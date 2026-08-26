@@ -1,0 +1,400 @@
+/**
+ * BR-005 — public-API hardening: rate limiting, CORS, and security headers for the PUBLIC read
+ * surfaces. Built here in `_shared` because more than one service will need it, and
+ * services must not drift on a security posture; each wires it into its own socket layer.
+ *
+ * ## Posture: three independent knobs, all DEFAULT OFF
+ *
+ * With nothing configured, every response is **byte-for-byte what it was before this module
+ * existed** — no new headers, no limiter in the path. That is deliberate and it is what keeps the
+ * QA Phase B evidence (which pins exact `Cache-Control` strings and exact bodies) valid in the
+ * default posture, while the enabled posture is proven by its own two-state pass. Deploy ≠ go-live,
+ * the same rule every BR gate follows.
+ *
+ * ## ⚠ EVERY NUMBER HERE IS A PROPOSAL — `AWAITING_RATIFICATION`
+ *
+ * Nothing in canon gives a rate limit, a window, a burst, a `Retry-After`, or an allowed origin:
+ * `docs/Roadmap.md`'s 10.F line says "rate limiting/CORS/CDN" and stops, and the services are not
+ * deployed to any public URL yet (D-07 scopes Vercel to the frontend), so there is not even a
+ * browser origin to inherit. The values below therefore follow the established
+ * `PROPOSED_FALLBACK_DELAY_MS` / `PROPOSED_FALLBACK_MODEL_VERSION` pattern: a `PROPOSED_`-prefixed
+ * exported const, reached ONLY as an env-overridable default, never inlined at a use site, and
+ * escalated to the founder in `docs/qa/phase-0-constants-register.md` §A. **Test the MECHANISM
+ * against the configured value; do not assert these numbers are canon.**
+ *
+ * ## What this module deliberately does NOT do
+ *
+ * - **It does not touch the indexer's webhook.** That surface is the authenticated Helius ingress,
+ *   not a public read: rate-limiting it would drop provider retries and silently lose events,
+ *   which is strictly worse than the abuse it would prevent (the sender is authenticated already).
+ * - **It changes no `Cache-Control` value.** The CDN half of BR-005 is examined in the IPC-012
+ *   addendum rather than implemented as header edits: the origin headers are already correct
+ *   (`/metadata/:asset` caches hard when immutable; every wallet- or collection-scoped feed is
+ *   deliberately `no-store` for reasons three IPC-012 addenda record), and which paths an edge
+ *   caches is deploy-time CDN config on a host that does not exist yet. The ONE header this module
+ *   adds for cache correctness is `Vary: Origin`, and only when a CORS header is actually emitted —
+ *   because a response that varies by origin and does not say so is a cache-poisoning bug.
+ */
+
+import { optional, parseBool, parsePositiveInt } from './config';
+
+/** A monotonic millisecond clock, injected so the limiter is testable without waiting. */
+export type MonotonicClock = () => number;
+
+// ── Rate limiting ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * PROPOSED sustained request rate per client, requests per minute — **AWAITING_RATIFICATION**
+ * (founder-owned; architect proposal 600/min ≈ 10/s).
+ *
+ * Derivation of the proposal, so ratification has something to argue with: the frontend polls
+ * a public list endpoint on a short poll, and a page that polls RPC (not us) every 3–5 s, so a
+ * single honest browser tab costs well under 10 requests/min; 600 leaves ~60x headroom for a shared
+ * NAT/office egress IP before anyone legitimate is touched. It is also deliberately far above what
+ * the QA bench does — the §B2 idempotency folder fires 10 concurrent requests and Newman hammers
+ * three collections across five passes — because a limit the bench can trip is a flake source
+ * (BR_Roadmap Section 2 names exactly that trade).
+ */
+export const PROPOSED_RATE_LIMIT_RPM = 600;
+
+/**
+ * PROPOSED burst allowance (bucket capacity), requests — **AWAITING_RATIFICATION** (architect
+ * proposal 120). A page load fans out a handful of parallel reads, and a returning user's tab can
+ * refetch several feeds at once; 120 absorbs that without letting a single client sustain more than
+ * {@link PROPOSED_RATE_LIMIT_RPM} over any minute.
+ */
+export const PROPOSED_RATE_LIMIT_BURST = 120;
+
+/**
+ * PROPOSED `Retry-After` value on a 429, seconds — **AWAITING_RATIFICATION** (architect proposal
+ * 1). At the proposed refill rate a single token is back within ~100 ms, so 1 s is the smallest
+ * honest integer: it never tells a client to wait materially longer than the limiter will actually
+ * hold it, which is what makes the header useful rather than decorative.
+ */
+export const PROPOSED_RATE_LIMIT_RETRY_AFTER_SECONDS = 1;
+
+/** Rate-limiter configuration, resolved from env by each service's config loader. */
+export interface RateLimitConfig {
+  /** Default OFF. When false the limiter is never consulted and adds no header. */
+  enabled: boolean;
+  /** Sustained requests per minute per client key. */
+  requestsPerMinute: number;
+  /** Bucket capacity — the most a client may spend at once. */
+  burst: number;
+  /** The integer seconds advertised in `Retry-After` on a 429. */
+  retryAfterSeconds: number;
+}
+
+/** The decision for one request. `retryAfterSeconds` is set only when `allowed` is false. */
+export interface RateLimitDecision {
+  allowed: boolean;
+  retryAfterSeconds?: number;
+}
+
+/**
+ * A per-client token bucket, in process memory.
+ *
+ * **In-process is a deliberate limitation, not an oversight.** A shared store (Redis) would be
+ * needed to enforce one budget across horizontally-scaled instances, and there is no such
+ * dependency in this stack today; with N instances behind a load balancer the effective limit is
+ * N x the configured rate. That is stated in the IPC-012 addendum rather than implied, because a
+ * limit that is quietly N times looser than documented is worse than a documented one. It is
+ * nonetheless a real defence for the case that matters pre-go-live: a single abusive client against
+ * a single instance.
+ *
+ * Bucket semantics: capacity `burst`, refilled continuously at `requestsPerMinute / 60_000` tokens
+ * per ms. A request spends one token; with no token available it is refused. Idle buckets are
+ * evicted (see {@link RateLimiter.sweep}) so an unbounded key space — every client IP is a key —
+ * cannot become an unbounded memory leak, which would turn a DoS defence into a DoS vector.
+ */
+export class RateLimiter {
+  private readonly buckets = new Map<string, { tokens: number; updatedAtMs: number }>();
+
+  constructor(
+    private readonly config: RateLimitConfig,
+    private readonly now: MonotonicClock = () => Date.now()
+  ) {}
+
+  /**
+   * Spend one token for `key`. A disabled limiter always allows and records nothing, so the
+   * default posture keeps no per-client state at all.
+   */
+  check(key: string): RateLimitDecision {
+    if (!this.config.enabled) {
+      return { allowed: true };
+    }
+    const nowMs = this.now();
+    const refillPerMs = this.config.requestsPerMinute / 60_000;
+    const bucket = this.buckets.get(key);
+
+    if (bucket === undefined) {
+      // A first-seen client starts full, then spends one.
+      this.buckets.set(key, { tokens: this.config.burst - 1, updatedAtMs: nowMs });
+      return { allowed: true };
+    }
+
+    const elapsedMs = Math.max(0, nowMs - bucket.updatedAtMs);
+    const tokens = Math.min(this.config.burst, bucket.tokens + elapsedMs * refillPerMs);
+    bucket.updatedAtMs = nowMs;
+
+    if (tokens < 1) {
+      // Refused: no token is spent, so the client is not pushed further into debt for retrying.
+      bucket.tokens = tokens;
+      return { allowed: false, retryAfterSeconds: this.config.retryAfterSeconds };
+    }
+    bucket.tokens = tokens - 1;
+    return { allowed: true };
+  }
+
+  /**
+   * Drop buckets untouched for `idleMs` and already refilled to capacity — they carry no state a
+   * fresh bucket would not reproduce. Called opportunistically by the socket layer.
+   */
+  sweep(idleMs: number): void {
+    const cutoff = this.now() - idleMs;
+    for (const [key, bucket] of this.buckets) {
+      if (bucket.updatedAtMs <= cutoff) {
+        this.buckets.delete(key);
+      }
+    }
+  }
+
+  /** Bucket count — for the sweep's own test, and for a gauge if one is ever wanted. */
+  size(): number {
+    return this.buckets.size;
+  }
+}
+
+/**
+ * The client key a limit is applied per: the left-most `X-Forwarded-For` hop when present (the
+ * originating client, as set by a trusted proxy), else the socket address, else a shared `unknown`
+ * bucket.
+ *
+ * **Trust caveat, stated because it is load-bearing:** `X-Forwarded-For` is client-supplied and
+ * trivially spoofed unless a trusted proxy overwrites it. Preferring it is correct behind a CDN or
+ * load balancer (otherwise every request keys to the proxy and one abusive client throttles
+ * everyone), and wrong when the service is exposed directly. Since these services are not deployed
+ * yet, the deployment posture — and therefore whether this header may be trusted — is a 10.F
+ * decision recorded there rather than guessed here.
+ */
+export function clientKeyFrom(
+  forwardedFor: string | string[] | undefined,
+  remoteAddress: string | undefined
+): string {
+  const raw = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor;
+  const firstHop = raw?.split(',')[0]?.trim();
+  if (firstHop) {
+    return firstHop;
+  }
+  return remoteAddress ?? 'unknown';
+}
+
+/** The 429 body every hardened surface returns — one shape, so a consumer branches once. */
+export const RATE_LIMITED_BODY = { error: 'rate limited' } as const;
+
+// ── CORS ───────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * CORS configuration. An EMPTY allowlist is the default and means "emit no CORS headers at all" —
+ * there is deliberately no separate on/off flag and no wildcard support: the presence of an origin
+ * IS the enablement, so a misconfiguration cannot accidentally open the surface to `*`.
+ *
+ * Why an allowlist rather than `*` even for public read data: the responses are public, so `*`
+ * would leak nothing today — but these services will gain authenticated surfaces (BR-002's
+ * sessions), and a `*` inherited from the read era is exactly how a credentialed endpoint ends up
+ * readable by any origin. Starting closed costs one env var.
+ */
+export interface CorsConfig {
+  /** Exact-match allowed origins (scheme + host + port). Empty ⇒ no CORS headers emitted. */
+  allowedOrigins: readonly string[];
+}
+
+/**
+ * The CORS response headers for a request from `origin`, or `{}` when CORS is not in play.
+ *
+ * `Vary: Origin` accompanies every emitted allow-header: the response now genuinely differs by
+ * request origin, and a shared cache that does not know that will serve one origin's response to
+ * another — the cache-poisoning failure this pairing exists to prevent. Only `GET` (and the
+ * `OPTIONS` preflight) is ever allowed, because that is the entire public read surface.
+ */
+export function corsHeadersFor(
+  origin: string | string[] | undefined,
+  config: CorsConfig
+): Record<string, string> {
+  const requested = Array.isArray(origin) ? origin[0] : origin;
+  if (!requested || config.allowedOrigins.length === 0) {
+    return {};
+  }
+  if (!config.allowedOrigins.includes(requested)) {
+    // A disallowed origin gets NO allow-header: the browser then blocks the read, which is the
+    // whole mechanism. The response body is unchanged — CORS is a browser policy, not auth.
+    return { Vary: 'Origin' };
+  }
+  return {
+    'Access-Control-Allow-Origin': requested,
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Max-Age': '600',
+    Vary: 'Origin',
+  };
+}
+
+/** True when the request is a CORS preflight (an `OPTIONS` carrying `Origin`). */
+export function isPreflight(
+  method: string | undefined,
+  origin: string | string[] | undefined
+): boolean {
+  return method === 'OPTIONS' && Boolean(Array.isArray(origin) ? origin[0] : origin);
+}
+
+// ── Security headers ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * Response hardening headers for a JSON API, applied only when enabled so the default posture is
+ * unchanged. Deliberately minimal and JSON-appropriate:
+ *
+ * - `X-Content-Type-Options: nosniff` — stops a browser second-guessing `application/json`.
+ * - `Referrer-Policy: no-referrer` — these URLs carry wallet addresses in the path; they should not
+ *   travel in a `Referer` to anywhere else.
+ * - `X-Frame-Options: DENY` — no JSON response has any business being framed.
+ *
+ * No `Content-Security-Policy` and no `Strict-Transport-Security`: a CSP governs documents, not
+ * JSON, and HSTS is a property of the TLS-terminating host (a 10.F deployment decision), so
+ * emitting either from here would be theatre.
+ */
+export function securityHeaders(): Record<string, string> {
+  return {
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'no-referrer',
+    'X-Frame-Options': 'DENY',
+  };
+}
+
+// ── The combined seam each service's socket layer uses ─────────────────────────────────────────
+
+/** Everything BR-005 needs to decide about one request, resolved from config once at startup. */
+export interface HygieneConfig {
+  rateLimit: RateLimitConfig;
+  cors: CorsConfig;
+  /** Default OFF — when false, {@link securityHeaders} is not applied. */
+  securityHeadersEnabled: boolean;
+}
+
+/** Request facts the hygiene layer reads (all supplied by the socket wiring). */
+export interface HygieneRequest {
+  method: string | undefined;
+  forwardedFor: string | string[] | undefined;
+  remoteAddress: string | undefined;
+  origin: string | string[] | undefined;
+}
+
+/**
+ * What the socket layer should do with a request before routing it.
+ *
+ * `kind: 'continue'` carries the headers to merge into whatever the route returns; `'preflight'`
+ * and `'rate_limited'` are complete answers the socket sends without touching the router — a
+ * refused request must not reach the store, which is the point of refusing it.
+ */
+export type HygieneOutcome =
+  | { kind: 'continue'; headers: Record<string, string> }
+  | { kind: 'preflight'; status: 204; headers: Record<string, string> }
+  | { kind: 'rate_limited'; status: 429; headers: Record<string, string>; body: unknown };
+
+/**
+ * Apply BR-005's hygiene to one request. Order is deliberate: **preflight first** (a browser's
+ * `OPTIONS` must be answerable even when the client is over its budget, or the browser reports a
+ * CORS failure for what is really a rate limit — two very different bug reports), then the rate
+ * limit, then the headers that decorate a normal response.
+ */
+export function applyHygiene(
+  req: HygieneRequest,
+  config: HygieneConfig,
+  limiter: RateLimiter
+): HygieneOutcome {
+  const cors = corsHeadersFor(req.origin, config.cors);
+  const security = config.securityHeadersEnabled ? securityHeaders() : {};
+
+  // Preflights are intercepted ONLY when CORS is actually configured. With an empty allowlist we
+  // are not doing CORS at all, so an OPTIONS-with-Origin must fall through to the router and get
+  // the ordinary non-GET 405 — the byte-for-byte pre-BR-005 wire. (Found by the pre-Phase-C
+  // closeout bench, 2026-08-22: the unconditional intercept answered a bare 204 in the default
+  // posture, which the unit suites missed because their preflight specs all ran with an allowlist
+  // configured. A disallowed origin against a NON-empty allowlist still gets the 204-without-
+  // allow-header — the browser blocks it, which is the mechanism.)
+  if (config.cors.allowedOrigins.length > 0 && isPreflight(req.method, req.origin)) {
+    return { kind: 'preflight', status: 204, headers: { ...cors, ...security } };
+  }
+
+  const decision = limiter.check(clientKeyFrom(req.forwardedFor, req.remoteAddress));
+  if (!decision.allowed) {
+    return {
+      kind: 'rate_limited',
+      status: 429,
+      headers: {
+        ...cors,
+        ...security,
+        'Retry-After': String(decision.retryAfterSeconds),
+        // Never let a shared cache hold a 429 and serve it to someone who is not over budget.
+        'Cache-Control': 'no-store',
+      },
+      body: RATE_LIMITED_BODY,
+    };
+  }
+
+  return { kind: 'continue', headers: { ...cors, ...security } };
+}
+
+// ── Config ─────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Env var names, shared by every hardened service (one posture, one set of knobs — a per-service
+ * naming split is how two surfaces end up hardened differently by accident).
+ */
+export const HYGIENE_ENV = {
+  /** Activation gate for the limiter. Default OFF. */
+  rateLimitEnabled: 'BLOTTO_API_RATE_LIMIT_ENABLED',
+  /** Sustained requests/minute/client (default {@link PROPOSED_RATE_LIMIT_RPM}, a PROPOSAL). */
+  rateLimitRpm: 'BLOTTO_API_RATE_LIMIT_RPM',
+  /** Burst capacity (default {@link PROPOSED_RATE_LIMIT_BURST}, a PROPOSAL). */
+  rateLimitBurst: 'BLOTTO_API_RATE_LIMIT_BURST',
+  /** `Retry-After` seconds (default {@link PROPOSED_RATE_LIMIT_RETRY_AFTER_SECONDS}, a PROPOSAL). */
+  rateLimitRetryAfter: 'BLOTTO_API_RATE_LIMIT_RETRY_AFTER_SECONDS',
+  /** Comma-separated exact-match origin allowlist. EMPTY (default) ⇒ no CORS headers at all. */
+  corsOrigins: 'BLOTTO_API_CORS_ORIGINS',
+  /** Activation gate for the JSON hardening headers. Default OFF. */
+  securityHeadersEnabled: 'BLOTTO_API_SECURITY_HEADERS_ENABLED',
+} as const;
+
+/**
+ * Resolve the hygiene posture from env. Fail-closed on a malformed number (`parsePositiveInt`
+ * throws) rather than silently falling back to a proposal the operator did not choose — the same
+ * rule every other numeric config key in this repo follows.
+ *
+ * All three knobs default to their OFF/empty state, so a service that calls this and wires the
+ * result is unchanged on the wire until someone deliberately configures it.
+ */
+export function loadHygieneConfig(
+  env: NodeJS.ProcessEnv = process.env
+): HygieneConfig {
+  const origins = optional(env, HYGIENE_ENV.corsOrigins, '')
+    .split(',')
+    .map((o) => o.trim())
+    .filter((o) => o.length > 0);
+  return {
+    rateLimit: {
+      enabled: parseBool(env[HYGIENE_ENV.rateLimitEnabled]),
+      requestsPerMinute: parsePositiveInt(
+        env,
+        HYGIENE_ENV.rateLimitRpm,
+        PROPOSED_RATE_LIMIT_RPM
+      ),
+      burst: parsePositiveInt(env, HYGIENE_ENV.rateLimitBurst, PROPOSED_RATE_LIMIT_BURST),
+      retryAfterSeconds: parsePositiveInt(
+        env,
+        HYGIENE_ENV.rateLimitRetryAfter,
+        PROPOSED_RATE_LIMIT_RETRY_AFTER_SECONDS
+      ),
+    },
+    cors: { allowedOrigins: origins },
+    securityHeadersEnabled: parseBool(env[HYGIENE_ENV.securityHeadersEnabled]),
+  };
+}
