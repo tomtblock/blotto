@@ -4,7 +4,7 @@
 
 ## Why it is empty
 
-New work. Nothing in `anarchy-fun` sealed anything — it had no allocations to hide — so there was
+New work. Nothing in the predecessor repository sealed anything — it had no allocations to hide — so there was
 nothing to carry.
 
 ## What Phase 2 must build here

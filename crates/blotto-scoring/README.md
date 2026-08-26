@@ -5,7 +5,7 @@ There is no code here yet beyond a `lib.rs` that compiles to nothing.
 
 ## Why it is empty
 
-This crate is new work. Nothing in `anarchy-fun` scored anything — the old product had no
+This crate is new work. Nothing in the predecessor repository scored anything — the old product had no
 competition, no allocations and no ranking — so there was nothing to carry. The extraction brief
 lists it under §8, "New — not in the old repo".
 

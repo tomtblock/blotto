@@ -4,7 +4,8 @@
 
 ## Why it is empty
 
-The extraction brief (§4) expected to carry an ed25519 signed-packet path from `anarchy-fun` — a
+The extraction brief (§4) expected to carry an ed25519 signed-packet path from the predecessor
+repository — a
 backend-issued struct, verified on-chain against a config pubkey via the instructions sysvar, with a
 Turnkey-custodied signer and an admin rotation instruction.
 

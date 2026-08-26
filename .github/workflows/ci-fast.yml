@@ -1,6 +1,7 @@
 # ci-fast — the always-on lane.
 #
-# Carried from anarchy-fun's ci-fast with the services and web jobs dropped: this
+# Carried from the predecessor repository's ci-fast, with the services and web jobs
+# dropped: this
 # repository has no service or web suite yet (Phase 0 carried the plumbing, not a
 # runnable service). Add those lanes back in the phase that makes them runnable.
 #

@@ -1,0 +1,23 @@
+# cargo-deny config — advisory gate.
+#
+# Carried from the predecessor repository. Scope: `cargo deny check advisories`
+# only — a license/bans/sources policy is a separate decision and is NOT gated here.
+#
+# The ignore list mirrors .cargo/audit.toml exactly, and was re-verified against THIS
+# workspace's Cargo.lock at extraction time rather than inherited on trust. The
+# justification for each entry lives in .cargo/audit.toml; keep the two files in
+# step, and re-check both on any dependency change.
+#
+# A red advisory check therefore always means a NEW finding.
+
+[advisories]
+ignore = [
+    # Stale lockfile entry, unreachable from any workspace member.
+    "RUSTSEC-2026-0235",
+    # bincode unmaintained — ecosystem-pinned via Anchor / Agave.
+    "RUSTSEC-2025-0141",
+    # libsecp256k1 unmaintained — ecosystem-pinned via Anchor / Agave.
+    "RUSTSEC-2025-0161",
+    # anyhow downcast_mut() unsoundness — no reachable trigger.
+    "RUSTSEC-2026-0190",
+]

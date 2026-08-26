@@ -1,7 +1,7 @@
 # gitleaks config for Blotto Cup.
 #
-# Carried from anarchy-fun, where the custom rule below was written after a real
-# leak: the default ruleset does NOT detect Solana's keypair format (a bare JSON
+# Carried from the predecessor repository, where the custom rule below was written after a
+# real leak: the default ruleset does NOT detect Solana's keypair format (a bare JSON
 # array of 64 byte values), so a committed keypair produced zero findings under
 # defaults. That rule is the reason this file exists and it is carried unchanged.
 #

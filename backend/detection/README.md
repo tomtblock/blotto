@@ -4,7 +4,7 @@
 
 ## Why it is empty
 
-New work. Nothing in `anarchy-fun` did abuse detection of this kind.
+New work. Nothing in the predecessor repository did abuse detection of this kind.
 
 ## What Phase 4 must build here
 

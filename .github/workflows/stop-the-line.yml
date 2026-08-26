@@ -1,4 +1,4 @@
-# stop-the-line — red-main automation, carried from anarchy-fun.
+# stop-the-line — red-main automation, carried from the predecessor repository.
 #
 # Watches ci-fast's completion on main. A red run auto-opens a `[stop-the-line]`
 # issue assigned to the merging author (the workflow_run actor), linked to the

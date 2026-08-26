@@ -4,7 +4,8 @@
 
 ## Why it is empty
 
-The extraction brief (§6) expected to carry a verify-page scaffold from `anarchy-fun`. **No verify
+The extraction brief (§6) expected to carry a verify-page scaffold from the predecessor
+repository. **No verify
 page exists there.** The nearest thing, `app/design/signing/`, is a signing console for constructing
 and inspecting transactions — a developer tool, not a verifier — and was not carried.
 

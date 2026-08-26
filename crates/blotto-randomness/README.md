@@ -5,7 +5,8 @@ Framework-agnostic Rust — no `solana-program` dependency, no float arithmetic,
 the SHA-256 hasher's internal block buffer. Every draw is a pure deterministic function of its
 inputs and is replayable for audit from on-chain state alone.
 
-**Carried from `anarchy-fun`'s `crates/randomness`.** See `EXTRACTION-REPORT.md` for what changed.
+**Carried from the predecessor repository's `crates/randomness`.** See `EXTRACTION-REPORT.md` for
+what changed.
 
 ## The one thing to understand before reading the code
 
@@ -59,7 +60,7 @@ The argument is named `class_counters`, never `odds` or `weights` (PID §8.7).
 
 ## Changes from the predecessor
 
-| | `anarchy-randomness` | `blotto-randomness` |
+| | Predecessor crate | `blotto-randomness` |
 |---|---|---|
 | Digest function | `derive_open_randomness` | `derive_class_randomness` |
 | Inputs | 4 — 98 bytes | **5 — 130 bytes**, adding `player_pubkey` last |

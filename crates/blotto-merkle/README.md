@@ -5,7 +5,8 @@ There is no code here yet beyond a `lib.rs` that compiles to nothing.
 
 ## Why it is empty rather than carried
 
-The extraction brief (§2) expected to find a slot-table Merkle module in `anarchy-fun` — shuffle,
+The extraction brief (§2) expected to find a slot-table Merkle module in the predecessor
+repository — shuffle,
 root, per-slot proofs, plus an encryption step for a table stored on Irys — and to carry it here.
 
 **No such module exists in the old repository.** The old product resolved rarity with a

@@ -44,9 +44,9 @@ One live conflict, recorded here so nobody resolves it the wrong way:
 
 ## Where history lives
 
-- **`reference/`** — decision records exported from the old `anarchy-fun` repo, for design context
-  only. Each carries the header "Exported from anarchy-fun for reference; superseded by Blotto Cup
-  docs where they conflict." **Nothing here is authoritative.** Never cite a reference export as the
+- **`reference/`** — decision records exported from the predecessor repository, for design context
+  only. Each carries a header marking it as an export, superseded by Blotto Cup docs where they
+  conflict. **Nothing here is authoritative.** Never cite a reference export as the
   reason for a decision — cite the PID or the architecture doc.
 - **`archive/`** — superseded Blotto Cup documents kept as evidence. Nothing here is authoritative
   either. See `archive/README.md`.
