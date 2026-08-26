@@ -34,52 +34,51 @@ If a key needs to be referenced in a document, record only its **public** key.
 
 ## The language gate
 
-PID §8.7 forbids a specific vocabulary. This is a legal-position rule (compliance item C12), not a
-style preference: the old product's language is a discoverable liability, and the failure mode is a
-single careless identifier surviving into the new repo. The words are:
+PID §8.7 forbids a specific vocabulary. This is a legal-position rule (compliance item C12, which
+blocks launch), not a style preference: the old product's language is a discoverable liability, and
+the failure mode is a single careless identifier surviving into this repository.
 
 > Never: lottery · gamble · bet · wager · casino · pull · pack · odds · jackpot · rake · deal · roll.
 > Use: entry · pass · character · battle · stat · allocation · tournament · prize pool · ranking.
 
-Run this from the repository root before every commit. **It must return nothing.**
+Run it from the repository root before every commit:
 
 ```bash
-# ALLOWLIST — exactly one token is permitted to match, nowhere else in this repository:
-#   pull_request   a GitHub Actions event name in .github/workflows/*.yml. It cannot be
-#                  renamed; it is not product language. Anything else that matches \bpull\b
-#                  is a real hit — rewrite it. Workflow steps use `git fetch`, never
-#                  `git pull`, so the verb never appears.
-# Nothing else is allowlisted. Do not extend this list without the same scrutiny.
-grep -rniE 'casino|gambling|disguised|dopamine|shill|degen|the house|pump|bonding|lottery|jackpot|\bodds\b|\bpack\b|\bpull\b|\bbet\b|wager|rake|\broll\b|anarchy|xp\b|graduat|trending|magic eden|synthetic' . \
-  --exclude-dir=node_modules --exclude-dir=target --exclude-dir=.git \
-  --exclude-dir=reference --exclude-dir=archive \
-  --exclude=EXTRACTION-REPORT.md --exclude=TRANSITION-REPORT.md \
-  --exclude=CONTRIBUTING.md \
-| grep -vE '^\./\.github/workflows/[^:]*:[0-9]+: *pull_request:?$'
+./scripts/check-language.sh
 ```
 
-Four paths are excluded and each has a reason:
+The script holds the pattern and the exclusion list, each exclusion with its reason. It is **not
+yet a CI lane** — Phase 0's brief scoped `ci-fast` to the Rust and gitleaks jobs. Promoting it is
+one job block in `.github/workflows/ci-fast.yml` and is a recommended follow-up recorded in
+`EXTRACTION-REPORT.md`; until then it is a manual step and a review responsibility.
+
+### What is excluded, and why
 
 | Excluded | Why |
 |---|---|
-| `docs/reference/` | Decision records exported verbatim from the old repo. Explicitly historical, never authoritative — `docs/INDEX.md` says so. |
-| `docs/archive/` | Superseded Blotto Cup documents, kept as evidence. |
-| `EXTRACTION-REPORT.md`, `TRANSITION-REPORT.md` | The two Phase 0 reports have to name the old product and the components that were not carried in order to be useful. |
-| `CONTRIBUTING.md` | This file lists the forbidden words in order to forbid them. |
+| `docs/reference/`, `docs/archive/` | Historical by definition, and marked non-authoritative in their own headers and in `docs/INDEX.md`. |
+| The four source documents in `docs/` | Copied verbatim — inputs to this repository rather than content authored in it. PID §8.7 necessarily *lists* the words it forbids, and TECH-ARCH §12 names a Phase-5 activity the pattern happens to match. |
+| `EXTRACTION-REPORT.md`, `TRANSITION-REPORT.md` | Both have to name the old product and the components that were not carried in order to be useful. |
+| `CONTRIBUTING.md`, `CLAUDE.md` | Both quote the forbidden list in order to forbid it. |
+| `Cargo.lock`, `package-lock.json`, `yarn.lock` | Dependency metadata, machine-generated. Package names like `pump`, `escape-string-regexp` and `solana-program-pack` are not ours to rename. |
+| `node_modules/`, `target/`, `.next/`, `.git/` | Not repository content. |
 
-Everything else in this repository is live and must pass.
-
-This grep is **not yet a CI lane** — Phase 0's brief scoped `ci-fast` to the Rust and gitleaks jobs.
-Promoting it is a recommended follow-up recorded in `EXTRACTION-REPORT.md`; until then it is a
-manual step and a review responsibility.
+**Everything else is live and must pass.** Exactly one token is allowlisted anywhere:
+`pull_request`, a GitHub Actions event name in `.github/workflows/*.yml`. It cannot be renamed and
+it is not product language; workflow steps use `git fetch`, never `git pull`, so the verb itself
+never appears. Nothing else is allowlisted, and a hit is fixed by rewriting it — never by widening
+the exclusion list.
 
 ### The specific traps
 
 - In the class draw, no variable is named `odds` or `weights`. The name is **`class_counters`**.
-- The reveal object is a character **pass**, never an egg and never a "pack". The verb is
+- The reveal object is a character **pass**, never an egg and never the other word. The verb is
   **reveal** or **unseal**, never crack or hatch.
 - `xp\b` catches `xp` as a whole word. It does not catch `expiry` or `export`.
-- `graduat` catches `graduation` and `graduated`. Blotto Cup pools do not graduate; they **close**.
+- `graduat` catches the whole family. Blotto Cup pools do not do that; they **close**.
+- Ordinary English words trip it too — "pull the value out of", "hand-roll the bytes", "a package
+  can pull this in". Rewrite them: "extract", "hand-encode", "import". The gate is blunt on
+  purpose, because a gate with judgement is a gate that lets things through.
 
 ## Rust
 

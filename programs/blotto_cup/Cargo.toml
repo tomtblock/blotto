@@ -52,7 +52,7 @@ switchboard-on-demand = { version = "=0.12.1", default-features = false, feature
 # PDA with `invoke_signed`. Default features (`borsh-v1`) are kept — they only
 # enable the borsh 1.x codec the instruction/account types need. We deliberately
 # do NOT enable the `anchor` feature: like the switchboard SDK's `anchor`
-# feature, it would pull anchor-lang 0.31 and clash with our anchor-lang 1.0.2 /
+# feature, it would drag in anchor-lang 0.31 and clash with our anchor-lang 1.0.2 /
 # Solana 3.x toolchain. The CPI builders take plain `&AccountInfo`/`&Pubkey`, so
 # no anchor-version bridge is needed — `to_account_info()` hands the builder
 # exactly what it wants. mpl-core 0.12.0 depends on `solana-program ^3.0.0`; the

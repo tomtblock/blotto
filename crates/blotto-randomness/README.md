@@ -56,7 +56,8 @@ initialised at pool open to `[38, 15, 7, 3, 1]` (sum = 64 = one pool's seats). T
 cumulative walk returns the class index. Counters are read but never mutated — the caller decrements
 at the call site.
 
-The argument is named `class_counters`, never `odds` or `weights` (PID §8.7).
+The argument is named `class_counters`. PID §8.7 forbids the shorter alternatives a reader might
+reach for; `CONTRIBUTING.md` → "The language gate" has the grep that enforces it.
 
 ## Changes from the predecessor
 
@@ -82,7 +83,7 @@ Both functions use little-endian throughout: `u16::to_le_bytes()` for `entry_ind
 hasher, and the first 8 bytes of `rng_bytes` interpreted as a little-endian `u64`. One byte-ordering
 rule for the whole crate, matching Borsh's default integer encoding — the Anchor/Solana
 account-serialization convention. **The `register` instruction must pass the typed `u16` and let this
-crate encode it; never hand-roll the bytes at the call site.**
+crate encode it; never hand-encode the bytes at the call site.**
 
 ### Modulo bias is accepted
 

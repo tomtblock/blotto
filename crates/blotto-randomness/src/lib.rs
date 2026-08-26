@@ -91,7 +91,7 @@ pub fn derive_class_randomness(
     hasher.update(vrf_seed);
     hasher.update(slot_hash);
     // Little-endian per Borsh / Solana convention. On-chain callers must pass the
-    // typed `u16` and let this function encode it — never hand-roll the bytes.
+    // typed `u16` and let this function encode it — never hand-encode the bytes.
     hasher.update(entry_index.to_le_bytes());
     hasher.update(pool_pubkey);
     hasher.update(player_pubkey);
@@ -109,7 +109,8 @@ pub fn derive_class_randomness(
 /// pool). This function reads `class_counters` but does not mutate it — the
 /// decrement happens at the call site, alongside the other state writes.
 ///
-/// The argument is named `class_counters`, never `odds` or `weights` (PID §8.7).
+/// The argument is named `class_counters`. PID §8.7 forbids the shorter
+/// alternatives a reader might reach for, and `CONTRIBUTING.md` has the grep.
 ///
 /// **Algorithm.** Take the first 8 bytes of `rng_bytes` as a little-endian `u64`,
 /// modulo by the counter sum to land in `[0, total)`, then walk the counters as a

@@ -53,3 +53,4 @@ coverage
 
 # App build output
 app/.next
+*.tsbuildinfo
