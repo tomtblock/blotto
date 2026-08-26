@@ -1,0 +1,52 @@
+# Rust / Anchor build output.
+#
+# Unlike the old repo, NOTHING under target/ is re-included. The old repo committed
+# its program-identity keypair at target/deploy/<program>-keypair.json so every deploy
+# reused the same program ID; that keypair then had to be treated as compromised.
+# Blotto Cup keeps the program keypair OUTSIDE the repository — see TRANSITION-REPORT.md
+# for the path — and pins the program ID in Anchor.toml and declare_id! instead.
+/target/
+**/target/
+**/*.rs.bk
+
+# Anchor
+.anchor
+.surfpool
+test-ledger
+.validator-ledger*
+
+# Keys — never committed, in any form. The pre-commit hook in .githooks/pre-commit
+# additionally rejects any staged file containing a 64-integer array (the Solana
+# keypair JSON shape), wherever it lives.
+keys/
+keys/*.json
+*.pem
+*keypair*.json
+id.json
+
+# Secrets scan output
+pre-scan.json
+gitleaks.json
+
+# Environment — only .env.example is tracked, and it carries names with no values.
+.env
+.env.local
+.env.*.local
+
+# Node
+node_modules
+.next
+dist
+coverage
+*.tsbuildinfo
+
+# macOS
+.DS_Store
+
+# Editor
+.idea
+*.swp
+*.swo
+
+# Logs
+*.log

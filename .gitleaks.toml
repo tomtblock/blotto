@@ -1,0 +1,32 @@
+# gitleaks config for Blotto Cup.
+#
+# Carried from anarchy-fun, where the custom rule below was written after a real
+# leak: the default ruleset does NOT detect Solana's keypair format (a bare JSON
+# array of 64 byte values), so a committed keypair produced zero findings under
+# defaults. That rule is the reason this file exists and it is carried unchanged.
+#
+# Principle: the gate is green on the known world, so a red gitleaks check always
+# means a NEW leak. Do not add an allowlist entry without the same scrutiny.
+#
+# The old repo's allowlist is deliberately NOT carried. It excused two committed
+# keypairs and a set of Postman fixture files, none of which exist here — this
+# repository was created with no keys in it and intends to keep it that way.
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "solana-keypair-json"
+description = "Solana keypair (JSON array of 64 byte values)"
+regex = '''\[\s*(?:\d{1,3}\s*,\s*){63}\d{1,3}\s*\]'''
+
+[allowlist]
+description = "Known-accepted, each entry justified here"
+paths = [
+  # Local build artifacts — gitignored, never repository content. CI scans a clean
+  # checkout, so this only matters for a developer running gitleaks locally.
+  '''(^|/)target/''',
+  '''(^|/)node_modules/''',
+  '''(^|/)\.anchor/''',
+  '''(^|/)\.next/''',
+]
