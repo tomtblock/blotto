@@ -19,7 +19,7 @@ use anchor_lang::prelude::*;
 /// Full derivation: `[POOL_SEED, pool_id.to_le_bytes()]`.
 ///
 /// Note this differs from the predecessor's Collection PDA, which was seeded on a
-/// pack-token mint. A Pool has no mint — entries are paid in SOL and the only
+/// launch-token mint. A Pool has no mint — entries are paid in SOL and the only
 /// token involved is the character pass, which is minted per entry — so the pool
 /// id is the discriminator.
 pub const POOL_SEED: &[u8] = b"pool";

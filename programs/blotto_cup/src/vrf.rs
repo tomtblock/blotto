@@ -84,7 +84,7 @@ pub struct CommitVrfSeed<'info> {
     /// seeds (`bump` with no `= expr`).
     ///
     /// The predecessor bound this account with `has_one = mint`, tying the
-    /// Collection PDA to a pack-token mint. **That binding is not carried**: a Pool
+    /// Collection PDA to a launch-token mint. **That binding is not carried**: a Pool
     /// has no mint. The PDA is keyed on the pool id instead, which is the
     /// discriminator that actually identifies a pool.
     #[account(
