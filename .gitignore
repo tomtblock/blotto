@@ -50,3 +50,6 @@ coverage
 
 # Logs
 *.log
+
+# App build output
+app/.next
