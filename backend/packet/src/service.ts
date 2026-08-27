@@ -3,23 +3,30 @@
  * ONE generic rejection — never which check failed. Geolocation vendors,
  * VPN/proxy intelligence and the sanctions list are seams: the vendor of
  * record is contracted in Phase 6 (R2 flags it must be named before this
- * service ships); sandbox implementations run today and the interfaces are
- * what the vendor adapters implement.
+ * service ships); stub implementations run today (`geo-adapters.ts`) and the
+ * interfaces are what the vendor adapters implement.
  *
- * Territory policy (R2): a founder-owned ALLOWLIST — default United Kingdom,
- * Ireland, Germany until the founder names otherwise — everything else
- * geoblocked. The allowlist is config, not code, and is deliberately
- * expressed as ISO 3166-1 alpha-2 codes.
+ * Territory policy (D-B3, carrying R2): the founder-owned schedule in
+ * `config/territories.json` — an `allowed` list (default United Kingdom /
+ * Ireland / Germany) plus an explicit `blocked` list that always wins and
+ * supports US-state granularity. FAIL-CLOSED: a lookup failure, an unknown
+ * country, or an ambiguous region blocks the entry. See `territories.ts`.
  */
 
 import { encodePacket, type EntryPacketFields, type PacketSigner } from './packet';
+import { territoryAllowed, type TerritorySchedule } from './territories';
 
-/** R2's default allowlist: UK ("GB"), Ireland, Germany. Founder-owned. */
-export const DEFAULT_TERRITORY_ALLOWLIST: readonly string[] = ['GB', 'IE', 'DE'];
+export interface GeoLookupResult {
+  /** ISO 3166-1 alpha-2 country code. */
+  country: string;
+  /** Sub-national region where the vendor resolves one (US states). */
+  region?: string;
+  /** Whether the address is a known VPN/proxy/hosting exit. */
+  vpnOrProxy: boolean;
+}
 
 export interface GeoLookup {
-  /** ISO country code + whether the address is a known VPN/proxy/hosting exit. */
-  lookup(ip: string): Promise<{ country: string; vpnOrProxy: boolean }>;
+  lookup(ip: string): Promise<GeoLookupResult>;
 }
 
 export interface SanctionsList {
@@ -27,7 +34,8 @@ export interface SanctionsList {
 }
 
 export interface PacketServiceConfig {
-  territoryAllowlist: readonly string[];
+  /** The founder-owned schedule from `config/territories.json` (D-B3). */
+  territories: TerritorySchedule;
   /** R3: no KYC at launch — issued packets carry tier 0. */
   kycTier: number;
 }
@@ -77,7 +85,7 @@ export async function issuePacket(
   try {
     // Every check runs even after one fails: uniform timing, uniform answer.
     const geo = await deps.geo.lookup(req.ip);
-    const territoryOk = deps.config.territoryAllowlist.includes(geo.country);
+    const territoryOk = territoryAllowed(deps.config.territories, geo.country, geo.region);
     const vpnOk = !geo.vpnOrProxy;
     const sanctioned = await deps.sanctions.isSanctioned(req.wallet, geo.country);
     const ageOk = req.ageAttested === true;
@@ -109,5 +117,19 @@ export async function issuePacket(
   } catch {
     // An upstream failure must not leak WHICH upstream failed either.
     return GENERIC_REJECTION;
+  }
+}
+
+/**
+ * The pre-flight verdict behind `GET /geo` (D-B3): the same lookup and the
+ * same schedule as issuance, answering only a boolean — which check decided
+ * is never disclosed. Any failure answers false: fail-closed.
+ */
+export async function geoVerdict(deps: PacketServiceDeps, ip: string): Promise<boolean> {
+  try {
+    const geo = await deps.geo.lookup(ip);
+    return territoryAllowed(deps.config.territories, geo.country, geo.region) && !geo.vpnOrProxy;
+  } catch {
+    return false;
   }
 }

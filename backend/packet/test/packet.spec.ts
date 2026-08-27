@@ -9,7 +9,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import nacl from 'tweetnacl';
 import {
-  DEFAULT_TERRITORY_ALLOWLIST,
+  DEFAULT_TERRITORY_SCHEDULE,
   GENERIC_REJECTION,
   LocalPacketSigner,
   ed25519InstructionData,
@@ -26,11 +26,15 @@ const vectors = JSON.parse(
 const WALLET = base58Encode(new Uint8Array(32).fill(3));
 const POOL = base58Encode(new Uint8Array(32).fill(4));
 
-function deps(overrides: Partial<{ country: string; vpn: boolean; sanctioned: boolean }> = {}): PacketServiceDeps {
+function deps(overrides: Partial<{ country: string; region: string; vpn: boolean; sanctioned: boolean }> = {}): PacketServiceDeps {
   return {
     geo: {
       async lookup() {
-        return { country: overrides.country ?? 'GB', vpnOrProxy: overrides.vpn ?? false };
+        return {
+          country: overrides.country ?? 'GB',
+          region: overrides.region,
+          vpnOrProxy: overrides.vpn ?? false,
+        };
       },
     },
     sanctions: {
@@ -39,7 +43,7 @@ function deps(overrides: Partial<{ country: string; vpn: boolean; sanctioned: bo
       },
     },
     signer: new LocalPacketSigner(new Uint8Array(32).fill(7)),
-    config: { territoryAllowlist: DEFAULT_TERRITORY_ALLOWLIST, kycTier: 0 },
+    config: { territories: DEFAULT_TERRITORY_SCHEDULE, kycTier: 0 },
     now: () => 1_756_000_000n,
     nonce: () => 42n,
   };
@@ -110,7 +114,8 @@ describe('packet issuance', () => {
   });
 
   it('the default allowlist is R2: GB, IE, DE — and only those', async () => {
-    expect(DEFAULT_TERRITORY_ALLOWLIST).to.deep.equal(['GB', 'IE', 'DE']);
+    expect(DEFAULT_TERRITORY_SCHEDULE.allowed).to.deep.equal(['GB', 'IE', 'DE']);
+    expect(DEFAULT_TERRITORY_SCHEDULE.blocked).to.deep.equal([]);
     for (const country of ['GB', 'IE', 'DE']) {
       const r = await issuePacket(deps({ country }), request);
       expect(r.ok, country).to.equal(true);

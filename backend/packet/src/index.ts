@@ -2,3 +2,5 @@
 export * from './packet';
 export * from './service';
 export * from './server';
+export * from './territories';
+export * from './geo-adapters';

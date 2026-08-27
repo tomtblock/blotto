@@ -20,6 +20,7 @@ owns; everywhere else a fact appears, it appears as a pointer.
 | Acceptance criteria | `TECH-ARCHITECTURE_Blotto-Cup_v0.2.md` §13 | Architect-owned |
 | What was carried from the old repo and what was not | `REPO-EXTRACTION-BRIEF_v1.1.md` (intent) · `../EXTRACTION-REPORT.md` (what actually happened) | The report wins on facts; the brief wins on intent |
 | Keys, custody, infrastructure provisioning | `REPO-TRANSITION-PLAYBOOK.md` (intent) · `../TRANSITION-REPORT.md` (state) | The report wins on facts |
+| Territory availability schedule (allowed + blocked lists) | `../config/territories.json` | FOUNDER-OWNED contents (R2/D-B3); schema + fail-closed semantics in `backend/packet/src/territories.ts`. Never edit the lists without a founder instruction |
 | Agent role and hard rules | `../CLAUDE.md` | Points here for everything it does not own |
 | Contribution process, hooks, the word grep | `../CONTRIBUTING.md` | Canonical for process |
 | Skill-evidence study: strategy ladder, parameters, published outcome statistics | `skill-evidence/REPORT.md` (results) · `../tests/rehearsal/strategies/README.md` (ladder rationale) | GENERATED — regenerate with `npm run skill-evidence` in `tests/rehearsal`; the nightly CI lane fails on drift. Never edit by hand |

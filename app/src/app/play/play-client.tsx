@@ -21,6 +21,7 @@ import { indexerApi } from '@/data/api';
 import type { PoolSummary } from '@/data/types';
 import { useAuth } from '@/wallet/auth-context';
 import { submitEntry, type EntryServices } from '@/entry/submit';
+import { checkGeoGate, type GeoGateState } from '@/entry/geo-gate';
 
 const AGE_KEY = 'blotto:age-attested';
 
@@ -79,11 +80,24 @@ export function PlayClient() {
   });
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  // D-B3: the territory pre-flight. Nothing that can take money renders
+  // until the verdict is an explicit 'allowed' — fail-closed by default.
+  const [geo, setGeo] = useState<GeoGateState>('checking');
 
   useEffect(() => {
     if (!poolId) return;
     indexerApi().getPool(poolId).then(setPool);
   }, [poolId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    checkGeoGate(process.env.NEXT_PUBLIC_ENTRY_API_URL).then((verdict) => {
+      if (!cancelled) setGeo(verdict);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const onConfirm = useCallback(
     async (battles: readonly Allocation[], timingsMs: readonly number[]) => {
@@ -106,6 +120,12 @@ export function PlayClient() {
 
   if (!poolId) return <p className="opacity-70">Pick a pool first.</p>;
   if (!pool) return <p className="opacity-70">…</p>;
+
+  // D-B3: territory gate ahead of everything, including the attestation.
+  if (geo === 'checking') return <p className="opacity-70">…</p>;
+  if (geo === 'blocked') {
+    return <p className="max-w-prose text-sm opacity-80">{COPY.gate.territoryBlocked}</p>;
+  }
 
   // 3.1: the age self-attestation modal gates everything.
   if (!attested) {
