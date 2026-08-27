@@ -411,10 +411,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "blotto-merkle"
-version = "0.1.0"
-
-[[package]]
 name = "blotto-randomness"
 version = "0.1.0"
 dependencies = [

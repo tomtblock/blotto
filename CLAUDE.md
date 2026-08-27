@@ -110,9 +110,12 @@ directly depends on, and verify every reference against them. If those files are
 **ask for them before proceeding** — do not work from docs alone.
 
 Check `EXTRACTION-REPORT.md` and the per-phase reports in `docs/phase-reports/` before assuming a
-component's state. `crates/blotto-scoring` was dropped by roadmap R20 (the scoring engine is
-TypeScript, in `backend/scoring/`); `crates/blotto-merkle` remains a placeholder — the results tree
-is built in TypeScript and its root is committed as opaque bytes on-chain (see the Phase 1 report).
+component's state. `crates/blotto-scoring` and `crates/blotto-merkle` were both dropped by roadmap
+R20: the scoring engine AND the results tree are TypeScript (`backend/scoring/`), the tree's root is
+committed as opaque bytes on-chain, and the predecessor's shuffled-class-table commitment is
+superseded by the on-chain `class_counters` bag (every draw replays from published events —
+ADR-021/026). `app/src/claim` was removed by R10 (no claim step) and `app/src/leaderboard` folded
+into the results page.
 
 ## Architect owns · founder reserves
 

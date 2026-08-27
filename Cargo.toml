@@ -2,7 +2,6 @@
 resolver = "2"
 members = [
     "crates/blotto-randomness", # class randomness digest + class draw (carried, Phase 0)
-    "crates/blotto-merkle",     # class table + results Merkle trees (new work, Phase 1/2)
     "programs/blotto_cup",      # Anchor program (Phase 1)
 ]
 # The LiteSVM integration suite lives OUTSIDE the workspace: it drives the
