@@ -141,7 +141,7 @@ the LiteSVM suite.
 - **Devnet deploy + Squads upgrade authority (roadmap 1.8)** needs the
   founder's devnet Squads vault and Turnkey sandbox sub-org (R21) — external
   accounts this environment cannot create. The artifact builds
-  (`anchor build` green, program ID `4pspHqtbdgqKTvSxvKFT2ycEU28u3EWdxjmj3xsTHD3Y`)
+  (`anchor build` green, program ID `5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17`)
   and deploy is a single command once those exist.
 - **The LiteSVM suite runs locally, not yet in `ci-fast`** — it needs the SBF
   artifact, and `ci-fast` deliberately has no Solana toolchain. A separate

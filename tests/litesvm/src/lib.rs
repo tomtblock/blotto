@@ -30,7 +30,7 @@ use std::str::FromStr;
 // ---------------------------------------------------------------------------
 
 pub fn program_id() -> Pubkey {
-    Pubkey::from_str("4pspHqtbdgqKTvSxvKFT2ycEU28u3EWdxjmj3xsTHD3Y").unwrap()
+    Pubkey::from_str("5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17").unwrap()
 }
 pub fn mpl_core_id() -> Pubkey {
     Pubkey::from_str("CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d").unwrap()

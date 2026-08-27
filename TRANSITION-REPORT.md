@@ -114,7 +114,7 @@ generated until Phase 7 is scheduled.
 
 | Purpose | Custody | Public key | Policy |
 |---|---|---|---|
-| Devnet program identity (`blotto_cup`) | Local file, **outside this repository** | `4pspHqtbdgqKTvSxvKFT2ycEU28u3EWdxjmj3xsTHD3Y` | None yet — a local keypair, not a custodied signer |
+| Devnet program identity (`blotto_cup`) | Local file, **outside this repository** | `5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17` | None yet — a local keypair, not a custodied signer |
 
 **Path:** `/home/user/keys/blotto-cup-devnet-program.json`, mode `0600`, outside the repository tree
 entirely. It is pinned in `Anchor.toml` (both `[programs.localnet]` and `[programs.devnet]`) and in

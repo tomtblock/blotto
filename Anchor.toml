@@ -5,7 +5,7 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-blotto_cup = "4pspHqtbdgqKTvSxvKFT2ycEU28u3EWdxjmj3xsTHD3Y"
+blotto_cup = "5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17"
 
 [programs.devnet]
 # Devnet program identity, generated fresh during Phase 0 extraction. The
@@ -20,7 +20,7 @@ blotto_cup = "4pspHqtbdgqKTvSxvKFT2ycEU28u3EWdxjmj3xsTHD3Y"
 # Replace this ID (here AND in programs/blotto_cup/src/lib.rs `declare_id!`) if the
 # keypair is regenerated. `anchor deploy --provider.cluster devnet` reports the
 # deployed ID.
-blotto_cup = "4pspHqtbdgqKTvSxvKFT2ycEU28u3EWdxjmj3xsTHD3Y"
+blotto_cup = "5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17"
 # The devnet cluster URL comes from RPC_URL (see .env.example) via the deploy
 # scripts; it is deliberately not hardcoded here. The default cluster below stays
 # localnet so `anchor test` keeps running against Surfpool. Note the hosting and RPC

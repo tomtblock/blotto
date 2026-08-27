@@ -40,7 +40,7 @@ import {
   TEST_EVENT,
 } from './event-codec';
 
-const PROGRAM = '4pspHqtbdgqKTvSxvKFT2ycEU28u3EWdxjmj3xsTHD3Y';
+const PROGRAM = '5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17';
 const INGEST: IngestContext = { commitment: 'finalized', program: PROGRAM };
 const POOL = 'PooL1111111111111111111111111111111111111111';
 

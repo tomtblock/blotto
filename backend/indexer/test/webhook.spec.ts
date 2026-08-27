@@ -20,7 +20,7 @@ import {
 import { encodeTestEvent, programDataLine, registerTestEvent } from './event-codec';
 
 const POOL = 'PooL1111111111111111111111111111111111111111';
-const PROGRAM = '4pspHqtbdgqKTvSxvKFT2ycEU28u3EWdxjmj3xsTHD3Y';
+const PROGRAM = '5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17';
 const SECRET = 'topsecret-shared-key';
 
 before(() => registerTestEvent());

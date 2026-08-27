@@ -48,7 +48,7 @@ use crate::state::Payout;
 // predecessor's program ID (57goj6dM…) is NOT reused — see TRANSITION-REPORT.md,
 // which also records where this keypair's private half lives (outside this
 // repository, and never in it).
-declare_id!("4pspHqtbdgqKTvSxvKFT2ycEU28u3EWdxjmj3xsTHD3Y");
+declare_id!("5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17");
 
 #[program]
 pub mod blotto_cup {
