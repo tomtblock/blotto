@@ -33,6 +33,13 @@ export interface Auth {
   /** Secondary path: classic Solana wallet connect (D-08). */
   connectWallet(): void;
   signOut(): Promise<void>;
+  /**
+   * Open the provider's wallet-funding flow for `address` (C9). Optional:
+   * absent when the provider is unconfigured or has no funding surface —
+   * the top-up BUTTON additionally hides behind `NEXT_PUBLIC_TOPUP_ENABLED`
+   * (default OFF, founder decision D-C).
+   */
+  addFunds?(address: string): Promise<void>;
 }
 
 /** `Ab3kf9Qz…9fQz` — the display form of an address, never the full string. */

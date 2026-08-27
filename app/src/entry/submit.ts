@@ -27,20 +27,26 @@ import {
   payloadBattlesHash,
 } from '../../../backend/sealing/src';
 import type { Allocation } from '@/battle/allocation';
+import type { IssuedPacketBytes } from './register-tx';
 
 export interface EntryServices {
   /** Store the sealed ciphertext (backend/sealing store). Must succeed BEFORE
    * the transaction: a paid entry whose ciphertext never landed is the lost-
    * ciphertext failure mode, so the order is ciphertext first, pay second. */
   putCiphertext(pool: string, player: string, ciphertext: Uint8Array): Promise<void>;
-  /** Obtain the Ed25519 entry-packet instruction bytes (packet service, 4.1). */
-  requestPacket(pool: string, player: string): Promise<Uint8Array>;
+  /** Obtain the service-issued entry packet — message, signature and signer
+   * key (the packet service, 4.1). All three feed the Ed25519 instruction. */
+  requestPacket(pool: string, player: string): Promise<IssuedPacketBytes>;
   /** Build, sign and land `register` with the battles hash + packet. Resolves
    * with the confirmed signature (the reveal machine's `tx_confirmed`). */
-  sendRegister(pool: string, battlesHash: Uint8Array, packet: Uint8Array): Promise<string>;
+  sendRegister(
+    pool: string,
+    battlesHash: Uint8Array,
+    packet: IssuedPacketBytes
+  ): Promise<string>;
   /** 32 CSPRNG bytes (window.crypto in the browser; injected in tests). */
   randomBytes(n: number): Uint8Array;
-  /** The device fingerprint (Privy, R19) — zeros until Phase 4 wires it. */
+  /** The device fingerprint (Privy, R19) — zeros until C11 wires it. */
   deviceHash(): Promise<Uint8Array>;
 }
 

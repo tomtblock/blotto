@@ -103,6 +103,9 @@ function fakeRpc(script: FakeRpcScript) {
     async getBalance() {
       return 0n;
     },
+    async getAccountData() {
+      return null;
+    },
     async getTokenBalance() {
       return 0n;
     },
@@ -353,5 +356,84 @@ describe("executeTrade — local partial signers (two-signer pack_open, 10.C Ste
     const { result, calls } = await run({});
     expect(result.outcome).toBe("confirmed");
     expect(calls.sent).toHaveLength(1); // echo-signer path: sent as returned
+  });
+});
+
+describe("multiple instructions (C9: Ed25519 packet + register in one tx)", () => {
+  it("compiles every instruction and scopes the fee estimate over all of them", async () => {
+    const SECOND_WRITABLE = address(
+      "4Nd1mBQtrMJVYVfKf2PJy9NZUZdTAsp7D4xWLs4gDB4T",
+    );
+    const feeQueries: string[] = [];
+    const rpc: TxRpc = {
+      async getLatestBlockhash() {
+        return { blockhash: BLOCKHASH, lastValidBlockHeight: 100n };
+      },
+      async getRecentPrioritizationFees(addresses) {
+        feeQueries.push(...addresses.map(String));
+        return [1_000n];
+      },
+      async simulateTransaction() {
+        return okSimulation;
+      },
+      async sendTransaction() {
+        return SIG;
+      },
+      async getSignatureStatus() {
+        return { confirmed: true, err: null };
+      },
+      async getTransaction() {
+        return null;
+      },
+      async isBlockhashValid() {
+        return true;
+      },
+      async getBalance() {
+        return 0n;
+      },
+      async getTokenBalance() {
+        return 0n;
+      },
+      async getAccountData() {
+        return null;
+      },
+    };
+    const signer: TxSigner = {
+      address: BUYER,
+      kind: "external",
+      label: "Fake",
+      async signTransaction(t) {
+        return t;
+      },
+    };
+    const companion: Instruction = {
+      programAddress: FIXTURE_PROGRAM,
+      accounts: [{ address: SECOND_WRITABLE, role: AccountRole.WRITABLE }],
+      data: new Uint8Array([9]),
+    };
+    const result = await executeTrade({
+      rpc,
+      signer,
+      instructions: [companion, await fixtureInstruction()],
+      onEvent: () => {},
+      sleep: async () => {},
+      confirmTimeoutMs: 5_000,
+      pollIntervalMs: 1,
+    });
+    expect(result.outcome).toBe("confirmed");
+    // Writable accounts from BOTH instructions reached the fee estimate.
+    expect(feeQueries).toContain(String(SECOND_WRITABLE));
+    expect(feeQueries).toContain(String(FIXTURE_WRITABLE));
+    expect(feeQueries).toContain(String(BUYER));
+  });
+
+  it("refuses an empty instruction set", async () => {
+    await expect(
+      executeTrade({
+        rpc: {} as TxRpc,
+        signer: { address: BUYER, kind: "external", label: "x", signTransaction: async (t) => t },
+        onEvent: () => {},
+      }),
+    ).rejects.toThrow(/no instruction/);
   });
 });

@@ -32,6 +32,14 @@ export const COPY = {
     ageConfirm: 'TODO_COPY: Confirm',
     territoryBlocked:
       'Blotto Cup is not available in your region. Entries cannot be accepted from your location.',
+    // C9: the balance pre-flight — shown BEFORE the timed session starts,
+    // never after battles are allocated.
+    balanceInsufficient: (needSol: string, haveSol: string) =>
+      `Entering this pool takes about ${needSol} SOL (entry price plus transaction costs). This wallet holds ${haveSol} SOL.`,
+    balanceUnavailable:
+      'Your wallet balance could not be checked. Entry stays closed until it can be.',
+    balanceRetry: 'Check again',
+    topUp: 'Add SOL',
   },
   pool: {
     entrantsOf: (n: number) => `${n} / 64 entered`,
@@ -77,6 +85,19 @@ export const COPY = {
     title: 'TODO_COPY: Profile',
     lifetime: 'TODO_COPY: Lifetime record',
     readOnlyNote: 'Profiles are a read-only record. Nothing here affects any pool.',
+  },
+  reveal: {
+    // PID §3 class names, ladder order 0..4. Cosmetic: artwork labels,
+    // read by nothing in any scoring or prize path.
+    classNames: ['Goblin', 'Knight', 'Wizard', 'Dragon', 'Titan'] as const,
+    cardTitle: 'Your character pass',
+    cardSeat: (n: number) => `Seat ${n + 1} of 64`,
+    cardDone: 'TODO_COPY: Continue',
+    stalled:
+      'Confirmation is taking longer than usual. Your entry is submitted and nothing further is needed — results appear on the pool page once the network confirms.',
+    stalledDismiss: 'TODO_COPY: Back to the pool',
+    failedRetry: 'TODO_COPY: Try again',
+    failedDismiss: 'TODO_COPY: Back',
   },
   rules: {
     // D-B6 (ratified 2026-08-27): the rules tab, plain language, one section
