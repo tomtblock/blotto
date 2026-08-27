@@ -1,82 +1,68 @@
 'use client';
 
 /*
- * The play-flow client: age attestation (3.1) → the battle flow (3.4) → the
- * sealed submit (3.3). The reveal machine takes over after `register`
- * confirms — its CONFIRMED-BEFORE-REVEAL discipline is carried and pinned
- * (src/reveal/machine.ts).
+ * The play-flow client (C9): geo gate → sign-in → age attestation → the
+ * BALANCE pre-flight → the battle flow → the sealed submit through the REAL
+ * transaction pipeline → the reveal takeover on the outcome.
  *
- * PHASE-3-REVIEW: `EntryServices` is wired to placeholder endpoints until
- * the Phase 4 packet service exists and the Phase 5 rehearsal wires devnet;
- * until then the submit path surfaces a clear "entry service not configured"
- * error rather than pretending.
+ * The balance check runs BEFORE the ninety-second session ever starts:
+ * a wallet that cannot cover entry + transaction costs sees the shortfall
+ * (and, behind NEXT_PUBLIC_TOPUP_ENABLED, the provider top-up flow) instead
+ * of a timer it cannot afford to finish.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { address } from '@solana/kit';
 import { COPY } from '@/copy';
 import { BattleFlow } from '@/battle/components/battle-flow';
 import type { Allocation } from '@/battle/allocation';
 import { indexerApi } from '@/data/api';
+import { lamportsToSol } from '@/data/format';
 import type { PoolSummary } from '@/data/types';
+import { rpcUrl } from '@/chain/rpc';
+import { makeTxRpc } from '@/tx/tx-rpc';
 import { useAuth } from '@/wallet/auth-context';
-import { submitEntry, type EntryServices } from '@/entry/submit';
+import type { RevealResult } from '@/reveal/types';
+import { makeLiveEntryServices } from '@/entry/services';
+import { submitForReveal } from '@/entry/outcome';
+import {
+  checkBalanceGate,
+  ENTRY_COST_HEADROOM_LAMPORTS,
+  type BalanceGateState,
+} from '@/entry/balance-gate';
 import { checkGeoGate, type GeoGateState } from '@/entry/geo-gate';
 import {
   TERMS_VERSION,
   hasLocalAttestation,
   submitAttestation,
 } from '@/entry/attestation';
+import { RevealHost } from './reveal-host';
 
-function browserServices(): EntryServices {
-  const base = process.env.NEXT_PUBLIC_ENTRY_API_URL;
-  const need = (): never => {
-    throw new Error('entry service not configured (NEXT_PUBLIC_ENTRY_API_URL)');
-  };
-  return {
-    async putCiphertext(pool, player, ciphertext) {
-      if (!base) need();
-      const res = await fetch(`${base}/ciphertexts`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          pool,
-          player,
-          ciphertext: Buffer.from(ciphertext).toString('base64'),
-        }),
-      });
-      if (!res.ok) throw new Error(`ciphertext store: ${res.status}`);
-    },
-    async requestPacket() {
-      // Phase 4 (roadmap 4.1) — the packet service issues this.
-      return need();
-    },
-    async sendRegister() {
-      // Phase 5 wires the carried tx seam against devnet.
-      return need();
-    },
-    randomBytes(n) {
-      const out = new Uint8Array(n);
-      crypto.getRandomValues(out);
-      return out;
-    },
-    async deviceHash() {
-      // R19: the Privy device fingerprint — wired in Phase 4 with detection.
-      return new Uint8Array(32);
-    },
-  };
-}
+/** D-C: the top-up prompt ships behind a flag, OFF by default. */
+const TOPUP_ENABLED = process.env.NEXT_PUBLIC_TOPUP_ENABLED === '1';
 
 export function PlayClient() {
   const params = useSearchParams();
   const poolId = params.get('pool');
   const auth = useAuth();
   const [pool, setPool] = useState<PoolSummary | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [submitted, setSubmitted] = useState(false);
   // D-B3: the territory pre-flight. Nothing that can take money renders
   // until the verdict is an explicit 'allowed' — fail-closed by default.
   const [geo, setGeo] = useState<GeoGateState>('checking');
+  // C9: the balance pre-flight, equally fail-closed, ahead of the timer.
+  // Keyed by (wallet, pool, run): a stale result renders as 'checking'
+  // rather than being cleared with a synchronous setState in the effect.
+  const [balanceResult, setBalanceResult] = useState<{
+    key: string;
+    verdict: BalanceGateState;
+  } | null>(null);
+  const [balanceRun, setBalanceRun] = useState(0);
+  // The in-flight entry: set at confirm, drives the reveal takeover.
+  const [revealRun, setRevealRun] = useState<Promise<RevealResult> | null>(null);
+  const [done, setDone] = useState(false);
+
+  const rpc = useMemo(() => makeTxRpc(rpcUrl()), []);
 
   useEffect(() => {
     if (!poolId) return;
@@ -93,24 +79,65 @@ export function PlayClient() {
     };
   }, []);
 
+  const wallet = auth.status === 'signed-in' ? auth.walletAddress : null;
+
+  const balanceKey = wallet && pool ? `${wallet}:${pool.id}:${balanceRun}` : null;
+  useEffect(() => {
+    if (!wallet || !pool || !balanceKey) return;
+    let cancelled = false;
+    checkBalanceGate(
+      (w) => rpc.getBalance(address(w)),
+      wallet,
+      BigInt(pool.entry_lamports)
+    ).then((verdict) => {
+      if (!cancelled) setBalanceResult({ key: balanceKey, verdict });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [wallet, pool, rpc, balanceKey]);
+  const balance: BalanceGateState | 'checking' =
+    balanceResult && balanceResult.key === balanceKey ? balanceResult.verdict : 'checking';
+
+  const startSubmit = useCallback(
+    (battles: readonly Allocation[], timingsMs: readonly number[]): Promise<RevealResult> | null => {
+      if (!pool || auth.status !== 'signed-in' || !auth.walletAddress) return null;
+      const signer = auth.signers.find((s) => s.address === auth.walletAddress);
+      if (!signer) return null;
+      const services = makeLiveEntryServices({
+        apiBase: process.env.NEXT_PUBLIC_ENTRY_API_URL,
+        programId: process.env.NEXT_PUBLIC_PROGRAM_ID,
+        rpc,
+        signer,
+        poolId: BigInt(pool.id),
+      });
+      return submitForReveal(services, rpc, {
+        pool: pool.pool,
+        sealingPubkeyHex: pool.sealing_pubkey,
+        player: auth.walletAddress,
+        battles,
+        timingsMs,
+      });
+    },
+    [pool, auth, rpc]
+  );
+
+  // The confirmed battles, kept ONLY to power retry after a never-broadcast
+  // failure (a fresh salt + upsert ciphertext + new packet — nothing landed).
+  const [lastConfirmed, setLastConfirmed] = useState<{
+    battles: readonly Allocation[];
+    timingsMs: readonly number[];
+  } | null>(null);
 
   const onConfirm = useCallback(
     async (battles: readonly Allocation[], timingsMs: readonly number[]) => {
-      if (!pool || auth.status !== 'signed-in' || !auth.walletAddress) return;
-      try {
-        await submitEntry(browserServices(), {
-          pool: pool.pool,
-          sealingPubkeyHex: pool.sealing_pubkey,
-          player: auth.walletAddress,
-          battles,
-          timingsMs,
-        });
-        setSubmitted(true);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
+      const run = startSubmit(battles, timingsMs);
+      if (run) {
+        setLastConfirmed({ battles, timingsMs });
+        setRevealRun(() => run);
       }
     },
-    [pool, auth]
+    [startSubmit]
   );
 
   if (!poolId) return <p className="opacity-70">Pick a pool first.</p>;
@@ -125,17 +152,34 @@ export function PlayClient() {
   if (auth.status !== 'signed-in') {
     return <p className="opacity-70">Sign in to enter.</p>;
   }
-
-  // D-B4: the versioned clickwrap — conspicuous, unavoidable, BEFORE any
-  // paid action. Keyed by wallet so acceptance state re-derives per wallet;
-  // a terms-version bump re-prompts because the cache key carries the
-  // version.
   if (!auth.walletAddress) {
     return <p className="opacity-70">…</p>;
   }
 
-  if (submitted) {
+  if (done) {
     return <p aria-live="polite">Entry submitted — sealing confirmed.</p>;
+  }
+
+  // The reveal takeover owns the screen from confirm onward.
+  if (revealRun) {
+    const retry = lastConfirmed
+      ? () => startSubmit(lastConfirmed.battles, lastConfirmed.timingsMs)
+      : null;
+    return (
+      <RevealHost
+        result={revealRun}
+        onRetry={
+          retry
+            ? () => {
+                const run = retry();
+                if (run) return run;
+                return revealRun;
+              }
+            : undefined
+        }
+        onDone={() => setDone(true)}
+      />
+    );
   }
 
   return (
@@ -144,9 +188,80 @@ export function PlayClient() {
       wallet={auth.walletAddress}
       signer={auth.signers.find((s) => s.address === auth.walletAddress)}
     >
-      {error && <p className="mb-4 text-sm text-red-400">{error}</p>}
-      <BattleFlow timerSeconds={pool.timer_seconds} onConfirm={onConfirm} />
+      <BalanceGateView
+        state={balance}
+        entryLamports={pool.entry_lamports}
+        wallet={auth.walletAddress}
+        addFunds={auth.addFunds}
+        onRecheck={() => setBalanceRun((n) => n + 1)}
+      >
+        <BattleFlow timerSeconds={pool.timer_seconds} onConfirm={onConfirm} />
+      </BalanceGateView>
     </AttestationGate>
+  );
+}
+
+/**
+ * C9 balance gate view: children render ONLY on an explicit 'ok'. The
+ * insufficient state shows the exact shortfall in plain numbers; the
+ * top-up button exists only behind the flag AND a provider funding seam.
+ */
+function BalanceGateView({
+  state,
+  entryLamports,
+  wallet,
+  addFunds,
+  onRecheck,
+  children,
+}: {
+  state: BalanceGateState | 'checking';
+  entryLamports: string;
+  wallet: string;
+  addFunds: ((address: string) => Promise<void>) | undefined;
+  onRecheck: () => void;
+  children: React.ReactNode;
+}) {
+  const [funding, setFunding] = useState(false);
+  if (state === 'checking') return <p className="opacity-70">…</p>;
+  if (state.state === 'ok') return <>{children}</>;
+
+  const needSol = lamportsToSol(
+    (BigInt(entryLamports) + ENTRY_COST_HEADROOM_LAMPORTS).toString()
+  );
+  return (
+    <section className="flex max-w-prose flex-col gap-4 rounded border p-6" aria-live="polite">
+      {state.state === 'insufficient' ? (
+        <p className="text-sm opacity-80">
+          {COPY.gate.balanceInsufficient(needSol, lamportsToSol(state.haveLamports.toString()))}
+        </p>
+      ) : (
+        <p className="text-sm opacity-80">{COPY.gate.balanceUnavailable}</p>
+      )}
+      <div className="flex gap-3">
+        {TOPUP_ENABLED && addFunds && state.state === 'insufficient' && (
+          <button
+            type="button"
+            disabled={funding}
+            className="rounded bg-[var(--color-accent,#7c5cff)] px-6 py-2 text-white disabled:opacity-40"
+            onClick={async () => {
+              setFunding(true);
+              try {
+                await addFunds(wallet);
+              } catch {
+                // Exited the funding flow — the recheck below stays available.
+              }
+              setFunding(false);
+              onRecheck();
+            }}
+          >
+            {funding ? '…' : COPY.gate.topUp}
+          </button>
+        )}
+        <button type="button" className="underline" onClick={onRecheck}>
+          {COPY.gate.balanceRetry}
+        </button>
+      </div>
+    </section>
   );
 }
 

@@ -55,7 +55,12 @@ import type { LifecycleLogEntry, TxFailure, TxSigner } from "./types";
 export interface ExecuteTradeParams {
   rpc: TxRpc;
   signer: TxSigner;
-  instruction: Instruction;
+  /** The transaction's single program instruction — or use `instructions`
+   * when the program requires companions in the same transaction (the
+   * `register` entry rides behind its Ed25519 packet verification). */
+  instruction?: Instruction;
+  /** Ordered instruction list; wins over `instruction` when present. */
+  instructions?: readonly Instruction[];
   /** Receives every lifecycle transition, timestamped. */
   onEvent: (entry: LifecycleLogEntry) => void;
   /** Injectable clock (tests); defaults to Date.now. */
@@ -105,6 +110,11 @@ const defaultSleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 export async function executeTrade(p: ExecuteTradeParams): Promise<TradeResult> {
+  const instructions =
+    p.instructions ?? (p.instruction ? [p.instruction] : []);
+  if (instructions.length === 0) {
+    throw new Error('executeTrade: no instruction(s) given');
+  }
   const now = p.now ?? Date.now;
   const sleep = p.sleep ?? defaultSleep;
   const confirmTimeoutMs = p.confirmTimeoutMs ?? DEFAULT_CONFIRM_TIMEOUT_MS;
@@ -143,7 +153,10 @@ export async function executeTrade(p: ExecuteTradeParams): Promise<TradeResult> 
   try {
     const [latest, priorityFeeMicroLamports] = await Promise.all([
       p.rpc.getLatestBlockhash(),
-      estimatePriorityFeeMicroLamports(p.rpc, writableAccounts(p.instruction)),
+      estimatePriorityFeeMicroLamports(
+        p.rpc,
+        instructions.flatMap((ix) => writableAccounts(ix))
+      ),
     ]);
     blockhash = latest.blockhash;
 
@@ -164,7 +177,7 @@ export async function executeTrade(p: ExecuteTradeParams): Promise<TradeResult> 
             getSetComputeUnitPriceInstruction({
               microLamports: priorityFeeMicroLamports,
             }),
-            p.instruction,
+            ...instructions,
           ],
           m,
         ),

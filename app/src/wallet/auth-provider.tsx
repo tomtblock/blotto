@@ -3,6 +3,7 @@
 import { PrivyProvider, useLogin, usePrivy } from "@privy-io/react-auth";
 import {
   toSolanaWalletConnectors,
+  useFundWallet,
   useSignMessage,
   useSignTransaction,
   useWallets,
@@ -77,6 +78,7 @@ function PrivyAdapter({ children }: { children: ReactNode }) {
   const { wallets } = useWallets();
   const { signTransaction } = useSignTransaction();
   const { signMessage } = useSignMessage();
+  const { fundWallet } = useFundWallet();
 
   const value = useMemo<Auth>(() => {
     // Active Solana wallet: a connected standard wallet (embedded or
@@ -149,8 +151,13 @@ function PrivyAdapter({ children }: { children: ReactNode }) {
         login({ loginMethods: [provider] }),
       connectWallet: () => login({ loginMethods: ["wallet"] }),
       signOut: logout,
+      // C9: Privy's funding flow, exposed as the provider-neutral seam. The
+      // top-up button additionally hides behind NEXT_PUBLIC_TOPUP_ENABLED.
+      addFunds: async (fundAddress: string) => {
+        await fundWallet({ address: fundAddress });
+      },
     };
-  }, [ready, authenticated, user, wallets, signTransaction, signMessage, login, logout]);
+  }, [ready, authenticated, user, wallets, signTransaction, signMessage, fundWallet, login, logout]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

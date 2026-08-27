@@ -21,11 +21,16 @@ function services(pool: ReturnType<typeof generateKeypair>) {
     },
     async requestPacket() {
       calls.push('packet');
-      return new Uint8Array([9, 9]);
+      return {
+        message: new Uint8Array(85),
+        signature: new Uint8Array(64),
+        publicKey: new Uint8Array(32),
+      };
     },
-    async sendRegister(_p, h) {
+    async sendRegister(_p, h, packet) {
       calls.push('register');
       expect(h.length).toBe(32);
+      expect(packet.message.length).toBe(85);
       return 'SIG';
     },
     randomBytes(n) {

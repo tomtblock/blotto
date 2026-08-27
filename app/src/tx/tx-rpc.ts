@@ -63,6 +63,9 @@ export interface TxRpc {
   getBalance(walletAddress: Address): Promise<bigint>;
   /** Token balance of an ATA; 0n when the account does not exist yet. */
   getTokenBalance(tokenAccount: Address): Promise<bigint>;
+  /** Raw account data (discriminator included), or null when the account
+   * does not exist — the client's read of `Config.platform_wallet`. */
+  getAccountData(accountAddress: Address): Promise<Uint8Array | null>;
 }
 
 export function makeTxRpc(rpcUrl: string): TxRpc {
@@ -159,6 +162,14 @@ export function makeTxRpc(rpcUrl: string): TxRpc {
         // ATA not created yet — a zero balance, not an error.
         return 0n;
       }
+    },
+
+    async getAccountData(accountAddress) {
+      const { value } = await rpc
+        .getAccountInfo(accountAddress, { encoding: "base64", commitment: "confirmed" })
+        .send();
+      if (!value) return null;
+      return new Uint8Array(Buffer.from(value.data[0], "base64"));
     },
   };
 }
