@@ -20,13 +20,19 @@ scripted bot in shadow mode, and drains the 63-entry refund fork in full.
 
 ## Sequence
 
-1. **Deploy the program.**
+1. **Deploy the program** (C12: one script — build, deploy, migrate,
+   re-derive):
    ```
-   anchor build
-   anchor deploy --provider.cluster devnet
-   solana program show 4pspHqtbdgqKTvSxvKFT2ycEU28u3EWdxjmj3xsTHD3Y
+   BLOTTO_PROGRAM_KEYPAIR=/path/to/blotto_cup-keypair.json \
+   BLOTTO_DATABASE_URL=postgres://... \
+   ./scripts/deploy-devnet.sh
    ```
-   Then transfer the upgrade authority to the devnet Squads vault and verify
+   The script refuses a keypair whose pubkey differs from the program's
+   `declare_id`, applies every PENDING migration in filename order (a clean
+   database gets all of them; an upgraded one gets exactly the new files —
+   0004 seat payouts, 0005 terms version, 0006 review decisions, ...), and
+   re-derives the derived tables from the events ledger. Then transfer the
+   upgrade authority to the devnet Squads vault and verify
    `solana program show` reports the Squads address (Gate 1's founder check).
 2. **Initialise.** `init_config` signed by the Squads vault, carrying the
    Turnkey entry-signer and settlement-signer pubkeys, the platform wallet,
@@ -35,10 +41,28 @@ scripted bot in shadow mode, and drains the 63-entry refund fork in full.
    Only the 0.1 tier is open at launch; the others stay gated by the R6
    switch until the founder opens them (`set_open_tiers`), and each
    ceiling moves one tier per `set_vault_ceiling` call.
-3. **Services up.** Indexer (webhook + read API), entry service
-   (`@blotto/packet` `serveEntryApi`) with the Turnkey `PacketSigner`, the
-   crank (`@blotto/reveal` with `Web3Chain`, Turnkey custody, Irys
-   publisher), app with `NEXT_PUBLIC_INDEXER_URL` / `NEXT_PUBLIC_ENTRY_API_URL`.
+3. **Services up.**
+   - **Indexer** — start with `npm --prefix backend/indexer run sync`: it
+     migrates, runs one BACKFILL (the fallback that catches anything missed
+     while the process was down), then serves the webhook. Webhook provider
+     (Helius or equivalent raw-transaction webhooks): point a webhook at
+     `http://<indexer-host>:<BLOTTO_INDEXER_PORT>/` filtered to the program
+     address, with the shared secret as the Authorization header — the same
+     value as `BLOTTO_HELIUS_WEBHOOK_SECRET`. Deliveries are idempotent
+     (`(signature, event_index)` ledger key), so provider retries and
+     overlapping backfills are safe; on any suspected gap, run
+     `npm --prefix backend/indexer run backfill` — same write path.
+   - **Entry service** — `@blotto/packet` `serveEntryApi` with the
+     `TurnkeyPacketSigner` (C11; `TURNKEY_*` + `ENTRY_SIGNER_*` env).
+   - **Daemon** — `@blotto/reveal` `makeDaemon` over `Web3Chain`, Turnkey
+     custody (C11), the Irys publisher (`IRYS_UPLOAD_KEY`), the Switchboard
+     coordinator; it settles sealed pools AND keeps one Open pool per open
+     tier (C8).
+   - **Review service** — `@blotto/detection` `serveReviewApi` with
+     `config/reviewers.json` filled (C10).
+   - **App** — `NEXT_PUBLIC_INDEXER_URL` / `NEXT_PUBLIC_ENTRY_API_URL` /
+     `NEXT_PUBLIC_REVIEW_API_URL` / `NEXT_PUBLIC_PROGRAM_ID` /
+     `NEXT_PUBLIC_SOLANA_RPC_URL`.
 4. **5.1 — twenty pools.** The rehearsal orchestrator drives 64 wallets per
    pool through the four strategies; at least one pool per run enters
    through the REAL frontend via `tests/rehearsal/playwright/entry-flow.spec.ts`

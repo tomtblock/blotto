@@ -14,8 +14,9 @@ import {
   type PostgresConfig,
 } from './shared';
 
-/** Default program ID — the `declare_id!` in programs/blotto_cup/src/lib.rs. Overridable per env. */
-export const DEFAULT_PROGRAM_ID = '57goj6dMYL9BuaGa18jnnTPH7ecztk5rfxiurc4UPW9r';
+/** Default program ID — the `declare_id!` in programs/blotto_cup/src/lib.rs. Overridable per env.
+ * C12 fix: this had drifted from the program's actual declared id. */
+export const DEFAULT_PROGRAM_ID = '4pspHqtbdgqKTvSxvKFT2ycEU28u3EWdxjmj3xsTHD3Y';
 /** Dev default RPC — overridable. Devnet for dev; mainnet-beta in production via env. */
 export const DEFAULT_RPC_URL = 'https://api.devnet.solana.com';
 

@@ -1,0 +1,105 @@
+# The on-chain lane (C12): `anchor build` of the real SBF artifact and the
+# LiteSVM integration suite driving it — the tests that pin the byte-level
+# wire contract every TypeScript client encodes against.
+#
+# Runs only when on-chain code (or this lane) changes: the artifact build is
+# minutes even warm, and ci-fast's cargo lane already covers the program's
+# host-side unit tests on every PR.
+#
+# Toolchain pins mirror the versions the branch is developed against
+# (solana-cli 3.1.10 / anchor-cli 1.0.2); bump both HERE and in the
+# rehearsal environment together. Everything heavy is cached: the Solana
+# release by version, the anchor binary by version, cargo registry + both
+# build trees by lockfile hash. Knowledge-currency note (CLAUDE.md): if the
+# Solana Foundation skill recommends avm or a different install channel for
+# Anchor 1.x at execution time, the skill wins — the pin matters, not the
+# channel.
+
+name: on-chain
+
+on:
+  pull_request:
+    paths:
+      - 'programs/**'
+      - 'crates/**'
+      - 'tests/litesvm/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'Anchor.toml'
+      - '.github/workflows/on-chain.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'programs/**'
+      - 'crates/**'
+      - 'tests/litesvm/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'Anchor.toml'
+      - '.github/workflows/on-chain.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: on-chain-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SOLANA_VERSION: 3.1.10
+  ANCHOR_VERSION: 1.0.2
+
+permissions:
+  contents: read
+
+jobs:
+  anchor-litesvm:
+    name: anchor build + litesvm
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Cache the Solana release
+        id: cache-solana
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.local/share/solana
+          key: solana-${{ env.SOLANA_VERSION }}
+
+      - name: Install Solana ${{ env.SOLANA_VERSION }}
+        if: steps.cache-solana.outputs.cache-hit != 'true'
+        run: sh -c "$(curl -sSfL https://release.anza.xyz/v${SOLANA_VERSION}/install)"
+
+      - name: Cache the anchor binary
+        id: cache-anchor
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cargo/bin/anchor
+          key: anchor-cli-${{ env.ANCHOR_VERSION }}
+
+      - name: Install anchor-cli ${{ env.ANCHOR_VERSION }}
+        if: steps.cache-anchor.outputs.cache-hit != 'true'
+        run: cargo install anchor-cli@${ANCHOR_VERSION} --locked
+
+      - name: Cache cargo + build trees
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+            tests/litesvm/target
+          key: onchain-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'tests/litesvm/Cargo.lock') }}
+          restore-keys: onchain-${{ runner.os }}-
+
+      - name: anchor build
+        run: |
+          export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
+          anchor build
+
+      - name: LiteSVM suite against the built artifact
+        run: |
+          export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
+          cd tests/litesvm
+          cargo test --locked

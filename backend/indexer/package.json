@@ -14,7 +14,8 @@
     "migrate": "ts-node src/index.ts migrate",
     "serve": "ts-node src/index.ts serve",
     "backfill": "ts-node src/index.ts backfill",
-    "re-derive": "ts-node src/index.ts re-derive"
+    "re-derive": "ts-node src/index.ts re-derive",
+    "sync": "ts-node src/index.ts sync"
   },
   "dependencies": {
     "@solana/web3.js": "^1.95.0",

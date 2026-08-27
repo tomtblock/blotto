@@ -7,6 +7,9 @@
  *   serve      — run the authenticated Helius webhook receiver
  *   backfill   — catch up from RPC through the same write path (dropped-webhook recovery)
  *   re-derive  — rebuild the derived tables from the ledger alone
+ *   sync       — the deployment entry (C12): migrate, then backfill (the
+ *                fallback catches anything the webhook missed while the
+ *                process was down), then serve
  *
  * Config (DB URL, RPC URL, program ID, commitment, webhook secret/port) comes from the loader —
  * nothing hard-coded. Ingest health reports through `Monitor` (logging default; Step 6 alerting).
@@ -84,6 +87,12 @@ async function cmdRederive(monitor: Monitor): Promise<void> {
   }
 }
 
+async function cmdSync(monitor: Monitor): Promise<void> {
+  await cmdMigrate(monitor);
+  await cmdBackfill(monitor);
+  await cmdServe(monitor);
+}
+
 export async function main(argv: readonly string[] = process.argv.slice(2)): Promise<void> {
   // Sink selected by BLOTTO_MONITOR_SINK (default `logging`); `serve` exposes `/metrics` under
   // the `prometheus` sink so one Alloy agent can scrape it (Step 6).
@@ -98,10 +107,12 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
       return cmdBackfill(monitor);
     case 're-derive':
       return cmdRederive(monitor);
+    case 'sync':
+      return cmdSync(monitor);
     default:
       console.error(
         `${SERVICE}: unknown command "${command ?? ''}". ` +
-          'Usage: indexer <migrate|serve|backfill|re-derive>'
+          'Usage: indexer <migrate|serve|backfill|re-derive|sync>'
       );
       process.exitCode = 1;
   }
