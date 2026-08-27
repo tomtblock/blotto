@@ -136,13 +136,21 @@ pub struct CreatePassCollection<'info> {
 pub fn handle_create_pass_collection(
     ctx: Context<CreatePassCollection>,
     _pool_id: u64,
-    name: String,
-    uri: String,
 ) -> Result<()> {
     require!(
         ctx.accounts.pool.state == PoolState::Open,
         ErrorCode::PoolNotOpen
     );
+
+    // INTERNAL-REVIEW (Phase 5, finding IR-1): the metadata is DERIVED, not
+    // caller-supplied. This instruction is deliberately permissionless (any
+    // payer), so accepting a name/uri from the caller would let a griefer
+    // front-run the settlement crank and label a pool's collection with
+    // arbitrary text. The name is fixed per pool; the uri starts empty (R12
+    // typographic launch) and only a later, counsel-gated instruction could
+    // ever set one.
+    let name = format!("BLOTTO PASS COLLECTION #{}", ctx.accounts.pool.id);
+    let uri = String::new();
 
     let pool_key = ctx.accounts.pool.key();
     let pass_collection_bump = ctx.bumps.pass_collection;

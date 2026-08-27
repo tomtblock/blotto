@@ -81,6 +81,7 @@ jobs:
             backend/indexer/package-lock.json
             backend/packet/package-lock.json
             backend/detection/package-lock.json
+            tests/rehearsal/package-lock.json
 
       # Order matters: later packages type-check against earlier ones' source
       # trees (the relative re-export convention), so every package installs
@@ -97,6 +98,13 @@ jobs:
             echo "=== backend/$pkg ==="
             (cd "backend/$pkg" && npm run typecheck && npm test)
           done
+
+      - name: rehearsal (offline twenty-pool settlement)
+        run: |
+          cd tests/rehearsal
+          npm ci --no-audit --no-fund
+          npm run typecheck
+          npm test
 
       - name: app install
         run: cd app && npm ci --no-audit --no-fund

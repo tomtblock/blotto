@@ -106,7 +106,7 @@ fn lifecycle_log_fixture() {
     let ix = open_pool_ix(&settlement.pubkey(), 2, 0, [9; 32], env.sealing_secret_hash);
     env.send(&[ix], &[&settlement]).unwrap();
     commit_vrf_for_real(&mut env, 2);
-    let ix = create_pass_collection_ix(&settlement.pubkey(), 2, "BLOTTO PASS COLLECTION", "");
+    let ix = create_pass_collection_ix(&settlement.pubkey(), 2);
     env.send(&[ix], &[&settlement]).unwrap();
     let refunders: Vec<(Keypair, Pubkey)> =
         (0..2).map(|_| env.register_player(2).unwrap()).collect();

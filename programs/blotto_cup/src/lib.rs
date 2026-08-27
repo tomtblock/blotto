@@ -130,13 +130,10 @@ pub mod blotto_cup {
 
     /// Create the Metaplex Core Collection that groups a pool's character
     /// passes, with transfer permanently frozen at the Collection level.
-    pub fn create_pass_collection(
-        ctx: Context<CreatePassCollection>,
-        pool_id: u64,
-        name: String,
-        uri: String,
-    ) -> Result<()> {
-        pass::handle_create_pass_collection(ctx, pool_id, name, uri)
+    /// Metadata is derived on-chain (permissionless caller, so no caller
+    /// input reaches the Collection — internal review IR-1).
+    pub fn create_pass_collection(ctx: Context<CreatePassCollection>, pool_id: u64) -> Result<()> {
+        pass::handle_create_pass_collection(ctx, pool_id)
     }
 
     /// Enter a pool: pay, submit the sealed battles hash, receive the class

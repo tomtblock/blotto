@@ -220,18 +220,9 @@ pub fn open_pool_ix(
     }
 }
 
-pub fn create_pass_collection_ix(
-    payer: &Pubkey,
-    pool_id: u64,
-    name: &str,
-    uri: &str,
-) -> Instruction {
+pub fn create_pass_collection_ix(payer: &Pubkey, pool_id: u64) -> Instruction {
     let mut data = disc("create_pass_collection").to_vec();
     data.extend_from_slice(&pool_id.to_le_bytes());
-    data.extend_from_slice(&(name.len() as u32).to_le_bytes());
-    data.extend_from_slice(name.as_bytes());
-    data.extend_from_slice(&(uri.len() as u32).to_le_bytes());
-    data.extend_from_slice(uri.as_bytes());
     let pool = pool_pda(pool_id);
     Instruction {
         program_id: program_id(),
@@ -582,12 +573,7 @@ impl Env {
         let settlement = self.settlement.insecure_clone();
         self.send(&[ix], &[&settlement]).expect("open_pool");
         patch_vrf_seed(&mut self.svm, &pool_pda(pool_id), [5u8; 32]);
-        let ix = create_pass_collection_ix(
-            &self.settlement.pubkey(),
-            pool_id,
-            "BLOTTO PASS COLLECTION",
-            "",
-        );
+        let ix = create_pass_collection_ix(&self.settlement.pubkey(), pool_id);
         self.send(&[ix], &[&settlement])
             .expect("create_pass_collection");
     }
