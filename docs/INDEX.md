@@ -22,6 +22,7 @@ owns; everywhere else a fact appears, it appears as a pointer.
 | Keys, custody, infrastructure provisioning | `REPO-TRANSITION-PLAYBOOK.md` (intent) · `../TRANSITION-REPORT.md` (state) | The report wins on facts |
 | Agent role and hard rules | `../CLAUDE.md` | Points here for everything it does not own |
 | Contribution process, hooks, the word grep | `../CONTRIBUTING.md` | Canonical for process |
+| Skill-evidence study: strategy ladder, parameters, published outcome statistics | `skill-evidence/REPORT.md` (results) · `../tests/rehearsal/strategies/README.md` (ladder rationale) | GENERATED — regenerate with `npm run skill-evidence` in `tests/rehearsal`; the nightly CI lane fails on drift. Never edit by hand |
 
 ## Reading order
 

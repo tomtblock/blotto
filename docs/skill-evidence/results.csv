@@ -1,0 +1,5 @@
+class,entrants,rank1_rate_pct,paid_seat_rate_pct,eliminated_rate_pct,mean_payout_share_pct,total_paid_lamports
+uniform,3200,0.000,0.00,100.00,0.0000,0
+random,3200,0.000,0.21,99.78,0.0064,1060000000
+heuristic,3200,1.125,34.43,65.56,1.6633,272520000000
+optimised,3200,5.125,65.34,34.65,4.5802,750420000000
