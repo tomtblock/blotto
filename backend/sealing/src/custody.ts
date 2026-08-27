@@ -54,6 +54,13 @@ export interface PoolKeyCustody {
   /** Create the pool's keypair under the export policy; return what to publish. */
   createPoolKey(poolId: bigint): Promise<PublishedPoolKey>;
   /**
+   * The PUBLIC half already created for this pool, or null. Never touches the
+   * secret. Exists for the daemon's crash window between `createPoolKey` and
+   * `open_pool` landing: on resume it must republish the SAME key, because
+   * custody holds the only copy of the secret the published hash commits to.
+   */
+  getPublishedKey(poolId: bigint): Promise<PublishedPoolKey | null>;
+  /**
    * Export the secret for the reveal. MUST throw `ExportRefusedError` when
    * the policy refuses. The returned bytes go straight into
    * `reveal_pool_secret` — on-chain, hence public, forever.
@@ -78,6 +85,12 @@ export class LocalCustody implements PoolKeyCustody {
     }
     const kp = generateKeypair();
     this.keys.set(key, kp);
+    return { poolId, publicKey: kp.publicKey, secretHash: sha256(kp.secretKey) };
+  }
+
+  async getPublishedKey(poolId: bigint): Promise<PublishedPoolKey | null> {
+    const kp = this.keys.get(poolId.toString());
+    if (!kp) return null;
     return { poolId, publicKey: kp.publicKey, secretHash: sha256(kp.secretKey) };
   }
 

@@ -89,7 +89,9 @@ export async function runOfflinePool(
 
   chain.pools.set(poolId.toString(), {
     poolId,
+    tier: 0,
     state: 'Sealed',
+    vrfCommitted: true,
     entryLamports: 100_000_000n,
     fillDeadline: 0n,
     secretRevealed: false,

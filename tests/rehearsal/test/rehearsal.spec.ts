@@ -58,7 +58,9 @@ describe('the offline dress rehearsal', () => {
     );
     chain.pools.set('9', {
       poolId: 9n,
+      tier: 0,
       state: 'Refunding',
+      vrfCommitted: true,
       entryLamports: 100_000_000n,
       fillDeadline: 0n,
       secretRevealed: false,
