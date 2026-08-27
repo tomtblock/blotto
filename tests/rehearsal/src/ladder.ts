@@ -49,6 +49,14 @@ function freeAllocation(seedStr: string): number[] {
  * Place `trioValues` on the trio's stats and `offValues` on the remaining
  * two, applying a seeded ±jitter that moves points BETWEEN trio stats so the
  * sum stays exactly 100 and mirror matchups do not tie stat-for-stat.
+ *
+ * The jitter model (documented per master prompt v2's A2 amendment): one
+ * transfer of 0..jitterMax points from trio stat `from` to trio stat `to`
+ * (skipped when from == to or the donor would drop to the off-stat level),
+ * both drawn from sha256 of the jitter seed. Uniqueness within a class is
+ * NOT left to jitter luck — `ensureUniqueWithinClass` below regenerates any
+ * entrant whose full seven-battle set collides with an earlier same-class
+ * entrant, bumping a salt deterministically until the set is unique.
  */
 function concentrated(
   trio: readonly [number, number, number],
@@ -77,12 +85,14 @@ function concentrated(
   return out;
 }
 
-/** One ladder entrant: seven valid battles + plausible deterministic timings. */
-export function generateLadderEntrant(cls: LadderClass, seed: number): GeneratedEntrant {
+/** One ladder entrant: seven valid battles + plausible deterministic
+ * timings. `salt` (default 0) feeds the uniqueness fixup — a nonzero salt
+ * reshapes the entrant's seeded streams without touching anyone else's. */
+export function generateLadderEntrant(cls: LadderClass, seed: number, salt = 0): GeneratedEntrant {
   const battles: number[][] = [];
   const timingsMs: number[] = [];
   for (let k = 0; k < 7; k++) {
-    const key = `ladder:${cls}:${seed}:${k}`;
+    const key = salt === 0 ? `ladder:${cls}:${seed}:${k}` : `ladder:${cls}:${seed}:${salt}:${k}`;
     switch (cls) {
       case 'uniform':
         battles.push([20, 20, 20, 20, 20]);
@@ -103,7 +113,7 @@ export function generateLadderEntrant(cls: LadderClass, seed: number): Generated
         // Per-entrant rotation over all ten trios; trio values one-upped
         // from the heuristic family, funded from the off-stats (4/3),
         // wider jitter so mirror matchups break asymmetrically.
-        const start = sha(`rot:${cls}:${seed}`)[0] % TRIOS.length;
+        const start = sha(`rot:${cls}:${seed}:${salt}`)[0] % TRIOS.length;
         const trio = TRIOS[(start + k) % TRIOS.length];
         battles.push(concentrated(trio, [39, 32, 22], [4, 3], `j:${key}`, 3));
         timingsMs.push(3500 + (sha(`t:${key}`)[0] % 4000));
@@ -121,6 +131,45 @@ export function generateLadderEntrant(cls: LadderClass, seed: number): Generated
 }
 
 /**
+ * Within-class uniqueness (master prompt v2, A2 amendment): no two entrants
+ * of the same class in one pool may share the identical seven-battle
+ * allocation set. Collisions are repaired deterministically — the LATER
+ * entrant regenerates with a bumped salt until its set is fresh — so the
+ * fixup is reproducible from the pool seed alone.
+ *
+ * The `uniform` class is EXEMPT, deliberately: 20/20/20/20/20 every battle
+ * is the class's definition — it is the structural baseline, not a
+ * strategy, and jittering it would destroy the property the appendix
+ * documents (a flat split loses 3–2 to any three-stat concentration).
+ * Recorded in the A2 step report as a judgement call.
+ */
+export function ensureUniqueWithinClass(
+  entrants: GeneratedEntrant[],
+  seedOf: (index: number) => number
+): void {
+  const seen = new Map<string, Set<string>>();
+  entrants.forEach((e, i) => {
+    if (e.strategy === 'uniform') return;
+    let set = seen.get(e.strategy);
+    if (!set) {
+      set = new Set();
+      seen.set(e.strategy, set);
+    }
+    let key = JSON.stringify(e.battles);
+    let salt = 0;
+    while (set.has(key)) {
+      salt += 1;
+      if (salt > 64) throw new Error(`cannot de-duplicate ${e.strategy} entrant ${i}`);
+      const fresh = generateLadderEntrant(e.strategy as LadderClass, seedOf(i), salt);
+      entrants[i] = fresh;
+      e = fresh;
+      key = JSON.stringify(e.battles);
+    }
+    set.add(key);
+  });
+}
+
+/**
  * One study pool: 16 entrants of each class, seat order shuffled by a
  * seeded Fisher–Yates so class membership is uncorrelated with seat index
  * (seat order places the indivisible remainder of a tie split and the leaf
@@ -133,10 +182,32 @@ export function ladderPopulation(poolSeed: number): GeneratedEntrant[] {
       out.push(generateLadderEntrant(cls, poolSeed * 1000 + c * 100 + i));
     }
   });
+  // Pre-shuffle, index i belongs to class floor(i/16), member i%16.
+  ensureUniqueWithinClass(out, (i) => poolSeed * 1000 + Math.floor(i / 16) * 100 + (i % 16));
   for (let i = out.length - 1; i > 0; i--) {
     const h = sha(`shuffle:${poolSeed}:${i}`);
     const j = (h[0] | (h[1] << 8)) % (i + 1);
     [out[i], out[j]] = [out[j], out[i]];
   }
+  return out;
+}
+
+/**
+ * A HOMOGENEOUS-field pool (v2's A2 amendment): all 64 entrants from one
+ * class — the "equally-skilled entrants" runs whose outcome spread the
+ * report compares against the everyone-equal baseline (each seat expecting
+ * 1/64 of the pot). Uniqueness within the class enforced as above (a
+ * homogeneous uniform pool would be one 64-way tie by definition and is not
+ * part of the study).
+ */
+export function homogeneousPopulation(cls: LadderClass, poolSeed: number): GeneratedEntrant[] {
+  if (cls === 'uniform') {
+    throw new Error('a homogeneous uniform pool is a single 64-way tie — not a study run');
+  }
+  const out: GeneratedEntrant[] = [];
+  for (let i = 0; i < 64; i++) {
+    out.push(generateLadderEntrant(cls, poolSeed * 1000 + i));
+  }
+  ensureUniqueWithinClass(out, (i) => poolSeed * 1000 + i);
   return out;
 }

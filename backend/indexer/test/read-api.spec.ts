@@ -101,4 +101,44 @@ describe('read API routing', () => {
     expect(tiers2[0].status).to.equal('settling');
     expect(tiers2[0].live_pool_state).to.equal('Refunding');
   });
+
+  it('serves the player-history exhibit endpoints (D-A2 v2)', async () => {
+    // W1: paid on entry 1, paid again on entry 2 (persistence).
+    // W2: unpaid on entry 1, unpaid on entry 2.
+    // W3: a single unpaid first-timer.
+    const rows = [
+      { player: 'W1', entries_to_date: '1', paid: true },
+      { player: 'W1', entries_to_date: '2', paid: true },
+      { player: 'W2', entries_to_date: '1', paid: false },
+      { player: 'W2', entries_to_date: '2', paid: false },
+      { player: 'W3', entries_to_date: '1', paid: false },
+    ];
+    const summary = (await handleRead(db(() => rows), '/history/summary')).body as Record<
+      string,
+      Record<string, string>
+    >;
+    expect(summary.first_time.entries).to.equal('3');
+    expect(summary.first_time.paid_seat_rate_pct).to.equal('33.33');
+    expect(summary.repeat.entries).to.equal('2');
+    expect(summary.repeat.paid_seat_rate_pct).to.equal('50.00');
+
+    const persistence = (await handleRead(db(() => rows), '/history/persistence'))
+      .body as Record<string, Record<string, string>>;
+    expect(persistence.pairs_after_paid.pairs).to.equal('1');
+    expect(persistence.pairs_after_paid.paid_next_rate_pct).to.equal('100.00');
+    expect(persistence.pairs_after_unpaid.pairs).to.equal('1');
+    expect(persistence.pairs_after_unpaid.paid_next_rate_pct).to.equal('0.00');
+
+    const dist = (await handleRead(db(() => rows), '/history/entries')).body as {
+      wallets: string;
+      entries_to_date: Array<{ entries: string; wallets: string }>;
+    };
+    expect(dist.wallets).to.equal('3');
+    expect(dist.entries_to_date).to.deep.equal([
+      { entries: '1', wallets: '1' },
+      { entries: '2', wallets: '2' },
+    ]);
+
+    expect((await handleRead(db(() => []), '/history/nope')).status).to.equal(404);
+  });
 });

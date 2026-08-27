@@ -26,7 +26,7 @@ import type { DecodedEvent } from './shared';
 export type ProjectionOp =
   | {
       kind: 'upsert';
-      table: 'pools' | 'entries' | 'results' | 'payouts' | 'profiles';
+      table: 'pools' | 'entries' | 'results' | 'payouts' | 'profiles' | 'player_history';
       key: Record<string, string | number>;
       set: Record<string, unknown>;
     }
@@ -37,6 +37,19 @@ export type ProjectionOp =
       field: string;
       /** Decimal string — increments are numeric and may exceed 2^53. */
       by: string;
+    }
+  | {
+      /**
+       * Insert the player-history row for one entry (D-A2 v2): tier and
+       * pot copied from the `pools` row, `entries_to_date` read from
+       * `profiles.pools_entered` — which the SAME event's increment op has
+       * already bumped, so the value is "this is my Nth entry". A named op
+       * (like the two conditionals) because it reads across tables.
+       */
+      kind: 'history_on_entry';
+      pool: string;
+      player: string;
+      seat: number;
     }
   | {
       /** `pools.state = 'Closed'` once `refunded_count >= entrants`. */
@@ -137,6 +150,14 @@ export function projectEvent(e: DecodedEvent): ProjectionOp[] {
           field: `class_${cls}`,
           by: '1',
         },
+        // AFTER the pools_entered increment above — entries_to_date is the
+        // post-increment counter (D-A2 v2's player-history exhibit).
+        {
+          kind: 'history_on_entry',
+          pool: e.pool as string,
+          player: e.player as string,
+          seat: e.index as number,
+        },
       ];
     }
     case 'PoolSealed':
@@ -199,6 +220,14 @@ export function projectEvent(e: DecodedEvent): ProjectionOp[] {
           key: { player: p.player },
           field: 'seats_paid',
           by: '1',
+        });
+        // The history row's outcome: a committed payout is a paid seat,
+        // escrowed or not (escrow is custody, not a smaller prize).
+        ops.push({
+          kind: 'upsert',
+          table: 'player_history',
+          key: { pool: e.pool as string, player: p.player },
+          set: { paid: true, amount_lamports: p.amount },
         });
         if (!p.escrowed) {
           ops.push({
@@ -332,6 +361,29 @@ export class MemoryProjection implements Projection {
           const current = BigInt((row[op.field] as string | number | undefined) ?? 0);
           row[op.field] = (current + BigInt(op.by)).toString();
           t.set(k, row);
+          break;
+        }
+        case 'history_on_entry': {
+          const poolRow = this.table('pools').get(MemoryProjection.rowKey({ pool: op.pool }));
+          const profile = this.table('profiles').get(
+            MemoryProjection.rowKey({ player: op.player })
+          );
+          const t = this.table('player_history');
+          const k = MemoryProjection.rowKey({ pool: op.pool, player: op.player });
+          t.set(k, {
+            pool: op.pool,
+            player: op.player,
+            seat: op.seat,
+            tier: (poolRow?.tier as number | undefined) ?? null,
+            pot_lamports: (poolRow?.pot_lamports as string | undefined) ?? null,
+            entries_to_date: String(profile?.pools_entered ?? '1'),
+            paid: false,
+            amount_lamports: '0',
+            ...(t.get(k) ?? {}),
+            // The identity fields above always win; the spread keeps a
+            // paid flag that a replayed PrizesPaid already set. (Events
+            // replay in ledger order, so in practice entry precedes pay.)
+          });
           break;
         }
         case 'close_if_fully_refunded': {

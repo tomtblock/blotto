@@ -5,49 +5,109 @@ by hand. Deterministic: the same parameters reproduce this file byte for
 byte, and the nightly CI job re-runs the study and diffs it against this
 committed copy.*
 
-## Parameters
+## Headline: considered play against unconsidered play
 
-- Pools: **200** × 64 entrants (16 per strategy class, seat order
-  shuffled per pool so class is uncorrelated with seat index)
-- Base seed: **20260827** (pool p uses seed baseSeed + p, p = 1..200)
-- Tier: 0.1 SOL entry (shares are pot-relative; per-class statistics are
-  tier-invariant)
-- Pipeline: the real settlement crank over the offline chain mirror
-  (`FakeChain`), full D3-B split-pot settlement; detection off (identical
-  sets inside a class are the study's construction, not collusion)
-- Conservation asserted on every pool: committed amounts sum to the pot
-  exactly
+Every entrant pays the same entry and faces the identical field; the only
+input that differs between the rows below is how the entrant allocated
+stats across the seven battles. The spread between **random** (valid
+allocations with no intent) and **optimised** (a tuned three-stat plan) is
+the measured effect of that choice under the published scoring rule
+(battles won, then stats won; ties split evenly per D3-B):
+
+| Class | Entrants | Rank-1 rate | Paid-seat rate | Eliminated from the paid set | Mean payout share of pot |
+|---|---|---|---|---|---|
+| random | 3200 | 0.000% | 0.15% | 99.84% | 0.0041% |
+| heuristic | 3200 | 1.093% | 33.84% | 66.15% | 1.6114% |
+| optimised | 3200 | 5.156% | 66.03% | 33.96% | 4.6343% |
+
+The everyone-equal baseline for a 64-seat pool is a mean payout share of
+**1.5625%** (1/64) per entrant. The gap between the rows above — produced
+purely by allocation choices — is the product's skill evidence.
+
+## Fields of equally-skilled entrants
+
+The v2 amendment's control runs: **200 pools per class** in
+which all 64 entrants play the SAME strategy class (with within-class
+uniqueness — no two entrants in a pool share an allocation set, see
+Methodology). When everyone is equally skilled, outcomes should spread
+toward the everyone-equal baseline: rank-1 rate near 1/64 (≈ 1.563%),
+paid-seat rate set by how the class's allocations tie under D3-B, and mean
+payout share at exactly 1.5625% of the pot (conservation forces the class
+total to equal the pot; the spread is who takes which slice).
+
+| Class (all 64 seats) | Entrants | Rank-1 rate | Paid-seat rate | Eliminated from the paid set | Mean payout share of pot |
+|---|---|---|---|---|---|
+| random | 12800 | 1.562% | 25.00% | 74.99% | 1.5625% |
+| heuristic | 12800 | 1.562% | 25.00% | 75.00% | 1.5625% |
+| optimised | 12800 | 1.562% | 25.00% | 75.00% | 1.5625% |
+
+Reading: among equals, no entrant holds an edge — the mean share sits at
+the baseline for every class. Skill differentiates BETWEEN classes (the
+headline table); within a class it cannot, which is exactly the shape a
+skill competition's outcomes should have.
+
+## Methodology
+
+- **Runs**: one mixed-field run (200 pools × 64 entrants:
+  16 per class, seat order shuffled per pool by a seeded Fisher–Yates so
+  class is uncorrelated with seat index) and three homogeneous-field runs
+  (200 pools × 64 entrants of one class each, for random /
+  heuristic / optimised).
+- **Seeds**: base seed **20260827**. Mixed-run pool p uses seed
+  baseSeed + p (p = 1..200); homogeneous run i (1 = random,
+  2 = heuristic, 3 = optimised) uses baseSeed + i×1,000,000 + p. Every
+  entrant stream is sha256 of a labelled seed string — no wall clock, no
+  `Math.random` — so a run is reproducible from its parameters alone.
+- **Within-class uniqueness**: no two entrants of one class in one pool
+  share the identical seven-battle allocation set. The jitter model moves
+  0..jitterMax points between trio stats (sum stays exactly 100); any
+  residual full-set collision is repaired deterministically by regenerating
+  the later entrant with a bumped salt (`ensureUniqueWithinClass`,
+  `tests/rehearsal/src/ladder.ts`). The uniform class is exempt —
+  20/20/20/20/20 is its definition (see the appendix).
+- **Definitions**: *rank-1 rate* — share of a class's entrants whose
+  competition rank was 1 (ties share rank 1); *paid-seat rate* — share
+  whose seat appears in the committed payout list (nonzero amount under the
+  D3-B split); *mean payout share* — the class's total committed lamports
+  over (pot × class entrants), in percent.
+- **Pipeline**: the real settlement crank over the offline chain mirror
+  (`FakeChain`) — decrypt, score, rank, split-pot assignment, Merkle
+  commitment, batched payout — with conservation asserted on every pool
+  (committed amounts sum to the pot exactly). Detection is off: identical
+  or near-identical sets inside a class are the study's construction, not
+  collusion. **The engine scoring these pools is the same module the crank
+  runs in production and the verify page runs in the browser** — a player
+  can recompute any pool of this study from its published data.
+- **Tier**: 0.1 SOL entries, the 5.12 SOL fixed pot (D-A1 revised). Shares
+  are pot-relative, so per-class statistics carry to every tier unchanged.
+- **Reproduce**:
+
+  ```bash
+  cd tests/rehearsal && npm ci && npm run skill-evidence
+  ```
 
 ## Strategy classes
 
 Documented in `tests/rehearsal/strategies/README.md`:
-**uniform** (20/20/20/20/20 every battle — the zero-thought baseline),
 **random** (valid free-integer allocations, no intent),
 **heuristic** (three-stat concentration, steep split),
 **optimised** (the same family, tuned: one-upped trio values funded from the
-off-stats, per-entrant trio rotation, wider jitter).
+off-stats, per-entrant trio rotation, wider jitter),
+and **uniform** (the appendix's structural baseline).
 
-## Results
+## Appendix: the uniform baseline
 
 | Class | Entrants | Rank-1 rate | Paid-seat rate | Eliminated from the paid set | Mean payout share of pot |
 |---|---|---|---|---|---|
 | uniform | 3200 | 0.000% | 0.00% | 100.00% | 0.0000% |
-| random | 3200 | 0.000% | 0.21% | 99.78% | 0.0064% |
-| heuristic | 3200 | 1.125% | 34.43% | 65.56% | 1.6633% |
-| optimised | 3200 | 5.125% | 65.34% | 34.65% | 4.5802% |
 
-## Reading the table
-
-Every entrant pays the same entry and faces the identical field; the only
-input that differs between the rows above is how the entrant allocated
-stats across the seven battles. The spread between the rows is the measured
-effect of that choice under the published scoring rule (battles won, then
-stats won; ties split evenly per D3-B). A pool's whole outcome is
-recomputable by any player from the published data — the same engine that
-produced these numbers runs on the verify page.
-
-## Reproduce
-
-```bash
-cd tests/rehearsal && npm ci && npm run skill-evidence
-```
+The flat 20/20/20/20/20 split is not a strategy but a STRUCTURAL baseline:
+against any three-stat concentration it loses that battle 3–2 (the
+concentrated side takes its three funded stats; the flat side takes the two
+starved ones), so a uniform entrant loses every battle against every
+concentrating opponent by construction. Its row is reported for
+completeness and kept out of the headline comparison — measuring "skill"
+against a shape that cannot win a battle would overstate the effect. The
+uniform class is also exempt from within-class uniqueness (the flat split
+IS the class), which is why a homogeneous uniform run does not exist: it
+would be a single 64-way tie by definition.

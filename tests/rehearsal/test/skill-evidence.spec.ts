@@ -9,6 +9,7 @@ import { expect } from 'chai';
 import {
   LADDER,
   generateLadderEntrant,
+  homogeneousPopulation,
   ladderPopulation,
   runSkillEvidence,
 } from '../src';
@@ -78,5 +79,42 @@ describe('the skill-evidence study', () => {
     // CSV never contains a bare 64-integer JSON array (the gitleaks
     // keypair-shape rule) — CSV rows are unbracketed by construction.
     expect(a.csv.includes('[')).to.equal(false);
+
+    // The homogeneous runs (v2 amendment): one row per class, all 64 seats
+    // that class, conservation per run, and the mean share pinned at the
+    // everyone-equal baseline — the pot divided by the field, exactly.
+    expect(a.homogeneous.map((r) => r.cls)).to.deep.equal([
+      'random',
+      'heuristic',
+      'optimised',
+    ]);
+    for (const r of a.homogeneous) {
+      expect(r.entrants).to.equal(64 * params.pools);
+      // Everyone in the pool is the class, so the class total IS the pot.
+      expect(r.paidLamports).to.equal(5_120_000_000n * BigInt(params.pools));
+    }
+  });
+
+  it('enforces within-class uniqueness of full allocation sets', () => {
+    for (const seed of [555001, 777002]) {
+      const mixed = ladderPopulation(seed);
+      const byClass = new Map<string, Set<string>>();
+      for (const e of mixed) {
+        if (e.strategy === 'uniform') continue; // the documented exemption
+        const set = byClass.get(e.strategy) ?? new Set<string>();
+        const key = JSON.stringify(e.battles);
+        expect(set.has(key), `${e.strategy} duplicate in pool ${seed}`).to.equal(false);
+        set.add(key);
+        byClass.set(e.strategy, set);
+      }
+      for (const cls of ['random', 'heuristic', 'optimised'] as const) {
+        const field = homogeneousPopulation(cls, seed);
+        expect(field.length).to.equal(64);
+        const keys = new Set(field.map((e) => JSON.stringify(e.battles)));
+        expect(keys.size).to.equal(64, `${cls} homogeneous field must be 64 distinct sets`);
+      }
+    }
+    // A homogeneous uniform run is refused by construction.
+    expect(() => homogeneousPopulation('uniform', 1)).to.throw(/64-way tie/);
   });
 });
