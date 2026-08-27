@@ -389,7 +389,9 @@ pub fn encode_payouts(payouts: &[(u16, u64)]) -> Vec<u8> {
 /// ranking's top 16 in order: seat i takes rank i+1's band amount.
 /// Takes the pool's FIXED pot (D-A1 revised) — never derived from entries.
 pub fn band_payouts(pot_lamports: u64) -> Vec<(u16, u64)> {
-    const BANDS: [u64; 16] = [270, 158, 102, 78, 50, 50, 50, 50, 27, 27, 27, 27, 27, 27, 27, 27];
+    const BANDS: [u64; 16] = [
+        270, 158, 102, 78, 50, 50, 50, 50, 27, 27, 27, 27, 27, 27, 27, 27,
+    ];
     (0..16u16)
         .map(|i| (i, pot_lamports / 1024 * BANDS[i as usize]))
         .collect()
@@ -669,8 +671,13 @@ impl Env {
         // Launch ceilings (D2 as re-scoped by v2: caps a pool's PASS SALES,
         // price × 64): tier 0 = 6.4 SOL; every other tier = its own gross,
         // so the ceiling is a cap, not a second switch.
-        let ceilings: [u64; 7] =
-            core::array::from_fn(|i| if i == 0 { 6_400_000_000 } else { TIER_PRICES[i] * 64 });
+        let ceilings: [u64; 7] = core::array::from_fn(|i| {
+            if i == 0 {
+                6_400_000_000
+            } else {
+                TIER_PRICES[i] * 64
+            }
+        });
         // Launch treasury minimum: 0 (the reserve-pots term still applies).
         let ix = init_config_ix(
             &admin.pubkey(),

@@ -60,7 +60,11 @@ fn full_lifecycle_pays_the_pot_to_the_lamport() {
     assert_eq!(pv.entrants, 64);
     assert_eq!(pv.state, 1, "Sealed");
     assert_eq!(pv.class_counters, [0u16; 5], "bag empties exactly at seal");
-    assert_eq!(env.balance(&vault_pda(1)), POT, "vault still holds the pot exactly");
+    assert_eq!(
+        env.balance(&vault_pda(1)),
+        POT,
+        "vault still holds the pot exactly"
+    );
     assert_eq!(
         env.balance(&platform_pda()) - platform_at_open,
         64 * ENTRY,
@@ -301,6 +305,9 @@ fn refund_fork_returns_the_full_entry() {
     assert_eq!(pv.state, 5, "Closed");
     assert_eq!(env.balance(&vault_pda(1)), 0);
     let cfg = read_config(&env.svm);
-    assert_eq!(cfg.platform_refundable, 0, "every refundable lamport repaid");
+    assert_eq!(
+        cfg.platform_refundable, 0,
+        "every refundable lamport repaid"
+    );
     assert_eq!(cfg.active_pool_by_tier[0], 0, "slot freed at Closed");
 }

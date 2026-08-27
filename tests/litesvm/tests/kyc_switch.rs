@@ -21,7 +21,12 @@ fn fill_and_commit(env: &mut Env) -> Vec<(Keypair, Pubkey)> {
     let settlement = env.settlement.insecure_clone();
     let secret = env.pool_secret;
     env.send(
-        &[settle_ix(&settlement.pubkey(), 1, "reveal_pool_secret", &secret)],
+        &[settle_ix(
+            &settlement.pubkey(),
+            1,
+            "reveal_pool_secret",
+            &secret,
+        )],
         &[&settlement],
     )
     .unwrap();
@@ -82,8 +87,15 @@ fn switch_on_escrows_first_place_and_kyc_packet_releases_it() {
     assert_eq!(env.balance(&p9.pubkey()) - b9, 135_000_000);
 
     // Release without any packet: rejected (PacketMissing).
-    let ix = release_escrow_ix(&settlement.pubkey(), 1, &players[0].1, &players[0].0.pubkey());
-    let err = env.send(std::slice::from_ref(&ix), &[&settlement]).unwrap_err();
+    let ix = release_escrow_ix(
+        &settlement.pubkey(),
+        1,
+        &players[0].1,
+        &players[0].0.pubkey(),
+    );
+    let err = env
+        .send(std::slice::from_ref(&ix), &[&settlement])
+        .unwrap_err();
     assert!(err.contains("6013"), "{err}");
 
     // Release with a TIER-0 packet: rejected (PacketKycInsufficient).
@@ -98,7 +110,8 @@ fn switch_on_escrows_first_place_and_kyc_packet_releases_it() {
     // Release with a tier-1 packet: the share lands.
     let tier1 = encode_packet(&players[0].0.pubkey(), &pool, 8, 1, 1, 1, now);
     let sig_ix = ed25519_ix(&signer, &tier1);
-    env.send(&[sig_ix, ix], &[&settlement]).expect("release with KYC");
+    env.send(&[sig_ix, ix], &[&settlement])
+        .expect("release with KYC");
     assert_eq!(env.balance(&players[0].0.pubkey()) - before, FIRST_PLACE);
     assert_eq!(read_entry(&env.svm, &players[0].1).escrow_lamports, 0);
 }
