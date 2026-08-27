@@ -16,14 +16,29 @@ export interface ReviewActions {
   forfeitEscrow(pool: string, player: string): Promise<void>;
 }
 
+/**
+ * One review decision — THE LOG FORMAT (C10). Every row is
+ * self-verifying: `signature` is the reviewer's Ed25519 signature (base64)
+ * over `canonicalReviewMessage({pool, player, action, criterion,
+ * signedAt: decidedAt})` (auth.ts), verifiable against `decidedBy` (the
+ * reviewer's base58 wallet key, a member of the admin multisig). Anyone
+ * holding the log can recheck who decided what, when, and under which
+ * published criterion — the reviewer is checkable, not trusted.
+ */
 export interface Decision {
+  /** Pool PDA, base58. */
   pool: string;
+  /** The entry's player wallet, base58. */
   player: string;
   action: 'flag' | 'clear' | 'release' | 'forfeit';
   /** Which published criterion the decision cites. */
   criterion: string;
+  /** The reviewer's wallet (base58) — the signature's verifying key. */
   decidedBy: string;
-  decidedAt: string; // ISO
+  /** ISO timestamp — the same instant the signature covers. */
+  decidedAt: string;
+  /** Base64 Ed25519 signature over the canonical decision message. */
+  signature: string;
 }
 
 export interface DecisionLog {

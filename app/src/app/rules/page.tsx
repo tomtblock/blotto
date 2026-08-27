@@ -79,6 +79,9 @@ export default function RulesPage() {
           <section key={s.id} id={s.id} className="mb-8">
             <h2 className="mb-2 text-lg">{s.heading}</h2>
             <p className="max-w-prose text-sm opacity-80">{s.body}</p>
+            {s.kind === 'text' && s.appendix && (
+              <p className="mt-2 max-w-prose text-sm opacity-80">{s.appendix}</p>
+            )}
             {s.kind === 'tiers' && (
               <div className="mt-3">
                 <TierPriceTable rows={s.rows} />

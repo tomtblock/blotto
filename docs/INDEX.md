@@ -22,6 +22,7 @@ owns; everywhere else a fact appears, it appears as a pointer.
 | Keys, custody, infrastructure provisioning | `REPO-TRANSITION-PLAYBOOK.md` (intent) · `../TRANSITION-REPORT.md` (state) | The report wins on facts |
 | Territory availability schedule (allowed + blocked lists) | `../config/territories.json` | FOUNDER-OWNED contents (R2/D-B3); schema + fail-closed semantics in `backend/packet/src/territories.ts`. Never edit the lists without a founder instruction |
 | Terms / attestation version (the D-B4 clickwrap) | `../config/terms.json` | FOUNDER-OWNED. Bumping `version` re-prompts every wallet and invalidates old attestation records at packet issuance; any wording change to the clickwrap is a new version by definition |
+| Reviewer wallets (the C10 review service's member list) | `../config/reviewers.json` | FOUNDER-OWNED. The operating multisig's member keys; ships EMPTY (no decision verifies until filled). Log row format: `backend/detection/src/review.ts` |
 | Agent role and hard rules | `../CLAUDE.md` | Points here for everything it does not own |
 | Contribution process, hooks, the word grep | `../CONTRIBUTING.md` | Canonical for process |
 | Skill-evidence study: strategy ladder, parameters, published outcome statistics | `skill-evidence/REPORT.md` (results) · `../tests/rehearsal/strategies/README.md` (ladder rationale) | GENERATED — regenerate with `npm run skill-evidence` in `tests/rehearsal`; the nightly CI lane fails on drift. Never edit by hand |

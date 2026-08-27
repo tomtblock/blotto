@@ -51,8 +51,15 @@ describe('rulesSections', () => {
   it('every mechanical body is filled — TODO_COPY only where founder/counsel prose is required', () => {
     for (const s of sections) {
       if (s.id === 'detection') {
-        // R4: the criteria wording is founder/counsel prose (Phase 6).
+        // R4: the criteria wording is founder/counsel prose (Phase 6) —
+        // but the review-process appendix (C10) is mechanical and filled.
         expect(s.body).to.contain('TODO_COPY');
+        expect(s.kind).to.equal('text');
+        if (s.kind === 'text') {
+          expect(s.appendix, 'review-process appendix').to.be.a('string');
+          expect(s.appendix!).to.not.contain('TODO_COPY');
+          expect(s.appendix!.length).to.be.greaterThan(100);
+        }
         continue;
       }
       expect(s.body, s.id).to.not.contain('TODO_COPY');

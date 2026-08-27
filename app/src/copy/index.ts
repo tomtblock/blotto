@@ -143,6 +143,10 @@ export const COPY = {
     // wording is founder/counsel prose (Phase 6) — the one section where a
     // placeholder is correct. C10 adds the review-process appendix here.
     detection: 'TODO_COPY(rules.detection)',
+    // C10: the review PROCESS is mechanical and stated now; the criteria
+    // wording above stays founder/counsel prose (R4).
+    reviewProcess:
+      'How review works: before any prize is paid, an entry that meets a published criterion can be flagged. A flagged share is not paid out — it is held by the program, in the same vault, while a named member of the operating multisig reviews the entry against the published criteria. Every decision is recorded in a public log signed by the reviewer who made it: what was decided, when, and which criterion it cited. A cleared share is released to the player in full; an upheld one is forfeited. Nothing about review is discretionary money movement — the program only ever releases to the entrant or forfeits to the operator, and the signed log shows which happened and why.',
     headings: {
       howToEnter: 'How to enter',
       price: 'Price per tier',
