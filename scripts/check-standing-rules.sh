@@ -7,8 +7,9 @@
 #
 # Rule 6 — "The vault has exactly three exits (pay_prizes, release_escrow,
 # refund). A CI test asserts it." NOTE, recorded in the Phase 1 report: the
-# roadmap's own §1.4 also routes forfeited escrow OUT of the vault (to the next
-# pool's vault or the platform wallet), so the true exit set is FOUR movers.
+# roadmap's own §1.4 also routes forfeited escrow OUT of the vault, so the true
+# exit set is FOUR movers (forfeit destination: platform wallet — see the
+# PHASE-1-REVIEW note in instructions/escrow.rs).
 # This check asserts the exact enumerated set below and fails on any other
 # occurrence of a vault debit, which is the rule's actual intent: no exit that
 # is not on the list.
@@ -54,6 +55,26 @@ if [ -d "$PROG" ]; then
     base="$(basename "$f")"
     if ! echo "$base" | grep -qE "^(${allowed})\.rs$"; then
       echo "standing-rule 6 FAILED: vault_debit called from unlisted instruction: $f"
+      fail=1
+    fi
+  done
+  # (c) the transfer chokepoint: `system_program::transfer` may appear ONLY in
+  # vault.rs. Any other occurrence is a lamport path that dodges the audit
+  # surface — exactly what rule 6 exists to prevent.
+  stray="$(grep -rln 'system_program::transfer' $PROG --include='*.rs' | grep -v '/vault\.rs$' || true)"
+  if [ -n "$stray" ]; then
+    echo "standing-rule 6 FAILED: system_program::transfer outside vault.rs:"
+    echo "$stray"
+    fail=1
+  fi
+  # (d) fees_debit call sites: the 64th-entry platform sweep (register.rs) and
+  # the R7 full refund (refund.rs) — nothing else drains the fees PDA.
+  fees_allowed='register|refund'
+  fsites="$(grep -rln 'fees_debit(' $PROG/instructions --include='*.rs' 2>/dev/null || true)"
+  for f in $fsites; do
+    base="$(basename "$f")"
+    if ! echo "$base" | grep -qE "^(${fees_allowed})\.rs$"; then
+      echo "standing-rule 6 FAILED: fees_debit called from unlisted instruction: $f"
       fail=1
     fi
   done
