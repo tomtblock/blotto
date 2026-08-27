@@ -114,5 +114,8 @@ export function rulesSections(): RulesSection[] {
       kind: 'text',
       body: r.responsiblePlay,
     },
+    // R4: detection criteria must be stated on the rules page. The wording
+    // is founder/counsel prose (Phase 6) — the one permitted placeholder.
+    { id: 'detection', heading: r.headings.detection, kind: 'text', body: r.detection },
   ];
 }

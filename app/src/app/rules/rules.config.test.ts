@@ -44,11 +44,17 @@ describe('rulesSections', () => {
       'availability',
       'age',
       'responsible-play',
+      'detection',
     ]);
   });
 
-  it('every mechanical body is filled — no TODO_COPY placeholders', () => {
+  it('every mechanical body is filled — TODO_COPY only where founder/counsel prose is required', () => {
     for (const s of sections) {
+      if (s.id === 'detection') {
+        // R4: the criteria wording is founder/counsel prose (Phase 6).
+        expect(s.body).to.contain('TODO_COPY');
+        continue;
+      }
       expect(s.body, s.id).to.not.contain('TODO_COPY');
       expect(s.body.length, s.id).to.be.greaterThan(40);
     }

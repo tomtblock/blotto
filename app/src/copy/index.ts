@@ -118,6 +118,10 @@ export const COPY = {
       'Blotto Cup is for adults 18 and older. Entering requires a signed confirmation of age and acceptance of the terms, recorded per wallet and per terms version.',
     responsiblePlay:
       'Entries are final and outcomes depend on how every player in the pool allocated. Enter only with funds you can afford to spend, set your own limits before you start, and step away when it stops being enjoyable.',
+    // R4 requires the rules to state the detection criteria; the criteria
+    // wording is founder/counsel prose (Phase 6) — the one section where a
+    // placeholder is correct. C10 adds the review-process appendix here.
+    detection: 'TODO_COPY(rules.detection)',
     headings: {
       howToEnter: 'How to enter',
       price: 'Price per tier',
@@ -131,6 +135,7 @@ export const COPY = {
       availability: 'Where Blotto Cup is available',
       age: '18+',
       responsiblePlay: 'Playing responsibly',
+      detection: 'Detection and review',
     },
     tableHeadings: {
       tier: 'Tier',

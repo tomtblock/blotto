@@ -42,11 +42,12 @@ predecessors merge).
    matching R2's allowlist posture; the blocked list renders additionally
    when non-empty. ISO codes map to display names; an unmapped code renders
    as the code, never silently dropped.
-3. **The R4 "detection criteria" and "language audit" stub sections** from
-   the old skeleton are not on the D-B6 tab (its ratified section list does
-   not include them); C10 adds the review-process appendix, and detection
-   criteria remain a founder/counsel Phase 6 item recorded in R4. Noted
-   here so the omission is a decision, not a loss.
+3. **The R4 "detection criteria" statement stays on the tab** as its own
+   section with the one permitted TODO_COPY placeholder (the criteria
+   wording is founder/counsel prose, Phase 6); C10 adds the review-process
+   appendix to it. The old skeleton's "language audit" stub is not a
+   player-facing rule and is not carried; the language gate itself is
+   CI-enforced and documented in CONTRIBUTING.md.
 
 ## Tests
 
