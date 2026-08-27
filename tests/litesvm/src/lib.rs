@@ -112,7 +112,23 @@ pub fn encode_packet(
     kyc: u8,
     issued_at: i64,
 ) -> Vec<u8> {
-    let mut m = Vec::with_capacity(83);
+    // Terms version 1 (D-B4) — the well-formed default; tests exercising the
+    // terms gate use `encode_packet_with_terms`.
+    encode_packet_with_terms(wallet, pool, nonce, geo, age, kyc, issued_at, 1)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn encode_packet_with_terms(
+    wallet: &Pubkey,
+    pool: &Pubkey,
+    nonce: u64,
+    geo: u8,
+    age: u8,
+    kyc: u8,
+    issued_at: i64,
+    terms_version: u16,
+) -> Vec<u8> {
+    let mut m = Vec::with_capacity(85);
     m.extend_from_slice(wallet.as_ref());
     m.extend_from_slice(pool.as_ref());
     m.extend_from_slice(&nonce.to_le_bytes());
@@ -120,6 +136,7 @@ pub fn encode_packet(
     m.push(age);
     m.push(kyc);
     m.extend_from_slice(&issued_at.to_le_bytes());
+    m.extend_from_slice(&terms_version.to_le_bytes());
     m
 }
 

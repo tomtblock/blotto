@@ -192,6 +192,8 @@ export function registerBlottoEventLayouts(): void {
     class: r.u8(),
     slot_hash: r.bytes32hex(),
     pass_asset: r.pubkey(),
+    // D-B4: the accepted terms version from the verified entry packet.
+    terms_version: r.u16(),
   }));
 
   layout('PoolSealed', (r) => ({

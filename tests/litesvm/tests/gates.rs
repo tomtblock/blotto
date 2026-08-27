@@ -296,6 +296,29 @@ fn bad_entry_packets_are_rejected() {
         assert!(err.contains("6019") || err.contains("PacketStale"), "{err}");
     }
 
+    // Terms version 0 — never attested (D-B4).
+    {
+        let player = Keypair::new();
+        env.svm.airdrop(&player.pubkey(), 10_000_000_000).unwrap();
+        let pass_asset = Keypair::new();
+        let m = encode_packet_with_terms(&player.pubkey(), &pool, 1, 1, 1, 0, now, 0);
+        let ixs = vec![
+            ed25519_ix(&signer, &m),
+            register_ix(
+                &player.pubkey(),
+                1,
+                &env.platform_wallet,
+                &pass_asset.pubkey(),
+                [3; 32],
+            ),
+        ];
+        let err = env.send(&ixs, &[&player, &pass_asset]).unwrap_err();
+        assert!(
+            err.contains("6046") || err.contains("PacketTermsVersionMissing"),
+            "{err}"
+        );
+    }
+
     // Geo not cleared.
     {
         let player = Keypair::new();

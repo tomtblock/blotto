@@ -110,4 +110,6 @@ pub enum ErrorCode {
     PayoutSumMismatch,
     #[msg("Seat is not in the committed payout list")]
     SeatNotInPayouts,
+    #[msg("Entry packet carries no accepted terms version")]
+    PacketTermsVersionMissing,
 }

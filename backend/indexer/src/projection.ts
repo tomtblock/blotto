@@ -109,6 +109,7 @@ export function projectEvent(e: DecodedEvent): ProjectionOp[] {
             class: cls,
             slot_hash: e.slot_hash,
             pass_asset: e.pass_asset,
+            terms_version: e.terms_version,
             flagged: false,
             refunded: false,
             escrow_settled: null,

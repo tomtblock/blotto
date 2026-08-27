@@ -22,6 +22,13 @@ export const COPY = {
   gate: {
     ageAttestation:
       'I confirm I am 18 or older and that entering skill tournaments for prizes is lawful where I live.',
+    // D-B4: the versioned clickwrap around the line above. SUBSTANCE FIXED:
+    // acceptance is recorded with the wallet's signature and the terms
+    // version; the wording of what is being accepted must stay accurate.
+    termsAcceptance: (version: number) =>
+      `I accept the terms (version ${version}). My wallet signs this statement and the acceptance is recorded.`,
+    attestFailed:
+      'The confirmation could not be recorded. Check your connection and try again.',
     ageConfirm: 'TODO_COPY: Confirm',
     territoryBlocked:
       'Blotto Cup is not available in your region. Entries cannot be accepted from your location.',

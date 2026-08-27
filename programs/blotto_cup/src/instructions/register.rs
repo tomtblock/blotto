@@ -146,7 +146,7 @@ pub fn handle_register(
     // ---- 2. Entry packet (compliance gate, TECH-ARCH §8) ----------------
     // KYC tier 0 suffices at entry (R3); the at-claim switch bites at
     // `release_escrow`, not here.
-    verify_entry_packet(
+    let packet = verify_entry_packet(
         &ctx.accounts.instructions_sysvar,
         &ctx.accounts.config.entry_signer,
         &ctx.accounts.player.key(),
@@ -230,6 +230,7 @@ pub fn handle_register(
         class: class_idx as u8,
         slot_hash,
         pass_asset: ctx.accounts.pass_asset.key(),
+        terms_version: packet.terms_version,
     });
 
     // ---- 7. The 64th entry seals ----------------------------------------

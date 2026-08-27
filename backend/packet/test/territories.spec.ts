@@ -10,6 +10,7 @@ import {
   DEFAULT_TERRITORY_SCHEDULE,
   GENERIC_REJECTION,
   LocalPacketSigner,
+  MemoryAttestationStore,
   StubGeoLookup,
   VendorHttpGeoLookup,
   geoVerdict,
@@ -32,17 +33,26 @@ function deps(
   geo: () => Promise<{ country: string; region?: string; vpnOrProxy: boolean }>,
   territories: TerritorySchedule = schedule()
 ): PacketServiceDeps {
+  const attestations = new MemoryAttestationStore();
+  void attestations.put({
+    wallet: WALLET,
+    termsVersion: 1,
+    attested18: true,
+    timestamp: 1_756_000_000n,
+    walletSignature: 'dGVzdA==',
+  });
   return {
     geo: { lookup: geo },
     sanctions: { isSanctioned: async () => false },
     signer: new LocalPacketSigner(new Uint8Array(32).fill(7)),
-    config: { territories, kycTier: 0 },
+    attestations,
+    config: { territories, kycTier: 0, termsVersion: 1 },
     now: () => 1_756_000_000n,
     nonce: () => 42n,
   };
 }
 
-const request = { wallet: WALLET, pool: POOL, ip: '203.0.113.7', ageAttested: true };
+const request = { wallet: WALLET, pool: POOL, ip: '203.0.113.7' };
 
 describe('the committed territory schedule', () => {
   it('config/territories.json parses and matches the R2 launch policy', () => {
@@ -230,7 +240,7 @@ describe('the /geo route and the header stub', () => {
       d,
       'POST',
       '/packet',
-      { wallet: WALLET, pool: POOL, ageAttested: true },
+      { wallet: WALLET, pool: POOL },
       '1.2.3.4',
       { 'x-geo-country': 'US' }
     );

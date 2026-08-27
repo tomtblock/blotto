@@ -24,6 +24,12 @@ export interface TxSigner {
   /** Human-readable wallet name ("Privy", "Phantom", …) for the picker. */
   label: string;
   signTransaction(transaction: Uint8Array): Promise<Uint8Array>;
+  /**
+   * Ed25519 signature over an arbitrary human-readable message (the D-B4
+   * attestation clickwrap). Optional: an adapter that cannot sign messages
+   * simply cannot attest — the flow fails closed, never around.
+   */
+  signMessage?(message: Uint8Array): Promise<Uint8Array>;
 }
 
 /**
