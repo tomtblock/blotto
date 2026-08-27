@@ -73,7 +73,7 @@ export function availability(): Availability {
 export const CURRENT_TERMS_VERSION: number = terms.version;
 
 export type RulesSection =
-  | { id: string; heading: string; kind: 'text'; body: string }
+  | { id: string; heading: string; kind: 'text'; body: string; appendix?: string }
   | { id: string; heading: string; kind: 'tiers'; body: string; rows: TierRow[] }
   | { id: string; heading: string; kind: 'prizes'; body: string; rows: TierRow[] }
   | { id: string; heading: string; kind: 'availability'; body: string; data: Availability }
@@ -116,6 +116,14 @@ export function rulesSections(): RulesSection[] {
     },
     // R4: detection criteria must be stated on the rules page. The wording
     // is founder/counsel prose (Phase 6) — the one permitted placeholder.
-    { id: 'detection', heading: r.headings.detection, kind: 'text', body: r.detection },
+    // The review-process summary (C10) is mechanical and rides as its
+    // appendix, filled now.
+    {
+      id: 'detection',
+      heading: r.headings.detection,
+      kind: 'text',
+      body: r.detection,
+      appendix: r.reviewProcess,
+    },
   ];
 }

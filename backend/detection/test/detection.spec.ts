@@ -138,6 +138,7 @@ describe('the review decision log (4.4)', () => {
       criterion: 'reviewed: timings human on inspection',
       decidedBy: 'founder',
       decidedAt: '2026-08-27T00:00:00Z',
+      signature: 'c2ln',
     });
     expect(calls).to.deep.equal(['clear:W']);
     const rows = await log.list('POOL');

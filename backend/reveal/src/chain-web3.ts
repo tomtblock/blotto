@@ -370,6 +370,15 @@ export class Web3Chain implements KeeperChain {
   }
 
   async flagEntry(poolId: bigint, player: string): Promise<void> {
+    await this.sendFlagIx('flag_entry', poolId, player);
+  }
+
+  async clearFlag(poolId: bigint, player: string): Promise<void> {
+    await this.sendFlagIx('clear_flag', poolId, player);
+  }
+
+  /** flag_entry and clear_flag share the FlagEntry accounts struct. */
+  private async sendFlagIx(name: string, poolId: bigint, player: string): Promise<void> {
     const poolKey = this.poolPda(poolId);
     const le = Buffer.alloc(8);
     le.writeBigUInt64LE(poolId);
@@ -382,7 +391,62 @@ export class Web3Chain implements KeeperChain {
           { pubkey: poolKey, isSigner: false, isWritable: false },
           { pubkey: this.entryPda(poolKey, new PublicKey(player)), isSigner: false, isWritable: true },
         ],
-        data: Buffer.concat([disc('flag_entry'), le]),
+        data: Buffer.concat([disc(name), le]),
+      }),
+    ]);
+  }
+
+  async releaseEscrow(poolId: bigint, player: string): Promise<void> {
+    const poolKey = this.poolPda(poolId);
+    const playerKey = new PublicKey(player);
+    const le = Buffer.alloc(8);
+    le.writeBigUInt64LE(poolId);
+    // With the KYC-at-claim switch ON and the share above the threshold, the
+    // program additionally requires a kyc_tier ≥ 1 packet as an Ed25519
+    // instruction in this transaction (R3). The switch is OFF at launch
+    // (D-B4); the KYC-path variant lands with the switch's activation.
+    await this.send([
+      new TransactionInstruction({
+        programId: this.cfg.programId,
+        keys: [
+          { pubkey: this.cfg.settlementSigner.publicKey, isSigner: true, isWritable: false },
+          { pubkey: this.configPda(), isSigner: false, isWritable: false },
+          { pubkey: poolKey, isSigner: false, isWritable: false },
+          { pubkey: this.vaultPda(poolId), isSigner: false, isWritable: true },
+          { pubkey: this.entryPda(poolKey, playerKey), isSigner: false, isWritable: true },
+          { pubkey: playerKey, isSigner: false, isWritable: true },
+          {
+            pubkey: new PublicKey('Sysvar1nstructions1111111111111111111111111'),
+            isSigner: false,
+            isWritable: false,
+          },
+          { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+        ],
+        data: Buffer.concat([disc('release_escrow'), le]),
+      }),
+    ]);
+  }
+
+  async forfeitEscrow(poolId: bigint, player: string): Promise<void> {
+    const poolKey = this.poolPda(poolId);
+    const le = Buffer.alloc(8);
+    le.writeBigUInt64LE(poolId);
+    const configData = await this.cfg.connection.getAccountInfo(this.configPda(), 'confirmed');
+    if (!configData) throw new Error('config account not found');
+    const platformWallet = new PublicKey(configData.data.subarray(104, 136));
+    await this.send([
+      new TransactionInstruction({
+        programId: this.cfg.programId,
+        keys: [
+          { pubkey: this.cfg.settlementSigner.publicKey, isSigner: true, isWritable: false },
+          { pubkey: this.configPda(), isSigner: false, isWritable: false },
+          { pubkey: poolKey, isSigner: false, isWritable: false },
+          { pubkey: this.vaultPda(poolId), isSigner: false, isWritable: true },
+          { pubkey: this.entryPda(poolKey, new PublicKey(player)), isSigner: false, isWritable: true },
+          { pubkey: platformWallet, isSigner: false, isWritable: true },
+          { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+        ],
+        data: Buffer.concat([disc('forfeit_escrow'), le]),
       }),
     ]);
   }

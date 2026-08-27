@@ -64,6 +64,12 @@ export interface SettlementChain {
   payPrizes(poolId: bigint, seats: number[]): Promise<void>;
   /** Detection's lever (R11) — must land BEFORE the seat is paid. */
   flagEntry(poolId: bigint, player: string): Promise<void>;
+  /** Review's reversal of a flag on a not-yet-settled entry (R11/4.4). */
+  clearFlag(poolId: bigint, player: string): Promise<void>;
+  /** Escrowed share → the player (review cleared it; KYC path per R3). */
+  releaseEscrow(poolId: bigint, player: string): Promise<void>;
+  /** Escrowed share → the platform wallet (review upheld the flag). */
+  forfeitEscrow(poolId: bigint, player: string): Promise<void>;
   triggerRefund(poolId: bigint): Promise<void>;
   refund(poolId: bigint, player: string): Promise<void>;
 }
@@ -204,6 +210,31 @@ export class FakeChain implements KeeperChain {
     const e = (this.entries.get(poolId.toString()) ?? []).find((x) => x.player === player);
     if (!e) throw new Error('EntryMismatch');
     e.flagged = true;
+  }
+
+  async clearFlag(poolId: bigint, player: string): Promise<void> {
+    const e = (this.entries.get(poolId.toString()) ?? []).find((x) => x.player === player);
+    if (!e) throw new Error('EntryMismatch');
+    e.flagged = false;
+  }
+
+  async releaseEscrow(poolId: bigint, player: string): Promise<void> {
+    const amount = this.escrowed.get(player) ?? 0n;
+    if (amount === 0n) throw new Error('NoEscrow');
+    this.escrowed.delete(player);
+    this.paid.set(player, (this.paid.get(player) ?? 0n) + amount);
+    void poolId;
+  }
+
+  /** Forfeited lamports per player — asserted by tests (platform-bound). */
+  forfeited = new Map<string, bigint>();
+
+  async forfeitEscrow(poolId: bigint, player: string): Promise<void> {
+    const amount = this.escrowed.get(player) ?? 0n;
+    if (amount === 0n) throw new Error('NoEscrow');
+    this.escrowed.delete(player);
+    this.forfeited.set(player, (this.forfeited.get(player) ?? 0n) + amount);
+    void poolId;
   }
 
   async triggerRefund(poolId: bigint): Promise<void> {
