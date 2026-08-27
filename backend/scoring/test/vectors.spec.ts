@@ -142,6 +142,13 @@ describe('split-pot cases (D3-B, through the same assignPrizes)', () => {
 });
 
 describe('per-tier prize tables (D1)', () => {
+  it('TIER_ENTRY_LAMPORTS mirrors the oracle tier table exactly', () => {
+    const { TIER_ENTRY_LAMPORTS } = require('../src');
+    expect(TIER_ENTRY_LAMPORTS.map((v: bigint) => v.toString())).to.deep.equal(
+      vectors.tier_tables.map((t: { entry_lamports: string }) => t.entry_lamports)
+    );
+  });
+
   for (const t of vectors.tier_tables) {
     it(`entry ${t.entry_lamports}`, () => {
       const pot = potLamports(BigInt(t.entry_lamports));

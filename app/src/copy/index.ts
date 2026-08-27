@@ -79,27 +79,65 @@ export const COPY = {
     readOnlyNote: 'Profiles are a read-only record. Nothing here affects any pool.',
   },
   rules: {
-    // R4's eight statements — headed sections; Phase 6 fills the bodies.
-    sections: [
-      { id: 'final', heading: 'Decisions are final', body: 'TODO_COPY(rules.final)' },
-      { id: 'fill', heading: 'Fill deadline and refunds', body: 'TODO_COPY(rules.fill)' },
-      { id: 'sealing', heading: 'Sealing', body: 'TODO_COPY(rules.sealing)' },
-      {
-        id: 'field',
-        heading: 'Identical-field scoring',
-        // SUBSTANCE FIXED (D3-B, ratified 2026-08-27): this paragraph states
-        // the ordering and tie rule the engine implements
-        // (backend/scoring/src/engine.ts) and must stay factually identical
-        // to it — Phase 6 may re-phrase, never re-order. Supersedes the
-        // Part 3 wording (seat as final tie-break), which the founder
-        // replaced by ratifying D3-B.
-        body:
-          'Every player faces the identical field: your battle 1 is compared against every other entry\u2019s battle 1, and so on for all seven. A battle is won by taking three or more of its five stats; if neither side takes three, it is a draw worth half a win to each. Rankings are ordered by total battles won (a draw counts half), then by total stats won across every comparison. Players equal on both are tied: they share the same rank and split the combined prize of the positions their group occupies evenly, with any indivisible lamport remainder going to the earliest seat in the tied group. Seat order never decides who ranks above whom or who is paid. The ordering is fully deterministic: the same sealed battles always produce the same ranking.',
-      },
-      { id: 'allocation', heading: 'Allocation rules', body: 'TODO_COPY(rules.allocation)' },
-      { id: 'timer', heading: 'The 15-second timer and lock-current', body: 'TODO_COPY(rules.timer)' },
-      { id: 'detection', heading: 'Detection criteria', body: 'TODO_COPY(rules.detection)' },
-      { id: 'language', heading: 'Language audit', body: 'TODO_COPY(rules.language)' },
-    ],
+    // D-B6 (ratified 2026-08-27): the rules tab, plain language, one section
+    // per topic. Everything MECHANICAL is stated in full and derives its
+    // numbers from rules.config.ts (which imports the shared tier constants
+    // — no hand-typed figures). Paragraphs marked SUBSTANCE FIXED state what
+    // the code enforces and must stay factually identical to it; Phase 6 may
+    // re-phrase with the substance intact.
+    title: 'Rules',
+    howToEnter:
+      'Sign in, pick an open pool, and confirm the 18+ and terms statements — your wallet signs that confirmation once per terms version. Pay the entry price for the tier. You then set seven battles, about ninety seconds in total: each battle splits 100 points across five stats. Your battles are encrypted on your device before any payment moves, and the pool fills to exactly 64 players. Decisions are final: a submitted entry cannot be changed or withdrawn (see the refund rule for pools that never fill).',
+    priceIntro:
+      'Seven tiers are configured. A tier must be switched on by the operator before pools open in it; at launch only the smallest tier is on. One pool per tier is open at a time, and a new pool of that tier can open the moment one fills.',
+    prizeIntro:
+      'Every pool pays from a prize pool equal to 80% of its 64 entries; the remaining 20% is the platform share, taken only when a pool fills (a pool that refunds returns it). The top 16 positions are paid on the published table below — exact 1024ths of the prize pool, so the amounts divide with no residue. Prizes are paid automatically when results are committed; there is no claim step.',
+    // SUBSTANCE FIXED (D3-B): identical-field scoring, exactly as the engine
+    // implements it (backend/scoring/src/engine.ts). Includes the R9
+    // lock-current disclosure.
+    scoring:
+      'Every player faces the identical field: your battle 1 is compared against every other entry\u2019s battle 1, and so on for all seven. A battle is won by taking three or more of its five stats; if neither side takes three, it is a draw worth half a win to each. Rankings are ordered by total battles won (a draw counts half), then by total stats won across every comparison. The ordering is fully deterministic: the same sealed battles always produce the same ranking. If the timer on a battle screen runs out, the battle locks exactly what the pentagon shows at that moment \u2014 nothing is ever chosen for you.',
+    // SUBSTANCE FIXED (D3-B): the split-pot tie rule.
+    ties:
+      'Two players are tied when their battles won AND stats won are both equal. Tied players share the same rank and split the combined prize of the positions their group occupies, evenly. If the split leaves an indivisible remainder of a few lamports, it goes to the tied player who entered the pool earliest. Every tied player with a nonzero share is paid \u2014 a tie across the 16th position can mean more than 16 players are paid. Seat order never decides who ranks above whom or who is paid.',
+    // SUBSTANCE FIXED: randomness scope (PID §8.3/§8.4).
+    randomness:
+      'Randomness from a Switchboard VRF seed, combined with a later slot hash, decides ONE thing: which character class artwork your pass shows. Class is cosmetic. It does not affect any stat, any battle, any score, any rank, or any prize \u2014 nothing in the scoring path reads it. Scoring and prizes depend only on the sealed battles every player submitted. Every class draw is replayable from published on-chain data.',
+    // SUBSTANCE FIXED: the sealing lifecycle (TECH-ARCH §5).
+    sealing:
+      'Your seven battles are encrypted on your device, before payment, to a pool key that nobody \u2014 the operator included \u2014 can open while the pool is filling. A hash of your battles is recorded on-chain at entry. When the pool fills, the pool secret is published on-chain: at that moment everyone\u2019s battles become readable and checkable against the hashes committed at entry, and anyone can re-run the scoring.',
+    refund:
+      'A pool that does not reach 64 entries within 72 hours refunds every entry in full \u2014 including the platform share \u2014 and closes. Anyone can trigger the refund once the deadline passes; no one\u2019s permission is needed.',
+    verify:
+      'Every number a player is paid is recomputable by that player. The Verify page decrypts the published battles with the revealed pool secret, re-runs the same scoring engine in your browser, rebuilds the results tree, and compares it against what was committed on-chain. Nothing on that page trusts the operator.',
+    verifyLink: 'Open the Verify page',
+    availabilityIntro:
+      'Blotto Cup is available only in the territories below. Where the service cannot determine your location, entry is not available.',
+    availabilityBlocked: 'Explicitly unavailable:',
+    age:
+      'Blotto Cup is for adults 18 and older. Entering requires a signed confirmation of age and acceptance of the terms, recorded per wallet and per terms version.',
+    responsiblePlay:
+      'Entries are final and outcomes depend on how every player in the pool allocated. Enter only with funds you can afford to spend, set your own limits before you start, and step away when it stops being enjoyable.',
+    headings: {
+      howToEnter: 'How to enter',
+      price: 'Price per tier',
+      prizes: 'Prize pool and payout table',
+      scoring: 'How scoring works',
+      ties: 'How ties are resolved',
+      randomness: 'What randomness does \u2014 and does not do',
+      sealing: 'Sealing: when your battles are encrypted and revealed',
+      refund: 'Refund and closing rule',
+      verify: 'How to verify a result',
+      availability: 'Where Blotto Cup is available',
+      age: '18+',
+      responsiblePlay: 'Playing responsibly',
+    },
+    tableHeadings: {
+      tier: 'Tier',
+      entry: 'Entry (SOL)',
+      pot: 'Prize pool (SOL)',
+      position: 'Position',
+      prize: 'Prize (SOL)',
+    },
   },
 } as const;
