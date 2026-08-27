@@ -11,7 +11,9 @@
  *     and gains no zones (there are no stats to compare);
  *   - two missing entries DRAW every battle against each other (1 half-point
  *     each) — neither produced a set that beats the other;
- *   - missing entries earn 0 zones and rank by entry index among themselves.
+ *   - missing entries earn 0 zones; equal on (score, zones) by construction,
+ *     they are TIED under D3-B and share one competition rank (they'd split
+ *     any prize their positions carry, like any other tie group).
  *
  * Uniform by construction: every present player faces the same missing
  * opponents, so the adjustment shifts everyone's score equally and the
@@ -62,12 +64,22 @@ export function scoreWithMissing(entries: readonly PoolEntryInput[]): PlayerResu
       const b = score.get(j)!;
       return b.scoreHalf - a.scoreHalf || b.zones - a.zones || i - j;
     });
+  // Competition ranks (D3-B): equal (score, zones) shares a rank.
   const rank = new Map<number, number>();
-  order.forEach((i, pos) => rank.set(i, pos + 1));
+  let groupStartPos = 0;
+  order.forEach((i, pos) => {
+    if (pos > 0) {
+      const a = score.get(i)!;
+      const b = score.get(order[pos - 1])!;
+      if (a.scoreHalf !== b.scoreHalf || a.zones !== b.zones) groupStartPos = pos;
+    }
+    rank.set(i, groupStartPos + 1);
+  });
   return sorted.map((e) => ({
     index: e.index,
     scoreHalf: score.get(e.index)!.scoreHalf,
     zones: score.get(e.index)!.zones,
     rank: rank.get(e.index)!,
+    amountLamports: 0n,
   }));
 }

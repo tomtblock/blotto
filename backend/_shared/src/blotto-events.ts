@@ -207,10 +207,14 @@ export function registerBlottoEventLayouts(): void {
   layout('ResultsCommitted', (r) => {
     const pool = r.pubkey();
     const root = r.bytes32hex();
+    // D3-B: the committed payout list — Vec<Payout { entry_index: u16,
+    // amount: u64 }>, seat-sorted, amounts summing to the pot.
     const n = r.vecLen();
-    const winners: string[] = [];
-    for (let i = 0; i < n; i++) winners.push(r.pubkey());
-    return { pool, root, winners };
+    const payouts = [];
+    for (let i = 0; i < n; i++) {
+      payouts.push({ entry_index: r.u16(), amount: r.u64() });
+    }
+    return { pool, root, payouts };
   });
 
   layout('PrizesPaid', (r) => {
@@ -220,12 +224,13 @@ export function registerBlottoEventLayouts(): void {
     for (let i = 0; i < n; i++) {
       payouts.push({
         player: r.pubkey(),
-        rank: r.u8(),
+        entry_index: r.u16(),
         amount: r.u64(),
         escrowed: r.bool(),
       });
     }
-    const paid_mask = r.u16();
+    // One bit per SEAT — u64 on-chain, decoded as a decimal string.
+    const paid_mask = r.u64();
     return { pool, payouts, paid_mask };
   });
 

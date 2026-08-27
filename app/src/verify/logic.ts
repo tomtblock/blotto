@@ -18,7 +18,7 @@
 
 import { sha256 } from '@noble/hashes/sha256';
 import {
-  amountForRank,
+  assignPrizes,
   battlesHash,
   decodeBattleSet,
   leafBytes,
@@ -49,11 +49,12 @@ export interface OnChainRecord {
   revealedSecretHex: string;
   /** From ResultsCommitted. */
   resultsRootHex: string;
-  winners: string[];
+  /** From ResultsCommitted: the committed payout list, seat-sorted. */
+  committedPayouts: Array<{ entryIndex: number; amount: string }>;
   /** From each EntryRegistered: player (base58) → battles_hash hex. */
   battlesHashByPlayer: Record<string, string>;
-  /** From PrizesPaid batches: rank → { player, amount }. */
-  payouts: Array<{ player: string; rank: number; amount: string }>;
+  /** From PrizesPaid batches: settled seats with the recipient wallet. */
+  payouts: Array<{ player: string; entryIndex: number; amount: string }>;
 }
 
 /** The published bundle (the crank's RevealBundle shape, already parsed). */
@@ -77,7 +78,7 @@ export interface PublishedBundle {
     rank: number;
     amount_lamports: string;
   }>;
-  winners: string[];
+  payouts: Array<{ entry_index: number; player: string; amount_lamports: string }>;
   results_root: string;
 }
 
@@ -134,44 +135,65 @@ export function verifyPool(bundle: PublishedBundle, chain: OnChainRecord): Verif
       battles: e.battles !== null ? decodeBattleSet(unhex(e.battles)) : null,
     }))
   );
+  // Amounts recomputed with the published split-pot rule (D3-B): tied
+  // players share a competition rank and split the combined band prize.
+  const pot = potLamports(BigInt(chain.entryLamports));
+  const withPrizes = assignPrizes(results, pot);
   let resultsOk = true;
   for (const r of bundle.results) {
-    const mine = results[r.index];
-    if (mine.scoreHalf !== r.score_half || mine.zones !== r.zones || mine.rank !== r.rank) {
+    const mine = withPrizes[r.index];
+    if (
+      mine.scoreHalf !== r.score_half ||
+      mine.zones !== r.zones ||
+      mine.rank !== r.rank ||
+      mine.amountLamports.toString() !== r.amount_lamports
+    ) {
       resultsOk = false;
     }
   }
-  push('rescore', resultsOk, 'recomputed scores, zones and ranks equal the published results');
+  push(
+    'rescore',
+    resultsOk,
+    'recomputed scores, zones, competition ranks and split-pot amounts equal the published results'
+  );
 
   // 4. Rebuild the tree; compare to the ON-CHAIN root (the bundle's copy is
-  //    informational).
-  const pot = potLamports(BigInt(chain.entryLamports));
-  const byRank = [...results].sort((a, b) => a.rank - b.rank);
+  //    informational). Leaf order: rank asc, entry index asc.
+  const byRank = [...withPrizes].sort((a, b) => a.rank - b.rank || a.index - b.index);
   const playerAt = (index: number) => byIndex[index].player;
   const leaves = byRank.map((r) =>
     leafBytes({
       player: base58Decode(playerAt(r.index)),
       rank: r.rank,
-      amountLamports: amountForRank(pot, r.rank),
+      amountLamports: r.amountLamports,
     })
   );
   const root = hex(merkleRoot(leaves));
   push('results-root', root === chain.resultsRootHex, 'recomputed Merkle root equals the on-chain commitment');
 
-  // 5. Winners and paid amounts: the on-chain payouts are exactly the top 16
-  //    recomputed players at exactly the band amounts.
-  const myWinners = byRank.slice(0, 16).map((r) => playerAt(r.index));
+  // 5. The committed payout list is exactly the recomputed one: every seat
+  //    with a nonzero split-pot share, seat-sorted, to the lamport. (The
+  //    paid set can exceed 16 seats when a tie straddles position 16.)
+  const myPayouts = withPrizes
+    .filter((r) => r.amountLamports > 0n)
+    .sort((a, b) => a.index - b.index)
+    .map((r) => ({ entryIndex: r.index, amount: r.amountLamports.toString() }));
   push(
-    'winners',
-    JSON.stringify(myWinners) === JSON.stringify(chain.winners),
-    'the committed winners are the recomputed top 16, in rank order'
+    'committed-payouts',
+    JSON.stringify(myPayouts) === JSON.stringify(chain.committedPayouts),
+    'the committed payout list is the recomputed split-pot list, seat-sorted'
   );
+
+  // 6. Every settled payout went to the wallet that entered that seat, at
+  //    the committed amount.
+  const amountBySeat = new Map(myPayouts.map((p) => [p.entryIndex, p.amount]));
   let payoutsOk = chain.payouts.length > 0;
   for (const p of chain.payouts) {
-    const expectedAmount = amountForRank(pot, p.rank).toString();
-    if (p.amount !== expectedAmount || myWinners[p.rank - 1] !== p.player) payoutsOk = false;
+    if (p.amount !== amountBySeat.get(p.entryIndex) || playerAt(p.entryIndex) !== p.player) {
+      payoutsOk = false;
+    }
   }
-  push('payouts', payoutsOk, 'every on-chain payout is the band amount to the recomputed winner');
+  push('payouts', payoutsOk, 'every settled payout is the committed amount to the seat\'s own wallet');
 
   return { ok: checks.every((c) => c.ok), checks };
 }

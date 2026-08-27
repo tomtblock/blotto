@@ -24,7 +24,7 @@
 
 import { sha256 } from '@noble/hashes/sha256';
 import {
-  amountForRank,
+  assignPrizes,
   base58Decode,
   battlesHash,
   decodeBattleSet,
@@ -186,21 +186,27 @@ export async function crankPool(deps: CrankDeps, poolId: bigint): Promise<CrankO
     });
   }
 
-  // ---- 3. Score + tree ---------------------------------------------------
-  const results = scoreWithMissing(scoringInput);
-  const byRank = [...results].sort((a, b) => a.rank - b.rank);
+  // ---- 3. Score + prizes + tree ------------------------------------------
+  // D3-B: competition ranks (tied players share one), split-pot amounts.
   const pot = potLamports(pool.entryLamports);
+  const results = assignPrizes(scoreWithMissing(scoringInput), pot);
+  // Published leaf order: rank asc, entry index asc (ranks repeat).
+  const byRank = [...results].sort((a, b) => a.rank - b.rank || a.index - b.index);
   const playerAt = (index: number) => chainEntries[index].player;
   const leaves = byRank.map((r) =>
     leafBytes({
       player: base58Decode(playerAt(r.index)),
       rank: r.rank,
-      amountLamports: amountForRank(pot, r.rank),
+      amountLamports: r.amountLamports,
     })
   );
   const root = merkleRoot(leaves);
-  const winners = byRank.slice(0, 16).map((r) => playerAt(r.index));
-  step('scored', { root: hex(root) });
+  // The on-chain payout list: every seat with a nonzero share, seat-sorted.
+  const payouts = results
+    .filter((r) => r.amountLamports > 0n)
+    .sort((a, b) => a.index - b.index)
+    .map((r) => ({ entryIndex: r.index, amountLamports: r.amountLamports }));
+  step('scored', { root: hex(root), paidSeats: payouts.length });
 
   // ---- 4. Publish the bundle --------------------------------------------
   const bundle: RevealBundle = {
@@ -215,9 +221,13 @@ export async function crankPool(deps: CrankDeps, poolId: bigint): Promise<CrankO
       score_half: r.scoreHalf,
       zones: r.zones,
       rank: r.rank,
-      amount_lamports: amountForRank(pot, r.rank).toString(),
+      amount_lamports: r.amountLamports.toString(),
     })),
-    winners,
+    payouts: payouts.map((p) => ({
+      entry_index: p.entryIndex,
+      player: playerAt(p.entryIndex),
+      amount_lamports: p.amountLamports.toString(),
+    })),
     results_root: hex(root),
     scored_as_all_losses: allLosses,
   };
@@ -254,16 +264,18 @@ export async function crankPool(deps: CrankDeps, poolId: bigint): Promise<CrankO
   // ---- 5. Commit ---------------------------------------------------------
   pool = await deps.chain.getPool(poolId);
   if (!pool.resultsCommitted) {
-    await deps.chain.commitResults(poolId, root, winners);
+    await deps.chain.commitResults(poolId, root, payouts);
     step('commit_results');
   } else {
     step('commit:already');
     // Resume safety: what the chain committed must equal what we recomputed
     // — a divergence means the inputs changed between runs, and paying
     // against it would pay the wrong ranking.
-    if (pool.winners.length && JSON.stringify(pool.winners) !== JSON.stringify(winners)) {
+    const committed = pool.payouts.map((p) => `${p.entryIndex}:${p.amountLamports}`).join(',');
+    const recomputed = payouts.map((p) => `${p.entryIndex}:${p.amountLamports}`).join(',');
+    if (pool.payouts.length && committed !== recomputed) {
       throw new Error(
-        `recomputed winners diverge from the committed set for pool ${poolId} — refusing to pay`
+        `recomputed payouts diverge from the committed list for pool ${poolId} — refusing to pay`
       );
     }
   }
@@ -272,17 +284,17 @@ export async function crankPool(deps: CrankDeps, poolId: bigint): Promise<CrankO
   pool = await deps.chain.getPool(poolId);
   const batchSize = deps.payBatchSize ?? 4;
   const unpaid: number[] = [];
-  for (let rank = 1; rank <= 16; rank++) {
-    if ((pool.paidMask & (1 << (rank - 1))) === 0) unpaid.push(rank);
+  for (const p of pool.payouts) {
+    if ((pool.paidMask & (1n << BigInt(p.entryIndex))) === 0n) unpaid.push(p.entryIndex);
   }
   for (let i = 0; i < unpaid.length; i += batchSize) {
     const batch = unpaid.slice(i, i + batchSize);
     await deps.chain.payPrizes(poolId, batch);
-    step('pay_prizes', { ranks: batch });
+    step('pay_prizes', { seats: batch });
   }
 
   pool = await deps.chain.getPool(poolId);
-  step('done', { state: pool.state, paidMask: pool.paidMask });
+  step('done', { state: pool.state, paidMask: pool.paidMask.toString() });
   return { poolId, finalState: pool.state, stepsTaken: steps, bundleUri };
 }
 

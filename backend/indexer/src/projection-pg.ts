@@ -54,24 +54,32 @@ export class PgProjection implements Projection {
           );
           break;
         }
-        case 'min': {
-          const keyCols = Object.keys(op.key).map(ident);
-          const field = ident(op.field);
-          const params = keyCols.map((_, i) => `$${i + 1}`);
-          await this.db.query(
-            `INSERT INTO ${ident(op.table)} (${keyCols.join(', ')}, ${field})
-             VALUES (${params.join(', ')}, $${keyCols.length + 1})
-             ON CONFLICT (${keyCols.join(', ')}) DO UPDATE
-               SET ${field} = LEAST(COALESCE(${ident(op.table)}.${field}, EXCLUDED.${field}), EXCLUDED.${field})`,
-            [...Object.values(op.key), op.value]
-          );
-          break;
-        }
         case 'close_if_fully_refunded': {
           await this.db.query(
             `UPDATE pools SET state = 'Closed'
               WHERE pool = $1 AND entrants > 0 AND refunded_count >= entrants`,
             [op.pool]
+          );
+          break;
+        }
+        case 'paid_if_fully_settled': {
+          // The mask is a u64 seat bitmask (NUMERIC in SQL, bigints as
+          // decimal strings end-to-end); the bit test runs in SQL so both
+          // executors implement the same rule against their own `results`.
+          await this.db.query('UPDATE pools SET paid_mask = $2 WHERE pool = $1', [
+            op.pool,
+            op.mask,
+          ]);
+          await this.db.query(
+            `UPDATE pools SET state = 'Paid'
+              WHERE pool = $1
+                AND EXISTS (SELECT 1 FROM results r WHERE r.pool = $1)
+                AND NOT EXISTS (
+                  SELECT 1 FROM results r
+                   WHERE r.pool = $1
+                     AND floor($2::numeric / (2::numeric ^ r.seat)) % 2 = 0
+                )`,
+            [op.pool, op.mask]
           );
           break;
         }

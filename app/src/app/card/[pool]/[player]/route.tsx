@@ -1,10 +1,13 @@
 /*
  * The shareable result card (R16, roadmap 3.8): a server-rendered OG image —
- * rank, class, score, pool id — plus nothing. No on-chain change, no reward;
- * any reward attached to sharing is a PID §8.4 question and out of scope.
+ * prize, class, pool id — plus nothing. No on-chain change, no reward; any
+ * reward attached to sharing is a PID §8.4 question and out of scope.
+ * (D3-B: rank labels are not indexed — the card shows the prize instead;
+ * the full ranking with tie labels lives on the verify page.)
  */
 import { ImageResponse } from 'next/og';
 import { indexerApi } from '@/data/api';
+import { lamportsToSol } from '@/data/format';
 
 
 const CLASS_NAMES = ['Goblin', 'Knight', 'Wizard', 'Dragon', 'Titan'];
@@ -20,8 +23,8 @@ export async function GET(
     api.getResults(poolId),
     api.getEntries(poolId),
   ]);
-  const rank = results.find((r) => r.player === player)?.rank;
   const entry = entries.find((e) => e.player === player);
+  const amount = entry ? results.find((r) => r.seat === entry.idx)?.amount : undefined;
 
   return new ImageResponse(
     (
@@ -39,7 +42,9 @@ export async function GET(
         }}
       >
         <div style={{ fontSize: 28, opacity: 0.7 }}>BLOTTO CUP · POOL #{pool?.id ?? '?'}</div>
-        <div style={{ fontSize: 96, fontWeight: 700 }}>{rank ? `#${rank}` : '—'}</div>
+        <div style={{ fontSize: 96, fontWeight: 700 }}>
+          {amount ? `${lamportsToSol(amount)} SOL` : '—'}
+        </div>
         <div style={{ fontSize: 36 }}>
           {entry ? CLASS_NAMES[entry.class] : ''} · of 64
         </div>

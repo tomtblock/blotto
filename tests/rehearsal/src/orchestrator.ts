@@ -16,11 +16,7 @@ import {
   encodePayload,
   seal,
 } from '../../../backend/sealing/src';
-import {
-  amountForRank,
-  battlesHash,
-  potLamports,
-} from '../../../backend/scoring/src';
+import { battlesHash, potLamports } from '../../../backend/scoring/src';
 import { base58Encode } from '../../../backend/_shared/src/blotto-events';
 import {
   FakeChain,
@@ -47,7 +43,7 @@ export interface OfflinePoolRun {
 /** Build, fill and settle one offline pool end to end. */
 export async function runOfflinePool(poolSeed: number): Promise<OfflinePoolRun> {
   const poolId = BigInt(poolSeed);
-  const chain = new FakeChain((entry, rank) => amountForRank(potLamports(entry), rank));
+  const chain = new FakeChain((entry) => potLamports(entry));
   const custody = new LocalCustody(async (id) => (await chain.getPool(id)).state !== 'Open');
   const store = new MemoryCiphertextStore();
   const publisher = new MemoryPublisher();
@@ -83,8 +79,8 @@ export async function runOfflinePool(poolSeed: number): Promise<OfflinePoolRun> 
     fillDeadline: 0n,
     secretRevealed: false,
     resultsCommitted: false,
-    paidMask: 0,
-    winners: [],
+    paidMask: 0n,
+    payouts: [],
     entrants: 64,
   });
   chain.entries.set(poolId.toString(), entries);

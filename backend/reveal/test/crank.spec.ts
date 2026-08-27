@@ -20,7 +20,7 @@ import {
   type SealedPayload,
 } from '../../sealing/src';
 import {
-  amountForRank,
+  assignPrizes,
   battlesHash,
   potLamports,
   scorePool,
@@ -55,7 +55,7 @@ async function buildSealedPool(sabotage: {
   garbage?: number;
   hashMismatch?: number;
 }): Promise<TestPool> {
-  const chain = new FakeChain((entry, rank) => amountForRank(potLamports(entry), rank));
+  const chain = new FakeChain((entry) => potLamports(entry));
   const custody = new LocalCustody(async (id) => {
     const p = await chain.getPool(id);
     return p.state !== 'Open';
@@ -99,8 +99,8 @@ async function buildSealedPool(sabotage: {
     fillDeadline: 0n,
     secretRevealed: false,
     resultsCommitted: false,
-    paidMask: 0,
-    winners: [],
+    paidMask: 0n,
+    payouts: [],
     entrants: 64,
   });
   chain.entries.set('1', entries);
@@ -118,25 +118,29 @@ describe('the settlement crank', () => {
     expect(outcome.finalState).to.equal('Paid');
     expect(outcome.bundleUri).to.be.a('string');
 
-    // The bundle's ranking equals the pure engine's over the same battles.
+    // The bundle's ranking and amounts equal the pure engine's (with the
+    // D3-B split-pot assignment) over the same battles.
     const bundle = t.publisher.published.get(outcome.bundleUri!)!;
-    const engine = scorePool(t.battles);
+    const pot = potLamports(100_000_000n);
+    const engine = assignPrizes(scorePool(t.battles), pot);
     for (const r of bundle.results) {
       const e = engine[r.index];
       expect(r.score_half).to.equal(e.scoreHalf);
       expect(r.rank).to.equal(e.rank);
+      expect(r.amount_lamports).to.equal(e.amountLamports.toString());
     }
     expect(bundle.scored_as_all_losses).to.deep.equal([]);
     expect(bundle.results_root).to.equal(hex(t.chain.committedRoots.get('1')!));
 
-    // Every winner got exactly the band amount; total = the whole pot.
-    const pot = potLamports(100_000_000n);
-    let total = 0n;
-    for (let rank = 1; rank <= 16; rank++) {
-      const player = (await t.chain.getPool(1n)).winners[rank - 1];
-      expect(t.chain.paid.get(player)).to.equal(amountForRank(pot, rank));
-      total += amountForRank(pot, rank);
+    // Every committed seat got exactly its split-pot amount; total = pot.
+    const committed = (await t.chain.getPool(1n)).payouts;
+    expect(committed.length).to.be.at.least(16);
+    for (const c of committed) {
+      expect(t.chain.paid.get(t.players[c.entryIndex])).to.equal(c.amountLamports);
+      expect(c.amountLamports).to.equal(engine[c.entryIndex].amountLamports);
     }
+    let total = 0n;
+    for (const v of t.chain.paid.values()) total += v;
     expect(total).to.equal(pot);
   });
 
@@ -211,8 +215,8 @@ describe('the settlement crank', () => {
       fillDeadline: 0n,
       secretRevealed: false,
       resultsCommitted: false,
-      paidMask: 0,
-      winners: [],
+      paidMask: 0n,
+      payouts: [],
       entrants: 3,
     });
     chain.entries.set(
@@ -256,11 +260,12 @@ describe('scoring with missing entries (the published all-losses rule)', () => {
       expect(withMissing[i].rank).to.equal(pure[i].rank);
       expect(withMissing[i].zones).to.equal(pure[i].zones);
     }
-    // The two missing entries draw each other and rank by index at the bottom.
+    // The two missing entries draw each other; equal on (score, zones) by
+    // construction they are TIED under D3-B and share a competition rank.
     expect(withMissing[6].scoreHalf).to.equal(7);
     expect(withMissing[7].scoreHalf).to.equal(7);
     expect(withMissing[6].rank).to.equal(7);
-    expect(withMissing[7].rank).to.equal(8);
+    expect(withMissing[7].rank).to.equal(7);
   });
   it('rejects gapped seat indices', () => {
     expect(() => scoreWithMissing([{ index: 1, battles: null }])).to.throw('without gaps');
@@ -322,12 +327,12 @@ describe('detection wired into the crank (R11, roadmap 4.3)', () => {
     expect(outcome.finalState).to.equal('Paid');
     expect(outcome.stepsTaken.filter((x) => x === 'flag_entry').length).to.equal(2);
 
-    // If either colluder ranked in the top 16, their share escrowed.
+    // If either colluder's seat is in the committed paid set, their share
+    // escrowed instead of paying.
     const pool = await t.chain.getPool(1n);
     for (const seat of [0, 1]) {
       const player = t.players[seat];
-      const rank = pool.winners.indexOf(player) + 1;
-      if (rank >= 1) {
+      if (pool.payouts.some((x) => x.entryIndex === seat)) {
         expect((t.chain.escrowed.get(player) ?? 0n) > 0n).to.equal(true);
         expect(t.chain.paid.get(player) ?? 0n).to.equal(0n);
       }

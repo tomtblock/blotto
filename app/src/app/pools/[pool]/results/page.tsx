@@ -21,8 +21,14 @@ export default async function ResultsPage({ params }: { params: Promise<{ pool: 
     api.getPayouts(poolId),
     api.getEntries(poolId),
   ]);
-  const payoutByRank = new Map(payouts.map((p) => [p.rank, p]));
-  const entryByPlayer = new Map(entries.map((e) => [e.player, e]));
+  // D3-B: the committed list is keyed by seat; a tie group's members split
+  // the combined prize, so the paid set can exceed 16 rows. Rank labels are
+  // not on-chain — the verify page recomputes them from the published data.
+  const payoutBySeat = new Map(payouts.map((p) => [p.seat, p]));
+  const entryBySeat = new Map(entries.map((e) => [e.idx, e]));
+  const rows = [...results].sort(
+    (a, b) => (BigInt(a.amount) < BigInt(b.amount) ? 1 : BigInt(a.amount) > BigInt(b.amount) ? -1 : a.seat - b.seat)
+  );
 
   return (
     <>
@@ -38,38 +44,39 @@ export default async function ResultsPage({ params }: { params: Promise<{ pool: 
         {results.length === 0 ? (
           <p className="opacity-70">Results are not committed yet.</p>
         ) : (
-          <table className="w-full text-left">
-            <thead>
-              <tr className="text-sm opacity-60">
-                <th className="py-2">Rank</th>
-                <th>Player</th>
-                <th className="text-right">Prize</th>
-              </tr>
-            </thead>
-            <tbody>
-              {results.map((r) => {
-                const payout = payoutByRank.get(r.rank);
-                const entry = entryByPlayer.get(r.player);
-                return (
-                  <tr key={r.rank} className="border-t">
-                    <td className="py-2 font-mono">#{r.rank}</td>
-                    <td className="font-mono text-sm">{r.player.slice(0, 8)}…</td>
-                    <td className="text-right font-mono">
-                      {payout ? (
-                        payout.escrowed && entry?.escrow_settled !== 'released' ? (
+          <>
+            <p className="mb-4 text-sm opacity-70">{COPY.results.tieNote}</p>
+            <table className="w-full text-left">
+              <thead>
+                <tr className="text-sm opacity-60">
+                  <th className="py-2">Seat</th>
+                  <th>Player</th>
+                  <th className="text-right">Prize</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => {
+                  const payout = payoutBySeat.get(r.seat);
+                  const entry = entryBySeat.get(r.seat);
+                  return (
+                    <tr key={r.seat} className="border-t">
+                      <td className="py-2 font-mono">{r.seat}</td>
+                      <td className="font-mono text-sm">
+                        {entry ? `${entry.player.slice(0, 8)}…` : '—'}
+                      </td>
+                      <td className="text-right font-mono">
+                        {payout && payout.escrowed && entry?.escrow_settled !== 'released' ? (
                           <span title={COPY.results.escrowHeld}>held</span>
                         ) : (
-                          `${lamportsToSol(payout.amount)} SOL`
-                        )
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                          `${lamportsToSol(r.amount)} SOL`
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </>
         )}
       </main>
       <TabBar />

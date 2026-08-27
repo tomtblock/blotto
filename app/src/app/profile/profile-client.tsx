@@ -29,15 +29,11 @@ export function ProfileClient() {
       </div>
       <div className="rounded border p-4">
         <div className="text-sm opacity-60">Paid finishes</div>
-        <div className="font-mono text-2xl">{profile.ranks_paid}</div>
+        <div className="font-mono text-2xl">{profile.seats_paid}</div>
       </div>
       <div className="rounded border p-4">
         <div className="text-sm opacity-60">Total prizes</div>
         <div className="font-mono text-2xl">{lamportsToSol(profile.total_won_lamports)} SOL</div>
-      </div>
-      <div className="rounded border p-4">
-        <div className="text-sm opacity-60">Best rank</div>
-        <div className="font-mono text-2xl">{profile.best_rank ? `#${profile.best_rank}` : '—'}</div>
       </div>
       <div className="col-span-2 rounded border p-4">
         <div className="mb-2 text-sm opacity-60">Character collection</div>

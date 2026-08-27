@@ -8,6 +8,7 @@ import { expect } from 'chai';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import {
+  assignPrizes,
   compareBattle,
   scorePool,
   rankOrder,
@@ -22,6 +23,7 @@ import {
   PRIZE_BANDS_1024,
   type Allocation,
   type BattleSet,
+  type PlayerResult,
 } from '../src';
 
 const vectors = JSON.parse(
@@ -50,29 +52,38 @@ describe('pool vectors (20 four-player + 5 full + edge cases)', () => {
       for (let i = 0; i < players.length; i++) {
         expect(hex(encodeBattleSet(players[i]))).to.equal(pool.players[i].battles_hex);
       }
-      const results = scorePool(players);
+      const pot = potLamports(BigInt(pool.entry_lamports));
+      const results = assignPrizes(scorePool(players), pot);
       for (const expected of pool.results) {
         const got = results[expected.index];
         expect(got.scoreHalf, `score of seat ${expected.index}`).to.equal(expected.score_half);
         expect(got.zones, `zones of seat ${expected.index}`).to.equal(expected.zones);
         expect(got.rank, `rank of seat ${expected.index}`).to.equal(expected.rank);
+        expect(
+          got.amountLamports.toString(),
+          `amount of seat ${expected.index}`
+        ).to.equal(expected.amount_lamports);
       }
-      expect(rankOrder(results).slice(0, pool.winners.length)).to.deep.equal(pool.winners);
+      expect(rankOrder(results)).to.deep.equal(pool.leaf_order);
+      // The committed payout list: nonzero seats, seat-sorted.
+      const myPayouts = results
+        .filter((r) => r.amountLamports > 0n)
+        .sort((a, b) => a.index - b.index)
+        .map((r) => ({ entry_index: r.index, amount: r.amountLamports.toString() }));
+      expect(myPayouts).to.deep.equal(pool.payouts);
 
       if (pool.root) {
-        const pot = potLamports(BigInt(vectors.entry_lamports));
-        expect(pot).to.equal(BigInt(vectors.pot_lamports));
-        const byRank = [...results].sort((a, b) => a.rank - b.rank);
+        const byRank = [...results].sort((a, b) => a.rank - b.rank || a.index - b.index);
         const leaves = byRank.map((r) =>
           leafBytes({
             player: unhex(pool.players_pubkeys[r.index]),
             rank: r.rank,
-            amountLamports: amountForRank(pot, r.rank),
+            amountLamports: r.amountLamports,
           })
         );
         leaves.forEach((l, i) => expect(hex(l)).to.equal(pool.leaves_hex[i]));
         byRank.forEach((r, i) =>
-          expect(amountForRank(pot, r.rank).toString()).to.equal(pool.amounts[i])
+          expect(r.amountLamports.toString()).to.equal(pool.amounts[i])
         );
         expect(hex(merkleRoot(leaves))).to.equal(pool.root);
         // Every leaf proves against the root.
@@ -84,6 +95,56 @@ describe('pool vectors (20 four-player + 5 full + edge cases)', () => {
         const tampered = leaves[0].slice();
         tampered[33] ^= 1;
         expect(verifyProof(tampered, merkleProof(leaves, 0), merkleRoot(leaves))).to.equal(false);
+      }
+    });
+  }
+});
+
+describe('split-pot cases (D3-B, through the same assignPrizes)', () => {
+  for (const c of vectors.split_cases) {
+    it(c.name, () => {
+      // Rebuild the constructed ranking the oracle described: consecutive
+      // tie groups over 64 seats.
+      const results: PlayerResult[] = [];
+      let rank = 1;
+      let seat = 0;
+      for (const size of c.group_sizes as number[]) {
+        for (let k = 0; k < size; k++) {
+          results.push({ index: seat++, scoreHalf: 0, zones: 0, rank, amountLamports: 0n });
+        }
+        rank += size;
+      }
+      const pot = potLamports(BigInt(c.entry_lamports));
+      const assigned = assignPrizes(results, pot);
+      const myPayouts = assigned
+        .filter((r) => r.amountLamports > 0n)
+        .map((r) => ({ entry_index: r.index, amount: r.amountLamports.toString() }));
+      expect(myPayouts).to.deep.equal(c.payouts);
+      // Conservation: the paid set carries the whole pot.
+      let total = 0n;
+      for (const r of assigned) total += r.amountLamports;
+      expect(total).to.equal(pot);
+    });
+  }
+  it('the straddle-17 case pays 17 seats', () => {
+    const c = vectors.split_cases.find((x: any) => x.name === 'straddle_17');
+    expect(c.payouts.length).to.equal(17);
+  });
+  it('the three-way 4th-6th remainder goes to the lowest seat', () => {
+    const c = vectors.split_cases.find((x: any) => x.name === 'three_way_4_6');
+    const tied = c.payouts.slice(3, 6).map((p: any) => BigInt(p.amount));
+    expect(tied[0]).to.equal(tied[1] + 2n);
+    expect(tied[1]).to.equal(tied[2]);
+  });
+});
+
+describe('per-tier prize tables (D1)', () => {
+  for (const t of vectors.tier_tables) {
+    it(`entry ${t.entry_lamports}`, () => {
+      const pot = potLamports(BigInt(t.entry_lamports));
+      expect(pot.toString()).to.equal(t.pot_lamports);
+      for (let r = 1; r <= 16; r++) {
+        expect(amountForRank(pot, r).toString()).to.equal(t.bands[r - 1]);
       }
     });
   }
