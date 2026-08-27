@@ -83,6 +83,7 @@ sweepstakes and put the product in the wrong regulatory box.
 | The five source documents in `docs/` (PID, TECH-ARCH, brief, playbook, `BUILD-ROADMAP_v1.0.md`) | Copied verbatim — inputs to this repository rather than content authored in it. PID §8.7 necessarily *lists* the words it forbids, and the roadmap's R11 discusses the forbidden word it bans. |
 | `EXTRACTION-REPORT.md`, `TRANSITION-REPORT.md` | Both have to name the old product and the components that were not carried in order to be useful. |
 | `CONTRIBUTING.md`, `CLAUDE.md` | Both quote the forbidden list in order to forbid it. |
+| `docs/phase-reports/step-vocabulary.md` | The D-B7 step report: it documents which forbidden words were amended and to what, which requires naming them. No other report gets this exclusion. |
 | `Cargo.lock`, `package-lock.json`, `yarn.lock` | Dependency metadata, machine-generated. Package names like `pump`, `escape-string-regexp` and `solana-program-pack` are not ours to rename. |
 | `LICENSE` | The verbatim Apache-2.0 text ("Licensed under…"). Legal boilerplate nobody here authored; software licensing, not a gaming-licence claim. |
 | `node_modules/`, `target/`, `.next/`, `.git/` | Not repository content. |

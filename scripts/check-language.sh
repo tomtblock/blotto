@@ -81,9 +81,12 @@ hits="$(
     `# were not carried in order to be useful.` \
     --exclude=EXTRACTION-REPORT.md \
     --exclude=TRANSITION-REPORT.md \
-    `# These two quote the forbidden list in order to forbid it.` \
+    `# These quote the forbidden list in order to forbid it — CONTRIBUTING` \
+    `# and CLAUDE.md state the rule; the D-B7 step report documents which` \
+    `# words were amended and to what. No other report gets this exclusion.` \
     --exclude=CONTRIBUTING.md \
     --exclude=CLAUDE.md \
+    --exclude=step-vocabulary.md \
     --exclude=check-language.sh \
     `# The verbatim Apache-2.0 text ("Licensed under..."). Legal boilerplate` \
     `# nobody here authored; software licensing, not a gaming-licence claim.` \
