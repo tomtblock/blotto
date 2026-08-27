@@ -1,9 +1,15 @@
 /**
  * The entry service's HTTP face: the two endpoints a client calls at entry.
  *
- *   POST /packet       { wallet, pool, ageAttested }  → IssuedPacket | 403 generic
+ *   POST /packet       { wallet, pool }               → IssuedPacket | 403 generic
  *   POST /ciphertexts  { pool, player, ciphertext }   → 204
+ *   POST /attestation  { wallet, termsVersion, signature } → 204 | 403
  *   GET  /geo                                         → { allowed: boolean }
+ *
+ * `/attestation` (D-B4) stores the signature-verified clickwrap record; a
+ * refusal carries no reason (a wrong version and a bad signature look
+ * alike). There is deliberately NO read endpoint: the client re-prompts
+ * from its own device cache, and packet issuance is the authority.
  *
  * `/geo` (D-B3) is the client pre-flight: the same lookup and schedule as
  * issuance, answering only a boolean so the play page can withhold the pay
@@ -27,6 +33,7 @@ import {
   type GeoLookupResult,
   type PacketServiceDeps,
 } from './service';
+import { acceptAttestation } from './attestations';
 
 export interface EntryServerDeps {
   packet: PacketServiceDeps;
@@ -87,7 +94,7 @@ export async function handleEntryRoute(
   if (method !== 'POST') return { status: 405, body: { error: 'method' } };
 
   if (path === '/packet') {
-    const b = body as { wallet?: string; pool?: string; ageAttested?: boolean };
+    const b = body as { wallet?: string; pool?: string };
     if (!b || !B58.test(b.wallet ?? '') || !B58.test(b.pool ?? '')) {
       // Malformed requests get the same generic answer as failed checks.
       return { status: 403, body: GENERIC_REJECTION };
@@ -96,9 +103,26 @@ export async function handleEntryRoute(
       wallet: b.wallet as string,
       pool: b.pool as string,
       ip,
-      ageAttested: b.ageAttested === true,
     });
     return res.ok ? { status: 200, body: res } : { status: 403, body: res };
+  }
+
+  if (path === '/attestation') {
+    const b = body as { wallet?: string; termsVersion?: number; signature?: string };
+    if (!b || !B58.test(b.wallet ?? '') || typeof b.signature !== 'string') {
+      return { status: 403, body: { ok: false } };
+    }
+    const stored = await acceptAttestation(
+      deps.packet.attestations,
+      deps.packet.config.termsVersion,
+      deps.packet.now,
+      {
+        wallet: b.wallet as string,
+        termsVersion: Number(b.termsVersion),
+        signature: b.signature,
+      }
+    );
+    return stored ? { status: 204, body: null } : { status: 403, body: { ok: false } };
   }
 
   if (path === '/ciphertexts') {

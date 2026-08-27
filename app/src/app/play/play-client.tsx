@@ -22,8 +22,11 @@ import type { PoolSummary } from '@/data/types';
 import { useAuth } from '@/wallet/auth-context';
 import { submitEntry, type EntryServices } from '@/entry/submit';
 import { checkGeoGate, type GeoGateState } from '@/entry/geo-gate';
-
-const AGE_KEY = 'blotto:age-attested';
+import {
+  TERMS_VERSION,
+  hasLocalAttestation,
+  submitAttestation,
+} from '@/entry/attestation';
 
 function browserServices(): EntryServices {
   const base = process.env.NEXT_PUBLIC_ENTRY_API_URL;
@@ -69,15 +72,6 @@ export function PlayClient() {
   const poolId = params.get('pool');
   const auth = useAuth();
   const [pool, setPool] = useState<PoolSummary | null>(null);
-  // Lazy initializer: reads localStorage once on the client; this component
-  // is client-only ('use client' + Suspense), so no hydration mismatch.
-  const [attested, setAttested] = useState<boolean>(() => {
-    try {
-      return typeof localStorage !== 'undefined' && localStorage.getItem(AGE_KEY) === '1';
-    } catch {
-      return false;
-    }
-  });
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
   // D-B3: the territory pre-flight. Nothing that can take money renders
@@ -98,6 +92,7 @@ export function PlayClient() {
       cancelled = true;
     };
   }, []);
+
 
   const onConfirm = useCallback(
     async (battles: readonly Allocation[], timingsMs: readonly number[]) => {
@@ -127,31 +122,16 @@ export function PlayClient() {
     return <p className="max-w-prose text-sm opacity-80">{COPY.gate.territoryBlocked}</p>;
   }
 
-  // 3.1: the age self-attestation modal gates everything.
-  if (!attested) {
-    return (
-      <section className="flex flex-col gap-4 rounded border p-6">
-        <p className="text-sm">{COPY.gate.ageAttestation}</p>
-        <button
-          type="button"
-          className="rounded bg-[var(--color-accent,#7c5cff)] px-6 py-2 text-white"
-          onClick={() => {
-            try {
-              localStorage.setItem(AGE_KEY, '1');
-            } catch {
-              /* private mode: gate again next visit */
-            }
-            setAttested(true);
-          }}
-        >
-          {COPY.gate.ageConfirm}
-        </button>
-      </section>
-    );
-  }
-
   if (auth.status !== 'signed-in') {
     return <p className="opacity-70">Sign in to enter.</p>;
+  }
+
+  // D-B4: the versioned clickwrap — conspicuous, unavoidable, BEFORE any
+  // paid action. Keyed by wallet so acceptance state re-derives per wallet;
+  // a terms-version bump re-prompts because the cache key carries the
+  // version.
+  if (!auth.walletAddress) {
+    return <p className="opacity-70">…</p>;
   }
 
   if (submitted) {
@@ -159,9 +139,78 @@ export function PlayClient() {
   }
 
   return (
-    <>
+    <AttestationGate
+      key={auth.walletAddress}
+      wallet={auth.walletAddress}
+      signer={auth.signers.find((s) => s.address === auth.walletAddress)}
+    >
       {error && <p className="mb-4 text-sm text-red-400">{error}</p>}
       <BattleFlow timerSeconds={pool.timer_seconds} onConfirm={onConfirm} />
-    </>
+    </AttestationGate>
+  );
+}
+
+/**
+ * D-B4 clickwrap gate: renders its children only for a wallet whose
+ * acceptance of the CURRENT terms version is on record. Lazy initial state
+ * (no effect) — the component is re-mounted per wallet via `key`.
+ */
+function AttestationGate({
+  wallet,
+  signer,
+  children,
+}: {
+  wallet: string;
+  signer: { signMessage?(message: Uint8Array): Promise<Uint8Array> } | undefined;
+  children: React.ReactNode;
+}) {
+  const [attested, setAttested] = useState(() => hasLocalAttestation(wallet));
+  const [ageChecked, setAgeChecked] = useState(false);
+  const [termsChecked, setTermsChecked] = useState(false);
+  const [attestError, setAttestError] = useState(false);
+  const [attesting, setAttesting] = useState(false);
+
+  const onAttest = useCallback(async () => {
+    if (attesting) return;
+    setAttesting(true);
+    setAttestError(false);
+    const ok = await submitAttestation(process.env.NEXT_PUBLIC_ENTRY_API_URL, signer, wallet);
+    setAttesting(false);
+    if (ok) setAttested(true);
+    else setAttestError(true);
+  }, [attesting, signer, wallet]);
+
+  if (attested) return <>{children}</>;
+
+  return (
+    <section className="flex max-w-prose flex-col gap-4 rounded border p-6">
+      <label className="flex items-start gap-3 text-sm">
+        <input
+          type="checkbox"
+          checked={ageChecked}
+          onChange={(e) => setAgeChecked(e.target.checked)}
+          className="mt-1"
+        />
+        <span>{COPY.gate.ageAttestation}</span>
+      </label>
+      <label className="flex items-start gap-3 text-sm">
+        <input
+          type="checkbox"
+          checked={termsChecked}
+          onChange={(e) => setTermsChecked(e.target.checked)}
+          className="mt-1"
+        />
+        <span>{COPY.gate.termsAcceptance(TERMS_VERSION)}</span>
+      </label>
+      {attestError && <p className="text-sm text-red-400">{COPY.gate.attestFailed}</p>}
+      <button
+        type="button"
+        disabled={!ageChecked || !termsChecked || attesting}
+        className="rounded bg-[var(--color-accent,#7c5cff)] px-6 py-2 text-white disabled:opacity-40"
+        onClick={onAttest}
+      >
+        {attesting ? '…' : COPY.gate.ageConfirm}
+      </button>
+    </section>
   );
 }

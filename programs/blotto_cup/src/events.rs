@@ -41,6 +41,9 @@ pub struct EntryRegistered {
     /// `PoolVrfSeeded` and the index above, anyone replays the draw.
     pub slot_hash: [u8; 32],
     pub pass_asset: Pubkey,
+    /// Terms/attestation version from the verified entry packet (D-B4) —
+    /// the durable record tying this entry to an accepted version.
+    pub terms_version: u16,
 }
 
 #[event]

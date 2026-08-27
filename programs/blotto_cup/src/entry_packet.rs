@@ -20,7 +20,7 @@
 //! caller passes, instead of the sysvar, is the failure mode this design
 //! exists to prevent (the extraction brief's §4 warning).
 //!
-//! # Canonical packet encoding — 83 bytes, all integers little-endian
+//! # Canonical packet encoding — 85 bytes, all integers little-endian
 //!
 //! | offset | size | field         |
 //! |--------|------|---------------|
@@ -31,9 +31,16 @@
 //! | 73     | 1    | age_verified  |
 //! | 74     | 1    | kyc_tier      |
 //! | 75     | 8    | issued_at (i64) |
+//! | 83     | 2    | terms_version (u16) |
 //!
 //! `kyc_tier` is retained in the struct and always 0 at launch (R3); the
 //! KYC-at-claim switch (4.5) requires `kyc_tier ≥ 1` on `release_escrow`.
+//! `terms_version` (D-B4, ratified 2026-08-27) is the version of the terms +
+//! 18+ clickwrap the wallet attested to, persisted by the packet service
+//! before it will sign a packet; the program requires it non-zero and emits
+//! it on `EntryRegistered`, tying every entry to an accepted version. WHICH
+//! version is current is service policy (config/terms.json), not program
+//! state.
 //!
 //! The packet service (`backend/packet/`) and the client instruction builder
 //! (`app/src/tx/blotto-instructions.ts`) encode this SAME layout; the Python
@@ -57,7 +64,7 @@ pub const ED25519_PROGRAM_ID: Pubkey = pubkey!("Ed25519SigVerify1111111111111111
 pub const INSTRUCTIONS_SYSVAR_ID: Pubkey = pubkey!("Sysvar1nstructions1111111111111111111111111");
 
 /// Canonical packet length.
-pub const PACKET_LEN: usize = 32 + 32 + 8 + 1 + 1 + 1 + 8;
+pub const PACKET_LEN: usize = 32 + 32 + 8 + 1 + 1 + 1 + 8 + 2;
 
 /// A parsed, signature-verified entry packet.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -69,6 +76,8 @@ pub struct EntryPacket {
     pub age_verified: u8,
     pub kyc_tier: u8,
     pub issued_at: i64,
+    /// Terms/attestation version accepted by the wallet (D-B4); never 0.
+    pub terms_version: u16,
 }
 
 impl EntryPacket {
@@ -89,6 +98,7 @@ impl EntryPacket {
             age_verified: message[73],
             kyc_tier: message[74],
             issued_at: i64::from_le_bytes(message[75..83].try_into().unwrap()),
+            terms_version: u16::from_le_bytes(message[83..85].try_into().unwrap()),
         })
     }
 
@@ -103,6 +113,7 @@ impl EntryPacket {
         out.push(self.age_verified);
         out.push(self.kyc_tier);
         out.extend_from_slice(&self.issued_at.to_le_bytes());
+        out.extend_from_slice(&self.terms_version.to_le_bytes());
         out
     }
 }
@@ -198,6 +209,12 @@ pub fn check_packet_policy(
         packet.geo_cleared == 1 && packet.age_verified == 1,
         ErrorCode::PacketNotCleared
     );
+    // D-B4: an entry must tie to an accepted terms version; 0 = never
+    // attested. Version currency is enforced by the issuing service.
+    require!(
+        packet.terms_version >= 1,
+        ErrorCode::PacketTermsVersionMissing
+    );
     require!(
         packet.kyc_tier >= min_kyc_tier,
         ErrorCode::PacketKycInsufficient
@@ -258,6 +275,7 @@ mod tests {
             age_verified: 1,
             kyc_tier: 0,
             issued_at: 1_700_000_000,
+            terms_version: 1,
         }
     }
 
@@ -360,6 +378,10 @@ mod tests {
         assert!(check_packet_policy(&q, &q.wallet, &q.pool, now, 0).is_err());
         let mut q = p.clone();
         q.age_verified = 0;
+        assert!(check_packet_policy(&q, &q.wallet, &q.pool, now, 0).is_err());
+        // D-B4: a packet with no accepted terms version is refused.
+        let mut q = p.clone();
+        q.terms_version = 0;
         assert!(check_packet_policy(&q, &q.wallet, &q.pool, now, 0).is_err());
         // Stale (61s) and too-far-future (6s beyond skew).
         assert!(check_packet_policy(&p, &p.wallet, &p.pool, p.issued_at + 61, 0).is_err());

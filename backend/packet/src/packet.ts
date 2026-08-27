@@ -2,7 +2,7 @@
  * The canonical EntryPacket encoding + the Ed25519 instruction the client
  * embeds (roadmap 4.1; TECH-ARCH §8).
  *
- * The 83-byte layout MIRRORS `programs/blotto_cup/src/entry_packet.rs` —
+ * The 85-byte layout MIRRORS `programs/blotto_cup/src/entry_packet.rs` —
  * that file is the verifier and this file is the issuer, and the layout
  * table lives in both headers on purpose:
  *
@@ -15,6 +15,7 @@
  *   | 73     | 1    | age_verified    |
  *   | 74     | 1    | kyc_tier        |
  *   | 75     | 8    | issued_at (i64) |
+ *   | 83     | 2    | terms_version (u16) |
  *
  * The independent oracle is `fixtures/gen_vectors.py` (Python builds the
  * bytes for known fields; the suite pins this encoder to it), and the
@@ -25,7 +26,7 @@
 import nacl from 'tweetnacl';
 import { base58Decode } from './shared';
 
-export const PACKET_LEN = 83;
+export const PACKET_LEN = 85;
 
 export interface EntryPacketFields {
   /** Base58 wallet. */
@@ -38,6 +39,8 @@ export interface EntryPacketFields {
   kycTier: number;
   /** Unix seconds. */
   issuedAt: bigint;
+  /** Terms/attestation version the wallet accepted (D-B4); never 0. */
+  termsVersion: number;
 }
 
 export function encodePacket(p: EntryPacketFields): Uint8Array {
@@ -60,6 +63,11 @@ export function encodePacket(p: EntryPacketFields): Uint8Array {
     out[75 + i] = Number(t & 0xffn);
     t >>= 8n;
   }
+  if (!Number.isInteger(p.termsVersion) || p.termsVersion < 0 || p.termsVersion > 0xffff) {
+    throw new Error(`terms_version must fit a u16, got ${p.termsVersion}`);
+  }
+  out[83] = p.termsVersion & 0xff;
+  out[84] = p.termsVersion >> 8;
   return out;
 }
 

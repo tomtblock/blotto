@@ -3,6 +3,7 @@
 import { PrivyProvider, useLogin, usePrivy } from "@privy-io/react-auth";
 import {
   toSolanaWalletConnectors,
+  useSignMessage,
   useSignTransaction,
   useWallets,
 } from "@privy-io/react-auth/solana";
@@ -75,6 +76,7 @@ function PrivyAdapter({ children }: { children: ReactNode }) {
   const { login } = useLogin();
   const { wallets } = useWallets();
   const { signTransaction } = useSignTransaction();
+  const { signMessage } = useSignMessage();
 
   const value = useMemo<Auth>(() => {
     // Active Solana wallet: a connected standard wallet (embedded or
@@ -122,6 +124,17 @@ function PrivyAdapter({ children }: { children: ReactNode }) {
             : new Error(`privy signing failed: ${String(error)}`);
         }
       },
+      // D-B4: the attestation clickwrap signs a human-readable message.
+      signMessage: async (message: Uint8Array) => {
+        try {
+          const { signature } = await signMessage({ message, wallet });
+          return signature;
+        } catch (error) {
+          throw error instanceof Error
+            ? error
+            : new Error(`privy message signing failed: ${String(error)}`);
+        }
+      },
     }));
 
     return {
@@ -137,7 +150,7 @@ function PrivyAdapter({ children }: { children: ReactNode }) {
       connectWallet: () => login({ loginMethods: ["wallet"] }),
       signOut: logout,
     };
-  }, [ready, authenticated, user, wallets, signTransaction, login, logout]);
+  }, [ready, authenticated, user, wallets, signTransaction, signMessage, login, logout]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -15,6 +15,7 @@
 
 import { encodePacket, type EntryPacketFields, type PacketSigner } from './packet';
 import { territoryAllowed, type TerritorySchedule } from './territories';
+import type { AttestationStore } from './attestations';
 
 export interface GeoLookupResult {
   /** ISO 3166-1 alpha-2 country code. */
@@ -38,14 +39,14 @@ export interface PacketServiceConfig {
   territories: TerritorySchedule;
   /** R3: no KYC at launch — issued packets carry tier 0. */
   kycTier: number;
+  /** Current terms version from `config/terms.json` (D-B4). */
+  termsVersion: number;
 }
 
 export interface PacketRequest {
   wallet: string;
   pool: string;
   ip: string;
-  /** The client's age self-attestation (R3: attestation, not verification). */
-  ageAttested: boolean;
 }
 
 export interface IssuedPacket {
@@ -71,6 +72,9 @@ export interface PacketServiceDeps {
   geo: GeoLookup;
   sanctions: SanctionsList;
   signer: PacketSigner;
+  /** D-B4: the durable clickwrap records; issuance requires one at the
+   * CURRENT terms version — an older record means the client re-prompts. */
+  attestations: AttestationStore;
   config: PacketServiceConfig;
   /** Injected clock (unix seconds) — testable freshness. */
   now(): bigint;
@@ -88,7 +92,13 @@ export async function issuePacket(
     const territoryOk = territoryAllowed(deps.config.territories, geo.country, geo.region);
     const vpnOk = !geo.vpnOrProxy;
     const sanctioned = await deps.sanctions.isSanctioned(req.wallet, geo.country);
-    const ageOk = req.ageAttested === true;
+    // D-B4: the durable, signature-verified clickwrap record replaces the
+    // old per-request boolean; it must exist AT the current version.
+    const attestation = await deps.attestations.get(req.wallet);
+    const ageOk =
+      attestation !== null &&
+      attestation.attested18 === true &&
+      attestation.termsVersion === deps.config.termsVersion;
 
     if (!territoryOk || !vpnOk || sanctioned || !ageOk) {
       return GENERIC_REJECTION;
@@ -103,6 +113,7 @@ export async function issuePacket(
       ageVerified: true,
       kycTier: deps.config.kycTier,
       issuedAt,
+      termsVersion: attestation.termsVersion,
     };
     const message = encodePacket(fields);
     const signature = await deps.signer.sign(message);

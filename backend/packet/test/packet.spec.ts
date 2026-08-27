@@ -12,9 +12,11 @@ import {
   DEFAULT_TERRITORY_SCHEDULE,
   GENERIC_REJECTION,
   LocalPacketSigner,
+  MemoryAttestationStore,
   ed25519InstructionData,
   encodePacket,
   issuePacket,
+  type AttestationStore,
   type PacketServiceDeps,
 } from '../src';
 import { base58Encode } from '../src/shared';
@@ -26,7 +28,28 @@ const vectors = JSON.parse(
 const WALLET = base58Encode(new Uint8Array(32).fill(3));
 const POOL = base58Encode(new Uint8Array(32).fill(4));
 
-function deps(overrides: Partial<{ country: string; region: string; vpn: boolean; sanctioned: boolean }> = {}): PacketServiceDeps {
+/** A store already holding WALLET's clickwrap record at `termsVersion`. */
+function attested(termsVersion = 1): AttestationStore {
+  const store = new MemoryAttestationStore();
+  void store.put({
+    wallet: WALLET,
+    termsVersion,
+    attested18: true,
+    timestamp: 1_756_000_000n,
+    walletSignature: 'dGVzdA==',
+  });
+  return store;
+}
+
+function deps(
+  overrides: Partial<{
+    country: string;
+    region: string;
+    vpn: boolean;
+    sanctioned: boolean;
+    attestations: AttestationStore;
+  }> = {}
+): PacketServiceDeps {
   return {
     geo: {
       async lookup() {
@@ -43,13 +66,14 @@ function deps(overrides: Partial<{ country: string; region: string; vpn: boolean
       },
     },
     signer: new LocalPacketSigner(new Uint8Array(32).fill(7)),
-    config: { territories: DEFAULT_TERRITORY_SCHEDULE, kycTier: 0 },
+    attestations: overrides.attestations ?? attested(),
+    config: { territories: DEFAULT_TERRITORY_SCHEDULE, kycTier: 0, termsVersion: 1 },
     now: () => 1_756_000_000n,
     nonce: () => 42n,
   };
 }
 
-const request = { wallet: WALLET, pool: POOL, ip: '203.0.113.7', ageAttested: true };
+const request = { wallet: WALLET, pool: POOL, ip: '203.0.113.7' };
 
 describe('the packet encoding (pinned to the Python oracle)', () => {
   for (const c of vectors.cases) {
@@ -62,6 +86,7 @@ describe('the packet encoding (pinned to the Python oracle)', () => {
         ageVerified: c.age_verified === 1,
         kycTier: c.kyc_tier,
         issuedAt: BigInt(c.issued_at),
+        termsVersion: c.terms_version,
       });
       expect(Buffer.from(bytes).toString('hex')).to.equal(c.expected_hex);
     });
@@ -75,16 +100,18 @@ describe('packet issuance', () => {
     const message = Buffer.from(res.message, 'base64');
     const signature = Buffer.from(res.signature, 'base64');
     const publicKey = Buffer.from(res.publicKey, 'base64');
-    expect(message.length).to.equal(83);
+    expect(message.length).to.equal(85);
     expect(nacl.sign.detached.verify(message, signature, publicKey)).to.equal(true);
     // geo_cleared and age_verified are set; kyc tier is 0 at launch (R3).
     expect(message[72]).to.equal(1);
     expect(message[73]).to.equal(1);
     expect(message[74]).to.equal(0);
+    // D-B4: the accepted terms version rides at offset 83 (u16 LE).
+    expect(message[83] | (message[84] << 8)).to.equal(1);
     // The ed25519 instruction bytes are self-referential and well-formed.
     const ix = ed25519InstructionData(publicKey, signature, message);
     expect(ix[0]).to.equal(1);
-    expect(ix.length).to.equal(16 + 32 + 64 + 83);
+    expect(ix.length).to.equal(16 + 32 + 64 + 85);
   });
 
   it('every failure is the SAME generic rejection', async () => {
@@ -92,7 +119,8 @@ describe('packet issuance', () => {
       issuePacket(deps({ country: 'US' }), request), // blocked territory
       issuePacket(deps({ vpn: true }), request), // VPN
       issuePacket(deps({ sanctioned: true }), request), // sanctions
-      issuePacket(deps(), { ...request, ageAttested: false }), // no attestation
+      issuePacket(deps({ attestations: new MemoryAttestationStore() }), request), // no attestation
+      issuePacket(deps({ attestations: attested(0) }), request), // stale terms version
       issuePacket(
         {
           ...deps(),
@@ -145,7 +173,7 @@ describe('the entry service routes', () => {
       d,
       'POST',
       '/packet',
-      { wallet: WALLET, pool: POOL, ageAttested: true },
+      { wallet: WALLET, pool: POOL },
       '203.0.113.7'
     );
     expect(ok.status).to.equal(200);
@@ -153,7 +181,7 @@ describe('the entry service routes', () => {
       { ...d, packet: deps({ country: 'US' }) },
       'POST',
       '/packet',
-      { wallet: WALLET, pool: POOL, ageAttested: true },
+      { wallet: WALLET, pool: POOL },
       '203.0.113.7'
     );
     expect(blocked.status).to.equal(403);
