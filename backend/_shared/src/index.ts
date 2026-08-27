@@ -88,4 +88,4 @@ export {
   type MonotonicClock,
 } from './http-hygiene';
 
-export { registerBlottoEventLayouts, base58Encode } from './blotto-events';
+export { registerBlottoEventLayouts, base58Encode, base58Decode } from './blotto-events';
