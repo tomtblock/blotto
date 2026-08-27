@@ -4,56 +4,39 @@
 resolution = true
 skip-lint = false
 
-[programs.localnet]
-blotto_cup = "4pspHqtbdgqKTvSxvKFT2ycEU28u3EWdxjmj3xsTHD3Y"
-
 [programs.devnet]
-# Devnet program identity, generated fresh during Phase 0 extraction. The
-# predecessor's program ID is deliberately NOT reused (playbook §0, Rule 1: no key
-# from the old repository is reused, ever).
-#
-# The keypair's private half lives OUTSIDE this repository and is never committed —
-# TRANSITION-REPORT.md records the path. Nothing under target/deploy/ is tracked
-# here, unlike the old repo, which committed its program-identity keypair and then
-# had to treat it as compromised.
-#
-# Replace this ID (here AND in programs/blotto_cup/src/lib.rs `declare_id!`) if the
-# keypair is regenerated. `anchor deploy --provider.cluster devnet` reports the
-# deployed ID.
 blotto_cup = "4pspHqtbdgqKTvSxvKFT2ycEU28u3EWdxjmj3xsTHD3Y"
-# The devnet cluster URL comes from RPC_URL (see .env.example) via the deploy
-# scripts; it is deliberately not hardcoded here. The default cluster below stays
-# localnet so `anchor test` keeps running against Surfpool. Note the hosting and RPC
-# region constraints in TECH-ARCH §11 — no US region, in any environment including
-# preview deployments.
 
-# Metaplex Core, loaded into the local validator at its canonical address so the
-# pass instructions can CPI into it. Anchor runs surfpool with `--offline`, so the
-# program cannot be lazily cloned from mainnet at test time — it is bundled as a
-# fixture instead, keeping the suite hermetic. The .so is a dumped copy of a public
-# on-chain program: not a secret, and safe to commit.
-# Refresh: `solana program dump CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d \
-#   tests/fixtures/mpl_core.so --url https://api.mainnet-beta.solana.com`.
-[[test.genesis]]
-address = "CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d"
-program = "tests/fixtures/mpl_core.so"
+[programs.localnet]
+blotto_cup = "5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17"
 
 [provider]
 cluster = "localnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]
-# Phase 1 replaced the carried Surfpool TS suites (tests/vrf.ts, tests/pass.ts)
-# with the LiteSVM integration suite — same coverage, runnable without a local
-# validator, against the compiled artifact. `anchor build` must run first.
 test = "cargo test --manifest-path tests/litesvm/Cargo.toml"
+
+[hooks]
+
+[test]
+startup_wait = 5000
+shutdown_wait = 2000
+upgradeable = false
+
+[[test.genesis]]
+address = "CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d"
+program = "tests/fixtures/mpl_core.so"
 
 [test.validator]
 bind_address = "127.0.0.1"
-rpc_port = 8899
 faucet_port = 9900
+ledger = ".anchor/test-ledger"
+rpc_port = 8899
 
 [surfpool]
+startup_wait = 5000
+shutdown_wait = 2000
 rpc_port = 8899
 ws_port = 8900
 host = "127.0.0.1"

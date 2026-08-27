@@ -54,3 +54,4 @@ coverage
 # App build output
 app/.next
 *.tsbuildinfo
+target/deploy/*-keypair.json
