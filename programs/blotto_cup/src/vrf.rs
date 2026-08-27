@@ -92,7 +92,7 @@ pub struct CommitVrfSeed<'info> {
         seeds = [POOL_SEED, &pool_id.to_le_bytes()],
         bump = pool.bump,
     )]
-    pub pool: Account<'info, Pool>,
+    pub pool: Box<Account<'info, Pool>>,
 
     /// CHECK: Switchboard On-Demand Randomness PDA, owned by the Switchboard program.
     /// Not an Anchor account; validated entirely in the handler — the owner is checked

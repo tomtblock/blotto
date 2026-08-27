@@ -34,6 +34,31 @@ pub fn band_amount(pot_lamports: u64, rank: u8) -> u64 {
     ((pot_lamports as u128) * (PRIZE_BANDS_1024[(rank - 1) as usize] as u128) / 1024) as u64
 }
 
+/// Split-pot arithmetic for a tie group (decision D3-B, 2026-08-27):
+/// a group of `group_size` players tied from 1-based position `first_rank`
+/// occupies positions `first_rank .. first_rank + group_size - 1`; its
+/// combined prize is the sum of those positions' band amounts (positions
+/// beyond 16 contribute zero). Returns `(each, remainder)`: every tied
+/// player receives `each = combined / group_size`, and the `remainder`
+/// lamports go to the tied player with the lowest entry index — entry index
+/// places the remainder, never decides who is paid. Integer-only; shared by
+/// the scoring engine's oracle-pinned twin, the vault model and the tests
+/// so the arithmetic exists in exactly one on-chain-adjacent place.
+pub fn split_group(pot_lamports: u64, first_rank: u16, group_size: u16) -> (u64, u64) {
+    assert!(group_size > 0, "a tie group has at least one member");
+    let mut combined: u128 = 0;
+    for offset in 0..group_size {
+        let rank = first_rank + offset;
+        if rank >= 1 && rank <= PAID_RANKS as u16 {
+            combined += band_amount(pot_lamports, rank as u8) as u128;
+        }
+    }
+    (
+        (combined / group_size as u128) as u64,
+        (combined % group_size as u128) as u64,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -98,6 +123,36 @@ mod tests {
             let paid: u64 = (1..=16u8).map(|r| band_amount(pot, r)).sum();
             assert_eq!(paid, pot, "prizes must sum to the pot exactly");
         }
+    }
+
+    /// D3-B split groups: a solo "group" is the plain band; a group covers
+    /// its whole span; positions past 16 contribute zero; each × size +
+    /// remainder reconstructs the combined prize exactly; and a full-pool
+    /// 64-way tie splits the whole pot with zero remainder at the 0.1 tier.
+    #[test]
+    fn split_groups_conserve_lamports_exactly() {
+        let pot = pot(100_000_000); // 5.12 SOL
+        for r in 1..=16u16 {
+            let (each, rem) = split_group(pot, r, 1);
+            assert_eq!(each, band_amount(pot, r as u8));
+            assert_eq!(rem, 0);
+        }
+        // Three-way tie spanning 4th–6th: bands 78+50+50 = 178/1024ths.
+        let (each, rem) = split_group(pot, 4, 3);
+        let combined = pot / 1024 * 178;
+        assert_eq!(each as u128 * 3 + rem as u128, combined as u128);
+        assert_eq!(rem, combined % 3, "remainder is the exact residue");
+        assert!(rem > 0, "this case exists to make the remainder visible");
+        // Straddling 16th/17th: 27 + 0, split two ways, both paid.
+        let (each, rem) = split_group(pot, 16, 2);
+        assert_eq!(each, pot / 1024 * 27 / 2);
+        assert_eq!(rem, 0);
+        // Fully below the paid places: zero.
+        assert_eq!(split_group(pot, 17, 5), (0, 0));
+        // Everyone tied: the whole pot, 64 ways, exact at this tier.
+        let (each, rem) = split_group(pot, 1, 64);
+        assert_eq!(each, 80_000_000);
+        assert_eq!(rem, 0);
     }
 
     /// PID §6's rounded percentage column sums to 100.02% — the reason bands

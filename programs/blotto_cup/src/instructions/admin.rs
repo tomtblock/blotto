@@ -9,6 +9,8 @@
 
 use anchor_lang::prelude::*;
 
+use crate::constants::N_TIERS;
+use crate::error::ErrorCode;
 use crate::state::{Config, CONFIG_SEED};
 
 // ---------------------------------------------------------------------------
@@ -29,7 +31,7 @@ pub struct InitConfig<'info> {
         seeds = [CONFIG_SEED],
         bump,
     )]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
 
     pub system_program: Program<'info, System>,
 }
@@ -47,7 +49,7 @@ pub fn handle_init_config(
     entry_signer: Pubkey,
     settlement_signer: Pubkey,
     platform_wallet: Pubkey,
-    vault_ceiling_lamports: u64,
+    vault_ceiling_lamports: [u64; N_TIERS],
 ) -> Result<()> {
     let config = &mut ctx.accounts.config;
     config.admin = ctx.accounts.admin.key();
@@ -55,8 +57,9 @@ pub fn handle_init_config(
     config.settlement_signer = settlement_signer;
     config.platform_wallet = platform_wallet;
     config.paused = false;
-    // R6: tiers configured 0.1/0.5/1/5 SOL; open at launch: 0.1 only.
-    config.open_tiers = [true, false, false, false];
+    // R6 as amended by D1: seven tiers configured; open at launch: 0.1
+    // ONLY. Written out, not computed, so the launch policy is readable.
+    config.open_tiers = [true, false, false, false, false, false, false];
     config.vault_ceiling_lamports = vault_ceiling_lamports;
     // R3: no KYC at launch — the at-claim switch starts off (0 = off).
     config.kyc_required_above_lamports = 0;
@@ -66,7 +69,7 @@ pub fn handle_init_config(
     config.detection_hard_block = false;
     // Pool ids start at 1: 0 is `active_pool_by_tier`'s "none" sentinel.
     config.next_pool_id = 1;
-    config.active_pool_by_tier = [0; 4];
+    config.active_pool_by_tier = [0; N_TIERS];
     config.bump = ctx.bumps.config;
     Ok(())
 }
@@ -86,7 +89,7 @@ pub struct AdminOnly<'info> {
         bump = config.bump,
         has_one = admin,
     )]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
 }
 
 /// Kill switch: blocks `register` (and only `register` — reveal, payout and
@@ -110,16 +113,23 @@ pub fn handle_set_settlement_signer(ctx: Context<AdminOnly>, new_signer: Pubkey)
 }
 
 /// Which tiers may open pools (R6: 0.5 opens only after audit + one counsel
-/// opinion; 1 and 5 only by explicit founder decision).
-pub fn handle_set_open_tiers(ctx: Context<AdminOnly>, open_tiers: [bool; 4]) -> Result<()> {
+/// opinion; higher tiers only by explicit founder decision).
+pub fn handle_set_open_tiers(ctx: Context<AdminOnly>, open_tiers: [bool; N_TIERS]) -> Result<()> {
     ctx.accounts.config.open_tiers = open_tiers;
     Ok(())
 }
 
-/// Per-pool gross ceiling. Checked at `open_pool`, so lowering it never
-/// affects a pool already open.
-pub fn handle_set_vault_ceiling(ctx: Context<AdminOnly>, ceiling_lamports: u64) -> Result<()> {
-    ctx.accounts.config.vault_ceiling_lamports = ceiling_lamports;
+/// Per-TIER gross ceiling (D2), one tier per call — so a Squads proposal
+/// reads as "raise tier 2's ceiling", never "replace the whole table".
+/// Checked at `open_pool` only: lowering a ceiling never affects a pool
+/// already open, it blocks the NEXT open in that tier.
+pub fn handle_set_vault_ceiling(
+    ctx: Context<AdminOnly>,
+    tier: u8,
+    ceiling_lamports: u64,
+) -> Result<()> {
+    require!((tier as usize) < N_TIERS, ErrorCode::UnknownTier);
+    ctx.accounts.config.vault_ceiling_lamports[tier as usize] = ceiling_lamports;
     Ok(())
 }
 

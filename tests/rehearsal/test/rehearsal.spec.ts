@@ -7,7 +7,7 @@
  */
 import { expect } from 'chai';
 import { runOfflinePool } from '../src';
-import { amountForRank, potLamports } from '../../../backend/scoring/src';
+import { potLamports } from '../../../backend/scoring/src';
 import { FakeChain } from '../../../backend/reveal/src';
 import { crankPool } from '../../../backend/reveal/src';
 import { LocalCustody, MemoryCiphertextStore } from '../../../backend/sealing/src';
@@ -32,8 +32,13 @@ describe('the offline dress rehearsal', () => {
       expect(bundle.results_root).to.equal(
         Buffer.from(run.chain.committedRoots.get(run.poolId.toString())!).toString('hex')
       );
-      // Every rank settled exactly once.
-      expect((await run.chain.getPool(run.poolId)).paidMask).to.equal(0xffff);
+      // Every committed seat settled exactly once (D3-B: the paid set can
+      // exceed 16 seats when a tie straddles position 16).
+      const pool = await run.chain.getPool(run.poolId);
+      expect(pool.payouts.length).to.be.at.least(16);
+      for (const c of pool.payouts) {
+        expect((pool.paidMask >> BigInt(c.entryIndex)) & 1n, `seat ${c.entryIndex}`).to.equal(1n);
+      }
     }
   });
 
@@ -58,8 +63,8 @@ describe('the offline dress rehearsal', () => {
       fillDeadline: 0n,
       secretRevealed: false,
       resultsCommitted: false,
-      paidMask: 0,
-      winners: [],
+      paidMask: 0n,
+      payouts: [],
       entrants: 63,
     });
     chain.entries.set(

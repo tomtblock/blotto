@@ -55,6 +55,9 @@ export const COPY = {
     escrowHeld:
       'This prize share is held pending review. It will be released or withheld per the published detection criteria.',
     rank: (r: number) => `Ranked #${r} of 64`,
+    // SUBSTANCE FIXED (D3-B, ratified 2026-08-27): the split-pot tie rule.
+    tieNote:
+      'Tied players — equal on battles won and on stats won — share a rank and split the combined prize of the positions they occupy evenly. The full ranking with tie labels is recomputable on the Verify page from the published data.',
   },
   verify: {
     title: 'TODO_COPY: Verify a pool',
@@ -74,7 +77,18 @@ export const COPY = {
       { id: 'final', heading: 'Decisions are final', body: 'TODO_COPY(rules.final)' },
       { id: 'fill', heading: 'Fill deadline and refunds', body: 'TODO_COPY(rules.fill)' },
       { id: 'sealing', heading: 'Sealing', body: 'TODO_COPY(rules.sealing)' },
-      { id: 'field', heading: 'Identical-field scoring', body: 'TODO_COPY(rules.field)' },
+      {
+        id: 'field',
+        heading: 'Identical-field scoring',
+        // SUBSTANCE FIXED (D3-B, ratified 2026-08-27): this paragraph states
+        // the ordering and tie rule the engine implements
+        // (backend/scoring/src/engine.ts) and must stay factually identical
+        // to it — Phase 6 may re-phrase, never re-order. Supersedes the
+        // Part 3 wording (seat as final tie-break), which the founder
+        // replaced by ratifying D3-B.
+        body:
+          'Every player faces the identical field: your battle 1 is compared against every other entry\u2019s battle 1, and so on for all seven. A battle is won by taking three or more of its five stats; if neither side takes three, it is a draw worth half a win to each. Rankings are ordered by total battles won (a draw counts half), then by total stats won across every comparison. Players equal on both are tied: they share the same rank and split the combined prize of the positions their group occupies evenly, with any indivisible lamport remainder going to the earliest seat in the tied group. Seat order never decides who ranks above whom or who is paid. The ordering is fully deterministic: the same sealed battles always produce the same ranking.',
+      },
       { id: 'allocation', heading: 'Allocation rules', body: 'TODO_COPY(rules.allocation)' },
       { id: 'timer', heading: 'The 15-second timer and lock-current', body: 'TODO_COPY(rules.timer)' },
       { id: 'detection', heading: 'Detection criteria', body: 'TODO_COPY(rules.detection)' },

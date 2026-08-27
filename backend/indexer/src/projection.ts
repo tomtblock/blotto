@@ -4,7 +4,7 @@
  *
  * The ledger stays the single source of truth: every rule here is expressed
  * by `projectEvent`, which turns one decoded event into a list of mechanical
- * operations (upsert / increment / min / one named conditional). Both
+ * operations (upsert / increment / two named conditionals). Both
  * implementations — the in-memory reference and Postgres — EXECUTE the same
  * operation list, so their semantics cannot drift apart rule by rule; and
  * `rederive()` rebuilds every table from the ledger alone, which is the
@@ -12,7 +12,9 @@
  * of truth.
  *
  * Profiles (R15): a lifetime, read-only record — pools entered, prize totals,
- * best rank, the cosmetic class collection. Nothing here can affect a pool.
+ * the cosmetic class collection. Nothing here can affect a pool. (Rank
+ * labels are not projected: under D3-B they are not in the events — they
+ * live in the published bundle, where the verify page recomputes them.)
  */
 
 import type { DecodedEvent } from './shared';
@@ -37,16 +39,19 @@ export type ProjectionOp =
       by: string;
     }
   | {
-      kind: 'min';
-      table: 'profiles';
-      key: Record<string, string | number>;
-      field: string;
-      value: number;
-    }
-  | {
       /** `pools.state = 'Closed'` once `refunded_count >= entrants`. */
       kind: 'close_if_fully_refunded';
       pool: string;
+    }
+  | {
+      /**
+       * `pools.paid_mask = mask` (decimal string of the on-chain u64), and
+       * `pools.state = 'Paid'` once every committed seat's bit (the
+       * `results` rows) is set — mirroring the program's own transition.
+       */
+      kind: 'paid_if_fully_settled';
+      pool: string;
+      mask: string;
     };
 
 /** Map one decoded event to its projection operations. Unknown events: []. */
@@ -151,6 +156,9 @@ export function projectEvent(e: DecodedEvent): ProjectionOp[] {
         },
       ];
     case 'ResultsCommitted': {
+      // D3-B: the committed payout list is keyed by SEAT; competition-rank
+      // labels are not on-chain — they live in the published bundle (the
+      // verify page recomputes them from it).
       const ops: ProjectionOp[] = [
         {
           kind: 'upsert',
@@ -159,43 +167,36 @@ export function projectEvent(e: DecodedEvent): ProjectionOp[] {
           set: { results_root: e.root, state: 'Scored' },
         },
       ];
-      (e.winners as string[]).forEach((player, i) => {
+      for (const p of e.payouts as Array<{ entry_index: number; amount: string }>) {
         ops.push({
           kind: 'upsert',
           table: 'results',
-          key: { pool: e.pool as string, rank: i + 1 },
-          set: { player },
+          key: { pool: e.pool as string, seat: p.entry_index },
+          set: { amount: p.amount },
         });
-      });
+      }
       return ops;
     }
     case 'PrizesPaid': {
       const ops: ProjectionOp[] = [];
       for (const p of e.payouts as Array<{
         player: string;
-        rank: number;
+        entry_index: number;
         amount: string;
         escrowed: boolean;
       }>) {
         ops.push({
           kind: 'upsert',
           table: 'payouts',
-          key: { pool: e.pool as string, rank: p.rank },
+          key: { pool: e.pool as string, seat: p.entry_index },
           set: { player: p.player, amount: p.amount, escrowed: p.escrowed },
         });
         ops.push({
           kind: 'increment',
           table: 'profiles',
           key: { player: p.player },
-          field: 'ranks_paid',
+          field: 'seats_paid',
           by: '1',
-        });
-        ops.push({
-          kind: 'min',
-          table: 'profiles',
-          key: { player: p.player },
-          field: 'best_rank',
-          value: p.rank,
         });
         if (!p.escrowed) {
           ops.push({
@@ -207,12 +208,12 @@ export function projectEvent(e: DecodedEvent): ProjectionOp[] {
           });
         }
       }
-      const mask = e.paid_mask as number;
+      // paid_mask is a u64 seat bitmask — carried as a decimal string, never
+      // a JS number.
       ops.push({
-        kind: 'upsert',
-        table: 'pools',
-        key: { pool: e.pool as string },
-        set: mask === 0xffff ? { paid_mask: mask, state: 'Paid' } : { paid_mask: mask },
+        kind: 'paid_if_fully_settled',
+        pool: e.pool as string,
+        mask: String(e.paid_mask),
       });
       return ops;
     }
@@ -331,15 +332,6 @@ export class MemoryProjection implements Projection {
           t.set(k, row);
           break;
         }
-        case 'min': {
-          const t = this.table(op.table);
-          const k = MemoryProjection.rowKey(op.key);
-          const row = t.get(k) ?? { ...op.key };
-          const current = row[op.field] as number | undefined;
-          row[op.field] = current === undefined ? op.value : Math.min(current, op.value);
-          t.set(k, row);
-          break;
-        }
         case 'close_if_fully_refunded': {
           const t = this.table('pools');
           const k = MemoryProjection.rowKey({ pool: op.pool });
@@ -348,6 +340,25 @@ export class MemoryProjection implements Projection {
             const refunded = BigInt((row.refunded_count as string | number | undefined) ?? 0);
             const entrants = BigInt((row.entrants as string | number | undefined) ?? 0);
             if (entrants > 0n && refunded >= entrants) row.state = 'Closed';
+          }
+          break;
+        }
+        case 'paid_if_fully_settled': {
+          const pools = this.table('pools');
+          const k = MemoryProjection.rowKey({ pool: op.pool });
+          const row = pools.get(k);
+          if (row) {
+            row.paid_mask = op.mask;
+            const mask = BigInt(op.mask);
+            const committed = [...this.table('results').values()].filter(
+              (r) => r.pool === op.pool
+            );
+            if (
+              committed.length > 0 &&
+              committed.every((r) => ((mask >> BigInt(r.seat as number)) & 1n) === 1n)
+            ) {
+              row.state = 'Paid';
+            }
           }
           break;
         }

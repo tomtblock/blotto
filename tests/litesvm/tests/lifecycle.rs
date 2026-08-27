@@ -73,11 +73,11 @@ fn full_lifecycle_pays_the_pot_to_the_lamport() {
 
     // ---- commit before reveal is rejected ----
     let settlement = env.settlement.insecure_clone();
-    let winners: Vec<Pubkey> = players.iter().take(16).map(|(p, _)| p.pubkey()).collect();
+    // D3-B: the committed payout list — seats 0..15 take ranks 1..16's bands
+    // (this pool's ranking fixture; no ties).
+    let payouts = band_payouts(ENTRY);
     let mut commit_args = [1u8; 32].to_vec();
-    for w in &winners {
-        commit_args.extend_from_slice(w.as_ref());
-    }
+    commit_args.extend_from_slice(&encode_payouts(&payouts));
     let ix = settle_ix(&settlement.pubkey(), 1, "commit_results", &commit_args);
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
     assert!(
@@ -105,33 +105,35 @@ fn full_lifecycle_pays_the_pot_to_the_lamport() {
     env.send(&[ix], &[&settlement]).expect("commit_results");
     assert_eq!(read_pool(&env.svm, &pool).state, 2, "Scored");
 
-    // ---- pay in four batches of four ----
-    let before: Vec<u64> = winners.iter().map(|w| env.balance(w)).collect();
-    for batch in 0u8..4 {
-        let ranks: Vec<u8> = (1..=4u8).map(|r| batch * 4 + r).collect();
-        let metas: Vec<(Pubkey, Pubkey)> = ranks
+    // ---- pay in four batches of four seats (seat i = rank i+1 here) ----
+    let before: Vec<u64> = players[..16]
+        .iter()
+        .map(|(p, _)| env.balance(&p.pubkey()))
+        .collect();
+    for batch in 0u16..4 {
+        let seats: Vec<u16> = (0..4u16).map(|s| batch * 4 + s).collect();
+        let metas: Vec<(Pubkey, Pubkey)> = seats
             .iter()
-            .map(|&r| {
-                let (p, e) = &players[(r - 1) as usize];
+            .map(|&seat| {
+                let (p, e) = &players[seat as usize];
                 (p.pubkey(), *e)
             })
             .collect();
-        let ix = pay_prizes_ix(&settlement.pubkey(), 1, &ranks, &metas);
+        let ix = pay_prizes_ix(&settlement.pubkey(), 1, &seats, &metas);
         env.send(&[ix], &[&settlement]).expect("pay batch");
     }
 
     // ---- every band exact, vault reaped to zero, state Paid ----
-    for (i, w) in winners.iter().enumerate() {
+    for (i, (p, _)) in players[..16].iter().enumerate() {
         assert_eq!(
-            env.balance(w) - before[i],
+            env.balance(&p.pubkey()) - before[i],
             BANDS[i],
-            "rank {} band amount",
-            i + 1
+            "seat {i} band amount"
         );
     }
     let pv = read_pool(&env.svm, &pool);
     assert_eq!(pv.state, 3, "Paid");
-    assert_eq!(pv.paid_mask, 0xFFFF);
+    assert_eq!(pv.paid_mask, 0xFFFF, "one bit per settled seat 0..15");
     assert_eq!(
         env.balance(&vault_pda(1)),
         0,
@@ -140,7 +142,7 @@ fn full_lifecycle_pays_the_pot_to_the_lamport() {
 
     // ---- double pay rejected ----
     let (p, e) = &players[0];
-    let ix = pay_prizes_ix(&settlement.pubkey(), 1, &[1], &[(p.pubkey(), *e)]);
+    let ix = pay_prizes_ix(&settlement.pubkey(), 1, &[0], &[(p.pubkey(), *e)]);
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
     // Pool is Paid, so the state gate fires first.
     assert!(
@@ -165,29 +167,26 @@ fn flagged_winner_escrows_then_releases_and_forfeits() {
         env.send(&[ix], &[&settlement]).expect("flag");
     }
 
-    // Reveal + commit with players[0..16] as winners.
+    // Reveal + commit the band payout list (seats 0..15 = ranks 1..16).
     let secret = env.pool_secret;
     let ix = settle_ix(&settlement.pubkey(), 1, "reveal_pool_secret", &secret);
     env.send(&[ix], &[&settlement]).unwrap();
-    let winners: Vec<Pubkey> = players.iter().take(16).map(|(p, _)| p.pubkey()).collect();
     let mut commit_args = [1u8; 32].to_vec();
-    for w in &winners {
-        commit_args.extend_from_slice(w.as_ref());
-    }
+    commit_args.extend_from_slice(&encode_payouts(&band_payouts(ENTRY)));
     let ix = settle_ix(&settlement.pubkey(), 1, "commit_results", &commit_args);
     env.send(&[ix], &[&settlement]).unwrap();
 
-    // Pay all 16 in two batches.
-    for half in 0u8..2 {
-        let ranks: Vec<u8> = (1..=8u8).map(|r| half * 8 + r).collect();
-        let metas: Vec<(Pubkey, Pubkey)> = ranks
+    // Pay all 16 seats in two batches.
+    for half in 0u16..2 {
+        let seats: Vec<u16> = (0..8u16).map(|r| half * 8 + r).collect();
+        let metas: Vec<(Pubkey, Pubkey)> = seats
             .iter()
-            .map(|&r| {
-                let (p, e) = &players[(r - 1) as usize];
+            .map(|&seat| {
+                let (p, e) = &players[seat as usize];
                 (p.pubkey(), *e)
             })
             .collect();
-        let ix = pay_prizes_ix(&settlement.pubkey(), 1, &ranks, &metas);
+        let ix = pay_prizes_ix(&settlement.pubkey(), 1, &seats, &metas);
         env.send(&[ix], &[&settlement]).expect("pay");
     }
 

@@ -26,6 +26,7 @@ import {
 import type {
   ChainEntryView,
   ChainPoolView,
+  CommittedPayout,
   PoolStateName,
   SettlementChain,
 } from './chain';
@@ -84,12 +85,18 @@ export class Web3Chain implements SettlementChain {
     // LiteSVM readers): disc 8 | id 8 | tier 1 | entry_lamports 8 |
     // entrants 2 | opened_at 8 | fill_deadline 8 | state 1 | sealing 32 |
     // hash 32 | vrf 32 | counters 10 | secret_revealed 1 | root 32 |
-    // committed 1 | winners 512 | paid_mask 2 | ...
-    const winners: string[] = [];
+    // committed 1 | payouts_len 2 | payouts 64×(seat 2 + amount 8) |
+    // paid_mask 8 | ...
     const committed = d[183] !== 0;
+    const payouts: CommittedPayout[] = [];
     if (committed) {
-      for (let i = 0; i < 16; i++) {
-        winners.push(new PublicKey(d.subarray(184 + i * 32, 184 + (i + 1) * 32)).toBase58());
+      const len = d.readUInt16LE(184);
+      for (let i = 0; i < len; i++) {
+        const off = 186 + i * 10;
+        payouts.push({
+          entryIndex: d.readUInt16LE(off),
+          amountLamports: d.readBigUInt64LE(off + 2),
+        });
       }
     }
     return {
@@ -99,8 +106,8 @@ export class Web3Chain implements SettlementChain {
       fillDeadline: BigInt(d.readBigInt64LE(35)),
       secretRevealed: d[150] !== 0,
       resultsCommitted: committed,
-      paidMask: d.readUInt16LE(696),
-      winners,
+      paidMask: d.readBigUInt64LE(826),
+      payouts,
       entrants: d.readUInt16LE(25),
     };
   }
@@ -147,10 +154,16 @@ export class Web3Chain implements SettlementChain {
     ]);
   }
 
-  async commitResults(poolId: bigint, root: Uint8Array, winners: string[]): Promise<void> {
+  async commitResults(poolId: bigint, root: Uint8Array, payouts: CommittedPayout[]): Promise<void> {
     const le = Buffer.alloc(8);
     le.writeBigUInt64LE(poolId);
-    const winnerBytes = Buffer.concat(winners.map((w) => new PublicKey(w).toBuffer()));
+    // Borsh Vec<Payout { entry_index: u16, amount: u64 }>.
+    const list = Buffer.alloc(4 + payouts.length * 10);
+    list.writeUInt32LE(payouts.length);
+    payouts.forEach((p, i) => {
+      list.writeUInt16LE(p.entryIndex, 4 + i * 10);
+      list.writeBigUInt64LE(p.amountLamports, 4 + i * 10 + 2);
+    });
     await this.send([
       new TransactionInstruction({
         programId: this.cfg.programId,
@@ -159,27 +172,26 @@ export class Web3Chain implements SettlementChain {
           { pubkey: this.configPda(), isSigner: false, isWritable: false },
           { pubkey: this.poolPda(poolId), isSigner: false, isWritable: true },
         ],
-        data: Buffer.concat([disc('commit_results'), le, Buffer.from(root), winnerBytes]),
+        data: Buffer.concat([disc('commit_results'), le, Buffer.from(root), list]),
       }),
     ]);
   }
 
-  async payPrizes(poolId: bigint, ranks: number[]): Promise<void> {
+  async payPrizes(poolId: bigint, seats: number[]): Promise<void> {
     const pool = await this.getPool(poolId);
     if (!pool.resultsCommitted) throw new Error('results not committed');
+    // The Entry accounts are the on-chain seat→player map; resolve each
+    // seat's wallet from them (the program re-checks the binding).
+    const entries = await this.getEntries(poolId);
+    const walletBySeat = new Map(entries.map((e) => [e.index, e.player]));
     const poolKey = this.poolPda(poolId);
     const le = Buffer.alloc(8);
     le.writeBigUInt64LE(poolId);
-    const data = Buffer.concat([
-      disc('pay_prizes'),
-      le,
-      (() => {
-        const v = Buffer.alloc(4 + ranks.length);
-        v.writeUInt32LE(ranks.length);
-        Buffer.from(ranks).copy(v, 4);
-        return v;
-      })(),
-    ]);
+    // Borsh Vec<u16>.
+    const list = Buffer.alloc(4 + seats.length * 2);
+    list.writeUInt32LE(seats.length);
+    seats.forEach((s, i) => list.writeUInt16LE(s, 4 + i * 2));
+    const data = Buffer.concat([disc('pay_prizes'), le, list]);
     const keys = [
       { pubkey: this.cfg.settlementSigner.publicKey, isSigner: true, isWritable: false },
       { pubkey: this.configPda(), isSigner: false, isWritable: false },
@@ -187,10 +199,12 @@ export class Web3Chain implements SettlementChain {
       { pubkey: this.vaultPda(poolId), isSigner: false, isWritable: true },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     ];
-    for (const rank of ranks) {
-      const winner = new PublicKey(pool.winners[rank - 1]);
-      keys.push({ pubkey: winner, isSigner: false, isWritable: true });
-      keys.push({ pubkey: this.entryPda(poolKey, winner), isSigner: false, isWritable: true });
+    for (const seat of seats) {
+      const player = walletBySeat.get(seat);
+      if (!player) throw new Error(`no entry for seat ${seat} in pool ${poolId}`);
+      const wallet = new PublicKey(player);
+      keys.push({ pubkey: wallet, isSigner: false, isWritable: true });
+      keys.push({ pubkey: this.entryPda(poolKey, wallet), isSigner: false, isWritable: true });
     }
     await this.send([
       new TransactionInstruction({ programId: this.cfg.programId, keys, data }),

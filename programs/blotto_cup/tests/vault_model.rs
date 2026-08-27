@@ -22,8 +22,8 @@
 //! does not execute the real BPF program — the LiteSVM integration suite
 //! covers the on-chain half against the compiled artifact.
 
-use blotto_cup::constants::{CAPACITY, PAID_RANKS, TIER_ENTRY_LAMPORTS};
-use blotto_cup::prize_math::{band_amount, fee_share, pot, vault_share};
+use blotto_cup::constants::{CAPACITY, TIER_ENTRY_LAMPORTS};
+use blotto_cup::prize_math::{band_amount, fee_share, pot, split_group, vault_share};
 use proptest::prelude::*;
 
 const CAP: usize = CAPACITY as usize;
@@ -58,8 +58,12 @@ struct Model {
     vault: u128,
     fees: u128,
     swept: bool,
-    paid_mask: u16,
-    winners: Vec<usize>, // entry indices, rank order (index 0 = rank 1)
+    /// Bit per SEAT (D3-B), mirroring the program.
+    paid_mask: u64,
+    /// The committed payout list: (seat, amount), seat-sorted. Built by
+    /// `commit` from tie groups through the SAME `split_group` the program's
+    /// arithmetic module exposes.
+    committed: Vec<(usize, u64)>,
     kyc_above: u64,
     entries: [EntryModel; CAP],
     // Ledger tallies for the invariant.
@@ -83,7 +87,7 @@ impl Model {
             fees: 0,
             swept: false,
             paid_mask: 0,
-            winners: Vec::new(),
+            committed: Vec::new(),
             kyc_above,
             entries: [EntryModel::default(); CAP],
             total_in_vault_shares: 0,
@@ -126,46 +130,80 @@ impl Model {
         e.flagged = on;
     }
 
-    /// `commit_results` — 16 distinct winners drawn from the 64 entries.
+    /// `commit_results` (D3-B) — a seeded RANKING of all 64 seats is
+    /// partitioned into tie groups, each group's prize split by the SAME
+    /// `split_group` the program's arithmetic module exposes (each × size +
+    /// remainder, remainder to the group's lowest seat), and the seats with
+    /// a non-zero amount become the committed payout list. Conservation is
+    /// therefore a THEOREM the invariant re-checks, not an assumption.
     fn commit(&mut self, seed: u64) {
         if self.state != St::Sealed {
             return;
         }
-        // Deterministic distinct pick: walk the seats from a seeded start.
-        let start = (seed as usize) % CAP;
-        let stride = 1 + (seed as usize / CAP) % 7;
-        let mut w = Vec::with_capacity(PAID_RANKS);
-        let mut k = start;
-        while w.len() < PAID_RANKS {
-            if !w.contains(&(k % CAP)) {
-                w.push(k % CAP);
+        // Seeded permutation of the seats = the ranking (rank 1 first).
+        let stride = 1 + (seed as usize) % 63; // 1..=63; 64 is 2^6, odd strides
+        let stride = if stride.is_multiple_of(2) {
+            stride + 1
+        } else {
+            stride
+        }; // coprime to 64
+        let start = (seed as usize / 64) % CAP;
+        let ranking: Vec<usize> = (0..CAP).map(|i| (start + i * stride) % CAP).collect();
+        // Seeded tie-group sizes over the ranking: group size 1..=4, plus a
+        // seeded chance of one giant group at the top (the everyone-tied
+        // shape the oracle also pins).
+        let potv = pot(self.entry_lamports);
+        let mut payouts: Vec<(usize, u64)> = Vec::new();
+        let mut pos: usize = 0; // 0-based position; rank = pos + 1
+        let mut g = seed ^ 0x9e37_79b9_7f4a_7c15;
+        while pos < CAP {
+            g = g
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            let size = if pos == 0 && g.is_multiple_of(11) {
+                CAP // everyone tied
+            } else {
+                1 + (g as usize % 4).min(CAP - pos - 1)
+            };
+            let size = size.min(CAP - pos);
+            let (each, remainder) = split_group(potv, (pos + 1) as u16, size as u16);
+            let group = &ranking[pos..pos + size];
+            let lowest_seat = *group.iter().min().unwrap();
+            for &seat in group {
+                let amount = each + if seat == lowest_seat { remainder } else { 0 };
+                if amount > 0 {
+                    payouts.push((seat, amount));
+                }
             }
-            k += stride;
+            pos += size;
         }
-        self.winners = w;
+        payouts.sort_by_key(|&(seat, _)| seat);
+        // The program validates Σ == pot at commit; the model asserts the
+        // same so a split_group bug fails HERE, loudly.
+        let total: u128 = payouts.iter().map(|&(_, a)| a as u128).sum();
+        assert_eq!(total, potv as u128, "committed payouts must sum to the pot");
+        self.committed = payouts;
         self.state = St::Scored;
     }
 
-    /// `pay_prizes` on a batch of ranks (1-based).
-    fn pay(&mut self, ranks: &[u8]) {
+    /// `pay_prizes` on a batch of seats (D3-B).
+    fn pay(&mut self, seats: &[u16]) {
         if self.state != St::Scored {
             return;
         }
-        let pot = pot(self.entry_lamports);
-        for &rank in ranks {
-            if !(1..=PAID_RANKS as u8).contains(&rank) {
-                continue;
-            }
-            let bit = 1u16 << (rank - 1);
+        for &seat in seats {
+            let seat = seat as usize % CAP;
+            let Some(&(_, amount)) = self.committed.iter().find(|&&(s, _)| s == seat) else {
+                continue; // handler rejects SeatNotInPayouts; model skips — same net state
+            };
+            let bit = 1u64 << seat;
             if self.paid_mask & bit != 0 {
                 continue; // handler reverts the batch; model skips — same net state
             }
-            let wi = self.winners[(rank - 1) as usize];
-            let e = &mut self.entries[wi];
+            let e = &mut self.entries[seat];
             if e.settled {
                 continue;
             }
-            let amount = band_amount(pot, rank);
             let escrowed = e.flagged || (self.kyc_above > 0 && amount > self.kyc_above);
             if escrowed {
                 e.escrow += amount;
@@ -177,7 +215,11 @@ impl Model {
             e.settled = true;
             self.paid_mask |= bit;
         }
-        if self.paid_mask == 0xFFFF {
+        if self
+            .committed
+            .iter()
+            .all(|&(s, _)| self.paid_mask & (1u64 << s) != 0)
+        {
             self.state = St::Paid;
         }
     }
@@ -289,7 +331,7 @@ enum Op {
     Register,
     Flag(usize, bool),
     Commit(u64),
-    Pay(Vec<u8>),
+    Pay(Vec<u16>),
     Release(usize),
     Forfeit(usize),
     TriggerRefund,
@@ -301,7 +343,7 @@ fn op_strategy() -> impl Strategy<Value = Op> {
         8 => Just(Op::Register),
         2 => (0usize..CAP, any::<bool>()).prop_map(|(i, b)| Op::Flag(i, b)),
         2 => any::<u64>().prop_map(Op::Commit),
-        4 => proptest::collection::vec(1u8..=16, 1..=8).prop_map(Op::Pay),
+        4 => proptest::collection::vec(0u16..CAPACITY, 1..=12).prop_map(Op::Pay),
         2 => (0usize..CAP).prop_map(Op::Release),
         2 => (0usize..CAP).prop_map(Op::Forfeit),
         1 => Just(Op::TriggerRefund),
@@ -329,7 +371,7 @@ proptest! {
                 Op::Register => m.register(),
                 Op::Flag(i, b) => m.flag(i % CAP, b),
                 Op::Commit(seed) => m.commit(seed),
-                Op::Pay(ranks) => m.pay(&ranks),
+                Op::Pay(seats) => m.pay(&seats),
                 Op::Release(i) => m.release(i % CAP),
                 Op::Forfeit(i) => m.forfeit(i % CAP),
                 Op::TriggerRefund => m.trigger_refund(),
@@ -355,19 +397,20 @@ proptest! {
         prop_assert_eq!(m.state, St::Sealed);
         prop_assert_eq!(m.fees, 0u128); // swept at seal
         m.commit(seed);
-        // Flag winners according to the bit pattern.
-        let winners = m.winners.clone();
-        for (r, &wi) in winners.iter().enumerate() {
-            if flagged_bits & (1 << r) != 0 { m.flag(wi, true); }
+        // Flag paid seats according to the bit pattern (the committed list
+        // includes every tie-group member touching the top 16 — D3-B).
+        let paid_seats: Vec<usize> = m.committed.iter().map(|&(s, _)| s).collect();
+        for (i, &seat) in paid_seats.iter().enumerate() {
+            if flagged_bits & (1 << (i % 16)) != 0 { m.flag(seat, true); }
         }
-        m.pay(&(1..=16u8).collect::<Vec<_>>());
+        m.pay(&paid_seats.iter().map(|&s| s as u16).collect::<Vec<_>>());
         m.assert_invariant();
         prop_assert_eq!(m.state, St::Paid);
-        // Settle escrow: release the even ranks' holds, forfeit the odd
-        // ranks' (forfeit requires the flag; release covers the rest).
-        for (r, &wi) in winners.iter().enumerate() {
-            if r % 2 == 0 { m.release(wi) } else { m.forfeit(wi) }
-            m.release(wi); // no-op unless the forfeit was refused
+        // Settle escrow: release the even seats' holds, forfeit the odd
+        // seats' (forfeit requires the flag; release covers the rest).
+        for (i, &seat) in paid_seats.iter().enumerate() {
+            if i % 2 == 0 { m.release(seat) } else { m.forfeit(seat) }
+            m.release(seat); // no-op unless the forfeit was refused
             m.assert_invariant();
         }
         prop_assert_eq!(m.vault, 0u128, "vault must end at exactly zero");

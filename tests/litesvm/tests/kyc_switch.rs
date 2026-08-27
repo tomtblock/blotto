@@ -26,9 +26,7 @@ fn fill_and_commit(env: &mut Env) -> Vec<(Keypair, Pubkey)> {
     )
     .unwrap();
     let mut args = [1u8; 32].to_vec();
-    for (p, _) in players.iter().take(16) {
-        args.extend_from_slice(p.pubkey().as_ref());
-    }
+    args.extend_from_slice(&encode_payouts(&band_payouts(100_000_000)));
     env.send(
         &[settle_ix(&settlement.pubkey(), 1, "commit_results", &args)],
         &[&settlement],
@@ -39,8 +37,8 @@ fn fill_and_commit(env: &mut Env) -> Vec<(Keypair, Pubkey)> {
 
 fn pay_rank_one(env: &mut Env, players: &[(Keypair, Pubkey)]) {
     let settlement = env.settlement.insecure_clone();
-    let (p, e) = &players[0];
-    let ix = pay_prizes_ix(&settlement.pubkey(), 1, &[1], &[(p.pubkey(), *e)]);
+    let (p, e) = &players[0]; // seat 0 = rank 1 under the band payout list
+    let ix = pay_prizes_ix(&settlement.pubkey(), 1, &[0], &[(p.pubkey(), *e)]);
     env.send(&[ix], &[&settlement]).expect("pay rank 1");
 }
 
@@ -77,9 +75,9 @@ fn switch_on_escrows_first_place_and_kyc_packet_releases_it() {
 
     // A small share stays direct even with the switch on.
     let settlement = env.settlement.insecure_clone();
-    let (p9, e9) = &players[8];
+    let (p9, e9) = &players[8]; // seat 8 = rank 9
     let b9 = env.balance(&p9.pubkey());
-    let ix = pay_prizes_ix(&settlement.pubkey(), 1, &[9], &[(p9.pubkey(), *e9)]);
+    let ix = pay_prizes_ix(&settlement.pubkey(), 1, &[8], &[(p9.pubkey(), *e9)]);
     env.send(&[ix], &[&settlement]).unwrap();
     assert_eq!(env.balance(&p9.pubkey()) - b9, 135_000_000);
 

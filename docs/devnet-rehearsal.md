@@ -30,7 +30,11 @@ scripted bot in shadow mode, and drains the 63-entry refund fork in full.
    `solana program show` reports the Squads address (Gate 1's founder check).
 2. **Initialise.** `init_config` signed by the Squads vault, carrying the
    Turnkey entry-signer and settlement-signer pubkeys, the platform wallet,
-   and the 6.4 SOL ceiling.
+   and the seven per-tier ceilings (D2): tier 0 at 6.4 SOL, every other
+   tier at its own gross intake (entry × 64 — e.g. tier 6 at 480 SOL).
+   Only the 0.1 tier is open at launch; the others stay gated by the R6
+   switch until the founder opens them (`set_open_tiers`), and each
+   ceiling moves one tier per `set_vault_ceiling` call.
 3. **Services up.** Indexer (webhook + read API), entry service
    (`@blotto/packet` `serveEntryApi`) with the Turnkey `PacketSigner`, the
    crank (`@blotto/reveal` with `Web3Chain`, Turnkey custody, Irys

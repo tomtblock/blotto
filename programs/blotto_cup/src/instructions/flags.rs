@@ -22,18 +22,18 @@ pub struct FlagEntry<'info> {
         bump = config.bump,
         has_one = settlement_signer,
     )]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
 
     #[account(
         seeds = [POOL_SEED, &pool_id.to_le_bytes()],
         bump = pool.bump,
     )]
-    pub pool: Account<'info, Pool>,
+    pub pool: Box<Account<'info, Pool>>,
 
     /// The entry being flagged. Owner + discriminator checked by `Account`;
     /// bound to THIS pool by constraint.
     #[account(mut, constraint = entry.pool == pool.key() @ ErrorCode::EntryMismatch)]
-    pub entry: Account<'info, Entry>,
+    pub entry: Box<Account<'info, Entry>>,
 }
 
 fn set_flag(ctx: Context<FlagEntry>, flagged: bool) -> Result<()> {

@@ -11,7 +11,7 @@
 
 use anchor_lang::prelude::*;
 
-use crate::constants::PAID_RANKS;
+use crate::constants::{CAPACITY, N_TIERS};
 
 // ---------------------------------------------------------------------------
 // PDA seed prefixes — one distinct prefix per PDA type (threat-tm-401).
@@ -68,12 +68,15 @@ pub struct Config {
     pub platform_wallet: Pubkey,
     /// Blocks `register` when true (admin kill switch).
     pub paused: bool,
-    /// Which of the four configured tiers may open pools (roadmap R6).
-    /// Index = tier: 0 → 0.1 SOL, 1 → 0.5, 2 → 1, 3 → 5.
-    pub open_tiers: [bool; 4],
-    /// Per-pool gross ceiling in lamports (roadmap R6/§7.1: launch 6.4 SOL).
-    /// `open_pool` rejects a tier whose full pool (entry × 64) would exceed it.
-    pub vault_ceiling_lamports: u64,
+    /// Which of the configured tiers may open pools (roadmap R6, D1).
+    /// Index = tier into `TIER_ENTRY_LAMPORTS`.
+    pub open_tiers: [bool; N_TIERS],
+    /// Per-TIER gross ceiling in lamports (decision D2, 2026-08-27 —
+    /// roadmap Phase 8's "each with its own vault ceiling"). `open_pool`
+    /// rejects a tier whose full pool (entry × 64) would exceed its entry.
+    /// Launch values: tier 0 = 6.4 SOL; every other tier = its own gross,
+    /// so the ceiling is a cap, not a second open/closed switch.
+    pub vault_ceiling_lamports: [u64; N_TIERS],
     /// KYC-at-claim switch (roadmap R3/4.5). 0 = off. When non-zero,
     /// `pay_prizes` escrows any share above it until a `kyc_tier ≥ 1` packet
     /// is presented via `release_escrow`.
@@ -85,12 +88,15 @@ pub struct Config {
     pub next_pool_id: u64,
     /// The currently-Open pool id per tier, 0 if none (roadmap R14: max one
     /// open pool per tier). Set by `open_pool`; cleared at seal or refund.
-    pub active_pool_by_tier: [u64; 4],
+    pub active_pool_by_tier: [u64; N_TIERS],
     pub bump: u8,
 }
 
 impl Config {
-    pub const LEN: usize = 32 * 4 + 1 + 4 + 8 + 8 + 1 + 8 + 8 * 4 + 1;
+    /// 4 pubkeys (128) + paused (1) + open_tiers (N_TIERS) + ceilings
+    /// (8·N_TIERS) + kyc threshold (8) + detection switch (1) +
+    /// next_pool_id (8) + active_pool_by_tier (8·N_TIERS) + bump (1).
+    pub const LEN: usize = 32 * 4 + 1 + N_TIERS + 8 * N_TIERS + 8 + 1 + 8 + 8 * N_TIERS + 1;
     pub const SPACE: usize = 8 + Self::LEN;
 }
 
@@ -114,6 +120,19 @@ pub enum PoolState {
     Refunding,
     /// Terminal: every entrant refunded.
     Closed,
+}
+
+/// One committed payout: a seat and the lamports it settles for. Amounts
+/// are computed off-chain by the published split-pot rule (D3-B; the
+/// scoring engine + the Python oracle) and validated in aggregate on-chain:
+/// the verify page is what makes a wrong list detectable (trust unchanged
+/// from the winners-array design).
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Default, PartialEq, Eq, Debug)]
+pub struct Payout {
+    /// Seat (entry index), 0-based.
+    pub entry_index: u16,
+    /// Lamports this seat settles for.
+    pub amount: u64,
 }
 
 /// A single competition pool.
@@ -150,14 +169,20 @@ pub struct Pool {
     /// payout transaction).
     pub results_root: [u8; 32],
     pub results_committed: bool,
-    /// The top-16 players, rank order, committed with the root. `pay_prizes`
-    /// pays exactly these, with amounts derived on-chain from the band table —
-    /// the settlement signer cannot choose either. See the Phase 1 report for
-    /// why this replaces per-payout Merkle proofs (transaction-size limit).
-    pub winners: [Pubkey; PAID_RANKS],
-    /// Bit r-1 set once rank r is settled (paid or escrowed). Makes
-    /// `pay_prizes` batches idempotent; 0xFFFF → state `Paid`.
-    pub paid_mask: u16,
+    /// Settled payout list, committed with the root (decision D3-B,
+    /// 2026-08-27 — split-pot ties). Sorted by `entry_index`, no duplicates,
+    /// amounts summing to exactly the pot — all validated at
+    /// `commit_results`. The paid set is variable (ties straddling 16th/17th
+    /// pay more than 16 players), so this replaces the fixed 16-winner
+    /// array; `pay_prizes` pays exactly these amounts to exactly these
+    /// seats. Measured on-Pool: 2 + 64×10 bytes keeps `Pool` at 834 bytes —
+    /// far under the 10 KiB companion-PDA threshold.
+    pub payouts_len: u16,
+    pub payouts: [Payout; CAPACITY as usize],
+    /// Bit `entry_index` set once that seat's payout is settled (paid or
+    /// escrowed). Makes `pay_prizes` batches idempotent; all `payouts_len`
+    /// bits set → state `Paid`.
+    pub paid_mask: u64,
     /// Entries refunded so far (Refunding pools). == entrants → `Closed`.
     pub refunded_count: u16,
     /// Per-screen timer, seconds (R9: 15). Recorded per pool so the value
@@ -183,8 +208,9 @@ impl Pool {
         + 1 // secret_revealed
         + 32 // results_root
         + 1 // results_committed
-        + 32 * PAID_RANKS // winners
-        + 2 // paid_mask
+        + 2 // payouts_len
+        + 10 * CAPACITY as usize // payouts (u16 + u64 each)
+        + 8 // paid_mask
         + 2 // refunded_count
         + 1 // timer_seconds
         + 1 + 1 + 1; // bumps
@@ -284,12 +310,12 @@ mod tests {
             settlement_signer: Pubkey::new_unique(),
             platform_wallet: Pubkey::new_unique(),
             paused: true,
-            open_tiers: [true, false, false, false],
-            vault_ceiling_lamports: u64::MAX,
+            open_tiers: [true, false, false, false, false, false, false],
+            vault_ceiling_lamports: [u64::MAX; N_TIERS],
             kyc_required_above_lamports: 0,
             detection_hard_block: true,
             next_pool_id: 1,
-            active_pool_by_tier: [0; 4],
+            active_pool_by_tier: [0; N_TIERS],
             bump: 255,
         };
         let mut buf = Vec::new();
@@ -314,8 +340,12 @@ mod tests {
             secret_revealed: true,
             results_root: [4; 32],
             results_committed: true,
-            winners: [Pubkey::new_unique(); PAID_RANKS],
-            paid_mask: 0xFFFF,
+            payouts_len: 17,
+            payouts: [Payout {
+                entry_index: 63,
+                amount: u64::MAX,
+            }; CAPACITY as usize],
+            paid_mask: u64::MAX,
             refunded_count: 64,
             timer_seconds: 15,
             bump: 255,

@@ -29,7 +29,16 @@ export interface RevealBundleResult {
   player: string;
   score_half: number;
   zones: number;
+  /** Competition rank (D3-B): tied players share one — 1, 2, 2, 4. */
   rank: number;
+  /** The split-pot amount actually committed for this seat (0 unpaid). */
+  amount_lamports: string;
+}
+
+/** One row of the on-chain committed payout list, mirrored for the page. */
+export interface RevealBundlePayout {
+  entry_index: number;
+  player: string;
   amount_lamports: string;
 }
 
@@ -40,7 +49,8 @@ export interface RevealBundle {
   entry_lamports: string;
   entries: RevealBundleEntry[];
   results: RevealBundleResult[];
-  winners: string[]; // base58, rank order, top 16
+  /** The committed payout list (D3-B), seat-sorted — can exceed 16 rows. */
+  payouts: RevealBundlePayout[];
   results_root: string; // hex 32 — must equal the on-chain commitment
   /**
    * The published lost-ciphertext rule applied to this pool: entries scored

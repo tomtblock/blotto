@@ -12,16 +12,21 @@ Scoring rules implemented (PID §4.4/§5, TECH-ARCH §6):
   - a battle is won by >= 3 stats; if neither side reaches 3, it is a draw
   - score is carried in INTEGER HALF-POINTS: win 2, draw 1, loss 0 (no floats
     anywhere — the on-chain rule extends to the oracle)
-  - rank by score desc, then zones (total stats won) desc, then entry index
-    asc (TECH-ARCH says "entered_at asc"; entry index is the same order made
-    strictly monotonic — recorded in the Phase 2 report)
-  - prizes: pot = 64 x 80% x entry; rank r takes PRIZE_BANDS_1024[r-1]/1024
-    of the pot (exact 1024ths, NOT the rounded bps column — see
-    programs/blotto_cup/src/constants.rs for the derivation); ranks 17..64
-    take zero
+  - rank by score desc, then zones (total stats won) desc; players equal on
+    BOTH are TIED (D3-B, ratified 2026-08-27) and share a COMPETITION rank
+    (1, 2, 2, 4 — one plus the number of strictly-better players); entry
+    index never breaks a rank
+  - prizes: pot = 64 x 80% x entry; a tie group at rank r of size s occupies
+    positions r..r+s-1 and its combined prize is the sum of the band amounts
+    of those positions that are <= 16 (PRIZE_BANDS_1024[p-1]/1024 of the pot
+    each — exact 1024ths, NOT the rounded bps column, see
+    programs/blotto_cup/src/constants.rs); each member takes
+    floor(combined/s), the indivisible remainder goes to the group's lowest
+    entry index; every tied member with a nonzero share is paid (the paid
+    set can exceed 16 seats)
   - results leaf: sha256(0x00 || player(32) || rank(u8) || amount(u64 LE)),
     node: sha256(0x01 || left || right); an odd node is PROMOTED, not
-    duplicated; leaves in rank order 1..64
+    duplicated; leaves ordered (rank asc, entry index asc)
 
 Deterministic allocation stream (also implemented in TS, byte-identical):
   alloc_bytes(i) = sha256("alloc:" + str(i))          # 32 bytes
@@ -98,18 +103,43 @@ def score_pool(players: list[list[list[int]]]) -> list[dict]:
                     score[j] += 1
     order = sorted(range(n), key=lambda i: (-score[i], -zones[i], i))
     ranks = [0] * n
+    group_start = 0
     for pos, i in enumerate(order):
-        ranks[i] = pos + 1
+        if pos > 0:
+            prev = order[pos - 1]
+            if (score[i], zones[i]) != (score[prev], zones[prev]):
+                group_start = pos
+        ranks[i] = group_start + 1
     return [
         {"index": i, "score_half": score[i], "zones": zones[i], "rank": ranks[i]}
         for i in range(n)
     ]
 
 
-def amount_for_rank(rank: int) -> int:
-    if 1 <= rank <= 16:
-        return POT * PRIZE_BANDS_1024[rank - 1] // 1024
+def band_amount(pot: int, position: int) -> int:
+    if 1 <= position <= 16:
+        return pot * PRIZE_BANDS_1024[position - 1] // 1024
     return 0
+
+
+def assign_prizes(results: list[dict], pot: int) -> dict[int, int]:
+    """D3-B split-pot assignment: seat -> lamports (0 for unpaid seats)."""
+    amounts = {r["index"]: 0 for r in results}
+    groups: dict[int, list[int]] = {}
+    for r in results:
+        groups.setdefault(r["rank"], []).append(r["index"])
+    for rank, seats in groups.items():
+        combined = sum(band_amount(pot, p) for p in range(rank, rank + len(seats)))
+        if combined == 0:
+            continue
+        each = combined // len(seats)
+        rem = combined % len(seats)
+        low = min(seats)
+        for seat in seats:
+            amounts[seat] = each + (rem if seat == low else 0)
+    expected = sum(band_amount(pot, p) for p in range(1, min(16, len(results)) + 1))
+    assert sum(amounts.values()) == expected, "split-pot conservation failed"
+    return amounts
 
 
 # ---------------------------------------------------------------------------
@@ -173,29 +203,75 @@ def hand_battle_cases() -> list[dict]:
     return out
 
 
-def pool_vector(name: str, players: list[list[list[int]]], with_tree: bool) -> dict:
+def pool_vector(
+    name: str,
+    players: list[list[list[int]]],
+    with_tree: bool,
+    entry_lamports: int = ENTRY_LAMPORTS,
+) -> dict:
     results = score_pool(players)
-    by_rank = sorted(results, key=lambda r: r["rank"])
+    pot = entry_lamports * 8 // 10 * CAPACITY
+    amounts = assign_prizes(results, pot)
+    for r in results:
+        r["amount_lamports"] = str(amounts[r["index"]])
+    # Published leaf order: rank asc, entry index asc (ranks repeat).
+    by_rank = sorted(results, key=lambda r: (r["rank"], r["index"]))
     vec = {
         "name": name,
+        "entry_lamports": str(entry_lamports),
         "players": [
             {"battles": p, "battles_hex": encode_battles(p).hex()} for p in players
         ],
         "results": results,
-        "winners": [r["index"] for r in by_rank[: min(16, len(players))]],
+        # Comma-joined rather than a JSON array: a bare 64-integer array is
+        # exactly the shape of a Solana keypair, and the gitleaks rule that
+        # guards against committed keypairs must stay strict (no allowlist).
+        "leaf_order": ",".join(str(r["index"]) for r in by_rank),
+        # The on-chain committed payout list: nonzero seats, seat-sorted.
+        "payouts": [
+            {"entry_index": seat, "amount": str(amount)}
+            for seat, amount in sorted(amounts.items())
+            if amount > 0
+        ],
     }
     if with_tree:
         leaves = [
             leaf_bytes(
-                player_pubkey(name, r["index"]), r["rank"], amount_for_rank(r["rank"])
+                player_pubkey(name, r["index"]), r["rank"], amounts[r["index"]]
             )
             for r in by_rank
         ]
         vec["players_pubkeys"] = [player_pubkey(name, i).hex() for i in range(len(players))]
-        vec["amounts"] = [str(amount_for_rank(r["rank"])) for r in by_rank]
+        vec["amounts"] = [str(amounts[r["index"]]) for r in by_rank]
         vec["leaves_hex"] = [l.hex() for l in leaves]
         vec["root"] = merkle_root(leaves).hex()
     return vec
+
+
+def split_case(name: str, group_sizes: list[int], entry_lamports: int) -> dict:
+    """A constructed ranking with the given tie-group sizes over 64 seats,
+    fed through the SAME assign_prizes as the real pools."""
+    assert sum(group_sizes) == CAPACITY
+    results = []
+    rank = 1
+    seat = 0
+    for size in group_sizes:
+        for _ in range(size):
+            results.append({"index": seat, "rank": rank})
+            seat += 1
+        rank += size
+    pot = entry_lamports * 8 // 10 * CAPACITY
+    amounts = assign_prizes(results, pot)
+    return {
+        "name": name,
+        "entry_lamports": str(entry_lamports),
+        "group_sizes": group_sizes,
+        "payouts": [
+            {"entry_index": s, "amount": str(a)}
+            for s, a in sorted(amounts.items())
+            if a > 0
+        ],
+    }
 
 
 def main() -> None:
@@ -210,13 +286,49 @@ def main() -> None:
             battles_from_counter(100_000 + p * 100_000 + i * 100) for i in range(CAPACITY)
         ]
         pools.append(pool_vector(f"full_{p}", players, with_tree=True))
-    # Edge cases.
+    # Per-tier 64-player vectors for the D1 tiers beyond 0.1 SOL (same
+    # battles, different pots — amounts must scale exactly).
+    tier_players = [battles_from_counter(700_000 + i * 100) for i in range(CAPACITY)]
+    for entry in (500_000_000, 750_000_000, 1_000_000_000, 2_500_000_000,
+                  5_000_000_000, 7_500_000_000):
+        pools.append(
+            pool_vector(
+                f"tier_{entry}", tier_players, with_tree=True, entry_lamports=entry
+            )
+        )
+    # Edge cases. Identical battle sets are exact ties (D3-B): every member
+    # shares rank 1 and the pot splits evenly.
     even = [[20, 20, 20, 20, 20] for _ in range(BATTLES)]
     pools.append(pool_vector("all_identical", [even] * 4, with_tree=False))
+    pools.append(pool_vector("all_identical_64", [even] * CAPACITY, with_tree=True))
     alloc = alloc_from_counter(9_000_000)
     pools.append(
         pool_vector("all_tied_pairwise", [[alloc] * BATTLES] * 4, with_tree=False)
     )
+
+    # D3-B split-pot cases, through the same assign_prizes as the pools:
+    # a two-way tie for 1st; a three-way tie at 4th-6th with a visible
+    # integer remainder (890_000_000 / 3 leaves 2 lamports to the lowest
+    # seat); a two-way tie at 16th whose paid set is 17 seats; and a 64-way
+    # tie splitting the whole pot.
+    split_cases = [
+        split_case("two_way_first", [2] + [1] * 62, ENTRY_LAMPORTS),
+        split_case("three_way_4_6", [1, 1, 1, 3] + [1] * 58, ENTRY_LAMPORTS),
+        split_case("straddle_17", [1] * 15 + [2] + [1] * 47, ENTRY_LAMPORTS),
+        split_case("all_identical_64", [64], ENTRY_LAMPORTS),
+        split_case("three_way_4_6_tier_0_75", [1, 1, 1, 3] + [1] * 58, 750_000_000),
+    ]
+
+    # Per-tier prize tables: the 16 band amounts at every configured tier.
+    tier_tables = [
+        {
+            "entry_lamports": str(entry),
+            "pot_lamports": str(entry * 8 // 10 * CAPACITY),
+            "bands": [str(band_amount(entry * 8 // 10 * CAPACITY, p)) for p in range(1, 17)],
+        }
+        for entry in (100_000_000, 500_000_000, 750_000_000, 1_000_000_000,
+                      2_500_000_000, 5_000_000_000, 7_500_000_000)
+    ]
 
     # Draw-rate sanity over the stream: single-battle comparisons.
     n_pairs = 10_000
@@ -251,14 +363,19 @@ def main() -> None:
         "rules": (
             "battle: stat won by larger number, ties to neither, battle won by "
             ">=3 stats else draw; score in half-points (win 2, draw 1); rank by "
-            "score desc, zones desc, entry index asc; leaf sha256(0x00||player||"
-            "rank_u8||amount_u64le), node sha256(0x01||l||r), odd node promoted"
+            "score desc, zones desc; equal on both = TIED, shared competition "
+            "rank (D3-B), tie group splits the combined band prize of its "
+            "occupied positions <= 16 evenly, remainder to the lowest seat; "
+            "leaf sha256(0x00||player||rank_u8||amount_u64le), node "
+            "sha256(0x01||l||r), odd node promoted, leaves (rank asc, seat asc)"
         ),
         "entry_lamports": str(ENTRY_LAMPORTS),
         "pot_lamports": str(POT),
         "prize_bands_1024": PRIZE_BANDS_1024,
         "battle_cases": hand_battle_cases(),
         "pools": pools,
+        "split_cases": split_cases,
+        "tier_tables": tier_tables,
         "draw_rate": {"n": n_pairs, "draws": draws, "rate": rate, "stream_base": 10_000_000},
         "hash_cases": hash_cases,
     }

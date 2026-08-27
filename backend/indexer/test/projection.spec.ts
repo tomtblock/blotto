@@ -86,7 +86,8 @@ describe('blotto event decoding against real emitted bytes', () => {
     const closedPool = pools.find((p) => p.state === 'Closed');
     expect(paidPool, 'one pool ends Paid').to.exist;
     expect(closedPool, 'the refund pool ends Closed').to.exist;
-    expect(paidPool!.paid_mask).to.equal(0xffff);
+    // u64 seat bitmask, decimal string: seats 0..15 settled.
+    expect(paidPool!.paid_mask).to.equal('65535');
     expect(paidPool!.entrants).to.equal(64);
     expect(paidPool!.secret).to.equal('2a'.repeat(32)); // the harness secret
     expect(paidPool!.results_root).to.equal('01'.repeat(32));
@@ -109,18 +110,24 @@ describe('blotto event decoding against real emitted bytes', () => {
     }
     expect(bag).to.deep.equal([38, 15, 7, 3, 1]);
 
-    expect(Object.values(snap.results).length).to.equal(16);
+    // The committed payout list (D3-B): 16 seat-keyed rows summing to the
+    // pot, mirrored by the 16 settled payouts.
+    const results = Object.values(snap.results);
+    expect(results.length).to.equal(16);
+    const committedTotal = results.reduce((a, r) => a + BigInt(r.amount as string), 0n);
+    expect(committedTotal.toString()).to.equal('5120000000');
     const payouts = Object.values(snap.payouts);
     expect(payouts.length).to.equal(16);
     const total = payouts.reduce((a, p) => a + BigInt(p.amount as string), 0n);
     expect(total.toString()).to.equal('5120000000'); // the whole 0.1-tier pot
 
-    // Profiles (R15): rank 1 was flagged then released — its profile still
-    // ends with the full band credited (via EscrowReleased), best rank 1.
-    const rank1 = Object.values(snap.results).find((r) => r.rank === 1)!;
-    const profile = Object.values(snap.profiles).find((p) => p.player === rank1.player)!;
-    expect(profile.best_rank).to.equal(1);
+    // Profiles (R15): seat 0 (the fixture's rank 1) was flagged then
+    // released — its profile still ends with the full band credited (via
+    // EscrowReleased).
+    const seat0 = payouts.find((p) => p.seat === 0)!;
+    const profile = Object.values(snap.profiles).find((p) => p.player === seat0.player)!;
     expect(profile.total_won_lamports).to.equal('1350000000');
+    expect(profile.seats_paid).to.equal('1');
     expect(profile.pools_entered).to.equal('1');
   });
 

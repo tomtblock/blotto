@@ -30,13 +30,18 @@ export interface EntryRow {
   escrow_settled: 'released' | 'forfeited' | null;
 }
 
+/**
+ * One row of the committed payout list (D3-B), keyed by seat. Rank labels
+ * are not served by the indexer — they live in the published bundle, and
+ * the verify page recomputes them.
+ */
 export interface ResultRow {
-  rank: number;
-  player: string;
+  seat: number;
+  amount: string;
 }
 
 export interface PayoutRow {
-  rank: number;
+  seat: number;
   player: string;
   amount: string;
   escrowed: boolean;
@@ -45,9 +50,8 @@ export interface PayoutRow {
 export interface ProfileRow {
   player: string;
   pools_entered: string;
-  ranks_paid: string;
+  seats_paid: string;
   total_won_lamports: string;
-  best_rank: number | null;
   /** Class collection in fixed class order (Goblin..Titan). */
   class_counts: [number, number, number, number, number];
 }

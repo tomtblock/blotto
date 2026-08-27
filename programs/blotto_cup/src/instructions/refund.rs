@@ -33,14 +33,14 @@ pub struct TriggerRefund<'info> {
 
     /// `mut`: the tier's active-pool slot frees so a new pool can open (R14).
     #[account(mut, seeds = [CONFIG_SEED], bump = config.bump)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
 
     #[account(
         mut,
         seeds = [POOL_SEED, &pool_id.to_le_bytes()],
         bump = pool.bump,
     )]
-    pub pool: Account<'info, Pool>,
+    pub pool: Box<Account<'info, Pool>>,
 }
 
 pub fn handle_trigger_refund(ctx: Context<TriggerRefund>, _pool_id: u64) -> Result<()> {
@@ -87,7 +87,7 @@ pub struct Refund<'info> {
         seeds = [POOL_SEED, &pool_id.to_le_bytes()],
         bump = pool.bump,
     )]
-    pub pool: Account<'info, Pool>,
+    pub pool: Box<Account<'info, Pool>>,
 
     /// CHECK: Prize-vault PDA — refunds the 80% share.
     #[account(mut, seeds = [VAULT_SEED, &pool_id.to_le_bytes()], bump = pool.vault_bump)]
@@ -98,7 +98,7 @@ pub struct Refund<'info> {
     pub fees: UncheckedAccount<'info>,
 
     #[account(mut, constraint = entry.pool == pool.key() @ ErrorCode::EntryMismatch)]
-    pub entry: Account<'info, Entry>,
+    pub entry: Box<Account<'info, Entry>>,
 
     /// CHECK: The refunded player's wallet, pinned to the Entry.
     #[account(mut, address = entry.player)]

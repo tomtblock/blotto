@@ -40,16 +40,20 @@ describe('browser bundle', () => {
     const scoring = factory(undefined, undefined, undefined);
 
     const pool = vectors.pools.find((p: any) => p.name === 'full_0');
-    const results = scoring.scorePool(pool.players.map((p: any) => p.battles));
-    const pot = scoring.potLamports(BigInt(vectors.entry_lamports));
-    const byRank = [...results].sort((a: any, b: any) => a.rank - b.rank);
+    const pot = scoring.potLamports(BigInt(pool.entry_lamports));
+    const results = scoring.assignPrizes(
+      scoring.scorePool(pool.players.map((p: any) => p.battles)),
+      pot
+    );
+    // Leaf order under D3-B: rank asc, entry index asc (ranks repeat).
+    const byRank = [...results].sort((a: any, b: any) => a.rank - b.rank || a.index - b.index);
     const unhex = (s: string) =>
       new Uint8Array(s.match(/../g)!.map((h) => parseInt(h, 16)));
     const leaves = byRank.map((r: any) =>
       scoring.leafBytes({
         player: unhex(pool.players_pubkeys[r.index]),
         rank: r.rank,
-        amountLamports: scoring.amountForRank(pot, r.rank),
+        amountLamports: r.amountLamports,
       })
     );
     const root = Array.from(scoring.merkleRoot(leaves) as Uint8Array)

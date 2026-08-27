@@ -74,15 +74,17 @@ export async function handleRead(db: Queryable, path: string): Promise<ReadApiRe
       return { status: 200, body: res.rows };
     }
     if (parts[2] === 'results') {
+      // The committed payout list, seat-keyed (D3-B). Rank labels are not
+      // served here — they live in the published bundle (verify page).
       const res = await db.query(
-        'SELECT rank, player FROM results WHERE pool = $1 ORDER BY rank ASC',
+        'SELECT seat, amount::text AS amount FROM results WHERE pool = $1 ORDER BY seat ASC',
         [pool]
       );
       return { status: 200, body: res.rows };
     }
     if (parts[2] === 'payouts') {
       const res = await db.query(
-        'SELECT rank, player, amount::text AS amount, escrowed FROM payouts WHERE pool = $1 ORDER BY rank ASC',
+        'SELECT seat, player, amount::text AS amount, escrowed FROM payouts WHERE pool = $1 ORDER BY seat ASC',
         [pool]
       );
       return { status: 200, body: res.rows };
@@ -104,9 +106,8 @@ export async function handleRead(db: Queryable, path: string): Promise<ReadApiRe
       body: {
         player: r.player,
         pools_entered: String(r.pools_entered),
-        ranks_paid: String(r.ranks_paid),
+        seats_paid: String(r.seats_paid),
         total_won_lamports: String(r.total_won_lamports),
-        best_rank: r.best_rank,
         class_counts: [r.class_0, r.class_1, r.class_2, r.class_3, r.class_4].map(Number),
       },
     };
@@ -131,9 +132,9 @@ async function verifyRecord(db: Queryable, pool: string): Promise<ReadApiResult>
   let entryLamports = '';
   let revealedSecretHex = '';
   let resultsRootHex = '';
-  let winners: string[] = [];
+  let committedPayouts: Array<{ entryIndex: number; amount: string }> = [];
   const battlesHashByPlayer: Record<string, string> = {};
-  const payouts: Array<{ player: string; rank: number; amount: string }> = [];
+  const payouts: Array<{ player: string; entryIndex: number; amount: string }> = [];
   for (const row of res.rows) {
     const e = row.raw as Record<string, unknown>;
     switch (row.name) {
@@ -149,11 +150,17 @@ async function verifyRecord(db: Queryable, pool: string): Promise<ReadApiResult>
         break;
       case 'ResultsCommitted':
         resultsRootHex = e.root as string;
-        winners = e.winners as string[];
+        committedPayouts = (
+          e.payouts as Array<{ entry_index: number; amount: string }>
+        ).map((p) => ({ entryIndex: p.entry_index, amount: p.amount }));
         break;
       case 'PrizesPaid':
-        for (const p of e.payouts as Array<{ player: string; rank: number; amount: string }>) {
-          payouts.push({ player: p.player, rank: p.rank, amount: p.amount });
+        for (const p of e.payouts as Array<{
+          player: string;
+          entry_index: number;
+          amount: string;
+        }>) {
+          payouts.push({ player: p.player, entryIndex: p.entry_index, amount: p.amount });
         }
         break;
     }
@@ -166,7 +173,7 @@ async function verifyRecord(db: Queryable, pool: string): Promise<ReadApiResult>
       entryLamports,
       revealedSecretHex,
       resultsRootHex,
-      winners,
+      committedPayouts,
       battlesHashByPlayer,
       payouts,
     },

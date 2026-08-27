@@ -50,8 +50,8 @@ describe('read API routing', () => {
       { name: 'PoolOpened', raw: { pool: POOL, entry_lamports: '100000000', sealing_secret_hash: 'aa'.repeat(32) } },
       { name: 'EntryRegistered', raw: { pool: POOL, player: 'P1', battles_hash: 'bb'.repeat(32) } },
       { name: 'PoolSecretRevealed', raw: { pool: POOL, secret: 'cc'.repeat(32) } },
-      { name: 'ResultsCommitted', raw: { pool: POOL, root: 'dd'.repeat(32), winners: ['P1'] } },
-      { name: 'PrizesPaid', raw: { pool: POOL, payouts: [{ player: 'P1', rank: 1, amount: '1350000000', escrowed: false }] } },
+      { name: 'ResultsCommitted', raw: { pool: POOL, root: 'dd'.repeat(32), payouts: [{ entry_index: 0, amount: '1350000000' }] } },
+      { name: 'PrizesPaid', raw: { pool: POOL, payouts: [{ player: 'P1', entry_index: 0, amount: '1350000000', escrowed: false }] } },
     ];
     const res = await handleRead(db(() => rows), `/pools/${POOL}/verify-record`);
     expect(res.status).to.equal(200);
@@ -59,6 +59,7 @@ describe('read API routing', () => {
     expect(r.revealedSecretHex).to.equal('cc'.repeat(32));
     expect(r.resultsRootHex).to.equal('dd'.repeat(32));
     expect((r.battlesHashByPlayer as Record<string, string>).P1).to.equal('bb'.repeat(32));
-    expect((r.payouts as unknown[]).length).to.equal(1);
+    expect(r.committedPayouts).to.deep.equal([{ entryIndex: 0, amount: '1350000000' }]);
+    expect(r.payouts).to.deep.equal([{ player: 'P1', entryIndex: 0, amount: '1350000000' }]);
   });
 });

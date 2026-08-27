@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { createHash } from 'crypto';
 import { verifyPool, type OnChainRecord, type PublishedBundle } from './logic';
 import {
-  amountForRank,
+  assignPrizes,
   battlesHash,
   encodeBattleSet,
   potLamports,
@@ -34,19 +34,22 @@ function fixture(): { bundle: PublishedBundle; chain: OnChainRecord } {
     Array.from({ length: 7 }, (_, k) => alloc(i * 100 + k))
   ) as never;
   const salts = Array.from({ length: n }, (_, i) => sha(`salt:${i}`));
-  const results = scorePool(battles);
-  const byRank = [...results].sort((a, b) => a.rank - b.rank);
   const entry = 100_000_000n;
   const pot = potLamports(entry);
+  const results = assignPrizes(scorePool(battles), pot);
+  // Leaf order (D3-B): rank asc, entry index asc.
+  const byRank = [...results].sort((a, b) => a.rank - b.rank || a.index - b.index);
   const leaves = byRank.map((r) =>
     leafBytes({
       player: base58Decode(players[r.index]),
       rank: r.rank,
-      amountLamports: amountForRank(pot, r.rank),
+      amountLamports: r.amountLamports,
     })
   );
   const root = hex(merkleRoot(leaves));
-  const winners = byRank.slice(0, 16).map((r) => players[r.index]);
+  const committed = results
+    .filter((r) => r.amountLamports > 0n)
+    .sort((a, b) => a.index - b.index);
   const secret = sha('the-pool-secret');
 
   const bundle: PublishedBundle = {
@@ -67,9 +70,13 @@ function fixture(): { bundle: PublishedBundle; chain: OnChainRecord } {
       score_half: r.scoreHalf,
       zones: r.zones,
       rank: r.rank,
-      amount_lamports: amountForRank(pot, r.rank).toString(),
+      amount_lamports: r.amountLamports.toString(),
     })),
-    winners,
+    payouts: committed.map((r) => ({
+      entry_index: r.index,
+      player: players[r.index],
+      amount_lamports: r.amountLamports.toString(),
+    })),
     results_root: root,
   };
   const chain: OnChainRecord = {
@@ -77,14 +84,17 @@ function fixture(): { bundle: PublishedBundle; chain: OnChainRecord } {
     entryLamports: entry.toString(),
     revealedSecretHex: hex(secret),
     resultsRootHex: root,
-    winners,
+    committedPayouts: committed.map((r) => ({
+      entryIndex: r.index,
+      amount: r.amountLamports.toString(),
+    })),
     battlesHashByPlayer: Object.fromEntries(
       players.map((p, i) => [p, hex(battlesHash(battles[i], salts[i]))])
     ),
-    payouts: winners.map((p, i) => ({
-      player: p,
-      rank: i + 1,
-      amount: amountForRank(pot, i + 1).toString(),
+    payouts: committed.map((r) => ({
+      player: players[r.index],
+      entryIndex: r.index,
+      amount: r.amountLamports.toString(),
     })),
   };
   return { bundle, chain };
@@ -100,7 +110,7 @@ describe('verifyPool', () => {
       'entry-commitments:true',
       'rescore:true',
       'results-root:true',
-      'winners:true',
+      'committed-payouts:true',
       'payouts:true',
     ]);
     expect(report.ok).toBe(true);
@@ -126,6 +136,22 @@ describe('verifyPool', () => {
   it('a wrong on-chain payout amount turns payouts red', () => {
     const { bundle, chain } = fixture();
     chain.payouts[0].amount = (BigInt(chain.payouts[0].amount) + 1n).toString();
+    const report = verifyPool(bundle, chain);
+    expect(report.checks.find((c) => c.name === 'payouts')!.ok).toBe(false);
+  });
+
+  it('a doctored committed payout list turns committed-payouts red', () => {
+    const { bundle, chain } = fixture();
+    chain.committedPayouts[0].amount = (
+      BigInt(chain.committedPayouts[0].amount) - 1n
+    ).toString();
+    const report = verifyPool(bundle, chain);
+    expect(report.checks.find((c) => c.name === 'committed-payouts')!.ok).toBe(false);
+  });
+
+  it('a payout routed to a different wallet turns payouts red', () => {
+    const { bundle, chain } = fixture();
+    chain.payouts[0].player = chain.payouts[1].player;
     const report = verifyPool(bundle, chain);
     expect(report.checks.find((c) => c.name === 'payouts')!.ok).toBe(false);
   });
