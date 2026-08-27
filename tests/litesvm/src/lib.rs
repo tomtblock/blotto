@@ -162,13 +162,15 @@ pub fn init_config_ix(
     entry_signer: &Pubkey,
     settlement_signer: &Pubkey,
     platform_wallet: &Pubkey,
-    vault_ceiling: u64,
+    vault_ceilings: [u64; 7],
 ) -> Instruction {
     let mut data = disc("init_config").to_vec();
     data.extend_from_slice(entry_signer.as_ref());
     data.extend_from_slice(settlement_signer.as_ref());
     data.extend_from_slice(platform_wallet.as_ref());
-    data.extend_from_slice(&vault_ceiling.to_le_bytes());
+    for c in vault_ceilings {
+        data.extend_from_slice(&c.to_le_bytes());
+    }
     Instruction {
         program_id: program_id(),
         accounts: vec![
@@ -284,16 +286,37 @@ pub fn settle_ix(settlement: &Pubkey, pool_id: u64, name: &str, args: &[u8]) -> 
     }
 }
 
+/// Borsh-encode a committed payout list: u32 len + per payout (u16 seat LE,
+/// u64 amount LE) — the `Vec<Payout>` argument of `commit_results`.
+pub fn encode_payouts(payouts: &[(u16, u64)]) -> Vec<u8> {
+    let mut out = (payouts.len() as u32).to_le_bytes().to_vec();
+    for &(seat, amount) in payouts {
+        out.extend_from_slice(&seat.to_le_bytes());
+        out.extend_from_slice(&amount.to_le_bytes());
+    }
+    out
+}
+
+/// The standard no-tie payout list for a pool whose seats 0..15 are the
+/// ranking's top 16 in order: seat i takes rank i+1's band amount.
+pub fn band_payouts(entry_lamports: u64) -> Vec<(u16, u64)> {
+    let pot = entry_lamports / 10 * 8 * 64;
+    const BANDS: [u64; 16] = [270, 158, 102, 78, 50, 50, 50, 50, 27, 27, 27, 27, 27, 27, 27, 27];
+    (0..16u16).map(|i| (i, pot / 1024 * BANDS[i as usize])).collect()
+}
+
 pub fn pay_prizes_ix(
     settlement: &Pubkey,
     pool_id: u64,
-    ranks: &[u8],
+    seats: &[u16],
     winner_wallets_and_entries: &[(Pubkey, Pubkey)],
 ) -> Instruction {
     let mut data = disc("pay_prizes").to_vec();
     data.extend_from_slice(&pool_id.to_le_bytes());
-    data.extend_from_slice(&(ranks.len() as u32).to_le_bytes());
-    data.extend_from_slice(ranks);
+    data.extend_from_slice(&(seats.len() as u32).to_le_bytes());
+    for &s in seats {
+        data.extend_from_slice(&s.to_le_bytes());
+    }
     let mut accounts = vec![
         AccountMeta::new_readonly(*settlement, true),
         AccountMeta::new_readonly(config_pda(), false),
@@ -414,7 +437,9 @@ pub struct PoolView {
     pub entrants: u16,
     pub state: u8, // 0 Open, 1 Sealed, 2 Scored, 3 Paid, 4 Refunding, 5 Closed
     pub class_counters: [u16; 5],
-    pub paid_mask: u16,
+    /// The committed payout list (seat, amount), D3-B.
+    pub payouts: Vec<(u16, u64)>,
+    pub paid_mask: u64,
     pub refunded_count: u16,
 }
 
@@ -422,12 +447,25 @@ pub fn read_pool(svm: &LiteSVM, pool: &Pubkey) -> PoolView {
     let data = svm.get_account(pool).expect("pool account").data;
     let counters: [u16; 5] =
         core::array::from_fn(|i| u16::from_le_bytes([data[140 + 2 * i], data[141 + 2 * i]]));
+    // Layout after results_committed@183 (D3-B): payouts_len u16 @184,
+    // payouts [u16+u64; 64] @186, paid_mask u64 @826, refunded_count @834.
+    let payouts_len = u16::from_le_bytes([data[184], data[185]]) as usize;
+    let payouts = (0..payouts_len)
+        .map(|i| {
+            let base = 186 + i * 10;
+            (
+                u16::from_le_bytes([data[base], data[base + 1]]),
+                u64::from_le_bytes(data[base + 2..base + 10].try_into().unwrap()),
+            )
+        })
+        .collect();
     PoolView {
         entrants: u16::from_le_bytes([data[25], data[26]]),
         state: data[43],
         class_counters: counters,
-        paid_mask: u16::from_le_bytes([data[696], data[697]]),
-        refunded_count: u16::from_le_bytes([data[698], data[699]]),
+        payouts,
+        paid_mask: u64::from_le_bytes(data[826..834].try_into().unwrap()),
+        refunded_count: u16::from_le_bytes([data[834], data[835]]),
     }
 }
 
@@ -510,12 +548,26 @@ impl Env {
         // create it, proving a transfer to a fresh address suffices.
 
         let entry_signer_pk = Pubkey::new_from_array(entry_signer.verifying_key().to_bytes());
+        // Launch ceilings (D2): tier 0 = 6.4 SOL; every other tier = its own
+        // gross (entry × 64), so the ceiling is a cap, not a second switch.
+        let ceilings: [u64; 7] = {
+            let entries = [
+                100_000_000u64,
+                500_000_000,
+                750_000_000,
+                1_000_000_000,
+                2_500_000_000,
+                5_000_000_000,
+                7_500_000_000,
+            ];
+            core::array::from_fn(|i| if i == 0 { 6_400_000_000 } else { entries[i] * 64 })
+        };
         let ix = init_config_ix(
             &admin.pubkey(),
             &entry_signer_pk,
             &settlement.pubkey(),
             &platform_wallet,
-            6_400_000_000, // launch ceiling: 6.4 SOL gross (roadmap §7.1)
+            ceilings,
         );
         let mut env = Env {
             svm,
@@ -557,7 +609,7 @@ impl Env {
                 self.captured_logs.push(meta.logs.clone());
                 Ok(())
             }
-            Err(e) => Err(format!("{:?}", e.err)),
+            Err(e) => Err(format!("{:?} logs={:?}", e.err, e.meta.logs)),
         }
     }
 

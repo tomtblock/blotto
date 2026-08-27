@@ -77,23 +77,22 @@ fn lifecycle_log_fixture() {
     let secret = env.pool_secret;
     let ix = settle_ix(&settlement.pubkey(), 1, "reveal_pool_secret", &secret);
     env.send(&[ix], &[&settlement]).unwrap();
-    let winners: Vec<Pubkey> = players.iter().take(16).map(|(p, _)| p.pubkey()).collect();
+    // D3-B: commit the payout list (seats 0..15 take ranks 1..16's bands in
+    // this fixture's ranking), then pay by seat in two batches of eight.
     let mut args = [1u8; 32].to_vec();
-    for w in &winners {
-        args.extend_from_slice(w.as_ref());
-    }
+    args.extend_from_slice(&encode_payouts(&band_payouts(100_000_000)));
     let ix = settle_ix(&settlement.pubkey(), 1, "commit_results", &args);
     env.send(&[ix], &[&settlement]).unwrap();
-    for half in 0u8..2 {
-        let ranks: Vec<u8> = (1..=8u8).map(|r| half * 8 + r).collect();
-        let metas: Vec<(Pubkey, Pubkey)> = ranks
+    for half in 0u16..2 {
+        let seats: Vec<u16> = (0..8u16).map(|s| half * 8 + s).collect();
+        let metas: Vec<(Pubkey, Pubkey)> = seats
             .iter()
-            .map(|&r| {
-                let (p, e) = &players[(r - 1) as usize];
+            .map(|&seat| {
+                let (p, e) = &players[seat as usize];
                 (p.pubkey(), *e)
             })
             .collect();
-        let ix = pay_prizes_ix(&settlement.pubkey(), 1, &ranks, &metas);
+        let ix = pay_prizes_ix(&settlement.pubkey(), 1, &seats, &metas);
         env.send(&[ix], &[&settlement]).unwrap();
     }
     let ix = release_escrow_ix(&settlement.pubkey(), 1, &players[0].1, &players[0].0.pubkey());

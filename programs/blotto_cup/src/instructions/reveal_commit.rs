@@ -15,10 +15,11 @@
 use anchor_lang::prelude::*;
 use solana_sha256_hasher::hash as sha256;
 
-use crate::constants::PAID_RANKS;
+use crate::constants::CAPACITY;
 use crate::error::ErrorCode;
 use crate::events::{PoolSecretRevealed, ResultsCommitted};
-use crate::state::{Config, Pool, PoolState, CONFIG_SEED, POOL_SEED};
+use crate::prize_math::pot;
+use crate::state::{Config, Payout, Pool, PoolState, CONFIG_SEED, POOL_SEED};
 
 #[derive(Accounts)]
 #[instruction(pool_id: u64)]
@@ -30,14 +31,14 @@ pub struct SettlePool<'info> {
         bump = config.bump,
         has_one = settlement_signer,
     )]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
 
     #[account(
         mut,
         seeds = [POOL_SEED, &pool_id.to_le_bytes()],
         bump = pool.bump,
     )]
-    pub pool: Account<'info, Pool>,
+    pub pool: Box<Account<'info, Pool>>,
 }
 
 /// Reveal the pool secret. Roadmap 1.4: allowed once the pool is `Sealed`, or
@@ -73,37 +74,62 @@ pub fn handle_reveal_pool_secret(
     Ok(())
 }
 
-/// Commit the results root and the 16 winners. `Sealed` + revealed only —
-/// results for a refunding pool are meaningless.
+/// Commit the results root and the settled payout list (D3-B). `Sealed` +
+/// revealed only — results for a refunding pool are meaningless.
+///
+/// Four checks make a malformed list unlandable: bounded by capacity,
+/// sorted strictly by seat (which also proves no duplicates), every seat in
+/// range, and the amounts summing to EXACTLY the pot — the settlement
+/// signer chooses the split the published rule dictates, never the total.
+/// (Worst case on the wire: 64 payouts × 10 bytes + the root ≈ 700 bytes —
+/// one transaction, comfortably.)
 pub fn handle_commit_results(
     ctx: Context<SettlePool>,
     _pool_id: u64,
     root: [u8; 32],
-    winners: [Pubkey; PAID_RANKS],
+    payouts: Vec<Payout>,
 ) -> Result<()> {
     let pool = &mut ctx.accounts.pool;
     require!(pool.state == PoolState::Sealed, ErrorCode::PoolNotSealed);
     require!(pool.secret_revealed, ErrorCode::SecretNotRevealed);
     require!(!pool.results_committed, ErrorCode::ResultsAlreadyCommitted);
 
-    // Distinct winners: a duplicated pubkey would let one wallet take two
-    // ranks' prizes and is never a legitimate ranking (one entry per wallet
-    // is a PDA invariant).
-    for i in 0..PAID_RANKS {
-        for j in (i + 1)..PAID_RANKS {
-            require!(winners[i] != winners[j], ErrorCode::WinnersNotDistinct);
+    require!(
+        !payouts.is_empty() && payouts.len() <= CAPACITY as usize,
+        ErrorCode::PayoutListMalformed
+    );
+    let mut total: u128 = 0;
+    for (i, p) in payouts.iter().enumerate() {
+        require!(
+            (p.entry_index as u16) < pool.entrants,
+            ErrorCode::PayoutListMalformed
+        );
+        if i > 0 {
+            // Strictly ascending seats: sorted AND duplicate-free in one check.
+            require!(
+                p.entry_index > payouts[i - 1].entry_index,
+                ErrorCode::PayoutListMalformed
+            );
         }
+        total += p.amount as u128;
     }
+    require!(
+        total == pot(pool.entry_lamports) as u128,
+        ErrorCode::PayoutSumMismatch
+    );
 
     pool.results_root = root;
-    pool.winners = winners;
+    pool.payouts_len = payouts.len() as u16;
+    for (i, p) in payouts.iter().enumerate() {
+        pool.payouts[i] = *p;
+    }
     pool.results_committed = true;
     pool.state = PoolState::Scored;
 
     emit!(ResultsCommitted {
         pool: pool.key(),
         root,
-        winners: winners.to_vec(),
+        payouts,
     });
 
     Ok(())

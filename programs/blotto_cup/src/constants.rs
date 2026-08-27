@@ -21,10 +21,25 @@ pub const FILL_DEADLINE_SECS: i64 = 72 * 60 * 60;
 /// alter a pool that players already entered under the published value.
 pub const TIMER_SECONDS: u8 = 15;
 
-/// The four configured tiers' entry prices in lamports (roadmap R6):
-/// 0.1 / 0.5 / 1 / 5 SOL. Which tiers are OPEN is `Config.open_tiers`;
-/// at launch only index 0 (0.1 SOL) is open.
-pub const TIER_ENTRY_LAMPORTS: [u64; 4] = [100_000_000, 500_000_000, 1_000_000_000, 5_000_000_000];
+/// Number of CONFIGURED tiers (decision D1, 2026-08-27). Configured is not
+/// open: `Config.open_tiers` starts 0.1-only (R6) and the founder opens the
+/// rest with `set_open_tiers` when R6's conditions are met.
+pub const N_TIERS: usize = 7;
+
+/// Configured tiers' entry prices (roadmap R6 as amended by decision D1,
+/// 2026-08-27): 0.1 / 0.5 / 0.75 / 1 / 2.5 / 5 / 7.5 SOL. Index = tier.
+/// Every entry is a multiple of 20 lamports, so every pot (entry × 0.8 × 64
+/// = 51.2 × entry) is an exact multiple of 1024 — the property
+/// `prize_math`'s band table relies on, asserted per tier in its tests.
+pub const TIER_ENTRY_LAMPORTS: [u64; N_TIERS] = [
+    100_000_000,
+    500_000_000,
+    750_000_000,
+    1_000_000_000,
+    2_500_000_000,
+    5_000_000_000,
+    7_500_000_000,
+];
 
 /// Prize-pool share of each entry, basis points (PID §2: 80% prize pool,
 /// 20% platform).

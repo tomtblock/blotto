@@ -113,7 +113,7 @@ pub struct CreatePassCollection<'info> {
         seeds = [POOL_SEED, &pool_id.to_le_bytes()],
         bump = pool.bump,
     )]
-    pub pool: Account<'info, Pool>,
+    pub pool: Box<Account<'info, Pool>>,
 
     /// CHECK: The Core Collection asset address, derived as `[PASS_COLLECTION_SEED,
     /// pool.key()]`. Passed in uninitialized; the mpl-core program initializes it

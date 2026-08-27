@@ -104,4 +104,10 @@ pub enum ErrorCode {
     WrongPoolId,
     #[msg("Only a flagged entry's escrow can be forfeited")]
     ForfeitRequiresFlag,
+    #[msg("Payout list must be non-empty, seat-sorted, duplicate-free and in range")]
+    PayoutListMalformed,
+    #[msg("Payout amounts must sum to exactly the pot")]
+    PayoutSumMismatch,
+    #[msg("Seat is not in the committed payout list")]
+    SeatNotInPayouts,
 }

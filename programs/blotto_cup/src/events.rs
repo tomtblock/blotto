@@ -61,17 +61,24 @@ pub struct PoolSecretRevealed {
 #[event]
 pub struct ResultsCommitted {
     pub pool: Pubkey,
-    /// Merkle root of the full 64-place ranking `(player, rank, amount)`.
+    /// Merkle root of the full 64-place ranking `(player, rank, amount)`,
+    /// leaves ordered (rank asc, entry index asc) — ranks repeat under
+    /// D3-B's shared competition ranks, entry index breaks the order.
     pub root: [u8; 32],
-    /// Top 16, rank order — the players `pay_prizes` will pay.
-    pub winners: Vec<Pubkey>,
+    /// The committed payout list (seat, lamports), sorted by seat — the
+    /// exact set `pay_prizes` will settle. Amount sum equals the pot,
+    /// validated on-chain; the ranking behind it is player-recomputable
+    /// from the published bundle (the verify page's job).
+    pub payouts: Vec<crate::state::Payout>,
 }
 
-/// One settled rank inside a `PrizesPaid` batch.
+/// One settled seat inside a `PrizesPaid` batch (D3-B: the paid set is the
+/// committed payout list, keyed by seat, amounts fixed at commit).
 #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
 pub struct PayoutRecord {
     pub player: Pubkey,
-    pub rank: u8,
+    /// Seat (entry index), 0-based.
+    pub entry_index: u16,
     pub amount: u64,
     /// True when the share went to escrow (flag or KYC threshold) instead of
     /// being transferred.
@@ -82,8 +89,9 @@ pub struct PayoutRecord {
 pub struct PrizesPaid {
     pub pool: Pubkey,
     pub payouts: Vec<PayoutRecord>,
-    /// Ranks settled so far, as a bitmask (bit r-1 = rank r). 0xFFFF = done.
-    pub paid_mask: u16,
+    /// Seats settled so far, as a bitmask (bit = entry_index). Every
+    /// committed payout's bit set = done.
+    pub paid_mask: u64,
 }
 
 #[event]

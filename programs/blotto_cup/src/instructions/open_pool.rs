@@ -34,7 +34,7 @@ pub struct OpenPool<'info> {
         bump = config.bump,
         has_one = settlement_signer,
     )]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
 
     #[account(
         init,
@@ -43,7 +43,7 @@ pub struct OpenPool<'info> {
         seeds = [POOL_SEED, &pool_id.to_le_bytes()],
         bump,
     )]
-    pub pool: Account<'info, Pool>,
+    pub pool: Box<Account<'info, Pool>>,
 
     /// CHECK: The prize-vault PDA. Uninitialized until the first entry credits
     /// it; only its derivation (and bump) is fixed here.
@@ -86,10 +86,10 @@ pub fn handle_open_pool(
     );
 
     let entry_lamports = TIER_ENTRY_LAMPORTS[tier_idx];
-    // R6/§7.1: the ceiling caps a pool's GROSS intake (entry × 64).
+    // D2: each tier's ceiling caps that tier's GROSS intake (entry × 64).
     let gross = (entry_lamports as u128) * (CAPACITY as u128);
     require!(
-        gross <= config.vault_ceiling_lamports as u128,
+        gross <= config.vault_ceiling_lamports[tier_idx] as u128,
         ErrorCode::VaultCeilingExceeded
     );
 
@@ -109,7 +109,8 @@ pub fn handle_open_pool(
     pool.secret_revealed = false;
     pool.results_root = [0u8; 32];
     pool.results_committed = false;
-    pool.winners = [Pubkey::default(); crate::constants::PAID_RANKS];
+    pool.payouts_len = 0;
+    pool.payouts = [crate::state::Payout::default(); crate::constants::CAPACITY as usize];
     pool.paid_mask = 0;
     pool.refunded_count = 0;
     // R9: recorded per pool so the value players entered under is on-chain.

@@ -39,20 +39,20 @@ pub struct ReleaseEscrow<'info> {
         bump = config.bump,
         has_one = settlement_signer,
     )]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
 
     #[account(
         seeds = [POOL_SEED, &pool_id.to_le_bytes()],
         bump = pool.bump,
     )]
-    pub pool: Account<'info, Pool>,
+    pub pool: Box<Account<'info, Pool>>,
 
     /// CHECK: Prize-vault PDA, derivation-checked.
     #[account(mut, seeds = [VAULT_SEED, &pool_id.to_le_bytes()], bump = pool.vault_bump)]
     pub vault: UncheckedAccount<'info>,
 
     #[account(mut, constraint = entry.pool == pool.key() @ ErrorCode::EntryMismatch)]
-    pub entry: Account<'info, Entry>,
+    pub entry: Box<Account<'info, Entry>>,
 
     /// CHECK: The escrowed player's wallet, pinned to the Entry.
     #[account(mut, address = entry.player)]
@@ -114,20 +114,20 @@ pub struct ForfeitEscrow<'info> {
         bump = config.bump,
         has_one = settlement_signer,
     )]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
 
     #[account(
         seeds = [POOL_SEED, &pool_id.to_le_bytes()],
         bump = pool.bump,
     )]
-    pub pool: Account<'info, Pool>,
+    pub pool: Box<Account<'info, Pool>>,
 
     /// CHECK: Prize-vault PDA, derivation-checked.
     #[account(mut, seeds = [VAULT_SEED, &pool_id.to_le_bytes()], bump = pool.vault_bump)]
     pub vault: UncheckedAccount<'info>,
 
     #[account(mut, constraint = entry.pool == pool.key() @ ErrorCode::EntryMismatch)]
-    pub entry: Account<'info, Entry>,
+    pub entry: Box<Account<'info, Entry>>,
 
     /// CHECK: The platform wallet, pinned to Config (see the module doc on
     /// why the destination is never another pool's vault).

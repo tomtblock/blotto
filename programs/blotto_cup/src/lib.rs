@@ -41,7 +41,8 @@ pub use instructions::*;
 pub use pass::*;
 pub use vrf::*;
 
-use crate::constants::PAID_RANKS;
+use crate::constants::N_TIERS;
+use crate::state::Payout;
 
 // Devnet program identity, generated fresh during Phase 0 extraction. The
 // predecessor's program ID (57goj6dM…) is NOT reused — see TRANSITION-REPORT.md,
@@ -62,7 +63,7 @@ pub mod blotto_cup {
         entry_signer: Pubkey,
         settlement_signer: Pubkey,
         platform_wallet: Pubkey,
-        vault_ceiling_lamports: u64,
+        vault_ceiling_lamports: [u64; N_TIERS],
     ) -> Result<()> {
         instructions::handle_init_config(
             ctx,
@@ -89,14 +90,18 @@ pub mod blotto_cup {
         instructions::handle_set_settlement_signer(ctx, new_signer)
     }
 
-    /// Which tiers may open pools (R6).
-    pub fn set_open_tiers(ctx: Context<AdminOnly>, open_tiers: [bool; 4]) -> Result<()> {
+    /// Which tiers may open pools (R6, D1).
+    pub fn set_open_tiers(ctx: Context<AdminOnly>, open_tiers: [bool; N_TIERS]) -> Result<()> {
         instructions::handle_set_open_tiers(ctx, open_tiers)
     }
 
-    /// Per-pool gross-intake ceiling (R6).
-    pub fn set_vault_ceiling(ctx: Context<AdminOnly>, ceiling_lamports: u64) -> Result<()> {
-        instructions::handle_set_vault_ceiling(ctx, ceiling_lamports)
+    /// Per-tier gross-intake ceiling (D2), one tier per call.
+    pub fn set_vault_ceiling(
+        ctx: Context<AdminOnly>,
+        tier: u8,
+        ceiling_lamports: u64,
+    ) -> Result<()> {
+        instructions::handle_set_vault_ceiling(ctx, tier, ceiling_lamports)
     }
 
     /// KYC-at-claim switch (R3): 0 = off.
@@ -154,24 +159,26 @@ pub mod blotto_cup {
         instructions::handle_reveal_pool_secret(ctx, pool_id, secret)
     }
 
-    /// Commit the full-ranking Merkle root and the 16 winners in rank order.
+    /// Commit the full-ranking Merkle root and the settled payout list
+    /// (D3-B: seat-sorted, duplicate-free, amounts summing to the pot —
+    /// validated on-chain).
     pub fn commit_results(
         ctx: Context<SettlePool>,
         pool_id: u64,
         root: [u8; 32],
-        winners: [Pubkey; PAID_RANKS],
+        payouts: Vec<Payout>,
     ) -> Result<()> {
-        instructions::handle_commit_results(ctx, pool_id, root, winners)
+        instructions::handle_commit_results(ctx, pool_id, root, payouts)
     }
 
-    /// Pay (or escrow) a batch of committed ranks. Idempotent via
-    /// `Pool.paid_mask`; all 16 settled → `Paid`.
+    /// Pay (or escrow) a batch of committed seats. Idempotent via
+    /// `Pool.paid_mask`; every committed seat settled → `Paid`.
     pub fn pay_prizes<'info>(
         ctx: Context<'info, PayPrizes<'info>>,
         pool_id: u64,
-        ranks: Vec<u8>,
+        seats: Vec<u16>,
     ) -> Result<()> {
-        instructions::handle_pay_prizes(ctx, pool_id, ranks)
+        instructions::handle_pay_prizes(ctx, pool_id, seats)
     }
 
     // ---- Detection flags + escrow settlement ----------------------------
