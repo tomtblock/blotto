@@ -3,6 +3,11 @@
  *
  *   POST /packet       { wallet, pool, ageAttested }  → IssuedPacket | 403 generic
  *   POST /ciphertexts  { pool, player, ciphertext }   → 204
+ *   GET  /geo                                         → { allowed: boolean }
+ *
+ * `/geo` (D-B3) is the client pre-flight: the same lookup and schedule as
+ * issuance, answering only a boolean so the play page can withhold the pay
+ * path in a blocked territory without learning why. Fail-closed end to end.
  *
  * The ciphertext lands here (roadmap 2.3's store) because both calls happen
  * in the same client flow and share the same deployment envelope; the store
@@ -15,12 +20,39 @@
 
 import { createServer, type IncomingMessage, type Server } from 'http';
 import type { CiphertextStore } from '../../sealing/src';
-import { GENERIC_REJECTION, issuePacket, type PacketServiceDeps } from './service';
+import {
+  GENERIC_REJECTION,
+  geoVerdict,
+  issuePacket,
+  type GeoLookupResult,
+  type PacketServiceDeps,
+} from './service';
 
 export interface EntryServerDeps {
   packet: PacketServiceDeps;
   ciphertexts: CiphertextStore;
   trustProxyHeader: boolean;
+  /**
+   * TEST/DEV ONLY (D-B3 stub): when true, `x-geo-country` / `x-geo-region` /
+   * `x-geo-vpn: 1` request headers override the geo lookup for that request.
+   * Never set behind anything a player can reach — a client-controlled
+   * header would decide its own territory.
+   */
+  trustGeoStubHeaders?: boolean;
+}
+
+/** Per-request header override for the stub path (see trustGeoStubHeaders). */
+function geoFromHeaders(headers: Record<string, string | string[] | undefined>):
+  | GeoLookupResult
+  | null {
+  const country = headers['x-geo-country'];
+  if (typeof country !== 'string' || country.length === 0) return null;
+  const region = headers['x-geo-region'];
+  return {
+    country,
+    region: typeof region === 'string' && region.length > 0 ? region : undefined,
+    vpnOrProxy: headers['x-geo-vpn'] === '1',
+  };
 }
 
 export interface RouteResult {
@@ -37,8 +69,21 @@ export async function handleEntryRoute(
   method: string,
   path: string,
   body: unknown,
-  ip: string
+  ip: string,
+  headers: Record<string, string | string[] | undefined> = {}
 ): Promise<RouteResult> {
+  // The stub header path swaps the lookup for THIS request only.
+  let packetDeps = deps.packet;
+  if (deps.trustGeoStubHeaders === true) {
+    const stub = geoFromHeaders(headers);
+    if (stub) packetDeps = { ...deps.packet, geo: { lookup: async () => stub } };
+  }
+
+  if (path === '/geo') {
+    if (method !== 'GET') return { status: 405, body: { error: 'method' } };
+    return { status: 200, body: { allowed: await geoVerdict(packetDeps, ip) } };
+  }
+
   if (method !== 'POST') return { status: 405, body: { error: 'method' } };
 
   if (path === '/packet') {
@@ -47,7 +92,7 @@ export async function handleEntryRoute(
       // Malformed requests get the same generic answer as failed checks.
       return { status: 403, body: GENERIC_REJECTION };
     }
-    const res = await issuePacket(deps.packet, {
+    const res = await issuePacket(packetDeps, {
       wallet: b.wallet as string,
       pool: b.pool as string,
       ip,
@@ -117,7 +162,8 @@ export function serveEntryApi(deps: EntryServerDeps, port: number): Server {
           req.method ?? '',
           req.url ?? '/',
           body,
-          clientIp(req, deps.trustProxyHeader)
+          clientIp(req, deps.trustProxyHeader),
+          req.headers
         );
         if (out === null) res.writeHead(status).end();
         else
