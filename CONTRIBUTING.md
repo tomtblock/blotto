@@ -41,6 +41,27 @@ the failure mode is a single careless identifier surviving into this repository.
 > Never: lottery · gamble · bet · wager · casino · pull · pack · odds · jackpot · rake · deal · roll.
 > Use: entry · pass · character · battle · stat · allocation · tournament · prize pool · ranking.
 
+**Amended by D-B7 (ratified 2026-08-27)** with five further groups, enforced by the same script over
+code, comments, docs and copy alike:
+
+1. **Bare status claims** — non-custodial · provably fair · licensed · regulated · compliant ·
+   trustless · can't be rigged · rig-proof. Each asserts a legal or trust status; a sentence that
+   cannot prove the claim it makes must not make it.
+2. **Anonymity-marketing** — anonymous · anonymity · no-KYC · untraceable · unbannable · play from
+   anywhere.
+3. **Guarantee claims** — guaranteed · risk-free · free money · +EV · everyone wins.
+4. **Finance framing** — yield · APY · passive income · earn · investment · early investors ·
+   number go up. Entering a tournament is not investing and prizes are not income.
+5. **Category assertions** — not gambling · just a game · skill game · skill tournament (and the
+   internal tell "gambling-coded"). Public copy never asserts the product's legal category, in
+   either direction — it describes **mechanics**: "sealed-allocation tournament", "prizes paid by
+   published rank", "randomness from Switchboard VRF affects the class draw only", "funds held by
+   program `<ID>`; upgrades require `<n-of-m>` signatures".
+
+One limit to know: the gate greps line by line, so a banned *phrase* hard-wrapped across two lines
+of markdown escapes it (single banned words cannot wrap). Reviewers watch for wrapped phrases; do
+not rely on the gate alone when editing prose.
+
 Run it from the repository root before every commit:
 
 ```bash
@@ -62,7 +83,9 @@ sweepstakes and put the product in the wrong regulatory box.
 | The five source documents in `docs/` (PID, TECH-ARCH, brief, playbook, `BUILD-ROADMAP_v1.0.md`) | Copied verbatim — inputs to this repository rather than content authored in it. PID §8.7 necessarily *lists* the words it forbids, and the roadmap's R11 discusses the forbidden word it bans. |
 | `EXTRACTION-REPORT.md`, `TRANSITION-REPORT.md` | Both have to name the old product and the components that were not carried in order to be useful. |
 | `CONTRIBUTING.md`, `CLAUDE.md` | Both quote the forbidden list in order to forbid it. |
+| `docs/phase-reports/step-vocabulary.md` | The D-B7 step report: it documents which forbidden words were amended and to what, which requires naming them. No other report gets this exclusion. |
 | `Cargo.lock`, `package-lock.json`, `yarn.lock` | Dependency metadata, machine-generated. Package names like `pump`, `escape-string-regexp` and `solana-program-pack` are not ours to rename. |
+| `LICENSE` | The verbatim Apache-2.0 text ("Licensed under…"). Legal boilerplate nobody here authored; software licensing, not a gaming-licence claim. |
 | `node_modules/`, `target/`, `.next/`, `.git/` | Not repository content. |
 
 **Everything else is live and must pass.** Exactly one token is allowlisted anywhere:

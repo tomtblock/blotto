@@ -17,6 +17,11 @@
 # Run from the repository root. Exits non-zero, and prints every hit, if anything
 # matches. See CONTRIBUTING.md → "The language gate" for the exclusion rationale.
 #
+# Known limit: grep is line-based, so a banned PHRASE hard-wrapped across two
+# lines of prose escapes it ("skill\ntournament" did exactly this once).
+# Reviewers watch for wrapped phrases in markdown; single banned WORDS cannot
+# wrap and are always caught.
+#
 # This script runs as the `standing-rules` CI lane on every PR (roadmap §3
 # standing rule 4), alongside scripts/check-standing-rules.sh.
 
@@ -29,12 +34,33 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 # marketplace.
 PATTERN='casino|gambling|disguised|dopamine|shill|degen|the house|pump|bonding|lottery|jackpot|\bodds\b|\bpack\b|\bpull\b|\bbet\b|wager|rake|\broll\b|anarchy|xp\b|graduat|trending|magic eden|synthetic|promotion|sweepstake'
 
+# D-B7 (ratified 2026-08-27): the amended lexicon. Five further groups, each a
+# distinct failure mode. Public copy describes MECHANICS instead — "sealed-
+# allocation tournament", "prizes paid by published rank", "randomness from
+# Switchboard VRF affects the class draw only", "funds held by program <ID>;
+# upgrades require <n-of-m> signatures".
+#
+#   1. Bare claims that assert a legal or trust status the product does not
+#      hold or cannot prove in the sentence that makes the claim:
+#      non-custodial · provably fair · licensed · regulated · compliant ·
+#      trustless · can't be rigged · rig-proof
+#   2. Anonymity-marketing: anonymous · anonymity · no-KYC · untraceable ·
+#      unbannable · play from anywhere
+#   3. Guarantee claims: guaranteed · risk-free · free money · +EV ·
+#      everyone wins
+#   4. Finance framing: yield · APY · passive income · earn · investment ·
+#      early investors · number go up
+#   5. Category assertions in public copy: not gambling ("gambling" is already
+#      banned above) · just a game · skill game · skill tournament — plus the
+#      internal-intent tell "gambling-coded" (also covered above).
+PATTERN_B7='non.custodial|provably fair|\blicensed\b|\bregulated\b|\bcompliant\b|trustless|can.?t be rigged|cannot be rigged|rig.proof|\banonymous\b|\banonymity\b|no[- ]kyc|untraceable|unbannable|play from anywhere|\bguaranteed\b|risk.free|free money|\+ev\b|everyone wins|\byield\b|\bapy\b|passive income|\bearn(s|ed|ing)?\b|\binvestments?\b|early investors|number go up|just a game|skill games?\b|skill tournaments?\b'
+
 # ---------------------------------------------------------------------------
 # Exclusions. Each one has a reason; do not extend this list without the same
 # scrutiny, and never exclude a path merely because it fails.
 # ---------------------------------------------------------------------------
 hits="$(
-  grep -rniE "$PATTERN" . \
+  grep -rniE "($PATTERN|$PATTERN_B7)" . \
     --exclude-dir=node_modules \
     --exclude-dir=target \
     --exclude-dir=.git \
@@ -55,10 +81,16 @@ hits="$(
     `# were not carried in order to be useful.` \
     --exclude=EXTRACTION-REPORT.md \
     --exclude=TRANSITION-REPORT.md \
-    `# These two quote the forbidden list in order to forbid it.` \
+    `# These quote the forbidden list in order to forbid it — CONTRIBUTING` \
+    `# and CLAUDE.md state the rule; the D-B7 step report documents which` \
+    `# words were amended and to what. No other report gets this exclusion.` \
     --exclude=CONTRIBUTING.md \
     --exclude=CLAUDE.md \
+    --exclude=step-vocabulary.md \
     --exclude=check-language.sh \
+    `# The verbatim Apache-2.0 text ("Licensed under..."). Legal boilerplate` \
+    `# nobody here authored; software licensing, not a gaming-licence claim.` \
+    --exclude=LICENSE \
     `# Lockfiles are dependency metadata, not authored prose. Package names like` \
     `# "pump", "escape-string-regexp" and "solana-program-pack" are not ours to` \
     `# rename, and a lockfile is machine-generated.` \

@@ -61,7 +61,7 @@ pub fn handle_init_config(
     // ONLY. Written out, not computed, so the launch policy is readable.
     config.open_tiers = [true, false, false, false, false, false, false];
     config.vault_ceiling_lamports = vault_ceiling_lamports;
-    // R3: no KYC at launch — the at-claim switch starts off (0 = off).
+    // R3: the KYC-at-claim switch starts off at launch (0 = off).
     config.kyc_required_above_lamports = 0;
     // R11: full escrow tier behind an admin switch, off at launch. The
     // baseline hard blocks (exact-duplicate sets, same-device multi-entry)

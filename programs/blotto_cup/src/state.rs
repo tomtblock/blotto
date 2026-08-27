@@ -31,7 +31,7 @@ pub const VAULT_SEED: &[u8] = b"vault";
 /// Fees PDA: `[FEES_SEED, pool_id.to_le_bytes()]`. A zero-data system-owned
 /// account holding the 20% platform share **until the pool seals**. Holding it
 /// per-pool until seal is what makes the R7 full refund (100% back, platform
-/// share included) trustless — the program cannot debit the founder's wallet,
+/// share included) operator-independent — the program cannot debit the founder's wallet,
 /// so the refundable 20% must sit under program control until the pool can no
 /// longer refund. Swept to the platform wallet in the 64th `register`.
 /// Recorded as a deliberate deviation from PID §7's instant-split diagram in

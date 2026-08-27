@@ -90,7 +90,7 @@ pub const MPL_CORE_ID: Pubkey = pubkey!("CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZ
 /// Creates the Core Collection that groups one pool's 64 character passes.
 ///
 /// The Collection's update authority is set to the program's `Pool` PDA, never a
-/// human. That is the precondition that makes the freeze trustless: only a
+/// human. That is the precondition that makes the freeze permanent by construction: only a
 /// Pool-PDA-signed CPI could ever mutate the freeze plugin, and this program
 /// contains no instruction that does. In `CreateCollectionV2` the
 /// `update_authority` account is *not* a signer — it merely designates who the

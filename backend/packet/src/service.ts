@@ -37,7 +37,7 @@ export interface SanctionsList {
 export interface PacketServiceConfig {
   /** The founder-owned schedule from `config/territories.json` (D-B3). */
   territories: TerritorySchedule;
-  /** R3: no KYC at launch — issued packets carry tier 0. */
+  /** R3: KYC stays off at launch — issued packets carry tier 0. */
   kycTier: number;
   /** Current terms version from `config/terms.json` (D-B4). */
   termsVersion: number;

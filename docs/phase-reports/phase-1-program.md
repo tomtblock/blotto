@@ -15,7 +15,7 @@ Instructions (all in `programs/blotto_cup/src/`, wired in `lib.rs`):
 | Admin | `init_config`, `set_paused`, `rotate_entry_signer`, `set_settlement_signer`, `set_open_tiers`, `set_vault_ceiling`, `set_kyc_threshold`, `set_detection_hard_block` | Squads vault (`has_one = admin`) |
 | Pool | `open_pool`, `commit_vrf_seed` (permissionless), `create_pass_collection` (permissionless), `register` (player) | settlement signer where noted |
 | Settlement | `reveal_pool_secret`, `commit_results`, `pay_prizes` (batched), `flag_entry`, `clear_flag`, `release_escrow`, `forfeit_escrow` | settlement signer |
-| Refund fork | `trigger_refund`, `refund` | anyone (R7 is trustless) |
+| Refund fork | `trigger_refund`, `refund` | anyone (R7 needs no operator) |
 
 Money movement is confined to `vault.rs` (`credit_from_signer`, `vault_debit`,
 `fees_debit`); `scripts/check-standing-rules.sh` greps this in CI (rule 6:

@@ -2,8 +2,8 @@
  * The age/terms attestation store (D-B4, ratified 2026-08-27).
  *
  * Age and identity policy at launch is a SELF-ATTESTATION clickwrap only —
- * "I am over 18" plus terms acceptance, versioned. No KYC provider, no
- * age-verification vendor (the program's KYC-at-claim switch stays built and
+ * "I am over 18" plus terms acceptance, versioned. There is neither a KYC
+ * provider nor an age-verification vendor (the KYC-at-claim switch stays built and
  * OFF, untouched). What this module makes durable is the record:
  *
  *   { wallet, terms_version, attested_18: true, timestamp, wallet_signature }

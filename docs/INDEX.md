@@ -11,12 +11,12 @@ owns; everywhere else a fact appears, it appears as a pointer.
 | **Phase order, step scope, gates, and the ratified decision register (R1–R21)** | `BUILD-ROADMAP_v1.0.md` | Founder-ratified 2026-08-26. **Where it and TECH-ARCH v0.2 disagree, the roadmap wins** — the deltas are its §1.3/§1.4, to be absorbed into TECH-ARCH v0.3 |
 | Product intent, game design, prizes, legal characterisation | `PID_Blotto-Cup_v0.5.md` | Founder-owned. Superseded only by a later PID version |
 | The allocation interaction (pentagon radar, live normalisation, "Even split") | `PID_Blotto-Cup_v0.5.md` §4 | Founder-owned. **Overrides** TECH-ARCH §10 — see the conflict note below |
-| Forbidden and preferred language | `PID_Blotto-Cup_v0.5.md` §8.7 | Founder + counsel. Enforced by the CI word grep |
+| Forbidden and preferred language | `PID_Blotto-Cup_v0.5.md` §8.7, as amended by register row D-B7 (full list in `../CONTRIBUTING.md` → "The language gate") | Founder + counsel. Enforced by the CI word grep |
 | System architecture, accounts, instructions, events, constants | `TECH-ARCHITECTURE_Blotto-Cup_v0.2.md` | Architect-owned |
 | Scoring algorithm and ranking | `TECH-ARCHITECTURE_Blotto-Cup_v0.2.md` §6 | Architect-owned |
 | Sealing lifecycle and failure modes | `TECH-ARCHITECTURE_Blotto-Cup_v0.2.md` §5 | Architect-owned |
 | Detection signals | `TECH-ARCHITECTURE_Blotto-Cup_v0.2.md` §9 | Architect-owned |
-| Roadmap and phase scope | `BUILD-ROADMAP_v1.0.md` (replaces TECH-ARCH §12 per its §1.4) | A phase flips only with the work that earns its gate |
+| Roadmap and phase scope | `BUILD-ROADMAP_v1.0.md` (replaces TECH-ARCH §12 per its §1.4) | A phase flips only with the work that passes its gate |
 | Acceptance criteria | `TECH-ARCHITECTURE_Blotto-Cup_v0.2.md` §13 | Architect-owned |
 | What was carried from the old repo and what was not | `REPO-EXTRACTION-BRIEF_v1.1.md` (intent) · `../EXTRACTION-REPORT.md` (what actually happened) | The report wins on facts; the brief wins on intent |
 | Keys, custody, infrastructure provisioning | `REPO-TRANSITION-PLAYBOOK.md` (intent) · `../TRANSITION-REPORT.md` (state) | The report wins on facts |
