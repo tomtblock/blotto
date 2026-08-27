@@ -101,7 +101,7 @@ pub fn handle_commit_results(
     let mut total: u128 = 0;
     for (i, p) in payouts.iter().enumerate() {
         require!(
-            (p.entry_index as u16) < pool.entrants,
+            p.entry_index < pool.entrants,
             ErrorCode::PayoutListMalformed
         );
         if i > 0 {

@@ -64,7 +64,10 @@ describe('pool vectors (20 four-player + 5 full + edge cases)', () => {
           `amount of seat ${expected.index}`
         ).to.equal(expected.amount_lamports);
       }
-      expect(rankOrder(results)).to.deep.equal(pool.leaf_order);
+      // leaf_order is comma-joined in the fixture (a bare 64-integer JSON
+      // array is exactly a Solana keypair's shape; the gitleaks rule stays
+      // strict instead of gaining an allowlist).
+      expect(rankOrder(results)).to.deep.equal(pool.leaf_order.split(',').map(Number));
       // The committed payout list: nonzero seats, seat-sorted.
       const myPayouts = results
         .filter((r) => r.amountLamports > 0n)

@@ -223,7 +223,10 @@ def pool_vector(
             {"battles": p, "battles_hex": encode_battles(p).hex()} for p in players
         ],
         "results": results,
-        "leaf_order": [r["index"] for r in by_rank],
+        # Comma-joined rather than a JSON array: a bare 64-integer array is
+        # exactly the shape of a Solana keypair, and the gitleaks rule that
+        # guards against committed keypairs must stay strict (no allowlist).
+        "leaf_order": ",".join(str(r["index"]) for r in by_rank),
         # The on-chain committed payout list: nonzero seats, seat-sorted.
         "payouts": [
             {"entry_index": seat, "amount": str(amount)}

@@ -142,7 +142,11 @@ impl Model {
         }
         // Seeded permutation of the seats = the ranking (rank 1 first).
         let stride = 1 + (seed as usize) % 63; // 1..=63; 64 is 2^6, odd strides
-        let stride = if stride % 2 == 0 { stride + 1 } else { stride }; // coprime to 64
+        let stride = if stride.is_multiple_of(2) {
+            stride + 1
+        } else {
+            stride
+        }; // coprime to 64
         let start = (seed as usize / 64) % CAP;
         let ranking: Vec<usize> = (0..CAP).map(|i| (start + i * stride) % CAP).collect();
         // Seeded tie-group sizes over the ranking: group size 1..=4, plus a
@@ -156,7 +160,7 @@ impl Model {
             g = g
                 .wrapping_mul(6364136223846793005)
                 .wrapping_add(1442695040888963407);
-            let size = if pos == 0 && g % 11 == 0 {
+            let size = if pos == 0 && g.is_multiple_of(11) {
                 CAP // everyone tied
             } else {
                 1 + (g as usize % 4).min(CAP - pos - 1)
