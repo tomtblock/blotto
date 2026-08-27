@@ -1,0 +1,142 @@
+/**
+ * The skill-evidence strategy ladder (D-A2, ratified 2026-08-27) — four
+ * strategy classes of increasing deliberateness, used to measure how outcome
+ * distributions differ by how considered an entrant's play is.
+ *
+ * These are DISTINCT from `strategies.ts` (the detection-oriented population
+ * shapes of roadmap 5.1). The ladder exists for one purpose: run mixed
+ * populations through the real crank at scale and publish the observed
+ * outcome statistics per class (`docs/skill-evidence/REPORT.md`).
+ *
+ *   uniform    — 20/20/20/20/20 every battle: the zero-thought baseline.
+ *   random     — valid free-integer allocations with no intent behind them.
+ *   heuristic  — a considered plan: concentrate on three stats per battle
+ *                (a battle is won by taking three of five), steep split,
+ *                small nonzero amounts on the remaining two.
+ *   optimised  — the same three-stat family, tuned: slightly higher trio
+ *                values funded from the off-stats, a per-entrant rotation
+ *                schedule over the ten possible trios, seeded jitter to
+ *                avoid exact mirror ties.
+ *
+ * Rationale and per-class documentation: tests/rehearsal/strategies/README.md.
+ * Everything is deterministic per (class, seed): sha256 streams only — no
+ * Date, no Math.random — so a run is reproducible from its base seed.
+ */
+
+import { createHash } from 'crypto';
+import type { GeneratedEntrant } from './strategies';
+
+export type LadderClass = 'uniform' | 'random' | 'heuristic' | 'optimised';
+export const LADDER: readonly LadderClass[] = ['uniform', 'random', 'heuristic', 'optimised'];
+
+const sha = (s: string) => createHash('sha256').update(s).digest();
+
+/** All ten 3-of-5 stat trios, in a fixed order. */
+const TRIOS: readonly (readonly [number, number, number])[] = [
+  [0, 1, 2], [0, 1, 3], [0, 1, 4], [0, 2, 3], [0, 2, 4],
+  [0, 3, 4], [1, 2, 3], [1, 2, 4], [1, 3, 4], [2, 3, 4],
+];
+
+function freeAllocation(seedStr: string): number[] {
+  const h = sha(seedStr);
+  const d = [0, 1, 2, 3]
+    .map((k) => (h[k * 2] | (h[k * 2 + 1] << 8)) % 101)
+    .sort((a, b) => a - b);
+  return [d[0], d[1] - d[0], d[2] - d[1], d[3] - d[2], 100 - d[3]];
+}
+
+/**
+ * Place `trioValues` on the trio's stats and `offValues` on the remaining
+ * two, applying a seeded ±jitter that moves points BETWEEN trio stats so the
+ * sum stays exactly 100 and mirror matchups do not tie stat-for-stat.
+ */
+function concentrated(
+  trio: readonly [number, number, number],
+  trioValues: [number, number, number],
+  offValues: [number, number],
+  jitterSeed: string,
+  jitterMax: number
+): number[] {
+  const values: [number, number, number] = [...trioValues];
+  const h = sha(jitterSeed);
+  const from = h[0] % 3;
+  const to = h[1] % 3;
+  const amount = h[2] % (jitterMax + 1);
+  if (from !== to && values[from] - amount > offValues[0]) {
+    values[from] -= amount;
+    values[to] += amount;
+  }
+  const out = [0, 0, 0, 0, 0];
+  trio.forEach((stat, i) => {
+    out[stat] = values[i];
+  });
+  let off = 0;
+  for (let stat = 0; stat < 5; stat++) {
+    if (!trio.includes(stat)) out[stat] = offValues[off++];
+  }
+  return out;
+}
+
+/** One ladder entrant: seven valid battles + plausible deterministic timings. */
+export function generateLadderEntrant(cls: LadderClass, seed: number): GeneratedEntrant {
+  const battles: number[][] = [];
+  const timingsMs: number[] = [];
+  for (let k = 0; k < 7; k++) {
+    const key = `ladder:${cls}:${seed}:${k}`;
+    switch (cls) {
+      case 'uniform':
+        battles.push([20, 20, 20, 20, 20]);
+        timingsMs.push(900 + (sha(`t:${key}`)[0] % 700));
+        break;
+      case 'random':
+        battles.push(freeAllocation(key));
+        timingsMs.push(2500 + (sha(`t:${key}`)[0] % 9000));
+        break;
+      case 'heuristic': {
+        // Trio re-picked per battle; steep 38/31/21 split, 6/4 off-stats.
+        const trio = TRIOS[sha(key)[3] % TRIOS.length];
+        battles.push(concentrated(trio, [38, 31, 21], [6, 4], `j:${key}`, 2));
+        timingsMs.push(5000 + (sha(`t:${key}`)[0] % 7000));
+        break;
+      }
+      case 'optimised': {
+        // Per-entrant rotation over all ten trios; trio values one-upped
+        // from the heuristic family, funded from the off-stats (4/3),
+        // wider jitter so mirror matchups break asymmetrically.
+        const start = sha(`rot:${cls}:${seed}`)[0] % TRIOS.length;
+        const trio = TRIOS[(start + k) % TRIOS.length];
+        battles.push(concentrated(trio, [39, 32, 22], [4, 3], `j:${key}`, 3));
+        timingsMs.push(3500 + (sha(`t:${key}`)[0] % 4000));
+        break;
+      }
+    }
+  }
+  for (const b of battles) {
+    const sum = b.reduce((a, v) => a + v, 0);
+    if (sum !== 100 || b.some((v) => v < 0 || v > 100)) {
+      throw new Error(`ladder class ${cls} produced an invalid allocation: ${b}`);
+    }
+  }
+  return { strategy: cls, battles, timingsMs };
+}
+
+/**
+ * One study pool: 16 entrants of each class, seat order shuffled by a
+ * seeded Fisher–Yates so class membership is uncorrelated with seat index
+ * (seat order places the indivisible remainder of a tie split and the leaf
+ * order — never who is paid — but the study removes even that correlation).
+ */
+export function ladderPopulation(poolSeed: number): GeneratedEntrant[] {
+  const out: GeneratedEntrant[] = [];
+  LADDER.forEach((cls, c) => {
+    for (let i = 0; i < 16; i++) {
+      out.push(generateLadderEntrant(cls, poolSeed * 1000 + c * 100 + i));
+    }
+  });
+  for (let i = out.length - 1; i > 0; i--) {
+    const h = sha(`shuffle:${poolSeed}:${i}`);
+    const j = (h[0] | (h[1] << 8)) % (i + 1);
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}

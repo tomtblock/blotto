@@ -10,7 +10,8 @@
   "main": "src/index.ts",
   "scripts": {
     "test": "ts-mocha -p ./tsconfig.json -t 300000 \"test/**/*.spec.ts\"",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "skill-evidence": "ts-node --project ./tsconfig.json src/skill-evidence-run.ts"
   },
   "devDependencies": {
     "@types/chai": "^4.3.0",

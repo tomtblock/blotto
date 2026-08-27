@@ -1,0 +1,41 @@
+# skill-evidence — the nightly evidence lane (D-A2, ratified 2026-08-27).
+#
+# Re-runs the full 200-pool skill-evidence study (deterministic from its base
+# seed) and fails if a fresh run no longer reproduces the committed
+# docs/skill-evidence/results.csv + REPORT.md. An engine change that shifts
+# outcome statistics must land together with regenerated evidence — this lane
+# turns silent drift into a red build.
+#
+# Nightly, not per push (ratified): the study runs ~200 × 64-entrant pools
+# through the real crank and takes minutes, not seconds. workflow_dispatch is
+# kept for on-demand runs.
+name: skill-evidence
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  study:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install workspace dependencies the study imports
+        run: |
+          (cd backend/_shared && npm ci)
+          (cd backend/scoring && npm ci)
+          (cd backend/class-digest && npm ci)
+          (cd backend/sealing && npm ci)
+          (cd backend/detection && npm ci)
+          (cd backend/reveal && npm ci)
+          (cd tests/rehearsal && npm ci)
+      - name: Reproduce the committed evidence (200 pools)
+        run: cd tests/rehearsal && SKILL_EVIDENCE_CHECK=1 npm run skill-evidence

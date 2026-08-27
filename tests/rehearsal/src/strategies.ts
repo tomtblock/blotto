@@ -25,7 +25,8 @@ export const STRATEGIES: readonly StrategyName[] = [
 ];
 
 export interface GeneratedEntrant {
-  strategy: StrategyName;
+  /** A `StrategyName`, or a ladder class from `ladder.ts` (D-A2). */
+  strategy: string;
   battles: number[][];
   timingsMs: number[];
 }
