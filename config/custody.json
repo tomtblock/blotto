@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "programId": "5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17",
+  "upgradeAuthority": null,
+  "multisig": {
+    "threshold": null,
+    "memberCount": null,
+    "timelockHours": null
+  },
+  "keys": {
+    "admin": null,
+    "entrySigner": null,
+    "settlementSigner": null,
+    "platformWallet": null,
+    "irysUploadWallet": null
+  },
+  "updated": "2026-08-27"
+}
