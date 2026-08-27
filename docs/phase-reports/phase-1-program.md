@@ -152,3 +152,14 @@ the LiteSVM suite.
 - **mpl-core stack-offset warnings** at `anchor build` are dead code
   (deserializers this program never calls) — documented in the program's
   `Cargo.toml`; our own frames are clean.
+
+---
+
+## Founder ratifications (2026-08-27)
+
+The three Phase 1/2 judgement calls put to the founder were ratified as
+built: **(1)** forfeited escrow transfers automatically to the platform
+wallet once a review decision is made (no successor-vault forwarding);
+**(2)** the 20% platform share is program-held in the fees PDA until seal;
+**(3)** payouts land in batches of four with winners and amounts fixed
+on-chain at commit. Note kept with the decisions it closes.
