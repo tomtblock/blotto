@@ -93,10 +93,16 @@ jobs:
           key: onchain-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'tests/litesvm/Cargo.lock') }}
           restore-keys: onchain-${{ runner.os }}-
 
+      # CI holds no program keypair (it never deploys), so anchor generates a
+      # throwaway one whose pubkey cannot match declare_id — --ignore-keys
+      # skips exactly that check. The artifact still compiles with the
+      # SOURCE's declared id, which is what LiteSVM drives; the deploy path
+      # (scripts/deploy-devnet.sh) keeps the strict keypair-vs-declare_id
+      # guard.
       - name: anchor build
         run: |
           export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
-          anchor build
+          anchor build --ignore-keys
 
       - name: LiteSVM suite against the built artifact
         run: |
