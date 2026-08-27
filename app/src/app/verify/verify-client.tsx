@@ -5,10 +5,11 @@
  * IN-BROWSER — the same scoring engine the crank runs, over the published
  * bundle and the on-chain record. Two inputs, one report, green or red.
  *
- * The on-chain record arrives via the indexer read API's /verify-record
- * endpoint (assembled from raw events); the bundle from its published URI.
- * Both can also be pasted, so verification works against a hostile or
- * absent operator — the wallet is never involved.
+ * C11: both inputs AUTO-FETCH — the on-chain record from the indexer read
+ * API's /verify-record for a pasted pool address, the bundle from its
+ * published URI (the Irys gateway address the crank emitted). Pasting the
+ * JSON directly still works and always will: verification must work
+ * against a hostile or absent operator — the wallet is never involved.
  */
 
 import { useState } from 'react';
@@ -16,10 +17,41 @@ import { COPY } from '@/copy';
 import { verifyPool, type OnChainRecord, type PublishedBundle, type VerifyReport } from '@/verify/logic';
 
 export function VerifyClient() {
+  const [pool, setPool] = useState('');
+  const [bundleUri, setBundleUri] = useState('');
   const [bundleText, setBundleText] = useState('');
   const [recordText, setRecordText] = useState('');
   const [report, setReport] = useState<VerifyReport | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [fetching, setFetching] = useState(false);
+
+  const autoFetch = async () => {
+    setError(null);
+    setFetching(true);
+    try {
+      // The on-chain record from the indexer read API (paste overrides).
+      const indexerBase = process.env.NEXT_PUBLIC_INDEXER_URL;
+      if (pool.trim() && indexerBase) {
+        const res = await fetch(
+          `${indexerBase}/pools/${encodeURIComponent(pool.trim())}/verify-record`,
+          { cache: 'no-store' }
+        );
+        if (!res.ok) throw new Error(`verify-record: ${res.status}`);
+        setRecordText(JSON.stringify(await res.json(), null, 2));
+      } else if (pool.trim() && !indexerBase) {
+        throw new Error('indexer not configured (NEXT_PUBLIC_INDEXER_URL) — paste the record');
+      }
+      // The published bundle from its permanent URI.
+      if (bundleUri.trim()) {
+        const res = await fetch(bundleUri.trim(), { cache: 'no-store' });
+        if (!res.ok) throw new Error(`bundle fetch: ${res.status}`);
+        setBundleText(JSON.stringify(await res.json(), null, 2));
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+    setFetching(false);
+  };
 
   const run = () => {
     try {
@@ -37,6 +69,32 @@ export function VerifyClient() {
     <section className="flex flex-col gap-4">
       <h1 className="text-2xl">{COPY.verify.title}</h1>
       <p className="text-sm opacity-80">{COPY.verify.explainer}</p>
+      <div className="flex flex-col gap-2 rounded border p-3">
+        <label className="flex flex-col gap-1 text-sm">
+          Pool address (fetches the on-chain record)
+          <input
+            className="rounded border bg-transparent p-2 font-mono text-xs"
+            value={pool}
+            onChange={(e) => setPool(e.target.value)}
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-sm">
+          Published bundle URI (the pool page links it)
+          <input
+            className="rounded border bg-transparent p-2 font-mono text-xs"
+            value={bundleUri}
+            onChange={(e) => setBundleUri(e.target.value)}
+          />
+        </label>
+        <button
+          type="button"
+          className="self-start rounded border px-4 py-1"
+          disabled={fetching || (!pool.trim() && !bundleUri.trim())}
+          onClick={autoFetch}
+        >
+          {fetching ? '…' : 'Fetch both'}
+        </button>
+      </div>
       <label className="flex flex-col gap-1 text-sm">
         Published reveal bundle (JSON)
         <textarea

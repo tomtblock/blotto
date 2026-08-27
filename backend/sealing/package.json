@@ -14,6 +14,8 @@
   },
   "dependencies": {
     "@noble/hashes": "^1.5.0",
+    "@turnkey/crypto": "^2.11.3",
+    "@turnkey/sdk-server": "^8.2.1",
     "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
