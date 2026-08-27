@@ -1,16 +1,19 @@
 //! Blotto Cup on-chain program.
 //!
-//! Phase 1 (roadmap Phase 1): the full pool lifecycle. Everything the vault
-//! does is here; nothing else holds money.
+//! Phase 1 (roadmap Phase 1): the full pool lifecycle. Money lives in
+//! exactly two places — the per-pool prize vaults and the platform treasury
+//! PDA (D-A1 revised) — and every transfer goes through `vault.rs`.
 //!
 //! # Two invariants that outrank any instruction added later
 //!
-//! **The prize vault has no withdraw instruction.** The only lamport exits
-//! are `pay_prizes`, `release_escrow`, `refund` and `forfeit_escrow`
-//! (roadmap §1.4; the fourth is its own design's forfeit path — see
-//! `vault.rs`). There is no admin path, no escape hatch, no
-//! recover-stuck-funds instruction. Every transfer goes through `vault.rs`,
-//! and the standing-rules CI check pins that file's call sites.
+//! **The prize vault has no withdraw instruction.** Its only lamport exits
+//! are `pay_prizes`, `release_escrow`, `trigger_refund`'s pot return and
+//! `forfeit_escrow` (D-A1 revised: `refund` repays entries from the
+//! TREASURY, and the refund fork returns the untouched pot treasury-ward).
+//! The platform treasury is a separate account with its own single gated
+//! exit, `withdraw_platform` — a new account, not a fifth exit on the prize
+//! vault. There is no escape hatch and no recover-stuck-funds instruction;
+//! the standing-rules CI check pins `vault.rs`'s call sites.
 //!
 //! **There is no instruction that can thaw a character pass.** See `pass.rs`.
 //!
@@ -57,20 +60,21 @@ pub mod blotto_cup {
     // ---- Admin (Squads vault only) --------------------------------------
 
     /// One-time global setup. Signer becomes admin; launch policy per the
-    /// decision register (only the 0.1 tier open, every switch off).
+    /// decision register (only the 0.1 tier open, every switch off; tier
+    /// prices and pots seeded from the launch constants — D-A1 revised).
     pub fn init_config(
         ctx: Context<InitConfig>,
         entry_signer: Pubkey,
         settlement_signer: Pubkey,
-        platform_wallet: Pubkey,
         vault_ceiling_lamports: [u64; N_TIERS],
+        treasury_min_platform_lamports: u64,
     ) -> Result<()> {
         instructions::handle_init_config(
             ctx,
             entry_signer,
             settlement_signer,
-            platform_wallet,
             vault_ceiling_lamports,
+            treasury_min_platform_lamports,
         )
     }
 
@@ -114,9 +118,47 @@ pub mod blotto_cup {
         instructions::handle_set_detection_hard_block(ctx, on)
     }
 
+    /// One tier's price and pot (D-A1 revised; founder-owned numbers).
+    /// Never touches an open pool — every pool copies both at open.
+    pub fn set_tier_economics(
+        ctx: Context<AdminTreasury>,
+        tier: u8,
+        price_lamports: u64,
+        pot_lamports: u64,
+    ) -> Result<()> {
+        instructions::handle_set_tier_economics(ctx, tier, price_lamports, pot_lamports)
+    }
+
+    /// The treasury policy: `reserve_pots` further pots per idle enabled
+    /// tier plus a minimum balance, both held back from `withdraw_platform`
+    /// and required before `open_pool` funds a pot.
+    pub fn set_treasury_policy(
+        ctx: Context<AdminTreasury>,
+        reserve_pots: u8,
+        min_platform_lamports: u64,
+    ) -> Result<()> {
+        instructions::handle_set_treasury_policy(ctx, reserve_pots, min_platform_lamports)
+    }
+
+    // ---- Platform treasury (D-A1 revised) -------------------------------
+
+    /// Anyone: deposit lamports into the platform treasury (the founder's
+    /// bootstrap path, and where every pass sale lands).
+    pub fn fund_platform_wallet(ctx: Context<FundPlatformWallet>, amount: u64) -> Result<()> {
+        instructions::handle_fund_platform_wallet(ctx, amount)
+    }
+
+    /// Admin (Squads): the ONE treasury exit, blocked below the policy
+    /// floor (minimum balance + idle-tier pot reserve + refundable entries).
+    pub fn withdraw_platform(ctx: Context<WithdrawPlatform>, amount: u64) -> Result<()> {
+        instructions::handle_withdraw_platform(ctx, amount)
+    }
+
     // ---- Pool lifecycle -------------------------------------------------
 
-    /// Open a pool in a tier (settlement signer; R6/R14 checks inside).
+    /// Anyone: open a pool in a tier (D-A1 revised — permissionless; the
+    /// gates are the tier's enablement, the SEQUENTIAL rule, and the
+    /// treasury policy; the pot funds from the treasury before any entry).
     pub fn open_pool(
         ctx: Context<OpenPool>,
         pool_id: u64,
@@ -200,7 +242,7 @@ pub mod blotto_cup {
         instructions::handle_release_escrow(ctx, pool_id)
     }
 
-    /// Move an upheld flag's escrowed share to the platform wallet.
+    /// Move an upheld flag's escrowed share to the platform treasury.
     pub fn forfeit_escrow(ctx: Context<ForfeitEscrow>, pool_id: u64) -> Result<()> {
         instructions::handle_forfeit_escrow(ctx, pool_id)
     }
@@ -212,8 +254,8 @@ pub mod blotto_cup {
         instructions::handle_trigger_refund(ctx, pool_id)
     }
 
-    /// Anyone: refund one entry in full (80% from the vault + 20% from the
-    /// fees PDA).
+    /// Anyone: refund one entry in full from the platform treasury (where
+    /// 100% of the entry price landed at `register` — D-A1 revised).
     pub fn refund(ctx: Context<Refund>, pool_id: u64) -> Result<()> {
         instructions::handle_refund(ctx, pool_id)
     }

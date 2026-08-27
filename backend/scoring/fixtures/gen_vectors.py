@@ -16,7 +16,9 @@ Scoring rules implemented (PID §4.4/§5, TECH-ARCH §6):
     BOTH are TIED (D3-B, ratified 2026-08-27) and share a COMPETITION rank
     (1, 2, 2, 4 — one plus the number of strictly-better players); entry
     index never breaks a rank
-  - prizes: pot = 64 x 80% x entry; a tie group at rank r of size s occupies
+  - prizes: the pot is the tier's FIXED constant (D-A1 revised, funded from
+    the prize treasury at open_pool, never derived from entries — the launch
+    table below); a tie group at rank r of size s occupies
     positions r..r+s-1 and its combined prize is the sum of the band amounts
     of those positions that are <= 16 (PRIZE_BANDS_1024[p-1]/1024 of the pot
     each — exact 1024ths, NOT the rounded bps column, see
@@ -46,7 +48,23 @@ BATTLES = 7
 CAPACITY = 64
 PRIZE_BANDS_1024 = [270, 158, 102, 78, 50, 50, 50, 50, 27, 27, 27, 27, 27, 27, 27, 27]
 ENTRY_LAMPORTS = 100_000_000  # the 0.1 SOL tier anchors every amount vector
-POT = ENTRY_LAMPORTS * 8 // 10 * CAPACITY  # 5_120_000_000
+# The launch economics table (D1 prices; D-A1 revised FIXED pots) — mirrors
+# constants.rs. A pot is a table entry, never arithmetic over entries.
+TIER_ENTRY_LAMPORTS = [
+    100_000_000, 500_000_000, 750_000_000, 1_000_000_000,
+    2_500_000_000, 5_000_000_000, 7_500_000_000,
+]
+TIER_POT_LAMPORTS = [
+    5_120_000_000, 25_600_000_000, 38_400_000_000, 51_200_000_000,
+    128_000_000_000, 256_000_000_000, 384_000_000_000,
+]
+
+
+def pot_for_entry(entry_lamports: int) -> int:
+    return TIER_POT_LAMPORTS[TIER_ENTRY_LAMPORTS.index(entry_lamports)]
+
+
+POT = pot_for_entry(ENTRY_LAMPORTS)  # 5_120_000_000
 
 
 def sha256(b: bytes) -> bytes:
@@ -210,7 +228,7 @@ def pool_vector(
     entry_lamports: int = ENTRY_LAMPORTS,
 ) -> dict:
     results = score_pool(players)
-    pot = entry_lamports * 8 // 10 * CAPACITY
+    pot = pot_for_entry(entry_lamports)
     amounts = assign_prizes(results, pot)
     for r in results:
         r["amount_lamports"] = str(amounts[r["index"]])
@@ -260,7 +278,7 @@ def split_case(name: str, group_sizes: list[int], entry_lamports: int) -> dict:
             results.append({"index": seat, "rank": rank})
             seat += 1
         rank += size
-    pot = entry_lamports * 8 // 10 * CAPACITY
+    pot = pot_for_entry(entry_lamports)
     amounts = assign_prizes(results, pot)
     return {
         "name": name,
@@ -323,7 +341,7 @@ def main() -> None:
     tier_tables = [
         {
             "entry_lamports": str(entry),
-            "pot_lamports": str(entry * 8 // 10 * CAPACITY),
+            "pot_lamports": str(pot_for_entry(entry)),
             "bands": [str(band_amount(entry * 8 // 10 * CAPACITY, p)) for p in range(1, 17)],
         }
         for entry in (100_000_000, 500_000_000, 750_000_000, 1_000_000_000,

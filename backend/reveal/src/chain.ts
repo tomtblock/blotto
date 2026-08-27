@@ -5,7 +5,7 @@
  * rehearsal drives.
  */
 
-import { TIER_ENTRY_LAMPORTS } from '../../scoring/src';
+import { TIER_ENTRY_LAMPORTS, TIER_POT_LAMPORTS } from '../../scoring/src';
 
 export type PoolStateName = 'Open' | 'Sealed' | 'Scored' | 'Paid' | 'Refunding' | 'Closed';
 
@@ -21,6 +21,10 @@ export interface ChainPoolView {
   tier: number;
   state: PoolStateName;
   entryLamports: bigint;
+  /** The FIXED pot (D-A1 revised), copied from Config at open and funded
+   * into the prize vault before any pass is sold. Settlement reads THIS —
+   * never the launch table, which the founder can change between pools. */
+  potLamports: bigint;
   fillDeadline: bigint;
   /** `Pool.vrf_seed` non-zero — `register` requires it (the daemon completes it). */
   vrfCommitted: boolean;
@@ -38,10 +42,23 @@ export interface ChainConfigView {
   paused: boolean;
   /** R6/D1 switchboard: which tiers may open pools. */
   openTiers: boolean[];
-  /** The currently-Open pool id per tier; 0n = none (R14). */
+  /** The tier's LIVE pool id; 0n = none. SEQUENTIAL since D-A1 revised:
+   * the slot clears only when the pool reaches Paid or Closed. */
   activePoolByTier: bigint[];
   /** The id `open_pool` must be called with next (gapless, monotonic). */
   nextPoolId: bigint;
+  /** Per-tier entry price / FIXED pot (D-A1 revised; founder-changeable via
+   * set_tier_economics, never touching an open pool). */
+  tierPriceLamports: bigint[];
+  tierPotLamports: bigint[];
+  /** Treasury policy: reserve_pots further pots per idle enabled tier plus
+   * a minimum balance, held back from withdrawals and required at open. */
+  treasuryReservePots: number;
+  treasuryMinPlatformLamports: bigint;
+  /** Pots currently locked in live pools' prize vaults. */
+  platformReserved: bigint;
+  /** Entry payments of pools that can still refund — program-held (R7). */
+  platformRefundable: bigint;
 }
 
 export interface ChainEntryView {
@@ -101,9 +118,11 @@ export interface KeeperChain extends SettlementChain {
   initConfig(args: {
     entrySigner: string;
     settlementSigner: string;
-    platformWallet: string;
     vaultCeilingLamports: bigint[];
+    treasuryMinPlatformLamports: bigint;
   }): Promise<void>;
+  /** The platform treasury PDA's lamport balance (the keeper's policy input). */
+  getPlatformBalance(): Promise<bigint>;
 }
 
 /**
@@ -129,12 +148,38 @@ export class FakeChain implements KeeperChain {
   config: ChainConfigView | null = null;
   /** R7 deadline offset applied by openPool, seconds. Tests may shrink it. */
   fillDeadlineSecs = 72n * 3600n;
-  /** pot per entry price, injected by tests (mirrors `pot()` on-chain);
-   * `now` injects the clock (mirrors `Clock::get`), defaulting to 0. */
-  constructor(
-    private readonly pot: (entry: bigint) => bigint,
-    readonly now: () => bigint = () => 0n
-  ) {}
+  /** The platform treasury PDA's balance (D-A1 revised). Deposits via
+   * `fundPlatform`; `openPool` moves pots out; refunds pay from here. */
+  platform = 0n;
+  /** Per-pool refundable entry payments (Σ = Config.platform_refundable).
+   * Only entries landed through `registerEntry` move money — tests that
+   * push into `entries` directly leave the treasury untouched, exactly as
+   * they always have. */
+  private refundableByPool = new Map<string, bigint>();
+  /** `now` injects the clock (mirrors `Clock::get`), defaulting to 0. */
+  constructor(readonly now: () => bigint = () => 0n) {}
+
+  /** `fund_platform_wallet` — permissionless deposit. */
+  fundPlatform(amount: bigint): void {
+    if (amount <= 0n) throw new Error('ZeroAmount');
+    this.platform += amount;
+  }
+
+  /** The v2 register money model: 100% of the price into the treasury,
+   * tracked refundable until seal. Pushes the entry and, at 64, seals. */
+  registerEntry(poolId: bigint, entry: ChainEntryView): void {
+    const p = this.pools.get(poolId.toString());
+    if (!p) throw new Error(`no pool ${poolId}`);
+    if (p.state !== 'Open') throw new Error('PoolNotOpen');
+    const key = poolId.toString();
+    const list = this.entries.get(key) ?? [];
+    list.push(entry);
+    this.entries.set(key, list);
+    p.entrants = list.length;
+    this.platform += p.entryLamports;
+    this.refundableByPool.set(key, (this.refundableByPool.get(key) ?? 0n) + p.entryLamports);
+    if (p.entrants === 64) this.sealPool(poolId);
+  }
 
   async getPool(poolId: bigint): Promise<ChainPoolView> {
     const p = this.pools.get(poolId.toString());
@@ -169,7 +214,7 @@ export class FakeChain implements KeeperChain {
       }
       total += x.amountLamports;
     });
-    if (total !== this.pot(p.entryLamports)) throw new Error('PayoutSumMismatch');
+    if (total !== p.potLamports) throw new Error('PayoutSumMismatch');
     p.resultsCommitted = true;
     p.payouts = payouts.map((x) => ({ ...x }));
     p.state = 'Scored';
@@ -203,6 +248,10 @@ export class FakeChain implements KeeperChain {
     }
     if (p.payouts.every((x) => p.paidMask & (1n << BigInt(x.entryIndex)))) {
       p.state = 'Paid';
+      // Sequential pools (D-A1 revised): Paid frees the tier's slot and
+      // releases the pot from the treasury's book-keeping.
+      this.reserved -= p.potLamports;
+      this.clearActiveSlot(poolId, p.tier);
     }
   }
 
@@ -234,6 +283,8 @@ export class FakeChain implements KeeperChain {
     if (amount === 0n) throw new Error('NoEscrow');
     this.escrowed.delete(player);
     this.forfeited.set(player, (this.forfeited.get(player) ?? 0n) + amount);
+    // D-A1 revised: the forfeit destination is the platform treasury PDA.
+    this.platform += amount;
     void poolId;
   }
 
@@ -241,7 +292,11 @@ export class FakeChain implements KeeperChain {
     const p = this.pools.get(poolId.toString())!;
     if (p.state !== 'Open') throw new Error('PoolNotOpen');
     p.state = p.entrants === 0 ? 'Closed' : 'Refunding';
-    this.clearActiveSlot(poolId, p.tier);
+    // The untouched pot returns to the treasury (refund.rs).
+    this.platform += p.potLamports;
+    this.reserved -= p.potLamports;
+    // Sequential pools: the slot frees only when the pool CLOSES.
+    if (p.state === 'Closed') this.clearActiveSlot(poolId, p.tier);
   }
 
   async refund(poolId: bigint, player: string): Promise<void> {
@@ -252,8 +307,14 @@ export class FakeChain implements KeeperChain {
     if (e.refunded) throw new Error('AlreadyRefunded');
     e.refunded = true;
     this.paid.set(player, (this.paid.get(player) ?? 0n) + p.entryLamports);
-    if ((this.entries.get(poolId.toString()) ?? []).every((x) => x.refunded)) {
+    // The full price back from the treasury (refund.rs).
+    this.platform -= p.entryLamports;
+    const key = poolId.toString();
+    const contribution = this.refundableByPool.get(key) ?? 0n;
+    if (contribution > 0n) this.refundableByPool.set(key, contribution - p.entryLamports);
+    if ((this.entries.get(key) ?? []).every((x) => x.refunded)) {
       p.state = 'Closed';
+      this.clearActiveSlot(poolId, p.tier);
     }
   }
 
@@ -265,23 +326,47 @@ export class FakeChain implements KeeperChain {
       ...this.config,
       openTiers: [...this.config.openTiers],
       activePoolByTier: [...this.config.activePoolByTier],
+      tierPriceLamports: [...this.config.tierPriceLamports],
+      tierPotLamports: [...this.config.tierPotLamports],
+      platformReserved: this.reserved,
+      platformRefundable: this.refundable,
     };
   }
+
+  async getPlatformBalance(): Promise<bigint> {
+    return this.platform;
+  }
+
+  /** Σ per-pool refundable contributions (= Config.platform_refundable). */
+  get refundable(): bigint {
+    let total = 0n;
+    for (const v of this.refundableByPool.values()) total += v;
+    return total;
+  }
+
+  /** Pots locked in live pools (= Config.platform_reserved). */
+  reserved = 0n;
 
   async initConfig(args: {
     entrySigner: string;
     settlementSigner: string;
-    platformWallet: string;
     vaultCeilingLamports: bigint[];
+    treasuryMinPlatformLamports: bigint;
   }): Promise<void> {
     if (this.config) throw new Error('already in use'); // Anchor `init` on an existing PDA
-    void args;
-    // Launch policy baked into the handler: only tier 0 open, ids from 1.
+    // Launch policy baked into the handler: only tier 0 open, ids from 1,
+    // prices and pots from the launch tables, reserve_pots = 1.
     this.config = {
       paused: false,
       openTiers: [true, false, false, false, false, false, false],
       activePoolByTier: [0n, 0n, 0n, 0n, 0n, 0n, 0n],
       nextPoolId: 1n,
+      tierPriceLamports: [...TIER_ENTRY_LAMPORTS],
+      tierPotLamports: [...TIER_POT_LAMPORTS],
+      treasuryReservePots: 1,
+      treasuryMinPlatformLamports: args.treasuryMinPlatformLamports,
+      platformReserved: 0n,
+      platformRefundable: 0n,
     };
   }
 
@@ -297,12 +382,30 @@ export class FakeChain implements KeeperChain {
     if (tier < 0 || tier >= cfg.openTiers.length) throw new Error('UnknownTier');
     if (!cfg.openTiers[tier]) throw new Error('TierNotOpen');
     if (cfg.activePoolByTier[tier] !== 0n) throw new Error('TierAlreadyHasOpenPool');
+    // The treasury policy gate (open_pool.rs): available = balance minus
+    // refundable entries; after funding this pot the remainder must cover
+    // the minimum plus one further pot of every OTHER enabled idle tier.
+    const pot = cfg.tierPotLamports[tier];
+    const available = this.platform - this.refundable;
+    let idleReserve = 0n;
+    for (let t = 0; t < cfg.openTiers.length; t++) {
+      if (t === tier) continue;
+      if (cfg.openTiers[t] && cfg.activePoolByTier[t] === 0n) {
+        idleReserve += cfg.tierPotLamports[t] * BigInt(cfg.treasuryReservePots);
+      }
+    }
+    const needed = pot + cfg.treasuryMinPlatformLamports + idleReserve;
+    if (available < needed) throw new Error('TreasuryShortfall');
+    // Fund the pot: treasury → the pool's prize vault, before any entry.
+    this.platform -= pot;
+    this.reserved += pot;
     const now = this.now();
     this.pools.set(poolId.toString(), {
       poolId,
       tier,
       state: 'Open',
-      entryLamports: TIER_ENTRY_LAMPORTS[tier], // D1, same table the program bakes in
+      entryLamports: cfg.tierPriceLamports[tier],
+      potLamports: pot,
       fillDeadline: now + this.fillDeadlineSecs,
       vrfCommitted: false,
       secretRevealed: false,
@@ -343,12 +446,13 @@ export class FakeChain implements KeeperChain {
   }
 
   /** Test helper mirroring the 64th `register`: the pool seals and its
-   * tier slot frees (register.rs clears `active_pool_by_tier`). */
+   * entries become revenue. The tier slot is NOT freed here — SEQUENTIAL
+   * pools (D-A1 revised): only Paid or Closed clears it. */
   sealPool(poolId: bigint): void {
     const p = this.pools.get(poolId.toString())!;
     p.state = 'Sealed';
     p.entrants = this.entries.get(poolId.toString())?.length ?? p.entrants;
-    this.clearActiveSlot(poolId, p.tier);
+    this.refundableByPool.delete(poolId.toString());
   }
 
   private clearActiveSlot(poolId: bigint, tier: number): void {

@@ -78,7 +78,7 @@ fn tier_2_and_tier_6_pools_settle_with_the_report_table_amounts() {
     // ---- tier 2: 0.75 SOL entry, 38.4 SOL pot ----
     env.open_ready_pool(1, 2);
     let players = fill_and_reveal(&mut env, 1);
-    let payouts = band_payouts(750_000_000);
+    let payouts = band_payouts(TIER_POTS[2]); // 38.4 SOL fixed pot
     // The step report's tier-2 prize table, to the lamport.
     let expected_t2: [u64; 16] = [
         10_125_000_000, // 1st: 10.125 SOL
@@ -111,7 +111,7 @@ fn tier_2_and_tier_6_pools_settle_with_the_report_table_amounts() {
     // by exactly 10× the tier-2 numbers (7.5 = 10 × 0.75).
     env.open_ready_pool(2, 6);
     let players = fill_and_reveal(&mut env, 2);
-    let payouts = band_payouts(7_500_000_000);
+    let payouts = band_payouts(TIER_POTS[6]); // 384 SOL fixed pot
     assert_eq!(
         payouts.iter().map(|&(_, a)| a).sum::<u64>(),
         384_000_000_000

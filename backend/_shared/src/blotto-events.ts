@@ -162,6 +162,8 @@ export function registerBlottoEventLayouts(): void {
     id: r.u64(),
     tier: r.u8(),
     entry_lamports: r.u64(),
+    // D-A1 revised: the FIXED pot, moved treasury → prize vault at open.
+    pot_lamports: r.u64(),
     fill_deadline: r.i64(),
     timer_seconds: r.u8(),
     sealing_pubkey: r.bytes32hex(),
@@ -264,5 +266,30 @@ export function registerBlottoEventLayouts(): void {
     pool: r.pubkey(),
     player: r.pubkey(),
     amount: r.u64(),
+  }));
+
+  // ---- Platform treasury (D-A1 revised, master prompt v2 2026-08-27) ----
+
+  layout('PlatformFunded', (r) => ({
+    funder: r.pubkey(),
+    amount: r.u64(),
+    platform_balance: r.u64(),
+  }));
+
+  layout('PlatformWithdrawn', (r) => ({
+    destination: r.pubkey(),
+    amount: r.u64(),
+    platform_balance: r.u64(),
+  }));
+
+  layout('TierEconomicsSet', (r) => ({
+    tier: r.u8(),
+    price_lamports: r.u64(),
+    pot_lamports: r.u64(),
+  }));
+
+  layout('TreasuryPolicySet', (r) => ({
+    reserve_pots: r.u8(),
+    min_platform_lamports: r.u64(),
   }));
 }

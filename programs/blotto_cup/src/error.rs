@@ -112,4 +112,13 @@ pub enum ErrorCode {
     SeatNotInPayouts,
     #[msg("Entry packet carries no accepted terms version")]
     PacketTermsVersionMissing,
+    // 6047 —
+    #[msg("Amount must be greater than zero")]
+    ZeroAmount,
+    #[msg("Withdrawal would take the platform treasury below its policy floor")]
+    WithdrawBelowFloor,
+    #[msg("Platform treasury cannot fund this pot under the treasury policy")]
+    TreasuryShortfall,
+    #[msg("Pot must be a positive multiple of 1024 lamports")]
+    PotNotDivisible,
 }

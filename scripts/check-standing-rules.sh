@@ -8,11 +8,19 @@
 # Rule 6 — "The vault has exactly three exits (pay_prizes, release_escrow,
 # refund). A CI test asserts it." NOTE, recorded in the Phase 1 report: the
 # roadmap's own §1.4 also routes forfeited escrow OUT of the vault, so the true
-# exit set is FOUR movers (forfeit destination: platform wallet — see the
+# exit set is FOUR movers (forfeit destination: the platform treasury — see the
 # PHASE-1-REVIEW note in instructions/escrow.rs).
 # This check asserts the exact enumerated set below and fails on any other
 # occurrence of a vault debit, which is the rule's actual intent: no exit that
 # is not on the list.
+#
+# D-A1 revised (master prompt v2, 2026-08-27) adds the platform TREASURY —
+# a separate account, not a fifth vault exit — with three checks of its own:
+# (e) platform_debit call sites are exactly open_pool / refund / treasury
+#     (withdraw_platform being the one gated exit);
+# (f) register credits NO prize vault — entries never touch one;
+# (g) no pot arithmetic: the program never derives a pot from entries or a
+#     balance (pots are fixed Config/constant values copied at open).
 
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -67,17 +75,44 @@ if [ -d "$PROG" ]; then
     echo "$stray"
     fail=1
   fi
-  # (d) fees_debit call sites: the 64th-entry platform sweep (register.rs) and
-  # the R7 full refund (refund.rs) — nothing else drains the fees PDA.
-  fees_allowed='register|refund'
-  fsites="$(grep -rln 'fees_debit(' $PROG/instructions --include='*.rs' 2>/dev/null || true)"
-  for f in $fsites; do
+  # (d) the platform treasury's seeds may appear in a signed CPI only inside
+  # vault.rs (same chokepoint discipline as the vault).
+  praw="$(grep -rln 'PLATFORM_SEED' $PROG --include='*.rs' | grep -vE '(state\.rs|vault\.rs|events\.rs)$' | while read -r f; do
+    grep -l 'invoke_signed' "$f" || true
+  done)"
+  if [ -n "$praw" ]; then
+    echo "standing-rule 6 FAILED: raw platform-signed CPI outside vault.rs:"
+    echo "$praw"
+    fail=1
+  fi
+  # (e) platform_debit call sites: pot funding (open_pool.rs), entry refunds
+  # (refund.rs) and the one Squads-gated exit (treasury.rs) — nothing else
+  # drains the treasury.
+  platform_allowed='open_pool|refund|treasury'
+  psites="$(grep -rln 'platform_debit(' $PROG/instructions --include='*.rs' 2>/dev/null || true)"
+  for f in $psites; do
     base="$(basename "$f")"
-    if ! echo "$base" | grep -qE "^(${fees_allowed})\.rs$"; then
-      echo "standing-rule 6 FAILED: fees_debit called from unlisted instruction: $f"
+    if ! echo "$base" | grep -qE "^(${platform_allowed})\.rs$"; then
+      echo "standing-rule 6 FAILED: platform_debit called from unlisted instruction: $f"
       fail=1
     fi
   done
+  # (f) entries never touch a prize vault: register.rs must not pass the
+  # vault account into any transfer (its only permitted use is the read-only
+  # belt-and-braces pot assertion via `.lamports()`), and must not debit it.
+  if grep -nE 'accounts\.vault\.to_account_info|vault_debit\(' $PROG/instructions/register.rs >/dev/null; then
+    echo "standing-rule 6 FAILED: register.rs moves lamports to/from the prize vault"
+    fail=1
+  fi
+  # (g) no pot arithmetic: a pot is a fixed value copied at open, never
+  # derived from entries or balances. Fail on any arithmetic combining
+  # pot_lamports with entry counts, entry prices, or live balances.
+  pot_arith="$(grep -rnE 'pot_lamports\s*[*+]|[*+]\s*pot_lamports|pot_lamports\s*=\s*[^;]*(entrants|entry_lamports|lamports\(\))' $PROG --include='*.rs' || true)"
+  if [ -n "$pot_arith" ]; then
+    echo "standing-rule 6 FAILED: pot arithmetic reading entries or balances:"
+    echo "$pot_arith"
+    fail=1
+  fi
 fi
 
 if [ "$fail" -ne 0 ]; then exit 1; fi

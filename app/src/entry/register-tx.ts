@@ -90,7 +90,9 @@ export interface RegisterPdas {
   config: Address;
   pool: Address;
   vault: Address;
-  fees: Address;
+  /** The platform treasury PDA `["platform"]` (D-A1 revised) — receives
+   * 100% of the entry price. */
+  platform: Address;
   entry: Address;
   passCollection: Address;
 }
@@ -112,7 +114,7 @@ export async function deriveRegisterPdas(
     config: await pda(['config']),
     pool,
     vault: await pda(['vault', idLe]),
-    fees: await pda(['fees', idLe]),
+    platform: await pda(['platform']),
     entry: await pda(['entry', poolBytes, new Uint8Array(enc.encode(address(player)))]),
     passCollection: await pda(['pass_collection', poolBytes]),
   };
@@ -123,8 +125,6 @@ export interface RegisterInstructionParams {
   poolId: bigint;
   /** Base58 — the entrant, fee payer, and signer. */
   player: string;
-  /** Base58 — pinned to `Config.platform_wallet` by the program. */
-  platformWallet: string;
   /** Base58 — the fresh pass-asset keypair's address (must also SIGN). */
   passAsset: string;
   /** 32 bytes — `sha256(battle set ‖ salt)`. */
@@ -145,9 +145,10 @@ export function buildRegisterInstruction(p: RegisterInstructionParams): Instruct
       { address: address(p.player), role: AccountRole.WRITABLE_SIGNER },
       { address: p.pdas.config, role: AccountRole.WRITABLE },
       { address: p.pdas.pool, role: AccountRole.WRITABLE },
-      { address: p.pdas.vault, role: AccountRole.WRITABLE },
-      { address: p.pdas.fees, role: AccountRole.WRITABLE },
-      { address: address(p.platformWallet), role: AccountRole.WRITABLE },
+      // Read-only: the belt-and-braces pot assertion (entries never touch
+      // a prize vault — D-A1 revised).
+      { address: p.pdas.vault, role: AccountRole.READONLY },
+      { address: p.pdas.platform, role: AccountRole.WRITABLE },
       { address: p.pdas.entry, role: AccountRole.WRITABLE },
       { address: p.pdas.passCollection, role: AccountRole.WRITABLE },
       { address: address(p.passAsset), role: AccountRole.WRITABLE_SIGNER },
@@ -158,17 +159,6 @@ export function buildRegisterInstruction(p: RegisterInstructionParams): Instruct
     ],
     data,
   };
-}
-
-/**
- * `Config.platform_wallet` from the raw config account bytes — offset 104
- * after the 8-byte discriminator + three pubkeys (layout LEN-asserted in
- * `state.rs`). The program re-checks the address (`address = config.
- * platform_wallet`), so a stale read fails the transaction, never misroutes.
- */
-export function platformWalletFromConfigData(data: Uint8Array): Uint8Array {
-  if (data.length < 136) throw new Error('config account too short');
-  return data.slice(104, 136);
 }
 
 /** What the confirmed transaction's `EntryRegistered` event yields. */

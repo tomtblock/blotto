@@ -80,7 +80,7 @@ fn lifecycle_log_fixture() {
     // D3-B: commit the payout list (seats 0..15 take ranks 1..16's bands in
     // this fixture's ranking), then pay by seat in two batches of eight.
     let mut args = [1u8; 32].to_vec();
-    args.extend_from_slice(&encode_payouts(&band_payouts(100_000_000)));
+    args.extend_from_slice(&encode_payouts(&band_payouts(TIER_POTS[0])));
     let ix = settle_ix(&settlement.pubkey(), 1, "commit_results", &args);
     env.send(&[ix], &[&settlement]).unwrap();
     for half in 0u16..2 {
@@ -97,8 +97,22 @@ fn lifecycle_log_fixture() {
     }
     let ix = release_escrow_ix(&settlement.pubkey(), 1, &players[0].1, &players[0].0.pubkey());
     env.send(&[ix], &[&settlement]).unwrap();
-    let ix = forfeit_escrow_ix(&settlement.pubkey(), 1, &players[1].1, &env.platform_wallet);
+    let ix = forfeit_escrow_ix(&settlement.pubkey(), 1, &players[1].1);
     env.send(&[ix], &[&settlement]).unwrap();
+
+    // A fixture round of the treasury instructions (D-A1 v2): a deposit and
+    // a floor-respecting withdrawal, so the decoders see PlatformFunded and
+    // PlatformWithdrawn payloads from the real program.
+    env.fund_platform(TIER_POTS[0] + 1_000_000_000);
+    let dest = Pubkey::new_unique();
+    let ix = withdraw_platform_ix(&env.admin.pubkey(), &dest, 500_000_000);
+    env.send(&[ix], &[]).unwrap();
+    // And the tier-economics + policy setters (TierEconomicsSet /
+    // TreasuryPolicySet events), restated at their launch values.
+    let ix = set_tier_economics_ix(&env.admin.pubkey(), 0, TIER_PRICES[0], TIER_POTS[0]);
+    env.send(&[ix], &[]).unwrap();
+    let ix = set_treasury_policy_ix(&env.admin.pubkey(), 1, 0);
+    env.send(&[ix], &[]).unwrap();
 
     // Pool 2: the refund fork — opened by hand so the VRF seed lands via a
     // REAL commit_vrf_seed (emitting PoolVrfSeeded into the fixture).

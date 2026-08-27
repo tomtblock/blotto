@@ -18,6 +18,7 @@ pub mod pay_prizes;
 pub mod refund;
 pub mod register;
 pub mod reveal_commit;
+pub mod treasury;
 
 pub use admin::*;
 pub use escrow::*;
@@ -27,3 +28,4 @@ pub use pay_prizes::*;
 pub use refund::*;
 pub use register::*;
 pub use reveal_commit::*;
+pub use treasury::*;

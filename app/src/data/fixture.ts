@@ -11,6 +11,7 @@ const POOL: PoolSummary = {
   id: 'FIXTURE',
   tier: 0,
   entry_lamports: '100000000',
+  pot_lamports: '5120000000',
   // A stable future-ish deadline; the countdown clamps at zero.
   fill_deadline: '4102444800',
   timer_seconds: 15,

@@ -36,7 +36,8 @@
  * crank itself took in Phase 2.
  */
 
-import type { KeeperChain } from './chain';
+import type { KeeperChain, PoolStateName } from './chain';
+import { nextOpenable, type TierPoolStates } from './treasury';
 import type { CrankOutcome } from './crank';
 import type { PoolKeyCustody } from './deps';
 
@@ -179,37 +180,61 @@ export function makeDaemon(deps: DaemonDeps): Daemon {
       else advancing = false;
     }
 
-    // ---- KEEP: one Open, launch-complete pool per open tier --------------
+    // ---- KEEP: complete launch steps on every live Open pool -------------
     for (let tier = 0; tier < cfg.openTiers.length; tier++) {
+      const active = cfg.activePoolByTier[tier];
+      if (active === 0n) continue;
       try {
-        // Fresh config each tier: each open advances next_pool_id, and a
-        // concurrent daemon may have moved it too.
-        const cur = await deps.chain.getConfig();
-        if (!cur.openTiers[tier]) continue;
-        let active = cur.activePoolByTier[tier];
-        if (active === 0n) {
-          if (cur.paused) {
-            // PHASE-C-REVIEW: paused holds the KEEPER only — `set_paused`
-            // blocks `register`, so opening pools nobody can enter is
-            // pointless churn; settlement above keeps running because
-            // pausing must never strand funds.
-            log('keeper:paused', { tier });
-            continue;
+        await completeLaunch(active, report);
+      } catch (e) {
+        report.errors.push({ action: 'keeper', tier, message: String(e) });
+        log('keeper:failed', { tier, error: String(e) });
+      }
+    }
+
+    // ---- OPEN: the treasury policy decides (D-A1 revised) ----------------
+    // `nextOpenable` mirrors `open_pool`'s gates exactly (sequential rule +
+    // policy floor), lowest tier first; loop until it says none, so one
+    // tick opens every tier the treasury can carry.
+    if (!cfg.paused) {
+      for (let guard = 0; guard < cfg.openTiers.length; guard++) {
+        try {
+          // Fresh config each pass: each open advances next_pool_id and
+          // fills a slot, and a concurrent daemon may have moved both.
+          const cur = await deps.chain.getConfig();
+          const balance = await deps.chain.getPlatformBalance();
+          const states: TierPoolStates = await Promise.all(
+            cur.activePoolByTier.map(async (id): Promise<PoolStateName | 'none'> => {
+              if (id === 0n) return 'none';
+              return (await deps.chain.getPool(id)).state;
+            })
+          );
+          const verdict = nextOpenable(cur, balance, states);
+          if (verdict.tier === null) {
+            log('keeper:hold', { reason: verdict.reason });
+            break;
           }
+          const tier = verdict.tier;
           const poolId = cur.nextPoolId;
           const key =
             (await deps.custody.getPublishedKey(poolId)) ??
             (await deps.custody.createPoolKey(poolId));
           await deps.chain.openPool(poolId, tier, key.publicKey, key.secretHash);
           report.opened.push({ poolId, tier });
-          log('open_pool', { poolId: poolId.toString(), tier });
-          active = poolId;
+          log('open_pool', { poolId: poolId.toString(), tier, reason: verdict.reason });
+          await completeLaunch(poolId, report);
+        } catch (e) {
+          report.errors.push({ action: 'keeper', tier: -1, message: String(e) });
+          log('keeper:failed', { error: String(e) });
+          break;
         }
-        await completeLaunch(active, report);
-      } catch (e) {
-        report.errors.push({ action: 'keeper', tier, message: String(e) });
-        log('keeper:failed', { tier, error: String(e) });
       }
+    } else {
+      // PHASE-C-REVIEW: paused holds the KEEPER only — `set_paused` blocks
+      // `register`, so opening pools nobody can enter is pointless churn;
+      // settlement above keeps running because pausing must never strand
+      // funds.
+      log('keeper:paused', {});
     }
 
     return report;

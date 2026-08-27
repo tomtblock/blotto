@@ -16,7 +16,7 @@ import {
   encodePayload,
   seal,
 } from '../../../backend/sealing/src';
-import { battlesHash, potLamports } from '../../../backend/scoring/src';
+import { battlesHash, potForTier } from '../../../backend/scoring/src';
 import { base58Encode } from '../../../backend/_shared/src/blotto-events';
 import {
   FakeChain,
@@ -58,7 +58,7 @@ export async function runOfflinePool(
   options: OfflinePoolOptions = {}
 ): Promise<OfflinePoolRun> {
   const poolId = BigInt(poolSeed);
-  const chain = new FakeChain((entry) => potLamports(entry));
+  const chain = new FakeChain();
   const custody = new LocalCustody(async (id) => (await chain.getPool(id)).state !== 'Open');
   const store = new MemoryCiphertextStore();
   const publisher = new MemoryPublisher();
@@ -93,6 +93,7 @@ export async function runOfflinePool(
     state: 'Sealed',
     vrfCommitted: true,
     entryLamports: 100_000_000n,
+    potLamports: potForTier(0),
     fillDeadline: 0n,
     secretRevealed: false,
     resultsCommitted: false,

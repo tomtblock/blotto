@@ -26,11 +26,11 @@ pub const TIMER_SECONDS: u8 = 15;
 /// rest with `set_open_tiers` when R6's conditions are met.
 pub const N_TIERS: usize = 7;
 
-/// Configured tiers' entry prices (roadmap R6 as amended by decision D1,
+/// Configured tiers' INITIAL entry prices (roadmap R6 as amended by D1,
 /// 2026-08-27): 0.1 / 0.5 / 0.75 / 1 / 2.5 / 5 / 7.5 SOL. Index = tier.
-/// Every entry is a multiple of 20 lamports, so every pot (entry × 0.8 × 64
-/// = 51.2 × entry) is an exact multiple of 1024 — the property
-/// `prize_math`'s band table relies on, asserted per tier in its tests.
+/// Since D-A1 (revised, master prompt v2 2026-08-27) prices live on `Config`
+/// (founder-changeable via `set_tier_economics`); these constants seed
+/// `init_config` and never touch an open pool.
 pub const TIER_ENTRY_LAMPORTS: [u64; N_TIERS] = [
     100_000_000,
     500_000_000,
@@ -41,10 +41,23 @@ pub const TIER_ENTRY_LAMPORTS: [u64; N_TIERS] = [
     7_500_000_000,
 ];
 
-/// Prize-pool share of each entry, basis points (PID §2: 80% prize pool,
-/// 20% platform).
-pub const VAULT_BPS: u64 = 8_000;
-pub const BPS_DENOM: u64 = 10_000;
+/// Configured tiers' INITIAL pots (D-A1 revised): FIXED constants —
+/// 5.12 / 25.6 / 38.4 / 51.2 / 128 / 256 / 384 SOL — funded from the
+/// platform treasury at `open_pool`, BEFORE any pass is sold. The founder's
+/// stated derivation for the initial values is 80% of price × 64; on-chain
+/// a pot is a constant, never arithmetic over entries or balances (the
+/// standing-rules grep asserts exactly that). Every value is a multiple of
+/// 1024 lamports so the band table divides with zero residue (prize_math
+/// tests assert per tier).
+pub const TIER_POT_LAMPORTS: [u64; N_TIERS] = [
+    5_120_000_000,
+    25_600_000_000,
+    38_400_000_000,
+    51_200_000_000,
+    128_000_000_000,
+    256_000_000_000,
+    384_000_000_000,
+];
 
 /// Number of paid places (PID §6: top 16).
 pub const PAID_RANKS: usize = 16;

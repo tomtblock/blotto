@@ -26,7 +26,7 @@ fn fill_and_commit(env: &mut Env) -> Vec<(Keypair, Pubkey)> {
     )
     .unwrap();
     let mut args = [1u8; 32].to_vec();
-    args.extend_from_slice(&encode_payouts(&band_payouts(100_000_000)));
+    args.extend_from_slice(&encode_payouts(&band_payouts(TIER_POTS[0])));
     env.send(
         &[settle_ix(&settlement.pubkey(), 1, "commit_results", &args)],
         &[&settlement],
@@ -83,7 +83,7 @@ fn switch_on_escrows_first_place_and_kyc_packet_releases_it() {
 
     // Release without any packet: rejected (PacketMissing).
     let ix = release_escrow_ix(&settlement.pubkey(), 1, &players[0].1, &players[0].0.pubkey());
-    let err = env.send(&[ix.clone()], &[&settlement]).unwrap_err();
+    let err = env.send(std::slice::from_ref(&ix), &[&settlement]).unwrap_err();
     assert!(err.contains("6013"), "{err}");
 
     // Release with a TIER-0 packet: rejected (PacketKycInsufficient).

@@ -22,7 +22,7 @@ import {
 import {
   assignPrizes,
   battlesHash,
-  potLamports,
+  potForTier,
   scorePool,
   type BattleSet,
 } from '../../scoring/src';
@@ -55,7 +55,7 @@ async function buildSealedPool(sabotage: {
   garbage?: number;
   hashMismatch?: number;
 }): Promise<TestPool> {
-  const chain = new FakeChain((entry) => potLamports(entry));
+  const chain = new FakeChain();
   const custody = new LocalCustody(async (id) => {
     const p = await chain.getPool(id);
     return p.state !== 'Open';
@@ -98,6 +98,7 @@ async function buildSealedPool(sabotage: {
     state: 'Sealed',
     vrfCommitted: true,
     entryLamports: 100_000_000n,
+    potLamports: potForTier(0),
     fillDeadline: 0n,
     secretRevealed: false,
     resultsCommitted: false,
@@ -123,7 +124,7 @@ describe('the settlement crank', () => {
     // The bundle's ranking and amounts equal the pure engine's (with the
     // D3-B split-pot assignment) over the same battles.
     const bundle = t.publisher.published.get(outcome.bundleUri!)!;
-    const pot = potLamports(100_000_000n);
+    const pot = potForTier(0);
     const engine = assignPrizes(scorePool(t.battles), pot);
     for (const r of bundle.results) {
       const e = engine[r.index];
@@ -183,7 +184,7 @@ describe('the settlement crank', () => {
 
     const resumed = await crankPool(deps, 1n);
     expect(resumed.finalState).to.equal('Paid');
-    const pot = potLamports(100_000_000n);
+    const pot = potForTier(0);
     let total = 0n;
     for (const v of t.chain.paid.values()) total += v;
     expect(total).to.equal(pot, 'no rank paid twice, none skipped');
@@ -209,13 +210,14 @@ describe('the settlement crank', () => {
   });
 
   it('drains a Refunding pool', async () => {
-    const chain = new FakeChain(() => 0n);
+    const chain = new FakeChain();
     chain.pools.set('9', {
       poolId: 9n,
       tier: 0,
       state: 'Refunding',
       vrfCommitted: true,
       entryLamports: 100_000_000n,
+      potLamports: potForTier(0),
       fillDeadline: 0n,
       secretRevealed: false,
       resultsCommitted: false,
@@ -342,7 +344,7 @@ describe('detection wired into the crank (R11, roadmap 4.3)', () => {
       }
     }
     // Total conservation: paid + escrowed == the whole pot.
-    const pot = potLamports(100_000_000n);
+    const pot = potForTier(0);
     let total = 0n;
     for (const v of t.chain.paid.values()) total += v;
     for (const v of t.chain.escrowed.values()) total += v;

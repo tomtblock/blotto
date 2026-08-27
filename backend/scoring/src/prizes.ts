@@ -32,8 +32,28 @@ export const TIER_ENTRY_LAMPORTS: readonly bigint[] = [
   5_000_000_000n,
   7_500_000_000n,
 ];
-export const VAULT_BPS = 8000n;
-export const BPS_DENOM = 10000n;
+
+/**
+ * The seven FIXED pots (D-A1 revised, master prompt v2 2026-08-27), tier
+ * 0..6 — a TS mirror of `constants.rs::TIER_POT_LAMPORTS`. A pot is a
+ * CONSTANT funded from the prize treasury at `open_pool`, before any pass
+ * is sold — never arithmetic over entries or balances. The founder's stated
+ * derivation for these initial values is 80% of price × 64; the derivation
+ * is history, the constant is the law (the standing-rules grep bans pot
+ * arithmetic in the program, and this module carries no 80/20 helpers any
+ * more). Every value is a multiple of 1024 so the band table divides with
+ * zero residue.
+ */
+export const TIER_POT_LAMPORTS: readonly bigint[] = [
+  5_120_000_000n,
+  25_600_000_000n,
+  38_400_000_000n,
+  51_200_000_000n,
+  128_000_000_000n,
+  256_000_000_000n,
+  384_000_000_000n,
+];
+
 export const PAID_RANKS = 16;
 
 /** Rank 1 → rank 16, in 1024ths of the pot. Sums to exactly 1024. */
@@ -41,14 +61,28 @@ export const PRIZE_BANDS_1024: readonly bigint[] = [
   270n, 158n, 102n, 78n, 50n, 50n, 50n, 50n, 27n, 27n, 27n, 27n, 27n, 27n, 27n, 27n,
 ];
 
-/** The 80% vault share of one entry. */
-export function vaultShare(entryLamports: bigint): bigint {
-  return (entryLamports * VAULT_BPS) / BPS_DENOM;
+/**
+ * The LAUNCH-TABLE pot for a tier (D-A1 revised). Settlement code must not
+ * use this against live chain state — the pool's own `pot_lamports` (copied
+ * on-chain at open) is authoritative there, because the founder can change a
+ * tier's economics between pools. This lookup exists for the rules page,
+ * fixtures and tests, which speak about the published launch table.
+ */
+export function potForTier(tier: number): bigint {
+  const pot = TIER_POT_LAMPORTS[tier];
+  if (pot === undefined) throw new Error(`unknown tier ${tier}`);
+  return pot;
 }
 
-/** The pot of a sealed pool: 64 vault shares. */
-export function potLamports(entryLamports: bigint): bigint {
-  return vaultShare(entryLamports) * CAPACITY;
+/**
+ * Launch-table lookup by entry price (for fixtures keyed on
+ * `entry_lamports`). A LOOKUP into the published table, not arithmetic —
+ * an unknown price throws rather than deriving anything.
+ */
+export function potForEntry(entryLamports: bigint): bigint {
+  const tier = TIER_ENTRY_LAMPORTS.indexOf(entryLamports);
+  if (tier === -1) throw new Error(`no tier with entry price ${entryLamports}`);
+  return TIER_POT_LAMPORTS[tier];
 }
 
 /**

@@ -40,6 +40,7 @@ describe('rulesSections', () => {
       'randomness',
       'sealing',
       'refund',
+      'pool-opening',
       'verify',
       'availability',
       'age',

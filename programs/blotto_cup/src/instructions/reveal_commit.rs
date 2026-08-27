@@ -18,7 +18,6 @@ use solana_sha256_hasher::hash as sha256;
 use crate::constants::CAPACITY;
 use crate::error::ErrorCode;
 use crate::events::{PoolSecretRevealed, ResultsCommitted};
-use crate::prize_math::pot;
 use crate::state::{Config, Payout, Pool, PoolState, CONFIG_SEED, POOL_SEED};
 
 #[derive(Accounts)]
@@ -113,8 +112,10 @@ pub fn handle_commit_results(
         }
         total += p.amount as u128;
     }
+    // D-A1 revised: the pot is the FIXED amount copied onto the Pool at
+    // open (funded from the treasury then) — never arithmetic over entries.
     require!(
-        total == pot(pool.entry_lamports) as u128,
+        total == pool.pot_lamports as u128,
         ErrorCode::PayoutSumMismatch
     );
 

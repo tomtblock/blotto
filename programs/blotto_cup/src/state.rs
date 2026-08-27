@@ -28,15 +28,16 @@ pub const POOL_SEED: &[u8] = b"pool";
 /// through the exits enumerated in `vault.rs`.
 pub const VAULT_SEED: &[u8] = b"vault";
 
-/// Fees PDA: `[FEES_SEED, pool_id.to_le_bytes()]`. A zero-data system-owned
-/// account holding the 20% platform share **until the pool seals**. Holding it
-/// per-pool until seal is what makes the R7 full refund (100% back, platform
-/// share included) operator-independent — the program cannot debit the founder's wallet,
-/// so the refundable 20% must sit under program control until the pool can no
-/// longer refund. Swept to the platform wallet in the 64th `register`.
-/// Recorded as a deliberate deviation from PID §7's instant-split diagram in
-/// `docs/phase-reports/phase-1-program.md`.
-pub const FEES_SEED: &[u8] = b"fees";
+/// Platform treasury PDA: `[PLATFORM_SEED]` — one per program (D-A1
+/// revised, 2026-08-27). A zero-data system-owned account that receives
+/// 100% of pass-sale revenue at `register` and funds each pool's prize
+/// vault at `open_pool`, BEFORE any pass is sold. Its only exits are
+/// `open_pool` (pot funding), `refund` (returning entry payments — the
+/// program holds every refundable lamport, R7 stays operator-independent)
+/// and the Squads-gated `withdraw_platform`, floor-guarded so neither the
+/// treasury policy's reserve nor any refundable entry can be withdrawn.
+/// The former per-pool fees PDA (the 80/20 split) is GONE.
+pub const PLATFORM_SEED: &[u8] = b"platform";
 
 /// Entry PDA: `[ENTRY_SEED, pool.key(), player.key()]`. Keying on the player
 /// makes one entry per wallet per pool a program invariant (a second `register`
@@ -63,20 +64,40 @@ pub struct Config {
     /// Signs `open_pool`, `reveal_pool_secret`, `commit_results`, `pay_prizes`,
     /// flag/escrow instructions (Turnkey-custodied). Rotatable.
     pub settlement_signer: Pubkey,
-    /// Receives the 20% platform share at seal, and forfeited escrow when no
-    /// successor pool exists.
-    pub platform_wallet: Pubkey,
     /// Blocks `register` when true (admin kill switch).
     pub paused: bool,
     /// Which of the configured tiers may open pools (roadmap R6, D1).
     /// Index = tier into `TIER_ENTRY_LAMPORTS`.
     pub open_tiers: [bool; N_TIERS],
-    /// Per-TIER gross ceiling in lamports (decision D2, 2026-08-27 —
-    /// roadmap Phase 8's "each with its own vault ceiling"). `open_pool`
-    /// rejects a tier whose full pool (entry × 64) would exceed its entry.
-    /// Launch values: tier 0 = 6.4 SOL; every other tier = its own gross,
-    /// so the ceiling is a cap, not a second open/closed switch.
+    /// Per-TIER ceiling in lamports on a pool's PASS SALES (decision D2 as
+    /// re-scoped by D-A1 v2: pots are fixed, so the ceiling caps gross
+    /// pass-sale intake, price × 64, at `open_pool`). Launch values: tier 0
+    /// = 6.4 SOL; every other tier = its own gross — a cap, not a second
+    /// open/closed switch.
     pub vault_ceiling_lamports: [u64; N_TIERS],
+    /// Per-tier entry price (D-A1 v2: founder-changeable via
+    /// `set_tier_economics`; a change never touches an open pool — each
+    /// pool copies its price at open). Seeded from `TIER_ENTRY_LAMPORTS`.
+    pub tier_price_lamports: [u64; N_TIERS],
+    /// Per-tier FIXED pot (D-A1 v2), funded from the platform treasury at
+    /// `open_pool`. Never derived from entries or balances. Seeded from
+    /// `TIER_POT_LAMPORTS`; must stay a multiple of 1024.
+    pub tier_pot_lamports: [u64; N_TIERS],
+    /// Treasury policy (D-A1 v2): a tier may open only if, after funding
+    /// its pot, the treasury still holds `min` + `reserve_pots` further
+    /// pots of every OTHER enabled tier with no live pool. Founder-tunable;
+    /// changes never touch an open pool.
+    pub treasury_reserve_pots: u8,
+    pub treasury_min_platform_lamports: u64,
+    /// Pots currently locked in open pools' prize vaults (informational,
+    /// D-A1 v2's `reserved`).
+    pub platform_reserved: u64,
+    /// Entry payments received for pools that can still refund (Open,
+    /// below 64). `withdraw_platform` may never dip into this — R7's 100%
+    /// refund is program-held, not a promise.
+    pub platform_refundable: u64,
+    /// Canonical bump of the `[PLATFORM_SEED]` treasury PDA.
+    pub platform_bump: u8,
     /// KYC-at-claim switch (roadmap R3/4.5). 0 = off. When non-zero,
     /// `pay_prizes` escrows any share above it until a `kyc_tier ≥ 1` packet
     /// is presented via `release_escrow`.
@@ -86,17 +107,22 @@ pub struct Config {
     pub detection_hard_block: bool,
     /// Next pool id. Starts at 1; 0 is the "no pool" sentinel below.
     pub next_pool_id: u64,
-    /// The currently-Open pool id per tier, 0 if none (roadmap R14: max one
-    /// open pool per tier). Set by `open_pool`; cleared at seal or refund.
+    /// The tier's LIVE pool id, 0 if none (D-A1 v2: pools per tier are
+    /// SEQUENTIAL — the slot is set by `open_pool` and clears only when the
+    /// pool reaches `Paid` or `Closed`, so the next pool in a tier cannot
+    /// open while the previous is unsettled).
     pub active_pool_by_tier: [u64; N_TIERS],
     pub bump: u8,
 }
 
 impl Config {
-    /// 4 pubkeys (128) + paused (1) + open_tiers (N_TIERS) + ceilings
-    /// (8·N_TIERS) + kyc threshold (8) + detection switch (1) +
+    /// 3 pubkeys (96) + paused (1) + open_tiers (N_TIERS) + ceilings
+    /// (8·N_TIERS) + prices (8·N_TIERS) + pots (8·N_TIERS) + reserve_pots
+    /// (1) + min_platform (8) + reserved (8) + refundable (8) +
+    /// platform_bump (1) + kyc threshold (8) + detection switch (1) +
     /// next_pool_id (8) + active_pool_by_tier (8·N_TIERS) + bump (1).
-    pub const LEN: usize = 32 * 4 + 1 + N_TIERS + 8 * N_TIERS + 8 + 1 + 8 + 8 * N_TIERS + 1;
+    pub const LEN: usize =
+        32 * 3 + 1 + N_TIERS + 8 * N_TIERS * 4 + 1 + 8 + 8 + 8 + 1 + 8 + 1 + 8 + 1;
     pub const SPACE: usize = 8 + Self::LEN;
 }
 
@@ -142,8 +168,12 @@ pub struct Pool {
     pub id: u64,
     /// Tier index into `TIER_ENTRY_LAMPORTS`.
     pub tier: u8,
-    /// Entry price in lamports, fixed at open.
+    /// Entry price in lamports, fixed at open (copied from Config's tier
+    /// price — a later founder change never touches this pool).
     pub entry_lamports: u64,
+    /// The FIXED pot funding this pool's prize vault (D-A1 v2), copied from
+    /// Config at open and locked in the vault before any pass is sold.
+    pub pot_lamports: u64,
     /// Entries so far. Also the next entry's index.
     pub entrants: u16,
     pub opened_at: i64,
@@ -190,13 +220,13 @@ pub struct Pool {
     pub timer_seconds: u8,
     pub bump: u8,
     pub vault_bump: u8,
-    pub fees_bump: u8,
 }
 
 impl Pool {
     pub const LEN: usize = 8 // id
         + 1 // tier
         + 8 // entry_lamports
+        + 8 // pot_lamports
         + 2 // entrants
         + 8 // opened_at
         + 8 // fill_deadline
@@ -213,7 +243,7 @@ impl Pool {
         + 8 // paid_mask
         + 2 // refunded_count
         + 1 // timer_seconds
-        + 1 + 1 + 1; // bumps
+        + 1 + 1; // bumps
     pub const SPACE: usize = 8 + Self::LEN;
 }
 
@@ -267,7 +297,7 @@ mod tests {
             CONFIG_SEED,
             POOL_SEED,
             VAULT_SEED,
-            FEES_SEED,
+            PLATFORM_SEED,
             ENTRY_SEED,
             PASS_COLLECTION_SEED,
         ];
@@ -288,7 +318,7 @@ mod tests {
             Pubkey::find_program_address(&[CONFIG_SEED], &crate::ID).0,
             pool,
             Pubkey::find_program_address(&[VAULT_SEED, &id.to_le_bytes()], &crate::ID).0,
-            Pubkey::find_program_address(&[FEES_SEED, &id.to_le_bytes()], &crate::ID).0,
+            Pubkey::find_program_address(&[PLATFORM_SEED], &crate::ID).0,
             Pubkey::find_program_address(&[ENTRY_SEED, pool.as_ref(), player.as_ref()], &crate::ID)
                 .0,
             Pubkey::find_program_address(&[PASS_COLLECTION_SEED, pool.as_ref()], &crate::ID).0,
@@ -308,10 +338,16 @@ mod tests {
             admin: Pubkey::new_unique(),
             entry_signer: Pubkey::new_unique(),
             settlement_signer: Pubkey::new_unique(),
-            platform_wallet: Pubkey::new_unique(),
             paused: true,
             open_tiers: [true, false, false, false, false, false, false],
             vault_ceiling_lamports: [u64::MAX; N_TIERS],
+            tier_price_lamports: crate::constants::TIER_ENTRY_LAMPORTS,
+            tier_pot_lamports: crate::constants::TIER_POT_LAMPORTS,
+            treasury_reserve_pots: 1,
+            treasury_min_platform_lamports: u64::MAX,
+            platform_reserved: u64::MAX,
+            platform_refundable: u64::MAX,
+            platform_bump: 254,
             kyc_required_above_lamports: 0,
             detection_hard_block: true,
             next_pool_id: 1,
@@ -329,6 +365,7 @@ mod tests {
             id: u64::MAX,
             tier: 3,
             entry_lamports: u64::MAX,
+            pot_lamports: u64::MAX,
             entrants: 64,
             opened_at: i64::MAX,
             fill_deadline: i64::MAX,
@@ -350,7 +387,6 @@ mod tests {
             timer_seconds: 15,
             bump: 255,
             vault_bump: 254,
-            fees_bump: 253,
         };
         let mut buf = Vec::new();
         p.serialize(&mut buf).unwrap();

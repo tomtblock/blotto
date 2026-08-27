@@ -7,3 +7,4 @@ export * from './daemon';
 export * from './missing';
 export * from './publisher';
 export * from './publisher-irys';
+export * from './treasury';

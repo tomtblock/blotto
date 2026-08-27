@@ -17,6 +17,13 @@ fn non_admin_reverts_on_every_admin_instruction() {
     // launch value so the admin success call is a no-op.
     let mut ceiling_args = vec![0u8];
     ceiling_args.extend_from_slice(&6_400_000_000u64.to_le_bytes());
+    // set_tier_economics: restated at tier 0's launch values (no-op).
+    let mut econ_args = vec![0u8];
+    econ_args.extend_from_slice(&TIER_PRICES[0].to_le_bytes());
+    econ_args.extend_from_slice(&TIER_POTS[0].to_le_bytes());
+    // set_treasury_policy: restated at the launch defaults (no-op).
+    let mut policy_args = vec![1u8];
+    policy_args.extend_from_slice(&0u64.to_le_bytes());
     let cases: Vec<(&str, Vec<u8>)> = vec![
         ("set_paused", vec![1]),
         (
@@ -31,6 +38,8 @@ fn non_admin_reverts_on_every_admin_instruction() {
         ("set_vault_ceiling", ceiling_args),
         ("set_kyc_threshold", 1u64.to_le_bytes().to_vec()),
         ("set_detection_hard_block", vec![1]),
+        ("set_tier_economics", econ_args),
+        ("set_treasury_policy", policy_args),
     ];
     for (name, args) in cases {
         let ix = admin_ix(&mallory.pubkey(), name, &args);
@@ -45,6 +54,11 @@ fn non_admin_reverts_on_every_admin_instruction() {
         env.send(&[ix], &[])
             .unwrap_or_else(|e| panic!("{name} as admin: {e}"));
     }
+    // `withdraw_platform` has its own account shape — same has_one gate.
+    let ix = withdraw_platform_ix(&mallory.pubkey(), &mallory.pubkey(), 1);
+    let err = env.send(&[ix], &[&mallory]).unwrap_err();
+    assert!(err.contains("2001"), "withdraw must reject a non-admin: {err}");
+
     // Undo what the loop set so later assertions aren't surprised.
     let admin = env.admin.pubkey();
     env.send(&[admin_ix(&admin, "set_paused", &[0])], &[])
@@ -75,12 +89,18 @@ fn pool_opening_gates_hold() {
     let Some(mut env) = Env::new() else { return };
     let settlement = env.settlement.insecure_clone();
 
-    // A non-settlement signer cannot open a pool.
-    let mallory = Keypair::new();
-    env.svm.airdrop(&mallory.pubkey(), 10_000_000_000).unwrap();
-    let ix = open_pool_ix(&mallory.pubkey(), 1, 0, [9; 32], env.sealing_secret_hash);
-    let err = env.send(&[ix], &[&mallory]).unwrap_err();
-    assert!(err.contains("2001"), "{err}");
+    // With an EMPTY treasury, even the enabled tier cannot open: the pot
+    // must be fundable first (D-A1 revised policy gate).
+    let ix = open_pool_ix(&settlement.pubkey(), 1, 0, [9; 32], env.sealing_secret_hash);
+    let err = env.send(&[ix], &[&settlement]).unwrap_err();
+    assert!(
+        err.contains("6049") || err.contains("TreasuryShortfall"),
+        "{err}"
+    );
+
+    // Fund enough for every check below (the gate order puts tier/id checks
+    // before the treasury check, but a funded treasury keeps them isolated).
+    env.fund_platform(2_000_000_000_000);
 
     // A closed tier (1 = 0.5 SOL, closed at launch per R6) rejects.
     let ix = open_pool_ix(&settlement.pubkey(), 1, 1, [9; 32], env.sealing_secret_hash);
@@ -97,9 +117,12 @@ fn pool_opening_gates_hold() {
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
     assert!(err.contains("6041") || err.contains("WrongPoolId"), "{err}");
 
-    // Open pool 1 on tier 0; a second tier-0 pool violates R14.
-    let ix = open_pool_ix(&settlement.pubkey(), 1, 0, [9; 32], env.sealing_secret_hash);
-    env.send(&[ix], &[&settlement]).expect("open pool 1");
+    // PERMISSIONLESS (D-A1 revised): any funded signer opens pool 1; a
+    // second tier-0 pool violates the sequential rule.
+    let mallory = Keypair::new();
+    env.svm.airdrop(&mallory.pubkey(), 10_000_000_000).unwrap();
+    let ix = open_pool_ix(&mallory.pubkey(), 1, 0, [9; 32], env.sealing_secret_hash);
+    env.send(&[ix], &[&mallory]).expect("permissionless open");
     let ix = open_pool_ix(&settlement.pubkey(), 2, 0, [9; 32], env.sealing_secret_hash);
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
     assert!(
@@ -108,7 +131,8 @@ fn pool_opening_gates_hold() {
     );
 
     // Open the 5 SOL tier (index 5) but lower its ceiling one lamport below
-    // its own gross (5 × 64 = 320 SOL): the next open in that tier rejects.
+    // its own gross pass sales (5 × 64 = 320 SOL): the next open in that
+    // tier rejects.
     let admin = env.admin.pubkey();
     env.send(
         &[admin_ix(&admin, "set_open_tiers", &[1, 1, 1, 1, 1, 1, 1])],
@@ -144,9 +168,14 @@ fn seven_tiers_open_concurrently_and_the_eighth_open_rejects() {
     )
     .unwrap();
 
-    // One pool per tier — all seven Open at the same time (R14 is per-tier;
-    // the launch ceilings admit every tier's own gross, tier 6's 480 SOL
-    // included).
+    // Enough treasury for all seven pots plus the shrinking idle-tier
+    // reserve at each step (Σ pots = 888.32 SOL; the first open needs
+    // pot + the other six pots in reserve).
+    env.fund_platform(1_800_000_000_000);
+
+    // One pool per tier — all seven Open at the same time (the sequential
+    // rule is per-tier; the launch ceilings admit every tier's own gross
+    // pass sales, tier 6's 480 SOL included).
     for tier in 0u8..7 {
         let pool_id = tier as u64 + 1;
         let ix = open_pool_ix(
@@ -179,6 +208,7 @@ fn lowering_a_ceiling_blocks_the_next_open_not_the_open_pool() {
     let admin = env.admin.pubkey();
 
     // Pool 1 opens on tier 0 at the launch ceiling (6.4 SOL = its own gross).
+    env.fund_platform(TIER_POTS[0]);
     let ix = open_pool_ix(&settlement.pubkey(), 1, 0, [9; 32], env.sealing_secret_hash);
     env.send(&[ix], &[&settlement]).unwrap();
 
@@ -217,6 +247,7 @@ fn register_requires_a_committed_vrf_seed() {
     // Open WITHOUT patching a VRF seed (and without a pass collection —
     // the VRF gate fires before the mint is reached).
     let settlement = env.settlement.insecure_clone();
+    env.fund_platform(TIER_POTS[0]);
     let ix = open_pool_ix(&settlement.pubkey(), 1, 0, [9; 32], env.sealing_secret_hash);
     env.send(&[ix], &[&settlement]).unwrap();
     let err = env.register_player(1).unwrap_err();
@@ -237,13 +268,7 @@ fn bad_entry_packets_are_rejected() {
         let player = Keypair::new();
         env.svm.airdrop(&player.pubkey(), 10_000_000_000).unwrap();
         let pass_asset = Keypair::new();
-        let reg = register_ix(
-            &player.pubkey(),
-            1,
-            &env.platform_wallet,
-            &pass_asset.pubkey(),
-            [3u8; 32],
-        );
+        let reg = register_ix(&player.pubkey(), 1, &pass_asset.pubkey(), [3u8; 32]);
         let ixs = match &packet {
             Some(m) => vec![ed25519_ix(signer, m), reg],
             None => vec![reg],
@@ -284,13 +309,7 @@ fn bad_entry_packets_are_rejected() {
         let m = encode_packet(&player.pubkey(), &pool, 1, 1, 1, 0, now - 61);
         let ixs = vec![
             ed25519_ix(&signer, &m),
-            register_ix(
-                &player.pubkey(),
-                1,
-                &env.platform_wallet,
-                &pass_asset.pubkey(),
-                [3; 32],
-            ),
+            register_ix(&player.pubkey(), 1, &pass_asset.pubkey(), [3; 32]),
         ];
         let err = env.send(&ixs, &[&player, &pass_asset]).unwrap_err();
         assert!(err.contains("6019") || err.contains("PacketStale"), "{err}");
@@ -304,13 +323,7 @@ fn bad_entry_packets_are_rejected() {
         let m = encode_packet_with_terms(&player.pubkey(), &pool, 1, 1, 1, 0, now, 0);
         let ixs = vec![
             ed25519_ix(&signer, &m),
-            register_ix(
-                &player.pubkey(),
-                1,
-                &env.platform_wallet,
-                &pass_asset.pubkey(),
-                [3; 32],
-            ),
+            register_ix(&player.pubkey(), 1, &pass_asset.pubkey(), [3; 32]),
         ];
         let err = env.send(&ixs, &[&player, &pass_asset]).unwrap_err();
         assert!(
@@ -327,13 +340,7 @@ fn bad_entry_packets_are_rejected() {
         let m = encode_packet(&player.pubkey(), &pool, 1, 0, 1, 0, now);
         let ixs = vec![
             ed25519_ix(&signer, &m),
-            register_ix(
-                &player.pubkey(),
-                1,
-                &env.platform_wallet,
-                &pass_asset.pubkey(),
-                [3; 32],
-            ),
+            register_ix(&player.pubkey(), 1, &pass_asset.pubkey(), [3; 32]),
         ];
         let err = env.send(&ixs, &[&player, &pass_asset]).unwrap_err();
         assert!(
@@ -387,7 +394,7 @@ fn malformed_payout_lists_and_wrong_recipients_reject() {
     )
     .unwrap();
 
-    let good = band_payouts(100_000_000);
+    let good = band_payouts(TIER_POTS[0]);
 
     // A duplicate seat rejects at commit (strict-ascending check).
     let mut dup = good.clone();

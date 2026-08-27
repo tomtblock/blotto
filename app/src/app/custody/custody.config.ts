@@ -76,7 +76,10 @@ export function custodyView(): CustodyView {
       },
       {
         name: k.platformWallet.name,
-        holder: c.keys.platformWallet,
+        // D-A1 revised: the treasury is a program-held PDA — no private key
+        // exists for it anywhere. The row's holder is architecture, not a
+        // configured wallet.
+        holder: k.platformWallet.holderNote,
         can: k.platformWallet.can,
         cannot: k.platformWallet.cannot,
       },

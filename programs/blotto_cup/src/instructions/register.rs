@@ -4,21 +4,28 @@
 //!
 //! Order of operations in the handler (each step names its test):
 //!
-//!   1. gates — paused, state, deadline, capacity, VRF seed present;
+//!   1. gates — paused, state, deadline, capacity, VRF seed present, and the
+//!      belt-and-braces check that the prize vault already holds the pot
+//!      (D-A1 revised: pots are pre-funded at `open_pool`; an entry NEVER
+//!      touches a prize vault);
 //!   2. entry packet — Ed25519-verified compliance packet from the
 //!      instructions sysvar (`entry_packet.rs`); real verification, not the
 //!      1.3 stub: the module was built Phase-1-early because it is on-chain
 //!      code, and only the ISSUING service is Phase 4 work;
-//!   3. the 80/20 split — `credit_from_signer` to the vault and fees PDAs
-//!      (the only credit path, `vault.rs`);
+//!   3. the entry payment — 100% of the price `credit_from_signer` to the
+//!      platform treasury PDA, tracked in `Config.platform_refundable` so
+//!      `withdraw_platform`'s floor keeps it program-held while the pool can
+//!      still refund (R7);
 //!   4. class draw — delayed slot hash + committed VRF seed + entry index +
 //!      pool + player through `blotto_randomness` (cosmetic; read by nothing
 //!      in the scoring path, PID §8.4);
 //!   5. pass mint — bare member of the frozen Collection (`pass.rs`);
 //!   6. state writes + `EntryRegistered`;
-//!   7. the 64th entry: seal, sweep the fees PDA to the platform wallet
-//!      (the pool can no longer refund, so the 20% becomes revenue), free the
-//!      tier slot (R14 lets the next pool open), emit `PoolSealed`.
+//!   7. the 64th entry: seal — refunds are now impossible, so the pool's
+//!      64 entry payments leave `platform_refundable` and become withdrawable
+//!      revenue. The tier slot is NOT freed here: pools per tier are
+//!      SEQUENTIAL (D-A1 revised supersedes R14) and the slot clears only
+//!      when the pool reaches `Paid` or `Closed`.
 //!
 //! One entry per wallet per pool is structural: the Entry PDA is keyed
 //! `[b"entry", pool, player]`, so a second `register` fails at `init`.
@@ -37,10 +44,9 @@ use crate::entry_packet::verify_entry_packet;
 use crate::error::ErrorCode;
 use crate::events::{EntryRegistered, PoolSealed};
 use crate::pass::{mint_pass_cpi, MPL_CORE_ID};
-use crate::prize_math::{fee_share, vault_share};
 use crate::slot_hashes::{delayed_slot_hash, SLOT_HASHES_SYSVAR_ID};
 use crate::state::{
-    Config, Entry, Pool, PoolState, CONFIG_SEED, ENTRY_SEED, FEES_SEED, PASS_COLLECTION_SEED,
+    Config, Entry, Pool, PoolState, CONFIG_SEED, ENTRY_SEED, PASS_COLLECTION_SEED, PLATFORM_SEED,
     POOL_SEED, VAULT_SEED,
 };
 
@@ -52,8 +58,8 @@ pub struct Register<'info> {
     #[account(mut)]
     pub player: Signer<'info>,
 
-    /// `mut` for the 64th entry only: sealing clears the tier's
-    /// `active_pool_by_tier` slot.
+    /// `mut`: every entry moves its price through `platform_refundable`
+    /// (and the 64th entry releases the pool's 64 prices from it at seal).
     #[account(mut, seeds = [CONFIG_SEED], bump = config.bump)]
     pub config: Box<Account<'info, Config>>,
 
@@ -64,21 +70,16 @@ pub struct Register<'info> {
     )]
     pub pool: Box<Account<'info, Pool>>,
 
-    /// CHECK: Prize-vault PDA, credited with the 80% share. Validated by
-    /// derivation against the bump captured at `open_pool`.
-    #[account(mut, seeds = [VAULT_SEED, &pool_id.to_le_bytes()], bump = pool.vault_bump)]
+    /// CHECK: Prize-vault PDA — READ ONLY here (D-A1 revised: entries never
+    /// touch a prize vault). Passed so the handler can assert the pre-funded
+    /// pot is actually present before taking the player's money.
+    #[account(seeds = [VAULT_SEED, &pool_id.to_le_bytes()], bump = pool.vault_bump)]
     pub vault: UncheckedAccount<'info>,
 
-    /// CHECK: Fees PDA, credited with the 20% share (held until seal — R7's
-    /// operator-independent full refund).
-    #[account(mut, seeds = [FEES_SEED, &pool_id.to_le_bytes()], bump = pool.fees_bump)]
-    pub fees: UncheckedAccount<'info>,
-
-    /// CHECK: Platform wallet, pinned to Config. Touched only by the 64th
-    /// entry's fees sweep; passed by every caller so the transaction shape is
-    /// uniform and the 64th entry needs nothing special from the client.
-    #[account(mut, address = config.platform_wallet)]
-    pub platform_wallet: UncheckedAccount<'info>,
+    /// CHECK: The platform treasury PDA — receives 100% of the entry price.
+    /// Derivation-checked against the bump captured at `init_config`.
+    #[account(mut, seeds = [PLATFORM_SEED], bump = config.platform_bump)]
+    pub platform: UncheckedAccount<'info>,
 
     #[account(
         init,
@@ -142,6 +143,14 @@ pub fn handle_register(
         ctx.accounts.pool.vrf_seed != [0u8; 32],
         ErrorCode::VrfSeedNotCommitted
     );
+    // Belt-and-braces (D-A1 revised): the pot was moved into the prize vault
+    // at `open_pool`, before any entry. No reachable state violates this —
+    // the vault has no exit until settlement — but a player's money must
+    // never be taken against a vault that cannot pay, so assert it anyway.
+    require!(
+        ctx.accounts.vault.lamports() >= ctx.accounts.pool.pot_lamports,
+        ErrorCode::TreasuryShortfall
+    );
 
     // ---- 2. Entry packet (compliance gate, TECH-ARCH §8) ----------------
     // KYC tier 0 suffices at entry (R3); the at-claim switch bites at
@@ -155,22 +164,23 @@ pub fn handle_register(
         0,
     )?;
 
-    // ---- 3. The 80/20 split (PID §2) ------------------------------------
+    // ---- 3. The entry payment (D-A1 revised: 100% to the treasury) ------
     let entry_lamports = ctx.accounts.pool.entry_lamports;
-    let to_vault = vault_share(entry_lamports);
-    let to_fees = fee_share(entry_lamports);
     crate::vault::credit_from_signer(
         &ctx.accounts.system_program,
         &ctx.accounts.player,
-        &ctx.accounts.vault.to_account_info(),
-        to_vault,
+        &ctx.accounts.platform.to_account_info(),
+        entry_lamports,
     )?;
-    crate::vault::credit_from_signer(
-        &ctx.accounts.system_program,
-        &ctx.accounts.player,
-        &ctx.accounts.fees.to_account_info(),
-        to_fees,
-    )?;
+    // Track it as refundable until seal: `withdraw_platform`'s floor holds
+    // this sum in the treasury so R7's 100% refund is program-held money,
+    // not an operator promise.
+    ctx.accounts.config.platform_refundable = ctx
+        .accounts
+        .config
+        .platform_refundable
+        .checked_add(entry_lamports)
+        .ok_or(ErrorCode::Overflow)?;
 
     // ---- 4. Class draw (cosmetic — PID §3, §8.4) ------------------------
     let index = ctx.accounts.pool.entrants;
@@ -242,26 +252,22 @@ pub fn handle_register(
             "a sealed pool must have an empty bag"
         );
 
-        // The pool can no longer refund, so the fees PDA's 20% becomes
-        // platform revenue. Sweep the whole balance and let the PDA reap.
-        let fees_balance = ctx.accounts.fees.lamports();
-        if fees_balance > 0 {
-            crate::vault::fees_debit(
-                &ctx.accounts.system_program,
-                &ctx.accounts.fees.to_account_info(),
-                &ctx.accounts.platform_wallet.to_account_info(),
-                pool.id,
-                pool.fees_bump,
-                fees_balance,
-            )?;
-        }
+        // Refunds are now impossible, so the pool's 64 entry payments leave
+        // the refundable floor and become withdrawable platform revenue.
+        // No lamport moves — the money is already in the treasury PDA.
+        let pool_entries_total = entry_lamports
+            .checked_mul(CAPACITY as u64)
+            .ok_or(ErrorCode::Overflow)?;
+        ctx.accounts.config.platform_refundable = ctx
+            .accounts
+            .config
+            .platform_refundable
+            .checked_sub(pool_entries_total)
+            .ok_or(ErrorCode::Overflow)?;
 
-        // R14: the tier slot frees the moment the pool fills, so the
-        // settlement crank can open the next pool immediately.
-        let tier_idx = pool.tier as usize;
-        if ctx.accounts.config.active_pool_by_tier[tier_idx] == pool.id {
-            ctx.accounts.config.active_pool_by_tier[tier_idx] = 0;
-        }
+        // The tier slot does NOT free here: pools per tier are SEQUENTIAL
+        // (D-A1 revised supersedes R14's seal-time handover) — the slot
+        // clears only when this pool reaches `Paid` or `Closed`.
 
         emit!(PoolSealed {
             pool: pool_key,

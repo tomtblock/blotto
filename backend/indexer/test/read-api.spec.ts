@@ -62,4 +62,43 @@ describe('read API routing', () => {
     expect(r.committedPayouts).to.deep.equal([{ entryIndex: 0, amount: '1350000000' }]);
     expect(r.payouts).to.deep.equal([{ player: 'P1', entryIndex: 0, amount: '1350000000' }]);
   });
+
+  it('assembles the treasury report from raw ledger rows (D-A1 revised)', async () => {
+    // Fund 10 SOL, open a tier-0 pool (pot 5.12 out), sell three passes
+    // (0.3 in), then trigger the refund fork (pot back) and refund one.
+    const rows = [
+      { name: 'PlatformFunded', raw: { funder: 'F', amount: '10000000000', platform_balance: '10000000000' } },
+      { name: 'PoolOpened', raw: { pool: POOL, id: '1', tier: 0, entry_lamports: '100000000', pot_lamports: '5120000000', fill_deadline: '0' } },
+      { name: 'EntryRegistered', raw: { pool: POOL, player: 'P1', index: 0 } },
+      { name: 'EntryRegistered', raw: { pool: POOL, player: 'P2', index: 1 } },
+      { name: 'EntryRegistered', raw: { pool: POOL, player: 'P3', index: 2 } },
+    ];
+    const res = await handleRead(db(() => rows), '/treasury');
+    expect(res.status).to.equal(200);
+    const t = res.body as Record<string, unknown>;
+    // 10 − 5.12 + 0.3 = 5.18 SOL in the treasury.
+    expect(t.platform_balance_lamports).to.equal('5180000000');
+    expect(t.reserved_pot_lamports).to.equal('5120000000');
+    expect(t.refundable_entry_lamports).to.equal('300000000');
+    const tiers = t.tiers as Array<Record<string, unknown>>;
+    expect(tiers[0].status).to.equal('open');
+    expect(tiers[1].status).to.equal('short'); // 25.6 SOL pot, far short
+    // The floor holds the refundable 0.3 plus one pot of every idle tier.
+    expect(t.withdrawable_lamports).to.equal('0');
+
+    // The refund fork: pot returns, one player repaid.
+    const rows2 = rows.concat([
+      { name: 'RefundTriggered', raw: { pool: POOL, entrants: 3 } },
+      { name: 'Refunded', raw: { pool: POOL, player: 'P1', amount: '100000000' } },
+    ] as never);
+    const t2 = (await handleRead(db(() => rows2), '/treasury')).body as Record<string, unknown>;
+    // 5.18 + 5.12 (pot back) − 0.1 (one refund) = 10.2 SOL.
+    expect(t2.platform_balance_lamports).to.equal('10200000000');
+    expect(t2.reserved_pot_lamports).to.equal('0');
+    expect(t2.refundable_entry_lamports).to.equal('200000000');
+    // Tier 0's slot is still held by the Refunding pool (sequential rule).
+    const tiers2 = t2.tiers as Array<Record<string, unknown>>;
+    expect(tiers2[0].status).to.equal('settling');
+    expect(tiers2[0].live_pool_state).to.equal('Refunding');
+  });
 });

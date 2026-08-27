@@ -7,7 +7,7 @@
  */
 import { expect } from 'chai';
 import { runOfflinePool } from '../src';
-import { potLamports } from '../../../backend/scoring/src';
+import { potForTier } from '../../../backend/scoring/src';
 import { FakeChain } from '../../../backend/reveal/src';
 import { crankPool } from '../../../backend/reveal/src';
 import { LocalCustody, MemoryCiphertextStore } from '../../../backend/sealing/src';
@@ -18,7 +18,7 @@ import { createHash } from 'crypto';
 describe('the offline dress rehearsal', () => {
   it('settles twenty pools cleanly with the pot conserved in every one', async function () {
     this.timeout(240_000);
-    const pot = potLamports(100_000_000n);
+    const pot = potForTier(0);
     for (let p = 1; p <= 20; p++) {
       const run = await runOfflinePool(p);
       expect(run.outcome.finalState, `pool ${p}`).to.equal('Paid');

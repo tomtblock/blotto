@@ -1,7 +1,7 @@
 /*
  * The rules tab's single data source (D-B6, ratified 2026-08-27). EVERY
  * number rendered on the rules page derives here from the same shared
- * constants the prize path uses — TIER_ENTRY_LAMPORTS / potLamports /
+ * constants the prize path uses — TIER_ENTRY_LAMPORTS / TIER_POT_LAMPORTS /
  * amountForRank from @blotto/scoring (pinned to the Python oracle and, via
  * LiteSVM, to the on-chain program) — and from the founder-owned config
  * files (territories, terms). No hand-typed figures, so the page cannot
@@ -14,8 +14,8 @@
 import {
   PAID_RANKS,
   TIER_ENTRY_LAMPORTS,
+  TIER_POT_LAMPORTS,
   amountForRank,
-  potLamports,
 } from '../../../../backend/scoring/src';
 import territories from '../../../../config/territories.json';
 import terms from '../../../../config/terms.json';
@@ -33,7 +33,9 @@ export interface TierRow {
 /** One row per configured tier, straight from the shared constants. */
 export function tierRows(): TierRow[] {
   return TIER_ENTRY_LAMPORTS.map((entry, tier) => {
-    const pot = potLamports(entry);
+    // D-A1 revised: the pot is the tier's FIXED constant, never derived
+    // from the entry price.
+    const pot = TIER_POT_LAMPORTS[tier];
     return {
       tier,
       entrySol: lamportsToSol(entry.toString()),
@@ -92,6 +94,12 @@ export function rulesSections(): RulesSection[] {
     { id: 'randomness', heading: r.headings.randomness, kind: 'text', body: r.randomness },
     { id: 'sealing', heading: r.headings.sealing, kind: 'text', body: r.sealing },
     { id: 'refund', heading: r.headings.refund, kind: 'text', body: r.refund },
+    {
+      id: 'pool-opening',
+      heading: r.headings.poolOpening,
+      kind: 'text',
+      body: r.poolOpening,
+    },
     {
       id: 'verify',
       heading: r.headings.verify,

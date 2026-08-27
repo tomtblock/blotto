@@ -19,6 +19,9 @@ pub struct PoolOpened {
     pub id: u64,
     pub tier: u8,
     pub entry_lamports: u64,
+    /// The FIXED pot (D-A1 revised), moved from the platform treasury into
+    /// the pool's prize vault in this same transaction — before any entry.
+    pub pot_lamports: u64,
     pub fill_deadline: i64,
     pub timer_seconds: u8,
     pub sealing_pubkey: [u8; 32],
@@ -127,6 +130,38 @@ pub struct EscrowForfeited {
 pub struct RefundTriggered {
     pub pool: Pubkey,
     pub entrants: u16,
+}
+
+// --- Platform treasury (D-A1 revised, master prompt v2 2026-08-27) ---
+
+#[event]
+pub struct PlatformFunded {
+    pub funder: Pubkey,
+    pub amount: u64,
+    /// Treasury balance AFTER the deposit — every treasury event carries the
+    /// resulting balance so the /treasury report replays from the log alone.
+    pub platform_balance: u64,
+}
+
+#[event]
+pub struct PlatformWithdrawn {
+    pub destination: Pubkey,
+    pub amount: u64,
+    /// Treasury balance AFTER the withdrawal.
+    pub platform_balance: u64,
+}
+
+#[event]
+pub struct TierEconomicsSet {
+    pub tier: u8,
+    pub price_lamports: u64,
+    pub pot_lamports: u64,
+}
+
+#[event]
+pub struct TreasuryPolicySet {
+    pub reserve_pots: u8,
+    pub min_platform_lamports: u64,
 }
 
 #[event]
