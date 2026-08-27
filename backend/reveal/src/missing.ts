@@ -1,0 +1,73 @@
+/**
+ * Scoring with missing entries — the published lost-ciphertext rule
+ * (TECH-ARCH §5): "a lost ciphertext means that entry is scored as all
+ * losses and its fee is refunded from the platform share."
+ *
+ * Made precise here, because "all losses" needs a definition players can
+ * recompute (tradeoff order #3):
+ *
+ *   - a missing entry LOSES every battle against every present entry:
+ *     each present player gains a full win (2 half-points) per battle,
+ *     and gains no zones (there are no stats to compare);
+ *   - two missing entries DRAW every battle against each other (1 half-point
+ *     each) — neither produced a set that beats the other;
+ *   - missing entries earn 0 zones and rank by entry index among themselves.
+ *
+ * Uniform by construction: every present player faces the same missing
+ * opponents, so the adjustment shifts everyone's score equally and the
+ * relative ranking among present players is EXACTLY `scorePool`'s.
+ */
+
+import { BATTLES, scorePool, type BattleSet, type PlayerResult } from './deps';
+
+export interface PoolEntryInput {
+  /** Seat index, 0-based. */
+  index: number;
+  /** The decrypted, verified battle set — or null when lost/failed. */
+  battles: BattleSet | null;
+}
+
+/** Score a pool where some entries may be missing. Results in seat order. */
+export function scoreWithMissing(entries: readonly PoolEntryInput[]): PlayerResult[] {
+  const sorted = [...entries].sort((a, b) => a.index - b.index);
+  sorted.forEach((e, i) => {
+    if (e.index !== i) throw new Error(`seat indices must be 0..n-1 without gaps (saw ${e.index} at ${i})`);
+  });
+  const present = sorted.filter((e) => e.battles !== null);
+  const missing = sorted.filter((e) => e.battles === null);
+
+  // Score present players among themselves with the pure engine.
+  const presentResults = scorePool(present.map((e) => e.battles as BattleSet));
+
+  const score = new Map<number, { scoreHalf: number; zones: number }>();
+  present.forEach((e, i) => {
+    score.set(e.index, {
+      // + a full win per battle per missing opponent.
+      scoreHalf: presentResults[i].scoreHalf + missing.length * BATTLES * 2,
+      zones: presentResults[i].zones,
+    });
+  });
+  for (const e of missing) {
+    score.set(e.index, {
+      // Draws against the other missing entries only.
+      scoreHalf: (missing.length - 1) * BATTLES,
+      zones: 0,
+    });
+  }
+
+  const order = sorted
+    .map((e) => e.index)
+    .sort((i, j) => {
+      const a = score.get(i)!;
+      const b = score.get(j)!;
+      return b.scoreHalf - a.scoreHalf || b.zones - a.zones || i - j;
+    });
+  const rank = new Map<number, number>();
+  order.forEach((i, pos) => rank.set(i, pos + 1));
+  return sorted.map((e) => ({
+    index: e.index,
+    scoreHalf: score.get(e.index)!.scoreHalf,
+    zones: score.get(e.index)!.zones,
+    rank: rank.get(e.index)!,
+  }));
+}

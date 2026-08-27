@@ -7,6 +7,8 @@
 #
 # Two jobs:
 #   rust      — fmt, clippy -D warnings, cargo test across the workspace
+#   node      — the backend TypeScript suites (scoring oracle vectors, sealing,
+#               crank, indexer projection over real emitted bytes) + typecheck
 #   gitleaks  — filesystem scan of the checkout, pinned binary, checksum-verified
 #
 # No Solana CLI or Anchor install here — nothing in this lane builds SBF. The
@@ -56,6 +58,65 @@ jobs:
       - name: cargo test
         run: cargo test --workspace
 
+  node:
+    name: node
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v4.4.0
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            app/package-lock.json
+            backend/_shared/package-lock.json
+            backend/scoring/package-lock.json
+            backend/class-digest/package-lock.json
+            backend/sealing/package-lock.json
+            backend/reveal/package-lock.json
+            backend/indexer/package-lock.json
+            backend/packet/package-lock.json
+            backend/detection/package-lock.json
+            tests/rehearsal/package-lock.json
+
+      # Order matters: later packages type-check against earlier ones' source
+      # trees (the relative re-export convention), so every package installs
+      # before any tests run.
+      - name: install
+        run: |
+          for pkg in _shared scoring class-digest sealing reveal indexer packet detection; do
+            (cd "backend/$pkg" && npm ci --no-audit --no-fund)
+          done
+
+      - name: typecheck + test
+        run: |
+          for pkg in _shared scoring class-digest sealing reveal indexer packet detection; do
+            echo "=== backend/$pkg ==="
+            (cd "backend/$pkg" && npm run typecheck && npm test)
+          done
+
+      - name: rehearsal (offline twenty-pool settlement)
+        run: |
+          cd tests/rehearsal
+          npm ci --no-audit --no-fund
+          npm run typecheck
+          npm test
+
+      - name: app install
+        run: cd app && npm ci --no-audit --no-fund
+
+      - name: app lint + typecheck + test + build
+        run: |
+          cd app
+          npm run lint
+          npm run typecheck
+          npm test
+          npm run build
+
   gitleaks:
     name: gitleaks
     runs-on: ubuntu-latest
@@ -78,9 +139,22 @@ jobs:
       - name: Scan working tree
         run: gitleaks dir . --no-banner --redact --config .gitleaks.toml
 
-# NOTE (Phase 0): the PID §8.7 forbidden-word grep is NOT a lane here. Phase 0's
-# brief scoped this workflow to the Rust and gitleaks lanes only, so the grep is
-# documented in CONTRIBUTING.md → "The language gate" and run by hand for now.
-# Promoting it to a third job is a one-line change and is recommended in
-# EXTRACTION-REPORT.md — it is a legal-position rule (PID §8.7, compliance item
-# C12), not a style preference, and review is a weaker gate than CI.
+  # Roadmap §3 standing rules 4–6: the PID §8.7 language gate and the two
+  # structural greps (no `class` in the scoring path; the vault's exits are
+  # exactly the enumerated set) run on every PR. Phase 0 left the language gate
+  # manual because its brief scoped ci-fast to two lanes; BUILD-ROADMAP_v1.0.md
+  # §3 now mandates it.
+  standing-rules:
+    name: standing-rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Language gate (PID §8.7 + roadmap §6.4)
+        run: ./scripts/check-language.sh
+
+      - name: Structural rules (roadmap §3 rules 5–6)
+        run: ./scripts/check-standing-rules.sh

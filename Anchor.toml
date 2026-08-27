@@ -43,7 +43,10 @@ cluster = "localnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]
-test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
+# Phase 1 replaced the carried Surfpool TS suites (tests/vrf.ts, tests/pass.ts)
+# with the LiteSVM integration suite — same coverage, runnable without a local
+# validator, against the compiled artifact. `anchor build` must run first.
+test = "cargo test --manifest-path tests/litesvm/Cargo.toml"
 
 [test.validator]
 bind_address = "127.0.0.1"

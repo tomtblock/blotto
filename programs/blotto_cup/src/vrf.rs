@@ -65,7 +65,7 @@ use anchor_lang::prelude::*;
 use switchboard_on_demand::accounts::RandomnessAccountData;
 
 use crate::error::ErrorCode;
-use crate::state::{Pool, POOL_SEED};
+use crate::state::{Pool, PoolState, POOL_SEED};
 
 /// Switchboard On-Demand program IDs (source: switchboard-xyz/solana-sdk
 /// `src/program_id.rs`, constants `ON_DEMAND_MAINNET_PID` / `ON_DEMAND_DEVNET_PID`).
@@ -109,6 +109,15 @@ pub struct CommitVrfSeed<'info> {
 }
 
 pub fn handle_commit_vrf_seed(ctx: Context<CommitVrfSeed>, _pool_id: u64) -> Result<()> {
+    // 0. Phase 1: the seed is only meaningful while the pool is accepting
+    //    entries — `register` requires it, and nothing after seal reads it
+    //    afresh. Rejecting non-Open states closes the (harmless but pointless)
+    //    window where a seed could land on a sealed or refunding pool.
+    require!(
+        ctx.accounts.pool.state == PoolState::Open,
+        ErrorCode::PoolNotOpen
+    );
+
     // 1. Write-once. Reject if a seed is already committed. The zero-filled
     //    placeholder written by `open_pool` is the "uncommitted" sentinel. This runs
     //    first so a second commit fails cheaply, before touching the oracle account.

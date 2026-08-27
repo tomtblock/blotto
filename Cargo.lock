@@ -411,20 +411,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "blotto-merkle"
-version = "0.1.0"
-
-[[package]]
 name = "blotto-randomness"
 version = "0.1.0"
 dependencies = [
  "proptest",
  "sha2 0.10.9",
 ]
-
-[[package]]
-name = "blotto-scoring"
-version = "0.1.0"
 
 [[package]]
 name = "blotto_cup"
@@ -435,6 +427,9 @@ dependencies = [
  "blotto-randomness",
  "getrandom 0.2.16",
  "mpl-core",
+ "proptest",
+ "solana-instructions-sysvar 3.0.1",
+ "solana-sha256-hasher",
  "switchboard-on-demand",
 ]
 
