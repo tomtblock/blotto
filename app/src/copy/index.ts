@@ -86,6 +86,67 @@ export const COPY = {
     lifetime: 'TODO_COPY: Lifetime record',
     readOnlyNote: 'Profiles are a read-only record. Nothing here affects any pool.',
   },
+  custody: {
+    // C13: the disclosure page. Everything here describes MECHANICS —
+    // what each key can and cannot do is fixed by the program.
+    title: 'Who holds which keys',
+    intro:
+      'Every key this product operates with, what it can do, and what it cannot. Values not yet configured say so explicitly — this page never shows a number that has not been set.',
+    notYetSet: 'not yet set',
+    programIdLabel: 'Program',
+    programIdNote:
+      'The on-chain program holding all entry funds. Prize and refund payments are made by the program itself; its instruction set contains no other way for money to leave.',
+    upgradeAuthorityLabel: 'Upgrade authority',
+    upgradeAuthorityNote:
+      'The only key that can change the program code. Held by a multisig: an upgrade requires the stated number of signatures.',
+    thresholdLabel: 'Signatures required',
+    timelockLabel: 'Upgrade timelock',
+    inventoryHeading: 'Key inventory',
+    tableHeadings: { key: 'Key', holder: 'Held by', can: 'Can', cannot: 'Cannot' },
+    updatedPrefix: 'Configuration last updated',
+    keys: {
+      admin: {
+        name: 'Admin (multisig)',
+        can: 'Open or close tiers, set ceilings and switches, rotate the two service signers, pause new entries.',
+        cannot:
+          'Move money. No admin instruction transfers a lamport; pausing never blocks settlement or refunds.',
+      },
+      entrySigner: {
+        name: 'Entry signer',
+        can: 'Sign entry packets — the per-entry approval that a wallet passed the entry checks.',
+        cannot: 'Move money or touch pools. A stolen entry signer could admit entrants, never pay itself.',
+      },
+      settlementSigner: {
+        name: 'Settlement signer',
+        can: 'Open pools, reveal pool secrets after seal, commit results, run the prize payments the program validates.',
+        cannot:
+          'Choose amounts or recipients. The program checks every payout list against the pot and the recorded entries; a wrong list is rejected on-chain.',
+      },
+      poolSealing: {
+        name: 'Pool sealing keys (one per pool)',
+        holderWhenProvisioned: 'Key custody service (export-locked until seal)',
+        can: 'Decrypt the pool’s sealed battles — only exported once the pool is sealed or past its deadline.',
+        cannot: 'Be read early. The export rule is enforced by custody; the reveal publishes the key for everyone.',
+      },
+      platformWallet: {
+        name: 'Platform wallet',
+        can: 'Receive the 20% operating share when a pool seals, and forfeited shares after review.',
+        cannot: 'Take anything from an open pool: until seal, the full 100% is refundable from program-held accounts.',
+      },
+      irysUpload: {
+        name: 'Publishing wallet',
+        can: 'Pay to publish each pool’s reveal bundle to permanent storage.',
+        cannot: 'Alter results. The published bundle is checkable against the on-chain commitment by anyone.',
+      },
+      reviewers: {
+        name: 'Reviewer wallets',
+        holderNote: 'Listed in the published reviewer configuration',
+        can: 'Sign review decisions on flagged entries; every decision is recorded in a public, signed log.',
+        cannot:
+          'Pay themselves. A review decision can only release a held share to its entrant or forfeit it to the platform wallet.',
+      },
+    },
+  },
   reveal: {
     // PID §3 class names, ladder order 0..4. Cosmetic: artwork labels,
     // read by nothing in any scoring or prize path.
