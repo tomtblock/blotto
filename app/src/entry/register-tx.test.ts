@@ -19,7 +19,7 @@ import {
   platformWalletFromConfigData,
 } from './register-tx';
 
-const PROGRAM_ID = '4pspHqtbdgqKTvSxvKFT2ycEU28u3EWdxjmj3xsTHD3Y';
+const PROGRAM_ID = '5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17';
 const PLAYER = new PublicKey(createHash('sha256').update('player').digest()).toBase58();
 
 describe('buildEd25519Instruction', () => {

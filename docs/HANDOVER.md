@@ -3,7 +3,7 @@
 *Updated 2026-08-27 (supersedes the phases-1–5 edition) · `main` with PRs
 [#2](https://github.com/tomtblock/blotto/issues/2) and
 [#3](https://github.com/tomtblock/blotto/issues/3) merged · Devnet program ID
-`4pspHqtbdgqKTvSxvKFT2ycEU28u3EWdxjmj3xsTHD3Y` · ≈390 tests across 13 suites,
+`5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17` · ≈390 tests across 13 suites,
 all green in CI.*
 
 The full stack for a 64-player, seven-battle, sealed-allocation

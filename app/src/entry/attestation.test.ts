@@ -9,7 +9,7 @@ import {
   submitAttestation,
 } from './attestation';
 
-const WALLET = '4pspHqtbdgqKTvSxvKFT2ycEU28u3EWdxjmj3xsTHD3Y';
+const WALLET = '5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17';
 
 // Node has no localStorage; the module treats its absence as "not cached"
 // (fail-closed). A Map-backed shim lets the cache behaviour be asserted.

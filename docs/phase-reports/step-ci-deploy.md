@@ -37,7 +37,7 @@
   wiring and env.
 - **Fixed en route:** `DEFAULT_PROGRAM_ID` in the indexer config had
   drifted from the program's actual `declare_id`
-  (`4pspHqtbdgqKTvSxvKFT2ycEU28u3EWdxjmj3xsTHD3Y`) — a stale Phase 2
+  (`5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17`) — a stale Phase 2
   value that would have pointed an unconfigured indexer at a nonexistent
   program.
 
