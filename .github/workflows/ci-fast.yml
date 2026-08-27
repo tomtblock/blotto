@@ -72,6 +72,7 @@ jobs:
           node-version: 20
           cache: npm
           cache-dependency-path: |
+            app/package-lock.json
             backend/_shared/package-lock.json
             backend/scoring/package-lock.json
             backend/class-digest/package-lock.json
@@ -94,6 +95,17 @@ jobs:
             echo "=== backend/$pkg ==="
             (cd "backend/$pkg" && npm run typecheck && npm test)
           done
+
+      - name: app install
+        run: cd app && npm ci --no-audit --no-fund
+
+      - name: app lint + typecheck + test + build
+        run: |
+          cd app
+          npm run lint
+          npm run typecheck
+          npm test
+          npm run build
 
   gitleaks:
     name: gitleaks

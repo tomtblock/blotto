@@ -1,0 +1,20 @@
+/* Profile (R15): lifetime pools, ranks, prize totals, the class collection.
+ * Read-only — nothing here can affect a pool. */
+import { COPY } from '@/copy';
+import { AppHeader } from '@/components/shell/app-header';
+import { TabBar } from '@/components/shell/tab-bar';
+import { ProfileClient } from './profile-client';
+
+export default function ProfilePage() {
+  return (
+    <>
+      <AppHeader />
+      <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8">
+        <h1 className="mb-2 text-2xl">{COPY.profile.title}</h1>
+        <p className="mb-6 text-sm opacity-60">{COPY.profile.readOnlyNote}</p>
+        <ProfileClient />
+      </main>
+      <TabBar />
+    </>
+  );
+}

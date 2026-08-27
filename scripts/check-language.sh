@@ -65,6 +65,9 @@ hits="$(
     --exclude=Cargo.lock \
     --exclude=package-lock.json \
     --exclude=yarn.lock \
+    `# Machine-generated compiler state (a file-list cache); same category as` \
+    `# a lockfile. Never authored, never shipped.` \
+    --exclude='*.tsbuildinfo' \
     2>/dev/null \
   | grep -vE '^\./\.github/workflows/[^:]*:[0-9]+: *pull_request:?$'
 )"

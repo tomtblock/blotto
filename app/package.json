@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@noble/hashes": "^1.8.0",
     "@privy-io/react-auth": "3.37.0",
     "@privy-io/server-auth": "1.32.5",
     "@solana-program/compute-budget": "0.17.0",
@@ -23,7 +24,8 @@
     "motion": "13.1.0",
     "next": "16.3.0",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
     "@solana/web3.js": "1.98.4",
