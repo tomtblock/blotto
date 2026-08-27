@@ -24,14 +24,20 @@ import {
   sendAndConfirmTransaction,
 } from '@solana/web3.js';
 import type {
+  ChainConfigView,
   ChainEntryView,
   ChainPoolView,
   CommittedPayout,
+  KeeperChain,
   PoolStateName,
-  SettlementChain,
 } from './chain';
 
 const STATE_NAMES: PoolStateName[] = ['Open', 'Sealed', 'Scored', 'Paid', 'Refunding', 'Closed'];
+
+/** Metaplex Core, pinned by address in the program (`pass.rs::MPL_CORE_ID`). */
+const MPL_CORE_ID = new PublicKey('CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d');
+
+const N_TIERS = 7;
 
 function disc(name: string): Buffer {
   return createHash('sha256').update(`global:${name}`).digest().subarray(0, 8);
@@ -42,9 +48,21 @@ export interface Web3ChainConfig {
   programId: PublicKey;
   /** Signs reveal / commit / pay — the settlement signer (Turnkey-backed in prod). */
   settlementSigner: Keypair;
+  /** Signs `init_config` only. Absent in the long-running daemon — the admin
+   * is the Squads vault and setup is a deploy-time step, not a daemon step. */
+  adminSigner?: Keypair;
+  /**
+   * Switchboard On-Demand seam: given the Randomness account, return the
+   * SDK-built `reveal` instruction to bundle IN THE SAME transaction as
+   * `commit_vrf_seed` (the program reads the revealed value only in its
+   * exact reveal slot — vrf.rs). Absent = the reveal already landed this
+   * slot by other means (the e2e bench's injected fixtures do exactly that).
+   * The production adapter is C11 vendor work.
+   */
+  makeVrfRevealIx?: (randomnessAccount: PublicKey) => Promise<TransactionInstruction | null>;
 }
 
-export class Web3Chain implements SettlementChain {
+export class Web3Chain implements KeeperChain {
   constructor(private readonly cfg: Web3ChainConfig) {}
 
   private pda(seeds: (Buffer | Uint8Array)[]): PublicKey {
@@ -101,15 +119,155 @@ export class Web3Chain implements SettlementChain {
     }
     return {
       poolId,
+      tier: d[16],
       state: STATE_NAMES[d[43]],
       entryLamports: d.readBigUInt64LE(17),
       fillDeadline: BigInt(d.readBigInt64LE(35)),
+      // vrf_seed occupies bytes 108..140; all-zero is the uncommitted sentinel.
+      vrfCommitted: d.subarray(108, 140).some((b) => b !== 0),
       secretRevealed: d[150] !== 0,
       resultsCommitted: committed,
       paidMask: d.readBigUInt64LE(826),
       payouts,
       entrants: d.readUInt16LE(25),
     };
+  }
+
+  async getConfig(): Promise<ChainConfigView> {
+    const info = await this.cfg.connection.getAccountInfo(this.configPda(), 'confirmed');
+    if (!info) throw new Error('config account not found');
+    const d = info.data;
+    // Config layout (state.rs, LEN-asserted): disc 8 | admin 32 |
+    // entry_signer 32 | settlement_signer 32 | platform_wallet 32 |
+    // paused 1 (136) | open_tiers 7 (137) | ceilings 7×8 (144) | kyc 8 (200)
+    // | detection 1 (208) | next_pool_id 8 (209) | active_by_tier 7×8 (217)
+    // | bump 1 (273).
+    const openTiers: boolean[] = [];
+    const activePoolByTier: bigint[] = [];
+    for (let t = 0; t < N_TIERS; t++) {
+      openTiers.push(d[137 + t] !== 0);
+      activePoolByTier.push(d.readBigUInt64LE(217 + 8 * t));
+    }
+    return {
+      paused: d[136] !== 0,
+      openTiers,
+      activePoolByTier,
+      nextPoolId: d.readBigUInt64LE(209),
+    };
+  }
+
+  async openPool(
+    poolId: bigint,
+    tier: number,
+    sealingPubkey: Uint8Array,
+    sealingSecretHash: Uint8Array
+  ): Promise<void> {
+    const le = Buffer.alloc(8);
+    le.writeBigUInt64LE(poolId);
+    await this.send([
+      new TransactionInstruction({
+        programId: this.cfg.programId,
+        keys: [
+          { pubkey: this.cfg.settlementSigner.publicKey, isSigner: true, isWritable: true },
+          { pubkey: this.configPda(), isSigner: false, isWritable: true },
+          { pubkey: this.poolPda(poolId), isSigner: false, isWritable: true },
+          { pubkey: this.vaultPda(poolId), isSigner: false, isWritable: false },
+          { pubkey: this.pda([Buffer.from('fees'), le]), isSigner: false, isWritable: false },
+          { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+        ],
+        data: Buffer.concat([
+          disc('open_pool'),
+          le,
+          Buffer.from([tier]),
+          Buffer.from(sealingPubkey),
+          Buffer.from(sealingSecretHash),
+        ]),
+      }),
+    ]);
+  }
+
+  async commitVrfSeed(poolId: bigint, randomnessAccount: string): Promise<void> {
+    const randomness = new PublicKey(randomnessAccount);
+    const le = Buffer.alloc(8);
+    le.writeBigUInt64LE(poolId);
+    const commitIx = new TransactionInstruction({
+      programId: this.cfg.programId,
+      keys: [
+        { pubkey: this.poolPda(poolId), isSigner: false, isWritable: true },
+        { pubkey: randomness, isSigner: false, isWritable: false },
+        { pubkey: this.cfg.settlementSigner.publicKey, isSigner: true, isWritable: false },
+      ],
+      data: Buffer.concat([disc('commit_vrf_seed'), le]),
+    });
+    // The Switchboard reveal must land in the SAME transaction (vrf.rs:
+    // the value is readable only in its exact reveal slot).
+    const revealIx = (await this.cfg.makeVrfRevealIx?.(randomness)) ?? null;
+    await this.send(revealIx ? [revealIx, commitIx] : [commitIx]);
+  }
+
+  private passCollectionPda(poolId: bigint): PublicKey {
+    return this.pda([Buffer.from('pass_collection'), this.poolPda(poolId).toBuffer()]);
+  }
+
+  async createPassCollection(poolId: bigint): Promise<void> {
+    const le = Buffer.alloc(8);
+    le.writeBigUInt64LE(poolId);
+    await this.send([
+      new TransactionInstruction({
+        programId: this.cfg.programId,
+        keys: [
+          { pubkey: this.cfg.settlementSigner.publicKey, isSigner: true, isWritable: true },
+          { pubkey: this.poolPda(poolId), isSigner: false, isWritable: false },
+          { pubkey: this.passCollectionPda(poolId), isSigner: false, isWritable: true },
+          { pubkey: MPL_CORE_ID, isSigner: false, isWritable: false },
+          { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+        ],
+        data: Buffer.concat([disc('create_pass_collection'), le]),
+      }),
+    ]);
+  }
+
+  async hasPassCollection(poolId: bigint): Promise<boolean> {
+    const info = await this.cfg.connection.getAccountInfo(
+      this.passCollectionPda(poolId),
+      'confirmed'
+    );
+    return info !== null;
+  }
+
+  async initConfig(args: {
+    entrySigner: string;
+    settlementSigner: string;
+    platformWallet: string;
+    vaultCeilingLamports: bigint[];
+  }): Promise<void> {
+    const admin = this.cfg.adminSigner;
+    if (!admin) throw new Error('init_config needs adminSigner (deploy-time only)');
+    if (args.vaultCeilingLamports.length !== N_TIERS) {
+      throw new Error(`vault ceilings must list exactly ${N_TIERS} tiers`);
+    }
+    const ceilings = Buffer.alloc(8 * N_TIERS);
+    args.vaultCeilingLamports.forEach((v, i) => ceilings.writeBigUInt64LE(v, 8 * i));
+    const tx = new Transaction().add(
+      new TransactionInstruction({
+        programId: this.cfg.programId,
+        keys: [
+          { pubkey: admin.publicKey, isSigner: true, isWritable: true },
+          { pubkey: this.configPda(), isSigner: false, isWritable: true },
+          { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+        ],
+        data: Buffer.concat([
+          disc('init_config'),
+          new PublicKey(args.entrySigner).toBuffer(),
+          new PublicKey(args.settlementSigner).toBuffer(),
+          new PublicKey(args.platformWallet).toBuffer(),
+          ceilings,
+        ]),
+      })
+    );
+    await sendAndConfirmTransaction(this.cfg.connection, tx, [admin], {
+      commitment: 'confirmed',
+    });
   }
 
   async getEntries(poolId: bigint): Promise<ChainEntryView[]> {

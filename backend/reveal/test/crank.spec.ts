@@ -94,7 +94,9 @@ async function buildSealedPool(sabotage: {
 
   chain.pools.set('1', {
     poolId: 1n,
+    tier: 0,
     state: 'Sealed',
+    vrfCommitted: true,
     entryLamports: 100_000_000n,
     fillDeadline: 0n,
     secretRevealed: false,
@@ -210,7 +212,9 @@ describe('the settlement crank', () => {
     const chain = new FakeChain(() => 0n);
     chain.pools.set('9', {
       poolId: 9n,
+      tier: 0,
       state: 'Refunding',
+      vrfCommitted: true,
       entryLamports: 100_000_000n,
       fillDeadline: 0n,
       secretRevealed: false,
