@@ -1,0 +1,89 @@
+[package]
+name = "blotto_cup"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Blotto Cup on-chain program (Anchor)"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "blotto_cup"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+anchor-debug = []
+custom-heap = []
+custom-panic = []
+
+[dependencies]
+# Pinned exactly. The old repo declared "1.0.2" as a caret range and enabled
+# `init-if-needed` for accounts this program does not have; the feature is not
+# carried. See CONTRIBUTING.md → Rust on why every version here is `=`.
+anchor-lang = "=1.0.2"
+anchor-spl = "=1.0.2"
+
+# --- Carried verbatim from the predecessor repository's program Cargo.toml ---
+# The comments below are load-bearing: they record why these feature selections
+# are what they are, and each one was arrived at by hitting the failure it
+# describes. Do not "tidy" them away, and do not relax the feature flags without
+# reproducing the clash they avoid.
+
+# Switchboard On-Demand VRF. `commit_vrf_seed` reads a revealed Randomness
+# account via `RandomnessAccountData::{parse,get_value}`, both in the base crate.
+# `default-features = false` drops the crate's `anchor`/`solana-v2` features
+# (which pin anchor-lang 0.31 + Solana SDK v2 and would clash with our
+# anchor-lang 1.0.2 / Solana 3.x); `cpi` disables its entrypoint, `solana-v3`
+# selects the Solana 3.x backend matching our toolchain. We deliberately do NOT
+# use the `anchor` feature — the Randomness account is read as an
+# `UncheckedAccount` and parsed manually, so no anchor-version bridge is needed.
+# Build note: the crate has a `cc` build-dependency (compiles C), so a C
+# toolchain must be present at build time (clang on macOS, gcc in CI).
+switchboard-on-demand = { version = "=0.12.1", default-features = false, features = ["cpi", "solana-v3"] }
+
+# Metaplex Core CPI. `create_pass_collection` builds the Core Collection via
+# `CreateCollectionV2CpiBuilder` and `mint_pass` mints members via
+# `CreateV2CpiBuilder` (the `instructions` module), signed for the program's Pool
+# PDA with `invoke_signed`. Default features (`borsh-v1`) are kept — they only
+# enable the borsh 1.x codec the instruction/account types need. We deliberately
+# do NOT enable the `anchor` feature: like the switchboard SDK's `anchor`
+# feature, it would drag in anchor-lang 0.31 and clash with our anchor-lang 1.0.2 /
+# Solana 3.x toolchain. The CPI builders take plain `&AccountInfo`/`&Pubkey`, so
+# no anchor-version bridge is needed — `to_account_info()` hands the builder
+# exactly what it wants. mpl-core 0.12.0 depends on `solana-program ^3.0.0`; the
+# cross-CPI types (`AccountInfo`, `Pubkey`, `ProgramResult`) come from the shared
+# split crates (`solana-account-info`, `solana-pubkey`, `solana-program-error`)
+# that our toolchain already resolves, so they unify across the facade-version
+# gap.
+# Build note: `anchor build` / `cargo build-sbf` prints SBF stack-offset warnings
+# for `mpl_core::hooked::*::deserialize` (e.g. the Collection/Asset
+# deserializers) — their frames exceed the 4 KB SBF stack. These are DEAD CODE in
+# this program: we only use the `instructions` CPI builders, never mpl-core's
+# on-chain deserializers, so the "may cause undefined behavior" caveat never
+# executes. The warnings come from the platform-tools linker (not clippy/rustc)
+# and do not fail the build; `cargo clippy -D warnings` stays clean.
+mpl-core = "=0.12.0"
+
+# switchboard-on-demand transitively pulls solana-program v4 -> k256 -> rand_core
+# -> getrandom v0.2, which refuses to compile for the Solana BPF target unless a
+# backend is selected. The `custom` feature satisfies getrandom's target gate; the
+# random code paths (secp256k1 recover / ZK) are never invoked by
+# `commit_vrf_seed` on-chain and are dead-code eliminated, so no custom backend is
+# actually registered. Standard Solana-program workaround for crates that drag in
+# getrandom 0.2.
+getrandom = { version = "=0.2.16", features = ["custom"] }
+# ----------------------------------------------------------------------------
+
+# Class randomness digest + cosmetic class draw. Wired into `register` in Phase 1;
+# this crate is declared here now so the dependency edge is real and the workspace
+# builds it. Framework-agnostic (no solana-program dep), so it unifies cleanly
+# across the toolchain — see the crate docs.
+blotto-randomness = { path = "../../crates/blotto-randomness" }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))'] }

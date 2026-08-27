@@ -1,0 +1,25 @@
+[package]
+name = "blotto-randomness"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Blotto Cup per-entry class randomness derivation and weighted bag-without-replacement cosmetic class draw. Framework-agnostic, deterministic, replayable for audit."
+publish = false
+
+[dependencies]
+# Pinned exactly, not caret-ranged. `=0.10.9` is the version resolved in the
+# predecessor repository's Cargo.lock at extraction time. Upgrading it changes the
+# hash implementation under a function whose output is committed on-chain and
+# recomputed by players for audit, so it is a separate, tested change with its own
+# commit — never a side effect of other work. See CONTRIBUTING.md → Rust.
+sha2 = "=0.10.9"
+
+[dev-dependencies]
+# Pinned to the version resolved in the predecessor's Cargo.lock (1.11.0). Note
+# that the old Cargo.toml declared a caret range of "1.5", which is why the
+# extraction brief expected a 1.5.x pin — the lockfile is the authority on what
+# was actually built and tested against, and it says 1.11.0.
+proptest = "=1.11.0"
+
+[lints]
+workspace = true

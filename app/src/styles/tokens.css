@@ -1,0 +1,163 @@
+/*
+ * Design tokens — SINGLE SOURCE OF TRUTH.
+ *
+ * Carried from the predecessor repository. The VALUES are that product's and
+ * were approved for it, not for this one: treat every hue here as a placeholder
+ * until the Phase 3 design pass. What IS worth carrying is the reservation
+ * discipline below — a token with a reserved meaning cannot be borrowed for
+ * decoration, so a colour a player learns to read never lies to them.
+ *
+ * Reservation rules — structural, not advisory:
+ *   - price-up / price-down  → functional semantics ONLY (win/loss, gain/loss).
+ *     Never decorative, never brand.
+ *   - rarity-gold*           → the top class's moments ONLY.
+ *   - class-0..class-4       → the five cosmetic character classes (PID §3),
+ *     intensifying with the ladder. A class confers nothing (PID §8.4), so
+ *     these are art direction and never a signal of advantage.
+ *
+ * Components consume these through Tailwind's semantic utilities
+ * (bg-raised, text-price-up, bg-class-3, text-rarity-gold, …) or
+ * var(--color-*) references. Raw hex values must not appear in components —
+ * this file is the only place a hex literal is allowed.
+ */
+
+/* `static` forces every token to emit as a CSS custom property even before a
+ * utility references it — swatch readback and var(--color-*) styling depend
+ * on all tokens existing at runtime. */
+@theme static {
+  /* Base surfaces — dark mode is the only mode. */
+  --color-base: #0a0a0f;
+  --color-raised: #12121a;
+  --color-overlay: #1a1a26;
+
+  /* Text. */
+  --color-ink: #f2f2f7;
+  --color-ink-muted: #8e8e9e;
+
+  /* Brand — electric violet/magenta family. */
+  --color-brand: #b026ff;
+  --color-brand-hot: #e040fb;
+  --color-brand-deep: #7b1fa2;
+
+  /* RESERVED functional semantics — never decorative. */
+  --color-price-up: #16c784;
+  --color-price-down: #ea3943;
+
+  /* RESERVED for rarity moments only. */
+  --color-rarity-gold: #ffd24a;
+  --color-rarity-gold-hot: #ffb300;
+
+  /* Class ladder, class-0 → class-5. class-5 intentionally equals rarity-gold. */
+  /* Five cosmetic character classes: Goblin, Knight, Wizard, Dragon, Titan
+     (PID §3). The predecessor's ladder had six rarity tiers; the top value —
+     its gold — is carried onto Titan, and the sixth is dropped.
+
+     PHASE-0-REVIEW: these are the predecessor's hues, remapped by position.
+     Class names and art direction are founder-owned and unratified (PID D2), so
+     treat every value here as a placeholder. */
+  --color-class-0: #9e9ea7;
+  --color-class-1: #7c8db5;
+  --color-class-2: #a855f7;
+  --color-class-3: #f472b6;
+  --color-class-4: #ffd24a;
+
+  /* An attention accent, unreserved. */
+  --color-heat: #ff6d00;
+
+  /* Motion easings (exposed as Tailwind ease-* utilities). */
+  --ease-juice: cubic-bezier(0.34, 1.56, 0.64, 1); /* overshoot — reveals, pulses */
+  --ease-snap: cubic-bezier(0.22, 1, 0.36, 1); /* fast-out — shakes, ticks */
+}
+
+:root {
+  /* Motion durations — the juice language is screen-shake/pulse/flash (D-04). */
+  --duration-pulse-fast: 600ms;
+  --duration-shake: 300ms;
+  --duration-flash: 150ms;
+}
+
+/* --- Motion vocabulary ------------------------------------------------- */
+
+@keyframes token-pulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-brand) 60%, transparent);
+  }
+  50% {
+    transform: scale(1.06);
+    box-shadow: 0 0 24px 6px color-mix(in srgb, var(--color-brand) 45%, transparent);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+@keyframes token-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-6px);
+  }
+  40% {
+    transform: translateX(5px);
+  }
+  60% {
+    transform: translateX(-4px);
+  }
+  80% {
+    transform: translateX(2px);
+  }
+}
+
+@keyframes token-flash {
+  0% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.9);
+  }
+  100% {
+    filter: brightness(1);
+  }
+}
+
+@keyframes aura-breathe {
+  from {
+    box-shadow:
+      0 0 18px 2px color-mix(in srgb, var(--color-rarity-gold) 55%, transparent),
+      0 0 48px 12px color-mix(in srgb, var(--color-rarity-gold) 25%, transparent);
+  }
+  to {
+    box-shadow:
+      0 0 26px 5px color-mix(in srgb, var(--color-rarity-gold) 70%, transparent),
+      0 0 72px 20px color-mix(in srgb, var(--color-rarity-gold) 35%, transparent);
+  }
+}
+
+.motion-pulse {
+  animation: token-pulse var(--duration-pulse-fast) var(--ease-juice);
+}
+
+.motion-shake {
+  animation: token-shake var(--duration-shake) var(--ease-snap);
+}
+
+.motion-flash {
+  animation: token-flash var(--duration-flash) linear 2;
+}
+
+.aura-breathe {
+  animation: aura-breathe 2.4s ease-in-out infinite alternate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .motion-pulse,
+  .motion-shake,
+  .motion-flash,
+  .aura-breathe {
+    animation: none;
+  }
+}

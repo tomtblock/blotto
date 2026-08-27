@@ -1,0 +1,10 @@
+[package]
+name = "blotto-merkle"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "PLACEHOLDER — not implemented. See README.md."
+publish = false
+
+[lints]
+workspace = true

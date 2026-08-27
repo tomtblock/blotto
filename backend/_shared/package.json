@@ -1,0 +1,30 @@
+{
+  "name": "@blotto/backend-shared",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "private": true,
+  "description": "Shared off-chain service infrastructure: env and config loading, the Postgres block and migrations home, HTTP hygiene, the Monitor metrics/alert seam, and the generic half of the Anchor event decoder.",
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "ts-mocha -p ./tsconfig.json -t 60000 \"test/**/*.spec.ts\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@solana/web3.js": "^1.95.0",
+    "pg": "^8.13.0"
+  },
+  "devDependencies": {
+    "@types/chai": "^4.3.0",
+    "@types/mocha": "^9.0.0",
+    "@types/node": "^20.0.0",
+    "@types/pg": "^8.11.0",
+    "chai": "^4.3.4",
+    "mocha": "^9.0.3",
+    "ts-mocha": "^10.0.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.7.3"
+  }
+}

@@ -1,0 +1,129 @@
+# stop-the-line — red-main automation, carried from the predecessor repository.
+#
+# Watches ci-fast's completion on main. A red run auto-opens a `[stop-the-line]`
+# issue assigned to the merging author (the workflow_run actor), linked to the
+# failed run; a subsequent green run of the same lane auto-closes it. Nobody
+# transcribes anything by hand — fixing red main is the one alarm that ever
+# demands action (CONTRIBUTING.md § CI).
+#
+# One open issue per lane (dedupe by exact title): repeat failures append comments
+# to the existing issue instead of stacking new ones.
+#
+# The watched-workflow list is ci-fast alone, because that is the only lane this
+# repository has. Add lanes here as they are added to .github/workflows/.
+#
+# workflow_dispatch is the simulation path (a simulated red files an issue; a
+# simulated green closes it) — a courtesy hook, never part of the routine path.
+#
+# Hardening (zizmor): every event-derived value reaches the shell via `env:` (no
+# template expansion inside run blocks), and the job holds only issues:write. The
+# workflow_run trigger itself is the design — branch-scoped to main, no checkout,
+# no code execution from the triggering run.
+name: stop-the-line
+
+on:
+  workflow_run: # zizmor: ignore[dangerous-triggers] — required for red-main watch; no checkout, env-routed inputs, issues:write only
+    workflows: ["ci-fast"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      simulate:
+        description: "Simulate a lane conclusion"
+        required: true
+        type: choice
+        options: [red, green]
+
+permissions:
+  contents: read
+
+jobs:
+  triage:
+    name: file or clear
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Resolve lane + conclusion
+        id: ctx
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          SIMULATE: ${{ inputs.simulate }}
+          WR_NAME: ${{ github.event.workflow_run.name }}
+          WR_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          WR_URL: ${{ github.event.workflow_run.html_url }}
+          WR_SHA: ${{ github.event.workflow_run.head_sha }}
+          WR_ACTOR: ${{ github.event.workflow_run.actor.login }}
+          SIM_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SIM_SHA: ${{ github.sha }}
+          SIM_ACTOR: ${{ github.actor }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            {
+              echo "lane=simulated-lane"
+              if [ "$SIMULATE" = "red" ]; then
+                echo "conclusion=failure"
+              else
+                echo "conclusion=success"
+              fi
+              echo "run_url=$SIM_URL"
+              echo "sha=$SIM_SHA"
+              echo "actor=$SIM_ACTOR"
+            } >> "$GITHUB_OUTPUT"
+          else
+            {
+              echo "lane=$WR_NAME"
+              echo "conclusion=$WR_CONCLUSION"
+              echo "run_url=$WR_URL"
+              echo "sha=$WR_SHA"
+              echo "actor=$WR_ACTOR"
+            } >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Ensure label exists
+        run: |
+          gh label create stop-the-line \
+            --description "main is red — fixing this outranks new work (CONTRIBUTING.md § CI)" \
+            --color B60205 2>/dev/null || true
+
+      - name: File on red
+        if: steps.ctx.outputs.conclusion == 'failure'
+        env:
+          LANE: ${{ steps.ctx.outputs.lane }}
+          RUN_URL: ${{ steps.ctx.outputs.run_url }}
+          SHA: ${{ steps.ctx.outputs.sha }}
+          ACTOR: ${{ steps.ctx.outputs.actor }}
+        run: |
+          TITLE="[stop-the-line] ${LANE} is red on main"
+          SHA7="$(echo "$SHA" | cut -c1-7)"
+          BODY="**main is red.** Lane: \`${LANE}\` · commit \`${SHA7}\` · merged by @${ACTOR}
+
+          Failed run: ${RUN_URL}
+
+          Fixing this outranks new work (CONTRIBUTING.md § CI — the one alarm that ever demands action). This issue auto-closes when \`${LANE}\` next runs green on main."
+          EXISTING="$(gh issue list --label stop-the-line --state open --search "in:title \"$TITLE\"" --json number,title --jq ".[] | select(.title == \"$TITLE\") | .number" | head -1)"
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body "Still red at \`${SHA7}\`: ${RUN_URL}"
+          else
+            gh issue create --title "$TITLE" --label stop-the-line \
+              --assignee "$ACTOR" --body "$BODY" \
+            || gh issue create --title "$TITLE" --label stop-the-line --body "$BODY"
+          fi
+
+      - name: Clear on green
+        if: steps.ctx.outputs.conclusion == 'success'
+        env:
+          LANE: ${{ steps.ctx.outputs.lane }}
+          RUN_URL: ${{ steps.ctx.outputs.run_url }}
+          SHA: ${{ steps.ctx.outputs.sha }}
+        run: |
+          TITLE="[stop-the-line] ${LANE} is red on main"
+          SHA7="$(echo "$SHA" | cut -c1-7)"
+          for n in $(gh issue list --label stop-the-line --state open --search "in:title \"$TITLE\"" --json number,title --jq ".[] | select(.title == \"$TITLE\") | .number"); do
+            gh issue close "$n" --comment "\`${LANE}\` is green again on main at \`${SHA7}\`: ${RUN_URL} — auto-closed."
+          done

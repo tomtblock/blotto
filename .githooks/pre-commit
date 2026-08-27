@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+#
+# Blotto Cup pre-commit hook — reject any staged file containing a Solana keypair.
+#
+# A Solana keypair on disk is a bare JSON array of 64 byte values. The gitleaks
+# default ruleset does not detect that shape (this is why .gitleaks.toml carries a
+# custom rule for it), and the old repo leaked exactly this way. This hook is the
+# local half of that defence: gitleaks catches it in CI, this catches it before the
+# commit object exists at all.
+#
+# Enable once per clone:
+#     git config core.hooksPath .githooks
+#
+# See CONTRIBUTING.md → "Keys and secrets".
+
+set -euo pipefail
+
+# The 64-integer-array shape, matched anywhere in the file (not just at line start):
+# a real keypair file is one long line, but a keypair pasted into a fixture, a test,
+# or a Markdown code fence is the same leak.
+KEYPAIR_RE='\[[[:space:]]*([0-9]{1,3}[[:space:]]*,[[:space:]]*){63}[0-9]{1,3}[[:space:]]*\]'
+
+offenders=()
+
+# Staged, non-deleted files only. -z / read -d '' so paths with spaces survive.
+while IFS= read -r -d '' file; do
+  # Read the staged blob, not the working tree — they can differ.
+  if git show ":$file" 2>/dev/null | grep -Eqz "$KEYPAIR_RE"; then
+    offenders+=("$file")
+  fi
+done < <(git diff --cached --name-only --diff-filter=d -z)
+
+if [ ${#offenders[@]} -gt 0 ]; then
+  echo "pre-commit: REJECTED — a staged file contains a 64-integer array (Solana keypair shape)."
+  echo
+  for f in "${offenders[@]}"; do
+    echo "    $f"
+  done
+  echo
+  echo "No key from any repository is ever committed here. Move the file outside the"
+  echo "repository, unstage it (git restore --staged <file>), and record only its PUBLIC"
+  echo "key if it needs to be referenced."
+  echo
+  echo "If this is a genuine false positive — a 64-element integer array that is not a"
+  echo "key — say so explicitly in the commit and bypass with: git commit --no-verify"
+  exit 1
+fi
+
+exit 0

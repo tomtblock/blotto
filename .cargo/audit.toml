@@ -1,0 +1,27 @@
+# cargo-audit config — advisory gate.
+#
+# Carried from the predecessor repository, with the ignore list re-verified against
+# THIS workspace's Cargo.lock rather than inherited on trust. Same ignore set as
+# deny.toml, so both tools are green-on-known and a red always means a NEW finding.
+#
+# Each entry below was checked with `cargo tree -i <crate> --workspace` at extraction
+# time; the finding is recorded next to it. Re-check on any dependency change — an
+# ignore that outlives its reason is worse than no gate at all.
+
+[advisories]
+ignore = [
+    # rkyv — present in Cargo.lock but UNREACHABLE: `cargo tree -i rkyv --workspace`
+    # returns nothing, so it is a stale lock entry with no path from any workspace
+    # member. Kept only because cargo-audit reads the lockfile without reachability
+    # analysis and would otherwise go red on a crate nothing compiles.
+    "RUSTSEC-2026-0235",
+    # bincode 1.3.3, unmaintained. Reachable, and ecosystem-pinned through the
+    # Anchor / Agave dependency tree — not ours to move.
+    "RUSTSEC-2025-0141",
+    # libsecp256k1 0.7.2, unmaintained. Reachable, ecosystem-pinned as above.
+    "RUSTSEC-2025-0161",
+    # anyhow 1.0.104, downcast_mut() unsoundness. Reachable, but the program does
+    # not call downcast_mut and the unsound path is not on any code path this
+    # workspace compiles.
+    "RUSTSEC-2026-0190",
+]
