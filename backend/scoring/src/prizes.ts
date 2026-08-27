@@ -14,6 +14,24 @@
  */
 
 export const CAPACITY = 64n;
+
+/**
+ * The seven configured entry prices (D1, ratified 2026-08-27), tier 0..6 —
+ * a TS mirror of `programs/blotto_cup/src/constants.rs::TIER_ENTRY_LAMPORTS`.
+ * The Rust table is authoritative; this mirror is pinned to the Python
+ * oracle's per-tier tables (vectors.json `tier_tables`) by the vector suite,
+ * so drift fails tests rather than shipping. Rules-page and prize-table UI
+ * derive every displayed number from THIS table — never hand-typed.
+ */
+export const TIER_ENTRY_LAMPORTS: readonly bigint[] = [
+  100_000_000n,
+  500_000_000n,
+  750_000_000n,
+  1_000_000_000n,
+  2_500_000_000n,
+  5_000_000_000n,
+  7_500_000_000n,
+];
 export const VAULT_BPS = 8000n;
 export const BPS_DENOM = 10000n;
 export const PAID_RANKS = 16;
