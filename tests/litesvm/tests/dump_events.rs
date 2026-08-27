@@ -95,7 +95,12 @@ fn lifecycle_log_fixture() {
         let ix = pay_prizes_ix(&settlement.pubkey(), 1, &seats, &metas);
         env.send(&[ix], &[&settlement]).unwrap();
     }
-    let ix = release_escrow_ix(&settlement.pubkey(), 1, &players[0].1, &players[0].0.pubkey());
+    let ix = release_escrow_ix(
+        &settlement.pubkey(),
+        1,
+        &players[0].1,
+        &players[0].0.pubkey(),
+    );
     env.send(&[ix], &[&settlement]).unwrap();
     let ix = forfeit_escrow_ix(&settlement.pubkey(), 1, &players[1].1);
     env.send(&[ix], &[&settlement]).unwrap();
@@ -146,7 +151,11 @@ fn lifecycle_log_fixture() {
             for (j, l) in logs.iter().enumerate() {
                 out.push_str(&format!("{}{:?}", if j > 0 { "," } else { "" }, l));
             }
-            out.push_str(if i + 1 < with_events.len() { "],\n" } else { "]\n" });
+            out.push_str(if i + 1 < with_events.len() {
+                "],\n"
+            } else {
+                "]\n"
+            });
         }
         out.push_str(" ]\n}\n");
         let path = concat!(

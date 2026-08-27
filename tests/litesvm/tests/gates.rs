@@ -57,7 +57,10 @@ fn non_admin_reverts_on_every_admin_instruction() {
     // `withdraw_platform` has its own account shape — same has_one gate.
     let ix = withdraw_platform_ix(&mallory.pubkey(), &mallory.pubkey(), 1);
     let err = env.send(&[ix], &[&mallory]).unwrap_err();
-    assert!(err.contains("2001"), "withdraw must reject a non-admin: {err}");
+    assert!(
+        err.contains("2001"),
+        "withdraw must reject a non-admin: {err}"
+    );
 
     // Undo what the loop set so later assertions aren't surprised.
     let admin = env.admin.pubkey();
@@ -218,7 +221,11 @@ fn lowering_a_ceiling_blocks_the_next_open_not_the_open_pool() {
     args.extend_from_slice(&(6_400_000_000u64 - 1).to_le_bytes());
     env.send(&[admin_ix(&admin, "set_vault_ceiling", &args)], &[])
         .unwrap();
-    assert_eq!(read_pool(&env.svm, &pool_pda(1)).state, 0, "pool 1 stays Open");
+    assert_eq!(
+        read_pool(&env.svm, &pool_pda(1)).state,
+        0,
+        "pool 1 stays Open"
+    );
 
     // Free the tier slot via the refund fork, then try the NEXT open: the
     // lowered ceiling is what blocks it.
@@ -238,7 +245,8 @@ fn lowering_a_ceiling_blocks_the_next_open_not_the_open_pool() {
     env.send(&[admin_ix(&admin, "set_vault_ceiling", &args)], &[])
         .unwrap();
     let ix = open_pool_ix(&settlement.pubkey(), 2, 0, [9; 32], env.sealing_secret_hash);
-    env.send(&[ix], &[&settlement]).expect("reopen after restore");
+    env.send(&[ix], &[&settlement])
+        .expect("reopen after restore");
 }
 
 #[test]

@@ -111,7 +111,9 @@ fn open_blocked_when_the_policy_floor_is_unmet() {
     let needed = TIER_POTS[0] + 1_000_000_000 + TIER_POTS[1];
     env.fund_platform(needed - 1);
     let ix = open_pool_ix(&settlement.pubkey(), 1, 0, [9; 32], env.sealing_secret_hash);
-    let err = env.send(std::slice::from_ref(&ix), &[&settlement]).unwrap_err();
+    let err = env
+        .send(std::slice::from_ref(&ix), &[&settlement])
+        .unwrap_err();
     assert!(
         err.contains("6049") || err.contains("TreasuryShortfall"),
         "{err}"
@@ -171,7 +173,8 @@ fn withdraw_blocked_below_the_floor_including_refundable_entries() {
         "refundable entries must be unwithdrawable: {err}"
     );
     let ix = withdraw_platform_ix(&admin, &dest, surplus);
-    env.send(&[ix], &[]).expect("surplus above refundable clears");
+    env.send(&[ix], &[])
+        .expect("surplus above refundable clears");
 }
 
 /// The seven-tier ladder from the founder's 5.12 SOL bootstrap: with every
@@ -240,7 +243,9 @@ fn seven_tier_ladder_unlocks_at_exact_thresholds_from_bootstrap() {
         if balance < threshold {
             // Fund to one lamport UNDER the threshold: blocked.
             env.fund_platform(threshold - balance - 1);
-            let err = env.send(std::slice::from_ref(&ix), &[&settlement]).unwrap_err();
+            let err = env
+                .send(std::slice::from_ref(&ix), &[&settlement])
+                .unwrap_err();
             assert!(err.contains("6049"), "tier {tier} rung short: {err}");
             // The exact lamport unlocks the rung.
             env.fund_platform(1);

@@ -397,7 +397,9 @@ impl Model {
         );
         assert_eq!(
             self.platform,
-            self.total_deposits + self.total_entries_in + self.total_pot_returns
+            self.total_deposits
+                + self.total_entries_in
+                + self.total_pot_returns
                 + self.total_forfeited
                 - self.total_pots_funded
                 - self.total_refunded
@@ -417,7 +419,10 @@ impl Model {
         } else {
             0
         };
-        assert_eq!(self.reserved, expected_reserved, "platform_reserved drifted");
+        assert_eq!(
+            self.reserved, expected_reserved,
+            "platform_reserved drifted"
+        );
         // `refundable` tracks exactly the open pool's unrefunded entries.
         let expected_refundable = match self.state {
             St::Open => self.entrants as u128 * self.price as u128,

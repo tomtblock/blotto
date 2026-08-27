@@ -37,8 +37,8 @@ pub fn idle_tier_reserve(config: &Config, exclude_tier: Option<usize>) -> u64 {
             continue;
         }
         if config.open_tiers[t] && config.active_pool_by_tier[t] == 0 {
-            reserve += (config.tier_pot_lamports[t] as u128)
-                * (config.treasury_reserve_pots as u128);
+            reserve +=
+                (config.tier_pot_lamports[t] as u128) * (config.treasury_reserve_pots as u128);
         }
     }
     reserve as u64

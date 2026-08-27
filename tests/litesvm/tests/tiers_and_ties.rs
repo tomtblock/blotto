@@ -79,7 +79,7 @@ fn tier_2_and_tier_6_pools_settle_with_the_report_table_amounts() {
     env.open_ready_pool(1, 2);
     let players = fill_and_reveal(&mut env, 1);
     let payouts = band_payouts(TIER_POTS[2]); // 38.4 SOL fixed pot
-    // The step report's tier-2 prize table, to the lamport.
+                                              // The step report's tier-2 prize table, to the lamport.
     let expected_t2: [u64; 16] = [
         10_125_000_000, // 1st: 10.125 SOL
         5_925_000_000,
