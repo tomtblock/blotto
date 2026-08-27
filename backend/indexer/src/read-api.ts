@@ -15,6 +15,9 @@
  *                                        story deliberately reads closer to
  *                                        the chain)
  *   GET /profiles/:player              → ProfileRow
+ *   GET /treasury                      → TreasuryReport (D-A1 revised) —
+ *                                        assembled from the raw event
+ *                                        ledger (treasury-report.ts)
  *
  * Route handling is a pure function (path → handler) so the suite tests it
  * without sockets; `serveReadApi` is the thin Node http wrapper.
@@ -22,6 +25,7 @@
 
 import { createServer, type Server } from 'http';
 import type { Queryable } from './shared';
+import { treasuryReport } from './treasury-report';
 
 type Json = unknown;
 
@@ -38,6 +42,7 @@ function poolRow(r: Record<string, unknown>): Json {
     id: r.id === null ? null : String(r.id),
     tier: r.tier,
     entry_lamports: r.entry_lamports === null ? null : String(r.entry_lamports),
+    pot_lamports: r.pot_lamports === null || r.pot_lamports === undefined ? null : String(r.pot_lamports),
     fill_deadline: r.fill_deadline === null ? null : String(r.fill_deadline),
     timer_seconds: r.timer_seconds,
     state: r.state,
@@ -95,6 +100,10 @@ export async function handleRead(db: Queryable, path: string): Promise<ReadApiRe
     return { status: 404, body: { error: 'not found' } };
   }
 
+  if (parts[0] === 'treasury' && parts.length === 1) {
+    return { status: 200, body: await treasuryReport(db) };
+  }
+
   if (parts[0] === 'profiles' && parts.length === 2) {
     const player = parts[1];
     if (!B58.test(player)) return { status: 400, body: { error: 'bad player address' } };
@@ -130,6 +139,7 @@ async function verifyRecord(db: Queryable, pool: string): Promise<ReadApiResult>
   );
   let sealingSecretHashHex = '';
   let entryLamports = '';
+  let potLamports = '';
   let revealedSecretHex = '';
   let resultsRootHex = '';
   let committedPayouts: Array<{ entryIndex: number; amount: string }> = [];
@@ -141,6 +151,7 @@ async function verifyRecord(db: Queryable, pool: string): Promise<ReadApiResult>
       case 'PoolOpened':
         sealingSecretHashHex = e.sealing_secret_hash as string;
         entryLamports = e.entry_lamports as string;
+        potLamports = e.pot_lamports as string;
         break;
       case 'EntryRegistered':
         battlesHashByPlayer[e.player as string] = e.battles_hash as string;
@@ -171,6 +182,7 @@ async function verifyRecord(db: Queryable, pool: string): Promise<ReadApiResult>
     body: {
       sealingSecretHashHex,
       entryLamports,
+      potLamports,
       revealedSecretHex,
       resultsRootHex,
       committedPayouts,

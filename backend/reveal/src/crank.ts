@@ -32,7 +32,6 @@ import {
   ExportRefusedError,
   leafBytes,
   merkleRoot,
-  potLamports,
   publicKeyOf,
   sealOpen,
   type BattleSet,
@@ -188,7 +187,9 @@ export async function crankPool(deps: CrankDeps, poolId: bigint): Promise<CrankO
 
   // ---- 3. Score + prizes + tree ------------------------------------------
   // D3-B: competition ranks (tied players share one), split-pot amounts.
-  const pot = potLamports(pool.entryLamports);
+  // The pot is the POOL'S fixed pot (D-A1 revised) — read from chain state,
+  // never derived from the entry price.
+  const pot = pool.potLamports;
   const results = assignPrizes(scoreWithMissing(scoringInput), pot);
   // Published leaf order: rank asc, entry index asc (ranks repeat).
   const byRank = [...results].sort((a, b) => a.rank - b.rank || a.index - b.index);

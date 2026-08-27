@@ -9,7 +9,7 @@ use solana_sdk::signature::Keypair;
 use solana_sdk::signer::Signer;
 
 const ENTRY: u64 = 100_000_000; // tier 0: 0.1 SOL
-const POT: u64 = 5_120_000_000; // 64 × 80%
+const POT: u64 = 5_120_000_000; // tier 0's FIXED pot (D-A1 revised)
 const BANDS: [u64; 16] = [
     1_350_000_000,
     790_000_000,
@@ -35,6 +35,14 @@ fn full_lifecycle_pays_the_pot_to_the_lamport() {
     env.open_ready_pool(1, 0);
     let pool = pool_pda(1);
 
+    // ---- pot locked at open, BEFORE any entry (D-A1 revised) ----
+    assert_eq!(env.balance(&vault_pda(1)), POT, "pot pre-funded at open");
+    assert_eq!(read_pool(&env.svm, &pool).pot_lamports, POT);
+    let cfg = read_config(&env.svm);
+    assert_eq!(cfg.platform_reserved, POT, "pot recorded as locked");
+    assert_eq!(cfg.active_pool_by_tier[0], 1, "tier slot taken");
+    let platform_at_open = env.balance(&platform_pda());
+
     // ---- 64 entries ----
     let mut players: Vec<(Keypair, Pubkey)> = Vec::new();
     for i in 0..64u16 {
@@ -47,18 +55,25 @@ fn full_lifecycle_pays_the_pot_to_the_lamport() {
         players.push((player, entry));
     }
 
-    // ---- sealed exactly at 64, bag empty, fees swept ----
+    // ---- sealed exactly at 64, bag empty, entries all in the treasury ----
     let pv = read_pool(&env.svm, &pool);
     assert_eq!(pv.entrants, 64);
     assert_eq!(pv.state, 1, "Sealed");
     assert_eq!(pv.class_counters, [0u16; 5], "bag empties exactly at seal");
-    assert_eq!(env.balance(&vault_pda(1)), POT, "vault holds the 80% pot");
-    assert_eq!(env.balance(&fees_pda(1)), 0, "fees PDA swept and reaped");
     assert_eq!(
-        env.balance(&env.platform_wallet.clone()),
-        64 * (ENTRY - ENTRY / 10 * 8),
-        "platform got the 20%"
+        env.balance(&vault_pda(1)),
+        POT,
+        "vault still holds the pot exactly"
     );
+    assert_eq!(
+        env.balance(&platform_pda()) - platform_at_open,
+        64 * ENTRY,
+        "treasury got 100% of every entry"
+    );
+    let cfg = read_config(&env.svm);
+    assert_eq!(cfg.platform_refundable, 0, "entries became revenue at seal");
+    // SEQUENTIAL pools (D-A1 revised): sealing does NOT free the tier slot.
+    assert_eq!(cfg.active_pool_by_tier[0], 1, "slot still held after seal");
 
     // ---- 65th entry rejected ----
     let err = env.register_player(1).unwrap_err();
@@ -75,7 +90,7 @@ fn full_lifecycle_pays_the_pot_to_the_lamport() {
     let settlement = env.settlement.insecure_clone();
     // D3-B: the committed payout list — seats 0..15 take ranks 1..16's bands
     // (this pool's ranking fixture; no ties).
-    let payouts = band_payouts(ENTRY);
+    let payouts = band_payouts(POT);
     let mut commit_args = [1u8; 32].to_vec();
     commit_args.extend_from_slice(&encode_payouts(&payouts));
     let ix = settle_ix(&settlement.pubkey(), 1, "commit_results", &commit_args);
@@ -139,6 +154,10 @@ fn full_lifecycle_pays_the_pot_to_the_lamport() {
         0,
         "vault drained to exactly zero"
     );
+    // Paid frees the tier slot and releases the pot from the book-keeping.
+    let cfg = read_config(&env.svm);
+    assert_eq!(cfg.active_pool_by_tier[0], 0, "slot freed at Paid");
+    assert_eq!(cfg.platform_reserved, 0, "pot released from reserved");
 
     // ---- double pay rejected ----
     let (p, e) = &players[0];
@@ -172,7 +191,7 @@ fn flagged_winner_escrows_then_releases_and_forfeits() {
     let ix = settle_ix(&settlement.pubkey(), 1, "reveal_pool_secret", &secret);
     env.send(&[ix], &[&settlement]).unwrap();
     let mut commit_args = [1u8; 32].to_vec();
-    commit_args.extend_from_slice(&encode_payouts(&band_payouts(ENTRY)));
+    commit_args.extend_from_slice(&encode_payouts(&band_payouts(POT)));
     let ix = settle_ix(&settlement.pubkey(), 1, "commit_results", &commit_args);
     env.send(&[ix], &[&settlement]).unwrap();
 
@@ -199,7 +218,7 @@ fn flagged_winner_escrows_then_releases_and_forfeits() {
     assert_eq!(read_pool(&env.svm, &pool_pda(1)).state, 3, "Paid");
 
     // Forfeiting an unflagged (no-escrow) entry: rejected.
-    let ix = forfeit_escrow_ix(&settlement.pubkey(), 1, &players[2].1, &env.platform_wallet);
+    let ix = forfeit_escrow_ix(&settlement.pubkey(), 1, &players[2].1);
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
     assert!(err.contains("6036") || err.contains("NoEscrow"), "{err}");
 
@@ -214,11 +233,11 @@ fn flagged_winner_escrows_then_releases_and_forfeits() {
     env.send(&[ix], &[&settlement]).expect("release");
     assert_eq!(env.balance(&players[0].0.pubkey()) - before, BANDS[0]);
 
-    // Forfeit rank 2 (still flagged) to the platform wallet.
-    let before = env.balance(&env.platform_wallet.clone());
-    let ix = forfeit_escrow_ix(&settlement.pubkey(), 1, &players[1].1, &env.platform_wallet);
+    // Forfeit rank 2 (still flagged) to the platform treasury.
+    let before = env.balance(&platform_pda());
+    let ix = forfeit_escrow_ix(&settlement.pubkey(), 1, &players[1].1);
     env.send(&[ix], &[&settlement]).expect("forfeit");
-    assert_eq!(env.balance(&env.platform_wallet.clone()) - before, BANDS[1]);
+    assert_eq!(env.balance(&platform_pda()) - before, BANDS[1]);
 
     assert_eq!(env.balance(&vault_pda(1)), 0, "vault ends at exactly zero");
 }
@@ -251,9 +270,18 @@ fn refund_fork_returns_the_full_entry() {
     );
     let rando = Keypair::new();
     env.svm.airdrop(&rando.pubkey(), 1_000_000_000).unwrap();
+    let platform_before = env.balance(&platform_pda());
     let ix = trigger_refund_ix(&rando.pubkey(), 1);
     env.send(&[ix], &[&rando]).expect("trigger_refund");
     assert_eq!(read_pool(&env.svm, &pool_pda(1)).state, 4, "Refunding");
+    // The untouched pot returned to the treasury; the vault reaped.
+    assert_eq!(env.balance(&vault_pda(1)), 0, "pot returned at trigger");
+    assert_eq!(
+        env.balance(&platform_pda()) - platform_before,
+        POT,
+        "treasury got the pot back"
+    );
+    assert_eq!(read_config(&env.svm).platform_reserved, 0);
 
     // Refund all three — each gets the FULL 0.1 SOL back.
     for (player, entry) in &players {
@@ -276,5 +304,10 @@ fn refund_fork_returns_the_full_entry() {
     let pv = read_pool(&env.svm, &pool_pda(1));
     assert_eq!(pv.state, 5, "Closed");
     assert_eq!(env.balance(&vault_pda(1)), 0);
-    assert_eq!(env.balance(&fees_pda(1)), 0);
+    let cfg = read_config(&env.svm);
+    assert_eq!(
+        cfg.platform_refundable, 0,
+        "every refundable lamport repaid"
+    );
+    assert_eq!(cfg.active_pool_by_tier[0], 0, "slot freed at Closed");
 }

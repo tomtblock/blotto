@@ -23,7 +23,7 @@ import {
   seal,
   type SealedPayload,
 } from '../../sealing/src';
-import { battlesHash, potLamports, TIER_ENTRY_LAMPORTS, type BattleSet } from '../../scoring/src';
+import { battlesHash, potForTier, TIER_ENTRY_LAMPORTS, type BattleSet } from '../../scoring/src';
 import { base58Encode } from '../../_shared/src/blotto-events';
 
 const sha = (s: string) => new Uint8Array(createHash('sha256').update(s).digest());
@@ -50,13 +50,16 @@ interface World {
 
 async function makeWorld(): Promise<World> {
   const clock = { t: 1_000n };
-  const chain = new FakeChain((entry) => potLamports(entry), () => clock.t);
+  const chain = new FakeChain(() => clock.t);
   await chain.initConfig({
     entrySigner: 'entry',
     settlementSigner: 'settle',
-    platformWallet: 'platform',
     vaultCeilingLamports: TIER_ENTRY_LAMPORTS.map((e) => e * 64n),
+    treasuryMinPlatformLamports: 0n,
   });
+  // Bootstrap the prize treasury far past every test's policy floor (the
+  // treasury-policy specs fund their own exact amounts).
+  chain.fundPlatform(1_800_000_000_000n);
   const custody = new LocalCustody(async (id) => {
     const p = await chain.getPool(id);
     return p.state !== 'Open';
@@ -166,7 +169,7 @@ describe('the daemon (C8): the product loop', () => {
     expect(r.opened).to.deep.equal([{ poolId: 2n, tier: 0 }]);
 
     // Conservation: the paid set carries exactly the pot.
-    const pot = potLamports(TIER_ENTRY_LAMPORTS[0]);
+    const pot = potForTier(0);
     let paid = 0n;
     for (const v of w.chain.paid.values()) paid += v;
     expect(paid).to.equal(pot);
@@ -328,7 +331,7 @@ describe('the daemon (C8): double-run', () => {
     // conserved exactly — the paid-mask (mirrored from the program) makes a
     // second settlement of any seat fail rather than pay twice.
     expect((await w.chain.getPool(1n)).state).to.equal('Paid');
-    const pot = potLamports(TIER_ENTRY_LAMPORTS[0]);
+    const pot = potForTier(0);
     let paid = 0n;
     for (const v of w.chain.paid.values()) paid += v;
     for (const v of w.chain.escrowed.values()) paid += v;

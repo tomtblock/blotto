@@ -67,6 +67,7 @@ export function projectEvent(e: DecodedEvent): ProjectionOp[] {
             id: e.id,
             tier: e.tier,
             entry_lamports: e.entry_lamports,
+            pot_lamports: e.pot_lamports,
             fill_deadline: e.fill_deadline,
             timer_seconds: e.timer_seconds,
             sealing_pubkey: e.sealing_pubkey,

@@ -27,7 +27,7 @@ use anchor_lang::prelude::*;
 use crate::entry_packet::verify_entry_packet;
 use crate::error::ErrorCode;
 use crate::events::{EscrowForfeited, EscrowReleased};
-use crate::state::{Config, Entry, Pool, CONFIG_SEED, POOL_SEED, VAULT_SEED};
+use crate::state::{Config, Entry, Pool, CONFIG_SEED, PLATFORM_SEED, POOL_SEED, VAULT_SEED};
 
 #[derive(Accounts)]
 #[instruction(pool_id: u64)]
@@ -129,10 +129,12 @@ pub struct ForfeitEscrow<'info> {
     #[account(mut, constraint = entry.pool == pool.key() @ ErrorCode::EntryMismatch)]
     pub entry: Box<Account<'info, Entry>>,
 
-    /// CHECK: The platform wallet, pinned to Config (see the module doc on
-    /// why the destination is never another pool's vault).
-    #[account(mut, address = config.platform_wallet @ ErrorCode::BadForfeitDestination)]
-    pub platform_wallet: UncheckedAccount<'info>,
+    /// CHECK: The platform treasury PDA (D-A1 revised — since the treasury
+    /// rework, forfeits land in the program-held treasury, reachable only
+    /// through `withdraw_platform`'s gated exit; see the module doc on why
+    /// the destination is never another pool's vault).
+    #[account(mut, seeds = [PLATFORM_SEED], bump = config.platform_bump)]
+    pub platform: UncheckedAccount<'info>,
 
     pub system_program: Program<'info, System>,
 }
@@ -147,7 +149,7 @@ pub fn handle_forfeit_escrow(ctx: Context<ForfeitEscrow>, _pool_id: u64) -> Resu
     crate::vault::vault_debit(
         &ctx.accounts.system_program,
         &ctx.accounts.vault.to_account_info(),
-        &ctx.accounts.platform_wallet.to_account_info(),
+        &ctx.accounts.platform.to_account_info(),
         ctx.accounts.pool.id,
         ctx.accounts.pool.vault_bump,
         amount,
@@ -158,7 +160,7 @@ pub fn handle_forfeit_escrow(ctx: Context<ForfeitEscrow>, _pool_id: u64) -> Resu
         pool: ctx.accounts.pool.key(),
         player: ctx.accounts.entry.player,
         amount,
-        destination: ctx.accounts.platform_wallet.key(),
+        destination: ctx.accounts.platform.key(),
     });
 
     Ok(())

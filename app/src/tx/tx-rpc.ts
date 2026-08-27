@@ -64,7 +64,7 @@ export interface TxRpc {
   /** Token balance of an ATA; 0n when the account does not exist yet. */
   getTokenBalance(tokenAccount: Address): Promise<bigint>;
   /** Raw account data (discriminator included), or null when the account
-   * does not exist — the client's read of `Config.platform_wallet`. */
+   * does not exist — the client's pre-flight Config existence check. */
   getAccountData(accountAddress: Address): Promise<Uint8Array | null>;
 }
 

@@ -15,7 +15,7 @@ import {
   battlesHash,
   encodeBattleSet,
   amountForRank,
-  potLamports,
+  potForEntry,
   leafBytes,
   merkleRoot,
   merkleProof,
@@ -52,7 +52,7 @@ describe('pool vectors (20 four-player + 5 full + edge cases)', () => {
       for (let i = 0; i < players.length; i++) {
         expect(hex(encodeBattleSet(players[i]))).to.equal(pool.players[i].battles_hex);
       }
-      const pot = potLamports(BigInt(pool.entry_lamports));
+      const pot = potForEntry(BigInt(pool.entry_lamports));
       const results = assignPrizes(scorePool(players), pot);
       for (const expected of pool.results) {
         const got = results[expected.index];
@@ -117,7 +117,7 @@ describe('split-pot cases (D3-B, through the same assignPrizes)', () => {
         }
         rank += size;
       }
-      const pot = potLamports(BigInt(c.entry_lamports));
+      const pot = potForEntry(BigInt(c.entry_lamports));
       const assigned = assignPrizes(results, pot);
       const myPayouts = assigned
         .filter((r) => r.amountLamports > 0n)
@@ -151,7 +151,7 @@ describe('per-tier prize tables (D1)', () => {
 
   for (const t of vectors.tier_tables) {
     it(`entry ${t.entry_lamports}`, () => {
-      const pot = potLamports(BigInt(t.entry_lamports));
+      const pot = potForEntry(BigInt(t.entry_lamports));
       expect(pot.toString()).to.equal(t.pot_lamports);
       for (let r = 1; r <= 16; r++) {
         expect(amountForRank(pot, r).toString()).to.equal(t.bands[r - 1]);
@@ -197,7 +197,7 @@ describe('prize bands', () => {
     expect(vectors.prize_bands_1024.map(BigInt)).to.deep.equal([...PRIZE_BANDS_1024]);
   });
   it('the 16 prizes sum to the pot exactly, ranks 17+ take zero', () => {
-    const pot = potLamports(100_000_000n);
+    const pot = potForEntry(100_000_000n);
     let paid = 0n;
     for (let r = 1; r <= 16; r++) paid += amountForRank(pot, r);
     expect(paid).to.equal(pot);

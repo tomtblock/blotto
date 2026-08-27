@@ -9,6 +9,8 @@ export interface PoolSummary {
   id: string;
   tier: number;
   entry_lamports: string;
+  /** The pool's FIXED pot (D-A1 revised), from `PoolOpened.pot_lamports`. */
+  pot_lamports: string;
   fill_deadline: string; // unix seconds, decimal string
   timer_seconds: number;
   state: 'Open' | 'Sealed' | 'Scored' | 'Paid' | 'Refunding' | 'Closed';

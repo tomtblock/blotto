@@ -40,7 +40,7 @@ describe('browser bundle', () => {
     const scoring = factory(undefined, undefined, undefined);
 
     const pool = vectors.pools.find((p: any) => p.name === 'full_0');
-    const pot = scoring.potLamports(BigInt(pool.entry_lamports));
+    const pot = scoring.potForEntry(BigInt(pool.entry_lamports));
     const results = scoring.assignPrizes(
       scoring.scorePool(pool.players.map((p: any) => p.battles)),
       pot

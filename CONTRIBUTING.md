@@ -51,7 +51,11 @@ code, comments, docs and copy alike:
    anywhere.
 3. **Guarantee claims** — guaranteed · risk-free · free money · +EV · everyone wins.
 4. **Finance framing** — yield · APY · passive income · earn · investment · early investors ·
-   number go up. Entering a tournament is not investing and prizes are not income.
+   number go up · reinvest · asset manager · AMM · advise (the last four added by master prompt
+   v2's D-A1 treasury vocabulary, 2026-08-27). Entering a tournament is not investing, prizes are
+   not income, and the platform treasury is described as "prize treasury" / "treasury policy" /
+   "treasury report" — a float of prize money with published rules, never anything that manages,
+   grows or advises on anyone's assets.
 5. **Category assertions** — not gambling · just a game · skill game · skill tournament (and the
    internal tell "gambling-coded"). Public copy never asserts the product's legal category, in
    either direction — it describes **mechanics**: "sealed-allocation tournament", "prizes paid by

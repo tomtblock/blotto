@@ -89,9 +89,31 @@ pub fn pool_pda(id: u64) -> Pubkey {
 pub fn vault_pda(id: u64) -> Pubkey {
     Pubkey::find_program_address(&[b"vault", &id.to_le_bytes()], &program_id()).0
 }
-pub fn fees_pda(id: u64) -> Pubkey {
-    Pubkey::find_program_address(&[b"fees", &id.to_le_bytes()], &program_id()).0
+pub fn platform_pda() -> Pubkey {
+    Pubkey::find_program_address(&[b"platform"], &program_id()).0
 }
+
+/// The launch tier prices (constants.rs::TIER_ENTRY_LAMPORTS).
+pub const TIER_PRICES: [u64; 7] = [
+    100_000_000,
+    500_000_000,
+    750_000_000,
+    1_000_000_000,
+    2_500_000_000,
+    5_000_000_000,
+    7_500_000_000,
+];
+
+/// The launch FIXED pots (constants.rs::TIER_POT_LAMPORTS, D-A1 revised).
+pub const TIER_POTS: [u64; 7] = [
+    5_120_000_000,
+    25_600_000_000,
+    38_400_000_000,
+    51_200_000_000,
+    128_000_000_000,
+    256_000_000_000,
+    384_000_000_000,
+];
 pub fn entry_pda(pool: &Pubkey, player: &Pubkey) -> Pubkey {
     Pubkey::find_program_address(&[b"entry", pool.as_ref(), player.as_ref()], &program_id()).0
 }
@@ -178,25 +200,74 @@ pub fn init_config_ix(
     admin: &Pubkey,
     entry_signer: &Pubkey,
     settlement_signer: &Pubkey,
-    platform_wallet: &Pubkey,
     vault_ceilings: [u64; 7],
+    treasury_min_platform_lamports: u64,
 ) -> Instruction {
     let mut data = disc("init_config").to_vec();
     data.extend_from_slice(entry_signer.as_ref());
     data.extend_from_slice(settlement_signer.as_ref());
-    data.extend_from_slice(platform_wallet.as_ref());
     for c in vault_ceilings {
         data.extend_from_slice(&c.to_le_bytes());
     }
+    data.extend_from_slice(&treasury_min_platform_lamports.to_le_bytes());
     Instruction {
         program_id: program_id(),
         accounts: vec![
             AccountMeta::new(*admin, true),
             AccountMeta::new(config_pda(), false),
+            AccountMeta::new_readonly(platform_pda(), false),
             AccountMeta::new_readonly(system_program_id(), false),
         ],
         data,
     }
+}
+
+/// `fund_platform_wallet` — permissionless treasury deposit.
+pub fn fund_platform_ix(funder: &Pubkey, amount: u64) -> Instruction {
+    let mut data = disc("fund_platform_wallet").to_vec();
+    data.extend_from_slice(&amount.to_le_bytes());
+    Instruction {
+        program_id: program_id(),
+        accounts: vec![
+            AccountMeta::new(*funder, true),
+            AccountMeta::new_readonly(config_pda(), false),
+            AccountMeta::new(platform_pda(), false),
+            AccountMeta::new_readonly(system_program_id(), false),
+        ],
+        data,
+    }
+}
+
+/// `withdraw_platform` — the one Squads-gated treasury exit.
+pub fn withdraw_platform_ix(admin: &Pubkey, destination: &Pubkey, amount: u64) -> Instruction {
+    let mut data = disc("withdraw_platform").to_vec();
+    data.extend_from_slice(&amount.to_le_bytes());
+    Instruction {
+        program_id: program_id(),
+        accounts: vec![
+            AccountMeta::new_readonly(*admin, true),
+            AccountMeta::new_readonly(config_pda(), false),
+            AccountMeta::new(platform_pda(), false),
+            AccountMeta::new(*destination, false),
+            AccountMeta::new_readonly(system_program_id(), false),
+        ],
+        data,
+    }
+}
+
+/// `set_tier_economics(tier, price, pot)` — founder-owned numbers.
+pub fn set_tier_economics_ix(admin: &Pubkey, tier: u8, price: u64, pot: u64) -> Instruction {
+    let mut args = vec![tier];
+    args.extend_from_slice(&price.to_le_bytes());
+    args.extend_from_slice(&pot.to_le_bytes());
+    admin_ix(admin, "set_tier_economics", &args)
+}
+
+/// `set_treasury_policy(reserve_pots, min_platform_lamports)`.
+pub fn set_treasury_policy_ix(admin: &Pubkey, reserve_pots: u8, min: u64) -> Instruction {
+    let mut args = vec![reserve_pots];
+    args.extend_from_slice(&min.to_le_bytes());
+    admin_ix(admin, "set_treasury_policy", &args)
 }
 
 /// Admin-only setters share one account shape.
@@ -213,8 +284,10 @@ pub fn admin_ix(admin: &Pubkey, name: &str, arg_bytes: &[u8]) -> Instruction {
     }
 }
 
+/// `open_pool` — PERMISSIONLESS since D-A1 revised; `opener` is any funded
+/// signer (pays the Pool's rent).
 pub fn open_pool_ix(
-    settlement: &Pubkey,
+    opener: &Pubkey,
     pool_id: u64,
     tier: u8,
     sealing_pubkey: [u8; 32],
@@ -228,11 +301,11 @@ pub fn open_pool_ix(
     Instruction {
         program_id: program_id(),
         accounts: vec![
-            AccountMeta::new(*settlement, true),
+            AccountMeta::new(*opener, true),
             AccountMeta::new(config_pda(), false),
             AccountMeta::new(pool_pda(pool_id), false),
-            AccountMeta::new_readonly(vault_pda(pool_id), false),
-            AccountMeta::new_readonly(fees_pda(pool_id), false),
+            AccountMeta::new(vault_pda(pool_id), false),
+            AccountMeta::new(platform_pda(), false),
             AccountMeta::new_readonly(system_program_id(), false),
         ],
         data,
@@ -259,7 +332,6 @@ pub fn create_pass_collection_ix(payer: &Pubkey, pool_id: u64) -> Instruction {
 pub fn register_ix(
     player: &Pubkey,
     pool_id: u64,
-    platform_wallet: &Pubkey,
     pass_asset: &Pubkey,
     battles_hash: [u8; 32],
 ) -> Instruction {
@@ -273,9 +345,8 @@ pub fn register_ix(
             AccountMeta::new(*player, true),
             AccountMeta::new(config_pda(), false),
             AccountMeta::new(pool, false),
-            AccountMeta::new(vault_pda(pool_id), false),
-            AccountMeta::new(fees_pda(pool_id), false),
-            AccountMeta::new(*platform_wallet, false),
+            AccountMeta::new_readonly(vault_pda(pool_id), false),
+            AccountMeta::new(platform_pda(), false),
             AccountMeta::new(entry_pda(&pool, player), false),
             AccountMeta::new(pass_collection_pda(&pool), false),
             AccountMeta::new(*pass_asset, true),
@@ -316,10 +387,14 @@ pub fn encode_payouts(payouts: &[(u16, u64)]) -> Vec<u8> {
 
 /// The standard no-tie payout list for a pool whose seats 0..15 are the
 /// ranking's top 16 in order: seat i takes rank i+1's band amount.
-pub fn band_payouts(entry_lamports: u64) -> Vec<(u16, u64)> {
-    let pot = entry_lamports / 10 * 8 * 64;
-    const BANDS: [u64; 16] = [270, 158, 102, 78, 50, 50, 50, 50, 27, 27, 27, 27, 27, 27, 27, 27];
-    (0..16u16).map(|i| (i, pot / 1024 * BANDS[i as usize])).collect()
+/// Takes the pool's FIXED pot (D-A1 revised) — never derived from entries.
+pub fn band_payouts(pot_lamports: u64) -> Vec<(u16, u64)> {
+    const BANDS: [u64; 16] = [
+        270, 158, 102, 78, 50, 50, 50, 50, 27, 27, 27, 27, 27, 27, 27, 27,
+    ];
+    (0..16u16)
+        .map(|i| (i, pot_lamports / 1024 * BANDS[i as usize]))
+        .collect()
 }
 
 pub fn pay_prizes_ix(
@@ -336,7 +411,7 @@ pub fn pay_prizes_ix(
     }
     let mut accounts = vec![
         AccountMeta::new_readonly(*settlement, true),
-        AccountMeta::new_readonly(config_pda(), false),
+        AccountMeta::new(config_pda(), false),
         AccountMeta::new(pool_pda(pool_id), false),
         AccountMeta::new(vault_pda(pool_id), false),
         AccountMeta::new_readonly(system_program_id(), false),
@@ -391,12 +466,7 @@ pub fn release_escrow_ix(
     }
 }
 
-pub fn forfeit_escrow_ix(
-    settlement: &Pubkey,
-    pool_id: u64,
-    entry: &Pubkey,
-    platform_wallet: &Pubkey,
-) -> Instruction {
+pub fn forfeit_escrow_ix(settlement: &Pubkey, pool_id: u64, entry: &Pubkey) -> Instruction {
     let mut data = disc("forfeit_escrow").to_vec();
     data.extend_from_slice(&pool_id.to_le_bytes());
     Instruction {
@@ -407,7 +477,7 @@ pub fn forfeit_escrow_ix(
             AccountMeta::new_readonly(pool_pda(pool_id), false),
             AccountMeta::new(vault_pda(pool_id), false),
             AccountMeta::new(*entry, false),
-            AccountMeta::new(*platform_wallet, false),
+            AccountMeta::new(platform_pda(), false),
             AccountMeta::new_readonly(system_program_id(), false),
         ],
         data,
@@ -423,6 +493,9 @@ pub fn trigger_refund_ix(signer: &Pubkey, pool_id: u64) -> Instruction {
             AccountMeta::new_readonly(*signer, true),
             AccountMeta::new(config_pda(), false),
             AccountMeta::new(pool_pda(pool_id), false),
+            AccountMeta::new(vault_pda(pool_id), false),
+            AccountMeta::new(platform_pda(), false),
+            AccountMeta::new_readonly(system_program_id(), false),
         ],
         data,
     }
@@ -435,9 +508,9 @@ pub fn refund_ix(signer: &Pubkey, pool_id: u64, entry: &Pubkey, player: &Pubkey)
         program_id: program_id(),
         accounts: vec![
             AccountMeta::new_readonly(*signer, true),
+            AccountMeta::new(config_pda(), false),
             AccountMeta::new(pool_pda(pool_id), false),
-            AccountMeta::new(vault_pda(pool_id), false),
-            AccountMeta::new(fees_pda(pool_id), false),
+            AccountMeta::new(platform_pda(), false),
             AccountMeta::new(*entry, false),
             AccountMeta::new(*player, false),
             AccountMeta::new_readonly(system_program_id(), false),
@@ -451,6 +524,7 @@ pub fn refund_ix(signer: &Pubkey, pool_id: u64, entry: &Pubkey, player: &Pubkey)
 // ---------------------------------------------------------------------------
 
 pub struct PoolView {
+    pub pot_lamports: u64,
     pub entrants: u16,
     pub state: u8, // 0 Open, 1 Sealed, 2 Scored, 3 Paid, 4 Refunding, 5 Closed
     pub class_counters: [u16; 5],
@@ -462,14 +536,16 @@ pub struct PoolView {
 
 pub fn read_pool(svm: &LiteSVM, pool: &Pubkey) -> PoolView {
     let data = svm.get_account(pool).expect("pool account").data;
+    // Layout since D-A1 v2 (`pot_lamports` u64 inserted after
+    // entry_lamports@17): pot@25, entrants@33, state@51, vrf_seed@116,
+    // class_counters@148, payouts_len@192, payouts@194, paid_mask@834,
+    // refunded_count@842.
     let counters: [u16; 5] =
-        core::array::from_fn(|i| u16::from_le_bytes([data[140 + 2 * i], data[141 + 2 * i]]));
-    // Layout after results_committed@183 (D3-B): payouts_len u16 @184,
-    // payouts [u16+u64; 64] @186, paid_mask u64 @826, refunded_count @834.
-    let payouts_len = u16::from_le_bytes([data[184], data[185]]) as usize;
+        core::array::from_fn(|i| u16::from_le_bytes([data[148 + 2 * i], data[149 + 2 * i]]));
+    let payouts_len = u16::from_le_bytes([data[192], data[193]]) as usize;
     let payouts = (0..payouts_len)
         .map(|i| {
-            let base = 186 + i * 10;
+            let base = 194 + i * 10;
             (
                 u16::from_le_bytes([data[base], data[base + 1]]),
                 u64::from_le_bytes(data[base + 2..base + 10].try_into().unwrap()),
@@ -477,12 +553,38 @@ pub fn read_pool(svm: &LiteSVM, pool: &Pubkey) -> PoolView {
         })
         .collect();
     PoolView {
-        entrants: u16::from_le_bytes([data[25], data[26]]),
-        state: data[43],
+        pot_lamports: u64::from_le_bytes(data[25..33].try_into().unwrap()),
+        entrants: u16::from_le_bytes([data[33], data[34]]),
+        state: data[51],
         class_counters: counters,
         payouts,
-        paid_mask: u64::from_le_bytes(data[826..834].try_into().unwrap()),
-        refunded_count: u16::from_le_bytes([data[834], data[835]]),
+        paid_mask: u64::from_le_bytes(data[834..842].try_into().unwrap()),
+        refunded_count: u16::from_le_bytes([data[842], data[843]]),
+    }
+}
+
+/// The treasury-relevant slice of Config (offsets mirror state.rs).
+pub struct ConfigView {
+    pub platform_reserved: u64,
+    pub platform_refundable: u64,
+    pub active_pool_by_tier: [u64; 7],
+    pub next_pool_id: u64,
+}
+
+pub fn read_config(svm: &LiteSVM) -> ConfigView {
+    let data = svm.get_account(&config_pda()).expect("config account").data;
+    // Layout (post-discriminator offsets +8): admin@8, entry_signer@40,
+    // settlement_signer@72, paused@104, open_tiers@105, ceilings@112,
+    // prices@168, pots@224, reserve_pots@280, min_platform@281,
+    // reserved@289, refundable@297, platform_bump@305, kyc@306,
+    // detection@314, next_pool_id@315, active_pool_by_tier@323, bump@379.
+    ConfigView {
+        platform_reserved: u64::from_le_bytes(data[289..297].try_into().unwrap()),
+        platform_refundable: u64::from_le_bytes(data[297..305].try_into().unwrap()),
+        active_pool_by_tier: core::array::from_fn(|i| {
+            u64::from_le_bytes(data[323 + 8 * i..331 + 8 * i].try_into().unwrap())
+        }),
+        next_pool_id: u64::from_le_bytes(data[315..323].try_into().unwrap()),
     }
 }
 
@@ -508,12 +610,12 @@ pub fn read_entry(svm: &LiteSVM, entry: &Pubkey) -> EntryView {
 }
 
 /// Write a fake committed VRF seed straight into the Pool account
-/// (offset 108, mirroring state.rs). Stands in for `commit_vrf_seed`, whose
-/// Switchboard reveal cannot run inside LiteSVM; the write-once and oracle
-/// checks are covered by the carried devnet test (`tests/vrf.ts`).
+/// (offset 116, mirroring state.rs since D-A1 v2). Stands in for
+/// `commit_vrf_seed`, whose Switchboard reveal cannot run inside LiteSVM; the
+/// write-once and oracle checks are covered by `tests/vrf_and_freeze.rs`.
 pub fn patch_vrf_seed(svm: &mut LiteSVM, pool: &Pubkey, seed: [u8; 32]) {
     let mut acct = svm.get_account(pool).expect("pool account");
-    acct.data[108..140].copy_from_slice(&seed);
+    acct.data[116..148].copy_from_slice(&seed);
     svm.set_account(*pool, acct).unwrap();
 }
 
@@ -526,7 +628,6 @@ pub struct Env {
     pub admin: Keypair,
     pub settlement: Keypair,
     pub entry_signer: SigningKey,
-    pub platform_wallet: Pubkey,
     pub pool_secret: [u8; 32],
     pub sealing_secret_hash: [u8; 32],
     /// Log lines of every SUCCESSFUL transaction, in send order — the raw
@@ -558,40 +659,38 @@ impl Env {
         let admin = Keypair::new();
         let settlement = Keypair::new();
         let entry_signer = SigningKey::from_bytes(&[7u8; 32]);
-        let platform_wallet = Pubkey::new_unique();
-        svm.airdrop(&admin.pubkey(), 100_000_000_000).unwrap();
+        // Enough to bootstrap treasuries across multi-pool tests (LiteSVM
+        // airdrops are free): the seven launch pots sum to 888.32 SOL.
+        svm.airdrop(&admin.pubkey(), 10_000_000_000_000).unwrap();
         svm.airdrop(&settlement.pubkey(), 100_000_000_000).unwrap();
-        // The platform wallet stays unfunded on purpose: the fees sweep must
-        // create it, proving a transfer to a fresh address suffices.
+        // The platform treasury PDA stays unfunded on purpose: the first
+        // deposit must create it, proving a transfer to a fresh address
+        // suffices.
 
         let entry_signer_pk = Pubkey::new_from_array(entry_signer.verifying_key().to_bytes());
-        // Launch ceilings (D2): tier 0 = 6.4 SOL; every other tier = its own
-        // gross (entry × 64), so the ceiling is a cap, not a second switch.
-        let ceilings: [u64; 7] = {
-            let entries = [
-                100_000_000u64,
-                500_000_000,
-                750_000_000,
-                1_000_000_000,
-                2_500_000_000,
-                5_000_000_000,
-                7_500_000_000,
-            ];
-            core::array::from_fn(|i| if i == 0 { 6_400_000_000 } else { entries[i] * 64 })
-        };
+        // Launch ceilings (D2 as re-scoped by v2: caps a pool's PASS SALES,
+        // price × 64): tier 0 = 6.4 SOL; every other tier = its own gross,
+        // so the ceiling is a cap, not a second switch.
+        let ceilings: [u64; 7] = core::array::from_fn(|i| {
+            if i == 0 {
+                6_400_000_000
+            } else {
+                TIER_PRICES[i] * 64
+            }
+        });
+        // Launch treasury minimum: 0 (the reserve-pots term still applies).
         let ix = init_config_ix(
             &admin.pubkey(),
             &entry_signer_pk,
             &settlement.pubkey(),
-            &platform_wallet,
             ceilings,
+            0,
         );
         let mut env = Env {
             svm,
             admin,
             settlement,
             entry_signer,
-            platform_wallet,
             pool_secret: [42u8; 32],
             sealing_secret_hash: Sha256::digest([42u8; 32]).into(),
             captured_logs: Vec::new(),
@@ -630,8 +729,22 @@ impl Env {
         }
     }
 
+    /// Deposit `amount` into the platform treasury from the admin keypair
+    /// (any signer works — the instruction is permissionless).
+    pub fn fund_platform(&mut self, amount: u64) {
+        let ix = fund_platform_ix(&self.admin.pubkey(), amount);
+        self.send(&[ix], &[]).expect("fund_platform_wallet");
+    }
+
     /// Open pool `pool_id` on `tier` and give it a VRF seed + pass Collection.
+    /// Tops the treasury up first so the D-A1 policy gate passes regardless of
+    /// which tiers a test has enabled: the tier's own pot plus one further pot
+    /// of every tier (a safe upper bound on the idle-tier reserve). Tests that
+    /// assert exact treasury numbers do their own funding and call
+    /// `open_pool_ix` directly.
     pub fn open_ready_pool(&mut self, pool_id: u64, tier: u8) {
+        let bootstrap = TIER_POTS[tier as usize] + TIER_POTS.iter().sum::<u64>();
+        self.fund_platform(bootstrap);
         let ix = open_pool_ix(
             &self.settlement.pubkey(),
             pool_id,
@@ -661,13 +774,7 @@ impl Env {
         let now = self.svm.get_sysvar::<Clock>().unix_timestamp;
         let packet = encode_packet(&player.pubkey(), &pool, 1, 1, 1, 0, now);
         let sig_ix = ed25519_ix(&self.entry_signer, &packet);
-        let reg_ix = register_ix(
-            &player.pubkey(),
-            pool_id,
-            &self.platform_wallet,
-            &pass_asset.pubkey(),
-            [3u8; 32],
-        );
+        let reg_ix = register_ix(&player.pubkey(), pool_id, &pass_asset.pubkey(), [3u8; 32]);
         let entry = entry_pda(&pool, &player.pubkey());
         self.send(&[sig_ix, reg_ix], &[player, &pass_asset])?;
         Ok(entry)

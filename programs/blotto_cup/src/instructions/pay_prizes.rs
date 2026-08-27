@@ -36,7 +36,11 @@ use crate::state::{Config, Entry, Pool, PoolState, CONFIG_SEED, POOL_SEED, VAULT
 pub struct PayPrizes<'info> {
     pub settlement_signer: Signer<'info>,
 
+    /// `mut` for the final batch only: reaching `Paid` frees the tier's
+    /// active-pool slot (sequential pools, D-A1 revised) and releases the
+    /// pot from `platform_reserved`.
     #[account(
+        mut,
         seeds = [CONFIG_SEED],
         bump = config.bump,
         has_one = settlement_signer,
@@ -149,6 +153,19 @@ pub fn handle_pay_prizes<'info>(
         .all(|p| ctx.accounts.pool.paid_mask & (1u64 << p.entry_index) != 0);
     if all_settled {
         ctx.accounts.pool.state = PoolState::Paid;
+        // The pot is fully settled (paid out or escrowed on Entries): it is
+        // no longer locked capacity in the treasury's book-keeping, and the
+        // tier may open its next pool (sequential pools, D-A1 revised).
+        ctx.accounts.config.platform_reserved = ctx
+            .accounts
+            .config
+            .platform_reserved
+            .checked_sub(ctx.accounts.pool.pot_lamports)
+            .ok_or(ErrorCode::Overflow)?;
+        let tier_idx = ctx.accounts.pool.tier as usize;
+        if ctx.accounts.config.active_pool_by_tier[tier_idx] == ctx.accounts.pool.id {
+            ctx.accounts.config.active_pool_by_tier[tier_idx] = 0;
+        }
     }
 
     emit!(PrizesPaid {

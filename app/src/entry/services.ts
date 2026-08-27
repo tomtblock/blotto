@@ -4,8 +4,8 @@
  *
  *   - `requestPacket`: POST /packet on the entry service → the issued
  *     packet's message/signature/signer bytes;
- *   - `sendRegister`: the src/tx pipeline end to end — derive the PDAs,
- *     read `Config.platform_wallet` from the chain, generate the fresh
+ *   - `sendRegister`: the src/tx pipeline end to end — derive the PDAs
+ *     (the platform treasury included, D-A1 revised), generate the fresh
  *     pass-asset keypair (Core requires its signature), build the Ed25519 +
  *     `register` instructions and drive `executeTrade` to confirmation.
  *
@@ -14,7 +14,6 @@
  */
 
 import { generateKeyPair, getAddressFromPublicKey } from '@solana/kit';
-import { base58Encode } from '../../../backend/_shared/src/blotto-events';
 import { executeTrade } from '@/tx/execute';
 import type { TxRpc } from '@/tx/tx-rpc';
 import type { LifecycleLogEntry, TxFailure, TxSigner } from '@/tx/types';
@@ -24,7 +23,6 @@ import {
   buildEd25519Instruction,
   buildRegisterInstruction,
   deriveRegisterPdas,
-  platformWalletFromConfigData,
   type IssuedPacketBytes,
 } from './register-tx';
 
@@ -111,9 +109,10 @@ export function makeLiveEntryServices(cfg: LiveEntryServicesConfig): EntryServic
         throw new Error('program not configured (NEXT_PUBLIC_PROGRAM_ID)');
       }
       const pdas = await deriveRegisterPdas(cfg.programId, cfg.poolId, cfg.signer.address);
+      // Pre-flight existence check only: since D-A1 revised the treasury is
+      // a PDA derived client-side, so nothing is read out of Config here.
       const configData = await cfg.rpc.getAccountData(pdas.config);
       if (!configData) throw new Error('config account not found on this cluster');
-      const platformWallet = base58Encode(platformWalletFromConfigData(configData));
 
       // The fresh pass asset: Core's CreateV2 requires the new asset
       // account's signature, so it partial-signs locally AFTER the wallet
@@ -127,7 +126,6 @@ export function makeLiveEntryServices(cfg: LiveEntryServicesConfig): EntryServic
           programId: cfg.programId,
           poolId: cfg.poolId,
           player: cfg.signer.address,
-          platformWallet,
           passAsset,
           battlesHash,
           pdas,

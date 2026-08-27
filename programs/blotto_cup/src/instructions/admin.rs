@@ -2,16 +2,17 @@
 //! instruction here requires its signature via `has_one = admin`, so a
 //! non-admin signer fails Anchor's `ConstraintHasOne` before any handler runs.
 //!
-//! Deliberately absent: a `set_platform_wallet`. Re-pointing the revenue and
-//! forfeit destination is a money-flow change the roadmap does not list, so it
-//! is not invented here; a compromised platform wallet is handled by pausing
-//! and shipping a reviewed upgrade, not by an always-armed admin path.
+//! Since D-A1 (revised) the revenue and forfeit destination is the
+//! program-held platform treasury PDA, not an operator wallet — so there is
+//! nothing to re-point and no `set_platform_wallet` exists. The treasury's
+//! own admin setters (`set_tier_economics`, `set_treasury_policy`,
+//! `withdraw_platform`) live in `instructions/treasury.rs`.
 
 use anchor_lang::prelude::*;
 
-use crate::constants::N_TIERS;
+use crate::constants::{N_TIERS, TIER_ENTRY_LAMPORTS, TIER_POT_LAMPORTS};
 use crate::error::ErrorCode;
-use crate::state::{Config, CONFIG_SEED};
+use crate::state::{Config, CONFIG_SEED, PLATFORM_SEED};
 
 // ---------------------------------------------------------------------------
 // init_config
@@ -33,6 +34,12 @@ pub struct InitConfig<'info> {
     )]
     pub config: Box<Account<'info, Config>>,
 
+    /// CHECK: The platform treasury PDA — passed so its canonical bump is
+    /// derived and captured once, here. The account itself stays a
+    /// zero-data system account funded lazily by the first deposit.
+    #[account(seeds = [PLATFORM_SEED], bump)]
+    pub platform: UncheckedAccount<'info>,
+
     pub system_program: Program<'info, System>,
 }
 
@@ -41,26 +48,37 @@ pub struct InitConfig<'info> {
 ///
 /// Launch policy baked in rather than parameterized (each traces to a register
 /// row): only the 0.1 SOL tier open (R6), not paused, detection full-escrow
-/// switch off (R11), KYC-at-claim switch off (R3). The founder-owned numbers
-/// that may legitimately differ per deploy — signers, wallet, ceiling — are
+/// switch off (R11), KYC-at-claim switch off (R3), tier prices and pots from
+/// the published launch constants (D-A1 revised: founder-changeable later via
+/// `set_tier_economics`), treasury reserve of ONE further pot per idle enabled
+/// tier (v2 default). The founder-owned numbers that may legitimately differ
+/// per deploy — signers, ceilings, the treasury's minimum balance — are
 /// arguments.
 pub fn handle_init_config(
     ctx: Context<InitConfig>,
     entry_signer: Pubkey,
     settlement_signer: Pubkey,
-    platform_wallet: Pubkey,
     vault_ceiling_lamports: [u64; N_TIERS],
+    treasury_min_platform_lamports: u64,
 ) -> Result<()> {
     let config = &mut ctx.accounts.config;
     config.admin = ctx.accounts.admin.key();
     config.entry_signer = entry_signer;
     config.settlement_signer = settlement_signer;
-    config.platform_wallet = platform_wallet;
     config.paused = false;
     // R6 as amended by D1: seven tiers configured; open at launch: 0.1
     // ONLY. Written out, not computed, so the launch policy is readable.
     config.open_tiers = [true, false, false, false, false, false, false];
     config.vault_ceiling_lamports = vault_ceiling_lamports;
+    // D-A1 revised: prices and pots are Config state, seeded from the launch
+    // constants; `set_tier_economics` changes them later (never an open pool).
+    config.tier_price_lamports = TIER_ENTRY_LAMPORTS;
+    config.tier_pot_lamports = TIER_POT_LAMPORTS;
+    // Treasury policy defaults (v2): one further pot per idle enabled tier.
+    config.treasury_reserve_pots = 1;
+    config.treasury_min_platform_lamports = treasury_min_platform_lamports;
+    config.platform_reserved = 0;
+    config.platform_refundable = 0;
     // R3: the KYC-at-claim switch starts off at launch (0 = off).
     config.kyc_required_above_lamports = 0;
     // R11: full escrow tier behind an admin switch, off at launch. The
@@ -71,6 +89,7 @@ pub fn handle_init_config(
     config.next_pool_id = 1;
     config.active_pool_by_tier = [0; N_TIERS];
     config.bump = ctx.bumps.config;
+    config.platform_bump = ctx.bumps.platform;
     Ok(())
 }
 

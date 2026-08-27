@@ -53,7 +53,7 @@ PATTERN='casino|gambling|disguised|dopamine|shill|degen|the house|pump|bonding|l
 #   5. Category assertions in public copy: not gambling ("gambling" is already
 #      banned above) · just a game · skill game · skill tournament — plus the
 #      internal-intent tell "gambling-coded" (also covered above).
-PATTERN_B7='non.custodial|provably fair|\blicensed\b|\bregulated\b|\bcompliant\b|trustless|can.?t be rigged|cannot be rigged|rig.proof|\banonymous\b|\banonymity\b|no[- ]kyc|untraceable|unbannable|play from anywhere|\bguaranteed\b|risk.free|free money|\+ev\b|everyone wins|\byield\b|\bapy\b|passive income|\bearn(s|ed|ing)?\b|\binvestments?\b|early investors|number go up|just a game|skill games?\b|skill tournaments?\b'
+PATTERN_B7='non.custodial|provably fair|\blicensed\b|\bregulated\b|\bcompliant\b|trustless|can.?t be rigged|cannot be rigged|rig.proof|\banonymous\b|\banonymity\b|no[- ]kyc|untraceable|unbannable|play from anywhere|\bguaranteed\b|risk.free|free money|\+ev\b|everyone wins|\byield\b|\bapy\b|passive income|\bearn(s|ed|ing)?\b|\binvestments?\b|early investors|number go up|just a game|skill games?\b|skill tournaments?\b|\breinvest|asset.managers?|\bamm\b|\badvis(e|es|ed|ing)\b'
 
 # ---------------------------------------------------------------------------
 # Exclusions. Each one has a reason; do not extend this list without the same

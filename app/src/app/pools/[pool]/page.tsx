@@ -59,7 +59,7 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
                 <tr key={b.label}>
                   <td className="py-1 opacity-70">{b.label}</td>
                   <td className="py-1 text-right font-mono">
-                    {lamportsToSol(prizeForRank(pool.entry_lamports, b.ranks[0]))} SOL
+                    {lamportsToSol(prizeForRank(pool.pot_lamports, b.ranks[0]))} SOL
                   </td>
                 </tr>
               ))}

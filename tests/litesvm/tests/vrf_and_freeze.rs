@@ -74,7 +74,7 @@ fn commit_vrf_ix(signer: &Pubkey, pool_id: u64, randomness: &Pubkey) -> Instruct
 
 fn read_vrf_seed(env: &Env, pool: &Pubkey) -> [u8; 32] {
     let data = env.svm.get_account(pool).unwrap().data;
-    data[108..140].try_into().unwrap()
+    data[116..148].try_into().unwrap()
 }
 
 #[test]
@@ -82,6 +82,7 @@ fn commit_vrf_seed_copies_a_revealed_value_write_once() {
     let Some(mut env) = Env::new() else { return };
     // Open a pool WITHOUT the harness's seed patch.
     let settlement = env.settlement.insecure_clone();
+    env.fund_platform(TIER_POTS[0]);
     let ix = open_pool_ix(&settlement.pubkey(), 1, 0, [9; 32], env.sealing_secret_hash);
     env.send(&[ix], &[&settlement]).unwrap();
     let pool = pool_pda(1);

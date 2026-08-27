@@ -23,7 +23,6 @@ import {
   decodeBattleSet,
   leafBytes,
   merkleRoot,
-  potLamports,
 } from '../../../backend/scoring/src';
 import { base58Decode } from '../../../backend/_shared/src/blotto-events';
 import { scoreWithMissing } from '../../../backend/reveal/src/missing';
@@ -45,6 +44,9 @@ export interface OnChainRecord {
   /** From PoolOpened. */
   sealingSecretHashHex: string;
   entryLamports: string;
+  /** From PoolOpened (D-A1 revised): the pool's FIXED pot — the amounts
+   * recompute against THIS, never against arithmetic over the price. */
+  potLamports: string;
   /** From PoolSecretRevealed. */
   revealedSecretHex: string;
   /** From ResultsCommitted. */
@@ -137,7 +139,7 @@ export function verifyPool(bundle: PublishedBundle, chain: OnChainRecord): Verif
   );
   // Amounts recomputed with the published split-pot rule (D3-B): tied
   // players share a competition rank and split the combined band prize.
-  const pot = potLamports(BigInt(chain.entryLamports));
+  const pot = BigInt(chain.potLamports);
   const withPrizes = assignPrizes(results, pot);
   let resultsOk = true;
   for (const r of bundle.results) {

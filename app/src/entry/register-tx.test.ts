@@ -16,7 +16,6 @@ import {
   buildRegisterInstruction,
   deriveRegisterPdas,
   entryRegisteredFromLogs,
-  platformWalletFromConfigData,
 } from './register-tx';
 
 const PROGRAM_ID = '5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17';
@@ -68,7 +67,7 @@ describe('deriveRegisterPdas', () => {
     expect(pdas.pool).toBe(pool);
     expect(pdas.config).toBe(expectPda([Buffer.from('config')]));
     expect(pdas.vault).toBe(expectPda([Buffer.from('vault'), le]));
-    expect(pdas.fees).toBe(expectPda([Buffer.from('fees'), le]));
+    expect(pdas.platform).toBe(expectPda([Buffer.from('platform')]));
     expect(pdas.entry).toBe(
       expectPda([
         Buffer.from('entry'),
@@ -83,19 +82,15 @@ describe('deriveRegisterPdas', () => {
 });
 
 describe('buildRegisterInstruction', () => {
-  it('encodes discriminator ‖ pool_id LE ‖ battles_hash with the 13 accounts in order', async () => {
+  it('encodes discriminator ‖ pool_id LE ‖ battles_hash with the 12 accounts in order', async () => {
     const poolId = 42n;
     const pdas = await deriveRegisterPdas(PROGRAM_ID, poolId, PLAYER);
     const battlesHash = Uint8Array.from({ length: 32 }, (_, i) => 50 + i);
-    const platformWallet = new PublicKey(
-      createHash('sha256').update('platform').digest()
-    ).toBase58();
     const passAsset = new PublicKey(createHash('sha256').update('asset').digest()).toBase58();
     const ix = buildRegisterInstruction({
       programId: PROGRAM_ID,
       poolId,
       player: PLAYER,
-      platformWallet,
       passAsset,
       battlesHash,
       pdas,
@@ -108,35 +103,26 @@ describe('buildRegisterInstruction', () => {
     expect([...ix.data!.slice(16)]).toEqual([...battlesHash]);
 
     const a = ix.accounts!;
-    expect(a.length).toBe(13);
+    expect(a.length).toBe(12);
     expect(a[0]).toEqual({ address: PLAYER, role: AccountRole.WRITABLE_SIGNER });
     expect(a[1].address).toBe(pdas.config);
     expect(a[2].address).toBe(pdas.pool);
-    expect(a[3].address).toBe(pdas.vault);
-    expect(a[4].address).toBe(pdas.fees);
-    expect(a[5].address).toBe(platformWallet);
-    expect(a[6].address).toBe(pdas.entry);
-    expect(a[7].address).toBe(pdas.passCollection);
-    expect(a[8]).toEqual({ address: passAsset, role: AccountRole.WRITABLE_SIGNER });
-    expect(a[9].address).toBe('CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d');
-    expect(a[10].address).toBe('Sysvar1nstructions1111111111111111111111111');
-    expect(a[11].address).toBe('SysvarS1otHashes111111111111111111111111111');
-    expect(a[12]).toEqual({
+    // The prize vault is READ-ONLY: entries never touch it (D-A1 revised);
+    // the program only asserts the pre-funded pot is present.
+    expect(a[3]).toEqual({ address: pdas.vault, role: AccountRole.READONLY });
+    expect(a[4].address).toBe(pdas.platform);
+    expect(a[5].address).toBe(pdas.entry);
+    expect(a[6].address).toBe(pdas.passCollection);
+    expect(a[7]).toEqual({ address: passAsset, role: AccountRole.WRITABLE_SIGNER });
+    expect(a[8].address).toBe('CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d');
+    expect(a[9].address).toBe('Sysvar1nstructions1111111111111111111111111');
+    expect(a[10].address).toBe('SysvarS1otHashes111111111111111111111111111');
+    expect(a[11]).toEqual({
       address: '11111111111111111111111111111111',
       role: AccountRole.READONLY,
     });
-    for (let i = 1; i <= 7; i++) expect(a[i].role).toBe(AccountRole.WRITABLE);
-    for (const i of [9, 10, 11]) expect(a[i].role).toBe(AccountRole.READONLY);
-  });
-});
-
-describe('platformWalletFromConfigData', () => {
-  it('slices bytes 104..136 (after disc + admin + entry + settlement signers)', () => {
-    const data = Uint8Array.from({ length: 274 }, (_, i) => i % 251);
-    expect([...platformWalletFromConfigData(data)]).toEqual(
-      [...Array(32)].map((_, i) => (104 + i) % 251)
-    );
-    expect(() => platformWalletFromConfigData(new Uint8Array(100))).toThrow(/short/);
+    for (const i of [1, 2, 4, 5, 6]) expect(a[i].role).toBe(AccountRole.WRITABLE);
+    for (const i of [3, 8, 9, 10]) expect(a[i].role).toBe(AccountRole.READONLY);
   });
 });
 

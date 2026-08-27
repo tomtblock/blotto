@@ -14,7 +14,7 @@
  * evidence pipeline as well).
  */
 
-import { potLamports } from '../../../backend/scoring/src';
+import { potForTier } from '../../../backend/scoring/src';
 import { LADDER, ladderPopulation, type LadderClass } from './ladder';
 import { runOfflinePool } from './orchestrator';
 
@@ -61,7 +61,7 @@ export async function runSkillEvidence(params: StudyParams): Promise<StudyResult
   const byClass = new Map<LadderClass, ClassRow>(
     LADDER.map((cls) => [cls, { cls, entrants: 0, rankOne: 0, paidSeats: 0, paidLamports: 0n }])
   );
-  const pot = potLamports(ENTRY_LAMPORTS);
+  const pot = potForTier(0);
 
   for (let p = 1; p <= params.pools; p++) {
     const poolSeed = params.baseSeed + p;

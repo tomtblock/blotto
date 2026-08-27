@@ -10,7 +10,7 @@ import {
   assignPrizes,
   battlesHash,
   encodeBattleSet,
-  potLamports,
+  potForTier,
   scorePool,
   leafBytes,
   merkleRoot,
@@ -35,7 +35,7 @@ function fixture(): { bundle: PublishedBundle; chain: OnChainRecord } {
   ) as never;
   const salts = Array.from({ length: n }, (_, i) => sha(`salt:${i}`));
   const entry = 100_000_000n;
-  const pot = potLamports(entry);
+  const pot = potForTier(0);
   const results = assignPrizes(scorePool(battles), pot);
   // Leaf order (D3-B): rank asc, entry index asc.
   const byRank = [...results].sort((a, b) => a.rank - b.rank || a.index - b.index);
@@ -82,6 +82,7 @@ function fixture(): { bundle: PublishedBundle; chain: OnChainRecord } {
   const chain: OnChainRecord = {
     sealingSecretHashHex: hex(new Uint8Array(createHash('sha256').update(secret).digest())),
     entryLamports: entry.toString(),
+    potLamports: pot.toString(),
     revealedSecretHex: hex(secret),
     resultsRootHex: root,
     committedPayouts: committed.map((r) => ({

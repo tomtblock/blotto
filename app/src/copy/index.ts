@@ -129,9 +129,11 @@ export const COPY = {
         cannot: 'Be read early. The export rule is enforced by custody; the reveal publishes the key for everyone.',
       },
       platformWallet: {
-        name: 'Platform wallet',
-        can: 'Receive the 20% operating share when a pool seals, and forfeited shares after review.',
-        cannot: 'Take anything from an open pool: until seal, the full 100% is refundable from program-held accounts.',
+        name: 'Prize treasury',
+        holderNote:
+          'Held by the program itself (a derived account \u2014 no private key exists)',
+        can: 'Hold pass-sale revenue, fund each tournament\u2019s fixed prize pool before entries open, and pay refunds. The one exit is a multisig-approved withdrawal, and the program blocks any withdrawal that would dip below the published floor: the minimum balance, one further prize pool per idle tier, and every entry payment that could still be refunded.',
+        cannot: 'Pay anyone directly, skim an open tournament, or touch the refundable entry payments \u2014 the floor is enforced by the program, not by policy.',
       },
       irysUpload: {
         name: 'Publishing wallet',
@@ -189,7 +191,11 @@ export const COPY = {
     sealing:
       'Your seven battles are encrypted on your device, before payment, to a pool key that nobody \u2014 the operator included \u2014 can open while the pool is filling. A hash of your battles is recorded on-chain at entry. When the pool fills, the pool secret is published on-chain: at that moment everyone\u2019s battles become readable and checkable against the hashes committed at entry, and anyone can re-run the scoring.',
     refund:
-      'A pool that does not reach 64 entries within 72 hours refunds every entry in full \u2014 including the platform share \u2014 and closes. Anyone can trigger the refund once the deadline passes; no one\u2019s permission is needed.',
+      'A pool that does not reach 64 entries within 72 hours refunds every entry in full and closes. Your entry payment is held by the program until the pool fills, so the refund never depends on the operator. Anyone can trigger the refund once the deadline passes; no one\u2019s permission is needed.',
+    // D-A1 revised (master prompt v2, 2026-08-27): the pool-opening rule.
+    // SUBSTANCE FIXED: sequential pools + pre-funded fixed pots.
+    poolOpening:
+      'Each tier runs one tournament at a time. A tier opens when the prize treasury holds its full prize pool and the previous tournament in that tier has paid out. Prize pools are fixed per tier and are funded before entries open.',
     verify:
       'Every number a player is paid is recomputable by that player. The Verify page decrypts the published battles with the revealed pool secret, re-runs the same scoring engine in your browser, rebuilds the results tree, and compares it against what was committed on-chain. Nothing on that page trusts the operator.',
     verifyLink: 'Open the Verify page',
@@ -217,6 +223,7 @@ export const COPY = {
       randomness: 'What randomness does \u2014 and does not do',
       sealing: 'Sealing: when your battles are encrypted and revealed',
       refund: 'Refund and closing rule',
+      poolOpening: 'When tournaments open',
       verify: 'How to verify a result',
       availability: 'Where Blotto Cup is available',
       age: '18+',

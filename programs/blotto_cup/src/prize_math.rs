@@ -6,23 +6,12 @@
 //!
 //! Integer-only, `u128` intermediates where a product can grow (threat-tm-403).
 
-use crate::constants::{BPS_DENOM, CAPACITY, PAID_RANKS, PRIZE_BANDS_1024, VAULT_BPS};
+use crate::constants::{PAID_RANKS, PRIZE_BANDS_1024};
 
-/// The 80% prize-pool share of one entry (PID §2).
-pub fn vault_share(entry_lamports: u64) -> u64 {
-    ((entry_lamports as u128) * (VAULT_BPS as u128) / (BPS_DENOM as u128)) as u64
-}
-
-/// The 20% platform share of one entry — defined as the remainder so the two
-/// shares always sum to exactly the entry, whatever the rounding.
-pub fn fee_share(entry_lamports: u64) -> u64 {
-    entry_lamports - vault_share(entry_lamports)
-}
-
-/// The full pot of a sealed pool: 64 vault shares.
-pub fn pot(entry_lamports: u64) -> u64 {
-    vault_share(entry_lamports) * (CAPACITY as u64)
-}
+// D-A1 (revised, 2026-08-27): pots are FIXED constants funded from the
+// platform treasury at `open_pool`. The former `vault_share`/`fee_share`/
+// `pot(entry)` derivations are deliberately GONE — nothing in this program
+// computes a pot from entries or balances (standing-rules grep).
 
 /// The prize for `rank` (1-based, 1..=16): `pot × band / 1024`.
 ///
@@ -62,7 +51,7 @@ pub fn split_group(pot_lamports: u64, first_rank: u16, group_size: u16) -> (u64,
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::constants::TIER_ENTRY_LAMPORTS;
+    use crate::constants::{TIER_ENTRY_LAMPORTS, TIER_POT_LAMPORTS};
 
     /// The bands must partition the pot exactly: Σ bands = 1024.
     #[test]
@@ -70,14 +59,12 @@ mod tests {
         assert_eq!(PRIZE_BANDS_1024.iter().sum::<u64>(), 1024);
     }
 
-    /// PID §6 publishes exact SOL amounts for the 0.1 tier. The band table must
-    /// reproduce them to the lamport — this pins the derivation in
-    /// `constants.rs` against the founder's published numbers.
+    /// PID §6 publishes exact SOL amounts for the 0.1 tier (pot 5.12 SOL).
+    /// The band table must reproduce them to the lamport.
     #[test]
     fn bands_reproduce_pid_section_6_amounts_for_the_entry_tier() {
-        let entry = 100_000_000u64; // 0.1 SOL
-        let pot = pot(entry);
-        assert_eq!(pot, 5_120_000_000, "pot must be 5.12 SOL");
+        let pot = TIER_POT_LAMPORTS[0];
+        assert_eq!(pot, 5_120_000_000, "tier-0 pot must be 5.12 SOL");
         let expected: [u64; 16] = [
             1_350_000_000, // 1st  — 1.350 SOL
             790_000_000,   // 2nd  — 0.790
@@ -105,33 +92,33 @@ mod tests {
         }
     }
 
-    /// For every configured tier: the split is exact, the pot divides by 1024
-    /// with zero remainder, and the 16 prizes sum to the pot exactly — no
-    /// residual, nothing stranded in the vault.
+    /// For every configured tier: the pot constant divides by 1024 with zero
+    /// remainder and the 16 prizes sum to the pot exactly — no residue,
+    /// nothing stranded in the vault. Also pins the founder's stated initial
+    /// derivation (pot = 80% of price × 64) WITHOUT the program ever
+    /// computing it: the constants must agree at init time.
     #[test]
-    fn every_tier_divides_exactly_with_zero_residual() {
-        for &entry in TIER_ENTRY_LAMPORTS.iter() {
-            assert_eq!(vault_share(entry) + fee_share(entry), entry);
-            // 80% of these entries is exact (all are multiples of 10 lamports).
-            assert_eq!(vault_share(entry), entry / 10 * 8);
-            let pot = pot(entry);
-            assert_eq!(
-                pot % 1024,
-                0,
-                "pot for entry {entry} not a multiple of 1024"
-            );
+    fn every_tier_pot_divides_exactly_with_zero_residual() {
+        for (t, &pot) in TIER_POT_LAMPORTS.iter().enumerate() {
+            assert_eq!(pot % 1024, 0, "tier {t} pot not a multiple of 1024");
             let paid: u64 = (1..=16u8).map(|r| band_amount(pot, r)).sum();
             assert_eq!(paid, pot, "prizes must sum to the pot exactly");
+            // The initial constants' published relationship (v2 D-A1).
+            assert_eq!(
+                pot,
+                TIER_ENTRY_LAMPORTS[t] / 10 * 8 * 64,
+                "tier {t}: initial pot must be 80% of price × 64"
+            );
         }
     }
 
     /// D3-B split groups: a solo "group" is the plain band; a group covers
     /// its whole span; positions past 16 contribute zero; each × size +
     /// remainder reconstructs the combined prize exactly; and a full-pool
-    /// 64-way tie splits the whole pot with zero remainder at the 0.1 tier.
+    /// 64-way tie splits the whole pot with zero remainder at tier 0.
     #[test]
     fn split_groups_conserve_lamports_exactly() {
-        let pot = pot(100_000_000); // 5.12 SOL
+        let pot = TIER_POT_LAMPORTS[0]; // 5.12 SOL
         for r in 1..=16u16 {
             let (each, rem) = split_group(pot, r, 1);
             assert_eq!(each, band_amount(pot, r as u8));

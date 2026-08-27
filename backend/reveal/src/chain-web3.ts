@@ -81,6 +81,9 @@ export class Web3Chain implements KeeperChain {
   private configPda(): PublicKey {
     return this.pda([Buffer.from('config')]);
   }
+  private platformPda(): PublicKey {
+    return this.pda([Buffer.from('platform')]);
+  }
   private entryPda(pool: PublicKey, player: PublicKey): PublicKey {
     return this.pda([Buffer.from('entry'), pool.toBuffer(), player.toBuffer()]);
   }
@@ -99,18 +102,18 @@ export class Web3Chain implements KeeperChain {
     const info = await this.cfg.connection.getAccountInfo(this.poolPda(poolId), 'confirmed');
     if (!info) throw new Error(`pool ${poolId} account not found`);
     const d = info.data;
-    // Offsets mirror state.rs (asserted by its serialize-LEN tests and the
-    // LiteSVM readers): disc 8 | id 8 | tier 1 | entry_lamports 8 |
-    // entrants 2 | opened_at 8 | fill_deadline 8 | state 1 | sealing 32 |
-    // hash 32 | vrf 32 | counters 10 | secret_revealed 1 | root 32 |
-    // committed 1 | payouts_len 2 | payouts 64×(seat 2 + amount 8) |
-    // paid_mask 8 | ...
-    const committed = d[183] !== 0;
+    // Offsets mirror state.rs since D-A1 v2 (asserted by its serialize-LEN
+    // tests and the LiteSVM readers): disc 8 | id 8 | tier 1 |
+    // entry_lamports 8 | pot_lamports 8 | entrants 2 | opened_at 8 |
+    // fill_deadline 8 | state 1 | sealing 32 | hash 32 | vrf 32 |
+    // counters 10 | secret_revealed 1 | root 32 | committed 1 |
+    // payouts_len 2 | payouts 64×(seat 2 + amount 8) | paid_mask 8 | ...
+    const committed = d[191] !== 0;
     const payouts: CommittedPayout[] = [];
     if (committed) {
-      const len = d.readUInt16LE(184);
+      const len = d.readUInt16LE(192);
       for (let i = 0; i < len; i++) {
-        const off = 186 + i * 10;
+        const off = 194 + i * 10;
         payouts.push({
           entryIndex: d.readUInt16LE(off),
           amountLamports: d.readBigUInt64LE(off + 2),
@@ -120,16 +123,17 @@ export class Web3Chain implements KeeperChain {
     return {
       poolId,
       tier: d[16],
-      state: STATE_NAMES[d[43]],
+      state: STATE_NAMES[d[51]],
       entryLamports: d.readBigUInt64LE(17),
-      fillDeadline: BigInt(d.readBigInt64LE(35)),
-      // vrf_seed occupies bytes 108..140; all-zero is the uncommitted sentinel.
-      vrfCommitted: d.subarray(108, 140).some((b) => b !== 0),
-      secretRevealed: d[150] !== 0,
+      potLamports: d.readBigUInt64LE(25),
+      fillDeadline: BigInt(d.readBigInt64LE(43)),
+      // vrf_seed occupies bytes 116..148; all-zero is the uncommitted sentinel.
+      vrfCommitted: d.subarray(116, 148).some((b) => b !== 0),
+      secretRevealed: d[158] !== 0,
       resultsCommitted: committed,
-      paidMask: d.readBigUInt64LE(826),
+      paidMask: d.readBigUInt64LE(834),
       payouts,
-      entrants: d.readUInt16LE(25),
+      entrants: d.readUInt16LE(33),
     };
   }
 
@@ -137,23 +141,40 @@ export class Web3Chain implements KeeperChain {
     const info = await this.cfg.connection.getAccountInfo(this.configPda(), 'confirmed');
     if (!info) throw new Error('config account not found');
     const d = info.data;
-    // Config layout (state.rs, LEN-asserted): disc 8 | admin 32 |
-    // entry_signer 32 | settlement_signer 32 | platform_wallet 32 |
-    // paused 1 (136) | open_tiers 7 (137) | ceilings 7×8 (144) | kyc 8 (200)
-    // | detection 1 (208) | next_pool_id 8 (209) | active_by_tier 7×8 (217)
-    // | bump 1 (273).
+    // Config layout since D-A1 v2 (state.rs, LEN-asserted): disc 8 |
+    // admin 32 | entry_signer 32 | settlement_signer 32 | paused 1 (104) |
+    // open_tiers 7 (105) | ceilings 7×8 (112) | prices 7×8 (168) |
+    // pots 7×8 (224) | reserve_pots 1 (280) | min_platform 8 (281) |
+    // reserved 8 (289) | refundable 8 (297) | platform_bump 1 (305) |
+    // kyc 8 (306) | detection 1 (314) | next_pool_id 8 (315) |
+    // active_by_tier 7×8 (323) | bump 1 (379).
     const openTiers: boolean[] = [];
     const activePoolByTier: bigint[] = [];
+    const tierPriceLamports: bigint[] = [];
+    const tierPotLamports: bigint[] = [];
     for (let t = 0; t < N_TIERS; t++) {
-      openTiers.push(d[137 + t] !== 0);
-      activePoolByTier.push(d.readBigUInt64LE(217 + 8 * t));
+      openTiers.push(d[105 + t] !== 0);
+      activePoolByTier.push(d.readBigUInt64LE(323 + 8 * t));
+      tierPriceLamports.push(d.readBigUInt64LE(168 + 8 * t));
+      tierPotLamports.push(d.readBigUInt64LE(224 + 8 * t));
     }
     return {
-      paused: d[136] !== 0,
+      paused: d[104] !== 0,
       openTiers,
       activePoolByTier,
-      nextPoolId: d.readBigUInt64LE(209),
+      nextPoolId: d.readBigUInt64LE(315),
+      tierPriceLamports,
+      tierPotLamports,
+      treasuryReservePots: d[280],
+      treasuryMinPlatformLamports: d.readBigUInt64LE(281),
+      platformReserved: d.readBigUInt64LE(289),
+      platformRefundable: d.readBigUInt64LE(297),
     };
+  }
+
+  async getPlatformBalance(): Promise<bigint> {
+    const info = await this.cfg.connection.getAccountInfo(this.platformPda(), 'confirmed');
+    return BigInt(info?.lamports ?? 0);
   }
 
   async openPool(
@@ -168,11 +189,13 @@ export class Web3Chain implements KeeperChain {
       new TransactionInstruction({
         programId: this.cfg.programId,
         keys: [
+          // Permissionless since D-A1 revised — the settlement signer is
+          // simply the daemon's funded keypair here.
           { pubkey: this.cfg.settlementSigner.publicKey, isSigner: true, isWritable: true },
           { pubkey: this.configPda(), isSigner: false, isWritable: true },
           { pubkey: this.poolPda(poolId), isSigner: false, isWritable: true },
-          { pubkey: this.vaultPda(poolId), isSigner: false, isWritable: false },
-          { pubkey: this.pda([Buffer.from('fees'), le]), isSigner: false, isWritable: false },
+          { pubkey: this.vaultPda(poolId), isSigner: false, isWritable: true },
+          { pubkey: this.platformPda(), isSigner: false, isWritable: true },
           { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
         ],
         data: Buffer.concat([
@@ -238,8 +261,8 @@ export class Web3Chain implements KeeperChain {
   async initConfig(args: {
     entrySigner: string;
     settlementSigner: string;
-    platformWallet: string;
     vaultCeilingLamports: bigint[];
+    treasuryMinPlatformLamports: bigint;
   }): Promise<void> {
     const admin = this.cfg.adminSigner;
     if (!admin) throw new Error('init_config needs adminSigner (deploy-time only)');
@@ -248,26 +271,47 @@ export class Web3Chain implements KeeperChain {
     }
     const ceilings = Buffer.alloc(8 * N_TIERS);
     args.vaultCeilingLamports.forEach((v, i) => ceilings.writeBigUInt64LE(v, 8 * i));
+    const minBuf = Buffer.alloc(8);
+    minBuf.writeBigUInt64LE(args.treasuryMinPlatformLamports);
     const tx = new Transaction().add(
       new TransactionInstruction({
         programId: this.cfg.programId,
         keys: [
           { pubkey: admin.publicKey, isSigner: true, isWritable: true },
           { pubkey: this.configPda(), isSigner: false, isWritable: true },
+          { pubkey: this.platformPda(), isSigner: false, isWritable: false },
           { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
         ],
         data: Buffer.concat([
           disc('init_config'),
           new PublicKey(args.entrySigner).toBuffer(),
           new PublicKey(args.settlementSigner).toBuffer(),
-          new PublicKey(args.platformWallet).toBuffer(),
           ceilings,
+          minBuf,
         ]),
       })
     );
     await sendAndConfirmTransaction(this.cfg.connection, tx, [admin], {
       commitment: 'confirmed',
     });
+  }
+
+  /** `fund_platform_wallet` — permissionless deposit (rehearsal bootstrap). */
+  async fundPlatformWallet(amountLamports: bigint): Promise<void> {
+    const amount = Buffer.alloc(8);
+    amount.writeBigUInt64LE(amountLamports);
+    await this.send([
+      new TransactionInstruction({
+        programId: this.cfg.programId,
+        keys: [
+          { pubkey: this.cfg.settlementSigner.publicKey, isSigner: true, isWritable: true },
+          { pubkey: this.configPda(), isSigner: false, isWritable: false },
+          { pubkey: this.platformPda(), isSigner: false, isWritable: true },
+          { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+        ],
+        data: Buffer.concat([disc('fund_platform_wallet'), amount]),
+      }),
+    ]);
   }
 
   async getEntries(poolId: bigint): Promise<ChainEntryView[]> {
@@ -431,9 +475,6 @@ export class Web3Chain implements KeeperChain {
     const poolKey = this.poolPda(poolId);
     const le = Buffer.alloc(8);
     le.writeBigUInt64LE(poolId);
-    const configData = await this.cfg.connection.getAccountInfo(this.configPda(), 'confirmed');
-    if (!configData) throw new Error('config account not found');
-    const platformWallet = new PublicKey(configData.data.subarray(104, 136));
     await this.send([
       new TransactionInstruction({
         programId: this.cfg.programId,
@@ -443,7 +484,8 @@ export class Web3Chain implements KeeperChain {
           { pubkey: poolKey, isSigner: false, isWritable: false },
           { pubkey: this.vaultPda(poolId), isSigner: false, isWritable: true },
           { pubkey: this.entryPda(poolKey, new PublicKey(player)), isSigner: false, isWritable: true },
-          { pubkey: platformWallet, isSigner: false, isWritable: true },
+          // D-A1 revised: forfeits land in the platform treasury PDA.
+          { pubkey: this.platformPda(), isSigner: false, isWritable: true },
           { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
         ],
         data: Buffer.concat([disc('forfeit_escrow'), le]),
@@ -461,6 +503,10 @@ export class Web3Chain implements KeeperChain {
           { pubkey: this.cfg.settlementSigner.publicKey, isSigner: true, isWritable: false },
           { pubkey: this.configPda(), isSigner: false, isWritable: true },
           { pubkey: this.poolPda(poolId), isSigner: false, isWritable: true },
+          // The untouched pot returns vault → treasury at trigger.
+          { pubkey: this.vaultPda(poolId), isSigner: false, isWritable: true },
+          { pubkey: this.platformPda(), isSigner: false, isWritable: true },
+          { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
         ],
         data: Buffer.concat([disc('trigger_refund'), le]),
       }),
@@ -472,15 +518,15 @@ export class Web3Chain implements KeeperChain {
     const playerKey = new PublicKey(player);
     const le = Buffer.alloc(8);
     le.writeBigUInt64LE(poolId);
-    const feesPda = this.pda([Buffer.from('fees'), le]);
     await this.send([
       new TransactionInstruction({
         programId: this.cfg.programId,
         keys: [
           { pubkey: this.cfg.settlementSigner.publicKey, isSigner: true, isWritable: false },
+          { pubkey: this.configPda(), isSigner: false, isWritable: true },
           { pubkey: poolKey, isSigner: false, isWritable: true },
-          { pubkey: this.vaultPda(poolId), isSigner: false, isWritable: true },
-          { pubkey: feesPda, isSigner: false, isWritable: true },
+          // D-A1 revised: the FULL price back from the platform treasury.
+          { pubkey: this.platformPda(), isSigner: false, isWritable: true },
           { pubkey: this.entryPda(poolKey, playerKey), isSigner: false, isWritable: true },
           { pubkey: playerKey, isSigner: false, isWritable: true },
           { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },

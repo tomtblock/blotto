@@ -1,29 +1,30 @@
-//! `trigger_refund` + `refund` (roadmap 1.6, R7) — full 64 or full refund.
+//! `trigger_refund` + `refund` (roadmap 1.6, R7, D-A1 revised) — full 64 or
+//! full refund.
 //!
 //! `trigger_refund` is permissionless: any signer may flip a pool that missed
 //! its 72h deadline into `Refunding`, so a vanished operator cannot strand
-//! entries. `refund` is likewise permissionless per entry and pays the FULL
-//! entry price: the 80% share back from the vault and the 20% share back from
-//! the fees PDA.
+//! entries. It also returns the pool's UNTOUCHED pot from the prize vault to
+//! the platform treasury (the pot was pre-funded at `open_pool`; entries
+//! never touch a prize vault, so on the refund fork the vault holds exactly
+//! the pot and nothing else). `refund` is likewise permissionless per entry
+//! and pays the FULL entry price back from the platform treasury — where
+//! `register` put 100% of it, tracked in `Config.platform_refundable` so
+//! `withdraw_platform`'s floor keeps the sum program-held until every entry
+//! is repaid. Refunds cannot depend on the operator keeping a reserve topped
+//! up (R7's guarantee is the program's, not a promise).
 //!
-//! # Where the 20% comes from (PHASE-1-REVIEW)
-//!
-//! Roadmap 1.6 sources the 20% from "the platform wallet's pre-funded refund
-//! reserve." Implemented instead: the fees PDA holds every entry's 20% until
-//! the pool SEALS (see `state.rs::FEES_SEED`), so the full refund is
-//! self-funding — it cannot depend on the operator keeping a reserve topped up,
-//! because the program cannot debit the founder's wallet and an empty
-//! reserve would turn R7's guarantee into a promise. Same money, same
-//! destination, custody moved from the operator to the program for the only
-//! window where refunds are possible. Recorded in the Phase 1 report.
+//! The tier's `active_pool_by_tier` slot clears only when the pool reaches
+//! `Closed` (D-A1 revised: pools per tier are SEQUENTIAL — the next pool
+//! opens only after this one is fully Paid or Refunded).
 
 use anchor_lang::prelude::*;
 
 use crate::constants::CAPACITY;
 use crate::error::ErrorCode;
 use crate::events::{RefundTriggered, Refunded};
-use crate::prize_math::{fee_share, vault_share};
-use crate::state::{Config, Entry, Pool, PoolState, CONFIG_SEED, FEES_SEED, POOL_SEED, VAULT_SEED};
+use crate::state::{
+    Config, Entry, Pool, PoolState, CONFIG_SEED, PLATFORM_SEED, POOL_SEED, VAULT_SEED,
+};
 
 #[derive(Accounts)]
 #[instruction(pool_id: u64)]
@@ -31,7 +32,9 @@ pub struct TriggerRefund<'info> {
     /// Permissionless — anyone may start the refund once the deadline passes.
     pub signer: Signer<'info>,
 
-    /// `mut`: the tier's active-pool slot frees so a new pool can open (R14).
+    /// `mut`: `platform_reserved` releases the pot; on the empty-pool path
+    /// the tier's active-pool slot also frees (the pool goes straight to
+    /// `Closed`).
     #[account(mut, seeds = [CONFIG_SEED], bump = config.bump)]
     pub config: Box<Account<'info, Config>>,
 
@@ -41,6 +44,17 @@ pub struct TriggerRefund<'info> {
         bump = pool.bump,
     )]
     pub pool: Box<Account<'info, Pool>>,
+
+    /// CHECK: Prize-vault PDA — holds exactly the untouched pot, returned to
+    /// the treasury here (the vault reaps).
+    #[account(mut, seeds = [VAULT_SEED, &pool_id.to_le_bytes()], bump = pool.vault_bump)]
+    pub vault: UncheckedAccount<'info>,
+
+    /// CHECK: The platform treasury PDA, receiving the pot back.
+    #[account(mut, seeds = [PLATFORM_SEED], bump = config.platform_bump)]
+    pub platform: UncheckedAccount<'info>,
+
+    pub system_program: Program<'info, System>,
 }
 
 pub fn handle_trigger_refund(ctx: Context<TriggerRefund>, _pool_id: u64) -> Result<()> {
@@ -62,9 +76,35 @@ pub fn handle_trigger_refund(ctx: Context<TriggerRefund>, _pool_id: u64) -> Resu
         PoolState::Refunding
     };
 
-    let tier_idx = pool.tier as usize;
-    if ctx.accounts.config.active_pool_by_tier[tier_idx] == pool.id {
-        ctx.accounts.config.active_pool_by_tier[tier_idx] = 0;
+    // Return the untouched pot to the treasury (D-A1 revised). Entries never
+    // touch a prize vault, so on this fork the vault holds exactly the pot;
+    // debiting it all reaps the vault.
+    let pot = pool.pot_lamports;
+    if pot > 0 {
+        crate::vault::vault_debit(
+            &ctx.accounts.system_program,
+            &ctx.accounts.vault.to_account_info(),
+            &ctx.accounts.platform.to_account_info(),
+            pool.id,
+            pool.vault_bump,
+            pot,
+        )?;
+    }
+    ctx.accounts.config.platform_reserved = ctx
+        .accounts
+        .config
+        .platform_reserved
+        .checked_sub(pot)
+        .ok_or(ErrorCode::Overflow)?;
+
+    // The tier slot frees only when the pool is fully settled (sequential
+    // pools, D-A1 revised): here on the straight-to-Closed empty path, else
+    // when the last `refund` closes the pool.
+    if pool.state == PoolState::Closed {
+        let tier_idx = pool.tier as usize;
+        if ctx.accounts.config.active_pool_by_tier[tier_idx] == pool.id {
+            ctx.accounts.config.active_pool_by_tier[tier_idx] = 0;
+        }
     }
 
     emit!(RefundTriggered {
@@ -82,6 +122,11 @@ pub struct Refund<'info> {
     /// crank does; a player can self-serve if the crank is gone).
     pub signer: Signer<'info>,
 
+    /// `mut`: each refund shrinks `platform_refundable`; the last one frees
+    /// the tier's active-pool slot (the pool closes).
+    #[account(mut, seeds = [CONFIG_SEED], bump = config.bump)]
+    pub config: Box<Account<'info, Config>>,
+
     #[account(
         mut,
         seeds = [POOL_SEED, &pool_id.to_le_bytes()],
@@ -89,13 +134,10 @@ pub struct Refund<'info> {
     )]
     pub pool: Box<Account<'info, Pool>>,
 
-    /// CHECK: Prize-vault PDA — refunds the 80% share.
-    #[account(mut, seeds = [VAULT_SEED, &pool_id.to_le_bytes()], bump = pool.vault_bump)]
-    pub vault: UncheckedAccount<'info>,
-
-    /// CHECK: Fees PDA — refunds the 20% share (module doc).
-    #[account(mut, seeds = [FEES_SEED, &pool_id.to_le_bytes()], bump = pool.fees_bump)]
-    pub fees: UncheckedAccount<'info>,
+    /// CHECK: The platform treasury PDA — refunds the FULL entry price (100%
+    /// of every entry landed here at `register`).
+    #[account(mut, seeds = [PLATFORM_SEED], bump = config.platform_bump)]
+    pub platform: UncheckedAccount<'info>,
 
     #[account(mut, constraint = entry.pool == pool.key() @ ErrorCode::EntryMismatch)]
     pub entry: Box<Account<'info, Entry>>,
@@ -115,32 +157,33 @@ pub fn handle_refund(ctx: Context<Refund>, _pool_id: u64) -> Result<()> {
     require!(!ctx.accounts.entry.refunded, ErrorCode::AlreadyRefunded);
 
     let entry_lamports = ctx.accounts.pool.entry_lamports;
-    let pool_id = ctx.accounts.pool.id;
 
-    // The two halves retrace the exact credits `register` made, so the last
-    // refund leaves both PDAs at zero and they reap.
-    crate::vault::vault_debit(
+    // The full price back from the treasury — retracing the exact credit
+    // `register` made (D-A1 revised: entries never touched the prize vault).
+    crate::vault::platform_debit(
         &ctx.accounts.system_program,
-        &ctx.accounts.vault.to_account_info(),
+        &ctx.accounts.platform.to_account_info(),
         &ctx.accounts.player.to_account_info(),
-        pool_id,
-        ctx.accounts.pool.vault_bump,
-        vault_share(entry_lamports),
+        ctx.accounts.config.platform_bump,
+        entry_lamports,
     )?;
-    crate::vault::fees_debit(
-        &ctx.accounts.system_program,
-        &ctx.accounts.fees.to_account_info(),
-        &ctx.accounts.player.to_account_info(),
-        pool_id,
-        ctx.accounts.pool.fees_bump,
-        fee_share(entry_lamports),
-    )?;
+    ctx.accounts.config.platform_refundable = ctx
+        .accounts
+        .config
+        .platform_refundable
+        .checked_sub(entry_lamports)
+        .ok_or(ErrorCode::Overflow)?;
 
     ctx.accounts.entry.refunded = true;
     let pool = &mut ctx.accounts.pool;
     pool.refunded_count += 1;
     if pool.refunded_count == pool.entrants {
         pool.state = PoolState::Closed;
+        // Fully refunded — the tier's slot frees (sequential pools).
+        let tier_idx = pool.tier as usize;
+        if ctx.accounts.config.active_pool_by_tier[tier_idx] == pool.id {
+            ctx.accounts.config.active_pool_by_tier[tier_idx] = 0;
+        }
     }
 
     emit!(Refunded {
