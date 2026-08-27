@@ -87,3 +87,5 @@ export {
   type HygieneOutcome,
   type MonotonicClock,
 } from './http-hygiene';
+
+export { registerBlottoEventLayouts, base58Encode } from './blotto-events';

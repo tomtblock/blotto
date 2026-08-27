@@ -9,4 +9,3 @@ export * from './allocation';
 export * from './engine';
 export * from './prizes';
 export * from './merkle';
-export * from './digest';

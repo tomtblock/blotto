@@ -7,7 +7,7 @@
 //! `EntryRegistered` carries the battles hash, class, and the delayed slot
 //! hash the class digest consumed, `PoolSecretRevealed` carries the secret
 //! itself, and `ResultsCommitted` carries the root and winners. The off-chain
-//! decoders in `backend/_shared/src/events.ts` mirror these structs
+//! decoders in `backend/_shared/src/blotto-events.ts` mirror these structs
 //! field-for-field — there is no committed IDL, so THESE STRUCTS ARE THE WIRE
 //! CONTRACT. Change one and you must change the decoder in the same commit.
 
@@ -105,8 +105,10 @@ pub struct EscrowForfeited {
     pub pool: Pubkey,
     pub player: Pubkey,
     pub amount: u64,
-    /// Where the forfeit went: the next open pool's vault of the same tier,
-    /// or the platform wallet if none (roadmap §1.4).
+    /// Where the forfeit went: the platform wallet (see the PHASE-1-REVIEW
+    /// note in `instructions/escrow.rs` — the roadmap's forward-to-successor-vault design would
+    /// strand the lamports). Emitted rather than implied so the destination
+    /// policy is auditable per event.
     pub destination: Pubkey,
 }
 

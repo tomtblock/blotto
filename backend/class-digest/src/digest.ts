@@ -7,9 +7,10 @@
  * crate, this module and the oracle can never drift apart silently.
  *
  * The class is COSMETIC: read by nothing in the scoring path (PID §8.4).
- * This module exists so a player can verify the draw, not so anything here
- * can influence anything in `engine.ts` — and nothing does: neither module
- * imports the other.
+ * This package exists so a player can verify the draw. It is deliberately
+ * SEPARATE from `@blotto/scoring` — standing rule 5 greps the scoring path
+ * for `class` and fails on any hit, so the separation is structural, not a
+ * convention.
  */
 
 import { sha256 } from '@noble/hashes/sha256';

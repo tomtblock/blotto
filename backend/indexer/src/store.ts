@@ -32,6 +32,7 @@
  */
 
 import { eventFromJson, type DecodedEvent } from './shared';
+import { MemoryProjection, type Projection } from './projection';
 
 /** A row as written to the `events` ledger. `raw` is the decoded event, bigints as strings. */
 export interface LedgerRecord {
@@ -77,14 +78,20 @@ function ledgerKey(signature: string, eventIndex: number): string {
 export class InMemoryEventStore implements EventStore {
   private readonly events = new Map<string, LedgerRecord>();
 
-  async ingest(record: LedgerRecord, _event: DecodedEvent): Promise<IngestOutcome> {
+  /** The derived tables, applied atomically with the append (Phase 2). */
+  readonly projection: MemoryProjection;
+
+  constructor(projection?: MemoryProjection) {
+    this.projection = projection ?? new MemoryProjection();
+  }
+
+  async ingest(record: LedgerRecord, event: DecodedEvent): Promise<IngestOutcome> {
     const key = ledgerKey(record.signature, record.eventIndex);
     if (this.events.has(key)) {
       return 'duplicate';
     }
     this.events.set(key, record);
-    // TODO(phase-2): project `_event` into the derived tables here, atomically
-    // with the append above.
+    await this.projection.apply(event);
     return 'inserted';
   }
 
@@ -111,12 +118,12 @@ export class InMemoryEventStore implements EventStore {
         a.signature.localeCompare(b.signature) ||
         a.eventIndex - b.eventIndex
     );
+    await this.projection.reset();
     for (const record of ordered) {
       // Parsing on replay is deliberate: it exercises the same decode path a live
       // ingest uses, so a ledger row that can no longer be read is found by a
       // re-derive rather than by a silent gap in a derived table.
-      eventFromJson(record.raw);
-      // TODO(phase-2): re-apply the projection for this event.
+      await this.projection.apply(eventFromJson(record.raw));
     }
     return ordered.length;
   }

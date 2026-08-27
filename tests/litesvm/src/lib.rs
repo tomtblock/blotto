@@ -483,6 +483,9 @@ pub struct Env {
     pub platform_wallet: Pubkey,
     pub pool_secret: [u8; 32],
     pub sealing_secret_hash: [u8; 32],
+    /// Log lines of every SUCCESSFUL transaction, in send order — the raw
+    /// material for the indexer's cross-language event fixtures.
+    pub captured_logs: Vec<Vec<String>>,
 }
 
 impl Env {
@@ -531,6 +534,7 @@ impl Env {
             platform_wallet,
             pool_secret: [42u8; 32],
             sealing_secret_hash: Sha256::digest([42u8; 32]).into(),
+            captured_logs: Vec::new(),
         };
         env.send(&[ix], &[]).expect("init_config");
         Some(env)
@@ -557,10 +561,13 @@ impl Env {
             &signers,
             self.svm.latest_blockhash(),
         );
-        self.svm
-            .send_transaction(tx)
-            .map(|_| ())
-            .map_err(|e| format!("{:?}", e.err))
+        match self.svm.send_transaction(tx) {
+            Ok(meta) => {
+                self.captured_logs.push(meta.logs.clone());
+                Ok(())
+            }
+            Err(e) => Err(format!("{:?}", e.err)),
+        }
     }
 
     /// Open pool `pool_id` on `tier` and give it a VRF seed + pass Collection.

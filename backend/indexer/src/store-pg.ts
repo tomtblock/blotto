@@ -17,6 +17,7 @@
 import type { Pool } from 'pg';
 import { eventFromJson, withTransaction, type DecodedEvent } from './shared';
 import type { EventStore, IngestOutcome, LedgerRecord } from './store';
+import { PgProjection } from './projection-pg';
 
 export class PgEventStore implements EventStore {
   constructor(private readonly pool: Pool) {}
@@ -44,10 +45,10 @@ export class PgEventStore implements EventStore {
       if (inserted.rowCount === 0) {
         return 'duplicate';
       }
-      // TODO(phase-2): project `event` into the derived tables HERE, inside this
-      // same transaction. See the note at the top of this file.
-      void event;
-      void client;
+      // The projection commits atomically with the append (same client, same
+      // transaction) — a ledger row and its derived rows land together or not
+      // at all.
+      await new PgProjection(client).apply(event);
       return 'inserted';
     });
   }
@@ -60,10 +61,8 @@ export class PgEventStore implements EventStore {
 
   async rederive(): Promise<number> {
     return withTransaction(this.pool, async (client) => {
-      // TODO(phase-2): TRUNCATE the derived tables here before the replay. There
-      // are none yet, so this is a read-only pass that proves every ledger row is
-      // still decodable — worth keeping even now, because a row that can no
-      // longer be read is found here rather than as a silent gap later.
+      const projection = new PgProjection(client);
+      await projection.reset();
       const res = await client.query(
         `SELECT signature, event_index, slot, raw
            FROM events
@@ -72,9 +71,9 @@ export class PgEventStore implements EventStore {
       for (const row of res.rows) {
         // Ordering above is load-bearing: an order-dependent projection must see
         // the same order on a rebuild as it saw live, or a rebuild produces
-        // different derived rows from the same ledger.
-        eventFromJson(row.raw as Record<string, unknown>);
-        // TODO(phase-2): re-apply the projection for this event.
+        // different derived rows from the same ledger. Decoding on replay also
+        // proves every ledger row is still readable.
+        await projection.apply(eventFromJson(row.raw as Record<string, unknown>));
       }
       return res.rowCount ?? 0;
     });
