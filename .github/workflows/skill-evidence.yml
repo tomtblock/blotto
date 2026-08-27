@@ -1,12 +1,13 @@
 # skill-evidence — the nightly evidence lane (D-A2, ratified 2026-08-27).
 #
-# Re-runs the full 200-pool skill-evidence study (deterministic from its base
-# seed) and fails if a fresh run no longer reproduces the committed
-# docs/skill-evidence/results.csv + REPORT.md. An engine change that shifts
+# Re-runs the full skill-evidence study — the 200-pool mixed run plus the
+# three 200-pool homogeneous-field runs (v2 amendment), all deterministic
+# from the base seed — and fails if a fresh run no longer reproduces the
+# committed docs/skill-evidence/results.csv + REPORT.md. An engine change that shifts
 # outcome statistics must land together with regenerated evidence — this lane
 # turns silent drift into a red build.
 #
-# Nightly, not per push (ratified): the study runs ~200 × 64-entrant pools
+# Nightly, not per push (ratified): the study runs ~800 × 64-entrant pools
 # through the real crank and takes minutes, not seconds. workflow_dispatch is
 # kept for on-demand runs.
 name: skill-evidence

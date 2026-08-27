@@ -67,6 +67,32 @@ paid (D3-B), but it does place the indivisible lamport remainder of a tie
 split and the published leaf order — the shuffle removes even that residual
 correlation between class and seat.
 
+## Within-class uniqueness (master prompt v2 amendment)
+
+No two entrants of one class in one pool share the identical seven-battle
+allocation set. The jitter model is documented at its site
+(`concentrated()` in `src/ladder.ts`): one seeded transfer of up to
+`jitterMax` points between two trio stats, keeping the sum at exactly 100.
+Jitter alone cannot GUARANTEE distinct full sets, so
+`ensureUniqueWithinClass` repairs any residual collision deterministically:
+the later entrant regenerates with a bumped salt until its set is fresh.
+The **uniform class is exempt** — `20/20/20/20/20` every battle is the
+class's definition; jittering it would destroy the structural property the
+report's appendix documents (a flat split loses every battle 3–2 to any
+three-stat concentration).
+
+## Homogeneous-field runs (master prompt v2 amendment)
+
+Alongside the mixed run, the study runs 200 pools per class in which ALL 64
+entrants play the same class (random / heuristic / optimised — a
+homogeneous uniform pool would be a single 64-way tie and is refused by
+construction). These are the "equally-skilled entrants" controls: within a
+class no entrant holds an edge, so the measured mean payout share sits at
+the everyone-equal baseline of 1/64 of the pot, and rank-1 lands at ≈ 1/64
+of entrants. The report leads with the mixed random-vs-optimised
+comparison; the homogeneous tables are the evidence that the spread between
+classes is skill, not structure.
+
 Detection is off for study runs: 16 uniform entrants have identical sets by
 construction, and flag-escrowing them as duplicates would distort the
 outcome statistics being measured. (The rehearsal suite proper keeps

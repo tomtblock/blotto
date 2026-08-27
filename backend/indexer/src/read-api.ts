@@ -18,6 +18,11 @@
  *   GET /treasury                      → TreasuryReport (D-A1 revised) —
  *                                        assembled from the raw event
  *                                        ledger (treasury-report.ts)
+ *   GET /history/summary               → first-time vs repeat paid-seat
+ *   GET /history/persistence             rates, paid persistence across
+ *   GET /history/entries                 consecutive entries, and the
+ *                                        entries-per-wallet distribution
+ *                                        (D-A2 v2 — player-history.ts)
  *
  * Route handling is a pure function (path → handler) so the suite tests it
  * without sockets; `serveReadApi` is the thin Node http wrapper.
@@ -26,6 +31,11 @@
 import { createServer, type Server } from 'http';
 import type { Queryable } from './shared';
 import { treasuryReport } from './treasury-report';
+import {
+  historyEntriesDistribution,
+  historyPersistence,
+  historySummary,
+} from './player-history';
 
 type Json = unknown;
 
@@ -102,6 +112,17 @@ export async function handleRead(db: Queryable, path: string): Promise<ReadApiRe
 
   if (parts[0] === 'treasury' && parts.length === 1) {
     return { status: 200, body: await treasuryReport(db) };
+  }
+
+  if (parts[0] === 'history' && parts.length === 2) {
+    if (parts[1] === 'summary') return { status: 200, body: await historySummary(db) };
+    if (parts[1] === 'persistence') {
+      return { status: 200, body: await historyPersistence(db) };
+    }
+    if (parts[1] === 'entries') {
+      return { status: 200, body: await historyEntriesDistribution(db) };
+    }
+    return { status: 404, body: { error: 'not found' } };
   }
 
   if (parts[0] === 'profiles' && parts.length === 2) {

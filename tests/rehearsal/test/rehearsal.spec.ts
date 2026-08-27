@@ -62,6 +62,7 @@ describe('the offline dress rehearsal', () => {
       state: 'Refunding',
       vrfCommitted: true,
       entryLamports: 100_000_000n,
+      potLamports: potForTier(0),
       fillDeadline: 0n,
       secretRevealed: false,
       resultsCommitted: false,

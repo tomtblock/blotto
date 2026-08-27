@@ -54,6 +54,30 @@ export class PgProjection implements Projection {
           );
           break;
         }
+        case 'history_on_entry': {
+          // Fill-missing semantics, mirroring MemoryProjection: identity
+          // fields land only where the row does not already carry a value
+          // (a replayed PrizesPaid may have created the row first).
+          await this.db.query(
+            `INSERT INTO player_history
+               (pool, player, seat, tier, pot_lamports, entries_to_date)
+             SELECT $1, $2, $3::int, p.tier, p.pot_lamports,
+                    COALESCE(pr.pools_entered, 1)
+               FROM (SELECT 1) one
+               LEFT JOIN pools p ON p.pool = $1
+               LEFT JOIN profiles pr ON pr.player = $2
+             ON CONFLICT (pool, player) DO UPDATE SET
+               seat = COALESCE(player_history.seat, EXCLUDED.seat),
+               tier = COALESCE(player_history.tier, EXCLUDED.tier),
+               pot_lamports = COALESCE(player_history.pot_lamports, EXCLUDED.pot_lamports),
+               entries_to_date = CASE
+                 WHEN player_history.entries_to_date = 0 THEN EXCLUDED.entries_to_date
+                 ELSE player_history.entries_to_date
+               END`,
+            [op.pool, op.player, op.seat]
+          );
+          break;
+        }
         case 'close_if_fully_refunded': {
           await this.db.query(
             `UPDATE pools SET state = 'Closed'
@@ -89,7 +113,7 @@ export class PgProjection implements Projection {
 
   async reset(): Promise<void> {
     await this.db.query(
-      'TRUNCATE pools, entries, results, payouts, profiles'
+      'TRUNCATE pools, entries, results, payouts, profiles, player_history'
     );
   }
 }

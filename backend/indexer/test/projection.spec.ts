@@ -129,6 +129,25 @@ describe('blotto event decoding against real emitted bytes', () => {
     expect(profile.total_won_lamports).to.equal('1350000000');
     expect(profile.seats_paid).to.equal('1');
     expect(profile.pools_entered).to.equal('1');
+
+    // Player history (D-A2 v2): one row per entry across both pools, each
+    // carrying tier, pot, and the running entry count; exactly the 16
+    // committed seats are marked paid, with the pool's fixed pot attached.
+    const history = Object.values(snap.player_history);
+    expect(history.length).to.equal(66);
+    for (const h of history) {
+      expect(h.entries_to_date, `entries_to_date for ${h.player}`).to.equal('1');
+      expect(h.tier).to.equal(0);
+      expect(h.pot_lamports).to.equal('5120000000');
+    }
+    const paidRows = history.filter((h) => h.paid === true);
+    expect(paidRows.length).to.equal(16);
+    const paidTotal = paidRows.reduce((a, h) => a + BigInt(h.amount_lamports as string), 0n);
+    expect(paidTotal.toString()).to.equal('5120000000');
+    // The history row's seat agrees with the payout's seat for the winner.
+    const h0 = history.find((h) => h.player === seat0.player && h.pool === seat0.pool)!;
+    expect(h0.seat).to.equal(0);
+    expect(h0.paid).to.equal(true);
   });
 
   it('rederive rebuilds an identical snapshot from the ledger alone', async () => {
