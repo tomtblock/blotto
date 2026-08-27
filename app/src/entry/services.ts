@@ -19,6 +19,7 @@ import { executeTrade } from '@/tx/execute';
 import type { TxRpc } from '@/tx/tx-rpc';
 import type { LifecycleLogEntry, TxFailure, TxSigner } from '@/tx/types';
 import type { EntryServices } from './submit';
+import { deviceMarker } from './device';
 import {
   buildEd25519Instruction,
   buildRegisterInstruction,
@@ -161,9 +162,9 @@ export function makeLiveEntryServices(cfg: LiveEntryServicesConfig): EntryServic
     },
 
     async deviceHash() {
-      // R19: the Privy device fingerprint — C11 wires it; zeros until then
-      // (detection ignores all-zero device hashes).
-      return new Uint8Array(32);
+      // C11: the persisted per-browser marker (device.ts documents why it
+      // is not the Privy fingerprint R19 assumed — the SDK has none).
+      return deviceMarker();
     },
   };
 }

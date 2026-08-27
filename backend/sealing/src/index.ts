@@ -2,4 +2,5 @@
 export * from './sealedbox';
 export * from './payload';
 export * from './custody';
+export * from './custody-turnkey';
 export * from './store';

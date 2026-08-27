@@ -6,3 +6,4 @@ export * from './crank';
 export * from './daemon';
 export * from './missing';
 export * from './publisher';
+export * from './publisher-irys';
