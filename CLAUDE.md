@@ -33,8 +33,9 @@ hands-on, and avoid jargon dumps. Prompts written for executor agents stay techn
 2. **The legal position.** Anything that erodes "class is cosmetic", "no chance in the mechanism",
    or the §8.7 language rules is a product-ending risk, not a polish item.
 3. **Verifiability.** Every number a player is paid must be recomputable by that player from
-   published data. Sealing, the revealed pool secret, the published battle set and the scoring crate
-   exist so the operator is checkable rather than trusted.
+   published data. Sealing, the revealed pool secret, the published battle set and the TypeScript
+   scoring engine (R20 — one module, crank and browser) exist so the operator is checkable rather
+   than trusted.
 4. **Integrity of the competition.** Detection quality, the client allocation invariant, the draw
    rate the free-integer space buys.
 5. **UX of the ninety-second session.**
@@ -47,17 +48,21 @@ acknowledge what is sacrificed.
 ## Hard rules — never violate
 
 - **No floats in on-chain math.** Integer-only, `u128` intermediates where a product can grow
-  (`threat-tm-403`). This holds in the scoring crate too — a score of "half a win" is carried as
-  half-points in integer units, never as `0.5f64`.
+  (`threat-tm-403`). This holds in the TypeScript scoring engine too — a score of "half a win" is
+  carried as half-points in integer units, never as a float.
 - **Class is cosmetic and is read by nothing in the scoring path** (PID §3, §8.4; TECH-ARCH §4).
   A Titan's Strength is worth exactly what a Goblin's is. No class may affect any stat, any battle,
   any pool, any prize, or any ranking tiebreak. Any proposed class reward faces two questions —
   *would anyone pay money for this, and does it improve the chance of winning?* Both must be no.
   This is the load-bearing rule for the legal position and the thing every future feature request
   will try to erode.
-- **The prize vault has no withdraw instruction** (TECH-ARCH §3.2). The only lamport exits are
-  `claim`, `refund` and `sweep_unclaimed`. Do not add a fourth, do not add an admin escape hatch,
-  and do not add a "recover stuck funds" path. An auditor confirms there is no other route.
+- **The prize vault has no withdraw instruction** (TECH-ARCH §3.2 as amended by roadmap R10/§1.4).
+  The only lamport exits are `pay_prizes`, `release_escrow`, `refund`, and `forfeit_escrow`
+  (escrow forfeited to the next pool's vault or the platform wallet — roadmap §1.4; note its prose
+  says "three exits" but its own design adds forfeit, recorded in the Phase 1 report). Do not add
+  another, do not add an admin escape hatch, and do not add a "recover stuck funds" path.
+  `scripts/check-standing-rules.sh` asserts the exact exit set in CI; an auditor confirms there is
+  no other route.
 - **Allocation invariant: five `u8` summing to exactly 100, in the fixed stat order**
   Strength, Speed, Heart, Wit, Durability (PID §4.6, TECH-ARCH §2). The program rejects anything
   else. The client must be unable to submit anything else. This invariant is what makes the 7% draw
@@ -76,9 +81,11 @@ acknowledge what is sacrificed.
 - **Distinct PDA seed prefixes for every PDA type** (`threat-tm-401`): `seeds = [b"<type>", ...]`.
 - **Always verify the signer on privileged instructions** (`threat-tm-402`).
 - **Never invent values.** If a constant is not in `PID_Blotto-Cup_v0.5.md`,
-  `TECH-ARCHITECTURE_Blotto-Cup_v0.2.md`, or an explicit founder direction, **ask**. Class counters,
-  prize bands, the fill deadline, the minimum fill, the per-screen timer and the claim window are all
-  founder-owned numbers with published consequences.
+  `TECH-ARCHITECTURE_Blotto-Cup_v0.2.md`, the ratified decision register in
+  `docs/BUILD-ROADMAP_v1.0.md` (R1–R21), or an explicit founder direction, **ask**. Class counters,
+  prize bands, the fill deadline, the per-screen timer (15s, R9), the tier table (R6) and the
+  territory allowlist (R2) are all founder-owned numbers with published consequences. Where the
+  roadmap and TECH-ARCH v0.2 disagree, the roadmap wins (its §1.3/§1.4 lists the deltas).
 
 ## Knowledge currency
 
@@ -102,10 +109,10 @@ names, test layout. Before writing a change, read the source files it will modif
 directly depends on, and verify every reference against them. If those files are not available,
 **ask for them before proceeding** — do not work from docs alone.
 
-Phase 0 left several directories deliberately empty with a README (`crates/blotto-merkle`,
-`crates/blotto-scoring`, `backend/{packet,sealing,detection,reveal}`, `app/src/{battle,verify,rules,leaderboard,claim}`).
-An empty directory is a placeholder, not an implementation — check `EXTRACTION-REPORT.md` before
-assuming any of it exists.
+Check `EXTRACTION-REPORT.md` and the per-phase reports in `docs/phase-reports/` before assuming a
+component's state. `crates/blotto-scoring` was dropped by roadmap R20 (the scoring engine is
+TypeScript, in `backend/scoring/`); `crates/blotto-merkle` remains a placeholder — the results tree
+is built in TypeScript and its root is committed as opaque bytes on-chain (see the Phase 1 report).
 
 ## Architect owns · founder reserves
 

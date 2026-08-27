@@ -78,9 +78,22 @@ jobs:
       - name: Scan working tree
         run: gitleaks dir . --no-banner --redact --config .gitleaks.toml
 
-# NOTE (Phase 0): the PID §8.7 forbidden-word grep is NOT a lane here. Phase 0's
-# brief scoped this workflow to the Rust and gitleaks lanes only, so the grep is
-# documented in CONTRIBUTING.md → "The language gate" and run by hand for now.
-# Promoting it to a third job is a one-line change and is recommended in
-# EXTRACTION-REPORT.md — it is a legal-position rule (PID §8.7, compliance item
-# C12), not a style preference, and review is a weaker gate than CI.
+  # Roadmap §3 standing rules 4–6: the PID §8.7 language gate and the two
+  # structural greps (no `class` in the scoring path; the vault's exits are
+  # exactly the enumerated set) run on every PR. Phase 0 left the language gate
+  # manual because its brief scoped ci-fast to two lanes; BUILD-ROADMAP_v1.0.md
+  # §3 now mandates it.
+  standing-rules:
+    name: standing-rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Language gate (PID §8.7 + roadmap §6.4)
+        run: ./scripts/check-language.sh
+
+      - name: Structural rules (roadmap §3 rules 5–6)
+        run: ./scripts/check-standing-rules.sh

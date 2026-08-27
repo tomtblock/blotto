@@ -8,16 +8,17 @@
 # into this one, where it is discoverable.
 #
 #   Never: lottery · gamble · bet · wager · casino · pull · pack · odds · jackpot ·
-#          rake · deal · roll
+#          rake · deal · roll — plus, per roadmap R11/§6.4: promotional · sweepstake
+#          (they denote free-entry sweepstakes and put the product in the wrong
+#          regulatory box)
 #   Use:   entry · pass · character · battle · stat · allocation · tournament ·
 #          prize pool · ranking
 #
 # Run from the repository root. Exits non-zero, and prints every hit, if anything
 # matches. See CONTRIBUTING.md → "The language gate" for the exclusion rationale.
 #
-# NOTE: this script is not yet a CI lane — Phase 0's brief scoped ci-fast to the
-# Rust and gitleaks jobs. Promoting it is one job block in
-# .github/workflows/ci-fast.yml and is a recommended follow-up.
+# This script runs as the `standing-rules` CI lane on every PR (roadmap §3
+# standing rule 4), alongside scripts/check-standing-rules.sh.
 
 set -uo pipefail
 
@@ -26,7 +27,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 # The pattern also catches vocabulary that is not in §8.7 but belongs to the
 # predecessor's product and has no business here: its name, its mechanics, and its
 # marketplace.
-PATTERN='casino|gambling|disguised|dopamine|shill|degen|the house|pump|bonding|lottery|jackpot|\bodds\b|\bpack\b|\bpull\b|\bbet\b|wager|rake|\broll\b|anarchy|xp\b|graduat|trending|magic eden|synthetic'
+PATTERN='casino|gambling|disguised|dopamine|shill|degen|the house|pump|bonding|lottery|jackpot|\bodds\b|\bpack\b|\bpull\b|\bbet\b|wager|rake|\broll\b|anarchy|xp\b|graduat|trending|magic eden|synthetic|promotion|sweepstake'
 
 # ---------------------------------------------------------------------------
 # Exclusions. Each one has a reason; do not extend this list without the same
@@ -49,6 +50,7 @@ hits="$(
     --exclude=TECH-ARCHITECTURE_Blotto-Cup_v0.2.md \
     --exclude=REPO-EXTRACTION-BRIEF_v1.1.md \
     --exclude=REPO-TRANSITION-PLAYBOOK.md \
+    --exclude=BUILD-ROADMAP_v1.0.md \
     `# The Phase 0 reports have to name the old product and the components that` \
     `# were not carried in order to be useful.` \
     --exclude=EXTRACTION-REPORT.md \

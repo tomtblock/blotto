@@ -47,17 +47,19 @@ Run it from the repository root before every commit:
 ./scripts/check-language.sh
 ```
 
-The script holds the pattern and the exclusion list, each exclusion with its reason. It is **not
-yet a CI lane** — Phase 0's brief scoped `ci-fast` to the Rust and gitleaks jobs. Promoting it is
-one job block in `.github/workflows/ci-fast.yml` and is a recommended follow-up recorded in
-`EXTRACTION-REPORT.md`; until then it is a manual step and a review responsibility.
+The script holds the pattern and the exclusion list, each exclusion with its reason. It runs as
+the **`standing-rules` CI lane on every PR** (roadmap §3 rule 4), together with
+`scripts/check-standing-rules.sh` — the structural greps for roadmap rules 5 (no `class` in the
+scoring path) and 6 (the vault's exits are exactly the enumerated set). Two additional forbidden
+words come from roadmap R11/§6.4: **promotional** and **sweepstake** — they denote free-entry
+sweepstakes and put the product in the wrong regulatory box.
 
 ### What is excluded, and why
 
 | Excluded | Why |
 |---|---|
 | `docs/reference/`, `docs/archive/` | Historical by definition, and marked non-authoritative in their own headers and in `docs/INDEX.md`. |
-| The four source documents in `docs/` | Copied verbatim — inputs to this repository rather than content authored in it. PID §8.7 necessarily *lists* the words it forbids, and TECH-ARCH §12 names a Phase-5 activity the pattern happens to match. |
+| The five source documents in `docs/` (PID, TECH-ARCH, brief, playbook, `BUILD-ROADMAP_v1.0.md`) | Copied verbatim — inputs to this repository rather than content authored in it. PID §8.7 necessarily *lists* the words it forbids, and the roadmap's R11 discusses the forbidden word it bans. |
 | `EXTRACTION-REPORT.md`, `TRANSITION-REPORT.md` | Both have to name the old product and the components that were not carried in order to be useful. |
 | `CONTRIBUTING.md`, `CLAUDE.md` | Both quote the forbidden list in order to forbid it. |
 | `Cargo.lock`, `package-lock.json`, `yarn.lock` | Dependency metadata, machine-generated. Package names like `pump`, `escape-string-regexp` and `solana-program-pack` are not ours to rename. |
@@ -111,8 +113,8 @@ program as a genesis fixture (`tests/fixtures/mpl_core.so`) so the suite runs of
 
 ## CI
 
-`ci-fast` runs on every pull request and every push to the default branch. Two jobs: `rust` and
-`gitleaks`.
+`ci-fast` runs on every pull request and every push to the default branch. Three jobs: `rust`,
+`gitleaks`, and `standing-rules` (language gate + roadmap §3 rules 5–6).
 
 **If the default branch goes red, fixing it outranks new work.** The `stop-the-line` workflow files
 an issue assigned to the merging author automatically and closes it when the lane next runs green —
