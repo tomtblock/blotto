@@ -423,10 +423,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "blotto-scoring"
-version = "0.1.0"
-
-[[package]]
 name = "blotto_cup"
 version = "0.1.0"
 dependencies = [
@@ -435,6 +431,9 @@ dependencies = [
  "blotto-randomness",
  "getrandom 0.2.16",
  "mpl-core",
+ "proptest",
+ "solana-instructions-sysvar 3.0.1",
+ "solana-sha256-hasher",
  "switchboard-on-demand",
 ]
 

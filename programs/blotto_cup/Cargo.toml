@@ -79,11 +79,25 @@ mpl-core = "=0.12.0"
 getrandom = { version = "=0.2.16", features = ["custom"] }
 # ----------------------------------------------------------------------------
 
+# Two Solana split crates anchor-lang 1.0's facade deliberately does not
+# re-export. Pinned to the versions already in the lockfile via anchor's own
+# dependency tree. `solana-instructions-sysvar` is the instructions-sysvar
+# loader pair `entry_packet.rs` uses; `solana-sha256-hasher` is the sha256
+# syscall wrapper `reveal_pool_secret` checks the sealing secret with (the
+# `sha2` feature only affects off-chain builds — on the solana target it is
+# the syscall).
+solana-instructions-sysvar = "=3.0.1"
+solana-sha256-hasher = { version = "=3.1.0", features = ["sha2"] }
+
 # Class randomness digest + cosmetic class draw. Wired into `register` in Phase 1;
 # this crate is declared here now so the dependency edge is real and the workspace
 # builds it. Framework-agnostic (no solana-program dep), so it unifies cleanly
 # across the toolchain — see the crate docs.
 blotto-randomness = { path = "../../crates/blotto-randomness" }
+
+[dev-dependencies]
+# The vault-invariant model suite (roadmap 1.7). Same pin as blotto-randomness.
+proptest = "=1.11.0"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))'] }

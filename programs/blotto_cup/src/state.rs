@@ -1,150 +1,351 @@
 //! Account state and PDA seed prefixes.
 //!
-//! **Phase 0 scope.** `Pool` here is a deliberate *subset* of the account
-//! specified in TECH-ARCH §3.1 — only the fields the two instructions carried in
-//! Phase 0 actually read or write. Phase 1 owns the full struct (`tier`,
-//! `entry_lamports`, `entrants`, `opened_at`, `fill_deadline`, `pool_pubkey`,
-//! `pool_secret_hash`, `class_root`, `class_counters`, `results_root`,
-//! `prize_vault`) along with `Config`, `Entry`, and the vault PDA.
+//! Layouts per TECH-ARCH §3.1 as amended by roadmap §1.4:
+//! `Config` gains `open_tiers`, `vault_ceiling_lamports`,
+//! `kyc_required_above_lamports`, `detection_hard_block`; `Pool` gains
+//! `timer_seconds` and (per R10) the 16 winners committed alongside the results
+//! root; `Entry` gains `escrow_lamports` and loses `claimed` (there is no claim
+//! step — prizes are pushed).
 //!
-//! Adding a field here is a Phase 1 decision, not a Phase 0 one: every field
-//! costs rent on every pool, and the layout is what the off-chain indexer decodes
-//! against. Nothing has been invented — every field below appears in TECH-ARCH
-//! §3.1 (`CLAUDE.md`: never invent values).
+//! Every field traces to TECH-ARCH §3.1 or a register row; nothing is invented.
 
 use anchor_lang::prelude::*;
 
-/// Pool PDA seed prefix.
-///
-/// Full derivation: `[POOL_SEED, pool_id.to_le_bytes()]`.
-///
-/// Note this differs from the predecessor's Collection PDA, which was seeded on a
-/// launch-token mint. A Pool has no mint — entries are paid in SOL and the only
-/// token involved is the character pass, which is minted per entry — so the pool
-/// id is the discriminator.
+use crate::constants::PAID_RANKS;
+
+// ---------------------------------------------------------------------------
+// PDA seed prefixes — one distinct prefix per PDA type (threat-tm-401).
+// ---------------------------------------------------------------------------
+
+/// Config PDA: `[CONFIG_SEED]` — global singleton.
+pub const CONFIG_SEED: &[u8] = b"config";
+
+/// Pool PDA: `[POOL_SEED, pool_id.to_le_bytes()]`.
 pub const POOL_SEED: &[u8] = b"pool";
 
-/// Metaplex Core Collection asset PDA seed prefix — the collection that groups a
-/// pool's character passes.
-///
-/// Full derivation: `[PASS_COLLECTION_SEED, pool_pubkey.as_ref()]`.
-///
-/// The address is derivable, so it is never stored on `Pool`: `create_pass_collection`
-/// (producer) and `mint_pass` (consumer) both re-derive it from these seeds.
-///
-/// Distinct prefix per PDA type, per `docs/reference/threat-tm-401.md`.
+/// Prize vault PDA: `[VAULT_SEED, pool_id.to_le_bytes()]`. A zero-data
+/// system-owned account holding the 80% prize pot. Lamports leave it only
+/// through the exits enumerated in `vault.rs`.
+pub const VAULT_SEED: &[u8] = b"vault";
+
+/// Fees PDA: `[FEES_SEED, pool_id.to_le_bytes()]`. A zero-data system-owned
+/// account holding the 20% platform share **until the pool seals**. Holding it
+/// per-pool until seal is what makes the R7 full refund (100% back, platform
+/// share included) trustless — the program cannot debit the founder's wallet,
+/// so the refundable 20% must sit under program control until the pool can no
+/// longer refund. Swept to the platform wallet in the 64th `register`.
+/// Recorded as a deliberate deviation from PID §7's instant-split diagram in
+/// `docs/phase-reports/phase-1-program.md`.
+pub const FEES_SEED: &[u8] = b"fees";
+
+/// Entry PDA: `[ENTRY_SEED, pool.key(), player.key()]`. Keying on the player
+/// makes one entry per wallet per pool a program invariant (a second `register`
+/// finds the PDA already initialized and reverts) — consistent with PID §1's
+/// "a player pays a fixed entry" and with detection treating multi-entry as
+/// multi-accounting (TECH-ARCH §9).
+pub const ENTRY_SEED: &[u8] = b"entry";
+
+/// Metaplex Core Collection asset PDA for a pool's character passes:
+/// `[PASS_COLLECTION_SEED, pool.key()]` (carried from Phase 0).
 pub const PASS_COLLECTION_SEED: &[u8] = b"pass_collection";
 
-/// Pool lifecycle (TECH-ARCH §3.2).
-///
-/// Phase 0 only ever inspects `Open`. The transitions — `Open` → `Sealed` at the
-/// 64th entry, `Sealed` → `Scored` after `commit_results`, and the `Refunding` /
-/// `Closed` terminal states — are Phase 1's to implement.
+// ---------------------------------------------------------------------------
+// Config
+// ---------------------------------------------------------------------------
+
+/// Global program configuration. Admin is the Squads vault (playbook §4.1).
+#[account]
+pub struct Config {
+    /// Squads multisig. The only signer for the admin instructions.
+    pub admin: Pubkey,
+    /// Signs entry packets (Turnkey-custodied, sign-only). Rotatable.
+    pub entry_signer: Pubkey,
+    /// Signs `open_pool`, `reveal_pool_secret`, `commit_results`, `pay_prizes`,
+    /// flag/escrow instructions (Turnkey-custodied). Rotatable.
+    pub settlement_signer: Pubkey,
+    /// Receives the 20% platform share at seal, and forfeited escrow when no
+    /// successor pool exists.
+    pub platform_wallet: Pubkey,
+    /// Blocks `register` when true (admin kill switch).
+    pub paused: bool,
+    /// Which of the four configured tiers may open pools (roadmap R6).
+    /// Index = tier: 0 → 0.1 SOL, 1 → 0.5, 2 → 1, 3 → 5.
+    pub open_tiers: [bool; 4],
+    /// Per-pool gross ceiling in lamports (roadmap R6/§7.1: launch 6.4 SOL).
+    /// `open_pool` rejects a tier whose full pool (entry × 64) would exceed it.
+    pub vault_ceiling_lamports: u64,
+    /// KYC-at-claim switch (roadmap R3/4.5). 0 = off. When non-zero,
+    /// `pay_prizes` escrows any share above it until a `kyc_tier ≥ 1` packet
+    /// is presented via `release_escrow`.
+    pub kyc_required_above_lamports: u64,
+    /// Detection hard-block policy flag (roadmap R11). Read by the off-chain
+    /// detection layer, recorded on-chain so the operative policy is public.
+    pub detection_hard_block: bool,
+    /// Next pool id. Starts at 1; 0 is the "no pool" sentinel below.
+    pub next_pool_id: u64,
+    /// The currently-Open pool id per tier, 0 if none (roadmap R14: max one
+    /// open pool per tier). Set by `open_pool`; cleared at seal or refund.
+    pub active_pool_by_tier: [u64; 4],
+    pub bump: u8,
+}
+
+impl Config {
+    pub const LEN: usize = 32 * 4 + 1 + 4 + 8 + 8 + 1 + 8 + 8 * 4 + 1;
+    pub const SPACE: usize = 8 + Self::LEN;
+}
+
+// ---------------------------------------------------------------------------
+// Pool
+// ---------------------------------------------------------------------------
+
+/// Pool lifecycle (TECH-ARCH §3.2 as amended by R10: `Paid` replaces the
+/// claim-window states).
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum PoolState {
     /// Accepting entries.
     Open,
-    /// Full (or past its fill deadline with enough entrants). No further entries;
-    /// the pool secret may now be exported and revealed.
+    /// 64th entry landed. No further entries; the pool secret may be exported.
     Sealed,
-    /// Results committed. Unflagged winners may claim.
+    /// Results root + winners committed. Awaiting `pay_prizes`.
     Scored,
-    /// Deadline passed below the minimum fill. Entries are refunded in full.
+    /// All 16 ranks settled (paid or escrowed).
+    Paid,
+    /// Deadline passed below 64. Entries refunded in full.
     Refunding,
-    /// Terminal.
+    /// Terminal: every entrant refunded.
     Closed,
 }
 
 /// A single competition pool.
-///
-/// **Phase 0 subset — see the module doc.**
 #[account]
 pub struct Pool {
-    /// Monotonic pool identifier. Also the Pool PDA's second seed, little-endian.
+    /// Monotonic pool id; also the PDA seed (little-endian).
     pub id: u64,
-
-    /// Lifecycle state (TECH-ARCH §3.2).
+    /// Tier index into `TIER_ENTRY_LAMPORTS`.
+    pub tier: u8,
+    /// Entry price in lamports, fixed at open.
+    pub entry_lamports: u64,
+    /// Entries so far. Also the next entry's index.
+    pub entrants: u16,
+    pub opened_at: i64,
+    /// `opened_at + FILL_DEADLINE_SECS` (72h, R7).
+    pub fill_deadline: i64,
     pub state: PoolState,
-
+    /// X25519 public key entries are sealed to (TECH-ARCH §5). Published at open.
+    pub sealing_pubkey: [u8; 32],
+    /// `sha256(secret)`, committed at open; checked at reveal.
+    pub sealing_secret_hash: [u8; 32],
     /// Switchboard On-Demand VRF result, committed once by `commit_vrf_seed`.
-    ///
-    /// Zero-filled at `open_pool` as the "uncommitted" sentinel; `commit_vrf_seed`
-    /// enforces write-once against exactly that. This seed is one of five inputs
-    /// to the per-entry class digest (TECH-ARCH §4) and **never determines an
-    /// outcome on its own** — knowing it in full tells an observer nothing about
-    /// any class, because the digest also mixes an execution-time slot hash.
-    ///
-    /// The class it eventually produces is cosmetic and is read by nothing in the
-    /// scoring path (PID §8.4).
+    /// Zero = uncommitted sentinel. One of five inputs to the cosmetic class
+    /// digest; read by nothing in the scoring path (PID §8.4).
     pub vrf_seed: [u8; 32],
-
-    /// Canonical bump for this PDA, stored so PDA-signed CPIs do not have to
-    /// re-derive it.
+    /// Bag-without-replacement class counters (PID §3). Sum falls from 64 to 0
+    /// as entries land. Named `class_counters`, never anything shorter
+    /// (PID §8.7).
+    pub class_counters: [u16; 5],
+    /// Set by `reveal_pool_secret` after the hash check.
+    pub secret_revealed: bool,
+    /// Merkle root of the full 64-place ranking `(player, rank, amount)`
+    /// (R10: committed for verifiability; the paid pairs go on-chain in the
+    /// payout transaction).
+    pub results_root: [u8; 32],
+    pub results_committed: bool,
+    /// The top-16 players, rank order, committed with the root. `pay_prizes`
+    /// pays exactly these, with amounts derived on-chain from the band table —
+    /// the settlement signer cannot choose either. See the Phase 1 report for
+    /// why this replaces per-payout Merkle proofs (transaction-size limit).
+    pub winners: [Pubkey; PAID_RANKS],
+    /// Bit r-1 set once rank r is settled (paid or escrowed). Makes
+    /// `pay_prizes` batches idempotent; 0xFFFF → state `Paid`.
+    pub paid_mask: u16,
+    /// Entries refunded so far (Refunding pools). == entrants → `Closed`.
+    pub refunded_count: u16,
+    /// Per-screen timer, seconds (R9: 15). Recorded per pool so the value
+    /// players entered under is on-chain.
+    pub timer_seconds: u8,
     pub bump: u8,
+    pub vault_bump: u8,
+    pub fees_bump: u8,
 }
 
 impl Pool {
-    /// Account size, excluding Anchor's 8-byte discriminator.
-    ///
-    /// `id` (8) + `state` (1, single-byte enum discriminant) + `vrf_seed` (32) +
-    /// `bump` (1). Phase 1 must revise this as it adds the fields from
-    /// TECH-ARCH §3.1.
-    pub const LEN: usize = 8 + 1 + 32 + 1;
+    pub const LEN: usize = 8 // id
+        + 1 // tier
+        + 8 // entry_lamports
+        + 2 // entrants
+        + 8 // opened_at
+        + 8 // fill_deadline
+        + 1 // state
+        + 32 // sealing_pubkey
+        + 32 // sealing_secret_hash
+        + 32 // vrf_seed
+        + 2 * 5 // class_counters
+        + 1 // secret_revealed
+        + 32 // results_root
+        + 1 // results_committed
+        + 32 * PAID_RANKS // winners
+        + 2 // paid_mask
+        + 2 // refunded_count
+        + 1 // timer_seconds
+        + 1 + 1 + 1; // bumps
+    pub const SPACE: usize = 8 + Self::LEN;
+}
+
+// ---------------------------------------------------------------------------
+// Entry
+// ---------------------------------------------------------------------------
+
+/// One player's entry in one pool.
+#[account]
+pub struct Entry {
+    pub pool: Pubkey,
+    pub player: Pubkey,
+    /// Seat index, 0-based; feeds the class digest.
+    pub index: u16,
+    /// `sha256(35-byte battle set ‖ 32-byte salt)` (TECH-ARCH §5).
+    pub battles_hash: [u8; 32],
+    /// The drawn cosmetic class (PID §3). Written here and to the pass for
+    /// display; **read by nothing in the scoring path** (PID §8.4).
+    pub class: u8,
+    /// The minted character pass (Metaplex Core asset).
+    pub pass_asset: Pubkey,
+    pub entered_at: i64,
+    /// The delayed slot hash the class digest consumed — stored (and emitted)
+    /// so any player can replay the draw from on-chain data alone.
+    pub slot_hash: [u8; 32],
+    /// Detection flag (R11). A flagged entry's prize share is escrowed at
+    /// `pay_prizes` instead of paid.
+    pub flagged: bool,
+    /// Rank settled at `pay_prizes` (paid or escrowed).
+    pub settled: bool,
+    pub refunded: bool,
+    /// Prize share held in the vault pending review (flag) or KYC (R3 switch).
+    pub escrow_lamports: u64,
+    pub bump: u8,
+}
+
+impl Entry {
+    pub const LEN: usize = 32 + 32 + 2 + 32 + 1 + 32 + 8 + 32 + 1 + 1 + 1 + 8 + 1;
+    pub const SPACE: usize = 8 + Self::LEN;
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::constants::LAUNCH_CLASS_COUNTERS;
 
-    /// Distinct seed prefix per PDA type (`docs/reference/threat-tm-401.md`): a
-    /// PDA crafted for one type must not satisfy another type's `seeds =`
-    /// constraint. With only two prefixes this is close to trivial, but the test
-    /// exists so that adding a third prefix without adding it here is visible.
+    /// Distinct seed prefix per PDA type (threat-tm-401).
     #[test]
     fn pda_seed_prefixes_are_pairwise_distinct() {
-        let prefixes: [&[u8]; 2] = [POOL_SEED, PASS_COLLECTION_SEED];
+        let prefixes: [&[u8]; 6] = [
+            CONFIG_SEED,
+            POOL_SEED,
+            VAULT_SEED,
+            FEES_SEED,
+            ENTRY_SEED,
+            PASS_COLLECTION_SEED,
+        ];
         for (i, a) in prefixes.iter().enumerate() {
             for b in prefixes.iter().skip(i + 1) {
-                assert_ne!(a, b, "seed prefixes {a:?} and {b:?} collide (TM-401)");
+                assert_ne!(a, b, "seed prefixes collide (TM-401)");
             }
         }
     }
 
-    /// The two PDA types must derive distinct addresses even from related inputs.
+    /// The PDA types derive pairwise-distinct addresses from related inputs.
     #[test]
-    fn pool_and_pass_collection_pdas_are_distinct() {
-        let pool_id: u64 = 7;
-        let pool = Pubkey::find_program_address(&[POOL_SEED, &pool_id.to_le_bytes()], &crate::ID).0;
-        let pass_collection =
-            Pubkey::find_program_address(&[PASS_COLLECTION_SEED, pool.as_ref()], &crate::ID).0;
-        assert_ne!(pool, pass_collection);
+    fn pda_types_derive_distinct_addresses() {
+        let id: u64 = 7;
+        let pool = Pubkey::find_program_address(&[POOL_SEED, &id.to_le_bytes()], &crate::ID).0;
+        let player = Pubkey::new_from_array([9u8; 32]);
+        let addrs = [
+            Pubkey::find_program_address(&[CONFIG_SEED], &crate::ID).0,
+            pool,
+            Pubkey::find_program_address(&[VAULT_SEED, &id.to_le_bytes()], &crate::ID).0,
+            Pubkey::find_program_address(&[FEES_SEED, &id.to_le_bytes()], &crate::ID).0,
+            Pubkey::find_program_address(&[ENTRY_SEED, pool.as_ref(), player.as_ref()], &crate::ID)
+                .0,
+            Pubkey::find_program_address(&[PASS_COLLECTION_SEED, pool.as_ref()], &crate::ID).0,
+        ];
+        for (i, a) in addrs.iter().enumerate() {
+            for b in addrs.iter().skip(i + 1) {
+                assert_ne!(a, b, "two PDA types derive the same address");
+            }
+        }
     }
 
-    /// The Pool PDA is keyed on the little-endian pool id, so two different pools
-    /// can never share an address.
+    /// The LEN constants must match what Borsh writes — a stale LEN
+    /// under-allocates and fails at runtime, expensively.
     #[test]
-    fn distinct_pool_ids_derive_distinct_pdas() {
-        let a = Pubkey::find_program_address(&[POOL_SEED, &0u64.to_le_bytes()], &crate::ID).0;
-        let b = Pubkey::find_program_address(&[POOL_SEED, &1u64.to_le_bytes()], &crate::ID).0;
-        assert_ne!(a, b);
-    }
-
-    /// `Pool::LEN` must match what Borsh actually writes. A stale LEN under-allocates
-    /// the account and the write fails at runtime, which is an expensive way to find out.
-    #[test]
-    fn pool_len_matches_serialized_size() {
-        let pool = Pool {
-            id: u64::MAX,
-            state: PoolState::Open,
-            vrf_seed: [0xff; 32],
+    fn config_len_matches_serialized_size() {
+        let c = Config {
+            admin: Pubkey::new_unique(),
+            entry_signer: Pubkey::new_unique(),
+            settlement_signer: Pubkey::new_unique(),
+            platform_wallet: Pubkey::new_unique(),
+            paused: true,
+            open_tiers: [true, false, false, false],
+            vault_ceiling_lamports: u64::MAX,
+            kyc_required_above_lamports: 0,
+            detection_hard_block: true,
+            next_pool_id: 1,
+            active_pool_by_tier: [0; 4],
             bump: 255,
         };
         let mut buf = Vec::new();
-        pool.serialize(&mut buf).expect("Pool must serialize");
-        assert_eq!(
-            buf.len(),
-            Pool::LEN,
-            "Pool::LEN is stale — update it alongside the struct",
-        );
+        c.serialize(&mut buf).unwrap();
+        assert_eq!(buf.len(), Config::LEN, "Config::LEN is stale");
+    }
+
+    #[test]
+    fn pool_len_matches_serialized_size() {
+        let p = Pool {
+            id: u64::MAX,
+            tier: 3,
+            entry_lamports: u64::MAX,
+            entrants: 64,
+            opened_at: i64::MAX,
+            fill_deadline: i64::MAX,
+            state: PoolState::Paid,
+            sealing_pubkey: [1; 32],
+            sealing_secret_hash: [2; 32],
+            vrf_seed: [3; 32],
+            class_counters: LAUNCH_CLASS_COUNTERS,
+            secret_revealed: true,
+            results_root: [4; 32],
+            results_committed: true,
+            winners: [Pubkey::new_unique(); PAID_RANKS],
+            paid_mask: 0xFFFF,
+            refunded_count: 64,
+            timer_seconds: 15,
+            bump: 255,
+            vault_bump: 254,
+            fees_bump: 253,
+        };
+        let mut buf = Vec::new();
+        p.serialize(&mut buf).unwrap();
+        assert_eq!(buf.len(), Pool::LEN, "Pool::LEN is stale");
+    }
+
+    #[test]
+    fn entry_len_matches_serialized_size() {
+        let e = Entry {
+            pool: Pubkey::new_unique(),
+            player: Pubkey::new_unique(),
+            index: 63,
+            battles_hash: [1; 32],
+            class: 4,
+            pass_asset: Pubkey::new_unique(),
+            entered_at: i64::MAX,
+            slot_hash: [2; 32],
+            flagged: true,
+            settled: true,
+            refunded: false,
+            escrow_lamports: u64::MAX,
+            bump: 255,
+        };
+        let mut buf = Vec::new();
+        e.serialize(&mut buf).unwrap();
+        assert_eq!(buf.len(), Entry::LEN, "Entry::LEN is stale");
     }
 }
