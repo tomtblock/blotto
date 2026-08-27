@@ -40,8 +40,23 @@ export interface OfflinePoolRun {
   players: string[];
 }
 
+export interface OfflinePoolOptions {
+  /** Override the entrant population (default: `poolPopulation(poolSeed)`). */
+  population?: GeneratedEntrant[];
+  /**
+   * Wire the detection pipeline (default true). The skill-evidence study
+   * (D-A2) runs with detection OFF: identical sets inside a strategy class
+   * are the study's own construction, not collusion, and flag-escrowing
+   * them would distort the outcome statistics being measured.
+   */
+  detect?: boolean;
+}
+
 /** Build, fill and settle one offline pool end to end. */
-export async function runOfflinePool(poolSeed: number): Promise<OfflinePoolRun> {
+export async function runOfflinePool(
+  poolSeed: number,
+  options: OfflinePoolOptions = {}
+): Promise<OfflinePoolRun> {
   const poolId = BigInt(poolSeed);
   const chain = new FakeChain((entry) => potLamports(entry));
   const custody = new LocalCustody(async (id) => (await chain.getPool(id)).state !== 'Open');
@@ -49,7 +64,7 @@ export async function runOfflinePool(poolSeed: number): Promise<OfflinePoolRun> 
   const publisher = new MemoryPublisher();
 
   const { publicKey } = await custody.createPoolKey(poolId);
-  const population = poolPopulation(poolSeed);
+  const population = options.population ?? poolPopulation(poolSeed);
   const players: string[] = [];
   const entries: ChainEntryView[] = [];
 
@@ -85,31 +100,30 @@ export async function runOfflinePool(poolSeed: number): Promise<OfflinePoolRun> 
   });
   chain.entries.set(poolId.toString(), entries);
 
+  const detect =
+    options.detect === false
+      ? undefined
+      : async (id: bigint, revealed: RevealedForDetection[]) => {
+          const report = detectPool(
+            id.toString(),
+            revealed
+              .filter((e) => e.battles !== null)
+              .map((e) => ({
+                player: e.player,
+                index: e.index,
+                battles: e.battles as number[][],
+                timingsMs: e.timingsMs ?? [],
+                deviceHash: e.deviceHash ?? '',
+                ipHash: `ip:${e.player}`,
+                scoreHalf: e.scoreHalf,
+              })),
+            { fullEscrowTier: false }
+          );
+          return report.hardBlocks;
+        };
+
   const outcome = await crankPool(
-    {
-      chain,
-      custody,
-      ciphertexts: store,
-      publisher,
-      detect: async (id, revealed: RevealedForDetection[]) => {
-        const report = detectPool(
-          id.toString(),
-          revealed
-            .filter((e) => e.battles !== null)
-            .map((e) => ({
-              player: e.player,
-              index: e.index,
-              battles: e.battles as number[][],
-              timingsMs: e.timingsMs ?? [],
-              deviceHash: e.deviceHash ?? '',
-              ipHash: `ip:${e.player}`,
-              scoreHalf: e.scoreHalf,
-            })),
-          { fullEscrowTier: false }
-        );
-        return report.hardBlocks;
-      },
-    },
+    { chain, custody, ciphertexts: store, publisher, detect },
     poolId
   );
 
