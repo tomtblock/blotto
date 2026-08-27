@@ -74,7 +74,17 @@ export const COPY = {
       { id: 'final', heading: 'Decisions are final', body: 'TODO_COPY(rules.final)' },
       { id: 'fill', heading: 'Fill deadline and refunds', body: 'TODO_COPY(rules.fill)' },
       { id: 'sealing', heading: 'Sealing', body: 'TODO_COPY(rules.sealing)' },
-      { id: 'field', heading: 'Identical-field scoring', body: 'TODO_COPY(rules.field)' },
+      {
+        id: 'field',
+        heading: 'Identical-field scoring',
+        // SUBSTANCE FIXED (step/tiers-and-ties Part 3): this paragraph states
+        // the ordering the engine implements (backend/scoring/src/engine.ts)
+        // and must stay factually identical to it — Phase 6 may re-phrase,
+        // never re-order. "Seat" is entry order made strictly monotonic (the
+        // Phase 2 report, judgement call 3).
+        body:
+          'Every player faces the identical field: your battle 1 is compared against every other entry\u2019s battle 1, and so on for all seven. A battle is won by taking three or more of its five stats; if neither side takes three, it is a draw worth half a win to each. Rankings are ordered by, in turn: total battles won (a draw counts half); then total stats won across every comparison; then the earlier seat \u2014 the seat is your entry order in the pool, so two entries can never tie on it. The ordering is fully deterministic: the same sealed battles always produce the same ranking.',
+      },
       { id: 'allocation', heading: 'Allocation rules', body: 'TODO_COPY(rules.allocation)' },
       { id: 'timer', heading: 'The 15-second timer and lock-current', body: 'TODO_COPY(rules.timer)' },
       { id: 'detection', heading: 'Detection criteria', body: 'TODO_COPY(rules.detection)' },
