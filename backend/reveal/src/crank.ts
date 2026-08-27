@@ -41,6 +41,16 @@ import {
   type PoolKeyCustody,
 } from './deps';
 import { scoreWithMissing, type PoolEntryInput } from './missing';
+
+/** What the detection pipeline sees per entry (backend/detection). */
+export interface RevealedForDetection {
+  player: string;
+  index: number;
+  battles: number[][] | null;
+  timingsMs: number[] | null;
+  deviceHash: string | null;
+  scoreHalf: number;
+}
 import type { SettlementChain } from './chain';
 import type { BundlePublisher } from './publisher';
 import type { RevealBundle, RevealBundleEntry } from './bundle';
@@ -52,6 +62,13 @@ export interface CrankDeps {
   custody: PoolKeyCustody;
   ciphertexts: CiphertextStore;
   publisher: BundlePublisher;
+  /**
+   * Detection hook (R11, roadmap 4.3): given the revealed entries, return
+   * the players whose entries must be FLAGGED before any rank is paid.
+   * Runs between scoring and payment; absent = no detection (tests that
+   * are not about detection).
+   */
+  detect?: (poolId: bigint, entries: RevealedForDetection[]) => Promise<string[]>;
   /** Structured progress log — the crank narrates every step it takes. */
   log?: (step: string, detail?: Record<string, unknown>) => void;
   /** Ranks per pay_prizes transaction. 4 fits comfortably in one packet. */
@@ -206,6 +223,33 @@ export async function crankPool(deps: CrankDeps, poolId: bigint): Promise<CrankO
   };
   const bundleUri = await deps.publisher.publish(bundle);
   step('published', { uri: bundleUri });
+
+  // ---- 4b. Detection → flags BEFORE payment (R11) ------------------------
+  if (deps.detect) {
+    const forDetection: RevealedForDetection[] = bundleEntries.map((e) => ({
+      player: e.player,
+      index: e.index,
+      battles:
+        e.battles === null
+          ? null
+          : Array.from({ length: 7 }, (_, k) =>
+              Array.from({ length: 5 }, (_, z) =>
+                parseInt((e.battles as string).slice((k * 5 + z) * 2, (k * 5 + z) * 2 + 2), 16)
+              )
+            ),
+      timingsMs: e.timings_ms,
+      deviceHash: e.device_hash,
+      scoreHalf: results[e.index].scoreHalf,
+    }));
+    const toFlag = await deps.detect(poolId, forDetection);
+    const already = new Set(chainEntries.filter((e) => e.flagged).map((e) => e.player));
+    for (const player of toFlag) {
+      if (!already.has(player)) {
+        await deps.chain.flagEntry(poolId, player);
+        step('flag_entry', { player });
+      }
+    }
+  }
 
   // ---- 5. Commit ---------------------------------------------------------
   pool = await deps.chain.getPool(poolId);

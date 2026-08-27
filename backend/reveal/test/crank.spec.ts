@@ -266,3 +266,77 @@ describe('scoring with missing entries (the published all-losses rule)', () => {
     expect(() => scoreWithMissing([{ index: 1, battles: null }])).to.throw('without gaps');
   });
 });
+
+describe('detection wired into the crank (R11, roadmap 4.3)', () => {
+  it('two colluding wallets are flagged before payment and their shares escrow', async function () {
+    this.timeout(30000);
+    const t = await buildSealedPool({});
+    const { detectPool } = require('../../detection/src');
+    const deps = {
+      chain: t.chain,
+      custody: t.custody,
+      ciphertexts: t.store,
+      publisher: t.publisher,
+      detect: async (_poolId: bigint, entries: unknown[]) => {
+        const report = detectPool(
+          '1',
+          (entries as Array<Record<string, unknown>>)
+            .filter((e) => e.battles !== null)
+            .map((e) => ({
+              player: e.player,
+              index: e.index,
+              battles: e.battles,
+              timingsMs: e.timingsMs ?? [],
+              deviceHash: e.deviceHash ?? '',
+              ipHash: `ip:${e.player}`,
+              scoreHalf: e.scoreHalf,
+            })),
+          { fullEscrowTier: false }
+        );
+        return report.hardBlocks;
+      },
+    };
+    // Make seats 0 and 1 colluders in the STORE before cranking: identical
+    // battle sets and one shared device hash. The pool key comes back from
+    // custody (the chain is already Sealed, so the export policy passes).
+    const { seal, encodePayload, publicKeyOf } = require('../../sealing/src');
+    const { createHash } = require('crypto');
+    const s = (x: string) => new Uint8Array(createHash('sha256').update(x).digest());
+    const secret = await t.custody.exportSecret(1n);
+    const poolPk = publicKeyOf(secret);
+    for (const seat of [0, 1]) {
+      const payload = {
+        battles: t.battles[0], // seat 0's set for both — exact duplicate
+        salt: s(`salt:${seat}`),
+        timingsMs: [1000, 2000, 3000, 4000, 5000, 6000, 7000],
+        deviceHash: s('shared-device'),
+      };
+      await t.store.put(1n, t.players[seat], seal(encodePayload(payload), poolPk));
+      // The on-chain battles_hash must match the duplicate content.
+      const { battlesHash } = require('../../scoring/src');
+      const entries = t.chain.entries.get('1')!;
+      entries[seat].battlesHash = Buffer.from(battlesHash(payload.battles, payload.salt)).toString('hex');
+    }
+
+    const outcome = await crankPool(deps, 1n);
+    expect(outcome.finalState).to.equal('Paid');
+    expect(outcome.stepsTaken.filter((x) => x === 'flag_entry').length).to.equal(2);
+
+    // If either colluder ranked in the top 16, their share escrowed.
+    const pool = await t.chain.getPool(1n);
+    for (const seat of [0, 1]) {
+      const player = t.players[seat];
+      const rank = pool.winners.indexOf(player) + 1;
+      if (rank >= 1) {
+        expect((t.chain.escrowed.get(player) ?? 0n) > 0n).to.equal(true);
+        expect(t.chain.paid.get(player) ?? 0n).to.equal(0n);
+      }
+    }
+    // Total conservation: paid + escrowed == the whole pot.
+    const pot = potLamports(100_000_000n);
+    let total = 0n;
+    for (const v of t.chain.paid.values()) total += v;
+    for (const v of t.chain.escrowed.values()) total += v;
+    expect(total).to.equal(pot);
+  });
+});

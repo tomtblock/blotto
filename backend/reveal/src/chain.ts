@@ -37,6 +37,8 @@ export interface SettlementChain {
   commitResults(poolId: bigint, root: Uint8Array, winners: string[]): Promise<void>;
   /** Settle a batch of ranks (1-based); accounts resolved by the implementation. */
   payPrizes(poolId: bigint, ranks: number[]): Promise<void>;
+  /** Detection's lever (R11) — must land BEFORE the rank is paid. */
+  flagEntry(poolId: bigint, player: string): Promise<void>;
   triggerRefund(poolId: bigint): Promise<void>;
   refund(poolId: bigint, player: string): Promise<void>;
 }
@@ -51,6 +53,8 @@ export class FakeChain implements SettlementChain {
   entries = new Map<string, ChainEntryView[]>();
   /** Lamports paid per player (base58) — asserted by tests. */
   paid = new Map<string, bigint>();
+  /** Lamports escrowed per player at payout (flagged entries). */
+  escrowed = new Map<string, bigint>();
   revealed = new Map<string, Uint8Array>();
   committedRoots = new Map<string, Uint8Array>();
   /** amount per rank, injected by tests via `bandAmount`. */
@@ -89,15 +93,28 @@ export class FakeChain implements SettlementChain {
   async payPrizes(poolId: bigint, ranks: number[]): Promise<void> {
     const p = this.pools.get(poolId.toString())!;
     if (p.state !== 'Scored') throw new Error('ResultsNotCommitted');
+    const entries = this.entries.get(poolId.toString()) ?? [];
     for (const rank of ranks) {
       const bit = 1 << (rank - 1);
       if (p.paidMask & bit) throw new Error('RankAlreadySettled');
       const player = p.winners[rank - 1];
       const amount = this.bandAmount(p.entryLamports, rank);
-      this.paid.set(player, (this.paid.get(player) ?? 0n) + amount);
+      const flagged = entries.find((e) => e.player === player)?.flagged ?? false;
+      if (flagged) {
+        // Escrowed: the lamports stay put (mirrors the program).
+        this.escrowed.set(player, (this.escrowed.get(player) ?? 0n) + amount);
+      } else {
+        this.paid.set(player, (this.paid.get(player) ?? 0n) + amount);
+      }
       p.paidMask |= bit;
     }
     if (p.paidMask === 0xffff) p.state = 'Paid';
+  }
+
+  async flagEntry(poolId: bigint, player: string): Promise<void> {
+    const e = (this.entries.get(poolId.toString()) ?? []).find((x) => x.player === player);
+    if (!e) throw new Error('EntryMismatch');
+    e.flagged = true;
   }
 
   async triggerRefund(poolId: bigint): Promise<void> {

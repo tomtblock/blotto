@@ -1,0 +1,38 @@
+{
+ "_comment": "GENERATED - python oracle for the 83-byte packet layout. Regenerate: python3 fixtures/gen_vectors.py --write",
+ "cases": [
+  {
+   "name": "baseline",
+   "wallet": "4wBqpZM9xaSheZzJSMawUKKwhdpChKbZ5eu5ky4Vigw",
+   "pool": "3ELeRTTg5W5hAYaEFznzFV1jknNFkjHqS8ytwvQEQP1Z",
+   "nonce": "42",
+   "geo_cleared": 1,
+   "age_verified": 1,
+   "kyc_tier": 0,
+   "issued_at": "1756000000",
+   "expected_hex": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f402a00000000000000010100006faa6800000000"
+  },
+  {
+   "name": "kyc_tier_1",
+   "wallet": "US517G5965aydkZ46HS38QLi7UQiSojurfbQfKCELFx",
+   "pool": "cGfHiC6Kgg3FpFZvgwGcswsCRtp4aBP2fzuXRQPizuN",
+   "nonce": "9223372036854775808",
+   "geo_cleared": 1,
+   "age_verified": 1,
+   "kyc_tier": 1,
+   "issued_at": "2000000000",
+   "expected_hex": "0707070707070707070707070707070707070707070707070707070707070707090909090909090909090909090909090909090909090909090909090909090900000000000000800101010094357700000000"
+  },
+  {
+   "name": "uncleared",
+   "wallet": "4vJ9JU1bJJE96FWSJKvHsmmFADCg4gpZQff4P3bkLKi",
+   "pool": "8qbHbw2BbbTHBW1sbeqakYXVKRQM8Ne7pLK7m6CVfeR",
+   "nonce": "0",
+   "geo_cleared": 0,
+   "age_verified": 0,
+   "kyc_tier": 0,
+   "issued_at": "0",
+   "expected_hex": "0101010101010101010101010101010101010101010101010101010101010101020202020202020202020202020202020202020202020202020202020202020200000000000000000000000000000000000000"
+  }
+ ]
+}

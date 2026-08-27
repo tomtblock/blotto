@@ -197,6 +197,24 @@ export class Web3Chain implements SettlementChain {
     ]);
   }
 
+  async flagEntry(poolId: bigint, player: string): Promise<void> {
+    const poolKey = this.poolPda(poolId);
+    const le = Buffer.alloc(8);
+    le.writeBigUInt64LE(poolId);
+    await this.send([
+      new TransactionInstruction({
+        programId: this.cfg.programId,
+        keys: [
+          { pubkey: this.cfg.settlementSigner.publicKey, isSigner: true, isWritable: false },
+          { pubkey: this.configPda(), isSigner: false, isWritable: false },
+          { pubkey: poolKey, isSigner: false, isWritable: false },
+          { pubkey: this.entryPda(poolKey, new PublicKey(player)), isSigner: false, isWritable: true },
+        ],
+        data: Buffer.concat([disc('flag_entry'), le]),
+      }),
+    ]);
+  }
+
   async triggerRefund(poolId: bigint): Promise<void> {
     const le = Buffer.alloc(8);
     le.writeBigUInt64LE(poolId);

@@ -79,19 +79,21 @@ jobs:
             backend/sealing/package-lock.json
             backend/reveal/package-lock.json
             backend/indexer/package-lock.json
+            backend/packet/package-lock.json
+            backend/detection/package-lock.json
 
       # Order matters: later packages type-check against earlier ones' source
       # trees (the relative re-export convention), so every package installs
       # before any tests run.
       - name: install
         run: |
-          for pkg in _shared scoring class-digest sealing reveal indexer; do
+          for pkg in _shared scoring class-digest sealing reveal indexer packet detection; do
             (cd "backend/$pkg" && npm ci --no-audit --no-fund)
           done
 
       - name: typecheck + test
         run: |
-          for pkg in _shared scoring class-digest sealing reveal indexer; do
+          for pkg in _shared scoring class-digest sealing reveal indexer packet detection; do
             echo "=== backend/$pkg ==="
             (cd "backend/$pkg" && npm run typecheck && npm test)
           done
