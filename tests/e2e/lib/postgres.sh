@@ -33,7 +33,7 @@ postgres_start() {
     docker rm -f "$E2E_PG_CONTAINER" >/dev/null 2>&1 || true
     log "starting $E2E_PG_CONTAINER on :$E2E_PG_PORT (db $E2E_PG_DB)"
     # No named volume: the end-to-end database is deliberately EPHEMERAL. `postgres_stop` removes the
-    # container and its anonymous storage, so every run starts from a clean, migrated schema and
+    # container and its unnamed scratch storage, so every run starts from a clean, migrated schema and
     # nothing survives to be inherited by the next run.
     docker run -d --rm \
       --name "$E2E_PG_CONTAINER" \

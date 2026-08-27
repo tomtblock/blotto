@@ -16,7 +16,7 @@ owns; everywhere else a fact appears, it appears as a pointer.
 | Scoring algorithm and ranking | `TECH-ARCHITECTURE_Blotto-Cup_v0.2.md` §6 | Architect-owned |
 | Sealing lifecycle and failure modes | `TECH-ARCHITECTURE_Blotto-Cup_v0.2.md` §5 | Architect-owned |
 | Detection signals | `TECH-ARCHITECTURE_Blotto-Cup_v0.2.md` §9 | Architect-owned |
-| Roadmap and phase scope | `BUILD-ROADMAP_v1.0.md` (replaces TECH-ARCH §12 per its §1.4) | A phase flips only with the work that earns its gate |
+| Roadmap and phase scope | `BUILD-ROADMAP_v1.0.md` (replaces TECH-ARCH §12 per its §1.4) | A phase flips only with the work that passes its gate |
 | Acceptance criteria | `TECH-ARCHITECTURE_Blotto-Cup_v0.2.md` §13 | Architect-owned |
 | What was carried from the old repo and what was not | `REPO-EXTRACTION-BRIEF_v1.1.md` (intent) · `../EXTRACTION-REPORT.md` (what actually happened) | The report wins on facts; the brief wins on intent |
 | Keys, custody, infrastructure provisioning | `REPO-TRANSITION-PLAYBOOK.md` (intent) · `../TRANSITION-REPORT.md` (state) | The report wins on facts |

@@ -11,7 +11,7 @@
 //! Roadmap 1.6 sources the 20% from "the platform wallet's pre-funded refund
 //! reserve." Implemented instead: the fees PDA holds every entry's 20% until
 //! the pool SEALS (see `state.rs::FEES_SEED`), so the full refund is
-//! trustless — it cannot depend on the operator keeping a reserve topped up,
+//! self-funding — it cannot depend on the operator keeping a reserve topped up,
 //! because the program cannot debit the founder's wallet and an empty
 //! reserve would turn R7's guarantee into a promise. Same money, same
 //! destination, custody moved from the operator to the program for the only

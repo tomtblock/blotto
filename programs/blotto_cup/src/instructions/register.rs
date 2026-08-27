@@ -70,7 +70,7 @@ pub struct Register<'info> {
     pub vault: UncheckedAccount<'info>,
 
     /// CHECK: Fees PDA, credited with the 20% share (held until seal — R7's
-    /// trustless full refund).
+    /// operator-independent full refund).
     #[account(mut, seeds = [FEES_SEED, &pool_id.to_le_bytes()], bump = pool.fees_bump)]
     pub fees: UncheckedAccount<'info>,
 

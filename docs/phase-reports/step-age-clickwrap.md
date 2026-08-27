@@ -1,8 +1,8 @@
 # Step report — age attestation clickwrap (`step/b4-age-clickwrap`, D-B4)
 
 **Status: delivered.** Item B4 of the 2026-08-27 master build prompt. Age and
-identity policy is a self-attestation clickwrap ONLY — no KYC provider, no
-age-verification vendor; the program's KYC-at-claim switch stays built, OFF,
+identity policy is a self-attestation clickwrap ONLY — without a KYC provider
+or age-verification vendor; the program's KYC-at-claim switch stays built, OFF,
 untouched (checked: nothing in this step touches it).
 
 **Stacks on B3** (same packet-service files): the PR's base is

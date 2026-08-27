@@ -6,7 +6,7 @@
 `4pspHqtbdgqKTvSxvKFT2ycEU28u3EWdxjmj3xsTHD3Y` · ≈390 tests across 13 suites,
 all green in CI.*
 
-The full stack for a 64-player, seven-battle, sealed-allocation skill
+The full stack for a 64-player, seven-battle, sealed-allocation
 tournament on Solana — built to `docs/BUILD-ROADMAP_v1.0.md` phases 1–5, plus
 the ratified **tiers-and-ties** step. This note is the entry point for the
 incoming architect: what exists, what just changed, what is deliberately a

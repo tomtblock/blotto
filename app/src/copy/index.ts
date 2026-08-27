@@ -21,7 +21,7 @@ export const COPY = {
   },
   gate: {
     ageAttestation:
-      'I confirm I am 18 or older and that entering skill tournaments for prizes is lawful where I live.',
+      'I confirm I am 18 or older and that entering a paid tournament for prizes is lawful where I live.',
     // D-B4: the versioned clickwrap around the line above. SUBSTANCE FIXED:
     // acceptance is recorded with the wallet's signature and the terms
     // version; the wording of what is being accepted must stay accurate.
