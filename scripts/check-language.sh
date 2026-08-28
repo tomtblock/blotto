@@ -72,6 +72,13 @@ hits="$(
     --exclude-dir=target \
     --exclude-dir=.git \
     --exclude-dir=.next \
+    `# Third-party agent skills installed by "npx skills add" (gitignored,` \
+    `# never committed or shipped). Same category as node_modules: tooling` \
+    `# dependencies not authored in this repository. The UI constitution` \
+    `# requires them at build time; their prose is theirs, not ours.` \
+    --exclude-dir=.agents \
+    --exclude-dir=.claude \
+    --exclude=skills-lock.json \
     `# Historical by definition — docs/INDEX.md says so, and both are marked` \
     `# non-authoritative in their own headers.` \
     --exclude-dir=reference \

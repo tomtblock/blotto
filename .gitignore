@@ -54,3 +54,11 @@ coverage
 # App build output
 app/.next
 *.tsbuildinfo
+
+# Third-party agent skills installed by `npx skills add` (emilkowalski/skills —
+# the design-engineering skills the UI constitution's PART 0 requires at build
+# time). Development tooling, never shipped, not authored here — the same
+# category as node_modules. Reinstall with: npx skills@latest add emilkowalski/skills
+.agents/
+.claude/skills/
+skills-lock.json
