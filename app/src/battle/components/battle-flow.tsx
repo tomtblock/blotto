@@ -113,7 +113,7 @@ export function BattleFlow({ timerSeconds, onConfirm }: BattleFlowProps) {
           {COPY.battle.timerNote}
         </p>
         <div className="flex gap-3">
-          <Button intent="quiet" onClick={() => dispatch({ type: 'even_split' })}>
+          <Button intent="secondary" onClick={() => dispatch({ type: 'even_split' })}>
             {COPY.battle.evenSplit}
           </Button>
           <Button className="ml-auto" size="lg" onClick={() => dispatch({ type: 'lock_in' })}>
@@ -159,7 +159,7 @@ export function BattleFlow({ timerSeconds, onConfirm }: BattleFlowProps) {
             <Button size="lg" onClick={() => dispatch({ type: 'confirm' })}>
               {COPY.battle.sealConfirm}
             </Button>
-            <Button intent="quiet" onClick={() => setSealArmed(false)}>
+            <Button intent="secondary" onClick={() => setSealArmed(false)}>
               {COPY.battle.sealCancel}
             </Button>
           </div>

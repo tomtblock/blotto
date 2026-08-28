@@ -83,7 +83,7 @@ export function SignInClient() {
         <span className="h-px flex-1 bg-line" />
       </div>
 
-      <Button size="lg" intent="quiet" disabled={disabled} onClick={() => connectWallet()}>
+      <Button size="lg" intent="secondary" disabled={disabled} onClick={() => connectWallet()}>
         {COPY.signin.wallet}
       </Button>
     </div>

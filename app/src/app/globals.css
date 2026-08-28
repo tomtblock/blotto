@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "../styles/tokens.css";
+@import "../styles/components.css";
 
 /* Font roles — variables set by next/font in the root layout. */
 @theme inline {

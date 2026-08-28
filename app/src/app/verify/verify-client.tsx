@@ -93,7 +93,7 @@ export function VerifyClient() {
           />
         </label>
         <Button
-          intent="quiet"
+          intent="secondary"
           className="self-start"
           disabled={fetching || (!pool.trim() && !bundleUri.trim())}
           onClick={autoFetch}

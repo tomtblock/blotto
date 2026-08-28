@@ -90,6 +90,29 @@ export const COPY = {
     tierFirst: (sol: string) => `1st place ${sol} SOL`,
     tierTableLink: 'Full prize tables',
   },
+  // The proof band (UI constitution 6.1 Act II): two instruments, both
+  // bound to on-chain data only. Substance rules: every number links to a
+  // way to recompute it; empty states are stated plainly, never dressed up.
+  proof: {
+    winnersTitle: 'Completed tournaments',
+    winnersEmpty: 'No completed tournaments yet.',
+    winnersEmptyTier: 'No completed tournaments yet in this tier.',
+    // Context line every winners card carries — a winners-only wall is an
+    // implied claim; this line is what keeps the card honest.
+    paidContext: (n: number) => `${n} of 64 paid`,
+    firstPlace: '1st place',
+    tiedFirst: (n: number) => `${n} tied at 1st`,
+    verifyThis: 'Verify this result',
+    paidToDate: 'Paid to players to date',
+    preFunded: 'Prize pools are funded before entries open.',
+    recompute: 'Recompute this number',
+    // A seat filling, announced politely (aria-live), and the riser text.
+    riser: '+1 entered',
+    seatsFilled: (n: number) => `${n} of 64 seats filled`,
+  },
+  // The FROST treatment's accessible face: what a screen reader hears where
+  // a sighted player sees a sealed, unreadable object.
+  sealedObject: 'Sealed — unreadable until the pool closes',
   // The landing page's game explainer (founder ask 2026-08-28). Substance
   // must match the rules tab and PRODUCT-FACTS; wording is founder-voiced
   // like all copy — re-voicing rights reserved.

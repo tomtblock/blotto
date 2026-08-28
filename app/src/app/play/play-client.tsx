@@ -324,7 +324,7 @@ function BalanceGateView({
               {funding ? '…' : COPY.gate.topUp}
             </Button>
           )}
-          <Button intent="quiet" onClick={onRecheck}>
+          <Button intent="secondary" onClick={onRecheck}>
             {COPY.gate.balanceRetry}
           </Button>
         </div>

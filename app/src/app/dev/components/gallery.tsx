@@ -16,6 +16,73 @@ import { RankBadge } from "@/components/ui/rank-badge";
 import { PrizeTable } from "@/components/ui/prize-table";
 import { ToastProvider, useToast } from "@/components/ui/toast";
 import { Sheet } from "@/components/ui/sheet";
+import { SeatRing } from "@/components/ui/seat-ring";
+import { Frost } from "@/components/ui/frost";
+import { PentagonMini } from "@/components/ui/pentagon-mini";
+import { EntrySplit } from "@/components/entry-split";
+import { SettledCounter } from "@/components/ui/settled-counter";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ErrorSurface } from "@/components/ui/error-surface";
+import type { Allocation } from "@/battle/allocation";
+
+/* Grammar demos: state lives here so the components animate real changes. */
+function SeatRingDemo() {
+  const [entrants, setEntrants] = useState(23);
+  return (
+    <div className="flex flex-wrap items-center gap-8">
+      <SeatRing entrants={entrants} riser yourSeat={4} />
+      <SeatRing entrants={entrants} size={96} />
+      <div className="flex flex-col items-start gap-2">
+        <Button intent="secondary" onClick={() => setEntrants((n) => Math.min(64, n + 1))}>
+          Simulate an entry event
+        </Button>
+        <p className="max-w-[36ch] text-[13px] leading-5 text-ink-muted">
+          Fill sweep + one LIGHT pass + digit slide + &quot;+1 entered&quot; riser per real event.
+          The resting glow (WARMTH) scales with occupancy and never loops.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+const DEMO_ALLOCATION: Allocation = [31, 17, 24, 9, 19];
+
+function FrostDemo() {
+  const [frosted, setFrosted] = useState(true);
+  return (
+    <div className="flex flex-wrap items-center gap-8">
+      <Frost frosted={frosted} className="rounded-xl border border-line bg-raised p-3">
+        <PentagonMini allocation={DEMO_ALLOCATION} size={96} />
+      </Frost>
+      <div className="flex flex-col items-start gap-2">
+        <Button intent="secondary" onClick={() => setFrosted((f) => !f)}>
+          {frosted ? "De-frost" : "Frost"}
+        </Button>
+        <p className="max-w-[36ch] text-[13px] leading-5 text-ink-muted">
+          FROST: the only blur on the site. Sealed objects are present but unreadable; de-frost
+          is always simultaneous for every object in a pool.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function SettledCounterDemo() {
+  const [paid, setPaid] = useState(128.4);
+  return (
+    <div className="flex flex-wrap items-end gap-8">
+      <SettledCounter
+        value={paid.toFixed(1)}
+        unit="SOL"
+        label="Paid to players to date"
+        deltaText={(prev, next) => `+${(Number(next) - Number(prev)).toFixed(1)} SOL`}
+      />
+      <Button intent="secondary" onClick={() => setPaid((v) => v + 4.1)}>
+        Simulate a payout event
+      </Button>
+    </div>
+  );
+}
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -78,10 +145,10 @@ function ToastDemoButtons() {
   const toast = useToast();
   return (
     <div className="flex flex-wrap gap-3">
-      <Button intent="quiet" onClick={() => toast.show("Allocation sealed")}>
+      <Button intent="secondary" onClick={() => toast.show("Allocation sealed")}>
         Show ink toast
       </Button>
-      <Button intent="quiet" onClick={() => toast.show("Prize paid to your wallet", "prize")}>
+      <Button intent="secondary" onClick={() => toast.show("Prize paid to your wallet", "prize")}>
         Show prize toast
       </Button>
     </div>
@@ -155,8 +222,8 @@ export function Gallery() {
         <Section title="Button">
           <div className="flex flex-wrap items-center gap-3">
             <Button>Enter tournament</Button>
-            <Button intent="quiet">View rules</Button>
-            <Button intent="prize">See your result</Button>
+            <Button intent="secondary">View rules</Button>
+            <Button intent="tertiary">See your result</Button>
             <Button disabled>Enter tournament</Button>
             <Button size="lg">Seal my allocation</Button>
           </div>
@@ -220,7 +287,7 @@ export function Gallery() {
         </Section>
 
         <Section title="Sheet">
-          <Button intent="quiet" onClick={() => setSheetOpen(true)}>
+          <Button intent="secondary" onClick={() => setSheetOpen(true)}>
             Open sheet
           </Button>
           <Sheet open={sheetOpen} onClose={() => setSheetOpen(false)} title="Example sheet">
@@ -229,6 +296,40 @@ export function Gallery() {
               focus is trapped by the native dialog element.
             </p>
           </Sheet>
+        </Section>
+
+        <Section title="Seat ring">
+          <SeatRingDemo />
+        </Section>
+
+        <Section title="Frost + PentagonMini">
+          <FrostDemo />
+        </Section>
+
+        <Section title="Entry split (80/20 TRAVEL)">
+          <Card className="p-5">
+            <EntrySplit entryLamports="100000000" />
+          </Card>
+          <p className="mt-3 max-w-prose text-[13px] leading-5 text-ink-muted">
+            Plays once on scroll-entry, then rests. One 80-piece, one 20-piece, both labeled,
+            visible paths, endpoints on screen. Reduced motion renders the settled diagram.
+          </p>
+        </Section>
+
+        <Section title="Settled counter">
+          <SettledCounterDemo />
+        </Section>
+
+        <Section title="Skeleton + ErrorSurface">
+          <div className="flex flex-col gap-4">
+            <div className="flex gap-3">
+              <Skeleton className="h-10 w-40" />
+              <Skeleton className="h-10 w-24" />
+            </div>
+            <ErrorSurface>
+              The confirmation could not be recorded. Check your connection and try again.
+            </ErrorSurface>
+          </div>
         </Section>
 
         <Section title="Elevation">

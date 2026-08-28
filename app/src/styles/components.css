@@ -1,0 +1,256 @@
+/*
+ * Shared component motion (UI constitution PART 5). Everything here is
+ * either a grammar word applied to one shared component, or micro-feedback
+ * under 250ms. Durations and curves come from tokens.css — no component
+ * invents its own values. Nothing loops at rest except the two sanctioned
+ * waits (the spinner in tokens.css, the skeleton shimmer below) and the
+ * winners drift (PART 5.7 — linear, pauses on hover).
+ */
+
+/* --- Button (PART 5.2) --------------------------------------------------- *
+ * Press feedback on every tier: scale 0.98, 160ms ease-out — the interface
+ * confirming it heard the press. Reversible, so no WEIGHT.               */
+
+.btn {
+  transition: transform 160ms var(--ease-out);
+}
+
+.btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+/* Primary — light arriving, not a spotlight snapping on: interior
+ * brightness lifts ~4% and a faint edge glow breathes in over 150ms,
+ * out over 250ms. Never pulses at rest. */
+.btn-primary {
+  transition:
+    transform 160ms var(--ease-out),
+    filter 250ms var(--ease-out),
+    box-shadow 250ms var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .btn-primary:hover:not(:disabled) {
+    transition:
+      transform 160ms var(--ease-out),
+      filter 150ms var(--ease-out),
+      box-shadow 150ms var(--ease-out);
+    filter: brightness(1.04);
+    box-shadow: 0 0 18px color-mix(in srgb, var(--color-brand) 32%, transparent);
+  }
+}
+
+/* Secondary — border and text brighten, background whispers in. No glow. */
+.btn-secondary {
+  transition:
+    transform 160ms var(--ease-out),
+    border-color 150ms var(--ease-out),
+    color 150ms var(--ease-out),
+    background-color 150ms var(--ease-out);
+}
+
+/* --- Tertiary / links: the underline draws in left-to-right, 150ms. ----- *
+ * Keyboard focus shows the underline INSTANTLY — keyboard-initiated
+ * actions never animate.                                                 */
+
+.link-draw {
+  position: relative;
+  text-decoration: none;
+}
+
+.link-draw::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -2px;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 150ms var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .link-draw:hover::after {
+    transform: scaleX(1);
+  }
+}
+
+.link-draw:focus-visible::after {
+  transition-duration: 0ms;
+  transform: scaleX(1);
+}
+
+/* --- WARMTH riser (PART 5.3) --------------------------------------------- *
+ * "+1 entered" — one soft rise per REAL event, fading up and out. WARMTH's
+ * event form; never fires without an on-chain entry behind it.           */
+
+@keyframes warmth-riser {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-14px);
+  }
+}
+
+.warmth-riser {
+  animation: warmth-riser 1200ms var(--ease-out) both;
+}
+
+/* --- Seat ring (PART 5.3) ------------------------------------------------- *
+ * A newly-filled segment sweeps in along its arc over 250ms ease-out
+ * (stroke-dashoffset over a pathLength-normalised arc — SVG's one
+ * sanctioned non-transform animatable, cheap at this size). The luminance
+ * pass around the filled arc is WAAPI-driven by the component (its end
+ * angle depends on real occupancy).                                      */
+
+@keyframes seat-fill {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.seat-fill {
+  stroke-dasharray: 1;
+  animation: seat-fill var(--duration-base) var(--ease-out) both;
+}
+
+/* --- Digit slide (PART 5.3 / 5.8) ---------------------------------------- *
+ * A counter increments with a single-digit slide: the old digit exits up,
+ * the new one enters from below. Exit (150ms) faster than enter (250ms).
+ * Only digits that actually changed move; nothing ticks idly.            */
+
+.digit-col {
+  position: relative;
+  display: inline-block;
+  overflow: hidden;
+}
+
+.digit-in {
+  animation: digit-in var(--duration-base) var(--ease-out) both;
+}
+
+.digit-out {
+  position: absolute;
+  inset: 0;
+  animation: digit-out var(--duration-fast) var(--ease-out) both;
+}
+
+@keyframes digit-in {
+  from {
+    opacity: 0;
+    transform: translateY(55%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes digit-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-55%);
+  }
+}
+
+/* --- FROST veil texture (PART 5.5) ---------------------------------------- *
+ * The crystalline presentation over a sealed object. The blur is STATIC
+ * (only the veil's opacity animates, via .frost-veil in tokens.css); the
+ * texture is gradients, not filters, so nothing else on the site needs
+ * blur — FROST stays the only one.                                       */
+
+.frost-blur {
+  filter: blur(7px) saturate(0.7) brightness(0.85);
+}
+
+.frost-crystal {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--color-ink) 10%, transparent) 0%,
+      transparent 40%,
+      color-mix(in srgb, var(--color-ink) 6%, transparent) 60%,
+      transparent 100%
+    ),
+    repeating-linear-gradient(
+      115deg,
+      transparent 0px,
+      transparent 9px,
+      color-mix(in srgb, var(--color-ink) 3%, transparent) 10px,
+      transparent 12px
+    );
+  border-radius: inherit;
+}
+
+/* --- Skeleton (PART 5.9) -------------------------------------------------- *
+ * Shimmers at most once per second (period 1.4s) and is replaced by
+ * content with a crossfade and zero layout jump. A wait is a state.      */
+
+@keyframes skeleton-breathe {
+  from {
+    opacity: 0.45;
+  }
+  to {
+    opacity: 0.75;
+  }
+}
+
+.skeleton {
+  background: var(--color-overlay);
+  border-radius: 8px;
+  animation: skeleton-breathe 1.4s ease-in-out infinite alternate;
+}
+
+/* --- Winners drift (PART 5.7) ---------------------------------------- *
+ * Constant slow drift, linear by definition (constant motion), pausing on
+ * hover or touch. Speed is set by the component via --drift-duration so it
+ * NEVER speeds up when pools are scarce.                                 */
+
+@keyframes winners-drift-slide {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.drift-track {
+  animation: winners-drift-slide var(--drift-duration, 48s) linear infinite;
+}
+
+.drift-track:hover,
+.drift-track[data-paused='true'] {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drift-track {
+    animation: none;
+  }
+}
+
+/* --- Error surface (PART 6.10) -------------------------------------------- *
+ * Fades in with a 4px rise — never a modal slam. Uses the micro
+ * enter-fast physics; role="alert" carries the urgency, not motion.      */
+
+.error-surface {
+  animation: enter-fast var(--duration-base) var(--ease-out) both;
+}
