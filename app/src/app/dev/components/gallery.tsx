@@ -14,7 +14,7 @@ import { Countdown } from "@/components/ui/countdown";
 import { ProgressRing } from "@/components/ui/progress-ring";
 import { RankBadge } from "@/components/ui/rank-badge";
 import { PrizeTable } from "@/components/ui/prize-table";
-import { ToastProvider, useToast } from "@/components/ui/toast";
+import { showToast } from "@/components/ui/toaster";
 import { Sheet } from "@/components/ui/sheet";
 import { SeatRing } from "@/components/ui/seat-ring";
 import { Frost } from "@/components/ui/frost";
@@ -164,13 +164,13 @@ const DEMO_PRIZE_ROWS = [
 ];
 
 function ToastDemoButtons() {
-  const toast = useToast();
+  
   return (
     <div className="flex flex-wrap gap-3">
-      <Button intent="secondary" onClick={() => toast.show("Allocation sealed")}>
+      <Button intent="secondary" onClick={() => showToast("Allocation sealed")}>
         Show ink toast
       </Button>
-      <Button intent="secondary" onClick={() => toast.show("Prize paid to your wallet", "prize")}>
+      <Button intent="secondary" onClick={() => showToast("Prize paid to your wallet", "prize")}>
         Show prize toast
       </Button>
     </div>
@@ -183,7 +183,7 @@ export function Gallery() {
   const [deadline] = useState(() => Math.floor(Date.now() / 1000) + 36 * 3600 + 42 * 60 + 7);
 
   return (
-    <ToastProvider>
+    <>
       <main className="mx-auto max-w-4xl px-5 py-10">
         <p className="mb-2 text-[12px] uppercase tracking-[0.14em] text-ink-muted">
           dev preview — not routed in production
@@ -373,6 +373,6 @@ export function Gallery() {
           </div>
         </Section>
       </main>
-    </ToastProvider>
+    </>
   );
 }

@@ -19,7 +19,7 @@ import { COPY } from '@/copy';
 import { indexerApi } from '@/data/api';
 import { useAuth } from '@/wallet/auth-context';
 import { Sheet } from '@/components/ui/sheet';
-import { useToast } from '@/components/ui/toast';
+import { showToast } from "@/components/ui/toaster";
 import { submitNotifyPreference } from '@/entry/notify';
 
 interface Item {
@@ -60,7 +60,6 @@ function itemFor(state: string, poolId: string): { message: string; toResults: b
 
 export function NotificationsBell() {
   const auth = useAuth();
-  const toast = useToast();
   const wallet = auth.status === 'signed-in' ? auth.walletAddress : null;
   const [items, setItems] = useState<Item[]>([]);
   const [unseen, setUnseen] = useState(0);
@@ -151,12 +150,12 @@ export function NotificationsBell() {
         } catch {
           // Preference is recorded server-side either way.
         }
-        toast.show(COPY.notify.emailSaved);
+        showToast(COPY.notify.emailSaved);
       } else {
         setEmailError(true);
       }
     },
-    [wallet, emailBusy, auth, toast]
+    [wallet, emailBusy, auth]
   );
 
   if (!wallet) return null;

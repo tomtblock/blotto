@@ -330,7 +330,7 @@
 .skeleton {
   background: var(--color-overlay);
   border-radius: 8px;
-  animation: skeleton-breathe 1.4s ease-in-out infinite alternate;
+  animation: skeleton-breathe 1.4s var(--ease-in-out) infinite alternate;
 }
 
 /* --- Winners drift (PART 5.7) ---------------------------------------- *

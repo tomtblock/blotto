@@ -36,7 +36,7 @@ export function Sheet({ open, onClose, title, children }: SheetProps) {
       }}
       className={
         "m-0 mt-auto w-full max-w-full bg-transparent p-0 " +
-        "backdrop:bg-black/60 open:animate-settle sm:mx-auto sm:max-w-lg"
+        "backdrop:bg-black/60 open:animate-enter sm:mx-auto sm:max-w-lg"
       }
     >
       <div

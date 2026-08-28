@@ -17,7 +17,7 @@
  *     founder-owned placeholders (PID D2).
  *
  * Components consume tokens through Tailwind's semantic utilities
- * (bg-raised, text-prize, border-line, animate-reveal, …) or var(--color-*)
+ * (bg-raised, text-prize, border-line, animate-enter, …) or var(--color-*)
  * references. Raw hex values must not appear in components — tokens.ts and
  * this mirror are the only places a hex literal is allowed.
  */
@@ -259,65 +259,6 @@
   outline-offset: 2px;
 }
 
-/* --- LEGACY (pre-constitution vocabulary) ------------------------------- *
- * Kept only while pages migrate to the grammar; every entry here is
- * deleted in the definition-of-done pass. Do not use in new code.        */
-
-@theme static {
-  --animate-reveal: reveal 700ms var(--ease-legacy-juice) both;
-  --animate-settle: settle 450ms var(--ease-out) both;
-  --animate-pulse-once: pulse-once 600ms var(--ease-legacy-juice) 1;
-  --animate-rise: rise 350ms var(--ease-out) both;
-}
-
-:root {
-  --ease-legacy-juice: cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-@keyframes reveal {
-  from {
-    opacity: 0;
-    transform: translateY(14px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes settle {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes pulse-once {
-  0% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.06);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
 
 /* Reduced motion collapses EVERYTHING — the vocabulary, the legacy
  * classes, and any component-local animation (D1 quality floor). */
