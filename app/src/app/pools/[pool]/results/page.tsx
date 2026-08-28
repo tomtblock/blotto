@@ -12,6 +12,8 @@ import { AppHeader } from '@/components/shell/app-header';
 import { TabBar } from '@/components/shell/tab-bar';
 import { Card } from '@/components/ui/card';
 import { ResultsReveal, VerifyAlways, type RevealRow } from './results-reveal';
+import { WhatBeatYouPanel } from './what-beat-you-panel';
+import { ShareResult } from './share-result';
 
 export default async function ResultsPage({ params }: { params: Promise<{ pool: string }> }) {
   const { pool: poolId } = await params;
@@ -75,6 +77,19 @@ export default async function ResultsPage({ params }: { params: Promise<{ pool: 
             <p className="mb-5 max-w-prose text-[13px] leading-5 text-ink-muted">
               {COPY.results.tieNote}
             </p>
+            {/* v3 D3: browser-side decrypt + re-score of the seats above
+                yours, and the share card for your own result. */}
+            <WhatBeatYouPanel
+              pool={pool.pool}
+              secretHex={pool.secret}
+              results={results}
+              seatByPlayer={Object.fromEntries(entries.map((e) => [e.player, e.idx]))}
+            />
+            <ShareResult
+              pool={pool.pool}
+              seatByPlayer={Object.fromEntries(entries.map((e) => [e.player, e.idx]))}
+              paidSeats={results.filter((r) => BigInt(r.amount) > 0n).map((r) => r.seat)}
+            />
           </>
         )}
         <VerifyAlways pool={pool.pool} />

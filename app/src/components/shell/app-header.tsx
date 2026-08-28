@@ -4,6 +4,7 @@ import Link from "next/link";
 import { COPY } from "@/copy";
 import { useAuth } from "@/wallet/auth-context";
 import { CopyableAddressPill } from "@/components/copyable-address";
+import { NotificationsBell } from "./notifications";
 
 /*
  * App header — wordmark + auth state. Signed out: a sign-in affordance
@@ -32,6 +33,7 @@ export function AppHeader() {
           <span className="h-8 w-20 rounded-full bg-raised" aria-hidden />
         ) : status === "signed-in" && walletAddress ? (
           <span className="flex items-center gap-2">
+            <NotificationsBell />
             <CopyableAddressPill value={walletAddress} />
             <button
               type="button"
