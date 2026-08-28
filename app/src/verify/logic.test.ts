@@ -15,8 +15,8 @@ import {
   leafBytes,
   merkleRoot,
   type BattleSet,
-} from '../../../backend/scoring/src';
-import { base58Encode, base58Decode } from '../../../backend/_shared/src/blotto-events';
+} from '@blotto/scoring';
+import { base58Encode, base58Decode } from '@blotto/shared/blotto-events';
 
 const sha = (s: string) => new Uint8Array(createHash('sha256').update(s).digest());
 const hex = (b: Uint8Array) => Buffer.from(b).toString('hex');

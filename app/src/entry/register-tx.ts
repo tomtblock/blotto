@@ -23,8 +23,8 @@ import {
   type Address,
   type Instruction,
 } from '@solana/kit';
-import { decodeEventsFromLogs } from '../../../backend/_shared/src/events';
-import { registerBlottoEventLayouts } from '../../../backend/_shared/src/blotto-events';
+import { decodeEventsFromLogs } from '@blotto/shared/events';
+import { registerBlottoEventLayouts } from '@blotto/shared/blotto-events';
 import type { RevealClass } from '@/reveal/types';
 
 export const ED25519_PROGRAM_ADDRESS = address(

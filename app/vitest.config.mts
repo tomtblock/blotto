@@ -19,6 +19,28 @@ export default defineConfig({
       "@solana/web3.js": fileURLToPath(
         new URL("./node_modules/@solana/web3.js", import.meta.url),
       ),
+      // The monorepo aliases (E2): one place knows where the shared packages
+      // live — mirrored from tsconfig.json "paths" (Next resolves those
+      // natively; vitest needs them restated here).
+      "@blotto/scoring": fileURLToPath(
+        new URL("../backend/scoring/src", import.meta.url),
+      ),
+      "@blotto/sealing": fileURLToPath(
+        new URL("../backend/sealing/src", import.meta.url),
+      ),
+      "@blotto/shared": fileURLToPath(
+        new URL("../backend/_shared/src", import.meta.url),
+      ),
+      "@blotto/packet": fileURLToPath(
+        new URL("../backend/packet/src", import.meta.url),
+      ),
+      "@blotto/reveal": fileURLToPath(
+        new URL("../backend/reveal/src", import.meta.url),
+      ),
+      "@blotto/detection": fileURLToPath(
+        new URL("../backend/detection/src", import.meta.url),
+      ),
+      "@config": fileURLToPath(new URL("../config", import.meta.url)),
     },
   },
   test: {

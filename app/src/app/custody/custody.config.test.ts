@@ -1,7 +1,7 @@
 /* C13 specs: the disclosure derives from config; unset values are an
  * explicit null (rendered "not yet set") — never a fabricated number. */
 import { describe, expect, it } from 'vitest';
-import custodyConfig from '../../../../config/custody.json';
+import custodyConfig from '@config/custody.json';
 import { custodyView } from './custody.config';
 
 describe('custodyView', () => {

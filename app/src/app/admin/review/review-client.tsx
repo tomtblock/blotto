@@ -14,7 +14,7 @@
  */
 
 import { useCallback, useState } from 'react';
-import { canonicalReviewMessage } from '../../../../../backend/detection/src/review-message';
+import { canonicalReviewMessage } from '@blotto/detection/review-message';
 import { indexerApi } from '@/data/api';
 import type { EntryRow } from '@/data/types';
 import { useAuth } from '@/wallet/auth-context';

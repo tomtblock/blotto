@@ -23,9 +23,9 @@ import {
   decodeBattleSet,
   leafBytes,
   merkleRoot,
-} from '../../../backend/scoring/src';
-import { base58Decode } from '../../../backend/_shared/src/blotto-events';
-import { scoreWithMissing } from '../../../backend/reveal/src/missing';
+} from '@blotto/scoring';
+import { base58Decode } from '@blotto/shared/blotto-events';
+import { scoreWithMissing } from '@blotto/reveal/missing';
 
 /** One named check with its outcome — the page renders these as rows. */
 export interface VerifyCheck {

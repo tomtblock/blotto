@@ -2,7 +2,7 @@
  * submission, and the version-keyed device cache. */
 import { describe, expect, it } from 'vitest';
 import nacl from 'tweetnacl';
-import { attestationMessage as serviceMessage } from '../../../backend/packet/src/attestations';
+import { attestationMessage as serviceMessage } from '@blotto/packet/attestations';
 import {
   attestationMessage,
   hasLocalAttestation,

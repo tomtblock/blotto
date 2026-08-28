@@ -25,7 +25,7 @@ import {
   encodePayload,
   seal,
   payloadBattlesHash,
-} from '../../../backend/sealing/src';
+} from '@blotto/sealing';
 import type { Allocation } from '@/battle/allocation';
 import type { IssuedPacketBytes } from './register-tx';
 

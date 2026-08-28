@@ -1,0 +1,5 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "installCommand": "for d in ../backend/_shared ../backend/scoring ../backend/sealing ../backend/packet ../backend/reveal ../backend/detection; do (cd $d && npm ci --no-audit --no-fund); done && npm ci --no-audit --no-fund"
+}

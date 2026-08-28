@@ -16,9 +16,9 @@ import {
   TIER_ENTRY_LAMPORTS,
   TIER_POT_LAMPORTS,
   amountForRank,
-} from '../../../../backend/scoring/src';
-import territories from '../../../../config/territories.json';
-import terms from '../../../../config/terms.json';
+} from '@blotto/scoring';
+import territories from '@config/territories.json';
+import terms from '@config/terms.json';
 import { COPY } from '@/copy';
 import { lamportsToSol } from '@/data/format';
 

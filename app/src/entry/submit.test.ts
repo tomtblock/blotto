@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'crypto';
 import { submitEntry, type EntryServices } from './submit';
-import { generateKeypair, sealOpen, decodePayload } from '../../../backend/sealing/src';
+import { generateKeypair, sealOpen, decodePayload } from '@blotto/sealing';
 import type { Allocation } from '@/battle/allocation';
 
 const battles: Allocation[] = Array.from({ length: 7 }, (_, k) => {

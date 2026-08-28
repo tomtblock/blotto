@@ -2,8 +2,8 @@
  * constants, every ratified section is present with a filled body, and the
  * availability list renders from the founder-owned config. */
 import { describe, expect, it } from 'vitest';
-import { TIER_ENTRY_LAMPORTS } from '../../../../backend/scoring/src';
-import territories from '../../../../config/territories.json';
+import { TIER_ENTRY_LAMPORTS } from '@blotto/scoring';
+import territories from '@config/territories.json';
 import { availability, rulesSections, tierRows } from './rules.config';
 
 describe('tierRows', () => {
