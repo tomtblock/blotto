@@ -11,7 +11,7 @@
  */
 import { ImageResponse } from 'next/og';
 import { COPY } from '@/copy';
-import { indexerApi } from '@/data/api';
+import { indexerApi, live } from '@/data/api';
 import { lamportsToSol } from '@/data/format';
 
 // tokens.ts mirrors — keep in step with the palette.
@@ -29,11 +29,13 @@ export async function GET(
 ) {
   const { pool: poolId, player } = await params;
   const api = indexerApi();
-  const [pool, results, entries] = await Promise.all([
-    api.getPool(poolId),
-    api.getResults(poolId),
-    api.getEntries(poolId),
-  ]);
+  // SSR outage guard: an unreachable indexer answers 503 (retryable),
+  // never an unhandled 500 from the image renderer.
+  const reads = await live(() =>
+    Promise.all([api.getPool(poolId), api.getResults(poolId), api.getEntries(poolId)])
+  );
+  if (!reads.ok) return new Response('live data unavailable', { status: 503 });
+  const [pool, results, entries] = reads.value;
   const entry = entries.find((e) => e.player === player);
   const amount = entry ? results.find((r) => r.seat === entry.idx)?.amount : undefined;
   const paid = amount !== undefined && BigInt(amount) > 0n;

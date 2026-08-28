@@ -22,6 +22,11 @@ export const COPY = {
       'Sixty-four players enter, each sets seven sealed battles of five stats summing to 100. ' +
       'Top sixteen are paid from a fixed prize pool, and every result is recomputable from published data.',
     tabs: { play: 'Play', pools: 'Pools', profile: 'Profile' },
+    // The honest degraded state: the data service is unreachable, which is
+    // NOT the same statement as "no tournament is open".
+    liveDataUnavailable: 'Live tournament data is temporarily unavailable.',
+    liveDataUnavailableDetail:
+      'The data service could not be reached. Refresh in a moment — nothing on-chain is affected.',
   },
   signin: {
     title: 'Sign in',

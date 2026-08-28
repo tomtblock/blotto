@@ -26,8 +26,24 @@ export function createPool(config: PostgresConfig): Pool {
   const poolConfig: PoolConfig = {
     connectionString: config.url,
     max: config.poolMax,
+    // Close our idle clients BEFORE a managed host's own idle reaper does
+    // (Neon's pooler drops idle connections after a few minutes), and keep
+    // TCP keepalives on so half-open connections surface promptly.
+    idleTimeoutMillis: 30_000,
+    keepAlive: true,
   };
-  return new Pool(poolConfig);
+  const pool = new Pool(poolConfig);
+  // REQUIRED, not optional: pg emits 'error' on the pool for any idle
+  // client that fails, and an unhandled 'error' event kills the process.
+  // Production incident (first devnet deploy, 2026-08-28): the indexer
+  // passed its deploy health checks, then died minutes later when the
+  // managed Postgres dropped an idle connection — a crash loop no suite
+  // caught because tests use short-lived pools. The next query simply
+  // takes a fresh client; losing an idle one is routine, so log and live.
+  pool.on('error', (err) => {
+    console.error('pg pool: idle client error (continuing):', err.message);
+  });
+  return pool;
 }
 
 /**

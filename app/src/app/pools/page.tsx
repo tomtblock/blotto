@@ -6,15 +6,18 @@
  * newest first; open pools wear the brand hairline. */
 import Link from 'next/link';
 import { TIER_ENTRY_LAMPORTS, TIER_POT_LAMPORTS, amountForRank } from '@blotto/scoring';
-import { indexerApi } from '@/data/api';
+import { indexerApi, live } from '@/data/api';
 import { lamportsToSol } from '@/data/format';
 import { COPY } from '@/copy';
 import { AppHeader } from '@/components/shell/app-header';
 import { TabBar } from '@/components/shell/tab-bar';
 import { Card } from '@/components/ui/card';
+import { LiveDataUnavailable } from '@/components/shell/live-unavailable';
 
 export default async function PoolsPage() {
-  const pools = await indexerApi().listPools();
+  // SSR outage guard: a dead indexer degrades this page, never kills it.
+  const poolsLive = await live(() => indexerApi().listPools());
+  const pools = poolsLive.ok ? poolsLive.value : [];
 
   // Group by tier, tiers ascending; a tier appears only when it has pools.
   const byTier = new Map<number, typeof pools>();
@@ -40,7 +43,9 @@ export default async function PoolsPage() {
             {COPY.pool.tierTableLink}
           </Link>
         </div>
-        {pools.length === 0 ? (
+        {!poolsLive.ok ? (
+          <LiveDataUnavailable />
+        ) : pools.length === 0 ? (
           <Card className="flex flex-col gap-2 p-6">
             <p className="text-[17px] font-medium text-ink">{COPY.pool.noOpenPool}</p>
             <p className="max-w-prose text-[13px] leading-5 text-ink-muted">
