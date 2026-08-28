@@ -6,18 +6,22 @@
  * character · battle · stat · allocation · tournament · prize pool ·
  * ranking.
  *
- * Strings marked TODO_COPY are placeholders awaiting the founder's voice
- * (brand voice is founder-reserved); strings WITHOUT the marker are
- * statements with legal weight whose substance is fixed by the PID —
- * "decisions are final" (§8.6), the sealing wording (TECH-ARCH §5), the R9
- * timeout disclosure — and only their phrasing may change in Phase 6, with
- * the substance intact.
+ * Filled per master prompt v3 D-UI-3 (no TODO_COPY survives to a visible
+ * surface). Brand voice remains founder-reserved: the founder may re-voice
+ * any string here. Strings whose comment says SUBSTANCE FIXED are statements
+ * with legal weight fixed by the PID — "decisions are final" (§8.6), the
+ * sealing wording (TECH-ARCH §5), the R9 timeout disclosure — and only their
+ * phrasing may change, with the substance intact.
  */
 
 export const COPY = {
   shell: {
-    title: 'TODO_COPY: Blotto Cup',
-    tagline: 'TODO_COPY: Sixty-four players. Seven battles. Top sixteen paid.',
+    title: 'Blotto Cup',
+    tagline: 'Sixty-four players. Seven battles. Top sixteen paid.',
+    metaDescription:
+      'Sixty-four players enter, each sets seven sealed battles of five stats summing to 100. ' +
+      'Top sixteen are paid from a fixed prize pool, and every result is recomputable from published data.',
+    tabs: { play: 'Play', pools: 'Pools', profile: 'Profile' },
   },
   gate: {
     ageAttestation:
@@ -29,7 +33,8 @@ export const COPY = {
       `I accept the terms (version ${version}). My wallet signs this statement and the acceptance is recorded.`,
     attestFailed:
       'The confirmation could not be recorded. Check your connection and try again.',
-    ageConfirm: 'TODO_COPY: Confirm',
+    ageConfirm: 'Confirm and continue',
+    gateTitle: 'Before you enter',
     territoryBlocked:
       'Blotto Cup is not available in your region. Entries cannot be accepted from your location.',
     // C9: the balance pre-flight — shown BEFORE the timed session starts,
@@ -50,7 +55,12 @@ export const COPY = {
       'Decisions are final. Once your seven battles are submitted they cannot be changed or withdrawn.',
     sealed:
       'Battles are encrypted to a key nobody holds until the pool closes, and their hash is recorded on-chain at entry.',
-    enter: 'TODO_COPY: Enter this pool',
+    enter: 'Enter this tournament',
+    ageTerritoryNote: '18+ only · available in listed territories',
+    lockedTier: 'Opens when the treasury covers it',
+    noOpenPool: 'No tournament is open for entries right now.',
+    noOpenPoolDetail:
+      'A tier opens the moment the prize treasury holds its full prize pool and the previous tournament in that tier has paid out.',
     refundRule:
       'If the pool does not reach 64 entries within 72 hours, every entry is refunded in full — including the platform share.',
   },
@@ -60,8 +70,13 @@ export const COPY = {
     lockIn: 'Lock in',
     // R9's disclosure — the rules page carries the long form.
     timerNote: 'When the timer ends, the battle locks in exactly what the pentagon shows.',
-    reviewTitle: 'TODO_COPY: Review your seven battles',
-    confirm: 'TODO_COPY: Submit entry',
+    reviewTitle: 'Your seven battles',
+    // The two-step seal (v3 D2): arm, then confirm. §8.6 renders above step 2.
+    seal: 'Seal my allocation',
+    sealConfirm: 'Confirm — seal and submit',
+    sealCancel: 'Go back',
+    sealing: 'Sealing your battles…',
+    remainingPoints: 'Points to place',
     statNames: ['Strength', 'Speed', 'Heart', 'Wit', 'Durability'] as const,
   },
   results: {
@@ -75,15 +90,15 @@ export const COPY = {
       'Tied players — equal on battles won and on stats won — share a rank and split the combined prize of the positions they occupy evenly. The full ranking with tie labels is recomputable on the Verify page from the published data.',
   },
   verify: {
-    title: 'TODO_COPY: Verify a pool',
+    title: 'Verify a pool',
     explainer:
       'Recompute the whole result yourself: decrypt every sealed battle with the revealed pool secret, score the identical field, rebuild the results tree, and compare it to what was committed on-chain. Nothing here trusts the operator.',
     match: 'Recomputed root matches the on-chain commitment.',
     mismatch: 'RECOMPUTED ROOT DOES NOT MATCH — the published data does not reproduce the on-chain result.',
   },
   profile: {
-    title: 'TODO_COPY: Profile',
-    lifetime: 'TODO_COPY: Lifetime record',
+    title: 'Your career',
+    lifetime: 'Lifetime record',
     readOnlyNote: 'Profiles are a read-only record. Nothing here affects any pool.',
   },
   custody: {
@@ -155,12 +170,12 @@ export const COPY = {
     classNames: ['Goblin', 'Knight', 'Wizard', 'Dragon', 'Titan'] as const,
     cardTitle: 'Your character pass',
     cardSeat: (n: number) => `Seat ${n + 1} of 64`,
-    cardDone: 'TODO_COPY: Continue',
+    cardDone: 'Continue',
     stalled:
       'Confirmation is taking longer than usual. Your entry is submitted and nothing further is needed — results appear on the pool page once the network confirms.',
-    stalledDismiss: 'TODO_COPY: Back to the pool',
-    failedRetry: 'TODO_COPY: Try again',
-    failedDismiss: 'TODO_COPY: Back',
+    stalledDismiss: 'Back to the pool',
+    failedRetry: 'Try again',
+    failedDismiss: 'Back',
   },
   rules: {
     // D-B6 (ratified 2026-08-27): the rules tab, plain language, one section
@@ -206,10 +221,21 @@ export const COPY = {
       'Blotto Cup is for adults 18 and older. Entering requires a signed confirmation of age and acceptance of the terms, recorded per wallet and per terms version.',
     responsiblePlay:
       'Entries are final and outcomes depend on how every player in the pool allocated. Enter only with funds you can afford to spend, set your own limits before you start, and step away when it stops being enjoyable.',
-    // R4 requires the rules to state the detection criteria; the criteria
-    // wording is founder/counsel prose (Phase 6) — the one section where a
-    // placeholder is correct. C10 adds the review-process appendix here.
-    detection: 'TODO_COPY(rules.detection)',
+    // R4 requires the rules to state the detection criteria. This states the
+    // FIVE IMPLEMENTED SIGNALS (backend/detection/src/signals.ts) and the
+    // two-signal rule mechanically — a factual description of what the code
+    // does, filled per v3 D-UI-3. PHASE-D2-REVIEW: founder/counsel may
+    // re-voice this wording; the substance must stay identical to the code.
+    detection:
+      'Five published signals are computed over data every player can see once a pool is revealed: ' +
+      '(1) allocation patterns — reuse of the same split, uniform round numbers; ' +
+      '(2) timing — how the ninety seconds were actually spent, screen by screen; ' +
+      '(3) duplicate or near-duplicate battle sets across entries; ' +
+      '(4) the same device or network origin behind multiple entries in one pool; ' +
+      '(5) a score far outside the field’s distribution. ' +
+      'No single soft signal flags an entry — a flag needs two independent signals — with two exceptions ' +
+      'that are conclusive on their own: exactly identical battle sets, and two entries from the same device. ' +
+      'A flag never decides anything by itself: it only sends the entry to the signed review process below.',
     // C10: the review PROCESS is mechanical and stated now; the criteria
     // wording above stays founder/counsel prose (R4).
     reviewProcess:

@@ -50,13 +50,12 @@ export const PROGRAM_ERROR_CODES: Readonly<Record<number, TxFailureKind>> = {
 /**
  * The message shown for each failure kind.
  *
- * ALL PLACEHOLDERS. The predecessor's strings were not carried: brand voice is
- * founder-owned, and PID §8.7 makes the vocabulary a legal-position rule rather
- * than a matter of tone. The Phase 3 language audit fills these (PID §10,
- * compliance item C12, which blocks launch).
+ * Filled per master prompt v3 D-UI-3 (brand voice stays founder-owned; the
+ * founder may re-voice). PID §8.7 makes the vocabulary a legal-position rule
+ * rather than a matter of tone.
  *
- * Two properties the audit must preserve, because they are correctness and not
- * style:
+ * Two properties any re-voicing must preserve, because they are correctness
+ * and not style:
  *
  *  1. **Say what happened.** Describe the state plainly, offer the factual next
  *     step, add no urgency.
@@ -67,14 +66,21 @@ export const PROGRAM_ERROR_CODES: Readonly<Record<number, TxFailureKind>> = {
  *     be final on submission. Say the entry is recorded and the display is behind.
  */
 export const FAILURE_COPY: Record<TxFailureKind, string> = {
-  "user-rejected": "TODO_COPY(tx.failure.user-rejected)",
-  "insufficient-sol": "TODO_COPY(tx.failure.insufficient-sol)",
-  "blockhash-expired": "TODO_COPY(tx.failure.blockhash-expired)",
-  "program-rejected": "TODO_COPY(tx.failure.program-rejected)",
-  "rpc-failure": "TODO_COPY(tx.failure.rpc-failure)",
+  "user-rejected":
+    "The signing prompt was closed before anything was signed. Nothing was sent and nothing was charged.",
+  "insufficient-sol":
+    "This wallet does not hold enough SOL to cover the entry price plus transaction costs.",
+  "blockhash-expired":
+    "The network window for this transaction lapsed before it confirmed. Nothing settled — you can try again.",
+  "program-rejected":
+    "The program declined this transaction, so nothing settled. The pool may have filled or closed — check the pool page before trying again.",
+  "rpc-failure":
+    "The network request did not go through. Check your connection and try again.",
   // The transaction LANDED; only the read-back failed. See property 2 above.
-  "outcome-unreadable": "TODO_COPY(tx.failure.outcome-unreadable)",
-  "outcome-mismatch": "TODO_COPY(tx.failure.outcome-mismatch)",
+  "outcome-unreadable":
+    "Your entry is recorded on-chain — the money has moved and your seat is held. Only this screen is behind: the confirmation could not be read back yet. Do not enter again; your entry appears on the pool page once the network catches up.",
+  "outcome-mismatch":
+    "Your entry is recorded on-chain — the money has moved and your seat is held. What was read back does not yet match this screen, which can happen while the network catches up. Do not enter again; check the pool page for your entry.",
 };
 
 /** Marker error for "validity window lapsed while awaiting confirmation". */

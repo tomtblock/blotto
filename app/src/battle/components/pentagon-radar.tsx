@@ -64,7 +64,7 @@ export function PentagonRadar({ display, onDrag, disabled }: PentagonRadarProps)
             key={v}
             points={polygonPoints([v, v, v, v, v], R, CX, CY)}
             fill="none"
-            stroke="var(--color-border, #333)"
+            stroke="var(--color-line)"
             strokeWidth={1}
             opacity={0.35}
           />
@@ -78,7 +78,7 @@ export function PentagonRadar({ display, onDrag, disabled }: PentagonRadarProps)
               y1={CY}
               x2={CX + u.x * R}
               y2={CY + u.y * R}
-              stroke="var(--color-border, #333)"
+              stroke="var(--color-line)"
               strokeWidth={1}
               opacity={0.35}
             />
@@ -87,9 +87,9 @@ export function PentagonRadar({ display, onDrag, disabled }: PentagonRadarProps)
         {/* The real allocation */}
         <polygon
           points={polygonPoints(display as unknown as number[], R, CX, CY)}
-          fill="var(--color-accent, #7c5cff)"
+          fill="var(--color-brand)"
           fillOpacity={0.25}
-          stroke="var(--color-accent, #7c5cff)"
+          stroke="var(--color-brand)"
           strokeWidth={2}
         />
         {/* Vertex handles */}
@@ -115,7 +115,7 @@ export function PentagonRadar({ display, onDrag, disabled }: PentagonRadarProps)
                 cx={CX + p.x}
                 cy={CY + p.y}
                 r={6}
-                fill="var(--color-accent, #7c5cff)"
+                fill="var(--color-brand)"
                 pointerEvents="none"
               />
               <text
@@ -123,7 +123,8 @@ export function PentagonRadar({ display, onDrag, disabled }: PentagonRadarProps)
                 y={CY + u.y * (R + 18)}
                 textAnchor="middle"
                 dominantBaseline="middle"
-                className="fill-current text-[11px]"
+                className="text-[11px] font-medium uppercase tracking-[0.1em]"
+                fill="var(--color-ink-muted)"
               >
                 {STAT_NAMES[i]}
               </text>
@@ -131,15 +132,26 @@ export function PentagonRadar({ display, onDrag, disabled }: PentagonRadarProps)
           );
         })}
       </svg>
-      {/* Integers under the pentagon — feedback, never targets (PID §4.2). */}
-      <dl className="grid grid-cols-5 gap-3 text-center font-mono">
-        {display.map((v, i) => (
-          <div key={i}>
-            <dt className="text-xs opacity-60">{COPY.battle.statNames[i]}</dt>
-            <dd className="text-lg tabular-nums">{v}</dd>
-          </div>
-        ))}
-      </dl>
+      {/* Integers under the pentagon — feedback, never targets (PID §4.2).
+          These are THE numbers of the session, so they wear the display face
+          big; the fixed total states the invariant (five stats, exactly 100). */}
+      <div className="flex w-full items-end justify-center gap-1">
+        <dl className="grid grid-cols-5 gap-4 text-center">
+          {display.map((v, i) => (
+            <div key={i} className="flex flex-col gap-0.5">
+              <dt className="text-[10px] uppercase tracking-[0.12em] text-ink-muted">
+                {COPY.battle.statNames[i]}
+              </dt>
+              <dd className="tnum font-display text-[28px] leading-[30px] font-bold text-ink">
+                {v}
+              </dd>
+            </div>
+          ))}
+        </dl>
+        <span className="tnum pb-0.5 pl-2 font-display text-[15px] font-semibold text-ink-muted">
+          = 100
+        </span>
+      </div>
     </div>
   );
 }

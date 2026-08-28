@@ -117,10 +117,9 @@ describe("classifyRpcError", () => {
       false,
     );
     expect(failure.kind).toBe("program-rejected");
-    // Copy is a TODO_COPY placeholder until the Phase 3 language audit fills it
-    // (PID §10, C12). Asserting the placeholder — rather than deleting the
-    // assertion — means the audit cannot quietly skip this string.
-    expect(failure.message).toMatch(/^TODO_COPY\(/);
+    // Copy filled per v3 D-UI-3 — no placeholder may survive to a player.
+    expect(failure.message).not.toContain("TODO_COPY");
+    expect(failure.message.length).toBeGreaterThan(20);
     expect(failure.broadcast).toBe(false);
   });
 

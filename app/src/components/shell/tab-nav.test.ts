@@ -29,12 +29,10 @@ describe("SHELL_TABS", () => {
     expect(tab("profile").href).toBe("/profile");
   });
 
-  it("carries only placeholder copy — the Phase 3 language audit fills it", () => {
-    // Every user-facing string carried in Phase 0 is a TODO_COPY placeholder
-    // (PID §10, compliance item C12). This assertion fails the moment someone
-    // ships real copy without going through that audit.
+  it("carries real copy from the copy module — no placeholder survives (v3 D-UI-3)", () => {
     for (const t of SHELL_TABS) {
-      expect(t.label, `${t.id} label`).toMatch(/^TODO_COPY\(/);
+      expect(t.label, `${t.id} label`).not.toContain("TODO_COPY");
+      expect(t.label.length, `${t.id} label`).toBeGreaterThan(0);
     }
   });
 });

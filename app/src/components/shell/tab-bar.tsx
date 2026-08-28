@@ -12,9 +12,8 @@ import { SHELL_TABS, isTabActive } from "./tab-nav";
  * three destinations it pointed at are gone; the layout mechanics, the token
  * discipline and the active-state wiring are what was worth keeping.
  *
- * PHASE-0-REVIEW: the tab set is a PLACEHOLDER and Phase 3 owns the real
- * information architecture — see tab-nav.ts. Labels are TODO_COPY placeholders
- * awaiting the Phase 3 language audit (PID §10, C12).
+ * The tab set is Play / Pools / Profile — see tab-nav.ts; labels come from
+ * the copy module (v3 D-UI-3).
  *
  * Colors are token references only (the reservation rule): ink / ink-muted for
  * tab states. No transition animations on tab switches — page transitions are

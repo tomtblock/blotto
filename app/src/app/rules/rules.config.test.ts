@@ -49,22 +49,19 @@ describe('rulesSections', () => {
     ]);
   });
 
-  it('every mechanical body is filled — TODO_COPY only where founder/counsel prose is required', () => {
+  it('every body is filled — no TODO_COPY anywhere (v3 D-UI-3)', () => {
     for (const s of sections) {
-      if (s.id === 'detection') {
-        // R4: the criteria wording is founder/counsel prose (Phase 6) —
-        // but the review-process appendix (C10) is mechanical and filled.
-        expect(s.body).to.contain('TODO_COPY');
-        expect(s.kind).to.equal('text');
-        if (s.kind === 'text') {
-          expect(s.appendix, 'review-process appendix').to.be.a('string');
-          expect(s.appendix!).to.not.contain('TODO_COPY');
-          expect(s.appendix!.length).to.be.greaterThan(100);
-        }
-        continue;
-      }
       expect(s.body, s.id).to.not.contain('TODO_COPY');
       expect(s.body.length, s.id).to.be.greaterThan(40);
+      if (s.id === 'detection' && s.kind === 'text') {
+        // The five-signal criteria statement (from the detection code) plus
+        // the mechanical review-process appendix (C10). PHASE-D2-REVIEW:
+        // founder/counsel may re-voice; substance must match the code.
+        expect(s.body).to.contain('signals');
+        expect(s.appendix, 'review-process appendix').to.be.a('string');
+        expect(s.appendix!).to.not.contain('TODO_COPY');
+        expect(s.appendix!.length).to.be.greaterThan(100);
+      }
     }
   });
 
