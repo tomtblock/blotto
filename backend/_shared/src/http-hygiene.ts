@@ -207,6 +207,20 @@ export const RATE_LIMITED_BODY = { error: 'rate limited' } as const;
 export interface CorsConfig {
   /** Exact-match allowed origins (scheme + host + port). Empty ⇒ no CORS headers emitted. */
   allowedOrigins: readonly string[];
+  /**
+   * Methods advertised on the allow-header. Default `GET, OPTIONS` — the read surface. A service
+   * with a browser-facing write surface (the packet service: `/packet`, `/attestation`,
+   * `/ciphertexts`, `/notify` are all POSTed by the app) overrides this at wiring time; env
+   * config deliberately cannot, because which methods a surface accepts is a property of the
+   * code, not of a deployment.
+   */
+  allowMethods?: string;
+  /**
+   * Request headers allowed on preflight. Unset ⇒ header not emitted (the read surface sends
+   * none). A JSON-POSTing surface needs at least `content-type`, or every browser preflight
+   * fails and the write surface is unreachable cross-origin.
+   */
+  allowHeaders?: string;
 }
 
 /**
@@ -214,8 +228,9 @@ export interface CorsConfig {
  *
  * `Vary: Origin` accompanies every emitted allow-header: the response now genuinely differs by
  * request origin, and a shared cache that does not know that will serve one origin's response to
- * another — the cache-poisoning failure this pairing exists to prevent. Only `GET` (and the
- * `OPTIONS` preflight) is ever allowed, because that is the entire public read surface.
+ * another — the cache-poisoning failure this pairing exists to prevent. The allowed methods
+ * default to `GET, OPTIONS` (the read surface); a write surface widens them in code via
+ * {@link CorsConfig.allowMethods}, never via env.
  */
 export function corsHeadersFor(
   origin: string | string[] | undefined,
@@ -232,7 +247,10 @@ export function corsHeadersFor(
   }
   return {
     'Access-Control-Allow-Origin': requested,
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Methods': config.allowMethods ?? 'GET, OPTIONS',
+    ...(config.allowHeaders
+      ? { 'Access-Control-Allow-Headers': config.allowHeaders }
+      : {}),
     'Access-Control-Max-Age': '600',
     Vary: 'Origin',
   };
