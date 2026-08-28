@@ -18,6 +18,7 @@
  * read into the initial render.
  */
 import { useEffect, useState } from "react";
+import { DigitSlide } from "./digit-slide";
 
 export interface CountdownProps {
   /** Unix seconds, decimal string or number. */
@@ -74,13 +75,28 @@ export function Countdown({ deadlineUnix, label, now = Date.now }: CountdownProp
         ? `${t.d}d ${pad(t.h)}:${pad(t.m)}:${pad(t.s)}`
         : `${pad(t.h)}:${pad(t.m)}:${pad(t.s)}`;
 
+  /* The final hour gets a tone shift ONLY (UI constitution 6.2): brighter,
+   * never faster, never red, never moving. A metronome, not an alarm. */
+  const finalHour = t !== null && t.d === 0 && t.h === 0;
+
   return (
     <div className="flex flex-col gap-1">
       {label ? (
         <span className="text-[12px] uppercase tracking-[0.14em] text-ink-muted">{label}</span>
       ) : null}
-      <time className="tnum font-display text-[24px] leading-[30px] font-bold text-ink">
-        {clock}
+      <time
+        className={
+          'tnum font-display text-[24px] leading-[30px] font-bold ' +
+          (finalHour ? 'text-brand-hot' : 'text-ink')
+        }
+      >
+        {t === null ? (
+          clock
+        ) : (
+          /* Calm per-second digit crossfade: only the digits that actually
+           * changed move (exit 150ms up, enter 250ms from below). */
+          <DigitSlide value={clock} label={label ? `${label}: ${clock}` : clock} />
+        )}
       </time>
     </div>
   );

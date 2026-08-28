@@ -27,7 +27,7 @@ import { TabBar } from '@/components/shell/tab-bar';
 import { Card } from '@/components/ui/card';
 import { Stat } from '@/components/ui/stat';
 import { Countdown } from '@/components/ui/countdown';
-import { SeatRing } from '@/components/ui/seat-ring';
+import { LivePoolRing } from '@/components/pool/live-pool-ring';
 import { buttonClasses } from '@/components/ui/button';
 import { FadeInView } from '@/components/ui/fade-in-view';
 import { HowItWorksExplainer } from '@/components/home/how-it-works-explainer';
@@ -71,7 +71,7 @@ export default async function PlayPage() {
         ) : hero ? (
           <Card live className="p-5">
             <div className="flex items-center gap-5">
-              <SeatRing entrants={hero.entrants} size={116} riser />
+              <LivePoolRing pool={hero} size={116} riser />
               <div className="flex min-w-0 flex-1 flex-col gap-3">
                 <Stat
                   label={COPY.pool.prizeTableTitle}

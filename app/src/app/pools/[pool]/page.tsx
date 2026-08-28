@@ -14,9 +14,10 @@ import { TabBar } from '@/components/shell/tab-bar';
 import { LiveDataUnavailable } from '@/components/shell/live-unavailable';
 import { Card } from '@/components/ui/card';
 import { Stat } from '@/components/ui/stat';
-import { ProgressRing } from '@/components/ui/progress-ring';
 import { PrizeTable } from '@/components/ui/prize-table';
 import { Countdown } from '@/components/ui/countdown';
+import { LivePoolRing } from '@/components/pool/live-pool-ring';
+import { buttonClasses } from '@/components/ui/button';
 
 const BANDS = [
   { label: '1st', rank: 1 },
@@ -57,7 +58,7 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
           </span>
           <Link
             href={`/verify?pool=${pool.pool}`}
-            className="ml-auto text-[13px] text-ink-muted underline underline-offset-2 hover:text-ink"
+            className="link-draw ml-auto text-[13px] text-ink-muted hover:text-ink"
           >
             Verify this pool
           </Link>
@@ -65,12 +66,9 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
 
         <Card live={open} className="mb-5 p-5">
           <div className="flex flex-wrap items-center gap-5">
-            <ProgressRing
-              value={pool.entrants}
-              total={64}
-              size={104}
-              label={`${pool.entrants} of 64 seats filled`}
-            />
+            {/* The room's heartbeat: real occupancy, WARMTH at true
+                intensity, one riser per real entry. */}
+            <LivePoolRing pool={pool} size={116} riser={open} />
             <div className="flex min-w-0 flex-1 flex-col gap-3">
               <Stat
                 label={COPY.pool.prizeTableTitle}
@@ -118,17 +116,14 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
             <p className="text-[14px] font-medium leading-5 text-ink">
               {COPY.pool.decisionsFinal}
             </p>
-            <Link
-              href={`/play?pool=${pool.pool}`}
-              className="flex h-14 items-center justify-center rounded-xl bg-brand text-[17px] font-semibold text-(--color-base) transition-colors hover:bg-brand-hot"
-            >
+            <Link href={`/play?pool=${pool.pool}`} className={buttonClasses('primary', 'lg') + ' w-full'}>
               {COPY.pool.enter}
             </Link>
           </section>
         ) : (
           <Link
             href={`/pools/${pool.pool}/results`}
-            className="flex h-12 items-center justify-center rounded-xl border border-line text-[15px] font-medium text-ink transition-colors hover:border-brand hover:text-brand"
+            className={buttonClasses('secondary', 'md') + ' w-full'}
           >
             Results
           </Link>

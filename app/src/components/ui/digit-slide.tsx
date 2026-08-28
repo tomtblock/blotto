@@ -13,7 +13,7 @@
  * never jitters sideways.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 
 interface DigitSlideProps {
   value: string;
@@ -23,14 +23,15 @@ interface DigitSlideProps {
 }
 
 export function DigitSlide({ value, className = '', label }: DigitSlideProps) {
+  // "Adjusting state when a prop changes" (render-phase update): prev is
+  // always the value of the previous render, so back-to-back ticks never
+  // animate against a stale outgoing digit.
+  const [last, setLast] = useState(value);
   const [prev, setPrev] = useState(value);
-  const settled = useRef(value);
-
-  useEffect(() => {
-    if (value === settled.current) return;
-    setPrev(settled.current);
-    settled.current = value;
-  }, [value]);
+  if (value !== last) {
+    setPrev(last);
+    setLast(value);
+  }
 
   const chars = [...value];
   const prevChars = [...prev];

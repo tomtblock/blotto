@@ -12,6 +12,7 @@ import { COPY } from '@/copy';
 import { AppHeader } from '@/components/shell/app-header';
 import { TabBar } from '@/components/shell/tab-bar';
 import { Card } from '@/components/ui/card';
+import { SeatRing } from '@/components/ui/seat-ring';
 import { LiveDataUnavailable } from '@/components/shell/live-unavailable';
 
 export default async function PoolsPage() {
@@ -79,6 +80,13 @@ export default async function PoolsPage() {
                               (p.state === 'Open' ? 'border-brand/40' : '')
                             }
                           >
+                            {/* The room's heartbeat in miniature — real
+                                occupancy only, WARMTH at true intensity. */}
+                            {p.state === 'Open' ? (
+                              <SeatRing entrants={p.entrants} size={44}>
+                                <span className="sr-only">{COPY.pool.entrantsOf(p.entrants)}</span>
+                              </SeatRing>
+                            ) : null}
                             <span className="tnum font-mono text-[12px] text-ink-muted">
                               #{p.id}
                             </span>

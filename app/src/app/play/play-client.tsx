@@ -48,7 +48,7 @@ const TOPUP_ENABLED = process.env.NEXT_PUBLIC_TOPUP_ENABLED === '1';
  * sentence — same panel shape whatever stopped the flow. */
 function StatePanel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="animate-rise flex flex-col gap-2 rounded-2xl border border-line bg-raised p-6">
+    <section className="animate-enter flex flex-col gap-2 rounded-2xl border border-line bg-raised p-6">
       <h2 className="font-display text-[24px] font-bold text-ink">{title}</h2>
       <div className="flex max-w-prose flex-col gap-2 text-[15px] leading-6 text-ink-muted">
         {children}
@@ -201,7 +201,7 @@ export function PlayClient() {
   if (done) {
     // v3 D2: the sealed confirmation is a designed moment, not a sentence.
     return (
-      <section aria-live="polite" className="animate-settle flex flex-col items-center gap-5 py-14 text-center">
+      <section aria-live="polite" className="animate-enter flex flex-col items-center gap-5 py-14 text-center">
         <div className="relative h-16 w-16" aria-hidden>
           <div className="absolute inset-0 rounded-2xl border-2 border-brand" />
           <div className="absolute inset-0 rounded-2xl" style={{ boxShadow: 'var(--glow-action)' }} />
@@ -352,6 +352,10 @@ function AttestationGate({
   const [termsChecked, setTermsChecked] = useState(false);
   const [attestError, setAttestError] = useState(false);
   const [attesting, setAttesting] = useState(false);
+  // The recorded acceptance lands as a WEIGHT stamp (it is final, signed,
+  // and versioned), then the gate yields. Reversible ticks get plain
+  // transitions; only the recorded act gets WEIGHT.
+  const [stamping, setStamping] = useState(false);
 
   const onAttest = useCallback(async () => {
     if (attesting) return;
@@ -359,17 +363,26 @@ function AttestationGate({
     setAttestError(false);
     const ok = await submitAttestation(process.env.NEXT_PUBLIC_ENTRY_API_URL, signer, wallet);
     setAttesting(false);
-    if (ok) setAttested(true);
-    else setAttestError(true);
+    if (ok) {
+      setStamping(true);
+      window.setTimeout(() => setAttested(true), 240);
+    } else {
+      setAttestError(true);
+    }
   }, [attesting, signer, wallet]);
 
   if (attested) return <>{children}</>;
 
-  // v3 D2: the clickwrap is a full-screen moment — the whole viewport is the
-  // agreement, nothing competes with it. Each statement is a large tap
-  // target; the confirm stays disabled until both are checked.
+  // The gate is near-silence (UI constitution 6.3): the sheet fades up
+  // once, ticks draw in over 150ms, nothing else moves. Sobriety here IS
+  // the design. Full-screen — the whole viewport is the agreement.
   return (
-    <section className="animate-settle flex min-h-[70vh] flex-col justify-center gap-6">
+    <section
+      className={
+        (stamping ? 'animate-stamp ' : 'animate-enter ') +
+        'flex min-h-[70vh] flex-col justify-center gap-6'
+      }
+    >
       <h2 className="font-display text-[34px] leading-[38px] font-extrabold text-ink">
         {COPY.gate.gateTitle}
       </h2>
@@ -387,7 +400,7 @@ function AttestationGate({
           <label
             key={i}
             className={
-              'flex cursor-pointer items-start gap-4 rounded-2xl border p-5 transition-colors ' +
+              'flex cursor-pointer items-start gap-4 rounded-2xl border p-5 transition-colors duration-150 ' +
               (row.checked ? 'border-brand/60 bg-raised' : 'border-line bg-raised hover:border-brand/30')
             }
           >
@@ -395,20 +408,59 @@ function AttestationGate({
               type="checkbox"
               checked={row.checked}
               onChange={(e) => row.set(e.target.checked)}
-              className="mt-0.5 h-5 w-5 shrink-0 accent-(--color-brand)"
+              className="sr-only"
             />
+            <GateTick checked={row.checked} />
             <span className="text-[15px] leading-6 text-ink">{row.text}</span>
           </label>
         ))}
       </div>
       {attestError && (
-        <p className="text-[14px] leading-5 text-price-down" role="alert">
+        <p className="error-surface text-[14px] leading-5 text-price-down" role="alert">
           {COPY.gate.attestFailed}
         </p>
       )}
-      <Button size="lg" disabled={!ageChecked || !termsChecked || attesting} onClick={onAttest}>
+      <Button
+        size="lg"
+        disabled={!ageChecked || !termsChecked || attesting || stamping}
+        onClick={onAttest}
+      >
         {attesting ? '…' : COPY.gate.ageConfirm}
       </Button>
     </section>
+  );
+}
+
+/** The gate checkbox: a tick whose stroke draws in over 150ms. Unchecking
+ * clears it faster (100ms) — every exit beats its enter. */
+function GateTick({ checked }: { checked: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className={
+        'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ' +
+        'transition-colors duration-150 ' +
+        (checked ? 'border-brand bg-brand' : 'border-line bg-overlay')
+      }
+    >
+      <svg viewBox="0 0 20 20" className="h-3.5 w-3.5">
+        <path
+          d="m4 10.5 4 4L16 6"
+          fill="none"
+          stroke="var(--color-base)"
+          strokeWidth="2.4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          pathLength={1}
+          strokeDasharray={1}
+          strokeDashoffset={checked ? 0 : 1}
+          style={{
+            transition: checked
+              ? 'stroke-dashoffset 150ms var(--ease-out)'
+              : 'stroke-dashoffset 100ms var(--ease-out)',
+          }}
+        />
+      </svg>
+    </span>
   );
 }
