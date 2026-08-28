@@ -1,18 +1,25 @@
 /*
- * Play tab (roadmap 3.1/3.2; restyled by v3 D2): the arena's front page.
- * The open pool is the LIVE fixture card — fixed prize pool big in prize
- * amber, the seat ring filling, the fill-deadline clock calm — and tiers the
- * treasury has not yet covered render locked, stating the rule that opens
- * them. The 18+/territory line sits directly under the hero so it is visible
- * without scrolling on a phone (v3 D2 requirement).
+ * The landing page (UI constitution PART 6.1): the door, the explainer,
+ * the proof band.
  *
- * Server component; live data via the indexer seam. Tier constants come from
- * the same shared module the prize path uses — never hand-typed.
+ * Act ORDER is reconciled against the D2 contract rather than copied from
+ * the constitution verbatim: the constitution reads explainer → proof →
+ * door, but the ratified v3 D2 requirement (e2e-asserted) pins the door to
+ * the top — the 18+/territory line must be in the first viewport on a
+ * phone, next to the one enter CTA, and there is exactly one link named
+ * "Enter this tournament" on the page. So the scroll runs door → Act I
+ * explainer → Act II proof band, which still passes the cold-visitor test:
+ * the room first, then how the game works, then the receipts. Recorded in
+ * the phase report.
+ *
+ * Server component; live data via the indexer seam, degrading honestly.
+ * Tier constants come from the shared scoring module — never hand-typed.
  */
 import Link from 'next/link';
 import { TIER_ENTRY_LAMPORTS, TIER_POT_LAMPORTS } from '@blotto/scoring';
 import { COPY } from '@/copy';
 import { indexerApi, live } from '@/data/api';
+import { proofBand } from '@/data/winners';
 import { LiveDataUnavailable } from '@/components/shell/live-unavailable';
 import { lamportsToSol } from '@/data/format';
 import { AppHeader } from '@/components/shell/app-header';
@@ -20,8 +27,11 @@ import { TabBar } from '@/components/shell/tab-bar';
 import { Card } from '@/components/ui/card';
 import { Stat } from '@/components/ui/stat';
 import { Countdown } from '@/components/ui/countdown';
-import { ProgressRing } from '@/components/ui/progress-ring';
-import { HeroPentagon } from '@/components/home/hero-pentagon';
+import { SeatRing } from '@/components/ui/seat-ring';
+import { buttonClasses } from '@/components/ui/button';
+import { FadeInView } from '@/components/ui/fade-in-view';
+import { HowItWorksExplainer } from '@/components/home/how-it-works-explainer';
+import { ProofBandSection } from '@/components/home/proof-band';
 
 export default async function PlayPage() {
   const api = indexerApi();
@@ -32,16 +42,13 @@ export default async function PlayPage() {
   ]);
   const pools = poolsLive.ok ? poolsLive.value : [];
   const treasury = treasuryLive.ok ? treasuryLive.value : null;
+  const proof = poolsLive.ok ? await proofBand(api, pools) : null;
   const open = pools
     .filter((p) => p.state === 'Open')
     .sort((a, b) => a.tier - b.tier);
   const hero = open[0];
   const others = open.slice(1);
   const openTiers = new Set(open.map((p) => p.tier));
-  // v3 D3: the fixture list carries the treasury projection when the read
-  // API serves it — which locked tier is already covered and which is
-  // short, straight off the event-ledger report. Fixture mode (no
-  // indexer) falls back to the open/locked split alone.
   const lockedTiers = TIER_ENTRY_LAMPORTS.map((_, tier) => tier).filter(
     (tier) => !openTiers.has(tier)
   );
@@ -55,17 +62,16 @@ export default async function PlayPage() {
           {COPY.shell.tagline}
         </h1>
 
+        {/* Act III — the door. The current open pool as the live seat ring:
+            real occupancy, WARMTH at true intensity, one primary CTA. The
+            room is visibly warm and the door is open; that is the entire
+            sales pitch. */}
         {!poolsLive.ok ? (
           <LiveDataUnavailable />
         ) : hero ? (
           <Card live className="p-5">
             <div className="flex items-center gap-5">
-              <ProgressRing
-                value={hero.entrants}
-                total={64}
-                size={104}
-                label={`${hero.entrants} of 64 seats filled`}
-              />
+              <SeatRing entrants={hero.entrants} size={116} riser />
               <div className="flex min-w-0 flex-1 flex-col gap-3">
                 <Stat
                   label={COPY.pool.prizeTableTitle}
@@ -85,7 +91,7 @@ export default async function PlayPage() {
             </div>
             <Link
               href={`/pools/${hero.pool}`}
-              className="mt-5 flex h-14 items-center justify-center rounded-xl bg-brand text-[17px] font-semibold text-(--color-base) transition-colors hover:bg-brand-hot"
+              className={buttonClasses('primary', 'lg') + ' mt-5 w-full'}
             >
               {COPY.pool.enter}
             </Link>
@@ -99,7 +105,8 @@ export default async function PlayPage() {
           </Card>
         )}
 
-        {/* v3 D2: visible without scrolling on mobile — directly under the hero. */}
+        {/* Constraint 5: static, fully opaque, never animated, never under
+            a sticky element — and in the first viewport on a phone. */}
         <p className="mt-3 text-center text-[12px] tracking-[0.02em] text-ink-muted">
           {COPY.pool.ageTerritoryNote}
           {' · '}
@@ -136,23 +143,29 @@ export default async function PlayPage() {
           </ul>
         )}
 
-        {/* How it works (founder ask 2026-08-28): the game explained where
-            a first-time visitor lands, led by the self-playing allocation
-            demo. Informational motion only — nothing here flashes, loops a
-            pressure cue, or sits next to a payment control. */}
+        {/* Act I — the hero explainer: the whole game in ~12 seconds.
+            Scroll-scrubbed on desktop, gentle autoplay on mobile, a static
+            three-panel strip under reduced motion. The page's one hero
+            animation. */}
         <section className="mt-10">
           <h2 className="mb-4 font-display text-[24px] leading-[30px] font-bold text-ink">
             {COPY.howItWorks.title}
           </h2>
-          <Card className="p-5">
-            <HeroPentagon caption={COPY.howItWorks.pentagonCaption} />
-          </Card>
-          <ol className="mt-4 flex flex-col gap-3">
+          <HowItWorksExplainer />
+          <FadeInView className="mt-3">
+            <p className="mx-auto max-w-[40ch] text-center text-[14px] leading-5 text-ink-muted">
+              {COPY.howItWorks.pentagonCaption}
+            </p>
+          </FadeInView>
+
+          {/* The full mechanics in plain words — reference text, silent by
+              design (the explainer above is the hero; text does not
+              compete). */}
+          <ol className="mt-6 flex flex-col gap-3">
             {COPY.howItWorks.steps.map((step, i) => (
               <li
                 key={step.title}
-                className="animate-rise flex gap-4 rounded-xl border border-line px-4 py-4"
-                style={{ animationDelay: `${i * 90}ms` }}
+                className="flex gap-4 rounded-xl border border-line px-4 py-4"
               >
                 <span
                   aria-hidden
@@ -170,14 +183,18 @@ export default async function PlayPage() {
             ))}
           </ol>
           <p className="mt-4 flex gap-5 text-[13px]">
-            <Link href="/rules" className="text-brand underline underline-offset-2">
+            <Link href="/rules" className="link-draw text-brand">
               {COPY.howItWorks.rulesLink}
             </Link>
-            <Link href="/verify" className="text-brand underline underline-offset-2">
+            <Link href="/verify" className="link-draw text-brand">
               {COPY.howItWorks.verifyLink}
             </Link>
           </p>
         </section>
+
+        {/* Act II — the proof band: the winners drift and the paid-out
+            counter, all of it on-chain data with Verify links. */}
+        {proof ? <ProofBandSection data={proof} /> : null}
 
         {poolsLive.ok && lockedTiers.length > 0 && (
           <section className="mt-8">

@@ -105,6 +105,9 @@ export const COPY = {
     verifyThis: 'Verify this result',
     paidToDate: 'Paid to players to date',
     preFunded: 'Prize pools are funded before entries open.',
+    // Mechanics statement, same substance as rules.prizeIntro.
+    split:
+      'Every entry splits at the program level: 80% to the prize treasury, 20% to the operator.',
     recompute: 'Recompute this number',
     // A seat filling, announced politely (aria-live), and the riser text.
     riser: '+1 entered',

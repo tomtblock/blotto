@@ -37,11 +37,16 @@ export interface ProofBand {
   paidToDateLamports: string;
 }
 
-/** Assemble the proof band from the read API. `limit` bounds the payout
- * fetches (one per card); the paid-to-date sum needs no extra requests. */
-export async function proofBand(api: IndexerApi, limit = 8): Promise<ProofBand> {
-  const pools = await api.listPools();
-  const paidPools = pools.filter((p) => p.state === 'Paid');
+/** Assemble the proof band. Callers that already hold the pool list pass
+ * it in; `limit` bounds the payout fetches (one per card) and the
+ * paid-to-date sum needs no extra requests. */
+export async function proofBand(
+  api: IndexerApi,
+  pools?: PoolSummary[],
+  limit = 8
+): Promise<ProofBand> {
+  const allPools = pools ?? (await api.listPools());
+  const paidPools = allPools.filter((p) => p.state === 'Paid');
 
   const paidToDate = paidPools.reduce((sum, p) => sum + BigInt(p.pot_lamports), 0n);
 
