@@ -12,9 +12,11 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { address } from '@solana/kit';
 import { COPY } from '@/copy';
+import { Button } from '@/components/ui/button';
 import { BattleFlow } from '@/battle/components/battle-flow';
 import type { Allocation } from '@/battle/allocation';
 import { indexerApi } from '@/data/api';
@@ -41,6 +43,29 @@ import { RevealHost } from './reveal-host';
 
 /** D-C: the top-up prompt ships behind a flag, OFF by default. */
 const TOPUP_ENABLED = process.env.NEXT_PUBLIC_TOPUP_ENABLED === '1';
+
+/* v3 D2: every empty/error state on the entry path is designed, not a bare
+ * sentence — same panel shape whatever stopped the flow. */
+function StatePanel({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="animate-rise flex flex-col gap-2 rounded-2xl border border-line bg-raised p-6">
+      <h2 className="font-display text-[24px] font-bold text-ink">{title}</h2>
+      <div className="flex max-w-prose flex-col gap-2 text-[15px] leading-6 text-ink-muted">
+        {children}
+      </div>
+    </section>
+  );
+}
+
+/** A quiet in-progress hold (checks, loads) — never a bare ellipsis. */
+function PendingPanel({ label }: { label: string }) {
+  return (
+    <section aria-live="polite" className="flex flex-col items-center gap-4 py-14">
+      <div className="h-8 w-8 rounded-full border-2 border-overlay border-t-brand motion-safe:animate-spin" aria-hidden />
+      <p className="text-[13px] uppercase tracking-[0.14em] text-ink-muted">{label}</p>
+    </section>
+  );
+}
 
 export function PlayClient() {
   const params = useSearchParams();
@@ -140,24 +165,67 @@ export function PlayClient() {
     [startSubmit]
   );
 
-  if (!poolId) return <p className="opacity-70">Pick a pool first.</p>;
-  if (!pool) return <p className="opacity-70">…</p>;
+  if (!poolId) {
+    return (
+      <StatePanel title="No pool selected">
+        <p>Pick an open tournament from the Play tab to enter.</p>
+        <Link href="/" className="mt-1 text-brand underline underline-offset-2">
+          Back to Play
+        </Link>
+      </StatePanel>
+    );
+  }
+  if (!pool) return <PendingPanel label="Loading the pool" />;
 
   // D-B3: territory gate ahead of everything, including the attestation.
-  if (geo === 'checking') return <p className="opacity-70">…</p>;
+  if (geo === 'checking') return <PendingPanel label="Checking availability" />;
   if (geo === 'blocked') {
-    return <p className="max-w-prose text-sm opacity-80">{COPY.gate.territoryBlocked}</p>;
+    return (
+      <StatePanel title="Not available here">
+        <p>{COPY.gate.territoryBlocked}</p>
+      </StatePanel>
+    );
   }
 
   if (auth.status !== 'signed-in') {
-    return <p className="opacity-70">Sign in to enter.</p>;
+    return (
+      <StatePanel title="Sign in to enter">
+        <p>Entering needs a signed-in wallet — sign in from the header above.</p>
+      </StatePanel>
+    );
   }
   if (!auth.walletAddress) {
-    return <p className="opacity-70">…</p>;
+    return <PendingPanel label="Resolving your wallet" />;
   }
 
   if (done) {
-    return <p aria-live="polite">Entry submitted — sealing confirmed.</p>;
+    // v3 D2: the sealed confirmation is a designed moment, not a sentence.
+    return (
+      <section aria-live="polite" className="animate-settle flex flex-col items-center gap-5 py-14 text-center">
+        <div className="relative h-16 w-16" aria-hidden>
+          <div className="absolute inset-0 rounded-2xl border-2 border-brand" />
+          <div className="absolute inset-0 rounded-2xl" style={{ boxShadow: 'var(--glow-action)' }} />
+          <svg viewBox="0 0 24 24" className="absolute inset-0 m-auto h-8 w-8 text-brand">
+            <path
+              d="m5 13 4.5 4.5L19 8"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </div>
+        <h2 className="font-display text-[34px] leading-[38px] font-extrabold text-ink">Sealed</h2>
+        <p className="max-w-prose text-[15px] leading-6 text-ink-muted">{COPY.pool.sealed}</p>
+        <Link
+          href={`/pools/${pool.pool}`}
+          className="mt-2 flex h-12 items-center justify-center rounded-xl bg-brand px-8 text-[15px] font-semibold text-(--color-base) transition-colors hover:bg-brand-hot"
+        >
+          {COPY.reveal.stalledDismiss}
+        </Link>
+      </section>
+    );
   }
 
   // The reveal takeover owns the screen from confirm onward.
@@ -222,46 +290,46 @@ function BalanceGateView({
   children: React.ReactNode;
 }) {
   const [funding, setFunding] = useState(false);
-  if (state === 'checking') return <p className="opacity-70">…</p>;
+  if (state === 'checking') return <PendingPanel label="Checking your balance" />;
   if (state.state === 'ok') return <>{children}</>;
 
   const needSol = lamportsToSol(
     (BigInt(entryLamports) + ENTRY_COST_HEADROOM_LAMPORTS).toString()
   );
   return (
-    <section className="flex max-w-prose flex-col gap-4 rounded border p-6" aria-live="polite">
-      {state.state === 'insufficient' ? (
-        <p className="text-sm opacity-80">
-          {COPY.gate.balanceInsufficient(needSol, lamportsToSol(state.haveLamports.toString()))}
-        </p>
-      ) : (
-        <p className="text-sm opacity-80">{COPY.gate.balanceUnavailable}</p>
-      )}
-      <div className="flex gap-3">
-        {TOPUP_ENABLED && addFunds && state.state === 'insufficient' && (
-          <button
-            type="button"
-            disabled={funding}
-            className="rounded bg-[var(--color-accent,#7c5cff)] px-6 py-2 text-white disabled:opacity-40"
-            onClick={async () => {
-              setFunding(true);
-              try {
-                await addFunds(wallet);
-              } catch {
-                // Exited the funding flow — the recheck below stays available.
-              }
-              setFunding(false);
-              onRecheck();
-            }}
-          >
-            {funding ? '…' : COPY.gate.topUp}
-          </button>
+    <StatePanel
+      title={state.state === 'insufficient' ? 'Not enough SOL for this entry' : 'Balance check needed'}
+    >
+      <div aria-live="polite" className="flex flex-col gap-4">
+        {state.state === 'insufficient' ? (
+          <p>{COPY.gate.balanceInsufficient(needSol, lamportsToSol(state.haveLamports.toString()))}</p>
+        ) : (
+          <p>{COPY.gate.balanceUnavailable}</p>
         )}
-        <button type="button" className="underline" onClick={onRecheck}>
-          {COPY.gate.balanceRetry}
-        </button>
+        <div className="flex flex-wrap gap-3">
+          {TOPUP_ENABLED && addFunds && state.state === 'insufficient' && (
+            <Button
+              disabled={funding}
+              onClick={async () => {
+                setFunding(true);
+                try {
+                  await addFunds(wallet);
+                } catch {
+                  // Exited the funding flow — the recheck below stays available.
+                }
+                setFunding(false);
+                onRecheck();
+              }}
+            >
+              {funding ? '…' : COPY.gate.topUp}
+            </Button>
+          )}
+          <Button intent="quiet" onClick={onRecheck}>
+            {COPY.gate.balanceRetry}
+          </Button>
+        </div>
       </div>
-    </section>
+    </StatePanel>
   );
 }
 
@@ -297,35 +365,50 @@ function AttestationGate({
 
   if (attested) return <>{children}</>;
 
+  // v3 D2: the clickwrap is a full-screen moment — the whole viewport is the
+  // agreement, nothing competes with it. Each statement is a large tap
+  // target; the confirm stays disabled until both are checked.
   return (
-    <section className="flex max-w-prose flex-col gap-4 rounded border p-6">
-      <label className="flex items-start gap-3 text-sm">
-        <input
-          type="checkbox"
-          checked={ageChecked}
-          onChange={(e) => setAgeChecked(e.target.checked)}
-          className="mt-1"
-        />
-        <span>{COPY.gate.ageAttestation}</span>
-      </label>
-      <label className="flex items-start gap-3 text-sm">
-        <input
-          type="checkbox"
-          checked={termsChecked}
-          onChange={(e) => setTermsChecked(e.target.checked)}
-          className="mt-1"
-        />
-        <span>{COPY.gate.termsAcceptance(TERMS_VERSION)}</span>
-      </label>
-      {attestError && <p className="text-sm text-red-400">{COPY.gate.attestFailed}</p>}
-      <button
-        type="button"
-        disabled={!ageChecked || !termsChecked || attesting}
-        className="rounded bg-[var(--color-accent,#7c5cff)] px-6 py-2 text-white disabled:opacity-40"
-        onClick={onAttest}
-      >
+    <section className="animate-settle flex min-h-[70vh] flex-col justify-center gap-6">
+      <h2 className="font-display text-[34px] leading-[38px] font-extrabold text-ink">
+        {COPY.gate.gateTitle}
+      </h2>
+      <div className="flex flex-col gap-3">
+        {(
+          [
+            { checked: ageChecked, set: setAgeChecked, text: COPY.gate.ageAttestation },
+            {
+              checked: termsChecked,
+              set: setTermsChecked,
+              text: COPY.gate.termsAcceptance(TERMS_VERSION),
+            },
+          ] as const
+        ).map((row, i) => (
+          <label
+            key={i}
+            className={
+              'flex cursor-pointer items-start gap-4 rounded-2xl border p-5 transition-colors ' +
+              (row.checked ? 'border-brand/60 bg-raised' : 'border-line bg-raised hover:border-brand/30')
+            }
+          >
+            <input
+              type="checkbox"
+              checked={row.checked}
+              onChange={(e) => row.set(e.target.checked)}
+              className="mt-0.5 h-5 w-5 shrink-0 accent-(--color-brand)"
+            />
+            <span className="text-[15px] leading-6 text-ink">{row.text}</span>
+          </label>
+        ))}
+      </div>
+      {attestError && (
+        <p className="text-[14px] leading-5 text-price-down" role="alert">
+          {COPY.gate.attestFailed}
+        </p>
+      )}
+      <Button size="lg" disabled={!ageChecked || !termsChecked || attesting} onClick={onAttest}>
         {attesting ? '…' : COPY.gate.ageConfirm}
-      </button>
+      </Button>
     </section>
   );
 }
