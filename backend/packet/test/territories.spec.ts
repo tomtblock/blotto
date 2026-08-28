@@ -13,6 +13,8 @@ import {
   MemoryAttestationStore,
   StubGeoLookup,
   VendorHttpGeoLookup,
+  IpLocateGeoLookup,
+  assertScheduleEvaluable,
   geoVerdict,
   issuePacket,
   parseTerritorySchedule,
@@ -284,5 +286,123 @@ describe('the /geo route and the header stub', () => {
     );
     expect(res.status).to.equal(403);
     expect(res.body).to.deep.equal(GENERIC_REJECTION);
+  });
+});
+
+/*
+ * IPLocate — the vendor of record (R2, founder instruction 2026-08-28).
+ * The shapes below are the live API's, captured 2026-08-28. Every case here
+ * is a FAIL-CLOSED assertion: the adapter throws, `geoVerdict` answers
+ * false, and the entry gate returns the one generic rejection.
+ */
+describe('IpLocateGeoLookup', () => {
+  const OK_BODY = {
+    ip: '8.8.8.8',
+    country: 'United States',
+    country_code: 'US',
+    subdivision: 'California',
+    privacy: { is_vpn: false, is_proxy: false, is_tor: false, is_hosting: true },
+  };
+
+  function vendor(answer: unknown, capture?: { url?: string; headers?: unknown }) {
+    return new IpLocateGeoLookup('https://iplocate.io/api/lookup', 'k', (async (
+      url: string,
+      init: { headers?: unknown }
+    ) => {
+      if (capture) {
+        capture.url = url;
+        capture.headers = init?.headers;
+      }
+      return answer;
+    }) as unknown as typeof fetch);
+  }
+
+  it('sends the address as a path segment and the key as X-API-Key', async () => {
+    const capture: { url?: string; headers?: unknown } = {};
+    await vendor({ ok: true, json: async () => OK_BODY }, capture).lookup('203.0.113.7');
+    expect(capture.url).to.equal('https://iplocate.io/api/lookup/203.0.113.7');
+    // Never a query parameter: an API key in a URL lands in access logs.
+    expect(capture.url).to.not.contain('apikey');
+    expect(capture.headers).to.deep.equal({ 'x-api-key': 'k' });
+  });
+
+  it('maps country_code (not the country NAME) and emits no region', async () => {
+    const got = await vendor({ ok: true, json: async () => OK_BODY }).lookup('8.8.8.8');
+    expect(got).to.deep.equal({ country: 'US', region: undefined, vpnOrProxy: false });
+  });
+
+  it('reads the privacy block for VPN, proxy and Tor', async () => {
+    for (const flag of ['is_vpn', 'is_proxy', 'is_tor']) {
+      const body = { ...OK_BODY, privacy: { ...OK_BODY.privacy, [flag]: true } };
+      const got = await vendor({ ok: true, json: async () => body }).lookup('8.8.8.8');
+      expect(got.vpnOrProxy, flag).to.equal(true);
+    }
+  });
+
+  it('throws on every bad answer — unreachable, malformed, and name-not-code', async () => {
+    const bad: unknown[] = [
+      // vendor unreachable / rejected the key
+      { ok: false, status: 401, json: async () => ({ error: 'Invalid API key' }) },
+      { ok: false, status: 500, json: async () => ({}) },
+      // malformed: nothing at all
+      { ok: true, json: async () => ({}) },
+      // the trap: the full country NAME where a code belongs
+      { ok: true, json: async () => ({ country_code: 'United States', privacy: {} }) },
+      // lowercase / wrong-length codes are not ISO alpha-2
+      { ok: true, json: async () => ({ country_code: 'us', privacy: {} }) },
+      { ok: true, json: async () => ({ country_code: '', privacy: {} }) },
+      // resolved country but no privacy block — cannot judge VPN, so block
+      { ok: true, json: async () => ({ country_code: 'US' }) },
+    ];
+    for (const answer of bad) {
+      let threw = false;
+      try {
+        await vendor(answer).lookup('203.0.113.7');
+      } catch {
+        threw = true;
+      }
+      expect(threw, JSON.stringify(answer)).to.equal(true);
+    }
+  });
+
+  it('a throwing vendor blocks the entry through geoVerdict', async () => {
+    const verdict = await geoVerdict(
+      deps(async () => {
+        throw new Error('vendor down');
+      }),
+      request.ip
+    );
+    expect(verdict).to.equal(false);
+  });
+
+  it('blocks BE and AU by country code, admits others (committed schedule)', async () => {
+    for (const [code, allowed] of [
+      ['BE', false],
+      ['AU', false],
+      ['GB', true],
+      ['US', true],
+    ] as const) {
+      const got = await geoVerdict(
+        deps(async () => ({ country: code, region: undefined, vpnOrProxy: false })),
+        request.ip
+      );
+      expect(got, code).to.equal(allowed);
+    }
+  });
+});
+
+describe('assertScheduleEvaluable', () => {
+  it('accepts a country-only schedule for a region-less vendor', () => {
+    expect(() => assertScheduleEvaluable(['BE', 'AU'], false)).to.not.throw();
+  });
+
+  it('refuses to boot on a sub-national rule the vendor cannot enforce', () => {
+    // Under-enforcing the founder's committed schedule is worse than not
+    // starting: the rule would sit in config looking enforced.
+    expect(() => assertScheduleEvaluable(['BE', 'US-NY'], false)).to.throw(/US-NY/);
+  });
+
+  it('allows sub-national rules when the vendor does answer region codes', () => {
+    expect(() => assertScheduleEvaluable(['US-NY'], true)).to.not.throw();
   });
 });

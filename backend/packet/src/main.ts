@@ -35,7 +35,11 @@ import { PgCiphertextStore } from '../../sealing/src/store';
 import { serveEntryApi } from './server';
 import { LocalPacketSigner, type PacketSigner } from './packet';
 import { TurnkeyPacketSigner } from './signer-turnkey';
-import { StubGeoLookup, VendorHttpGeoLookup } from './geo-adapters';
+import {
+  IpLocateGeoLookup,
+  StubGeoLookup,
+  assertScheduleEvaluable,
+} from './geo-adapters';
 import { loadTermsVersion } from './attestations';
 import { loadTerritorySchedule } from './territories';
 import { PgAttestationStore, PgNotifyPreferenceStore } from './stores-pg';
@@ -78,9 +82,14 @@ function buildSigner(env: NodeJS.ProcessEnv): PacketSigner {
   );
 }
 
-function buildGeo(env: NodeJS.ProcessEnv): GeoLookup {
+function buildGeo(env: NodeJS.ProcessEnv, blocked: readonly string[]): GeoLookup {
   if (env.GEO_VENDOR_URL && env.GEO_VENDOR_API_KEY) {
-    return new VendorHttpGeoLookup(env.GEO_VENDOR_URL, env.GEO_VENDOR_API_KEY);
+    // The vendor of record is IPLocate (R2, founder instruction 2026-08-28).
+    // It emits no region code, so the schedule must contain no sub-national
+    // rule — asserted here, at boot, rather than discovered as a silent
+    // under-enforcement in production.
+    assertScheduleEvaluable(blocked, false);
+    return new IpLocateGeoLookup(env.GEO_VENDOR_URL, env.GEO_VENDOR_API_KEY);
   }
   if (env.GEO_STUB_COUNTRY) {
     console.warn(`${SERVICE}: using the GEO STUB (dev only) — country=${env.GEO_STUB_COUNTRY}`);
@@ -116,7 +125,7 @@ export function main(env: NodeJS.ProcessEnv = process.env): void {
   serveEntryApi(
     {
       packet: {
-        geo: buildGeo(env),
+        geo: buildGeo(env, territories.blocked),
         // No sanctions vendor is wired yet (module doc; docs/hosting.md).
         sanctions: { isSanctioned: async () => false },
         signer: buildSigner(env),
