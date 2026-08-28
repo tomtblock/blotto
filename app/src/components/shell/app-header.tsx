@@ -46,7 +46,7 @@ export function AppHeader() {
         ) : (
           <Link
             href="/signin"
-            className="rounded-full bg-brand px-4 py-1.5 font-mono text-xs font-medium tracking-[0.08em] text-ink uppercase"
+            className="rounded-full bg-brand px-4 py-1.5 font-mono text-xs font-semibold tracking-[0.08em] text-(--color-base) uppercase"
           >
             sign in
           </Link>

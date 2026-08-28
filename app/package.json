@@ -9,7 +9,9 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "journey": "playwright test",
+    "lighthouse": "node scripts/lighthouse-gate.mjs"
   },
   "dependencies": {
     "@noble/hashes": "^1.8.0",
@@ -28,6 +30,7 @@
     "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.56.1",
     "@solana/web3.js": "1.98.4",
     "@tailwindcss/postcss": "4.3.3",
     "@types/node": "20.19.43",
@@ -36,6 +39,7 @@
     "eslint": "9.39.5",
     "eslint-config-next": "16.3.0",
     "fast-check": "4.9.0",
+    "lighthouse": "^12.8.2",
     "tailwindcss": "4.3.3",
     "typescript": "5.9.3",
     "vitest": "4.1.10"
