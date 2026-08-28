@@ -8,12 +8,16 @@
  */
 
 import type {
+  CareerRow,
   EntryRow,
   IndexerApi,
   PayoutRow,
   PoolSummary,
   ProfileRow,
   ResultRow,
+  RivalRow,
+  SealedEntryRow,
+  TreasuryTiers,
 } from './types';
 import { FIXTURE_API } from './fixture';
 
@@ -44,6 +48,24 @@ class HttpIndexerApi implements IndexerApi {
   }
   async getProfile(player: string) {
     return this.get<ProfileRow>(`/profiles/${player}`);
+  }
+  async getCareer(player: string) {
+    return (await this.get<CareerRow[]>(`/profiles/${player}/history`)) ?? [];
+  }
+  async getRivals(player: string) {
+    return (await this.get<RivalRow[]>(`/profiles/${player}/rivals`)) ?? [];
+  }
+  async getSealedEntries(pool: string) {
+    // 403 = the pool secret is not on-chain yet (the endpoint fails closed);
+    // render that the same as "nothing to show".
+    try {
+      return (await this.get<SealedEntryRow[]>(`/pools/${pool}/sealed-entries`)) ?? [];
+    } catch {
+      return [];
+    }
+  }
+  async getTreasury() {
+    return this.get<TreasuryTiers>('/treasury');
   }
 }
 

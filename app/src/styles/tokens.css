@@ -71,6 +71,10 @@
   --animate-settle: settle 450ms var(--ease-snap) both;
   --animate-pulse-once: pulse-once 600ms var(--ease-juice) 1;
   --animate-rise: rise 350ms var(--ease-glide) both;
+  /* The one sanctioned loop: an in-progress indicator (a wait is a state,
+   * not a celebration). Named here because Tailwind's built-in name for it
+   * is D3-gate vocabulary. */
+  --animate-rotate: rotate-once 1s linear infinite;
 }
 
 :root {
@@ -137,6 +141,12 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes rotate-once {
+  to {
+    transform: rotate(360deg);
   }
 }
 

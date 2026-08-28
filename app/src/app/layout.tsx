@@ -3,6 +3,7 @@ import { Big_Shoulders, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import { COPY } from "@/copy";
 import { AuthProvider } from "@/wallet/auth-provider";
 import { QueryProvider } from "@/query/query-provider";
+import { ToastProvider } from "@/components/ui/toast";
 import "./globals.css";
 
 // The display face (D1): Big Shoulders — a condensed athletic family built
@@ -57,7 +58,9 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <AuthProvider>
-          <QueryProvider>{children}</QueryProvider>
+          <QueryProvider>
+            <ToastProvider>{children}</ToastProvider>
+          </QueryProvider>
         </AuthProvider>
       </body>
     </html>

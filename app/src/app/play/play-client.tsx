@@ -61,7 +61,7 @@ function StatePanel({ title, children }: { title: string; children: React.ReactN
 function PendingPanel({ label }: { label: string }) {
   return (
     <section aria-live="polite" className="flex flex-col items-center gap-4 py-14">
-      <div className="h-8 w-8 rounded-full border-2 border-overlay border-t-brand motion-safe:animate-spin" aria-hidden />
+      <div className="h-8 w-8 rounded-full border-2 border-overlay border-t-brand motion-safe:animate-rotate" aria-hidden />
       <p className="text-[13px] uppercase tracking-[0.14em] text-ink-muted">{label}</p>
     </section>
   );

@@ -41,4 +41,16 @@ export const FIXTURE_API: IndexerApi = {
   async getProfile() {
     return null;
   },
+  async getCareer() {
+    return [];
+  },
+  async getRivals() {
+    return [];
+  },
+  async getSealedEntries() {
+    return [];
+  },
+  async getTreasury() {
+    return null;
+  },
 };

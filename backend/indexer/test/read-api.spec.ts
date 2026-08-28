@@ -142,3 +142,78 @@ describe('read API routing', () => {
     expect((await handleRead(db(() => []), '/history/nope')).status).to.equal(404);
   });
 });
+
+describe('read API — D3 routes', () => {
+  const PLAYER = 'P1ayerAAAA111111111111111111111111111111111';
+
+  it('serves the per-player career history rows', async () => {
+    const rows = [
+      {
+        pool: POOL,
+        pool_id: '1',
+        tier: 0,
+        seat: 3,
+        entries_to_date: '1',
+        paid: true,
+        amount_lamports: '1350000000',
+        pot_lamports: '5120000000',
+        state: 'Paid',
+      },
+    ];
+    const res = await handleRead(
+      db((sql) => (sql.includes('FROM player_history h') ? rows : [])),
+      `/profiles/${PLAYER}/history`
+    );
+    expect(res.status).to.equal(200);
+    const body = res.body as Array<Record<string, unknown>>;
+    expect(body[0].amount_lamports).to.equal('1350000000');
+    expect(body[0].paid).to.equal(true);
+  });
+
+  it('serves rivals and 404s an unknown profile subroute', async () => {
+    const rows = [{ player: 'R1', pools_shared: '4', paid_in_shared: '2' }];
+    const res = await handleRead(
+      db((sql) => (sql.includes('JOIN player_history o') ? rows : [])),
+      `/profiles/${PLAYER}/rivals`
+    );
+    expect(res.status).to.equal(200);
+    expect((res.body as unknown[]).length).to.equal(1);
+    expect((await handleRead(db(() => []), `/profiles/${PLAYER}/nope`)).status).to.equal(404);
+    expect((await handleRead(db(() => []), '/profiles/not-base58!/history')).status).to.equal(400);
+  });
+
+  it('sealed-entries fails CLOSED before the reveal and serves seat-keyed rows after', async () => {
+    // No pool → 404.
+    expect((await handleRead(db(() => []), `/pools/${POOL}/sealed-entries`)).status).to.equal(404);
+
+    // Pool exists, secret not yet on-chain → 403, and the ciphertext query
+    // is never reached (the canned db would return rows for it).
+    const before = await handleRead(
+      db((sql) =>
+        sql.includes('SELECT id, secret')
+          ? [{ id: '1', secret: null }]
+          : [{ seat: 0, ciphertext_hex: 'aa' }]
+      ),
+      `/pools/${POOL}/sealed-entries`
+    );
+    expect(before.status).to.equal(403);
+
+    // Secret revealed → anonymised seat-keyed ciphertexts.
+    const after = await handleRead(
+      db((sql) =>
+        sql.includes('SELECT id, secret')
+          ? [{ id: '1', secret: 'cc'.repeat(32) }]
+          : [
+              { seat: 0, ciphertext_hex: 'aa'.repeat(35) },
+              { seat: 1, ciphertext_hex: 'bb'.repeat(35) },
+            ]
+      ),
+      `/pools/${POOL}/sealed-entries`
+    );
+    expect(after.status).to.equal(200);
+    const body = after.body as Array<Record<string, unknown>>;
+    expect(body.length).to.equal(2);
+    expect(body[0].seat).to.equal(0);
+    expect(Object.keys(body[0])).to.not.include('player');
+  });
+});

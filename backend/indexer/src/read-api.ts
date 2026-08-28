@@ -14,7 +14,12 @@
  *                                        (not the derived tables — the verify
  *                                        story deliberately reads closer to
  *                                        the chain)
+ *   GET /pools/:pool/sealed-entries    → seat-keyed ciphertexts, served only
+ *                                        after the pool secret is on-chain
+ *                                        (D3 what-beat-you; fail-closed)
  *   GET /profiles/:player              → ProfileRow
+ *   GET /profiles/:player/history      → career rows off player_history (D3)
+ *   GET /profiles/:player/rivals       → most-shared co-entrants (D3)
  *   GET /treasury                      → TreasuryReport (D-A1 revised) —
  *                                        assembled from the raw event
  *                                        ledger (treasury-report.ts)
@@ -107,6 +112,9 @@ export async function handleRead(db: Queryable, path: string): Promise<ReadApiRe
     if (parts[2] === 'verify-record') {
       return verifyRecord(db, pool);
     }
+    if (parts[2] === 'sealed-entries') {
+      return sealedEntries(db, pool);
+    }
     return { status: 404, body: { error: 'not found' } };
   }
 
@@ -121,6 +129,47 @@ export async function handleRead(db: Queryable, path: string): Promise<ReadApiRe
     }
     if (parts[1] === 'entries') {
       return { status: 200, body: await historyEntriesDistribution(db) };
+    }
+    return { status: 404, body: { error: 'not found' } };
+  }
+
+  if (parts[0] === 'profiles' && parts.length === 3) {
+    const player = parts[1];
+    if (!B58.test(player)) return { status: 400, body: { error: 'bad player address' } };
+    // D3: the career record — one row per entry, oldest first, straight off
+    // player_history (rank labels deliberately absent; D3-B).
+    if (parts[2] === 'history') {
+      const res = await db.query(
+        `SELECT h.pool, p.id::text AS pool_id, h.tier, h.seat,
+                h.entries_to_date::text AS entries_to_date, h.paid,
+                h.amount_lamports::text AS amount_lamports,
+                h.pot_lamports::text AS pot_lamports,
+                p.state
+           FROM player_history h
+           LEFT JOIN pools p ON p.pool = h.pool
+          WHERE h.player = $1
+          ORDER BY h.entries_to_date ASC, h.pool ASC`,
+        [player]
+      );
+      return { status: 200, body: res.rows };
+    }
+    // D3: rivals — the wallets most often in the same pools. Public
+    // on-chain co-entry facts only; no ordering by who beat whom (rank
+    // labels are not indexed).
+    if (parts[2] === 'rivals') {
+      const res = await db.query(
+        `SELECT o.player,
+                COUNT(*)::text AS pools_shared,
+                SUM(CASE WHEN o.paid THEN 1 ELSE 0 END)::text AS paid_in_shared
+           FROM player_history me
+           JOIN player_history o ON o.pool = me.pool AND o.player <> me.player
+          WHERE me.player = $1
+          GROUP BY o.player
+          ORDER BY COUNT(*) DESC, o.player ASC
+          LIMIT 8`,
+        [player]
+      );
+      return { status: 200, body: res.rows };
     }
     return { status: 404, body: { error: 'not found' } };
   }
@@ -144,6 +193,36 @@ export async function handleRead(db: Queryable, path: string): Promise<ReadApiRe
   }
 
   return { status: 404, body: { error: 'not found' } };
+}
+
+/**
+ * D3: the sealed ciphertexts, seat-keyed and ANONYMISED (no player column),
+ * served ONLY once the pool's secret is on-chain. Before reveal this
+ * endpoint refuses — the sealing property (no early read) is enforced here
+ * exactly as everywhere else, even though a ciphertext without the secret
+ * is unreadable anyway. After reveal the same bytes are already public in
+ * substance: the published bundle carries every decrypted payload, so this
+ * adds a bundle-independent path for the what-beat-you view to decrypt and
+ * re-score in the browser with the revealed secret.
+ */
+async function sealedEntries(db: Queryable, pool: string): Promise<ReadApiResult> {
+  const state = await db.query('SELECT id, secret FROM pools WHERE pool = $1', [pool]);
+  if (state.rows.length === 0) return { status: 404, body: { error: 'not found' } };
+  const row = state.rows[0] as { id: unknown; secret: unknown };
+  if (row.secret === null || row.secret === undefined) {
+    // Fail closed: nothing sealed is served before the reveal.
+    return { status: 403, body: { error: 'pool secret not revealed' } };
+  }
+  const res = await db.query(
+    `SELECT e.idx AS seat, encode(s.ciphertext, 'hex') AS ciphertext_hex
+       FROM pools p
+       JOIN sealed_entries s ON s.pool_id = p.id
+       JOIN entries e ON e.pool = p.pool AND e.player = s.player
+      WHERE p.pool = $1
+      ORDER BY e.idx ASC`,
+    [pool]
+  );
+  return { status: 200, body: res.rows };
 }
 
 /**

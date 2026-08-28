@@ -79,6 +79,48 @@ export const COPY = {
     remainingPoints: 'Points to place',
     statNames: ['Strength', 'Speed', 'Heart', 'Wit', 'Durability'] as const,
   },
+  // v3 D3: retention surfaces — mastery and standing only. Factual state
+  // changes, never pressure; the do-not-build vocabulary is CI-enforced.
+  fixtures: {
+    title: 'Fixtures',
+    statusOpen: 'Taking entries',
+    statusSettling: 'Settling',
+    statusOpenable: 'Covered — opens next',
+    statusShort: 'Opens when the treasury covers it',
+    shortBy: (sol: string) => `${sol} SOL to go`,
+  },
+  notify: {
+    title: 'Notifications',
+    emptyTitle: 'Nothing yet',
+    empty:
+      'Updates about pools you have entered appear here: sealed, results committed, prizes paid, refunds open.',
+    emailLabel: 'Also email me these updates',
+    emailNote:
+      'Optional. Uses the email on your sign-in; your choice is recorded with your wallet signature and applies until you change it.',
+    emailSaved: 'Notification choice recorded',
+    emailFailed: 'Your choice could not be recorded. Check your connection and try again.',
+    sealed: (id: string) => `Pool #${id} sealed — battles are being revealed`,
+    scored: (id: string) => `Pool #${id}: results are committed`,
+    paid: (id: string) => `Pool #${id}: prizes are paid`,
+    refunding: (id: string) => `Pool #${id} did not fill — refunds are open`,
+  },
+  career: {
+    chartTitle: 'Prize record',
+    chartNote: 'Prize per tournament, in entry order. Paid finishes in amber.',
+    rivalsTitle: 'Rivals',
+    rivalsNote: 'The wallets most often in your pools — public co-entry facts only.',
+    sharedPools: (n: string) => `${n} pools together`,
+  },
+  beatYou: {
+    title: 'What finished above you',
+    note: 'Decrypted and re-scored in your browser from the revealed pool data. Seats only — no names.',
+    headToHead: (w: number, d: number, l: number) => `${w}W · ${d}D · ${l}L against you`,
+    unavailable:
+      'The sealed battles for this pool are not available to decrypt yet. The Verify page recomputes the full result from the published bundle.',
+  },
+  share: {
+    button: 'Share your result card',
+  },
   results: {
     paidAutomatically:
       'Prizes are paid automatically when results are committed. No claim step.',

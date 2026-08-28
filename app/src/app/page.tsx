@@ -22,16 +22,22 @@ import { Countdown } from '@/components/ui/countdown';
 import { ProgressRing } from '@/components/ui/progress-ring';
 
 export default async function PlayPage() {
-  const pools = await indexerApi().listPools();
+  const api = indexerApi();
+  const [pools, treasury] = await Promise.all([api.listPools(), api.getTreasury()]);
   const open = pools
     .filter((p) => p.state === 'Open')
     .sort((a, b) => a.tier - b.tier);
   const hero = open[0];
   const others = open.slice(1);
   const openTiers = new Set(open.map((p) => p.tier));
+  // v3 D3: the fixture list carries the treasury projection when the read
+  // API serves it — which locked tier is already covered and which is
+  // short, straight off the event-ledger report. Fixture mode (no
+  // indexer) falls back to the open/locked split alone.
   const lockedTiers = TIER_ENTRY_LAMPORTS.map((_, tier) => tier).filter(
     (tier) => !openTiers.has(tier)
   );
+  const tierStatus = new Map(treasury?.tiers.map((t) => [t.tier, t]) ?? []);
 
   return (
     <>
@@ -123,35 +129,64 @@ export default async function PlayPage() {
         {lockedTiers.length > 0 && (
           <section className="mt-8">
             <h2 className="mb-3 text-[12px] uppercase tracking-[0.14em] text-ink-muted">
-              Locked tiers
+              {COPY.fixtures.title}
             </h2>
             <ul className="flex flex-col gap-2">
-              {lockedTiers.map((tier) => (
-                <li
-                  key={tier}
-                  className="flex items-center gap-4 rounded-xl border border-line/60 px-4 py-3"
-                >
-                  <svg viewBox="0 0 24 24" className="h-4 w-4 text-ink-muted" aria-hidden>
-                    <path
-                      d="M7 10V8a5 5 0 0 1 10 0v2m-9 0h8a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2Z"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                  <span className="tnum font-display text-[15px] font-semibold text-ink-muted">
-                    {lamportsToSol(TIER_ENTRY_LAMPORTS[tier].toString())}
-                    <span className="ml-1 font-body text-[11px] font-medium">SOL</span>
-                  </span>
-                  <span className="tnum text-[13px] text-ink-muted">
-                    {lamportsToSol(TIER_POT_LAMPORTS[tier].toString())} SOL prize pool
-                  </span>
-                  <span className="ml-auto text-right text-[12px] text-ink-muted">
-                    {COPY.pool.lockedTier}
-                  </span>
-                </li>
-              ))}
+              {lockedTiers.map((tier) => {
+                const status = tierStatus.get(tier);
+                const label =
+                  status?.status === 'settling'
+                    ? COPY.fixtures.statusSettling
+                    : status?.status === 'openable'
+                      ? COPY.fixtures.statusOpenable
+                      : COPY.fixtures.statusShort;
+                const shortBy =
+                  status?.status === 'short' && BigInt(status.short_by_lamports) > 0n
+                    ? COPY.fixtures.shortBy(lamportsToSol(status.short_by_lamports))
+                    : null;
+                const covered = status?.status === 'openable' || status?.status === 'settling';
+                return (
+                  <li
+                    key={tier}
+                    className={
+                      'flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border px-4 py-3 ' +
+                      (covered ? 'border-brand/40' : 'border-line/60')
+                    }
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      className={'h-4 w-4 ' + (covered ? 'text-brand' : 'text-ink-muted')}
+                      aria-hidden
+                    >
+                      <path
+                        d="M7 10V8a5 5 0 0 1 10 0v2m-9 0h8a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2Z"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                    <span className="tnum font-display text-[15px] font-semibold text-ink-muted">
+                      {lamportsToSol(TIER_ENTRY_LAMPORTS[tier].toString())}
+                      <span className="ml-1 font-body text-[11px] font-medium">SOL</span>
+                    </span>
+                    <span className="tnum text-[13px] text-ink-muted">
+                      {lamportsToSol(TIER_POT_LAMPORTS[tier].toString())} SOL prize pool
+                    </span>
+                    <span
+                      className={
+                        'ml-auto text-right text-[12px] ' +
+                        (covered ? 'text-brand' : 'text-ink-muted')
+                      }
+                    >
+                      {label}
+                      {shortBy ? (
+                        <span className="tnum block text-[11px] text-ink-muted">{shortBy}</span>
+                      ) : null}
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
           </section>
         )}
