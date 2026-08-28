@@ -170,6 +170,25 @@ describe('corsHeadersFor', () => {
       );
     }
   });
+
+  it('a write surface widens methods and request headers IN CODE (the packet wiring)', () => {
+    const write = {
+      allowedOrigins: ['https://example.invalid'],
+      allowMethods: 'GET, POST, OPTIONS',
+      allowHeaders: 'content-type',
+    };
+    expect(corsHeadersFor('https://example.invalid', write)).to.deep.equal({
+      'Access-Control-Allow-Origin': 'https://example.invalid',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'content-type',
+      'Access-Control-Max-Age': '600',
+      Vary: 'Origin',
+    });
+    // The read default is unchanged: no headers field, no allow-headers emitted.
+    expect(corsHeadersFor('https://example.invalid', config)).to.not.have.property(
+      'Access-Control-Allow-Headers'
+    );
+  });
 });
 
 describe('isPreflight', () => {

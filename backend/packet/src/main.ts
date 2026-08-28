@@ -29,6 +29,7 @@
 import { randomBytes } from 'crypto';
 import { loadPostgresConfig } from '../../_shared/src/config';
 import { createPool } from '../../_shared/src/db';
+import { loadHygieneConfig } from '../../_shared/src/http-hygiene';
 import { PgCiphertextStore } from '../../sealing/src/store';
 import { serveEntryApi } from './server';
 import { LocalPacketSigner, type PacketSigner } from './packet';
@@ -110,6 +111,20 @@ export function main(env: NodeJS.ProcessEnv = process.env): void {
       ciphertexts: new PgCiphertextStore(db),
       notify: new PgNotifyPreferenceStore(db),
       trustProxyHeader: env.BLOTTO_TRUST_PROXY === '1',
+      // BR-005 posture from env (BLOTTO_API_CORS_ORIGINS etc.), widened in
+      // CODE to this service's browser-facing POST surface — which methods a
+      // surface accepts is a property of the code, never of a deployment.
+      hygiene: (() => {
+        const base = loadHygieneConfig(env);
+        return {
+          ...base,
+          cors: {
+            ...base.cors,
+            allowMethods: 'GET, POST, OPTIONS',
+            allowHeaders: 'content-type',
+          },
+        };
+      })(),
     },
     port
   );

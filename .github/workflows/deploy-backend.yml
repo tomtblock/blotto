@@ -1,0 +1,106 @@
+# Devnet backend deploy (founder-triggered): the indexer (read API + webhook
+# receiver) and the packet service onto Fly.io, Frankfurt, per
+# docs/hosting.md. Run it from the Actions tab ("Run workflow") — it is
+# never triggered by a push, because deploying is a decision, not a side
+# effect of merging.
+#
+# Requires two REPOSITORY SECRETS (Settings → Secrets and variables →
+# Actions), created by the founder per docs/deploy-backend.md:
+#   FLY_API_TOKEN        — a Fly.io deploy token
+#   BLOTTO_DATABASE_URL  — the managed Postgres connection string (EU region)
+#
+# Everything else is derived here:
+#   - BLOTTO_HELIUS_WEBHOOK_SECRET and ENTRY_SIGNER_SEED_HEX are generated
+#     ONCE (first run) and kept across runs — regenerating the entry-signer
+#     seed would silently change the signer's public key.
+#   - GEO_STUB_COUNTRY=GB: the DEV geo stub (no vendor is contracted yet —
+#     R2). Every lookup resolves as GB, so the territory gate passes for
+#     everyone; the real block-list bites once a geo vendor is configured.
+#     Devnet-only posture, recorded in docs/deploy-backend.md.
+#   - BLOTTO_API_CORS_ORIGINS names the app's production origin, exactly.
+#
+# The indexer image's `sync` entry runs migrations itself at boot, so there
+# is no separate migration job; deploy order (indexer first) guarantees the
+# tables exist before the packet service accepts traffic.
+
+name: deploy-backend
+
+on:
+  workflow_dispatch:
+
+concurrency: deploy-backend
+
+env:
+  FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+  INDEXER_APP: blotto-indexer
+  PACKET_APP: blotto-packet
+  APP_ORIGIN: https://blotto-jade.vercel.app
+  DEVNET_RPC: https://api.devnet.solana.com
+  PROGRAM_ID: 5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Check the two required secrets exist
+        run: |
+          missing=0
+          [ -z "${{ secrets.FLY_API_TOKEN }}" ] && echo "::error::FLY_API_TOKEN repository secret is not set — see docs/deploy-backend.md step 2" && missing=1
+          [ -z "${{ secrets.BLOTTO_DATABASE_URL }}" ] && echo "::error::BLOTTO_DATABASE_URL repository secret is not set — see docs/deploy-backend.md step 3" && missing=1
+          exit $missing
+
+      - name: Create the Fly apps (first run only)
+        run: |
+          flyctl apps create "$INDEXER_APP" || echo "$INDEXER_APP exists (or the name is taken — see docs/deploy-backend.md troubleshooting)"
+          flyctl apps create "$PACKET_APP" || echo "$PACKET_APP exists (or the name is taken — see docs/deploy-backend.md troubleshooting)"
+
+      - name: Stage indexer secrets
+        run: |
+          flyctl secrets set --app "$INDEXER_APP" --stage \
+            BLOTTO_DATABASE_URL="${{ secrets.BLOTTO_DATABASE_URL }}" \
+            BLOTTO_RPC_URL="$DEVNET_RPC" \
+            BLOTTO_PROGRAM_ID="$PROGRAM_ID" \
+            BLOTTO_API_CORS_ORIGINS="$APP_ORIGIN"
+          # Generate-once: the webhook receiver refuses to start without a
+          # secret (E6 fail-closed). Helius gets this value when the webhook
+          # is created (docs/hosting.md); until then nothing calls it.
+          if ! flyctl secrets list --app "$INDEXER_APP" | grep -q BLOTTO_HELIUS_WEBHOOK_SECRET; then
+            flyctl secrets set --app "$INDEXER_APP" --stage \
+              BLOTTO_HELIUS_WEBHOOK_SECRET="$(openssl rand -hex 32)"
+          fi
+
+      - name: Deploy indexer
+        run: flyctl deploy . --config deploy/fly/indexer.fly.toml --remote-only --yes
+
+      - name: Stage packet secrets
+        run: |
+          flyctl secrets set --app "$PACKET_APP" --stage \
+            BLOTTO_DATABASE_URL="${{ secrets.BLOTTO_DATABASE_URL }}" \
+            BLOTTO_API_CORS_ORIGINS="$APP_ORIGIN" \
+            GEO_STUB_COUNTRY="GB"
+          # Generate-once: regenerating would change the entry signer's
+          # public key mid-flight. Dev seed per docs/hosting.md; Turnkey
+          # replaces it at the credentialed rehearsal (C11).
+          if ! flyctl secrets list --app "$PACKET_APP" | grep -q ENTRY_SIGNER_SEED_HEX; then
+            flyctl secrets set --app "$PACKET_APP" --stage \
+              ENTRY_SIGNER_SEED_HEX="$(openssl rand -hex 32)"
+          fi
+
+      - name: Deploy packet service
+        run: flyctl deploy . --config deploy/fly/packet.fly.toml --remote-only --yes
+
+      - name: Smoke-check both services
+        run: |
+          sleep 10
+          for url in \
+            "https://$INDEXER_APP.fly.dev/health" \
+            "https://$PACKET_APP.fly.dev/health" \
+            "https://$PACKET_APP.fly.dev/geo"; do
+            echo "GET $url"
+            curl --fail --silent --show-error --max-time 20 "$url" && echo
+          done
+          echo "Backend is up. Next: set the two NEXT_PUBLIC_* URLs in Vercel (docs/deploy-backend.md step 6)."

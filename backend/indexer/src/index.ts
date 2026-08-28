@@ -14,6 +14,7 @@
  * Config (DB URL, RPC URL, program ID, commitment, webhook secret/port) comes from the loader —
  * nothing hard-coded. Ingest health reports through `Monitor` (logging default; Step 6 alerting).
  */
+import { loadHygieneConfig } from '../../_shared/src/http-hygiene';
 import { buildMonitor, loadMonitor, createPool, METRIC, type Monitor } from './shared';
 import { loadIndexerConfig, requireWebhookSecret } from './config';
 import { migrate } from './migrate';
@@ -59,7 +60,9 @@ async function cmdServe(monitor: Monitor): Promise<void> {
   });
   // E5: the public read API rides in the same process, its own port — the
   // app's NEXT_PUBLIC_INDEXER_URL points here.
-  serveReadApi(pool, config.readApiPort);
+  // BR-005: CORS/limits from env (BLOTTO_API_CORS_ORIGINS etc.) — the read
+  // surface keeps the module's GET-only default methods.
+  serveReadApi(pool, config.readApiPort, loadHygieneConfig(process.env));
   console.log(`${SERVICE}: read API listening on :${config.readApiPort}`);
 }
 

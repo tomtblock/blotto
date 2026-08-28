@@ -26,6 +26,11 @@
  */
 
 import { createServer, type IncomingMessage, type Server } from 'http';
+import {
+  RateLimiter,
+  applyHygiene,
+  type HygieneConfig,
+} from '../../_shared/src/http-hygiene';
 import type { CiphertextStore } from '../../sealing/src';
 import {
   GENERIC_REJECTION,
@@ -44,6 +49,15 @@ export interface EntryServerDeps {
    * without it answers /notify with 503 rather than pretending to record. */
   notify?: NotifyPreferenceStore;
   trustProxyHeader: boolean;
+  /**
+   * BR-005 hygiene (CORS / rate limit / security headers) for the socket
+   * layer. Optional so the offline route suites are unchanged; a deployment
+   * entry passes `loadHygieneConfig(env)` widened to the POST surface (see
+   * main.ts). Without it the server emits no CORS headers at all — a
+   * browser app on another origin then cannot reach this service, so every
+   * real deployment must configure `BLOTTO_API_CORS_ORIGINS`.
+   */
+  hygiene?: HygieneConfig;
   /**
    * TEST/DEV ONLY (D-B3 stub): when true, `x-geo-country` / `x-geo-region` /
    * `x-geo-vpn: 1` request headers override the geo lookup for that request.
@@ -210,7 +224,40 @@ function clientIp(req: IncomingMessage, trustProxy: boolean): string {
 }
 
 export function serveEntryApi(deps: EntryServerDeps, port: number): Server {
+  // BR-005 wiring: one hygiene decision per request, BEFORE the router. The
+  // previous hand-rolled `access-control-allow-origin: *` is gone — the
+  // allowlist (BLOTTO_API_CORS_ORIGINS) is the one CORS mechanism, and it
+  // covers every response shape (JSON, 204, and the 500 catch) plus the
+  // browser preflight the POST surface needs.
+  const hygiene: HygieneConfig = deps.hygiene ?? {
+    rateLimit: { enabled: false, requestsPerMinute: 1, burst: 1, retryAfterSeconds: 1 },
+    cors: { allowedOrigins: [] },
+    securityHeadersEnabled: false,
+  };
+  const limiter = new RateLimiter(hygiene.rateLimit);
   const server = createServer(async (req, res) => {
+    const outcome = applyHygiene(
+      {
+        method: req.method,
+        forwardedFor: deps.trustProxyHeader ? req.headers['x-forwarded-for'] : undefined,
+        remoteAddress: req.socket.remoteAddress ?? undefined,
+        origin: req.headers.origin,
+      },
+      hygiene,
+      limiter
+    );
+    if (outcome.kind === 'preflight') {
+      res.writeHead(outcome.status, outcome.headers).end();
+      return;
+    }
+    if (outcome.kind === 'rate_limited') {
+      res
+        .writeHead(outcome.status, { 'content-type': 'application/json', ...outcome.headers })
+        .end(JSON.stringify(outcome.body));
+      return;
+    }
+    const baseHeaders = outcome.headers;
+
     let raw = '';
     req.on('data', (c) => {
       raw += c;
@@ -232,13 +279,15 @@ export function serveEntryApi(deps: EntryServerDeps, port: number): Server {
           clientIp(req, deps.trustProxyHeader),
           req.headers
         );
-        if (out === null) res.writeHead(status).end();
+        if (out === null) res.writeHead(status, baseHeaders).end();
         else
           res
-            .writeHead(status, { 'content-type': 'application/json', 'access-control-allow-origin': '*' })
+            .writeHead(status, { 'content-type': 'application/json', ...baseHeaders })
             .end(JSON.stringify(out));
       } catch {
-        res.writeHead(500, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'internal' }));
+        res
+          .writeHead(500, { 'content-type': 'application/json', ...baseHeaders })
+          .end(JSON.stringify({ error: 'internal' }));
       }
     });
   });

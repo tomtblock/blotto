@@ -36,6 +36,11 @@ each image carries the whole backend tree plus `config/`).
 
 ## Fly.io (production shape)
 
+The founder-facing, no-terminal version of this section is
+`docs/deploy-backend.md` + the `deploy-backend` GitHub Action (indexer +
+packet, secrets from the repository's Actions secrets, dev stubs per that
+runbook's small print).
+
 One Fly app per service, all `primary_region = "fra"` (Frankfurt):
 
 ```bash

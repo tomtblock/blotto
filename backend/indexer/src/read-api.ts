@@ -34,6 +34,11 @@
  */
 
 import { createServer, type Server } from 'http';
+import {
+  RateLimiter,
+  applyHygiene,
+  type HygieneConfig,
+} from '../../_shared/src/http-hygiene';
 import type { Queryable } from './shared';
 import { treasuryReport } from './treasury-report';
 import {
@@ -297,11 +302,47 @@ async function verifyRecord(db: Queryable, pool: string): Promise<ReadApiResult>
   };
 }
 
-/** The thin HTTP wrapper. GET-only; everything else is 405. */
-export function serveReadApi(db: Queryable, port: number): Server {
+/** The thin HTTP wrapper. GET-only; everything else is 405.
+ *
+ * BR-005 wiring (2026-08-28): the hand-rolled `access-control-allow-origin:
+ * *` is replaced by the shared hygiene layer — `BLOTTO_API_CORS_ORIGINS`
+ * is the one CORS mechanism, exact-match origins only. Unconfigured means
+ * NO CORS headers: a browser on another origin (the verify page's
+ * auto-fetch) cannot read this API until the deployment names its origin. */
+export function serveReadApi(
+  db: Queryable,
+  port: number,
+  hygieneConfig?: HygieneConfig
+): Server {
+  const hygiene: HygieneConfig = hygieneConfig ?? {
+    rateLimit: { enabled: false, requestsPerMinute: 1, burst: 1, retryAfterSeconds: 1 },
+    cors: { allowedOrigins: [] },
+    securityHeadersEnabled: false,
+  };
+  const limiter = new RateLimiter(hygiene.rateLimit);
   const server = createServer(async (req, res) => {
+    const outcome = applyHygiene(
+      {
+        method: req.method,
+        forwardedFor: req.headers['x-forwarded-for'],
+        remoteAddress: req.socket.remoteAddress ?? undefined,
+        origin: req.headers.origin,
+      },
+      hygiene,
+      limiter
+    );
+    if (outcome.kind === 'preflight') {
+      res.writeHead(outcome.status, outcome.headers).end();
+      return;
+    }
+    if (outcome.kind === 'rate_limited') {
+      res
+        .writeHead(outcome.status, { 'content-type': 'application/json', ...outcome.headers })
+        .end(JSON.stringify(outcome.body));
+      return;
+    }
     if (req.method !== 'GET') {
-      res.writeHead(405).end();
+      res.writeHead(405, outcome.headers).end();
       return;
     }
     try {
@@ -309,13 +350,13 @@ export function serveReadApi(db: Queryable, port: number): Server {
       res
         .writeHead(status, {
           'content-type': 'application/json',
-          'access-control-allow-origin': '*',
+          ...outcome.headers,
         })
         .end(JSON.stringify(body));
     } catch (e) {
-      res.writeHead(500, { 'content-type': 'application/json' }).end(
-        JSON.stringify({ error: 'internal' })
-      );
+      res
+        .writeHead(500, { 'content-type': 'application/json', ...outcome.headers })
+        .end(JSON.stringify({ error: 'internal' }));
       void e;
     }
   });
