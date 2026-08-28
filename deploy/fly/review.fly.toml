@@ -1,0 +1,26 @@
+# Fly.io app config for the review service (E5). Frankfurt per TECH-ARCH §11
+# (EU region, never US). Deploy from the repo root:
+#   fly deploy --config deploy/fly/review.fly.toml
+# Secrets (fly secrets set ...): see docs/hosting.md — never in this file.
+app = "blotto-review"
+primary_region = "fra"
+
+[build]
+  dockerfile = "../docker/Dockerfile.review"
+
+[env]
+  BLOTTO_REVIEW_PORT = "8083"
+
+[http_service]
+  internal_port = 8083
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[http_service.checks]]
+  interval = "15s"
+  timeout = "5s"
+  grace_period = "30s"
+  method = "GET"
+  path = "/health"

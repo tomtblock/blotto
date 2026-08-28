@@ -72,6 +72,11 @@ function poolRow(r: Record<string, unknown>): Json {
 export async function handleRead(db: Queryable, path: string): Promise<ReadApiResult> {
   const parts = path.replace(/\/+$/, '').split('/').filter(Boolean);
 
+  // E5: the deployment liveness probe.
+  if (parts[0] === 'health' && parts.length === 1) {
+    return { status: 200, body: { ok: true, service: 'indexer-read-api' } };
+  }
+
   if (parts[0] === 'pools' && parts.length === 1) {
     const res = await db.query('SELECT * FROM pools ORDER BY id DESC LIMIT 100');
     return { status: 200, body: res.rows.map(poolRow) };

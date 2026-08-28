@@ -26,6 +26,7 @@ export const INDEXER_ENV = {
   programId: 'BLOTTO_PROGRAM_ID',
   commitment: 'BLOTTO_INDEXER_COMMITMENT',
   port: 'BLOTTO_INDEXER_PORT',
+  readApiPort: 'BLOTTO_READ_API_PORT',
 } as const;
 
 /** Commitment the indexer ingests at. Default `finalized` — see the README reorg note. */
@@ -37,6 +38,8 @@ export interface IndexerConfig {
   programId: string;
   commitment: Commitment;
   webhookPort: number;
+  /** E5: the public read API's port (`serve` runs both servers). */
+  readApiPort: number;
 }
 
 function parseCommitment(raw: string): Commitment {
@@ -57,6 +60,7 @@ export function loadIndexerConfig(
     programId: optional(env, INDEXER_ENV.programId, DEFAULT_PROGRAM_ID),
     commitment: parseCommitment(optional(env, INDEXER_ENV.commitment, 'finalized')),
     webhookPort: parsePositiveInt(env, INDEXER_ENV.port, 8080),
+    readApiPort: parsePositiveInt(env, INDEXER_ENV.readApiPort, 8081),
   };
 }
 

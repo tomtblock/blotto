@@ -125,6 +125,13 @@ export function createWebhookServer(deps: WebhookDeps): Server {
     if (serveMetricsIfPrometheus(deps.monitor, req, res)) {
       return;
     }
+    // E5: the deployment liveness probe.
+    if (req.method === 'GET' && req.url === '/health') {
+      res
+        .writeHead(200, { 'Content-Type': 'application/json' })
+        .end(JSON.stringify({ ok: true, service: 'indexer-webhook' }));
+      return;
+    }
     if (req.method !== 'POST') {
       res.writeHead(404).end();
       return;

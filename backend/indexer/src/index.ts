@@ -19,6 +19,7 @@ import { loadIndexerConfig, requireWebhookSecret } from './config';
 import { migrate } from './migrate';
 import { PgEventStore } from './store-pg';
 import { createWebhookServer } from './webhook';
+import { serveReadApi } from './read-api';
 import { runBackfill, Web3BackfillRpc } from './backfill';
 
 const SERVICE = 'indexer';
@@ -56,6 +57,10 @@ async function cmdServe(monitor: Monitor): Promise<void> {
       `${SERVICE}: webhook listening on :${config.webhookPort} (commitment=${config.commitment})`
     );
   });
+  // E5: the public read API rides in the same process, its own port — the
+  // app's NEXT_PUBLIC_INDEXER_URL points here.
+  serveReadApi(pool, config.readApiPort);
+  console.log(`${SERVICE}: read API listening on :${config.readApiPort}`);
 }
 
 async function cmdBackfill(monitor: Monitor): Promise<void> {

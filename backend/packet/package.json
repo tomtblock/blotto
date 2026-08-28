@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@turnkey/sdk-server": "^8.2.1",
     "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
