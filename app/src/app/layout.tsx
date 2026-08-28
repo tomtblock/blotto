@@ -1,12 +1,20 @@
 import type { Metadata, Viewport } from "next";
-import { JetBrains_Mono, Space_Grotesk, Unbounded } from "next/font/google";
+import { Big_Shoulders, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import { AuthProvider } from "@/wallet/auth-provider";
 import { QueryProvider } from "@/query/query-provider";
 import "./globals.css";
 
-const unbounded = Unbounded({
-  variable: "--font-unbounded",
+// The display face (D1): Big Shoulders — a condensed athletic family built
+// for scoreboards and stadium signage, which is exactly what prize amounts,
+// ranks and countdowns are. Weighted heavy; used with restraint.
+const bigShoulders = Big_Shoulders({
+  variable: "--font-big-shoulders",
   subsets: ["latin"],
+  weight: ["600", "700", "800"],
+  // next/font has no fallback metrics for this family (build warns and skips
+  // the generated fallback), so pin an explicit condensed-ish stack instead.
+  adjustFontFallback: false,
+  fallback: ["Arial Narrow", "Arial", "sans-serif"],
 });
 
 const spaceGrotesk = Space_Grotesk({
@@ -31,7 +39,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   // Literal required here (meta tag config, not component styling);
   // keep in sync with --color-base in src/styles/tokens.css.
-  themeColor: "#0A0A0F",
+  themeColor: "#070B14",
 };
 
 // Typed explicitly rather than with Next's generated `LayoutProps` global: that
@@ -45,7 +53,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${unbounded.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      className={`${bigShoulders.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         <AuthProvider>

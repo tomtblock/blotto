@@ -1,82 +1,159 @@
 /*
- * Design tokens — SINGLE SOURCE OF TRUTH.
+ * Design tokens — the CSS face of `src/design/tokens.ts` (D1, master
+ * prompt v3). tokens.ts is canonical; `src/design/tokens.test.ts` asserts
+ * every value here matches it, so neither file can drift alone.
  *
- * Carried from the predecessor repository. The VALUES are that product's and
- * were approved for it, not for this one: treat every hue here as a placeholder
- * until the Phase 3 design pass. What IS worth carrying is the reservation
- * discipline below — a token with a reserved meaning cannot be borrowed for
- * decoration, so a colour a player learns to read never lies to them.
+ * Direction (D-UI-1): a competition arena at night — deep navy-black base,
+ * ONE electric accent for action (floodlight blue), ONE warm accent for
+ * prize and celebration (molten amber). Dark is the only mode.
  *
  * Reservation rules — structural, not advisory:
- *   - price-up / price-down  → functional semantics ONLY (win/loss, gain/loss).
- *     Never decorative, never brand.
- *   - rarity-gold*           → the top class's moments ONLY.
- *   - class-0..class-4       → the five cosmetic character classes (PID §3),
- *     intensifying with the ladder. A class confers nothing (PID §8.4), so
- *     these are art direction and never a signal of advantage.
+ *   - price-up / price-down → win/loss semantics ONLY. Never decorative.
+ *   - prize / prize-hot     → prize amounts and celebration moments ONLY.
+ *   - rarity-gold*          → the top class's art moments ONLY (prize
+ *     amber ≠ class gold — neither may impersonate the other).
+ *   - class-0..class-4      → the five cosmetic classes (PID §3); art
+ *     direction, never a signal of advantage (PID §8.4). Hues are
+ *     founder-owned placeholders (PID D2).
  *
- * Components consume these through Tailwind's semantic utilities
- * (bg-raised, text-price-up, bg-class-3, text-rarity-gold, …) or
- * var(--color-*) references. Raw hex values must not appear in components —
- * this file is the only place a hex literal is allowed.
+ * Components consume tokens through Tailwind's semantic utilities
+ * (bg-raised, text-prize, border-line, animate-reveal, …) or var(--color-*)
+ * references. Raw hex values must not appear in components — tokens.ts and
+ * this mirror are the only places a hex literal is allowed.
  */
 
-/* `static` forces every token to emit as a CSS custom property even before a
- * utility references it — swatch readback and var(--color-*) styling depend
- * on all tokens existing at runtime. */
+/* `static` forces every token to emit as a CSS custom property even before
+ * a utility references it — swatch readback and var(--color-*) styling
+ * depend on all tokens existing at runtime. */
 @theme static {
-  /* Base surfaces — dark mode is the only mode. */
-  --color-base: #0a0a0f;
-  --color-raised: #12121a;
-  --color-overlay: #1a1a26;
+  /* Surfaces — the arena at night. */
+  --color-base: #070b14;
+  --color-raised: #0d1420;
+  --color-overlay: #131c2e;
+  --color-line: #1d2942;
 
   /* Text. */
-  --color-ink: #f2f2f7;
-  --color-ink-muted: #8e8e9e;
+  --color-ink: #edf2fb;
+  --color-ink-muted: #7e8aa3;
 
-  /* Brand — electric violet/magenta family. */
-  --color-brand: #b026ff;
-  --color-brand-hot: #e040fb;
-  --color-brand-deep: #7b1fa2;
+  /* THE action accent — stadium floodlight blue. */
+  --color-brand: #3d8bff;
+  --color-brand-hot: #66b2ff;
+  --color-brand-deep: #1f5fcc;
+
+  /* THE celebration accent — molten amber. Prize amounts only. */
+  --color-prize: #ffaa33;
+  --color-prize-hot: #ffc96b;
 
   /* RESERVED functional semantics — never decorative. */
   --color-price-up: #16c784;
   --color-price-down: #ea3943;
 
-  /* RESERVED for rarity moments only. */
+  /* RESERVED for the top class's art moments only. */
   --color-rarity-gold: #ffd24a;
   --color-rarity-gold-hot: #ffb300;
 
-  /* Class ladder, class-0 → class-5. class-5 intentionally equals rarity-gold. */
-  /* Five cosmetic character classes: Goblin, Knight, Wizard, Dragon, Titan
-     (PID §3). The predecessor's ladder had six rarity tiers; the top value —
-     its gold — is carried onto Titan, and the sixth is dropped.
-
-     PHASE-0-REVIEW: these are the predecessor's hues, remapped by position.
-     Class names and art direction are founder-owned and unratified (PID D2), so
-     treat every value here as a placeholder. */
+  /* Class ladder placeholders (founder-owned, PID D2). */
   --color-class-0: #9e9ea7;
   --color-class-1: #7c8db5;
   --color-class-2: #a855f7;
   --color-class-3: #f472b6;
   --color-class-4: #ffd24a;
 
-  /* An attention accent, unreserved. */
-  --color-heat: #ff6d00;
-
   /* Motion easings (exposed as Tailwind ease-* utilities). */
-  --ease-juice: cubic-bezier(0.34, 1.56, 0.64, 1); /* overshoot — reveals, pulses */
-  --ease-snap: cubic-bezier(0.22, 1, 0.36, 1); /* fast-out — shakes, ticks */
+  --ease-juice: cubic-bezier(0.34, 1.56, 0.64, 1); /* overshoot — celebration only */
+  --ease-snap: cubic-bezier(0.22, 1, 0.36, 1); /* fast-out — state changes */
+  --ease-glide: cubic-bezier(0.4, 0, 0.2, 1); /* even — long reveals */
+
+  /* The named motion vocabulary (D1) as animate-* utilities. Motion
+   * celebrates outcomes; it never nags — nothing here loops. */
+  --animate-reveal: reveal 700ms var(--ease-juice) both;
+  --animate-settle: settle 450ms var(--ease-snap) both;
+  --animate-pulse-once: pulse-once 600ms var(--ease-juice) 1;
+  --animate-rise: rise 350ms var(--ease-glide) both;
 }
 
 :root {
-  /* Motion durations — the juice language is screen-shake/pulse/flash (D-04). */
-  --duration-pulse-fast: 600ms;
-  --duration-shake: 300ms;
-  --duration-flash: 150ms;
+  /* Motion durations, mirrored from tokens.ts. */
+  --duration-reveal: 700ms;
+  --duration-settle: 450ms;
+  --duration-pulse-once: 600ms;
+  --duration-rise: 350ms;
+
+  /* Elevation recipes — depth for neutrals; glow belongs to the accents. */
+  --elevation-card:
+    0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 8px 24px rgba(0, 0, 0, 0.45);
+  --elevation-sheet: 0 -12px 48px rgba(0, 0, 0, 0.6);
+  --glow-action: 0 0 24px rgba(61, 139, 255, 0.35);
+  --glow-prize: 0 0 32px rgba(255, 170, 51, 0.3);
 }
 
-/* --- Motion vocabulary ------------------------------------------------- */
+/* Numbers are ALWAYS tabular (D1): every numeric readout uses this. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- The motion vocabulary --------------------------------------------- */
+
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes settle {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-once {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* The signature light sweep — reveal/celebration surfaces ONLY (the
+ * fixture card's live state and the staged reveal). Never on buttons,
+ * never ambient. */
+@keyframes light-sweep {
+  from {
+    transform: translateX(-120%) skewX(-18deg);
+  }
+  to {
+    transform: translateX(240%) skewX(-18deg);
+  }
+}
+
+/* --- Legacy motion (pre-D1 reveal theatre; the reveal stage still uses
+ * these — they migrate to the vocabulary above in D2). ------------------ */
 
 @keyframes token-pulse {
   0% {
@@ -137,6 +214,12 @@
   }
 }
 
+:root {
+  --duration-pulse-fast: 600ms;
+  --duration-shake: 300ms;
+  --duration-flash: 150ms;
+}
+
 .motion-pulse {
   animation: token-pulse var(--duration-pulse-fast) var(--ease-juice);
 }
@@ -153,11 +236,14 @@
   animation: aura-breathe 2.4s ease-in-out infinite alternate;
 }
 
+/* Reduced motion collapses EVERYTHING — the vocabulary, the legacy
+ * classes, and any component-local animation (D1 quality floor). */
 @media (prefers-reduced-motion: reduce) {
-  .motion-pulse,
-  .motion-shake,
-  .motion-flash,
-  .aura-breathe {
-    animation: none;
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

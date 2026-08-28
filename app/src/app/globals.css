@@ -3,7 +3,7 @@
 
 /* Font roles — variables set by next/font in the root layout. */
 @theme inline {
-  --font-display: var(--font-unbounded);
+  --font-display: var(--font-big-shoulders);
   --font-body: var(--font-space-grotesk);
   --font-mono: var(--font-jetbrains-mono);
 }
