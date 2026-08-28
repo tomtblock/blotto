@@ -73,3 +73,23 @@ export function indexerApi(): IndexerApi {
   const base = process.env.NEXT_PUBLIC_INDEXER_URL;
   return base ? new HttpIndexerApi(base) : FIXTURE_API;
 }
+
+/**
+ * The SSR outage guard (production incident, 2026-08-28: the indexer went
+ * down and every server-rendered page died to the framework's blank
+ * "server error" screen). A page must DEGRADE when a backend read fails —
+ * render an honest "live data unavailable" state — never crash. The
+ * discriminated result keeps "the indexer says empty" distinct from "the
+ * indexer is unreachable": conflating them would show "no tournament is
+ * open" while the truth is "we cannot know right now".
+ */
+export type Live<T> = { ok: true; value: T } | { ok: false };
+
+export async function live<T>(read: () => Promise<T>): Promise<Live<T>> {
+  try {
+    return { ok: true, value: await read() };
+  } catch (error) {
+    console.error('indexer read failed (page degrades):', error);
+    return { ok: false };
+  }
+}

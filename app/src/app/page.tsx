@@ -12,7 +12,8 @@
 import Link from 'next/link';
 import { TIER_ENTRY_LAMPORTS, TIER_POT_LAMPORTS } from '@blotto/scoring';
 import { COPY } from '@/copy';
-import { indexerApi } from '@/data/api';
+import { indexerApi, live } from '@/data/api';
+import { LiveDataUnavailable } from '@/components/shell/live-unavailable';
 import { lamportsToSol } from '@/data/format';
 import { AppHeader } from '@/components/shell/app-header';
 import { TabBar } from '@/components/shell/tab-bar';
@@ -24,7 +25,13 @@ import { HeroPentagon } from '@/components/home/hero-pentagon';
 
 export default async function PlayPage() {
   const api = indexerApi();
-  const [pools, treasury] = await Promise.all([api.listPools(), api.getTreasury()]);
+  // SSR outage guard: a dead indexer degrades this page, never kills it.
+  const [poolsLive, treasuryLive] = await Promise.all([
+    live(() => api.listPools()),
+    live(() => api.getTreasury()),
+  ]);
+  const pools = poolsLive.ok ? poolsLive.value : [];
+  const treasury = treasuryLive.ok ? treasuryLive.value : null;
   const open = pools
     .filter((p) => p.state === 'Open')
     .sort((a, b) => a.tier - b.tier);
@@ -48,7 +55,9 @@ export default async function PlayPage() {
           {COPY.shell.tagline}
         </h1>
 
-        {hero ? (
+        {!poolsLive.ok ? (
+          <LiveDataUnavailable />
+        ) : hero ? (
           <Card live className="p-5">
             <div className="flex items-center gap-5">
               <ProgressRing
@@ -170,7 +179,7 @@ export default async function PlayPage() {
           </p>
         </section>
 
-        {lockedTiers.length > 0 && (
+        {poolsLive.ok && lockedTiers.length > 0 && (
           <section className="mt-8">
             <h2 className="mb-3 text-[12px] uppercase tracking-[0.14em] text-ink-muted">
               {COPY.fixtures.title}

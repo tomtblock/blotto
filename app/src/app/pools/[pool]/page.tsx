@@ -7,10 +7,11 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { COPY } from '@/copy';
-import { indexerApi } from '@/data/api';
+import { indexerApi, live } from '@/data/api';
 import { lamportsToSol, prizeForRank } from '@/data/format';
 import { AppHeader } from '@/components/shell/app-header';
 import { TabBar } from '@/components/shell/tab-bar';
+import { LiveDataUnavailable } from '@/components/shell/live-unavailable';
 import { Card } from '@/components/ui/card';
 import { Stat } from '@/components/ui/stat';
 import { ProgressRing } from '@/components/ui/progress-ring';
@@ -28,7 +29,20 @@ const BANDS = [
 
 export default async function PoolPage({ params }: { params: Promise<{ pool: string }> }) {
   const { pool: poolId } = await params;
-  const pool = await indexerApi().getPool(poolId);
+  // SSR outage guard: unreachable indexer ≠ nonexistent pool.
+  const poolLive = await live(() => indexerApi().getPool(poolId));
+  if (!poolLive.ok) {
+    return (
+      <>
+        <AppHeader />
+        <main className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 pb-24">
+          <LiveDataUnavailable />
+        </main>
+        <TabBar />
+      </>
+    );
+  }
+  const pool = poolLive.value;
   if (!pool) notFound();
   const open = pool.state === 'Open';
 

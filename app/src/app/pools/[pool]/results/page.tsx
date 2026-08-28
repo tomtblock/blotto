@@ -6,11 +6,12 @@
  */
 import { notFound } from 'next/navigation';
 import { COPY } from '@/copy';
-import { indexerApi } from '@/data/api';
+import { indexerApi, live } from '@/data/api';
 import { lamportsToSol } from '@/data/format';
 import { AppHeader } from '@/components/shell/app-header';
 import { TabBar } from '@/components/shell/tab-bar';
 import { Card } from '@/components/ui/card';
+import { LiveDataUnavailable } from '@/components/shell/live-unavailable';
 import { ResultsReveal, VerifyAlways, type RevealRow } from './results-reveal';
 import { WhatBeatYouPanel } from './what-beat-you-panel';
 import { ShareResult } from './share-result';
@@ -18,13 +19,30 @@ import { ShareResult } from './share-result';
 export default async function ResultsPage({ params }: { params: Promise<{ pool: string }> }) {
   const { pool: poolId } = await params;
   const api = indexerApi();
-  const pool = await api.getPool(poolId);
-  if (!pool) notFound();
-  const [results, payouts, entries] = await Promise.all([
-    api.getResults(poolId),
-    api.getPayouts(poolId),
-    api.getEntries(poolId),
-  ]);
+  // SSR outage guard: unreachable indexer ≠ nonexistent pool or results.
+  const pageLive = await live(async () => {
+    const pool = await api.getPool(poolId);
+    if (!pool) return null;
+    const [results, payouts, entries] = await Promise.all([
+      api.getResults(poolId),
+      api.getPayouts(poolId),
+      api.getEntries(poolId),
+    ]);
+    return { pool, results, payouts, entries };
+  });
+  if (!pageLive.ok) {
+    return (
+      <>
+        <AppHeader />
+        <main className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 pb-24">
+          <LiveDataUnavailable />
+        </main>
+        <TabBar />
+      </>
+    );
+  }
+  if (!pageLive.value) notFound();
+  const { pool, results, payouts, entries } = pageLive.value;
   // D3-B: the committed list is keyed by seat; a tie group's members split
   // the combined prize, so the paid set can exceed 16 rows. Rank labels are
   // not on-chain — the verify page recomputes them from the published data.
