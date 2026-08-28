@@ -69,7 +69,7 @@ engine).
 | Fact | Value | Source |
 |---|---|---|
 | Age | 18+ self-attestation clickwrap, versioned, signed by the wallet's key and stored; packet issuance requires a record at the **current** terms version | D-B4; `backend/packet/src/attestations.ts` |
-| Territory | allow-list from founder-owned `config/territories.json`; **fail-closed at every edge** — no configured geo service, a lookup failure, or an undetermined location all refuse entry | D-B3; `backend/packet/src/territories.ts`, `service.ts`, `app/src/entry/geo-gate.ts` |
+| Territory | founder-owned schedule in `config/territories.json` — block-list posture since 2026-08-28 (available everywhere except Belgium and Australia); **fail-closed at every edge** — no configured geo service, a lookup failure, or an undetermined location all refuse entry, whatever the posture | D-B3 + founder instruction 2026-08-28; `backend/packet/src/territories.ts`, `service.ts`, `app/src/entry/geo-gate.ts` |
 | KYC | a KYC-at-claim switch exists and is **OFF** at launch (threshold 0) | R3; `set_kyc_threshold` |
 | Fairness detection | five published signals over post-reveal data; a flag needs two independent signals, except two conclusive cases (byte-identical battle sets; two entries from one device); a flag only routes the share to signed human review — release to the entrant or forfeit, nothing else | R11; `backend/detection/src/signals.ts`, `pipeline.ts`; review process in `backend/detection/src/review.ts` |
 | Review audit trail | append-only log (no update, no delete, no replaceable key), every decision signed by a registry-listed reviewer | `backend/detection/src/log-pg.ts`, `auth.ts` |

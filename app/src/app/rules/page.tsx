@@ -110,15 +110,26 @@ export default function RulesPage() {
             )}
             {s.kind === 'availability' && (
               <div className="mt-2 text-[15px] leading-6 text-ink-muted">
-                <ul className="list-disc pl-5">
-                  {s.data.allowed.map((name) => (
-                    <li key={name}>{name}</li>
-                  ))}
-                </ul>
-                {s.data.blocked.length > 0 && (
-                  <p className="mt-2">
-                    {COPY.rules.availabilityBlocked} {s.data.blocked.join(', ')}
-                  </p>
+                {s.data.posture === 'block-list' ? (
+                  // Block-list posture: the blocked territories ARE the list.
+                  <ul className="list-disc pl-5">
+                    {s.data.blocked.map((name) => (
+                      <li key={name}>{name}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <>
+                    <ul className="list-disc pl-5">
+                      {s.data.allowed.map((name) => (
+                        <li key={name}>{name}</li>
+                      ))}
+                    </ul>
+                    {s.data.blocked.length > 0 && (
+                      <p className="mt-2">
+                        {COPY.rules.availabilityBlocked} {s.data.blocked.join(', ')}
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
             )}

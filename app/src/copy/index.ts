@@ -23,6 +23,22 @@ export const COPY = {
       'Top sixteen are paid from a fixed prize pool, and every result is recomputable from published data.',
     tabs: { play: 'Play', pools: 'Pools', profile: 'Profile' },
   },
+  signin: {
+    title: 'Sign in',
+    subtitle:
+      'Sign in with an account and a wallet is created for you, or connect a Solana wallet you already use.',
+    google: 'Continue with Google',
+    apple: 'Continue with Apple',
+    twitter: 'Continue with X',
+    walletDivider: 'or',
+    wallet: 'Connect a wallet',
+    // Rendered only in builds without sign-in credentials (previews, local
+    // dev) — the buttons would silently do nothing otherwise.
+    unavailable:
+      'Sign-in is not configured in this preview build. The buttons below are inactive.',
+    signedInAs: 'Signed in as',
+    continueLink: 'Go to the arena',
+  },
   gate: {
     ageAttestation:
       'I confirm I am 18 or older and that entering a paid tournament for prizes is lawful where I live.',
@@ -56,13 +72,55 @@ export const COPY = {
     sealed:
       'Battles are encrypted to a key nobody holds until the pool closes, and their hash is recorded on-chain at entry.',
     enter: 'Enter this tournament',
-    ageTerritoryNote: '18+ only · available in listed territories',
+    ageTerritoryNote: '18+ only · not available in some territories',
     lockedTier: 'Opens when the treasury covers it',
     noOpenPool: 'No tournament is open for entries right now.',
     noOpenPoolDetail:
       'A tier opens the moment the prize treasury holds its full prize pool and the previous tournament in that tier has paid out.',
     refundRule:
       'If the pool does not reach 64 entries within 72 hours, every entry is refunded in full — including the platform share.',
+    // Per-tier lobby (the old handover's §5A remainder, closed 2026-08-28).
+    tierEntry: (sol: string) => `${sol} SOL entry`,
+    tierPot: (sol: string) => `${sol} SOL prize pool`,
+    tierFirst: (sol: string) => `1st place ${sol} SOL`,
+    tierTableLink: 'Full prize tables',
+  },
+  // The landing page's game explainer (founder ask 2026-08-28). Substance
+  // must match the rules tab and PRODUCT-FACTS; wording is founder-voiced
+  // like all copy — re-voicing rights reserved.
+  howItWorks: {
+    title: 'How it works',
+    pentagonCaption:
+      'Five stats. One hundred points. Where you put them is the whole game.',
+    steps: [
+      {
+        title: 'Take a seat',
+        body:
+          'Pick an open pool and pay the entry — sixty-four players per pool. Your character pass is cosmetic art: its look never affects scoring or prizes.',
+      },
+      {
+        title: 'Set seven battles',
+        body:
+          'For each battle, split exactly 100 points across Strength, Speed, Heart, Wit and Durability — fifteen seconds per screen. Your battles are encrypted on your device before you pay; nobody can read them until the pool closes.',
+      },
+      {
+        title: 'Everyone fights everyone',
+        body:
+          'When all sixty-four seats fill, entries are revealed. Your battle one faces every other player’s battle one, and so on through seven. A battle is won by taking three of the five stats.',
+      },
+      {
+        title: 'Top sixteen are paid',
+        body:
+          'Ranking is by battles won. The top sixteen are paid automatically from a fixed prize pool that is funded before entries open.',
+      },
+      {
+        title: 'Check the math yourself',
+        body:
+          'Everything needed to recompute every score and every payment is published. The Verify page re-runs the whole thing in your browser.',
+      },
+    ],
+    rulesLink: 'Read the full rules',
+    verifyLink: 'Verify a result',
   },
   battle: {
     screenOf: (k: number) => `Battle ${k} of 7`,
@@ -258,6 +316,10 @@ export const COPY = {
     verifyLink: 'Open the Verify page',
     availabilityIntro:
       'Blotto Cup is available only in the territories below. Where the service cannot determine your location, entry is not available.',
+    // Founder posture 2026-08-28: block-list — everywhere except the listed
+    // territories. The fail-closed sentence stays in both variants.
+    availabilityIntroBlockList:
+      'Blotto Cup is available everywhere except the territories listed below. Where the service cannot determine your location, entry is not available.',
     availabilityBlocked: 'Explicitly unavailable:',
     age:
       'Blotto Cup is for adults 18 and older. Entering requires a signed confirmation of age and acceptance of the terms, recorded per wallet and per terms version.',

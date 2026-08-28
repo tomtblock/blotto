@@ -80,9 +80,11 @@ describe('rulesSections', () => {
 });
 
 describe('availability', () => {
-  it('renders from config/territories.json, names mapped', () => {
+  it('renders from config/territories.json, names mapped (block-list posture, 2026-08-28)', () => {
     const a = availability();
-    expect(a.allowed).to.deep.equal(['United Kingdom', 'Ireland', 'Germany']);
+    expect(a.posture).to.equal('block-list');
+    expect(a.allowed).to.deep.equal([]);
+    expect(a.blocked).to.deep.equal(['Belgium', 'Australia']);
     expect(a.blocked.length).to.equal(territories.blocked.length);
     expect(a.scheduleVersion).to.equal(territories.version);
   });

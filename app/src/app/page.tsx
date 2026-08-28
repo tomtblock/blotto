@@ -20,6 +20,7 @@ import { Card } from '@/components/ui/card';
 import { Stat } from '@/components/ui/stat';
 import { Countdown } from '@/components/ui/countdown';
 import { ProgressRing } from '@/components/ui/progress-ring';
+import { HeroPentagon } from '@/components/home/hero-pentagon';
 
 export default async function PlayPage() {
   const api = indexerApi();
@@ -125,6 +126,49 @@ export default async function PlayPage() {
             ))}
           </ul>
         )}
+
+        {/* How it works (founder ask 2026-08-28): the game explained where
+            a first-time visitor lands, led by the self-playing allocation
+            demo. Informational motion only — nothing here flashes, loops a
+            pressure cue, or sits next to a payment control. */}
+        <section className="mt-10">
+          <h2 className="mb-4 font-display text-[24px] leading-[30px] font-bold text-ink">
+            {COPY.howItWorks.title}
+          </h2>
+          <Card className="p-5">
+            <HeroPentagon caption={COPY.howItWorks.pentagonCaption} />
+          </Card>
+          <ol className="mt-4 flex flex-col gap-3">
+            {COPY.howItWorks.steps.map((step, i) => (
+              <li
+                key={step.title}
+                className="animate-rise flex gap-4 rounded-xl border border-line px-4 py-4"
+                style={{ animationDelay: `${i * 90}ms` }}
+              >
+                <span
+                  aria-hidden
+                  className="tnum font-display text-[20px] leading-6 font-bold text-brand"
+                >
+                  {i + 1}
+                </span>
+                <div className="flex flex-col gap-1">
+                  <h3 className="text-[15px] font-semibold text-ink">{step.title}</h3>
+                  <p className="max-w-prose text-[13px] leading-5 text-ink-muted">
+                    {step.body}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ol>
+          <p className="mt-4 flex gap-5 text-[13px]">
+            <Link href="/rules" className="text-brand underline underline-offset-2">
+              {COPY.howItWorks.rulesLink}
+            </Link>
+            <Link href="/verify" className="text-brand underline underline-offset-2">
+              {COPY.howItWorks.verifyLink}
+            </Link>
+          </p>
+        </section>
 
         {lockedTiers.length > 0 && (
           <section className="mt-8">
