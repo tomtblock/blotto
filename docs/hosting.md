@@ -63,6 +63,36 @@ The daemon's additionally carries the LAST TICK summary (`at`, counts of
 opened/cranked/refunds/errors) — a stale `at` is the "hung RPC" alarm;
 platform checks should alert on staleness, not just non-200.
 
+## Creating the Helius webhook (E6)
+
+The indexer's receiver validates every delivery before touching the
+ledger (`backend/indexer/src/webhook.ts`): the `Authorization` header must
+equal `BLOTTO_HELIUS_WEBHOOK_SECRET` **byte-for-byte** (length-checked,
+timing-safe compare); anything else is `401` with nothing ingested, an
+unparseable body is `400`, and a store failure answers `500` so Helius
+redelivers. The server starts only when the secret is set
+(`requireWebhookSecret` — fail-closed). Spec-pinned in
+`backend/indexer/test/webhook.spec.ts`.
+
+Create the webhook (Helius dashboard → Webhooks, or the API) with exactly:
+
+| Setting | Value |
+|---|---|
+| Webhook URL | `https://<indexer-host>:8080/webhook` (the receiver accepts any POST path; use `/webhook` for log legibility) |
+| Webhook type | **Raw** (the parser reads `signature` / `slot` / `meta.logMessages` from raw-transaction deliveries) |
+| Transaction types | All (the program's events ride log messages; the ingest decoder filters to this program) |
+| Account addresses | the program id — `5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17` |
+| Commitment | `finalized` — must MATCH `BLOTTO_INDEXER_COMMITMENT` (default `finalized`); a mismatch double-feeds or starves the ledger |
+| Auth header | the generated secret — the same value as `BLOTTO_HELIUS_WEBHOOK_SECRET`, sent verbatim (no `Bearer` prefix) |
+
+Rotation: set the new value in Helius first, then update the service's
+secret and restart — deliveries in between answer 401 and Helius
+redelivers them once the values agree; the backfill on the next `sync`
+start catches anything dropped past the retry window.
+
+The webhook is delivery optimisation, not truth: the ledger rebuilds from
+RPC via `backfill`, and `sync` runs one backfill before serving.
+
 ## Vendor needs (the open list)
 
 | Need | Blocks | Where it lands |

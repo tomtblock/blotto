@@ -50,6 +50,13 @@ describe('authorize', () => {
     expect(authorize(undefined, SECRET)).to.equal(false);
     expect(authorize('', SECRET)).to.equal(false);
   });
+
+  it('rejects near-misses: prefix, suffix, and a Bearer-wrapped secret (E6)', () => {
+    expect(authorize(SECRET.slice(0, -1), SECRET)).to.equal(false);
+    expect(authorize(`${SECRET}x`, SECRET)).to.equal(false);
+    // Helius sends the header VERBATIM — a Bearer prefix means misconfig.
+    expect(authorize(`Bearer ${SECRET}`, SECRET)).to.equal(false);
+  });
 });
 
 describe('extractTxContexts', () => {
