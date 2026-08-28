@@ -15,8 +15,9 @@
  */
 
 import dynamic from "next/dynamic";
-import { useMemo, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { AuthContext } from "./auth-context";
+import { sameAuthState } from "./auth-state";
 import type { Auth } from "./types";
 
 const PrivyBridge = dynamic(() => import("./privy-bridge"), { ssr: false });
@@ -31,6 +32,21 @@ const INITIALIZING: Auth = {
   connectWallet: () => {},
   signOut: async () => {},
 };
+
+/*
+ * UPDATE-LOOP RULE (production incident, 2026-08-28): the bridge's adapter
+ * rebuilds its Auth object whenever any provider-SDK hook return changes
+ * identity — and once the SDK finishes initializing (real credentials
+ * only, so no fixture-mode test catches it), some of those returns are
+ * fresh objects on EVERY render. Feeding each rebuild straight into
+ * `setLive` re-rendered this provider, which re-rendered the adapter,
+ * which rebuilt the object again — an infinite loop (React #185) that
+ * took the whole page down to the default error screen on Vercel. The
+ * guard below therefore keeps the PREVIOUS state object whenever the new
+ * one is meaningfully identical, so React bails out of the re-render and
+ * the cycle stops (comparator: ./auth-state.ts, unit-pinned). Never hand
+ * `setLive` to the bridge unguarded.
+ */
 
 /** Renders when Privy credentials are absent: app works, sign-in is inert. */
 function unconfiguredAuth(): Auth {
@@ -52,6 +68,17 @@ function unconfiguredAuth(): Auth {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
   const [live, setLive] = useState<Auth | null>(null);
+
+  // See the update-loop rule above. Keeping the previous object also keeps
+  // its callback closures; that is safe — the SDK's functions dispatch to
+  // one underlying client, and any change that matters (sign-in, sign-out,
+  // wallet connect) alters the compared fields and adopts the fresh object.
+  const onAuth = useCallback((next: Auth) => {
+    setLive((prev) =>
+      prev !== null && sameAuthState(prev, next) ? prev : next,
+    );
+  }, []);
+
   const value = useMemo<Auth>(
     () => live ?? (appId ? INITIALIZING : unconfiguredAuth()),
     [live, appId],
@@ -59,7 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider value={value}>
-      {appId ? <PrivyBridge appId={appId} onAuth={setLive} /> : null}
+      {appId ? <PrivyBridge appId={appId} onAuth={onAuth} /> : null}
       {children}
     </AuthContext.Provider>
   );
