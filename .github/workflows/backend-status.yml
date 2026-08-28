@@ -1,0 +1,32 @@
+# Founder-clickable diagnostics: prints each backend app's Fly status,
+# machine list, and recent logs into the run output, so a crash can be
+# diagnosed from the Actions page without anyone touching a terminal or
+# copying anything. Read-only — it deploys nothing and changes nothing.
+#
+# Needs only the FLY_API_TOKEN repository secret (already set for
+# deploy-backend).
+
+name: backend-status
+
+on:
+  workflow_dispatch:
+
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+    steps:
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Status and logs for both services
+        run: |
+          for app in blotto-indexer blotto-packet; do
+            echo "===================== $app: status ====================="
+            flyctl status --app "$app" || true
+            echo "===================== $app: machines ==================="
+            flyctl machine list --app "$app" || true
+            echo "===================== $app: recent logs ================"
+            flyctl logs --app "$app" --no-tail | tail -n 150 || true
+            echo
+          done
