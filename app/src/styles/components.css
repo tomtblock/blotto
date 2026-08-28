@@ -125,6 +125,121 @@
   animation: seat-fill var(--duration-base) var(--ease-out) both;
 }
 
+/* --- Pentagon: the charge moment (PART 6.4) ------------------------------- *
+ * The release settle: ONE small spring overshoot into a grounded landing —
+ * the single sanctioned overshoot on the site, and only after a physical
+ * gesture. Charge particles drift up the active axis toward the vertex
+ * while a value RISES; they exist only while charge is live (rate of
+ * change), so nothing here idles.                                        */
+
+@keyframes pentagon-settle {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.012);
+  }
+  70% {
+    transform: scale(0.997);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.pentagon-settle {
+  animation: pentagon-settle 300ms var(--ease-out);
+}
+
+@keyframes charge-drift {
+  0% {
+    transform: translateX(34px);
+    opacity: 0;
+  }
+  25% {
+    opacity: var(--charge, 0.6);
+  }
+  100% {
+    transform: translateX(118px);
+    opacity: 0;
+  }
+}
+
+.charge-particle {
+  animation: charge-drift 600ms linear infinite;
+}
+
+/* The lock-in edge flash: one brief brightness beat as the stamp lands
+ * (WEIGHT's punctuation), then FROST takes over. */
+@keyframes edge-flash {
+  0% {
+    filter: brightness(1);
+  }
+  40% {
+    filter: brightness(1.45);
+  }
+  100% {
+    filter: brightness(1);
+  }
+}
+
+.edge-flash {
+  animation: edge-flash 150ms linear 1;
+}
+
+/* The lock-in sequence (PART 6.4): the just-locked shape stamps (WEIGHT,
+ * via animate-stamp on the middle layer), its veil condenses (FROST), and
+ * the sealed object slides off; the fresh even split enters underneath.
+ * Nothing blocks — the machine has already advanced and the next screen
+ * is live while this overlay plays. */
+@keyframes lock-slide-off {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(-38%);
+    opacity: 0;
+  }
+}
+
+.lock-slide-off {
+  animation: lock-slide-off var(--duration-base) var(--ease-in-out) 650ms both;
+}
+
+@keyframes veil-condense {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.veil-condense {
+  animation: veil-condense var(--duration-slow) var(--ease-in-out) 200ms both;
+}
+
+/* Seven sealed battles TRAVELing together into the pool at submit
+ * (PART 6.5). Per-card destination via --tx/--ty; constant ease-in-out. */
+@keyframes to-pool {
+  from {
+    transform: translate(0, 0) scale(1);
+    opacity: 1;
+  }
+  85% {
+    opacity: 0.9;
+  }
+  to {
+    transform: translate(var(--tx, 0px), var(--ty, 0px)) scale(0.3);
+    opacity: 0;
+  }
+}
+
+.to-pool {
+  animation: to-pool 600ms var(--ease-in-out) both;
+}
+
 /* --- Digit slide (PART 5.3 / 5.8) ---------------------------------------- *
  * A counter increments with a single-digit slide: the old digit exits up,
  * the new one enters from below. Exit (150ms) faster than enter (250ms).

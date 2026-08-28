@@ -23,7 +23,14 @@ import { EntrySplit } from "@/components/entry-split";
 import { SettledCounter } from "@/components/ui/settled-counter";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorSurface } from "@/components/ui/error-surface";
-import type { Allocation } from "@/battle/allocation";
+import {
+  EVEN_RAW,
+  dragTo,
+  normalize,
+  type Allocation,
+  type RawWeights,
+} from "@/battle/allocation";
+import { PentagonRadar } from "@/battle/components/pentagon-radar";
 
 /* Grammar demos: state lives here so the components animate real changes. */
 function SeatRingDemo() {
@@ -46,6 +53,21 @@ function SeatRingDemo() {
 }
 
 const DEMO_ALLOCATION: Allocation = [31, 17, 24, 9, 19];
+
+/* The full allocation instrument, wired to the real normalisation — the
+ * perf-budget surface (60fps during a drag at 4× CPU throttle). */
+function PentagonDemo() {
+  const [raw, setRaw] = useState<RawWeights>(() => [...EVEN_RAW]);
+  const display = normalize(raw);
+  return (
+    <div className="max-w-[380px]" data-testid="pentagon-demo">
+      <PentagonRadar
+        display={display}
+        onDrag={(stat, value) => setRaw((r) => dragTo(r, stat, value))}
+      />
+    </div>
+  );
+}
 
 function FrostDemo() {
   const [frosted, setFrosted] = useState(true);
@@ -296,6 +318,10 @@ export function Gallery() {
               focus is trapped by the native dialog element.
             </p>
           </Sheet>
+        </Section>
+
+        <Section title="Pentagon radar (the instrument)">
+          <PentagonDemo />
         </Section>
 
         <Section title="Seat ring">

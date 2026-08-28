@@ -16,7 +16,9 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { address } from '@solana/kit';
 import { COPY } from '@/copy';
-import { Button } from '@/components/ui/button';
+import { Button, buttonClasses } from '@/components/ui/button';
+import { EntrySplit } from '@/components/entry-split';
+import { LivePoolRing } from '@/components/pool/live-pool-ring';
 import { BattleFlow } from '@/battle/components/battle-flow';
 import type { Allocation } from '@/battle/allocation';
 import { indexerApi } from '@/data/api';
@@ -199,29 +201,19 @@ export function PlayClient() {
   }
 
   if (done) {
-    // v3 D2: the sealed confirmation is a designed moment, not a sentence.
+    // The submit confirmation (UI constitution 6.5): the player watches
+    // their money go exactly where the documentation says it goes — the
+    // entry visibly splits 80/20 into the labeled treasury and operator —
+    // and then the live ring connects their act to the lobby's heartbeat
+    // (the poll picks the new entry up from the chain; the LIGHT pass
+    // fires on the real event, never on a simulated one).
     return (
-      <section aria-live="polite" className="animate-enter flex flex-col items-center gap-5 py-14 text-center">
-        <div className="relative h-16 w-16" aria-hidden>
-          <div className="absolute inset-0 rounded-2xl border-2 border-brand" />
-          <div className="absolute inset-0 rounded-2xl" style={{ boxShadow: 'var(--glow-action)' }} />
-          <svg viewBox="0 0 24 24" className="absolute inset-0 m-auto h-8 w-8 text-brand">
-            <path
-              d="m5 13 4.5 4.5L19 8"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </div>
+      <section aria-live="polite" className="animate-enter flex flex-col items-center gap-5 py-8 text-center">
         <h2 className="font-display text-[34px] leading-[38px] font-extrabold text-ink">Sealed</h2>
         <p className="max-w-prose text-[15px] leading-6 text-ink-muted">{COPY.pool.sealed}</p>
-        <Link
-          href={`/pools/${pool.pool}`}
-          className="mt-2 flex h-12 items-center justify-center rounded-xl bg-brand px-8 text-[15px] font-semibold text-(--color-base) transition-colors hover:bg-brand-hot"
-        >
+        <EntrySplit entryLamports={pool.entry_lamports} playOnMount className="max-w-[420px]" />
+        <LivePoolRing pool={pool} size={96} riser />
+        <Link href={`/pools/${pool.pool}`} className={buttonClasses('primary', 'md') + ' mt-2 px-8'}>
           {COPY.reveal.stalledDismiss}
         </Link>
       </section>
