@@ -55,12 +55,19 @@ PATTERN='casino|gambling|disguised|dopamine|shill|degen|the house|pump|bonding|l
 #      internal-intent tell "gambling-coded" (also covered above).
 PATTERN_B7='non.custodial|provably fair|\blicensed\b|\bregulated\b|\bcompliant\b|trustless|can.?t be rigged|cannot be rigged|rig.proof|\banonymous\b|\banonymity\b|no[- ]kyc|untraceable|unbannable|play from anywhere|\bguaranteed\b|risk.free|free money|\+ev\b|everyone wins|\byield\b|\bapy\b|passive income|\bearn(s|ed|ing)?\b|\binvestments?\b|early investors|number go up|just a game|skill games?\b|skill tournaments?\b|\breinvest|asset.managers?|\bamm\b|\badvis(e|es|ed|ing)\b'
 
+# D3 (master prompt v3, 2026-08-27): retention runs on mastery and standing,
+# never on pressure or chance-flavoured framing. These words are the
+# do-not-build list's vocabulary; their presence in copy or code means a
+# forbidden mechanic is being built. (jackpot and \broll\b are already in
+# PATTERN above.)
+PATTERN_D3='\bhurry\b|last chance|don.?t miss|\bstreaks?\b|daily bonus(es)?|\bspin(s|ning)?\b|\blucky\b'
+
 # ---------------------------------------------------------------------------
 # Exclusions. Each one has a reason; do not extend this list without the same
 # scrutiny, and never exclude a path merely because it fails.
 # ---------------------------------------------------------------------------
 hits="$(
-  grep -rniE "($PATTERN|$PATTERN_B7)" . \
+  grep -rniE "($PATTERN|$PATTERN_B7|$PATTERN_D3)" . \
     --exclude-dir=node_modules \
     --exclude-dir=target \
     --exclude-dir=.git \

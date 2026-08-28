@@ -15,7 +15,7 @@
  * (100, 137), the 50%/55% transform origin the stage already uses).
  *
  * Like the reveal-step table, the numbers HERE are geometry, not feel knobs:
- * shapes, spread vectors, spins. The burst's *timing* magnitudes (flight
+ * shapes, spread vectors, rotations. The burst's *timing* magnitudes (flight
  * duration, scale decay, flash envelope) are Q-026 constants in
  * lib/reveal/constants.ts.
  */

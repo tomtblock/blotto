@@ -57,7 +57,7 @@ export function ProfileClient() {
     return (
       <div aria-live="polite" className="flex flex-col items-center gap-4 py-14">
         <div
-          className="h-8 w-8 rounded-full border-2 border-overlay border-t-brand motion-safe:animate-spin"
+          className="h-8 w-8 rounded-full border-2 border-overlay border-t-brand motion-safe:animate-rotate"
           aria-hidden
         />
       </div>

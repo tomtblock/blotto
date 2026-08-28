@@ -93,7 +93,7 @@ export const spacing = [0, 4, 8, 12, 16, 24, 32, 48, 64, 96] as const;
 /*
  * Motion (D1): a small named vocabulary, used consistently. Motion
  * CELEBRATES outcomes; it never nags — nothing loops to attract attention,
- * nothing shakes to hurry anyone. `prefers-reduced-motion` collapses all of
+ * nothing shakes to rush anyone. `prefers-reduced-motion` collapses all of
  * it (global rule in tokens.css).
  *
  *   reveal     — a staged entrance for outcome moments (battle rows, the
