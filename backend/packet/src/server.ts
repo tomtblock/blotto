@@ -4,6 +4,7 @@
  *   POST /packet       { wallet, pool }               → IssuedPacket | 403 generic
  *   POST /ciphertexts  { pool, player, ciphertext }   → 204
  *   POST /attestation  { wallet, termsVersion, signature } → 204 | 403
+ *   POST /notify       { wallet, emailOptIn, atUnix, signature } → 204 | 403
  *   GET  /geo                                         → { allowed: boolean }
  *
  * `/attestation` (D-B4) stores the signature-verified clickwrap record; a
@@ -34,10 +35,14 @@ import {
   type PacketServiceDeps,
 } from './service';
 import { acceptAttestation } from './attestations';
+import { acceptNotifyPreference, type NotifyPreferenceStore } from './notify';
 
 export interface EntryServerDeps {
   packet: PacketServiceDeps;
   ciphertexts: CiphertextStore;
+  /** v3 D3: the email-notification opt-in store. Optional — a deployment
+   * without it answers /notify with 503 rather than pretending to record. */
+  notify?: NotifyPreferenceStore;
   trustProxyHeader: boolean;
   /**
    * TEST/DEV ONLY (D-B3 stub): when true, `x-geo-country` / `x-geo-region` /
@@ -122,6 +127,38 @@ export async function handleEntryRoute(
         signature: b.signature,
       }
     );
+    return stored ? { status: 204, body: null } : { status: 403, body: { ok: false } };
+  }
+
+  if (path === '/notify') {
+    if (!deps.notify) return { status: 503, body: { error: 'unconfigured' } };
+    const b = body as {
+      wallet?: string;
+      emailOptIn?: boolean;
+      atUnix?: string | number;
+      signature?: string;
+    };
+    if (
+      !b ||
+      !B58.test(b.wallet ?? '') ||
+      typeof b.emailOptIn !== 'boolean' ||
+      typeof b.signature !== 'string' ||
+      (typeof b.atUnix !== 'string' && typeof b.atUnix !== 'number')
+    ) {
+      return { status: 403, body: { ok: false } };
+    }
+    let atUnix: bigint;
+    try {
+      atUnix = BigInt(b.atUnix);
+    } catch {
+      return { status: 403, body: { ok: false } };
+    }
+    const stored = await acceptNotifyPreference(deps.notify, deps.packet.now, {
+      wallet: b.wallet as string,
+      emailOptIn: b.emailOptIn,
+      atUnix,
+      signature: b.signature,
+    });
     return stored ? { status: 204, body: null } : { status: 403, body: { ok: false } };
   }
 

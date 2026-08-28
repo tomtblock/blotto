@@ -58,6 +58,49 @@ export interface ProfileRow {
   class_counts: [number, number, number, number, number];
 }
 
+/** One career entry (D3), from GET /profiles/:player/history. Rank labels
+ * are deliberately absent (D3-B: ranks live in the published bundle). */
+export interface CareerRow {
+  pool: string;
+  pool_id: string | null;
+  tier: number | null;
+  seat: number | null;
+  entries_to_date: string;
+  paid: boolean;
+  amount_lamports: string;
+  pot_lamports: string | null;
+  state: PoolSummary['state'] | null;
+}
+
+/** One rival (D3): a wallet often in the same pools, co-entry facts only. */
+export interface RivalRow {
+  player: string;
+  pools_shared: string;
+  paid_in_shared: string;
+}
+
+/** One sealed ciphertext (D3), seat-keyed and anonymised; served by the
+ * read API only after the pool secret is on-chain. */
+export interface SealedEntryRow {
+  seat: number;
+  ciphertext_hex: string;
+}
+
+/** The tier rows of GET /treasury the app renders (D3 fixture list). The
+ * full TreasuryReport carries more; the app reads only what it shows. */
+export interface TreasuryTierStatus {
+  tier: number;
+  price_lamports: string;
+  pot_lamports: string;
+  status: 'open' | 'settling' | 'openable' | 'short';
+  live_pool_state: string | null;
+  short_by_lamports: string;
+}
+
+export interface TreasuryTiers {
+  tiers: TreasuryTierStatus[];
+}
+
 export interface IndexerApi {
   listPools(): Promise<PoolSummary[]>;
   getPool(pool: string): Promise<PoolSummary | null>;
@@ -65,4 +108,9 @@ export interface IndexerApi {
   getResults(pool: string): Promise<ResultRow[]>;
   getPayouts(pool: string): Promise<PayoutRow[]>;
   getProfile(player: string): Promise<ProfileRow | null>;
+  /** D3 additions. */
+  getCareer(player: string): Promise<CareerRow[]>;
+  getRivals(player: string): Promise<RivalRow[]>;
+  getSealedEntries(pool: string): Promise<SealedEntryRow[]>;
+  getTreasury(): Promise<TreasuryTiers | null>;
 }
