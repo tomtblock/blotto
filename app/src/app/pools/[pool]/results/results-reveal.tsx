@@ -19,6 +19,7 @@
 
 import Link from 'next/link';
 import { COPY } from '@/copy';
+import { buttonClasses } from '@/components/ui/button';
 import { useAuth } from '@/wallet/auth-context';
 
 export interface RevealRow {
@@ -31,28 +32,43 @@ export interface RevealRow {
   amountSol: string | null;
 }
 
-const ROW_STAGGER_MS = 90;
+/* 6.6: rows cascade with a 30ms stagger, capped so late rows appear
+ * instantly rather than queueing behind a long list. */
+const ROW_STAGGER_MS = 30;
+const STAGGER_CAP_MS = 480;
 
 export function ResultsReveal({ rows }: { rows: RevealRow[] }) {
   const auth = useAuth();
   const wallet = auth.status === 'signed-in' ? auth.walletAddress : null;
-  // The stagger is pure CSS: `reveal … both` holds each row invisible until
+  // The stagger is pure CSS: `enter … both` holds each row invisible until
   // its animation-delay passes, so no mount gate or effect is needed.
 
   return (
     <ol className="flex flex-col">
       {rows.map((r, i) => {
         const mine = wallet !== null && r.player === wallet;
+        const paid = r.amountSol !== null;
         return (
           <li
             key={r.seat}
             className={
-              'animate-reveal flex items-center gap-4 px-4 py-2.5 ' +
+              'animate-enter relative flex items-center gap-4 overflow-hidden px-4 py-2.5 ' +
               (i > 0 ? 'border-t border-line ' : '') +
-              (mine ? 'rounded-lg bg-prize/10' : '')
+              // Paid rows carry the accent warmth; your row a touch more.
+              (mine ? 'rounded-lg bg-prize/10' : paid ? 'bg-brand/[0.04]' : '')
             }
-            style={{ animationDelay: `${i * ROW_STAGGER_MS}ms` }}
+            style={{ animationDelay: `${Math.min(i * ROW_STAGGER_MS, STAGGER_CAP_MS)}ms` }}
           >
+            {/* One gentle LIGHT sweep across your row, once the cascade
+                has settled it — never repeated. */}
+            {mine ? (
+              <span aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+                <span
+                  className="animate-light-pass absolute inset-y-0 w-1/3 bg-gradient-to-r from-transparent via-prize/15 to-transparent"
+                  style={{ animationDelay: `${Math.min(i * ROW_STAGGER_MS, STAGGER_CAP_MS) + 350}ms` }}
+                />
+              </span>
+            ) : null}
             <span className="tnum w-10 text-[12px] uppercase tracking-[0.1em] text-ink-muted">
               s{r.seat}
             </span>
@@ -90,10 +106,7 @@ export function ResultsReveal({ rows }: { rows: RevealRow[] }) {
 /** The verify affordance — always on screen with the results (R20/D3-B). */
 export function VerifyAlways({ pool }: { pool: string }) {
   return (
-    <Link
-      href={`/verify?pool=${pool}`}
-      className="flex h-12 items-center justify-center rounded-xl border border-line text-[15px] font-medium text-ink transition-colors hover:border-brand hover:text-brand"
-    >
+    <Link href={`/verify?pool=${pool}`} className={buttonClasses('secondary', 'md') + ' w-full'}>
       {COPY.verify.title}
     </Link>
   );

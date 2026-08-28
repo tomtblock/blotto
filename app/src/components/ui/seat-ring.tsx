@@ -25,7 +25,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { COPY } from '@/copy';
 import { motion } from '@/design/tokens';
-import { usePrefersReducedMotion } from '@/reveal/stages/use-reduced-motion';
+import { usePrefersReducedMotion } from '@/design/use-reduced-motion';
 import { DigitSlide } from './digit-slide';
 
 export const SEATS = 64;

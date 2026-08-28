@@ -362,6 +362,71 @@
   }
 }
 
+/* --- Pass material finishes (PART 6.6 / 6.8) ------------------------------- *
+ * Rarity is conveyed by MATERIAL, never by fanfare: Common is matte,
+ * ascending classes take a progressively stronger brushed finish (static
+ * gradients), and the top class carries a slow sheen that plays once per
+ * hover — interaction-driven only, never looping at rest.               */
+
+.pass-material {
+  position: relative;
+  overflow: hidden;
+}
+
+.pass-material[data-finish='brushed']::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    105deg,
+    transparent 0px,
+    transparent 5px,
+    color-mix(in srgb, var(--color-ink) calc(2% * var(--finish-grade, 1)), transparent) 6px,
+    transparent 8px
+  );
+}
+
+.pass-sheen-layer {
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(
+    100deg,
+    transparent,
+    color-mix(in srgb, var(--color-rarity-gold) 18%, transparent),
+    transparent
+  );
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .pass-material[data-finish='sheen']:hover .pass-sheen-layer {
+    opacity: 1;
+    animation: light-pass 1400ms var(--ease-in-out) 1 both;
+  }
+}
+
+/* --- Verify instrument panel (PART 6.7) ------------------------------------ *
+ * Checks complete top-to-bottom; each tick DRAWS in as its row settles
+ * into the verdict colour (LIGHT as truth — its purest use). Motion here
+ * reads as instruments, never celebration.                               */
+
+@keyframes tick-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.tick-draw {
+  stroke-dasharray: 1;
+  animation: tick-draw 150ms var(--ease-out) both;
+}
+
 /* --- Error surface (PART 6.10) -------------------------------------------- *
  * Fades in with a 4px rise — never a modal slam. Uses the micro
  * enter-fast physics; role="alert" carries the urgency, not motion.      */

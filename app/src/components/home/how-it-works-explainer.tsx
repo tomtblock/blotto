@@ -38,7 +38,7 @@ import { useEffect, useRef, useState } from 'react';
 import { COPY } from '@/copy';
 import type { Allocation } from '@/battle/allocation';
 import { axisUnit, pointFor, polygonPoints } from '@/battle/geometry';
-import { usePrefersReducedMotion } from '@/reveal/stages/use-reduced-motion';
+import { usePrefersReducedMotion } from '@/design/use-reduced-motion';
 
 /* --- timeline ----------------------------------------------------------- */
 

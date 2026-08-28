@@ -15,6 +15,7 @@
  */
 
 import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { COPY } from '@/copy';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -25,13 +26,18 @@ const FIELD =
   'outline-none focus-visible:border-brand';
 
 export function VerifyClient() {
-  const [pool, setPool] = useState('');
+  // Deep links (?pool=…) from winners cards and pool pages prefill the
+  // instrument; the reader still presses the buttons — "I checked", not
+  // "it checked itself".
+  const params = useSearchParams();
+  const [pool, setPool] = useState(() => params.get('pool') ?? '');
   const [bundleUri, setBundleUri] = useState('');
   const [bundleText, setBundleText] = useState('');
   const [recordText, setRecordText] = useState('');
   const [report, setReport] = useState<VerifyReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fetching, setFetching] = useState(false);
+  const [runId, setRunId] = useState(0);
 
   const autoFetch = async () => {
     setError(null);
@@ -67,6 +73,7 @@ export function VerifyClient() {
       const bundle = JSON.parse(bundleText) as PublishedBundle;
       const record = JSON.parse(recordText) as OnChainRecord;
       setReport(verifyPool(bundle, record));
+      setRunId((n) => n + 1); // replay the instrument sequence per run
     } catch (e) {
       setReport(null);
       setError(e instanceof Error ? e.message : String(e));
@@ -81,11 +88,11 @@ export function VerifyClient() {
       <p className="max-w-prose text-[15px] leading-6 text-ink-muted">{COPY.verify.explainer}</p>
       <Card className="flex flex-col gap-3 p-4">
         <label className="flex flex-col gap-1.5 text-[13px] text-ink-muted">
-          Pool address (fetches the on-chain record)
+          {COPY.verify.poolLabel}
           <input className={FIELD} value={pool} onChange={(e) => setPool(e.target.value)} />
         </label>
         <label className="flex flex-col gap-1.5 text-[13px] text-ink-muted">
-          Published bundle URI (the pool page links it)
+          {COPY.verify.bundleUriLabel}
           <input
             className={FIELD}
             value={bundleUri}
@@ -98,11 +105,11 @@ export function VerifyClient() {
           disabled={fetching || (!pool.trim() && !bundleUri.trim())}
           onClick={autoFetch}
         >
-          {fetching ? '…' : 'Fetch both'}
+          {fetching ? '…' : COPY.verify.fetchBoth}
         </Button>
       </Card>
       <label className="flex flex-col gap-1.5 text-[13px] text-ink-muted">
-        Published reveal bundle (JSON)
+        {COPY.verify.bundleTextLabel}
         <textarea
           className={`h-32 ${FIELD}`}
           value={bundleText}
@@ -110,7 +117,7 @@ export function VerifyClient() {
         />
       </label>
       <label className="flex flex-col gap-1.5 text-[13px] text-ink-muted">
-        On-chain record (JSON — from the events, or the read API&apos;s /verify-record)
+        {COPY.verify.recordTextLabel}
         <textarea
           className={`h-32 ${FIELD}`}
           value={recordText}
@@ -118,42 +125,99 @@ export function VerifyClient() {
         />
       </label>
       <Button size="lg" onClick={run}>
-        Recompute
+        {COPY.verify.run}
       </Button>
       {error && (
-        <p className="text-[14px] leading-5 text-price-down" role="alert">
+        <p className="error-surface text-[14px] leading-5 text-price-down" role="alert">
           {error}
         </p>
       )}
-      {report && (
-        <div
-          className={
-            'animate-settle rounded-2xl border-2 bg-raised p-5 ' +
-            (report.ok ? 'border-price-up' : 'border-price-down')
-          }
-          role="status"
-        >
-          <p
-            className={
-              'mb-3 font-display text-[18px] font-bold ' +
-              (report.ok ? 'text-price-up' : 'text-price-down')
-            }
-          >
-            {report.ok ? COPY.verify.match : COPY.verify.mismatch}
-          </p>
-          <ul className="flex flex-col gap-1.5 text-sm">
-            {report.checks.map((c) => (
-              <li key={c.name} className="flex gap-2">
-                <span className={c.ok ? 'text-price-up' : 'text-price-down'}>
-                  {c.ok ? '✓' : '✗'}
-                </span>
-                <span className="font-mono text-[13px] text-ink">{c.name}</span>
-                <span className="text-[13px] text-ink-muted">{c.detail}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {report && <InstrumentPanel key={runId} report={report} />}
     </section>
+  );
+}
+
+/* 6.7: the instrument panel. Checks complete top-to-bottom (a 90ms
+ * cadence), each tick drawing in as its row settles into the verdict
+ * colour — LIGHT as truth, its purest use. A failed check pins to the top
+ * and takes the site's ONLY shake (≤200ms), once. The verdict banner
+ * settles last, after the instruments. Motion here reads as instruments,
+ * never celebration; reduced motion renders the settled panel instantly. */
+const CHECK_CADENCE_MS = 90;
+
+function InstrumentPanel({ report }: { report: VerifyReport }) {
+  // Failures pin to the top; order is otherwise the engine's.
+  const checks = [...report.checks].sort((a, b) => Number(a.ok) - Number(b.ok));
+  const bannerDelay = checks.length * CHECK_CADENCE_MS + 150;
+  return (
+    <div
+      className={
+        'rounded-2xl border-2 bg-raised p-5 ' +
+        (report.ok ? 'border-price-up' : 'border-price-down')
+      }
+      role="status"
+    >
+      <ul className="flex flex-col gap-1.5 text-sm">
+        {checks.map((c, i) => (
+          <li
+            key={c.name}
+            className="animate-enter-fast flex items-baseline gap-2"
+            style={{ animationDelay: `${i * CHECK_CADENCE_MS}ms` }}
+          >
+            <span
+              className={
+                (c.ok ? '' : 'animate-verify-shake ') + 'flex items-baseline gap-2'
+              }
+              style={c.ok ? undefined : { animationDelay: `${i * CHECK_CADENCE_MS + 120}ms` }}
+            >
+              <svg viewBox="0 0 16 16" className="h-3.5 w-3.5 self-center" aria-hidden>
+                {c.ok ? (
+                  <path
+                    d="m3 8.5 3.2 3.2L13 5"
+                    fill="none"
+                    stroke="var(--color-price-up)"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    pathLength={1}
+                    className="tick-draw"
+                    style={{ animationDelay: `${i * CHECK_CADENCE_MS + 80}ms` }}
+                  />
+                ) : (
+                  <path
+                    d="m4 4 8 8M12 4l-8 8"
+                    fill="none"
+                    stroke="var(--color-price-down)"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    pathLength={1}
+                    className="tick-draw"
+                    style={{ animationDelay: `${i * CHECK_CADENCE_MS + 80}ms` }}
+                  />
+                )}
+              </svg>
+              <span className="sr-only">{c.ok ? 'passed:' : 'FAILED:'}</span>
+              <span
+                className={
+                  'font-mono text-[13px] ' + (c.ok ? 'text-ink' : 'font-semibold text-price-down')
+                }
+              >
+                {c.name}
+              </span>
+              <span className="text-[13px] text-ink-muted">{c.detail}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p
+        className={
+          'animate-enter mt-4 font-display text-[18px] font-bold ' +
+          (report.ok ? 'text-price-up' : 'text-price-down')
+        }
+        style={{ animationDelay: `${bannerDelay}ms` }}
+      >
+        {report.ok ? COPY.verify.match : COPY.verify.mismatch}
+      </p>
+    </div>
   );
 }

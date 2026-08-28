@@ -226,6 +226,13 @@ export const COPY = {
       'Recompute the whole result yourself: decrypt every sealed battle with the revealed pool secret, score the identical field, rebuild the results tree, and compare it to what was committed on-chain. Nothing here trusts the operator.',
     match: 'Recomputed root matches the on-chain commitment.',
     mismatch: 'RECOMPUTED ROOT DOES NOT MATCH — the published data does not reproduce the on-chain result.',
+    // The instrument panel's controls (previously bare literals).
+    poolLabel: 'Pool address (fetches the on-chain record)',
+    bundleUriLabel: 'Published bundle URI (the pool page links it)',
+    bundleTextLabel: 'Published reveal bundle (JSON)',
+    recordTextLabel: 'On-chain record (JSON — from the events, or the read API’s /verify-record)',
+    fetchBoth: 'Fetch both',
+    run: 'Recompute',
   },
   profile: {
     title: 'Your career',

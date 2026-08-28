@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react';
 import { indexerApi } from '@/data/api';
 import type { PoolSummary } from '@/data/types';
 import { SeatRing } from '@/components/ui/seat-ring';
+import { useAuth } from '@/wallet/auth-context';
 
 const POLL_MS = 15_000;
 
@@ -21,13 +22,38 @@ export function LivePoolRing({
   size = 104,
   riser = true,
   yourSeat = null,
+  detectYourSeat = false,
 }: {
   pool: PoolSummary;
   size?: number;
   riser?: boolean;
   yourSeat?: number | null;
+  /** Look up the signed-in wallet's seat (the waiting state, 6.6): your
+   * segment holds a steady brighter WARMTH while the pool fills. */
+  detectYourSeat?: boolean;
 }) {
   const [entrants, setEntrants] = useState(pool.entrants);
+  const auth = useAuth();
+  const wallet = auth.status === 'signed-in' ? auth.walletAddress : null;
+  const [foundSeat, setFoundSeat] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!detectYourSeat || !wallet) return;
+    let live = true;
+    indexerApi()
+      .getEntries(pool.pool)
+      .then((rows) => {
+        if (!live) return;
+        const mine = rows.find((r) => r.player === wallet);
+        setFoundSeat(mine ? mine.idx : null);
+      })
+      .catch(() => {
+        // Unreachable indexer: no highlight; never guess a seat.
+      });
+    return () => {
+      live = false;
+    };
+  }, [detectYourSeat, wallet, pool.pool, entrants]);
 
   useEffect(() => {
     if (pool.state !== 'Open') return;
@@ -43,5 +69,12 @@ export function LivePoolRing({
     return () => clearInterval(id);
   }, [pool.pool, pool.state]);
 
-  return <SeatRing entrants={entrants} size={size} riser={riser} yourSeat={yourSeat} />;
+  return (
+    <SeatRing
+      entrants={entrants}
+      size={size}
+      riser={riser}
+      yourSeat={yourSeat ?? foundSeat}
+    />
+  );
 }

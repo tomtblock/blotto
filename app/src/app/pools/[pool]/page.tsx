@@ -67,8 +67,9 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
         <Card live={open} className="mb-5 p-5">
           <div className="flex flex-wrap items-center gap-5">
             {/* The room's heartbeat: real occupancy, WARMTH at true
-                intensity, one riser per real entry. */}
-            <LivePoolRing pool={pool} size={116} riser={open} />
+                intensity, one riser per real entry — and if you have
+                entered, your seat held steady and bright while you wait. */}
+            <LivePoolRing pool={pool} size={116} riser={open} detectYourSeat />
             <div className="flex min-w-0 flex-1 flex-col gap-3">
               <Stat
                 label={COPY.pool.prizeTableTitle}

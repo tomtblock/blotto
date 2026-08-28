@@ -1,77 +1,83 @@
 'use client';
 
 /*
- * The reveal takeover host (C9) — the effectful shell around the PURE beat
- * machine (src/reveal/machine.ts). The machine owns every transition; this
- * component owns exactly the effects the machine's header assigns to it:
+ * The entry-outcome host (C9; rebuilt per UI constitution 6.5/6.6): the
+ * calm shell around the entry's terminal promise. The predecessor's
+ * tap-to-crack reveal theatre is gone — the entry moment is now:
  *
- *   - the outcome promise → `tx_confirmed` / `tx_failed`;
- *   - taps → `tap`;
- *   - the per-beat timers (host-timing.ts): strain's stall timer, the
- *     fixed-duration tell/unseal advances → `stall_timeout` / `beat_elapsed`;
- *   - dismiss / retry buttons → `dismiss` / `retry`.
+ *   sealing — the seven sealed battles TRAVEL into the pool glyph while
+ *             the transaction runs; a quiet hold, tap-free.
+ *   sealed  — the persona-defining confirmation: "Sealed", the 80/20
+ *             entry split playing over labeled endpoints, the LIVE ring
+ *             (whose LIGHT pass fires when the poll sees the real entry
+ *             on-chain — never before), and then the character pass as a
+ *             quiet card that fades and settles. Rank-before-rarity
+ *             discipline: the pass is presented after the consequential
+ *             information, never as the moment.
+ *   stalled — the honest long-confirmation message (the entry is
+ *             submitted; nothing further is needed).
+ *   failed  — failure as data, in place, next to the fix. Retry is
+ *             offered ONLY for a never-broadcast failure (a landed entry
+ *             must never see "try again" — a second submit would enter
+ *             twice, which PID §8.6 forbids).
  *
- * CONFIRMED-BEFORE-REVEAL is the machine's own invariant (typed, pinned in
- * machine.test.ts) — nothing here can render a class early because the
- * visual projection carries no class field before the tell.
- *
- * Retry is offered ONLY for a failure that was never broadcast
- * (types.ts's rendering obligation: a landed entry must never see a
- * "try again" — the entry IS recorded and a second submit would enter
- * twice, which PID §8.6 forbids).
+ * The stall timer is the one piece of pacing kept from the old machine
+ * (STALL_THRESHOLD_MS); a confirmation that lands while stalled still
+ * resolves to sealed — stalled is a message, not a terminal state.
  */
 
-import { useEffect, useReducer, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { COPY } from '@/copy';
-import {
-  INITIAL_REVEAL_STATE,
-  revealReducer,
-  revealVisual,
-  type RevealEvent,
-  type RevealState,
-} from '@/reveal/machine';
-import { beatTimer } from '@/reveal/host-timing';
-import { RevealStage, type RevealStageBeat } from '@/reveal/stages/reveal-stage';
-import { classColorToken } from '@/reveal/class-colour';
-import type { RevealResult } from '@/reveal/types';
-import { truncateAddress } from '@/wallet/types';
+import { Button, buttonClasses } from '@/components/ui/button';
+import { ErrorSurface } from '@/components/ui/error-surface';
+import { EntrySplit } from '@/components/entry-split';
+import { LivePoolRing } from '@/components/pool/live-pool-ring';
+import { Frost } from '@/components/ui/frost';
+import { PentagonMini } from '@/components/ui/pentagon-mini';
+import { PassCard } from '@/reveal/components/pass-card';
+import { STALL_THRESHOLD_MS } from '@/reveal/constants';
+import type { RevealOutcome, RevealResult } from '@/reveal/types';
+import type { TxFailure } from '@/tx/types';
+import type { Allocation } from '@/battle/allocation';
+import type { PoolSummary } from '@/data/types';
+import { usePrefersReducedMotion } from '@/design/use-reduced-motion';
 
-const STAGE_BEATS: ReadonlySet<string> = new Set([
-  'entry',
-  'revealing',
-  'strain',
-  'failed',
-  'tell',
-  'unseal',
-]);
+type HostPhase =
+  | { kind: 'sealing'; stalled: boolean }
+  | { kind: 'sealed'; outcome: RevealOutcome }
+  | { kind: 'failed'; failure: TxFailure };
 
 export function RevealHost({
   result,
+  pool,
+  battles,
   onRetry,
   onDone,
 }: {
   /** The entry's terminal state — resolves, never rejects (outcome.ts). */
   result: Promise<RevealResult>;
+  /** The pool being entered — powers the split amounts and the live ring. */
+  pool: PoolSummary;
+  /** The just-sealed battles, for the TRAVEL-to-pool visual. */
+  battles: readonly Allocation[] | null;
   /** Re-submit after a NEVER-BROADCAST failure; absent = no retry offered. */
   onRetry?: () => Promise<RevealResult>;
-  /** Called when the player dismisses the settled takeover. */
+  /** Called when the player dismisses the settled confirmation. */
   onDone: () => void;
 }) {
-  const [state, dispatch] = useReducer(
-    (s: RevealState, e: RevealEvent) => revealReducer(s, e),
-    INITIAL_REVEAL_STATE
-  );
   const [pending, setPending] = useState(result);
+  const [phase, setPhase] = useState<HostPhase>({ kind: 'sealing', stalled: false });
+  const reduced = usePrefersReducedMotion();
 
-  // Outcome promise → machine events.
+  // Outcome promise → phase.
   useEffect(() => {
     let live = true;
     pending.then((r) => {
       if (!live) return;
-      dispatch(
+      setPhase(
         r.kind === 'confirmed'
-          ? { kind: 'tx_confirmed', outcome: r.outcome }
-          : { kind: 'tx_failed', failure: r.failure }
+          ? { kind: 'sealed', outcome: r.outcome }
+          : { kind: 'failed', failure: r.failure }
       );
     });
     return () => {
@@ -79,95 +85,112 @@ export function RevealHost({
     };
   }, [pending]);
 
-  // Beat timers, armed from the pure schedule.
-  const visual = revealVisual(state);
-  const beat = visual.beat;
-  const extended = visual.beat === 'tell' && visual.extended;
+  // The stall message, honest and single-shot per pending promise.
   useEffect(() => {
-    const timer = beatTimer(revealVisual(state));
-    if (!timer) return;
-    const t = setTimeout(() => dispatch({ kind: timer.event }), timer.ms);
+    const t = setTimeout(
+      () => setPhase((p) => (p.kind === 'sealing' ? { kind: 'sealing', stalled: true } : p)),
+      STALL_THRESHOLD_MS
+    );
     return () => clearTimeout(t);
-    // Re-arm on beat identity, not every state object.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [beat, extended]);
+  }, [pending]);
 
-  if (visual.beat === 'settled') {
-    return <SettledExit onDone={onDone} />;
-  }
-
-  if (visual.beat === 'stalled') {
+  if (phase.kind === 'sealed') {
     return (
-      <section className="flex max-w-prose flex-col gap-4 p-6" aria-live="polite">
-        <p className="text-sm opacity-80">{COPY.reveal.stalled}</p>
-        <button type="button" className="underline" onClick={() => dispatch({ kind: 'dismiss' })}>
-          {COPY.reveal.stalledDismiss}
-        </button>
-      </section>
-    );
-  }
-
-  if (visual.beat === 'card') {
-    return (
-      <section className="flex max-w-prose flex-col items-center gap-4 p-6" aria-live="polite">
-        <h2 className="text-lg">{COPY.reveal.cardTitle}</h2>
-        <div
-          className="rounded-lg border px-8 py-10 text-center"
-          style={{ borderColor: `var(${classColorToken(visual.class)})` }}
-        >
-          <p className="text-2xl">{COPY.reveal.classNames[visual.class]}</p>
-          <p className="mt-2 text-sm opacity-70">{COPY.reveal.cardSeat(visual.entryIndex)}</p>
-          <p className="mt-1 font-mono text-xs opacity-50">{truncateAddress(visual.asset)}</p>
-        </div>
-        <button
-          type="button"
-          className="rounded bg-[var(--color-accent,#7c5cff)] px-6 py-2 text-white"
-          onClick={() => dispatch({ kind: 'dismiss' })}
-        >
+      <section aria-live="polite" className="animate-enter flex flex-col items-center gap-5 py-8 text-center">
+        <h2 className="font-display text-[34px] leading-[38px] font-extrabold text-ink">Sealed</h2>
+        <p className="max-w-prose text-[15px] leading-6 text-ink-muted">{COPY.pool.sealed}</p>
+        {/* The player watches their money go exactly where the
+            documentation says it goes. */}
+        <EntrySplit entryLamports={pool.entry_lamports} playOnMount className="max-w-[420px]" />
+        <LivePoolRing pool={pool} size={96} riser />
+        <PassCard outcome={phase.outcome} />
+        <Button size="lg" onClick={onDone}>
           {COPY.reveal.cardDone}
-        </button>
+        </Button>
       </section>
     );
   }
 
-  // The stage-owned beats.
-  return (
-    <div className="flex flex-col items-center gap-4">
-      {STAGE_BEATS.has(visual.beat) && (
-        <RevealStage
-          visual={visual as Parameters<typeof RevealStage>[0]['visual'] & { beat: RevealStageBeat }}
-          onTap={() => dispatch({ kind: 'tap' })}
-        />
-      )}
-      {visual.beat === 'failed' && (
-        <div className="flex max-w-prose flex-col gap-3 text-center" aria-live="polite">
-          <p className="text-sm text-red-400">{visual.failure.message}</p>
-          {onRetry && !visual.failure.broadcast && (
-            <button
-              type="button"
-              className="rounded border px-6 py-2"
+  if (phase.kind === 'failed') {
+    return (
+      <section className="flex flex-col items-center gap-4 py-10" aria-live="polite">
+        <ErrorSurface className="max-w-prose">{phase.failure.message}</ErrorSurface>
+        <div className="flex gap-3">
+          {onRetry && !phase.failure.broadcast ? (
+            <Button
               onClick={() => {
-                dispatch({ kind: 'retry' });
+                setPhase({ kind: 'sealing', stalled: false });
                 setPending(onRetry());
               }}
             >
               {COPY.reveal.failedRetry}
-            </button>
-          )}
-          <button type="button" className="underline" onClick={() => dispatch({ kind: 'dismiss' })}>
+            </Button>
+          ) : null}
+          <a href={`/pools/${pool.pool}`} className={buttonClasses('secondary', 'md')}>
             {COPY.reveal.failedDismiss}
-          </button>
+          </a>
         </div>
-      )}
-    </div>
-  );
-}
+      </section>
+    );
+  }
 
-/** Settled is terminal: hand control back exactly once, after mount. */
-function SettledExit({ onDone }: { onDone: () => void }) {
-  useEffect(() => {
-    onDone();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  return null;
+  // Sealing: the seven sealed battles TRAVEL into the pool glyph, then a
+  // quiet hold. Pleasant to watch, pleasant to ignore.
+  return (
+    <section aria-live="polite" className="flex flex-col items-center gap-6 py-14">
+      <div
+        className="relative flex h-40 w-full max-w-[360px] items-end justify-center"
+        aria-hidden
+      >
+        <div
+          className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-brand"
+          style={{ boxShadow: 'var(--glow-action)' }}
+        >
+          <svg viewBox="0 0 24 24" className="h-7 w-7 text-brand">
+            <circle
+              cx="12"
+              cy="12"
+              r="8"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeDasharray="2.4 1.8"
+            />
+          </svg>
+        </div>
+        {!reduced && battles
+          ? battles.map((b, k) => (
+              <div
+                key={k}
+                className="to-pool absolute top-0"
+                style={
+                  {
+                    left: `${6 + k * 13}%`,
+                    '--tx': `${(50 - (6 + k * 13)) * 3.4}px`,
+                    '--ty': '96px',
+                    animationDelay: `${k * 40}ms`,
+                  } as React.CSSProperties
+                }
+              >
+                <Frost frosted>
+                  <PentagonMini allocation={b} size={34} />
+                </Frost>
+              </div>
+            ))
+          : null}
+      </div>
+      <div
+        className="h-8 w-8 rounded-full border-2 border-overlay border-t-brand motion-safe:animate-rotate"
+        aria-hidden
+      />
+      <p className="text-[15px] text-ink-muted">
+        {phase.stalled ? COPY.reveal.stalled : COPY.battle.sealing}
+      </p>
+      {phase.stalled ? (
+        <a href={`/pools/${pool.pool}`} className={buttonClasses('secondary', 'md')}>
+          {COPY.reveal.stalledDismiss}
+        </a>
+      ) : null}
+    </section>
+  );
 }

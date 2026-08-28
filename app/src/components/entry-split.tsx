@@ -32,7 +32,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from '@/design/tokens';
 import { travel } from '@/design/grammar';
 import { lamportsToSol } from '@/data/format';
-import { usePrefersReducedMotion } from '@/reveal/stages/use-reduced-motion';
+import { usePrefersReducedMotion } from '@/design/use-reduced-motion';
 
 export interface EntrySplitProps {
   /** The tier's entry price in lamports (decimal string, chain state). */

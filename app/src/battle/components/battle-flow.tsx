@@ -33,7 +33,7 @@ import { COPY } from '@/copy';
 import { Button } from '@/components/ui/button';
 import { PentagonMini } from '@/components/ui/pentagon-mini';
 import { Frost } from '@/components/ui/frost';
-import { usePrefersReducedMotion } from '@/reveal/stages/use-reduced-motion';
+import { usePrefersReducedMotion } from '@/design/use-reduced-motion';
 import { polygonPoints } from '../geometry';
 import { EVEN_SPLIT, type Allocation } from '../allocation';
 import { initialState, reduce, type BattleFlowState } from '../machine';
@@ -205,48 +205,15 @@ export function BattleFlow({ timerSeconds, onConfirm }: BattleFlowProps) {
     );
   }
 
-  // Confirmed: the seven sealed battles TRAVEL together into the pool
-  // glyph while the parent runs the real submit; the reveal takeover
-  // replaces this screen when the outcome resolves.
+  // Confirmed: a one-frame fallback — the parent swaps in the outcome
+  // host (which plays the TRAVEL-to-pool sequence) on the same commit.
   return (
-    <section aria-live="polite" className="flex flex-col items-center gap-6 py-14">
-      <div className="relative flex h-40 w-full max-w-[360px] items-end justify-center" aria-hidden>
-        {/* The pool glyph: a small seat ring outline, receiving. */}
-        <div
-          className={
-            (reduced ? '' : 'animate-light-in ') +
-            'flex h-16 w-16 items-center justify-center rounded-full border-2 border-brand'
-          }
-          style={{ boxShadow: 'var(--glow-action)' }}
-        >
-          <svg viewBox="0 0 24 24" className="h-7 w-7 text-brand">
-            <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" strokeWidth="1.6" strokeDasharray="2.4 1.8" />
-          </svg>
-        </div>
-        {/* Seven sealed minis converging on the glyph. */}
-        {!reduced &&
-          state.battles.map((b, k) => (
-            <div
-              key={k}
-              className="to-pool absolute top-0"
-              style={
-                {
-                  left: `${6 + k * 13}%`,
-                  '--tx': `${(50 - (6 + k * 13)) * 3.4}px`,
-                  '--ty': '96px',
-                  animationDelay: `${k * 40}ms`,
-                } as React.CSSProperties
-              }
-            >
-              <Frost frosted>
-                <PentagonMini allocation={b} size={34} />
-              </Frost>
-            </div>
-          ))}
-      </div>
-      <p className={(reduced ? '' : 'animate-enter ') + 'text-[15px] text-ink-muted'}>
-        {COPY.battle.sealing}
-      </p>
+    <section aria-live="polite" className="flex flex-col items-center gap-4 py-14">
+      <div
+        className="h-8 w-8 rounded-full border-2 border-overlay border-t-brand motion-safe:animate-rotate"
+        aria-hidden
+      />
+      <p className="text-[15px] text-ink-muted">{COPY.battle.sealing}</p>
     </section>
   );
 }

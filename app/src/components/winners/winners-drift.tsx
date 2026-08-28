@@ -16,7 +16,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { COPY } from '@/copy';
-import { usePrefersReducedMotion } from '@/reveal/stages/use-reduced-motion';
+import { usePrefersReducedMotion } from '@/design/use-reduced-motion';
 
 const SECONDS_PER_VIEWPORT = 24;
 const MIN_CARDS_TO_DRIFT = 3;

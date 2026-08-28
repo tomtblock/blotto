@@ -37,7 +37,7 @@ import { COPY } from '@/copy';
 import { STAT_NAMES, type Allocation } from '../allocation';
 import { AXES, axisUnit, pointFor, polygonPoints, valueForPointer } from '../geometry';
 import { DigitSlide } from '@/components/ui/digit-slide';
-import { usePrefersReducedMotion } from '@/reveal/stages/use-reduced-motion';
+import { usePrefersReducedMotion } from '@/design/use-reduced-motion';
 
 const SIZE = 360;
 const R = 150;
