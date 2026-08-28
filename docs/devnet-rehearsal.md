@@ -34,13 +34,54 @@ scripted bot in shadow mode, and drains the 63-entry refund fork in full.
    re-derives the derived tables from the events ledger. Then transfer the
    upgrade authority to the devnet Squads vault and verify
    `solana program show` reports the Squads address (Gate 1's founder check).
-2. **Initialise.** `init_config` signed by the Squads vault, carrying the
-   Turnkey entry-signer and settlement-signer pubkeys, the platform wallet,
-   and the seven per-tier ceilings (D2): tier 0 at 6.4 SOL, every other
-   tier at its own gross intake (entry × 64 — e.g. tier 6 at 480 SOL).
-   Only the 0.1 tier is open at launch; the others stay gated by the R6
-   switch until the founder opens them (`set_open_tiers`), and each
-   ceiling moves one tier per `set_vault_ceiling` call.
+2. **Initialise — the admin CLI (E3).** Every admin call runs through
+   `scripts/admin.ts`, two ways:
+
+   - **direct-signed** (devnet rehearsal — the admin is a local keypair):
+     set `FEE_PAYER_KEYPAIR=/path/to/admin.json` and run the command;
+   - **`--emit-proposal --admin <squads-vault>`** (mainnet, or a devnet
+     Squads vault): prints the instruction's accounts + base64 data
+     WITHOUT signing — paste it into the Squads proposal. The CLI cannot
+     sign for a multisig, by design.
+
+   The rehearsal sequence, direct-signed (amounts are lamports, or exact
+   decimal SOL written like `6.4sol` — parsed in bigint, never a float):
+
+   ```bash
+   export FEE_PAYER_KEYPAIR=/path/to/devnet-admin.json
+   A="npx ts-node --transpile-only scripts/admin.ts"
+
+   # One-time setup: signer becomes admin. Ceilings per D2: tier 0 at
+   # 6.4 SOL, every other tier its own gross intake (entry × 64).
+   $A init-config \
+     --entry-signer   <turnkey-entry-signer-pubkey> \
+     --settlement-signer <turnkey-settlement-signer-pubkey> \
+     --ceilings 6.4sol,32sol,48sol,64sol,160sol,320sol,480sol \
+     --min-platform <founder-ratified-lamports>
+
+   # Bootstrap the prize treasury before any tier can open (D-A1 revised:
+   # pots pre-fund from the treasury). Permissionless — any funder.
+   $A fund-platform-wallet --amount 6sol
+
+   # Only the 0.1 tier open at launch (R6, founder-owned).
+   $A set-open-tiers --tiers 1,0,0,0,0,0,0
+
+   # Rotate a service signer later (either flag, or both):
+   $A register-signers --settlement-signer <new-pubkey>
+
+   # The ONE treasury exit — blocked on-chain below the policy floor:
+   $A withdraw-platform --amount 1sol --destination <founder-wallet>
+
+   # Sanity read at any point (no keypair needed):
+   $A status
+   ```
+
+   The `--ceilings` example is each tier's gross intake (entry × 64) per
+   the D2 register and the shared tier constants (0.1 / 0.5 / 0.75 / 1 /
+   2.5 / 5 / 7.5 SOL entries); the founder ratifies the actual numbers at
+   run time — the CLI has no defaults for founder-owned figures.
+   `--min-platform` is the mainnet treasury minimum awaiting ratification
+   (its devnet stand-in can be small).
 3. **Services up.**
    - **Indexer** — start with `npm --prefix backend/indexer run sync`: it
      migrates, runs one BACKFILL (the fallback that catches anything missed
