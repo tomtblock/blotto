@@ -158,3 +158,6 @@ jobs:
 
       - name: Structural rules (roadmap §3 rules 5–6)
         run: ./scripts/check-standing-rules.sh
+
+      - name: Env-example coverage (E1)
+        run: ./scripts/check-env-examples.sh

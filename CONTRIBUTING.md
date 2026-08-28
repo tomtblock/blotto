@@ -7,7 +7,8 @@ document is canonical on which subject. This file is canonical for **process** o
 
 ```bash
 git config core.hooksPath .githooks    # enables the keypair pre-commit hook — do this first
-cp .env.example .env                   # then fill values from the shared vault, never from chat
+cp app/.env.example app/.env.local     # then fill values from the shared vault, never from chat
+cp backend/.env.example backend/.env   # (one example per side since E1; the CI env gate keeps them honest)
 ```
 
 ## Keys and secrets
