@@ -3,4 +3,5 @@ export * from './sealedbox';
 export * from './payload';
 export * from './custody';
 export * from './custody-turnkey';
+export * from './custody-pg';
 export * from './store';

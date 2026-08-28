@@ -79,6 +79,11 @@ export async function handleReviewRoute(
 ): Promise<ReviewRouteResult> {
   const [route, queryString] = path.split('?', 2);
 
+  // E5: the deployment liveness probe.
+  if (route === '/health' && method === 'GET') {
+    return { status: 200, body: { ok: true, service: 'review' } };
+  }
+
   if (route === '/decisions' && method === 'GET') {
     const pool = new URLSearchParams(queryString ?? '').get('pool');
     if (!pool || !B58.test(pool)) return { status: 400, body: { error: 'pool' } };

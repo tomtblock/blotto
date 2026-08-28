@@ -1,0 +1,44 @@
+# Fly.io app config for the indexer service (E5). Frankfurt per TECH-ARCH §11
+# (EU region, never US). Deploy from the repo root:
+#   fly deploy --config deploy/fly/indexer.fly.toml
+# Secrets (fly secrets set ...): see docs/hosting.md — never in this file.
+app = "blotto-indexer"
+primary_region = "fra"
+
+[build]
+  dockerfile = "../docker/Dockerfile.indexer"
+
+[env]
+  BLOTTO_INDEXER_PORT = "8080"
+  BLOTTO_READ_API_PORT = "8081"
+
+[http_service]
+  internal_port = 8081
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[http_service.checks]]
+  interval = "15s"
+  timeout = "5s"
+  grace_period = "30s"
+  method = "GET"
+  path = "/health"
+
+# The webhook receiver rides the same machine on its own public service —
+# Helius posts here (Authorization: the shared secret; E6 validates it).
+[[services]]
+  internal_port = 8080
+  protocol = "tcp"
+
+  [[services.ports]]
+    port = 8080
+    handlers = ["tls", "http"]
+
+  [[services.http_checks]]
+    interval = "15s"
+    timeout = "5s"
+    grace_period = "30s"
+    method = "get"
+    path = "/health"

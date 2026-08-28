@@ -91,6 +91,12 @@ export async function handleEntryRoute(
     if (stub) packetDeps = { ...deps.packet, geo: { lookup: async () => stub } };
   }
 
+  // E5: the deployment liveness probe.
+  if (path === '/health') {
+    if (method !== 'GET') return { status: 405, body: { error: 'method' } };
+    return { status: 200, body: { ok: true, service: 'packet' } };
+  }
+
   if (path === '/geo') {
     if (method !== 'GET') return { status: 405, body: { error: 'method' } };
     return { status: 200, body: { allowed: await geoVerdict(packetDeps, ip) } };

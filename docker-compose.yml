@@ -1,0 +1,131 @@
+# E5 (master prompt v3): the full backend on one machine — the local dev /
+# staging topology behind docs/hosting.md. Secrets come from `.env` at the
+# repo root (cp backend/.env.example .env and fill), NEVER from this file.
+#
+#   docker compose up --build postgres indexer packet     # the read path
+#   docker compose up --build                             # everything
+#
+# The daemon and review services need credentialed seams (Turnkey, Irys,
+# the settlement keypair); without them their containers exit at startup
+# with an explicit message — that refusal is the fail-closed design, not a
+# compose bug.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: blotto
+      POSTGRES_PASSWORD: blotto
+      POSTGRES_DB: blotto
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U blotto']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  indexer:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.indexer
+    environment:
+      BLOTTO_DATABASE_URL: postgres://blotto:blotto@postgres:5432/blotto
+      BLOTTO_RPC_URL: ${BLOTTO_RPC_URL:-https://api.devnet.solana.com}
+      BLOTTO_PROGRAM_ID: ${BLOTTO_PROGRAM_ID:-}
+      BLOTTO_HELIUS_WEBHOOK_SECRET: ${BLOTTO_HELIUS_WEBHOOK_SECRET:?set in .env}
+      BLOTTO_INDEXER_PORT: '8080'
+      BLOTTO_READ_API_PORT: '8081'
+    ports:
+      - '8080:8080' # webhook (Helius posts here)
+      - '8081:8081' # read API (the app's NEXT_PUBLIC_INDEXER_URL)
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'node -e "fetch(''http://127.0.0.1:8081/health'').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  packet:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.packet
+    environment:
+      BLOTTO_DATABASE_URL: postgres://blotto:blotto@postgres:5432/blotto
+      BLOTTO_PACKET_PORT: '8082'
+      BLOTTO_TRUST_PROXY: '0'
+      # Signer: Turnkey set (production) or the dev seed — see .env.example.
+      TURNKEY_API_BASE_URL: ${TURNKEY_API_BASE_URL:-}
+      TURNKEY_API_PUBLIC_KEY: ${TURNKEY_API_PUBLIC_KEY:-}
+      TURNKEY_API_PRIVATE_KEY: ${TURNKEY_API_PRIVATE_KEY:-}
+      TURNKEY_ORGANIZATION_ID: ${TURNKEY_ORGANIZATION_ID:-}
+      ENTRY_SIGNER_KEY_ID: ${ENTRY_SIGNER_KEY_ID:-}
+      ENTRY_SIGNER_PUBLIC_KEY_HEX: ${ENTRY_SIGNER_PUBLIC_KEY_HEX:-}
+      ENTRY_SIGNER_SEED_HEX: ${ENTRY_SIGNER_SEED_HEX:-}
+      # Geo: vendor pair (production) or the dev stub.
+      GEO_VENDOR_URL: ${GEO_VENDOR_URL:-}
+      GEO_VENDOR_API_KEY: ${GEO_VENDOR_API_KEY:-}
+      GEO_STUB_COUNTRY: ${GEO_STUB_COUNTRY:-}
+      GEO_STUB_REGION: ${GEO_STUB_REGION:-}
+      GEO_STUB_VPN: ${GEO_STUB_VPN:-}
+    ports:
+      - '8082:8082'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'node -e "fetch(''http://127.0.0.1:8082/health'').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  review:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.review
+    environment:
+      BLOTTO_DATABASE_URL: postgres://blotto:blotto@postgres:5432/blotto
+      BLOTTO_REVIEW_PORT: '8083'
+      BLOTTO_RPC_URL: ${BLOTTO_RPC_URL:-https://api.devnet.solana.com}
+      BLOTTO_PROGRAM_ID: ${BLOTTO_PROGRAM_ID:-}
+      SETTLEMENT_SIGNER_KEYPAIR: /run/secrets/settlement-signer.json
+    volumes:
+      - ${SETTLEMENT_SIGNER_KEYPAIR:-/dev/null}:/run/secrets/settlement-signer.json:ro
+    ports:
+      - '8083:8083'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  daemon:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.daemon
+    environment:
+      BLOTTO_DATABASE_URL: postgres://blotto:blotto@postgres:5432/blotto
+      BLOTTO_RPC_URL: ${BLOTTO_RPC_URL:-https://api.devnet.solana.com}
+      BLOTTO_PROGRAM_ID: ${BLOTTO_PROGRAM_ID:-}
+      BLOTTO_DAEMON_HEALTH_PORT: '8084'
+      SETTLEMENT_SIGNER_KEYPAIR: /run/secrets/settlement-signer.json
+      RANDOMNESS_ACCOUNT: ${RANDOMNESS_ACCOUNT:-}
+      TURNKEY_API_BASE_URL: ${TURNKEY_API_BASE_URL:-}
+      TURNKEY_API_PUBLIC_KEY: ${TURNKEY_API_PUBLIC_KEY:-}
+      TURNKEY_API_PRIVATE_KEY: ${TURNKEY_API_PRIVATE_KEY:-}
+      TURNKEY_ORGANIZATION_ID: ${TURNKEY_ORGANIZATION_ID:-}
+      TURNKEY_USER_ID: ${TURNKEY_USER_ID:-}
+      IRYS_UPLOAD_KEY: ${IRYS_UPLOAD_KEY:-}
+      IRYS_NETWORK: ${IRYS_NETWORK:-devnet}
+    volumes:
+      - ${SETTLEMENT_SIGNER_KEYPAIR:-/dev/null}:/run/secrets/settlement-signer.json:ro
+    ports:
+      - '8084:8084'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:

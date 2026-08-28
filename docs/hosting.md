@@ -1,0 +1,87 @@
+# Hosting (E5) — topology, images, health, and the runbook
+
+The product runs as **one Next.js app on Vercel** (docs/deploy-vercel.md)
+plus **four backend services and one Postgres** in the EU (TECH-ARCH §11:
+Frankfurt/Dublin, never US). Everything below deploys from this repository
+with no build step beyond `npm ci` — the services run ts-node directly.
+
+## Topology
+
+| Service | Entry | Ports | Health | Needs |
+|---|---|---|---|---|
+| indexer | `backend/indexer` → `src/index.ts sync` | 8080 webhook · 8081 read API | `GET /health` on both | Postgres, Helius webhook secret |
+| packet | `backend/packet` → `src/main.ts` | 8082 | `GET /health` | Postgres, entry signer (Turnkey or dev seed), geo (vendor or dev stub), `config/territories.json` + `config/terms.json` |
+| review | `backend/detection` → `src/main.ts` | 8083 | `GET /health` | Postgres, `config/reviewers.json`, settlement keypair, RPC |
+| daemon | `backend/reveal` → `src/main.ts` | 8084 (health only) | `GET /health` (reports the last tick) | Postgres, settlement keypair, Turnkey custody, Irys wallet, Randomness account, RPC |
+
+Every service reads `BLOTTO_DATABASE_URL` and applies nothing itself — run
+migrations once per deploy (`npm --prefix backend/indexer run migrate`,
+also step 3 of `scripts/deploy-devnet.sh`).
+
+Every credentialed seam **fails closed**: a service missing its signer,
+geo vendor, custody or upload wallet refuses to start (or refuses the
+request) with an explicit message. That is the design, not a deploy bug.
+
+## Local / staging: docker compose
+
+```bash
+cp backend/.env.example .env    # fill what you have; see fail-closed note
+docker compose up --build postgres indexer packet   # the read path
+docker compose up --build                           # everything
+```
+
+Compose builds the four images in `deploy/docker/Dockerfile.*` (build
+context is the repo root — the packages cross-import by relative path, so
+each image carries the whole backend tree plus `config/`).
+
+## Fly.io (production shape)
+
+One Fly app per service, all `primary_region = "fra"` (Frankfurt):
+
+```bash
+fly launch --no-deploy --config deploy/fly/indexer.fly.toml   # once per app
+fly secrets set BLOTTO_DATABASE_URL=... BLOTTO_HELIUS_WEBHOOK_SECRET=... -a blotto-indexer
+fly deploy --config deploy/fly/indexer.fly.toml
+```
+
+- Postgres: a managed EU instance (Fly Postgres in `fra`, or Supabase/Neon
+  EU) — set `BLOTTO_DATABASE_URL` as a secret on every app.
+- The indexer app serves the read API as its main HTTP service and the
+  Helius webhook on a second service (port 8080) — both health-checked.
+- Keypair files (settlement signer) mount via Fly secrets as base64 →
+  written to `/run/secrets` by a release command, or use `fly secrets set
+  SETTLEMENT_SIGNER_KEYPAIR=/path` with a volume; the compose file shows
+  the same read-only mount shape.
+- The app on Vercel points at these: `NEXT_PUBLIC_INDEXER_URL` → the
+  indexer app's public URL, `NEXT_PUBLIC_ENTRY_API_URL` → the packet
+  app's, `NEXT_PUBLIC_REVIEW_API_URL` → the review app's.
+
+## Health checks
+
+All four services expose `GET /health` returning `{ ok: true, ... }`.
+The daemon's additionally carries the LAST TICK summary (`at`, counts of
+opened/cranked/refunds/errors) — a stale `at` is the "hung RPC" alarm;
+platform checks should alert on staleness, not just non-200.
+
+## Vendor needs (the open list)
+
+| Need | Blocks | Where it lands |
+|---|---|---|
+| Helius webhook + API key | indexer ingest | `BLOTTO_HELIUS_WEBHOOK_SECRET`, webhook creation settings in E6's section of this doc |
+| Turnkey org (entry signer, custody user) | packet signing, daemon custody | `TURNKEY_*`, `ENTRY_SIGNER_*` |
+| Geo vendor (R2) | packet issuance in production | `GEO_VENDOR_URL/_API_KEY` |
+| Irys funded wallet | bundle publishing | `IRYS_UPLOAD_KEY` |
+| Switchboard On-Demand reveal adapter | VRF commit on live devnet | chain-web3's `makeVrfRevealIx` seam (C11 remainder) — until then the daemon reports vrf errors per tick and everything else proceeds |
+| Mail provider (founder's pick) | D3 email notifications | a dispatch job reading `notify_optin`, resolving addresses via the sign-in provider |
+| Sanctions screening vendor | packet issuance hardening | the packet main ships the suite's always-clear answer; territory gating (fail-closed) is the operative geographic control at launch |
+
+## Sequencing (first devnet bring-up)
+
+1. Postgres up; `scripts/deploy-devnet.sh` (build, extend-if-needed,
+   deploy, migrate, re-derive).
+2. `scripts/admin.ts init-config` + `fund-platform-wallet` +
+   `set-open-tiers` (docs/devnet-rehearsal.md step 2).
+3. indexer up (webhook + read API), Helius webhook created (E6 settings).
+4. packet up; app deployed with the three `NEXT_PUBLIC_*` URLs.
+5. daemon up (opens the first pool once the treasury covers tier 0);
+   review up when reviewers are configured.
