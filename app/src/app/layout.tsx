@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Big_Shoulders, JetBrains_Mono, Space_Grotesk } from "next/font/google";
+import { COPY } from "@/copy";
 import { AuthProvider } from "@/wallet/auth-provider";
 import { QueryProvider } from "@/query/query-provider";
 import "./globals.css";
@@ -27,13 +28,12 @@ const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
 });
 
-// TODO_COPY(layout.metadata): the page title and description are the FIRST
-// user-facing strings a search engine or a link preview will quote, so they are
-// squarely inside the PID §8.7 language rule and squarely inside the Phase 3
-// audit (PID §10, C12). Placeholders until then.
+// The page title and description are the FIRST user-facing strings a search
+// engine or a link preview will quote — squarely inside the PID §8.7 language
+// rule. Both come from the copy module (v3 D-UI-3).
 export const metadata: Metadata = {
-  title: "TODO_COPY(layout.title)",
-  description: "TODO_COPY(layout.description)",
+  title: `${COPY.shell.title} — ${COPY.shell.tagline}`,
+  description: COPY.shell.metaDescription,
 };
 
 export const viewport: Viewport = {

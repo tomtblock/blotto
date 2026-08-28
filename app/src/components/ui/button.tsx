@@ -11,14 +11,16 @@ type Intent = "primary" | "quiet" | "prize";
 type Size = "md" | "lg";
 
 const INTENT: Record<Intent, string> = {
+  // text-(--color-base): `text-base` is Tailwind's font-size utility, so the
+  // surface colour must go through the var shorthand.
   primary:
-    "bg-brand text-base font-semibold hover:bg-brand-hot active:bg-brand-deep " +
+    "bg-brand text-(--color-base) font-semibold hover:bg-brand-hot active:bg-brand-deep " +
     "disabled:bg-overlay disabled:text-ink-muted",
   quiet:
     "bg-transparent text-ink border border-line hover:border-brand hover:text-brand " +
     "disabled:text-ink-muted disabled:hover:border-line",
   prize:
-    "bg-prize text-base font-semibold hover:bg-prize-hot " +
+    "bg-prize text-(--color-base) font-semibold hover:bg-prize-hot " +
     "disabled:bg-overlay disabled:text-ink-muted",
 };
 

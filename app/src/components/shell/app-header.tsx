@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { COPY } from "@/copy";
 import { useAuth } from "@/wallet/auth-context";
 import { CopyableAddressPill } from "@/components/copyable-address";
 
@@ -19,10 +20,11 @@ export function AppHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-overlay bg-base/90 backdrop-blur-md">
       <div className="mx-auto flex h-14 max-w-md items-center justify-between px-4">
-        {/* TODO_COPY(app-header.wordmark): the product wordmark. Placeholder
-            until the Phase 3 language and brand pass (PID §10, C12). */}
-        <Link href="/" className="font-display text-sm font-extrabold">
-          TODO_COPY<span className="text-brand">(app-header.wordmark)</span>
+        <Link
+          href="/"
+          className="font-display text-[17px] font-extrabold tracking-[0.06em] text-ink uppercase"
+        >
+          {COPY.shell.title}
         </Link>
 
         {status === "initializing" ? (

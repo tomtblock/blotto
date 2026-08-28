@@ -1,9 +1,11 @@
 'use client';
 
 /*
- * The verify page's client half (R13, roadmap 3.6): everything runs
- * IN-BROWSER — the same scoring engine the crank runs, over the published
- * bundle and the on-chain record. Two inputs, one report, green or red.
+ * The verify page's client half (R13, roadmap 3.6; restyled by v3 D2):
+ * everything runs IN-BROWSER — the same scoring engine the crank runs, over
+ * the published bundle and the on-chain record. Two inputs, one report,
+ * green or red (the priceUp/priceDown pair: a verification verdict is
+ * outcome semantics, the one non-market place those tokens apply).
  *
  * C11: both inputs AUTO-FETCH — the on-chain record from the indexer read
  * API's /verify-record for a pasted pool address, the bundle from its
@@ -14,7 +16,13 @@
 
 import { useState } from 'react';
 import { COPY } from '@/copy';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { verifyPool, type OnChainRecord, type PublishedBundle, type VerifyReport } from '@/verify/logic';
+
+const FIELD =
+  'rounded-lg border border-line bg-base p-2.5 font-mono text-xs text-ink ' +
+  'outline-none focus-visible:border-brand';
 
 export function VerifyClient() {
   const [pool, setPool] = useState('');
@@ -67,68 +75,80 @@ export function VerifyClient() {
 
   return (
     <section className="flex flex-col gap-4">
-      <h1 className="text-2xl">{COPY.verify.title}</h1>
-      <p className="text-sm opacity-80">{COPY.verify.explainer}</p>
-      <div className="flex flex-col gap-2 rounded border p-3">
-        <label className="flex flex-col gap-1 text-sm">
+      <h1 className="font-display text-[34px] leading-[38px] font-extrabold text-ink">
+        {COPY.verify.title}
+      </h1>
+      <p className="max-w-prose text-[15px] leading-6 text-ink-muted">{COPY.verify.explainer}</p>
+      <Card className="flex flex-col gap-3 p-4">
+        <label className="flex flex-col gap-1.5 text-[13px] text-ink-muted">
           Pool address (fetches the on-chain record)
-          <input
-            className="rounded border bg-transparent p-2 font-mono text-xs"
-            value={pool}
-            onChange={(e) => setPool(e.target.value)}
-          />
+          <input className={FIELD} value={pool} onChange={(e) => setPool(e.target.value)} />
         </label>
-        <label className="flex flex-col gap-1 text-sm">
+        <label className="flex flex-col gap-1.5 text-[13px] text-ink-muted">
           Published bundle URI (the pool page links it)
           <input
-            className="rounded border bg-transparent p-2 font-mono text-xs"
+            className={FIELD}
             value={bundleUri}
             onChange={(e) => setBundleUri(e.target.value)}
           />
         </label>
-        <button
-          type="button"
-          className="self-start rounded border px-4 py-1"
+        <Button
+          intent="quiet"
+          className="self-start"
           disabled={fetching || (!pool.trim() && !bundleUri.trim())}
           onClick={autoFetch}
         >
           {fetching ? '…' : 'Fetch both'}
-        </button>
-      </div>
-      <label className="flex flex-col gap-1 text-sm">
+        </Button>
+      </Card>
+      <label className="flex flex-col gap-1.5 text-[13px] text-ink-muted">
         Published reveal bundle (JSON)
         <textarea
-          className="h-32 rounded border bg-transparent p-2 font-mono text-xs"
+          className={`h-32 ${FIELD}`}
           value={bundleText}
           onChange={(e) => setBundleText(e.target.value)}
         />
       </label>
-      <label className="flex flex-col gap-1 text-sm">
+      <label className="flex flex-col gap-1.5 text-[13px] text-ink-muted">
         On-chain record (JSON — from the events, or the read API&apos;s /verify-record)
         <textarea
-          className="h-32 rounded border bg-transparent p-2 font-mono text-xs"
+          className={`h-32 ${FIELD}`}
           value={recordText}
           onChange={(e) => setRecordText(e.target.value)}
         />
       </label>
-      <button type="button" className="rounded border px-4 py-2" onClick={run}>
+      <Button size="lg" onClick={run}>
         Recompute
-      </button>
-      {error && <p className="text-sm text-red-400">{error}</p>}
+      </Button>
+      {error && (
+        <p className="text-[14px] leading-5 text-price-down" role="alert">
+          {error}
+        </p>
+      )}
       {report && (
         <div
-          className={`rounded border p-4 ${report.ok ? 'border-green-500' : 'border-red-500'}`}
+          className={
+            'animate-settle rounded-2xl border-2 bg-raised p-5 ' +
+            (report.ok ? 'border-price-up' : 'border-price-down')
+          }
           role="status"
         >
-          <p className="mb-3 font-medium">
+          <p
+            className={
+              'mb-3 font-display text-[18px] font-bold ' +
+              (report.ok ? 'text-price-up' : 'text-price-down')
+            }
+          >
             {report.ok ? COPY.verify.match : COPY.verify.mismatch}
           </p>
-          <ul className="flex flex-col gap-1 text-sm">
+          <ul className="flex flex-col gap-1.5 text-sm">
             {report.checks.map((c) => (
               <li key={c.name} className="flex gap-2">
-                <span>{c.ok ? '✓' : '✗'}</span>
-                <span className="font-mono">{c.name}</span>
-                <span className="opacity-60">{c.detail}</span>
+                <span className={c.ok ? 'text-price-up' : 'text-price-down'}>
+                  {c.ok ? '✓' : '✗'}
+                </span>
+                <span className="font-mono text-[13px] text-ink">{c.name}</span>
+                <span className="text-[13px] text-ink-muted">{c.detail}</span>
               </li>
             ))}
           </ul>

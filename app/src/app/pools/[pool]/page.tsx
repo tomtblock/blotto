@@ -1,8 +1,8 @@
 /*
- * The pool page (roadmap 3.2): tier, entry, entrants/64, the 72h countdown,
- * the prize table, the rules summary — and the §8.6 "decisions are final"
- * statement ABOVE the enter control, which is a legal-position requirement,
- * not layout taste.
+ * The pool page (roadmap 3.2; restyled by v3 D2): the fixture in full — the
+ * seat ring, the fixed prize pool, the 72h clock, the published prize table
+ * — and the §8.6 "decisions are final" statement ABOVE the enter control,
+ * which is a legal-position requirement, not layout taste.
  */
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -11,89 +11,111 @@ import { indexerApi } from '@/data/api';
 import { lamportsToSol, prizeForRank } from '@/data/format';
 import { AppHeader } from '@/components/shell/app-header';
 import { TabBar } from '@/components/shell/tab-bar';
-import { Countdown } from './countdown';
+import { Card } from '@/components/ui/card';
+import { Stat } from '@/components/ui/stat';
+import { ProgressRing } from '@/components/ui/progress-ring';
+import { PrizeTable } from '@/components/ui/prize-table';
+import { Countdown } from '@/components/ui/countdown';
+
+const BANDS = [
+  { label: '1st', rank: 1 },
+  { label: '2nd', rank: 2 },
+  { label: '3rd', rank: 3 },
+  { label: '4th', rank: 4 },
+  { label: '5th–8th', rank: 5 },
+  { label: '9th–16th', rank: 9 },
+];
 
 export default async function PoolPage({ params }: { params: Promise<{ pool: string }> }) {
   const { pool: poolId } = await params;
   const pool = await indexerApi().getPool(poolId);
   if (!pool) notFound();
-  const bands = [
-    { label: '1st', ranks: [1] },
-    { label: '2nd', ranks: [2] },
-    { label: '3rd', ranks: [3] },
-    { label: '4th', ranks: [4] },
-    { label: '5th–8th', ranks: [5] },
-    { label: '9th–16th', ranks: [9] },
-  ];
+  const open = pool.state === 'Open';
+
   return (
     <>
       <AppHeader />
-      <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8">
-        <header className="mb-6 flex items-baseline gap-4">
-          <h1 className="text-2xl">Pool #{pool.id}</h1>
-          <span className="font-mono text-xl">{lamportsToSol(pool.entry_lamports)} SOL</span>
-          <span className="ml-auto rounded border px-2 py-0.5 text-sm">{pool.state}</span>
+      <main className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 pb-24">
+        <header className="mb-5 flex items-baseline gap-3">
+          <h1 className="font-display text-[24px] font-bold text-ink">Pool #{pool.id}</h1>
+          <span className="rounded-full border border-line px-2.5 py-0.5 text-[12px] uppercase tracking-[0.1em] text-ink-muted">
+            {pool.state}
+          </span>
+          <Link
+            href={`/verify?pool=${pool.pool}`}
+            className="ml-auto text-[13px] text-ink-muted underline underline-offset-2 hover:text-ink"
+          >
+            Verify this pool
+          </Link>
         </header>
 
-        <section className="mb-6 grid grid-cols-2 gap-4">
-          <div className="rounded border p-4">
-            <div className="text-sm opacity-60">{COPY.pool.entrantsOf(pool.entrants)}</div>
-            <div className="mt-1 h-2 overflow-hidden rounded bg-[var(--color-border,#333)]">
-              <div
-                className="h-full bg-[var(--color-accent,#7c5cff)]"
-                style={{ width: `${(pool.entrants / 64) * 100}%` }}
+        <Card live={open} className="mb-5 p-5">
+          <div className="flex flex-wrap items-center gap-5">
+            <ProgressRing
+              value={pool.entrants}
+              total={64}
+              size={104}
+              label={`${pool.entrants} of 64 seats filled`}
+            />
+            <div className="flex min-w-0 flex-1 flex-col gap-3">
+              <Stat
+                label={COPY.pool.prizeTableTitle}
+                value={lamportsToSol(pool.pot_lamports)}
+                unit="SOL"
+                tone="prize"
               />
+              <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
+                <Stat label="Entry" value={lamportsToSol(pool.entry_lamports)} unit="SOL" />
+                {open && (
+                  <Countdown deadlineUnix={pool.fill_deadline} label={COPY.pool.fillDeadline} />
+                )}
+              </div>
             </div>
           </div>
-          <div className="rounded border p-4">
-            <div className="text-sm opacity-60">{COPY.pool.fillDeadline}</div>
-            <Countdown deadlineUnix={pool.fill_deadline} />
-          </div>
-        </section>
+        </Card>
 
-        <section className="mb-6 rounded border p-4">
-          <h2 className="mb-3">{COPY.pool.prizeTableTitle}</h2>
-          <table className="w-full text-left">
-            <tbody>
-              {bands.map((b) => (
-                <tr key={b.label}>
-                  <td className="py-1 opacity-70">{b.label}</td>
-                  <td className="py-1 text-right font-mono">
-                    {lamportsToSol(prizeForRank(pool.pot_lamports, b.ranks[0]))} SOL
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
+        <Card className="mb-5 p-5">
+          <h2 className="mb-3 text-[12px] uppercase tracking-[0.14em] text-ink-muted">
+            {COPY.pool.prizeTableTitle}
+          </h2>
+          <PrizeTable
+            caption={COPY.pool.prizeTableTitle}
+            rows={BANDS.map((b) => ({
+              position: b.label,
+              amountSol: lamportsToSol(prizeForRank(pool.pot_lamports, b.rank)),
+              rank: b.rank,
+            }))}
+          />
+        </Card>
 
-        <section className="mb-6 flex flex-col gap-2 text-sm opacity-80">
+        <section className="mb-6 flex flex-col gap-2 text-[13px] leading-5 text-ink-muted">
           <p>{COPY.pool.sealed}</p>
           <p>{COPY.pool.refundRule}</p>
           <p>
-            <Link href="/rules" className="underline">
-              Rules
-            </Link>
-            {' · '}
-            <Link href={`/verify?pool=${pool.pool}`} className="underline">
-              Verify this pool
+            <Link href="/rules" className="underline underline-offset-2 hover:text-ink">
+              {COPY.rules.title}
             </Link>
           </p>
         </section>
 
-        {pool.state === 'Open' ? (
+        {open ? (
           <section className="flex flex-col gap-3">
             {/* PID §8.6: above the Enter control. Do not move it below. */}
-            <p className="text-sm font-medium">{COPY.pool.decisionsFinal}</p>
+            <p className="text-[14px] font-medium leading-5 text-ink">
+              {COPY.pool.decisionsFinal}
+            </p>
             <Link
               href={`/play?pool=${pool.pool}`}
-              className="rounded bg-[var(--color-accent,#7c5cff)] px-6 py-3 text-center text-white"
+              className="flex h-14 items-center justify-center rounded-xl bg-brand text-[17px] font-semibold text-(--color-base) transition-colors hover:bg-brand-hot"
             >
               {COPY.pool.enter}
             </Link>
           </section>
         ) : (
-          <Link href={`/pools/${pool.pool}/results`} className="underline">
+          <Link
+            href={`/pools/${pool.pool}/results`}
+            className="flex h-12 items-center justify-center rounded-xl border border-line text-[15px] font-medium text-ink transition-colors hover:border-brand hover:text-brand"
+          >
             Results
           </Link>
         )}

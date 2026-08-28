@@ -3,29 +3,19 @@
  * the active-state logic can be pinned by the node/no-DOM suite. The rendering
  * lives in `tab-bar.tsx`.
  *
- * Carried from the predecessor repository, with its three destinations replaced.
- *
- * PHASE-0-REVIEW: the tab set below is a PLACEHOLDER. Phase 0's brief says the
- * tabs become Play / Pools / Profile and that Phase 3 decides the real
- * information architecture. Nothing about this navigation has been ratified — the
- * routes it points at are the empty scaffolds in app/src/, and the labels are
- * lowercase placeholders awaiting the Phase 3 language audit (PID §10, C12) like
- * every other user-facing string in this directory.
+ * The tab set is Play / Pools / Profile (Phase 0 brief, kept by the v3 D2
+ * pass); labels come from the copy module like every user-facing string.
  */
+import { COPY } from '@/copy';
 
-/** The three shell destinations. Placeholder — Phase 3 owns the real IA. */
+/** The three shell destinations. */
 export type ShellTabId = "play" | "pools" | "profile";
 
 export interface TabDef {
   id: ShellTabId;
   /** The navigation target. */
   href: "/" | "/pools" | "/profile";
-  /**
-   * TODO_COPY(tab-nav): every label here is a placeholder. The Phase 3 language
-   * audit fills them, against PID §8.7 — which forbids a specific vocabulary and
-   * names the one to use instead (entry, pass, character, battle, stat,
-   * allocation, tournament, prize pool, ranking).
-   */
+  /** Label from the copy module (PID §8.7 vocabulary, CI-enforced). */
   label: string;
   /**
    * Pathname prefixes that mark this tab active. `"/"` matches the root EXACTLY;
@@ -35,17 +25,17 @@ export interface TabDef {
 }
 
 export const SHELL_TABS: readonly TabDef[] = [
-  { id: "play", href: "/", label: "TODO_COPY(tab-nav.play)", activeOn: ["/"] },
+  { id: "play", href: "/", label: COPY.shell.tabs.play, activeOn: ["/"] },
   {
     id: "pools",
     href: "/pools",
-    label: "TODO_COPY(tab-nav.pools)",
+    label: COPY.shell.tabs.pools,
     activeOn: ["/pools"],
   },
   {
     id: "profile",
     href: "/profile",
-    label: "TODO_COPY(tab-nav.profile)",
+    label: COPY.shell.tabs.profile,
     activeOn: ["/profile"],
   },
 ];
