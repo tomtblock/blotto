@@ -16,17 +16,17 @@
  * Tier constants come from the shared scoring module — never hand-typed.
  */
 import Link from 'next/link';
-import { TIER_ENTRY_LAMPORTS, TIER_POT_LAMPORTS } from '@blotto/scoring';
+import { PAID_RANKS, TIER_ENTRY_LAMPORTS, TIER_POT_LAMPORTS } from '@blotto/scoring';
 import { COPY } from '@/copy';
+import { LEGAL_COPY } from '@/copy/legal';
 import { indexerApi, live } from '@/data/api';
 import { proofBand } from '@/data/winners';
 import { LiveDataUnavailable } from '@/components/shell/live-unavailable';
-import { lamportsToSol } from '@/data/format';
+import { lamportsToSol, prizeForRank } from '@/data/format';
 import { AppHeader } from '@/components/shell/app-header';
 import { TabBar } from '@/components/shell/tab-bar';
 import { Card } from '@/components/ui/card';
 import { Stat } from '@/components/ui/stat';
-import { Countdown } from '@/components/ui/countdown';
 import { LivePoolRing } from '@/components/pool/live-pool-ring';
 import { buttonClasses } from '@/components/ui/button';
 import { FadeInView } from '@/components/ui/fade-in-view';
@@ -58,8 +58,14 @@ export default async function PlayPage() {
     <>
       <AppHeader />
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 pb-24">
-        <h1 className="mb-5 max-w-[22ch] font-display text-[34px] leading-[38px] font-extrabold text-ink sm:text-[56px] sm:leading-[58px]">
-          {COPY.shell.tagline}
+        {/* The hero line, set on three lines (founder direction). The middle
+            line is the instruction, so it carries the action accent. */}
+        <h1 className="mb-6 font-display text-[38px] leading-[40px] font-extrabold tracking-[-0.01em] text-ink sm:text-[62px] sm:leading-[62px]">
+          {COPY.shell.taglineLines.map((line, i) => (
+            <span key={line} className={'block ' + (i === 1 ? 'text-brand' : '')}>
+              {line}
+            </span>
+          ))}
         </h1>
 
         {/* Act III — the door. The current open pool as the live seat ring:
@@ -69,33 +75,52 @@ export default async function PlayPage() {
         {!poolsLive.ok ? (
           <LiveDataUnavailable />
         ) : hero ? (
-          <Card live className="p-5">
-            <div className="flex items-center gap-5">
-              <LivePoolRing pool={hero} size={116} riser />
-              <div className="flex min-w-0 flex-1 flex-col gap-3">
-                <Stat
-                  label={COPY.pool.prizeTableTitle}
-                  value={lamportsToSol(hero.pot_lamports)}
-                  unit="SOL"
-                  tone="prize"
-                />
-                <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
+          <div className="relative">
+            {/* A static floor glow under the open door — depth, not motion. */}
+            <div
+              aria-hidden
+              // Vertical bleed only: a horizontal one pushes past the
+              // page gutter at 375px and the no-horizontal-scroll contract
+              // fails (caught by the journey suite).
+              className="pointer-events-none absolute inset-x-0 -inset-y-6 -z-10 rounded-[32px]"
+              style={{
+                background:
+                  'radial-gradient(60% 60% at 50% 40%, color-mix(in srgb, var(--color-brand) 12%, transparent), transparent 70%)',
+              }}
+            />
+            <Card live className="p-5 sm:p-6">
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-4">
+                <LivePoolRing pool={hero} size={132} riser />
+                <div className="flex min-w-[180px] flex-1 flex-col gap-2">
+                  {/* The prize pool is the biggest number on the page. */}
                   <Stat
-                    label="Entry"
-                    value={lamportsToSol(hero.entry_lamports)}
+                    label={COPY.pool.prizeTableTitle}
+                    value={lamportsToSol(hero.pot_lamports)}
                     unit="SOL"
+                    tone="prize"
+                    size="moment"
                   />
-                  <Countdown deadlineUnix={hero.fill_deadline} label={COPY.pool.fillDeadline} />
+                  <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 text-[14px]">
+                    <span className="tnum font-semibold text-prize">
+                      {COPY.pool.tierFirst(
+                        lamportsToSol(prizeForRank(hero.pot_lamports, 1))
+                      )}
+                    </span>
+                    <span className="text-ink-muted">{COPY.proof.paidContext(PAID_RANKS)}</span>
+                    <span className="tnum text-ink-muted">
+                      {COPY.pool.tierEntry(lamportsToSol(hero.entry_lamports))}
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
-            <Link
-              href={`/pools/${hero.pool}`}
-              className={buttonClasses('primary', 'lg') + ' mt-5 w-full'}
-            >
-              {COPY.pool.enter}
-            </Link>
-          </Card>
+              <Link
+                href={`/pools/${hero.pool}`}
+                className={buttonClasses('primary', 'lg') + ' mt-5 w-full'}
+              >
+                {COPY.pool.enter}
+              </Link>
+            </Card>
+          </div>
         ) : (
           <Card className="flex flex-col items-start gap-2 p-6">
             <p className="text-[17px] font-medium text-ink">{COPY.pool.noOpenPool}</p>
@@ -107,11 +132,19 @@ export default async function PlayPage() {
 
         {/* Constraint 5: static, fully opaque, never animated, never under
             a sticky element — and in the first viewport on a phone. */}
-        <p className="mt-3 text-center text-[12px] tracking-[0.02em] text-ink-muted">
-          {COPY.pool.ageTerritoryNote}
-          {' · '}
+        <p className="mt-3 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center text-[12px] tracking-[0.02em] text-ink-muted">
+          <span>{COPY.pool.ageTerritoryNote}</span>
+          <span aria-hidden>·</span>
           <Link href="/rules" className="underline underline-offset-2 hover:text-ink">
             {COPY.rules.titleShort}
+          </Link>
+          <span aria-hidden>·</span>
+          <Link href="/terms" className="underline underline-offset-2 hover:text-ink">
+            {LEGAL_COPY.termsTitle}
+          </Link>
+          <span aria-hidden>·</span>
+          <Link href="/privacy" className="underline underline-offset-2 hover:text-ink">
+            {LEGAL_COPY.privacyTitle}
           </Link>
         </p>
 
@@ -152,37 +185,21 @@ export default async function PlayPage() {
             {COPY.howItWorks.title}
           </h2>
           <HowItWorksExplainer />
-          <FadeInView className="mt-3">
-            <p className="mx-auto max-w-[40ch] text-center text-[14px] leading-5 text-ink-muted">
+          {/* The best line in the product — given the weight to match. */}
+          <FadeInView className="mt-2">
+            <p className="mx-auto max-w-[26ch] text-center font-display text-[22px] leading-[28px] font-bold text-ink sm:max-w-[34ch] sm:text-[26px] sm:leading-[32px]">
               {COPY.howItWorks.pentagonCaption}
             </p>
           </FadeInView>
 
-          {/* The full mechanics in plain words — reference text, silent by
-              design (the explainer above is the hero; text does not
-              compete). */}
-          <ol className="mt-6 flex flex-col gap-3">
-            {COPY.howItWorks.steps.map((step, i) => (
-              <li
-                key={step.title}
-                className="flex gap-4 rounded-xl border border-line px-4 py-4"
-              >
-                <span
-                  aria-hidden
-                  className="tnum font-display text-[20px] leading-6 font-bold text-brand"
-                >
-                  {i + 1}
-                </span>
-                <div className="flex flex-col gap-1">
-                  <h3 className="text-[15px] font-semibold text-ink">{step.title}</h3>
-                  <p className="max-w-prose text-[13px] leading-5 text-ink-muted">
-                    {step.body}
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ol>
-          <p className="mt-4 flex gap-5 text-[13px]">
+          {/* The numbered step list that used to sit here was removed on
+              founder direction (2026-08-28): the explainer's own captions
+              carry the same four facts, and the list repeated them in
+              smaller type. The cold-visitor facts still land — player
+              count, what a battle is, when reveal happens and how many are
+              paid come from the captions; the operator's 20% and the
+              refund rule from the proof band below. */}
+          <p className="mt-6 flex gap-5 text-[14px]">
             <Link href="/rules" className="link-draw text-brand">
               {COPY.howItWorks.rulesLink}
             </Link>

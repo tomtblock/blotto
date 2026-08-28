@@ -21,6 +21,7 @@
 import Link from 'next/link';
 import { TIER_ENTRY_LAMPORTS } from '@blotto/scoring';
 import { COPY } from '@/copy';
+import { LEGAL_COPY } from '@/copy/legal';
 import { AppHeader } from '@/components/shell/app-header';
 import { TabBar } from '@/components/shell/tab-bar';
 import { EntrySplit } from '@/components/entry-split';
@@ -187,6 +188,17 @@ export default function RulesPage() {
             )}
           </section>
         ))}
+
+        {/* The two legal pages, linked where a reader looking for them
+            would look (founder direction 2026-08-28). */}
+        <p className="flex flex-wrap gap-5 text-[14px]">
+          <Link href="/terms" className="link-draw text-brand">
+            {LEGAL_COPY.termsTitle}
+          </Link>
+          <Link href="/privacy" className="link-draw text-brand">
+            {LEGAL_COPY.privacyTitle}
+          </Link>
+        </p>
       </main>
       <TabBar />
     </>

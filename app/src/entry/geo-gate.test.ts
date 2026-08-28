@@ -1,4 +1,8 @@
-/* Geo pre-flight gate specs (D-B3): every failure mode lands on 'blocked'. */
+/*
+ * Geo pre-flight gate specs (D-B3, amended 2026-08-28): every failure mode
+ * keeps entry CLOSED, and the state distinguishes a real territory verdict
+ * from the gate's own inability to ask.
+ */
 import { describe, expect, it } from 'vitest';
 import { checkGeoGate } from './geo-gate';
 
@@ -12,19 +16,31 @@ describe('checkGeoGate', () => {
     );
   });
 
-  it('blocks on allowed: false, non-200, malformed body, network error, and no base URL', async () => {
+  it('reports a real verdict as blocked', async () => {
     expect(await checkGeoGate('https://entry.example', answering(200, { allowed: false }))).toBe(
       'blocked'
     );
-    expect(await checkGeoGate('https://entry.example', answering(403, {}))).toBe('blocked');
-    expect(await checkGeoGate('https://entry.example', answering(200, {}))).toBe('blocked');
+  });
+
+  it('reports its own failures as unavailable, never as a territory block', async () => {
+    expect(await checkGeoGate('https://entry.example', answering(403, {}))).toBe('unavailable');
+    expect(await checkGeoGate('https://entry.example', answering(500, {}))).toBe('unavailable');
+    expect(await checkGeoGate('https://entry.example', answering(200, {}))).toBe('unavailable');
     expect(await checkGeoGate('https://entry.example', answering(200, { allowed: 'yes' }))).toBe(
-      'blocked'
+      'unavailable'
     );
     const failing: typeof fetch = (async () => {
       throw new Error('offline');
     }) as never;
-    expect(await checkGeoGate('https://entry.example', failing)).toBe('blocked');
-    expect(await checkGeoGate(undefined, answering(200, { allowed: true }))).toBe('blocked');
+    expect(await checkGeoGate('https://entry.example', failing)).toBe('unavailable');
+    // A missing entry API is a deployment fact, not a statement about the
+    // player's location.
+    expect(await checkGeoGate(undefined, answering(200, { allowed: true }))).toBe('unavailable');
+  });
+
+  it('never returns allowed for anything but an explicit true', async () => {
+    for (const body of [{}, { allowed: 1 }, { allowed: 'true' }, { allowed: null }]) {
+      expect(await checkGeoGate('https://entry.example', answering(200, body))).not.toBe('allowed');
+    }
   });
 });

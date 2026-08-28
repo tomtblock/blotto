@@ -16,6 +16,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { address } from '@solana/kit';
 import { COPY } from '@/copy';
+import { LEGAL_COPY } from '@/copy/legal';
 import { Button, buttonClasses } from '@/components/ui/button';
 import { BattleFlow } from '@/battle/components/battle-flow';
 import type { Allocation } from '@/battle/allocation';
@@ -75,6 +76,10 @@ export function PlayClient() {
   // D-B3: the territory pre-flight. Nothing that can take money renders
   // until the verdict is an explicit 'allowed' — fail-closed by default.
   const [geo, setGeo] = useState<GeoGateState>('checking');
+  // Re-run counter for the geo pre-flight's "check again" affordance: an
+  // 'unavailable' verdict is usually transient (a service starting, a
+  // network blip), so the player gets a retry rather than a dead end.
+  const [geoRun, setGeoRun] = useState(0);
   // C9: the balance pre-flight, equally fail-closed, ahead of the timer.
   // Keyed by (wallet, pool, run): a stale result renders as 'checking'
   // rather than being cleared with a synchronous setState in the effect.
@@ -102,7 +107,7 @@ export function PlayClient() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [geoRun]);
 
   const wallet = auth.status === 'signed-in' ? auth.walletAddress : null;
 
@@ -178,11 +183,32 @@ export function PlayClient() {
   if (!pool) return <PendingPanel label="Loading the pool" />;
 
   // D-B3: territory gate ahead of everything, including the attestation.
+  // Fail-closed either way — but 'blocked' (the service said no) and
+  // 'unavailable' (the service could not be asked) are different facts and
+  // the player is told which one applies.
   if (geo === 'checking') return <PendingPanel label="Checking availability" />;
   if (geo === 'blocked') {
     return (
       <StatePanel title="Not available here">
         <p>{COPY.gate.territoryBlocked}</p>
+      </StatePanel>
+    );
+  }
+  if (geo === 'unavailable') {
+    return (
+      <StatePanel title={COPY.gate.territoryUnavailableTitle}>
+        <p>{COPY.gate.territoryUnavailable}</p>
+        <div className="pt-1">
+          <Button
+            intent="secondary"
+            onClick={() => {
+              setGeo('checking');
+              setGeoRun((n) => n + 1);
+            }}
+          >
+            {COPY.gate.territoryRetry}
+          </Button>
+        </div>
       </StatePanel>
     );
   }
@@ -401,6 +427,18 @@ function AttestationGate({
           </label>
         ))}
       </div>
+      {/* The statement above asks you to accept the terms; this is where
+          you can read them (founder direction 2026-08-28 — the clickwrap
+          had no link to its own subject). Outside the labels, so tapping
+          it never toggles a checkbox. */}
+      <p className="flex flex-wrap gap-5 text-[13px]">
+        <Link href="/terms" className="link-draw text-brand">
+          {LEGAL_COPY.termsTitle}
+        </Link>
+        <Link href="/privacy" className="link-draw text-brand">
+          {LEGAL_COPY.privacyTitle}
+        </Link>
+      </p>
       {attestError && (
         <p className="error-surface text-[14px] leading-5 text-price-down" role="alert">
           {COPY.gate.attestFailed}

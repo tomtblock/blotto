@@ -10,7 +10,7 @@
  * buttons disabled with an explicit note instead of silently doing nothing.
  */
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { COPY } from "@/copy";
@@ -18,6 +18,7 @@ import { useAuth } from "@/wallet/auth-context";
 import type { SocialProvider } from "@/wallet/types";
 import { Button } from "@/components/ui/button";
 import { CopyableAddressPill } from "@/components/copyable-address";
+import { ErrorSurface } from "@/components/ui/error-surface";
 
 const CONFIGURED = Boolean(process.env.NEXT_PUBLIC_PRIVY_APP_ID);
 
@@ -28,8 +29,12 @@ const SOCIALS: Array<{ provider: SocialProvider; label: string }> = [
 ];
 
 export function SignInClient() {
-  const { status, walletAddress, signInWithSocial, connectWallet } = useAuth();
+  const { status, walletAddress, signInWithSocial, connectWallet, lastAuthError } =
+    useAuth();
   const router = useRouter();
+  // Which button was pressed last, so the failure line names the provider
+  // the player actually chose.
+  const [attempted, setAttempted] = useState<string | null>(null);
 
   useEffect(() => {
     if (status === "signed-in") router.replace("/play");
@@ -64,12 +69,23 @@ export function SignInClient() {
         </p>
       ) : null}
 
+      {/* A provider that is not enabled for this app — or a domain that is
+          not allow-listed with the provider — fails inside the provider's
+          own flow. The app says so, in place, instead of leaving a button
+          that appears to do nothing. */}
+      {lastAuthError ? (
+        <ErrorSurface className="mb-1">{COPY.signin.failed(attempted ?? "Sign-in")}</ErrorSurface>
+      ) : null}
+
       {SOCIALS.map(({ provider, label }) => (
         <Button
           key={provider}
           size="lg"
           disabled={disabled}
-          onClick={() => signInWithSocial(provider)}
+          onClick={() => {
+            setAttempted(label.replace(/^Continue with /, ""));
+            signInWithSocial(provider);
+          }}
         >
           {label}
         </Button>
@@ -83,7 +99,15 @@ export function SignInClient() {
         <span className="h-px flex-1 bg-line" />
       </div>
 
-      <Button size="lg" intent="secondary" disabled={disabled} onClick={() => connectWallet()}>
+      <Button
+        size="lg"
+        intent="secondary"
+        disabled={disabled}
+        onClick={() => {
+          setAttempted("Wallet");
+          connectWallet();
+        }}
+      >
         {COPY.signin.wallet}
       </Button>
     </div>

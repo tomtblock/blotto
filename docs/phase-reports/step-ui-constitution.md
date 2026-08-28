@@ -101,3 +101,96 @@ category as `node_modules`).
   fair-play rename). Unit suite green (161 tests; the deleted reveal-machine
   suites left with their subject, `profile/insights` and `grammar` suites
   added).
+
+---
+
+# Founder round 2, 2026-08-28 (post-preview review)
+
+Nine items from the founder after looking at the deployed preview. What
+changed, and what is a configuration answer rather than a code one.
+
+## Copy and layout
+
+1. **The hero line is three lines**, and the middle one is no longer "Seven
+   battles" — it read as seven opponents rather than seven decisions. It is
+   now "Choose Your Fighters." in the founder's own capitalisation, carrying
+   the action accent. `COPY.shell.taglineLines` renders them; the flat
+   `tagline` survives for the document title. The journey suite asserts the
+   three lines individually.
+2. **The countdown is gone from the landing hero.** It remains on the pool
+   page, where a fill deadline is a fact a player is deciding against. ⚑ Say
+   if it should come off there too.
+3. **The five-step list under the explainer is gone.** Its facts did not
+   vanish with it: the explainer now carries a FOURTH caption ("Top sixteen
+   are paid") on the beat that shows the rankings settling, and the reduced-
+   motion fallback grew to four panels for parity. The operator's 20% and
+   the refund rule are stated in the proof band below. The cold-visitor
+   checklist (PART 7 #9) still passes.
+
+## Motion
+
+4. **The captions are title cards now**: 28–34px display face over a 15–16px
+   body, entering from the right over 250ms ease-out and leaving to the left
+   over 150ms — bigger, clearer, sliding on and off as asked. Fixed height,
+   so nothing below them shifts. Classified as micro-feedback, not a grammar
+   word; the scene beneath still owns the grammar.
+5. **"More exciting" was answered with scale and hierarchy, not loops**:
+   arena-scale hero type, a static floor glow under the open door (depth,
+   never motion), the prize pool at moment size in prize amber, the
+   1st-place figure and "16 of 64 paid" beside it, a bigger seat ring, and
+   the pentagon line promoted to a statement. No idle motion was added —
+   the constitution's own ban still holds.
+
+## The two bugs
+
+6. **The geofence was the product lying, and that is fixed.** `checkGeoGate`
+   answered 'blocked' for BOTH a real territory verdict and its own
+   inability to ask, so a missing entry-API URL, a service that is down, or
+   a CORS failure all told the player their region was blocked. It now
+   answers 'unavailable' for its own failures — still fail-closed, entry
+   still shut, but the panel says the location could not be checked and
+   offers a retry. Only an explicit `{allowed:false}` is reported as a
+   block.
+   ⚑ **The founder's actual cause is configuration, not code**: the
+   territory schedule blocks only BE and AU, so the block came from the
+   gate's own failure. `NEXT_PUBLIC_ENTRY_API_URL` must be set on the
+   deployment AND the packet service must be reachable from the browser
+   (it also refuses to start without a geo lookup configured —
+   `GEO_VENDOR_URL` + `GEO_VENDOR_API_KEY`, or the dev stub). The new panel
+   now names which of those is happening.
+7. **Social sign-in failed silently; now it says so.** The call itself is
+   correct against the installed SDK (`login({loginMethods:[provider]})`
+   type-checks against @privy-io/react-auth 3.37.0). What was missing was
+   any handling of failure: `useLogin`'s `onError` is now wired through the
+   Auth seam as `lastAuthError` (a deliberate cancel is excluded), the
+   comparator behind the update-loop guard compares it so the state
+   propagates, and the sign-in page renders an honest line in place.
+   ⚑ **The cause is again configuration**: wallet connect is client-side and
+   works, while Google/Apple/X need the provider enabled for the app AND
+   the site's domain allow-listed with the provider. Both are dashboard
+   settings.
+   *Landmine removed on the way past*: `PrivyErrorCode` is a TYPE-ONLY
+   export of that package — importing it as a value type-checks and then
+   throws in the browser. The cancel code is compared as its documented
+   literal instead.
+
+## The legal pages
+
+8. **`/privacy` and `/terms` exist**, linked from the landing legal line,
+   the fair-play page, and — new — the clickwrap itself, which until now
+   asked players to accept terms it did not link to.
+   ⚑ **They are marked DRAFT and are not counsel-reviewed.** Every clause
+   states a mechanic this repository implements (the code path is named in a
+   comment beside it); everything only counsel can supply — operating
+   entity, contact route, retention schedule, named sub-processors,
+   liability, governing law, dispute process — renders as an explicit "not
+   yet set" chip rather than a plausible invention. One flag,
+   `LEGAL_DRAFT` in `src/copy/legal.ts`, removes the banner when they are
+   signed off. Both pages pass the §8.7 language gate.
+
+## Evidence
+
+Language gate and standing rules clean; typecheck, lint, 163 unit tests,
+production build and 14/14 journey tests green. One real regression was
+caught by the suite on the way (the hero's floor glow overflowed the page
+gutter at 375px) and fixed before commit.

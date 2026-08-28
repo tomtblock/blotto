@@ -124,7 +124,7 @@ interface Scene {
   } | null;
   travelers: Array<{ x: number; y: number; scale: number; frost: number; opacity: number }>;
   ranks: Array<{ width: number; warm: boolean; opacity: number }>;
-  caption: 0 | 1 | 2;
+  caption: 0 | 1 | 2 | 3;
 }
 
 function scene(t: number): Scene {
@@ -231,6 +231,10 @@ function scene(t: number): Scene {
   });
 
   if (t >= 0.75) caption = 2;
+  // The rankings settling carries its own caption — the payout fact used
+  // to live in the numbered list below the explainer, which the founder
+  // removed; it belongs on the beat that shows it.
+  if (t >= 0.9) caption = 3;
   return { beat, seats, pentagon, travelers, ranks, caption };
 }
 
@@ -492,25 +496,48 @@ export function HowItWorksExplainer() {
   return scrub ? <ScrubExplainer hostRef={hostRef} /> : <AutoplayExplainer hostRef={hostRef} />;
 }
 
-const CAPTION_STEPS = [0, 1, 2] as const;
+const CAPTION_STEPS = [0, 1, 2, 3] as const;
 
-function Captions({ active }: { active: 0 | 1 | 2 }) {
+/*
+ * The captions (founder direction, 2026-08-28: bigger, clearer, and
+ * sliding on and off the screen). Each caption is a title card: it enters
+ * from the right over 250ms ease-out and leaves to the left faster
+ * (150ms), so at any moment exactly one is legible and the movement says
+ * "the scene has moved on". Micro-feedback, not a grammar word — the
+ * scene beneath owns the grammar. Fixed height, so nothing below it ever
+ * shifts; `overflow-hidden` keeps the travel off the page edges.
+ */
+function Captions({ active }: { active: 0 | 1 | 2 | 3 }) {
   return (
-    <div className="relative min-h-[76px]">
+    <div className="relative min-h-[236px] overflow-hidden px-1 sm:min-h-[184px]">
       {CAPTION_STEPS.map((i) => {
         const step = COPY.howItWorks.steps[i];
+        const state = i === active ? 'in' : i < active ? 'past' : 'next';
         return (
           <div
             key={step.title}
-            className="absolute inset-0 flex flex-col gap-1 text-center"
+            className="absolute inset-0 flex flex-col items-center gap-2 px-2 text-center"
             style={{
-              opacity: active === i ? 1 : 0,
-              transition: `opacity var(--duration-base) var(--ease-out)`,
+              opacity: state === 'in' ? 1 : 0,
+              transform:
+                state === 'in'
+                  ? 'translateX(0)'
+                  : state === 'past'
+                    ? 'translateX(-44px)'
+                    : 'translateX(44px)',
+              transition:
+                state === 'in'
+                  ? 'opacity var(--duration-base) var(--ease-out), transform var(--duration-base) var(--ease-out)'
+                  : 'opacity var(--duration-fast) var(--ease-out), transform var(--duration-fast) var(--ease-out)',
             }}
-            aria-hidden={active !== i}
+            aria-hidden={state !== 'in'}
           >
-            <h3 className="text-[16px] font-semibold text-ink">{step.title}</h3>
-            <p className="mx-auto max-w-[52ch] text-[13px] leading-5 text-ink-muted">{step.body}</p>
+            <h3 className="font-display text-[28px] leading-[32px] font-bold text-ink sm:text-[34px] sm:leading-[38px]">
+              {step.title}
+            </h3>
+            <p className="mx-auto max-w-[46ch] text-[15px] leading-6 text-ink-muted sm:text-[16px]">
+              {step.body}
+            </p>
           </div>
         );
       })}
@@ -545,10 +572,11 @@ function AutoplayExplainer({ hostRef }: { hostRef: React.RefObject<HTMLDivElemen
 /** Reduced motion: the same scene function at three fixed times — a calm,
  * fully readable three-panel strip. Also exported as the fair-play page's
  * miniature explainer (6.9 §1), where it rests by design. */
-const STATIC_PANELS: ReadonlyArray<{ t: number; step: 0 | 1 | 2 }> = [
+const STATIC_PANELS: ReadonlyArray<{ t: number; step: 0 | 1 | 2 | 3 }> = [
   { t: 0.28, step: 0 },
   { t: 0.43, step: 1 },
-  { t: 0.99, step: 2 },
+  { t: 0.87, step: 2 },
+  { t: 0.99, step: 3 },
 ];
 
 export function ExplainerPanels() {
@@ -557,15 +585,15 @@ export function ExplainerPanels() {
 
 function StaticExplainer() {
   return (
-    <div className="grid gap-6 sm:grid-cols-3">
+    <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
       {STATIC_PANELS.map(({ t, step }) => {
         const s = COPY.howItWorks.steps[step];
         return (
           <figure key={s.title} className="flex flex-col gap-2">
             <ExplainerScene t={t} statNames={COPY.battle.statNames} />
             <figcaption className="flex flex-col gap-1 text-center">
-              <span className="text-[15px] font-semibold text-ink">{s.title}</span>
-              <span className="text-[12px] leading-4 text-ink-muted">{s.body}</span>
+              <span className="font-display text-[20px] font-bold text-ink">{s.title}</span>
+              <span className="text-[13px] leading-5 text-ink-muted">{s.body}</span>
             </figcaption>
           </figure>
         );

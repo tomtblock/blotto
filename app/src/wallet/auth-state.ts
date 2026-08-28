@@ -14,6 +14,9 @@ export function sameAuthState(a: Auth, b: Auth): boolean {
   return (
     a.status === b.status &&
     a.walletAddress === b.walletAddress &&
+    // A sign-in failure is a state change screens must see (it is a value,
+    // not a callback, so comparing it cannot reintroduce the loop).
+    (a.lastAuthError ?? null) === (b.lastAuthError ?? null) &&
     // The funding seam is either wired or absent; its identity is noise.
     (a.addFunds !== undefined) === (b.addFunds !== undefined) &&
     a.signers.length === b.signers.length &&

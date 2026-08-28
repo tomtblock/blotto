@@ -30,6 +30,15 @@ export interface Auth {
   signers: TxSigner[];
   /** Hero path: social login backed by an embedded wallet (D-08). */
   signInWithSocial(provider: SocialProvider): void;
+  /**
+   * The provider's most recent sign-in FAILURE code, or null. A deliberate
+   * cancel (the player closing the provider's modal) is not a failure and
+   * never lands here. Founder report 2026-08-28: the social buttons
+   * appeared to do nothing, because a provider that is not enabled — or a
+   * domain not allow-listed — fails inside the provider's own flow and the
+   * app said nothing at all. Screens render an honest line from this.
+   */
+  lastAuthError?: string | null;
   /** Secondary path: classic Solana wallet connect (D-08). */
   connectWallet(): void;
   signOut(): Promise<void>;

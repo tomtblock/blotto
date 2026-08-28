@@ -17,7 +17,17 @@
 export const COPY = {
   shell: {
     title: 'Blotto Cup',
-    tagline: 'Sixty-four players. Seven battles. Top sixteen paid.',
+    // The hero line (founder direction, 2026-08-28): set on THREE lines,
+    // and the middle line is no longer "Seven battles" — that read as seven
+    // opponents rather than seven decisions. Brand voice is founder-owned;
+    // this is their wording, capitalisation included.
+    taglineLines: [
+      'Sixty-four players.',
+      'Choose Your Fighters.',
+      'Top sixteen paid.',
+    ] as const,
+    /** The same line, flat — for the document title and meta description. */
+    tagline: 'Sixty-four players. Choose Your Fighters. Top sixteen paid.',
     metaDescription:
       'Sixty-four players enter, each sets seven sealed battles of five stats summing to 100. ' +
       'Top sixteen are paid from a fixed prize pool, and every result is recomputable from published data.',
@@ -41,6 +51,10 @@ export const COPY = {
     // dev) — the buttons would silently do nothing otherwise.
     unavailable:
       'Sign-in is not configured in this preview build. The buttons below are inactive.',
+    // Shown in place when a provider's own flow refuses or fails — a dead
+    // button that does nothing is the one thing this page must never be.
+    failed: (provider: string) =>
+      `${provider} sign-in did not complete. Try again, or connect a wallet below.`,
     signedInAs: 'Signed in as',
     continueLink: 'Go to the arena',
   },
@@ -58,6 +72,14 @@ export const COPY = {
     gateTitle: 'Before you enter',
     territoryBlocked:
       'Blotto Cup is not available in your region. Entries cannot be accepted from your location.',
+    // The fail-closed sentence, stated honestly: the service could not
+    // determine the location (unreachable, unconfigured, or a network
+    // failure). Entry stays closed either way, but the product never tells
+    // a player their region is blocked when it does not know that.
+    territoryUnavailable:
+      'Your location could not be checked, so entry is not available right now. Nothing on-chain is affected — try again in a moment.',
+    territoryRetry: 'Check again',
+    territoryUnavailableTitle: 'Entry is not available right now',
     // C9: the balance pre-flight — shown BEFORE the timed session starts,
     // never after battles are allocated.
     balanceInsufficient: (needSol: string, haveSol: string) =>

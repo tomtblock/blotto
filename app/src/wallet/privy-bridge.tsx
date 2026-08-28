@@ -28,7 +28,7 @@ import {
   useWallets,
 } from "@privy-io/react-auth/solana";
 import { createSolanaRpc, createSolanaRpcSubscriptions } from "@solana/kit";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Auth, SocialProvider } from "./types";
 import type { TxSigner } from "@/tx/types";
 import { rpcUrl } from "@/chain/rpc";
@@ -74,9 +74,34 @@ declare global {
   }
 }
 
+/** PrivyErrorCode.USER_EXITED_AUTH_FLOW's value — the player closing the
+ * provider's modal, which is a decision, not a failure. */
+const USER_CANCELLED = "exited_auth_flow";
+
 function PrivyAdapter({ onAuth }: { onAuth: (auth: Auth) => void }) {
   const { ready, authenticated, user, logout } = usePrivy();
-  const { login } = useLogin();
+  /*
+   * Sign-in failures are DATA, not silence (founder report 2026-08-28: the
+   * social buttons "don't work"). A provider that is not enabled for this
+   * app, or a domain that is not allow-listed, fails inside the provider's
+   * own flow — the app used to hear nothing and show nothing. The code is
+   * kept for the console; screens render their own honest line from the
+   * fact that one exists. A deliberate cancel is NOT a failure.
+   */
+  const [lastAuthError, setLastAuthError] = useState<string | null>(null);
+  const { login } = useLogin({
+    onComplete: () => setLastAuthError(null),
+    onError: (code) => {
+      // The SDK ships PrivyErrorCode as a TYPE-ONLY export (verified
+      // against the installed 3.37.0 build: it is absent from the runtime
+      // module), so the cancel code is compared as its documented literal.
+      // Importing it as a value would typecheck and then throw in the
+      // browser.
+      if (code === USER_CANCELLED) return;
+      console.warn(`[auth] sign-in failed: ${code}`);
+      setLastAuthError(String(code));
+    },
+  });
   const { wallets } = useWallets();
   const { signTransaction } = useSignTransaction();
   const { signMessage } = useSignMessage();
@@ -149,9 +174,15 @@ function PrivyAdapter({ onAuth }: { onAuth: (auth: Auth) => void }) {
           : "signed-out",
       walletAddress,
       signers,
-      signInWithSocial: (provider: SocialProvider) =>
-        login({ loginMethods: [provider] }),
-      connectWallet: () => login({ loginMethods: ["wallet"] }),
+      signInWithSocial: (provider: SocialProvider) => {
+        setLastAuthError(null);
+        login({ loginMethods: [provider] });
+      },
+      connectWallet: () => {
+        setLastAuthError(null);
+        login({ loginMethods: ["wallet"] });
+      },
+      lastAuthError,
       signOut: logout,
       // C9: Privy's funding flow, exposed as the provider-neutral seam. The
       // top-up button additionally hides behind NEXT_PUBLIC_TOPUP_ENABLED.
@@ -159,7 +190,18 @@ function PrivyAdapter({ onAuth }: { onAuth: (auth: Auth) => void }) {
         await fundWallet({ address: fundAddress });
       },
     };
-  }, [ready, authenticated, user, wallets, signTransaction, signMessage, fundWallet, login, logout]);
+  }, [
+    ready,
+    authenticated,
+    user,
+    wallets,
+    signTransaction,
+    signMessage,
+    fundWallet,
+    login,
+    logout,
+    lastAuthError,
+  ]);
 
   useEffect(() => {
     onAuth(value);

@@ -20,7 +20,11 @@ const shot = (page: Page, name: string, project: string) =>
 
 test('landing: hero fixture card with the 18+ line above the fold', async ({ page }, info) => {
   await page.goto('/');
-  await expect(page.getByText('Sixty-four players. Seven battles. Top sixteen paid.')).toBeVisible();
+  // The hero line is set on three lines (founder direction 2026-08-28);
+  // "Seven battles" was replaced because it read as seven opponents.
+  for (const line of ['Sixty-four players.', 'Choose Your Fighters.', 'Top sixteen paid.']) {
+    await expect(page.getByRole('heading', { level: 1 }).getByText(line)).toBeVisible();
+  }
   // The live fixture card and its seat ring.
   await expect(page.getByRole('img', { name: /of 64 seats filled/ })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Enter this tournament' })).toBeVisible();
@@ -63,7 +67,13 @@ test('entry path fail-closed: the designed territory panel, never a bare sentenc
   // the first designed panel on the path is the territory refusal. (The
   // sign-in and clickwrap moments need the credentialed rehearsal stack.)
   await page.goto(`/play?pool=${POOL}`);
-  await expect(page.getByRole('heading', { name: 'Not available here' })).toBeVisible();
+  // Fixture builds have no entry API, so the gate cannot ASK — that is
+  // 'unavailable', not a territory block (the panel must never tell a
+  // player their region is blocked when the service simply could not be
+  // reached).
+  await expect(
+    page.getByRole('heading', { name: 'Entry is not available right now' })
+  ).toBeVisible();
   await shot(page, 'play-fail-closed', info.project.name);
 });
 
