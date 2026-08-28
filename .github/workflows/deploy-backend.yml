@@ -27,6 +27,11 @@ name: deploy-backend
 
 on:
   workflow_dispatch:
+    inputs:
+      include_settlement_services:
+        description: "Also deploy the daemon + review services (C5/C6 - needs their credentials first)"
+        type: boolean
+        default: false
 
 concurrency: deploy-backend
 
@@ -34,6 +39,8 @@ env:
   FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
   INDEXER_APP: blotto-indexer
   PACKET_APP: blotto-packet
+  DAEMON_APP: blotto-daemon
+  REVIEW_APP: blotto-review
   APP_ORIGIN: https://blotto-jade.vercel.app
   DEVNET_RPC: https://api.devnet.solana.com
   PROGRAM_ID: 5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17
@@ -93,7 +100,7 @@ jobs:
       - name: Deploy packet service
         run: flyctl deploy . --config deploy/fly/packet.fly.toml --remote-only --yes --ha=false
 
-      - name: Smoke-check both services
+      - name: Smoke-check the entry-path services
         run: |
           sleep 10
           for url in \
@@ -104,3 +111,90 @@ jobs:
             curl --fail --silent --show-error --max-time 20 "$url" && echo
           done
           echo "Backend is up. Next: set the two NEXT_PUBLIC_* URLs in Vercel (docs/deploy-backend.md step 6)."
+
+      # --- C5 / C6: the settlement-path services -------------------------
+      # daemon.fly.toml and review.fly.toml have existed since E5, but no
+      # workflow ever deployed them, so neither Fly app exists and the crank
+      # has never run on a real cluster. Off by default: ticking the input
+      # above is a deliberate act, and the step below refuses loudly rather
+      # than deploying a service that would crash-loop on a missing
+      # credential. Nothing here loosens a fail-closed path - the services
+      # still refuse to boot without their credentials; this only declines
+      # to deploy them before those credentials exist.
+      - name: Settlement services - check their credentials first
+        if: ${{ inputs.include_settlement_services }}
+        run: |
+          missing=""
+          [ -z "${{ secrets.RANDOMNESS_ACCOUNT }}" ] && missing="$missing RANDOMNESS_ACCOUNT"
+          [ -z "${{ secrets.IRYS_UPLOAD_KEY }}" ] && missing="$missing IRYS_UPLOAD_KEY"
+          [ -z "${{ secrets.TURNKEY_API_BASE_URL }}" ] && missing="$missing TURNKEY_API_BASE_URL"
+          [ -z "${{ secrets.TURNKEY_API_PUBLIC_KEY }}" ] && missing="$missing TURNKEY_API_PUBLIC_KEY"
+          [ -z "${{ secrets.TURNKEY_API_PRIVATE_KEY }}" ] && missing="$missing TURNKEY_API_PRIVATE_KEY"
+          [ -z "${{ secrets.TURNKEY_ORGANIZATION_ID }}" ] && missing="$missing TURNKEY_ORGANIZATION_ID"
+          [ -z "${{ secrets.TURNKEY_USER_ID }}" ] && missing="$missing TURNKEY_USER_ID"
+          if [ -n "$missing" ]; then
+            echo "::error::Not deploying the settlement services. Missing repository secrets:$missing"
+            echo "::error::Set them under Settings -> Secrets and variables -> Actions, then run this workflow again."
+            exit 1
+          fi
+          # OPEN DECISION (raised with the founder, Stage A follow-up):
+          # both services read SETTLEMENT_SIGNER_KEYPAIR as a PATH to a
+          # keypair JSON. A Fly secret is an environment variable, not a
+          # file, and docs/hosting.md offers two unimplemented options (a
+          # base64 secret written out by a release command, or a volume).
+          # The custody disclosure page states the mounted-path model, so
+          # changing it is a founder decision with a documentation
+          # consequence - not something to settle inside a deploy script.
+          echo "::error::SETTLEMENT_SIGNER_KEYPAIR delivery is undecided - see docs/hosting.md and the Stage A follow-up. Deploy blocked here deliberately."
+          exit 1
+
+      - name: Create the settlement Fly apps
+        if: ${{ inputs.include_settlement_services }}
+        run: |
+          flyctl apps create "$DAEMON_APP" || echo "$DAEMON_APP exists"
+          flyctl apps create "$REVIEW_APP" || echo "$REVIEW_APP exists"
+
+      - name: Stage daemon secrets
+        if: ${{ inputs.include_settlement_services }}
+        run: |
+          flyctl secrets set --app "$DAEMON_APP" --stage \
+            BLOTTO_DATABASE_URL="${{ secrets.BLOTTO_DATABASE_URL }}" \
+            BLOTTO_RPC_URL="$DEVNET_RPC" \
+            BLOTTO_PROGRAM_ID="$PROGRAM_ID" \
+            RANDOMNESS_ACCOUNT="${{ secrets.RANDOMNESS_ACCOUNT }}" \
+            IRYS_UPLOAD_KEY="${{ secrets.IRYS_UPLOAD_KEY }}" \
+            IRYS_NETWORK="devnet" \
+            TURNKEY_API_BASE_URL="${{ secrets.TURNKEY_API_BASE_URL }}" \
+            TURNKEY_API_PUBLIC_KEY="${{ secrets.TURNKEY_API_PUBLIC_KEY }}" \
+            TURNKEY_API_PRIVATE_KEY="${{ secrets.TURNKEY_API_PRIVATE_KEY }}" \
+            TURNKEY_ORGANIZATION_ID="${{ secrets.TURNKEY_ORGANIZATION_ID }}" \
+            TURNKEY_USER_ID="${{ secrets.TURNKEY_USER_ID }}"
+
+      - name: Deploy daemon
+        if: ${{ inputs.include_settlement_services }}
+        run: flyctl deploy . --config deploy/fly/daemon.fly.toml --remote-only --yes --ha=false
+
+      - name: Stage review secrets
+        if: ${{ inputs.include_settlement_services }}
+        run: |
+          flyctl secrets set --app "$REVIEW_APP" --stage \
+            BLOTTO_DATABASE_URL="${{ secrets.BLOTTO_DATABASE_URL }}" \
+            BLOTTO_RPC_URL="$DEVNET_RPC" \
+            BLOTTO_PROGRAM_ID="$PROGRAM_ID" \
+            BLOTTO_API_CORS_ORIGINS="$APP_ORIGIN"
+
+      - name: Deploy review service
+        if: ${{ inputs.include_settlement_services }}
+        run: flyctl deploy . --config deploy/fly/review.fly.toml --remote-only --yes --ha=false
+
+      - name: Smoke-check the settlement services
+        if: ${{ inputs.include_settlement_services }}
+        run: |
+          sleep 10
+          for url in \
+            "https://$DAEMON_APP.fly.dev/health" \
+            "https://$REVIEW_APP.fly.dev/health"; do
+            echo "GET $url"
+            curl --fail --silent --show-error --max-time 20 "$url" && echo
+          done
+          echo "Settlement services are up. The daemon health body carries the LAST TICK summary."
