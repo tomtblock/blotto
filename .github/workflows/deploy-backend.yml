@@ -74,7 +74,7 @@ jobs:
           fi
 
       - name: Deploy indexer
-        run: flyctl deploy . --config deploy/fly/indexer.fly.toml --remote-only --yes
+        run: flyctl deploy . --config deploy/fly/indexer.fly.toml --remote-only --yes --ha=false
 
       - name: Stage packet secrets
         run: |
@@ -91,7 +91,7 @@ jobs:
           fi
 
       - name: Deploy packet service
-        run: flyctl deploy . --config deploy/fly/packet.fly.toml --remote-only --yes
+        run: flyctl deploy . --config deploy/fly/packet.fly.toml --remote-only --yes --ha=false
 
       - name: Smoke-check both services
         run: |

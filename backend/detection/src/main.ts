@@ -19,6 +19,7 @@
  */
 
 import { readFileSync } from 'fs';
+import { resolve } from 'path';
 // web3.js from the REVEAL package's own copy: Web3Chain's constructor types
 // carry web3 classes with private members, and TypeScript treats a second
 // installed copy as a different nominal type — one copy, one declaration.
@@ -43,7 +44,15 @@ export function main(env: NodeJS.ProcessEnv = process.env): void {
   const port = Number(env.BLOTTO_REVIEW_PORT ?? 8083);
   const db = createPool(loadPostgresConfig(env));
   const registry = parseReviewerRegistry(
-    JSON.parse(readFileSync(env.BLOTTO_REVIEWERS_PATH ?? 'config/reviewers.json', 'utf8'))
+    // Repo-root default, CWD-independent — the same fix as the packet
+    // service's config paths (first Fly deploy, 2026-08-28): the images
+    // run with WORKDIR backend/<service> while config/ sits at the root.
+    JSON.parse(
+      readFileSync(
+        env.BLOTTO_REVIEWERS_PATH ?? resolve(__dirname, '..', '..', '..', 'config', 'reviewers.json'),
+        'utf8'
+      )
+    )
   );
 
   const keypairPath = env.SETTLEMENT_SIGNER_KEYPAIR;

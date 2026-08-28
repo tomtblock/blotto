@@ -27,6 +27,7 @@
  */
 
 import { randomBytes } from 'crypto';
+import { resolve } from 'path';
 import { loadPostgresConfig } from '../../_shared/src/config';
 import { createPool } from '../../_shared/src/db';
 import { loadHygieneConfig } from '../../_shared/src/http-hygiene';
@@ -90,11 +91,27 @@ function buildGeo(env: NodeJS.ProcessEnv): GeoLookup {
   );
 }
 
+/*
+ * The founder-owned config files ship at the REPO ROOT, next to backend/
+ * (the service images copy both side by side), while the images run with
+ * WORKDIR backend/packet — so the DEFAULT paths must not depend on the
+ * process's working directory. Resolve them from this file's location
+ * (src → package → backend → repo root). First Fly deploy, 2026-08-28:
+ * the CWD-relative default crashed the packet machine at boot with
+ * "ENOENT config/territories.json". Env overrides are used verbatim, as
+ * the operator wrote them.
+ */
+const REPO_ROOT = resolve(__dirname, '..', '..', '..');
+
 export function main(env: NodeJS.ProcessEnv = process.env): void {
   const port = Number(env.BLOTTO_PACKET_PORT ?? 8082);
   const db = createPool(loadPostgresConfig(env));
-  const territories = loadTerritorySchedule(env.BLOTTO_TERRITORIES_PATH ?? 'config/territories.json');
-  const termsVersion = loadTermsVersion(env.BLOTTO_TERMS_PATH ?? 'config/terms.json');
+  const territories = loadTerritorySchedule(
+    env.BLOTTO_TERRITORIES_PATH ?? resolve(REPO_ROOT, 'config', 'territories.json')
+  );
+  const termsVersion = loadTermsVersion(
+    env.BLOTTO_TERMS_PATH ?? resolve(REPO_ROOT, 'config', 'terms.json')
+  );
 
   serveEntryApi(
     {
