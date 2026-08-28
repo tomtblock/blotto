@@ -42,3 +42,12 @@ primary_region = "fra"
     grace_period = "30s"
     method = "get"
     path = "/health"
+
+# 512MB: the sync entry idles at ~164MB RSS measured locally (ts-node +
+# web3.js + two HTTP servers), leaving no headroom for migrate/backfill
+# spikes on Fly's 256MB default — an OOM kill presents exactly as the
+# observed "healthy at deploy, dead minutes later". Memory is the one
+# resource a crash-looping service cannot log its way out of.
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
