@@ -21,11 +21,31 @@ export interface Queryable {
   query(text: string, params?: readonly unknown[]): Promise<QueryResult>;
 }
 
+/**
+ * True when the connection string asks for TLS. `pg` 8.x IGNORES `sslmode`
+ * inside a `connectionString` passed via `PoolConfig` (verified against the
+ * pinned pg 8.23: `pool.options.ssl` stays undefined), so without this a
+ * TLS-only host — every managed Postgres, Neon included — refuses the
+ * plaintext attempt and the service crash-loops at boot (production
+ * incident, first devnet deploy 2026-08-28: the indexer machine never
+ * passed health checks).
+ */
+export function connectionStringWantsTls(url: string): boolean {
+  return /[?&]sslmode=(require|verify-ca|verify-full)\b/.test(url);
+}
+
 /** Build a `pg.Pool` from the shared Postgres config. */
 export function createPool(config: PostgresConfig): Pool {
   const poolConfig: PoolConfig = {
     connectionString: config.url,
     max: config.poolMax,
+    // VERIFIED TLS whenever the URL asks for any TLS mode — stricter than
+    // libpq's `require` (which skips chain verification), deliberately:
+    // managed hosts present publicly-chained certificates, and unverified
+    // TLS is a MITM accepting posture this stack should never default to.
+    // A host that genuinely needs unverified TLS is an explicit ops
+    // decision to bring here, not a default to weaken.
+    ...(connectionStringWantsTls(config.url) ? { ssl: true } : {}),
   };
   return new Pool(poolConfig);
 }

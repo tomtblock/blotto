@@ -106,6 +106,12 @@ site shows the real (empty) devnet state.
 - **Troubleshooting — "name is taken":** Fly app names are global. If the
   log says `blotto-indexer` or `blotto-packet` is taken by someone else,
   tell me and I'll rename ours (a one-line change in `deploy/fly/`).
+- **Troubleshooting — "timeout reached waiting for health checks":** the
+  service is crashing at boot, and the most common cause is the database
+  connection. Check that the `BLOTTO_DATABASE_URL` secret is Neon's full
+  connection string ending in `?sslmode=require...` (Neon includes it by
+  default — it is what turns encryption on). Re-paste the secret and run
+  the workflow again; if it still fails, send the red step's message.
 
 ## What comes after (the next milestone)
 
