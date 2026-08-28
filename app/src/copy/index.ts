@@ -238,6 +238,43 @@ export const COPY = {
     title: 'Your career',
     lifetime: 'Lifetime record',
     readOnlyNote: 'Profiles are a read-only record. Nothing here affects any pool.',
+    // Previously bare literals in the profile client (D-UI-3 hygiene).
+    signedOut: 'Sign in to see your record.',
+    signedOutDetail:
+      'Your career — every tournament entered, every paid finish, every character pass — is built from on-chain data for the wallet you sign in with.',
+    empty: 'No entries yet.',
+    emptyDetail: 'Your first tournament starts your record — the Play tab has the open pool.',
+    entered: 'Pools entered',
+    paidFinishes: 'Paid finishes',
+    totalPrizes: 'Total prizes',
+    collection: 'Character collection',
+    // The badge case (6.8): placement above rarity, always. Placement
+    // derives from committed payouts and is recomputable on Verify;
+    // empty slots state their condition plainly — invitation, not
+    // pressure.
+    badges: {
+      title: 'Badge case',
+      first: '1st place',
+      top3: 'Top-3 finish',
+      paid16: 'Paid finish',
+      shared: 'Shared placement',
+      emptyFirst: 'Awarded for a 1st-place finish',
+      emptyTop3: 'Awarded for a top-3 finish',
+      emptyPaid: 'Awarded for a paid finish',
+      note: 'Placement badges come from committed payouts. Every one is recomputable on the Verify page.',
+    },
+    // The film room (6.8): study material, post-reveal only.
+    filmRoom: {
+      title: 'Battle history',
+      note: 'Your seven battles against the field, decrypted and recomputed in your browser once a pool is revealed.',
+      open: 'Open the film room',
+      close: 'Close',
+      vsField: (w: number, d: number, l: number) => `${w}W · ${d}D · ${l}L vs the field`,
+      overlayNote:
+        'The dashed shape is the field’s average allocation for that battle; lit vertices are stats you took above it.',
+      unavailable: 'The sealed battles for this pool cannot be decrypted yet.',
+      battleN: (k: number) => `Battle ${k}`,
+    },
   },
   custody: {
     // C13: the disclosure page. Everything here describes MECHANICS —
@@ -322,7 +359,12 @@ export const COPY = {
     // — no hand-typed figures). Paragraphs marked SUBSTANCE FIXED state what
     // the code enforces and must stay factually identical to it; Phase 6 may
     // re-phrase with the substance intact.
-    title: 'Rules',
+    // 6.9 naming (constitution): "Fair play & availability" — the
+    // Adjudicator explains; it does not disclaim. PENDING FOUNDER
+    // RATIFICATION: this renames the former "Rules" tab title; the short
+    // form serves tight inline links.
+    title: 'Fair play & availability',
+    titleShort: 'Fair play',
     howToEnter:
       'Sign in, pick an open pool, and confirm the 18+ and terms statements — your wallet signs that confirmation once per terms version. Pay the entry price for the tier. You then set seven battles, about ninety seconds in total: each battle splits 100 points across five stats. Your battles are encrypted on your device before any payment moves, and the pool fills to exactly 64 players. Decisions are final: a submitted entry cannot be changed or withdrawn (see the refund rule for pools that never fill).',
     priceIntro:
@@ -340,6 +382,15 @@ export const COPY = {
     // SUBSTANCE FIXED: randomness scope (PID §8.3/§8.4).
     randomness:
       'Randomness from a Switchboard VRF seed, combined with a later slot hash, decides ONE thing: which character class artwork your pass shows. Class is cosmetic. It does not affect any stat, any battle, any score, any rank, or any prize \u2014 nothing in the scoring path reads it. Scoring and prizes depend only on the sealed battles every player submitted. Every class draw is replayable from published on-chain data.',
+    // The FROST lifecycle diagram's step labels (6.9 §3) — short
+    // mechanics statements; the full SUBSTANCE FIXED sentence below is
+    // the authority.
+    sealingSteps: [
+      'Encrypted on your device, before payment',
+      'Hash recorded on-chain at entry',
+      'Pool secret published at close',
+      'Everything checkable against the committed hashes',
+    ],
     // SUBSTANCE FIXED: the sealing lifecycle (TECH-ARCH §5).
     sealing:
       'Your seven battles are encrypted on your device, before payment, to a pool key that nobody \u2014 the operator included \u2014 can open while the pool is filling. A hash of your battles is recorded on-chain at entry. When the pool fills, the pool secret is published on-chain: at that moment everyone\u2019s battles become readable and checkable against the hashes committed at entry, and anyone can re-run the scoring.',

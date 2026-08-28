@@ -76,7 +76,11 @@ test('pools, results (uncommitted), rules, custody, verify all render', async ({
   await expect(page.getByRole('link', { name: 'Verify a pool' })).toBeVisible();
 
   await page.goto('/rules');
-  await expect(page.getByRole('heading', { name: 'Rules', exact: true })).toBeVisible();
+  // 6.9 naming: the fair-play page — the Adjudicator explains, it does
+  // not disclaim. (Renamed from "Rules" with the UI constitution rebuild.)
+  await expect(
+    page.getByRole('heading', { name: 'Fair play & availability', exact: true })
+  ).toBeVisible();
   await expect(page.getByText('three or more of its five stats')).toBeVisible();
   await shot(page, 'rules', info.project.name);
 

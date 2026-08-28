@@ -111,7 +111,7 @@ export default async function PlayPage() {
           {COPY.pool.ageTerritoryNote}
           {' · '}
           <Link href="/rules" className="underline underline-offset-2 hover:text-ink">
-            {COPY.rules.title}
+            {COPY.rules.titleShort}
           </Link>
         </p>
 

@@ -30,13 +30,18 @@ const AXIS_ENDS = Array.from({ length: AXES }, (_, i) => {
 });
 
 export interface PentagonMiniProps {
-  allocation: Allocation;
+  /** Five values summing to 100 (the battle Allocation, or any engine's
+   * equivalent five-tuple — this component only draws what it is given). */
+  allocation: Allocation | readonly number[];
   /** Rendered size in px. */
   size?: number;
   /** Stroke/fill hue; defaults to the action accent. */
   tone?: 'brand' | 'ink';
   /** Winning stats to carry the LIGHT treatment (film room), by index. */
   litStats?: readonly number[];
+  /** A comparison shape (the field's post-reveal aggregate) drawn muted
+   * beneath yours — the film room's population overlay. */
+  overlay?: readonly number[];
   className?: string;
   /** Accessible description; defaults to the five values. */
   label?: string;
@@ -47,6 +52,7 @@ export function PentagonMini({
   size = 48,
   tone = 'brand',
   litStats,
+  overlay,
   className = '',
   label,
 }: PentagonMiniProps) {
@@ -71,6 +77,16 @@ export function PentagonMini({
       {AXIS_ENDS.map(([x, y], i) => (
         <line key={i} x1={C} y1={C} x2={x} y2={y} stroke="var(--color-line)" strokeWidth="1" />
       ))}
+      {overlay ? (
+        <polygon
+          points={polygonPoints(overlay, R, C, C)}
+          fill="color-mix(in srgb, var(--color-ink-muted) 10%, transparent)"
+          stroke="var(--color-ink-muted)"
+          strokeWidth="1.5"
+          strokeDasharray="3 2.5"
+          strokeLinejoin="round"
+        />
+      ) : null}
       <polygon
         points={polygonPoints(allocation, R, C, C)}
         fill={fill}

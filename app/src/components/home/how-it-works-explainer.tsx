@@ -543,12 +543,17 @@ function AutoplayExplainer({ hostRef }: { hostRef: React.RefObject<HTMLDivElemen
 }
 
 /** Reduced motion: the same scene function at three fixed times — a calm,
- * fully readable three-panel strip. */
+ * fully readable three-panel strip. Also exported as the fair-play page's
+ * miniature explainer (6.9 §1), where it rests by design. */
 const STATIC_PANELS: ReadonlyArray<{ t: number; step: 0 | 1 | 2 }> = [
   { t: 0.28, step: 0 },
   { t: 0.43, step: 1 },
   { t: 0.99, step: 2 },
 ];
+
+export function ExplainerPanels() {
+  return <StaticExplainer />;
+}
 
 function StaticExplainer() {
   return (
