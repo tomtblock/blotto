@@ -91,33 +91,36 @@ export const type = {
 export const spacing = [0, 4, 8, 12, 16, 24, 32, 48, 64, 96] as const;
 
 /*
- * Motion (D1): a small named vocabulary, used consistently. Motion
- * CELEBRATES outcomes; it never nags — nothing loops to attract attention,
- * nothing shakes to rush anyone. `prefers-reduced-motion` collapses all of
- * it (global rule in tokens.css).
+ * Motion (UI constitution PART 4): the grammar's shared physics. Motion on
+ * this site is a language with five words — LIGHT, FROST, WEIGHT, WARMTH,
+ * TRAVEL — each permanently bound to one game concept (see
+ * `src/design/grammar.ts`). This object owns the raw physics those words
+ * share; no page invents its own values.
  *
- *   reveal     — a staged entrance for outcome moments (battle rows, the
- *                rank). Rises + fades with a slight overshoot.
- *   settle     — state coming to rest (a card landing, a sheet docking).
- *   pulse-once — a SINGLE emphasis beat (seat count ticking up). One shot,
- *                by definition: it never repeats on its own.
- *   rise       — small entrance for secondary content.
+ *   fast — micro-feedback and every exit (exits are always faster than
+ *          their enters).
+ *   base — LIGHT and standard enters.
+ *   slow — FROST and on-screen morphs.
+ *
+ * Two curves site-wide: one ease-out for enters and LIGHT, one ease-in-out
+ * for morphs, FROST and TRAVEL. The single spring is for gesture-driven
+ * release only (the pentagon vertex settling under a thumb) — nothing else
+ * springs, nothing overshoots.
  */
 export const motion = {
   duration: {
-    reveal: 700,
-    settle: 450,
-    pulseOnce: 600,
-    rise: 350,
+    fast: 150,
+    base: 250,
+    slow: 400,
   },
   easing: {
-    /* Overshoot — celebration moments only. */
-    juice: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
-    /* Fast-out — interface state changes. */
-    snap: 'cubic-bezier(0.22, 1, 0.36, 1)',
-    /* Even glide — long reveals. */
-    glide: 'cubic-bezier(0.4, 0, 0.2, 1)',
+    /* Enters + LIGHT. Strong curve — built-in CSS easings are too weak. */
+    out: 'cubic-bezier(0.23, 1, 0.32, 1)',
+    /* Morphs, FROST, TRAVEL. */
+    inOut: 'cubic-bezier(0.77, 0, 0.175, 1)',
   },
+  /* Gesture-driven release ONLY — the settle of a well-made drawer. */
+  spring: { type: 'spring', duration: 0.45, bounce: 0.15 },
 } as const;
 
 /* Elevation: shadow recipes over the navy base. The glow tiers belong to

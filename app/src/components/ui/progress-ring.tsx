@@ -47,7 +47,7 @@ export function ProgressRing({ value, total, size = 96, children, label }: Progr
           strokeLinecap="round"
           strokeDasharray={c}
           strokeDashoffset={c * (1 - filled)}
-          style={{ transition: "stroke-dashoffset 450ms var(--ease-snap)" }}
+          style={{ transition: "stroke-dashoffset var(--duration-base) var(--ease-out)" }}
         />
       </svg>
       <span className="absolute inset-0 flex items-center justify-center">

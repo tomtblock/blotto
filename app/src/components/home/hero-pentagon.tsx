@@ -76,10 +76,12 @@ function useMorphingAllocation(): Allocation {
     let raf = 0;
     let timer: ReturnType<typeof setTimeout>;
 
-    const ease = (t: number) => 1 - Math.pow(1 - t, 3); // ≈ the glide curve
+    // Morphs are ease-in-out (grammar PART 4.2): shapes moving on screen.
+    const ease = (t: number) =>
+      t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
     const step = (now: number) => {
       const { from, to, start } = state.current;
-      const t = Math.min(1, (now - start) / motion.duration.reveal);
+      const t = Math.min(1, (now - start) / motion.duration.slow);
       const e = ease(t);
       setDisplay(
         from.map((v, i) => v + (to[i] - v) * e) as unknown as Allocation

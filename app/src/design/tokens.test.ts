@@ -29,28 +29,58 @@ describe('design token parity (tokens.ts ↔ tokens.css)', () => {
   });
 
   it('every easing appears verbatim', () => {
+    const cssEase: Record<string, string> = {
+      out: '--ease-out',
+      inOut: '--ease-in-out',
+    };
     for (const [name, value] of Object.entries(motion.easing)) {
-      expect(css, `--ease-${name}`).toContain(`--ease-${name}: ${value}`);
+      expect(css, cssEase[name]).toContain(`${cssEase[name]}: ${value}`);
     }
   });
 
   it('every motion duration appears in ms', () => {
     const cssDuration: Record<string, string> = {
-      reveal: '--duration-reveal',
-      settle: '--duration-settle',
-      pulseOnce: '--duration-pulse-once',
-      rise: '--duration-rise',
+      fast: '--duration-fast',
+      base: '--duration-base',
+      slow: '--duration-slow',
     };
     for (const [name, ms] of Object.entries(motion.duration)) {
       expect(css).toContain(`${cssDuration[name]}: ${ms}ms`);
     }
   });
 
-  it('the named animation vocabulary is exposed as animate-* utilities', () => {
-    for (const name of ['reveal', 'settle', 'pulse-once', 'rise']) {
+  it('the grammar vocabulary is exposed as animate-* utilities', () => {
+    for (const name of [
+      'light-in',
+      'light-pass',
+      'stamp',
+      'warmth-rise',
+      'enter',
+      'enter-fast',
+      'exit',
+      'verify-shake',
+    ]) {
       expect(css).toContain(`--animate-${name}:`);
+    }
+    for (const name of [
+      'light-in',
+      'light-pass',
+      'stamp',
+      'warmth-rise',
+      'enter',
+      'exit-fade',
+      'verify-shake',
+    ]) {
       expect(css).toContain(`@keyframes ${name} `);
     }
+  });
+
+  it('FROST is the only blur on the site', () => {
+    // The frost crossfade animates opacity between a sharp and a
+    // pre-blurred layer; no stylesheet may animate or transition a blur.
+    expect(css).not.toMatch(/transition:[^;]*filter/);
+    expect(css).toContain('.frost-veil');
+    expect(css).toContain('.frost-sharp');
   });
 
   it('no hex colour exists in the CSS that tokens.ts does not know', () => {

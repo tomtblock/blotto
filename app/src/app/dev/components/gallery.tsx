@@ -136,17 +136,19 @@ export function Gallery() {
           </div>
         </Section>
 
-        <Section title="Motion">
+        <Section title="Motion — the grammar">
           <div className="flex flex-wrap gap-8">
-            <MotionDemo name="reveal" animateClass="animate-reveal" />
-            <MotionDemo name="settle" animateClass="animate-settle" />
-            <MotionDemo name="pulse-once" animateClass="animate-pulse-once" />
-            <MotionDemo name="rise" animateClass="animate-rise" />
+            <MotionDemo name="LIGHT (in)" animateClass="animate-light-in" />
+            <MotionDemo name="WEIGHT (stamp)" animateClass="animate-stamp" />
+            <MotionDemo name="WARMTH (rise)" animateClass="animate-warmth-rise" />
+            <MotionDemo name="enter" animateClass="animate-enter" />
           </div>
           <p className="mt-5 max-w-prose text-[13px] leading-5 text-ink-muted">
-            Durations: reveal {motion.duration.reveal}ms · settle {motion.duration.settle}ms ·
-            pulse-once {motion.duration.pulseOnce}ms · rise {motion.duration.rise}ms. All motion
-            collapses under prefers-reduced-motion.
+            Durations: fast {motion.duration.fast}ms (micro-feedback, every exit) · base{' '}
+            {motion.duration.base}ms (LIGHT, enters) · slow {motion.duration.slow}ms (FROST,
+            morphs). Five words — LIGHT · FROST · WEIGHT · WARMTH · TRAVEL — each bound to one
+            game concept; see src/design/grammar.ts. All motion collapses under
+            prefers-reduced-motion.
           </p>
         </Section>
 

@@ -1,8 +1,10 @@
 /*
- * Card (D1). Neutral surfaces get DEPTH (elevation), never glow — glow
- * belongs to the two accents. `live` marks the one card on a screen that
- * represents a running tournament: it carries the signature light sweep on
- * its top edge and a brand hairline. At most one live card per screen.
+ * Card. Neutral surfaces get DEPTH (elevation), never glow — glow belongs
+ * to the two accents. `live` marks the one card on a screen that represents
+ * a running tournament: a brand hairline on its top edge, static. The old
+ * perpetual light sweep was idle motion — the grammar forbids it (nothing
+ * loops at rest); liveness is now expressed by the seat ring's WARMTH,
+ * which scales with real occupancy. At most one live card per screen.
  */
 import type { HTMLAttributes, ReactNode } from "react";
 
@@ -24,12 +26,10 @@ export function Card({ live = false, className = "", children, ...rest }: CardPr
       {...rest}
     >
       {live ? (
-        <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px overflow-hidden">
-          <div
-            className="h-full w-1/3 bg-gradient-to-r from-transparent via-brand-hot to-transparent"
-            style={{ animation: "light-sweep 3.2s var(--ease-glide) infinite" }}
-          />
-        </div>
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-brand-hot/70 to-transparent"
+        />
       ) : null}
       {children}
     </div>

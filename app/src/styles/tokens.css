@@ -60,17 +60,24 @@
   --color-class-3: #f472b6;
   --color-class-4: #ffd24a;
 
-  /* Motion easings (exposed as Tailwind ease-* utilities). */
-  --ease-juice: cubic-bezier(0.34, 1.56, 0.64, 1); /* overshoot — celebration only */
-  --ease-snap: cubic-bezier(0.22, 1, 0.36, 1); /* fast-out — state changes */
-  --ease-glide: cubic-bezier(0.4, 0, 0.2, 1); /* even — long reveals */
+  /* Motion easings (UI constitution PART 4.2): exactly two curves
+   * site-wide, exposed as Tailwind ease-* utilities. These override
+   * Tailwind's built-in ease-out / ease-in-out — deliberately, so every
+   * transition on the site lands on the same physics. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1); /* enters + LIGHT */
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1); /* morphs, FROST, TRAVEL */
 
-  /* The named motion vocabulary (D1) as animate-* utilities. Motion
-   * celebrates outcomes; it never nags — nothing here loops. */
-  --animate-reveal: reveal 700ms var(--ease-juice) both;
-  --animate-settle: settle 450ms var(--ease-snap) both;
-  --animate-pulse-once: pulse-once 600ms var(--ease-juice) 1;
-  --animate-rise: rise 350ms var(--ease-glide) both;
+  /* The grammar's animate-* utilities (see src/design/grammar.ts for the
+   * word ↔ meaning binding). Nothing here loops; nothing here begs. */
+  --animate-light-in: light-in 250ms var(--ease-out) both;
+  --animate-light-pass: light-pass 600ms var(--ease-out) 1 both;
+  --animate-stamp: stamp 200ms var(--ease-out) both;
+  --animate-warmth-rise: warmth-rise 400ms var(--ease-out) 1;
+  --animate-enter: enter 250ms var(--ease-out) both;
+  --animate-enter-fast: enter-fast 150ms var(--ease-out) both;
+  --animate-exit: exit-fade 150ms var(--ease-out) both;
+  /* The ONLY shake on the site: a Verify check failing. ≤200ms. */
+  --animate-verify-shake: verify-shake 200ms linear 1;
   /* The one sanctioned loop: an in-progress indicator (a wait is a state,
    * not a celebration). Named here because Tailwind's built-in name for it
    * is D3-gate vocabulary. */
@@ -78,11 +85,12 @@
 }
 
 :root {
-  /* Motion durations, mirrored from tokens.ts. */
-  --duration-reveal: 700ms;
-  --duration-settle: 450ms;
-  --duration-pulse-once: 600ms;
-  --duration-rise: 350ms;
+  /* Motion durations, mirrored from tokens.ts (PART 4.2). fast = micro-
+   * feedback and every exit; base = LIGHT and enters; slow = FROST and
+   * morphs. Exits are always faster than their enters. */
+  --duration-fast: 150ms;
+  --duration-base: 250ms;
+  --duration-slow: 400ms;
 
   /* Elevation recipes — depth for neutrals; glow belongs to the accents. */
   --elevation-card:
@@ -97,7 +105,174 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* --- The motion vocabulary --------------------------------------------- */
+/* --- The grammar (UI constitution PART 4.1) ----------------------------- *
+ * Five words, each bound to one game concept. The binding lives in
+ * src/design/grammar.ts; these are the physical behaviours.              */
+
+/* LIGHT — information becoming true. Luminance rises once, ease-out. */
+@keyframes light-in {
+  from {
+    filter: brightness(0.72);
+  }
+  to {
+    filter: brightness(1);
+  }
+}
+
+/* LIGHT's traveling form: a single luminance pass across a surface.
+ * One iteration, always — a pass that repeats is a strobe. */
+@keyframes light-pass {
+  from {
+    transform: translateX(-120%) skewX(-18deg);
+  }
+  to {
+    transform: translateX(240%) skewX(-18deg);
+  }
+}
+
+/* WEIGHT — finality. A stamp with a hard settle; a low landing, never a
+ * bounce. Applies only to irreversible actions. */
+@keyframes stamp {
+  0% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(0.96);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* WARMTH's event form — one soft rise per real event, then rest. The
+ * resting glow itself is static (see .warmth-glow below), never animated. */
+@keyframes warmth-rise {
+  0% {
+    filter: brightness(1);
+  }
+  40% {
+    filter: brightness(1.22);
+  }
+  100% {
+    filter: brightness(1);
+  }
+}
+
+/* Micro-feedback enters (everything that is not a grammar word is either
+ * silent or one of these, under 250ms). */
+@keyframes enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes enter-fast {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Every exit is faster than its enter. */
+@keyframes exit-fade {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* The ONLY shake on the entire site: a Verify check failing. ≤200ms. */
+@keyframes verify-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-5px);
+  }
+  55% {
+    transform: translateX(4px);
+  }
+  80% {
+    transform: translateX(-2px);
+  }
+}
+
+@keyframes rotate-once {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* --- FROST — a commitment sealed ---------------------------------------- *
+ * The ONLY blur on the site. Implemented as a static pre-blurred layer
+ * crossfaded with the sharp layer (opacity is animated, the blur itself
+ * never is — compositing stays cheap). Toggle with [data-frosted]; the
+ * Frost component owns the markup. De-frost is FROST reversed, and always
+ * simultaneous for every object in a pool.                               */
+
+.frost-sharp {
+  opacity: 1;
+  transition: opacity var(--duration-slow) var(--ease-in-out);
+}
+
+.frost-veil {
+  opacity: 0;
+  transition: opacity var(--duration-slow) var(--ease-in-out);
+}
+
+[data-frosted='true'] .frost-sharp {
+  opacity: 0;
+}
+
+[data-frosted='true'] .frost-veil {
+  opacity: 1;
+}
+
+/* --- WARMTH's resting glow ---------------------------------------------- *
+ * Intensity scales with REAL occupancy via --warmth (0..1), set from
+ * on-chain data only. Static at rest: it never oscillates, blinks or
+ * loops. A nearly-full pool feels warm because it is.                    */
+
+.warmth-glow {
+  opacity: var(--warmth, 0);
+  transition: opacity var(--duration-slow) var(--ease-in-out);
+}
+
+/* --- Focus is information becoming true (PART 4.3) ----------------------- *
+ * The LIGHT treatment, statically: keyboard-initiated, so it never
+ * animates — it is simply, immediately, lit.                             */
+
+:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+}
+
+/* --- LEGACY (pre-constitution vocabulary) ------------------------------- *
+ * Kept only while pages migrate to the grammar; every entry here is
+ * deleted in the definition-of-done pass. Do not use in new code.        */
+
+@theme static {
+  --animate-reveal: reveal 700ms var(--ease-legacy-juice) both;
+  --animate-settle: settle 450ms var(--ease-out) both;
+  --animate-pulse-once: pulse-once 600ms var(--ease-legacy-juice) 1;
+  --animate-rise: rise 350ms var(--ease-out) both;
+}
+
+:root {
+  --ease-legacy-juice: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
 
 @keyframes reveal {
   from {
@@ -142,108 +317,6 @@
     opacity: 1;
     transform: translateY(0);
   }
-}
-
-@keyframes rotate-once {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* The signature light sweep — reveal/celebration surfaces ONLY (the
- * fixture card's live state and the staged reveal). Never on buttons,
- * never ambient. */
-@keyframes light-sweep {
-  from {
-    transform: translateX(-120%) skewX(-18deg);
-  }
-  to {
-    transform: translateX(240%) skewX(-18deg);
-  }
-}
-
-/* --- Legacy motion (pre-D1 reveal theatre; the reveal stage still uses
- * these — they migrate to the vocabulary above in D2). ------------------ */
-
-@keyframes token-pulse {
-  0% {
-    transform: scale(1);
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-brand) 60%, transparent);
-  }
-  50% {
-    transform: scale(1.06);
-    box-shadow: 0 0 24px 6px color-mix(in srgb, var(--color-brand) 45%, transparent);
-  }
-  100% {
-    transform: scale(1);
-    box-shadow: 0 0 0 0 transparent;
-  }
-}
-
-@keyframes token-shake {
-  0%,
-  100% {
-    transform: translateX(0);
-  }
-  20% {
-    transform: translateX(-6px);
-  }
-  40% {
-    transform: translateX(5px);
-  }
-  60% {
-    transform: translateX(-4px);
-  }
-  80% {
-    transform: translateX(2px);
-  }
-}
-
-@keyframes token-flash {
-  0% {
-    filter: brightness(1);
-  }
-  50% {
-    filter: brightness(1.9);
-  }
-  100% {
-    filter: brightness(1);
-  }
-}
-
-@keyframes aura-breathe {
-  from {
-    box-shadow:
-      0 0 18px 2px color-mix(in srgb, var(--color-rarity-gold) 55%, transparent),
-      0 0 48px 12px color-mix(in srgb, var(--color-rarity-gold) 25%, transparent);
-  }
-  to {
-    box-shadow:
-      0 0 26px 5px color-mix(in srgb, var(--color-rarity-gold) 70%, transparent),
-      0 0 72px 20px color-mix(in srgb, var(--color-rarity-gold) 35%, transparent);
-  }
-}
-
-:root {
-  --duration-pulse-fast: 600ms;
-  --duration-shake: 300ms;
-  --duration-flash: 150ms;
-}
-
-.motion-pulse {
-  animation: token-pulse var(--duration-pulse-fast) var(--ease-juice);
-}
-
-.motion-shake {
-  animation: token-shake var(--duration-shake) var(--ease-snap);
-}
-
-.motion-flash {
-  animation: token-flash var(--duration-flash) linear 2;
-}
-
-.aura-breathe {
-  animation: aura-breathe 2.4s ease-in-out infinite alternate;
 }
 
 /* Reduced motion collapses EVERYTHING — the vocabulary, the legacy
