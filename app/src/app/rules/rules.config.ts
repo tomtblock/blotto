@@ -53,11 +53,16 @@ const ISO_NAMES: Record<string, string> = {
   GB: 'United Kingdom',
   IE: 'Ireland',
   DE: 'Germany',
+  BE: 'Belgium',
+  AU: 'Australia',
 };
 
 const territoryName = (code: string) => ISO_NAMES[code] ?? code;
 
 export interface Availability {
+  /** Which way an unlisted territory falls (founder posture, 2026-08-28:
+   * block-list — available everywhere except `blocked`). */
+  posture: 'allow-list' | 'block-list';
   allowed: string[];
   blocked: string[];
   scheduleVersion: number;
@@ -66,6 +71,7 @@ export interface Availability {
 /** Rendered from config/territories.json — the founder-owned schedule. */
 export function availability(): Availability {
   return {
+    posture: territories.posture === 'block-list' ? 'block-list' : 'allow-list',
     allowed: territories.allowed.map(territoryName),
     blocked: territories.blocked.map(territoryName),
     scheduleVersion: territories.version,
@@ -112,7 +118,10 @@ export function rulesSections(): RulesSection[] {
       id: 'availability',
       heading: r.headings.availability,
       kind: 'availability',
-      body: r.availabilityIntro,
+      body:
+        availability().posture === 'block-list'
+          ? r.availabilityIntroBlockList
+          : r.availabilityIntro,
       data: availability(),
     },
     { id: 'age', heading: r.headings.age, kind: 'text', body: r.age },

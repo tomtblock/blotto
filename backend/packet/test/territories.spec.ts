@@ -55,10 +55,11 @@ function deps(
 const request = { wallet: WALLET, pool: POOL, ip: '203.0.113.7' };
 
 describe('the committed territory schedule', () => {
-  it('config/territories.json parses and matches the R2 launch policy', () => {
+  it('config/territories.json parses and matches the launch policy (2026-08-28: block BE + AU)', () => {
     const committed = parseTerritorySchedule(
       readFileSync(join(__dirname, '..', '..', '..', 'config', 'territories.json'), 'utf8')
     );
+    expect(committed.posture).to.equal(DEFAULT_TERRITORY_SCHEDULE.posture);
     expect(committed.allowed).to.deep.equal(DEFAULT_TERRITORY_SCHEDULE.allowed);
     expect(committed.blocked).to.deep.equal(DEFAULT_TERRITORY_SCHEDULE.blocked);
     expect(committed.version).to.be.at.least(1);
@@ -77,6 +78,9 @@ describe('parseTerritorySchedule', () => {
       '{"version":1,"allowed":["GB"],"blocked":["US-"],"updated":"x"}',
       '{"version":1,"allowed":["GB"],"blocked":[7],"updated":"x"}',
       '{"version":1,"allowed":["GB"],"blocked":[],"updated":""}',
+      '{"version":2,"posture":"deny-list","allowed":[],"blocked":[],"updated":"x"}',
+      // A populated allowlist under block-list posture misstates the policy.
+      '{"version":2,"posture":"block-list","allowed":["GB"],"blocked":["BE"],"updated":"x"}',
     ];
     for (const text of bad) {
       expect(() => parseTerritorySchedule(text), text).to.throw();
@@ -89,10 +93,17 @@ describe('parseTerritorySchedule', () => {
     );
     expect(s.blocked).to.include('US-NY');
   });
+
+  it('a schedule without a posture reads as allow-list (the original schema)', () => {
+    const s = parseTerritorySchedule(
+      '{"version":1,"allowed":["GB"],"blocked":[],"updated":"2026-08-27"}'
+    );
+    expect(s.posture).to.equal('allow-list');
+  });
 });
 
-describe('territoryAllowed (fail-closed decision table)', () => {
-  const s = schedule({ allowed: ['GB', 'US'], blocked: ['US-NY'] });
+describe('territoryAllowed (fail-closed decision table, allow-list posture)', () => {
+  const s = schedule({ posture: 'allow-list', allowed: ['GB', 'US'], blocked: ['US-NY'] });
   const cases: Array<[string | undefined | null, string | undefined, boolean, string]> = [
     ['GB', undefined, true, 'allowed country'],
     ['US', 'CA', true, 'allowed country, unblocked region'],
@@ -111,8 +122,35 @@ describe('territoryAllowed (fail-closed decision table)', () => {
   }
 
   it('an explicit country block wins over the allowed list', () => {
-    const blocked = schedule({ allowed: ['GB'], blocked: ['GB'] });
+    const blocked = schedule({ posture: 'allow-list', allowed: ['GB'], blocked: ['GB'] });
     expect(territoryAllowed(blocked, 'GB')).to.equal(false);
+  });
+});
+
+describe('territoryAllowed (block-list posture — the 2026-08-28 launch policy)', () => {
+  const s = DEFAULT_TERRITORY_SCHEDULE; // block-list, blocked BE + AU
+  const cases: Array<[string | undefined | null, string | undefined, boolean, string]> = [
+    ['AR', undefined, true, 'an unlisted country is allowed'],
+    ['GB', undefined, true, 'a formerly-allowlisted country stays allowed'],
+    ['US', 'NY', true, 'unlisted country with a region is allowed'],
+    ['BE', undefined, false, 'Belgium is blocked'],
+    ['AU', undefined, false, 'Australia is blocked'],
+    ['AU', 'NSW', false, 'a blocked country stays blocked whatever the region'],
+    [undefined, undefined, false, 'no country resolved — fail-closed survives the posture'],
+    ['', undefined, false, 'empty country — fail-closed'],
+    ['ar', undefined, false, 'malformed country code — fail-closed'],
+    ['AR', 'n/a!', false, 'ambiguous region — fail-closed'],
+  ];
+  for (const [country, region, want, name] of cases) {
+    it(name, () => {
+      expect(territoryAllowed(s, country, region)).to.equal(want);
+    });
+  }
+
+  it('a region block still works under block-list posture', () => {
+    const withRegion = schedule({ blocked: ['BE', 'AU', 'US-NY'] });
+    expect(territoryAllowed(withRegion, 'US', 'NY')).to.equal(false);
+    expect(territoryAllowed(withRegion, 'US', 'CA')).to.equal(true);
   });
 });
 
@@ -140,7 +178,7 @@ describe('packet issuance under the schedule', () => {
 describe('geoVerdict (the /geo pre-flight)', () => {
   it('answers only a boolean, false on any failure', async () => {
     expect(await geoVerdict(deps(async () => ({ country: 'GB', vpnOrProxy: false })), '1.2.3.4')).to.equal(true);
-    expect(await geoVerdict(deps(async () => ({ country: 'FR', vpnOrProxy: false })), '1.2.3.4')).to.equal(false);
+    expect(await geoVerdict(deps(async () => ({ country: 'BE', vpnOrProxy: false })), '1.2.3.4')).to.equal(false);
     expect(await geoVerdict(deps(async () => ({ country: 'GB', vpnOrProxy: true })), '1.2.3.4')).to.equal(false);
     expect(
       await geoVerdict(
@@ -223,13 +261,13 @@ describe('the /geo route and the header stub', () => {
   it('stub headers override the lookup ONLY when the dep opts in', async () => {
     const trusted = serverDeps(true);
     const blocked = await handleEntryRoute(trusted, 'GET', '/geo', null, '1.2.3.4', {
-      'x-geo-country': 'FR',
+      'x-geo-country': 'BE',
     });
     expect(blocked.body).to.deep.equal({ allowed: false });
 
     const untrusted = serverDeps(false);
     const ignored = await handleEntryRoute(untrusted, 'GET', '/geo', null, '1.2.3.4', {
-      'x-geo-country': 'FR',
+      'x-geo-country': 'BE',
     });
     expect(ignored.body).to.deep.equal({ allowed: true }, 'headers ignored without the opt-in');
   });
@@ -242,7 +280,7 @@ describe('the /geo route and the header stub', () => {
       '/packet',
       { wallet: WALLET, pool: POOL },
       '1.2.3.4',
-      { 'x-geo-country': 'US' }
+      { 'x-geo-country': 'BE' }
     );
     expect(res.status).to.equal(403);
     expect(res.body).to.deep.equal(GENERIC_REJECTION);

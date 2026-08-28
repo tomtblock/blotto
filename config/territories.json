@@ -1,6 +1,7 @@
 {
-  "version": 1,
-  "allowed": ["GB", "IE", "DE"],
-  "blocked": [],
-  "updated": "2026-08-27"
+  "version": 2,
+  "posture": "block-list",
+  "allowed": [],
+  "blocked": ["BE", "AU"],
+  "updated": "2026-08-28"
 }

@@ -116,7 +116,7 @@ describe('packet issuance', () => {
 
   it('every failure is the SAME generic rejection', async () => {
     const results = await Promise.all([
-      issuePacket(deps({ country: 'US' }), request), // blocked territory
+      issuePacket(deps({ country: 'BE' }), request), // blocked territory
       issuePacket(deps({ vpn: true }), request), // VPN
       issuePacket(deps({ sanctioned: true }), request), // sanctions
       issuePacket(deps({ attestations: new MemoryAttestationStore() }), request), // no attestation
@@ -141,14 +141,15 @@ describe('packet issuance', () => {
     expect(new Set(texts).size).to.equal(1);
   });
 
-  it('the default allowlist is R2: GB, IE, DE — and only those', async () => {
-    expect(DEFAULT_TERRITORY_SCHEDULE.allowed).to.deep.equal(['GB', 'IE', 'DE']);
-    expect(DEFAULT_TERRITORY_SCHEDULE.blocked).to.deep.equal([]);
-    for (const country of ['GB', 'IE', 'DE']) {
+  it('the launch policy blocks BE and AU — and only those (founder, 2026-08-28)', async () => {
+    expect(DEFAULT_TERRITORY_SCHEDULE.posture).to.equal('block-list');
+    expect(DEFAULT_TERRITORY_SCHEDULE.allowed).to.deep.equal([]);
+    expect(DEFAULT_TERRITORY_SCHEDULE.blocked).to.deep.equal(['BE', 'AU']);
+    for (const country of ['GB', 'IE', 'DE', 'US', 'FR', 'AR']) {
       const r = await issuePacket(deps({ country }), request);
       expect(r.ok, country).to.equal(true);
     }
-    for (const country of ['US', 'FR', 'CN', 'RU']) {
+    for (const country of ['BE', 'AU']) {
       const r = await issuePacket(deps({ country }), request);
       expect(r.ok, country).to.equal(false);
     }
@@ -178,7 +179,7 @@ describe('the entry service routes', () => {
     );
     expect(ok.status).to.equal(200);
     const blocked = await handleEntryRoute(
-      { ...d, packet: deps({ country: 'US' }) },
+      { ...d, packet: deps({ country: 'BE' }) },
       'POST',
       '/packet',
       { wallet: WALLET, pool: POOL },

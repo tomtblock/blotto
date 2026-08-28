@@ -1,33 +1,44 @@
 /**
- * The territory schedule (D-B3, ratified 2026-08-27) — the founder-owned,
- * config-driven policy behind `GeoLookup`, FAIL-CLOSED at every edge:
+ * The territory schedule (D-B3, ratified 2026-08-27; posture redirected by
+ * founder instruction 2026-08-28) — the founder-owned, config-driven policy
+ * behind `GeoLookup`, FAIL-CLOSED at every edge:
  *
- *   - a lookup failure or an ambiguous/unknown location → blocked
+ *   - a lookup failure or an ambiguous/unknown location → blocked, in
+ *     EITHER posture (the fail-closed property is not posture-dependent)
  *   - a territory on the `blocked` list → blocked, whatever else says
- *   - a territory absent from the `allowed` list → blocked (R2's allowlist
- *     posture, carried: default United Kingdom / Ireland / Germany until the
- *     founder names otherwise; everything else is unavailable)
+ *   - otherwise, the posture decides:
+ *       "allow-list"  → blocked unless the country is on `allowed`
+ *                       (R2's original carry: GB / IE / DE)
+ *       "block-list"  → allowed (the launch policy since 2026-08-28:
+ *                       everywhere except Belgium and Australia)
  *
  * The file is `config/territories.json` at the repository root:
  *
- *   { "version": 1, "allowed": ["GB", ...], "blocked": ["US-NY", ...],
- *     "updated": "YYYY-MM-DD" }
+ *   { "version": 2, "posture": "block-list", "allowed": [],
+ *     "blocked": ["BE", "AU"], "updated": "YYYY-MM-DD" }
  *
  * Codes are ISO 3166-1 alpha-2 country codes, optionally suffixed with a
  * region for sub-national blocks (US states: "US-NY"). `blocked` supports
- * both granularities and always wins over `allowed`; the D-B3 schema names
- * `blocked` and this module adds `allowed` so R2's allowlist lives in the
- * same founder-editable file instead of in code. Contents are FOUNDER-OWNED
- * (R2): never edit the lists without a founder instruction.
+ * both granularities and always wins. A missing `posture` reads as
+ * "allow-list" (the original schema); under "block-list" the `allowed`
+ * list must be empty — a populated allowlist that decides nothing would
+ * misstate the policy to anyone reading the file. Contents are
+ * FOUNDER-OWNED (R2): never edit the lists or posture without a founder
+ * instruction.
  */
 
 import { readFileSync } from 'fs';
 
+export type TerritoryPosture = 'allow-list' | 'block-list';
+
 export interface TerritorySchedule {
   version: number;
-  /** ISO 3166-1 alpha-2 codes a player may enter from. */
+  /** Which way an unlisted (but resolved) territory falls. */
+  posture: TerritoryPosture;
+  /** ISO 3166-1 alpha-2 codes a player may enter from (allow-list posture;
+   * must be empty under block-list). */
   allowed: readonly string[];
-  /** Explicit blocks — country ("US") or country-region ("US-NY"). Wins. */
+  /** Explicit blocks — country ("BE") or country-region ("US-NY"). Wins. */
   blocked: readonly string[];
   /** Founder's last-edited date, informational. */
   updated: string;
@@ -53,6 +64,10 @@ export function parseTerritorySchedule(text: string): TerritorySchedule {
   if (typeof doc.updated !== 'string' || doc.updated.length === 0) {
     throw new Error('territory schedule: updated must be a non-empty string');
   }
+  const posture = (doc as { posture?: unknown }).posture ?? 'allow-list';
+  if (posture !== 'allow-list' && posture !== 'block-list') {
+    throw new Error('territory schedule: posture must be "allow-list" or "block-list"');
+  }
   for (const [field, pattern] of [
     ['allowed', COUNTRY],
     ['blocked', COUNTRY_OR_REGION],
@@ -65,8 +80,14 @@ export function parseTerritorySchedule(text: string): TerritorySchedule {
       }
     }
   }
+  if (posture === 'block-list' && (doc.allowed as string[]).length > 0) {
+    throw new Error(
+      'territory schedule: allowed must be empty under block-list posture'
+    );
+  }
   return {
     version: doc.version as number,
+    posture,
     allowed: [...(doc.allowed as string[])],
     blocked: [...(doc.blocked as string[])],
     updated: doc.updated,
@@ -81,7 +102,8 @@ export function loadTerritorySchedule(path: string): TerritorySchedule {
 /**
  * The one decision function. `country` / `region` come from the geo lookup;
  * anything missing, empty, or malformed answers false — never assume where
- * an unresolvable address is.
+ * an unresolvable address is. Only a well-formed, unblocked location ever
+ * reaches the posture branch.
  */
 export function territoryAllowed(
   schedule: TerritorySchedule,
@@ -94,13 +116,15 @@ export function territoryAllowed(
     if (!/^[A-Z0-9]{1,3}$/.test(region)) return false; // ambiguous region → blocked
     if (schedule.blocked.includes(`${country}-${region}`)) return false;
   }
-  return schedule.allowed.includes(country);
+  return schedule.posture === 'block-list' || schedule.allowed.includes(country);
 }
 
-/** R2's launch policy as a schedule — the committed config file's contents. */
+/** The launch policy as a schedule — the committed config file's contents
+ * (founder instruction 2026-08-28: block Belgium and Australia only). */
 export const DEFAULT_TERRITORY_SCHEDULE: TerritorySchedule = {
-  version: 1,
-  allowed: ['GB', 'IE', 'DE'],
-  blocked: [],
-  updated: '2026-08-27',
+  version: 2,
+  posture: 'block-list',
+  allowed: [],
+  blocked: ['BE', 'AU'],
+  updated: '2026-08-28',
 };

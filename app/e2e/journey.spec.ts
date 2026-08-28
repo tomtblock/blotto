@@ -25,7 +25,7 @@ test('landing: hero fixture card with the 18+ line above the fold', async ({ pag
   await expect(page.getByRole('img', { name: /of 64 seats filled/ })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Enter this tournament' })).toBeVisible();
   // v3 D2: 18+/territory visible WITHOUT SCROLLING at this viewport.
-  const note = page.getByText('18+ only · available in listed territories');
+  const note = page.getByText('18+ only · not available in some territories');
   await expect(note).toBeInViewport();
   await shot(page, 'landing', info.project.name);
 });
