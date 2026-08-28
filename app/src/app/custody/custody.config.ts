@@ -7,7 +7,7 @@
  * a custody page that invents a threshold would be worse than none.
  */
 
-import custodyConfig from '../../../../config/custody.json';
+import custodyConfig from '@config/custody.json';
 import { COPY } from '@/copy';
 
 export interface CustodyValue {

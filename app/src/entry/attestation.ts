@@ -10,8 +10,8 @@
  * issuance; the device cache only decides whether to SHOW the clickwrap.
  */
 
-import { attestationMessage } from '../../../backend/_shared/src/attestation-message';
-import termsConfig from '../../../config/terms.json';
+import { attestationMessage } from '@blotto/shared/attestation-message';
+import termsConfig from '@config/terms.json';
 
 export { attestationMessage };
 
