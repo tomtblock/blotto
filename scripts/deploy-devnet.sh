@@ -41,6 +41,23 @@ cp "$BLOTTO_PROGRAM_KEYPAIR" target/deploy/blotto_cup-keypair.json
 echo "deploy: building..."
 anchor build
 
+# E4 (master prompt v3): on an UPGRADE, a build larger than the deployed
+# programdata account fails at `anchor deploy` — extend first, by the
+# computed shortfall. First deploys (no program on the cluster yet) and
+# same-or-smaller builds skip this without error.
+NEW_SIZE="$(stat -c%s target/deploy/blotto_cup.so 2>/dev/null || stat -f%z target/deploy/blotto_cup.so)"
+CURRENT_SIZE="$(solana program show "$DECLARED_ID" --url devnet 2>/dev/null \
+  | grep -oE 'Data Length: [0-9]+' | grep -oE '[0-9]+' || true)"
+if [ -n "$CURRENT_SIZE" ] && [ "$NEW_SIZE" -gt "$CURRENT_SIZE" ]; then
+  EXTEND_BY=$((NEW_SIZE - CURRENT_SIZE))
+  echo "deploy: extending programdata by $EXTEND_BY bytes ($CURRENT_SIZE -> $NEW_SIZE)..."
+  solana program extend "$DECLARED_ID" "$EXTEND_BY" --url devnet
+elif [ -n "$CURRENT_SIZE" ]; then
+  echo "deploy: programdata size $CURRENT_SIZE covers the new build ($NEW_SIZE) — no extend needed"
+else
+  echo "deploy: program not on the cluster yet — first deploy, no extend needed"
+fi
+
 echo "deploy: deploying $DECLARED_ID to devnet..."
 anchor deploy --provider.cluster "${ANCHOR_PROVIDER_URL:-devnet}"
 solana program show "$DECLARED_ID" --url devnet
