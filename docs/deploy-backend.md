@@ -106,6 +106,10 @@ site shows the real (empty) devnet state.
 - **Troubleshooting — "name is taken":** Fly app names are global. If the
   log says `blotto-indexer` or `blotto-packet` is taken by someone else,
   tell me and I'll rename ours (a one-line change in `deploy/fly/`).
+- **Troubleshooting — "timeout reached waiting for health checks":** the
+  service is crashing or stalling at boot. Open the app's Monitoring page
+  on Fly.io (the deploy log prints the link) — the last lines there name
+  the actual error. Send me that message and I'll fix it.
 
 ## What comes after (the next milestone)
 
