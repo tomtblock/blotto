@@ -74,13 +74,12 @@ different shape, so the seam as-is throws on every lookup and blocks everyone.
 C2 needs a concrete adapter, its known-vector tests, and the header/URL/body facts
 re-derived from what actually ships.
 
-**B-c. `scripts/admin.ts` has no `set-paused`.** The CLI exposes six commands —
-`status`, `init-config`, `set-open-tiers`, `register-signers`,
-`fund-platform-wallet`, `withdraw-platform`. `set_paused` exists on-chain
-(`lib.rs`) but has no proposal emitter, and neither do `set_vault_ceiling`,
-`set_kyc_threshold`, `set_detection_hard_block`, `set_tier_economics` or
-`set_treasury_policy`. **Without `set-paused`, drill 5.2 cannot run.** Add it, with
-`--emit-proposal` support, before Stage D.
+**B-c. Admin CLI setters — LANDED.** `scripts/admin.ts` now carries `set-paused`,
+`set-vault-ceiling`, `set-kyc-threshold`, `set-detection-hard-block`,
+`set-tier-economics` and `set-treasury-policy`, all with `--emit-proposal`. Drill
+5.2 is unblocked. Every discriminator was checked against an independent
+`sha256("global:<name>")`, and the client-side guards (tier range, strict booleans,
+the pot's 1024-lamport divisibility) reject before a proposal is ever raised.
 
 **B-d. `blotto-daemon` and `blotto-review` have no deploy path.**
 `deploy-backend.yml` deploys the indexer and the packet service only. The Fly
@@ -129,9 +128,35 @@ draft budgeted only the first.
 
 | Purpose | Amount | Why |
 |---|---|---|
-| Bank wallet working capital | ~18 SOL | fronts 6.4 SOL of entries per pool, recycled from prizes and the 5-pool treasury sweeps |
+| Bank wallet working capital | see the budget table below | fronts 6.4 SOL of entries **plus ~0.4 SOL of unrecoverable rent** per pool |
 | Platform treasury bootstrap | ≥ 6 SOL | **`open_pool` reverts with `TreasuryShortfall` below it** |
-| Irys | 0.5 SOL | C0.2 |
+| Irys | ~0.3 SOL | C0.2. Devnet bundles are cheap; more than this is parked, not spent |
+
+**Rent is the only true burn, and no account is ever closed.** There is no `close =`
+anywhere in the program, so every `Entry` (0.00222 SOL) and every Metaplex Core pass
+(~0.004 SOL) is permanent — 64 of each per pool, paid by the entrant, plus the Pool
+PDA (0.006786 SOL). That is **~0.41 SOL per pool minimum**, and the app's own balance
+gate budgets 0.01 SOL per entrant (0.65 SOL per pool) as its conservative bound.
+Everything else recycles: entries return via the treasury sweep, prizes return from
+the winner wallets — *provided the recycle harness actually sweeps them*.
+
+Sweep frequency is the dominant lever on how far a given balance stretches, because
+it decides how fast working capital returns:
+
+| Starting SOL | sweep every 5 | every 3 | every 2 | every 1 |
+|---|---|---|---|---|
+| minimum for 20 pools | 25.4 | 22.0 | 21.6 | 20.3 |
+
+(Computed at the repo's own 0.004 SOL Core-asset estimate, with a 6 SOL treasury
+bootstrap. At a pessimistic 0.006 the 20-pool minimum rises to 28.0 / 24.3 / 24.1 /
+22.8.) Pool 1's measured rent decides which column is real — that is why it is
+reported before pool 2 runs.
+
+**End-of-rehearsal recovery:** `min_platform + reserve_pots × pot[0]` (5.62 SOL) is
+locked only while tier 0 is *enabled and idle*. Running
+`set-open-tiers --tiers 0,0,0,0,0,0,0` after the last pool drops the reserve term, so
+the floor falls to `min_platform` alone and a final `withdraw-platform` recovers the
+5.12 SOL pot reserve.
 
 The treasury floor is not a suggestion: `open_pool` requires
 `platform.lamports − platform_refundable ≥ pot + min_platform + idle_tier_reserve`.
@@ -142,9 +167,9 @@ With tier 0 only, that is `5.12 + 0.5 = 5.62 SOL` before pool 1 can open at all.
 solana airdrop 2 4ydbVZuNupTPu1cKGCc2cePs95B8iMkrR4TvsCLiwcL1 --url devnet
 ```
 
-At 2 SOL per airdrop, ~24 SOL is **twelve or more successful requests**, not four.
-Plan the sittings, or line up a second funded devnet source. Retry later rather
-than hammering.
+At 2 SOL per airdrop this is many sittings, not four requests. Before grinding the
+faucet, check what is already parked: the Irys wallet only needs a fraction of a SOL
+for devnet bundles, and the deploy keypair holds a residue after C4.
 
 **C0.4 IPLocate quota.** Dashboard → monthly request cap. Need ~1,300 plus retries.
 
@@ -183,6 +208,19 @@ it does not match, stop and re-read.
 
 - `curl -s https://blotto-packet.fly.dev/health` → ok
 - A packet signature verifies against `ENTRY_SIGNER_PUBLIC_KEY_HEX`
+- **The signature check that proves the key pair, without the console.** Post an
+  attestation for a throwaway wallet, request a packet, and verify its `signature`
+  over its `message` against the `publicKey` the response returns. `sign()` goes to
+  Turnkey's `signRawPayload`; `publicKey()` returns the configured
+  `ENTRY_SIGNER_PUBLIC_KEY_HEX` verbatim. So a valid signature proves the configured
+  hex is the true public key of the Turnkey-held private key — a botched base58 → hex
+  conversion cannot pass. Do this BEFORE C3: on-chain the same mistake surfaces only
+  as a failed Ed25519 check at `register`, after the value is committed.
+- **What that check does NOT prove:** the local dev-seed signer would also produce a
+  self-consistent signature. Base58-encode the returned `publicKey` and compare it to
+  the Turnkey key's Solana address — that comparison, and only that, distinguishes
+  Turnkey from a silent seed fallback. (The startup line added alongside this now
+  names the path directly, which is the cheaper check from here on.)
 - **Negative:** remove `TURNKEY_API_PRIVATE_KEY` while leaving `ENTRY_SIGNER_KEY_ID`
   set → the service must refuse to start. (Removing `ENTRY_SIGNER_KEY_ID` instead
   exercises a different branch and proves less.) If it starts anyway, the
@@ -211,6 +249,12 @@ answer — that is a gap to build if you ever add one, not a property you have.
 **Verify:** `/geo` → true from a normal address · false for BE and AU · false when
 the vendor is unreachable · false on a malformed answer. Rejections are generic by
 design; do not expect them to say why.
+
+**The acceptance criterion is the startup log, not the endpoint.** `packet: using the
+GEO STUB (dev only) — country=GB` prints on every boot while the stub is live. After
+the swap that line must be GONE. The endpoint tells you what an answer was; the log
+line tells you which code path produced it — and only the second one catches a
+vendor variable that quietly went missing.
 
 **Not in scope, but open:** sanctions screening has no vendor wired at all —
 `backend/packet/src/main.ts` ships the always-clear answer the suite pins. Record it
