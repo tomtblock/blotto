@@ -152,11 +152,10 @@ bootstrap. At a pessimistic 0.006 the 20-pool minimum rises to 28.0 / 24.3 / 24.
 22.8.) Pool 1's measured rent decides which column is real — that is why it is
 reported before pool 2 runs.
 
-**End-of-rehearsal recovery:** `min_platform + reserve_pots × pot[0]` (5.62 SOL) is
-locked only while tier 0 is *enabled and idle*. Running
-`set-open-tiers --tiers 0,0,0,0,0,0,0` after the last pool drops the reserve term, so
-the floor falls to `min_platform` alone and a final `withdraw-platform` recovers the
-5.12 SOL pot reserve.
+**End-of-rehearsal recovery** is step 5.2a in Stage D: `min_platform + reserve_pots ×
+pot[0]` (5.62 SOL) is locked only while tier 0 is *enabled and idle*, so disabling the
+tier after the last pool drops the reserve term and a final `withdraw-platform`
+recovers 5.12 SOL.
 
 The treasury floor is not a suggestion: `open_pool` requires
 `platform.lamports − platform_refundable ≥ pot + min_platform + idle_tier_reserve`.
@@ -326,11 +325,8 @@ Whichever key signs becomes admin **permanently**. There is no `set_admin`.
 generated — do C6's key generation before this step, not after** · C0.1 done
 (Phantom working) · vault holds ≥ 0.05 SOL for the Config PDA's rent.
 
-**Confirm before signing — `--min-platform` is a founder-owned number.**
-`devnet-rehearsal.md` writes it as `<founder-ratified-lamports>`. 0.5 SOL is a
-proposal awaiting your ratification, not a fact. It matters twice: it is the
-permanent floor term, and `set_treasury_policy` (which would change it) has no CLI
-today (B-c).
+**`--min-platform` = 0.5 SOL — RATIFIED (founder, 2026-08-29).** It is the permanent
+floor term. `set-treasury-policy` can change it later, now that the command exists.
 
 **1. [ARCH] emits the proposal** ⚠ VERIFY exact flags against `scripts/admin.ts`
 USAGE:
@@ -352,7 +348,7 @@ lamports. Prefer the `sol` form — it is readable in a Squads proposal review.
 - `--admin` reads `9EEW…` and **not** `9EL1m9wv…`
 - the entry signer matches what Turnkey printed in C1
 - ceilings match the confirmed table (each tier's gross intake, entry × 64)
-- `--min-platform` is the value you ratified
+- `--min-platform` reads `0.5sol`
 
 **3. [YOU] paste into a Squads proposal, approve, execute.**
 
@@ -405,6 +401,11 @@ solana program set-upgrade-authority 5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH1
 
 **After this, every deploy is a Squads proposal.** Decide with the architect whether
 to do it before or after the rehearsal's last redeploy. Then retire `GXKX…`.
+
+**Top up `GXKX…` before running this.** It holds ~0.108 SOL after funding Irys three
+times on 2026-08-29; a transfer that runs out of gas mid-authority-change is the one
+failure this step must not have. A few hundredths of a SOL is enough, but check it
+rather than assuming.
 
 ---
 
@@ -482,6 +483,17 @@ pools through the front end, the rest through `Web3Chain`.
 full pool end to end before committing to twenty. **[ARCH]** measures real rent on
 pool 1 and **reports before pool 2 runs**.
 
+**Pool 1 carries two explicit pass/fail gates, not observations.**
+
+1. **The prize sweep-back works.** Every budget number assumes the harness returns
+   the 5.12 SOL of prize money from the 16 winner wallets to the bank. Assert it:
+   the bank's net change across pool 1 must be about **−0.41 SOL**, not −5.5. If the
+   sweep-back silently does not happen the run still *looks* fine, and the bank is
+   empty by pool 4. A 13× difference is impossible to miss if someone looks — so
+   look, and record the number.
+2. **Measured rent decides the sweep cadence** (below). Record the bank's net change
+   per pool; that single figure carries rent, fees and any leak at once.
+
 **Decision point:** if rent lands near 10 SOL, revisit the pool count before spending
 it.
 
@@ -503,6 +515,19 @@ matching the published bundle.
 - **One deliberate detection flag**, so `release_escrow` and `forfeit_escrow` are
   exercised once before they ever matter
 
+**5.2a End-of-run treasury recovery.** After pool 20 settles, and before Stage E:
+
+1. `set-open-tiers --tiers 0,0,0,0,0,0,0` — tier 0 stops being an enabled-and-idle
+   tier, so the `reserve_pots × pot[0]` term leaves the withdraw floor.
+2. `withdraw-platform --amount <treasury − 0.5 SOL> --destination <bank>` — recovers
+   the 5.12 SOL that was locked behind the reserve.
+3. `status` — confirm `open tiers: [0, 0, 0, 0, 0, 0, 0]` and the treasury at its
+   `min_platform` floor.
+
+Both are Squads proposals. This is also the only coverage `set-open-tiers` gets in the
+whole rehearsal, so it is a test as much as a recovery — run it deliberately, not as
+a cleanup afterthought.
+
 **5.3 Public verification.** All 20 verified from the verify page, wallet
 disconnected. **[YOU]** arrange one non-founder recompute from the URL alone.
 
@@ -510,10 +535,62 @@ disconnected. **[YOU]** arrange one non-founder recompute from the URL alone.
 2. **[YOU]** supply the Helius URL as an env var — public RPC will rate-limit.
 Timings go into `docs/devnet-rehearsal.md`.
 
-**Every 5 pools: `withdraw_platform` sweep, destination = the bank wallet.** That is
-what makes the 18 SOL budget recycle: each pool nets the treasury about +1.28 SOL
-(6.4 SOL of entries in, 5.12 SOL of pot out), so roughly 6.4 SOL is sweepable per
-five pools. Each sweep is an admin instruction, so each is a Squads proposal.
+## The sweep, and what "unattended" actually means
+
+**`withdraw_platform` sweep every 2 pools, destination = the bank wallet.** Each pool
+nets the treasury about +1.28 SOL (6.4 SOL of entries in, 5.12 SOL of pot out) while
+the bank bleeds the same amount, so the sweep is what keeps the bank solvent. It is
+an admin instruction, so **every sweep is a Squads proposal the founder approves and
+executes by hand.**
+
+That is the honest reconciliation with 5.1's "unattended": **unattended within a
+segment, not across the run.** No human is in the loop during a pool's fill-and-settle
+cycle — the daemon opens, seals, reveals, scores and pays without help. The founder is
+needed only at segment boundaries. Plan the run as **ten segments of two pools with a
+founder-attended sweep between them**, and say so in the timings rather than
+discovering it at pool 8.
+
+Two things make the boundaries cheap:
+
+- **Pre-stage every sweep proposal in one sitting.** The amount does not have to be
+  exact — a fixed, conservative 2.5 SOL clears the floor at every boundary — so all
+  ten can be created and reviewed together, then executed one per boundary. That turns
+  ten reviews into one review and ten clicks.
+- **Segment boundaries are natural checkpoints anyway.** The ledger reconciliation
+  5.2 wants, and the rent check below, both belong exactly there.
+
+This manual cost is bought by the decision to make the Squads vault the devnet admin.
+The alternative the rehearsal doc offers — a direct-signed local keypair as admin on
+devnet — would make sweeps scriptable and the run genuinely unattended, at the price
+of never exercising the Squads proposal path before mainnet. That path is also what
+5.2's pause drill runs on. Keeping the vault is the right call; this is what it costs.
+
+### The cadence trigger, set in advance
+
+Expected net bank burn is **~0.41 SOL per pool** — rent, since everything else
+recycles. Measure it on pool 1 and apply this directly; no judgement on the day:
+
+| Measured net burn per pool | Cadence |
+|---|---|
+| ≤ 0.42 SOL | sweep every 3 would hold, but see below |
+| ≤ 0.445 SOL | **sweep every 2 — the plan** |
+| ≤ 0.509 SOL | sweep every pool |
+| > 0.51 SOL | stop: cut the pool count or raise more devnet SOL |
+
+**Why every 2 rather than every 3.** At the repo's own pass-rent estimate, sweeping
+every 3 clears twenty pools by about 3% — and its low-water mark, mid-pool-18, is
+**0.24 SOL**. That is not a margin. Sweeping every 2 lifts the same low point to 1.52
+SOL for four extra boundaries. Re-check after pool 1: if measured burn comes in at or
+under 0.42 the every-3 cadence is available, but it should be a deliberate choice to
+spend the margin, not the default.
+
+Every additional ~3 SOL of devnet funding buys back one cadence step. If the faucets
+cooperate and the bank reaches ~25 SOL, sweep every 5 and the run is four boundaries.
+
+**Assert a floor-breaching withdrawal reverts first** — but note the mechanics: with
+`--emit-proposal` you would be pushing a deliberately failing proposal through Squads.
+Cheaper to assert the revert in the LiteSVM suite and record it, unless you want one
+burned proposal as live evidence. Decide which, in advance.
 
 Assert a floor-breaching withdrawal reverts first — but note the mechanics: with
 `--emit-proposal` you would be pushing a deliberately failing proposal through

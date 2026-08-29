@@ -326,3 +326,28 @@ watched to fail as unproven.
 **Also recorded for Phase 7:** the devnet admin multisig is Squads **v3** (`squads-mpl`,
 `SMPL…ZekMu`); its signing address is the index-1 *authority* PDA, not a v4 "vault" PDA. Squads v4
 is the current line — revisit before a permanent mainnet admin is chosen.
+
+## Accepted gap: sub-national territory rules are not enforceable end to end
+
+**Decision, founder, 2026-08-29: accepted as a written gap, not fixed in code.** Recorded here
+because whoever adds the first sub-national rule needs to find this before they trust it.
+
+`config/territories.json` accepts entries in two shapes: a country (`"BE"`) and a country-region
+(`"US-NY"`). `territoryAllowed()` in `backend/packet/src/territories.ts` honours both — it checks
+`${country}-${region}` against the block list whenever the geo lookup supplies a region, and treats
+an unparseable region as blocked.
+
+**The failure mode.** A region-level rule only bites if the geo vendor actually returns a region for
+that address. Nothing asserts that it does. So a sub-national entry can sit in the config file
+looking enforced while admitting every person it names — silently, with no error, no log line, and a
+config file that reads as though the rule is live. The country-level entries beside it keep working
+normally, which makes the broken one harder to notice, not easier.
+
+**Why it is acceptable today.** The schedule is `{"blocked": ["BE", "AU"]}` — country-level only, so
+there is nothing for the gap to break. Building a boot-time refusal now would be guarding a case
+that does not exist.
+
+**What must happen before the first sub-national rule ships.** Either a boot assertion that the
+configured vendor returns a region for a known address in that country and the service refuses to
+start otherwise, or an explicit per-rule capability check at load. Adding the config entry alone is
+not enough, and is the failure this note exists to prevent.
