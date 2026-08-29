@@ -58,6 +58,21 @@ jobs:
           flyctl apps create "$INDEXER_APP" || echo "$INDEXER_APP exists (or the name is taken — see docs/deploy-backend.md troubleshooting)"
           flyctl apps create "$PACKET_APP" || echo "$PACKET_APP exists (or the name is taken — see docs/deploy-backend.md troubleshooting)"
 
+      # Incident 2026-08-29: blotto-indexer had NO public IP — its first deploy
+      # failed before allocation and later deploys never re-attempted, so
+      # blotto-indexer.fly.dev did not resolve and nothing could reach the
+      # service even when it ran. Deploy does not guarantee an IP; assert it.
+      - name: Ensure each app has public IPs
+        run: |
+          for app in "$INDEXER_APP" "$PACKET_APP"; do
+            if ! flyctl ips list --app "$app" --json | jq -e 'length > 0' >/dev/null; then
+              echo "$app has no public IPs — allocating (shared v4 + v6)"
+              flyctl ips allocate-v4 --shared --app "$app"
+              flyctl ips allocate-v6 --app "$app"
+            fi
+            flyctl ips list --app "$app"
+          done
+
       - name: Stage indexer secrets
         run: |
           flyctl secrets set --app "$INDEXER_APP" --stage \
@@ -93,14 +108,53 @@ jobs:
       - name: Deploy packet service
         run: flyctl deploy . --config deploy/fly/packet.fly.toml --remote-only --yes --ha=false
 
+      # `flyctl deploy` updates a STOPPED machine in place without starting
+      # it (incident 2026-08-29: the indexer sat stopped through two green
+      # deploys after an earlier crash loop hit Fly's max restart count).
+      # A deploy is not done until every machine is actually running.
+      - name: Assert every machine is started
+        run: |
+          fail=0
+          for app in "$INDEXER_APP" "$PACKET_APP"; do
+            for id in $(flyctl machine list --app "$app" --json | jq -r '.[].id'); do
+              state=$(flyctl machine list --app "$app" --json | jq -r ".[] | select(.id==\"$id\") | .state")
+              if [ "$state" != "started" ]; then
+                echo "$app machine $id is '$state' — starting it"
+                flyctl machine start "$id" --app "$app" || true
+              fi
+            done
+            for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+              not_started=$(flyctl machine list --app "$app" --json | jq -r '[.[] | select(.state != "started")] | length')
+              [ "$not_started" = "0" ] && break
+              sleep 5
+            done
+            not_started=$(flyctl machine list --app "$app" --json | jq -r '[.[] | select(.state != "started")] | length')
+            if [ "$not_started" != "0" ]; then
+              echo "::error::$app still has $not_started machine(s) not running — run backend-status for the machine's event log"
+              flyctl machine list --app "$app" || true
+              fail=1
+            fi
+          done
+          exit $fail
+
+      # NOTE the `if ! curl` form: a bare `curl --fail && echo` inside a
+      # `set -e` step does NOT stop the step when curl fails (the && list
+      # exempts it) — incident 2026-08-29: two runs went green while the
+      # indexer hostname didn't even resolve.
       - name: Smoke-check both services
         run: |
           sleep 10
+          fail=0
           for url in \
             "https://$INDEXER_APP.fly.dev/health" \
             "https://$PACKET_APP.fly.dev/health" \
             "https://$PACKET_APP.fly.dev/geo"; do
             echo "GET $url"
-            curl --fail --silent --show-error --max-time 20 "$url" && echo
+            if ! curl --fail --silent --show-error --max-time 20 "$url"; then
+              echo "::error::smoke check failed: $url"
+              fail=1
+            fi
+            echo
           done
-          echo "Backend is up. Next: set the two NEXT_PUBLIC_* URLs in Vercel (docs/deploy-backend.md step 6)."
+          [ "$fail" = "0" ] && echo "Backend is up. Next: set the two NEXT_PUBLIC_* URLs in Vercel (docs/deploy-backend.md step 6)."
+          exit $fail
