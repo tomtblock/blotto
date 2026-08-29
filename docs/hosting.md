@@ -106,7 +106,7 @@ RPC via `backfill`, and `sync` runs one backfill before serving.
 | Turnkey org (entry signer, custody user) | packet signing, daemon custody | `TURNKEY_*`, `ENTRY_SIGNER_*` |
 | Geo vendor (R2) | packet issuance in production | `GEO_VENDOR_URL/_API_KEY` |
 | Irys funded wallet | bundle publishing | `IRYS_UPLOAD_KEY` |
-| Switchboard On-Demand reveal adapter | VRF commit on live devnet | chain-web3's `makeVrfRevealIx` seam (C11 remainder) — until then the daemon reports vrf errors per tick and everything else proceeds |
+| Switchboard On-Demand queue (public config, not a credential) | VRF commit on live devnet | `SWITCHBOARD_QUEUE` — the production coordinator (`backend/reveal/src/vrf-switchboard.ts`) creates a fresh Randomness account per pool and bundles the reveal with `commit_vrf_seed`; `RANDOMNESS_ACCOUNT` selects the tests/bench stub instead; the daemon refuses to start with neither |
 | Mail provider (founder's pick) | D3 email notifications | a dispatch job reading `notify_optin`, resolving addresses via the sign-in provider |
 | Sanctions screening vendor | packet issuance hardening | the packet main ships the suite's always-clear answer; territory gating (fail-closed) is the operative geographic control at launch |
 

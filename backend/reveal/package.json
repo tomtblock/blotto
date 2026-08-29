@@ -17,6 +17,7 @@
     "@irys/upload-solana": "^0.1.8",
     "@noble/hashes": "^1.5.0",
     "@solana/web3.js": "^1.95.0",
+    "@switchboard-xyz/on-demand": "^3.10.6",
     "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
