@@ -130,9 +130,18 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
       : undefined,
   });
 
+  // Same reasoning as the packet service's signer line: both coordinators
+  // start cleanly and report healthy, so the only way an operator can tell a
+  // production run from one silently pinned to the stub is to say so here.
   if (swCoordinator) {
+    console.log(`${SERVICE}: VRF = SWITCHBOARD On-Demand (queue ${env.SWITCHBOARD_QUEUE})`);
     vrf = swCoordinator;
   } else if (env.RANDOMNESS_ACCOUNT) {
+    console.warn(
+      `${SERVICE}: VRF = STUB COORDINATOR (RANDOMNESS_ACCOUNT=${env.RANDOMNESS_ACCOUNT}) — ` +
+        `tests and bench only. The class draw is NOT consuming live Switchboard ` +
+        `randomness. Set SWITCHBOARD_QUEUE for production.`
+    );
     vrf = new StubVrfCoordinator(chain, env.RANDOMNESS_ACCOUNT);
   } else {
     throw new Error(

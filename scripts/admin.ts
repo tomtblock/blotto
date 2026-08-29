@@ -51,6 +51,20 @@ commands
       --min-platform <lamports | SOL decimal ending in "sol", e.g. 2sol>
   set-open-tiers            which tiers may open pools (founder-owned)
       --tiers <7 comma-separated 0/1, e.g. 1,0,0,0,0,0,0>
+  set-paused                the kill switch: blocks register, and ONLY
+                            register (reveal/payout/refund keep working, so
+                            a pause never strands funds)
+      --paused <true|false>
+  set-vault-ceiling         one tier's gross-intake ceiling (D2)
+      --tier <0-6> --ceiling <lamports | e.g. 6.4sol>
+  set-kyc-threshold         KYC-at-claim switch (R3); 0 disables
+      --above <lamports | e.g. 1sol>
+  set-detection-hard-block  R11's full-escrow-tier switch
+      --on <true|false>
+  set-tier-economics        one tier's price and pot (founder-owned)
+      --tier <0-6> --price <lamports|SOL> --pot <lamports|SOL>
+  set-treasury-policy       the withdraw floor + open_pool requirement
+      --reserve-pots <u8> --min-platform <lamports|SOL>
   register-signers          rotate the service signers (either or both)
       [--entry-signer <pubkey>] [--settlement-signer <pubkey>]
   fund-platform-wallet      permissionless treasury deposit
@@ -304,6 +318,100 @@ async function cmdSetOpenTiers(ctx: Ctx): Promise<void> {
   await deliver(ctx, [adminOnlyIx(ctx, 'set_open_tiers', Buffer.from(tiers))], 'admin');
 }
 
+/** Strict boolean flag — anything but "true"/"false" is an error rather
+ * than a silent falsy, because these flags gate money and the kill switch. */
+function parseBool(raw: string, flag: string): boolean {
+  const v = raw.trim().toLowerCase();
+  if (v === 'true') return true;
+  if (v === 'false') return false;
+  throw new Error(`--${flag} must be true or false, got ${raw}`);
+}
+
+/** Tier index shared by the per-tier setters. */
+function parseTier(raw: string): number {
+  const t = Number(raw);
+  if (!Number.isInteger(t) || t < 0 || t >= N_TIERS) {
+    throw new Error(`--tier must be an integer 0-${N_TIERS - 1}, got ${raw}`);
+  }
+  return t;
+}
+
+/** The kill switch (R-roadmap 1.1). Blocks `register` only. */
+async function cmdSetPaused(ctx: Ctx): Promise<void> {
+  const paused = parseBool(need(ctx.cli, 'paused'), 'paused');
+  await deliver(ctx, [adminOnlyIx(ctx, 'set_paused', Buffer.from([paused ? 1 : 0]))], 'admin');
+}
+
+async function cmdSetVaultCeiling(ctx: Ctx): Promise<void> {
+  const tier = parseTier(need(ctx.cli, 'tier'));
+  const ceiling = parseAmount(need(ctx.cli, 'ceiling'));
+  await deliver(
+    ctx,
+    [adminOnlyIx(ctx, 'set_vault_ceiling', Buffer.concat([Buffer.from([tier]), u64le(ceiling)]))],
+    'admin'
+  );
+}
+
+async function cmdSetKycThreshold(ctx: Ctx): Promise<void> {
+  const above = parseAmount(need(ctx.cli, 'above'));
+  await deliver(ctx, [adminOnlyIx(ctx, 'set_kyc_threshold', u64le(above))], 'admin');
+}
+
+async function cmdSetDetectionHardBlock(ctx: Ctx): Promise<void> {
+  const on = parseBool(need(ctx.cli, 'on'), 'on');
+  await deliver(
+    ctx,
+    [adminOnlyIx(ctx, 'set_detection_hard_block', Buffer.from([on ? 1 : 0]))],
+    'admin'
+  );
+}
+
+/** One tier per call — the D2 precedent, for Squads proposal readability.
+ * The program rejects a pot that is not a multiple of 1024 (the band table
+ * divides in 1024ths; an off-grid pot would strand a residue in the vault),
+ * so mirror that check here rather than burning a proposal on it. */
+async function cmdSetTierEconomics(ctx: Ctx): Promise<void> {
+  const tier = parseTier(need(ctx.cli, 'tier'));
+  const price = parseAmount(need(ctx.cli, 'price'));
+  const pot = parseAmount(need(ctx.cli, 'pot'));
+  if (price <= 0n) throw new Error('--price must be greater than zero');
+  if (pot <= 0n || pot % 1024n !== 0n) {
+    throw new Error(`--pot must be greater than zero and a multiple of 1024 lamports, got ${pot}`);
+  }
+  await deliver(
+    ctx,
+    [
+      adminOnlyIx(
+        ctx,
+        'set_tier_economics',
+        Buffer.concat([Buffer.from([tier]), u64le(price), u64le(pot)])
+      ),
+    ],
+    'admin'
+  );
+}
+
+/** The floor `withdraw_platform` may never breach, and the balance
+ * `open_pool` demands before it funds a pot. */
+async function cmdSetTreasuryPolicy(ctx: Ctx): Promise<void> {
+  const reserve = Number(need(ctx.cli, 'reserve-pots'));
+  if (!Number.isInteger(reserve) || reserve < 0 || reserve > 255) {
+    throw new Error(`--reserve-pots must fit a u8, got ${reserve}`);
+  }
+  const minPlatform = parseAmount(need(ctx.cli, 'min-platform'));
+  await deliver(
+    ctx,
+    [
+      adminOnlyIx(
+        ctx,
+        'set_treasury_policy',
+        Buffer.concat([Buffer.from([reserve]), u64le(minPlatform)])
+      ),
+    ],
+    'admin'
+  );
+}
+
 async function cmdRegisterSigners(ctx: Ctx): Promise<void> {
   const entry = ctx.cli.flags.get('entry-signer');
   const settlement = ctx.cli.flags.get('settlement-signer');
@@ -389,6 +497,18 @@ async function main(): Promise<void> {
       return cmdInitConfig(ctx);
     case 'set-open-tiers':
       return cmdSetOpenTiers(ctx);
+    case 'set-paused':
+      return cmdSetPaused(ctx);
+    case 'set-vault-ceiling':
+      return cmdSetVaultCeiling(ctx);
+    case 'set-kyc-threshold':
+      return cmdSetKycThreshold(ctx);
+    case 'set-detection-hard-block':
+      return cmdSetDetectionHardBlock(ctx);
+    case 'set-tier-economics':
+      return cmdSetTierEconomics(ctx);
+    case 'set-treasury-policy':
+      return cmdSetTreasuryPolicy(ctx);
     case 'register-signers':
       return cmdRegisterSigners(ctx);
     case 'fund-platform-wallet':

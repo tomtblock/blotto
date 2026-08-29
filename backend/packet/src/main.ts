@@ -43,6 +43,14 @@ import type { GeoLookup } from './service';
 
 const SERVICE = 'packet';
 
+/** First 6 and last 4 characters of an identifier, for startup lines. Never
+ * used on a secret — only on ids and public keys, which are public by
+ * definition — but truncated anyway so a pasted log stays boring. */
+function redact(v: string | undefined): string {
+  if (!v) return '<unset>';
+  return v.length <= 12 ? v : `${v.slice(0, 6)}…${v.slice(-4)}`;
+}
+
 function buildSigner(env: NodeJS.ProcessEnv): PacketSigner {
   if (env.ENTRY_SIGNER_KEY_ID) {
     for (const k of [
@@ -63,6 +71,16 @@ function buildSigner(env: NodeJS.ProcessEnv): PacketSigner {
       apiPrivateKey: env.TURNKEY_API_PRIVATE_KEY as string,
       defaultOrganizationId: env.TURNKEY_ORGANIZATION_ID as string,
     }).apiClient();
+    // Say WHICH path was chosen. A clean boot proves the credentials were
+    // present, not which signer is live, and the two are indistinguishable
+    // from outside the process — the packet's public key is config either
+    // way. Naming it here is the only cheap way an operator can tell a
+    // Turnkey deployment from one that silently fell back to the dev seed.
+    console.log(
+      `${SERVICE}: entry signer = TURNKEY (key ${redact(env.ENTRY_SIGNER_KEY_ID)}, ` +
+        `org ${redact(env.TURNKEY_ORGANIZATION_ID)}, ` +
+        `pubkey ${redact(env.ENTRY_SIGNER_PUBLIC_KEY_HEX)})`
+    );
     return new TurnkeyPacketSigner({
       client,
       organizationId: env.TURNKEY_ORGANIZATION_ID as string,
@@ -71,6 +89,10 @@ function buildSigner(env: NodeJS.ProcessEnv): PacketSigner {
     });
   }
   if (env.ENTRY_SIGNER_SEED_HEX) {
+    console.warn(
+      `${SERVICE}: entry signer = LOCAL DEV SEED (ENTRY_SIGNER_SEED_HEX) — ` +
+        `NOT Turnkey. Development only; set ENTRY_SIGNER_KEY_ID for custody.`
+    );
     return new LocalPacketSigner(new Uint8Array(Buffer.from(env.ENTRY_SIGNER_SEED_HEX, 'hex')));
   }
   throw new Error(
