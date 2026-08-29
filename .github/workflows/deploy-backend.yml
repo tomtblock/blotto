@@ -1,23 +1,44 @@
-# Devnet backend deploy (founder-triggered): the indexer (read API + webhook
-# receiver) and the packet service onto Fly.io, Frankfurt, per
+# Devnet backend deploy (founder-triggered): the indexer, the packet service,
+# the settlement daemon and the review service onto Fly.io, Frankfurt, per
 # docs/hosting.md. Run it from the Actions tab ("Run workflow") — it is
 # never triggered by a push, because deploying is a decision, not a side
 # effect of merging.
 #
-# Requires two REPOSITORY SECRETS (Settings → Secrets and variables →
-# Actions), created by the founder per docs/deploy-backend.md:
-#   FLY_API_TOKEN        — a Fly.io deploy token
-#   BLOTTO_DATABASE_URL  — the managed Postgres connection string (EU region)
+# THIS WORKFLOW NEVER CREATES A CREDENTIAL. It stages what the founder
+# provisioned and nothing else.
 #
-# Everything else is derived here:
-#   - BLOTTO_HELIUS_WEBHOOK_SECRET and ENTRY_SIGNER_SEED_HEX are generated
-#     ONCE (first run) and kept across runs — regenerating the entry-signer
-#     seed would silently change the signer's public key.
-#   - GEO_STUB_COUNTRY=GB: the DEV geo stub (no vendor is contracted yet —
-#     R2). Every lookup resolves as GB, so the territory gate passes for
-#     everyone; the real block-list bites once a geo vendor is configured.
-#     Devnet-only posture, recorded in docs/deploy-backend.md.
-#   - BLOTTO_API_CORS_ORIGINS names the app's production origin, exactly.
+# That rule is the fix for a specific failure: the previous version
+# GENERATED a development entry-signer seed whenever one was absent, and set
+# GEO_STUB_COUNTRY=GB unconditionally on every single run. Both silently
+# undid a credential swap at the next deploy click, and the geo one was the
+# dangerous half — backend/packet/src/main.ts prefers the vendor only when
+# BOTH GEO_VENDOR_URL and GEO_VENDOR_API_KEY are non-empty, so losing either
+# one dropped the territory gate through to a stub that admits everyone as
+# GB, with no error and no log line to say so.
+#
+# So: production credentials are REQUIRED by default, the dev ones are
+# actively removed, and running with dev credentials is an explicit,
+# audited choice made in the Actions UI (`allow_dev_credentials`), never a
+# silent fallback.
+#
+# Repository secrets (Settings → Secrets and variables → Actions), per
+# docs/deploy-backend.md. Missing ones are reported by name in preflight.
+#
+#   Always required
+#     FLY_API_TOKEN, BLOTTO_DATABASE_URL
+#   Packet service — the entry signer (C1) and geo vendor (C2)
+#     TURNKEY_API_BASE_URL, TURNKEY_API_PUBLIC_KEY, TURNKEY_API_PRIVATE_KEY,
+#     TURNKEY_ORGANIZATION_ID, ENTRY_SIGNER_KEY_ID, ENTRY_SIGNER_PUBLIC_KEY_HEX
+#     GEO_VENDOR_URL, GEO_VENDOR_API_KEY
+#   Daemon (C5) — deployed only once all of these exist
+#     TURNKEY_USER_ID, SWITCHBOARD_QUEUE, IRYS_UPLOAD_KEY,
+#     SETTLEMENT_SIGNER_KEYPAIR_B64
+#   Review service (C6) — deployed only once this exists
+#     SETTLEMENT_SIGNER_KEYPAIR_B64
+#
+# BLOTTO_HELIUS_WEBHOOK_SECRET is still generated once and kept: it is a
+# shared secret between us and Helius with no external authority to issue
+# it, not a stand-in for a credential someone else holds.
 #
 # The indexer image's `sync` entry runs migrations itself at boot, so there
 # is no separate migration job; deploy order (indexer first) guarantees the
@@ -27,6 +48,11 @@ name: deploy-backend
 
 on:
   workflow_dispatch:
+    inputs:
+      allow_dev_credentials:
+        description: "DEV ONLY: permit the entry-signer seed and the geo stub (admits every address as GB). Leave unchecked for the credentialed path."
+        type: boolean
+        default: false
 
 concurrency: deploy-backend
 
@@ -34,6 +60,8 @@ env:
   FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
   INDEXER_APP: blotto-indexer
   PACKET_APP: blotto-packet
+  DAEMON_APP: blotto-daemon
+  REVIEW_APP: blotto-review
   APP_ORIGIN: https://blotto-jade.vercel.app
   DEVNET_RPC: https://api.devnet.solana.com
   PROGRAM_ID: 5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17
@@ -41,30 +69,101 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      # Mapped once so the shell can test presence without repeating the
+      # secrets context; an unset secret arrives as the empty string.
+      TURNKEY_API_BASE_URL: ${{ secrets.TURNKEY_API_BASE_URL }}
+      TURNKEY_API_PUBLIC_KEY: ${{ secrets.TURNKEY_API_PUBLIC_KEY }}
+      TURNKEY_API_PRIVATE_KEY: ${{ secrets.TURNKEY_API_PRIVATE_KEY }}
+      TURNKEY_ORGANIZATION_ID: ${{ secrets.TURNKEY_ORGANIZATION_ID }}
+      TURNKEY_USER_ID: ${{ secrets.TURNKEY_USER_ID }}
+      ENTRY_SIGNER_KEY_ID: ${{ secrets.ENTRY_SIGNER_KEY_ID }}
+      ENTRY_SIGNER_PUBLIC_KEY_HEX: ${{ secrets.ENTRY_SIGNER_PUBLIC_KEY_HEX }}
+      GEO_VENDOR_URL: ${{ secrets.GEO_VENDOR_URL }}
+      GEO_VENDOR_API_KEY: ${{ secrets.GEO_VENDOR_API_KEY }}
+      SWITCHBOARD_QUEUE: ${{ secrets.SWITCHBOARD_QUEUE }}
+      IRYS_UPLOAD_KEY: ${{ secrets.IRYS_UPLOAD_KEY }}
+      SETTLEMENT_SIGNER_KEYPAIR_B64: ${{ secrets.SETTLEMENT_SIGNER_KEYPAIR_B64 }}
+      DEV_CREDS: ${{ inputs.allow_dev_credentials }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: superfly/flyctl-actions/setup-flyctl@master
 
-      - name: Check the two required secrets exist
+      # Every credential decision is made HERE, once, and printed. A deploy
+      # that is going to leave a service fail-closed at boot should stop in
+      # preflight with the missing name, not after four images are pushed.
+      - name: Preflight — classify every credential
+        id: pre
         run: |
-          missing=0
-          [ -z "${{ secrets.FLY_API_TOKEN }}" ] && echo "::error::FLY_API_TOKEN repository secret is not set — see docs/deploy-backend.md step 2" && missing=1
-          [ -z "${{ secrets.BLOTTO_DATABASE_URL }}" ] && echo "::error::BLOTTO_DATABASE_URL repository secret is not set — see docs/deploy-backend.md step 3" && missing=1
-          exit $missing
+          missing=""
+          # Indirect expansion, not eval; and an explicit if rather than an
+          # `&&` list, because a trailing `&&` that evaluates false returns
+          # non-zero and would fail the step under `set -e` — the same shape
+          # that let a broken smoke check pass on 2026-08-29.
+          req() { if [ -z "${!1:-}" ]; then missing="$missing $1"; fi; }
+
+          if [ -z "${{ secrets.FLY_API_TOKEN }}" ]; then missing="$missing FLY_API_TOKEN"; fi
+          if [ -z "${{ secrets.BLOTTO_DATABASE_URL }}" ]; then missing="$missing BLOTTO_DATABASE_URL"; fi
+
+          if [ "$DEV_CREDS" = "true" ]; then
+            echo "::warning::DEV CREDENTIALS ENABLED — the packet service may run with a"
+            echo "::warning::generated entry-signer seed and the geo stub (every address resolves GB)."
+            echo "::warning::This is a development posture. Never leave it on for a credentialed run."
+          else
+            for n in TURNKEY_API_BASE_URL TURNKEY_API_PUBLIC_KEY TURNKEY_API_PRIVATE_KEY \
+                     TURNKEY_ORGANIZATION_ID ENTRY_SIGNER_KEY_ID ENTRY_SIGNER_PUBLIC_KEY_HEX \
+                     GEO_VENDOR_URL GEO_VENDOR_API_KEY; do
+              req "$n"
+            done
+          fi
+
+          if [ -n "$missing" ]; then
+            echo "::error::missing repository secret(s):$missing"
+            echo "::error::Set them under Settings → Secrets and variables → Actions (docs/deploy-backend.md),"
+            echo "::error::or re-run with allow_dev_credentials checked for a pre-C2 development deploy."
+            exit 1
+          fi
+
+          # Optional services: deployed when complete, skipped loudly when not.
+          daemon=true
+          for n in TURNKEY_API_BASE_URL TURNKEY_API_PUBLIC_KEY TURNKEY_API_PRIVATE_KEY \
+                   TURNKEY_ORGANIZATION_ID TURNKEY_USER_ID SWITCHBOARD_QUEUE \
+                   IRYS_UPLOAD_KEY SETTLEMENT_SIGNER_KEYPAIR_B64; do
+            if [ -z "${!n:-}" ]; then daemon=false; echo "daemon: waiting on $n"; fi
+          done
+          review=true
+          if [ -z "${SETTLEMENT_SIGNER_KEYPAIR_B64:-}" ]; then
+            review=false; echo "review: waiting on SETTLEMENT_SIGNER_KEYPAIR_B64"
+          fi
+
+          echo "deploy_daemon=$daemon" >> "$GITHUB_OUTPUT"
+          echo "deploy_review=$review" >> "$GITHUB_OUTPUT"
+          echo "--- plan ---"
+          echo "indexer: yes | packet: yes | daemon: $daemon | review: $review"
+          echo "dev credentials: $DEV_CREDS"
 
       - name: Create the Fly apps (first run only)
         run: |
-          flyctl apps create "$INDEXER_APP" || echo "$INDEXER_APP exists (or the name is taken — see docs/deploy-backend.md troubleshooting)"
-          flyctl apps create "$PACKET_APP" || echo "$PACKET_APP exists (or the name is taken — see docs/deploy-backend.md troubleshooting)"
+          apps="$INDEXER_APP $PACKET_APP"
+          if [ "${{ steps.pre.outputs.deploy_daemon }}" = "true" ]; then apps="$apps $DAEMON_APP"; fi
+          if [ "${{ steps.pre.outputs.deploy_review }}" = "true" ]; then apps="$apps $REVIEW_APP"; fi
+          for app in $apps; do
+            flyctl apps create "$app" || echo "$app exists (or the name is taken — see docs/deploy-backend.md troubleshooting)"
+          done
 
       # Incident 2026-08-29: blotto-indexer had NO public IP — its first deploy
       # failed before allocation and later deploys never re-attempted, so
       # blotto-indexer.fly.dev did not resolve and nothing could reach the
       # service even when it ran. Deploy does not guarantee an IP; assert it.
+      # The daemon and review services are http_service apps too, so they get
+      # the same treatment.
       - name: Ensure each app has public IPs
         run: |
-          for app in "$INDEXER_APP" "$PACKET_APP"; do
+          apps="$INDEXER_APP $PACKET_APP"
+          if [ "${{ steps.pre.outputs.deploy_daemon }}" = "true" ]; then apps="$apps $DAEMON_APP"; fi
+          if [ "${{ steps.pre.outputs.deploy_review }}" = "true" ]; then apps="$apps $REVIEW_APP"; fi
+          for app in $apps; do
             if ! flyctl ips list --app "$app" --json | jq -e 'length > 0' >/dev/null; then
               echo "$app has no public IPs — allocating (shared v4 + v6)"
               flyctl ips allocate-v4 --shared --app "$app"
@@ -82,7 +181,8 @@ jobs:
             BLOTTO_API_CORS_ORIGINS="$APP_ORIGIN"
           # Generate-once: the webhook receiver refuses to start without a
           # secret (E6 fail-closed). Helius gets this value when the webhook
-          # is created (docs/hosting.md); until then nothing calls it.
+          # is created (docs/hosting.md); until then nothing calls it. This
+          # is ours to issue — no external party holds an authoritative copy.
           if ! flyctl secrets list --app "$INDEXER_APP" | grep -q BLOTTO_HELIUS_WEBHOOK_SECRET; then
             flyctl secrets set --app "$INDEXER_APP" --stage \
               BLOTTO_HELIUS_WEBHOOK_SECRET="$(openssl rand -hex 32)"
@@ -95,18 +195,79 @@ jobs:
         run: |
           flyctl secrets set --app "$PACKET_APP" --stage \
             BLOTTO_DATABASE_URL="${{ secrets.BLOTTO_DATABASE_URL }}" \
-            BLOTTO_API_CORS_ORIGINS="$APP_ORIGIN" \
-            GEO_STUB_COUNTRY="GB"
-          # Generate-once: regenerating would change the entry signer's
-          # public key mid-flight. Dev seed per docs/hosting.md; Turnkey
-          # replaces it at the credentialed rehearsal (C11).
-          if ! flyctl secrets list --app "$PACKET_APP" | grep -q ENTRY_SIGNER_SEED_HEX; then
+            BLOTTO_API_CORS_ORIGINS="$APP_ORIGIN"
+
+          if [ "$DEV_CREDS" = "true" ]; then
+            # Development posture, explicitly chosen in the Actions UI. The
+            # seed is still generate-once: regenerating it would change the
+            # entry signer's public key mid-flight.
+            if ! flyctl secrets list --app "$PACKET_APP" | grep -q ENTRY_SIGNER_SEED_HEX; then
+              flyctl secrets set --app "$PACKET_APP" --stage \
+                ENTRY_SIGNER_SEED_HEX="$(openssl rand -hex 32)"
+            fi
+            flyctl secrets set --app "$PACKET_APP" --stage GEO_STUB_COUNTRY="GB"
+            echo "::warning::packet deployed with DEV credentials (seed signer and/or geo stub)."
+          else
             flyctl secrets set --app "$PACKET_APP" --stage \
-              ENTRY_SIGNER_SEED_HEX="$(openssl rand -hex 32)"
+              TURNKEY_API_BASE_URL="$TURNKEY_API_BASE_URL" \
+              TURNKEY_API_PUBLIC_KEY="$TURNKEY_API_PUBLIC_KEY" \
+              TURNKEY_API_PRIVATE_KEY="$TURNKEY_API_PRIVATE_KEY" \
+              TURNKEY_ORGANIZATION_ID="$TURNKEY_ORGANIZATION_ID" \
+              ENTRY_SIGNER_KEY_ID="$ENTRY_SIGNER_KEY_ID" \
+              ENTRY_SIGNER_PUBLIC_KEY_HEX="$ENTRY_SIGNER_PUBLIC_KEY_HEX" \
+              GEO_VENDOR_URL="$GEO_VENDOR_URL" \
+              GEO_VENDOR_API_KEY="$GEO_VENDOR_API_KEY"
+            # Remove the dev fallbacks rather than trusting them to be absent.
+            # A lingering ENTRY_SIGNER_SEED_HEX is inert while Turnkey is
+            # configured but goes live the moment ENTRY_SIGNER_KEY_ID is
+            # cleared; a lingering GEO_STUB_COUNTRY goes live the moment
+            # either vendor variable is empty. Neither is a state to leave
+            # lying around. `unset` on an absent secret is not an error here.
+            flyctl secrets unset --app "$PACKET_APP" --stage ENTRY_SIGNER_SEED_HEX || true
+            flyctl secrets unset --app "$PACKET_APP" --stage GEO_STUB_COUNTRY || true
           fi
 
       - name: Deploy packet service
         run: flyctl deploy . --config deploy/fly/packet.fly.toml --remote-only --yes --ha=false
+
+      - name: Stage daemon secrets
+        if: steps.pre.outputs.deploy_daemon == 'true'
+        run: |
+          flyctl secrets set --app "$DAEMON_APP" --stage \
+            BLOTTO_DATABASE_URL="${{ secrets.BLOTTO_DATABASE_URL }}" \
+            BLOTTO_RPC_URL="$DEVNET_RPC" \
+            BLOTTO_PROGRAM_ID="$PROGRAM_ID" \
+            SETTLEMENT_SIGNER_KEYPAIR_B64="$SETTLEMENT_SIGNER_KEYPAIR_B64" \
+            TURNKEY_API_BASE_URL="$TURNKEY_API_BASE_URL" \
+            TURNKEY_API_PUBLIC_KEY="$TURNKEY_API_PUBLIC_KEY" \
+            TURNKEY_API_PRIVATE_KEY="$TURNKEY_API_PRIVATE_KEY" \
+            TURNKEY_ORGANIZATION_ID="$TURNKEY_ORGANIZATION_ID" \
+            TURNKEY_USER_ID="$TURNKEY_USER_ID" \
+            IRYS_UPLOAD_KEY="$IRYS_UPLOAD_KEY" \
+            IRYS_NETWORK="devnet" \
+            SWITCHBOARD_QUEUE="$SWITCHBOARD_QUEUE"
+          # RANDOMNESS_ACCOUNT selects the STUB coordinator, which starts
+          # cleanly and reports healthy while the class draw consumes no live
+          # randomness at all. SWITCHBOARD_QUEUE is set above; make sure the
+          # stub selector is not sitting alongside it.
+          flyctl secrets unset --app "$DAEMON_APP" --stage RANDOMNESS_ACCOUNT || true
+
+      - name: Deploy daemon
+        if: steps.pre.outputs.deploy_daemon == 'true'
+        run: flyctl deploy . --config deploy/fly/daemon.fly.toml --remote-only --yes --ha=false
+
+      - name: Stage review secrets
+        if: steps.pre.outputs.deploy_review == 'true'
+        run: |
+          flyctl secrets set --app "$REVIEW_APP" --stage \
+            BLOTTO_DATABASE_URL="${{ secrets.BLOTTO_DATABASE_URL }}" \
+            BLOTTO_RPC_URL="$DEVNET_RPC" \
+            BLOTTO_PROGRAM_ID="$PROGRAM_ID" \
+            SETTLEMENT_SIGNER_KEYPAIR_B64="$SETTLEMENT_SIGNER_KEYPAIR_B64"
+
+      - name: Deploy review service
+        if: steps.pre.outputs.deploy_review == 'true'
+        run: flyctl deploy . --config deploy/fly/review.fly.toml --remote-only --yes --ha=false
 
       # `flyctl deploy` updates a STOPPED machine in place without starting
       # it (incident 2026-08-29: the indexer sat stopped through two green
@@ -114,8 +275,11 @@ jobs:
       # A deploy is not done until every machine is actually running.
       - name: Assert every machine is started
         run: |
+          apps="$INDEXER_APP $PACKET_APP"
+          if [ "${{ steps.pre.outputs.deploy_daemon }}" = "true" ]; then apps="$apps $DAEMON_APP"; fi
+          if [ "${{ steps.pre.outputs.deploy_review }}" = "true" ]; then apps="$apps $REVIEW_APP"; fi
           fail=0
-          for app in "$INDEXER_APP" "$PACKET_APP"; do
+          for app in $apps; do
             for id in $(flyctl machine list --app "$app" --json | jq -r '.[].id'); do
               state=$(flyctl machine list --app "$app" --json | jq -r ".[] | select(.id==\"$id\") | .state")
               if [ "$state" != "started" ]; then
@@ -141,14 +305,14 @@ jobs:
       # `set -e` step does NOT stop the step when curl fails (the && list
       # exempts it) — incident 2026-08-29: two runs went green while the
       # indexer hostname didn't even resolve.
-      - name: Smoke-check both services
+      - name: Smoke-check every deployed service
         run: |
           sleep 10
           fail=0
-          for url in \
-            "https://$INDEXER_APP.fly.dev/health" \
-            "https://$PACKET_APP.fly.dev/health" \
-            "https://$PACKET_APP.fly.dev/geo"; do
+          urls="https://$INDEXER_APP.fly.dev/health https://$PACKET_APP.fly.dev/health https://$PACKET_APP.fly.dev/geo"
+          if [ "${{ steps.pre.outputs.deploy_daemon }}" = "true" ]; then urls="$urls https://$DAEMON_APP.fly.dev/health"; fi
+          if [ "${{ steps.pre.outputs.deploy_review }}" = "true" ]; then urls="$urls https://$REVIEW_APP.fly.dev/health"; fi
+          for url in $urls; do
             echo "GET $url"
             if ! curl --fail --silent --show-error --max-time 20 "$url"; then
               echo "::error::smoke check failed: $url"
@@ -156,5 +320,20 @@ jobs:
             fi
             echo
           done
-          [ "$fail" = "0" ] && echo "Backend is up. Next: set the two NEXT_PUBLIC_* URLs in Vercel (docs/deploy-backend.md step 6)."
           exit $fail
+
+      # The startup lines are the acceptance criterion, not the endpoints:
+      # they name which code path is live, where a healthy endpoint only
+      # says an answer came back. Printed here so the run itself records it.
+      - name: Print the signer and VRF path each service chose
+        if: always()
+        run: |
+          echo "--- packet: entry signer + geo ---"
+          flyctl logs --app "$PACKET_APP" --no-tail 2>/dev/null | grep -E "entry signer|GEO STUB" | tail -5 || echo "(no matching line yet)"
+          if [ "${{ steps.pre.outputs.deploy_daemon }}" = "true" ]; then
+            echo "--- daemon: VRF coordinator + settlement signer ---"
+            flyctl logs --app "$DAEMON_APP" --no-tail 2>/dev/null | grep -E "VRF =|settlement signer" | tail -5 || echo "(no matching line yet)"
+          fi
+          echo
+          echo "Expected on a credentialed run: 'entry signer = TURNKEY', NO 'GEO STUB' line,"
+          echo "and 'VRF = SWITCHBOARD On-Demand'. Anything else means a dev path is live."
