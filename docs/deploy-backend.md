@@ -90,10 +90,12 @@ them, rather than deploying something that cannot start.
 1. In the repository, open the **Actions** tab.
 2. In the left sidebar, click **deploy-backend**.
 3. Click **Run workflow** (right side) → green **Run workflow** button.
-4. Leave **"DEV ONLY: permit the entry-signer seed and the geo stub"**
-   UNCHECKED. It exists for development before the real credentials are in
-   hand; checking it deploys a packet service that admits every address as
-   GB. The run warns loudly when it is on.
+4. Leave the **"DEV ONLY"** box UNCHECKED once every credential is in hand.
+   Before then it lets the deploy fall back **only where a production
+   credential is missing** — so between C1 and C2, with Turnkey set but no
+   geo vendor yet, checking it keeps the real Turnkey signer and stubs only
+   the geo lookup. It never downgrades something already real, and the run
+   warns by name for each fallback it takes.
 5. Watch it run (click the job to see live logs). Green check = deployed.
    The final step prints **which signer and which randomness source each
    service actually chose** — that is the real acceptance check. A

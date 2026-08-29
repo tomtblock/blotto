@@ -17,16 +17,20 @@
 # GB, with no error and no log line to say so.
 #
 # So: production credentials are REQUIRED by default, the dev ones are
-# actively removed, and running with dev credentials is an explicit,
-# audited choice made in the Actions UI (`allow_dev_credentials`), never a
-# silent fallback.
+# actively removed once the real ones are staged, and falling back is an
+# explicit, audited choice made in the Actions UI (`allow_dev_credentials`),
+# never a silent one. That switch is applied PER CREDENTIAL and only where
+# the production one is absent — so it can never downgrade a signer or a geo
+# lookup that is already real.
 #
 # Repository secrets (Settings → Secrets and variables → Actions), per
 # docs/deploy-backend.md. Missing ones are reported by name in preflight.
 #
 #   Always required
 #     FLY_API_TOKEN, BLOTTO_DATABASE_URL
-#   Packet service — the entry signer (C1) and geo vendor (C2)
+#   Packet service — the entry signer (C1) and geo vendor (C2), decided
+#   INDEPENDENTLY: between those two steps the real state is a live Turnkey
+#   signer beside a stubbed geo lookup, and the switch must express that
 #     TURNKEY_API_BASE_URL, TURNKEY_API_PUBLIC_KEY, TURNKEY_API_PRIVATE_KEY,
 #     TURNKEY_ORGANIZATION_ID, ENTRY_SIGNER_KEY_ID, ENTRY_SIGNER_PUBLIC_KEY_HEX
 #     GEO_VENDOR_URL, GEO_VENDOR_API_KEY
@@ -50,7 +54,7 @@ on:
   workflow_dispatch:
     inputs:
       allow_dev_credentials:
-        description: "DEV ONLY: permit the entry-signer seed and the geo stub (admits every address as GB). Leave unchecked for the credentialed path."
+        description: "DEV ONLY: where a production credential is absent, fall back (entry-signer seed / geo stub, which admits every address as GB). Applied per credential — a live Turnkey signer is never replaced. Leave unchecked for the credentialed path."
         type: boolean
         default: false
 
@@ -106,16 +110,41 @@ jobs:
           if [ -z "${{ secrets.FLY_API_TOKEN }}" ]; then missing="$missing FLY_API_TOKEN"; fi
           if [ -z "${{ secrets.BLOTTO_DATABASE_URL }}" ]; then missing="$missing BLOTTO_DATABASE_URL"; fi
 
-          if [ "$DEV_CREDS" = "true" ]; then
-            echo "::warning::DEV CREDENTIALS ENABLED — the packet service may run with a"
-            echo "::warning::generated entry-signer seed and the geo stub (every address resolves GB)."
-            echo "::warning::This is a development posture. Never leave it on for a credentialed run."
+          # The two packet credentials are decided INDEPENDENTLY. They are
+          # provisioned at different steps (Turnkey at C1, the geo vendor at
+          # C2), so the real state between those two steps is a live Turnkey
+          # signer beside a stubbed geo lookup. An all-or-nothing dev switch
+          # cannot express that, and would re-seed the dev signer over a
+          # Turnkey deployment that was already correct.
+          signer_missing=""
+          for n in TURNKEY_API_BASE_URL TURNKEY_API_PUBLIC_KEY TURNKEY_API_PRIVATE_KEY \
+                   TURNKEY_ORGANIZATION_ID ENTRY_SIGNER_KEY_ID ENTRY_SIGNER_PUBLIC_KEY_HEX; do
+            if [ -z "${!n:-}" ]; then signer_missing="$signer_missing $n"; fi
+          done
+          geo_missing=""
+          for n in GEO_VENDOR_URL GEO_VENDOR_API_KEY; do
+            if [ -z "${!n:-}" ]; then geo_missing="$geo_missing $n"; fi
+          done
+
+          if [ -z "$signer_missing" ]; then
+            signer_mode=turnkey
+          elif [ "$DEV_CREDS" = "true" ]; then
+            signer_mode=dev
+            echo "::warning::entry signer = DEV SEED (missing:$signer_missing)"
           else
-            for n in TURNKEY_API_BASE_URL TURNKEY_API_PUBLIC_KEY TURNKEY_API_PRIVATE_KEY \
-                     TURNKEY_ORGANIZATION_ID ENTRY_SIGNER_KEY_ID ENTRY_SIGNER_PUBLIC_KEY_HEX \
-                     GEO_VENDOR_URL GEO_VENDOR_API_KEY; do
-              req "$n"
-            done
+            signer_mode=none
+            missing="$missing$signer_missing"
+          fi
+
+          if [ -z "$geo_missing" ]; then
+            geo_mode=vendor
+          elif [ "$DEV_CREDS" = "true" ]; then
+            geo_mode=dev
+            echo "::warning::geo lookup = STUB — every address resolves GB and the territory"
+            echo "::warning::block-list is NOT enforced (missing:$geo_missing)"
+          else
+            geo_mode=none
+            missing="$missing$geo_missing"
           fi
 
           if [ -n "$missing" ]; then
@@ -139,9 +168,11 @@ jobs:
 
           echo "deploy_daemon=$daemon" >> "$GITHUB_OUTPUT"
           echo "deploy_review=$review" >> "$GITHUB_OUTPUT"
+          echo "signer_mode=$signer_mode" >> "$GITHUB_OUTPUT"
+          echo "geo_mode=$geo_mode" >> "$GITHUB_OUTPUT"
           echo "--- plan ---"
           echo "indexer: yes | packet: yes | daemon: $daemon | review: $review"
-          echo "dev credentials: $DEV_CREDS"
+          echo "packet entry signer: $signer_mode | packet geo: $geo_mode"
 
       - name: Create the Fly apps (first run only)
         run: |
@@ -197,34 +228,39 @@ jobs:
             BLOTTO_DATABASE_URL="${{ secrets.BLOTTO_DATABASE_URL }}" \
             BLOTTO_API_CORS_ORIGINS="$APP_ORIGIN"
 
-          if [ "$DEV_CREDS" = "true" ]; then
-            # Development posture, explicitly chosen in the Actions UI. The
-            # seed is still generate-once: regenerating it would change the
-            # entry signer's public key mid-flight.
-            if ! flyctl secrets list --app "$PACKET_APP" | grep -q ENTRY_SIGNER_SEED_HEX; then
-              flyctl secrets set --app "$PACKET_APP" --stage \
-                ENTRY_SIGNER_SEED_HEX="$(openssl rand -hex 32)"
-            fi
-            flyctl secrets set --app "$PACKET_APP" --stage GEO_STUB_COUNTRY="GB"
-            echo "::warning::packet deployed with DEV credentials (seed signer and/or geo stub)."
-          else
+          # Entry signer — independent of geo (see preflight).
+          if [ "${{ steps.pre.outputs.signer_mode }}" = "turnkey" ]; then
             flyctl secrets set --app "$PACKET_APP" --stage \
               TURNKEY_API_BASE_URL="$TURNKEY_API_BASE_URL" \
               TURNKEY_API_PUBLIC_KEY="$TURNKEY_API_PUBLIC_KEY" \
               TURNKEY_API_PRIVATE_KEY="$TURNKEY_API_PRIVATE_KEY" \
               TURNKEY_ORGANIZATION_ID="$TURNKEY_ORGANIZATION_ID" \
               ENTRY_SIGNER_KEY_ID="$ENTRY_SIGNER_KEY_ID" \
-              ENTRY_SIGNER_PUBLIC_KEY_HEX="$ENTRY_SIGNER_PUBLIC_KEY_HEX" \
+              ENTRY_SIGNER_PUBLIC_KEY_HEX="$ENTRY_SIGNER_PUBLIC_KEY_HEX"
+            # Clear the fallback rather than trusting it to be absent: a
+            # lingering seed is inert while Turnkey is configured, but goes
+            # live the moment ENTRY_SIGNER_KEY_ID is cleared. `unset` on an
+            # absent secret is not an error here.
+            flyctl secrets unset --app "$PACKET_APP" --stage ENTRY_SIGNER_SEED_HEX || true
+          else
+            # Generate-once: regenerating would change the entry signer's
+            # public key mid-flight, and it is bound on-chain at init_config.
+            if ! flyctl secrets list --app "$PACKET_APP" | grep -q ENTRY_SIGNER_SEED_HEX; then
+              flyctl secrets set --app "$PACKET_APP" --stage \
+                ENTRY_SIGNER_SEED_HEX="$(openssl rand -hex 32)"
+            fi
+          fi
+
+          # Geo lookup — independent of the signer.
+          if [ "${{ steps.pre.outputs.geo_mode }}" = "vendor" ]; then
+            flyctl secrets set --app "$PACKET_APP" --stage \
               GEO_VENDOR_URL="$GEO_VENDOR_URL" \
               GEO_VENDOR_API_KEY="$GEO_VENDOR_API_KEY"
-            # Remove the dev fallbacks rather than trusting them to be absent.
-            # A lingering ENTRY_SIGNER_SEED_HEX is inert while Turnkey is
-            # configured but goes live the moment ENTRY_SIGNER_KEY_ID is
-            # cleared; a lingering GEO_STUB_COUNTRY goes live the moment
-            # either vendor variable is empty. Neither is a state to leave
-            # lying around. `unset` on an absent secret is not an error here.
-            flyctl secrets unset --app "$PACKET_APP" --stage ENTRY_SIGNER_SEED_HEX || true
+            # A lingering stub goes live the moment either vendor variable
+            # empties — the exact silent failure this workflow exists to stop.
             flyctl secrets unset --app "$PACKET_APP" --stage GEO_STUB_COUNTRY || true
+          else
+            flyctl secrets set --app "$PACKET_APP" --stage GEO_STUB_COUNTRY="GB"
           fi
 
       - name: Deploy packet service
