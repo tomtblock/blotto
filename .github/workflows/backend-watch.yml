@@ -1,0 +1,70 @@
+# The rotation net (founder finding, 2026-08-29): `fly secrets set` bumps a
+# machine's version but does NOT start a machine that exhausted its restart
+# budget — so any credential rotation done outside the deploy-backend lane
+# can leave a service down silently. This watch turns that into "self-healed
+# within a cycle, or a red run naming why".
+#
+# Posture: backend-status stays READ-ONLY forensics (the tool for when
+# nothing must be reset). This watch is the opposite tool — it probes, and
+# it is allowed to START a stopped machine (never anything more: no deploys,
+# no secret changes, no restarts of a running machine).
+#
+# A probe failure that self-heals is a ::warning:: on a green run; a service
+# that stays unhealthy is a red run with the machine state in the output.
+# Enable Actions failure notifications (GitHub mobile/email) to get paged.
+
+name: backend-watch
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+concurrency: backend-watch
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+    steps:
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Probe health, start stopped machines, fail loudly
+        run: |
+          probe() {
+            curl --fail --silent --show-error --max-time 20 "$1" >/dev/null 2>&1
+          }
+          fail=0
+          for app in blotto-indexer blotto-packet; do
+            url="https://$app.fly.dev/health"
+            if probe "$url"; then
+              echo "$app: healthy"
+              continue
+            fi
+            echo "$app: health probe failed — inspecting machines"
+            started_one=0
+            for id in $(flyctl machine list --app "$app" --json | jq -r '.[] | select(.state != "started") | .id'); do
+              echo "$app machine $id is not running — starting it"
+              flyctl machine start "$id" --app "$app" || true
+              started_one=1
+            done
+            # Give a cold boot time to migrate and listen, then re-probe.
+            healthy=0
+            for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+              sleep 10
+              if probe "$url"; then healthy=1; break; fi
+            done
+            if [ "$healthy" = "1" ]; then
+              if [ "$started_one" = "1" ]; then
+                echo "::warning::$app was down (stopped machine) and was started by backend-watch — check what stopped it (likely a credential rotation outside deploy-backend)"
+              else
+                echo "::warning::$app recovered without a machine start (transient probe failure)"
+              fi
+            else
+              echo "::error::$app is unhealthy and did not recover after a start attempt — run backend-status for the event log"
+              flyctl machine list --app "$app" || true
+              fail=1
+            fi
+          done
+          exit $fail
