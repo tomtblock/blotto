@@ -308,3 +308,21 @@ region, in *every* environment including preview deployments. `app/src/chain/rpc
 front-end half of the rule — the endpoint falls back to devnet by construction, so an environment
 that forgets to configure it lands somewhere harmless — but the real control is in the hosting
 provider's configuration, and it is easier to set at project creation than to retrofit.
+
+**8. "The smoke check passed" earned less trust on 2026-08-29, and the record says why.** During the
+first devnet backend bring-up, two consecutive `deploy-backend` runs went green while the indexer's
+hostname did not even resolve: the app had no public IP (its first, failed deploy never allocated
+one), `flyctl deploy` had updated a crash-loop-stopped machine in place without starting it, and the
+smoke step's `curl --fail … && echo` inside a `set -e` shell swallowed the resolution failure. The
+service was down and unreachable for 22 hours behind green runs. Two fixes shipped in that window —
+the pg idle-client error handler and the 512MB machine — are sound hardening that stays, but the
+root-cause claims attached to each (idle-disconnect crash; OOM) were **wrong**, made before the
+machine's event record was read. The lesson is procedural, and it is why the deploy workflow now
+asserts public IPs and machine state and fails the smoke step honestly, and why `backend-status`
+prints the per-machine event log (exit code, OOM flag): diagnose from the event record, not from
+which hypothesis fits the symptoms best — and treat any green check whose failure path has not been
+watched to fail as unproven.
+
+**Also recorded for Phase 7:** the devnet admin multisig is Squads **v3** (`squads-mpl`,
+`SMPL…ZekMu`); its signing address is the index-1 *authority* PDA, not a v4 "vault" PDA. Squads v4
+is the current line — revisit before a permanent mainnet admin is chosen.
