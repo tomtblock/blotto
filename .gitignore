@@ -40,6 +40,9 @@ dist
 coverage
 *.tsbuildinfo
 
+# Vercel CLI project linkage (holds org/project ids; never tracked)
+.vercel/
+
 # macOS
 .DS_Store
 
