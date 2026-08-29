@@ -26,7 +26,16 @@ jobs:
             flyctl status --app "$app" || true
             echo "===================== $app: machines ==================="
             flyctl machine list --app "$app" || true
+            # Per-machine event history is the authoritative exit record:
+            # exit code, OOM flag, restart count — logs can be truncated,
+            # events are not. This is how "why did it stop" gets answered.
+            for id in $(flyctl machine list --app "$app" --json | jq -r '.[].id'); do
+              echo "===================== $app: machine $id events ========="
+              flyctl machine status "$id" --app "$app" || true
+            done
+            echo "===================== $app: secret names ==============="
+            flyctl secrets list --app "$app" || true
             echo "===================== $app: recent logs ================"
-            flyctl logs --app "$app" --no-tail | tail -n 150 || true
+            flyctl logs --app "$app" --no-tail | tail -n 400 || true
             echo
           done
