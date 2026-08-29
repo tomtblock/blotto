@@ -11,15 +11,22 @@
  *   BLOTTO_PROGRAM_ID            default the declared id
  *   BLOTTO_DATABASE_URL          Postgres (ciphertexts + published pool keys)
  *   SETTLEMENT_SIGNER_KEYPAIR    path to the settlement keypair JSON
- *   RANDOMNESS_ACCOUNT           the Switchboard Randomness account (base58)
+ *   SWITCHBOARD_QUEUE            the Switchboard On-Demand queue (base58) —
+ *                                selects the PRODUCTION VRF coordinator
+ *                                (vrf-switchboard.ts): fresh Randomness
+ *                                account per pool, reveal bundled with
+ *                                commit_vrf_seed
+ *   RANDOMNESS_ACCOUNT           a fixed Randomness account for the STUB
+ *                                coordinator (tests/bench only; ignored when
+ *                                SWITCHBOARD_QUEUE is set). One of the two
+ *                                must be set — the daemon refuses to start
+ *                                with neither (fail-closed, like every
+ *                                credentialed seam).
  *   TURNKEY_API_BASE_URL/_PUBLIC_KEY/_PRIVATE_KEY, TURNKEY_ORGANIZATION_ID,
  *   TURNKEY_USER_ID              pool-key custody (R21)
  *   IRYS_UPLOAD_KEY, IRYS_NETWORK  bundle publishing
  *
- * Two seams stay open, on the record (docs/hosting.md):
- *   - the Switchboard REVEAL instruction (chain-web3's `makeVrfRevealIx`)
- *     is C11 vendor work — until it lands, `commit_vrf_seed` errors are
- *     caught per-tick and reported by the daemon rather than crashing it;
+ * One seam stays open, on the record (docs/hosting.md):
  *   - the detection ipHash rides empty (the hashed-IP capture at ciphertext
  *     submission is not stored yet) — device correlation, the R11 hard
  *     block, still runs on the sealed device hash.
@@ -40,7 +47,8 @@ import {
 import { detectPool } from '../../detection/src/pipeline';
 import { Web3Chain } from './chain-web3';
 import { crankPool, type RevealedForDetection } from './crank';
-import { makeDaemon, StubVrfCoordinator, type TickReport } from './daemon';
+import { makeDaemon, StubVrfCoordinator, type TickReport, type VrfCoordinator } from './daemon';
+import { makeSwitchboardOps, SwitchboardVrfCoordinator } from './vrf-switchboard';
 import { IrysPublisher, irysUploaderFromEnv } from './publisher-irys';
 
 const SERVICE = 'daemon';
@@ -87,15 +95,50 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
   const connection = new Connection(env.BLOTTO_RPC_URL ?? DEFAULT_RPC, {
     commitment: 'confirmed',
   });
-  const chain = new Web3Chain({
+  const settlementSigner = Keypair.fromSecretKey(
+    new Uint8Array(
+      JSON.parse(readFileSync(requireEnv(env, 'SETTLEMENT_SIGNER_KEYPAIR'), 'utf8')) as number[]
+    )
+  );
+
+  // VRF: the production Switchboard coordinator when a queue is configured;
+  // the fixed-account stub only when explicitly asked for (tests/bench);
+  // neither configured → refuse to start, like every credentialed seam.
+  // The coordinator and the chain reference each other (the chain bundles
+  // the coordinator's reveal ix; the coordinator lands the commit through
+  // the chain), resolved by closure: both arrows run only inside daemon
+  // ticks, long after both consts below are assigned.
+  let vrf: VrfCoordinator;
+  const swCoordinator: SwitchboardVrfCoordinator | null = env.SWITCHBOARD_QUEUE
+    ? new SwitchboardVrfCoordinator({
+        ops: await makeSwitchboardOps({
+          connection,
+          payer: settlementSigner,
+          queue: new PublicKey(env.SWITCHBOARD_QUEUE),
+        }),
+        commitOnChain: (poolId, account): Promise<void> => chain.commitVrfSeed(poolId, account),
+        log: (step, detail) => console.log(`${SERVICE}: ${step}`, JSON.stringify(detail ?? {})),
+      })
+    : null;
+
+  const chain: Web3Chain = new Web3Chain({
     connection,
     programId: new PublicKey(env.BLOTTO_PROGRAM_ID ?? DEFAULT_PROGRAM_ID),
-    settlementSigner: Keypair.fromSecretKey(
-      new Uint8Array(
-        JSON.parse(readFileSync(requireEnv(env, 'SETTLEMENT_SIGNER_KEYPAIR'), 'utf8')) as number[]
-      )
-    ),
+    settlementSigner,
+    makeVrfRevealIx: swCoordinator
+      ? (account) => swCoordinator.makeVrfRevealIx(account)
+      : undefined,
   });
+
+  if (swCoordinator) {
+    vrf = swCoordinator;
+  } else if (env.RANDOMNESS_ACCOUNT) {
+    vrf = new StubVrfCoordinator(chain, env.RANDOMNESS_ACCOUNT);
+  } else {
+    throw new Error(
+      `${SERVICE}: set SWITCHBOARD_QUEUE (production) or RANDOMNESS_ACCOUNT (stub, tests/bench) — refusing to run without a VRF coordinator`
+    );
+  }
 
   const now = (): bigint => BigInt(Math.floor(Date.now() / 1000));
   // The sealing property as an export policy: a pool's secret exports only
@@ -141,7 +184,7 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
   const daemon = makeDaemon({
     chain,
     custody,
-    vrf: new StubVrfCoordinator(chain, requireEnv(env, 'RANDOMNESS_ACCOUNT')),
+    vrf,
     crank: (poolId) => crankPool({ chain, custody, ciphertexts, publisher, detect }, poolId),
     now,
     log: (step, detail) => console.log(`${SERVICE}: ${step}`, JSON.stringify(detail ?? {})),
