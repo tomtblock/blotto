@@ -60,13 +60,48 @@ the deploy automation can only *use* them.
    - Name: `BLOTTO_DATABASE_URL` — Secret: paste the connection string
      from Step 3 → **Add secret**.
 
+### The credentialed secrets (added as each one is provisioned)
+
+The deploy **never invents a credential**. Each of these is created by you
+in the vendor's console and pasted here once; a missing one is reported by
+name in the run's first step, before anything is deployed.
+
+| Secret | From | Needed for |
+|---|---|---|
+| `TURNKEY_API_BASE_URL` | Turnkey console | packet + daemon |
+| `TURNKEY_API_PUBLIC_KEY` | Turnkey console | packet + daemon |
+| `TURNKEY_API_PRIVATE_KEY` | Turnkey console (shown once) | packet + daemon |
+| `TURNKEY_ORGANIZATION_ID` | Turnkey console | packet + daemon |
+| `ENTRY_SIGNER_KEY_ID` | Turnkey entry-signer key | packet |
+| `ENTRY_SIGNER_PUBLIC_KEY_HEX` | that key's public key, hex | packet |
+| `GEO_VENDOR_URL` | the geo vendor | packet |
+| `GEO_VENDOR_API_KEY` | the geo vendor | packet |
+| `TURNKEY_USER_ID` | Turnkey console | daemon |
+| `SWITCHBOARD_QUEUE` | Switchboard On-Demand queue (public config) | daemon |
+| `IRYS_UPLOAD_KEY` | the funded Irys wallet's secret key, base58 | daemon |
+| `SETTLEMENT_SIGNER_KEYPAIR_B64` | `base64 -w0 < settlement-keypair.json` | daemon + review |
+
+The daemon and the review service are deployed **only once their secrets are
+all present** — until then the run says which one it is waiting on and skips
+them, rather than deploying something that cannot start.
+
 ## Step 5 — Run the deploy (~10 min, mostly waiting)
 
 1. In the repository, open the **Actions** tab.
 2. In the left sidebar, click **deploy-backend**.
 3. Click **Run workflow** (right side) → green **Run workflow** button.
-4. Watch it run (click the job to see live logs). Green check = deployed;
-   the last step prints the two service addresses and checks their health.
+4. Leave the **"DEV ONLY"** box UNCHECKED once every credential is in hand.
+   Before then it lets the deploy fall back **only where a production
+   credential is missing** — so between C1 and C2, with Turnkey set but no
+   geo vendor yet, checking it keeps the real Turnkey signer and stubs only
+   the geo lookup. It never downgrades something already real, and the run
+   warns by name for each fallback it takes.
+5. Watch it run (click the job to see live logs). Green check = deployed.
+   The final step prints **which signer and which randomness source each
+   service actually chose** — that is the real acceptance check. A
+   credentialed run reads `entry signer = TURNKEY`, shows no `GEO STUB`
+   line, and reads `VRF = SWITCHBOARD On-Demand`. Anything else means a
+   development path is live even though the deploy went green.
 
 If it fails, copy the red step's message to me and I'll fix it.
 
@@ -99,10 +134,13 @@ site shows the real (empty) devnet state.
   vendor is on the founder to-do list; the moment its two credentials are
   configured, the stub is ignored and fail-closed + the real block-list
   take over.
-- **Two secrets are generated automatically on first deploy** (the entry
-  signer's development key and the webhook shared secret) and kept stable
-  across redeploys. The development entry signer is replaced by Turnkey
-  custody at the credentialed rehearsal.
+- **One secret is generated automatically** — the Helius webhook shared
+  secret, on first deploy, kept stable across redeploys. It is ours to
+  issue: no external party holds an authoritative copy. Nothing else is
+  ever generated. The deploy used to create a development entry-signer seed
+  and set the geo stub on every run, which silently undid a credential swap
+  at the next deploy click; both are now removed, and the workflow actively
+  clears them from the app once the real credentials are staged.
 - **Troubleshooting — "name is taken":** Fly app names are global. If the
   log says `blotto-indexer` or `blotto-packet` is taken by someone else,
   tell me and I'll rename ours (a one-line change in `deploy/fly/`).

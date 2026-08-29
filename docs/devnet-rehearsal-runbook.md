@@ -50,21 +50,14 @@ any file containing it. The original draft's standing rule 1 would not have merg
 These are code changes, not credential steps, and every one of them gates a Stage C
 step. None is on `main` today.
 
-**B-a. `deploy-backend.yml` must stop re-seeding dev credentials.** The workflow
-today sets `GEO_STUB_COUNTRY="GB"` **unconditionally on every run** (no
-generate-once guard), and regenerates `ENTRY_SIGNER_SEED_HEX` whenever it is
-absent. Either one silently undoes a Stage C swap at the next deploy click:
-
-- `backend/packet/src/main.ts` `buildSigner()` prefers Turnkey only when
-  `ENTRY_SIGNER_KEY_ID` is set, so a re-seeded `ENTRY_SIGNER_SEED_HEX` is inert
-  *while* Turnkey is configured — but it is a live fallback the moment
-  `ENTRY_SIGNER_KEY_ID` is cleared.
-- `buildGeo()` prefers the vendor only when **both** `GEO_VENDOR_URL` and
-  `GEO_VENDOR_API_KEY` are non-empty. Drop either and it falls through to the
-  stub and admits everyone as `GB`. This is the dangerous one.
-
-The edit stages `TURNKEY_*`/`ENTRY_SIGNER_*` and `GEO_VENDOR_*` from repository
-secrets and removes both dev seeds. **Do C1 and C2 only after it lands.**
+**B-a. Deploy-lane credential fix — LANDED.** `deploy-backend.yml` no longer creates
+any credential. It stages `TURNKEY_*`/`ENTRY_SIGNER_*`/`GEO_VENDOR_*` from repository
+secrets, actively clears `ENTRY_SIGNER_SEED_HEX` and `GEO_STUB_COUNTRY` from the app
+once the real ones are staged, and fails in preflight naming any missing secret.
+Running with development credentials is now an explicit tick-box in the Actions UI
+(`allow_dev_credentials`, default off) that warns loudly — never a silent fallback.
+The final step prints which signer and which randomness source each service actually
+chose, so a green deploy that quietly took a dev path is visible in the run itself.
 
 **B-b. The IPLocate adapter is not written.** `VendorHttpGeoLookup`
 (`backend/packet/src/geo-adapters.ts`) is a generic seam, and says so in its own
@@ -81,13 +74,14 @@ re-derived from what actually ships.
 `sha256("global:<name>")`, and the client-side guards (tier range, strict booleans,
 the pot's 1024-lamport divisibility) reject before a proposal is ever raised.
 
-**B-d. `blotto-daemon` and `blotto-review` have no deploy path.**
-`deploy-backend.yml` deploys the indexer and the packet service only. The Fly
-configs exist (`deploy/fly/daemon.fly.toml`, `review.fly.toml`) and document a
-manual `fly deploy --config …`. Decide: workflow steps, or a written manual
-procedure naming who runs it and where each secret comes from. Note the review
-service's image runs `backend/detection/src/main.ts` — there is no
-`backend/review/` directory.
+**B-d. Daemon and review deployment — LANDED.** Both are in `deploy-backend.yml`,
+with the same public-IP, machine-started and honest-smoke-check hardening the other
+two services have. Each deploys only once all of its secrets exist; until then the run
+names the one it is waiting on and skips it, rather than deploying something that
+cannot start. The settlement keypair travels as `SETTLEMENT_SIGNER_KEYPAIR_B64` and is
+decoded to tmpfs at boot by `deploy/docker/entrypoint-settlement.sh` (C6 option (a)) —
+which refuses to start on an absent, malformed, or wrong-length secret. Note the review
+service's image runs `backend/detection/src/main.ts`; there is no `backend/review/`.
 
 **B-e. The test signer is unbuilt.** `app/src/tx/test-signer.ts` exists and is
 imported by nothing; `NEXT_PUBLIC_ALLOW_TEST_SIGNER` appears nowhere; there is no

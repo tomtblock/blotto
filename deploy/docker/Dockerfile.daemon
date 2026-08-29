@@ -8,6 +8,8 @@ FROM node:22-slim
 WORKDIR /app
 COPY backend backend
 COPY config config
+COPY deploy/docker/entrypoint-settlement.sh /usr/local/bin/entrypoint-settlement
+RUN chmod +x /usr/local/bin/entrypoint-settlement
 
 RUN for d in backend/_shared backend/scoring backend/sealing backend/packet backend/reveal backend/detection backend/indexer; do \
       (cd "$d" && npm ci --no-audit --no-fund); \
@@ -15,4 +17,8 @@ RUN for d in backend/_shared backend/scoring backend/sealing backend/packet back
 
 WORKDIR /app/backend/reveal
 EXPOSE 8084
+# The settlement keypair arrives as a base64 secret and is decoded to tmpfs
+# at boot (see the entrypoint). It refuses to start without it.
+ENV SERVICE_NAME=daemon
+ENTRYPOINT ["/usr/local/bin/entrypoint-settlement"]
 CMD ["npx", "ts-node", "--transpile-only", "src/main.ts"]
