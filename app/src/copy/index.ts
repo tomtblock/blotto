@@ -71,6 +71,81 @@ export const COPY = {
     lifetime: 'TODO_COPY: Lifetime record',
     readOnlyNote: 'Profiles are a read-only record. Nothing here affects any pool.',
   },
+  arena: {
+    title: 'TODO_COPY: The Arena',
+    tagline: 'TODO_COPY: Build seven characters. Enter sealed. Watch the whole field battle.',
+    listIntro: 'TODO_COPY: Pick a pool to enter with your characters.',
+    builder: {
+      characterOf: (k: number) => `Character ${k} of 7`,
+      intro: 'TODO_COPY: Shape this character by spending its 100 stat points.',
+      reviewTitle: 'TODO_COPY: Your seven characters',
+      // The R9 disclosure, arena phrasing — substance identical to
+      // battle.timerNote: timeout locks exactly what is shown.
+      timerNote: 'When the timer ends, this character locks in exactly the stats shown.',
+    },
+    lobby: {
+      title: 'TODO_COPY: The field is filling',
+      yourSeat: 'Your character team is sealed in this seat.',
+      waitingNote:
+        'Every entry is sealed. No stats, no characters, no standings exist to show until the pool fills — then everything is revealed and scored at once.',
+      sealedAt: 'The pool is full. Entries are being unsealed and scored.',
+    },
+    sealing: {
+      title: 'TODO_COPY: Unsealing',
+      body:
+        'The pool has closed. Entries are being decrypted, scored and committed. The full battle playback opens when results are published.',
+    },
+    refunding: {
+      title: 'TODO_COPY: Pool did not fill',
+    },
+    battle: {
+      matchupTitle: (seat: number) => `Versus seat ${seat + 1}`,
+      mySide: (name: string) => `your ${name}`,
+      oppSide: (name: string) => `the rival ${name}`,
+      roundIntro: (k: number, name: string) =>
+        `Battle ${k} of 7 — your ${name} against theirs.`,
+      moveCall: (name: string, stat: string) => `${name} tests ${stat}…`,
+      statTaken: (stat: string, winner: string, a: number, b: number) =>
+        `${stat} goes to ${winner} — ${a} against ${b}.`,
+      statTied: (stat: string, value: number) => `${stat} is tied at ${value}. Neither side takes it.`,
+      roundWon: (name: string) => `${name} takes the battle — three stats won.`,
+      roundLost: (name: string) => `${name} is beaten — the opponent takes three stats.`,
+      roundDraw: 'Neither side reaches three stats. The battle is a draw.',
+      matchupResult: (wins: number, draws: number, losses: number) =>
+        `Final: ${wins} battles won, ${draws} drawn, ${losses} lost.`,
+      tapNote: 'TODO_COPY: Tap to continue',
+      skip: 'TODO_COPY: Skip to result',
+      replay: 'TODO_COPY: Watch again',
+      pause: 'TODO_COPY: Pause',
+      resume: 'TODO_COPY: Resume',
+    },
+    results: {
+      title: 'TODO_COPY: The pool, revealed',
+      highlights: 'TODO_COPY: Featured battles',
+      allMatchups: 'TODO_COPY: Every opponent',
+      spectator:
+        'You did not hold a seat in this pool. You are watching the top-ranked entry’s battles.',
+      recomputeNote:
+        'Every outcome shown here is recomputed from the published entries with the same engine the Verify page uses — nothing is staged.',
+      mismatch:
+        'The published results do not match what this page recomputed from the published entries. Playback is disabled — check the pool on the Verify page.',
+      lostEntry:
+        'This entry’s sealed battles could not be published, so it was scored as all losses and its fee refunded (the published rule). There is nothing to play back for it.',
+      verifyLink: 'TODO_COPY: Verify this pool',
+      resultsLink: 'TODO_COPY: Full results table',
+    },
+    /** Fixed archetype identities, one per battle index (cosmetic only —
+     * PID §8.4: identity confers nothing; the stats are the character). */
+    characterNames: [
+      'Emberling',
+      'Galewisp',
+      'Thornshell',
+      'Riftling',
+      'Cindermaw',
+      'Frostwhelp',
+      'Stormpup',
+    ] as const,
+  },
   rules: {
     // R4's eight statements — headed sections; Phase 6 fills the bodies.
     sections: [
