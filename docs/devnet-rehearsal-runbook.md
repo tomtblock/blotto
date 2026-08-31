@@ -191,9 +191,20 @@ terminal:
    `ENTRY_SIGNER_PUBLIC_KEY_HEX`
 4. If `TURNKEY_USER_ID` is on screen, take it — the daemon needs it at C5 and this
    saves a second sitting
-5. Mirror all six to Fly secrets on `blotto-packet`. These six are exactly the set
+5. Mirror all six to Fly secrets on `blotto-packet`, **and to GitHub repository
+   secrets** — Fly secrets cannot be read back, so GitHub is the only durable copy,
+   and the deploy workflow stages from there. These six are exactly the set
    `buildSigner()` requires; `TURNKEY_USER_ID` is daemon-only and does not go here.
-6. **Remove `ENTRY_SIGNER_SEED_HEX`** from `blotto-packet` — no silent fallback
+6. **Remove `ENTRY_SIGNER_SEED_HEX` from `blotto-packet` — BEFORE verifying, not
+   after.** This ordering is load-bearing and the earlier draft had it wrong. With
+   the seed still present, a missing `ENTRY_SIGNER_KEY_ID` selects the development
+   signer, and every check below still passes: the service boots, answers `/health`,
+   and issues packets whose signatures verify against the key it reports. That is
+   exactly what happened on 2026-08-29. Remove the seed first and the same
+   misconfiguration refuses to start instead of hiding.
+7. **Confirm the machine actually restarted** and picked the new values up. Staged
+   secrets do not reach a running process. `fly secrets list` shows when each was
+   set; compare against the machine's last start.
 
 **Screen names are expected shapes, not gospel.** The architect reads each aloud; if
 it does not match, stop and re-read.
@@ -210,11 +221,14 @@ it does not match, stop and re-read.
   hex is the true public key of the Turnkey-held private key — a botched base58 → hex
   conversion cannot pass. Do this BEFORE C3: on-chain the same mistake surfaces only
   as a failed Ed25519 check at `register`, after the value is committed.
-- **What that check does NOT prove:** the local dev-seed signer would also produce a
-  self-consistent signature. Base58-encode the returned `publicKey` and compare it to
-  the Turnkey key's Solana address — that comparison, and only that, distinguishes
-  Turnkey from a silent seed fallback. (The startup line added alongside this now
-  names the path directly, which is the cheaper check from here on.)
+- **What that check does NOT prove — and this is not hypothetical.** A seed-backed
+  signer produces an equally self-consistent signature, so the check passes either
+  way. On 2026-08-29 it did: the service reported a public key that verified its own
+  signature perfectly, and the key belonged to the CI-generated development seed, not
+  to Turnkey. **Base58-encode the returned `publicKey` and compare it to the Turnkey
+  key's Solana address.** That comparison, and only that, distinguishes the two. The
+  startup line names the path directly and is the cheaper standing check once
+  deployed — but on a first credentialed bring-up, do the address comparison.
 - **Negative:** remove `TURNKEY_API_PRIVATE_KEY` while leaving `ENTRY_SIGNER_KEY_ID`
   set → the service must refuse to start. (Removing `ENTRY_SIGNER_KEY_ID` instead
   exercises a different branch and proves less.) If it starts anyway, the
