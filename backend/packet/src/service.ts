@@ -125,8 +125,18 @@ export async function issuePacket(
       publicKey: Buffer.from(publicKey).toString('base64'),
       issuedAt: issuedAt.toString(),
     };
-  } catch {
-    // An upstream failure must not leak WHICH upstream failed either.
+  } catch (e) {
+    // The CLIENT must never learn which upstream failed — that is what makes
+    // the rejection uniform and the gate non-probeable. The OPERATOR must,
+    // and until 2026-08-31 did not: a Turnkey signing failure and a blocked
+    // territory were indistinguishable from outside AND from the logs, so a
+    // live signer fault looked exactly like a correctly refused entry.
+    //
+    // Log server-side, answer generically. The two are not in tension: the
+    // log is not reachable by the caller.
+    console.error(
+      `packet: entry packet NOT issued — ${e instanceof Error ? e.message : String(e)}`
+    );
     return GENERIC_REJECTION;
   }
 }
