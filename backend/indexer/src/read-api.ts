@@ -325,6 +325,10 @@ export function serveReadApi(
       {
         method: req.method,
         forwardedFor: req.headers['x-forwarded-for'],
+        // Same resolver as the packet service: the leftmost X-Forwarded-For
+        // hop is caller-supplied, so rate limiting keyed on it was bypassable
+        // by rotating one header (found 2026-08-31).
+        flyClientIp: req.headers['fly-client-ip'],
         remoteAddress: req.socket.remoteAddress ?? undefined,
         origin: req.headers.origin,
       },

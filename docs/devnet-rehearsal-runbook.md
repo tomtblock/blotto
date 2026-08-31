@@ -247,24 +247,47 @@ admin-signed rotation (`register-signers --entry-signer`), not a redeploy.
 
 ## C2 — Geo vendor
 
-**C2 IS CLOSED (2026-08-31).** Verified live from Buenos Aires:
+**C2 status: negatives passed, ONE end-to-end gap remains.** The allow path is
+live from Buenos Aires (`geo = IPLOCATE`, `geo ALLOW … country=AR`, no `GEO STUB`
+line). All four negatives run against the real vendor through the production
+adapter, each distinguishable in the log:
 
-```
-packet: geo = IPLOCATE (https://iplocate.io/api/lookup), per-IP cache 900000ms
-packet: geo ALLOW 2800:… — country=AR
-```
+| Case | Answer | Log |
+|---|---|---|
+| Belgium (real address) | `false` | `territory schedule: BE` |
+| Australia (real address) | `false` | `territory schedule: AU` |
+| Vendor unreachable | `false` | `LOOKUP FAILED (this is NOT a territory decision) — unreachable after N attempts` |
+| Malformed answer | `false` | `LOOKUP FAILED … no usable country_code` |
+| **Quota 429** | `false` | `LOOKUP FAILED … QUOTA OR RATE LIMIT (HTTP 429) — the daily request cap is spent … This is NOT a territory block` |
 
-No `GEO STUB` line, and the entry signer named as TURNKEY in the same startup
-block. **With C1 also closed, Stage C is complete and C3 is the next step.**
+**The remaining gap:** BE and AU were proven against the live vendor through the
+production adapter, not through the deployed service from an address in those
+countries. There is no honest way to do the latter without an exit node there —
+and deliberately so: the header override that would allow it was a bypass, now
+closed (below). Record this as the limit of the evidence rather than implying more.
 
-Two costs paid to get here, both recorded because they are the same failure
-twice: a service that knows something and cannot say it. `/geo` answered
-`false` identically for a vendor fault and a blocked country, and logged
-neither; and two green deploys shipped code older than the fix. Every service
-now prints its build commit first, then names each credentialed seam it chose,
-and every geo decision is logged with its reason. **Hold that standard for any
-new service — it is what turned the last fault from an hour of guesswork into
-one attempt.**
+**The bypass, found by running these negatives (2026-08-31).** The gate decided
+on `X-Forwarded-For.split(',')[0]` — the LEFTMOST hop, which a proxy appends to
+rather than overwrites, so it is whatever the caller typed. Sending
+`X-Forwarded-For: <a Belgian address>` made the live service refuse; sending
+nothing made it allow. **The caller chose the verdict of the gate.** It was
+simultaneously a rate-limit bypass, since the limiter keyed on the same value.
+Resolution is now `Fly-Client-IP` (proxy-set, overwritten every request) then the
+RIGHTMOST forwarded hop, through one shared resolver so the limiter and the gate
+can never disagree.
+
+**RATIFIED — the 15-minute per-IP cache (founder, pending).** What it changes
+about enforcement: **nothing about which addresses are allowed.** The decision is
+already a pure function of the address, so two requests from one IP receive the
+same verdict with or without a cache. What it changes is only how often the
+vendor is asked. Three properties, each tested, keep that true: a failure is
+never cached (not a throw, not a quota error, not a timeout — an unreachable
+vendor can never become a stored answer); the key is the resolved address itself
+and never anything the caller supplies; and the TTL is 15 minutes, so a genuine
+reclassification is picked up within one pool rather than persisting for the run.
+What it costs: a country that changes classification mid-run is honoured up to 15
+minutes late. What it buys: at two lookups per entrant and 128 per pool against a
+1,000/day cap, roughly the difference between finishing Stage D and not.
 
 **Requires B-a and B-b.** Country-level blocks are what `config/territories.json`
 carries today (`{"blocked":["BE","AU"]}`); the schedule format *also* supports

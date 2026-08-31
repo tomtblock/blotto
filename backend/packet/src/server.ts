@@ -29,6 +29,7 @@ import { createServer, type IncomingMessage, type Server } from 'http';
 import {
   RateLimiter,
   applyHygiene,
+  clientKeyFrom,
   type HygieneConfig,
 } from '../../_shared/src/http-hygiene';
 import type { CiphertextStore } from '../../sealing/src';
@@ -215,12 +216,17 @@ export function poolKey(pool: string): bigint {
   return acc;
 }
 
+/** ONE resolver for the whole service, shared with the rate limiter, so the
+ * territory gate and the limiter can never disagree about who is calling.
+ * See `clientKeyFrom` for why the leftmost X-Forwarded-For entry is not it. */
 function clientIp(req: IncomingMessage, trustProxy: boolean): string {
-  if (trustProxy) {
-    const fwd = req.headers['x-forwarded-for'];
-    if (typeof fwd === 'string' && fwd.length > 0) return fwd.split(',')[0].trim();
-  }
-  return req.socket.remoteAddress ?? '';
+  if (!trustProxy) return req.socket.remoteAddress ?? '';
+  const resolved = clientKeyFrom(
+    req.headers['x-forwarded-for'],
+    req.socket.remoteAddress ?? undefined,
+    req.headers['fly-client-ip']
+  );
+  return resolved === 'unknown' ? '' : resolved;
 }
 
 export function serveEntryApi(deps: EntryServerDeps, port: number): Server {
@@ -241,6 +247,7 @@ export function serveEntryApi(deps: EntryServerDeps, port: number): Server {
         method: req.method,
         forwardedFor: deps.trustProxyHeader ? req.headers['x-forwarded-for'] : undefined,
         remoteAddress: req.socket.remoteAddress ?? undefined,
+        flyClientIp: deps.trustProxyHeader ? req.headers['fly-client-ip'] : undefined,
         origin: req.headers.origin,
       },
       hygiene,
