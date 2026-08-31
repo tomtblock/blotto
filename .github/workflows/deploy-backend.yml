@@ -242,6 +242,7 @@ jobs:
             # live the moment ENTRY_SIGNER_KEY_ID is cleared. `unset` on an
             # absent secret is not an error here.
             flyctl secrets unset --app "$PACKET_APP" --stage ENTRY_SIGNER_SEED_HEX || true
+            flyctl secrets unset --app "$PACKET_APP" --stage ALLOW_DEV_ENTRY_SIGNER || true
           else
             # Generate-once: regenerating would change the entry signer's
             # public key mid-flight, and it is bound on-chain at init_config.
@@ -249,6 +250,11 @@ jobs:
               flyctl secrets set --app "$PACKET_APP" --stage \
                 ENTRY_SIGNER_SEED_HEX="$(openssl rand -hex 32)"
             fi
+            # The service now REFUSES the seed without this opt-in, so that a
+            # missing ENTRY_SIGNER_KEY_ID can never silently downgrade a
+            # Turnkey deployment (devnet incident, 2026-08-29). Set it only on
+            # the deliberate development path.
+            flyctl secrets set --app "$PACKET_APP" --stage ALLOW_DEV_ENTRY_SIGNER="1"
           fi
 
           # Geo lookup — independent of the signer.

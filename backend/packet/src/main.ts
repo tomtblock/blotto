@@ -14,7 +14,9 @@
  *     TURNKEY_API_BASE_URL + TURNKEY_API_PUBLIC_KEY + TURNKEY_API_PRIVATE_KEY
  *       + TURNKEY_ORGANIZATION_ID + ENTRY_SIGNER_KEY_ID
  *       + ENTRY_SIGNER_PUBLIC_KEY_HEX          (production — C11 adapter)
- *     ENTRY_SIGNER_SEED_HEX                    (dev/rehearsal, 32-byte hex)
+ *     ENTRY_SIGNER_SEED_HEX + ALLOW_DEV_ENTRY_SIGNER=1   (dev only — the
+       opt-in is required so a missing ENTRY_SIGNER_KEY_ID can never
+       silently downgrade a Turnkey deployment to the development key)
  *
  *   Geo, one of:
  *     GEO_VENDOR_URL + GEO_VENDOR_API_KEY      (production — R2 vendor)
@@ -33,8 +35,7 @@ import { createPool } from '../../_shared/src/db';
 import { loadHygieneConfig } from '../../_shared/src/http-hygiene';
 import { PgCiphertextStore } from '../../sealing/src/store';
 import { serveEntryApi } from './server';
-import { LocalPacketSigner, type PacketSigner } from './packet';
-import { TurnkeyPacketSigner } from './signer-turnkey';
+import { buildSigner } from './signer-select';
 import { StubGeoLookup, VendorHttpGeoLookup } from './geo-adapters';
 import { loadTermsVersion } from './attestations';
 import { loadTerritorySchedule } from './territories';
@@ -43,62 +44,7 @@ import type { GeoLookup } from './service';
 
 const SERVICE = 'packet';
 
-/** First 6 and last 4 characters of an identifier, for startup lines. Never
- * used on a secret — only on ids and public keys, which are public by
- * definition — but truncated anyway so a pasted log stays boring. */
-function redact(v: string | undefined): string {
-  if (!v) return '<unset>';
-  return v.length <= 12 ? v : `${v.slice(0, 6)}…${v.slice(-4)}`;
-}
 
-function buildSigner(env: NodeJS.ProcessEnv): PacketSigner {
-  if (env.ENTRY_SIGNER_KEY_ID) {
-    for (const k of [
-      'TURNKEY_API_BASE_URL',
-      'TURNKEY_API_PUBLIC_KEY',
-      'TURNKEY_API_PRIVATE_KEY',
-      'TURNKEY_ORGANIZATION_ID',
-      'ENTRY_SIGNER_PUBLIC_KEY_HEX',
-    ]) {
-      if (!env[k]) throw new Error(`${SERVICE}: ${k} is required with ENTRY_SIGNER_KEY_ID`);
-    }
-    // Lazy vendor import — offline suites never load the SDK (C11 pattern).
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { Turnkey } = require('@turnkey/sdk-server') as typeof import('@turnkey/sdk-server');
-    const client = new Turnkey({
-      apiBaseUrl: env.TURNKEY_API_BASE_URL as string,
-      apiPublicKey: env.TURNKEY_API_PUBLIC_KEY as string,
-      apiPrivateKey: env.TURNKEY_API_PRIVATE_KEY as string,
-      defaultOrganizationId: env.TURNKEY_ORGANIZATION_ID as string,
-    }).apiClient();
-    // Say WHICH path was chosen. A clean boot proves the credentials were
-    // present, not which signer is live, and the two are indistinguishable
-    // from outside the process — the packet's public key is config either
-    // way. Naming it here is the only cheap way an operator can tell a
-    // Turnkey deployment from one that silently fell back to the dev seed.
-    console.log(
-      `${SERVICE}: entry signer = TURNKEY (key ${redact(env.ENTRY_SIGNER_KEY_ID)}, ` +
-        `org ${redact(env.TURNKEY_ORGANIZATION_ID)}, ` +
-        `pubkey ${redact(env.ENTRY_SIGNER_PUBLIC_KEY_HEX)})`
-    );
-    return new TurnkeyPacketSigner({
-      client,
-      organizationId: env.TURNKEY_ORGANIZATION_ID as string,
-      signWith: env.ENTRY_SIGNER_KEY_ID,
-      publicKeyHex: env.ENTRY_SIGNER_PUBLIC_KEY_HEX as string,
-    });
-  }
-  if (env.ENTRY_SIGNER_SEED_HEX) {
-    console.warn(
-      `${SERVICE}: entry signer = LOCAL DEV SEED (ENTRY_SIGNER_SEED_HEX) — ` +
-        `NOT Turnkey. Development only; set ENTRY_SIGNER_KEY_ID for custody.`
-    );
-    return new LocalPacketSigner(new Uint8Array(Buffer.from(env.ENTRY_SIGNER_SEED_HEX, 'hex')));
-  }
-  throw new Error(
-    `${SERVICE}: no entry signer configured — set the Turnkey variables or ENTRY_SIGNER_SEED_HEX (dev)`
-  );
-}
 
 function buildGeo(env: NodeJS.ProcessEnv): GeoLookup {
   if (env.GEO_VENDOR_URL && env.GEO_VENDOR_API_KEY) {
