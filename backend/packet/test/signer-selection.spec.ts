@@ -13,6 +13,13 @@
 
 import { strict as assert } from 'assert';
 import { buildSigner } from '../src/signer-select';
+import { issuePacket } from '../src/service';
+import { loadTerritorySchedule } from '../src/territories';
+import { resolve } from 'path';
+
+const TERRITORIES = loadTerritorySchedule(
+  resolve(__dirname, '..', '..', '..', 'config', 'territories.json')
+);
 
 const TURNKEY_ENV = {
   TURNKEY_API_BASE_URL: 'https://api.turnkey.com',
@@ -76,5 +83,58 @@ describe('entry-signer selection', () => {
 
   it('no signer configured at all refuses', () => {
     assert.throws(() => buildSigner({} as NodeJS.ProcessEnv), /no entry signer configured/);
+  });
+});
+
+/**
+ * The rejection is uniform to the CALLER and specific to the OPERATOR.
+ *
+ * On 2026-08-31 the packet service refused every entry with the generic
+ * answer while the Turnkey signer threw on every call. Geo, territory,
+ * attestation and sanctions all passed; only signing failed — and nothing,
+ * client-side or in the logs, said so. A live signer fault was
+ * indistinguishable from a correctly refused entry.
+ */
+describe('a failed issuance is generic to the caller, diagnosable by the operator', () => {
+  it('logs the underlying reason and still answers generically', async () => {
+    const errors: string[] = [];
+    const spy = console.error;
+    console.error = (m?: unknown) => void errors.push(String(m));
+    try {
+      const res = await issuePacket(
+        {
+          geo: { lookup: async () => ({ country: 'GB', vpnOrProxy: false }) },
+          sanctions: { isSanctioned: async () => false },
+          attestations: {
+            get: async () => ({
+              wallet: 'w',
+              termsVersion: 1,
+              attested18: true as const,
+              timestamp: 0n,
+              walletSignature: 's',
+            }),
+            put: async () => undefined,
+          },
+          config: { territories: TERRITORIES, termsVersion: 1, kycTier: 0 },
+          now: () => 0n,
+          nonce: () => 0n,
+          signer: {
+            publicKey: async () => new Uint8Array(32),
+            // The live failure: Turnkey rejects the signing request.
+            sign: async () => {
+              throw new Error('turnkey returned r=0/s=0 bytes, expected 32/32');
+            },
+          },
+        } as never,
+        { wallet: '11111111111111111111111111111111', pool: '11111111111111111111111111111111', ip: '1.2.3.4' }
+      );
+      assert.deepEqual(res, { ok: false, error: 'entry_unavailable' }, 'caller sees only the generic answer');
+      assert.ok(
+        errors.some((m) => m.includes('turnkey returned')),
+        'the operator sees the real reason in the log'
+      );
+    } finally {
+      console.error = spy;
+    }
   });
 });

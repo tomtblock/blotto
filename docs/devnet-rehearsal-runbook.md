@@ -42,6 +42,12 @@ any file containing it. The original draft's standing rule 1 would not have merg
 | Deploy keypair | `~/.config/solana/blotto/fee-payer-devnet.json` (`GXKX…`) | upgrade authority; retire after C4 |
 | Program keypair | `~/.config/solana/blotto/blotto_cup-program-devnet.json` | `BLOTTO_PROGRAM_KEYPAIR` |
 | Irys wallet | `~/.config/solana/blotto/irys-devnet.json` (`HG56…`) | `IRYS_UPLOAD_KEY` source |
+| **Entry signer** (VERIFIED 2026-08-31) | Turnkey `blotto-entry-signer-devnet`, Ed25519, non-exportable · key id `79672a1a-3c43-481a-a304-82f0ee10709c` · address `9XhwKrXjKwFdYJatxYMZYyfB6nFLbmdFNSuM5JTyy8TP` · `ENTRY_SIGNER_PUBLIC_KEY_HEX` = `7ebb34f6a4a985b0e3fc5a2ab0488cae67e4c7577b2c75dc21eac677a922a4b6` | goes on-chain as `Config.entry_signer` at C3 |
+
+**The entry signer is confirmed end to end**: `npm run check-signer` in
+`backend/packet` had Turnkey sign a payload with that key and verified the result
+against the hex above, and the address matches the console. Changing it after C3 is an
+admin-signed `register-signers --entry-signer` rotation, not a redeploy.
 
 ---
 
