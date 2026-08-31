@@ -65,6 +65,52 @@ async function main(): Promise<void> {
   }
   console.log();
 
+  // Shape checks BEFORE the API call. Turnkey's own error for a junk
+  // credential ("invalid public key ... compressed P-256") is identical
+  // whether the value is a typo, a swapped pair, or an unsubstituted
+  // placeholder from a copied command — which is exactly what happened on
+  // the first run of this tool. Naming what was actually found is far more
+  // useful than relaying a message that fits three different causes.
+  const PLACEHOLDERS = /^(\.{2,}|<.*>|your[-_].*|xxx+|todo|changeme|paste.*)$/i;
+  const placeheld = [...PUBLIC_VARS, ...SECRET_VARS].filter(
+    (k) => env[k] !== undefined && PLACEHOLDERS.test(env[k] as string)
+  );
+  if (placeheld.length > 0) {
+    console.error(`  These still hold a placeholder, not a real value: ${placeheld.join(', ')}`);
+    console.error('  Substitute the actual values from the Turnkey console and re-run.');
+    process.exitCode = 1;
+    return;
+  }
+
+  // Turnkey's API credential is a P-256 pair: a 33-byte compressed public
+  // key (66 hex chars, leading 02 or 03) and a 32-byte private key (64 hex).
+  // Reported as warnings rather than refusals — if this expectation is ever
+  // wrong the tool must still be able to reach the API and let it answer.
+  const hex = (v: string | undefined) => (v ? /^[0-9a-fA-F]+$/.test(v) : false);
+  const pub = env.TURNKEY_API_PUBLIC_KEY;
+  const priv = env.TURNKEY_API_PRIVATE_KEY;
+  if (hex(pub) && hex(priv) && pub!.length === 64 && priv!.length === 66) {
+    console.warn('  WARNING: the API key pair looks SWAPPED — the public key is 64 hex');
+    console.warn('  characters and the private key 66. Turnkey expects the reverse.');
+  } else {
+    if (pub && !(hex(pub) && pub.length === 66)) {
+      console.warn(
+        `  WARNING: TURNKEY_API_PUBLIC_KEY is ${pub.length} characters` +
+          `${hex(pub) ? '' : ' and not hex'}; a compressed P-256 public key is 66 hex characters.`
+      );
+    }
+    if (priv && !(hex(priv) && priv.length === 64)) {
+      console.warn(
+        `  WARNING: TURNKEY_API_PRIVATE_KEY is ${priv.length} characters` +
+          `${hex(priv) ? '' : ' and not hex'}; the P-256 private key is 64 hex characters.`
+      );
+    }
+  }
+  if (env.TURNKEY_API_BASE_URL && !/^https:\/\//.test(env.TURNKEY_API_BASE_URL)) {
+    console.warn('  WARNING: TURNKEY_API_BASE_URL is not an https URL.');
+  }
+  console.log();
+
   console.log('--- selecting the signer (production code path) ---');
   const signer = buildSigner(env);
   console.log();
