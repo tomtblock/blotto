@@ -82,6 +82,33 @@ export interface PacketServiceDeps {
   nonce(): bigint;
 }
 
+/**
+ * Server-side observability for the entry gate.
+ *
+ * The CLIENT gets one uniform answer, always — that is what makes the gate
+ * non-probeable and it does not change here. The OPERATOR needs the reason
+ * by name, and until 2026-08-31 got nothing at all on this path: `/geo`
+ * caught every failure with a bare `catch { return false }`, so a live
+ * vendor fault and a correctly blocked territory were identical in the
+ * response AND absent from the logs. Ninety minutes went into the Turnkey
+ * base URL for exactly that reason; this is the same fix one layer over.
+ *
+ * The two are not in tension: the log is not reachable by the caller.
+ */
+
+/** First two octets of a v4 address, or the first hextet of a v6 — enough to
+ * correlate an entrant across log lines during a run, without writing whole
+ * addresses to a log that outlives the reason for holding them. */
+function ipPrefix(ip: string): string {
+  if (ip.includes(':')) return `${ip.split(':')[0]}:…`;
+  const parts = ip.split('.');
+  return parts.length === 4 ? `${parts[0]}.${parts[1]}.x.x` : 'unparsed';
+}
+
+function logGeo(verdict: 'ALLOW' | 'BLOCK', ip: string, detail: string): void {
+  console.log(`packet: geo ${verdict} ${ipPrefix(ip)} — ${detail}`);
+}
+
 export async function issuePacket(
   deps: PacketServiceDeps,
   req: PacketRequest
@@ -101,8 +128,19 @@ export async function issuePacket(
       attestation.termsVersion === deps.config.termsVersion;
 
     if (!territoryOk || !vpnOk || sanctioned || !ageOk) {
+      // Every failing check, not just the first — the caller still learns
+      // nothing, and an operator chasing a stalled fill needs to know
+      // whether it is the territory schedule or a missing attestation.
+      const failed = [
+        territoryOk ? null : `territory(${geo.country}${geo.region ? `-${geo.region}` : ''})`,
+        vpnOk ? null : 'vpn-or-proxy',
+        sanctioned ? 'sanctions' : null,
+        ageOk ? null : 'attestation-missing-or-stale',
+      ].filter(Boolean);
+      logGeo('BLOCK', req.ip, `packet refused: ${failed.join(', ')}`);
       return GENERIC_REJECTION;
     }
+    logGeo('ALLOW', req.ip, `packet issued: country=${geo.country}`);
 
     const issuedAt = deps.now();
     const fields: EntryPacketFields = {
@@ -149,8 +187,27 @@ export async function issuePacket(
 export async function geoVerdict(deps: PacketServiceDeps, ip: string): Promise<boolean> {
   try {
     const geo = await deps.geo.lookup(ip);
-    return territoryAllowed(deps.config.territories, geo.country, geo.region) && !geo.vpnOrProxy;
-  } catch {
+    const territoryOk = territoryAllowed(deps.config.territories, geo.country, geo.region);
+    if (!territoryOk) {
+      logGeo('BLOCK', ip, `territory schedule: ${geo.country}${geo.region ? `-${geo.region}` : ''}`);
+      return false;
+    }
+    if (geo.vpnOrProxy) {
+      logGeo('BLOCK', ip, `vendor reports vpn/proxy/tor: ${geo.country}`);
+      return false;
+    }
+    logGeo('ALLOW', ip, `country=${geo.country}`);
+    return true;
+  } catch (e) {
+    // THE fix. A vendor that is unreachable, out of quota, or answering a
+    // shape we cannot read produced a silent `false` here — identical to a
+    // country on the block list. It is now named, and the vendor's own
+    // error text carries the distinction (GeoQuotaError says so outright).
+    logGeo(
+      'BLOCK',
+      ip,
+      `LOOKUP FAILED (this is NOT a territory decision) — ${e instanceof Error ? e.message : String(e)}`
+    );
     return false;
   }
 }

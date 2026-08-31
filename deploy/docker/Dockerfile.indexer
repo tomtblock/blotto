@@ -5,6 +5,13 @@
 # package gets its own npm ci (the repo's per-package layout, no hoisting).
 FROM node:22-slim
 
+# Which commit this image was built from. Two incidents on 2026-08-31
+# came from a green deploy shipping code older than the fix, and neither
+# was visible from outside the container. A service that names its own
+# commit at startup answers that question directly.
+ARG BLOTTO_BUILD_COMMIT=unknown
+ENV BLOTTO_BUILD_COMMIT=$BLOTTO_BUILD_COMMIT
+
 WORKDIR /app
 COPY backend backend
 COPY config config

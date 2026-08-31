@@ -1,0 +1,54 @@
+# Build context for all four service images. Every one of them deploys with
+# `flyctl deploy .` from the repository root (deploy-backend.yml), so this one
+# file governs the context for indexer, packet, daemon and review alike.
+#
+# 2026-08-31: the context was 4.9 GB. Each image reinstalls its own
+# dependencies from package-lock anyway (`npm ci` per package in every
+# Dockerfile), so shipping the local node_modules was pure waste — uploaded
+# four times per deploy, and paid again on every CI run.
+#
+# Rule: this file excludes things the IMAGES DO NOT NEED. The Dockerfiles copy
+# `backend/` and `config/`; anything outside that is a candidate, but is left
+# in only where a build step genuinely reads it.
+
+# Installed dependencies — every image runs its own `npm ci`.
+node_modules/
+**/node_modules/
+
+# Rust build output. The images are Node; the program is deployed separately
+# by scripts/deploy-devnet.sh, never from inside a service image.
+target/
+
+# Next.js build output and cache — the app deploys to Vercel, not to Fly.
+.next/
+**/.next/
+app/
+
+# Version control and CI metadata.
+.git/
+.github/
+.githooks/
+
+# Test suites and fixtures. The images run services, never tests.
+tests/
+**/*.spec.ts
+**/*.test.ts
+
+# Editor, OS and tooling noise.
+.vscode/
+.idea/
+.DS_Store
+**/*.log
+**/*.tsbuildinfo
+.vercel/
+
+# Local environment files must never enter an image layer. The services read
+# their configuration from Fly secrets at runtime.
+.env
+.env.*
+!.env.example
+
+# Documentation and reports.
+docs/
+*.md
+!README.md

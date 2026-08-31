@@ -88,6 +88,7 @@ function buildCustody(
 }
 
 export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> {
+  console.log(`${SERVICE}: build ${env.BLOTTO_BUILD_COMMIT ?? 'unknown'}`);
   const intervalMs = Number(env.BLOTTO_DAEMON_INTERVAL_MS ?? 15_000);
   const healthPort = Number(env.BLOTTO_DAEMON_HEALTH_PORT ?? 8084);
   const db = createPool(loadPostgresConfig(env));

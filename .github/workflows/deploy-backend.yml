@@ -220,7 +220,7 @@ jobs:
           fi
 
       - name: Deploy indexer
-        run: flyctl deploy . --config deploy/fly/indexer.fly.toml --remote-only --yes --ha=false
+        run: flyctl deploy . --config deploy/fly/indexer.fly.toml --remote-only --yes --ha=false --build-arg BLOTTO_BUILD_COMMIT="$GITHUB_SHA"
 
       - name: Stage packet secrets
         run: |
@@ -270,7 +270,7 @@ jobs:
           fi
 
       - name: Deploy packet service
-        run: flyctl deploy . --config deploy/fly/packet.fly.toml --remote-only --yes --ha=false
+        run: flyctl deploy . --config deploy/fly/packet.fly.toml --remote-only --yes --ha=false --build-arg BLOTTO_BUILD_COMMIT="$GITHUB_SHA"
 
       - name: Stage daemon secrets
         if: steps.pre.outputs.deploy_daemon == 'true'
@@ -296,7 +296,7 @@ jobs:
 
       - name: Deploy daemon
         if: steps.pre.outputs.deploy_daemon == 'true'
-        run: flyctl deploy . --config deploy/fly/daemon.fly.toml --remote-only --yes --ha=false
+        run: flyctl deploy . --config deploy/fly/daemon.fly.toml --remote-only --yes --ha=false --build-arg BLOTTO_BUILD_COMMIT="$GITHUB_SHA"
 
       - name: Stage review secrets
         if: steps.pre.outputs.deploy_review == 'true'
@@ -309,7 +309,7 @@ jobs:
 
       - name: Deploy review service
         if: steps.pre.outputs.deploy_review == 'true'
-        run: flyctl deploy . --config deploy/fly/review.fly.toml --remote-only --yes --ha=false
+        run: flyctl deploy . --config deploy/fly/review.fly.toml --remote-only --yes --ha=false --build-arg BLOTTO_BUILD_COMMIT="$GITHUB_SHA"
 
       # `flyctl deploy` updates a STOPPED machine in place without starting
       # it (incident 2026-08-29: the indexer sat stopped through two green
