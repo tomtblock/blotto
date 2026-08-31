@@ -96,6 +96,11 @@ function buildGeo(env: NodeJS.ProcessEnv): GeoLookup {
 const REPO_ROOT = resolve(__dirname, '..', '..', '..');
 
 export function main(env: NodeJS.ProcessEnv = process.env): void {
+  // FIRST line, before anything can fail: which code is actually running.
+  // Both of 2026-08-31's incidents were a deploy shipping code older than
+  // the fix, diagnosed only by comparing a commit on a web page against a
+  // branch. The service can simply say.
+  console.log(`${SERVICE}: build ${env.BLOTTO_BUILD_COMMIT ?? 'unknown'}`);
   const port = Number(env.BLOTTO_PACKET_PORT ?? 8082);
   const db = createPool(loadPostgresConfig(env));
   const territories = loadTerritorySchedule(

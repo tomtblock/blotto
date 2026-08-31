@@ -9,7 +9,14 @@
 import { strict as assert } from 'assert';
 import { IpLocateGeoLookup, GeoQuotaError, GeoAuthError } from '../src/geo-iplocate';
 import { CachingGeoLookup } from '../src/geo-cache';
+import { geoVerdict } from '../src/service';
 import type { GeoLookup } from '../src/service';
+import { loadTerritorySchedule } from '../src/territories';
+import { resolve } from 'path';
+
+const TERRITORIES = loadTerritorySchedule(
+  resolve(__dirname, '..', '..', '..', 'config', 'territories.json')
+);
 
 // Captured verbatim from https://iplocate.io/api/lookup/8.8.8.8, trimmed to
 // the fields the adapter reads plus enough context to stay recognisable.
@@ -220,5 +227,77 @@ describe('CachingGeoLookup', () => {
     });
     for (let i = 0; i < 100; i++) await c.lookup(`10.0.0.${i}`);
     assert.ok(c.misses === 100);
+  });
+});
+
+/**
+ * The gap that made 2026-08-31 expensive: `/geo` answered `false` for a
+ * vendor fault and for a blocked country identically, and logged neither.
+ * The caller must still learn nothing; the operator must learn everything.
+ */
+describe('the geo decision is named in the log, never in the answer', () => {
+  const capture = async (fn: () => Promise<unknown>) => {
+    const lines: string[] = [];
+    const spy = console.log;
+    console.log = (m?: unknown) => void lines.push(String(m));
+    try {
+      return { result: await fn(), lines };
+    } finally {
+      console.log = spy;
+    }
+  };
+  const deps = (lookup: () => Promise<{ country: string; vpnOrProxy: boolean }>) =>
+    ({
+      geo: { lookup },
+      config: { territories: TERRITORIES, termsVersion: 1, kycTier: 0 },
+    }) as never;
+
+  it('names a LOOKUP FAILURE distinctly from a territory decision', async () => {
+    const { result, lines } = await capture(() =>
+      geoVerdict(
+        deps(async () => {
+          throw new GeoQuotaError(429);
+        }),
+        '203.0.113.7'
+      )
+    );
+    assert.equal(result, false, 'the answer stays fail-closed and unchanged');
+    const line = lines.find((l) => l.includes('geo BLOCK'));
+    assert.ok(line, 'the decision must be logged');
+    assert.match(line, /LOOKUP FAILED/);
+    assert.match(line, /NOT a territory decision/);
+    assert.match(line, /QUOTA OR RATE LIMIT/, "the vendor's own reason carries through");
+  });
+
+  it('names a territory block as a territory block', async () => {
+    const { result, lines } = await capture(() =>
+      geoVerdict(deps(async () => ({ country: 'BE', vpnOrProxy: false })), '203.0.113.7')
+    );
+    assert.equal(result, false);
+    assert.match(lines.find((l) => l.includes('geo BLOCK'))!, /territory schedule: BE/);
+  });
+
+  it('names a vpn block as a vpn block', async () => {
+    const { lines } = await capture(() =>
+      geoVerdict(deps(async () => ({ country: 'AR', vpnOrProxy: true })), '203.0.113.7')
+    );
+    assert.match(lines.find((l) => l.includes('geo BLOCK'))!, /vpn\/proxy\/tor/);
+  });
+
+  it('logs an allow, and Argentina is one', async () => {
+    const { result, lines } = await capture(() =>
+      geoVerdict(deps(async () => ({ country: 'AR', vpnOrProxy: false })), '203.0.113.7')
+    );
+    assert.equal(result, true, 'AR is not on the block list');
+    assert.match(lines.find((l) => l.includes('geo ALLOW'))!, /country=AR/);
+  });
+
+  it('never writes a whole address to the log', async () => {
+    const { lines } = await capture(() =>
+      geoVerdict(deps(async () => ({ country: 'AR', vpnOrProxy: false })), '203.0.113.7')
+    );
+    const line = lines.find((l) => l.includes('geo '))!;
+    assert.ok(!line.includes('203.0.113.7'), 'the full address must not be logged');
+    assert.match(line, /203\.0\.x\.x/);
   });
 });
