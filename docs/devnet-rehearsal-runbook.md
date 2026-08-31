@@ -26,6 +26,17 @@ any file containing it. The original draft's standing rule 1 would not have merg
 2. Secrets are typed into destination fields, never pasted into chat, files, commits
    or logs.
 3. A service refusing to start on a missing credential is correct. Never loosen it.
+3a. **Set credentials in GitHub repository secrets and deploy. Never hand-set a Fly
+   secret.** Fly is a cache of what the workflow stages, not a place to edit. On
+   2026-08-31 a hand-set `TURNKEY_API_BASE_URL` on `blotto-packet` diverged from
+   GitHub's value and broke entry issuance for roughly ninety minutes with no visible
+   cause — every other credential was identical, the service booted clean, and the
+   only symptom was a generic rejection. The deploy that reconciled the two fixed it.
+   When Fly and GitHub disagree, the running service is wrong and nothing says so.
+3b. **To find such a divergence: snapshot `fly secrets list` before a deploy and
+   compare digests after.** A digest that moved is a value where Fly and GitHub
+   disagreed. Neither store reveals values, so this is the only comparison available —
+   and it is what identified the base URL as the single wrong one.
 4. If a verification fails, stop. Do not proceed with a half-working credential
    behind you.
 5. Ask "what would distinguish this explanation from the alternatives" before
