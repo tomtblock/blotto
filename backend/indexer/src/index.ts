@@ -105,6 +105,11 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
   // Sink selected by BLOTTO_MONITOR_SINK (default `logging`); `serve` exposes `/metrics` under
   // the `prometheus` sink so one Alloy agent can scrape it (Step 6).
   const monitor = buildMonitor(loadMonitor(), 'indexer');
+  // FIRST, before any command can fail: which code is running, and against
+  // what. Two deploys on 2026-08-31 shipped code older than the fix and were
+  // diagnosed only by comparing a commit on a web page against a branch.
+  console.log(`${SERVICE}: build ${process.env.BLOTTO_BUILD_COMMIT ?? 'unknown'}`);
+
   const command = argv[0];
   switch (command) {
     case 'migrate':

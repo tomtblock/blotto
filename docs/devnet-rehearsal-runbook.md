@@ -247,6 +247,25 @@ admin-signed rotation (`register-signers --entry-signer`), not a redeploy.
 
 ## C2 — Geo vendor
 
+**C2 IS CLOSED (2026-08-31).** Verified live from Buenos Aires:
+
+```
+packet: geo = IPLOCATE (https://iplocate.io/api/lookup), per-IP cache 900000ms
+packet: geo ALLOW 2800:… — country=AR
+```
+
+No `GEO STUB` line, and the entry signer named as TURNKEY in the same startup
+block. **With C1 also closed, Stage C is complete and C3 is the next step.**
+
+Two costs paid to get here, both recorded because they are the same failure
+twice: a service that knows something and cannot say it. `/geo` answered
+`false` identically for a vendor fault and a blocked country, and logged
+neither; and two green deploys shipped code older than the fix. Every service
+now prints its build commit first, then names each credentialed seam it chose,
+and every geo decision is logged with its reason. **Hold that standard for any
+new service — it is what turned the last fault from an hour of guesswork into
+one attempt.**
+
 **Requires B-a and B-b.** Country-level blocks are what `config/territories.json`
 carries today (`{"blocked":["BE","AU"]}`); the schedule format *also* supports
 sub-national entries (`US-NY`), and `decide()` honours them when the lookup returns
