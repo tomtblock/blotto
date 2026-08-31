@@ -19,7 +19,9 @@
        silently downgrade a Turnkey deployment to the development key)
  *
  *   Geo, one of:
- *     GEO_VENDOR_URL + GEO_VENDOR_API_KEY      (production — R2 vendor)
+ *     GEO_VENDOR_URL + GEO_VENDOR_API_KEY      (production — IPLocate, R2)
+ *       optional: GEO_VENDOR_ATTEMPTS (3), GEO_VENDOR_TIMEOUT_MS (4000),
+ *       GEO_CACHE_TTL_MS (900000; 0 disables the per-IP cache)
  *     GEO_STUB_COUNTRY [+ GEO_STUB_REGION/GEO_STUB_VPN]  (dev stub)
  *
  * Sanctions: no vendor is wired in this repository yet — the deployment
@@ -37,6 +39,8 @@ import { PgCiphertextStore } from '../../sealing/src/store';
 import { serveEntryApi } from './server';
 import { buildSigner } from './signer-select';
 import { StubGeoLookup, VendorHttpGeoLookup } from './geo-adapters';
+import { IpLocateGeoLookup } from './geo-iplocate';
+import { CachingGeoLookup } from './geo-cache';
 import { loadTermsVersion } from './attestations';
 import { loadTerritorySchedule } from './territories';
 import { PgAttestationStore, PgNotifyPreferenceStore } from './stores-pg';
@@ -48,7 +52,27 @@ const SERVICE = 'packet';
 
 function buildGeo(env: NodeJS.ProcessEnv): GeoLookup {
   if (env.GEO_VENDOR_URL && env.GEO_VENDOR_API_KEY) {
-    return new VendorHttpGeoLookup(env.GEO_VENDOR_URL, env.GEO_VENDOR_API_KEY);
+    // IPLocate is the vendor of record (R2). `VendorHttpGeoLookup` remains
+    // the documented generic seam for a future vendor swap; it is not the
+    // production path and never matched IPLocate's actual contract.
+    const vendor = new IpLocateGeoLookup({
+      baseUrl: env.GEO_VENDOR_URL,
+      apiKey: env.GEO_VENDOR_API_KEY,
+      attempts: Number(env.GEO_VENDOR_ATTEMPTS ?? 3),
+      timeoutMs: Number(env.GEO_VENDOR_TIMEOUT_MS ?? 4000),
+    });
+    // The plan's request budget is real: two lookups per entrant (the /geo
+    // pre-flight on page load, then /packet) across 64 entrants is 128 per
+    // pool, against a DAILY cap over a finite, non-renewing credit balance.
+    // The cache changes no verdict — see geo-cache.ts for why — it only
+    // stops the same address being asked about twice.
+    const ttlMs = Number(env.GEO_CACHE_TTL_MS ?? 15 * 60 * 1000);
+    if (ttlMs > 0) {
+      console.log(`${SERVICE}: geo = IPLOCATE (${env.GEO_VENDOR_URL}), per-IP cache ${ttlMs}ms`);
+      return new CachingGeoLookup(vendor, { ttlMs });
+    }
+    console.log(`${SERVICE}: geo = IPLOCATE (${env.GEO_VENDOR_URL}), cache DISABLED`);
+    return vendor;
   }
   if (env.GEO_STUB_COUNTRY) {
     console.warn(`${SERVICE}: using the GEO STUB (dev only) — country=${env.GEO_STUB_COUNTRY}`);
