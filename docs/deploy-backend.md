@@ -27,13 +27,40 @@ Fly.io is where the two services run (Frankfurt, EU — our hosting rule).
 2. Add a payment card when asked (Settings → Billing). The two small
    machines this deploys cost roughly **$5–10/month** total.
 
-## Step 2 — Create a deploy token (~2 min)
+## Step 2 — Create a deploy token (~4 min, in the terminal)
 
-1. In the Fly.io dashboard, open **Tokens** (under your account/organization
-   settings), or go to **fly.io/user/personal_access_tokens**.
-2. Click **Create token**, name it `blotto-deploy`, create it, and **copy
-   the token text** — you'll paste it in Step 4. Treat it like a password:
-   paste it only where Step 4 says, never into chat or email.
+**This must be an *organization* token, and the dashboard cannot create one.**
+Since 5 Sep 2026 an organization on this account requires Single Sign On, and
+Fly no longer honours account-level "personal access tokens" — the dashboard
+refuses to create them and the existing ones stopped authenticating. The Fly
+tokens page says as much in a yellow banner.
+
+Open a terminal and run these four, one at a time:
+
+```bash
+fly auth login      # opens a browser; complete the sign-in there
+fly auth whoami     # should print your email
+fly orgs list       # note the SLUG of the org that owns the blotto apps
+fly apps list       # blotto-indexer and blotto-packet should both be listed
+```
+
+Then create the token, substituting the slug from `fly orgs list`:
+
+```bash
+fly tokens create org --org <slug> --name blotto-deploy-ci
+```
+
+It prints one long line. **Copy the whole line, including the leading
+`FlyV1 ` and the space after it** — a Fly token contains a space, and a copy
+that starts at `fm2_` authenticates against nothing and fails exactly like a
+rejected one. You'll paste it in the next step but one. Treat it like a
+password: paste it only into the GitHub secret field, never into chat or
+email.
+
+The default expiry is about twenty years, so this is not a recurring chore.
+What is worth writing into the key register in
+`docs/devnet-rehearsal-runbook.md` is the **org slug** and the date you
+created it — the org is the thing that scopes what this token may do.
 
 ## Step 3 — Create the database (~5 min)
 
@@ -125,15 +152,16 @@ site shows the real (empty) devnet state.
 
 ## Honest small print
 
-- **The location check runs in stub mode.** No geo-lookup vendor is
-  contracted yet (roadmap R2), so the deployment uses the development
-  stub: every visitor's location resolves as United Kingdom, which the
-  schedule allows. That means the Belgium/Australia block is **not
-  actually enforced** while the stub is in — acceptable on devnet where
-  no real money moves, **not acceptable for launch**. Contracting the geo
-  vendor is on the founder to-do list; the moment its two credentials are
-  configured, the stub is ignored and fail-closed + the real block-list
-  take over.
+- **The location check is live** (IPLocate, since 2026-08-31). Both
+  `GEO_VENDOR_URL` and `GEO_VENDOR_API_KEY` are configured, so the
+  development stub — which resolved every visitor as United Kingdom and
+  therefore enforced nothing — is ignored, and the run's final step prints
+  a line if it ever comes back. Ticking `allow_dev_credentials` would
+  restore that stub wherever a production credential is absent; leave it
+  unticked. A vendor outage or an exhausted quota refuses the entry and
+  says so in the log as `LOOKUP FAILED (this is NOT a territory
+  decision)`, which is how it tells itself apart from a real country
+  block.
 - **One secret is generated automatically** — the Helius webhook shared
   secret, on first deploy, kept stable across redeploys. It is ours to
   issue: no external party holds an authoritative copy. Nothing else is
@@ -141,6 +169,20 @@ site shows the real (empty) devnet state.
   and set the geo stub on every run, which silently undid a credential swap
   at the next deploy click; both are now removed, and the workflow actively
   clears them from the app once the real credentials are staged.
+- **Troubleshooting — `Unauthorized` or "You must be authenticated to view
+  this":** Fly is refusing our credential outright. The tell is that the
+  token still appears in the dashboard, unrevoked and unexpired — nothing
+  there looks wrong, because it is the *type* of token that is no longer
+  accepted, not that particular one. This is what happened on 2026-09-05:
+  an organization on the account began requiring SSO and every
+  account-level personal access token stopped working at once. Create an
+  **org** token (Step 2) and update the secret (Step 4). The same event
+  also breaks `fly` on your own laptop until you re-run `fly auth login`,
+  so an empty `fly logs` while this is unfixed is not evidence about the
+  service. **Nothing was deployed** and nothing was changed on any app, so
+  re-running after replacing the token is safe. The run now stops for this
+  in its first Fly step, naming the token; before 2026-09-05 it surfaced
+  four steps later as the misleading `blotto-indexer has no public IPs`.
 - **Troubleshooting — "name is taken":** Fly app names are global. If the
   log says `blotto-indexer` or `blotto-packet` is taken by someone else,
   tell me and I'll rename ours (a one-line change in `deploy/fly/`).

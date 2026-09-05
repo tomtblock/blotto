@@ -42,6 +42,7 @@ any file containing it. The original draft's standing rule 1 would not have merg
 | Deploy keypair | `~/.config/solana/blotto/fee-payer-devnet.json` (`GXKX…`) | upgrade authority; retire after C4 |
 | Program keypair | `~/.config/solana/blotto/blotto_cup-program-devnet.json` | `BLOTTO_PROGRAM_KEYPAIR` |
 | Irys wallet | `~/.config/solana/blotto/irys-devnet.json` (`HG56…`) | `IRYS_UPLOAD_KEY` source |
+| Fly deploy token | GitHub secret `FLY_API_TOKEN` · **must be an ORG token** (`fly tokens create org --org <slug>`) · org slug: `personal` (the only org on the account; both apps owned by it) · created: 2026-09-05 | every backend deploy. Account-level personal access tokens stopped authenticating on 2026-09-05 when an org on the account began requiring SSO; the dashboard cannot create the replacement |
 | **Entry signer** (VERIFIED 2026-08-31) | Turnkey `blotto-entry-signer-devnet`, Ed25519, non-exportable · key id `79672a1a-3c43-481a-a304-82f0ee10709c` · address `9XhwKrXjKwFdYJatxYMZYyfB6nFLbmdFNSuM5JTyy8TP` · `ENTRY_SIGNER_PUBLIC_KEY_HEX` = `7ebb34f6a4a985b0e3fc5a2ab0488cae67e4c7577b2c75dc21eac677a922a4b6` | goes on-chain as `Config.entry_signer` at C3 |
 
 **The entry signer is confirmed end to end**: `npm run check-signer` in
@@ -152,11 +153,10 @@ bootstrap. At a pessimistic 0.006 the 20-pool minimum rises to 28.0 / 24.3 / 24.
 22.8.) Pool 1's measured rent decides which column is real — that is why it is
 reported before pool 2 runs.
 
-**End-of-rehearsal recovery:** `min_platform + reserve_pots × pot[0]` (5.62 SOL) is
-locked only while tier 0 is *enabled and idle*. Running
-`set-open-tiers --tiers 0,0,0,0,0,0,0` after the last pool drops the reserve term, so
-the floor falls to `min_platform` alone and a final `withdraw-platform` recovers the
-5.12 SOL pot reserve.
+**End-of-rehearsal recovery** is step 5.2a in Stage D: `min_platform + reserve_pots ×
+pot[0]` (5.62 SOL) is locked only while tier 0 is *enabled and idle*, so disabling the
+tier after the last pool drops the reserve term and a final `withdraw-platform`
+recovers 5.12 SOL.
 
 The treasury floor is not a suggestion: `open_pool` requires
 `platform.lamports − platform_refundable ≥ pot + min_platform + idle_tier_reserve`.
@@ -247,10 +247,11 @@ admin-signed rotation (`register-signers --entry-signer`), not a redeploy.
 
 ## C2 — Geo vendor
 
-**C2 status: negatives passed, ONE end-to-end gap remains.** The allow path is
-live from Buenos Aires (`geo = IPLOCATE`, `geo ALLOW … country=AR`, no `GEO STUB`
-line). All four negatives run against the real vendor through the production
-adapter, each distinguishable in the log:
+**C2 status: CLOSED (2026-09-05).** The allow path is live (`geo = IPLOCATE`,
+`geo ALLOW … country=AR`, no `GEO STUB` line) and the refusal path is proven in
+production, not only on the bench — see "What production actually proved" below.
+All four negatives run against the real vendor through the production adapter,
+each distinguishable in the log:
 
 | Case | Answer | Log |
 |---|---|---|
@@ -260,21 +261,66 @@ adapter, each distinguishable in the log:
 | Malformed answer | `false` | `LOOKUP FAILED … no usable country_code` |
 | **Quota 429** | `false` | `LOOKUP FAILED … QUOTA OR RATE LIMIT (HTTP 429) — the daily request cap is spent … This is NOT a territory block` |
 
-**The remaining gap:** BE and AU were proven against the live vendor through the
-production adapter, not through the deployed service from an address in those
-countries. There is no honest way to do the latter without an exit node there —
-and deliberately so: the header override that would allow it was a bypass, now
-closed (below). Record this as the limit of the evidence rather than implying more.
+**What production actually proved.** These lines are from the deployed service
+on 5 Sep, before the fix shipped — the bench is not involved:
 
-**The bypass, found by running these negatives (2026-08-31).** The gate decided
-on `X-Forwarded-For.split(',')[0]` — the LEFTMOST hop, which a proxy appends to
-rather than overwrites, so it is whatever the caller typed. Sending
-`X-Forwarded-For: <a Belgian address>` made the live service refuse; sending
-nothing made it allow. **The caller chose the verdict of the gate.** It was
-simultaneously a rate-limit bypass, since the limiter keyed on the same value.
-Resolution is now `Fly-Client-IP` (proxy-set, overwritten every request) then the
-RIGHTMOST forwarded hop, through one shared resolver so the limiter and the gate
-can never disagree.
+```
+20:51:52  geo BLOCK 81.246.x.x — territory schedule: BE
+20:51:53  geo BLOCK 1.128.x.x  — territory schedule: AU
+```
+
+IPLocate genuinely resolved those addresses to BE and AU and `decide()` genuinely
+refused them, in Frankfurt, in the running service. The bypass was never a defect
+in the decision or in the vendor integration — it was only *which address got
+looked up*. So the whole path "vendor says BE → refuse" is demonstrated in
+production, and the fix changed exactly one thing: where the address comes from.
+
+**The limit of the evidence.** No connection has originated in a blocked
+territory, and none can without an exit node there — deliberately, since the
+header override that would have simulated one *was* the bypass. What is
+therefore assumed rather than tested is that Fly's edge reports the true origin
+of a connection. That is a property of their proxy, not of our code, and no test
+written here could establish it. Record it as the assumption it is.
+
+**The bypass, found by running these negatives (2026-08-31). CLOSED IN
+PRODUCTION 2026-09-05.** The gate decided on `X-Forwarded-For.split(',')[0]` —
+the LEFTMOST hop, which a proxy appends to rather than overwrites, so it is
+whatever the caller typed. Sending `X-Forwarded-For: <a Belgian address>` made
+the live service refuse; sending nothing made it allow. **The caller chose the
+verdict of the gate.** It was simultaneously a rate-limit bypass, since the
+limiter keyed on the same value. Resolution is now `Fly-Client-IP` (proxy-set,
+overwritten every request) then the RIGHTMOST forwarded hop, through one shared
+resolver so the limiter and the gate can never disagree.
+
+The fix merged as PR #50 on 31 Aug and **did not reach production until
+5 Sep 22:00 UTC** (deploy run #11, commit `804302b`) — five days serving the
+defect behind a merged fix. Two causes, both now closed: the deploy step was
+skipped on the first attempt (merging is not deploying), and the second attempt
+was refused by Fly when an organization on the account began requiring SSO and
+account-level tokens stopped authenticating.
+
+**Production vector, re-run independently after the deploy** — not by the person
+who shipped it, from a different address than the founder's:
+
+```
+no header                            → {"allowed":true}
+X-Forwarded-For: 81.246.0.1   (BE)   → {"allowed":true}
+X-Forwarded-For: 1.128.0.1    (AU)   → {"allowed":true}
+X-Forwarded-For: 81.246.0.1, 8.8.8.8 → {"allowed":true}
+```
+
+The fourth line is the one that matters: a forged leftmost entry with a real hop
+appended, which is the actual attack rather than the single-value form. Before
+the deploy the second line returned `false`. **The header no longer changes the
+answer.**
+
+The service's own log shows why, and is the stronger evidence: all four requests
+resolved to the **same** address — `160.79.x.x`, `country=US`, the prober's real
+egress — including the two carrying forged BE and AU headers. Compare the
+pre-deploy lines above, where the forged addresses were the ones looked up. The
+caller-supplied value is no longer read at all. Run #11's log independently shows `entry signer = TURNKEY` with the
+key verified on 31 Aug, and **no `GEO STUB` line** — the vendor path, not the
+stub that admits everyone as GB.
 
 **RATIFIED — the 15-minute per-IP cache (founder, pending).** What it changes
 about enforcement: **nothing about which addresses are allowed.** The decision is
@@ -326,11 +372,8 @@ Whichever key signs becomes admin **permanently**. There is no `set_admin`.
 generated — do C6's key generation before this step, not after** · C0.1 done
 (Phantom working) · vault holds ≥ 0.05 SOL for the Config PDA's rent.
 
-**Confirm before signing — `--min-platform` is a founder-owned number.**
-`devnet-rehearsal.md` writes it as `<founder-ratified-lamports>`. 0.5 SOL is a
-proposal awaiting your ratification, not a fact. It matters twice: it is the
-permanent floor term, and `set_treasury_policy` (which would change it) has no CLI
-today (B-c).
+**`--min-platform` = 0.5 SOL — RATIFIED (founder, 2026-08-29).** It is the permanent
+floor term. `set-treasury-policy` can change it later, now that the command exists.
 
 **1. [ARCH] emits the proposal** ⚠ VERIFY exact flags against `scripts/admin.ts`
 USAGE:
@@ -352,7 +395,7 @@ lamports. Prefer the `sol` form — it is readable in a Squads proposal review.
 - `--admin` reads `9EEW…` and **not** `9EL1m9wv…`
 - the entry signer matches what Turnkey printed in C1
 - ceilings match the confirmed table (each tier's gross intake, entry × 64)
-- `--min-platform` is the value you ratified
+- `--min-platform` reads `0.5sol`
 
 **3. [YOU] paste into a Squads proposal, approve, execute.**
 
@@ -405,6 +448,11 @@ solana program set-upgrade-authority 5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH1
 
 **After this, every deploy is a Squads proposal.** Decide with the architect whether
 to do it before or after the rehearsal's last redeploy. Then retire `GXKX…`.
+
+**Top up `GXKX…` before running this.** It holds ~0.108 SOL after funding Irys three
+times on 2026-08-29; a transfer that runs out of gas mid-authority-change is the one
+failure this step must not have. A few hundredths of a SOL is enough, but check it
+rather than assuming.
 
 ---
 
@@ -482,6 +530,17 @@ pools through the front end, the rest through `Web3Chain`.
 full pool end to end before committing to twenty. **[ARCH]** measures real rent on
 pool 1 and **reports before pool 2 runs**.
 
+**Pool 1 carries two explicit pass/fail gates, not observations.**
+
+1. **The prize sweep-back works.** Every budget number assumes the harness returns
+   the 5.12 SOL of prize money from the 16 winner wallets to the bank. Assert it:
+   the bank's net change across pool 1 must be about **−0.41 SOL**, not −5.5. If the
+   sweep-back silently does not happen the run still *looks* fine, and the bank is
+   empty by pool 4. A 13× difference is impossible to miss if someone looks — so
+   look, and record the number.
+2. **Measured rent decides the sweep cadence** (below). Record the bank's net change
+   per pool; that single figure carries rent, fees and any leak at once.
+
 **Decision point:** if rent lands near 10 SOL, revisit the pool count before spending
 it.
 
@@ -503,6 +562,19 @@ matching the published bundle.
 - **One deliberate detection flag**, so `release_escrow` and `forfeit_escrow` are
   exercised once before they ever matter
 
+**5.2a End-of-run treasury recovery.** After pool 20 settles, and before Stage E:
+
+1. `set-open-tiers --tiers 0,0,0,0,0,0,0` — tier 0 stops being an enabled-and-idle
+   tier, so the `reserve_pots × pot[0]` term leaves the withdraw floor.
+2. `withdraw-platform --amount <treasury − 0.5 SOL> --destination <bank>` — recovers
+   the 5.12 SOL that was locked behind the reserve.
+3. `status` — confirm `open tiers: [0, 0, 0, 0, 0, 0, 0]` and the treasury at its
+   `min_platform` floor.
+
+Both are Squads proposals. This is also the only coverage `set-open-tiers` gets in the
+whole rehearsal, so it is a test as much as a recovery — run it deliberately, not as
+a cleanup afterthought.
+
 **5.3 Public verification.** All 20 verified from the verify page, wallet
 disconnected. **[YOU]** arrange one non-founder recompute from the URL alone.
 
@@ -510,10 +582,62 @@ disconnected. **[YOU]** arrange one non-founder recompute from the URL alone.
 2. **[YOU]** supply the Helius URL as an env var — public RPC will rate-limit.
 Timings go into `docs/devnet-rehearsal.md`.
 
-**Every 5 pools: `withdraw_platform` sweep, destination = the bank wallet.** That is
-what makes the 18 SOL budget recycle: each pool nets the treasury about +1.28 SOL
-(6.4 SOL of entries in, 5.12 SOL of pot out), so roughly 6.4 SOL is sweepable per
-five pools. Each sweep is an admin instruction, so each is a Squads proposal.
+## The sweep, and what "unattended" actually means
+
+**`withdraw_platform` sweep every 2 pools, destination = the bank wallet.** Each pool
+nets the treasury about +1.28 SOL (6.4 SOL of entries in, 5.12 SOL of pot out) while
+the bank bleeds the same amount, so the sweep is what keeps the bank solvent. It is
+an admin instruction, so **every sweep is a Squads proposal the founder approves and
+executes by hand.**
+
+That is the honest reconciliation with 5.1's "unattended": **unattended within a
+segment, not across the run.** No human is in the loop during a pool's fill-and-settle
+cycle — the daemon opens, seals, reveals, scores and pays without help. The founder is
+needed only at segment boundaries. Plan the run as **ten segments of two pools with a
+founder-attended sweep between them**, and say so in the timings rather than
+discovering it at pool 8.
+
+Two things make the boundaries cheap:
+
+- **Pre-stage every sweep proposal in one sitting.** The amount does not have to be
+  exact — a fixed, conservative 2.5 SOL clears the floor at every boundary — so all
+  ten can be created and reviewed together, then executed one per boundary. That turns
+  ten reviews into one review and ten clicks.
+- **Segment boundaries are natural checkpoints anyway.** The ledger reconciliation
+  5.2 wants, and the rent check below, both belong exactly there.
+
+This manual cost is bought by the decision to make the Squads vault the devnet admin.
+The alternative the rehearsal doc offers — a direct-signed local keypair as admin on
+devnet — would make sweeps scriptable and the run genuinely unattended, at the price
+of never exercising the Squads proposal path before mainnet. That path is also what
+5.2's pause drill runs on. Keeping the vault is the right call; this is what it costs.
+
+### The cadence trigger, set in advance
+
+Expected net bank burn is **~0.41 SOL per pool** — rent, since everything else
+recycles. Measure it on pool 1 and apply this directly; no judgement on the day:
+
+| Measured net burn per pool | Cadence |
+|---|---|
+| ≤ 0.42 SOL | sweep every 3 would hold, but see below |
+| ≤ 0.445 SOL | **sweep every 2 — the plan** |
+| ≤ 0.509 SOL | sweep every pool |
+| > 0.51 SOL | stop: cut the pool count or raise more devnet SOL |
+
+**Why every 2 rather than every 3.** At the repo's own pass-rent estimate, sweeping
+every 3 clears twenty pools by about 3% — and its low-water mark, mid-pool-18, is
+**0.24 SOL**. That is not a margin. Sweeping every 2 lifts the same low point to 1.52
+SOL for four extra boundaries. Re-check after pool 1: if measured burn comes in at or
+under 0.42 the every-3 cadence is available, but it should be a deliberate choice to
+spend the margin, not the default.
+
+Every additional ~3 SOL of devnet funding buys back one cadence step. If the faucets
+cooperate and the bank reaches ~25 SOL, sweep every 5 and the run is four boundaries.
+
+**Assert a floor-breaching withdrawal reverts first** — but note the mechanics: with
+`--emit-proposal` you would be pushing a deliberately failing proposal through Squads.
+Cheaper to assert the revert in the LiteSVM suite and record it, unless you want one
+burned proposal as live evidence. Decide which, in advance.
 
 Assert a floor-breaching withdrawal reverts first — but note the mechanics: with
 `--emit-proposal` you would be pushing a deliberately failing proposal through
@@ -563,3 +687,35 @@ indexer, the packet service, the daemon and the review service. Update all four.
 
 **Digest matching proves two apps hold the same value, not a correct one.** Verify
 against the source of truth.
+
+**A dead credential can look like a missing resource.** On 2026-09-05 the deploy
+announced `blotto-indexer has no public IPs — allocating` when the truth was that
+it had been refused permission to ask. Fly had rejected `FLY_API_TOKEN` outright;
+the step before it had already been told `You must be authenticated to view this`
+and hid it behind an `|| echo "$app exists"`.
+
+The cause was not expiry or revocation — the token was still listed in the Fly
+dashboard, unrevoked, looking perfectly healthy. An organization on the account
+had begun requiring **Single Sign On**, and Fly stopped honouring account-level
+personal access tokens as a class. The fix is an org token,
+`fly tokens create org --org <slug>`, which the dashboard cannot issue; see
+`docs/deploy-backend.md` Step 2. Four rules follow:
+
+1. **Read the step above the red one.** The first step to touch a service usually
+   knows the real answer; the red step is often only the first one honest enough
+   to stop.
+2. **A present credential is not a working credential.** The deploy now probes
+   Fly before it builds anything, and a rejection stops the run naming the token.
+   The same check does not yet exist for Turnkey, the geo vendor or Neon — their
+   failures still surface at boot rather than in preflight.
+3. **A vendor console showing a credential as healthy is not evidence it
+   authenticates.** Only a call that uses it is. This is the same lesson as the
+   entry signer on 2026-08-29, where the console and the live service disagreed.
+4. **The same event breaks `fly` on the founder's laptop.** Local flyctl holds
+   its own token of the same kind, so `fly logs` returns nothing and looks like
+   a silent service. **An empty log grep is not evidence about the service until
+   `fly auth whoami` succeeds.** This was misdiagnosed as "the machine has not
+   restarted" on the day.
+
+Replacing the token is safe at any point: nothing is staged or deployed until it
+authenticates, so a failed run leaves every app exactly as it was.
