@@ -39,7 +39,7 @@ any file containing it. The original draft's standing rule 1 would not have merg
 | Squads vault | `9EEWtzyu72a3DKJVUkCaeYX4HuBKD59xXCcENnDVe34Z` | **becomes `Config.admin`** |
 | Squads multisig | `9EL1m9wvqGSznHJ8zkS5YaXQnG4gq4aNYsbGnP1TmFyN` | **never `--admin`** |
 | Bank wallet | `4ydbVZuNupTPu1cKGCc2cePs95B8iMkrR4TvsCLiwcL1` | funds entrants; Squads member |
-| Deploy keypair | `~/.config/solana/blotto/fee-payer-devnet.json` (`GXKX…`) | upgrade authority; retire after C4 |
+| Deploy keypair | `~/.config/solana/blotto/fee-payer-devnet.json` = `GXKXLYHBWBAhp7LWNMEZbsuwGb3WHeoDBsmhfndwagXY` | upgrade authority; retire after C4. **Confirmed 2026-09-05 against the chain**, not against a document: the program's ProgramData account (`52jz82LJAuMdkiVqjat5ipqV1WXH26dutAuU3Wowfend`) names this key as upgrade authority. Verify with `solana address -k <path>` before C4 — if the file disagrees, stop |
 | Program keypair | `~/.config/solana/blotto/blotto_cup-program-devnet.json` | `BLOTTO_PROGRAM_KEYPAIR` |
 | Irys wallet | `~/.config/solana/blotto/irys-devnet.json` (`HG56…`) | `IRYS_UPLOAD_KEY` source |
 | Fly deploy token | GitHub secret `FLY_API_TOKEN` · **must be an ORG token** (`fly tokens create org --org <slug>`) · org slug: `personal` (the only org on the account; both apps owned by it) · created: 2026-09-05 | every backend deploy. Account-level personal access tokens stopped authenticating on 2026-09-05 when an org on the account began requiring SSO; the dashboard cannot create the replacement |
