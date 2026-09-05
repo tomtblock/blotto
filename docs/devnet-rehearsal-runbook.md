@@ -266,15 +266,39 @@ countries. There is no honest way to do the latter without an exit node there �
 and deliberately so: the header override that would allow it was a bypass, now
 closed (below). Record this as the limit of the evidence rather than implying more.
 
-**The bypass, found by running these negatives (2026-08-31).** The gate decided
-on `X-Forwarded-For.split(',')[0]` — the LEFTMOST hop, which a proxy appends to
-rather than overwrites, so it is whatever the caller typed. Sending
-`X-Forwarded-For: <a Belgian address>` made the live service refuse; sending
-nothing made it allow. **The caller chose the verdict of the gate.** It was
-simultaneously a rate-limit bypass, since the limiter keyed on the same value.
-Resolution is now `Fly-Client-IP` (proxy-set, overwritten every request) then the
-RIGHTMOST forwarded hop, through one shared resolver so the limiter and the gate
-can never disagree.
+**The bypass, found by running these negatives (2026-08-31). CLOSED IN
+PRODUCTION 2026-09-05.** The gate decided on `X-Forwarded-For.split(',')[0]` —
+the LEFTMOST hop, which a proxy appends to rather than overwrites, so it is
+whatever the caller typed. Sending `X-Forwarded-For: <a Belgian address>` made
+the live service refuse; sending nothing made it allow. **The caller chose the
+verdict of the gate.** It was simultaneously a rate-limit bypass, since the
+limiter keyed on the same value. Resolution is now `Fly-Client-IP` (proxy-set,
+overwritten every request) then the RIGHTMOST forwarded hop, through one shared
+resolver so the limiter and the gate can never disagree.
+
+The fix merged as PR #50 on 31 Aug and **did not reach production until
+5 Sep 22:00 UTC** (deploy run #11, commit `804302b`) — five days serving the
+defect behind a merged fix. Two causes, both now closed: the deploy step was
+skipped on the first attempt (merging is not deploying), and the second attempt
+was refused by Fly when an organization on the account began requiring SSO and
+account-level tokens stopped authenticating.
+
+**Production vector, re-run independently after the deploy** — not by the person
+who shipped it, from a different address than the founder's:
+
+```
+no header                            → {"allowed":true}
+X-Forwarded-For: 81.246.0.1   (BE)   → {"allowed":true}
+X-Forwarded-For: 1.128.0.1    (AU)   → {"allowed":true}
+X-Forwarded-For: 81.246.0.1, 8.8.8.8 → {"allowed":true}
+```
+
+The fourth line is the one that matters: a forged leftmost entry with a real hop
+appended, which is the actual attack rather than the single-value form. Before
+the deploy the second line returned `false`. **The header no longer changes the
+answer.** Run #11's log independently shows `entry signer = TURNKEY` with the
+key verified on 31 Aug, and **no `GEO STUB` line** — the vendor path, not the
+stub that admits everyone as GB.
 
 **RATIFIED — the 15-minute per-IP cache (founder, pending).** What it changes
 about enforcement: **nothing about which addresses are allowed.** The decision is
