@@ -119,9 +119,40 @@ describe('RateLimiter', () => {
 });
 
 describe('clientKeyFrom', () => {
-  it('prefers the left-most X-Forwarded-For hop (the originating client behind a proxy)', () => {
-    expect(clientKeyFrom('1.2.3.4, 10.0.0.1', '10.0.0.1')).to.equal('1.2.3.4');
-    expect(clientKeyFrom(['5.6.7.8, 10.0.0.1'], '10.0.0.1')).to.equal('5.6.7.8');
+  /*
+   * This block previously asserted the LEFT-most hop, and that assertion was
+   * the bypass. A proxy APPENDS to X-Forwarded-For rather than overwriting it,
+   * so the left-most entry is whatever the caller typed. On 2026-08-31 the
+   * live entry service could be told which country it was serving by sending
+   * one header — a territory-gate bypass (PID §8), and a rate-limit bypass
+   * too, since the limiter keyed on the same value.
+   *
+   * Only the right-most hop is observed by our own edge. Everything to its
+   * left came from someone we do not control.
+   */
+
+  it('takes the RIGHT-most hop — anything to its left is caller-supplied', () => {
+    expect(clientKeyFrom('1.2.3.4, 10.0.0.1', '10.0.0.1')).to.equal('10.0.0.1');
+    expect(clientKeyFrom(['5.6.7.8, 10.0.0.1'], '10.0.0.1')).to.equal('10.0.0.1');
+  });
+
+  it('REGRESSION: an injected left-most hop cannot choose the key', () => {
+    const injected = clientKeyFrom('81.246.0.1, 203.0.113.9', '203.0.113.9');
+    expect(injected).to.equal('203.0.113.9');
+    expect(injected, 'the caller-supplied value must never win').to.not.equal('81.246.0.1');
+  });
+
+  it('prefers Fly-Client-IP, which the proxy overwrites rather than appends', () => {
+    expect(clientKeyFrom('81.246.0.1, 1.128.0.1', '10.0.0.1', '203.0.113.9')).to.equal(
+      '203.0.113.9'
+    );
+  });
+
+  it('tolerates whitespace, empty hops and a trailing comma', () => {
+    expect(clientKeyFrom('81.246.0.1 , , 203.0.113.9 ,', '10.0.0.1')).to.equal('203.0.113.9');
+    expect(clientKeyFrom(' , , ', '9.9.9.9'), 'an all-empty header is no header').to.equal(
+      '9.9.9.9'
+    );
   });
 
   it('falls back to the socket address, then to a shared bucket', () => {
@@ -290,14 +321,43 @@ describe('applyHygiene', () => {
     expect(outcome.headers['X-Frame-Options']).to.equal('DENY');
   });
 
-  it('keys the limit off the forwarded client, not the proxy', () => {
+  it('a caller cannot mint a fresh budget by rotating X-Forwarded-For', () => {
+    // The old contract keyed on the left-most hop, so a caller who changed one
+    // header got an unlimited supply of buckets and the limiter did nothing.
     const limiter = new RateLimiter(on.rateLimit, fakeClock().now);
-    const viaProxy = (ip: string) =>
-      applyHygiene(req({ forwardedFor: `${ip}, 10.0.0.1`, remoteAddress: '10.0.0.1' }), on, limiter)
+    const claiming = (ip: string) =>
+      applyHygiene(req({ forwardedFor: `${ip}, 203.0.113.9`, remoteAddress: '203.0.113.9' }), on, limiter)
         .kind;
-    expect(viaProxy('2.2.2.2')).to.equal('continue');
-    expect(viaProxy('2.2.2.2'), 'same client, over budget').to.equal('rate_limited');
-    expect(viaProxy('3.3.3.3'), 'different client behind the same proxy').to.equal('continue');
+    expect(claiming('2.2.2.2')).to.equal('continue');
+    expect(claiming('2.2.2.2'), 'same caller, over budget').to.equal('rate_limited');
+    expect(
+      claiming('3.3.3.3'),
+      'a new claimed identity must NOT reset the budget'
+    ).to.equal('rate_limited');
+  });
+
+  it('ACCEPTED COST: callers sharing one egress share one budget', () => {
+    /*
+     * The deliberate trade. Distinguishing two callers behind a shared egress
+     * requires trusting a value that egress (or the caller) supplies, which is
+     * exactly what made the gate bypassable. So a large NAT gets one bucket,
+     * and one abusive caller behind it can consume the budget for the rest.
+     *
+     * Priced and accepted: the limit is 600/min with a burst of 120, and
+     * BLOTTO_API_RATE_LIMIT_ENABLED is not staged by the deploy workflow, so
+     * the limiter is off in production today. A forgeable key, by contrast,
+     * makes the limiter useless at any setting.
+     *
+     * Pinned as a test so the behaviour is a recorded decision rather than a
+     * surprise the first time someone reports being throttled.
+     */
+    const limiter = new RateLimiter(on.rateLimit, fakeClock().now);
+    const behindNat = () =>
+      applyHygiene(req({ forwardedFor: '10.0.0.1', remoteAddress: '10.0.0.1' }), on, limiter).kind;
+    expect(behindNat()).to.equal('continue');
+    expect(behindNat(), 'the second caller through the same egress shares the budget').to.equal(
+      'rate_limited'
+    );
   });
 });
 

@@ -177,14 +177,51 @@ export class RateLimiter {
  * yet, the deployment posture — and therefore whether this header may be trusted — is a 10.F
  * decision recorded there rather than guessed here.
  */
+/**
+ * The client address, resolved so that the CALLER CANNOT CHOOSE IT.
+ *
+ * 2026-08-31, found while running the territory gate's negative cases: the
+ * previous implementation took `X-Forwarded-For.split(',')[0]` — the LEFTMOST
+ * entry. A proxy APPENDS to that header, it does not overwrite it, so the
+ * leftmost entry is whatever the caller typed. Sending
+ * `X-Forwarded-For: <a Belgian address>` made the live service report Belgium
+ * and refuse the entry; sending nothing made it allow. The caller chose the
+ * verdict of a gate whose whole purpose is that they cannot.
+ *
+ * That is a territory-gate bypass (PID §8 / CLAUDE.md tradeoff #2) and it was
+ * also a rate-limit bypass, since the limiter keyed on the same value.
+ *
+ * Resolution order, most trustworthy first:
+ *
+ *   1. `Fly-Client-IP` — set by Fly Proxy from the peer it actually sees, and
+ *      OVERWRITTEN on every request, so a client cannot forge it (Fly's
+ *      request-headers documentation).
+ *   2. The RIGHTMOST `X-Forwarded-For` entry — the address our own proxy
+ *      observed and appended. Anything to its left came from the caller.
+ *   3. The socket peer, when we are not behind a proxy at all.
+ *
+ * `trustProxy` still gates 1 and 2: exposed directly, every header is the
+ * caller's and only the socket may be believed.
+ */
 export function clientKeyFrom(
   forwardedFor: string | string[] | undefined,
-  remoteAddress: string | undefined
+  remoteAddress: string | undefined,
+  flyClientIp?: string | string[] | undefined
 ): string {
-  const raw = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor;
-  const firstHop = raw?.split(',')[0]?.trim();
-  if (firstHop) {
-    return firstHop;
+  const one = (v: string | string[] | undefined): string | undefined =>
+    (Array.isArray(v) ? v[0] : v)?.trim() || undefined;
+
+  const fly = one(flyClientIp);
+  if (fly) return fly;
+
+  const raw = one(forwardedFor);
+  if (raw) {
+    // The LAST hop, not the first. The first is caller-supplied.
+    const hops = raw
+      .split(',')
+      .map((h) => h.trim())
+      .filter((h) => h.length > 0);
+    if (hops.length > 0) return hops[hops.length - 1];
   }
   return remoteAddress ?? 'unknown';
 }
@@ -302,6 +339,9 @@ export interface HygieneRequest {
   method: string | undefined;
   forwardedFor: string | string[] | undefined;
   remoteAddress: string | undefined;
+  /** Fly Proxy's own view of the peer; unforgeable because the proxy
+   * overwrites it. Preferred over X-Forwarded-For — see `clientKeyFrom`. */
+  flyClientIp?: string | string[] | undefined;
   origin: string | string[] | undefined;
 }
 
@@ -342,7 +382,9 @@ export function applyHygiene(
     return { kind: 'preflight', status: 204, headers: { ...cors, ...security } };
   }
 
-  const decision = limiter.check(clientKeyFrom(req.forwardedFor, req.remoteAddress));
+  const decision = limiter.check(
+    clientKeyFrom(req.forwardedFor, req.remoteAddress, req.flyClientIp)
+  );
   if (!decision.allowed) {
     return {
       kind: 'rate_limited',

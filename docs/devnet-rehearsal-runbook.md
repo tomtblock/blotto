@@ -247,6 +247,48 @@ admin-signed rotation (`register-signers --entry-signer`), not a redeploy.
 
 ## C2 — Geo vendor
 
+**C2 status: negatives passed, ONE end-to-end gap remains.** The allow path is
+live from Buenos Aires (`geo = IPLOCATE`, `geo ALLOW … country=AR`, no `GEO STUB`
+line). All four negatives run against the real vendor through the production
+adapter, each distinguishable in the log:
+
+| Case | Answer | Log |
+|---|---|---|
+| Belgium (real address) | `false` | `territory schedule: BE` |
+| Australia (real address) | `false` | `territory schedule: AU` |
+| Vendor unreachable | `false` | `LOOKUP FAILED (this is NOT a territory decision) — unreachable after N attempts` |
+| Malformed answer | `false` | `LOOKUP FAILED … no usable country_code` |
+| **Quota 429** | `false` | `LOOKUP FAILED … QUOTA OR RATE LIMIT (HTTP 429) — the daily request cap is spent … This is NOT a territory block` |
+
+**The remaining gap:** BE and AU were proven against the live vendor through the
+production adapter, not through the deployed service from an address in those
+countries. There is no honest way to do the latter without an exit node there —
+and deliberately so: the header override that would allow it was a bypass, now
+closed (below). Record this as the limit of the evidence rather than implying more.
+
+**The bypass, found by running these negatives (2026-08-31).** The gate decided
+on `X-Forwarded-For.split(',')[0]` — the LEFTMOST hop, which a proxy appends to
+rather than overwrites, so it is whatever the caller typed. Sending
+`X-Forwarded-For: <a Belgian address>` made the live service refuse; sending
+nothing made it allow. **The caller chose the verdict of the gate.** It was
+simultaneously a rate-limit bypass, since the limiter keyed on the same value.
+Resolution is now `Fly-Client-IP` (proxy-set, overwritten every request) then the
+RIGHTMOST forwarded hop, through one shared resolver so the limiter and the gate
+can never disagree.
+
+**RATIFIED — the 15-minute per-IP cache (founder, pending).** What it changes
+about enforcement: **nothing about which addresses are allowed.** The decision is
+already a pure function of the address, so two requests from one IP receive the
+same verdict with or without a cache. What it changes is only how often the
+vendor is asked. Three properties, each tested, keep that true: a failure is
+never cached (not a throw, not a quota error, not a timeout — an unreachable
+vendor can never become a stored answer); the key is the resolved address itself
+and never anything the caller supplies; and the TTL is 15 minutes, so a genuine
+reclassification is picked up within one pool rather than persisting for the run.
+What it costs: a country that changes classification mid-run is honoured up to 15
+minutes late. What it buys: at two lookups per entrant and 128 per pool against a
+1,000/day cap, roughly the difference between finishing Stage D and not.
+
 **Requires B-a and B-b.** Country-level blocks are what `config/territories.json`
 carries today (`{"blocked":["BE","AU"]}`); the schedule format *also* supports
 sub-national entries (`US-NY`), and `decide()` honours them when the lookup returns

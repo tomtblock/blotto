@@ -41,6 +41,10 @@ const DEFAULT_PROGRAM_ID = '5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17';
 const DEFAULT_RPC = 'https://api.devnet.solana.com';
 
 export function main(env: NodeJS.ProcessEnv = process.env): void {
+  // The same standard the packet service and daemon carry: say which code is
+  // running before anything can fail, then name every seam that was chosen
+  // rather than leaving it to be inferred from the absence of an error.
+  console.log(`${SERVICE}: build ${env.BLOTTO_BUILD_COMMIT ?? 'unknown'}`);
   const port = Number(env.BLOTTO_REVIEW_PORT ?? 8083);
   const db = createPool(loadPostgresConfig(env));
   const registry = parseReviewerRegistry(
@@ -85,6 +89,18 @@ export function main(env: NodeJS.ProcessEnv = process.env): void {
       log: new PgDecisionLog(db),
     },
     port
+  );
+  // An empty reviewer registry is not an error — config/reviewers.json ships
+  // empty by design — but it means NO decision will verify, and that is worth
+  // saying out loud rather than discovering when the first flag is raised.
+  if (registry.members.length === 0) {
+    console.warn(
+      `${SERVICE}: reviewers registry is EMPTY — no review decision will verify. ` +
+        `Fill config/reviewers.json (BLOTTO_REVIEWERS_PATH) before the detection drill.`
+    );
+  }
+  console.log(
+    `${SERVICE}: chain = ${env.BLOTTO_RPC_URL ?? DEFAULT_RPC} program ${env.BLOTTO_PROGRAM_ID ?? DEFAULT_PROGRAM_ID}`
   );
   console.log(`${SERVICE}: listening on :${port} (${registry.members.length} reviewer(s))`);
 }
