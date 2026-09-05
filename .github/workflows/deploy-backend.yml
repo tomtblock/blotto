@@ -94,22 +94,34 @@ jobs:
 
       - uses: superfly/flyctl-actions/setup-flyctl@master
 
-      # Incident 2026-09-05: FLY_API_TOKEN was present but no longer valid.
-      # Preflight passed (it only asserted the secret was non-empty), the app
-      # step swallowed "You must be authenticated to view this" behind an
-      # `|| echo "$app exists"`, and the run finally died four steps later on
-      # an opaque `Unauthorized` from `ips list` — reported as "blotto-indexer
-      # has no public IPs", which was not true and not what the tool had said.
-      # A present-but-dead credential is the same class of fault as an absent
-      # one, so it stops in the same place, by name, before anything is built.
+      # Incident 2026-09-05: FLY_API_TOKEN was present, listed and unrevoked in
+      # the Fly dashboard, and no longer accepted. An organization on the
+      # account began requiring SSO, and Fly stopped honouring account-level
+      # personal access tokens; the credential must now be an ORG token
+      # (`fly tokens create org`). Nothing in the dashboard looked wrong, which
+      # is why the run had to say it.
+      #
+      # It did not. Preflight asserted only that the secret was non-empty; the
+      # app step swallowed "You must be authenticated to view this" behind an
+      # `|| echo "$app exists"` and reported green; and the run finally died
+      # four steps later on an opaque `Unauthorized` from `ips list`, announced
+      # as "blotto-indexer has no public IPs" — which was neither true nor what
+      # the tool had said. A present-but-dead credential is the same class of
+      # fault as an absent one, so it now stops in the same place, by name,
+      # before anything is built.
+      #
+      # The probe is `apps list` and not `orgs list` deliberately: it is the
+      # operation the very next step depends on, and it is inside what an
+      # org-scoped token is documented to grant. Probing a broader permission
+      # than the deploy needs would fail a token that can do the whole job.
       - name: Preflight — Fly accepts the token
         run: |
-          if ! flyctl orgs list >/dev/null 2>&1; then
-            echo "::error::FLY_API_TOKEN is set but Fly rejected it. The token is expired, revoked, or was pasted without its leading 'FlyV1 ' prefix; or the Fly organization is suspended. Create a new token per docs/deploy-backend.md Step 2 and update the GitHub secret. Nothing was deployed."
+          if ! flyctl apps list >/dev/null 2>&1; then
+            echo "::error::FLY_API_TOKEN is set but Fly rejected it. Since 2026-09-05 an organization on this account requires SSO, so account-level personal access tokens no longer authenticate — and they stay listed and unrevoked in the dashboard, so nothing there looks wrong. Create an ORG token ('fly tokens create org --org <slug>') per docs/deploy-backend.md Step 2 and update the GitHub secret. Nothing was deployed."
             exit 1
           fi
-          echo "Fly accepts the token. Organizations visible to it:"
-          flyctl orgs list
+          echo "Fly accepts the token. Apps visible to it:"
+          flyctl apps list
 
       # Every credential decision is made HERE, once, and printed. A deploy
       # that is going to leave a service fail-closed at boot should stop in

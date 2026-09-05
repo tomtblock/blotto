@@ -42,7 +42,7 @@ any file containing it. The original draft's standing rule 1 would not have merg
 | Deploy keypair | `~/.config/solana/blotto/fee-payer-devnet.json` (`GXKX…`) | upgrade authority; retire after C4 |
 | Program keypair | `~/.config/solana/blotto/blotto_cup-program-devnet.json` | `BLOTTO_PROGRAM_KEYPAIR` |
 | Irys wallet | `~/.config/solana/blotto/irys-devnet.json` (`HG56…`) | `IRYS_UPLOAD_KEY` source |
-| Fly deploy token | GitHub secret `FLY_API_TOKEN` · **expiry: _record it here_** | every backend deploy; rejected outright on 2026-09-05 — replace and note the new date |
+| Fly deploy token | GitHub secret `FLY_API_TOKEN` · **must be an ORG token** (`fly tokens create org --org <slug>`) · org slug: _record it here_ · created: _record it here_ | every backend deploy. Account-level personal access tokens stopped authenticating on 2026-09-05 when an org on the account began requiring SSO; the dashboard cannot create the replacement |
 | **Entry signer** (VERIFIED 2026-08-31) | Turnkey `blotto-entry-signer-devnet`, Ed25519, non-exportable · key id `79672a1a-3c43-481a-a304-82f0ee10709c` · address `9XhwKrXjKwFdYJatxYMZYyfB6nFLbmdFNSuM5JTyy8TP` · `ENTRY_SIGNER_PUBLIC_KEY_HEX` = `7ebb34f6a4a985b0e3fc5a2ab0488cae67e4c7577b2c75dc21eac677a922a4b6` | goes on-chain as `Config.entry_signer` at C3 |
 
 **The entry signer is confirmed end to end**: `npm run check-signer` in
@@ -646,7 +646,14 @@ against the source of truth.
 announced `blotto-indexer has no public IPs — allocating` when the truth was that
 it had been refused permission to ask. Fly had rejected `FLY_API_TOKEN` outright;
 the step before it had already been told `You must be authenticated to view this`
-and hid it behind an `|| echo "$app exists"`. Two rules follow:
+and hid it behind an `|| echo "$app exists"`.
+
+The cause was not expiry or revocation — the token was still listed in the Fly
+dashboard, unrevoked, looking perfectly healthy. An organization on the account
+had begun requiring **Single Sign On**, and Fly stopped honouring account-level
+personal access tokens as a class. The fix is an org token,
+`fly tokens create org --org <slug>`, which the dashboard cannot issue; see
+`docs/deploy-backend.md` Step 2. Four rules follow:
 
 1. **Read the step above the red one.** The first step to touch a service usually
    knows the real answer; the red step is often only the first one honest enough
@@ -655,6 +662,14 @@ and hid it behind an `|| echo "$app exists"`. Two rules follow:
    Fly before it builds anything, and a rejection stops the run naming the token.
    The same check does not yet exist for Turnkey, the geo vendor or Neon — their
    failures still surface at boot rather than in preflight.
+3. **A vendor console showing a credential as healthy is not evidence it
+   authenticates.** Only a call that uses it is. This is the same lesson as the
+   entry signer on 2026-08-29, where the console and the live service disagreed.
+4. **The same event breaks `fly` on the founder's laptop.** Local flyctl holds
+   its own token of the same kind, so `fly logs` returns nothing and looks like
+   a silent service. **An empty log grep is not evidence about the service until
+   `fly auth whoami` succeeds.** This was misdiagnosed as "the machine has not
+   restarted" on the day.
 
 Replacing the token is safe at any point: nothing is staged or deployed until it
 authenticates, so a failed run leaves every app exactly as it was.

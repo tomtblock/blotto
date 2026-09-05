@@ -27,22 +27,40 @@ Fly.io is where the two services run (Frankfurt, EU — our hosting rule).
 2. Add a payment card when asked (Settings → Billing). The two small
    machines this deploys cost roughly **$5–10/month** total.
 
-## Step 2 — Create a deploy token (~2 min)
+## Step 2 — Create a deploy token (~4 min, in the terminal)
 
-1. In the Fly.io dashboard, open **Tokens** (under your account/organization
-   settings), or go to **fly.io/user/personal_access_tokens**.
-2. Click **Create token**, name it `blotto-deploy`, set the expiry
-   explicitly to the longest option offered, and create it.
-3. **Copy the whole token, including the leading `FlyV1 ` and the space
-   after it.** A Fly token contains a space; a copy that starts at `fm2_`
-   authenticates against nothing and fails exactly like an expired one.
-   You'll paste it in the next step but one. Treat it like a password:
-   paste it only into the GitHub secret field, never into chat or email.
+**This must be an *organization* token, and the dashboard cannot create one.**
+Since 5 Sep 2026 an organization on this account requires Single Sign On, and
+Fly no longer honours account-level "personal access tokens" — the dashboard
+refuses to create them and the existing ones stopped authenticating. The Fly
+tokens page says as much in a yellow banner.
 
-Then write the token's **expiry date** into the key register in
-`docs/devnet-rehearsal-runbook.md`. A token that lapses mid-rehearsal stops
-every deploy, and the failure does not announce itself as an expiry — see the
-troubleshooting note near the end of this document.
+Open a terminal and run these four, one at a time:
+
+```bash
+fly auth login      # opens a browser; complete the sign-in there
+fly auth whoami     # should print your email
+fly orgs list       # note the SLUG of the org that owns the blotto apps
+fly apps list       # blotto-indexer and blotto-packet should both be listed
+```
+
+Then create the token, substituting the slug from `fly orgs list`:
+
+```bash
+fly tokens create org --org <slug> --name blotto-deploy-ci
+```
+
+It prints one long line. **Copy the whole line, including the leading
+`FlyV1 ` and the space after it** — a Fly token contains a space, and a copy
+that starts at `fm2_` authenticates against nothing and fails exactly like a
+rejected one. You'll paste it in the next step but one. Treat it like a
+password: paste it only into the GitHub secret field, never into chat or
+email.
+
+The default expiry is about twenty years, so this is not a recurring chore.
+What is worth writing into the key register in
+`docs/devnet-rehearsal-runbook.md` is the **org slug** and the date you
+created it — the org is the thing that scopes what this token may do.
 
 ## Step 3 — Create the database (~5 min)
 
@@ -152,16 +170,19 @@ site shows the real (empty) devnet state.
   at the next deploy click; both are now removed, and the workflow actively
   clears them from the app once the real credentials are staged.
 - **Troubleshooting — `Unauthorized` or "You must be authenticated to view
-  this":** Fly is refusing our credential outright. `FLY_API_TOKEN` is
-  present but no longer valid — expired, revoked, or pasted without its
-  leading `FlyV1 ` prefix. Create a new token (Step 2) and update the
-  secret (Step 4). **Nothing was deployed**, and nothing was changed on
-  any app, so a re-run after replacing the token is safe. If a brand-new
-  token fails the same way, the problem is the Fly *organization* rather
-  than the token — check Billing before creating a third one. The run now
-  stops for this in its first Fly step, naming the token; before
-  2026-09-05 it surfaced four steps later as the misleading
-  `blotto-indexer has no public IPs`.
+  this":** Fly is refusing our credential outright. The tell is that the
+  token still appears in the dashboard, unrevoked and unexpired — nothing
+  there looks wrong, because it is the *type* of token that is no longer
+  accepted, not that particular one. This is what happened on 2026-09-05:
+  an organization on the account began requiring SSO and every
+  account-level personal access token stopped working at once. Create an
+  **org** token (Step 2) and update the secret (Step 4). The same event
+  also breaks `fly` on your own laptop until you re-run `fly auth login`,
+  so an empty `fly logs` while this is unfixed is not evidence about the
+  service. **Nothing was deployed** and nothing was changed on any app, so
+  re-running after replacing the token is safe. The run now stops for this
+  in its first Fly step, naming the token; before 2026-09-05 it surfaced
+  four steps later as the misleading `blotto-indexer has no public IPs`.
 - **Troubleshooting — "name is taken":** Fly app names are global. If the
   log says `blotto-indexer` or `blotto-packet` is taken by someone else,
   tell me and I'll rename ours (a one-line change in `deploy/fly/`).
