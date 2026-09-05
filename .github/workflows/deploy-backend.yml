@@ -94,6 +94,23 @@ jobs:
 
       - uses: superfly/flyctl-actions/setup-flyctl@master
 
+      # Incident 2026-09-05: FLY_API_TOKEN was present but no longer valid.
+      # Preflight passed (it only asserted the secret was non-empty), the app
+      # step swallowed "You must be authenticated to view this" behind an
+      # `|| echo "$app exists"`, and the run finally died four steps later on
+      # an opaque `Unauthorized` from `ips list` — reported as "blotto-indexer
+      # has no public IPs", which was not true and not what the tool had said.
+      # A present-but-dead credential is the same class of fault as an absent
+      # one, so it stops in the same place, by name, before anything is built.
+      - name: Preflight — Fly accepts the token
+        run: |
+          if ! flyctl orgs list >/dev/null 2>&1; then
+            echo "::error::FLY_API_TOKEN is set but Fly rejected it. The token is expired, revoked, or was pasted without its leading 'FlyV1 ' prefix; or the Fly organization is suspended. Create a new token per docs/deploy-backend.md Step 2 and update the GitHub secret. Nothing was deployed."
+            exit 1
+          fi
+          echo "Fly accepts the token. Organizations visible to it:"
+          flyctl orgs list
+
       # Every credential decision is made HERE, once, and printed. A deploy
       # that is going to leave a service fail-closed at boot should stop in
       # preflight with the missing name, not after four images are pushed.
@@ -179,8 +196,35 @@ jobs:
           apps="$INDEXER_APP $PACKET_APP"
           if [ "${{ steps.pre.outputs.deploy_daemon }}" = "true" ]; then apps="$apps $DAEMON_APP"; fi
           if [ "${{ steps.pre.outputs.deploy_review }}" = "true" ]; then apps="$apps $REVIEW_APP"; fi
+          # `flyctl apps create "$app" || echo "$app exists"` swallowed an
+          # authentication failure on 2026-09-05 and reported the step green.
+          # Ask what exists FIRST, then create only what is missing: no error
+          # string is matched (flyctl's wording is not a contract) and any
+          # failure of the create itself is a real failure. A name taken by
+          # another organisation now stops the run here, where the message is
+          # legible, instead of confusing a later step.
+          if ! existing=$(flyctl apps list --json 2>&1); then
+            echo "::error::could not list Fly apps: $existing"
+            exit 1
+          fi
           for app in $apps; do
-            flyctl apps create "$app" || echo "$app exists (or the name is taken — see docs/deploy-backend.md troubleshooting)"
+            if printf '%s' "$existing" | jq -e --arg a "$app" 'any(.[]; (.Name // .name) == $a)' >/dev/null; then
+              echo "$app exists"
+            else
+              echo "$app is missing — creating it"
+              if ! out=$(flyctl apps create "$app" 2>&1); then
+                # Belt and braces. If the app does in fact exist — a shape
+                # change in `apps list --json` would make the check above
+                # miss it — `status` succeeds and this is not a failure.
+                # Anything else is, and stops the run with flyctl's own words.
+                if flyctl status --app "$app" >/dev/null 2>&1; then
+                  echo "$app exists after all; the existence check did not see it"
+                else
+                  echo "::error::creating $app failed: $out"
+                  exit 1
+                fi
+              fi
+            fi
           done
 
       # Incident 2026-08-29: blotto-indexer had NO public IP — its first deploy
@@ -194,8 +238,23 @@ jobs:
           apps="$INDEXER_APP $PACKET_APP"
           if [ "${{ steps.pre.outputs.deploy_daemon }}" = "true" ]; then apps="$apps $DAEMON_APP"; fi
           if [ "${{ steps.pre.outputs.deploy_review }}" = "true" ]; then apps="$apps $REVIEW_APP"; fi
+          # A failed query is not an empty answer. The previous form piped a
+          # failing `ips list` straight into jq, read the non-zero status as
+          # "no IPs", and went on to allocate against an app whose state it
+          # had not managed to read (2026-09-05).
           for app in $apps; do
-            if ! flyctl ips list --app "$app" --json | jq -e 'length > 0' >/dev/null; then
+            if ! ips=$(flyctl ips list --app "$app" --json 2>&1); then
+              echo "::error::could not read IP assignments for $app: $ips"
+              exit 1
+            fi
+            if ! count=$(printf '%s' "$ips" | jq '
+                  if type == "array" then length
+                  elif type == "null" then 0
+                  else error("unexpected shape") end' 2>&1); then
+              echo "::error::could not parse IP assignments for $app: $ips"
+              exit 1
+            fi
+            if [ "$count" -eq 0 ]; then
               echo "$app has no public IPs — allocating (shared v4 + v6)"
               flyctl ips allocate-v4 --shared --app "$app"
               flyctl ips allocate-v6 --app "$app"

@@ -31,9 +31,18 @@ Fly.io is where the two services run (Frankfurt, EU — our hosting rule).
 
 1. In the Fly.io dashboard, open **Tokens** (under your account/organization
    settings), or go to **fly.io/user/personal_access_tokens**.
-2. Click **Create token**, name it `blotto-deploy`, create it, and **copy
-   the token text** — you'll paste it in Step 4. Treat it like a password:
-   paste it only where Step 4 says, never into chat or email.
+2. Click **Create token**, name it `blotto-deploy`, set the expiry
+   explicitly to the longest option offered, and create it.
+3. **Copy the whole token, including the leading `FlyV1 ` and the space
+   after it.** A Fly token contains a space; a copy that starts at `fm2_`
+   authenticates against nothing and fails exactly like an expired one.
+   You'll paste it in the next step but one. Treat it like a password:
+   paste it only into the GitHub secret field, never into chat or email.
+
+Then write the token's **expiry date** into the key register in
+`docs/devnet-rehearsal-runbook.md`. A token that lapses mid-rehearsal stops
+every deploy, and the failure does not announce itself as an expiry — see the
+troubleshooting note near the end of this document.
 
 ## Step 3 — Create the database (~5 min)
 
@@ -125,15 +134,16 @@ site shows the real (empty) devnet state.
 
 ## Honest small print
 
-- **The location check runs in stub mode.** No geo-lookup vendor is
-  contracted yet (roadmap R2), so the deployment uses the development
-  stub: every visitor's location resolves as United Kingdom, which the
-  schedule allows. That means the Belgium/Australia block is **not
-  actually enforced** while the stub is in — acceptable on devnet where
-  no real money moves, **not acceptable for launch**. Contracting the geo
-  vendor is on the founder to-do list; the moment its two credentials are
-  configured, the stub is ignored and fail-closed + the real block-list
-  take over.
+- **The location check is live** (IPLocate, since 2026-08-31). Both
+  `GEO_VENDOR_URL` and `GEO_VENDOR_API_KEY` are configured, so the
+  development stub — which resolved every visitor as United Kingdom and
+  therefore enforced nothing — is ignored, and the run's final step prints
+  a line if it ever comes back. Ticking `allow_dev_credentials` would
+  restore that stub wherever a production credential is absent; leave it
+  unticked. A vendor outage or an exhausted quota refuses the entry and
+  says so in the log as `LOOKUP FAILED (this is NOT a territory
+  decision)`, which is how it tells itself apart from a real country
+  block.
 - **One secret is generated automatically** — the Helius webhook shared
   secret, on first deploy, kept stable across redeploys. It is ours to
   issue: no external party holds an authoritative copy. Nothing else is
@@ -141,6 +151,17 @@ site shows the real (empty) devnet state.
   and set the geo stub on every run, which silently undid a credential swap
   at the next deploy click; both are now removed, and the workflow actively
   clears them from the app once the real credentials are staged.
+- **Troubleshooting — `Unauthorized` or "You must be authenticated to view
+  this":** Fly is refusing our credential outright. `FLY_API_TOKEN` is
+  present but no longer valid — expired, revoked, or pasted without its
+  leading `FlyV1 ` prefix. Create a new token (Step 2) and update the
+  secret (Step 4). **Nothing was deployed**, and nothing was changed on
+  any app, so a re-run after replacing the token is safe. If a brand-new
+  token fails the same way, the problem is the Fly *organization* rather
+  than the token — check Billing before creating a third one. The run now
+  stops for this in its first Fly step, naming the token; before
+  2026-09-05 it surfaced four steps later as the misleading
+  `blotto-indexer has no public IPs`.
 - **Troubleshooting — "name is taken":** Fly app names are global. If the
   log says `blotto-indexer` or `blotto-packet` is taken by someone else,
   tell me and I'll rename ours (a one-line change in `deploy/fly/`).

@@ -42,6 +42,7 @@ any file containing it. The original draft's standing rule 1 would not have merg
 | Deploy keypair | `~/.config/solana/blotto/fee-payer-devnet.json` (`GXKX…`) | upgrade authority; retire after C4 |
 | Program keypair | `~/.config/solana/blotto/blotto_cup-program-devnet.json` | `BLOTTO_PROGRAM_KEYPAIR` |
 | Irys wallet | `~/.config/solana/blotto/irys-devnet.json` (`HG56…`) | `IRYS_UPLOAD_KEY` source |
+| Fly deploy token | GitHub secret `FLY_API_TOKEN` · **expiry: _record it here_** | every backend deploy; rejected outright on 2026-09-05 — replace and note the new date |
 | **Entry signer** (VERIFIED 2026-08-31) | Turnkey `blotto-entry-signer-devnet`, Ed25519, non-exportable · key id `79672a1a-3c43-481a-a304-82f0ee10709c` · address `9XhwKrXjKwFdYJatxYMZYyfB6nFLbmdFNSuM5JTyy8TP` · `ENTRY_SIGNER_PUBLIC_KEY_HEX` = `7ebb34f6a4a985b0e3fc5a2ab0488cae67e4c7577b2c75dc21eac677a922a4b6` | goes on-chain as `Config.entry_signer` at C3 |
 
 **The entry signer is confirmed end to end**: `npm run check-signer` in
@@ -640,3 +641,20 @@ indexer, the packet service, the daemon and the review service. Update all four.
 
 **Digest matching proves two apps hold the same value, not a correct one.** Verify
 against the source of truth.
+
+**A dead credential can look like a missing resource.** On 2026-09-05 the deploy
+announced `blotto-indexer has no public IPs — allocating` when the truth was that
+it had been refused permission to ask. Fly had rejected `FLY_API_TOKEN` outright;
+the step before it had already been told `You must be authenticated to view this`
+and hid it behind an `|| echo "$app exists"`. Two rules follow:
+
+1. **Read the step above the red one.** The first step to touch a service usually
+   knows the real answer; the red step is often only the first one honest enough
+   to stop.
+2. **A present credential is not a working credential.** The deploy now probes
+   Fly before it builds anything, and a rejection stops the run naming the token.
+   The same check does not yet exist for Turnkey, the geo vendor or Neon — their
+   failures still surface at boot rather than in preflight.
+
+Replacing the token is safe at any point: nothing is staged or deployed until it
+authenticates, so a failed run leaves every app exactly as it was.
