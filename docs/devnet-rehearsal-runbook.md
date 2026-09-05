@@ -22,13 +22,23 @@ any file containing it. The original draft's standing rule 1 would not have merg
 
 1. Every `solana` command carries an explicit `-k <path>`. The CLI default is
    `fee-payer-devnet.json` = `GXKX…`, which holds upgrade authority. Never sign by
-   default.
-2. Secrets are typed into destination fields, never pasted into chat, files, commits
+   default. **Confirmed by incident, 2026-09-05**: a transfer that lost its `-k`
+   was signed by `GXKX…` anyway, because that key IS the CLI default. The rule is
+   not a precaution, it is the only thing standing between a dropped flag and the
+   upgrade authority signing something nobody chose.
+2. **Every command written for the founder is ONE line.** No backslash
+   continuations, no multi-line blocks. Pasting a continued command into the
+   terminal can insert blank lines, which end the command early: on 2026-09-05
+   `solana transfer <addr> 0.5 \` + `-k …` + `-u devnet` ran as a transfer with
+   NO flags, followed by two `command not found` errors. It succeeded, on whatever
+   the CLI defaults happened to be. A command that loses its flags and still works
+   is the worst shape available — it reports success while doing something else.
+3. Secrets are typed into destination fields, never pasted into chat, files, commits
    or logs.
-3. A service refusing to start on a missing credential is correct. Never loosen it.
-4. If a verification fails, stop. Do not proceed with a half-working credential
+4. A service refusing to start on a missing credential is correct. Never loosen it.
+5. If a verification fails, stop. Do not proceed with a half-working credential
    behind you.
-5. Ask "what would distinguish this explanation from the alternatives" before
+6. Ask "what would distinguish this explanation from the alternatives" before
    approving any fix.
 
 ## KEY REGISTER
@@ -687,6 +697,16 @@ indexer, the packet service, the daemon and the review service. Update all four.
 
 **Digest matching proves two apps hold the same value, not a correct one.** Verify
 against the source of truth.
+
+**A command that loses its flags still succeeds.** On 2026-09-05 a three-line
+`solana transfer` lost its `-k` and `-u` to blank lines inserted on paste. It ran
+with the CLI defaults and printed a normal `Signature:` line; the giveaway was two
+`command not found: -k` / `-u` errors AFTER the success, not instead of it. It
+happened to be harmless — devnet, and the default key was the intended one — but
+only by luck. **Read what came back, not just the last line**, and check the
+signature on-chain before assuming a transfer went where it was aimed:
+`getTransaction` returns `null` on any network the transaction is not on, which
+is how you tell devnet from mainnet in one call.
 
 **A dead credential can look like a missing resource.** On 2026-09-05 the deploy
 announced `blotto-indexer has no public IPs — allocating` when the truth was that
