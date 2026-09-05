@@ -247,10 +247,11 @@ admin-signed rotation (`register-signers --entry-signer`), not a redeploy.
 
 ## C2 — Geo vendor
 
-**C2 status: negatives passed, ONE end-to-end gap remains.** The allow path is
-live from Buenos Aires (`geo = IPLOCATE`, `geo ALLOW … country=AR`, no `GEO STUB`
-line). All four negatives run against the real vendor through the production
-adapter, each distinguishable in the log:
+**C2 status: CLOSED (2026-09-05).** The allow path is live (`geo = IPLOCATE`,
+`geo ALLOW … country=AR`, no `GEO STUB` line) and the refusal path is proven in
+production, not only on the bench — see "What production actually proved" below.
+All four negatives run against the real vendor through the production adapter,
+each distinguishable in the log:
 
 | Case | Answer | Log |
 |---|---|---|
@@ -260,11 +261,26 @@ adapter, each distinguishable in the log:
 | Malformed answer | `false` | `LOOKUP FAILED … no usable country_code` |
 | **Quota 429** | `false` | `LOOKUP FAILED … QUOTA OR RATE LIMIT (HTTP 429) — the daily request cap is spent … This is NOT a territory block` |
 
-**The remaining gap:** BE and AU were proven against the live vendor through the
-production adapter, not through the deployed service from an address in those
-countries. There is no honest way to do the latter without an exit node there —
-and deliberately so: the header override that would allow it was a bypass, now
-closed (below). Record this as the limit of the evidence rather than implying more.
+**What production actually proved.** These lines are from the deployed service
+on 5 Sep, before the fix shipped — the bench is not involved:
+
+```
+20:51:52  geo BLOCK 81.246.x.x — territory schedule: BE
+20:51:53  geo BLOCK 1.128.x.x  — territory schedule: AU
+```
+
+IPLocate genuinely resolved those addresses to BE and AU and `decide()` genuinely
+refused them, in Frankfurt, in the running service. The bypass was never a defect
+in the decision or in the vendor integration — it was only *which address got
+looked up*. So the whole path "vendor says BE → refuse" is demonstrated in
+production, and the fix changed exactly one thing: where the address comes from.
+
+**The limit of the evidence.** No connection has originated in a blocked
+territory, and none can without an exit node there — deliberately, since the
+header override that would have simulated one *was* the bypass. What is
+therefore assumed rather than tested is that Fly's edge reports the true origin
+of a connection. That is a property of their proxy, not of our code, and no test
+written here could establish it. Record it as the assumption it is.
 
 **The bypass, found by running these negatives (2026-08-31). CLOSED IN
 PRODUCTION 2026-09-05.** The gate decided on `X-Forwarded-For.split(',')[0]` —
@@ -296,7 +312,13 @@ X-Forwarded-For: 81.246.0.1, 8.8.8.8 → {"allowed":true}
 The fourth line is the one that matters: a forged leftmost entry with a real hop
 appended, which is the actual attack rather than the single-value form. Before
 the deploy the second line returned `false`. **The header no longer changes the
-answer.** Run #11's log independently shows `entry signer = TURNKEY` with the
+answer.**
+
+The service's own log shows why, and is the stronger evidence: all four requests
+resolved to the **same** address — `160.79.x.x`, `country=US`, the prober's real
+egress — including the two carrying forged BE and AU headers. Compare the
+pre-deploy lines above, where the forged addresses were the ones looked up. The
+caller-supplied value is no longer read at all. Run #11's log independently shows `entry signer = TURNKEY` with the
 key verified on 31 Aug, and **no `GEO STUB` line** — the vendor path, not the
 stub that admits everyone as GB.
 
