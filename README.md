@@ -11,8 +11,8 @@ About ninety seconds, then nothing more to do.
 When the 64th entry lands, every battle is revealed and scored against the corresponding battle of
 every other player: 441 comparisons per person, 14,112 in total. No pairing, no bracket, no clock, no
 chance in the mechanism — every player faces the identical field, and the only variable between them
-is the quality of their seven decisions. The top 16 are paid from a prize vault holding 80% of
-entries; the platform retains 20%.
+is the quality of their seven decisions. The player ranked first is paid the whole fixed prize
+pool, funded before entries open; a pool runs with anywhere from 52 to 64 players.
 
 ## Start here
 

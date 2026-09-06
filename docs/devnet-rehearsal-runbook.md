@@ -741,6 +741,83 @@ open items decided · **[YOU]** read and sign off.
 
 ---
 
+## D-E2 / D-E4 — the winner-takes-all + minimum-field upgrade: drain, upgrade, revert
+
+*Proposal E1 §8, §11.6. One drain, one upgrade, one terms event, one counsel
+opinion. PR3a (GitHub #64) carries the program; PR3b carries everything
+off-chain. **PR3b does not merge and
+nothing here runs until counsel has signed off on the reissued PID §6 +
+§8.5.** Nothing in this section moves a lamport; every step is a deploy or a
+query.*
+
+Why a drain at all: the prize rule is enforced by the **scoring engine** (the
+crank and the verify page), not by the program — `commit_results` accepts any
+list that conserves the pot. So the rule flips when the backend deploys, and
+the drain must hold from the moment `set_paused` lands until the backend and
+the frontend are both on the new code. A pool that opened under top-16 copy
+must not be settled by a winner-takes-all engine, and vice versa.
+
+Under B′ (the go-timer stored by shortening `fill_deadline`, no new account
+field) the upgrade does **not** strand any pre-upgrade account: an Open pool
+opened before the upgrade keeps taking entries and simply gains the go-timer
+on its next entry past 52. So the drain gate is the fairness gate only.
+
+1. **Pause new entries.** `set_paused(true)` from the admin key. Settlement,
+   refunds and `seal_at_deadline` keep working — pause blocks `register`
+   only.
+2. **Drain query — record it.** Every pool must be `Open` (0 entrants is
+   ideal), `Paid` or `Closed`; **zero** `Sealed` / `Scored` / `Refunding`.
+   Run and keep the output, timestamped, before the upgrade transaction:
+
+   ```bash
+   npx tsx scripts/check-deployed.ts --pools   # or the indexer: GET /pools?state=Sealed etc.
+   ```
+
+   If an Open pool holds entries, wait: it either fills (settles under the
+   OLD engine — fine, the old copy still describes it) or its deadline
+   passes and it refunds. Do not upgrade over a pool that is mid-settlement.
+   **If any pool sits in Sealed/Scored/Refunding, stop here.**
+3. **Program upgrade.** From the PR3a merge commit, with the artifact built by
+   `anchor build --ignore-keys` (the same command CI ran green):
+
+   ```bash
+   scripts/deploy-devnet.sh        # extend-if-grown + anchor deploy, deploy keypair GXKX…agXY (C4 not yet done)
+   ```
+
+   Then `scripts/check-deployed.ts` must report the new error variants
+   (`FieldBelowMinimum` 6051, `FieldReached` 6052, `PotExceedsMinimumField`
+   6053) and the `seal_at_deadline` instruction.
+4. **Backend deploy + migrate.** The manual `workflow_dispatch` deploy from
+   the PR3b merge commit; then `npm run migrate` in `backend/indexer`
+   (0012 adds `pools.go_deadline`). The daemon now seals 52–63-seat pools at
+   their deadline and pays one winner; the indexer projects
+   `GoTimerStarted` and replays `TiersOpened` into the treasury report.
+5. **Frontend.** Vercel deploys `main` on the PR3b merge. `config/terms.json`
+   is version 2: every wallet re-accepts once at the gate (the D17 test pins
+   that a version-1 record never satisfies version 2).
+6. **Unpause and watch one pool.** `set_paused(false)`; the keeper opens the
+   next tier-0 pool under the new rules. Watch it to Paid: exactly one
+   winner (or a tie split conserving the pot), `paid_mask` with one bit per
+   tied seat, the verify page green with the wallet disconnected.
+
+**Abort criteria (§8.2).** Any of: the drain query shows a Sealed/Scored/
+Refunding pool; `check-deployed` disagrees with the built artifact; the
+first pool's committed list does not conserve the pot; the verify page
+disagrees with the on-chain root. On abort, revert (below) before
+unpausing.
+
+**Revert.** Branch `revert/pre-d-e2` is `main` at `844a7c5` — the last
+commit before PR3a: `PAID_RANKS = 16`, the original band table, no minimum
+field. It was CI-green when it merged (#62/#63). To revert: redeploy the
+program from that branch (`scripts/deploy-devnet.sh`), redeploy the backend
+and frontend from it, and set `config/terms.json` back only if counsel says
+the version-2 terms must be withdrawn — otherwise leave version 2 (the
+re-prompt already happened). Pools opened under the new program between
+upgrade and revert must be drained first, exactly as in step 2: the
+program's `trigger_refund` still refunds below 52 on either build, but a
+52–63-seat pool sealed by the new build must be settled by the NEW engine
+before the old one is redeployed.
+
 ## RECOVERY NOTES
 
 **A machine that hits max restart count stays stopped even after the fault is
