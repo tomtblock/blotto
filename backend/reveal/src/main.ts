@@ -53,7 +53,7 @@ import { makeDaemon, StubVrfCoordinator, type VrfCoordinator } from './daemon';
 import { makeSwitchboardOps, SwitchboardVrfCoordinator } from './vrf-switchboard';
 import { IrysPublisher, irysUploaderFromEnv } from './publisher-irys';
 import { newDaemonHealth, serveDaemonHealth, type DaemonPhase } from './health';
-import { step } from './startup';
+import { assertCanPayFees, formatSol, step } from './startup';
 
 const SERVICE = 'daemon';
 const DEFAULT_PROGRAM_ID = '5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17';
@@ -115,9 +115,10 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
   serveDaemonHealth(health, healthPort);
   console.log(`${SERVICE}: tick every ${intervalMs}ms once ready`);
 
-  // Every phase change is logged with elapsed time. When the daemon stalls,
-  // its /health answers 503 and Fly's proxy stops routing to it, so the
-  // endpoint cannot report the stall — the log is the only witness.
+  // Every phase change is logged with elapsed time. The log is the only
+  // witness to a stall: a blocked event loop cannot answer /health at all,
+  // and once past the startup budget the 503 takes the daemon out of the
+  // proxy's rotation — either way the endpoint cannot report its own trouble.
   // The rss figure is here because the 2026-09-06 stall had to be inferred
   // from an OOM line in the platform's own log rather than read from ours.
   const enter = (phase: DaemonPhase): void => {
@@ -139,6 +140,17 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
     new Uint8Array(
       JSON.parse(readFileSync(requireEnv(env, 'SETTLEMENT_SIGNER_KEYPAIR'), 'utf8')) as number[]
     )
+  );
+
+  // Fail closed on an empty fee payer, in the same place and the same way as
+  // every other credentialed seam here — see startup.ts for the incident.
+  health.settlementLamports = BigInt(
+    await connection.getBalance(settlementSigner.publicKey, 'confirmed')
+  );
+  assertCanPayFees(settlementSigner.publicKey.toBase58(), health.settlementLamports);
+  log(
+    `settlement signer ${settlementSigner.publicKey.toBase58()} holds ` +
+      `${formatSol(health.settlementLamports)} SOL`
   );
 
   // VRF: the production Switchboard coordinator when a queue is configured;
@@ -264,6 +276,16 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
     try {
       const report = await daemon.tick();
       health.lastTick = { at: new Date().toISOString(), report };
+      // One cheap call per tick, so a drain toward the floor shows on /health
+      // rather than only at the next restart. A failure here must never take
+      // down a tick that otherwise worked.
+      try {
+        health.settlementLamports = BigInt(
+          await connection.getBalance(settlementSigner.publicKey, 'confirmed')
+        );
+      } catch {
+        // leave the last known value; the RPC error surfaces via the tick itself
+      }
       for (const e of report.errors) {
         console.error(`${SERVICE}: tick error`, JSON.stringify(e));
       }

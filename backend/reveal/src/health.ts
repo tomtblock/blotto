@@ -25,6 +25,7 @@
 
 import { createServer, type Server } from 'http';
 import type { TickReport } from './daemon';
+import { formatSol } from './startup';
 
 const SERVICE = 'daemon';
 
@@ -48,10 +49,18 @@ export interface DaemonHealth {
   /** `Date.now()` at process start — the clock the startup budget runs on. */
   readonly startedAtMs: number;
   lastTick: { at: string; report: TickReport } | null;
+  /**
+   * The settlement signer's balance in lamports, refreshed each tick. It pays
+   * every fee and every account rent the daemon incurs; startup refuses below
+   * a floor (startup.ts), and this is here so a slow drain toward that floor
+   * is visible without waiting for a restart to catch it. `null` until first
+   * read. Lamports, integer — no float touches a balance.
+   */
+  settlementLamports: bigint | null;
 }
 
 export function newDaemonHealth(startedAtMs: number = Date.now()): DaemonHealth {
-  return { phase: 'starting', startedAtMs, lastTick: null };
+  return { phase: 'starting', startedAtMs, lastTick: null, settlementLamports: null };
 }
 
 /**
@@ -83,6 +92,8 @@ export function healthPayload(
       service: SERVICE,
       phase: state.phase,
       uptimeMs,
+      settlementSol:
+        state.settlementLamports === null ? null : formatSol(state.settlementLamports),
       ...(stuck
         ? {
             error: `still ${state.phase} after ${STARTUP_BUDGET_MS}ms — initialisation is stuck`,

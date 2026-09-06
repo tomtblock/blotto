@@ -53,6 +53,8 @@ any file containing it. The original draft's standing rule 1 would not have merg
 | Program keypair | `~/.config/solana/blotto/blotto_cup-program-devnet.json` | `BLOTTO_PROGRAM_KEYPAIR` |
 | Irys wallet | `~/.config/solana/blotto/irys-devnet.json` (`HG56…`) | `IRYS_UPLOAD_KEY` source |
 | Fly deploy token | GitHub secret `FLY_API_TOKEN` · **must be an ORG token** (`fly tokens create org --org <slug>`) · org slug: `personal` (the only org on the account; both apps owned by it) · created: 2026-09-05 | every backend deploy. Account-level personal access tokens stopped authenticating on 2026-09-05 when an org on the account began requiring SSO; the dashboard cannot create the replacement |
+| **Settlement signer** | `EaDfwMWwW712L4YgdhBgEqbzzpdVP17e5mvY9LPwjrSD` · staged as `SETTLEMENT_SIGNER_KEYPAIR_B64` | `Config.settlement_signer`. **MUST HOLD SOL** — it pays the fee and the account rent for every daemon instruction. Funded at C6.1; the daemon refuses to start below 0.05 SOL |
+| Config PDA | `6Q3HReRVp4fND7wCuYSpRDPbz5KsQR7cbEwApVUhPzDa` | read it back with `solana account` when a value is in doubt; the chain is the register's referee |
 | **Entry signer** (VERIFIED 2026-08-31) | Turnkey `blotto-entry-signer-devnet`, Ed25519, non-exportable · key id `79672a1a-3c43-481a-a304-82f0ee10709c` · address `9XhwKrXjKwFdYJatxYMZYyfB6nFLbmdFNSuM5JTyy8TP` · `ENTRY_SIGNER_PUBLIC_KEY_HEX` = `7ebb34f6a4a985b0e3fc5a2ab0488cae67e4c7577b2c75dc21eac677a922a4b6` | goes on-chain as `Config.entry_signer` at C3 |
 
 **The entry signer is confirmed end to end**: `npm run check-signer` in
@@ -551,10 +553,37 @@ change goes through the B7 language audit. **[ARCH]** deploys `blotto-review` pe
 B-d. Fill `config/reviewers.json` first: it ships empty and no decision verifies
 until it has member keys.
 
+**C6.1 — FUND THE SETTLEMENT SIGNER [YOU]. Added 2026-09-06 after it was missed.**
+`EaDfwMWwW712L4YgdhBgEqbzzpdVP17e5mvY9LPwjrSD` pays the fee AND the account rent
+for every instruction the daemon sends — `open_pool`, `commit_vrf_seed`,
+`create_pass_collection`, `reveal_pool_secret`, `commit_results`, `pay_prizes`.
+Generated and staged is not funded. Left empty it does not fail loudly: the
+keeper retries once per tick with Solana's message for an unfunded fee payer,
+"Attempt to debit an account but found no record of a prior credit".
+
+```
+solana transfer EaDfwMWwW712L4YgdhBgEqbzzpdVP17e5mvY9LPwjrSD 2 -k /Users/tomhumber/.config/solana/blotto/fee-payer-devnet.json -u https://api.devnet.solana.com --allow-unfunded-recipient
+```
+
+**2 SOL, sized not guessed.** Per pool: `Pool` PDA rent 0.00679 (847 bytes),
+its vault 0.00089, the Switchboard randomness and MPL Core collection accounts
+~0.008 between them, fees ~0.00005 — about **0.016 SOL**, so twenty pools is
+~0.35. Two is roughly 5x, covering the two vendor figures that are estimates
+rather than quotes. Pool 1 measures the real number; replace this line with it.
+
+Do NOT confuse this with the **platform treasury** (6.0 SOL), a different
+account that funds each pool's 5.12 SOL pot at `open_pool`. The entry signer
+holds nothing and should stay that way — it signs packets off-chain and never
+pays a fee.
+
+The daemon now refuses to start below **0.05 SOL** and reports
+`settlementSol` on `/health` (`backend/reveal/src/startup.ts`).
+
 **Verify:** review `/health` (port 8083) · a flagged entry appears on the review page
 · `clear_flag` executes and the decision log records it. Note `clear_flag` is
 **settlement-signed**, not admin-signed — it is driven by the review service, not by
-a Squads proposal.
+a Squads proposal. · **the settlement signer's balance is above the floor** —
+`solana balance EaDfwMWwW712L4YgdhBgEqbzzpdVP17e5mvY9LPwjrSD -u https://api.devnet.solana.com`
 
 ---
 
@@ -825,6 +854,32 @@ Three consequences, all now in place:
 
 When the deploy reports the daemon unready, read the log lines it dumps, not the
 endpoint.
+
+**Generated and staged is not funded.** With the deploy finally green on
+2026-09-06, the daemon reached `ready`, ticked on schedule — and reported one
+error every fifteen seconds for forty minutes:
+
+```
+daemon: keeper:failed {"error":"... Attempt to debit an account
+  but found no record of a prior credit."}
+```
+
+That is Solana's message for a **fee payer that has never been funded**. The
+settlement signer held nothing. C6 said to generate and stage the keypair and
+never said to fund it, while C3's preconditions carefully required the vault to
+hold 0.05 SOL for one account's rent. The account that pays for every
+instruction after C3 was guarded by nothing. C6.1 now exists.
+
+Two smaller lessons from the same half hour:
+
+- **The abbreviation in a register is for reading, not for doing.** The row
+  carried `EaDf…jrSD`, so writing a single transfer command meant deriving the
+  full address from `Config` on chain. Full addresses now, both here and for
+  the Config PDA.
+- **Read the register before guessing a path.** The first funding attempt used
+  `~/.config/solana/fee-payer-devnet.json` and failed with "No default signer
+  found". The register already said `~/.config/solana/blotto/…`. The keypair
+  paths were right there; the guess was the only thing that wasn't.
 
 **Correction, and the actual cause.** The paragraph above first said the empty
 answer meant "unhealthy, not unreachable" — that the 503 had taken the daemon out

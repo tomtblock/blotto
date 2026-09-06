@@ -69,3 +69,60 @@ export async function step<T>(
     if (timer !== undefined) clearTimeout(timer);
   }
 }
+
+/**
+ * The settlement signer pays for every instruction the daemon sends —
+ * `open_pool`, `commit_vrf_seed`, `create_pass_collection`,
+ * `reveal_pool_secret`, `commit_results`, `pay_prizes` — plus the rent for
+ * every account those create.
+ *
+ * On 2026-09-06 it held nothing. The runbook's C6 said to generate and stage
+ * the keypair and never said to fund it, so the keeper failed on
+ * `open_pool` every fifteen seconds with Solana's message for an unfunded fee
+ * payer, "Attempt to debit an account but found no record of a prior credit"
+ * — accurate, and unrecognisable unless you already know what it means.
+ *
+ * Every other credentialed seam in `main.ts` is fail-closed with a named
+ * message: no `SWITCHBOARD_QUEUE` and no `RANDOMNESS_ACCOUNT` → refuse; no
+ * `IRYS_UPLOAD_KEY` → refuse. An empty fee payer is the same class of thing
+ * and now refuses in the same place, saying so in words.
+ */
+export const LAMPORTS_PER_SOL = 1_000_000_000n;
+
+/**
+ * Floor: 0.05 SOL, about three pools at the measured per-pool cost (roughly
+ * 0.016 SOL — `Pool` PDA rent 0.00679, its vault 0.00089, the Switchboard
+ * randomness and pass-collection accounts, and fees). Enough that the daemon
+ * never opens a pool it cannot afford to finish settling.
+ */
+export const SETTLEMENT_FLOOR_LAMPORTS = 50_000_000n;
+
+/** Integer-only lamports → SOL, for human eyes. Never fed back into an amount. */
+export function formatSol(lamports: bigint): string {
+  const sign = lamports < 0n ? '-' : '';
+  const abs = lamports < 0n ? -lamports : lamports;
+  const whole = abs / LAMPORTS_PER_SOL;
+  const frac = (abs % LAMPORTS_PER_SOL).toString().padStart(9, '0');
+  return `${sign}${whole}.${frac}`;
+}
+
+export function assertCanPayFees(
+  address: string,
+  lamports: bigint,
+  floorLamports: bigint = SETTLEMENT_FLOOR_LAMPORTS
+): void {
+  if (lamports >= floorLamports) return;
+  throw new Error(
+    `${SERVICE_LABEL}: the settlement signer ${address} holds ` +
+      `${formatSol(lamports)} SOL, below the ${formatSol(floorLamports)} SOL floor. ` +
+      `It pays the fee and the account rent for every instruction this daemon ` +
+      `sends — open_pool, commit_vrf_seed, create_pass_collection, ` +
+      `reveal_pool_secret, commit_results, pay_prizes — so with an empty ` +
+      `signer the keeper cannot open a pool and fails once per tick with ` +
+      `"Attempt to debit an account but found no record of a prior credit". ` +
+      `Fund the address and restart. Refusing to run rather than retry that ` +
+      `silently.`
+  );
+}
+
+const SERVICE_LABEL = 'daemon';

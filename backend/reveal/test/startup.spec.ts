@@ -5,7 +5,14 @@
  */
 
 import { expect } from 'chai';
-import { StartupTimeout, step } from '../src/startup';
+import {
+  LAMPORTS_PER_SOL,
+  SETTLEMENT_FLOOR_LAMPORTS,
+  StartupTimeout,
+  assertCanPayFees,
+  formatSol,
+  step,
+} from '../src/startup';
 
 const lines: string[] = [];
 const log = (line: string): void => {
@@ -67,5 +74,49 @@ describe('a bounded startup step', () => {
     const before = Date.now();
     await step('fast', 60_000, async () => 1, log);
     expect(Date.now() - before).to.be.lessThan(5_000);
+  });
+});
+
+describe('the settlement signer floor', () => {
+  const ADDR = 'EaDfwMWwW712L4YgdhBgEqbzzpdVP17e5mvY9LPwjrSD';
+
+  it('lets a funded signer through', () => {
+    expect(() => assertCanPayFees(ADDR, 2n * LAMPORTS_PER_SOL)).to.not.throw();
+  });
+
+  it('REFUSES an empty signer, naming the address — the 2026-09-06 case', () => {
+    // Zero is not a degenerate input here: it is the state the daemon actually
+    // ran in for forty minutes, retrying every fifteen seconds.
+    expect(() => assertCanPayFees(ADDR, 0n)).to.throw(new RegExp(ADDR));
+  });
+
+  it('names what the balance is for, not just that it is low', () => {
+    let message = '';
+    try {
+      assertCanPayFees(ADDR, 0n);
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message).to.match(/open_pool/);
+    expect(message).to.match(/prior credit/);
+  });
+
+  it('refuses just below the floor and passes exactly at it', () => {
+    expect(() => assertCanPayFees(ADDR, SETTLEMENT_FLOOR_LAMPORTS - 1n)).to.throw();
+    expect(() => assertCanPayFees(ADDR, SETTLEMENT_FLOOR_LAMPORTS)).to.not.throw();
+  });
+
+  it('sits the floor above one pool and below a pointless reserve', () => {
+    // ~0.016 SOL per pool measured from the account layouts. A floor under one
+    // pool would let the daemon open one it cannot finish settling.
+    const onePool = 16_000_000n;
+    expect(SETTLEMENT_FLOOR_LAMPORTS > onePool * 2n).to.equal(true);
+    expect(SETTLEMENT_FLOOR_LAMPORTS < LAMPORTS_PER_SOL).to.equal(true);
+  });
+
+  it('formats lamports without a float', () => {
+    expect(formatSol(2_000_000_000n)).to.equal('2.000000000');
+    expect(formatSol(0n)).to.equal('0.000000000');
+    expect(formatSol(1n)).to.equal('0.000000001');
   });
 });
