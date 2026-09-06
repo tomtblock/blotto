@@ -104,6 +104,17 @@ export const COPY = {
   // The landing page's game explainer (founder ask 2026-08-28). Substance
   // must match the rules tab and PRODUCT-FACTS; wording is founder-voiced
   // like all copy — re-voicing rights reserved.
+  landing: {
+    // Hero voice is a PLACEHOLDER awaiting founder re-voice (brand voice
+    // is founder-reserved); everything else on the landing reuses lines
+    // already ratified elsewhere in this file.
+    heroTitle: 'Make your Blot',
+    tryDials: 'Try the dials',
+    demoHint: 'Drag a dial — the other four give way. Nothing to sign, nothing to pay: this one is just to feel it.',
+    openPoolTitle: 'Open now',
+    seatsLabel: 'seats filled',
+  },
+
   howItWorks: {
     title: 'How it works',
     pentagonCaption:
