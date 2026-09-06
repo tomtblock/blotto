@@ -53,6 +53,8 @@ any file containing it. The original draft's standing rule 1 would not have merg
 | Program keypair | `~/.config/solana/blotto/blotto_cup-program-devnet.json` | `BLOTTO_PROGRAM_KEYPAIR` |
 | Irys wallet | `~/.config/solana/blotto/irys-devnet.json` (`HG56…`) | `IRYS_UPLOAD_KEY` source |
 | Fly deploy token | GitHub secret `FLY_API_TOKEN` · **must be an ORG token** (`fly tokens create org --org <slug>`) · org slug: `personal` (the only org on the account; both apps owned by it) · created: 2026-09-05 | every backend deploy. Account-level personal access tokens stopped authenticating on 2026-09-05 when an org on the account began requiring SSO; the dashboard cannot create the replacement |
+| **Settlement signer** | `EaDfwMWwW712L4YgdhBgEqbzzpdVP17e5mvY9LPwjrSD` · staged as `SETTLEMENT_SIGNER_KEYPAIR_B64` | `Config.settlement_signer`. **MUST HOLD SOL** — it pays the fee and the account rent for every daemon instruction. Funded at C6.1; the daemon refuses to start below 0.05 SOL |
+| Config PDA | `6Q3HReRVp4fND7wCuYSpRDPbz5KsQR7cbEwApVUhPzDa` | read it back with `solana account` when a value is in doubt; the chain is the register's referee |
 | **Entry signer** (VERIFIED 2026-08-31) | Turnkey `blotto-entry-signer-devnet`, Ed25519, non-exportable · key id `79672a1a-3c43-481a-a304-82f0ee10709c` · address `9XhwKrXjKwFdYJatxYMZYyfB6nFLbmdFNSuM5JTyy8TP` · `ENTRY_SIGNER_PUBLIC_KEY_HEX` = `7ebb34f6a4a985b0e3fc5a2ab0488cae67e4c7577b2c75dc21eac677a922a4b6` | goes on-chain as `Config.entry_signer` at C3 |
 
 **The entry signer is confirmed end to end**: `npm run check-signer` in
@@ -524,7 +526,12 @@ base58), `IRYS_UPLOAD_KEY`, `IRYS_NETWORK=devnet`, `TURNKEY_API_BASE_URL`,
 
 **Verify:**
 
-- daemon health endpoint green (`/health`, port 8084)
+- daemon health endpoint reports **`"ready":true`**, not merely a 200 (`/health`,
+  port 8084). It answers 200 with `"ready":false` while it is still starting — that
+  is deliberate, so the platform stops killing it mid-init — so a 200 alone proves
+  only that the process is alive. The `phase` field names the step it is on, and
+  the endpoint turns 503 if it is still starting after two minutes. The deploy's
+  "Assert the daemon reached ready" step checks this for you.
 - **the log line and the reveal instruction show the Switchboard path, not the stub**
 - one pool key created in Turnkey at `open_pool`
 - **export before seal refused by Turnkey policy** — assert the API error. This is
@@ -546,10 +553,37 @@ change goes through the B7 language audit. **[ARCH]** deploys `blotto-review` pe
 B-d. Fill `config/reviewers.json` first: it ships empty and no decision verifies
 until it has member keys.
 
+**C6.1 — FUND THE SETTLEMENT SIGNER [YOU]. Added 2026-09-06 after it was missed.**
+`EaDfwMWwW712L4YgdhBgEqbzzpdVP17e5mvY9LPwjrSD` pays the fee AND the account rent
+for every instruction the daemon sends — `open_pool`, `commit_vrf_seed`,
+`create_pass_collection`, `reveal_pool_secret`, `commit_results`, `pay_prizes`.
+Generated and staged is not funded. Left empty it does not fail loudly: the
+keeper retries once per tick with Solana's message for an unfunded fee payer,
+"Attempt to debit an account but found no record of a prior credit".
+
+```
+solana transfer EaDfwMWwW712L4YgdhBgEqbzzpdVP17e5mvY9LPwjrSD 2 -k /Users/tomhumber/.config/solana/blotto/fee-payer-devnet.json -u https://api.devnet.solana.com --allow-unfunded-recipient
+```
+
+**2 SOL, sized not guessed.** Per pool: `Pool` PDA rent 0.00679 (847 bytes),
+its vault 0.00089, the Switchboard randomness and MPL Core collection accounts
+~0.008 between them, fees ~0.00005 — about **0.016 SOL**, so twenty pools is
+~0.35. Two is roughly 5x, covering the two vendor figures that are estimates
+rather than quotes. Pool 1 measures the real number; replace this line with it.
+
+Do NOT confuse this with the **platform treasury** (6.0 SOL), a different
+account that funds each pool's 5.12 SOL pot at `open_pool`. The entry signer
+holds nothing and should stay that way — it signs packets off-chain and never
+pays a fee.
+
+The daemon now refuses to start below **0.05 SOL** and reports
+`settlementSol` on `/health` (`backend/reveal/src/startup.ts`).
+
 **Verify:** review `/health` (port 8083) · a flagged entry appears on the review page
 · `clear_flag` executes and the decision log records it. Note `clear_flag` is
 **settlement-signed**, not admin-signed — it is driven by the review service, not by
-a Squads proposal.
+a Squads proposal. · **the settlement signer's balance is above the floor** —
+`solana balance EaDfwMWwW712L4YgdhBgEqbzzpdVP17e5mvY9LPwjrSD -u https://api.devnet.solana.com`
 
 ---
 
@@ -771,3 +805,119 @@ personal access tokens as a class. The fix is an org token,
 
 Replacing the token is safe at any point: nothing is staged or deployed until it
 authenticates, so a failed run leaves every app exactly as it was.
+
+**A step that has never run is not a step that works.** On 2026-09-06 the deploy
+got every credential right — the run printed `entry signer = TURNKEY`,
+`settlement signer = DECODED FROM SECRET`, `VRF = SWITCHBOARD On-Demand`, and no
+`GEO STUB` line — and still failed, at "Deploy daemon", with Fly reporting nothing
+listening on `0.0.0.0:8084`.
+
+The daemon did have a health endpoint. It bound the port **last**, after
+`makeSwitchboardOps` (21 seconds on that run, from the log timestamps) and
+`irysUploaderFromEnv`. Both awaits were reached for the first time that night:
+`SWITCHBOARD_QUEUE` and `IRYS_UPLOAD_KEY` had been empty until C5 set them, so the
+daemon had always taken the short path around them. The code did not regress —
+**configuring a service correctly for the first time is also the first time its
+real startup path runs.** Expect the first credentialed deploy of any service to
+fail on something no previous deploy could have exposed.
+
+The fix binds `/health` before anything else and reports the startup phase, so the
+platform can tell "still starting" from "dead" (`backend/reveal/src/health.ts`).
+That creates the opposite hazard, which is why the endpoint turns **503** past a
+two-minute startup budget and why the deploy now asserts `"ready":true` rather than
+a bare 200: a machine that answers 200 forever while wedged in initialisation would
+be the same silent failure wearing the other mask.
+
+**An unhealthy service cannot be the thing that tells you why.** The same night,
+with the port bound early, the daemon deployed cleanly, logged
+`VRF = SWITCHBOARD On-Demand`, and then went silent — no ready line, no ticks, no
+error. Its public `/health` stopped answering entirely: past the startup budget it
+returns 503, and Fly's proxy does not route to an instance whose check is failing,
+so the request hangs with zero bytes. The endpoint that knew what was wrong was
+unreachable *because* it was right.
+
+Three consequences, all now in place:
+
+1. **The log is the witness.** Every startup phase is logged with its elapsed
+   time, and the daemon prints an explicit `READY` line
+   (`backend/reveal/src/main.ts`). "Still starting" and "running" used to look
+   identical in the log; they no longer do.
+2. **A vendor call gets a budget.** `makeSwitchboardOps` and
+   `irysUploaderFromEnv` each run under a named 45s limit
+   (`backend/reveal/src/startup.ts`). A third party that neither answers nor
+   fails now produces a named, fatal error instead of an indefinite stall. Irys
+   is additionally given `BLOTTO_RPC_URL` and its own HTTP timeout, so it is no
+   longer reaching an unnamed default endpoint nobody here configured.
+3. **`backend-status` covers all four apps**, with public IPs and check state.
+   It had covered only the indexer and the packet service, which is why the
+   daemon's silence could not be read from the Actions page at all.
+
+When the deploy reports the daemon unready, read the log lines it dumps, not the
+endpoint.
+
+**Generated and staged is not funded.** With the deploy finally green on
+2026-09-06, the daemon reached `ready`, ticked on schedule — and reported one
+error every fifteen seconds for forty minutes:
+
+```
+daemon: keeper:failed {"error":"... Attempt to debit an account
+  but found no record of a prior credit."}
+```
+
+That is Solana's message for a **fee payer that has never been funded**. The
+settlement signer held nothing. C6 said to generate and stage the keypair and
+never said to fund it, while C3's preconditions carefully required the vault to
+hold 0.05 SOL for one account's rent. The account that pays for every
+instruction after C3 was guarded by nothing. C6.1 now exists.
+
+Two smaller lessons from the same half hour:
+
+- **The abbreviation in a register is for reading, not for doing.** The row
+  carried `EaDf…jrSD`, so writing a single transfer command meant deriving the
+  full address from `Config` on chain. Full addresses now, both here and for
+  the Config PDA.
+- **Read the register before guessing a path.** The first funding attempt used
+  `~/.config/solana/fee-payer-devnet.json` and failed with "No default signer
+  found". The register already said `~/.config/solana/blotto/…`. The keypair
+  paths were right there; the guess was the only thing that wasn't.
+
+**Correction, and the actual cause.** The paragraph above first said the empty
+answer meant "unhealthy, not unreachable" — that the 503 had taken the daemon out
+of the proxy's rotation. That was wrong, and the phase logging is what showed it.
+The real timeline:
+
+```
+03:44:30  Out of memory: Killed process 668 (node) ... anon-rss:126312kB
+03:46:26  daemon: phase=switchboard (+560ms)
+03:46:40  daemon: switchboard queue: done in 13873ms
+03:46:48  Health check on port 8084 has FAILED
+03:52:15  daemon: phase=irys (+349127ms)
+```
+
+The daemon was **OOM-killed**, and the 5m35s gap is neither vendor call — it sits
+between them, in `buildCustody`'s synchronous `require` of the Turnkey SDK. A
+one-second require took five and a half minutes: a process thrashing against a
+memory ceiling.
+
+`deploy/fly/daemon.fly.toml` had no `[[vm]]` block, so it ran on Fly's 256 MB
+default, while `indexer.fly.toml` declares 512 MB explicitly. The daemon is the
+heaviest of the four services — Turnkey, Switchboard, Irys, `@solana/web3.js` and
+the detection pipeline in one process, all under ts-node — and was the only one
+with no memory declared. It is now 1 GB, and every phase line reports resident
+memory so the next one is read rather than inferred.
+
+Three things worth keeping:
+
+1. **An in-process health endpoint cannot report a blocked event loop.** A
+   synchronous require stops the HTTP server dead: the kernel accepts the
+   connection and nothing ever reads it, so the caller sees zero bytes rather
+   than an error. The 503 logic never ran, because nothing could run. The
+   platform's own check failing is the only signal for this case.
+2. **The heaviest service was the one running on a platform default.** Where a
+   limit is not declared, nobody has decided it. `packet.fly.toml` and
+   `review.fly.toml` are still implicit — they are running fine, so they were
+   not touched mid-rehearsal, but they are unclosed.
+3. **`ts-node` in production is the underlying defect**, in all four services. It
+   puts the TypeScript compiler's memory cost in the runtime. Compiling at image
+   build and running plain `node` is the real fix, deferred deliberately to its
+   own change rather than attempted mid-rehearsal.

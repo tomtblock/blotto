@@ -21,9 +21,22 @@ jobs:
 
       - name: Status and logs for both services
         run: |
-          for app in blotto-indexer blotto-packet; do
+          # All four apps. Until 2026-09-06 this loop named only the indexer
+          # and the packet service, so when the daemon deployed and then went
+          # silent there was no founder-clickable way to see its machine
+          # events, its check state or its logs — and a stalled daemon cannot
+          # answer on its own health endpoint, because a failing check is
+          # exactly what makes Fly's proxy stop routing to it. The log is the
+          # only witness, so it has to be reachable from here.
+          for app in blotto-indexer blotto-packet blotto-daemon blotto-review; do
             echo "===================== $app: status ====================="
             flyctl status --app "$app" || true
+            echo "===================== $app: public IPs ================="
+            flyctl ips list --app "$app" || true
+            echo "===================== $app: checks ====================="
+            # Which check is failing, and what it last returned. A machine can
+            # be 'started' and still be out of rotation.
+            flyctl checks list --app "$app" || true
             echo "===================== $app: machines ==================="
             flyctl machine list --app "$app" || true
             # Per-machine event history is the authoritative exit record:

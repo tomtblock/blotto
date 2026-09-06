@@ -16,6 +16,7 @@
 
 import dynamic from "next/dynamic";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { testSignerFromWindow } from "../tx/test-signer";
 import { AuthContext } from "./auth-context";
 import { sameAuthState } from "./auth-state";
 import type { Auth } from "./types";
@@ -65,9 +66,60 @@ function unconfiguredAuth(): Auth {
   };
 }
 
+/*
+ * C7 / B-e — the automation signer, behind three gates.
+ *
+ * Stage D 5.1 requires 64 automated entrants through the REAL front end, not
+ * through the API, and embedded auth cannot be automated. `test-signer.ts`
+ * has existed since the 10.B signing spike with nothing importing it; this is
+ * the wiring, and every gate here is load-bearing:
+ *
+ *   1. BUILD-TIME FLAG. Next inlines NEXT_PUBLIC_* literally, so with the flag
+ *      unset this function collapses to `return null` and everything below is
+ *      unreachable — which the minifier drops. That is asserted, not assumed:
+ *      the app-test-signer CI lane builds with the flag unset and greps the
+ *      bundle for the injected global's name. The same lane builds WITH the
+ *      flag on and requires the name to be present, so a grep that could only
+ *      ever pass cannot masquerade as a gate.
+ *   2. DEVNET ONLY. The app is devnet by construction (privy-bridge's
+ *      SOLANA_CHAIN), but an operator can repoint the RPC — so the endpoint
+ *      must name devnet, or be unset and take tx-rpc's devnet fallback.
+ *      Fail-closed: anything else refuses.
+ *   3. THE INJECTION ITSELF, absent in any ordinary browser.
+ *
+ * Never present outside a test-driven browser context — all three must hold.
+ */
+function testSignerAuth(): Auth | null {
+  if (process.env.NEXT_PUBLIC_ALLOW_TEST_SIGNER !== "1") return null;
+
+  const rpc = process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? "";
+  if (rpc !== "" && !/devnet/i.test(rpc)) return null;
+
+  const signer = testSignerFromWindow();
+  if (signer === null) return null;
+
+  return {
+    status: "signed-in",
+    walletAddress: signer.address,
+    signers: [signer],
+    // A driven browser never reaches these: the header renders no sign-in
+    // affordance while signed in, and the run drives the play flow directly.
+    signInWithSocial: () => {},
+    connectWallet: () => {},
+    signOut: async () => {},
+  };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
   const [live, setLive] = useState<Auth | null>(null);
+  // Resolved once, during render. `testSignerAuth` reads `window`, so this is
+  // null on the server and stays null in every deployable build — the whole
+  // branch is eliminated there (see next.config.ts), so no ordinary render
+  // path is affected. Deliberately NOT an effect: setState in an effect body
+  // triggers the cascading re-render this file's update-loop rule exists to
+  // prevent, and eslint refuses it.
+  const injected = useMemo(() => testSignerAuth(), []);
 
   // See the update-loop rule above. Keeping the previous object also keeps
   // its callback closures; that is safe — the SDK's functions dispatch to
@@ -80,8 +132,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<Auth>(
-    () => live ?? (appId ? INITIALIZING : unconfiguredAuth()),
-    [live, appId],
+    () => injected ?? live ?? (appId ? INITIALIZING : unconfiguredAuth()),
+    [injected, live, appId],
   );
 
   return (

@@ -414,6 +414,40 @@ jobs:
           done
           exit $fail
 
+      # The daemon's /health answers 200 with `ready:false` while it starts —
+      # deliberately, so Fly stops killing a machine mid-init (the ~25s
+      # Switchboard + Irys path, incident 2026-09-06). So a bare curl is too
+      # weak: it would pass a daemon that never finished starting.
+      #
+      # This runs BEFORE the generic smoke check, and the daemon is excluded
+      # from that check, because of a trap worth naming: once the daemon is
+      # past its startup budget its /health answers 503, and Fly's proxy does
+      # not route to an instance whose check is failing — so the request just
+      # hangs with no body. The endpoint cannot report its own stall. That is
+      # why this step ends by dumping the log, which is the only witness, and
+      # why letting the generic check fail first (as it did on 2026-09-06)
+      # cost a whole round-trip: it exited the job before anything explained
+      # itself.
+      - name: Assert the daemon reached ready
+        if: steps.pre.outputs.deploy_daemon == 'true'
+        run: |
+          url="https://$DAEMON_APP.fly.dev/health"
+          for i in $(seq 1 18); do
+            body=$(curl --silent --show-error --max-time 20 "$url" || true)
+            echo "attempt $i: ${body:-(no answer — proxy has no healthy instance to route to)}"
+            case "$body" in
+              *'"ready":true'*)
+                echo "daemon is ready"
+                exit 0
+                ;;
+            esac
+            sleep 10
+          done
+          echo "--- last 80 daemon log lines ---"
+          flyctl logs --app "$DAEMON_APP" --no-tail 2>/dev/null | tail -80 || true
+          echo "::error::daemon never reported ready:true within 3 minutes. The log above is authoritative: each startup phase is logged with its elapsed time, and a step that outran its budget says so by name. A daemon still starting past its budget answers 503, which takes it out of the proxy's rotation — an empty answer above means unhealthy, not unreachable."
+          exit 1
+
       # NOTE the `if ! curl` form: a bare `curl --fail && echo` inside a
       # `set -e` step does NOT stop the step when curl fails (the && list
       # exempts it) — incident 2026-08-29: two runs went green while the
@@ -423,7 +457,9 @@ jobs:
           sleep 10
           fail=0
           urls="https://$INDEXER_APP.fly.dev/health https://$PACKET_APP.fly.dev/health https://$PACKET_APP.fly.dev/geo"
-          if [ "${{ steps.pre.outputs.deploy_daemon }}" = "true" ]; then urls="$urls https://$DAEMON_APP.fly.dev/health"; fi
+          # The daemon is deliberately NOT here: "Assert the daemon reached
+          # ready" above checks it properly, and a bare curl against a daemon
+          # that is unready hangs rather than answering.
           if [ "${{ steps.pre.outputs.deploy_review }}" = "true" ]; then urls="$urls https://$REVIEW_APP.fly.dev/health"; fi
           for url in $urls; do
             echo "GET $url"
@@ -434,6 +470,7 @@ jobs:
             echo
           done
           exit $fail
+
 
       # The startup lines are the acceptance criterion, not the endpoints:
       # they name which code path is live, where a healthy endpoint only
