@@ -55,6 +55,20 @@ jobs:
           cache: npm
           cache-dependency-path: app/package-lock.json
 
+      # The app imports backend/*/src directly (the relative re-export
+      # convention), and those files resolve vendor packages from each backend
+      # package's OWN node_modules — so `next build` cannot resolve them unless
+      # the backend packages are installed first. ci-fast.yml installs in the
+      # same order for the same reason; installing only `app` here made the
+      # build fail with module-not-found rather than with anything about the
+      # signer.
+      - name: install backend packages the app builds against
+        working-directory: .
+        run: |
+          for pkg in _shared scoring class-digest sealing reveal indexer packet detection; do
+            (cd "backend/$pkg" && npm ci --no-audit --no-fund)
+          done
+
       - run: npm ci --no-audit --no-fund
 
       - name: Build as deployed (flag unset) — the injection must be ABSENT

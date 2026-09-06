@@ -85,9 +85,9 @@ describe('the settlement signer floor', () => {
   });
 
   it('REFUSES an empty signer, naming the address — the 2026-09-06 case', () => {
-    // Zero is not a degenerate input here: it is the state the daemon actually
+    // Zero is not a contrived input here: it is the state the daemon actually
     // ran in for forty minutes, retrying every fifteen seconds.
-    expect(() => assertCanPayFees(ADDR, 0n)).to.throw(new RegExp(ADDR));
+    expect(() => assertCanPayFees(ADDR, 0n)).to.throw(ADDR);
   });
 
   it('names what the balance is for, not just that it is low', () => {
