@@ -1,8 +1,8 @@
 run,class,entrants,rank1_rate_pct,paid_seat_rate_pct,eliminated_rate_pct,mean_payout_share_pct,total_paid_lamports
 mixed,uniform,3200,0.000,0.00,100.00,0.0000,0
-mixed,random,3200,0.000,0.15,99.84,0.0041,527343750
-mixed,heuristic,3200,1.093,33.84,66.15,1.6114,206269531250
-mixed,optimised,3200,5.156,66.03,33.96,4.6343,593203125000
-homogeneous,random,12800,1.562,25.00,74.99,1.5625,800000000000
-homogeneous,heuristic,12800,1.562,25.00,75.00,1.5625,800000000000
-homogeneous,optimised,12800,1.562,25.00,75.00,1.5625,800000000000
+mixed,random,3200,0.000,0.00,100.00,0.0000,0
+mixed,heuristic,3200,1.093,1.09,98.90,1.0937,140000000000
+mixed,optimised,3200,5.156,5.15,94.84,5.1562,660000000000
+homogeneous,random,12800,1.562,1.56,98.43,1.5625,800000000000
+homogeneous,heuristic,12800,1.562,1.56,98.43,1.5625,800000000000
+homogeneous,optimised,12800,1.562,1.56,98.43,1.5625,800000000000
