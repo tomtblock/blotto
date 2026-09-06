@@ -38,20 +38,21 @@ export const TIER_ENTRY_LAMPORTS: readonly bigint[] = [
  * 0..6 — a TS mirror of `constants.rs::TIER_POT_LAMPORTS`. A pot is a
  * CONSTANT funded from the prize treasury at `open_pool`, before any pass
  * is sold — never arithmetic over entries or balances. The founder's stated
- * derivation for these initial values is 80% of price × 64; the derivation
+ * derivation for these values is 62.5% of price × 64 (D-E1, 2026-09-06 —
+ * equivalently price / 8 × 5 × 64, exact in integers); the derivation
  * is history, the constant is the law (the standing-rules grep bans pot
  * arithmetic in the program, and this module carries no 80/20 helpers any
  * more). Every value is a multiple of 1024 so the band table divides with
  * zero residue.
  */
 export const TIER_POT_LAMPORTS: readonly bigint[] = [
-  5_120_000_000n,
-  25_600_000_000n,
-  38_400_000_000n,
-  51_200_000_000n,
-  128_000_000_000n,
-  256_000_000_000n,
-  384_000_000_000n,
+  4_000_000_000n,
+  20_000_000_000n,
+  30_000_000_000n,
+  40_000_000_000n,
+  100_000_000_000n,
+  200_000_000_000n,
+  300_000_000_000n,
 ];
 
 export const PAID_RANKS = 16;

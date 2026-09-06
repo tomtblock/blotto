@@ -89,6 +89,11 @@ export const COPY = {
       'Battles are encrypted to a key nobody holds until the pool closes, and their hash is recorded on-chain at entry.',
     enter: 'Enter this tournament',
     ageTerritoryNote: '18+ only · not available in some territories',
+    // D-E1 §1.4 (option A): shown on any pool whose on-chain pot differs
+    // from the CURRENT launch table — the guarantee the architecture
+    // already provides, said out loud instead of read as a cut.
+    potFixedAtOpen:
+      'This pool\u2019s prize pool was fixed when it opened and is unaffected by later changes.',
     lockedTier: 'Opens when the treasury covers it',
     noOpenPool: 'No tournament is open for entries right now.',
     noOpenPoolDetail:

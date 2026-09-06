@@ -34,9 +34,9 @@ test('pool page: prize table from the fixed pot, §8.6 above the enter control',
   page,
 }, info) => {
   await page.goto(`/pools/${POOL}`);
-  // The fixed 5.12 SOL pot pays 1st exactly 270/1024.
+  // The fixed 4 SOL pot (D-E1) pays 1st exactly 270/1024.
   await expect(page.getByRole('table')).toContainText('1st');
-  await expect(page.getByRole('table')).toContainText('1.35');
+  await expect(page.getByRole('table')).toContainText('1.0546875');
   const finalText = page.getByText(/Decisions are final/);
   await expect(finalText).toBeVisible();
   const enter = page.getByRole('link', { name: 'Enter this tournament' });

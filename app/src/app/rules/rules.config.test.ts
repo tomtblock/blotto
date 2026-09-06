@@ -10,15 +10,15 @@ describe('tierRows', () => {
   it('one row per configured tier, numbers from the shared table', () => {
     const rows = tierRows();
     expect(rows.length).to.equal(TIER_ENTRY_LAMPORTS.length);
-    // Tier 0: 0.1 SOL entry, 5.12 SOL prize pool, 1.35 SOL first prize.
+    // Tier 0 (D-E1): 0.1 SOL entry, 4 SOL prize pool, 1.0546875 SOL first prize.
     expect(rows[0].entrySol).to.equal('0.1');
-    expect(rows[0].potSol).to.equal('5.12');
-    expect(rows[0].prizesSol[0]).to.equal('1.35');
-    expect(rows[0].prizesSol[15]).to.equal('0.135');
+    expect(rows[0].potSol).to.equal('4');
+    expect(rows[0].prizesSol[0]).to.equal('1.0546875');
+    expect(rows[0].prizesSol[15]).to.equal('0.10546875');
     // Tier 6: 7.5 SOL entry, 384 SOL prize pool, 101.25 SOL first prize.
     expect(rows[6].entrySol).to.equal('7.5');
-    expect(rows[6].potSol).to.equal('384');
-    expect(rows[6].prizesSol[0]).to.equal('101.25');
+    expect(rows[6].potSol).to.equal('300');
+    expect(rows[6].prizesSol[0]).to.equal('79.1015625');
   });
 
   it('sixteen paid positions per tier', () => {

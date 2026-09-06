@@ -59,35 +59,38 @@ mod tests {
         assert_eq!(PRIZE_BANDS_1024.iter().sum::<u64>(), 1024);
     }
 
-    /// PID §6 publishes exact SOL amounts for the 0.1 tier (pot 5.12 SOL).
-    /// The band table must reproduce them to the lamport.
+    /// The published amounts for the 0.1 tier at the D-E1 pot (4 SOL).
+    /// PID §6's reissue is pending (counsel gate, proposal E1 §8.1); this
+    /// pins the INTERMEDIATE state — D-E1 pots under the unchanged top-16
+    /// bands — and is replaced wholesale by D-E2's single-figure pin. The
+    /// band table must reproduce the amounts to the lamport.
     #[test]
     fn bands_reproduce_pid_section_6_amounts_for_the_entry_tier() {
         let pot = TIER_POT_LAMPORTS[0];
-        assert_eq!(pot, 5_120_000_000, "tier-0 pot must be 5.12 SOL");
+        assert_eq!(pot, 4_000_000_000, "tier-0 pot must be 4 SOL (D-E1)");
         let expected: [u64; 16] = [
-            1_350_000_000, // 1st  — 1.350 SOL
-            790_000_000,   // 2nd  — 0.790
-            510_000_000,   // 3rd  — 0.510
-            390_000_000,   // 4th  — 0.390
-            250_000_000,
-            250_000_000,
-            250_000_000,
-            250_000_000, // 5th–8th
-            135_000_000,
-            135_000_000,
-            135_000_000,
-            135_000_000, // 9th–16th
-            135_000_000,
-            135_000_000,
-            135_000_000,
-            135_000_000,
+            1_054_687_500, // 1st  — 1.0546875 SOL
+            617_187_500,   // 2nd  — 0.6171875
+            398_437_500,   // 3rd  — 0.3984375
+            304_687_500,   // 4th  — 0.3046875
+            195_312_500,
+            195_312_500,
+            195_312_500,
+            195_312_500, // 5th–8th
+            105_468_750,
+            105_468_750,
+            105_468_750,
+            105_468_750, // 9th–16th
+            105_468_750,
+            105_468_750,
+            105_468_750,
+            105_468_750,
         ];
         for r in 1..=16u8 {
             assert_eq!(
                 band_amount(pot, r),
                 expected[(r - 1) as usize],
-                "rank {r} amount diverges from PID §6",
+                "rank {r} amount diverges from the D-E1 published table",
             );
         }
     }
@@ -106,8 +109,8 @@ mod tests {
             // The initial constants' published relationship (v2 D-A1).
             assert_eq!(
                 pot,
-                TIER_ENTRY_LAMPORTS[t] / 10 * 8 * 64,
-                "tier {t}: initial pot must be 80% of price × 64"
+                TIER_ENTRY_LAMPORTS[t] / 8 * 5 * 64,
+                "tier {t}: initial pot must be 62.5% of price × 64 (D-E1)"
             );
         }
     }
@@ -118,7 +121,7 @@ mod tests {
     /// 64-way tie splits the whole pot with zero remainder at tier 0.
     #[test]
     fn split_groups_conserve_lamports_exactly() {
-        let pot = TIER_POT_LAMPORTS[0]; // 5.12 SOL
+        let pot = TIER_POT_LAMPORTS[0]; // 4 SOL (D-E1)
         for r in 1..=16u16 {
             let (each, rem) = split_group(pot, r, 1);
             assert_eq!(each, band_amount(pot, r as u8));
@@ -138,7 +141,7 @@ mod tests {
         assert_eq!(split_group(pot, 17, 5), (0, 0));
         // Everyone tied: the whole pot, 64 ways, exact at this tier.
         let (each, rem) = split_group(pot, 1, 64);
-        assert_eq!(each, 80_000_000);
+        assert_eq!(each, 62_500_000); // 4 SOL / 64 (D-E1)
         assert_eq!(rem, 0);
     }
 

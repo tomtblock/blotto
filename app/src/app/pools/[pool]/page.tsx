@@ -6,6 +6,7 @@
  */
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { TIER_POT_LAMPORTS } from '@blotto/scoring';
 import { COPY } from '@/copy';
 import { indexerApi, live } from '@/data/api';
 import { lamportsToSol, prizeForRank } from '@/data/format';
@@ -45,6 +46,12 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
   const pool = poolLive.value;
   if (!pool) notFound();
   const open = pool.state === 'Open';
+  // D-E1 §1.4: a pool carries the pot it OPENED with; when the launch
+  // table has since moved, say the guarantee rather than look like a cut.
+  const potDiffers =
+    pool.tier >= 0 &&
+    pool.tier < TIER_POT_LAMPORTS.length &&
+    BigInt(pool.pot_lamports) !== TIER_POT_LAMPORTS[pool.tier];
 
   return (
     <>
@@ -64,6 +71,11 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
         </header>
 
         <Card live={open} className="mb-5 p-5">
+          {potDiffers && (
+            <p className="mb-3 text-[13px] leading-5 text-ink-muted">
+              {COPY.pool.potFixedAtOpen}
+            </p>
+          )}
           <div className="flex flex-wrap items-center gap-5">
             <ProgressRing
               value={pool.entrants}

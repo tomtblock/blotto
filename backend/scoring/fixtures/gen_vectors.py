@@ -55,8 +55,8 @@ TIER_ENTRY_LAMPORTS = [
     2_500_000_000, 5_000_000_000, 7_500_000_000,
 ]
 TIER_POT_LAMPORTS = [
-    5_120_000_000, 25_600_000_000, 38_400_000_000, 51_200_000_000,
-    128_000_000_000, 256_000_000_000, 384_000_000_000,
+    4_000_000_000, 20_000_000_000, 30_000_000_000, 40_000_000_000,
+    100_000_000_000, 200_000_000_000, 300_000_000_000,
 ]
 
 
@@ -64,7 +64,7 @@ def pot_for_entry(entry_lamports: int) -> int:
     return TIER_POT_LAMPORTS[TIER_ENTRY_LAMPORTS.index(entry_lamports)]
 
 
-POT = pot_for_entry(ENTRY_LAMPORTS)  # 5_120_000_000
+POT = pot_for_entry(ENTRY_LAMPORTS)  # 4_000_000_000 (D-E1)
 
 
 def sha256(b: bytes) -> bytes:
@@ -342,7 +342,7 @@ def main() -> None:
         {
             "entry_lamports": str(entry),
             "pot_lamports": str(pot_for_entry(entry)),
-            "bands": [str(band_amount(entry * 8 // 10 * CAPACITY, p)) for p in range(1, 17)],
+            "bands": [str(band_amount(pot_for_entry(entry), p)) for p in range(1, 17)],
         }
         for entry in (100_000_000, 500_000_000, 750_000_000, 1_000_000_000,
                       2_500_000_000, 5_000_000_000, 7_500_000_000)

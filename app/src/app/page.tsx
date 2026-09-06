@@ -145,6 +145,12 @@ export default async function LandingPage() {
                 <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-game-ink-muted">
                   {COPY.landing.openPoolTitle}
                 </p>
+                {/* D-E1 §1.4: the pot travels with the pool, not the table. */}
+                {BigInt(hero.pot_lamports) !== TIER_POT_LAMPORTS[hero.tier] && (
+                  <p className="mt-2 text-[12px] leading-5 text-game-ink-muted">
+                    {COPY.pool.potFixedAtOpen}
+                  </p>
+                )}
                 <div className="mt-4 flex flex-wrap items-center gap-6">
                   <SeatRing entrants={hero.entrants} />
                   <div className="min-w-0 flex-1">

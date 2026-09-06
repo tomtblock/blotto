@@ -106,13 +106,13 @@ pub const TIER_PRICES: [u64; 7] = [
 
 /// The launch FIXED pots (constants.rs::TIER_POT_LAMPORTS, D-A1 revised).
 pub const TIER_POTS: [u64; 7] = [
-    5_120_000_000,
-    25_600_000_000,
-    38_400_000_000,
-    51_200_000_000,
-    128_000_000_000,
-    256_000_000_000,
-    384_000_000_000,
+    4_000_000_000,
+    20_000_000_000,
+    30_000_000_000,
+    40_000_000_000,
+    100_000_000_000,
+    200_000_000_000,
+    300_000_000_000,
 ];
 pub fn entry_pda(pool: &Pubkey, player: &Pubkey) -> Pubkey {
     Pubkey::find_program_address(&[b"entry", pool.as_ref(), player.as_ref()], &program_id()).0

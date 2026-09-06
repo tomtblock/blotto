@@ -78,8 +78,10 @@ skill competition's outcomes should have.
   collusion. **The engine scoring these pools is the same module the crank
   runs in production and the verify page runs in the browser** — a player
   can recompute any pool of this study from its published data.
-- **Tier**: 0.1 SOL entries, the 5.12 SOL fixed pot (D-A1 revised). Shares
-  are pot-relative, so per-class statistics carry to every tier unchanged.
+- **Tier**: 0.1 SOL entries, the 4 SOL fixed pot (D-A1,
+  pot revised by D-E1) — read from the same pot table the engine pays from,
+  never restated here. Shares are pot-relative, so per-class statistics
+  carry to every tier unchanged.
 - **Reproduce**:
 
   ```bash

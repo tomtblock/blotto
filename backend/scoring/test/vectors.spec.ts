@@ -136,8 +136,11 @@ describe('split-pot cases (D3-B, through the same assignPrizes)', () => {
   it('the three-way 4th-6th remainder goes to the lowest seat', () => {
     const c = vectors.split_cases.find((x: any) => x.name === 'three_way_4_6');
     const tied = c.payouts.slice(3, 6).map((p: any) => BigInt(p.amount));
-    expect(tied[0]).to.equal(tied[1] + 2n);
+    // D-E1 pot 4 SOL: combined 4th-6th = 3_906_250 × 178 = 695_312_500,
+    // mod 3 = 1 — the single indivisible lamport lands on the lowest seat.
+    expect(tied[0]).to.equal(tied[1] + 1n);
     expect(tied[1]).to.equal(tied[2]);
+    expect((tied[0] + tied[1] + tied[2]) % 3n).to.equal(1n);
   });
 });
 

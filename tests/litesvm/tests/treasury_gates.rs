@@ -2,7 +2,7 @@
 //! compiled artifact: the SEQUENTIAL rule (a tier's next pool opens only
 //! after the previous is Paid or Refunded), the treasury policy gate, the
 //! withdraw floor (minimum + idle-tier reserve + refundable entries), and
-//! the tier ladder's unlock thresholds from a 5.12 SOL bootstrap.
+//! the tier ladder's unlock thresholds from a 4 SOL bootstrap (D-E1).
 //!
 //! The lifecycle suite covers the other v2-named cases in situ: the pot is
 //! locked in the vault before the first register, and the refund fork
@@ -106,8 +106,8 @@ fn open_blocked_when_the_policy_floor_is_unmet() {
     let ix = set_treasury_policy_ix(&admin, 1, 1_000_000_000);
     env.send(&[ix], &[]).unwrap();
 
-    // Opening tier 0 needs: pot(5.12) + min(1) + tier 1's idle pot (25.6)
-    // = 31.72 SOL. One lamport short → TreasuryShortfall, nothing moves.
+    // Opening tier 0 needs: pot(4) + min(1) + tier 1's idle pot (20)
+    // = 25 SOL (D-E1). One lamport short → TreasuryShortfall, nothing moves.
     let needed = TIER_POTS[0] + 1_000_000_000 + TIER_POTS[1];
     env.fund_platform(needed - 1);
     let ix = open_pool_ix(&settlement.pubkey(), 1, 0, [9; 32], env.sealing_secret_hash);
@@ -177,12 +177,12 @@ fn withdraw_blocked_below_the_floor_including_refundable_entries() {
         .expect("surplus above refundable clears");
 }
 
-/// The seven-tier ladder from the founder's 5.12 SOL bootstrap: with every
-/// tier enabled and `reserve_pots = 1`, each tier's unlock threshold is its
-/// own pot plus one pot of every other idle tier — asserted here to the
-/// lamport by funding one lamport under (blocked) and at (opens) each rung.
-/// The revenue GRIND that walks the treasury up this ladder for real (64
-/// entries per pool, +1.28 SOL net per tier-0 pool) is the Phase 5
+/// The seven-tier ladder from the founder's 4 SOL bootstrap (D-E1): with
+/// every tier enabled and `reserve_pots = 1`, each tier's unlock threshold
+/// is its own pot plus one pot of every other idle tier — asserted here to
+/// the lamport by funding one lamport under (blocked) and at (opens) each
+/// rung. The revenue GRIND that walks the treasury up this ladder for real
+/// (64 entries per pool, +2.4 SOL net per tier-0 pool) is the Phase 5
 /// rehearsal's 20-pool run — this test pins the gate arithmetic the ladder
 /// climbs against.
 #[test]
@@ -199,13 +199,13 @@ fn seven_tier_ladder_unlocks_at_exact_thresholds_from_bootstrap() {
     // The bootstrap: exactly one tier-0 pot. With six other ENABLED idle
     // tiers each demanding a reserve pot, tier 0 cannot open yet — the
     // founder's launch posture is all-tiers-enabled only once the treasury
-    // can carry them; at 5.12 SOL only a tier-0-only config opens.
+    // can carry them; at 4 SOL only a tier-0-only config opens.
     env.fund_platform(TIER_POTS[0]);
     let ix = open_pool_ix(&settlement.pubkey(), 1, 0, [9; 32], env.sealing_secret_hash);
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
     assert!(err.contains("6049"), "{err}");
 
-    // Tier-0-only: 5.12 SOL is EXACTLY the tier-0 threshold.
+    // Tier-0-only: 4 SOL is EXACTLY the tier-0 threshold.
     env.send(
         &[admin_ix(&admin, "set_open_tiers", &[1, 0, 0, 0, 0, 0, 0])],
         &[],
@@ -213,7 +213,7 @@ fn seven_tier_ladder_unlocks_at_exact_thresholds_from_bootstrap() {
     .unwrap();
     let ix = open_pool_ix(&settlement.pubkey(), 1, 0, [9; 32], env.sealing_secret_hash);
     env.send(&[ix], &[&settlement])
-        .expect("5.12 SOL bootstrap opens the first tier-0 pool");
+        .expect("the one-pot bootstrap opens the first tier-0 pool");
     let pool1 = 1u64;
 
     // Re-enable everything and climb: with tier 0 LIVE, tier t's threshold
@@ -279,8 +279,8 @@ fn seven_tier_ladder_unlocks_at_exact_thresholds_from_bootstrap() {
 }
 
 /// The tier-0 revenue loop end-to-end: a full pool nets the treasury
-/// +1.28 SOL (6.4 SOL of entries in, 5.12 SOL pot out and paid), and the
-/// tier immediately reopens from its own retained pot-return economics.
+/// +2.4 SOL (6.4 SOL of entries in, the 4 SOL D-E1 pot out and paid), and
+/// the tier immediately reopens from its own retained pot-return economics.
 #[test]
 fn a_paid_pool_grows_the_treasury_by_its_net_margin() {
     let Some(mut env) = Env::new() else { return };
@@ -294,9 +294,9 @@ fn a_paid_pool_grows_the_treasury_by_its_net_margin() {
 
     fill_reveal_commit_pay(&mut env, 1);
 
-    // Treasury: 5.12 in − 5.12 pot + 6.4 entries = 6.4 SOL; the margin over
-    // the bootstrap is 64 × 0.02 = 1.28 SOL, and the tier can fund its next
-    // pot from the balance alone.
+    // Treasury: 4 in − 4 pot + 6.4 entries = 6.4 SOL; the margin over the
+    // bootstrap is 64 × 0.0375 = 2.4 SOL (D-E1), and the tier can fund its
+    // next pot from the balance alone.
     assert_eq!(env.balance(&platform_pda()), 64 * TIER_PRICES[0]);
     let ix = open_pool_ix(&settlement.pubkey(), 2, 0, [9; 32], env.sealing_secret_hash);
     env.send(&[ix], &[&settlement])
