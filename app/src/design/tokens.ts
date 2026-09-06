@@ -93,6 +93,10 @@ export const palette = {
   blotAmbient: '#a8541e',
   blotVisor: '#2a1030',
   brandCream: '#fff6ec',
+  /* Berry: dark plum used AS BRAND-LAYER text and strokes on pink (the
+   * preloader's footer line and quiet pills). Same hex as gameBase — the
+   * duplicate name is the point: this one never paints a card surface. */
+  brandBerry: '#5e1b40',
   brandPalePink: '#ffc7e3',
   brandDeepMagenta: '#d63c8c',
   brandCoral: '#ff9a6b',
