@@ -40,7 +40,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   // Literal required here (meta tag config, not component styling);
   // keep in sync with --color-base in src/styles/tokens.css.
-  themeColor: "#070B14",
+  themeColor: "#5E1B40",
 };
 
 // Typed explicitly rather than with Next's generated `LayoutProps` global: that

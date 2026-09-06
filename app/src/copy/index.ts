@@ -163,6 +163,27 @@ export const COPY = {
     sealing: 'Sealing your battles…',
     remainingPoints: 'Points to place',
     statNames: ['Strength', 'Speed', 'Heart', 'Wit', 'Durability'] as const,
+
+    /* v4 run (founder brief 2026-09-06). The ninety-second rule text is
+     * the brief's approved line, verbatim; the rules PAGE copy change
+     * remains with counsel (founder open item). */
+    approvedTitle: "You're in.",
+    begin: 'Make my first Blot',
+    ruleNinety:
+      "Ninety seconds for all seven battles. Any battle you don't lock in time is locked at whatever shape it has.",
+    lockBattle: (n: number) => `Lock in battle ${n}`,
+    sevenTitle: 'Seven made',
+    expiredNote: 'Time ran out — every battle locked at the shape it had.',
+    montageHeadlineFirst: 'I just made my first Blot.',
+    montageHeadlineSeven: 'I just made seven Blots.',
+    montageFooter: 'BLOTTO CUP \u00b7 blotto.gg \u00b7 18+ only \u00b7 not available in some territories',
+    share: 'Share',
+    shareTextFirst: 'I just made my first Blot. Join the battle at blotto.gg',
+    shareTextSeven: 'I just made seven Blots. Join the battle at blotto.gg',
+    shareFallbackCopied: 'Share line copied — the image downloaded to your device.',
+    backSheetLine: 'Leaving locks nothing and loses nothing — your clock keeps running.',
+    backStay: 'Stay',
+    backLeave: 'Leave',
   },
   // v3 D3: retention surfaces — mastery and standing only. Factual state
   // changes, never pressure; the do-not-build vocabulary is CI-enforced.
@@ -227,6 +248,9 @@ export const COPY = {
     title: 'Your career',
     lifetime: 'Lifetime record',
     readOnlyNote: 'Profiles are a read-only record. Nothing here affects any pool.',
+    myBlots: 'My Blots',
+    myBlotsNote:
+      'Every battle you have locked, as its Blot — kept on this device only. Shapes, never numbers.',
   },
   custody: {
     // C13: the disclosure page. Everything here describes MECHANICS —

@@ -13,6 +13,7 @@ import { AppHeader } from '@/components/shell/app-header';
 import { TabBar } from '@/components/shell/tab-bar';
 import { Card } from '@/components/ui/card';
 import { LiveDataUnavailable } from '@/components/shell/live-unavailable';
+import { PoolStateBlot } from '@/components/pools/PoolStateBlot';
 
 export default async function PoolsPage() {
   // SSR outage guard: a dead indexer degrades this page, never kills it.
@@ -79,6 +80,11 @@ export default async function PoolsPage() {
                               (p.state === 'Open' ? 'border-brand/40' : '')
                             }
                           >
+                            {/* The 48px state object (master prompt D): the
+                                pool's lifecycle as a Blot shape. No amount
+                                shares this row — prize figures stay in the
+                                tier header above. */}
+                            <PoolStateBlot state={p.state} entrants={p.entrants} />
                             <span className="tnum font-mono text-[12px] text-ink-muted">
                               #{p.id}
                             </span>
