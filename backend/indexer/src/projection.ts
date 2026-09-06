@@ -160,6 +160,18 @@ export function projectEvent(e: DecodedEvent): ProjectionOp[] {
         },
       ];
     }
+    case 'GoTimerStarted':
+      // D-E4: the 52nd entry shortened the on-chain `fill_deadline` in place
+      // to the go deadline. Mirror both: `fill_deadline` stays THE effective
+      // deadline for every reader; `go_deadline` says the timer started.
+      return [
+        {
+          kind: 'upsert',
+          table: 'pools',
+          key: { pool: e.pool as string },
+          set: { fill_deadline: e.go_deadline, go_deadline: e.go_deadline },
+        },
+      ];
     case 'PoolSealed':
       return [
         {

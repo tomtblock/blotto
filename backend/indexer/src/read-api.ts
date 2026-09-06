@@ -71,6 +71,9 @@ function poolRow(r: Record<string, unknown>): Json {
     entry_lamports: r.entry_lamports === null ? null : String(r.entry_lamports),
     pot_lamports: r.pot_lamports === null || r.pot_lamports === undefined ? null : String(r.pot_lamports),
     fill_deadline: r.fill_deadline === null ? null : String(r.fill_deadline),
+    // D-E4: set once the 52nd entry started the go-timer (then equal to
+    // fill_deadline, which it shortened); null before that.
+    go_deadline: r.go_deadline === null || r.go_deadline === undefined ? null : String(r.go_deadline),
     timer_seconds: r.timer_seconds,
     state: r.state,
     entrants: Number(r.entrants),
