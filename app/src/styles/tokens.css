@@ -60,6 +60,28 @@
   --color-class-3: #f472b6;
   --color-class-4: #ffd24a;
 
+  /* Blot world (v4) — the two-layer system. Brand layer: pink page, yellow
+   * Blot + inflated type, cream/pale-pink light panels, magenta depth,
+   * coral second-Blot accent. Game layer: plum cards for every number,
+   * rule and control; game-action is the only colour that spends or
+   * commits; game-prize is worn only by amounts a player is paid. The
+   * duplicate hexes across layers are deliberate — the name says which
+   * job the colour is doing. Arena tokens above remain until the v4
+   * migration completes (deleted together in the final PR). */
+  --color-brand-pink: #ff3daa;
+  --color-brand-yellow: #ffd400;
+  --color-brand-cream: #fff4e6;
+  --color-brand-pale-pink: #ffb3d9;
+  --color-brand-deep-magenta: #c2186e;
+  --color-brand-coral: #ff7a45;
+  --color-brand-slate: #3a3f4b;
+  --color-game-base: #3a0a20;
+  --color-game-raised: #4a1030;
+  --color-game-ink: #fff4e6;
+  --color-game-ink-muted: #ffb3d9;
+  --color-game-action: #ff3daa;
+  --color-game-prize: #ffd400;
+
   /* Motion easings (exposed as Tailwind ease-* utilities). */
   --ease-juice: cubic-bezier(0.34, 1.56, 0.64, 1); /* overshoot — celebration only */
   --ease-snap: cubic-bezier(0.22, 1, 0.36, 1); /* fast-out — state changes */
