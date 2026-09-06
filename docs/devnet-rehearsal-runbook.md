@@ -824,4 +824,45 @@ Three consequences, all now in place:
    daemon's silence could not be read from the Actions page at all.
 
 When the deploy reports the daemon unready, read the log lines it dumps, not the
-endpoint. An empty answer there means *unhealthy*, not unreachable.
+endpoint.
+
+**Correction, and the actual cause.** The paragraph above first said the empty
+answer meant "unhealthy, not unreachable" — that the 503 had taken the daemon out
+of the proxy's rotation. That was wrong, and the phase logging is what showed it.
+The real timeline:
+
+```
+03:44:30  Out of memory: Killed process 668 (node) ... anon-rss:126312kB
+03:46:26  daemon: phase=switchboard (+560ms)
+03:46:40  daemon: switchboard queue: done in 13873ms
+03:46:48  Health check on port 8084 has FAILED
+03:52:15  daemon: phase=irys (+349127ms)
+```
+
+The daemon was **OOM-killed**, and the 5m35s gap is neither vendor call — it sits
+between them, in `buildCustody`'s synchronous `require` of the Turnkey SDK. A
+one-second require took five and a half minutes: a process thrashing against a
+memory ceiling.
+
+`deploy/fly/daemon.fly.toml` had no `[[vm]]` block, so it ran on Fly's 256 MB
+default, while `indexer.fly.toml` declares 512 MB explicitly. The daemon is the
+heaviest of the four services — Turnkey, Switchboard, Irys, `@solana/web3.js` and
+the detection pipeline in one process, all under ts-node — and was the only one
+with no memory declared. It is now 1 GB, and every phase line reports resident
+memory so the next one is read rather than inferred.
+
+Three things worth keeping:
+
+1. **An in-process health endpoint cannot report a blocked event loop.** A
+   synchronous require stops the HTTP server dead: the kernel accepts the
+   connection and nothing ever reads it, so the caller sees zero bytes rather
+   than an error. The 503 logic never ran, because nothing could run. The
+   platform's own check failing is the only signal for this case.
+2. **The heaviest service was the one running on a platform default.** Where a
+   limit is not declared, nobody has decided it. `packet.fly.toml` and
+   `review.fly.toml` are still implicit — they are running fine, so they were
+   not touched mid-rehearsal, but they are unclosed.
+3. **`ts-node` in production is the underlying defect**, in all four services. It
+   puts the TypeScript compiler's memory cost in the runtime. Compiling at image
+   build and running plain `node` is the real fix, deferred deliberately to its
+   own change rather than attempted mid-rehearsal.

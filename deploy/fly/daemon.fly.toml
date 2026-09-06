@@ -8,6 +8,23 @@ primary_region = "fra"
 [build]
   dockerfile = "../docker/Dockerfile.daemon"
 
+# DECLARED, not defaulted. On 2026-09-06 this file had no [[vm]] block, so the
+# machine ran on Fly's 256 MB default — and the daemon is by a distance the
+# heaviest of the four services: it loads the Turnkey SDK, Switchboard
+# On-Demand, the Irys uploader, @solana/web3.js and the detection pipeline in
+# one process, all through ts-node. It was OOM-killed at ~126 MB resident, and
+# on the following boot spent 5m35s inside a single synchronous require,
+# thrashing. A blocked event loop cannot answer its own health endpoint, so the
+# service looked unreachable rather than starved.
+#
+# 1 GB is the next size up and leaves roughly 4x headroom over the observed
+# working set. The real fix is to stop running ts-node in production (see
+# Dockerfile.daemon); this is sized so that change is an improvement rather
+# than a prerequisite.
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"
+
 [env]
   BLOTTO_DAEMON_HEALTH_PORT = "8084"
 

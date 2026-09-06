@@ -118,9 +118,14 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
   // Every phase change is logged with elapsed time. When the daemon stalls,
   // its /health answers 503 and Fly's proxy stops routing to it, so the
   // endpoint cannot report the stall — the log is the only witness.
+  // The rss figure is here because the 2026-09-06 stall had to be inferred
+  // from an OOM line in the platform's own log rather than read from ours.
   const enter = (phase: DaemonPhase): void => {
     health.phase = phase;
-    console.log(`${SERVICE}: phase=${phase} (+${Date.now() - health.startedAtMs}ms)`);
+    const rssMb = Math.round(process.memoryUsage().rss / 1_048_576);
+    console.log(
+      `${SERVICE}: phase=${phase} (+${Date.now() - health.startedAtMs}ms, rss ${rssMb}MB)`
+    );
   };
   const log = (line: string): void => console.log(`${SERVICE}: ${line}`);
 
