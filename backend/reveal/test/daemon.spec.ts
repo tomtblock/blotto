@@ -376,3 +376,88 @@ describe('the daemon (C8): run loop', () => {
     expect(ticks).to.be.greaterThan(2); // survived the first (failing) tick
   });
 });
+
+describe('the daemon (proposal E1 §5.3): the keeper-cost seam', () => {
+  // The platform PDA cannot sign, so every fee and rent comes from the
+  // keeper's own signer wallet — the one main.ts floor-checks at startup
+  // (SETTLEMENT_FLOOR_LAMPORTS) and re-reads once per tick into /health.
+  // The cost instrumentation will measure per-cycle deltas at exactly
+  // this seam: read balance, run the tick, read again, attribute the
+  // delta to the tick's outcomes. This test pins that measurement SHAPE
+  // against the daemon as it exists — spec-local metering only, no
+  // production change — so the instrumentation lands on a proven pattern.
+  class MeteredChain extends FakeChain {
+    /** The keeper's hot-wallet balance, spec-local (1 SOL). */
+    keeperLamports = 1_000_000_000n;
+    private meter(): void {
+      this.keeperLamports -= 5_000n; // one base fee per sent transaction
+    }
+    override async openPool(
+      poolId: bigint,
+      tier: number,
+      sealingPubkey: Uint8Array,
+      sealingSecretHash: Uint8Array
+    ): Promise<void> {
+      this.meter();
+      return super.openPool(poolId, tier, sealingPubkey, sealingSecretHash);
+    }
+    override async commitVrfSeed(poolId: bigint, randomnessAccount: string): Promise<void> {
+      this.meter();
+      return super.commitVrfSeed(poolId, randomnessAccount);
+    }
+    override async createPassCollection(poolId: bigint): Promise<void> {
+      this.meter();
+      return super.createPassCollection(poolId);
+    }
+  }
+
+  it('a tick is measurable: balance before, after, delta keyed by the tick report', async () => {
+    const clock = { t: 1_000n };
+    const chain = new MeteredChain(() => clock.t);
+    await chain.initConfig({
+      entrySigner: 'entry',
+      settlementSigner: 'settle',
+      vaultCeilingLamports: TIER_ENTRY_LAMPORTS.map((e) => e * 64n),
+      treasuryMinPlatformLamports: 0n,
+    });
+    chain.fundPlatform(1_800_000_000_000n);
+    const custody = new LocalCustody(async (id) => {
+      const p = await chain.getPool(id);
+      return p.state !== 'Open';
+    });
+    const store = new MemoryCiphertextStore();
+    const publisher = new MemoryPublisher();
+    const daemon = makeDaemon({
+      chain,
+      custody,
+      vrf: new StubVrfCoordinator(chain, base58Encode(sha('randomness'))),
+      crank: (poolId) => crankPool({ chain, custody, ciphertexts: store, publisher }, poolId),
+      now: () => clock.t,
+    });
+
+    const before = chain.keeperLamports;
+    const report = await daemon.tick();
+    const after = chain.keeperLamports;
+    const spent = before - after;
+
+    // The first tick opens tier 0 and completes its launch: open_pool,
+    // commit_vrf_seed, create_pass_collection — three sends.
+    expect(report.opened).to.deep.equal([{ poolId: 1n, tier: 0 }]);
+    expect(spent).to.equal(3n * 5_000n);
+
+    // The ops_costs row shape (§5.3): the delta keys by pool and outcome,
+    // and stays bigint end to end — a lamport value never touches a float.
+    const row = {
+      pool: report.opened[0].poolId,
+      outcome: 'opened' as const,
+      lamports_spent: spent,
+    };
+    expect(row.lamports_spent > 0n).to.equal(true);
+
+    // A quiet second tick spends nothing — the meter reads zero, so the
+    // instrumentation can skip writing a row rather than logging noise.
+    const idleBefore = chain.keeperLamports;
+    await daemon.tick();
+    expect(chain.keeperLamports).to.equal(idleBefore);
+  });
+});
