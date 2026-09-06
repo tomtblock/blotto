@@ -198,9 +198,19 @@ export function registerBlottoEventLayouts(): void {
     terms_version: r.u16(),
   }));
 
+  // D-E4: `entrants` is the field the pool plays with — 64 at the 64th
+  // register, MIN_SEATS..63 when `seal_at_deadline` closed it.
   layout('PoolSealed', (r) => ({
     pool: r.pubkey(),
     entrants: r.u16(),
+  }));
+
+  // D-E4 §11.3 (option B): the pool reached the minimum field and its close
+  // time shortened to `go_deadline` (unix seconds, decimal string). Emitted
+  // once per pool, only when the shortening actually moved the deadline.
+  layout('GoTimerStarted', (r) => ({
+    pool: r.pubkey(),
+    go_deadline: r.i64(),
   }));
 
   layout('PoolSecretRevealed', (r) => ({
@@ -291,5 +301,13 @@ export function registerBlottoEventLayouts(): void {
   layout('TreasuryPolicySet', (r) => ({
     reserve_pots: r.u8(),
     min_platform_lamports: r.u64(),
+  }));
+
+  // Tier enablement (`set_open_tiers`), so the ledger can tell an
+  // enabled-idle tier from a disabled one — the PHASE-A1-REVIEW phantom
+  // floor in the treasury report ends here. `[bool; N_TIERS]` is seven
+  // Borsh bools, one byte each.
+  layout('TiersOpened', (r) => ({
+    open_tiers: Array.from({ length: 7 }, () => r.bool()),
   }));
 }
