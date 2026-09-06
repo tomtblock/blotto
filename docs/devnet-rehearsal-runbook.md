@@ -798,3 +798,30 @@ That creates the opposite hazard, which is why the endpoint turns **503** past a
 two-minute startup budget and why the deploy now asserts `"ready":true` rather than
 a bare 200: a machine that answers 200 forever while wedged in initialisation would
 be the same silent failure wearing the other mask.
+
+**An unhealthy service cannot be the thing that tells you why.** The same night,
+with the port bound early, the daemon deployed cleanly, logged
+`VRF = SWITCHBOARD On-Demand`, and then went silent — no ready line, no ticks, no
+error. Its public `/health` stopped answering entirely: past the startup budget it
+returns 503, and Fly's proxy does not route to an instance whose check is failing,
+so the request hangs with zero bytes. The endpoint that knew what was wrong was
+unreachable *because* it was right.
+
+Three consequences, all now in place:
+
+1. **The log is the witness.** Every startup phase is logged with its elapsed
+   time, and the daemon prints an explicit `READY` line
+   (`backend/reveal/src/main.ts`). "Still starting" and "running" used to look
+   identical in the log; they no longer do.
+2. **A vendor call gets a budget.** `makeSwitchboardOps` and
+   `irysUploaderFromEnv` each run under a named 45s limit
+   (`backend/reveal/src/startup.ts`). A third party that neither answers nor
+   fails now produces a named, fatal error instead of an indefinite stall. Irys
+   is additionally given `BLOTTO_RPC_URL` and its own HTTP timeout, so it is no
+   longer reaching an unnamed default endpoint nobody here configured.
+3. **`backend-status` covers all four apps**, with public IPs and check state.
+   It had covered only the indexer and the packet service, which is why the
+   daemon's silence could not be read from the Actions page at all.
+
+When the deploy reports the daemon unready, read the log lines it dumps, not the
+endpoint. An empty answer there means *unhealthy*, not unreachable.

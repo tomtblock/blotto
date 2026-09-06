@@ -5,6 +5,7 @@ export * from './chain-web3';
 export * from './crank';
 export * from './daemon';
 export * from './health';
+export * from './startup';
 export * from './missing';
 export * from './publisher';
 export * from './publisher-irys';

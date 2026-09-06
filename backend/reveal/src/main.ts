@@ -52,11 +52,21 @@ import { crankPool, type RevealedForDetection } from './crank';
 import { makeDaemon, StubVrfCoordinator, type VrfCoordinator } from './daemon';
 import { makeSwitchboardOps, SwitchboardVrfCoordinator } from './vrf-switchboard';
 import { IrysPublisher, irysUploaderFromEnv } from './publisher-irys';
-import { newDaemonHealth, serveDaemonHealth } from './health';
+import { newDaemonHealth, serveDaemonHealth, type DaemonPhase } from './health';
+import { step } from './startup';
 
 const SERVICE = 'daemon';
 const DEFAULT_PROGRAM_ID = '5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17';
 const DEFAULT_RPC = 'https://api.devnet.solana.com';
+
+/**
+ * Budgets for the two startup steps that leave the process and talk to a
+ * vendor. Switchboard measured 19-21s on devnet, so 45s is generous without
+ * being indefinite; Irys is given the same. Exceeding either is fatal — see
+ * startup.ts for why a stalled daemon must not be allowed to sit silently.
+ */
+const SWITCHBOARD_BUDGET_MS = 45_000;
+const IRYS_BUDGET_MS = 45_000;
 
 function requireEnv(env: NodeJS.ProcessEnv, name: string): string {
   const v = env[name];
@@ -105,7 +115,16 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
   serveDaemonHealth(health, healthPort);
   console.log(`${SERVICE}: tick every ${intervalMs}ms once ready`);
 
-  health.phase = 'connecting';
+  // Every phase change is logged with elapsed time. When the daemon stalls,
+  // its /health answers 503 and Fly's proxy stops routing to it, so the
+  // endpoint cannot report the stall — the log is the only witness.
+  const enter = (phase: DaemonPhase): void => {
+    health.phase = phase;
+    console.log(`${SERVICE}: phase=${phase} (+${Date.now() - health.startedAtMs}ms)`);
+  };
+  const log = (line: string): void => console.log(`${SERVICE}: ${line}`);
+
+  enter('connecting');
   const db = createPool(loadPostgresConfig(env));
 
   const connection = new Connection(env.BLOTTO_RPC_URL ?? DEFAULT_RPC, {
@@ -125,16 +144,19 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
   // the chain), resolved by closure: both arrows run only inside daemon
   // ticks, long after both consts below are assigned.
   let vrf: VrfCoordinator;
-  health.phase = 'switchboard';
+  enter('switchboard');
   const swCoordinator: SwitchboardVrfCoordinator | null = env.SWITCHBOARD_QUEUE
     ? new SwitchboardVrfCoordinator({
-        ops: await makeSwitchboardOps({
-          connection,
-          payer: settlementSigner,
-          queue: new PublicKey(env.SWITCHBOARD_QUEUE),
-        }),
+        ops: await step('switchboard queue', SWITCHBOARD_BUDGET_MS, () =>
+          makeSwitchboardOps({
+            connection,
+            payer: settlementSigner,
+            queue: new PublicKey(env.SWITCHBOARD_QUEUE as string),
+          }),
+          log
+        ),
         commitOnChain: (poolId, account): Promise<void> => chain.commitVrfSeed(poolId, account),
-        log: (step, detail) => console.log(`${SERVICE}: ${step}`, JSON.stringify(detail ?? {})),
+        log: (stage, detail) => console.log(`${SERVICE}: ${stage}`, JSON.stringify(detail ?? {})),
       })
     : null;
 
@@ -176,12 +198,19 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
 
   const custody = buildCustody(env, new PgPublishedKeyStore(db), policy);
   const ciphertexts = new PgCiphertextStore(db);
-  health.phase = 'irys';
+  enter('irys');
   const publisher = new IrysPublisher(
-    await irysUploaderFromEnv({
-      IRYS_UPLOAD_KEY: env.IRYS_UPLOAD_KEY,
-      IRYS_NETWORK: env.IRYS_NETWORK,
-    })
+    await step(
+      'irys uploader',
+      IRYS_BUDGET_MS,
+      () =>
+        irysUploaderFromEnv({
+          IRYS_UPLOAD_KEY: env.IRYS_UPLOAD_KEY,
+          IRYS_NETWORK: env.IRYS_NETWORK,
+          BLOTTO_RPC_URL: env.BLOTTO_RPC_URL ?? DEFAULT_RPC,
+        }),
+      log
+    )
   );
 
   // R11: the detection hook, exactly as the rehearsal wires it (hard blocks
@@ -214,12 +243,16 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
     vrf,
     crank: (poolId) => crankPool({ chain, custody, ciphertexts, publisher, detect }, poolId),
     now,
-    log: (step, detail) => console.log(`${SERVICE}: ${step}`, JSON.stringify(detail ?? {})),
+    log: (stage, detail) => console.log(`${SERVICE}: ${stage}`, JSON.stringify(detail ?? {})),
   });
 
   // Initialisation is done: the endpoint now reports ready, and `lastTick`
   // becomes the liveness signal — a hung RPC shows up as a stale `at`.
-  health.phase = 'ready';
+  enter('ready');
+  console.log(
+    `${SERVICE}: READY — health on :${healthPort}, ticking every ${intervalMs}ms ` +
+      `(startup took ${Date.now() - health.startedAtMs}ms)`
+  );
 
   // The loop: tick, record, sleep. A throwing tick is logged and retried.
   for (;;) {
