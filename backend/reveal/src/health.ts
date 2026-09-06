@@ -69,8 +69,12 @@ export function healthPayload(
   nowMs: number
 ): { status: number; body: Record<string, unknown> } {
   const ready = state.phase === 'ready';
-  const startingForMs = nowMs - state.startedAtMs;
-  const stuck = !ready && startingForMs > STARTUP_BUDGET_MS;
+  // Named `uptimeMs`, not `startingForMs`: it keeps counting once ready, so a
+  // healthy daemon reporting `startingForMs: 97171` reads as "has been
+  // starting for 97 seconds". An operator should not need the source to read
+  // the field.
+  const uptimeMs = nowMs - state.startedAtMs;
+  const stuck = !ready && uptimeMs > STARTUP_BUDGET_MS;
   return {
     status: stuck ? 503 : 200,
     body: {
@@ -78,7 +82,7 @@ export function healthPayload(
       ready,
       service: SERVICE,
       phase: state.phase,
-      startingForMs,
+      uptimeMs,
       ...(stuck
         ? {
             error: `still ${state.phase} after ${STARTUP_BUDGET_MS}ms — initialisation is stuck`,

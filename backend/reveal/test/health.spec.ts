@@ -54,7 +54,7 @@ describe('the daemon health payload', () => {
     expect(body.ready).to.equal(false);
     expect(body.ok).to.equal(true);
     expect(body.phase).to.equal('switchboard');
-    expect(body.startingForMs).to.equal(25_000);
+    expect(body.uptimeMs).to.equal(25_000);
     expect(body.lastTick).to.equal(null);
   });
 
