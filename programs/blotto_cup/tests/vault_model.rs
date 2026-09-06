@@ -721,10 +721,11 @@ proptest! {
         prop_assert_eq!(m.state, St::Paid);
         prop_assert_eq!(m.vault, 0u128, "the whole pot left the vault");
         prop_assert_eq!(m.total_paid, pot as u128, "the winner set received exactly the pot");
-        // Break-even (§11.1): entries in minus the pot out is positive at the floor.
-        let margin = m.platform as i128 - 0i128; // bootstrap pot − pot funded + entries
+        // The bootstrap pot left the treasury at open, so what remains is the
+        // field's entries; break-even (§11.1) means they exceed the pot the
+        // treasury funded — at the 52-seat floor too, not only at 64.
         prop_assert_eq!(m.platform, fill as u128 * price as u128, "treasury holds the field's entries");
-        prop_assert!(margin > pot as i128, "the minimum field clears the pot with margin");
+        prop_assert!(m.platform > pot as u128, "the minimum field clears the pot with margin");
     }
 
     /// `withdraw_platform`'s floor: a withdrawal that would dip below
