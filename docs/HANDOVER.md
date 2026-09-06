@@ -131,49 +131,39 @@ platform share included.
 
 ## 5 · Gaps
 
-Each is a marked seam (`PHASE-N-REVIEW` at the site) or a founder-gated item.
-The two **NEXT** rows are the founder's stated product loop (2026-08-27):
-every tier's pool restarts automatically, and a player short of the entry
-price is prompted to top up.
+**Corrected 2026-09-06 by reading the branch.** This section had gone
+materially stale: it listed as unbuilt a tier keeper, a crank daemon, a review
+HTTP service, client transaction wiring, a device fingerprint, an Irys
+publisher, a geo adapter, a verify-page fetch layer and a program-CI lane —
+**every one of which exists.** Planning off the old list would have budgeted
+weeks of work that is already done, and would have missed the two things that
+are genuinely absent. Verify against the branch before trusting any row here.
 
-### A — Code still to write (architect-unblocked, rough priority order)
+### A — Genuinely still to write
 
-| Missing piece | Where the seam is | Size |
+| Missing piece | Where | Size |
 |---|---|---|
-| **Tier keeper (rolling pool opener). NEXT.** For every open tier with no Open pool (the slot frees at seal, or at refund), call `open_pool` + `commit_vrf_seed` + `create_pass_collection`. The program already enforces one-per-tier and the ceiling; `Web3Chain` lacks the `open_pool`/`init_config` builders. Recommended home: the crank process. | `backend/reveal` | S–M |
-| **Pre-flight balance check + top-up prompt. NEXT.** Check the wallet's balance against entry + fees BEFORE the ninety-second session starts; on shortfall open the Privy funding flow (card on-ramp, R19). Today an underfunded wallet only fails at broadcast — the classifier maps it to `insufficient-sol`, but the copy is TODO and there is no funding path. | `app/src/app/play/play-client.tsx` · `app/src/tx/errors.ts` | S–M |
-| **Crank daemon.** `crankPool()` is a library; the long-running process that watches `PoolSealed` and invokes it (idempotent, a simple poll works) does not exist. Natural twin of the tier keeper. | `backend/reveal/src/crank.ts` | S |
-| **Review HTTP service.** `decide()` and the decision log exist; the small server the admin page POSTs to — plus Squads-member login — does not. | `backend/detection/src/review.ts` · `app/src/app/admin/review/` | M |
-| **Client transaction wiring.** `sendRegister` / `requestPacket` in the app are honest stubs; connect the carried tx pipeline (`app/src/tx`) to the register instruction + entry service; the carried class-reveal machine takes over on confirmation. | `app/src/app/play/play-client.tsx` | M |
-| **Privy device fingerprint** into the sealed payload (currently zeroed; detection deliberately ignores zeros). | `play-client.tsx` `deviceHash()` | S |
-| **Turnkey adapters** for custody (`PoolKeyCustody`) and the packet signer (`PacketSigner`); local implementations enforce the same semantics today. | `backend/sealing/src/custody.ts` · `backend/packet/src/packet.ts` | M |
-| **Irys publisher.** The bundle format is final (`payouts` replaced `winners`); the seam is one method. | `backend/reveal/src/publisher.ts` | S |
-| **Geo vendor adapter** behind `GeoLookup` once the vendor of record is contracted (R2). | `backend/packet/src/service.ts` | S |
-| **Verify-page fetch layer.** The logic + UI take pasted JSON; auto-fetch from `/verify-record` + the Irys URI is small wiring. | `app/src/app/verify/verify-client.tsx` | S |
-| **Program-CI lane.** ci-fast runs fmt, clippy `-D warnings`, workspace tests, gitleaks and both standing gates; a cached-toolchain lane for `anchor build` + LiteSVM is still missing. | `.github/workflows/` | S |
-| **Indexer provider config** (Helius or equivalent webhook; the backfill walker is built). First devnet deploy must also run migration 0004 + `rederive()`. | `backend/indexer/src/webhook.ts` | S |
-| **Per-tier lobby layout.** The pools page lists all open pools across tiers correctly; grouping by tier with entry price and prize table per card is Phase 6 polish. | `app/src/app/pools/page.tsx` | S |
+| **Test-signer wiring (B-e / C7).** `app/src/tx/test-signer.ts` defines `testSignerFromWindow()` and **nothing imports it**; `NEXT_PUBLIC_ALLOW_TEST_SIGNER` appears nowhere; there is no CI grep asserting a production bundle omits `__BLOTTO_TEST_SIGNER__`. Blocks Stage D 5.1, which requires entry through the real front end. | `app/src/tx/test-signer.ts` | S–M |
+| **Bank/recycle harness (B-f).** Funds 64 devnet wallets from the bank and sweeps prize money back after settlement. Without the sweep-back the bank is empty by pool 4 — and the run still *looks* fine, so pool 1 asserts the bank's net change is ≈ −0.41 SOL, not ≈ −5.5. | new, alongside `tests/rehearsal/` | M |
+| **Per-tier lobby layout.** Pools list correctly across tiers; grouping by tier with per-card entry price and prize table is Phase 6 polish. | `app/src/app/pools/page.tsx` | S |
 
-### B — Blocked on founder provisioning (the devnet day — runbook: `docs/devnet-rehearsal.md`)
+### B — Built, waiting only on a credential or config
 
-| Item | Then what happens |
-|---|---|
-| Devnet Squads vault + Turnkey sandbox sub-org (R21) | Deploy, move upgrade authority, `init_config` with the seven per-tier ceilings; Turnkey adapters written; the live export-refusal test runs. |
-| Funded devnet fee payer + Irys wallet | Twenty real pools per the runbook; timings recorded; Playwright drives the real UI. |
-| App hosting (Frankfurt/Dublin — never a US region, TECH-ARCH §11) | Gate 3: a stranger completes a session unaided. |
-| Geo vendor contract (R2) · counsel engagement (R1) · all `TODO_COPY` strings | Phase 6 — founder + counsel own the words; the rules skeleton and copy module are ready to fill. |
+None of these is code work. Each is a founder-provisioned value (Stage C).
 
-### C — Open decisions on the founder's desk
-
-The KYC-at-claim threshold (unset; expected ON before high tiers open, per
-the D1 register flag). A PID v0.6 — the PID's two-tier tables (§2/§6) are
-superseded by the D1 register row until then. Whether the app should regain
-rank badges by indexing the published bundle (the deliberate D3-B trade,
-documented in the step report). `docs/internal-review.md` items IR-2
-(Switchboard cluster-ID pinning at deploy), IR-3 (PDA donations strand
-harmlessly), IR-4 (escrow depends on settlement-signer liveness; the 24h
-review commitment is the mitigation). Founder ratifications of the Phase 1/2
-judgement calls are recorded in `docs/phase-reports/phase-1-program.md`.
+| Component | Built at | Waiting on |
+|---|---|---|
+| Tier keeper + crank daemon | `backend/reveal/src/daemon.ts`, `crank.ts` | `SWITCHBOARD_QUEUE` (C5) |
+| Irys bundle publisher | `backend/reveal/src/publisher-irys.ts` | `IRYS_UPLOAD_KEY` (C5) |
+| Review HTTP service (E5) | `backend/detection/src/main.ts` | deploy + `config/reviewers.json`, which ships empty (C6) |
+| Turnkey entry signer | `backend/packet/src/signer-turnkey.ts` | nothing — live and verified 2026-08-31 (C1) |
+| Geo vendor adapter | `backend/packet/src/geo-iplocate.ts` | nothing — live and verified 2026-09-05 (C2) |
+| Client transaction wiring (C9) | `app/src/entry/services.ts` | nothing |
+| Device marker (C11) | `app/src/entry/device.ts` | nothing |
+| Verify-page fetch layer | `app/src/app/verify/verify-client.tsx` | nothing — auto-fetches `/verify-record`, paste overrides |
+| Program-CI lane | `.github/workflows/on-chain.yml` | nothing — `anchor build` + LiteSVM on program changes |
+| Deployed-drift check | `scripts/check-deployed.ts`, `.github/workflows/deployed-drift.yml` | nothing — added 2026-09-06 |
+| Indexer provider config | `backend/indexer/src/webhook.ts` | a Helius webhook; first devnet deploy runs migration 0004 + `rederive()` |
 
 ## 6 · For the incoming architect — reading order and first hour
 

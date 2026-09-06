@@ -87,8 +87,19 @@ describe('the reviewer registry (config/reviewers.json)', () => {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const committed = require('../../../config/reviewers.json');
     const parsed = parseReviewerRegistry(committed);
-    // Ships EMPTY: nobody can decide until the founder lists the members.
-    expect(parsed.members).to.deep.equal([]);
+    // This asserted `members` was EMPTY while the file shipped unconfigured.
+    // The founder ratified the devnet reviewer on 2026-09-06, so emptiness was
+    // a moment in time rather than an invariant, and pinning it turned a
+    // founder-owned config change into a CI failure. What IS invariant is that
+    // the committed file survives the parser: a typo'd or non-base58 key makes
+    // `parseReviewerRegistry` throw, and this test fails, which is the guard
+    // worth having. Whether the list is empty is the founder's call, and the
+    // service already logs loudly at startup when it is.
+    expect(parsed.members).to.be.an('array');
+    for (const member of parsed.members) {
+      expect(member).to.match(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
+    }
+    expect(parsed.version).to.be.at.least(1);
     expect(() => parseReviewerRegistry({ version: 1 })).to.throw(/malformed/);
     expect(() =>
       parseReviewerRegistry({ version: 1, members: ['not base58!!'], updated: 'x' })

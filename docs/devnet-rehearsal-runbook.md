@@ -22,13 +22,23 @@ any file containing it. The original draft's standing rule 1 would not have merg
 
 1. Every `solana` command carries an explicit `-k <path>`. The CLI default is
    `fee-payer-devnet.json` = `GXKX…`, which holds upgrade authority. Never sign by
-   default.
-2. Secrets are typed into destination fields, never pasted into chat, files, commits
+   default. **Confirmed by incident, 2026-09-05**: a transfer that lost its `-k`
+   was signed by `GXKX…` anyway, because that key IS the CLI default. The rule is
+   not a precaution, it is the only thing standing between a dropped flag and the
+   upgrade authority signing something nobody chose.
+2. **Every command written for the founder is ONE line.** No backslash
+   continuations, no multi-line blocks. Pasting a continued command into the
+   terminal can insert blank lines, which end the command early: on 2026-09-05
+   `solana transfer <addr> 0.5 \` + `-k …` + `-u devnet` ran as a transfer with
+   NO flags, followed by two `command not found` errors. It succeeded, on whatever
+   the CLI defaults happened to be. A command that loses its flags and still works
+   is the worst shape available — it reports success while doing something else.
+3. Secrets are typed into destination fields, never pasted into chat, files, commits
    or logs.
-3. A service refusing to start on a missing credential is correct. Never loosen it.
-4. If a verification fails, stop. Do not proceed with a half-working credential
+4. A service refusing to start on a missing credential is correct. Never loosen it.
+5. If a verification fails, stop. Do not proceed with a half-working credential
    behind you.
-5. Ask "what would distinguish this explanation from the alternatives" before
+6. Ask "what would distinguish this explanation from the alternatives" before
    approving any fix.
 
 ## KEY REGISTER
@@ -39,7 +49,7 @@ any file containing it. The original draft's standing rule 1 would not have merg
 | Squads vault | `9EEWtzyu72a3DKJVUkCaeYX4HuBKD59xXCcENnDVe34Z` | **becomes `Config.admin`** |
 | Squads multisig | `9EL1m9wvqGSznHJ8zkS5YaXQnG4gq4aNYsbGnP1TmFyN` | **never `--admin`** |
 | Bank wallet | `4ydbVZuNupTPu1cKGCc2cePs95B8iMkrR4TvsCLiwcL1` | funds entrants; Squads member |
-| Deploy keypair | `~/.config/solana/blotto/fee-payer-devnet.json` (`GXKX…`) | upgrade authority; retire after C4 |
+| Deploy keypair | `~/.config/solana/blotto/fee-payer-devnet.json` = `GXKXLYHBWBAhp7LWNMEZbsuwGb3WHeoDBsmhfndwagXY` | upgrade authority; retire after C4. **Confirmed 2026-09-05 against the chain**, not against a document: the program's ProgramData account (`52jz82LJAuMdkiVqjat5ipqV1WXH26dutAuU3Wowfend`) names this key as upgrade authority. Verify with `solana address -k <path>` before C4 — if the file disagrees, stop |
 | Program keypair | `~/.config/solana/blotto/blotto_cup-program-devnet.json` | `BLOTTO_PROGRAM_KEYPAIR` |
 | Irys wallet | `~/.config/solana/blotto/irys-devnet.json` (`HG56…`) | `IRYS_UPLOAD_KEY` source |
 | Fly deploy token | GitHub secret `FLY_API_TOKEN` · **must be an ORG token** (`fly tokens create org --org <slug>`) · org slug: `personal` (the only org on the account; both apps owned by it) · created: 2026-09-05 | every backend deploy. Account-level personal access tokens stopped authenticating on 2026-09-05 when an org on the account began requiring SSO; the dashboard cannot create the replacement |
@@ -364,7 +374,31 @@ as a Stage E open item so it is not a surprise later.
 
 ---
 
-## C3 — `init_config` **[BOTH] ⚠⚠ THE IRREVERSIBLE ONE**
+## C3 — `init_config` — **DONE 2026-09-06 00:16Z**
+
+**Executed.** Squads proposal `GW8y…Vj5i`, execution signature
+`ogPsdSWbtwgW8fhby9LhpmVzYynziSENbDP8Q47Q5UPmXMWgMCDebEjYYfZ2mDNa29QuhBgVSpot7V6V2yKSUTF`,
+devnet slot 493796990. `Config.admin` = `9EEWtzyu…e34Z`, the Squads vault.
+Every field was read back off-chain and checked against the key register: entry
+signer `9Xhw…y8TP`, settlement signer `EaDf…jrSD`, paused false, open tiers
+`[1,0,0,0,0,0,0]`, ceilings = price × 64, min platform 0.5 SOL, next pool id 1 —
+380 of 380 bytes decoded with no residue.
+
+**It nearly went wrong, and the near-miss is the lesson.** The proposal was
+encoded correctly, but the program deployed at `5aawXay…` was the build from
+**before** commit 357a435 — nine days stale. Squads' own inspector decoded the
+payload against the real IDL and showed an argument we had never sent
+("Platform Wallet"); that was dismissed as a display quirk. Simulating the
+instruction returned `InstructionDidNotDeserialize`, which is what actually
+caught it. Had it been signed, the best case was a revert and the worst was a
+`Config` written in a layout the current code cannot read, on a write-once PDA.
+
+The program was rebuilt and redeployed (slot 493789531) and the instruction
+re-simulated to `err: null` before anything was signed.
+
+**`scripts/check-deployed.ts` now makes that check routine** — run
+`npm run check-deployed` before any irreversible instruction, and
+`deployed-drift.yml` runs it after every merge to main and daily.
 
 Whichever key signs becomes admin **permanently**. There is no `set_admin`.
 
@@ -448,6 +482,14 @@ solana program set-upgrade-authority 5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH1
 
 **After this, every deploy is a Squads proposal.** Decide with the architect whether
 to do it before or after the rehearsal's last redeploy. Then retire `GXKX…`.
+
+**ARCHITECT RECOMMENDATION (2026-09-06): after Stage D, not before.** Two
+reasons, both from the C3 near-miss. The deployed binary drifted from source for
+nine days undetected, and Stage D is the first time the program runs anything
+beyond `init_config` on a real cluster — so expect fixes. Today a fix is one
+command; after C4 it is a Squads proposal, on the exact path where a stale
+deploy is hardest to spot. Move the authority once the code has stopped
+changing, and gate it on `npm run check-deployed` passing.
 
 **Top up `GXKX…` before running this.** It holds ~0.108 SOL after funding Irys three
 times on 2026-08-29; a transfer that runs out of gas mid-authority-change is the one
@@ -687,6 +729,16 @@ indexer, the packet service, the daemon and the review service. Update all four.
 
 **Digest matching proves two apps hold the same value, not a correct one.** Verify
 against the source of truth.
+
+**A command that loses its flags still succeeds.** On 2026-09-05 a three-line
+`solana transfer` lost its `-k` and `-u` to blank lines inserted on paste. It ran
+with the CLI defaults and printed a normal `Signature:` line; the giveaway was two
+`command not found: -k` / `-u` errors AFTER the success, not instead of it. It
+happened to be harmless — devnet, and the default key was the intended one — but
+only by luck. **Read what came back, not just the last line**, and check the
+signature on-chain before assuming a transfer went where it was aimed:
+`getTransaction` returns `null` on any network the transaction is not on, which
+is how you tell devnet from mainnet in one call.
 
 **A dead credential can look like a missing resource.** On 2026-09-05 the deploy
 announced `blotto-indexer has no public IPs — allocating` when the truth was that
