@@ -12,6 +12,7 @@ import type {
   EntryRow,
   IndexerApi,
   PayoutRow,
+  PoolLeaderboard,
   PoolSummary,
   ProfileRow,
   ResultRow,
@@ -66,6 +67,11 @@ class HttpIndexerApi implements IndexerApi {
   }
   async getTreasury() {
     return this.get<TreasuryTiers>('/treasury');
+  }
+  async getLeaderboard(pool: string) {
+    // 404 = no VERIFIED archive for this pool (the read API fails closed;
+    // an unverified or mismatched bundle is indistinguishable from none).
+    return this.get<PoolLeaderboard>(`/pools/${pool}/leaderboard`);
   }
 }
 

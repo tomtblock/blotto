@@ -254,12 +254,43 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
     return report.hardBlocks;
   };
 
+  // E3 §4.4 (live path): after the crank publishes a bundle, tell the
+  // indexer where it is — POST /bundles on the webhook server, same shared
+  // secret as the Helius deliveries (one secret, one receiver). Optional:
+  // without both env vars the archive fills by `archive-backfill` alone.
+  // Fire-safe by the daemon's contract — a throw here becomes a tick error,
+  // never a blocked sweep; a non-2xx (including the indexer's 503 "root not
+  // ingested yet") throws so the miss is visible in the tick report rather
+  // than silently waiting on the backfill.
+  const announceUrl = env.BLOTTO_INDEXER_ANNOUNCE_URL;
+  const announceSecret = env.BLOTTO_HELIUS_WEBHOOK_SECRET;
+  const announceBundle =
+    announceUrl && announceSecret
+      ? async (poolId: bigint, bundleUri: string): Promise<void> => {
+          const res = await fetch(announceUrl, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', authorization: announceSecret },
+            body: JSON.stringify({ pool_id: poolId.toString(), uri: bundleUri }),
+          });
+          if (!res.ok) {
+            throw new Error(`bundle announce: HTTP ${res.status} ${await res.text()}`);
+          }
+        }
+      : undefined;
+  if (!announceBundle) {
+    console.log(
+      `${SERVICE}: bundle announce OFF (set BLOTTO_INDEXER_ANNOUNCE_URL + ` +
+        `BLOTTO_HELIUS_WEBHOOK_SECRET) — archive relies on archive-backfill`
+    );
+  }
+
   const daemon = makeDaemon({
     chain,
     custody,
     vrf,
     crank: (poolId) => crankPool({ chain, custody, ciphertexts, publisher, detect }, poolId),
     now,
+    announceBundle,
     log: (stage, detail) => console.log(`${SERVICE}: ${stage}`, JSON.stringify(detail ?? {})),
   });
 

@@ -16,8 +16,10 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http';
 import { timingSafeEqual } from 'crypto';
 import { ALERT, METRIC, serveMetricsIfPrometheus, type Monitor } from './shared';
+import type { Queryable } from './shared';
 import type { EventStore } from './store';
 import { ingestTransaction, type IngestStats, type TxContext } from './ingest';
+import { ingestBundle } from './archive';
 
 export interface WebhookDeps {
   store: EventStore;
@@ -28,6 +30,14 @@ export interface WebhookDeps {
   commitment: string;
   /** The emitting program, recorded on every ledger row. */
   program: string;
+  /**
+   * E3: the derived-tables handle for `POST /bundles` (the daemon's
+   * bundle-URI announce). Optional — a deployment without it 404s the
+   * path and the archive fills by backfill alone.
+   */
+  archiveDb?: Queryable;
+  /** Injectable fetch for the announce path's bundle download (tests). */
+  fetchImpl?: typeof fetch;
 }
 
 export interface WebhookResult {
@@ -118,6 +128,81 @@ export async function handleWebhookPayload(
   return { status: storeError ? 500 : 200, stats: totals };
 }
 
+export interface AnnounceResult {
+  status: number;
+  body: unknown;
+}
+
+/**
+ * E3 §4.4 (live path): the daemon announces `{ pool_id, uri }` after the
+ * crank publishes a bundle, authenticated by the SAME shared secret as the
+ * Helius deliveries. The daemon knows pools by numeric id (its chain seam
+ * never exposes the PDA address), so the announce carries the id and THIS
+ * side resolves the address from its own `pools` projection. The URI is
+ * untrusted by design — everything rides on the Merkle-root check inside
+ * `ingestBundle`, so a forged announce can at worst write a loud
+ * `root_matches = false` row, never a served ranking.
+ *
+ *   200 — verified and persisted
+ *   409 — fetched but the root did not match (recorded + alerted)
+ *   503 — the pool or its on-chain root is not in the ledger yet (the
+ *         PoolOpened/ResultsCommitted delivery can lag the daemon's
+ *         announce); nothing is persisted, the daemon may retry and the
+ *         backfill sweeps stragglers
+ *   502 — the bundle could not be fetched or was malformed
+ */
+export async function handleBundleAnnounce(
+  deps: WebhookDeps,
+  authHeader: string | undefined,
+  rawBody: string
+): Promise<AnnounceResult> {
+  if (!authorize(authHeader, deps.secret)) {
+    deps.monitor.recordEvent(METRIC.indexer.webhookUnauthorized);
+    return { status: 401, body: { error: 'unauthorized' } };
+  }
+  if (!deps.archiveDb) {
+    return { status: 404, body: { error: 'archive not configured' } };
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawBody);
+  } catch {
+    return { status: 400, body: { error: 'bad json' } };
+  }
+  const { pool_id, uri } = (parsed ?? {}) as { pool_id?: unknown; uri?: unknown };
+  if (typeof pool_id !== 'string' || !/^\d{1,19}$/.test(pool_id)) {
+    return { status: 400, body: { error: 'bad pool id' } };
+  }
+  if (typeof uri !== 'string' || !/^https:\/\//.test(uri)) {
+    return { status: 400, body: { error: 'bad bundle uri' } };
+  }
+
+  const found = await deps.archiveDb.query('SELECT pool FROM pools WHERE id = $1', [pool_id]);
+  const pool: string | undefined = found.rows[0]?.pool;
+  if (!pool) {
+    return { status: 503, body: { error: 'pool not indexed yet' } };
+  }
+
+  const out = await ingestBundle(deps.archiveDb, pool, uri, deps.fetchImpl ?? fetch);
+  if (out.ok) {
+    deps.monitor.recordEvent(METRIC.indexer.archiveVerified);
+    return { status: 200, body: { verified: true, rows: out.rows } };
+  }
+  if (out.reason === 'no committed results_root on chain') {
+    return { status: 503, body: { error: out.reason } };
+  }
+  if (out.recomputedRoot !== undefined) {
+    deps.monitor.alert(ALERT.indexer.archiveRootMismatch, {
+      pool,
+      uri,
+      recomputedRoot: out.recomputedRoot,
+      onChainRoot: out.onChainRoot ?? '',
+    });
+    return { status: 409, body: { error: out.reason } };
+  }
+  return { status: 502, body: { error: out.reason } };
+}
+
 /** Wire the pure handler onto a Node `http` server. POSTs only; everything else is 404. */
 export function createWebhookServer(deps: WebhookDeps): Server {
   return createServer((req: IncomingMessage, res: ServerResponse) => {
@@ -139,11 +224,21 @@ export function createWebhookServer(deps: WebhookDeps): Server {
     const chunks: Buffer[] = [];
     req.on('data', (c: Buffer) => chunks.push(c));
     req.on('end', () => {
-      void handleWebhookPayload(
-        deps,
-        req.headers.authorization,
-        Buffer.concat(chunks).toString('utf8')
-      )
+      const rawBody = Buffer.concat(chunks).toString('utf8');
+      // E3: the daemon's bundle announce rides the same server + secret.
+      if ((req.url ?? '').split('?')[0] === '/bundles') {
+        void handleBundleAnnounce(deps, req.headers.authorization, rawBody)
+          .then((result) => {
+            res.writeHead(result.status, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(result.body));
+          })
+          .catch((err) => {
+            deps.monitor.alert(ALERT.indexer.handlerThrew, { error: String(err) });
+            res.writeHead(500).end();
+          });
+        return;
+      }
+      void handleWebhookPayload(deps, req.headers.authorization, rawBody)
         .then((result) => {
           res.writeHead(result.status, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify(result.stats));

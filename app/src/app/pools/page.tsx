@@ -20,9 +20,15 @@ export default async function PoolsPage() {
   const poolsLive = await live(() => indexerApi().listPools());
   const pools = poolsLive.ok ? poolsLive.value : [];
 
+  // E3: settled (Paid) pools move to the archive strip below — the tier
+  // lanes stay about pools someone can still watch or join. Closed refund
+  // pools keep their lane row: they have no results to archive.
+  const active = pools.filter((p) => p.state !== 'Paid');
+  const archived = pools.filter((p) => p.state === 'Paid');
+
   // Group by tier, tiers ascending; a tier appears only when it has pools.
   const byTier = new Map<number, typeof pools>();
-  for (const p of pools) {
+  for (const p of active) {
     const group = byTier.get(p.tier);
     if (group) group.push(p);
     else byTier.set(p.tier, [p]);
@@ -46,7 +52,7 @@ export default async function PoolsPage() {
         </div>
         {!poolsLive.ok ? (
           <LiveDataUnavailable />
-        ) : pools.length === 0 ? (
+        ) : active.length === 0 ? (
           <Card className="flex flex-col gap-2 p-6">
             <p className="text-[17px] font-medium text-ink">{COPY.pool.noOpenPool}</p>
             <p className="max-w-prose text-[13px] leading-5 text-ink-muted">
@@ -103,6 +109,36 @@ export default async function PoolsPage() {
               );
             })}
           </div>
+        )}
+        {poolsLive.ok && archived.length > 0 && (
+          <section className="mt-10">
+            <header className="mb-3">
+              <h2 className="font-display text-[20px] font-bold text-ink">
+                {COPY.pool.archiveTitle}
+              </h2>
+              <p className="text-[13px] leading-5 text-ink-muted">{COPY.pool.archiveNote}</p>
+            </header>
+            <ul className="flex flex-col gap-2">
+              {archived.map((p) => (
+                <li key={p.pool}>
+                  <Link href={`/pools/${p.pool}/results`}>
+                    <Card className="flex items-center gap-4 px-4 py-3 transition-colors hover:border-brand/40">
+                      <span className="tnum font-mono text-[12px] text-ink-muted">#{p.id}</span>
+                      <span className="text-[13px] text-ink-muted">
+                        {COPY.pool.tierEntry(lamportsToSol(p.entry_lamports))}
+                      </span>
+                      <span className="tnum text-[13px] font-semibold text-prize">
+                        {COPY.pool.tierPot(lamportsToSol(p.pot_lamports))}
+                      </span>
+                      <span className="ml-auto rounded-full border border-line px-2.5 py-0.5 text-[11px] uppercase tracking-[0.1em] text-ink-muted">
+                        {p.state}
+                      </span>
+                    </Card>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
       </main>
       <TabBar />

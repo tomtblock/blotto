@@ -36,6 +36,7 @@ import type {
   CareerRow,
   EntryRow,
   PayoutRow,
+  PoolLeaderboard,
   PoolSummary,
   ProfileRow,
   ResultRow,
@@ -80,6 +81,8 @@ export interface Scenario {
   readonly results: ResultRow[];
   readonly payouts: PayoutRow[];
   readonly sealedEntries: SealedEntryRow[];
+  /** E3: the verified-archive ranking; null where no bundle verified. */
+  readonly leaderboard?: PoolLeaderboard | null;
 }
 
 function poolSummary(over: Partial<PoolSummary> & { pool: string; id: string }): PoolSummary {
@@ -150,6 +153,44 @@ function payouts(pool: string, escrowSeat: number | null = null): PayoutRow[] {
     amount: PAID_AMOUNTS[i],
     escrowed: seat === escrowSeat,
   }));
+}
+
+/**
+ * The full 64-row verified-archive ranking (E3) for a settled scenario.
+ * Paid seats carry the same amounts as `results()`; everyone else ranks
+ * below them at zero. `score_half` is in HALF-POINT integer units across
+ * the seven battles (max 14) and descends with rank so the table reads
+ * plausibly — a display fixture, not a scored pool.
+ */
+function leaderboard(pool: string): PoolLeaderboard {
+  const byIdx = entries(pool, 64);
+  const paidRank = new Map(PAID_SEATS.map((seat, i) => [seat, i + 1]));
+  const unpaid = Array.from({ length: 64 }, (_, s) => s).filter((s) => !paidRank.has(s));
+  const rows = [
+    ...PAID_SEATS.map((seat, i) => ({
+      seat,
+      player: byIdx[seat].player,
+      rank: i + 1,
+      score_half: 14 - Math.floor(i / 2),
+      zones: 20 - i,
+      amount_lamports: PAID_AMOUNTS[i],
+    })),
+    ...unpaid.map((seat, i) => ({
+      seat,
+      player: byIdx[seat].player,
+      rank: 17 + i,
+      score_half: Math.max(1, 6 - Math.floor(i / 10)),
+      zones: Math.max(1, 8 - Math.floor(i / 8)),
+      amount_lamports: '0',
+    })),
+  ];
+  return {
+    pool,
+    uri: `https://gateway.irys.xyz/F1XTUREbund1e${pool.slice(7, 15)}`,
+    results_root: 'ef'.repeat(32),
+    verified_at: '2026-09-01T12:00:00Z',
+    rows,
+  };
 }
 
 function sealed(count: number): SealedEntryRow[] {
@@ -255,6 +296,7 @@ export const SCENARIOS: readonly Scenario[] = [
     results: results(),
     payouts: payouts(PAID),
     sealedEntries: sealed(64),
+    leaderboard: leaderboard(PAID),
   },
   {
     key: 'escrow',
@@ -274,6 +316,7 @@ export const SCENARIOS: readonly Scenario[] = [
     results: results(),
     payouts: payouts(ESCROW, 3),
     sealedEntries: sealed(64),
+    leaderboard: leaderboard(ESCROW),
   },
   {
     key: 'refunding',
@@ -332,6 +375,8 @@ export const FIXTURE_CAREER: CareerRow[] = [
     amount_lamports: '1536000000',
     pot_lamports: TIER0_POT,
     state: 'Paid',
+    // E3: seat 3 leads PAID_SEATS, so the verified archive ranks it first.
+    rank: 1,
   },
   {
     pool: ESCROW,

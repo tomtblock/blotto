@@ -42,7 +42,11 @@ function PrizeRecordChart({ career }: { career: CareerRow[] }) {
           return (
             <div
               key={`${r.pool}`}
-              title={`#${r.entries_to_date}: ${r.paid ? `${lamportsToSol(r.amount_lamports)} SOL` : 'unpaid'}`}
+              // E3: rank appears only once the pool's published bundle
+              // verified against the on-chain root (null/absent otherwise).
+              title={`#${r.entries_to_date}: ${r.paid ? `${lamportsToSol(r.amount_lamports)} SOL` : 'unpaid'}${
+                typeof r.rank === 'number' ? ` · ${COPY.results.rank(r.rank)}` : ''
+              }`}
               className={
                 'w-full max-w-8 rounded-t ' + (r.paid ? 'bg-prize' : 'bg-overlay')
               }

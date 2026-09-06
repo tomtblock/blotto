@@ -461,3 +461,67 @@ describe('the daemon (proposal E1 §5.3): the keeper-cost seam', () => {
     expect(chain.keeperLamports).to.equal(idleBefore);
   });
 });
+
+describe('the daemon (E3 §4.4): the bundle-announce seam', () => {
+  it('announces each published bundle URI once; refunds announce nothing', async () => {
+    const w = await makeWorld();
+    const announced: Array<{ poolId: bigint; uri: string }> = [];
+    // Same world, second daemon with the seam wired — the deps contract
+    // makes announce additive, so nothing else changes.
+    const daemon = makeDaemon({
+      chain: w.chain,
+      custody: w.custody,
+      vrf: new StubVrfCoordinator(w.chain, base58Encode(sha('randomness'))),
+      crank: (poolId) =>
+        crankPool({ chain: w.chain, custody: w.custody, ciphertexts: w.store, publisher: w.publisher }, poolId),
+      now: () => w.clock.t,
+      announceBundle: async (poolId, uri) => {
+        announced.push({ poolId, uri });
+      },
+    });
+
+    await daemon.tick(); // opens pool 1
+    await enterPlayers(w, 1n, 64);
+    const r = await daemon.tick(); // cranks to Paid, publishes, announces
+    expect(r.errors).to.deep.equal([]);
+    expect(announced).to.have.length(1);
+    expect(announced[0].poolId).to.equal(1n);
+    expect(w.publisher.published.has(announced[0].uri)).to.equal(
+      true,
+      'the announced URI is exactly the published one'
+    );
+
+    // The refund fork publishes no bundle, so it announces nothing.
+    await enterPlayers(w, 2n, 3);
+    w.clock.t = (await w.chain.getPool(2n)).fillDeadline + 1n;
+    const r2 = await daemon.tick();
+    expect(r2.cranked).to.deep.equal([{ poolId: 2n, finalState: 'Closed' }]);
+    expect(announced).to.have.length(1);
+  });
+
+  it('a failing announce is a tick error, never a blocked settlement (fire-safe)', async () => {
+    const w = await makeWorld();
+    const daemon = makeDaemon({
+      chain: w.chain,
+      custody: w.custody,
+      vrf: new StubVrfCoordinator(w.chain, base58Encode(sha('randomness'))),
+      crank: (poolId) =>
+        crankPool({ chain: w.chain, custody: w.custody, ciphertexts: w.store, publisher: w.publisher }, poolId),
+      now: () => w.clock.t,
+      announceBundle: async () => {
+        throw new Error('indexer unreachable');
+      },
+    });
+
+    await daemon.tick();
+    await enterPlayers(w, 1n, 64);
+    const r = await daemon.tick();
+
+    // Settlement finished and the tier reopened despite the announce failure.
+    expect(r.cranked).to.deep.equal([{ poolId: 1n, finalState: 'Paid' }]);
+    expect(r.opened).to.deep.equal([{ poolId: 2n, tier: 0 }]);
+    expect(r.errors).to.have.length(1);
+    expect(r.errors[0].action).to.equal('announce_bundle');
+    expect(r.errors[0].poolId).to.equal('1');
+  });
+});

@@ -13,6 +13,7 @@ import { TabBar } from '@/components/shell/tab-bar';
 import { Card } from '@/components/ui/card';
 import { LiveDataUnavailable } from '@/components/shell/live-unavailable';
 import { ResultsReveal, VerifyAlways, type RevealRow } from './results-reveal';
+import { ArchiveStandings } from './archive-standings';
 import { WhatBeatYouPanel } from './what-beat-you-panel';
 import { ShareResult } from './share-result';
 import { PaidConfetti } from './paid-confetti';
@@ -24,12 +25,15 @@ export default async function ResultsPage({ params }: { params: Promise<{ pool: 
   const pageLive = await live(async () => {
     const pool = await api.getPool(poolId);
     if (!pool) return null;
-    const [results, payouts, entries] = await Promise.all([
+    const [results, payouts, entries, archive] = await Promise.all([
       api.getResults(poolId),
       api.getPayouts(poolId),
       api.getEntries(poolId),
+      // E3: null unless the published bundle verified against the on-chain
+      // root — the section below simply does not render without it.
+      api.getLeaderboard(poolId),
     ]);
-    return { pool, results, payouts, entries };
+    return { pool, results, payouts, entries, archive };
   });
   if (!pageLive.ok) {
     return (
@@ -43,7 +47,7 @@ export default async function ResultsPage({ params }: { params: Promise<{ pool: 
     );
   }
   if (!pageLive.value) notFound();
-  const { pool, results, payouts, entries } = pageLive.value;
+  const { pool, results, payouts, entries, archive } = pageLive.value;
   // D3-B: the committed list is keyed by seat; a tie group's members split
   // the combined prize, so the paid set can exceed 16 rows. Rank labels are
   // not on-chain — the verify page recomputes them from the published data.
@@ -116,6 +120,7 @@ export default async function ResultsPage({ params }: { params: Promise<{ pool: 
               seatByPlayer={Object.fromEntries(entries.map((e) => [e.player, e.idx]))}
               paidSeats={results.filter((r) => BigInt(r.amount) > 0n).map((r) => r.seat)}
             />
+            {archive && <ArchiveStandings archive={archive} />}
           </>
         )}
         <VerifyAlways pool={pool.pool} />
