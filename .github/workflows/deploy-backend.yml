@@ -435,6 +435,30 @@ jobs:
           done
           exit $fail
 
+      # The daemon's /health answers 200 with `ready:false` while it starts —
+      # deliberately, so Fly stops killing a machine mid-init (the ~25s
+      # Switchboard + Irys path, incident 2026-09-06). That makes the smoke
+      # check above too weak on its own: it would pass a daemon that never
+      # finished starting. Assert readiness explicitly, and let it fail loudly
+      # rather than let a half-started daemon be reported as deployed.
+      - name: Assert the daemon reached ready
+        if: steps.pre.outputs.deploy_daemon == 'true'
+        run: |
+          url="https://$DAEMON_APP.fly.dev/health"
+          for i in $(seq 1 18); do
+            body=$(curl --silent --show-error --max-time 20 "$url" || true)
+            echo "attempt $i: $body"
+            case "$body" in
+              *'"ready":true'*)
+                echo "daemon is ready"
+                exit 0
+                ;;
+            esac
+            sleep 10
+          done
+          echo "::error::daemon never reported ready:true within 3 minutes. Its last answer is above; its phase field names the step it is stuck on (connecting = Postgres, switchboard = the queue fetch, irys = the uploader). Check 'flyctl logs --app $DAEMON_APP'."
+          exit 1
+
       # The startup lines are the acceptance criterion, not the endpoints:
       # they name which code path is live, where a healthy endpoint only
       # says an answer came back. Printed here so the run itself records it.

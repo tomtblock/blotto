@@ -21,6 +21,9 @@ primary_region = "fra"
 [[http_service.checks]]
   interval = "15s"
   timeout = "5s"
-  grace_period = "30s"
+  # 60s, not 30: the daemon binds /health immediately and reports its startup
+  # phase, but the Switchboard queue fetch and the Irys uploader take ~25s
+  # between them on a cold start. The 30s here predated both.
+  grace_period = "60s"
   method = "GET"
   path = "/health"

@@ -6,7 +6,10 @@
  * when a credentialed seam is unconfigured.
  *
  *   BLOTTO_DAEMON_INTERVAL_MS    default 15000
- *   BLOTTO_DAEMON_HEALTH_PORT    default 8084 (GET /health: last tick)
+ *   BLOTTO_DAEMON_HEALTH_PORT    default 8084 — GET /health, bound before
+ *                                anything else: startup phase while it comes
+ *                                up, last tick once running, 503 if it is
+ *                                still starting past the budget (health.ts)
  *   BLOTTO_RPC_URL               default devnet
  *   BLOTTO_PROGRAM_ID            default the declared id
  *   BLOTTO_DATABASE_URL          Postgres (ciphertexts + published pool keys)
@@ -32,7 +35,6 @@
  *     block, still runs on the sealed device hash.
  */
 
-import { createServer } from 'http';
 import { readFileSync } from 'fs';
 import { Connection, Keypair, PublicKey } from '@solana/web3.js';
 import { loadPostgresConfig } from '../../_shared/src/config';
@@ -47,9 +49,10 @@ import {
 import { detectPool } from '../../detection/src/pipeline';
 import { Web3Chain } from './chain-web3';
 import { crankPool, type RevealedForDetection } from './crank';
-import { makeDaemon, StubVrfCoordinator, type TickReport, type VrfCoordinator } from './daemon';
+import { makeDaemon, StubVrfCoordinator, type VrfCoordinator } from './daemon';
 import { makeSwitchboardOps, SwitchboardVrfCoordinator } from './vrf-switchboard';
 import { IrysPublisher, irysUploaderFromEnv } from './publisher-irys';
+import { newDaemonHealth, serveDaemonHealth } from './health';
 
 const SERVICE = 'daemon';
 const DEFAULT_PROGRAM_ID = '5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17';
@@ -91,6 +94,18 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
   console.log(`${SERVICE}: build ${env.BLOTTO_BUILD_COMMIT ?? 'unknown'}`);
   const intervalMs = Number(env.BLOTTO_DAEMON_INTERVAL_MS ?? 15_000);
   const healthPort = Number(env.BLOTTO_DAEMON_HEALTH_PORT ?? 8084);
+
+  // FIRST, before any credential, database handle or network fetch. The
+  // Switchboard and Irys steps below take ~25s between them, and a platform
+  // health check that arrives during those seconds must find something
+  // listening — see health.ts for the 2026-09-06 deploy this comes from.
+  // Past the startup budget the endpoint turns 503, so a wedged init is a
+  // restart rather than a machine that looks fine forever.
+  const health = newDaemonHealth();
+  serveDaemonHealth(health, healthPort);
+  console.log(`${SERVICE}: tick every ${intervalMs}ms once ready`);
+
+  health.phase = 'connecting';
   const db = createPool(loadPostgresConfig(env));
 
   const connection = new Connection(env.BLOTTO_RPC_URL ?? DEFAULT_RPC, {
@@ -110,6 +125,7 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
   // the chain), resolved by closure: both arrows run only inside daemon
   // ticks, long after both consts below are assigned.
   let vrf: VrfCoordinator;
+  health.phase = 'switchboard';
   const swCoordinator: SwitchboardVrfCoordinator | null = env.SWITCHBOARD_QUEUE
     ? new SwitchboardVrfCoordinator({
         ops: await makeSwitchboardOps({
@@ -160,6 +176,7 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
 
   const custody = buildCustody(env, new PgPublishedKeyStore(db), policy);
   const ciphertexts = new PgCiphertextStore(db);
+  health.phase = 'irys';
   const publisher = new IrysPublisher(
     await irysUploaderFromEnv({
       IRYS_UPLOAD_KEY: env.IRYS_UPLOAD_KEY,
@@ -200,39 +217,15 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
     log: (step, detail) => console.log(`${SERVICE}: ${step}`, JSON.stringify(detail ?? {})),
   });
 
-  // The health endpoint reports the last completed tick — a hung RPC shows
-  // up as a stale `at`, which is what the platform's checks alert on.
-  let lastTick: { at: string; report: TickReport } | null = null;
-  createServer((req, res) => {
-    if (req.method === 'GET' && req.url === '/health') {
-      res.writeHead(200, { 'content-type': 'application/json' }).end(
-        JSON.stringify({
-          ok: true,
-          service: SERVICE,
-          lastTick:
-            lastTick === null
-              ? null
-              : {
-                  at: lastTick.at,
-                  opened: lastTick.report.opened.length,
-                  cranked: lastTick.report.cranked.length,
-                  refundsTriggered: lastTick.report.refundsTriggered.length,
-                  errors: lastTick.report.errors.length,
-                },
-        })
-      );
-      return;
-    }
-    res.writeHead(404).end();
-  }).listen(healthPort, () => {
-    console.log(`${SERVICE}: health on :${healthPort}, tick every ${intervalMs}ms`);
-  });
+  // Initialisation is done: the endpoint now reports ready, and `lastTick`
+  // becomes the liveness signal — a hung RPC shows up as a stale `at`.
+  health.phase = 'ready';
 
   // The loop: tick, record, sleep. A throwing tick is logged and retried.
   for (;;) {
     try {
       const report = await daemon.tick();
-      lastTick = { at: new Date().toISOString(), report };
+      health.lastTick = { at: new Date().toISOString(), report };
       for (const e of report.errors) {
         console.error(`${SERVICE}: tick error`, JSON.stringify(e));
       }

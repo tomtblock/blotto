@@ -524,7 +524,12 @@ base58), `IRYS_UPLOAD_KEY`, `IRYS_NETWORK=devnet`, `TURNKEY_API_BASE_URL`,
 
 **Verify:**
 
-- daemon health endpoint green (`/health`, port 8084)
+- daemon health endpoint reports **`"ready":true`**, not merely a 200 (`/health`,
+  port 8084). It answers 200 with `"ready":false` while it is still starting — that
+  is deliberate, so the platform stops killing it mid-init — so a 200 alone proves
+  only that the process is alive. The `phase` field names the step it is on, and
+  the endpoint turns 503 if it is still starting after two minutes. The deploy's
+  "Assert the daemon reached ready" step checks this for you.
 - **the log line and the reveal instruction show the Switchboard path, not the stub**
 - one pool key created in Turnkey at `open_pool`
 - **export before seal refused by Turnkey policy** — assert the API error. This is
@@ -771,3 +776,25 @@ personal access tokens as a class. The fix is an org token,
 
 Replacing the token is safe at any point: nothing is staged or deployed until it
 authenticates, so a failed run leaves every app exactly as it was.
+
+**A step that has never run is not a step that works.** On 2026-09-06 the deploy
+got every credential right — the run printed `entry signer = TURNKEY`,
+`settlement signer = DECODED FROM SECRET`, `VRF = SWITCHBOARD On-Demand`, and no
+`GEO STUB` line — and still failed, at "Deploy daemon", with Fly reporting nothing
+listening on `0.0.0.0:8084`.
+
+The daemon did have a health endpoint. It bound the port **last**, after
+`makeSwitchboardOps` (21 seconds on that run, from the log timestamps) and
+`irysUploaderFromEnv`. Both awaits were reached for the first time that night:
+`SWITCHBOARD_QUEUE` and `IRYS_UPLOAD_KEY` had been empty until C5 set them, so the
+daemon had always taken the short path around them. The code did not regress —
+**configuring a service correctly for the first time is also the first time its
+real startup path runs.** Expect the first credentialed deploy of any service to
+fail on something no previous deploy could have exposed.
+
+The fix binds `/health` before anything else and reports the startup phase, so the
+platform can tell "still starting" from "dead" (`backend/reveal/src/health.ts`).
+That creates the opposite hazard, which is why the endpoint turns **503** past a
+two-minute startup budget and why the deploy now asserts `"ready":true` rather than
+a bare 200: a machine that answers 200 forever while wedged in initialisation would
+be the same silent failure wearing the other mask.
