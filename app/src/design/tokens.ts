@@ -79,10 +79,18 @@ export const palette = {
    * ———————————————————————————————————————————————————————————————— */
   brandPink: '#ff7ac8',
   brandYellow: '#ffde59',
-  /* The vinyl's edge: gradient rim and seam stroke on the Blot's body.
-   * Material rendering only — never a surface, never type. */
-  brandYellowDeep: '#e6b800',
-  /* The Blot's visor. Material, like the seam — never a surface. */
+  /* THE BLOT'S MATERIAL (architect brief §2.3–2.4, exact values). These
+   * are rendering pigments for the mascot's vinyl body ONLY — never a
+   * surface, never type, never a control. Lit/shade bracket brandYellow
+   * in the body's radial gradient; rim and seam are the vinyl's edges;
+   * heart, shadow and ambient are the fixed features. */
+  blotLit: '#fff0a8',
+  blotShade: '#e8b92e',
+  blotRim: '#fff6d6',
+  blotSeam: '#e8c84a',
+  blotHeart: '#ff3daa',
+  blotShadow: '#c2186e',
+  blotAmbient: '#a8541e',
   blotVisor: '#2a1030',
   brandCream: '#fff6ec',
   brandPalePink: '#ffc7e3',

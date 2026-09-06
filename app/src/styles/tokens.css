@@ -70,7 +70,13 @@
    * migration completes (deleted together in the final PR). */
   --color-brand-pink: #ff7ac8;
   --color-brand-yellow: #ffde59;
-  --color-brand-yellow-deep: #e6b800;
+  --color-blot-lit: #fff0a8;
+  --color-blot-shade: #e8b92e;
+  --color-blot-rim: #fff6d6;
+  --color-blot-seam: #e8c84a;
+  --color-blot-heart: #ff3daa;
+  --color-blot-shadow: #c2186e;
+  --color-blot-ambient: #a8541e;
   --color-blot-visor: #2a1030;
   --color-brand-cream: #fff6ec;
   --color-brand-pale-pink: #ffc7e3;
