@@ -60,3 +60,6 @@ app/.next
 
 # Generated screenshot sets (npm run capture) — delivered as a zip, not committed.
 app/screens/
+
+# Founder design-handoff folder (reference inputs + fetched assets) — never committed.
+handoff/
