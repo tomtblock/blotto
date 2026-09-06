@@ -121,4 +121,11 @@ pub enum ErrorCode {
     TreasuryShortfall,
     #[msg("Pot must be a positive multiple of 1024 lamports")]
     PotNotDivisible,
+    // 6051 — D-E4, the minimum field (appended, never inserted)
+    #[msg("Pool is below the minimum field; it refunds rather than seals")]
+    FieldBelowMinimum,
+    #[msg("Pool reached the minimum field; it seals rather than refunds")]
+    FieldReached,
+    #[msg("Pot must be below the minimum field's entries (MIN_SEATS × price)")]
+    PotExceedsMinimumField,
 }

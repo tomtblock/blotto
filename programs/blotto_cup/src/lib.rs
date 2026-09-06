@@ -184,9 +184,17 @@ pub mod blotto_cup {
     }
 
     /// Enter a pool: pay, submit the sealed battles hash, receive the class
-    /// and the frozen pass. The 64th entry seals the pool.
+    /// and the frozen pass. The 64th entry seals the pool; the entry that
+    /// reaches the minimum field starts the go-timer (D-E4).
     pub fn register(ctx: Context<Register>, pool_id: u64, battles_hash: [u8; 32]) -> Result<()> {
         instructions::handle_register(ctx, pool_id, battles_hash)
+    }
+
+    /// Anyone: close a pool whose deadline has passed at or above the
+    /// minimum field (D-E4). A pure function of state and time — the
+    /// operator has no say in when a pool seals.
+    pub fn seal_at_deadline(ctx: Context<SealAtDeadline>, pool_id: u64) -> Result<()> {
+        instructions::handle_seal_at_deadline(ctx, pool_id)
     }
 
     // ---- Settlement -----------------------------------------------------
@@ -249,7 +257,8 @@ pub mod blotto_cup {
 
     // ---- Refund fork (R7) -----------------------------------------------
 
-    /// Anyone: flip a pool past its deadline and below 64 into `Refunding`.
+    /// Anyone: flip a pool past its deadline and below the minimum field
+    /// into `Refunding` (at or above it, `seal_at_deadline` applies).
     pub fn trigger_refund(ctx: Context<TriggerRefund>, pool_id: u64) -> Result<()> {
         instructions::handle_trigger_refund(ctx, pool_id)
     }

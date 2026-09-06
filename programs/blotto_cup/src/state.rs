@@ -100,7 +100,9 @@ pub struct Config {
     pub platform_bump: u8,
     /// KYC-at-claim switch (roadmap R3/4.5). 0 = off. When non-zero,
     /// `pay_prizes` escrows any share above it until a `kyc_tier ≥ 1` packet
-    /// is presented via `release_escrow`.
+    /// is presented via `release_escrow`. D-E5: kept at 0, never deleted;
+    /// under D-E2 (one paid seat = the whole pot) any threshold below the
+    /// smallest pot escrows EVERY payout — see `handle_set_kyc_threshold`.
     pub kyc_required_above_lamports: u64,
     /// Detection hard-block policy flag (roadmap R11). Read by the off-chain
     /// detection layer, recorded on-chain so the operative policy is public.
@@ -174,10 +176,17 @@ pub struct Pool {
     /// The FIXED pot funding this pool's prize vault (D-A1 v2), copied from
     /// Config at open and locked in the vault before any pass is sold.
     pub pot_lamports: u64,
-    /// Entries so far. Also the next entry's index.
+    /// Entries so far. Also the next entry's index. Under D-E4 a pool may
+    /// seal anywhere in `MIN_SEATS..=CAPACITY`; this is the field it played.
     pub entrants: u16,
     pub opened_at: i64,
-    /// `opened_at + FILL_DEADLINE_SECS` (72h, R7).
+    /// The moment entries close: `opened_at + FILL_DEADLINE_SECS` (72h, R7),
+    /// SHORTENED in place to `now + GO_TIMER_SECS` by the `register` that
+    /// brings the pool to `MIN_SEATS` when that is sooner (D-E4 §11.3, option
+    /// B — the go-timer lives here rather than in a new field so the account
+    /// layout, and every reader of it, is unchanged; `GoTimerStarted`
+    /// carries the original-vs-shortened distinction off-chain). Past it,
+    /// `seal_at_deadline` (≥ MIN_SEATS) or `trigger_refund` (< MIN_SEATS).
     pub fill_deadline: i64,
     pub state: PoolState,
     /// X25519 public key entries are sealed to (TECH-ARCH §5). Published at open.
@@ -202,11 +211,16 @@ pub struct Pool {
     /// Settled payout list, committed with the root (decision D3-B,
     /// 2026-08-27 — split-pot ties). Sorted by `entry_index`, no duplicates,
     /// amounts summing to exactly the pot — all validated at
-    /// `commit_results`. The paid set is variable (ties straddling 16th/17th
-    /// pay more than 16 players), so this replaces the fixed 16-winner
-    /// array; `pay_prizes` pays exactly these amounts to exactly these
-    /// seats. Measured on-Pool: 2 + 64×10 bytes keeps `Pool` at 834 bytes —
-    /// far under the 10 KiB companion-PDA threshold.
+    /// `commit_results`. The paid set is variable (under D-E2 it is the
+    /// winner, or every member of a tie for first), so this is a length plus
+    /// a fixed 64-slot array; `pay_prizes` pays exactly these amounts to
+    /// exactly these seats. The array stays 64 wide on purpose (proposal E1
+    /// §2.3): shrinking it would move every offset the LiteSVM and web3
+    /// readers hard-code, force an account migration, and foreclose a
+    /// return to a multi-place table — 630 bytes of rent is the price of
+    /// reversibility. On the wire: 2 + 64×10 = 642 bytes of an 839-byte
+    /// `Pool::LEN` (847 with the discriminator) — far under the 10 KiB
+    /// companion-PDA threshold.
     pub payouts_len: u16,
     pub payouts: [Payout; CAPACITY as usize],
     /// Bit `entry_index` set once that seat's payout is settled (paid or
@@ -391,6 +405,28 @@ mod tests {
         let mut buf = Vec::new();
         p.serialize(&mut buf).unwrap();
         assert_eq!(buf.len(), Pool::LEN, "Pool::LEN is stale");
+    }
+
+    /// The account layouts are load-bearing beyond this crate: the LiteSVM
+    /// harness, `backend/reveal/src/chain-web3.ts` and `scripts/admin.ts`
+    /// read them by hard-coded byte offsets, and every live account on-chain
+    /// was allocated at these sizes — an appended field would make every
+    /// pre-upgrade Pool/Config one field short and undeserialisable (a pool
+    /// that can neither take entries nor refund holds its pot with no exit).
+    /// D-E4 was therefore built WITHOUT a new field (the go-timer shortens
+    /// `fill_deadline` in place). These pins turn a future layout change
+    /// into a deliberate, reviewed act rather than a side effect.
+    #[test]
+    fn account_layouts_are_pinned() {
+        assert_eq!(Pool::LEN, 839, "Pool layout changed — read the note above");
+        assert_eq!(Pool::SPACE, 847);
+        assert_eq!(
+            Config::LEN,
+            372,
+            "Config layout changed — read the note above"
+        );
+        assert_eq!(Config::SPACE, 380);
+        assert_eq!(Entry::LEN, 183);
     }
 
     #[test]
