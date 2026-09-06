@@ -69,7 +69,14 @@ class MemDb implements Queryable {
   bundles = new Map<string, { pool: string; uri: string; results_root: string; root_matches: boolean }>();
   rankings = new Map<string, Record<string, unknown>>(); // key `${pool}:${seat}`
 
-  async query(sql: string, params: readonly unknown[] = []): Promise<{ rows: any[] }> {
+  // Queryable's return is pg's full QueryResult; the archive only ever
+  // reads `rows`, so the double is narrowed with the same `as never`
+  // idiom the read-api spec's canned db uses.
+  async query(sql: string, params: readonly unknown[] = []): ReturnType<Queryable['query']> {
+    return (await this.run(sql, params)) as never;
+  }
+
+  private async run(sql: string, params: readonly unknown[]): Promise<{ rows: any[] }> {
     const s = sql.replace(/\s+/g, ' ').trim();
     if (s.startsWith('SELECT results_root FROM pools')) {
       const p = this.pools.get(params[0] as string);
@@ -113,10 +120,10 @@ class MemDb implements Queryable {
       return { rows: b ? [{ ...b, verified_at: '2026-09-06T00:00:00Z' }] : [] };
     }
     if (s.startsWith('SELECT seat, player, rank, score_half, zones, amount_lamports')) {
-      const rows = [...this.rankings.entries()]
+      const rows: any[] = [...this.rankings.entries()]
         .filter(([k]) => k.startsWith(`${params[0]}:`))
-        .map(([, v]) => ({ ...v, amount_lamports: String(v.amount_lamports) }))
-        .sort((a, b) => (a.rank as number) - (b.rank as number) || (a.seat as number) - (b.seat as number));
+        .map(([, v]) => ({ ...v, amount_lamports: String(v.amount_lamports) }));
+      rows.sort((a, b) => a.rank - b.rank || a.seat - b.seat);
       return { rows };
     }
     throw new Error(`MemDb: unhandled SQL: ${s}`);
