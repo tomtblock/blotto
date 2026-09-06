@@ -11,7 +11,14 @@ export interface PoolSummary {
   entry_lamports: string;
   /** The pool's FIXED pot (D-A1 revised), from `PoolOpened.pot_lamports`. */
   pot_lamports: string;
-  fill_deadline: string; // unix seconds, decimal string
+  /** The EFFECTIVE deadline, unix seconds, decimal string: the 72h fill
+   * deadline, shortened in place to the go-deadline once the 52nd seat
+   * lands (D-E4). Always the clock to show. */
+  fill_deadline: string;
+  /** Set once the minimum field is seated and the go-timer started (D-E4);
+   * then equal to `fill_deadline`. Null until then — and null for pools
+   * indexed before the go-timer existed. */
+  go_deadline: string | null;
   timer_seconds: number;
   state: 'Open' | 'Sealed' | 'Scored' | 'Paid' | 'Refunding' | 'Closed';
   /** Hex, 32 bytes — the X25519 key entries seal to (from PoolOpened). */

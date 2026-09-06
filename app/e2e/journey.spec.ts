@@ -20,7 +20,9 @@ const shot = (page: Page, name: string, project: string) =>
 
 test('landing: hero fixture card with the 18+ line above the fold', async ({ page }, info) => {
   await page.goto('/');
-  await expect(page.getByText('Sixty-four players. Seven battles. Top sixteen paid.')).toBeVisible();
+  await expect(
+    page.getByText('Sixty-four seats. Seven battles. The winner takes the prize pool.')
+  ).toBeVisible();
   // The live fixture card and its seat ring.
   await expect(page.getByRole('img', { name: /of 64 seats filled/ })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Enter this tournament' })).toBeVisible();

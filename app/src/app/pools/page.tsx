@@ -1,11 +1,12 @@
 /* Pools tab (restyled by v3 D2; per-tier lobby 2026-08-28 — the old
  * handover's §5A remainder): pools grouped by tier, each tier card carrying
- * its entry price, fixed prize pool and 1st-place share from the SAME
- * shared constants the prize path uses (never hand-typed), with the full
- * per-tier prize tables one link away on the rules tab. Within a tier,
- * newest first; open pools wear the brand hairline. */
+ * its entry price and fixed prize pool from the SAME shared constants the
+ * prize path uses (never hand-typed) — the winner takes that pool (D-E2),
+ * so there is no second figure — with the per-tier table one link away on
+ * the rules tab. Within a tier, newest first; open pools wear the brand
+ * hairline. */
 import Link from 'next/link';
-import { TIER_ENTRY_LAMPORTS, TIER_POT_LAMPORTS, amountForRank } from '@blotto/scoring';
+import { MIN_SEATS, TIER_ENTRY_LAMPORTS, TIER_POT_LAMPORTS } from '@blotto/scoring';
 import { indexerApi, live } from '@/data/api';
 import { lamportsToSol } from '@/data/format';
 import { COPY } from '@/copy';
@@ -72,9 +73,7 @@ export default async function PoolsPage() {
                     <span className="tnum text-[13px] font-semibold text-prize">
                       {COPY.pool.tierPot(lamportsToSol(pot.toString()))}
                     </span>
-                    <span className="tnum text-[13px] text-ink-muted">
-                      {COPY.pool.tierFirst(lamportsToSol(amountForRank(pot, 1).toString()))}
-                    </span>
+                    <span className="text-[13px] text-ink-muted">{COPY.pool.tierWinner}</span>
                   </header>
                   <ul className="flex flex-col gap-3">
                     {byTier.get(tier)!.map((p) => (
@@ -95,7 +94,7 @@ export default async function PoolsPage() {
                               #{p.id}
                             </span>
                             <span className="text-[13px] text-ink-muted">
-                              {COPY.pool.entrantsOf(p.entrants)}
+                              {COPY.pool.entrantsOf(p.entrants, Number(MIN_SEATS))}
                             </span>
                             <span className="ml-auto rounded-full border border-line px-2.5 py-0.5 text-[11px] uppercase tracking-[0.1em] text-ink-muted">
                               {p.state}

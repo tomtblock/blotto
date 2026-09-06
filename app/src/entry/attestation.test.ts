@@ -4,8 +4,10 @@ import { describe, expect, it } from 'vitest';
 import nacl from 'tweetnacl';
 import { attestationMessage as serviceMessage } from '@blotto/packet/attestations';
 import {
+  TERMS_VERSION,
   attestationMessage,
   hasLocalAttestation,
+  rememberLocalAttestation,
   submitAttestation,
 } from './attestation';
 
@@ -56,5 +58,16 @@ describe('submitAttestation (fail-closed)', () => {
 
   it('the device cache is keyed by version — a bump re-prompts', () => {
     expect(hasLocalAttestation(WALLET, 999)).toBe(false);
+  });
+
+  it('a wallet that accepted version 1 is re-prompted at version 2 (the D-E2 terms bump)', () => {
+    const wallet = 'Bump1111111111111111111111111111111111111111';
+    rememberLocalAttestation(wallet, 1);
+    expect(hasLocalAttestation(wallet, 1)).toBe(true);
+    expect(hasLocalAttestation(wallet, 2)).toBe(false);
+    // The gate reads the CURRENT version from config/terms.json; the record
+    // written under the old version never satisfies it.
+    expect(TERMS_VERSION).toBe(2);
+    expect(hasLocalAttestation(wallet)).toBe(false);
   });
 });

@@ -2,27 +2,42 @@
  * constants, every ratified section is present with a filled body, and the
  * availability list renders from the founder-owned config. */
 import { describe, expect, it } from 'vitest';
-import { TIER_ENTRY_LAMPORTS } from '@blotto/scoring';
+import {
+  MIN_SEATS,
+  PAID_RANKS,
+  TIER_ENTRY_LAMPORTS,
+  TIER_POT_LAMPORTS,
+  amountForRank,
+} from '@blotto/scoring';
 import territories from '@config/territories.json';
-import { availability, rulesSections, tierRows } from './rules.config';
+import { FIELD_RULES, availability, rulesSections, tierRows } from './rules.config';
 
 describe('tierRows', () => {
   it('one row per configured tier, numbers from the shared table', () => {
     const rows = tierRows();
     expect(rows.length).to.equal(TIER_ENTRY_LAMPORTS.length);
-    // Tier 0 (D-E1): 0.1 SOL entry, 4 SOL prize pool, 1.0546875 SOL first prize.
+    // Tier 0 (D-E1): 0.1 SOL entry, 4 SOL prize pool.
     expect(rows[0].entrySol).to.equal('0.1');
     expect(rows[0].potSol).to.equal('4');
-    expect(rows[0].prizesSol[0]).to.equal('1.0546875');
-    expect(rows[0].prizesSol[15]).to.equal('0.10546875');
-    // Tier 6: 7.5 SOL entry, 384 SOL prize pool, 101.25 SOL first prize.
+    // Tier 6: 7.5 SOL entry, 300 SOL prize pool.
     expect(rows[6].entrySol).to.equal('7.5');
     expect(rows[6].potSol).to.equal('300');
-    expect(rows[6].prizesSol[0]).to.equal('79.1015625');
   });
 
-  it('sixteen paid positions per tier', () => {
-    for (const row of tierRows()) expect(row.prizesSol.length).to.equal(16);
+  it('one paid place (D-E2): the prize pool shown IS the winner’s prize at every tier', () => {
+    expect(PAID_RANKS).to.equal(1);
+    TIER_POT_LAMPORTS.forEach((pot, tier) => {
+      expect(amountForRank(pot, 1), `tier ${tier}`).to.equal(pot);
+      expect(amountForRank(pot, 2), `tier ${tier} rank 2`).to.equal(0n);
+    });
+  });
+});
+
+describe('FIELD_RULES', () => {
+  it('carries the shared minimum field and go-timer, never hand-typed', () => {
+    expect(FIELD_RULES.minSeats).to.equal(Number(MIN_SEATS));
+    expect(FIELD_RULES.minSeats).to.equal(52);
+    expect(FIELD_RULES.goTimerHours).to.be.greaterThan(0);
   });
 });
 
@@ -39,6 +54,7 @@ describe('rulesSections', () => {
       'ties',
       'randomness',
       'sealing',
+      'field-size',
       'refund',
       'pool-opening',
       'verify',
@@ -68,11 +84,22 @@ describe('rulesSections', () => {
   it('the substance-fixed paragraphs state what the code enforces', () => {
     const byId = new Map(sections.map((s) => [s.id, s]));
     expect(byId.get('scoring')!.body).to.contain('three or more of its five stats');
-    expect(byId.get('ties')!.body).to.contain('split the combined prize');
+    // D-E2: one paid place; a tie for first splits the pot (D3-B's rule).
+    expect(byId.get('ties')!.body).to.contain('split the prize pool evenly');
     expect(byId.get('ties')!.body).to.contain('entered the pool earliest');
+    expect(byId.get('ties')!.body).to.contain('nobody ranked below first is paid');
+    expect(byId.get('prizes')!.body).to.contain('The player ranked first receives the whole prize pool');
+    expect(byId.get('prizes')!.body).to.not.match(/\d+\s*[×x]/); // no multiple, ever
+    expect(byId.get('prizes')!.body).to.not.contain('%');
     expect(byId.get('randomness')!.body).to.contain('class');
     expect(byId.get('randomness')!.body).to.contain('does not affect any stat');
+    // D-E4: the minimum field and the go-timer, from the shared constants.
+    expect(byId.get('field-size')!.body).to.contain(`at least ${FIELD_RULES.minSeats} players`);
+    expect(byId.get('field-size')!.body).to.contain(`${FIELD_RULES.goTimerHours}-hour clock`);
+    expect(byId.get('field-size')!.body).to.contain('Nobody decides when a pool runs');
     expect(byId.get('refund')!.body).to.contain('72 hours');
+    expect(byId.get('refund')!.body).to.contain(`fewer than ${FIELD_RULES.minSeats} players`);
+    expect(byId.get('how-to-enter')!.body).to.contain(`at least ${FIELD_RULES.minSeats} players`);
     const verify = byId.get('verify')!;
     expect(verify.kind).to.equal('verify');
     if (verify.kind === 'verify') expect(verify.href).to.equal('/verify');

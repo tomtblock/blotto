@@ -3,7 +3,9 @@
  * and randomness rules in plain language, one section per topic. Every
  * number comes through rules.config.ts from the same shared constants the
  * prize path uses; the availability section renders from the founder-owned
- * config/territories.json. Strings live in the copy module.
+ * config/territories.json. Strings live in the copy module. Under D-E2 the
+ * per-tier table (entry → prize pool) is the only table: the winner takes
+ * the pool, so there is no per-position table to render.
  */
 import Link from 'next/link';
 import { COPY } from '@/copy';
@@ -39,38 +41,6 @@ function TierPriceTable({ rows }: { rows: TierRow[] }) {
   );
 }
 
-function PrizeTable({ rows }: { rows: TierRow[] }) {
-  const h = COPY.rules.tableHeadings;
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-left text-sm">
-        <thead>
-          <tr className="text-[12px] uppercase tracking-[0.1em] text-ink-muted">
-            <th className="py-2 pr-4 font-medium">{h.position}</th>
-            {rows.map((r) => (
-              <th key={r.tier} className="tnum pr-4 font-medium">
-                {r.entrySol} SOL
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows[0].prizesSol.map((_, position) => (
-            <tr key={position} className="border-t border-line">
-              <td className="tnum py-2 pr-4 font-mono text-ink-muted">#{position + 1}</td>
-              {rows.map((r) => (
-                <td key={r.tier} className="tnum py-2 pr-4 font-mono text-ink">
-                  {r.prizesSol[position]}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
 export default function RulesPage() {
   return (
     <>
@@ -91,11 +61,6 @@ export default function RulesPage() {
             {s.kind === 'tiers' && (
               <div className="mt-3">
                 <TierPriceTable rows={s.rows} />
-              </div>
-            )}
-            {s.kind === 'prizes' && (
-              <div className="mt-3">
-                <PrizeTable rows={s.rows} />
               </div>
             )}
             {s.kind === 'verify' && (
