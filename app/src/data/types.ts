@@ -58,8 +58,7 @@ export interface ProfileRow {
   class_counts: [number, number, number, number, number];
 }
 
-/** One career entry (D3), from GET /profiles/:player/history. Rank labels
- * are deliberately absent (D3-B: ranks live in the published bundle). */
+/** One career entry (D3), from GET /profiles/:player/history. */
 export interface CareerRow {
   pool: string;
   pool_id: string | null;
@@ -70,6 +69,38 @@ export interface CareerRow {
   amount_lamports: string;
   pot_lamports: string | null;
   state: PoolSummary['state'] | null;
+  /**
+   * E3: nullable, and sourced ONLY from the verified archive — null until
+   * the pool's published bundle recomputed to the on-chain root. Absent on
+   * rows served by a pre-E3 indexer, hence optional.
+   */
+  rank?: number | null;
+}
+
+/** One row of a pool's verified archive ranking (E3). */
+export interface LeaderboardRow {
+  seat: number;
+  player: string;
+  rank: number;
+  /** Battle score in HALF-POINT integer units (a drawn battle is 1). */
+  score_half: number;
+  zones: number;
+  amount_lamports: string;
+}
+
+/**
+ * GET /pools/:pool/leaderboard — served only when the published bundle
+ * recomputed to the on-chain results_root; the provenance rides along so
+ * the page can link to the published data itself.
+ */
+export interface PoolLeaderboard {
+  pool: string;
+  /** Where the bundle lives (the player can fetch the same bytes). */
+  uri: string;
+  /** The locally recomputed root, hex — equals the on-chain commitment. */
+  results_root: string;
+  verified_at: string;
+  rows: LeaderboardRow[];
 }
 
 /** One rival (D3): a wallet often in the same pools, co-entry facts only. */
@@ -113,4 +144,6 @@ export interface IndexerApi {
   getRivals(player: string): Promise<RivalRow[]>;
   getSealedEntries(pool: string): Promise<SealedEntryRow[]>;
   getTreasury(): Promise<TreasuryTiers | null>;
+  /** E3: null when the pool has no VERIFIED archive (fail-closed 404). */
+  getLeaderboard(pool: string): Promise<PoolLeaderboard | null>;
 }

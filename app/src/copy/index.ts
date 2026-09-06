@@ -100,6 +100,11 @@ export const COPY = {
     tierPot: (sol: string) => `${sol} SOL prize pool`,
     tierFirst: (sol: string) => `1st place ${sol} SOL`,
     tierTableLink: 'Full prize tables',
+    // E3: the archive strip on the pools tab. Draft pending founder voice
+    // review; the substance (settled pools remain browsable, every result
+    // recomputable) is the architecture speaking.
+    archiveTitle: 'Archive',
+    archiveNote: 'Settled tournaments. Every result here is recomputable from published data.',
   },
   // The landing page's game explainer (founder ask 2026-08-28). Substance
   // must match the rules tab and PRODUCT-FACTS; wording is founder-voiced
@@ -236,6 +241,24 @@ export const COPY = {
     // SUBSTANCE FIXED (D3-B, ratified 2026-08-27): the split-pot tie rule.
     tieNote:
       'Tied players — equal on battles won and on stats won — share a rank and split the combined prize of the positions they occupy evenly. The full ranking with tie labels is recomputable on the Verify page from the published data.',
+    // E3 (proposal E1 §4): the verified archive. Drafts pending founder
+    // voice review — substance (provenance, recomputability) is the
+    // architecture speaking; the wording is the founder's to shape.
+    archive: {
+      title: 'Full standings',
+      note:
+        'Served from the published results data and re-checked against the on-chain commitment before anything here is shown. Fetch the same data yourself and recompute it — nothing on this page asks for trust.',
+      bundleLink: 'Published data',
+      verifyLink: 'Recompute on the Verify page',
+      winner: (playerShort: string, amountSol: string) =>
+        `Winner: ${playerShort} — ${amountSol} SOL`,
+      seat: 'Seat',
+      player: 'Player',
+      rank: 'Rank',
+      /** Battle score across the seven battles; a drawn battle counts half. */
+      battleScore: 'Battles won',
+      prize: 'Prize',
+    },
   },
   verify: {
     title: 'Verify a pool',

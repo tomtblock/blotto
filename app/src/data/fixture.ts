@@ -60,4 +60,9 @@ export const FIXTURE_API: IndexerApi = {
   async getTreasury() {
     return FIXTURE_TREASURY;
   },
+  async getLeaderboard(pool) {
+    // E3: only scenarios whose bundle "verified" carry one — the read API's
+    // fail-closed 404 renders as the archive section simply not appearing.
+    return SCENARIO_BY_POOL.get(pool)?.leaderboard ?? null;
+  },
 };
