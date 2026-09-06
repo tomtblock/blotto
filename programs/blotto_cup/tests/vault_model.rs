@@ -26,16 +26,25 @@
 //! after the previous reached `Paid` or `Closed`, mirroring
 //! `active_pool_by_tier`, and the ledger identities run ACROSS pools.
 //!
+//! D-E4 (2026-09-06) adds the second seal path: past the deadline a pool at
+//! or above `MIN_SEATS` seals (`seal_at_deadline`) and below it refunds
+//! (`trigger_refund`). The model abstracts the clock the same way it always
+//! did for the refund fork — the deadline is assumed past whenever either
+//! op fires — and mirrors the field guard on both, so the fork is decided by
+//! seat count exactly as on-chain. The invariants are UNCHANGED by D-E2 and
+//! D-E4; only the operation set and the refund proptest's domain moved.
+//!
 //! What this does and does not prove: it proves the arithmetic and the state
 //! machine conserve lamports under any interleaving the program permits. It
 //! does not execute the real BPF program — the LiteSVM integration suite
 //! covers the on-chain half against the compiled artifact.
 
-use blotto_cup::constants::{CAPACITY, TIER_ENTRY_LAMPORTS, TIER_POT_LAMPORTS};
-use blotto_cup::prize_math::{band_amount, split_group};
+use blotto_cup::constants::{CAPACITY, MIN_SEATS, TIER_ENTRY_LAMPORTS, TIER_POT_LAMPORTS};
+use blotto_cup::prize_math::split_group;
 use proptest::prelude::*;
 
 const CAP: usize = CAPACITY as usize;
+const MIN: usize = MIN_SEATS as usize;
 
 /// Mirror of `PoolState` — the model tracks the same machine.
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -203,10 +212,33 @@ impl Model {
         self.entries[self.entrants].exists = true;
         self.entrants += 1;
         if self.entrants == CAP {
-            self.state = St::Sealed;
-            // Refunds are now impossible: the 64 prices become revenue.
-            self.refundable -= self.price as u128 * CAP as u128;
+            self.seal();
         }
+    }
+
+    /// The shared seal (`register::seal_pool`): refunds are now impossible,
+    /// so the pool's REAL field's prices become revenue — `entrants`, never
+    /// `CAP` (equal at 64; below 64 only the former is correct).
+    fn seal(&mut self) {
+        self.state = St::Sealed;
+        self.refundable -= self.price as u128 * self.entrants as u128;
+    }
+
+    /// `seal_at_deadline` (D-E4) — past the deadline, at or above the minimum
+    /// field and below capacity, the pool closes to entries. Permissionless
+    /// on-chain; the model has no clock, so "past the deadline" is assumed
+    /// whenever the op fires (exactly as `trigger_refund` is modelled).
+    fn seal_at_deadline(&mut self) {
+        if !self.opened || self.state != St::Open {
+            return; // PoolNotOpen
+        }
+        if self.entrants < MIN {
+            return; // FieldBelowMinimum — this pool refunds instead
+        }
+        if self.entrants >= CAP {
+            return; // PoolFull — unreachable while Open, mirrored anyway
+        }
+        self.seal();
     }
 
     fn flag(&mut self, i: usize, on: bool) {
@@ -217,25 +249,32 @@ impl Model {
         e.flagged = on;
     }
 
-    /// `commit_results` (D3-B) — a seeded RANKING of all 64 seats is
-    /// partitioned into tie groups, each group's prize split by the SAME
-    /// `split_group` the program's arithmetic module exposes (each × size +
-    /// remainder, remainder to the group's lowest seat), and the seats with
-    /// a non-zero amount become the committed payout list. Conservation is
-    /// therefore a THEOREM the invariant re-checks, not an assumption.
+    /// `commit_results` (D3-B) — a seeded RANKING of the pool's seats (the
+    /// REAL field, `entrants`: 52..=64 under D-E4) is partitioned into tie
+    /// groups, each group's prize split by the SAME `split_group` the
+    /// program's arithmetic module exposes (each × size + remainder,
+    /// remainder to the group's lowest seat), and the seats with a non-zero
+    /// amount become the committed payout list — under D-E2 that is the
+    /// winner, or every member of a tie for first. Conservation is therefore
+    /// a THEOREM the invariant re-checks, not an assumption.
     fn commit(&mut self, seed: u64) {
         if !self.opened || self.state != St::Sealed {
             return;
         }
-        // Seeded permutation of the seats = the ranking (rank 1 first).
-        let stride = 1 + (seed as usize) % 63; // 1..=63; 64 is 2^6, odd strides
-        let stride = if stride.is_multiple_of(2) {
-            stride + 1
-        } else {
-            stride
-        }; // coprime to 64
-        let start = (seed as usize / 64) % CAP;
-        let ranking: Vec<usize> = (0..CAP).map(|i| (start + i * stride) % CAP).collect();
+        let n = self.entrants;
+        assert!(n >= MIN, "a sealed pool holds at least the minimum field");
+        // Seeded permutation of the seats = the ranking (rank 1 first): an
+        // odd stride is coprime to any even n; for odd n fall back to a
+        // stride of 1 (still a permutation — the start offset varies).
+        let mut stride = 1 + (seed as usize) % (n - 1);
+        if stride.is_multiple_of(2) {
+            stride += 1;
+        }
+        if gcd(stride, n) != 1 {
+            stride = 1;
+        }
+        let start = (seed as usize / 64) % n;
+        let ranking: Vec<usize> = (0..n).map(|i| (start + i * stride) % n).collect();
         // Seeded tie-group sizes over the ranking: group size 1..=4, plus a
         // seeded chance of one giant group at the top (the everyone-tied
         // shape the oracle also pins).
@@ -243,16 +282,16 @@ impl Model {
         let mut payouts: Vec<(usize, u64)> = Vec::new();
         let mut pos: usize = 0; // 0-based position; rank = pos + 1
         let mut g = seed ^ 0x9e37_79b9_7f4a_7c15;
-        while pos < CAP {
+        while pos < n {
             g = g
                 .wrapping_mul(6364136223846793005)
                 .wrapping_add(1442695040888963407);
             let size = if pos == 0 && g.is_multiple_of(11) {
-                CAP // everyone tied
+                n // everyone tied
             } else {
-                1 + (g as usize % 4).min(CAP - pos - 1)
+                1 + (g as usize % 4).min(n - pos - 1)
             };
-            let size = size.min(CAP - pos);
+            let size = size.min(n - pos);
             let (each, remainder) = split_group(potv, (pos + 1) as u16, size as u16);
             let group = &ranking[pos..pos + size];
             let lowest_seat = *group.iter().min().unwrap();
@@ -269,6 +308,12 @@ impl Model {
         // same so a split_group bug fails HERE, loudly.
         let total: u128 = payouts.iter().map(|&(_, a)| a as u128).sum();
         assert_eq!(total, potv as u128, "committed payouts must sum to the pot");
+        // D-E2: the paid set is exactly the tie group at rank 1 — one seat,
+        // or every member of a tie for first — never a seat outside it.
+        assert!(
+            !payouts.is_empty() && payouts.len() <= n,
+            "the paid set is the rank-1 group"
+        );
         self.committed = payouts;
         self.state = St::Scored;
     }
@@ -340,10 +385,15 @@ impl Model {
         e.escrow = 0;
     }
 
-    /// `trigger_refund` — the untouched pot returns to the treasury.
+    /// `trigger_refund` — the untouched pot returns to the treasury. D-E4:
+    /// only BELOW the minimum field; at or above it the pool seals instead,
+    /// so nobody can refund a playable pool out from under its entrants.
     fn trigger_refund(&mut self) {
         if !self.opened || self.state != St::Open {
             return;
+        }
+        if self.entrants >= MIN {
+            return; // FieldReached — this pool seals instead
         }
         if self.entrants == 0 {
             self.state = St::Closed;
@@ -468,6 +518,16 @@ impl Model {
     }
 }
 
+/// Greatest common divisor — for choosing a stride coprime to the field.
+fn gcd(mut a: usize, mut b: usize) -> usize {
+    while b != 0 {
+        let t = a % b;
+        a = b;
+        b = t;
+    }
+    a
+}
+
 /// One random operation. Indices/amounts are folded into range at execution.
 #[derive(Clone, Debug)]
 enum Op {
@@ -481,6 +541,10 @@ enum Op {
     Release(usize),
     Forfeit(usize),
     TriggerRefund,
+    /// D-E4: the second seal path. Weighted like `TriggerRefund` — rare
+    /// enough that pools mostly fill, common enough that every fill in
+    /// `MIN..CAP` is exercised across 10k sequences.
+    SealAtDeadline,
     Refund(usize),
 }
 
@@ -496,6 +560,7 @@ fn op_strategy() -> impl Strategy<Value = Op> {
         2 => (0usize..CAP).prop_map(Op::Release),
         2 => (0usize..CAP).prop_map(Op::Forfeit),
         1 => Just(Op::TriggerRefund),
+        1 => Just(Op::SealAtDeadline),
         3 => (0usize..CAP).prop_map(Op::Refund),
     ]
 }
@@ -514,8 +579,9 @@ proptest! {
         let price = TIER_ENTRY_LAMPORTS[tier];
         let pot = TIER_POT_LAMPORTS[tier];
         // When the KYC switch is on, put the threshold where it splits the
-        // band table: some prizes above, some below.
-        let kyc_above = if kyc_on { band_amount(pot, 5) } else { 0 };
+        // D-E2 paid set: a solo winner (the whole pot) escrows, a member of
+        // a two-way-or-wider tie for first (pot / k ≤ pot / 2) does not.
+        let kyc_above = if kyc_on { pot / 2 } else { 0 };
         let mut m = Model::new(price, pot, min_platform, kyc_above);
         for op in ops {
             match op {
@@ -529,6 +595,7 @@ proptest! {
                 Op::Release(i) => m.release(i % CAP),
                 Op::Forfeit(i) => m.forfeit(i % CAP),
                 Op::TriggerRefund => m.trigger_refund(),
+                Op::SealAtDeadline => m.seal_at_deadline(),
                 Op::Refund(i) => m.refund(i % CAP),
             }
             m.assert_invariant();
@@ -561,7 +628,7 @@ proptest! {
         prop_assert_eq!(m.refundable, 0u128); // revenue at seal
         m.commit(seed);
         // Flag paid seats according to the bit pattern (the committed list
-        // includes every tie-group member touching the top 16 — D3-B).
+        // is the rank-1 tie group — D-E2 over D3-B).
         let paid_seats: Vec<usize> = m.committed.iter().map(|&(s, _)| s).collect();
         for (i, &seat) in paid_seats.iter().enumerate() {
             if flagged_bits & (1 << (i % 16)) != 0 { m.flag(seat, true); }
@@ -585,13 +652,16 @@ proptest! {
         prop_assert_eq!(m.platform, expected, "treasury drifted over the lifecycle");
     }
 
-    /// The refund fork, exhaustively: any partial fill, trigger (pot returns
+    /// The refund fork, exhaustively: any fill BELOW the minimum field (D-E4
+    /// moved the threshold from 64 to `MIN_SEATS`), trigger (pot returns
     /// whole), refund all — the vault ends at zero, every entrant is repaid
     /// exactly their price, and the treasury ends exactly where it started.
+    /// A seal attempt on such a pool is a no-op: the fork is decided by the
+    /// field, and the two instructions reject each other's case.
     #[test]
     fn refund_fork_returns_every_lamport(
         tier in 0usize..TIER_ENTRY_LAMPORTS.len(),
-        fill in 0usize..CAP, // strictly below capacity — a full pool seals
+        fill in 0usize..MIN, // strictly below the minimum field
     ) {
         let price = TIER_ENTRY_LAMPORTS[tier];
         let pot = TIER_POT_LAMPORTS[tier];
@@ -599,6 +669,8 @@ proptest! {
         m.fund(pot);
         m.open_pool();
         for _ in 0..fill { m.register(); }
+        m.seal_at_deadline(); // FieldBelowMinimum — must not seal
+        prop_assert_eq!(m.state, St::Open, "a short field must not seal");
         m.trigger_refund();
         for i in 0..fill {
             m.refund(i);
@@ -611,6 +683,49 @@ proptest! {
             "R7: every entrant repaid exactly the price");
         // Pot out, pot back: the treasury holds exactly the bootstrap again.
         prop_assert_eq!(m.platform, pot as u128, "treasury drifted over the refund fork");
+    }
+
+    /// The minimum-field path, exhaustively (D-E4): any fill in
+    /// `MIN_SEATS..CAPACITY`, the deadline passes, the pool SEALS (a refund
+    /// attempt is refused), the winner (or the tie for first) is paid the
+    /// whole pot, the vault ends at zero, and the treasury keeps the field's
+    /// entries minus the pot — strictly positive at every fill, which is the
+    /// §11.1 break-even property the constants promise, exercised rather than
+    /// asserted.
+    #[test]
+    fn min_field_seals_and_pays_the_winner(
+        tier in 0usize..TIER_ENTRY_LAMPORTS.len(),
+        fill in MIN..CAP,
+        seed in any::<u64>(),
+    ) {
+        let price = TIER_ENTRY_LAMPORTS[tier];
+        let pot = TIER_POT_LAMPORTS[tier];
+        let mut m = Model::new(price, pot, 0, 0);
+        m.fund(pot);
+        m.open_pool();
+        for _ in 0..fill { m.register(); }
+        prop_assert_eq!(m.state, St::Open, "below 64 the pool is still Open");
+        prop_assert_eq!(m.refundable, fill as u128 * price as u128);
+        m.trigger_refund(); // FieldReached — must not refund
+        prop_assert_eq!(m.state, St::Open, "a playable field must not refund");
+        m.seal_at_deadline();
+        prop_assert_eq!(m.state, St::Sealed);
+        prop_assert_eq!(m.refundable, 0u128, "the field's entries became revenue at seal");
+        m.assert_invariant();
+        m.commit(seed);
+        let paid_seats: Vec<u16> = m.committed.iter().map(|&(s, _)| s as u16).collect();
+        prop_assert!(!paid_seats.is_empty());
+        prop_assert!(paid_seats.iter().all(|&s| (s as usize) < fill), "only real seats are paid");
+        m.pay(&paid_seats);
+        m.assert_invariant();
+        prop_assert_eq!(m.state, St::Paid);
+        prop_assert_eq!(m.vault, 0u128, "the whole pot left the vault");
+        prop_assert_eq!(m.total_paid, pot as u128, "the winner set received exactly the pot");
+        // The bootstrap pot left the treasury at open, so what remains is the
+        // field's entries; break-even (§11.1) means they exceed the pot the
+        // treasury funded — at the 52-seat floor too, not only at 64.
+        prop_assert_eq!(m.platform, fill as u128 * price as u128, "treasury holds the field's entries");
+        prop_assert!(m.platform > pot as u128, "the minimum field clears the pot with margin");
     }
 
     /// `withdraw_platform`'s floor: a withdrawal that would dip below

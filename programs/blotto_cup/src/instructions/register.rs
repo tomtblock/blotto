@@ -21,11 +21,15 @@
 //!      in the scoring path, PID §8.4);
 //!   5. pass mint — bare member of the frozen Collection (`pass.rs`);
 //!   6. state writes + `EntryRegistered`;
-//!   7. the 64th entry: seal — refunds are now impossible, so the pool's
-//!      64 entry payments leave `platform_refundable` and become withdrawable
+//!   7. (a) at or above `MIN_SEATS` the go-timer (D-E4 §11.3, option B):
+//!      the deadline shortens in place to `now + GO_TIMER_SECS` when that is
+//!      sooner, `GoTimerStarted` once; (b) the 64th entry: seal via
+//!      `seal_pool` — refunds are now impossible, so the pool's entry
+//!      payments leave `platform_refundable` and become withdrawable
 //!      revenue. The tier slot is NOT freed here: pools per tier are
 //!      SEQUENTIAL (D-A1 revised supersedes R14) and the slot clears only
-//!      when the pool reaches `Paid` or `Closed`.
+//!      when the pool reaches `Paid` or `Closed`. `seal_pool` is shared
+//!      with `seal_at_deadline` (`seal.rs`), the second seal path.
 //!
 //! One entry per wallet per pool is structural: the Entry PDA is keyed
 //! `[b"entry", pool, player]`, so a second `register` fails at `init`.
@@ -39,10 +43,10 @@ use anchor_lang::prelude::*;
 
 use blotto_randomness::{derive_class_randomness, weighted_class_draw};
 
-use crate::constants::CAPACITY;
+use crate::constants::{CAPACITY, GO_TIMER_SECS, MIN_SEATS};
 use crate::entry_packet::verify_entry_packet;
 use crate::error::ErrorCode;
-use crate::events::{EntryRegistered, PoolSealed};
+use crate::events::{EntryRegistered, GoTimerStarted, PoolSealed};
 use crate::pass::{mint_pass_cpi, MPL_CORE_ID};
 use crate::slot_hashes::{delayed_slot_hash, SLOT_HASHES_SYSVAR_ID};
 use crate::state::{
@@ -243,37 +247,63 @@ pub fn handle_register(
         terms_version: packet.terms_version,
     });
 
-    // ---- 7. The 64th entry seals ----------------------------------------
+    // ---- 7a. The minimum field starts the go-timer (D-E4 §11.3, option B)
+    // Applied on EVERY register at or above MIN_SEATS, not only the 52nd:
+    // `min` makes it idempotent (a later register has a larger `now`, so
+    // the first shortening stands) and transition-safe (a pool already past
+    // 52 when this code deploys shortens on its next entry). When the 52nd
+    // seat lands inside the last GO_TIMER_SECS of the 72h, the fill deadline
+    // is already the sooner of the two and nothing changes — the deadline
+    // players entered under is never pushed later.
+    if pool.entrants >= MIN_SEATS && pool.entrants < CAPACITY {
+        let go_deadline = now.checked_add(GO_TIMER_SECS).ok_or(ErrorCode::Overflow)?;
+        if go_deadline < pool.fill_deadline {
+            pool.fill_deadline = go_deadline;
+            emit!(GoTimerStarted {
+                pool: pool_key,
+                go_deadline,
+            });
+        }
+    }
+
+    // ---- 7b. The 64th entry seals ---------------------------------------
     if pool.entrants == CAPACITY {
-        pool.state = PoolState::Sealed;
         debug_assert_eq!(
             pool.class_counters.iter().map(|&c| c as u32).sum::<u32>(),
             0,
-            "a sealed pool must have an empty bag"
+            "a full pool must have an empty bag"
         );
-
-        // Refunds are now impossible, so the pool's 64 entry payments leave
-        // the refundable floor and become withdrawable platform revenue.
-        // No lamport moves — the money is already in the treasury PDA.
-        let pool_entries_total = entry_lamports
-            .checked_mul(CAPACITY as u64)
-            .ok_or(ErrorCode::Overflow)?;
-        ctx.accounts.config.platform_refundable = ctx
-            .accounts
-            .config
-            .platform_refundable
-            .checked_sub(pool_entries_total)
-            .ok_or(ErrorCode::Overflow)?;
-
-        // The tier slot does NOT free here: pools per tier are SEQUENTIAL
-        // (D-A1 revised supersedes R14's seal-time handover) — the slot
-        // clears only when this pool reaches `Paid` or `Closed`.
-
-        emit!(PoolSealed {
-            pool: pool_key,
-            entrants: pool.entrants,
-        });
+        seal_pool(pool, &mut ctx.accounts.config, pool_key)?;
     }
 
+    Ok(())
+}
+
+/// Close a pool to entries: `Open → Sealed`, its entry payments leave the
+/// refundable floor and become platform revenue, `PoolSealed` carries the
+/// field it plays with. Shared by the 64th `register` and `seal_at_deadline`
+/// (D-E4) so the two seal paths cannot drift; the accounting uses the REAL
+/// field (`entrants`), never `CAPACITY` — at 64 they are equal, below 64
+/// only the former is correct (subtracting 64 prices from a 52-seat pool
+/// would underflow the floor and leave the pool unable to seal OR refund).
+///
+/// No lamport moves — the money is already in the treasury PDA. The tier
+/// slot does NOT free here: pools per tier are SEQUENTIAL (D-A1 revised
+/// supersedes R14's seal-time handover) — the slot clears only when this
+/// pool reaches `Paid` or `Closed`.
+pub(crate) fn seal_pool(pool: &mut Pool, config: &mut Config, pool_key: Pubkey) -> Result<()> {
+    pool.state = PoolState::Sealed;
+    let pool_entries_total = pool
+        .entry_lamports
+        .checked_mul(pool.entrants as u64)
+        .ok_or(ErrorCode::Overflow)?;
+    config.platform_refundable = config
+        .platform_refundable
+        .checked_sub(pool_entries_total)
+        .ok_or(ErrorCode::Overflow)?;
+    emit!(PoolSealed {
+        pool: pool_key,
+        entrants: pool.entrants,
+    });
     Ok(())
 }

@@ -1,6 +1,7 @@
 //! The full pool lifecycle against the compiled artifact: 64 entries, seal,
-//! reveal, commit, batched payout — every lamport accounted for at the end.
+//! reveal, commit, payout — every lamport accounted for at the end.
 //! (Roadmap 1.3–1.5 gates, run for real instead of asserted on a model.)
+//! Under D-E2 the committed list is one seat — the winner — taking the pot.
 
 use blotto_litesvm_tests::*;
 use sha2::{Digest, Sha256};
@@ -10,24 +11,6 @@ use solana_sdk::signer::Signer;
 
 const ENTRY: u64 = 100_000_000; // tier 0: 0.1 SOL
 const POT: u64 = 4_000_000_000; // tier 0's FIXED pot (D-E1)
-const BANDS: [u64; 16] = [
-    1_054_687_500,
-    617_187_500,
-    398_437_500,
-    304_687_500,
-    195_312_500,
-    195_312_500,
-    195_312_500,
-    195_312_500,
-    105_468_750,
-    105_468_750,
-    105_468_750,
-    105_468_750,
-    105_468_750,
-    105_468_750,
-    105_468_750,
-    105_468_750,
-];
 
 #[test]
 fn full_lifecycle_pays_the_pot_to_the_lamport() {
@@ -42,6 +25,7 @@ fn full_lifecycle_pays_the_pot_to_the_lamport() {
     assert_eq!(cfg.platform_reserved, POT, "pot recorded as locked");
     assert_eq!(cfg.active_pool_by_tier[0], 1, "tier slot taken");
     let platform_at_open = env.balance(&platform_pda());
+    let opened_deadline = read_pool(&env.svm, &pool).fill_deadline;
 
     // ---- 64 entries ----
     let mut players: Vec<(Keypair, Pubkey)> = Vec::new();
@@ -60,6 +44,13 @@ fn full_lifecycle_pays_the_pot_to_the_lamport() {
     assert_eq!(pv.entrants, 64);
     assert_eq!(pv.state, 1, "Sealed");
     assert_eq!(pv.class_counters, [0u16; 5], "bag empties exactly at seal");
+    // D-E4: the 52nd seat started the go-timer — the deadline moved EARLIER
+    // (the clock does not advance between registers in LiteSVM, so the
+    // shortened value is exactly open-time + GO_TIMER_SECS) and never later.
+    assert!(
+        pv.fill_deadline < opened_deadline,
+        "the go-timer shortened the deadline at the 52nd seat"
+    );
     assert_eq!(
         env.balance(&vault_pda(1)),
         POT,
@@ -88,9 +79,9 @@ fn full_lifecycle_pays_the_pot_to_the_lamport() {
 
     // ---- commit before reveal is rejected ----
     let settlement = env.settlement.insecure_clone();
-    // D3-B: the committed payout list — seats 0..15 take ranks 1..16's bands
-    // (this pool's ranking fixture; no ties).
-    let payouts = band_payouts(POT);
+    // D-E2: the committed payout list — seat 0 is this pool's ranking's
+    // first place and takes the whole pot (no ties).
+    let payouts = winner_payout(POT);
     let mut commit_args = [1u8; 32].to_vec();
     commit_args.extend_from_slice(&encode_payouts(&payouts));
     let ix = settle_ix(&settlement.pubkey(), 1, "commit_results", &commit_args);
@@ -118,37 +109,30 @@ fn full_lifecycle_pays_the_pot_to_the_lamport() {
     // ---- commit results ----
     let ix = settle_ix(&settlement.pubkey(), 1, "commit_results", &commit_args);
     env.send(&[ix], &[&settlement]).expect("commit_results");
-    assert_eq!(read_pool(&env.svm, &pool).state, 2, "Scored");
+    let pv = read_pool(&env.svm, &pool);
+    assert_eq!(pv.state, 2, "Scored");
+    assert_eq!(pv.payouts, payouts, "one committed seat, the whole pot");
 
-    // ---- pay in four batches of four seats (seat i = rank i+1 here) ----
-    let before: Vec<u64> = players[..16]
-        .iter()
-        .map(|(p, _)| env.balance(&p.pubkey()))
-        .collect();
-    for batch in 0u16..4 {
-        let seats: Vec<u16> = (0..4u16).map(|s| batch * 4 + s).collect();
-        let metas: Vec<(Pubkey, Pubkey)> = seats
-            .iter()
-            .map(|&seat| {
-                let (p, e) = &players[seat as usize];
-                (p.pubkey(), *e)
-            })
-            .collect();
-        let ix = pay_prizes_ix(&settlement.pubkey(), 1, &seats, &metas);
-        env.send(&[ix], &[&settlement]).expect("pay batch");
-    }
+    // ---- pay the winner ----
+    let (winner, winner_entry) = &players[0];
+    let before = env.balance(&winner.pubkey());
+    let ix = pay_prizes_ix(
+        &settlement.pubkey(),
+        1,
+        &[0],
+        &[(winner.pubkey(), *winner_entry)],
+    );
+    env.send(&[ix], &[&settlement]).expect("pay the winner");
 
-    // ---- every band exact, vault reaped to zero, state Paid ----
-    for (i, (p, _)) in players[..16].iter().enumerate() {
-        assert_eq!(
-            env.balance(&p.pubkey()) - before[i],
-            BANDS[i],
-            "seat {i} band amount"
-        );
-    }
+    // ---- the pot to the lamport, vault reaped to zero, state Paid ----
+    assert_eq!(
+        env.balance(&winner.pubkey()) - before,
+        POT,
+        "winner takes all"
+    );
     let pv = read_pool(&env.svm, &pool);
     assert_eq!(pv.state, 3, "Paid");
-    assert_eq!(pv.paid_mask, 0xFFFF, "one bit per settled seat 0..15");
+    assert_eq!(pv.paid_mask, 0b1, "one bit: the winner's seat");
     assert_eq!(
         env.balance(&vault_pda(1)),
         0,
@@ -159,9 +143,9 @@ fn full_lifecycle_pays_the_pot_to_the_lamport() {
     assert_eq!(cfg.active_pool_by_tier[0], 0, "slot freed at Paid");
     assert_eq!(cfg.platform_reserved, 0, "pot released from reserved");
 
-    // ---- double pay rejected ----
-    let (p, e) = &players[0];
-    let ix = pay_prizes_ix(&settlement.pubkey(), 1, &[0], &[(p.pubkey(), *e)]);
+    // ---- second place is not in the paid set; double pay rejected ----
+    let (p, e) = &players[1];
+    let ix = pay_prizes_ix(&settlement.pubkey(), 1, &[1], &[(p.pubkey(), *e)]);
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
     // Pool is Paid, so the state gate fires first.
     assert!(
@@ -170,8 +154,11 @@ fn full_lifecycle_pays_the_pot_to_the_lamport() {
     );
 }
 
+/// Escrow under D-E2 is all-or-nothing per paid seat (proposal E1 §12): the
+/// fixture uses a two-way tie for first so BOTH escrow paths — release and
+/// forfeit — run against real paid seats in one pool.
 #[test]
-fn flagged_winner_escrows_then_releases_and_forfeits() {
+fn flagged_winners_escrow_then_release_and_forfeit() {
     let Some(mut env) = Env::new() else { return };
     env.open_ready_pool(1, 0);
     let mut players: Vec<(Keypair, Pubkey)> = Vec::new();
@@ -180,41 +167,34 @@ fn flagged_winner_escrows_then_releases_and_forfeits() {
     }
     let settlement = env.settlement.insecure_clone();
 
-    // Flag ranks 1 and 2 before payout.
+    // Flag both tied winners before payout.
     for (_, entry) in players.iter().take(2) {
         let ix = flag_ix(&settlement.pubkey(), 1, entry, "flag_entry");
         env.send(&[ix], &[&settlement]).expect("flag");
     }
 
-    // Reveal + commit the band payout list (seats 0..15 = ranks 1..16).
+    // Reveal + commit a two-way tie for first: seats 0 and 1, pot / 2 each.
     let secret = env.pool_secret;
     let ix = settle_ix(&settlement.pubkey(), 1, "reveal_pool_secret", &secret);
     env.send(&[ix], &[&settlement]).unwrap();
+    let payouts = tied_first_payouts(POT, 2);
+    assert_eq!(payouts, vec![(0, POT / 2), (1, POT / 2)]);
     let mut commit_args = [1u8; 32].to_vec();
-    commit_args.extend_from_slice(&encode_payouts(&band_payouts(POT)));
+    commit_args.extend_from_slice(&encode_payouts(&payouts));
     let ix = settle_ix(&settlement.pubkey(), 1, "commit_results", &commit_args);
     env.send(&[ix], &[&settlement]).unwrap();
 
-    // Pay all 16 seats in two batches.
-    for half in 0u16..2 {
-        let seats: Vec<u16> = (0..8u16).map(|r| half * 8 + r).collect();
-        let metas: Vec<(Pubkey, Pubkey)> = seats
-            .iter()
-            .map(|&seat| {
-                let (p, e) = &players[seat as usize];
-                (p.pubkey(), *e)
-            })
-            .collect();
-        let ix = pay_prizes_ix(&settlement.pubkey(), 1, &seats, &metas);
-        env.send(&[ix], &[&settlement]).expect("pay");
-    }
+    // Pay both seats in one batch.
+    let metas: Vec<(Pubkey, Pubkey)> = players[..2].iter().map(|(p, e)| (p.pubkey(), *e)).collect();
+    let ix = pay_prizes_ix(&settlement.pubkey(), 1, &[0, 1], &metas);
+    env.send(&[ix], &[&settlement]).expect("pay");
 
-    // Ranks 1 and 2 escrowed; their lamports still in the vault.
+    // Both escrowed; their lamports still in the vault; the pool is Paid.
     let e1 = read_entry(&env.svm, &players[0].1);
     let e2 = read_entry(&env.svm, &players[1].1);
-    assert_eq!(e1.escrow_lamports, BANDS[0]);
-    assert_eq!(e2.escrow_lamports, BANDS[1]);
-    assert_eq!(env.balance(&vault_pda(1)), BANDS[0] + BANDS[1]);
+    assert_eq!(e1.escrow_lamports, POT / 2);
+    assert_eq!(e2.escrow_lamports, POT / 2);
+    assert_eq!(env.balance(&vault_pda(1)), POT);
     assert_eq!(read_pool(&env.svm, &pool_pda(1)).state, 3, "Paid");
 
     // Forfeiting an unflagged (no-escrow) entry: rejected.
@@ -222,7 +202,7 @@ fn flagged_winner_escrows_then_releases_and_forfeits() {
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
     assert!(err.contains("6036") || err.contains("NoEscrow"), "{err}");
 
-    // Release rank 1 to its player.
+    // Release seat 0's share to its player.
     let before = env.balance(&players[0].0.pubkey());
     let ix = release_escrow_ix(
         &settlement.pubkey(),
@@ -231,13 +211,13 @@ fn flagged_winner_escrows_then_releases_and_forfeits() {
         &players[0].0.pubkey(),
     );
     env.send(&[ix], &[&settlement]).expect("release");
-    assert_eq!(env.balance(&players[0].0.pubkey()) - before, BANDS[0]);
+    assert_eq!(env.balance(&players[0].0.pubkey()) - before, POT / 2);
 
-    // Forfeit rank 2 (still flagged) to the platform treasury.
+    // Forfeit seat 1's share (still flagged) to the platform treasury.
     let before = env.balance(&platform_pda());
     let ix = forfeit_escrow_ix(&settlement.pubkey(), 1, &players[1].1);
     env.send(&[ix], &[&settlement]).expect("forfeit");
-    assert_eq!(env.balance(&platform_pda()) - before, BANDS[1]);
+    assert_eq!(env.balance(&platform_pda()) - before, POT / 2);
 
     assert_eq!(env.balance(&vault_pda(1)), 0, "vault ends at exactly zero");
 }

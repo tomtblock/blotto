@@ -16,6 +16,28 @@ pub const BATTLES: usize = 7;
 /// Fill deadline: 72 hours (PID §2, roadmap R7).
 pub const FILL_DEADLINE_SECS: i64 = 72 * 60 * 60;
 
+/// Minimum field for a pool to play (D-E4, founder decision 2026-09-06). A
+/// pool at or above this when its deadline passes seals and plays for the
+/// full pot (`seal_at_deadline`); below it, every entry refunds in full (R7
+/// unchanged, threshold moved from 64). 52/64 is the first integer at or
+/// above the founder's 80% — expressed ONLY as a seat count, never as a
+/// percentage, anywhere in the program, the engine or the copy.
+///
+/// Must clear break-even at every tier: `MIN_SEATS × price > pot`. At the
+/// D-E1 pots break-even is 40 seats (pot = price × 40 by derivation), so 52
+/// carries a 12-seat buffer — asserted in `prize_math` tests against the
+/// constants and enforced at `set_tier_economics` against the live values.
+pub const MIN_SEATS: u16 = 52;
+
+/// The go-timer (D-E4 §11.3, option B): once a pool holds `MIN_SEATS`, its
+/// deadline shortens to `now + GO_TIMER_SECS` if that is sooner than the
+/// 72h fill deadline (never later — the fill deadline is a ceiling). Stored
+/// by shortening `Pool.fill_deadline` in place, so no account layout changes
+/// and every reader of the deadline keeps its meaning: the moment entries
+/// close. PROPOSAL VALUE — 6 hours is the proposal's float (founder-owned;
+/// change here, it is a program upgrade like `FILL_DEADLINE_SECS`).
+pub const GO_TIMER_SECS: i64 = 6 * 60 * 60;
+
 /// Per-screen timer, seconds (roadmap R9: 15s visible, lock-current on timeout).
 /// Stored on each `Pool` so a later founder change to Config does not silently
 /// alter a pool that players already entered under the published value.
@@ -61,38 +83,26 @@ pub const TIER_POT_LAMPORTS: [u64; N_TIERS] = [
     300_000_000_000,
 ];
 
-/// Number of paid places (PID §6: top 16).
-pub const PAID_RANKS: usize = 16;
+/// Number of paid places (D-E2, founder decision 2026-09-06: winner takes
+/// all — PID §6 reissue pending counsel). Was 16 under PID §6 v0.5.
+pub const PAID_RANKS: usize = 1;
 
-/// Prize bands in 1024ths of the pot, rank 1 → rank 16.
+/// Prize bands in 1024ths of the pot, rank 1 → rank `PAID_RANKS`.
 ///
-/// # Derivation (PID §6 — shown, not asserted)
+/// D-E2 (2026-09-06): the player ranked first receives the entire pot —
+/// `1024/1024`, exact for any pot. Ties for first split it through
+/// `prize_math::split_group` (each = pot / k, the indivisible remainder to
+/// the tied player with the lowest entry index); every rank below the
+/// paid line receives zero, and ranks 2+ appear in the committed ranking
+/// with amount 0.
 ///
-/// The 1024ths are unchanged by D-E1; only the pot they divide moved.
-/// At the D-E1 tier-0 pot (62.5% × 6.4 = 4 SOL) the published amounts
-/// become (PID §6 reissue pending — the founder document still shows the
-/// pre-D-E1 5.12-pot amounts until counsel signs the reissue):
-///
-/// | Place  | SOL        | fraction of 4    | ×1024 |
-/// |--------|------------|------------------|-------|
-/// | 1st    | 1.0546875  | 135/512          | 270   |
-/// | 2nd    | 0.6171875  |  79/512          | 158   |
-/// | 3rd    | 0.3984375  |  51/512          | 102   |
-/// | 4th    | 0.3046875  |  39/512          |  78   |
-/// | 5–8th  | 0.1953125  |  25/512 each     |  50   |
-/// | 9–16th | 0.10546875 |  27/1024 each    |  27   |
-///
-/// 270 + 158 + 102 + 78 + 4×50 + 8×27 = **1024 exactly**, so the pot divides
-/// with zero residual for every tier (each tier's pot is a multiple of 1024
-/// lamports — see `prize_math` tests).
-///
-/// The PID's *percentage* column (26.37% …) is rounded for display and sums to
-/// 100.02%; a bps table built from it would misallocate. The SOL amounts are
-/// the exact founder-published values, and this table is their exact form.
-/// Recorded in `docs/phase-reports/phase-1-program.md`.
-pub const PRIZE_BANDS_1024: [u64; PAID_RANKS] = [
-    270, 158, 102, 78, 50, 50, 50, 50, 27, 27, 27, 27, 27, 27, 27, 27,
-];
+/// The 1024ths form and the "pot is a multiple of 1024" invariant are kept
+/// on purpose even though a single band no longer needs them: they cost
+/// nothing, keep tie splits well-conditioned, and make a return to a
+/// multi-place table a constants edit rather than a re-derivation. The
+/// previous table (270/158/102/78/50×4/27×8, PID §6 v0.5) lives in git
+/// history and in the revert branch prepared for the D-E2 upgrade.
+pub const PRIZE_BANDS_1024: [u64; PAID_RANKS] = [1024];
 
 /// Entry-packet freshness window, seconds (roadmap 4.1: "issued_at within 60s").
 pub const PACKET_MAX_AGE_SECS: i64 = 60;
@@ -104,7 +114,12 @@ pub const PACKET_MAX_AGE_SECS: i64 = 60;
 pub const PACKET_MAX_FUTURE_SKEW_SECS: i64 = 5;
 
 /// Class counters at pool open (PID §3): Goblin, Knight, Wizard, Dragon, Titan.
-/// Sum = 64 = CAPACITY, so a full pool empties the bag exactly.
+/// Sum = 64 = CAPACITY, so a FULL pool empties the bag exactly. Under D-E4 a
+/// pool may seal at `MIN_SEATS..CAPACITY`, in which case the bag is drawn
+/// down but not emptied — the draw stays unbiased (uniform over the
+/// remaining bag), the published rarity statement describes the bag rather
+/// than the outcome (PID §3 reissue, founder-owned). Class is cosmetic and
+/// read by nothing in the scoring path (PID §8.4).
 /// Mirrors `blotto_randomness::LAUNCH_CLASS_COUNTERS`; asserted equal in tests.
 pub const LAUNCH_CLASS_COUNTERS: [u16; 5] = [38, 15, 7, 3, 1];
 

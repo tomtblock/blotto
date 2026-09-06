@@ -22,7 +22,7 @@
 
 use anchor_lang::prelude::*;
 
-use crate::constants::N_TIERS;
+use crate::constants::{MIN_SEATS, N_TIERS};
 use crate::error::ErrorCode;
 use crate::events::{PlatformFunded, PlatformWithdrawn, TierEconomicsSet, TreasuryPolicySet};
 use crate::state::{Config, CONFIG_SEED, PLATFORM_SEED};
@@ -154,10 +154,22 @@ pub fn handle_set_tier_economics(
     require!(t < N_TIERS, ErrorCode::UnknownTier);
     require!(price_lamports > 0, ErrorCode::ZeroAmount);
     // The band table divides in 1024ths; a pot off the grid would strand a
-    // residue in the vault (prize_math's zero-residual property).
+    // residue in the vault (prize_math's zero-residual property). Kept under
+    // D-E2's single band on purpose (constants.rs).
     require!(
         pot_lamports > 0 && pot_lamports.is_multiple_of(1024),
         ErrorCode::PotNotDivisible
+    );
+    // D-E4 §11.1: the minimum field must clear break-even, or every pool
+    // that plays at the floor pays out more than it took in. A comparison
+    // against the live values — the pot itself is never derived from them
+    // (standing-rules check (g)).
+    let min_field_entries = (MIN_SEATS as u64)
+        .checked_mul(price_lamports)
+        .ok_or(ErrorCode::Overflow)?;
+    require!(
+        pot_lamports < min_field_entries,
+        ErrorCode::PotExceedsMinimumField
     );
     let config = &mut ctx.accounts.config;
     config.tier_price_lamports[t] = price_lamports;

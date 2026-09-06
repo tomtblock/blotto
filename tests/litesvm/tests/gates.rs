@@ -402,7 +402,9 @@ fn malformed_payout_lists_and_wrong_recipients_reject() {
     )
     .unwrap();
 
-    let good = band_payouts(TIER_POTS[0]);
+    // D-E2: a two-way tie for first — two rows, so the ordering and
+    // duplicate checks have something to trip on.
+    let good = tied_first_payouts(TIER_POTS[0], 2);
 
     // A duplicate seat rejects at commit (strict-ascending check).
     let mut dup = good.clone();
@@ -430,7 +432,7 @@ fn malformed_payout_lists_and_wrong_recipients_reject() {
 
     // Amounts one lamport off the pot reject.
     let mut off = good.clone();
-    off[15].1 += 1;
+    off[1].1 += 1;
     let mut args = [1u8; 32].to_vec();
     args.extend_from_slice(&encode_payouts(&off));
     let ix = settle_ix(&settlement.pubkey(), 1, "commit_results", &args);
@@ -457,9 +459,9 @@ fn malformed_payout_lists_and_wrong_recipients_reject() {
         "{err}"
     );
 
-    // A seat outside the committed list rejects.
-    let (p17, e17) = &players[16];
-    let ix = pay_prizes_ix(&settlement.pubkey(), 1, &[16], &[(p17.pubkey(), *e17)]);
+    // A seat outside the committed list rejects (second place, under D-E2).
+    let (p17, e17) = &players[2];
+    let ix = pay_prizes_ix(&settlement.pubkey(), 1, &[2], &[(p17.pubkey(), *e17)]);
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
     assert!(
         err.contains("6045") || err.contains("SeatNotInPayouts"),

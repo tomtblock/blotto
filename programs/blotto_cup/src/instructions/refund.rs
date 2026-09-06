@@ -1,9 +1,11 @@
-//! `trigger_refund` + `refund` (roadmap 1.6, R7, D-A1 revised) — full 64 or
-//! full refund.
+//! `trigger_refund` + `refund` (roadmap 1.6, R7, D-A1 revised, threshold
+//! moved by D-E4) — reach the minimum field or refund in full.
 //!
 //! `trigger_refund` is permissionless: any signer may flip a pool that missed
-//! its 72h deadline into `Refunding`, so a vanished operator cannot strand
-//! entries. It also returns the pool's UNTOUCHED pot from the prize vault to
+//! its deadline BELOW `MIN_SEATS` into `Refunding`, so a vanished operator
+//! cannot strand entries (a pool at or above the minimum seals instead —
+//! `seal.rs`; the two are separate instructions with one guard each). It
+//! also returns the pool's UNTOUCHED pot from the prize vault to
 //! the platform treasury (the pot was pre-funded at `open_pool`; entries
 //! never touch a prize vault, so on the refund fork the vault holds exactly
 //! the pot and nothing else). `refund` is likewise permissionless per entry
@@ -19,7 +21,7 @@
 
 use anchor_lang::prelude::*;
 
-use crate::constants::CAPACITY;
+use crate::constants::MIN_SEATS;
 use crate::error::ErrorCode;
 use crate::events::{RefundTriggered, Refunded};
 use crate::state::{
@@ -61,12 +63,14 @@ pub fn handle_trigger_refund(ctx: Context<TriggerRefund>, _pool_id: u64) -> Resu
     let now = Clock::get()?.unix_timestamp;
     let pool = &mut ctx.accounts.pool;
 
-    // Only an Open pool refunds: a Sealed pool filled, and every later state
-    // descends from Sealed. (`entrants < 64` is therefore implied — a full
-    // pool is never Open — but asserted anyway as defense in depth.)
+    // Only an Open pool refunds: a Sealed pool closed to entries, and every
+    // later state descends from Sealed. Past the deadline the field decides
+    // the fork (D-E4): below `MIN_SEATS` refunds here, at or above it seals
+    // via `seal_at_deadline` — so a 52-seat pool can never be refunded out
+    // from under its entrants by anyone racing the seal.
     require!(pool.state == PoolState::Open, ErrorCode::PoolNotOpen);
     require!(now > pool.fill_deadline, ErrorCode::DeadlineNotPassed);
-    require!(pool.entrants < CAPACITY, ErrorCode::PoolFull);
+    require!(pool.entrants < MIN_SEATS, ErrorCode::FieldReached);
 
     // A pool that never got an entry has nothing to refund — close it now so
     // it does not sit in `Refunding` forever.

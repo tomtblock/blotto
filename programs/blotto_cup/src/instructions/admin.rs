@@ -12,6 +12,7 @@ use anchor_lang::prelude::*;
 
 use crate::constants::{N_TIERS, TIER_ENTRY_LAMPORTS, TIER_POT_LAMPORTS};
 use crate::error::ErrorCode;
+use crate::events::TiersOpened;
 use crate::state::{Config, CONFIG_SEED, PLATFORM_SEED};
 
 // ---------------------------------------------------------------------------
@@ -132,9 +133,12 @@ pub fn handle_set_settlement_signer(ctx: Context<AdminOnly>, new_signer: Pubkey)
 }
 
 /// Which tiers may open pools (R6: 0.5 opens only after audit + one counsel
-/// opinion; higher tiers only by explicit founder decision).
+/// opinion; higher tiers only by explicit founder decision). Emits
+/// `TiersOpened` so the events ledger — and the treasury report replayed
+/// from it — knows enablement, not just the keeper reading live Config.
 pub fn handle_set_open_tiers(ctx: Context<AdminOnly>, open_tiers: [bool; N_TIERS]) -> Result<()> {
     ctx.accounts.config.open_tiers = open_tiers;
+    emit!(TiersOpened { open_tiers });
     Ok(())
 }
 
@@ -155,6 +159,16 @@ pub fn handle_set_vault_ceiling(
 /// KYC-at-claim switch (R3, roadmap 4.5). 0 = off. When non-zero,
 /// `pay_prizes` escrows any share above it and `release_escrow` demands a
 /// `kyc_tier ≥ 1` packet.
+///
+/// D-E5 (founder decision 2026-09-06): identity verification is NOT
+/// required; the switch stays at 0 and is kept — not deleted — so turning
+/// it on later is one admin transaction rather than a program upgrade
+/// under pressure. READ BEFORE FLIPPING IT: under D-E2 (winner takes all)
+/// the one paid seat receives the entire pot, so any threshold below the
+/// smallest pot (4 SOL at tier 0) escrows EVERY payout at EVERY tier. It is
+/// an all-or-nothing gate now, not a large-prize gate as it was under
+/// top-16. The decision to run without it, and its AML/CTF and territory
+/// reasoning, are recorded in the decision register beside D-E5.
 pub fn handle_set_kyc_threshold(ctx: Context<AdminOnly>, above_lamports: u64) -> Result<()> {
     ctx.accounts.config.kyc_required_above_lamports = above_lamports;
     Ok(())

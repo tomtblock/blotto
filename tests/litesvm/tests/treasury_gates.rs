@@ -22,21 +22,13 @@ fn fill_reveal_commit_pay(env: &mut Env, pool_id: u64) {
     let ix = settle_ix(&settlement.pubkey(), pool_id, "reveal_pool_secret", &secret);
     env.send(&[ix], &[&settlement]).expect("reveal");
     let mut args = [1u8; 32].to_vec();
-    args.extend_from_slice(&encode_payouts(&band_payouts(TIER_POTS[0])));
+    args.extend_from_slice(&encode_payouts(&winner_payout(TIER_POTS[0])));
     let ix = settle_ix(&settlement.pubkey(), pool_id, "commit_results", &args);
     env.send(&[ix], &[&settlement]).expect("commit");
-    for half in 0u16..2 {
-        let seats: Vec<u16> = (0..8u16).map(|s| half * 8 + s).collect();
-        let metas: Vec<(Pubkey, Pubkey)> = seats
-            .iter()
-            .map(|&seat| {
-                let (p, e) = &players[seat as usize];
-                (p.pubkey(), *e)
-            })
-            .collect();
-        let ix = pay_prizes_ix(&settlement.pubkey(), pool_id, &seats, &metas);
-        env.send(&[ix], &[&settlement]).expect("pay");
-    }
+    // D-E2: one committed seat — the winner.
+    let (p, e) = &players[0];
+    let ix = pay_prizes_ix(&settlement.pubkey(), pool_id, &[0], &[(p.pubkey(), *e)]);
+    env.send(&[ix], &[&settlement]).expect("pay");
     assert_eq!(read_pool(&env.svm, &pool_pda(pool_id)).state, 3, "Paid");
 }
 
@@ -65,26 +57,17 @@ fn open_blocked_while_the_tiers_prior_pool_is_unpaid() {
     let ix = settle_ix(&settlement.pubkey(), 1, "reveal_pool_secret", &secret);
     env.send(&[ix], &[&settlement]).unwrap();
     let mut args = [1u8; 32].to_vec();
-    args.extend_from_slice(&encode_payouts(&band_payouts(TIER_POTS[0])));
+    args.extend_from_slice(&encode_payouts(&winner_payout(TIER_POTS[0])));
     let ix = settle_ix(&settlement.pubkey(), 1, "commit_results", &args);
     env.send(&[ix], &[&settlement]).unwrap();
     let ix = open_pool_ix(&settlement.pubkey(), 2, 0, [9; 32], env.sealing_secret_hash);
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
     assert!(err.contains("6008"), "scored-but-unpaid: {err}");
 
-    // Paid frees it: the last payout batch unlocks the next open.
-    for half in 0u16..2 {
-        let seats: Vec<u16> = (0..8u16).map(|s| half * 8 + s).collect();
-        let metas: Vec<(Pubkey, Pubkey)> = seats
-            .iter()
-            .map(|&seat| {
-                let (p, e) = &players[seat as usize];
-                (p.pubkey(), *e)
-            })
-            .collect();
-        let ix = pay_prizes_ix(&settlement.pubkey(), 1, &seats, &metas);
-        env.send(&[ix], &[&settlement]).unwrap();
-    }
+    // Paid frees it: settling the winner unlocks the next open.
+    let (p, e) = &players[0];
+    let ix = pay_prizes_ix(&settlement.pubkey(), 1, &[0], &[(p.pubkey(), *e)]);
+    env.send(&[ix], &[&settlement]).unwrap();
     assert_eq!(read_config(&env.svm).active_pool_by_tier[0], 0);
     let ix = open_pool_ix(&settlement.pubkey(), 2, 0, [9; 32], env.sealing_secret_hash);
     env.send(&[ix], &[&settlement])

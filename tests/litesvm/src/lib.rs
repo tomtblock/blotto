@@ -385,16 +385,40 @@ pub fn encode_payouts(payouts: &[(u16, u64)]) -> Vec<u8> {
     out
 }
 
-/// The standard no-tie payout list for a pool whose seats 0..15 are the
-/// ranking's top 16 in order: seat i takes rank i+1's band amount.
-/// Takes the pool's FIXED pot (D-A1 revised) — never derived from entries.
-pub fn band_payouts(pot_lamports: u64) -> Vec<(u16, u64)> {
-    const BANDS: [u64; 16] = [
-        270, 158, 102, 78, 50, 50, 50, 50, 27, 27, 27, 27, 27, 27, 27, 27,
-    ];
-    (0..16u16)
-        .map(|i| (i, pot_lamports / 1024 * BANDS[i as usize]))
+/// The standard no-tie payout list under D-E2 (winner takes all): seat 0 is
+/// the ranking's first place and takes the whole pot — one row. Takes the
+/// pool's FIXED pot (D-A1 revised) — never derived from entries. (Under
+/// top-16 this was a sixteen-row band table; it lives in git history and
+/// in the revert branch.)
+pub fn winner_payout(pot_lamports: u64) -> Vec<(u16, u64)> {
+    vec![(0, pot_lamports)]
+}
+
+/// A k-way tie for first over seats `0..k` (D-E2's sharp edge): each takes
+/// `pot / k`, the indivisible remainder goes to the lowest seat — the same
+/// rule `prize_math::split_group` documents. Seat-sorted as `commit_results`
+/// requires.
+pub fn tied_first_payouts(pot_lamports: u64, k: u16) -> Vec<(u16, u64)> {
+    let each = pot_lamports / k as u64;
+    let rem = pot_lamports % k as u64;
+    (0..k)
+        .map(|seat| (seat, each + if seat == 0 { rem } else { 0 }))
         .collect()
+}
+
+/// `seal_at_deadline` (D-E4) — permissionless; `signer` is any keypair.
+pub fn seal_at_deadline_ix(signer: &Pubkey, pool_id: u64) -> Instruction {
+    let mut data = disc("seal_at_deadline").to_vec();
+    data.extend_from_slice(&pool_id.to_le_bytes());
+    Instruction {
+        program_id: program_id(),
+        accounts: vec![
+            AccountMeta::new_readonly(*signer, true),
+            AccountMeta::new(config_pda(), false),
+            AccountMeta::new(pool_pda(pool_id), false),
+        ],
+        data,
+    }
 }
 
 pub fn pay_prizes_ix(
@@ -526,6 +550,10 @@ pub fn refund_ix(signer: &Pubkey, pool_id: u64, entry: &Pubkey, player: &Pubkey)
 pub struct PoolView {
     pub pot_lamports: u64,
     pub entrants: u16,
+    /// The moment entries close (unix seconds). D-E4: shortened in place by
+    /// the go-timer once the pool holds `MIN_SEATS` — the layout is
+    /// unchanged, only the value moves.
+    pub fill_deadline: i64,
     pub state: u8, // 0 Open, 1 Sealed, 2 Scored, 3 Paid, 4 Refunding, 5 Closed
     pub class_counters: [u16; 5],
     /// The committed payout list (seat, amount), D3-B.
@@ -537,9 +565,16 @@ pub struct PoolView {
 pub fn read_pool(svm: &LiteSVM, pool: &Pubkey) -> PoolView {
     let data = svm.get_account(pool).expect("pool account").data;
     // Layout since D-A1 v2 (`pot_lamports` u64 inserted after
-    // entry_lamports@17): pot@25, entrants@33, state@51, vrf_seed@116,
-    // class_counters@148, payouts_len@192, payouts@194, paid_mask@834,
-    // refunded_count@842.
+    // entry_lamports@17): pot@25, entrants@33, fill_deadline@43, state@51,
+    // vrf_seed@116, class_counters@148, payouts_len@192, payouts@194,
+    // paid_mask@834, refunded_count@842. Unchanged by D-E4 (the go-timer
+    // rewrites fill_deadline's VALUE, not the layout) — `Pool::LEN` is
+    // pinned at 839 in state.rs for exactly this reason.
+    assert_eq!(
+        data.len(),
+        847,
+        "Pool account size drifted from the pinned layout"
+    );
     let counters: [u16; 5] =
         core::array::from_fn(|i| u16::from_le_bytes([data[148 + 2 * i], data[149 + 2 * i]]));
     let payouts_len = u16::from_le_bytes([data[192], data[193]]) as usize;
@@ -555,6 +590,7 @@ pub fn read_pool(svm: &LiteSVM, pool: &Pubkey) -> PoolView {
     PoolView {
         pot_lamports: u64::from_le_bytes(data[25..33].try_into().unwrap()),
         entrants: u16::from_le_bytes([data[33], data[34]]),
+        fill_deadline: i64::from_le_bytes(data[43..51].try_into().unwrap()),
         state: data[51],
         class_counters: counters,
         payouts,

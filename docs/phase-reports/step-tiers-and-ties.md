@@ -165,9 +165,11 @@ derived tables are a pure function of the events ledger (0003's contract).
    `ranks_paid`). If the founder wants rank labels back in the app, the
    clean route is indexing the published bundle, not widening the on-chain
    struct.
-2. **The committed list lives on the Pool account** (834 bytes measured,
-   well under the 10 KiB realloc threshold and one transaction on the wire:
-   64 × 10 bytes + root ≈ 700 bytes).
+2. **The committed list lives on the Pool account** (`Pool::LEN` 839, 847
+   with the discriminator — 834 in the original text was the end offset of
+   the payouts array, corrected 2026-09-06; well under the 10 KiB realloc
+   threshold and one transaction on the wire: 64 × 10 bytes + root ≈ 700
+   bytes).
 3. **The Entry account is the seat→player map at payout.** `pay_prizes`
    binds wallet → `entry.player` and seat → `entry.index`, so the recipient
    cannot be substituted; the settlement signer only chooses batching.

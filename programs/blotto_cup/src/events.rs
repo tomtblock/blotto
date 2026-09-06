@@ -49,10 +49,27 @@ pub struct EntryRegistered {
     pub terms_version: u16,
 }
 
+/// The pool closed to entries — at the 64th seat (`register`) or at its
+/// deadline with at least `MIN_SEATS` seats (`seal_at_deadline`, D-E4).
+/// `entrants` is the field the pool plays with; below 64 it is the record a
+/// holder reads their class draw and the winner's competition against.
 #[event]
 pub struct PoolSealed {
     pub pool: Pubkey,
     pub entrants: u16,
+}
+
+/// D-E4 §11.3 (option B): the pool reached `MIN_SEATS` and its deadline
+/// shortened to `go_deadline` (= min(fill deadline, now + GO_TIMER_SECS)).
+/// Emitted once, by the `register` that first shortens the deadline; the
+/// indexer projects it onto the pool's close time and the app swaps the
+/// 72h countdown for the final window. Never emitted when the shortening
+/// would not move the deadline (the 52nd seat landing inside the last
+/// go-timer window of the 72h) — the deadline players entered under stands.
+#[event]
+pub struct GoTimerStarted {
+    pub pool: Pubkey,
+    pub go_deadline: i64,
 }
 
 #[event]
@@ -162,6 +179,17 @@ pub struct TierEconomicsSet {
 pub struct TreasuryPolicySet {
     pub reserve_pots: u8,
     pub min_platform_lamports: u64,
+}
+
+/// Tier enablement (`set_open_tiers`), emitted so the events ledger can tell
+/// an enabled-idle tier from a disabled one. Before this the treasury report
+/// had to treat every configured tier as enabled and could only OVERSTATE
+/// the policy floor (the PHASE-A1-REVIEW note in
+/// `backend/indexer/src/treasury-report.ts`); the keeper was never affected
+/// — `nextOpenable` reads live Config.
+#[event]
+pub struct TiersOpened {
+    pub open_tiers: [bool; crate::constants::N_TIERS],
 }
 
 #[event]
