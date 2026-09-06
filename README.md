@@ -23,6 +23,26 @@ entries; the platform retains 20%.
    is built.
 5. [`CONTRIBUTING.md`](CONTRIBUTING.md) — process, the pre-commit hook, and the language gate.
 
+## Running it locally
+
+```
+npm run setup
+```
+
+Then `cd app && npm run dev`.
+
+**`setup` is not optional and not a convenience.** The app imports the backend packages'
+*sources* directly, and those files resolve their own vendor dependencies from each backend
+package's own `node_modules` — so `next dev` fails with `Module not found: Can't resolve
+'@turnkey/crypto'` (or similar) until every backend package is installed, no matter how many
+times `app` alone is installed. The same requirement bit CI on 2026-09-06, where the app build
+lane installed only `app` and failed for a reason unrelated to what it was testing.
+
+The root uses **yarn** (`yarn.lock`); every package under `backend/` and `app/` uses **npm**
+(`package-lock.json`). Running `npm install` at the root rewrites `yarn.lock` and leaves a
+competing `package-lock.json` — if that has happened, `git checkout -- yarn.lock` and delete the
+stray file. `npm run setup` only *runs* a script and is safe at the root.
+
 ## Where the code is
 
 This repository is at **Phase 0**: the skeleton exists, a small number of components were carried

@@ -1,56 +1,63 @@
 /*
  * Deterministic fixture data — what the pages render before an indexer URL
- * is configured. Shaped exactly like the read API's rows; the pool id
- * `FIXTURE` is the watermark.
+ * is configured. Shaped exactly like the read API's rows; the pool ids all
+ * begin `F1XTURE`, which is the watermark.
+ *
+ * The rows come from `scenarios.ts`, which carries one pool per lifecycle
+ * state so that every page can be reached without a live tournament. This
+ * module is only the adapter: it answers the `IndexerApi` questions by
+ * looking the pool up in that catalogue.
+ *
+ * `listPools()` deliberately returns EVERY scenario rather than just the open
+ * one — the pools index is itself a screen that needs to show a mixed list,
+ * and a one-row list is not a design of anything.
  */
 
-import type { IndexerApi, PoolSummary } from './types';
-
-const POOL: PoolSummary = {
-  pool: 'F1XTUREPoo1111111111111111111111111111111111',
-  id: 'FIXTURE',
-  tier: 0,
-  entry_lamports: '100000000',
-  pot_lamports: '5120000000',
-  // A stable future-ish deadline; the countdown clamps at zero.
-  fill_deadline: '4102444800',
-  timer_seconds: 15,
-  state: 'Open',
-  sealing_pubkey: '11'.repeat(32),
-  entrants: 23,
-  results_root: null,
-  secret: null,
-};
+import type { IndexerApi } from './types';
+import {
+  FIXTURE_CAREER,
+  FIXTURE_PLAYER,
+  FIXTURE_PROFILE,
+  FIXTURE_RIVALS,
+  FIXTURE_TREASURY,
+  SCENARIOS,
+  SCENARIO_BY_POOL,
+} from './scenarios';
 
 export const FIXTURE_API: IndexerApi = {
   async listPools() {
-    return [POOL];
+    return SCENARIOS.map((s) => s.summary);
   },
   async getPool(pool) {
-    return pool === POOL.pool ? POOL : null;
+    return SCENARIO_BY_POOL.get(pool)?.summary ?? null;
   },
-  async getEntries() {
-    return [];
+  async getEntries(pool) {
+    return SCENARIO_BY_POOL.get(pool)?.entries ?? [];
   },
-  async getResults() {
-    return [];
+  async getResults(pool) {
+    return SCENARIO_BY_POOL.get(pool)?.results ?? [];
   },
-  async getPayouts() {
-    return [];
+  async getPayouts(pool) {
+    return SCENARIO_BY_POOL.get(pool)?.payouts ?? [];
   },
-  async getProfile() {
-    return null;
+  async getProfile(player) {
+    // Any wallet gets the fixture career: the preview is driven by the test
+    // signer, whose address is whatever keypair the harness injected, and a
+    // profile page that renders empty for it would show nothing to design.
+    return player === FIXTURE_PLAYER ? FIXTURE_PROFILE : { ...FIXTURE_PROFILE, player };
   },
   async getCareer() {
-    return [];
+    return FIXTURE_CAREER;
   },
   async getRivals() {
-    return [];
+    return FIXTURE_RIVALS;
   },
-  async getSealedEntries() {
-    return [];
+  async getSealedEntries(pool) {
+    // The read API serves these only once the pool secret is on-chain; the
+    // scenarios encode that by carrying rows only where `secret` is set.
+    return SCENARIO_BY_POOL.get(pool)?.sealedEntries ?? [];
   },
   async getTreasury() {
-    return null;
+    return FIXTURE_TREASURY;
   },
 };
