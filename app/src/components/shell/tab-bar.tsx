@@ -32,23 +32,33 @@ const iconProps = {
 } as const;
 
 /*
- * Icons keyed by tab id.
+ * Icons keyed by tab id — Blot world (v4), replacing the predecessor
+ * placeholders. Same 24-grid, 1.8 stroke, round caps as the rest of the
+ * icon set.
  *
- * PHASE-0-REVIEW: these are placeholders carried across from the predecessor's
- * icon set and reassigned by position, not by meaning. Phase 3 picks real
- * iconography alongside the real information architecture.
+ * play    — the pentagon: the Blot's body, i.e. the allocation itself.
+ * pools   — the seat ring: six seats around a table, the pool motif.
+ * profile — a person; kept, it was never a placeholder problem.
+ *
+ * PHASE-4-REVIEW: drawn in-repo because the Figma icon library page
+ * (01 · Icons & Components) is not exposed under the shared file key —
+ * only the brand-guide page is. If that page turns up, these swap for
+ * the exported icon/nav/* glyphs; the geometry contract stays the same.
  */
 const TAB_ICONS: Record<string, ReactNode> = {
   play: (
     <svg {...iconProps} aria-hidden>
-      <circle cx="12" cy="12" r="8.5" />
-      <path d="m15 9-1.4 4.6L9 15l1.4-4.6L15 9Z" />
+      <path d="M12 3.8 20 9.9l-3.1 9.3H7.1L4 9.9 12 3.8Z" />
     </svg>
   ),
   pools: (
     <svg {...iconProps} aria-hidden>
-      <circle cx="12" cy="12" r="8.5" />
-      <path d="M12 3.5v17M3.5 12h17" />
+      <circle cx="12" cy="4.6" r="1.7" />
+      <circle cx="18.5" cy="8.3" r="1.7" />
+      <circle cx="18.5" cy="15.7" r="1.7" />
+      <circle cx="12" cy="19.4" r="1.7" />
+      <circle cx="5.5" cy="15.7" r="1.7" />
+      <circle cx="5.5" cy="8.3" r="1.7" />
     </svg>
   ),
   profile: (

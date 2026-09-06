@@ -53,6 +53,52 @@ export const palette = {
   rarityGold: '#ffd24a',
   rarityGoldHot: '#ffb300',
 
+  /* ————————————————————————————————————————————————————————————————
+   * BLOT WORLD (v4, 2026-09-06) — the two-layer system.
+   *
+   * Brand layer (surfaces, mascot, celebration): the page is hot pink, the
+   * Blot and inflated display type are yellow, cream/pale-pink are light
+   * panels and quiet surfaces, deep magenta is depth and hover-on-pink,
+   * coral is the second Blot in a pair — accent only.
+   *
+   * Game layer (every number, rule and control): dark plum cards.
+   * gameAction (pink) is the ONLY colour that spends or commits — Enter,
+   * Pay entry, Seal — and a pink pill is the only pink object permitted
+   * inside a plum card. gamePrize (yellow) is worn ONLY by amounts a
+   * player is paid; the Blot (also yellow) never shares a frame with a
+   * paid amount or a stat number, so yellow can never be both at once.
+   *
+   * The layers share hexes (pink appears as brandPink and gameAction,
+   * yellow as brandYellow and gamePrize) but never share a surface —
+   * the DUPLICATE NAMES ARE THE POINT: a consumer says which job the
+   * colour is doing, so the reservation rules stay greppable.
+   *
+   * The arena tokens above remain exported until every consumer has
+   * migrated; they are deleted together in the final PR of the v4
+   * sequence, never silently before.
+   * ———————————————————————————————————————————————————————————————— */
+  brandPink: '#ff7ac8',
+  brandYellow: '#ffde59',
+  /* The vinyl's edge: gradient rim and seam stroke on the Blot's body.
+   * Material rendering only — never a surface, never type. */
+  brandYellowDeep: '#e6b800',
+  /* The Blot's visor. Material, like the seam — never a surface. */
+  blotVisor: '#2a1030',
+  brandCream: '#fff6ec',
+  brandPalePink: '#ffc7e3',
+  brandDeepMagenta: '#d63c8c',
+  brandCoral: '#ff9a6b',
+
+  gameBase: '#5e1b40',
+  gameRaised: '#72244f',
+  gameInk: '#fff6ec',
+  gameInkMuted: '#ffc7e3',
+  gameAction: '#ff7ac8',
+  gamePrize: '#ffde59',
+  /* Dials, hardware, object details — moved from the brand layer in the
+   * candy revision (2026-09-06): hardware belongs with the controls. */
+  gameSlate: '#4b4f5c',
+
   /* Class ladder placeholders (founder-owned, PID D2). */
   class0: '#9e9ea7',
   class1: '#7c8db5',
@@ -83,6 +129,10 @@ export const type = {
     /* The moment sizes — display face only. */
     moment: [56, 58],
     arena: [88, 88],
+    /* v4: inflated brand type (Blot world) — page titles and section
+     * openers on brand surfaces only. It never carries a number that
+     * matters; everything a player must read to act stays body-on-plum. */
+    inflated: [128, 116],
   },
 } as const;
 

@@ -114,6 +114,14 @@ export function Gallery() {
             by paid amounts and nothing else; rarityGold belongs to the top class&apos;s art and never
             to prizes; class hues are cosmetic placeholders (founder-owned).
           </p>
+          <p className="mt-3 max-w-prose text-[13px] leading-5 text-ink-muted">
+            Blot world (v4), the two-layer rule: brand tokens are surfaces, the mascot and inflated
+            type; game tokens are the plum cards where every number, rule and control lives.
+            gameAction is the only colour that spends or commits, and a pink pill is the only pink
+            object allowed inside a plum card; gamePrize is worn only by amounts a player is paid.
+            The Blot never shares a frame with a paid amount or a stat number. Arena tokens remain
+            until every consumer migrates, then are deleted together.
+          </p>
         </Section>
 
         <Section title="Type scale">
