@@ -60,6 +60,8 @@ export const METRIC = {
     backfillComplete: 'indexer_backfill_complete',
     /** Counter: a webhook delivery failed the shared-secret check (auth drift signal). */
     webhookUnauthorized: 'indexer_webhook_unauthorized',
+    /** Counter: an announced or backfilled bundle recomputed to the on-chain root (E3). */
+    archiveVerified: 'indexer_archive_verified',
   },
 } as const;
 
@@ -73,6 +75,13 @@ export const ALERT = {
   indexer: {
     ingestFailed: 'indexer webhook ingest failed',
     handlerThrew: 'indexer webhook handler threw',
+    /**
+     * E3: a published bundle FAILED the Merkle-root check against the
+     * on-chain `results_root`. Either the publish is corrupt or someone
+     * is serving forged results under our tags — both are incidents, and
+     * the archive stops serving that pool either way (fail-closed).
+     */
+    archiveRootMismatch: 'indexer archive bundle root mismatch',
   },
 } as const;
 

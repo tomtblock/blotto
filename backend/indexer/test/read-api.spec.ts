@@ -217,3 +217,54 @@ describe('read API — D3 routes', () => {
     expect(Object.keys(body[0])).to.not.include('player');
   });
 });
+
+describe('read API — the /pools filters (E3)', () => {
+  /** Capture the SQL + params the route generates. */
+  function capturing(rows: unknown[] = []) {
+    const calls: Array<{ sql: string; params?: readonly unknown[] }> = [];
+    const q: Queryable = {
+      async query(sql: string, params?: readonly unknown[]) {
+        calls.push({ sql, params });
+        return { rows } as never;
+      },
+    };
+    return { q, calls };
+  }
+
+  it('builds every filter as a bind parameter, in one WHERE clause', async () => {
+    const { q, calls } = capturing();
+    const res = await handleRead(q, '/pools?state=Paid&tier=2&before=50&limit=10');
+    expect(res.status).to.equal(200);
+    expect(calls).to.have.length(1);
+    const sql = calls[0].sql.replace(/\s+/g, ' ');
+    expect(sql).to.include('WHERE state = $1 AND tier = $2 AND id < $3');
+    expect(sql).to.include('ORDER BY id DESC LIMIT $4');
+    expect(calls[0].params).to.deep.equal(['Paid', 2, '50', 10]);
+  });
+
+  it('a bare /pools (and a stray ?) keeps the unfiltered query', async () => {
+    for (const path of ['/pools', '/pools?']) {
+      const { q, calls } = capturing();
+      expect((await handleRead(q, path)).status).to.equal(200);
+      const sql = calls[0].sql.replace(/\s+/g, ' ');
+      expect(sql).to.not.include('WHERE');
+      expect(calls[0].params).to.deep.equal([100]);
+    }
+  });
+
+  it('rejects out-of-range or malformed filters with 400, touching no SQL', async () => {
+    for (const path of [
+      '/pools?state=Robbed', // not a projection state
+      '/pools?tier=7', // tiers are 0..6
+      '/pools?tier=x',
+      '/pools?before=abc',
+      '/pools?limit=0',
+      '/pools?limit=101',
+      '/pools?limit=ten',
+    ]) {
+      const { q, calls } = capturing();
+      expect((await handleRead(q, path)).status).to.equal(400, path);
+      expect(calls).to.have.length(0, `${path} must not reach the database`);
+    }
+  });
+});

@@ -7,6 +7,8 @@
  *   serve      — run the authenticated Helius webhook receiver
  *   backfill   — catch up from RPC through the same write path (dropped-webhook recovery)
  *   re-derive  — rebuild the derived tables from the ledger alone
+ *   archive-backfill — discover + verify + ingest every settled pool's
+ *                published bundle (E3; idempotent, safe to re-run)
  *   sync       — the deployment entry (C12): migrate, then backfill (the
  *                fallback catches anything the webhook missed while the
  *                process was down), then serve
@@ -22,6 +24,7 @@ import { PgEventStore } from './store-pg';
 import { createWebhookServer } from './webhook';
 import { serveReadApi } from './read-api';
 import { runBackfill, Web3BackfillRpc } from './backfill';
+import { backfillArchive } from './archive';
 
 const SERVICE = 'indexer';
 
@@ -52,6 +55,9 @@ async function cmdServe(monitor: Monitor): Promise<void> {
     secret,
     commitment: config.commitment,
     program: config.programId,
+    // E3: POST /bundles (the daemon's announce) verifies against the same
+    // derived tables this process already writes.
+    archiveDb: pool,
   });
   server.listen(config.webhookPort, () => {
     console.log(
@@ -77,6 +83,26 @@ async function cmdBackfill(monitor: Monitor): Promise<void> {
     console.log(
       `backfill: ${result.transactions} tx, ${result.inserted} inserted, ${result.duplicates} duplicates`
     );
+  } finally {
+    await pool.end();
+  }
+}
+
+async function cmdArchiveBackfill(monitor: Monitor): Promise<void> {
+  const config = loadIndexerConfig();
+  const pool = createPool(config.postgres);
+  try {
+    const result = await backfillArchive(pool);
+    for (let i = 0; i < result.verified; i++) {
+      monitor.recordEvent(METRIC.indexer.archiveVerified);
+    }
+    console.log(
+      `archive-backfill: ${result.attempted} settled pool(s), ` +
+        `${result.verified} verified, ${result.failed} failed`
+    );
+    // A failed pool is not fatal to the run (the next run retries it),
+    // but the exit code says so for cron/CI callers.
+    if (result.failed > 0) process.exitCode = 1;
   } finally {
     await pool.end();
   }
@@ -120,12 +146,14 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
       return cmdBackfill(monitor);
     case 're-derive':
       return cmdRederive(monitor);
+    case 'archive-backfill':
+      return cmdArchiveBackfill(monitor);
     case 'sync':
       return cmdSync(monitor);
     default:
       console.error(
         `${SERVICE}: unknown command "${command ?? ''}". ` +
-          'Usage: indexer <migrate|serve|backfill|re-derive|sync>'
+          'Usage: indexer <migrate|serve|backfill|re-derive|archive-backfill|sync>'
       );
       process.exitCode = 1;
   }

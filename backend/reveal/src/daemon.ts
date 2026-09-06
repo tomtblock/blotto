@@ -71,6 +71,15 @@ export interface DaemonDeps {
   /** Run the settlement crank for one pool (crank.ts composed with its own
    * deps; injectable so daemon tests can observe or fail it). */
   crank: (poolId: bigint) => Promise<CrankOutcome>;
+  /**
+   * E3 §4.4 (live path): tell the indexer where a settled pool's bundle
+   * was published, so the archive verifies it without waiting for the
+   * backfill. OPTIONAL AND FIRE-SAFE: the crank's outcome is already on
+   * chain and on Irys before this runs; a failed or absent announce costs
+   * only archive freshness (the backfill discovers by tag), so a throw
+   * here is logged as a tick error and never blocks the sweep.
+   */
+  announceBundle?: (poolId: bigint, bundleUri: string) => Promise<void>;
   /** Unix seconds — compared against `Pool.fill_deadline` (R7). */
   now: () => bigint;
   log?: (step: string, detail?: Record<string, unknown>) => void;
@@ -132,6 +141,20 @@ export function makeDaemon(deps: DaemonDeps): Daemon {
       const outcome = await deps.crank(poolId);
       report.cranked.push({ poolId, finalState: outcome.finalState });
       log('cranked', { poolId: poolId.toString(), finalState: outcome.finalState });
+      if (outcome.bundleUri && deps.announceBundle) {
+        try {
+          await deps.announceBundle(poolId, outcome.bundleUri);
+          log('bundle_announced', { poolId: poolId.toString(), uri: outcome.bundleUri });
+        } catch (e) {
+          // Fire-safe by contract (see DaemonDeps.announceBundle).
+          report.errors.push({
+            action: 'announce_bundle',
+            poolId: poolId.toString(),
+            message: String(e),
+          });
+          log('announce_bundle:failed', { poolId: poolId.toString(), error: String(e) });
+        }
+      }
       pool = await deps.chain.getPool(poolId);
     }
 

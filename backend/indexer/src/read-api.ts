@@ -4,10 +4,17 @@
  * tables. Read-only by construction: every handler takes a `Queryable` and
  * issues SELECTs; there is no write path in this module.
  *
- *   GET /pools                         → PoolSummary[]
+ *   GET /pools                         → PoolSummary[] — filterable by
+ *                                        ?state=&tier=&before=<id>&limit=
+ *                                        (E3: the archive list is
+ *                                        /pools?state=Paid, paged by id)
  *   GET /pools/:pool                   → PoolSummary
  *   GET /pools/:pool/entries           → EntryRow[]
  *   GET /pools/:pool/results           → ResultRow[]
+ *   GET /pools/:pool/leaderboard       → the VERIFIED archive ranking (E3):
+ *                                        404 unless the pool's bundle
+ *                                        recomputed to the on-chain root
+ *                                        (archive.ts — fail-closed)
  *   GET /pools/:pool/payouts           → PayoutRow[]
  *   GET /pools/:pool/verify-record     → the verify page's OnChainRecord,
  *                                        assembled from the raw event ledger
@@ -75,7 +82,12 @@ function poolRow(r: Record<string, unknown>): Json {
 
 /** Dispatch one GET. Unknown path → 404. */
 export async function handleRead(db: Queryable, path: string): Promise<ReadApiResult> {
-  const parts = path.replace(/\/+$/, '').split('/').filter(Boolean);
+  // E3: the path may carry a query string (the /pools filters). Before
+  // this, query strings 404ed by falling into the path split.
+  const qIndex = path.indexOf('?');
+  const pathname = qIndex === -1 ? path : path.slice(0, qIndex);
+  const query = new URLSearchParams(qIndex === -1 ? '' : path.slice(qIndex + 1));
+  const parts = pathname.replace(/\/+$/, '').split('/').filter(Boolean);
 
   // E5: the deployment liveness probe.
   if (parts[0] === 'health' && parts.length === 1) {
@@ -83,8 +95,7 @@ export async function handleRead(db: Queryable, path: string): Promise<ReadApiRe
   }
 
   if (parts[0] === 'pools' && parts.length === 1) {
-    const res = await db.query('SELECT * FROM pools ORDER BY id DESC LIMIT 100');
-    return { status: 200, body: res.rows.map(poolRow) };
+    return poolsList(db, query);
   }
 
   if (parts[0] === 'pools' && parts.length >= 2) {
@@ -119,6 +130,9 @@ export async function handleRead(db: Queryable, path: string): Promise<ReadApiRe
       );
       return { status: 200, body: res.rows };
     }
+    if (parts[2] === 'leaderboard') {
+      return leaderboard(db, pool);
+    }
     if (parts[2] === 'verify-record') {
       return verifyRecord(db, pool);
     }
@@ -147,16 +161,19 @@ export async function handleRead(db: Queryable, path: string): Promise<ReadApiRe
     const player = parts[1];
     if (!B58.test(player)) return { status: 400, body: { error: 'bad player address' } };
     // D3: the career record — one row per entry, oldest first, straight off
-    // player_history (rank labels deliberately absent; D3-B).
+    // player_history. `rank` is NULLABLE and comes only from the verified
+    // archive (E3): null until the pool's bundle recomputes to the
+    // on-chain root, never a claim this service made up on its own.
     if (parts[2] === 'history') {
       const res = await db.query(
         `SELECT h.pool, p.id::text AS pool_id, h.tier, h.seat,
                 h.entries_to_date::text AS entries_to_date, h.paid,
                 h.amount_lamports::text AS amount_lamports,
                 h.pot_lamports::text AS pot_lamports,
-                p.state
+                p.state, r.rank
            FROM player_history h
            LEFT JOIN pools p ON p.pool = h.pool
+           LEFT JOIN rankings r ON r.pool = h.pool AND r.seat = h.seat
           WHERE h.player = $1
           ORDER BY h.entries_to_date ASC, h.pool ASC`,
         [player]
@@ -203,6 +220,93 @@ export async function handleRead(db: Queryable, path: string): Promise<ReadApiRe
   }
 
   return { status: 404, body: { error: 'not found' } };
+}
+
+/** The pool states the projection writes — the ?state= allowlist. */
+const POOL_STATES = new Set(['Open', 'Sealed', 'Scored', 'Paid', 'Refunding', 'Closed']);
+
+/**
+ * GET /pools with the E3 filters. Every filter is validated before it
+ * touches SQL and every value is a bind parameter — the allowlist plus
+ * parameterisation, never string-built SQL. `before` pages by numeric
+ * pool id (exclusive), newest first, so the archive list walks backwards
+ * with ?state=Paid&before=<last id on the page>.
+ */
+async function poolsList(db: Queryable, query: URLSearchParams): Promise<ReadApiResult> {
+  const where: string[] = [];
+  const params: unknown[] = [];
+
+  const state = query.get('state');
+  if (state !== null) {
+    if (!POOL_STATES.has(state)) return { status: 400, body: { error: 'bad state filter' } };
+    params.push(state);
+    where.push(`state = $${params.length}`);
+  }
+  const tier = query.get('tier');
+  if (tier !== null) {
+    if (!/^[0-6]$/.test(tier)) return { status: 400, body: { error: 'bad tier filter' } };
+    params.push(Number(tier));
+    where.push(`tier = $${params.length}`);
+  }
+  const before = query.get('before');
+  if (before !== null) {
+    if (!/^\d{1,19}$/.test(before)) return { status: 400, body: { error: 'bad before cursor' } };
+    params.push(before);
+    where.push(`id < $${params.length}`);
+  }
+  let limit = 100;
+  const rawLimit = query.get('limit');
+  if (rawLimit !== null) {
+    if (!/^\d{1,3}$/.test(rawLimit) || Number(rawLimit) < 1 || Number(rawLimit) > 100) {
+      return { status: 400, body: { error: 'bad limit' } };
+    }
+    limit = Number(rawLimit);
+  }
+  params.push(limit);
+
+  const clause = where.length > 0 ? ` WHERE ${where.join(' AND ')}` : '';
+  const res = await db.query(
+    `SELECT * FROM pools${clause} ORDER BY id DESC LIMIT $${params.length}`,
+    params
+  );
+  return { status: 200, body: res.rows.map(poolRow) };
+}
+
+/**
+ * E3: the archive leaderboard — served ONLY from a bundle that verified
+ * against the on-chain root (fail-closed: no bundles row, or
+ * root_matches = false, is a 404, indistinguishable from "no archive").
+ * This is the one place rank labels are served, and the provenance rides
+ * along: the bundle URI and the root the rows verified against, so the
+ * page can link straight to the published data and the verify story.
+ */
+async function leaderboard(db: Queryable, pool: string): Promise<ReadApiResult> {
+  const bundle = await db.query(
+    'SELECT uri, results_root, verified_at, root_matches FROM bundles WHERE pool = $1',
+    [pool]
+  );
+  const b = bundle.rows[0] as
+    | { uri: string; results_root: string; verified_at: unknown; root_matches: boolean }
+    | undefined;
+  if (!b || !b.root_matches) {
+    return { status: 404, body: { error: 'no verified archive for this pool' } };
+  }
+  const rows = await db.query(
+    `SELECT seat, player, rank, score_half, zones, amount_lamports::text AS amount_lamports
+       FROM rankings WHERE pool = $1
+      ORDER BY rank ASC, seat ASC`,
+    [pool]
+  );
+  return {
+    status: 200,
+    body: {
+      pool,
+      uri: b.uri,
+      results_root: b.results_root,
+      verified_at: String(b.verified_at),
+      rows: rows.rows,
+    },
+  };
 }
 
 /**
