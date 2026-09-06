@@ -84,7 +84,8 @@ fn switch_on_escrows_first_place_and_kyc_packet_releases_it() {
     let b9 = env.balance(&p9.pubkey());
     let ix = pay_prizes_ix(&settlement.pubkey(), 1, &[8], &[(p9.pubkey(), *e9)]);
     env.send(&[ix], &[&settlement]).unwrap();
-    assert_eq!(env.balance(&p9.pubkey()) - b9, 135_000_000);
+    // Rank 9 at the D-E1 pot: 4e9 × 27/1024 — under the 1 SOL threshold.
+    assert_eq!(env.balance(&p9.pubkey()) - b9, 105_468_750);
 
     // Release without any packet: rejected (PacketMissing).
     let ix = release_escrow_ix(

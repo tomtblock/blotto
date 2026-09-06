@@ -1,8 +1,9 @@
 //! D1/D2/D3-B acceptance against the compiled artifact: a 0.75 SOL and a
-//! 7.5 SOL pool fill and settle with the step report's exact band amounts
-//! (vault drained to zero), and a tie-case pool settles a split-pot payout
-//! list — an 18-seat paid set straddling position 17, with a visible
-//! integer-division remainder going to the tied group's lowest seat.
+//! 7.5 SOL pool fill and settle with the exact band amounts at the D-E1
+//! pots (vault drained to zero), and a tie-case pool settles a split-pot
+//! payout list — an 18-seat paid set straddling position 17, with a
+//! visible integer-division remainder going to the tied group's lowest
+//! seat.
 
 use blotto_litesvm_tests::*;
 use solana_sdk::pubkey::Pubkey;
@@ -75,30 +76,31 @@ fn tier_2_and_tier_6_pools_settle_with_the_report_table_amounts() {
     )
     .unwrap();
 
-    // ---- tier 2: 0.75 SOL entry, 38.4 SOL pot ----
+    // ---- tier 2: 0.75 SOL entry, 30 SOL pot (D-E1) ----
     env.open_ready_pool(1, 2);
     let players = fill_and_reveal(&mut env, 1);
-    let payouts = band_payouts(TIER_POTS[2]); // 38.4 SOL fixed pot
-                                              // The step report's tier-2 prize table, to the lamport.
+    let payouts = band_payouts(TIER_POTS[2]); // 30 SOL fixed pot
+                                              // The D-E1 tier-2 prize table, to the lamport
+                                              // (band unit = 30e9 / 1024 = 29_296_875).
     let expected_t2: [u64; 16] = [
-        10_125_000_000, // 1st: 10.125 SOL
-        5_925_000_000,
-        3_825_000_000,
-        2_925_000_000,
-        1_875_000_000,
-        1_875_000_000,
-        1_875_000_000,
-        1_875_000_000,
-        1_012_500_000,
-        1_012_500_000,
-        1_012_500_000,
-        1_012_500_000,
-        1_012_500_000,
-        1_012_500_000,
-        1_012_500_000,
-        1_012_500_000,
+        7_910_156_250, // 1st: 270 units
+        4_628_906_250,
+        2_988_281_250,
+        2_285_156_250,
+        1_464_843_750,
+        1_464_843_750,
+        1_464_843_750,
+        1_464_843_750,
+        791_015_625,
+        791_015_625,
+        791_015_625,
+        791_015_625,
+        791_015_625,
+        791_015_625,
+        791_015_625,
+        791_015_625,
     ];
-    assert_eq!(payouts.iter().map(|&(_, a)| a).sum::<u64>(), 38_400_000_000);
+    assert_eq!(payouts.iter().map(|&(_, a)| a).sum::<u64>(), 30_000_000_000);
     for (i, &(seat, amount)) in payouts.iter().enumerate() {
         assert_eq!((seat, amount), (i as u16, expected_t2[i]));
     }
@@ -106,18 +108,18 @@ fn tier_2_and_tier_6_pools_settle_with_the_report_table_amounts() {
     let deltas = pay_all_and_measure(&mut env, 1, &players, &payouts);
     assert_eq!(deltas, expected_t2.to_vec());
 
-    // ---- tier 6: 7.5 SOL entry, 384 SOL pot ----
+    // ---- tier 6: 7.5 SOL entry, 300 SOL pot (D-E1) ----
     // register_player's 10 SOL airdrop covers the entry; the pot maths scale
     // by exactly 10× the tier-2 numbers (7.5 = 10 × 0.75).
     env.open_ready_pool(2, 6);
     let players = fill_and_reveal(&mut env, 2);
-    let payouts = band_payouts(TIER_POTS[6]); // 384 SOL fixed pot
+    let payouts = band_payouts(TIER_POTS[6]); // 300 SOL fixed pot
     assert_eq!(
         payouts.iter().map(|&(_, a)| a).sum::<u64>(),
-        384_000_000_000
+        300_000_000_000
     );
     let expected_t6: Vec<u64> = expected_t2.iter().map(|a| a * 10).collect();
-    assert_eq!(payouts[0].1, 101_250_000_000, "1st: 101.25 SOL");
+    assert_eq!(payouts[0].1, 79_101_562_500, "1st: 79.1015625 SOL");
     for (i, &(seat, amount)) in payouts.iter().enumerate() {
         assert_eq!((seat, amount), (i as u16, expected_t6[i]));
     }
