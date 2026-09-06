@@ -55,6 +55,15 @@ export interface StudyResult {
   report: string;
 }
 
+/** Lamports as a SOL string for prose, bigint math only — trailing zeros
+ *  trimmed so a whole-SOL pot reads "4", not "4.000000000". Human eyes only,
+ *  never fed back into an amount. */
+function solString(lamports: bigint): string {
+  const whole = lamports / 1_000_000_000n;
+  const frac = (lamports % 1_000_000_000n).toString().padStart(9, '0').replace(/0+$/, '');
+  return frac === '' ? `${whole}` : `${whole}.${frac}`;
+}
+
 /** rate = numerator/denominator as a fixed-decimals percent string, bigint math. */
 function pct(numerator: bigint, denominator: bigint, decimals: number): string {
   if (denominator === 0n) return '0';
@@ -274,8 +283,10 @@ skill competition's outcomes should have.
   collusion. **The engine scoring these pools is the same module the crank
   runs in production and the verify page runs in the browser** — a player
   can recompute any pool of this study from its published data.
-- **Tier**: 0.1 SOL entries, the 5.12 SOL fixed pot (D-A1 revised). Shares
-  are pot-relative, so per-class statistics carry to every tier unchanged.
+- **Tier**: 0.1 SOL entries, the ${solString(pot)} SOL fixed pot (D-A1,
+  pot revised by D-E1) — read from the same pot table the engine pays from,
+  never restated here. Shares are pot-relative, so per-class statistics
+  carry to every tier unchanged.
 - **Reproduce**:
 
   \`\`\`bash

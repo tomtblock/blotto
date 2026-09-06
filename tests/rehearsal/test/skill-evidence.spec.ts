@@ -6,6 +6,7 @@
  * one ordering that is robust even at a small sample size.
  */
 import { expect } from 'chai';
+import { potForTier } from '../../../backend/scoring/src';
 import {
   LADDER,
   generateLadderEntrant,
@@ -13,6 +14,12 @@ import {
   ladderPopulation,
   runSkillEvidence,
 } from '../src';
+
+// The study settles tier-0 pools; conservation is asserted against the same
+// pot table the engine pays from (D-E1). The constant itself is pinned in
+// prize_math.rs and backend/scoring — this suite checks the money adds up,
+// not what the number is.
+const TIER0_POT = potForTier(0);
 
 describe('the skill-evidence strategy ladder', () => {
   it('every class emits only valid allocations, deterministically', () => {
@@ -66,7 +73,7 @@ describe('the skill-evidence study', () => {
       total += r.paidLamports;
     }
     // Conservation across the whole study: every pool's pot, fully assigned.
-    expect(total).to.equal(5_120_000_000n * BigInt(params.pools));
+    expect(total).to.equal(TIER0_POT * BigInt(params.pools));
 
     // The one ordering robust even at a small sample: a three-stat
     // concentrator beats the untouched pentagon (uniform loses its trio
@@ -91,7 +98,7 @@ describe('the skill-evidence study', () => {
     for (const r of a.homogeneous) {
       expect(r.entrants).to.equal(64 * params.pools);
       // Everyone in the pool is the class, so the class total IS the pot.
-      expect(r.paidLamports).to.equal(5_120_000_000n * BigInt(params.pools));
+      expect(r.paidLamports).to.equal(TIER0_POT * BigInt(params.pools));
     }
   });
 
