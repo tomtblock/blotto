@@ -26,24 +26,29 @@
  */
 
 export const palette = {
-  /* Surfaces — dark arena, the only mode. */
-  base: '#070b14',
-  raised: '#0d1420',
-  overlay: '#131c2e',
-  line: '#1d2942',
+  /* Surfaces — v4: the legacy arena names now ALIAS the game layer, so
+   * every plum-side page re-skins through the utilities it already uses.
+   * Brand surfaces use the brand* tokens below explicitly. These alias
+   * names are deleted once no consumer remains (final v4 PR); until then
+   * base=gameBase, raised=gameRaised, ink=gameInk, and so on, with the
+   * overlay/line/hover shades derived from the plum ramp. */
+  base: '#5e1b40',
+  raised: '#72244f',
+  overlay: '#84315e',
+  line: '#7d3f65',
 
   /* Text. */
-  ink: '#edf2fb',
-  inkMuted: '#7e8aa3',
+  ink: '#fff6ec',
+  inkMuted: '#ffc7e3',
 
-  /* THE action accent — stadium floodlight blue. Buttons, focus, live. */
-  brand: '#3d8bff',
-  brandHot: '#66b2ff',
-  brandDeep: '#1f5fcc',
+  /* THE action accent — game-action pink: the colour that commits. */
+  brand: '#ff7ac8',
+  brandHot: '#d63c8c',
+  brandDeep: '#b52f68',
 
-  /* THE celebration accent — molten amber. Prize amounts, paid moments. */
-  prize: '#ffaa33',
-  prizeHot: '#ffc96b',
+  /* THE celebration accent — game-prize yellow. Paid amounts only. */
+  prize: '#ffde59',
+  prizeHot: '#ffe98c',
 
   /* RESERVED functional semantics. */
   priceUp: '#16c784',

@@ -11,7 +11,7 @@
  * of a timer it cannot afford to finish.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { address } from '@solana/kit';
@@ -263,7 +263,7 @@ export function PlayClient() {
         addFunds={auth.addFunds}
         onRecheck={() => setBalanceRun((n) => n + 1)}
       >
-        <BattleFlow timerSeconds={pool.timer_seconds} onConfirm={onConfirm} />
+        <BattleFlow poolAddress={pool.pool} onConfirm={onConfirm} />
       </BalanceGateView>
     </AttestationGate>
   );
@@ -338,6 +338,19 @@ function BalanceGateView({
  * acceptance of the CURRENT terms version is on record. Lazy initial state
  * (no effect) — the component is re-mounted per wallet via `key`.
  */
+/* The attestation flag lives in localStorage; reading it during the first
+ * render made server and client HTML disagree (hydration error). The
+ * store below reads it through useSyncExternalStore — false on the
+ * server, the real value after hydration, notified on a fresh attest. */
+const attestListeners = new Set<() => void>();
+function subscribeAttested(cb: () => void): () => void {
+  attestListeners.add(cb);
+  return () => attestListeners.delete(cb);
+}
+function notifyAttested() {
+  for (const cb of attestListeners) cb();
+}
+
 function AttestationGate({
   wallet,
   signer,
@@ -347,7 +360,11 @@ function AttestationGate({
   signer: { signMessage?(message: Uint8Array): Promise<Uint8Array> } | undefined;
   children: React.ReactNode;
 }) {
-  const [attested, setAttested] = useState(() => hasLocalAttestation(wallet));
+  const attested = useSyncExternalStore(
+    subscribeAttested,
+    () => hasLocalAttestation(wallet),
+    () => false
+  );
   const [ageChecked, setAgeChecked] = useState(false);
   const [termsChecked, setTermsChecked] = useState(false);
   const [attestError, setAttestError] = useState(false);
@@ -359,7 +376,7 @@ function AttestationGate({
     setAttestError(false);
     const ok = await submitAttestation(process.env.NEXT_PUBLIC_ENTRY_API_URL, signer, wallet);
     setAttesting(false);
-    if (ok) setAttested(true);
+    if (ok) notifyAttested();
     else setAttestError(true);
   }, [attesting, signer, wallet]);
 

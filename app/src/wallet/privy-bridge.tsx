@@ -188,7 +188,7 @@ export default function PrivyBridge({
           // Privy SDK, not component styling) — keep in sync with
           // --color-brand in src/styles/tokens.css (D1 arena palette; the
           // predecessor violet was a stale carry, caught in D4).
-          accentColor: "#3d8bff",
+          accentColor: "#ff7ac8",
           walletChainType: "solana-only",
         },
         embeddedWallets: {

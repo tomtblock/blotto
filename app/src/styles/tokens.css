@@ -26,24 +26,27 @@
  * a utility references it — swatch readback and var(--color-*) styling
  * depend on all tokens existing at runtime. */
 @theme static {
-  /* Surfaces — the arena at night. */
-  --color-base: #070b14;
-  --color-raised: #0d1420;
-  --color-overlay: #131c2e;
-  --color-line: #1d2942;
+  /* Surfaces — v4: the legacy names now ALIAS the Blot-world game layer,
+   * so every plum-side page re-skins through the utilities it already
+   * uses. Brand-layer surfaces reference brand-* tokens explicitly. The
+   * alias names are deleted once no consumer remains (final v4 PR). */
+  --color-base: #5e1b40;
+  --color-raised: #72244f;
+  --color-overlay: #84315e;
+  --color-line: #7d3f65;
 
-  /* Text. */
-  --color-ink: #edf2fb;
-  --color-ink-muted: #7e8aa3;
+  /* Text — cream ink, pale-pink muted (the game layer's own). */
+  --color-ink: #fff6ec;
+  --color-ink-muted: #ffc7e3;
 
-  /* THE action accent — stadium floodlight blue. */
-  --color-brand: #3d8bff;
-  --color-brand-hot: #66b2ff;
-  --color-brand-deep: #1f5fcc;
+  /* THE action accent — now game-action pink: the colour that commits. */
+  --color-brand: #ff7ac8;
+  --color-brand-hot: #d63c8c;
+  --color-brand-deep: #b52f68;
 
-  /* THE celebration accent — molten amber. Prize amounts only. */
-  --color-prize: #ffaa33;
-  --color-prize-hot: #ffc96b;
+  /* THE celebration accent — now game-prize yellow. Paid amounts only. */
+  --color-prize: #ffde59;
+  --color-prize-hot: #ffe98c;
 
   /* RESERVED functional semantics — never decorative. */
   --color-price-up: #16c784;

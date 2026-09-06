@@ -15,13 +15,13 @@ import { indexerApi, live } from '@/data/api';
 import { lamportsToSol } from '@/data/format';
 
 // tokens.ts mirrors — keep in step with the palette.
-const BASE = '#070b14';
-const RAISED = '#0d1420';
-const LINE = '#1d2942';
-const INK = '#edf2fb';
-const INK_MUTED = '#7e8aa3';
-const BRAND = '#3d8bff';
-const PRIZE = '#ffaa33';
+const BASE = '#5e1b40';
+const RAISED = '#72244f';
+const LINE = '#7d3f65';
+const INK = '#fff6ec';
+const INK_MUTED = '#ffc7e3';
+const BRAND = '#ff7ac8';
+const PRIZE = '#ffde59';
 
 export async function GET(
   _req: Request,

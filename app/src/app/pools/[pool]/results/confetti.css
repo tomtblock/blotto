@@ -1,0 +1,28 @@
+/* One burst, one second, once ever (see paid-confetti.tsx). */
+.confetti-field {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  overflow: hidden;
+}
+.confetti-piece {
+  position: absolute;
+  top: -16px;
+  width: 10px;
+  height: 14px;
+  border-radius: 2px;
+  animation: confetti-fall 1.1s ease-in forwards;
+}
+@keyframes confetti-fall {
+  to {
+    transform: translateY(105vh) rotate(340deg);
+    opacity: 0.7;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .confetti-piece {
+    animation: none;
+    display: none;
+  }
+}

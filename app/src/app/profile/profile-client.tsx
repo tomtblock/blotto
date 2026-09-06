@@ -20,6 +20,7 @@ import { lamportsToSol } from '@/data/format';
 import type { CareerRow, ProfileRow, RivalRow } from '@/data/types';
 import { Card } from '@/components/ui/card';
 import { Stat } from '@/components/ui/stat';
+import { MyBlots } from './my-blots';
 
 function PrizeRecordChart({ career }: { career: CareerRow[] }) {
   if (career.length < 2) return null;
@@ -161,6 +162,7 @@ export function ProfileClient() {
           />
         </div>
       </Card>
+      <MyBlots />
       <PrizeRecordChart career={result?.career ?? []} />
       <Rivals rivals={result?.rivals ?? []} />
       <Card className="p-5">

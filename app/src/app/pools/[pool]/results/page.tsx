@@ -15,6 +15,7 @@ import { LiveDataUnavailable } from '@/components/shell/live-unavailable';
 import { ResultsReveal, VerifyAlways, type RevealRow } from './results-reveal';
 import { WhatBeatYouPanel } from './what-beat-you-panel';
 import { ShareResult } from './share-result';
+import { PaidConfetti } from './paid-confetti';
 
 export default async function ResultsPage({ params }: { params: Promise<{ pool: string }> }) {
   const { pool: poolId } = await params;
@@ -102,6 +103,13 @@ export default async function ResultsPage({ params }: { params: Promise<{ pool: 
               secretHex={pool.secret}
               results={results}
               seatByPlayer={Object.fromEntries(entries.map((e) => [e.player, e.idx]))}
+            />
+            <PaidConfetti
+              pool={pool.pool}
+              paidPlayers={results
+                .filter((r) => BigInt(r.amount) > 0n)
+                .map((r) => entryBySeat.get(r.seat)?.player ?? '')
+                .filter(Boolean)}
             />
             <ShareResult
               pool={pool.pool}
