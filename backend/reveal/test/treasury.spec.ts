@@ -105,7 +105,12 @@ describe('nextOpenable ↔ FakeChain parity (the on-chain mirror)', () => {
       2_000_000_000_000n,
     ];
     for (let mask = 1; mask < 128; mask += 9) {
-      for (const balance of balances) {
+      // Proposal E1 §6.3: the exact-boundary balance per mask (and one
+      // lamport under it) join the sweep — the zero-slack cascade must
+      // agree with the chain at the boundary too, not only around it.
+      const enabledPots = TIER_POT_LAMPORTS.filter((_, t) => (mask >> t) % 2 === 1);
+      const boundary = enabledPots.reduce((a, p) => a + p, 0n);
+      for (const balance of [...balances, boundary, boundary - 1n]) {
         const chain = await chainWith(0n);
         chain.config!.openTiers = Array.from({ length: 7 }, (_, t) => (mask >> t) % 2 === 1);
         chain.fundPlatform(balance + 1n); // +1n: fundPlatform rejects zero
@@ -128,6 +133,64 @@ describe('nextOpenable ↔ FakeChain parity (the on-chain mirror)', () => {
           }
         }
       }
+    }
+  });
+});
+
+describe('the zero-slack cascade (proposal E1 §6.3)', () => {
+  // §6.1: with reserve_pots = 1 and every enabled tier idle, the open gate
+  // collapses to `available >= min_platform + Σ pot(enabled)` — and it
+  // cascades EXACTLY: opening tier t debits pot[t] and removes pot[t] from
+  // the idle reserve in the same step, so a balance that opens the first
+  // tier must open every enabled tier in one open-loop. The failure mode
+  // this pins is silent in production — lower tiers open, the top tier
+  // quietly misses, and the log reads like an ordinary shortfall — so the
+  // boundary is asserted with zero slack for EVERY enabled-tier mask, and
+  // with a nonzero policy minimum so the floor term is exercised too (the
+  // parity sweep above runs with min = 0).
+  it('at exactly min_platform + Σ pot, every enabled tier opens in one open-loop', async function () {
+    this.timeout(10000);
+    const MIN = 2_000_000_000n;
+    for (let mask = 1; mask < 128; mask++) {
+      const enabled = Array.from({ length: 7 }, (_, t) => (mask >> t) % 2 === 1);
+      const sumPots = TIER_POT_LAMPORTS.reduce((a, p, t) => (enabled[t] ? a + p : a), 0n);
+      const chain = await chainWith(MIN);
+      chain.config!.openTiers = enabled;
+      chain.fundPlatform(1n); // fundPlatform rejects zero
+      chain.platform = MIN + sumPots; // the boundary, exactly
+      const opened: number[] = [];
+      // Mirror the daemon's OPEN phase: a loop bounded by the tier count,
+      // re-reading config and balance every pass (daemon.ts guard loop).
+      for (let guard = 0; guard < 7; guard++) {
+        const cfg = await chain.getConfig();
+        const v = nextOpenable(cfg, chain.platform, NONE);
+        if (v.tier === null) {
+          // The loop must end because every enabled tier is busy — a
+          // shortfall here IS the silent cascade failure this test exists
+          // to catch.
+          expect(v.reason, `mask ${mask}: loop ended short, not busy`).to.contain('live pool');
+          break;
+        }
+        await chain.openPool(cfg.nextPoolId, v.tier, sha('pk'), sha('h'));
+        opened.push(v.tier);
+      }
+      const want: number[] = [];
+      enabled.forEach((on, t) => {
+        if (on) want.push(t);
+      });
+      expect(opened, `mask ${mask}: opened tiers`).to.deep.equal(want);
+
+      // One lamport under the boundary opens NOTHING: the first tier's
+      // gate already demands the whole sum (§6.1), so there is no partial
+      // cascade for a near-miss to hide in — and the reported shortfall
+      // is exactly the missing lamport.
+      const chain2 = await chainWith(MIN);
+      chain2.config!.openTiers = [...enabled];
+      chain2.fundPlatform(1n);
+      chain2.platform = MIN + sumPots - 1n;
+      const v2 = nextOpenable(await chain2.getConfig(), chain2.platform, NONE);
+      expect(v2.tier, `mask ${mask}: boundary - 1 must open nothing`).to.equal(null);
+      expect(v2.shortfallLamports).to.equal(1n);
     }
   });
 });
