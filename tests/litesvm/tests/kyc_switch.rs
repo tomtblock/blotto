@@ -10,7 +10,7 @@ use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Keypair;
 use solana_sdk::signer::Signer;
 
-const FIRST_PLACE: u64 = 1_350_000_000;
+const FIRST_PLACE: u64 = 1_054_687_500; // tier-0 rank 1 at the D-E1 pot
 
 fn fill_and_commit(env: &mut Env) -> Vec<(Keypair, Pubkey)> {
     env.open_ready_pool(1, 0);

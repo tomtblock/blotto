@@ -43,7 +43,7 @@ describe('nextOpenable (the treasury policy, off-chain)', () => {
     expect(v.reason).to.contain('short by');
   });
 
-  it('exactly the pot opens tier 0 (the 5.12 SOL bootstrap)', async () => {
+  it('exactly the pot opens tier 0 (the 4 SOL bootstrap, D-E1)', async () => {
     const chain = await chainWith(0n);
     const v = nextOpenable(await chain.getConfig(), TIER_POT_LAMPORTS[0], NONE);
     expect(v.tier).to.equal(0);

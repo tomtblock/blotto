@@ -2,7 +2,7 @@
  "_comment": "GENERATED FILE - do not edit by hand. Regenerate with `python3 fixtures/gen_vectors.py --write` from backend/scoring/. Every value is computed by Python (the independent oracle, R20), never by the TypeScript engine under test.",
  "rules": "battle: stat won by larger number, ties to neither, battle won by >=3 stats else draw; score in half-points (win 2, draw 1); rank by score desc, zones desc; equal on both = TIED, shared competition rank (D3-B), tie group splits the combined band prize of its occupied positions <= 16 evenly, remainder to the lowest seat; leaf sha256(0x00||player||rank_u8||amount_u64le), node sha256(0x01||l||r), odd node promoted, leaves (rank asc, seat asc)",
  "entry_lamports": "100000000",
- "pot_lamports": "5120000000",
+ "pot_lamports": "4000000000",
  "prize_bands_1024": [
   270,
   158,
@@ -451,47 +451,47 @@
      "score_half": 12,
      "zones": 46,
      "rank": 4,
-     "amount_lamports": "390000000"
+     "amount_lamports": "304687500"
     },
     {
      "index": 1,
      "score_half": 30,
      "zones": 60,
      "rank": 1,
-     "amount_lamports": "1350000000"
+     "amount_lamports": "1054687500"
     },
     {
      "index": 2,
      "score_half": 14,
      "zones": 46,
      "rank": 3,
-     "amount_lamports": "510000000"
+     "amount_lamports": "398437500"
     },
     {
      "index": 3,
      "score_half": 28,
      "zones": 56,
      "rank": 2,
-     "amount_lamports": "790000000"
+     "amount_lamports": "617187500"
     }
    ],
    "leaf_order": "1,3,2,0",
    "payouts": [
     {
      "entry_index": 0,
-     "amount": "390000000"
+     "amount": "304687500"
     },
     {
      "entry_index": 1,
-     "amount": "1350000000"
+     "amount": "1054687500"
     },
     {
      "entry_index": 2,
-     "amount": "510000000"
+     "amount": "398437500"
     },
     {
      "entry_index": 3,
-     "amount": "790000000"
+     "amount": "617187500"
     }
    ]
   },
@@ -722,47 +722,47 @@
      "score_half": 23,
      "zones": 50,
      "rank": 1,
-     "amount_lamports": "1350000000"
+     "amount_lamports": "1054687500"
     },
     {
      "index": 1,
      "score_half": 22,
      "zones": 54,
      "rank": 3,
-     "amount_lamports": "510000000"
+     "amount_lamports": "398437500"
     },
     {
      "index": 2,
      "score_half": 17,
      "zones": 47,
      "rank": 4,
-     "amount_lamports": "390000000"
+     "amount_lamports": "304687500"
     },
     {
      "index": 3,
      "score_half": 22,
      "zones": 55,
      "rank": 2,
-     "amount_lamports": "790000000"
+     "amount_lamports": "617187500"
     }
    ],
    "leaf_order": "0,3,1,2",
    "payouts": [
     {
      "entry_index": 0,
-     "amount": "1350000000"
+     "amount": "1054687500"
     },
     {
      "entry_index": 1,
-     "amount": "510000000"
+     "amount": "398437500"
     },
     {
      "entry_index": 2,
-     "amount": "390000000"
+     "amount": "304687500"
     },
     {
      "entry_index": 3,
-     "amount": "790000000"
+     "amount": "617187500"
     }
    ]
   },
@@ -993,47 +993,47 @@
      "score_half": 13,
      "zones": 46,
      "rank": 4,
-     "amount_lamports": "390000000"
+     "amount_lamports": "304687500"
     },
     {
      "index": 1,
      "score_half": 27,
      "zones": 57,
      "rank": 1,
-     "amount_lamports": "1350000000"
+     "amount_lamports": "1054687500"
     },
     {
      "index": 2,
      "score_half": 18,
      "zones": 47,
      "rank": 3,
-     "amount_lamports": "510000000"
+     "amount_lamports": "398437500"
     },
     {
      "index": 3,
      "score_half": 26,
      "zones": 55,
      "rank": 2,
-     "amount_lamports": "790000000"
+     "amount_lamports": "617187500"
     }
    ],
    "leaf_order": "1,3,2,0",
    "payouts": [
     {
      "entry_index": 0,
-     "amount": "390000000"
+     "amount": "304687500"
     },
     {
      "entry_index": 1,
-     "amount": "1350000000"
+     "amount": "1054687500"
     },
     {
      "entry_index": 2,
-     "amount": "510000000"
+     "amount": "398437500"
     },
     {
      "entry_index": 3,
-     "amount": "790000000"
+     "amount": "617187500"
     }
    ]
   },
@@ -1264,47 +1264,47 @@
      "score_half": 27,
      "zones": 57,
      "rank": 1,
-     "amount_lamports": "1350000000"
+     "amount_lamports": "1054687500"
     },
     {
      "index": 1,
      "score_half": 25,
      "zones": 54,
      "rank": 2,
-     "amount_lamports": "790000000"
+     "amount_lamports": "617187500"
     },
     {
      "index": 2,
      "score_half": 11,
      "zones": 46,
      "rank": 4,
-     "amount_lamports": "390000000"
+     "amount_lamports": "304687500"
     },
     {
      "index": 3,
      "score_half": 21,
      "zones": 51,
      "rank": 3,
-     "amount_lamports": "510000000"
+     "amount_lamports": "398437500"
     }
    ],
    "leaf_order": "0,1,3,2",
    "payouts": [
     {
      "entry_index": 0,
-     "amount": "1350000000"
+     "amount": "1054687500"
     },
     {
      "entry_index": 1,
-     "amount": "790000000"
+     "amount": "617187500"
     },
     {
      "entry_index": 2,
-     "amount": "390000000"
+     "amount": "304687500"
     },
     {
      "entry_index": 3,
-     "amount": "510000000"
+     "amount": "398437500"
     }
    ]
   },
@@ -1535,47 +1535,47 @@
      "score_half": 18,
      "zones": 48,
      "rank": 4,
-     "amount_lamports": "390000000"
+     "amount_lamports": "304687500"
     },
     {
      "index": 1,
      "score_half": 24,
      "zones": 54,
      "rank": 1,
-     "amount_lamports": "1350000000"
+     "amount_lamports": "1054687500"
     },
     {
      "index": 2,
      "score_half": 22,
      "zones": 57,
      "rank": 2,
-     "amount_lamports": "790000000"
+     "amount_lamports": "617187500"
     },
     {
      "index": 3,
      "score_half": 20,
      "zones": 49,
      "rank": 3,
-     "amount_lamports": "510000000"
+     "amount_lamports": "398437500"
     }
    ],
    "leaf_order": "1,2,3,0",
    "payouts": [
     {
      "entry_index": 0,
-     "amount": "390000000"
+     "amount": "304687500"
     },
     {
      "entry_index": 1,
-     "amount": "1350000000"
+     "amount": "1054687500"
     },
     {
      "entry_index": 2,
-     "amount": "790000000"
+     "amount": "617187500"
     },
     {
      "entry_index": 3,
-     "amount": "510000000"
+     "amount": "398437500"
     }
    ]
   },
@@ -1806,47 +1806,47 @@
      "score_half": 29,
      "zones": 56,
      "rank": 1,
-     "amount_lamports": "1350000000"
+     "amount_lamports": "1054687500"
     },
     {
      "index": 1,
      "score_half": 19,
      "zones": 51,
      "rank": 2,
-     "amount_lamports": "790000000"
+     "amount_lamports": "617187500"
     },
     {
      "index": 2,
      "score_half": 18,
      "zones": 50,
      "rank": 3,
-     "amount_lamports": "510000000"
+     "amount_lamports": "398437500"
     },
     {
      "index": 3,
      "score_half": 18,
      "zones": 49,
      "rank": 4,
-     "amount_lamports": "390000000"
+     "amount_lamports": "304687500"
     }
    ],
    "leaf_order": "0,1,2,3",
    "payouts": [
     {
      "entry_index": 0,
-     "amount": "1350000000"
+     "amount": "1054687500"
     },
     {
      "entry_index": 1,
-     "amount": "790000000"
+     "amount": "617187500"
     },
     {
      "entry_index": 2,
-     "amount": "510000000"
+     "amount": "398437500"
     },
     {
      "entry_index": 3,
-     "amount": "390000000"
+     "amount": "304687500"
     }
    ]
   },
@@ -2077,47 +2077,47 @@
      "score_half": 22,
      "zones": 54,
      "rank": 2,
-     "amount_lamports": "790000000"
+     "amount_lamports": "617187500"
     },
     {
      "index": 1,
      "score_half": 18,
      "zones": 48,
      "rank": 3,
-     "amount_lamports": "450000000"
+     "amount_lamports": "351562500"
     },
     {
      "index": 2,
      "score_half": 18,
      "zones": 48,
      "rank": 3,
-     "amount_lamports": "450000000"
+     "amount_lamports": "351562500"
     },
     {
      "index": 3,
      "score_half": 26,
      "zones": 57,
      "rank": 1,
-     "amount_lamports": "1350000000"
+     "amount_lamports": "1054687500"
     }
    ],
    "leaf_order": "3,0,1,2",
    "payouts": [
     {
      "entry_index": 0,
-     "amount": "790000000"
+     "amount": "617187500"
     },
     {
      "entry_index": 1,
-     "amount": "450000000"
+     "amount": "351562500"
     },
     {
      "entry_index": 2,
-     "amount": "450000000"
+     "amount": "351562500"
     },
     {
      "entry_index": 3,
-     "amount": "1350000000"
+     "amount": "1054687500"
     }
    ]
   },
@@ -2348,47 +2348,47 @@
      "score_half": 14,
      "zones": 47,
      "rank": 4,
-     "amount_lamports": "390000000"
+     "amount_lamports": "304687500"
     },
     {
      "index": 1,
      "score_half": 29,
      "zones": 59,
      "rank": 1,
-     "amount_lamports": "1350000000"
+     "amount_lamports": "1054687500"
     },
     {
      "index": 2,
      "score_half": 20,
      "zones": 51,
      "rank": 3,
-     "amount_lamports": "510000000"
+     "amount_lamports": "398437500"
     },
     {
      "index": 3,
      "score_half": 21,
      "zones": 49,
      "rank": 2,
-     "amount_lamports": "790000000"
+     "amount_lamports": "617187500"
     }
    ],
    "leaf_order": "1,3,2,0",
    "payouts": [
     {
      "entry_index": 0,
-     "amount": "390000000"
+     "amount": "304687500"
     },
     {
      "entry_index": 1,
-     "amount": "1350000000"
+     "amount": "1054687500"
     },
     {
      "entry_index": 2,
-     "amount": "510000000"
+     "amount": "398437500"
     },
     {
      "entry_index": 3,
-     "amount": "790000000"
+     "amount": "617187500"
     }
    ]
   },
@@ -2619,47 +2619,47 @@
      "score_half": 30,
      "zones": 59,
      "rank": 1,
-     "amount_lamports": "1350000000"
+     "amount_lamports": "1054687500"
     },
     {
      "index": 1,
      "score_half": 21,
      "zones": 54,
      "rank": 2,
-     "amount_lamports": "790000000"
+     "amount_lamports": "617187500"
     },
     {
      "index": 2,
      "score_half": 19,
      "zones": 46,
      "rank": 3,
-     "amount_lamports": "510000000"
+     "amount_lamports": "398437500"
     },
     {
      "index": 3,
      "score_half": 14,
      "zones": 47,
      "rank": 4,
-     "amount_lamports": "390000000"
+     "amount_lamports": "304687500"
     }
    ],
    "leaf_order": "0,1,2,3",
    "payouts": [
     {
      "entry_index": 0,
-     "amount": "1350000000"
+     "amount": "1054687500"
     },
     {
      "entry_index": 1,
-     "amount": "790000000"
+     "amount": "617187500"
     },
     {
      "entry_index": 2,
-     "amount": "510000000"
+     "amount": "398437500"
     },
     {
      "entry_index": 3,
-     "amount": "390000000"
+     "amount": "304687500"
     }
    ]
   },
@@ -2890,47 +2890,47 @@
      "score_half": 11,
      "zones": 45,
      "rank": 4,
-     "amount_lamports": "390000000"
+     "amount_lamports": "304687500"
     },
     {
      "index": 1,
      "score_half": 20,
      "zones": 52,
      "rank": 3,
-     "amount_lamports": "510000000"
+     "amount_lamports": "398437500"
     },
     {
      "index": 2,
      "score_half": 31,
      "zones": 59,
      "rank": 1,
-     "amount_lamports": "1350000000"
+     "amount_lamports": "1054687500"
     },
     {
      "index": 3,
      "score_half": 22,
      "zones": 50,
      "rank": 2,
-     "amount_lamports": "790000000"
+     "amount_lamports": "617187500"
     }
    ],
    "leaf_order": "2,3,1,0",
    "payouts": [
     {
      "entry_index": 0,
-     "amount": "390000000"
+     "amount": "304687500"
     },
     {
      "entry_index": 1,
-     "amount": "510000000"
+     "amount": "398437500"
     },
     {
      "entry_index": 2,
-     "amount": "1350000000"
+     "amount": "1054687500"
     },
     {
      "entry_index": 3,
-     "amount": "790000000"
+     "amount": "617187500"
     }
    ]
   },
@@ -3161,47 +3161,47 @@
      "score_half": 17,
      "zones": 51,
      "rank": 4,
-     "amount_lamports": "390000000"
+     "amount_lamports": "304687500"
     },
     {
      "index": 1,
      "score_half": 24,
      "zones": 54,
      "rank": 1,
-     "amount_lamports": "1350000000"
+     "amount_lamports": "1054687500"
     },
     {
      "index": 2,
      "score_half": 21,
      "zones": 49,
      "rank": 3,
-     "amount_lamports": "510000000"
+     "amount_lamports": "398437500"
     },
     {
      "index": 3,
      "score_half": 22,
      "zones": 54,
      "rank": 2,
-     "amount_lamports": "790000000"
+     "amount_lamports": "617187500"
     }
    ],
    "leaf_order": "1,3,2,0",
    "payouts": [
     {
      "entry_index": 0,
-     "amount": "390000000"
+     "amount": "304687500"
     },
     {
      "entry_index": 1,
-     "amount": "1350000000"
+     "amount": "1054687500"
     },
     {
      "entry_index": 2,
-     "amount": "510000000"
+     "amount": "398437500"
     },
     {
      "entry_index": 3,
-     "amount": "790000000"
+     "amount": "617187500"
     }
    ]
   },
@@ -3432,47 +3432,47 @@
      "score_half": 17,
      "zones": 50,
      "rank": 4,
-     "amount_lamports": "390000000"
+     "amount_lamports": "304687500"
     },
     {
      "index": 1,
      "score_half": 26,
      "zones": 55,
      "rank": 1,
-     "amount_lamports": "1350000000"
+     "amount_lamports": "1054687500"
     },
     {
      "index": 2,
      "score_half": 18,
      "zones": 48,
      "rank": 3,
-     "amount_lamports": "510000000"
+     "amount_lamports": "398437500"
     },
     {
      "index": 3,
      "score_half": 23,
      "zones": 53,
      "rank": 2,
-     "amount_lamports": "790000000"
+     "amount_lamports": "617187500"
     }
    ],
    "leaf_order": "1,3,2,0",
    "payouts": [
     {
      "entry_index": 0,
-     "amount": "390000000"
+     "amount": "304687500"
     },
     {
      "entry_index": 1,
-     "amount": "1350000000"
+     "amount": "1054687500"
     },
     {
      "entry_index": 2,
-     "amount": "510000000"
+     "amount": "398437500"
     },
     {
      "entry_index": 3,
-     "amount": "790000000"
+     "amount": "617187500"
     }
    ]
   },
@@ -3703,47 +3703,47 @@
      "score_half": 18,
      "zones": 46,
      "rank": 4,
-     "amount_lamports": "390000000"
+     "amount_lamports": "304687500"
     },
     {
      "index": 1,
      "score_half": 18,
      "zones": 50,
      "rank": 3,
-     "amount_lamports": "510000000"
+     "amount_lamports": "398437500"
     },
     {
      "index": 2,
      "score_half": 19,
      "zones": 49,
      "rank": 2,
-     "amount_lamports": "790000000"
+     "amount_lamports": "617187500"
     },
     {
      "index": 3,
      "score_half": 29,
      "zones": 58,
      "rank": 1,
-     "amount_lamports": "1350000000"
+     "amount_lamports": "1054687500"
     }
    ],
    "leaf_order": "3,2,1,0",
    "payouts": [
     {
      "entry_index": 0,
-     "amount": "390000000"
+     "amount": "304687500"
     },
     {
      "entry_index": 1,
-     "amount": "510000000"
+     "amount": "398437500"
     },
     {
      "entry_index": 2,
-     "amount": "790000000"
+     "amount": "617187500"
     },
     {
      "entry_index": 3,
-     "amount": "1350000000"
+     "amount": "1054687500"
     }
    ]
   },
@@ -3974,47 +3974,47 @@
      "score_half": 24,
      "zones": 55,
      "rank": 1,
-     "amount_lamports": "1070000000"
+     "amount_lamports": "835937500"
     },
     {
      "index": 1,
      "score_half": 24,
      "zones": 55,
      "rank": 1,
-     "amount_lamports": "1070000000"
+     "amount_lamports": "835937500"
     },
     {
      "index": 2,
      "score_half": 22,
      "zones": 51,
      "rank": 3,
-     "amount_lamports": "510000000"
+     "amount_lamports": "398437500"
     },
     {
      "index": 3,
      "score_half": 14,
      "zones": 47,
      "rank": 4,
-     "amount_lamports": "390000000"
+     "amount_lamports": "304687500"
     }
    ],
    "leaf_order": "0,1,2,3",
    "payouts": [
     {
      "entry_index": 0,
-     "amount": "1070000000"
+     "amount": "835937500"
     },
     {
      "entry_index": 1,
-     "amount": "1070000000"
+     "amount": "835937500"
     },
     {
      "entry_index": 2,
-     "amount": "510000000"
+     "amount": "398437500"
     },
     {
      "entry_index": 3,
-     "amount": "390000000"
+     "amount": "304687500"
     }
    ]
   },
@@ -4245,47 +4245,47 @@
      "score_half": 25,
      "zones": 54,
      "rank": 1,
-     "amount_lamports": "1350000000"
+     "amount_lamports": "1054687500"
     },
     {
      "index": 1,
      "score_half": 19,
      "zones": 48,
      "rank": 3,
-     "amount_lamports": "510000000"
+     "amount_lamports": "398437500"
     },
     {
      "index": 2,
      "score_half": 24,
      "zones": 52,
      "rank": 2,
-     "amount_lamports": "790000000"
+     "amount_lamports": "617187500"
     },
     {
      "index": 3,
      "score_half": 16,
      "zones": 51,
      "rank": 4,
-     "amount_lamports": "390000000"
+     "amount_lamports": "304687500"
     }
    ],
    "leaf_order": "0,2,1,3",
    "payouts": [
     {
      "entry_index": 0,
-     "amount": "1350000000"
+     "amount": "1054687500"
     },
     {
      "entry_index": 1,
-     "amount": "510000000"
+     "amount": "398437500"
     },
     {
      "entry_index": 2,
-     "amount": "790000000"
+     "amount": "617187500"
     },
     {
      "entry_index": 3,
-     "amount": "390000000"
+     "amount": "304687500"
     }
    ]
   },
@@ -4516,47 +4516,47 @@
      "score_half": 24,
      "zones": 52,
      "rank": 1,
-     "amount_lamports": "1070000000"
+     "amount_lamports": "835937500"
     },
     {
      "index": 1,
      "score_half": 24,
      "zones": 52,
      "rank": 1,
-     "amount_lamports": "1070000000"
+     "amount_lamports": "835937500"
     },
     {
      "index": 2,
      "score_half": 16,
      "zones": 48,
      "rank": 4,
-     "amount_lamports": "390000000"
+     "amount_lamports": "304687500"
     },
     {
      "index": 3,
      "score_half": 20,
      "zones": 54,
      "rank": 3,
-     "amount_lamports": "510000000"
+     "amount_lamports": "398437500"
     }
    ],
    "leaf_order": "0,1,3,2",
    "payouts": [
     {
      "entry_index": 0,
-     "amount": "1070000000"
+     "amount": "835937500"
     },
     {
      "entry_index": 1,
-     "amount": "1070000000"
+     "amount": "835937500"
     },
     {
      "entry_index": 2,
-     "amount": "390000000"
+     "amount": "304687500"
     },
     {
      "entry_index": 3,
-     "amount": "510000000"
+     "amount": "398437500"
     }
    ]
   },
@@ -4787,47 +4787,47 @@
      "score_half": 23,
      "zones": 52,
      "rank": 2,
-     "amount_lamports": "790000000"
+     "amount_lamports": "617187500"
     },
     {
      "index": 1,
      "score_half": 25,
      "zones": 56,
      "rank": 1,
-     "amount_lamports": "1350000000"
+     "amount_lamports": "1054687500"
     },
     {
      "index": 2,
      "score_half": 14,
      "zones": 48,
      "rank": 4,
-     "amount_lamports": "390000000"
+     "amount_lamports": "304687500"
     },
     {
      "index": 3,
      "score_half": 22,
      "zones": 50,
      "rank": 3,
-     "amount_lamports": "510000000"
+     "amount_lamports": "398437500"
     }
    ],
    "leaf_order": "1,0,3,2",
    "payouts": [
     {
      "entry_index": 0,
-     "amount": "790000000"
+     "amount": "617187500"
     },
     {
      "entry_index": 1,
-     "amount": "1350000000"
+     "amount": "1054687500"
     },
     {
      "entry_index": 2,
-     "amount": "390000000"
+     "amount": "304687500"
     },
     {
      "entry_index": 3,
-     "amount": "510000000"
+     "amount": "398437500"
     }
    ]
   },
@@ -5058,47 +5058,47 @@
      "score_half": 27,
      "zones": 59,
      "rank": 1,
-     "amount_lamports": "1350000000"
+     "amount_lamports": "1054687500"
     },
     {
      "index": 1,
      "score_half": 8,
      "zones": 44,
      "rank": 4,
-     "amount_lamports": "390000000"
+     "amount_lamports": "304687500"
     },
     {
      "index": 2,
      "score_half": 26,
      "zones": 55,
      "rank": 2,
-     "amount_lamports": "790000000"
+     "amount_lamports": "617187500"
     },
     {
      "index": 3,
      "score_half": 23,
      "zones": 50,
      "rank": 3,
-     "amount_lamports": "510000000"
+     "amount_lamports": "398437500"
     }
    ],
    "leaf_order": "0,2,3,1",
    "payouts": [
     {
      "entry_index": 0,
-     "amount": "1350000000"
+     "amount": "1054687500"
     },
     {
      "entry_index": 1,
-     "amount": "390000000"
+     "amount": "304687500"
     },
     {
      "entry_index": 2,
-     "amount": "790000000"
+     "amount": "617187500"
     },
     {
      "entry_index": 3,
-     "amount": "510000000"
+     "amount": "398437500"
     }
    ]
   },
@@ -5329,47 +5329,47 @@
      "score_half": 23,
      "zones": 53,
      "rank": 1,
-     "amount_lamports": "1350000000"
+     "amount_lamports": "1054687500"
     },
     {
      "index": 1,
      "score_half": 17,
      "zones": 47,
      "rank": 4,
-     "amount_lamports": "390000000"
+     "amount_lamports": "304687500"
     },
     {
      "index": 2,
      "score_half": 22,
      "zones": 52,
      "rank": 2,
-     "amount_lamports": "790000000"
+     "amount_lamports": "617187500"
     },
     {
      "index": 3,
      "score_half": 22,
      "zones": 51,
      "rank": 3,
-     "amount_lamports": "510000000"
+     "amount_lamports": "398437500"
     }
    ],
    "leaf_order": "0,2,3,1",
    "payouts": [
     {
      "entry_index": 0,
-     "amount": "1350000000"
+     "amount": "1054687500"
     },
     {
      "entry_index": 1,
-     "amount": "390000000"
+     "amount": "304687500"
     },
     {
      "entry_index": 2,
-     "amount": "790000000"
+     "amount": "617187500"
     },
     {
      "entry_index": 3,
-     "amount": "510000000"
+     "amount": "398437500"
     }
    ]
   },
@@ -5600,47 +5600,47 @@
      "score_half": 23,
      "zones": 52,
      "rank": 2,
-     "amount_lamports": "790000000"
+     "amount_lamports": "617187500"
     },
     {
      "index": 1,
      "score_half": 16,
      "zones": 48,
      "rank": 4,
-     "amount_lamports": "390000000"
+     "amount_lamports": "304687500"
     },
     {
      "index": 2,
      "score_half": 24,
      "zones": 52,
      "rank": 1,
-     "amount_lamports": "1350000000"
+     "amount_lamports": "1054687500"
     },
     {
      "index": 3,
      "score_half": 21,
      "zones": 51,
      "rank": 3,
-     "amount_lamports": "510000000"
+     "amount_lamports": "398437500"
     }
    ],
    "leaf_order": "2,0,3,1",
    "payouts": [
     {
      "entry_index": 0,
-     "amount": "790000000"
+     "amount": "617187500"
     },
     {
      "entry_index": 1,
-     "amount": "390000000"
+     "amount": "304687500"
     },
     {
      "entry_index": 2,
-     "amount": "1350000000"
+     "amount": "1054687500"
     },
     {
      "entry_index": 3,
-     "amount": "510000000"
+     "amount": "398437500"
     }
    ]
   },
@@ -9111,7 +9111,7 @@
      "score_half": 494,
      "zones": 1126,
      "rank": 10,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 1,
@@ -9139,7 +9139,7 @@
      "score_half": 497,
      "zones": 1128,
      "rank": 9,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 5,
@@ -9160,7 +9160,7 @@
      "score_half": 490,
      "zones": 1095,
      "rank": 12,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 8,
@@ -9216,7 +9216,7 @@
      "score_half": 534,
      "zones": 1148,
      "rank": 4,
-     "amount_lamports": "390000000"
+     "amount_lamports": "304687500"
     },
     {
      "index": 16,
@@ -9230,7 +9230,7 @@
      "score_half": 487,
      "zones": 1107,
      "rank": 14,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 18,
@@ -9258,7 +9258,7 @@
      "score_half": 501,
      "zones": 1113,
      "rank": 8,
-     "amount_lamports": "250000000"
+     "amount_lamports": "195312500"
     },
     {
      "index": 22,
@@ -9272,7 +9272,7 @@
      "score_half": 542,
      "zones": 1151,
      "rank": 3,
-     "amount_lamports": "510000000"
+     "amount_lamports": "398437500"
     },
     {
      "index": 24,
@@ -9300,14 +9300,14 @@
      "score_half": 521,
      "zones": 1137,
      "rank": 6,
-     "amount_lamports": "250000000"
+     "amount_lamports": "195312500"
     },
     {
      "index": 28,
      "score_half": 486,
      "zones": 1117,
      "rank": 15,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 29,
@@ -9335,7 +9335,7 @@
      "score_half": 504,
      "zones": 1125,
      "rank": 7,
-     "amount_lamports": "250000000"
+     "amount_lamports": "195312500"
     },
     {
      "index": 33,
@@ -9356,7 +9356,7 @@
      "score_half": 490,
      "zones": 1123,
      "rank": 11,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 36,
@@ -9377,14 +9377,14 @@
      "score_half": 544,
      "zones": 1172,
      "rank": 1,
-     "amount_lamports": "1350000000"
+     "amount_lamports": "1054687500"
     },
     {
      "index": 39,
      "score_half": 543,
      "zones": 1164,
      "rank": 2,
-     "amount_lamports": "790000000"
+     "amount_lamports": "617187500"
     },
     {
      "index": 40,
@@ -9524,14 +9524,14 @@
      "score_half": 489,
      "zones": 1115,
      "rank": 13,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 60,
      "score_half": 486,
      "zones": 1107,
      "rank": 16,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 61,
@@ -9552,74 +9552,74 @@
      "score_half": 527,
      "zones": 1152,
      "rank": 5,
-     "amount_lamports": "250000000"
+     "amount_lamports": "195312500"
     }
    ],
    "leaf_order": "38,39,23,15,63,27,32,21,4,0,35,7,59,17,28,60,61,18,31,47,10,1,53,16,14,54,43,19,2,29,40,22,62,9,50,45,49,52,20,11,26,6,44,25,12,37,56,5,51,3,58,33,30,8,42,57,13,36,41,48,24,55,34,46",
    "payouts": [
     {
      "entry_index": 0,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 4,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 7,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 15,
-     "amount": "390000000"
+     "amount": "304687500"
     },
     {
      "entry_index": 17,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 21,
-     "amount": "250000000"
+     "amount": "195312500"
     },
     {
      "entry_index": 23,
-     "amount": "510000000"
+     "amount": "398437500"
     },
     {
      "entry_index": 27,
-     "amount": "250000000"
+     "amount": "195312500"
     },
     {
      "entry_index": 28,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 32,
-     "amount": "250000000"
+     "amount": "195312500"
     },
     {
      "entry_index": 35,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 38,
-     "amount": "1350000000"
+     "amount": "1054687500"
     },
     {
      "entry_index": 39,
-     "amount": "790000000"
+     "amount": "617187500"
     },
     {
      "entry_index": 59,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 60,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 63,
-     "amount": "250000000"
+     "amount": "195312500"
     }
    ],
    "players_pubkeys": [
@@ -9689,22 +9689,22 @@
     "4342cd8f953f088bc251c7bef395b1fca1e84f0548466531a182720c857af6f4"
    ],
    "amounts": [
-    "1350000000",
-    "790000000",
-    "510000000",
-    "390000000",
-    "250000000",
-    "250000000",
-    "250000000",
-    "250000000",
-    "135000000",
-    "135000000",
-    "135000000",
-    "135000000",
-    "135000000",
-    "135000000",
-    "135000000",
-    "135000000",
+    "1054687500",
+    "617187500",
+    "398437500",
+    "304687500",
+    "195312500",
+    "195312500",
+    "195312500",
+    "195312500",
+    "105468750",
+    "105468750",
+    "105468750",
+    "105468750",
+    "105468750",
+    "105468750",
+    "105468750",
+    "105468750",
     "0",
     "0",
     "0",
@@ -9755,22 +9755,22 @@
     "0"
    ],
    "leaves_hex": [
-    "5512a4375636132a6e8b0942eed80868217d39e3662086e1af662e552f3124c301805d775000000000",
-    "c78fb9f235a44dda6eccee7a49e91a87365d17eb736496c0418d4dc76d221977028071162f00000000",
-    "374f054ea03af33b1ee0f1fa9141ead1b5c9dbe309f0de54c346428561b19e370380fb651e00000000",
-    "db5a9f55b9b9f44fa91697df7753cb09ec902272bc6671a3d097ead5dbbca3fd0480ed3e1700000000",
-    "4342cd8f953f088bc251c7bef395b1fca1e84f0548466531a182720c857af6f40580b2e60e00000000",
-    "e9307d490726454011af13f3dc408acd71f0615dba048d04e762cafe16d56e0c0680b2e60e00000000",
-    "2dc0f38b353f8762530e74b18caa4f323e66a058ab71dde6ef79fcca3983e0010780b2e60e00000000",
-    "9f56021549e6d47ccc6c1fd6e0f863206b482f3700454ca77283b673dd3c93e80880b2e60e00000000",
-    "21de2117ade577ebba2bfefc48c881aad69ccbdb33b66ba66ea04c49fa89aaf509c0ef0b0800000000",
-    "4d6998114a5a8c729060e720d3f758a6fda47dbef18f659522b58409fe17f7d70ac0ef0b0800000000",
-    "9af5d2e28cd0f95c9133609e5353f92e84ab17d6ac93f15b14a2bb8bacf614ce0bc0ef0b0800000000",
-    "38cc4c7f16eade3f4fc2d4897e28734185f0a86710a895f85e50b43b8b0d12550cc0ef0b0800000000",
-    "723f98696bfb18b64a7f0ddb43716df2c8e222ad939626940fc4d5dea1a8a3440dc0ef0b0800000000",
-    "f66144afab9032e0d3cb6b975717f5d045621d8ec82f92cd48bfcf9a1d1eba6a0ec0ef0b0800000000",
-    "29e0368f80a8bf1fc8943a57d005deec817297bfe7187733e2daded510d7fcf40fc0ef0b0800000000",
-    "872b6e1204be2a44679e27eff707433097ad2e58a480fe0c9fcf147c153aebd210c0ef0b0800000000",
+    "5512a4375636132a6e8b0942eed80868217d39e3662086e1af662e552f3124c3010c41dd3e00000000",
+    "c78fb9f235a44dda6eccee7a49e91a87365d17eb736496c0418d4dc76d22197702ac88c92400000000",
+    "374f054ea03af33b1ee0f1fa9141ead1b5c9dbe309f0de54c346428561b19e37037cacbf1700000000",
+    "db5a9f55b9b9f44fa91697df7753cb09ec902272bc6671a3d097ead5dbbca3fd048c29291200000000",
+    "4342cd8f953f088bc251c7bef395b1fca1e84f0548466531a182720c857af6f405743ba40b00000000",
+    "e9307d490726454011af13f3dc408acd71f0615dba048d04e762cafe16d56e0c06743ba40b00000000",
+    "2dc0f38b353f8762530e74b18caa4f323e66a058ab71dde6ef79fcca3983e00107743ba40b00000000",
+    "9f56021549e6d47ccc6c1fd6e0f863206b482f3700454ca77283b673dd3c93e808743ba40b00000000",
+    "21de2117ade577ebba2bfefc48c881aad69ccbdb33b66ba66ea04c49fa89aaf5094e53490600000000",
+    "4d6998114a5a8c729060e720d3f758a6fda47dbef18f659522b58409fe17f7d70a4e53490600000000",
+    "9af5d2e28cd0f95c9133609e5353f92e84ab17d6ac93f15b14a2bb8bacf614ce0b4e53490600000000",
+    "38cc4c7f16eade3f4fc2d4897e28734185f0a86710a895f85e50b43b8b0d12550c4e53490600000000",
+    "723f98696bfb18b64a7f0ddb43716df2c8e222ad939626940fc4d5dea1a8a3440d4e53490600000000",
+    "f66144afab9032e0d3cb6b975717f5d045621d8ec82f92cd48bfcf9a1d1eba6a0e4e53490600000000",
+    "29e0368f80a8bf1fc8943a57d005deec817297bfe7187733e2daded510d7fcf40f4e53490600000000",
+    "872b6e1204be2a44679e27eff707433097ad2e58a480fe0c9fcf147c153aebd2104e53490600000000",
     "e68cf639daedfa19d383cbf09516a2393bb530c448dda64791f38925323b1b3c110000000000000000",
     "cd6756f744e197aa95c263565be3d90885a37e90f2d42fc981345da0514915cb120000000000000000",
     "5c717f0ac5c16d23d7be48d9cee6f800a748785158a49dd956bf3c34f0b34baf130000000000000000",
@@ -9820,7 +9820,7 @@
     "5abe83112f2d993450214b4c3bec65e58b3ab164f5105d494d6efd38d1aff4d03f0000000000000000",
     "93c0d6f1a8fd962bc3b4c68b686fea08ae17f3ecf81d86aa9fdb9f3c5da67ba1400000000000000000"
    ],
-   "root": "d4a936ae8bcdebe90980590d6a6635bbbdc02b75e88360b3f078327b32899b8a"
+   "root": "23f316452ff87b5628f04b881682dbc36ba208f6e1f8214da5011b06aae7d9bf"
   },
   {
    "name": "full_1",
@@ -13289,7 +13289,7 @@
      "score_half": 502,
      "zones": 1128,
      "rank": 10,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 1,
@@ -13317,7 +13317,7 @@
      "score_half": 494,
      "zones": 1116,
      "rank": 13,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 5,
@@ -13352,7 +13352,7 @@
      "score_half": 523,
      "zones": 1148,
      "rank": 2,
-     "amount_lamports": "790000000"
+     "amount_lamports": "617187500"
     },
     {
      "index": 10,
@@ -13366,7 +13366,7 @@
      "score_half": 515,
      "zones": 1148,
      "rank": 7,
-     "amount_lamports": "250000000"
+     "amount_lamports": "195312500"
     },
     {
      "index": 12,
@@ -13429,7 +13429,7 @@
      "score_half": 482,
      "zones": 1116,
      "rank": 16,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 21,
@@ -13471,14 +13471,14 @@
      "score_half": 518,
      "zones": 1138,
      "rank": 5,
-     "amount_lamports": "250000000"
+     "amount_lamports": "195312500"
     },
     {
      "index": 27,
      "score_half": 507,
      "zones": 1127,
      "rank": 8,
-     "amount_lamports": "250000000"
+     "amount_lamports": "195312500"
     },
     {
      "index": 28,
@@ -13492,7 +13492,7 @@
      "score_half": 505,
      "zones": 1133,
      "rank": 9,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 30,
@@ -13513,21 +13513,21 @@
      "score_half": 516,
      "zones": 1151,
      "rank": 6,
-     "amount_lamports": "250000000"
+     "amount_lamports": "195312500"
     },
     {
      "index": 33,
      "score_half": 500,
      "zones": 1136,
      "rank": 11,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 34,
      "score_half": 518,
      "zones": 1141,
      "rank": 4,
-     "amount_lamports": "390000000"
+     "amount_lamports": "304687500"
     },
     {
      "index": 35,
@@ -13576,7 +13576,7 @@
      "score_half": 492,
      "zones": 1119,
      "rank": 14,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 42,
@@ -13604,7 +13604,7 @@
      "score_half": 492,
      "zones": 1103,
      "rank": 15,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 46,
@@ -13625,7 +13625,7 @@
      "score_half": 523,
      "zones": 1141,
      "rank": 3,
-     "amount_lamports": "510000000"
+     "amount_lamports": "398437500"
     },
     {
      "index": 49,
@@ -13688,14 +13688,14 @@
      "score_half": 498,
      "zones": 1125,
      "rank": 12,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 58,
      "score_half": 561,
      "zones": 1179,
      "rank": 1,
-     "amount_lamports": "1350000000"
+     "amount_lamports": "1054687500"
     },
     {
      "index": 59,
@@ -13737,67 +13737,67 @@
    "payouts": [
     {
      "entry_index": 0,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 4,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 9,
-     "amount": "790000000"
+     "amount": "617187500"
     },
     {
      "entry_index": 11,
-     "amount": "250000000"
+     "amount": "195312500"
     },
     {
      "entry_index": 20,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 26,
-     "amount": "250000000"
+     "amount": "195312500"
     },
     {
      "entry_index": 27,
-     "amount": "250000000"
+     "amount": "195312500"
     },
     {
      "entry_index": 29,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 32,
-     "amount": "250000000"
+     "amount": "195312500"
     },
     {
      "entry_index": 33,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 34,
-     "amount": "390000000"
+     "amount": "304687500"
     },
     {
      "entry_index": 41,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 45,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 48,
-     "amount": "510000000"
+     "amount": "398437500"
     },
     {
      "entry_index": 57,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 58,
-     "amount": "1350000000"
+     "amount": "1054687500"
     }
    ],
    "players_pubkeys": [
@@ -13867,22 +13867,22 @@
     "bac86ebd8f9906e2cb5d8b4b236fb24c275850cb550bb3da2721431475f2dc7b"
    ],
    "amounts": [
-    "1350000000",
-    "790000000",
-    "510000000",
-    "390000000",
-    "250000000",
-    "250000000",
-    "250000000",
-    "250000000",
-    "135000000",
-    "135000000",
-    "135000000",
-    "135000000",
-    "135000000",
-    "135000000",
-    "135000000",
-    "135000000",
+    "1054687500",
+    "617187500",
+    "398437500",
+    "304687500",
+    "195312500",
+    "195312500",
+    "195312500",
+    "195312500",
+    "105468750",
+    "105468750",
+    "105468750",
+    "105468750",
+    "105468750",
+    "105468750",
+    "105468750",
+    "105468750",
     "0",
     "0",
     "0",
@@ -13933,22 +13933,22 @@
     "0"
    ],
    "leaves_hex": [
-    "a5ff38eaa967528e2c9d266fdee970e6b18b1ff72463feec84bcce3d8034791901805d775000000000",
-    "399d0c3aaba344dde3770cb6faad8678fc19f74509642456d8d4da061b6108c0028071162f00000000",
-    "99acd8444a11ac101c3ada0ed7960399990f51a472bf77eb5b0ad5d46328a47e0380fb651e00000000",
-    "8ec9ece2fd4456508987e5fdbb7b93f63bea0eb4dbe9b8d1c3d0bbe05dae03440480ed3e1700000000",
-    "c3ac067fa742d6c2fe7007409c0292ea2d44b08ffd4feb4133c919c40d56535a0580b2e60e00000000",
-    "20a9541d743c6dff4af2d409a6d66ff0d8dd39342e6e869eb6e03ed10ab151230680b2e60e00000000",
-    "40c108d47af7fafcb6e71663d7cf5b8711420d06cf35642feca981d3178fb7ff0780b2e60e00000000",
-    "2610f480d2654490932b72a3661a46c67c71bf20edfd15cc7281de535fa45b110880b2e60e00000000",
-    "cb82790ffd67b89aefed34cb5f9bfde7815e1f58d00df95159f59a360689233909c0ef0b0800000000",
-    "1d3d7170c180c2f2b9564d824782245b0a14b1cde70b081ae38842f9bd7e704f0ac0ef0b0800000000",
-    "94928f2af4ee34e520f32984d606657dd0becbf714a032a8fe4da895156dd7350bc0ef0b0800000000",
-    "f3a24b63026fa49d2b7825ad3e346ada2bb55ba4cf632c5a658319668ff452af0cc0ef0b0800000000",
-    "cdca9663e9b17955757d15f7e47bbfdb9166b4a89e12509d5686ee519134e1fc0dc0ef0b0800000000",
-    "6eb04ab9f5ad8e47af048ef510d94553cfba0a97e0609a36905409178693a4ae0ec0ef0b0800000000",
-    "282a47c95b0cf3ae6b398eb4301d05415e88548312f3027bd97fc30d387865330fc0ef0b0800000000",
-    "a10e59fa0cd1da0737749d3ca387609987dc49154c59b9342e219c795529b6b910c0ef0b0800000000",
+    "a5ff38eaa967528e2c9d266fdee970e6b18b1ff72463feec84bcce3d80347919010c41dd3e00000000",
+    "399d0c3aaba344dde3770cb6faad8678fc19f74509642456d8d4da061b6108c002ac88c92400000000",
+    "99acd8444a11ac101c3ada0ed7960399990f51a472bf77eb5b0ad5d46328a47e037cacbf1700000000",
+    "8ec9ece2fd4456508987e5fdbb7b93f63bea0eb4dbe9b8d1c3d0bbe05dae0344048c29291200000000",
+    "c3ac067fa742d6c2fe7007409c0292ea2d44b08ffd4feb4133c919c40d56535a05743ba40b00000000",
+    "20a9541d743c6dff4af2d409a6d66ff0d8dd39342e6e869eb6e03ed10ab1512306743ba40b00000000",
+    "40c108d47af7fafcb6e71663d7cf5b8711420d06cf35642feca981d3178fb7ff07743ba40b00000000",
+    "2610f480d2654490932b72a3661a46c67c71bf20edfd15cc7281de535fa45b1108743ba40b00000000",
+    "cb82790ffd67b89aefed34cb5f9bfde7815e1f58d00df95159f59a3606892339094e53490600000000",
+    "1d3d7170c180c2f2b9564d824782245b0a14b1cde70b081ae38842f9bd7e704f0a4e53490600000000",
+    "94928f2af4ee34e520f32984d606657dd0becbf714a032a8fe4da895156dd7350b4e53490600000000",
+    "f3a24b63026fa49d2b7825ad3e346ada2bb55ba4cf632c5a658319668ff452af0c4e53490600000000",
+    "cdca9663e9b17955757d15f7e47bbfdb9166b4a89e12509d5686ee519134e1fc0d4e53490600000000",
+    "6eb04ab9f5ad8e47af048ef510d94553cfba0a97e0609a36905409178693a4ae0e4e53490600000000",
+    "282a47c95b0cf3ae6b398eb4301d05415e88548312f3027bd97fc30d387865330f4e53490600000000",
+    "a10e59fa0cd1da0737749d3ca387609987dc49154c59b9342e219c795529b6b9104e53490600000000",
     "8cb6ea1f1d195c72353eb4dbe990173c578187806886e51b6a5e7c127b810d44110000000000000000",
     "d171470be30536b9ec8046dcddc72ad197962cfec168b39c12198d8417cc714c120000000000000000",
     "99b381e3879df4084cb1b833161781f986879e091f429a0af33b5fe0d5f3fe2a130000000000000000",
@@ -13998,7 +13998,7 @@
     "e90b61c2cdf789586eb3a930199a4e2373afe327db2f5741fef8800669d3e83f3f0000000000000000",
     "3c95ea6af82c0770cbe488c5be96c5a45201ffb26b3c13997cc69d7edbf8de12400000000000000000"
    ],
-   "root": "b836eabdbb2f991d0a0c8ef269b3fd84f768222d119adf360e3948f247a287a9"
+   "root": "e9d301c8a96e7857a43d3d011d416e48370510d9609de6190dd50c44a808ef4e"
   },
   {
    "name": "full_2",
@@ -17481,7 +17481,7 @@
      "score_half": 487,
      "zones": 1116,
      "rank": 15,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 3,
@@ -17530,7 +17530,7 @@
      "score_half": 510,
      "zones": 1132,
      "rank": 5,
-     "amount_lamports": "250000000"
+     "amount_lamports": "195312500"
     },
     {
      "index": 10,
@@ -17551,7 +17551,7 @@
      "score_half": 488,
      "zones": 1103,
      "rank": 13,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 13,
@@ -17565,7 +17565,7 @@
      "score_half": 494,
      "zones": 1122,
      "rank": 11,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 15,
@@ -17579,7 +17579,7 @@
      "score_half": 513,
      "zones": 1144,
      "rank": 4,
-     "amount_lamports": "390000000"
+     "amount_lamports": "304687500"
     },
     {
      "index": 17,
@@ -17593,7 +17593,7 @@
      "score_half": 497,
      "zones": 1125,
      "rank": 6,
-     "amount_lamports": "250000000"
+     "amount_lamports": "195312500"
     },
     {
      "index": 19,
@@ -17642,7 +17642,7 @@
      "score_half": 495,
      "zones": 1120,
      "rank": 8,
-     "amount_lamports": "250000000"
+     "amount_lamports": "195312500"
     },
     {
      "index": 26,
@@ -17670,7 +17670,7 @@
      "score_half": 487,
      "zones": 1118,
      "rank": 14,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 30,
@@ -17684,7 +17684,7 @@
      "score_half": 488,
      "zones": 1119,
      "rank": 12,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 32,
@@ -17705,7 +17705,7 @@
      "score_half": 495,
      "zones": 1119,
      "rank": 9,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 35,
@@ -17782,7 +17782,7 @@
      "score_half": 496,
      "zones": 1132,
      "rank": 7,
-     "amount_lamports": "250000000"
+     "amount_lamports": "195312500"
     },
     {
      "index": 46,
@@ -17796,7 +17796,7 @@
      "score_half": 482,
      "zones": 1114,
      "rank": 16,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 48,
@@ -17824,14 +17824,14 @@
      "score_half": 577,
      "zones": 1174,
      "rank": 1,
-     "amount_lamports": "1350000000"
+     "amount_lamports": "1054687500"
     },
     {
      "index": 52,
      "score_half": 526,
      "zones": 1129,
      "rank": 2,
-     "amount_lamports": "790000000"
+     "amount_lamports": "617187500"
     },
     {
      "index": 53,
@@ -17887,14 +17887,14 @@
      "score_half": 515,
      "zones": 1136,
      "rank": 3,
-     "amount_lamports": "510000000"
+     "amount_lamports": "398437500"
     },
     {
      "index": 61,
      "score_half": 495,
      "zones": 1119,
      "rank": 9,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 62,
@@ -17915,67 +17915,67 @@
    "payouts": [
     {
      "entry_index": 2,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 9,
-     "amount": "250000000"
+     "amount": "195312500"
     },
     {
      "entry_index": 12,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 14,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 16,
-     "amount": "390000000"
+     "amount": "304687500"
     },
     {
      "entry_index": 18,
-     "amount": "250000000"
+     "amount": "195312500"
     },
     {
      "entry_index": 25,
-     "amount": "250000000"
+     "amount": "195312500"
     },
     {
      "entry_index": 29,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 31,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 34,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 45,
-     "amount": "250000000"
+     "amount": "195312500"
     },
     {
      "entry_index": 47,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 51,
-     "amount": "1350000000"
+     "amount": "1054687500"
     },
     {
      "entry_index": 52,
-     "amount": "790000000"
+     "amount": "617187500"
     },
     {
      "entry_index": 60,
-     "amount": "510000000"
+     "amount": "398437500"
     },
     {
      "entry_index": 61,
-     "amount": "135000000"
+     "amount": "105468750"
     }
    ],
    "players_pubkeys": [
@@ -18045,22 +18045,22 @@
     "9ac101e65c8c078ad19ff87f4ee4e9a4d50dcb95d49bd438edcb283c17d2e7c2"
    ],
    "amounts": [
-    "1350000000",
-    "790000000",
-    "510000000",
-    "390000000",
-    "250000000",
-    "250000000",
-    "250000000",
-    "250000000",
-    "135000000",
-    "135000000",
-    "135000000",
-    "135000000",
-    "135000000",
-    "135000000",
-    "135000000",
-    "135000000",
+    "1054687500",
+    "617187500",
+    "398437500",
+    "304687500",
+    "195312500",
+    "195312500",
+    "195312500",
+    "195312500",
+    "105468750",
+    "105468750",
+    "105468750",
+    "105468750",
+    "105468750",
+    "105468750",
+    "105468750",
+    "105468750",
     "0",
     "0",
     "0",
@@ -18111,22 +18111,22 @@
     "0"
    ],
    "leaves_hex": [
-    "109fc176629860498a541256b5fd1be5f89b0fc48eabeaafcabeee22374e368a01805d775000000000",
-    "07b34eb184179186133d4223db788404f2d0c51ecf39129911f223cdfd3ea012028071162f00000000",
-    "adc24c7d8deea7c4bc982b8fb0fb47b9d2eacdbc4c0cd30a8b1cf2f1149b3fbe0380fb651e00000000",
-    "21f94d6f7a322da5ad07dc8d50ca91d60f24fc079c8d4f240257ffa0a56fd5d70480ed3e1700000000",
-    "839f72befd706a66decc8f683ef60aa68212944343ee85064dcfb52a3585ba950580b2e60e00000000",
-    "c01838b6dc33dc73347a7f22657a1a6bc31a11be51e4f150efc94fdb11ee3a9f0680b2e60e00000000",
-    "9435e62b49d2017f6c7fbf0376b9264accbc36ab8b972a9053ba2e0e70aef2ea0780b2e60e00000000",
-    "78f3668db15e9cb633eaf3892cf41c32351647abafd3bacf64c9f46255044eb30880b2e60e00000000",
-    "09e7558337551d7a6fb4028e8d55072a062334f9c15144a2de7041eca839178309c0ef0b0800000000",
-    "ce22d2ce265d89e6bc66e6af52837b402ab6b3daef9dcb3da061d0b727bd4bae09c0ef0b0800000000",
-    "7d31d482f572bcec7a2fa871dee2f9867c87a7fdf0bac03e14cfdf290c68fc680bc0ef0b0800000000",
-    "919fd0f1b70078e41c2f4c53c11f0b47565960ca74052f988337f15f1e3b960d0cc0ef0b0800000000",
-    "fc780efd02eb1206f5c9815588d982114ebee328a33359c399d9ec7ec918394e0dc0ef0b0800000000",
-    "5beef9047b96b1811a4c9e6b6cca57b84114d207758d082deccae711e017cd470ec0ef0b0800000000",
-    "a30289edad039c91d6ce5f7d02bfeb292067301a48f9e6e33402d2e6de5146000fc0ef0b0800000000",
-    "694f4869654cb921aa35a06cd5f1c4cf228699feb1fa172e8d04c653b6c0183710c0ef0b0800000000",
+    "109fc176629860498a541256b5fd1be5f89b0fc48eabeaafcabeee22374e368a010c41dd3e00000000",
+    "07b34eb184179186133d4223db788404f2d0c51ecf39129911f223cdfd3ea01202ac88c92400000000",
+    "adc24c7d8deea7c4bc982b8fb0fb47b9d2eacdbc4c0cd30a8b1cf2f1149b3fbe037cacbf1700000000",
+    "21f94d6f7a322da5ad07dc8d50ca91d60f24fc079c8d4f240257ffa0a56fd5d7048c29291200000000",
+    "839f72befd706a66decc8f683ef60aa68212944343ee85064dcfb52a3585ba9505743ba40b00000000",
+    "c01838b6dc33dc73347a7f22657a1a6bc31a11be51e4f150efc94fdb11ee3a9f06743ba40b00000000",
+    "9435e62b49d2017f6c7fbf0376b9264accbc36ab8b972a9053ba2e0e70aef2ea07743ba40b00000000",
+    "78f3668db15e9cb633eaf3892cf41c32351647abafd3bacf64c9f46255044eb308743ba40b00000000",
+    "09e7558337551d7a6fb4028e8d55072a062334f9c15144a2de7041eca8391783094e53490600000000",
+    "ce22d2ce265d89e6bc66e6af52837b402ab6b3daef9dcb3da061d0b727bd4bae094e53490600000000",
+    "7d31d482f572bcec7a2fa871dee2f9867c87a7fdf0bac03e14cfdf290c68fc680b4e53490600000000",
+    "919fd0f1b70078e41c2f4c53c11f0b47565960ca74052f988337f15f1e3b960d0c4e53490600000000",
+    "fc780efd02eb1206f5c9815588d982114ebee328a33359c399d9ec7ec918394e0d4e53490600000000",
+    "5beef9047b96b1811a4c9e6b6cca57b84114d207758d082deccae711e017cd470e4e53490600000000",
+    "a30289edad039c91d6ce5f7d02bfeb292067301a48f9e6e33402d2e6de5146000f4e53490600000000",
+    "694f4869654cb921aa35a06cd5f1c4cf228699feb1fa172e8d04c653b6c01837104e53490600000000",
     "afa1b202e4b4ac6f5f38892db9e8eae2a86a72d79c65c5dec380448ed03dee56110000000000000000",
     "0ac313068491ced34cdeca69fcd4b89ab34dc30d28080f5aa478d1c7add998e7120000000000000000",
     "d8d2aef7ce4cfd8c6e189cb9db8666d8f3636dcc8d8c67967dce492ec440dbf0130000000000000000",
@@ -18176,7 +18176,7 @@
     "42595f9ba133a9b50954716acd9b66cfaad22475798c66f8537d26471ca262713f0000000000000000",
     "7ccd4194647741cf0abaedf5746dfa23ed9e5e205c4b816383c9a249745fc434400000000000000000"
    ],
-   "root": "e194547f7f5343972b82d2133aaccaea9fd8b7f6a8a56a69f54ccaea01f97734"
+   "root": "afa98d915d6a75a77365740d75cf3ba8d94b45b932cd2e7affa8803156cfb600"
   },
   {
    "name": "full_3",
@@ -21645,7 +21645,7 @@
      "score_half": 512,
      "zones": 1125,
      "rank": 5,
-     "amount_lamports": "250000000"
+     "amount_lamports": "195312500"
     },
     {
      "index": 1,
@@ -21673,7 +21673,7 @@
      "score_half": 498,
      "zones": 1116,
      "rank": 10,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 5,
@@ -21694,7 +21694,7 @@
      "score_half": 533,
      "zones": 1154,
      "rank": 1,
-     "amount_lamports": "1350000000"
+     "amount_lamports": "1054687500"
     },
     {
      "index": 8,
@@ -21708,7 +21708,7 @@
      "score_half": 506,
      "zones": 1124,
      "rank": 7,
-     "amount_lamports": "250000000"
+     "amount_lamports": "195312500"
     },
     {
      "index": 10,
@@ -21722,7 +21722,7 @@
      "score_half": 512,
      "zones": 1125,
      "rank": 5,
-     "amount_lamports": "250000000"
+     "amount_lamports": "195312500"
     },
     {
      "index": 12,
@@ -21743,7 +21743,7 @@
      "score_half": 523,
      "zones": 1150,
      "rank": 2,
-     "amount_lamports": "790000000"
+     "amount_lamports": "617187500"
     },
     {
      "index": 15,
@@ -21764,14 +21764,14 @@
      "score_half": 500,
      "zones": 1130,
      "rank": 9,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 18,
      "score_half": 490,
      "zones": 1130,
      "rank": 13,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 19,
@@ -21827,14 +21827,14 @@
      "score_half": 501,
      "zones": 1140,
      "rank": 8,
-     "amount_lamports": "250000000"
+     "amount_lamports": "195312500"
     },
     {
      "index": 27,
      "score_half": 520,
      "zones": 1146,
      "rank": 3,
-     "amount_lamports": "510000000"
+     "amount_lamports": "398437500"
     },
     {
      "index": 28,
@@ -21862,7 +21862,7 @@
      "score_half": 513,
      "zones": 1123,
      "rank": 4,
-     "amount_lamports": "390000000"
+     "amount_lamports": "304687500"
     },
     {
      "index": 32,
@@ -21897,7 +21897,7 @@
      "score_half": 479,
      "zones": 1108,
      "rank": 16,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 37,
@@ -21932,7 +21932,7 @@
      "score_half": 482,
      "zones": 1123,
      "rank": 14,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 42,
@@ -21988,7 +21988,7 @@
      "score_half": 482,
      "zones": 1116,
      "rank": 15,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 50,
@@ -22009,7 +22009,7 @@
      "score_half": 492,
      "zones": 1126,
      "rank": 12,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 53,
@@ -22030,7 +22030,7 @@
      "score_half": 496,
      "zones": 1127,
      "rank": 11,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 56,
@@ -22093,67 +22093,67 @@
    "payouts": [
     {
      "entry_index": 0,
-     "amount": "250000000"
+     "amount": "195312500"
     },
     {
      "entry_index": 4,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 7,
-     "amount": "1350000000"
+     "amount": "1054687500"
     },
     {
      "entry_index": 9,
-     "amount": "250000000"
+     "amount": "195312500"
     },
     {
      "entry_index": 11,
-     "amount": "250000000"
+     "amount": "195312500"
     },
     {
      "entry_index": 14,
-     "amount": "790000000"
+     "amount": "617187500"
     },
     {
      "entry_index": 17,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 18,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 26,
-     "amount": "250000000"
+     "amount": "195312500"
     },
     {
      "entry_index": 27,
-     "amount": "510000000"
+     "amount": "398437500"
     },
     {
      "entry_index": 31,
-     "amount": "390000000"
+     "amount": "304687500"
     },
     {
      "entry_index": 36,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 41,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 49,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 52,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 55,
-     "amount": "135000000"
+     "amount": "105468750"
     }
    ],
    "players_pubkeys": [
@@ -22223,22 +22223,22 @@
     "44acf8aa55d551c3db7a0ad1fa6c170fdf7e02150b3fde2b313095deb25d0acd"
    ],
    "amounts": [
-    "1350000000",
-    "790000000",
-    "510000000",
-    "390000000",
-    "250000000",
-    "250000000",
-    "250000000",
-    "250000000",
-    "135000000",
-    "135000000",
-    "135000000",
-    "135000000",
-    "135000000",
-    "135000000",
-    "135000000",
-    "135000000",
+    "1054687500",
+    "617187500",
+    "398437500",
+    "304687500",
+    "195312500",
+    "195312500",
+    "195312500",
+    "195312500",
+    "105468750",
+    "105468750",
+    "105468750",
+    "105468750",
+    "105468750",
+    "105468750",
+    "105468750",
+    "105468750",
     "0",
     "0",
     "0",
@@ -22289,22 +22289,22 @@
     "0"
    ],
    "leaves_hex": [
-    "db127b6108ff6e3a998be1011041f9cf4620df24a69f3206f28e179547b3a54301805d775000000000",
-    "9d74552cdc905fd97603242e563593c0a53e0ddd4cc27c80c5e2251774951ff6028071162f00000000",
-    "98edffbafc587585764654e6371cb763694c6de6a62a69e024414286007e42560380fb651e00000000",
-    "556b192fb4b598346072d4dcf65a941f08cfbe5594ca58bef669b78ed3ee23320480ed3e1700000000",
-    "8bb4284f8ff26426be9dbd2cd76baca35d10d259b6fb4843b1f637fde4ece76c0580b2e60e00000000",
-    "3bfac8cedbfe29c3d05080ac115d2af8ef5ae70a60ac45b842517b462c91e2cb0580b2e60e00000000",
-    "f459a2d3e47d2fbce38ecbe9d04e4ef3e4c9f9aaa998ffba5000a84e4bc9f9430780b2e60e00000000",
-    "1382da903e46b7adf533d1b4008d392fd7888e57b8a682f6810d8c386a0689f70880b2e60e00000000",
-    "6fdd578e7b35d05c6ae79660fc3da849f4faa5cff1d44fee47c5e1d98f6a196409c0ef0b0800000000",
-    "e4f03d8e0ad224fca394a5a447bd6d7bff89c99dfa43017c7a70797e45bad4df0ac0ef0b0800000000",
-    "5d631c55a8960769d6686f598421fe2387f015277656d15613a2e1fd77aadfad0bc0ef0b0800000000",
-    "370b752aa24bfbc47ad232b2991c7002836c87706a2507fc1b9cd712682ecbd80cc0ef0b0800000000",
-    "ecd103b1ce292cc0d278c74e631c1d1cdddee487bb6ebc7e73992ff359d786bf0dc0ef0b0800000000",
-    "5ccccf363236853060389b585c4944d46a17cb9fa646ce1553c3fae51ef696040ec0ef0b0800000000",
-    "1b3ec9b0b88474c1f69b7d411b6042e190fcec3a4360453cbf160120c87bdf6c0fc0ef0b0800000000",
-    "e77dbc659364f462685e85d55b82b40c01f3452436e79f59fe567a429173ef6510c0ef0b0800000000",
+    "db127b6108ff6e3a998be1011041f9cf4620df24a69f3206f28e179547b3a543010c41dd3e00000000",
+    "9d74552cdc905fd97603242e563593c0a53e0ddd4cc27c80c5e2251774951ff602ac88c92400000000",
+    "98edffbafc587585764654e6371cb763694c6de6a62a69e024414286007e4256037cacbf1700000000",
+    "556b192fb4b598346072d4dcf65a941f08cfbe5594ca58bef669b78ed3ee2332048c29291200000000",
+    "8bb4284f8ff26426be9dbd2cd76baca35d10d259b6fb4843b1f637fde4ece76c05743ba40b00000000",
+    "3bfac8cedbfe29c3d05080ac115d2af8ef5ae70a60ac45b842517b462c91e2cb05743ba40b00000000",
+    "f459a2d3e47d2fbce38ecbe9d04e4ef3e4c9f9aaa998ffba5000a84e4bc9f94307743ba40b00000000",
+    "1382da903e46b7adf533d1b4008d392fd7888e57b8a682f6810d8c386a0689f708743ba40b00000000",
+    "6fdd578e7b35d05c6ae79660fc3da849f4faa5cff1d44fee47c5e1d98f6a1964094e53490600000000",
+    "e4f03d8e0ad224fca394a5a447bd6d7bff89c99dfa43017c7a70797e45bad4df0a4e53490600000000",
+    "5d631c55a8960769d6686f598421fe2387f015277656d15613a2e1fd77aadfad0b4e53490600000000",
+    "370b752aa24bfbc47ad232b2991c7002836c87706a2507fc1b9cd712682ecbd80c4e53490600000000",
+    "ecd103b1ce292cc0d278c74e631c1d1cdddee487bb6ebc7e73992ff359d786bf0d4e53490600000000",
+    "5ccccf363236853060389b585c4944d46a17cb9fa646ce1553c3fae51ef696040e4e53490600000000",
+    "1b3ec9b0b88474c1f69b7d411b6042e190fcec3a4360453cbf160120c87bdf6c0f4e53490600000000",
+    "e77dbc659364f462685e85d55b82b40c01f3452436e79f59fe567a429173ef65104e53490600000000",
     "ccc9652e383af4c07e0c15e51dff192b2e4f6c60e36f0ed8bddf5e13183b19b3110000000000000000",
     "16d5e77bb5cf4aa83993d33a1114aad4db0e3fe4dc0a95db88f6a57d83e6298c120000000000000000",
     "fb65338393e1a2081e4a631ead42767bf791bd720b2bf4f541b463e8209efe50130000000000000000",
@@ -22354,7 +22354,7 @@
     "8fefe81c71e9ed680a0b9d7eda3bf7eefa415bd456ffc075de46a7c29d6a15433f0000000000000000",
     "942609fcb9184e7121c3cc10e336c4799ff1ad83e2ea3b4bd1fe79045564373c400000000000000000"
    ],
-   "root": "4c0d28bead5de27e3a3521cf40955c62d6feff435699ce806a21818e683d817e"
+   "root": "595bba23f174aa31c5bd307c07a6e4338ebd0503bf716b05928b97ab6691214d"
   },
   {
    "name": "full_4",
@@ -25851,14 +25851,14 @@
      "score_half": 503,
      "zones": 1131,
      "rank": 8,
-     "amount_lamports": "250000000"
+     "amount_lamports": "195312500"
     },
     {
      "index": 5,
      "score_half": 530,
      "zones": 1152,
      "rank": 2,
-     "amount_lamports": "790000000"
+     "amount_lamports": "617187500"
     },
     {
      "index": 6,
@@ -25872,14 +25872,14 @@
      "score_half": 526,
      "zones": 1143,
      "rank": 3,
-     "amount_lamports": "510000000"
+     "amount_lamports": "398437500"
     },
     {
      "index": 8,
      "score_half": 514,
      "zones": 1133,
      "rank": 5,
-     "amount_lamports": "250000000"
+     "amount_lamports": "195312500"
     },
     {
      "index": 9,
@@ -25893,7 +25893,7 @@
      "score_half": 479,
      "zones": 1115,
      "rank": 16,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 11,
@@ -25907,7 +25907,7 @@
      "score_half": 490,
      "zones": 1111,
      "rank": 14,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 13,
@@ -25956,7 +25956,7 @@
      "score_half": 501,
      "zones": 1133,
      "rank": 10,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 20,
@@ -26026,14 +26026,14 @@
      "score_half": 503,
      "zones": 1133,
      "rank": 7,
-     "amount_lamports": "250000000"
+     "amount_lamports": "195312500"
     },
     {
      "index": 30,
      "score_half": 525,
      "zones": 1147,
      "rank": 4,
-     "amount_lamports": "390000000"
+     "amount_lamports": "304687500"
     },
     {
      "index": 31,
@@ -26110,14 +26110,14 @@
      "score_half": 481,
      "zones": 1105,
      "rank": 15,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 42,
      "score_half": 494,
      "zones": 1121,
      "rank": 12,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 43,
@@ -26131,7 +26131,7 @@
      "score_half": 500,
      "zones": 1132,
      "rank": 11,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 45,
@@ -26152,7 +26152,7 @@
      "score_half": 508,
      "zones": 1146,
      "rank": 6,
-     "amount_lamports": "250000000"
+     "amount_lamports": "195312500"
     },
     {
      "index": 48,
@@ -26180,7 +26180,7 @@
      "score_half": 539,
      "zones": 1158,
      "rank": 1,
-     "amount_lamports": "1350000000"
+     "amount_lamports": "1054687500"
     },
     {
      "index": 52,
@@ -26236,7 +26236,7 @@
      "score_half": 491,
      "zones": 1115,
      "rank": 13,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 60,
@@ -26250,7 +26250,7 @@
      "score_half": 502,
      "zones": 1130,
      "rank": 9,
-     "amount_lamports": "135000000"
+     "amount_lamports": "105468750"
     },
     {
      "index": 62,
@@ -26271,67 +26271,67 @@
    "payouts": [
     {
      "entry_index": 4,
-     "amount": "250000000"
+     "amount": "195312500"
     },
     {
      "entry_index": 5,
-     "amount": "790000000"
+     "amount": "617187500"
     },
     {
      "entry_index": 7,
-     "amount": "510000000"
+     "amount": "398437500"
     },
     {
      "entry_index": 8,
-     "amount": "250000000"
+     "amount": "195312500"
     },
     {
      "entry_index": 10,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 12,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 19,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 29,
-     "amount": "250000000"
+     "amount": "195312500"
     },
     {
      "entry_index": 30,
-     "amount": "390000000"
+     "amount": "304687500"
     },
     {
      "entry_index": 41,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 42,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 44,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 47,
-     "amount": "250000000"
+     "amount": "195312500"
     },
     {
      "entry_index": 51,
-     "amount": "1350000000"
+     "amount": "1054687500"
     },
     {
      "entry_index": 59,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 61,
-     "amount": "135000000"
+     "amount": "105468750"
     }
    ],
    "players_pubkeys": [
@@ -26401,22 +26401,22 @@
     "b078e64130a663bc5d04b4c5b3e0196fac8d988d354ef61723da622747d0ebd5"
    ],
    "amounts": [
-    "1350000000",
-    "790000000",
-    "510000000",
-    "390000000",
-    "250000000",
-    "250000000",
-    "250000000",
-    "250000000",
-    "135000000",
-    "135000000",
-    "135000000",
-    "135000000",
-    "135000000",
-    "135000000",
-    "135000000",
-    "135000000",
+    "1054687500",
+    "617187500",
+    "398437500",
+    "304687500",
+    "195312500",
+    "195312500",
+    "195312500",
+    "195312500",
+    "105468750",
+    "105468750",
+    "105468750",
+    "105468750",
+    "105468750",
+    "105468750",
+    "105468750",
+    "105468750",
     "0",
     "0",
     "0",
@@ -26467,22 +26467,22 @@
     "0"
    ],
    "leaves_hex": [
-    "777044f9c1fb09f2f626ee76f083eb3881fe4242de0256d61e230c696c96ce6801805d775000000000",
-    "6599e46f73321eefe0bc1c3a4ba0adfdbee027a6113b41793e7d1503c81cb615028071162f00000000",
-    "5f0dd268650e13264015b9f67528e2fb4d29b11ebb32eb655a9059682f96dc420380fb651e00000000",
-    "6fc19b08c2438de024cf441d5822afc0be1555ecb4289ed215e2c59353bc88110480ed3e1700000000",
-    "93af052a5eaae347688d6e56ba015b42cab078597bfe617588fc3409c8886a400580b2e60e00000000",
-    "979dfaac896fd4a855163708b19ffea0020bb7761d8240f771b53b54645553aa0680b2e60e00000000",
-    "838b96fe38762e34ac6db18c8d5189df77cbd2cdde5d9528ca5cf3003f5b01e30780b2e60e00000000",
-    "d3e883d25a041a110d6a1ef91e2f507942c4a5dae7600a8a6f3cc598183618280880b2e60e00000000",
-    "3fbd92f994851721f0e8963aaddf2e8ba0930d48e283372fb91bbbc3bac73bfe09c0ef0b0800000000",
-    "7782602fdb8a9bf6a1978e8139f6471205cbc3f97fe6f1b205726f028d5dddbe0ac0ef0b0800000000",
-    "4f1ed36ed51a5bc853e644103cbc0c472d697bfa3610d7933edc929be4ece6420bc0ef0b0800000000",
-    "d2bc17ed00e8760f47c1180b09b045984649308a23c1988b9cf2809ce239a27c0cc0ef0b0800000000",
-    "9885ae6c7255e79631b96074290ea2fb4a89f34d3946b66ea794a203dd5c03790dc0ef0b0800000000",
-    "0f636a567221c9870690d10817b36277ed615062683b5ea13fe931fce575b78b0ec0ef0b0800000000",
-    "1ecdd9ecc013b7d9da81cd669a046bdee03dd6a2a0c0e2c9887640c0b63022f50fc0ef0b0800000000",
-    "a074a6cf426bc92525ed142aa583c1112eded078fef50631f4625e1f6e3106f610c0ef0b0800000000",
+    "777044f9c1fb09f2f626ee76f083eb3881fe4242de0256d61e230c696c96ce68010c41dd3e00000000",
+    "6599e46f73321eefe0bc1c3a4ba0adfdbee027a6113b41793e7d1503c81cb61502ac88c92400000000",
+    "5f0dd268650e13264015b9f67528e2fb4d29b11ebb32eb655a9059682f96dc42037cacbf1700000000",
+    "6fc19b08c2438de024cf441d5822afc0be1555ecb4289ed215e2c59353bc8811048c29291200000000",
+    "93af052a5eaae347688d6e56ba015b42cab078597bfe617588fc3409c8886a4005743ba40b00000000",
+    "979dfaac896fd4a855163708b19ffea0020bb7761d8240f771b53b54645553aa06743ba40b00000000",
+    "838b96fe38762e34ac6db18c8d5189df77cbd2cdde5d9528ca5cf3003f5b01e307743ba40b00000000",
+    "d3e883d25a041a110d6a1ef91e2f507942c4a5dae7600a8a6f3cc5981836182808743ba40b00000000",
+    "3fbd92f994851721f0e8963aaddf2e8ba0930d48e283372fb91bbbc3bac73bfe094e53490600000000",
+    "7782602fdb8a9bf6a1978e8139f6471205cbc3f97fe6f1b205726f028d5dddbe0a4e53490600000000",
+    "4f1ed36ed51a5bc853e644103cbc0c472d697bfa3610d7933edc929be4ece6420b4e53490600000000",
+    "d2bc17ed00e8760f47c1180b09b045984649308a23c1988b9cf2809ce239a27c0c4e53490600000000",
+    "9885ae6c7255e79631b96074290ea2fb4a89f34d3946b66ea794a203dd5c03790d4e53490600000000",
+    "0f636a567221c9870690d10817b36277ed615062683b5ea13fe931fce575b78b0e4e53490600000000",
+    "1ecdd9ecc013b7d9da81cd669a046bdee03dd6a2a0c0e2c9887640c0b63022f50f4e53490600000000",
+    "a074a6cf426bc92525ed142aa583c1112eded078fef50631f4625e1f6e3106f6104e53490600000000",
     "4319a94368b288b198f846c0eb71aab1f6b51004331d0075cdb3636f5d110753110000000000000000",
     "7cfc75d5204153f79e5191f863065181ec6b16beeb422480373f62fa99f22738120000000000000000",
     "236da737ffc629a3812e513135023621c7ccf3ae2853860278ebdeef4aafd5ea130000000000000000",
@@ -26532,7 +26532,7 @@
     "697a0d2fbe06ecb8ef7166ddfd5d00b6f86a58f42a38cef7c904c810cd1b9b233f0000000000000000",
     "a11ac1ec17a57426caf9317f8e509800c5ddd3cd60ba626ff2817b40e22040ed400000000000000000"
    ],
-   "root": "0529f7c70d1d6f8a5c82853bd51f4764087dd060435f0bcec6a8e560dd7650cd"
+   "root": "068b575cf99aadd7211a6caedaf682f0efde2042e00b720be6488392fdb28d75"
   },
   {
    "name": "tier_500000000",
@@ -30001,14 +30001,14 @@
      "score_half": 534,
      "zones": 1151,
      "rank": 2,
-     "amount_lamports": "3950000000"
+     "amount_lamports": "3085937500"
     },
     {
      "index": 1,
      "score_half": 497,
      "zones": 1123,
      "rank": 12,
-     "amount_lamports": "675000000"
+     "amount_lamports": "527343750"
     },
     {
      "index": 2,
@@ -30022,7 +30022,7 @@
      "score_half": 498,
      "zones": 1129,
      "rank": 11,
-     "amount_lamports": "675000000"
+     "amount_lamports": "527343750"
     },
     {
      "index": 4,
@@ -30036,7 +30036,7 @@
      "score_half": 499,
      "zones": 1135,
      "rank": 10,
-     "amount_lamports": "675000000"
+     "amount_lamports": "527343750"
     },
     {
      "index": 6,
@@ -30050,14 +30050,14 @@
      "score_half": 512,
      "zones": 1128,
      "rank": 5,
-     "amount_lamports": "1250000000"
+     "amount_lamports": "976562500"
     },
     {
      "index": 8,
      "score_half": 516,
      "zones": 1121,
      "rank": 4,
-     "amount_lamports": "1950000000"
+     "amount_lamports": "1523437500"
     },
     {
      "index": 9,
@@ -30155,7 +30155,7 @@
      "score_half": 494,
      "zones": 1128,
      "rank": 13,
-     "amount_lamports": "675000000"
+     "amount_lamports": "527343750"
     },
     {
      "index": 23,
@@ -30183,7 +30183,7 @@
      "score_half": 493,
      "zones": 1142,
      "rank": 14,
-     "amount_lamports": "675000000"
+     "amount_lamports": "527343750"
     },
     {
      "index": 27,
@@ -30197,7 +30197,7 @@
      "score_half": 486,
      "zones": 1128,
      "rank": 16,
-     "amount_lamports": "675000000"
+     "amount_lamports": "527343750"
     },
     {
      "index": 29,
@@ -30211,7 +30211,7 @@
      "score_half": 501,
      "zones": 1125,
      "rank": 8,
-     "amount_lamports": "1250000000"
+     "amount_lamports": "976562500"
     },
     {
      "index": 31,
@@ -30225,7 +30225,7 @@
      "score_half": 525,
      "zones": 1147,
      "rank": 3,
-     "amount_lamports": "2550000000"
+     "amount_lamports": "1992187500"
     },
     {
      "index": 33,
@@ -30239,7 +30239,7 @@
      "score_half": 488,
      "zones": 1122,
      "rank": 15,
-     "amount_lamports": "675000000"
+     "amount_lamports": "527343750"
     },
     {
      "index": 35,
@@ -30323,14 +30323,14 @@
      "score_half": 511,
      "zones": 1133,
      "rank": 7,
-     "amount_lamports": "1250000000"
+     "amount_lamports": "976562500"
     },
     {
      "index": 47,
      "score_half": 551,
      "zones": 1166,
      "rank": 1,
-     "amount_lamports": "6750000000"
+     "amount_lamports": "5273437500"
     },
     {
      "index": 48,
@@ -30428,7 +30428,7 @@
      "score_half": 511,
      "zones": 1144,
      "rank": 6,
-     "amount_lamports": "1250000000"
+     "amount_lamports": "976562500"
     },
     {
      "index": 62,
@@ -30442,74 +30442,74 @@
      "score_half": 500,
      "zones": 1133,
      "rank": 9,
-     "amount_lamports": "675000000"
+     "amount_lamports": "527343750"
     }
    ],
    "leaf_order": "47,0,32,8,7,61,46,30,63,5,3,1,22,26,34,28,57,10,19,17,31,40,4,35,43,39,56,18,59,14,13,49,12,55,58,11,36,27,41,50,20,45,37,15,53,21,33,24,9,25,38,2,54,48,6,42,52,16,60,62,23,29,44,51",
    "payouts": [
     {
      "entry_index": 0,
-     "amount": "3950000000"
+     "amount": "3085937500"
     },
     {
      "entry_index": 1,
-     "amount": "675000000"
+     "amount": "527343750"
     },
     {
      "entry_index": 3,
-     "amount": "675000000"
+     "amount": "527343750"
     },
     {
      "entry_index": 5,
-     "amount": "675000000"
+     "amount": "527343750"
     },
     {
      "entry_index": 7,
-     "amount": "1250000000"
+     "amount": "976562500"
     },
     {
      "entry_index": 8,
-     "amount": "1950000000"
+     "amount": "1523437500"
     },
     {
      "entry_index": 22,
-     "amount": "675000000"
+     "amount": "527343750"
     },
     {
      "entry_index": 26,
-     "amount": "675000000"
+     "amount": "527343750"
     },
     {
      "entry_index": 28,
-     "amount": "675000000"
+     "amount": "527343750"
     },
     {
      "entry_index": 30,
-     "amount": "1250000000"
+     "amount": "976562500"
     },
     {
      "entry_index": 32,
-     "amount": "2550000000"
+     "amount": "1992187500"
     },
     {
      "entry_index": 34,
-     "amount": "675000000"
+     "amount": "527343750"
     },
     {
      "entry_index": 46,
-     "amount": "1250000000"
+     "amount": "976562500"
     },
     {
      "entry_index": 47,
-     "amount": "6750000000"
+     "amount": "5273437500"
     },
     {
      "entry_index": 61,
-     "amount": "1250000000"
+     "amount": "976562500"
     },
     {
      "entry_index": 63,
-     "amount": "675000000"
+     "amount": "527343750"
     }
    ],
    "players_pubkeys": [
@@ -30579,22 +30579,22 @@
     "2ce2e9211d84823d3419d5397f1c663e3dc122d1692ee4e6f9063b263a1581f1"
    ],
    "amounts": [
-    "6750000000",
-    "3950000000",
-    "2550000000",
-    "1950000000",
-    "1250000000",
-    "1250000000",
-    "1250000000",
-    "1250000000",
-    "675000000",
-    "675000000",
-    "675000000",
-    "675000000",
-    "675000000",
-    "675000000",
-    "675000000",
-    "675000000",
+    "5273437500",
+    "3085937500",
+    "1992187500",
+    "1523437500",
+    "976562500",
+    "976562500",
+    "976562500",
+    "976562500",
+    "527343750",
+    "527343750",
+    "527343750",
+    "527343750",
+    "527343750",
+    "527343750",
+    "527343750",
+    "527343750",
     "0",
     "0",
     "0",
@@ -30645,22 +30645,22 @@
     "0"
    ],
    "leaves_hex": [
-    "6ff68a2d3c0c53e8c792b38b71eeea9c84b446ec6d6c87c48d022356a952dadc0180d3549201000000",
-    "5c4e8b0ec00cb7463d506ca113dbd388f2abba479f88eeea70a469b12c05518902803770eb00000000",
-    "d333efbe3136d055a99b1439c98c8b41fd314c3fb2e5ad104ee66e62fc4dc2d60380e9fd9700000000",
-    "6527177ed868bfc40f3118fda61464d798a6339cc4210391cc6bb164dd770cf20480a33a7400000000",
-    "844947fa2b512bd3daf3733c25943cf315401d7d2b63bd98f30c3bd15c7add8e05807c814a00000000",
-    "08f02621086bd0055ae1ca2708ed1c17cefdc108d19b85bf7d124db2b40780d306807c814a00000000",
-    "a826ff20930935c95c9658a2ee96e8a3e4f76c35616b6ade22c0d76a3da9066007807c814a00000000",
-    "2c6fde1ac04d830de2761469a1149598927106cea5e04da1757f131b8a77ad8808807c814a00000000",
-    "2ce2e9211d84823d3419d5397f1c663e3dc122d1692ee4e6f9063b263a1581f109c0ae3b2800000000",
-    "8511024732a684604de8df807400f4e9b8e58bcb8f1d3192e755e0dc9bbf828d0ac0ae3b2800000000",
-    "aa59e92e3d908324b3711c7029874a6393c16450806c24542e661234065291b00bc0ae3b2800000000",
-    "b0b3dd709f0b00196cd5b9efa9d8c55cb92c854fe349c44ab9ab14cbd947ab360cc0ae3b2800000000",
-    "2388437c71393d1b5074c113ba76e4c45b8f1b6036794fe621b412a6d100f9e40dc0ae3b2800000000",
-    "9461014a9fda357832ae7dad4f8f42466c5ae1126a0375e942c4dfecb176e5cf0ec0ae3b2800000000",
-    "858968c1e8ac5902002ba15f99e53e5b09878c497dd8af34c0fdeceb69d251940fc0ae3b2800000000",
-    "5c333103009070ce21b605732093bfbb37ca5005002cf269f7fe7f75897429a910c0ae3b2800000000",
+    "6ff68a2d3c0c53e8c792b38b71eeea9c84b446ec6d6c87c48d022356a952dadc013c45523a01000000",
+    "5c4e8b0ec00cb7463d506ca113dbd388f2abba479f88eeea70a469b12c055189025cabefb700000000",
+    "d333efbe3136d055a99b1439c98c8b41fd314c3fb2e5ad104ee66e62fc4dc2d6036c5ebe7600000000",
+    "6527177ed868bfc40f3118fda61464d798a6339cc4210391cc6bb164dd770cf204bccfcd5a00000000",
+    "844947fa2b512bd3daf3733c25943cf315401d7d2b63bd98f30c3bd15c7add8e054429353a00000000",
+    "08f02621086bd0055ae1ca2708ed1c17cefdc108d19b85bf7d124db2b40780d3064429353a00000000",
+    "a826ff20930935c95c9658a2ee96e8a3e4f76c35616b6ade22c0d76a3da90660074429353a00000000",
+    "2c6fde1ac04d830de2761469a1149598927106cea5e04da1757f131b8a77ad88084429353a00000000",
+    "2ce2e9211d84823d3419d5397f1c663e3dc122d1692ee4e6f9063b263a1581f10986a06e1f00000000",
+    "8511024732a684604de8df807400f4e9b8e58bcb8f1d3192e755e0dc9bbf828d0a86a06e1f00000000",
+    "aa59e92e3d908324b3711c7029874a6393c16450806c24542e661234065291b00b86a06e1f00000000",
+    "b0b3dd709f0b00196cd5b9efa9d8c55cb92c854fe349c44ab9ab14cbd947ab360c86a06e1f00000000",
+    "2388437c71393d1b5074c113ba76e4c45b8f1b6036794fe621b412a6d100f9e40d86a06e1f00000000",
+    "9461014a9fda357832ae7dad4f8f42466c5ae1126a0375e942c4dfecb176e5cf0e86a06e1f00000000",
+    "858968c1e8ac5902002ba15f99e53e5b09878c497dd8af34c0fdeceb69d251940f86a06e1f00000000",
+    "5c333103009070ce21b605732093bfbb37ca5005002cf269f7fe7f75897429a91086a06e1f00000000",
     "a7253d1d26eaec3df35a24775cb75f00cf935848f766453e0f967ef133d83d2b110000000000000000",
     "493d9c09fcdf871a052c69857d6cf0b2971a46cd015502d31e4021b1c1f2cc7f120000000000000000",
     "bea65a4c1ae7e0424024028328d4454932273151a5bde5d68b5f4d12c78bcf37130000000000000000",
@@ -30710,7 +30710,7 @@
     "c096b85a2b70888f849aea2e02acff5be67879aae2e28d86ab6c3994779539aa3f0000000000000000",
     "001aa2942924d9a7e54ed18cf82b5152030e027e51314aa3dcf34928acec7a47400000000000000000"
    ],
-   "root": "951be19d2d2dab59866c9fa9698eb9fa68ffcd03e608851eb26addc4f819c0e7"
+   "root": "97581517ef0e7a517c36a1256166b2676f67aee9763696281dd9d2ce9949cab3"
   },
   {
    "name": "tier_750000000",
@@ -34179,14 +34179,14 @@
      "score_half": 534,
      "zones": 1151,
      "rank": 2,
-     "amount_lamports": "5925000000"
+     "amount_lamports": "4628906250"
     },
     {
      "index": 1,
      "score_half": 497,
      "zones": 1123,
      "rank": 12,
-     "amount_lamports": "1012500000"
+     "amount_lamports": "791015625"
     },
     {
      "index": 2,
@@ -34200,7 +34200,7 @@
      "score_half": 498,
      "zones": 1129,
      "rank": 11,
-     "amount_lamports": "1012500000"
+     "amount_lamports": "791015625"
     },
     {
      "index": 4,
@@ -34214,7 +34214,7 @@
      "score_half": 499,
      "zones": 1135,
      "rank": 10,
-     "amount_lamports": "1012500000"
+     "amount_lamports": "791015625"
     },
     {
      "index": 6,
@@ -34228,14 +34228,14 @@
      "score_half": 512,
      "zones": 1128,
      "rank": 5,
-     "amount_lamports": "1875000000"
+     "amount_lamports": "1464843750"
     },
     {
      "index": 8,
      "score_half": 516,
      "zones": 1121,
      "rank": 4,
-     "amount_lamports": "2925000000"
+     "amount_lamports": "2285156250"
     },
     {
      "index": 9,
@@ -34333,7 +34333,7 @@
      "score_half": 494,
      "zones": 1128,
      "rank": 13,
-     "amount_lamports": "1012500000"
+     "amount_lamports": "791015625"
     },
     {
      "index": 23,
@@ -34361,7 +34361,7 @@
      "score_half": 493,
      "zones": 1142,
      "rank": 14,
-     "amount_lamports": "1012500000"
+     "amount_lamports": "791015625"
     },
     {
      "index": 27,
@@ -34375,7 +34375,7 @@
      "score_half": 486,
      "zones": 1128,
      "rank": 16,
-     "amount_lamports": "1012500000"
+     "amount_lamports": "791015625"
     },
     {
      "index": 29,
@@ -34389,7 +34389,7 @@
      "score_half": 501,
      "zones": 1125,
      "rank": 8,
-     "amount_lamports": "1875000000"
+     "amount_lamports": "1464843750"
     },
     {
      "index": 31,
@@ -34403,7 +34403,7 @@
      "score_half": 525,
      "zones": 1147,
      "rank": 3,
-     "amount_lamports": "3825000000"
+     "amount_lamports": "2988281250"
     },
     {
      "index": 33,
@@ -34417,7 +34417,7 @@
      "score_half": 488,
      "zones": 1122,
      "rank": 15,
-     "amount_lamports": "1012500000"
+     "amount_lamports": "791015625"
     },
     {
      "index": 35,
@@ -34501,14 +34501,14 @@
      "score_half": 511,
      "zones": 1133,
      "rank": 7,
-     "amount_lamports": "1875000000"
+     "amount_lamports": "1464843750"
     },
     {
      "index": 47,
      "score_half": 551,
      "zones": 1166,
      "rank": 1,
-     "amount_lamports": "10125000000"
+     "amount_lamports": "7910156250"
     },
     {
      "index": 48,
@@ -34606,7 +34606,7 @@
      "score_half": 511,
      "zones": 1144,
      "rank": 6,
-     "amount_lamports": "1875000000"
+     "amount_lamports": "1464843750"
     },
     {
      "index": 62,
@@ -34620,74 +34620,74 @@
      "score_half": 500,
      "zones": 1133,
      "rank": 9,
-     "amount_lamports": "1012500000"
+     "amount_lamports": "791015625"
     }
    ],
    "leaf_order": "47,0,32,8,7,61,46,30,63,5,3,1,22,26,34,28,57,10,19,17,31,40,4,35,43,39,56,18,59,14,13,49,12,55,58,11,36,27,41,50,20,45,37,15,53,21,33,24,9,25,38,2,54,48,6,42,52,16,60,62,23,29,44,51",
    "payouts": [
     {
      "entry_index": 0,
-     "amount": "5925000000"
+     "amount": "4628906250"
     },
     {
      "entry_index": 1,
-     "amount": "1012500000"
+     "amount": "791015625"
     },
     {
      "entry_index": 3,
-     "amount": "1012500000"
+     "amount": "791015625"
     },
     {
      "entry_index": 5,
-     "amount": "1012500000"
+     "amount": "791015625"
     },
     {
      "entry_index": 7,
-     "amount": "1875000000"
+     "amount": "1464843750"
     },
     {
      "entry_index": 8,
-     "amount": "2925000000"
+     "amount": "2285156250"
     },
     {
      "entry_index": 22,
-     "amount": "1012500000"
+     "amount": "791015625"
     },
     {
      "entry_index": 26,
-     "amount": "1012500000"
+     "amount": "791015625"
     },
     {
      "entry_index": 28,
-     "amount": "1012500000"
+     "amount": "791015625"
     },
     {
      "entry_index": 30,
-     "amount": "1875000000"
+     "amount": "1464843750"
     },
     {
      "entry_index": 32,
-     "amount": "3825000000"
+     "amount": "2988281250"
     },
     {
      "entry_index": 34,
-     "amount": "1012500000"
+     "amount": "791015625"
     },
     {
      "entry_index": 46,
-     "amount": "1875000000"
+     "amount": "1464843750"
     },
     {
      "entry_index": 47,
-     "amount": "10125000000"
+     "amount": "7910156250"
     },
     {
      "entry_index": 61,
-     "amount": "1875000000"
+     "amount": "1464843750"
     },
     {
      "entry_index": 63,
-     "amount": "1012500000"
+     "amount": "791015625"
     }
    ],
    "players_pubkeys": [
@@ -34757,22 +34757,22 @@
     "fc3607fb8bffb407d3119f988e2c42e81358b953ceb9a1cc4ab1516f7ebadc41"
    ],
    "amounts": [
-    "10125000000",
-    "5925000000",
-    "3825000000",
-    "2925000000",
-    "1875000000",
-    "1875000000",
-    "1875000000",
-    "1875000000",
-    "1012500000",
-    "1012500000",
-    "1012500000",
-    "1012500000",
-    "1012500000",
-    "1012500000",
-    "1012500000",
-    "1012500000",
+    "7910156250",
+    "4628906250",
+    "2988281250",
+    "2285156250",
+    "1464843750",
+    "1464843750",
+    "1464843750",
+    "1464843750",
+    "791015625",
+    "791015625",
+    "791015625",
+    "791015625",
+    "791015625",
+    "791015625",
+    "791015625",
+    "791015625",
     "0",
     "0",
     "0",
@@ -34823,22 +34823,22 @@
     "0"
    ],
    "leaves_hex": [
-    "575e2b4c67ce0bc46c04fdc2cb948e3a76673f3df3a9dc8527b9562c666bc1f501403d7f5b02000000",
-    "6dee21dcec3fbe9e6a54208a1e30b72e2d52dd414a629cf2ceba7f3c73f0536a024053286101000000",
-    "1cb31b9803c41f3ae4a0ac57545713175d2a1db25c1605e5e865f99216e68ddd0340defce300000000",
-    "16ed95f1cc06997d13a49a16e88777db14a3773727269019a3c584725055f8300440f557ae00000000",
-    "d2da155a4e1dc45bf376d868c33acc1db20a9c961bf29f56bc27e6340040084a05c03ac26f00000000",
-    "74af90116e3ddeddfd6fecc41b5f29e65359fa1f5739a1ddb60dc674ff426dc506c03ac26f00000000",
-    "9a999f1367a4b4f61ba10c62c50e03d79694bbc5df5a1308cdf624bd565e87d607c03ac26f00000000",
-    "07860689c218113ae4f120da845f30766fbdcac4d3829e76e32b4abdb12275b208c03ac26f00000000",
-    "fc3607fb8bffb407d3119f988e2c42e81358b953ceb9a1cc4ab1516f7ebadc41092086593c00000000",
-    "77217d83faf39ba8cc9bb7478ec35f496f4a0dc5eb2824ae66de546324a61dd00a2086593c00000000",
-    "0bdbc836801c74a7c6b0665952f40b5372c9ba1ef4d1212df3379de7d2cd70b60b2086593c00000000",
-    "b07a2cc0dbcbb794c9a487ed317ecacb1c58070fcbe8e4b63ffac72a9d3773920c2086593c00000000",
-    "c470946d74dd3e7fdc1898348314de89d55d737a630edfb7a41e43282aaa19160d2086593c00000000",
-    "23a68f60b2af3d942a8bd47e0da4d9dec652e6865e71626cf7054cbf7729cb3e0e2086593c00000000",
-    "e22201777bff892311ed66d43caed5d94f3972661bd9ad6600508f25646a323f0f2086593c00000000",
-    "dc63a62cc53cb40143d36517976d5a4faa93692a625ddcc97cab28146ba2d148102086593c00000000",
+    "575e2b4c67ce0bc46c04fdc2cb948e3a76673f3df3a9dc8527b9562c666bc1f501da677bd701000000",
+    "6dee21dcec3fbe9e6a54208a1e30b72e2d52dd414a629cf2ceba7f3c73f0536a020a81e71301000000",
+    "1cb31b9803c41f3ae4a0ac57545713175d2a1db25c1605e5e865f99216e68ddd03a28d1db200000000",
+    "16ed95f1cc06997d13a49a16e88777db14a3773727269019a3c584725055f830049ab7348800000000",
+    "d2da155a4e1dc45bf376d868c33acc1db20a9c961bf29f56bc27e6340040084a05e6bd4f5700000000",
+    "74af90116e3ddeddfd6fecc41b5f29e65359fa1f5739a1ddb60dc674ff426dc506e6bd4f5700000000",
+    "9a999f1367a4b4f61ba10c62c50e03d79694bbc5df5a1308cdf624bd565e87d607e6bd4f5700000000",
+    "07860689c218113ae4f120da845f30766fbdcac4d3829e76e32b4abdb12275b208e6bd4f5700000000",
+    "fc3607fb8bffb407d3119f988e2c42e81358b953ceb9a1cc4ab1516f7ebadc4109c9f0252f00000000",
+    "77217d83faf39ba8cc9bb7478ec35f496f4a0dc5eb2824ae66de546324a61dd00ac9f0252f00000000",
+    "0bdbc836801c74a7c6b0665952f40b5372c9ba1ef4d1212df3379de7d2cd70b60bc9f0252f00000000",
+    "b07a2cc0dbcbb794c9a487ed317ecacb1c58070fcbe8e4b63ffac72a9d3773920cc9f0252f00000000",
+    "c470946d74dd3e7fdc1898348314de89d55d737a630edfb7a41e43282aaa19160dc9f0252f00000000",
+    "23a68f60b2af3d942a8bd47e0da4d9dec652e6865e71626cf7054cbf7729cb3e0ec9f0252f00000000",
+    "e22201777bff892311ed66d43caed5d94f3972661bd9ad6600508f25646a323f0fc9f0252f00000000",
+    "dc63a62cc53cb40143d36517976d5a4faa93692a625ddcc97cab28146ba2d14810c9f0252f00000000",
     "b3a8d17a32476ecb9a96c56df8a40745016734cbe997fb77564d95b086b32850110000000000000000",
     "3673a3fccb81c2e99ceb91206d39052ce1376e269bcac6ad8dc292ef3f3e4c77120000000000000000",
     "2e4499a771abbc61dfb9c768cbdbe2e67d010e5690530ca24b8d6e3670e60f1e130000000000000000",
@@ -34888,7 +34888,7 @@
     "4c6133f172456517256e02f96bda80f4a5888a19c2487267f6944ce39a249f5e3f0000000000000000",
     "0a57288e6e77f3dbb2ed985abd503fbc3c273dea050bdb2638e7469ed622d2db400000000000000000"
    ],
-   "root": "15efa0c2510da007df634f411051219a16cd1680388fda4fc4fc00868fb15409"
+   "root": "0d35447d602ca083051d7aee44f8b2fb46209b705ce4a4368f45865071e04d5c"
   },
   {
    "name": "tier_1000000000",
@@ -38357,14 +38357,14 @@
      "score_half": 534,
      "zones": 1151,
      "rank": 2,
-     "amount_lamports": "7900000000"
+     "amount_lamports": "6171875000"
     },
     {
      "index": 1,
      "score_half": 497,
      "zones": 1123,
      "rank": 12,
-     "amount_lamports": "1350000000"
+     "amount_lamports": "1054687500"
     },
     {
      "index": 2,
@@ -38378,7 +38378,7 @@
      "score_half": 498,
      "zones": 1129,
      "rank": 11,
-     "amount_lamports": "1350000000"
+     "amount_lamports": "1054687500"
     },
     {
      "index": 4,
@@ -38392,7 +38392,7 @@
      "score_half": 499,
      "zones": 1135,
      "rank": 10,
-     "amount_lamports": "1350000000"
+     "amount_lamports": "1054687500"
     },
     {
      "index": 6,
@@ -38406,14 +38406,14 @@
      "score_half": 512,
      "zones": 1128,
      "rank": 5,
-     "amount_lamports": "2500000000"
+     "amount_lamports": "1953125000"
     },
     {
      "index": 8,
      "score_half": 516,
      "zones": 1121,
      "rank": 4,
-     "amount_lamports": "3900000000"
+     "amount_lamports": "3046875000"
     },
     {
      "index": 9,
@@ -38511,7 +38511,7 @@
      "score_half": 494,
      "zones": 1128,
      "rank": 13,
-     "amount_lamports": "1350000000"
+     "amount_lamports": "1054687500"
     },
     {
      "index": 23,
@@ -38539,7 +38539,7 @@
      "score_half": 493,
      "zones": 1142,
      "rank": 14,
-     "amount_lamports": "1350000000"
+     "amount_lamports": "1054687500"
     },
     {
      "index": 27,
@@ -38553,7 +38553,7 @@
      "score_half": 486,
      "zones": 1128,
      "rank": 16,
-     "amount_lamports": "1350000000"
+     "amount_lamports": "1054687500"
     },
     {
      "index": 29,
@@ -38567,7 +38567,7 @@
      "score_half": 501,
      "zones": 1125,
      "rank": 8,
-     "amount_lamports": "2500000000"
+     "amount_lamports": "1953125000"
     },
     {
      "index": 31,
@@ -38581,7 +38581,7 @@
      "score_half": 525,
      "zones": 1147,
      "rank": 3,
-     "amount_lamports": "5100000000"
+     "amount_lamports": "3984375000"
     },
     {
      "index": 33,
@@ -38595,7 +38595,7 @@
      "score_half": 488,
      "zones": 1122,
      "rank": 15,
-     "amount_lamports": "1350000000"
+     "amount_lamports": "1054687500"
     },
     {
      "index": 35,
@@ -38679,14 +38679,14 @@
      "score_half": 511,
      "zones": 1133,
      "rank": 7,
-     "amount_lamports": "2500000000"
+     "amount_lamports": "1953125000"
     },
     {
      "index": 47,
      "score_half": 551,
      "zones": 1166,
      "rank": 1,
-     "amount_lamports": "13500000000"
+     "amount_lamports": "10546875000"
     },
     {
      "index": 48,
@@ -38784,7 +38784,7 @@
      "score_half": 511,
      "zones": 1144,
      "rank": 6,
-     "amount_lamports": "2500000000"
+     "amount_lamports": "1953125000"
     },
     {
      "index": 62,
@@ -38798,74 +38798,74 @@
      "score_half": 500,
      "zones": 1133,
      "rank": 9,
-     "amount_lamports": "1350000000"
+     "amount_lamports": "1054687500"
     }
    ],
    "leaf_order": "47,0,32,8,7,61,46,30,63,5,3,1,22,26,34,28,57,10,19,17,31,40,4,35,43,39,56,18,59,14,13,49,12,55,58,11,36,27,41,50,20,45,37,15,53,21,33,24,9,25,38,2,54,48,6,42,52,16,60,62,23,29,44,51",
    "payouts": [
     {
      "entry_index": 0,
-     "amount": "7900000000"
+     "amount": "6171875000"
     },
     {
      "entry_index": 1,
-     "amount": "1350000000"
+     "amount": "1054687500"
     },
     {
      "entry_index": 3,
-     "amount": "1350000000"
+     "amount": "1054687500"
     },
     {
      "entry_index": 5,
-     "amount": "1350000000"
+     "amount": "1054687500"
     },
     {
      "entry_index": 7,
-     "amount": "2500000000"
+     "amount": "1953125000"
     },
     {
      "entry_index": 8,
-     "amount": "3900000000"
+     "amount": "3046875000"
     },
     {
      "entry_index": 22,
-     "amount": "1350000000"
+     "amount": "1054687500"
     },
     {
      "entry_index": 26,
-     "amount": "1350000000"
+     "amount": "1054687500"
     },
     {
      "entry_index": 28,
-     "amount": "1350000000"
+     "amount": "1054687500"
     },
     {
      "entry_index": 30,
-     "amount": "2500000000"
+     "amount": "1953125000"
     },
     {
      "entry_index": 32,
-     "amount": "5100000000"
+     "amount": "3984375000"
     },
     {
      "entry_index": 34,
-     "amount": "1350000000"
+     "amount": "1054687500"
     },
     {
      "entry_index": 46,
-     "amount": "2500000000"
+     "amount": "1953125000"
     },
     {
      "entry_index": 47,
-     "amount": "13500000000"
+     "amount": "10546875000"
     },
     {
      "entry_index": 61,
-     "amount": "2500000000"
+     "amount": "1953125000"
     },
     {
      "entry_index": 63,
-     "amount": "1350000000"
+     "amount": "1054687500"
     }
    ],
    "players_pubkeys": [
@@ -38935,22 +38935,22 @@
     "cb84ebbcce23182dc5103a0bf56dd346b4afcc123f8b5f9652972264419a5fa6"
    ],
    "amounts": [
-    "13500000000",
-    "7900000000",
-    "5100000000",
-    "3900000000",
-    "2500000000",
-    "2500000000",
-    "2500000000",
-    "2500000000",
-    "1350000000",
-    "1350000000",
-    "1350000000",
-    "1350000000",
-    "1350000000",
-    "1350000000",
-    "1350000000",
-    "1350000000",
+    "10546875000",
+    "6171875000",
+    "3984375000",
+    "3046875000",
+    "1953125000",
+    "1953125000",
+    "1953125000",
+    "1953125000",
+    "1054687500",
+    "1054687500",
+    "1054687500",
+    "1054687500",
+    "1054687500",
+    "1054687500",
+    "1054687500",
+    "1054687500",
     "0",
     "0",
     "0",
@@ -39001,22 +39001,22 @@
     "0"
    ],
    "leaves_hex": [
-    "7375a75101d5c62c76fe396cebb298fe7815b6c253b49715d92eb3f7cc9ada2c0100a7a92403000000",
-    "f1c474521546da7efe21c501088b3c1779c194fa0bf1f507dfa406c76cc0ef5602006fe0d601000000",
-    "99391c45b4b416d669a6fa254c8556faa92970fa71c303622bf42d212a00739e0300d3fb2f01000000",
-    "1934ddbee7822d4bdb95bfffd499b12171b60ef17417191bf14fd1dd4f45904e04004775e800000000",
-    "a849fad0af6ee3f48944555945f3616d2e93dd4a573a6c501429f24e3289d9d40500f9029500000000",
-    "5e132644e19312b7289ab36e260a545061656c31f4faffc63d3fa335f8a9bd250600f9029500000000",
-    "d8bad39b59e8a435226f311aa67c266aaec0f37d0360e108afaf72cc0ec4a2120700f9029500000000",
-    "6406eccad2a0793be74ef305c7a1d92a302e48c21e7f25eb562dc727082d73510800f9029500000000",
-    "cb84ebbcce23182dc5103a0bf56dd346b4afcc123f8b5f9652972264419a5fa609805d775000000000",
-    "73bb2d85c872637f1f72753210b5757946d9ed526937f8afce92b1d2658d8b560a805d775000000000",
-    "fc98ddde2a818ad4ac351ea5b29065a1ed4533bb403bbc7f14fb8cfb87b56c110b805d775000000000",
-    "bbe8ba9ec5a8a357c0540a32587037087c281915a07356f13879e9b325fe84e60c805d775000000000",
-    "dc94267571432ba446fc27d1d186cdfaaae747a845258f3fed42ecb2abb478420d805d775000000000",
-    "8963a8bf3c0c34629ec8f6d20a8b18bb92d3eccd753c24e923eeffc42fa214ea0e805d775000000000",
-    "f00e2753903688bdeb071fc9665e9c81fbfa3052d7868c5cb08c1014cab7cfc50f805d775000000000",
-    "2935ed75ad58d6d6ff5ac63d0ed24370097b293810698cdb9585d4cc7db0cecc10805d775000000000",
+    "7375a75101d5c62c76fe396cebb298fe7815b6c253b49715d92eb3f7cc9ada2c01788aa47402000000",
+    "f1c474521546da7efe21c501088b3c1779c194fa0bf1f507dfa406c76cc0ef5602b856df6f01000000",
+    "99391c45b4b416d669a6fa254c8556faa92970fa71c303622bf42d212a00739e03d8bc7ced00000000",
+    "1934ddbee7822d4bdb95bfffd499b12171b60ef17417191bf14fd1dd4f45904e04789f9bb500000000",
+    "a849fad0af6ee3f48944555945f3616d2e93dd4a573a6c501429f24e3289d9d40588526a7400000000",
+    "5e132644e19312b7289ab36e260a545061656c31f4faffc63d3fa335f8a9bd250688526a7400000000",
+    "d8bad39b59e8a435226f311aa67c266aaec0f37d0360e108afaf72cc0ec4a2120788526a7400000000",
+    "6406eccad2a0793be74ef305c7a1d92a302e48c21e7f25eb562dc727082d73510888526a7400000000",
+    "cb84ebbcce23182dc5103a0bf56dd346b4afcc123f8b5f9652972264419a5fa6090c41dd3e00000000",
+    "73bb2d85c872637f1f72753210b5757946d9ed526937f8afce92b1d2658d8b560a0c41dd3e00000000",
+    "fc98ddde2a818ad4ac351ea5b29065a1ed4533bb403bbc7f14fb8cfb87b56c110b0c41dd3e00000000",
+    "bbe8ba9ec5a8a357c0540a32587037087c281915a07356f13879e9b325fe84e60c0c41dd3e00000000",
+    "dc94267571432ba446fc27d1d186cdfaaae747a845258f3fed42ecb2abb478420d0c41dd3e00000000",
+    "8963a8bf3c0c34629ec8f6d20a8b18bb92d3eccd753c24e923eeffc42fa214ea0e0c41dd3e00000000",
+    "f00e2753903688bdeb071fc9665e9c81fbfa3052d7868c5cb08c1014cab7cfc50f0c41dd3e00000000",
+    "2935ed75ad58d6d6ff5ac63d0ed24370097b293810698cdb9585d4cc7db0cecc100c41dd3e00000000",
     "528743bc174db5c423fab1930d1c2af3ca7491e6c21cb33bde3d163869ca14f3110000000000000000",
     "bbc08f76ef69f615873b6538ea217af5c6dbbf045ef30f937db6eea7c93c1d74120000000000000000",
     "b64cbb9d961a7a53297c29c508a6a0c1941c09e2e4b6f0b495b70e1e41d78643130000000000000000",
@@ -39066,7 +39066,7 @@
     "e022166541e67fb9ad8b77dd69004bd4d3ecdd15bb65bc6a24a3d342cbef70403f0000000000000000",
     "5eaad5feed72fa2f6b2006602f12d13905c884e51a4b1d1979867220381743f4400000000000000000"
    ],
-   "root": "c7de095450babc30e4005e8823e69c0f59164bf54159ff2a6328979c0f498dc0"
+   "root": "fcd08e59daba29c2c2303cab1a33e12ac32105b88fb8ec306c4997f320781496"
   },
   {
    "name": "tier_2500000000",
@@ -42535,14 +42535,14 @@
      "score_half": 534,
      "zones": 1151,
      "rank": 2,
-     "amount_lamports": "19750000000"
+     "amount_lamports": "15429687500"
     },
     {
      "index": 1,
      "score_half": 497,
      "zones": 1123,
      "rank": 12,
-     "amount_lamports": "3375000000"
+     "amount_lamports": "2636718750"
     },
     {
      "index": 2,
@@ -42556,7 +42556,7 @@
      "score_half": 498,
      "zones": 1129,
      "rank": 11,
-     "amount_lamports": "3375000000"
+     "amount_lamports": "2636718750"
     },
     {
      "index": 4,
@@ -42570,7 +42570,7 @@
      "score_half": 499,
      "zones": 1135,
      "rank": 10,
-     "amount_lamports": "3375000000"
+     "amount_lamports": "2636718750"
     },
     {
      "index": 6,
@@ -42584,14 +42584,14 @@
      "score_half": 512,
      "zones": 1128,
      "rank": 5,
-     "amount_lamports": "6250000000"
+     "amount_lamports": "4882812500"
     },
     {
      "index": 8,
      "score_half": 516,
      "zones": 1121,
      "rank": 4,
-     "amount_lamports": "9750000000"
+     "amount_lamports": "7617187500"
     },
     {
      "index": 9,
@@ -42689,7 +42689,7 @@
      "score_half": 494,
      "zones": 1128,
      "rank": 13,
-     "amount_lamports": "3375000000"
+     "amount_lamports": "2636718750"
     },
     {
      "index": 23,
@@ -42717,7 +42717,7 @@
      "score_half": 493,
      "zones": 1142,
      "rank": 14,
-     "amount_lamports": "3375000000"
+     "amount_lamports": "2636718750"
     },
     {
      "index": 27,
@@ -42731,7 +42731,7 @@
      "score_half": 486,
      "zones": 1128,
      "rank": 16,
-     "amount_lamports": "3375000000"
+     "amount_lamports": "2636718750"
     },
     {
      "index": 29,
@@ -42745,7 +42745,7 @@
      "score_half": 501,
      "zones": 1125,
      "rank": 8,
-     "amount_lamports": "6250000000"
+     "amount_lamports": "4882812500"
     },
     {
      "index": 31,
@@ -42759,7 +42759,7 @@
      "score_half": 525,
      "zones": 1147,
      "rank": 3,
-     "amount_lamports": "12750000000"
+     "amount_lamports": "9960937500"
     },
     {
      "index": 33,
@@ -42773,7 +42773,7 @@
      "score_half": 488,
      "zones": 1122,
      "rank": 15,
-     "amount_lamports": "3375000000"
+     "amount_lamports": "2636718750"
     },
     {
      "index": 35,
@@ -42857,14 +42857,14 @@
      "score_half": 511,
      "zones": 1133,
      "rank": 7,
-     "amount_lamports": "6250000000"
+     "amount_lamports": "4882812500"
     },
     {
      "index": 47,
      "score_half": 551,
      "zones": 1166,
      "rank": 1,
-     "amount_lamports": "33750000000"
+     "amount_lamports": "26367187500"
     },
     {
      "index": 48,
@@ -42962,7 +42962,7 @@
      "score_half": 511,
      "zones": 1144,
      "rank": 6,
-     "amount_lamports": "6250000000"
+     "amount_lamports": "4882812500"
     },
     {
      "index": 62,
@@ -42976,74 +42976,74 @@
      "score_half": 500,
      "zones": 1133,
      "rank": 9,
-     "amount_lamports": "3375000000"
+     "amount_lamports": "2636718750"
     }
    ],
    "leaf_order": "47,0,32,8,7,61,46,30,63,5,3,1,22,26,34,28,57,10,19,17,31,40,4,35,43,39,56,18,59,14,13,49,12,55,58,11,36,27,41,50,20,45,37,15,53,21,33,24,9,25,38,2,54,48,6,42,52,16,60,62,23,29,44,51",
    "payouts": [
     {
      "entry_index": 0,
-     "amount": "19750000000"
+     "amount": "15429687500"
     },
     {
      "entry_index": 1,
-     "amount": "3375000000"
+     "amount": "2636718750"
     },
     {
      "entry_index": 3,
-     "amount": "3375000000"
+     "amount": "2636718750"
     },
     {
      "entry_index": 5,
-     "amount": "3375000000"
+     "amount": "2636718750"
     },
     {
      "entry_index": 7,
-     "amount": "6250000000"
+     "amount": "4882812500"
     },
     {
      "entry_index": 8,
-     "amount": "9750000000"
+     "amount": "7617187500"
     },
     {
      "entry_index": 22,
-     "amount": "3375000000"
+     "amount": "2636718750"
     },
     {
      "entry_index": 26,
-     "amount": "3375000000"
+     "amount": "2636718750"
     },
     {
      "entry_index": 28,
-     "amount": "3375000000"
+     "amount": "2636718750"
     },
     {
      "entry_index": 30,
-     "amount": "6250000000"
+     "amount": "4882812500"
     },
     {
      "entry_index": 32,
-     "amount": "12750000000"
+     "amount": "9960937500"
     },
     {
      "entry_index": 34,
-     "amount": "3375000000"
+     "amount": "2636718750"
     },
     {
      "entry_index": 46,
-     "amount": "6250000000"
+     "amount": "4882812500"
     },
     {
      "entry_index": 47,
-     "amount": "33750000000"
+     "amount": "26367187500"
     },
     {
      "entry_index": 61,
-     "amount": "6250000000"
+     "amount": "4882812500"
     },
     {
      "entry_index": 63,
-     "amount": "3375000000"
+     "amount": "2636718750"
     }
    ],
    "players_pubkeys": [
@@ -43113,22 +43113,22 @@
     "99f2a208e7e53eb47a06102cf3d0ca63b1cf9f8a0feda7b48c70004871af6f6d"
    ],
    "amounts": [
-    "33750000000",
-    "19750000000",
-    "12750000000",
-    "9750000000",
-    "6250000000",
-    "6250000000",
-    "6250000000",
-    "6250000000",
-    "3375000000",
-    "3375000000",
-    "3375000000",
-    "3375000000",
-    "3375000000",
-    "3375000000",
-    "3375000000",
-    "3375000000",
+    "26367187500",
+    "15429687500",
+    "9960937500",
+    "7617187500",
+    "4882812500",
+    "4882812500",
+    "4882812500",
+    "4882812500",
+    "2636718750",
+    "2636718750",
+    "2636718750",
+    "2636718750",
+    "2636718750",
+    "2636718750",
+    "2636718750",
+    "2636718750",
     "0",
     "0",
     "0",
@@ -43179,22 +43179,22 @@
     "0"
    ],
    "leaves_hex": [
-    "5129088d3309ae8c8dd41dbb2ecd4c08f126c97515b2268395d119d91f4d008a018021a8db07000000",
-    "c30e9f8cde46b554948f9eecdff493a42cf79eb749be95af1ec40ab05670f806028015319904000000",
-    "b5eef6d2d056f78a4eabba63b2bc9fe8da5b2b8aeeab7921417ba0502670639503808ff5f702000000",
-    "d07448122b37d55571239ff24354cd1cdaee2698dd38e2ade642fdf81c0e86d4048031254502000000",
-    "d97489a9ad4e1e04f6c9ae61c07ad1ba70c471ff68384157717ac16920987a8605806e877401000000",
-    "2b074bf435046e2f2fce1316895d79ce31d4d495de2e8b2371f46d89b1de48f306806e877401000000",
-    "e578053060b7eb644565a322f7c1c93cecc464df0941d6b2be230a5663788b7507806e877401000000",
-    "c300cdec5eba49b149cc3f31be556987d66b5a9a79b69be595944dac4eac9c0208806e877401000000",
-    "99f2a208e7e53eb47a06102cf3d0ca63b1cf9f8a0feda7b48c70004871af6f6d09c0692ac900000000",
-    "303335b2c57865b0402f412c1b2b607bf068ba6c7623a6f9794195c5ea5399290ac0692ac900000000",
-    "b2eb0151285398cea099d79f70b2ba1366f8ee2b1326836dd6d579bf656d0d0c0bc0692ac900000000",
-    "043717ecf671d96cb6f3610a700c1a19f9f5bdff192eb4c1efc9dd185d5f61af0cc0692ac900000000",
-    "4f4ec2b43c1cbd3377722282137eea2f37da37132041c055b2cffc31d59601640dc0692ac900000000",
-    "43dc63ef4eef2281c0f4867f89a847edc6a8f794427643237b1030dda2e538820ec0692ac900000000",
-    "97b45dad78d6dc78dc48dc8912313eba8ed12d98f547480ee86de544241eb65b0fc0692ac900000000",
-    "9ce7956a4b49cb9a821554a09fe1ea2b3536cd2c765ffde79c83832e9d82b7a810c0692ac900000000",
+    "5129088d3309ae8c8dd41dbb2ecd4c08f126c97515b2268395d119d91f4d008a012c5a9b2306000000",
+    "c30e9f8cde46b554948f9eecdff493a42cf79eb749be95af1ec40ab05670f80602cc58ae9703000000",
+    "b5eef6d2d056f78a4eabba63b2bc9fe8da5b2b8aeeab7921417ba05026706395031cd8b75102000000",
+    "d07448122b37d55571239ff24354cd1cdaee2698dd38e2ade642fdf81c0e86d404ac0e05c601000000",
+    "d97489a9ad4e1e04f6c9ae61c07ad1ba70c471ff68384157717ac16920987a860554ce092301000000",
+    "2b074bf435046e2f2fce1316895d79ce31d4d495de2e8b2371f46d89b1de48f30654ce092301000000",
+    "e578053060b7eb644565a322f7c1c93cecc464df0941d6b2be230a5663788b750754ce092301000000",
+    "c300cdec5eba49b149cc3f31be556987d66b5a9a79b69be595944dac4eac9c020854ce092301000000",
+    "99f2a208e7e53eb47a06102cf3d0ca63b1cf9f8a0feda7b48c70004871af6f6d099e22299d00000000",
+    "303335b2c57865b0402f412c1b2b607bf068ba6c7623a6f9794195c5ea5399290a9e22299d00000000",
+    "b2eb0151285398cea099d79f70b2ba1366f8ee2b1326836dd6d579bf656d0d0c0b9e22299d00000000",
+    "043717ecf671d96cb6f3610a700c1a19f9f5bdff192eb4c1efc9dd185d5f61af0c9e22299d00000000",
+    "4f4ec2b43c1cbd3377722282137eea2f37da37132041c055b2cffc31d59601640d9e22299d00000000",
+    "43dc63ef4eef2281c0f4867f89a847edc6a8f794427643237b1030dda2e538820e9e22299d00000000",
+    "97b45dad78d6dc78dc48dc8912313eba8ed12d98f547480ee86de544241eb65b0f9e22299d00000000",
+    "9ce7956a4b49cb9a821554a09fe1ea2b3536cd2c765ffde79c83832e9d82b7a8109e22299d00000000",
     "f8297b8cfbc4f41e8c260fadcd0c2c9f2f23c5b2138cbb8faf3953961dba0fdd110000000000000000",
     "e24f3c3c544df633413278349d478b3bc2713c4cde88f595da301dcda6b1ff20120000000000000000",
     "d0dd69779fffaf04231231ff6fe9c983d9f1283eda3f6b1e2ffa22da039bdf1a130000000000000000",
@@ -43244,7 +43244,7 @@
     "3993d4604ff52759afd8a641169955405260a0aebb125806d986302b521b20fb3f0000000000000000",
     "e24d0886f5dcb1103d38599f0bc198c1eadb264e2ef3b39673a8e3015a33876c400000000000000000"
    ],
-   "root": "6cedf0f2dfc3fa14eda64fe8dad384f184a7c2f28dc0d0a47daff04133e4cdbf"
+   "root": "1bc1d0d641af801bc082916caf35ccb403297e97f7c68df638517b4ae870b730"
   },
   {
    "name": "tier_5000000000",
@@ -46713,14 +46713,14 @@
      "score_half": 534,
      "zones": 1151,
      "rank": 2,
-     "amount_lamports": "39500000000"
+     "amount_lamports": "30859375000"
     },
     {
      "index": 1,
      "score_half": 497,
      "zones": 1123,
      "rank": 12,
-     "amount_lamports": "6750000000"
+     "amount_lamports": "5273437500"
     },
     {
      "index": 2,
@@ -46734,7 +46734,7 @@
      "score_half": 498,
      "zones": 1129,
      "rank": 11,
-     "amount_lamports": "6750000000"
+     "amount_lamports": "5273437500"
     },
     {
      "index": 4,
@@ -46748,7 +46748,7 @@
      "score_half": 499,
      "zones": 1135,
      "rank": 10,
-     "amount_lamports": "6750000000"
+     "amount_lamports": "5273437500"
     },
     {
      "index": 6,
@@ -46762,14 +46762,14 @@
      "score_half": 512,
      "zones": 1128,
      "rank": 5,
-     "amount_lamports": "12500000000"
+     "amount_lamports": "9765625000"
     },
     {
      "index": 8,
      "score_half": 516,
      "zones": 1121,
      "rank": 4,
-     "amount_lamports": "19500000000"
+     "amount_lamports": "15234375000"
     },
     {
      "index": 9,
@@ -46867,7 +46867,7 @@
      "score_half": 494,
      "zones": 1128,
      "rank": 13,
-     "amount_lamports": "6750000000"
+     "amount_lamports": "5273437500"
     },
     {
      "index": 23,
@@ -46895,7 +46895,7 @@
      "score_half": 493,
      "zones": 1142,
      "rank": 14,
-     "amount_lamports": "6750000000"
+     "amount_lamports": "5273437500"
     },
     {
      "index": 27,
@@ -46909,7 +46909,7 @@
      "score_half": 486,
      "zones": 1128,
      "rank": 16,
-     "amount_lamports": "6750000000"
+     "amount_lamports": "5273437500"
     },
     {
      "index": 29,
@@ -46923,7 +46923,7 @@
      "score_half": 501,
      "zones": 1125,
      "rank": 8,
-     "amount_lamports": "12500000000"
+     "amount_lamports": "9765625000"
     },
     {
      "index": 31,
@@ -46937,7 +46937,7 @@
      "score_half": 525,
      "zones": 1147,
      "rank": 3,
-     "amount_lamports": "25500000000"
+     "amount_lamports": "19921875000"
     },
     {
      "index": 33,
@@ -46951,7 +46951,7 @@
      "score_half": 488,
      "zones": 1122,
      "rank": 15,
-     "amount_lamports": "6750000000"
+     "amount_lamports": "5273437500"
     },
     {
      "index": 35,
@@ -47035,14 +47035,14 @@
      "score_half": 511,
      "zones": 1133,
      "rank": 7,
-     "amount_lamports": "12500000000"
+     "amount_lamports": "9765625000"
     },
     {
      "index": 47,
      "score_half": 551,
      "zones": 1166,
      "rank": 1,
-     "amount_lamports": "67500000000"
+     "amount_lamports": "52734375000"
     },
     {
      "index": 48,
@@ -47140,7 +47140,7 @@
      "score_half": 511,
      "zones": 1144,
      "rank": 6,
-     "amount_lamports": "12500000000"
+     "amount_lamports": "9765625000"
     },
     {
      "index": 62,
@@ -47154,74 +47154,74 @@
      "score_half": 500,
      "zones": 1133,
      "rank": 9,
-     "amount_lamports": "6750000000"
+     "amount_lamports": "5273437500"
     }
    ],
    "leaf_order": "47,0,32,8,7,61,46,30,63,5,3,1,22,26,34,28,57,10,19,17,31,40,4,35,43,39,56,18,59,14,13,49,12,55,58,11,36,27,41,50,20,45,37,15,53,21,33,24,9,25,38,2,54,48,6,42,52,16,60,62,23,29,44,51",
    "payouts": [
     {
      "entry_index": 0,
-     "amount": "39500000000"
+     "amount": "30859375000"
     },
     {
      "entry_index": 1,
-     "amount": "6750000000"
+     "amount": "5273437500"
     },
     {
      "entry_index": 3,
-     "amount": "6750000000"
+     "amount": "5273437500"
     },
     {
      "entry_index": 5,
-     "amount": "6750000000"
+     "amount": "5273437500"
     },
     {
      "entry_index": 7,
-     "amount": "12500000000"
+     "amount": "9765625000"
     },
     {
      "entry_index": 8,
-     "amount": "19500000000"
+     "amount": "15234375000"
     },
     {
      "entry_index": 22,
-     "amount": "6750000000"
+     "amount": "5273437500"
     },
     {
      "entry_index": 26,
-     "amount": "6750000000"
+     "amount": "5273437500"
     },
     {
      "entry_index": 28,
-     "amount": "6750000000"
+     "amount": "5273437500"
     },
     {
      "entry_index": 30,
-     "amount": "12500000000"
+     "amount": "9765625000"
     },
     {
      "entry_index": 32,
-     "amount": "25500000000"
+     "amount": "19921875000"
     },
     {
      "entry_index": 34,
-     "amount": "6750000000"
+     "amount": "5273437500"
     },
     {
      "entry_index": 46,
-     "amount": "12500000000"
+     "amount": "9765625000"
     },
     {
      "entry_index": 47,
-     "amount": "67500000000"
+     "amount": "52734375000"
     },
     {
      "entry_index": 61,
-     "amount": "12500000000"
+     "amount": "9765625000"
     },
     {
      "entry_index": 63,
-     "amount": "6750000000"
+     "amount": "5273437500"
     }
    ],
    "players_pubkeys": [
@@ -47291,22 +47291,22 @@
     "3b5d4b34b3fe4916ec60443a7cbeeee86e96796b3ea7c85bf47f80d2eba8c753"
    ],
    "amounts": [
-    "67500000000",
-    "39500000000",
-    "25500000000",
-    "19500000000",
-    "12500000000",
-    "12500000000",
-    "12500000000",
-    "12500000000",
-    "6750000000",
-    "6750000000",
-    "6750000000",
-    "6750000000",
-    "6750000000",
-    "6750000000",
-    "6750000000",
-    "6750000000",
+    "52734375000",
+    "30859375000",
+    "19921875000",
+    "15234375000",
+    "9765625000",
+    "9765625000",
+    "9765625000",
+    "9765625000",
+    "5273437500",
+    "5273437500",
+    "5273437500",
+    "5273437500",
+    "5273437500",
+    "5273437500",
+    "5273437500",
+    "5273437500",
     "0",
     "0",
     "0",
@@ -47357,22 +47357,22 @@
     "0"
    ],
    "leaves_hex": [
-    "48159c4be935e710a2887241f36b8e7d27b1f32ec040be913d242308958429d401004350b70f000000",
-    "98fd2b53a3378ae2dc626c14c5243f98685fe67fdd0255c0c51d9eae7973d53c02002b623209000000",
-    "37ff68545b08e85d9cb137d578fbb4e4382c15ac9ff4938449b21199c964783f03001febef05000000",
-    "c91330f8ee1f1d9dbbbbecadefdabe8a0b75ab8acdf461b25977afb36e2eed820400634a8a04000000",
-    "5d4834f634f8c608c427a195047af55501558bf4d6b22267fab776e280ca93190500dd0ee902000000",
-    "9a937e964d2a105bd43a8b4bd6cabb6994bada42804e01facace919c00ca3e760600dd0ee902000000",
-    "d31f65ed5b38dc0538516fac4471f282c82c6a8a9a81adbceed2989d040901f60700dd0ee902000000",
-    "b09895a3d4300c949aa873d18165fa215d8b9348c87f4141f3917dcd96ccc8c90800dd0ee902000000",
-    "3b5d4b34b3fe4916ec60443a7cbeeee86e96796b3ea7c85bf47f80d2eba8c7530980d3549201000000",
-    "afe0be8662f984394ed2c1610bbef7fb13fcff38ccd0a1ad52acf65b6d5aea880a80d3549201000000",
-    "8045e7ef3d683e1af4d1e280f24a4ee0546c933846f0c0a27db69973518c9e4c0b80d3549201000000",
-    "4279aa57b62ca74a2aa4a591b6bc018b39a345905a6f59eb9bc93eee06c7d6650c80d3549201000000",
-    "7efeb1668b138036733d82553ba5f548af462dc436a17a86d51cc8cd9120965f0d80d3549201000000",
-    "d4e7a87276f8b2e8f1f8ffca80624166a4c217ff1b9c9f0f38854db8c2745e560e80d3549201000000",
-    "1bf1962f314aec2df0ee0df71b1df0de0d59a62466565ef7968eb2c62867510b0f80d3549201000000",
-    "e52f60adf9d8ce7a7562e9aca83e0c020fed747736b706587669fbda280474461080d3549201000000",
+    "48159c4be935e710a2887241f36b8e7d27b1f32ec040be913d242308958429d40158b436470c000000",
+    "98fd2b53a3378ae2dc626c14c5243f98685fe67fdd0255c0c51d9eae7973d53c0298b15c2f07000000",
+    "37ff68545b08e85d9cb137d578fbb4e4382c15ac9ff4938449b21199c964783f0338b06fa304000000",
+    "c91330f8ee1f1d9dbbbbecadefdabe8a0b75ab8acdf461b25977afb36e2eed8204581d0a8c03000000",
+    "5d4834f634f8c608c427a195047af55501558bf4d6b22267fab776e280ca931905a89c134602000000",
+    "9a937e964d2a105bd43a8b4bd6cabb6994bada42804e01facace919c00ca3e7606a89c134602000000",
+    "d31f65ed5b38dc0538516fac4471f282c82c6a8a9a81adbceed2989d040901f607a89c134602000000",
+    "b09895a3d4300c949aa873d18165fa215d8b9348c87f4141f3917dcd96ccc8c908a89c134602000000",
+    "3b5d4b34b3fe4916ec60443a7cbeeee86e96796b3ea7c85bf47f80d2eba8c753093c45523a01000000",
+    "afe0be8662f984394ed2c1610bbef7fb13fcff38ccd0a1ad52acf65b6d5aea880a3c45523a01000000",
+    "8045e7ef3d683e1af4d1e280f24a4ee0546c933846f0c0a27db69973518c9e4c0b3c45523a01000000",
+    "4279aa57b62ca74a2aa4a591b6bc018b39a345905a6f59eb9bc93eee06c7d6650c3c45523a01000000",
+    "7efeb1668b138036733d82553ba5f548af462dc436a17a86d51cc8cd9120965f0d3c45523a01000000",
+    "d4e7a87276f8b2e8f1f8ffca80624166a4c217ff1b9c9f0f38854db8c2745e560e3c45523a01000000",
+    "1bf1962f314aec2df0ee0df71b1df0de0d59a62466565ef7968eb2c62867510b0f3c45523a01000000",
+    "e52f60adf9d8ce7a7562e9aca83e0c020fed747736b706587669fbda28047446103c45523a01000000",
     "58823eaf5a71d0487dc2370b45ce7ed2643ff7f87d1c80a537e6485cd3115f15110000000000000000",
     "d0a2e831fd5809f08bec1160eae09a2e38eb1e06c91178c82c81d03ec4fb3f0b120000000000000000",
     "562868223bf21bcc8f4963208f30c614804cabd213117d40668a5aa3dd5eadab130000000000000000",
@@ -47422,7 +47422,7 @@
     "1527d76e2d61dda24a828b687a9783c898f9fdc782441ca88a84a8ebb652ff363f0000000000000000",
     "154cfd02804daeadbab7f513365f5e16e8a5d65d02cf0e40bdf2a2783bdf93d2400000000000000000"
    ],
-   "root": "757bfd58fcfe63607f2a304578b1447ad233846a4310aa67785337ee4763ab2b"
+   "root": "46da9afa574ed61cea27807c28c7473e51585729ac3851d0b69ef937fd536cd2"
   },
   {
    "name": "tier_7500000000",
@@ -50891,14 +50891,14 @@
      "score_half": 534,
      "zones": 1151,
      "rank": 2,
-     "amount_lamports": "59250000000"
+     "amount_lamports": "46289062500"
     },
     {
      "index": 1,
      "score_half": 497,
      "zones": 1123,
      "rank": 12,
-     "amount_lamports": "10125000000"
+     "amount_lamports": "7910156250"
     },
     {
      "index": 2,
@@ -50912,7 +50912,7 @@
      "score_half": 498,
      "zones": 1129,
      "rank": 11,
-     "amount_lamports": "10125000000"
+     "amount_lamports": "7910156250"
     },
     {
      "index": 4,
@@ -50926,7 +50926,7 @@
      "score_half": 499,
      "zones": 1135,
      "rank": 10,
-     "amount_lamports": "10125000000"
+     "amount_lamports": "7910156250"
     },
     {
      "index": 6,
@@ -50940,14 +50940,14 @@
      "score_half": 512,
      "zones": 1128,
      "rank": 5,
-     "amount_lamports": "18750000000"
+     "amount_lamports": "14648437500"
     },
     {
      "index": 8,
      "score_half": 516,
      "zones": 1121,
      "rank": 4,
-     "amount_lamports": "29250000000"
+     "amount_lamports": "22851562500"
     },
     {
      "index": 9,
@@ -51045,7 +51045,7 @@
      "score_half": 494,
      "zones": 1128,
      "rank": 13,
-     "amount_lamports": "10125000000"
+     "amount_lamports": "7910156250"
     },
     {
      "index": 23,
@@ -51073,7 +51073,7 @@
      "score_half": 493,
      "zones": 1142,
      "rank": 14,
-     "amount_lamports": "10125000000"
+     "amount_lamports": "7910156250"
     },
     {
      "index": 27,
@@ -51087,7 +51087,7 @@
      "score_half": 486,
      "zones": 1128,
      "rank": 16,
-     "amount_lamports": "10125000000"
+     "amount_lamports": "7910156250"
     },
     {
      "index": 29,
@@ -51101,7 +51101,7 @@
      "score_half": 501,
      "zones": 1125,
      "rank": 8,
-     "amount_lamports": "18750000000"
+     "amount_lamports": "14648437500"
     },
     {
      "index": 31,
@@ -51115,7 +51115,7 @@
      "score_half": 525,
      "zones": 1147,
      "rank": 3,
-     "amount_lamports": "38250000000"
+     "amount_lamports": "29882812500"
     },
     {
      "index": 33,
@@ -51129,7 +51129,7 @@
      "score_half": 488,
      "zones": 1122,
      "rank": 15,
-     "amount_lamports": "10125000000"
+     "amount_lamports": "7910156250"
     },
     {
      "index": 35,
@@ -51213,14 +51213,14 @@
      "score_half": 511,
      "zones": 1133,
      "rank": 7,
-     "amount_lamports": "18750000000"
+     "amount_lamports": "14648437500"
     },
     {
      "index": 47,
      "score_half": 551,
      "zones": 1166,
      "rank": 1,
-     "amount_lamports": "101250000000"
+     "amount_lamports": "79101562500"
     },
     {
      "index": 48,
@@ -51318,7 +51318,7 @@
      "score_half": 511,
      "zones": 1144,
      "rank": 6,
-     "amount_lamports": "18750000000"
+     "amount_lamports": "14648437500"
     },
     {
      "index": 62,
@@ -51332,74 +51332,74 @@
      "score_half": 500,
      "zones": 1133,
      "rank": 9,
-     "amount_lamports": "10125000000"
+     "amount_lamports": "7910156250"
     }
    ],
    "leaf_order": "47,0,32,8,7,61,46,30,63,5,3,1,22,26,34,28,57,10,19,17,31,40,4,35,43,39,56,18,59,14,13,49,12,55,58,11,36,27,41,50,20,45,37,15,53,21,33,24,9,25,38,2,54,48,6,42,52,16,60,62,23,29,44,51",
    "payouts": [
     {
      "entry_index": 0,
-     "amount": "59250000000"
+     "amount": "46289062500"
     },
     {
      "entry_index": 1,
-     "amount": "10125000000"
+     "amount": "7910156250"
     },
     {
      "entry_index": 3,
-     "amount": "10125000000"
+     "amount": "7910156250"
     },
     {
      "entry_index": 5,
-     "amount": "10125000000"
+     "amount": "7910156250"
     },
     {
      "entry_index": 7,
-     "amount": "18750000000"
+     "amount": "14648437500"
     },
     {
      "entry_index": 8,
-     "amount": "29250000000"
+     "amount": "22851562500"
     },
     {
      "entry_index": 22,
-     "amount": "10125000000"
+     "amount": "7910156250"
     },
     {
      "entry_index": 26,
-     "amount": "10125000000"
+     "amount": "7910156250"
     },
     {
      "entry_index": 28,
-     "amount": "10125000000"
+     "amount": "7910156250"
     },
     {
      "entry_index": 30,
-     "amount": "18750000000"
+     "amount": "14648437500"
     },
     {
      "entry_index": 32,
-     "amount": "38250000000"
+     "amount": "29882812500"
     },
     {
      "entry_index": 34,
-     "amount": "10125000000"
+     "amount": "7910156250"
     },
     {
      "entry_index": 46,
-     "amount": "18750000000"
+     "amount": "14648437500"
     },
     {
      "entry_index": 47,
-     "amount": "101250000000"
+     "amount": "79101562500"
     },
     {
      "entry_index": 61,
-     "amount": "18750000000"
+     "amount": "14648437500"
     },
     {
      "entry_index": 63,
-     "amount": "10125000000"
+     "amount": "7910156250"
     }
    ],
    "players_pubkeys": [
@@ -51469,22 +51469,22 @@
     "8ce2f71f0bd01078b3ed507c402245342428cbd5cd25e1bd5601c8c02fd816a8"
    ],
    "amounts": [
-    "101250000000",
-    "59250000000",
-    "38250000000",
-    "29250000000",
-    "18750000000",
-    "18750000000",
-    "18750000000",
-    "18750000000",
-    "10125000000",
-    "10125000000",
-    "10125000000",
-    "10125000000",
-    "10125000000",
-    "10125000000",
-    "10125000000",
-    "10125000000",
+    "79101562500",
+    "46289062500",
+    "29882812500",
+    "22851562500",
+    "14648437500",
+    "14648437500",
+    "14648437500",
+    "14648437500",
+    "7910156250",
+    "7910156250",
+    "7910156250",
+    "7910156250",
+    "7910156250",
+    "7910156250",
+    "7910156250",
+    "7910156250",
     "0",
     "0",
     "0",
@@ -51535,22 +51535,22 @@
     "0"
    ],
    "leaves_hex": [
-    "1126aa3f3cc5c54e59cadd1e0b1f301b0da575ff29b0f0538b404d4537f80b63018064f89217000000",
-    "daf898bc274b4b204e556dfdc18c024a8a04bc5a826407bcf820089b76c2662a02804093cb0d000000",
-    "8aa11c11da31f1000f41019c03daa425662e9151dd0514a8efafd12c806aa6a60380aee0e708000000",
-    "28e2322f94c7500447bc3fb680e8b3b34abe816c1d670474462fc003494ed6760480946fcf06000000",
-    "4ab60747f3d6803d4f9bbd63272de1eac2bcdda9c902252676f5c717ff959d0f05804b965d04000000",
-    "4039dc64c23300e36e54fcc172bd77a50628c575fb543150fbab5fe0889bb1b606804b965d04000000",
-    "d197463ae39214809ab535abb987d6917db9508ba27edfb7adc03f3e5922e22907804b965d04000000",
-    "1805e2480400d82f0e7b96dd76d66ee085e5af7cf50d18289f641c6cee7cc95808804b965d04000000",
-    "8ce2f71f0bd01078b3ed507c402245342428cbd5cd25e1bd5601c8c02fd816a809403d7f5b02000000",
-    "235bc76b6c8206d49749c5eb648c37303b3bbbf26ddbfd8f27f37761647231290a403d7f5b02000000",
-    "ad5001b755e1d5a34da712cc8f4d98c714abe63cfa81762cb958b14bf930f47c0b403d7f5b02000000",
-    "7af283a2bd8533ef293c6fc1570ed120e79512db4b5638580b2973e4dac7ea620c403d7f5b02000000",
-    "a46b43642765b85a46dc724b4aad0e3376e6b5d7573fd13c99b6780e7934d9f20d403d7f5b02000000",
-    "c81f334a5db8b6511734f87e9506d42f28de13b16e498eff4ad75bacc2a932970e403d7f5b02000000",
-    "1965d2967cbb3e34df6bd52505f84d16beeb74c35b6bff1099f21633ee23350b0f403d7f5b02000000",
-    "86092545c0100c0abdbfb05f7a4b9ee4dc40765be137a43ddec5ac6e0eb729be10403d7f5b02000000",
+    "1126aa3f3cc5c54e59cadd1e0b1f301b0da575ff29b0f0538b404d4537f80b6301840ed26a12000000",
+    "daf898bc274b4b204e556dfdc18c024a8a04bc5a826407bcf820089b76c2662a02640a0bc70a000000",
+    "8aa11c11da31f1000f41019c03daa425662e9151dd0514a8efafd12c806aa6a603548827f506000000",
+    "28e2322f94c7500447bc3fb680e8b3b34abe816c1d670474462fc003494ed67604042c0f5205000000",
+    "4ab60747f3d6803d4f9bbd63272de1eac2bcdda9c902252676f5c717ff959d0f05fc6a1d6903000000",
+    "4039dc64c23300e36e54fcc172bd77a50628c575fb543150fbab5fe0889bb1b606fc6a1d6903000000",
+    "d197463ae39214809ab535abb987d6917db9508ba27edfb7adc03f3e5922e22907fc6a1d6903000000",
+    "1805e2480400d82f0e7b96dd76d66ee085e5af7cf50d18289f641c6cee7cc95808fc6a1d6903000000",
+    "8ce2f71f0bd01078b3ed507c402245342428cbd5cd25e1bd5601c8c02fd816a809da677bd701000000",
+    "235bc76b6c8206d49749c5eb648c37303b3bbbf26ddbfd8f27f37761647231290ada677bd701000000",
+    "ad5001b755e1d5a34da712cc8f4d98c714abe63cfa81762cb958b14bf930f47c0bda677bd701000000",
+    "7af283a2bd8533ef293c6fc1570ed120e79512db4b5638580b2973e4dac7ea620cda677bd701000000",
+    "a46b43642765b85a46dc724b4aad0e3376e6b5d7573fd13c99b6780e7934d9f20dda677bd701000000",
+    "c81f334a5db8b6511734f87e9506d42f28de13b16e498eff4ad75bacc2a932970eda677bd701000000",
+    "1965d2967cbb3e34df6bd52505f84d16beeb74c35b6bff1099f21633ee23350b0fda677bd701000000",
+    "86092545c0100c0abdbfb05f7a4b9ee4dc40765be137a43ddec5ac6e0eb729be10da677bd701000000",
     "5d72598ab503702bc9175154cc711a95b5795ed28d7a61aa6f1f6ad262c4e934110000000000000000",
     "6661f085c423b34e0066bd41a4bb5f6fa32a28b44fa1e8c0e51a5a46c64f106e120000000000000000",
     "db9ae96009b21234e352209294aed9a7cd162f45b4c8b6a49d2397a08ca22aab130000000000000000",
@@ -51600,7 +51600,7 @@
     "cdfa1ce275a5daf2a7bc96d608dc05db3cd88405be615b670b8a8ce7499721483f0000000000000000",
     "0001db3d2918625bf48953885662dfbce03e8c65b1e0f1742f055404bdc11d23400000000000000000"
    ],
-   "root": "27743242aa42d107b1d939713555e200468cc8eb166a57b122292d2a491ea971"
+   "root": "1eece7d381c7d984bdc6fe9139405aae3c48eb4ae213026cee1078b5a3bfd5f6"
   },
   {
    "name": "all_identical",
@@ -51829,47 +51829,47 @@
      "score_half": 21,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "760000000"
+     "amount_lamports": "593750000"
     },
     {
      "index": 1,
      "score_half": 21,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "760000000"
+     "amount_lamports": "593750000"
     },
     {
      "index": 2,
      "score_half": 21,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "760000000"
+     "amount_lamports": "593750000"
     },
     {
      "index": 3,
      "score_half": 21,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "760000000"
+     "amount_lamports": "593750000"
     }
    ],
    "leaf_order": "0,1,2,3",
    "payouts": [
     {
      "entry_index": 0,
-     "amount": "760000000"
+     "amount": "593750000"
     },
     {
      "entry_index": 1,
-     "amount": "760000000"
+     "amount": "593750000"
     },
     {
      "entry_index": 2,
-     "amount": "760000000"
+     "amount": "593750000"
     },
     {
      "entry_index": 3,
-     "amount": "760000000"
+     "amount": "593750000"
     }
    ]
   },
@@ -55340,707 +55340,707 @@
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 1,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 2,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 3,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 4,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 5,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 6,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 7,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 8,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 9,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 10,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 11,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 12,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 13,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 14,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 15,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 16,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 17,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 18,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 19,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 20,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 21,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 22,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 23,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 24,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 25,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 26,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 27,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 28,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 29,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 30,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 31,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 32,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 33,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 34,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 35,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 36,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 37,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 38,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 39,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 40,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 41,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 42,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 43,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 44,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 45,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 46,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 47,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 48,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 49,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 50,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 51,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 52,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 53,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 54,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 55,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 56,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 57,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 58,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 59,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 60,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 61,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 62,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     },
     {
      "index": 63,
      "score_half": 441,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "80000000"
+     "amount_lamports": "62500000"
     }
    ],
    "leaf_order": "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63",
    "payouts": [
     {
      "entry_index": 0,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 1,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 2,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 3,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 4,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 5,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 6,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 7,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 8,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 9,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 10,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 11,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 12,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 13,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 14,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 15,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 16,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 17,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 18,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 19,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 20,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 21,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 22,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 23,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 24,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 25,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 26,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 27,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 28,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 29,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 30,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 31,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 32,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 33,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 34,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 35,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 36,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 37,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 38,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 39,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 40,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 41,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 42,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 43,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 44,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 45,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 46,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 47,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 48,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 49,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 50,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 51,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 52,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 53,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 54,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 55,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 56,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 57,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 58,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 59,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 60,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 61,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 62,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 63,
-     "amount": "80000000"
+     "amount": "62500000"
     }
    ],
    "players_pubkeys": [
@@ -56110,138 +56110,138 @@
     "1fff63b72db15d92cf379a47731c0cc121bb9f53137b5f7c3a2a7c7c0d9ebf0b"
    ],
    "amounts": [
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000",
-    "80000000"
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000",
+    "62500000"
    ],
    "leaves_hex": [
-    "48255264d89abe43437ae2271548f8c2625cac13d37f303ba44ec5d5eafd14100100b4c40400000000",
-    "e18f5342b25a8d2053226f0808ea429bdc1fade65abc2d5635b02cd6bb94db800100b4c40400000000",
-    "23a3a18a33b2a37f1c095630a250ddce1f15538b2bab3337181304f20d5e2b0c0100b4c40400000000",
-    "310fff5c16f5f0f815acd8831100ec4c613142627116288227559f8b3a446c390100b4c40400000000",
-    "56df97d190594c10170dd7cd695ee1052ea0df412e724dd7eec17cc4626650750100b4c40400000000",
-    "0a539b84c0c53c597573d90f1897e211f15b78ec0542361fd5f481ca7577e5370100b4c40400000000",
-    "887cade74d37b46d07d1c2a9b954acc77e13bf2c2d2853aef6bea1e023c0aa8c0100b4c40400000000",
-    "80ee10c689c586d0dd98b5cbc0879732467494ac3550a27f41b8fd675f49117c0100b4c40400000000",
-    "09dc69d45bcc4c5c9cfcf0ac7b7e8baec9c96a4be2f808f259a2bcfe51ced6060100b4c40400000000",
-    "c574624d0d45dfaf942bc84c8bb84b30c321305b6392030421b9ae24eb6187f30100b4c40400000000",
-    "ec53f7b7e83c5a32e7f03d2ceeb15dbbf6005595ac34fef4938f1a4ae6555fbd0100b4c40400000000",
-    "28261dc1ca39bc7043f0b3bb6bbe59c0614c612a47722abb07f047047ac9b4bf0100b4c40400000000",
-    "5c6181de9d57a9baff5f2f53c0fcd69bddc37a43f25b2f5e9af1393deac861b70100b4c40400000000",
-    "f45711f481ec7e41e0887079467a6d992066f05f166e3dd34752982fd418006d0100b4c40400000000",
-    "79bf87d431189647c80045fc6012cbe244d72efcbac51611a8c138f4a0dda0050100b4c40400000000",
-    "707bb7bc745a55c688dcf930d68327749ff3969e0f2002c427d6ef55165f1edf0100b4c40400000000",
-    "c5fe6324aa6e748622f93a11057fcec98e19b5cc07077b85a1a4358d93224c520100b4c40400000000",
-    "3bfa1ee7909764d8ae6df89dee8215e45f3d0a31d7f0790a62347a4c2f3d75000100b4c40400000000",
-    "4994c2bd4f3c62f706c722db72b6c4a6ae23959c524091d16f09b21bcc42c6650100b4c40400000000",
-    "eb1577fcc085efee220378bf2a8a91c236a745d86e16d9784d55fedf11c547b20100b4c40400000000",
-    "a7b665bc8bf6b75a1099e1d19a2909d366ba88ff931c6b2eca988e2303ad7dd80100b4c40400000000",
-    "9539c0f496a09d47beb148006e496ded57fc27ac7faf831f7f4b3dcbb1360e8d0100b4c40400000000",
-    "68e23bfee9e16b0485c5931f1f3803232946a279cbd27217862207d3609dfd980100b4c40400000000",
-    "243d85168cdcf06aecf667ec13883400a1feac78bcf9e757405b636be9317fb00100b4c40400000000",
-    "da804bb66daf802f5d8d442dc7ceb2a52e9f3039d7dc17379e7708035127783a0100b4c40400000000",
-    "a96c86ab1e53a314b9f1066975f605c3bb584697d732a5bdd614f2a5a3ef257a0100b4c40400000000",
-    "67efab8cdf541fde0f16b2c904e1353621ea067e9c855bab40278327a5504dc90100b4c40400000000",
-    "572bdc9d745e95f23571ebd5f3aac4cbfe80b31aee9e0f1f1dcd071ca6676b030100b4c40400000000",
-    "381ce6c36384ac7919b9b8b2f06f900745f41c9f53bdc5c0bead4b3223864ad80100b4c40400000000",
-    "1e121ab1e5ae81d80b9701f2d48c13f8f79e9f8b1edb81a0ab919fa887d503870100b4c40400000000",
-    "b8473e4cdc2f468541210ed8269d3633dad706fe34e8d58eb424ed86ac7ccd980100b4c40400000000",
-    "c478ba5291eb3c386d41a26b64ef9d131afc0cb8e1d4dc2559eb0ca7b864e3220100b4c40400000000",
-    "88c78e9b59c9c78a1f51140e54267411102456ef8b1d37d280c2be68b4ee0f220100b4c40400000000",
-    "6129146e6ed223986f8407a86de33190bc383fba2c1808ceea9f2700fa511c940100b4c40400000000",
-    "29863ded6157911dabe9f33b7defffa23afd1ddb7a893aea7e5a78fae4d7954e0100b4c40400000000",
-    "ad08beb1e9c26384432e5efb271ee2a78d439e27dad6437575eaca2e31a9b4cf0100b4c40400000000",
-    "b5c7b86f838d8b235f3d7cb46ffda9c2c96cef2d4e08afdab43e43d8cbb316750100b4c40400000000",
-    "d4f5965e5b55195f2213ce9f81d60aa56bc68785d1ba09c73e7a7f9ca2dbe4b30100b4c40400000000",
-    "5d5dcebfd2f9684b767930bdb3de6f67a0a425a6540f5632a7b02a50156749e90100b4c40400000000",
-    "14db834c58a7b8047082d8349e2a3122087b80809895a02e43871e0d02eaf99b0100b4c40400000000",
-    "1426ac945468e42fcbb49b0b41918a3a57b02eaf7bd9db1137a7400f888ab8bb0100b4c40400000000",
-    "cf1872d9c4b672ee9b83f08e76374b609a01de7d7993e2570db329d745e0a3ce0100b4c40400000000",
-    "3b1c8ce9f0b23b672869eeaeb24992ff80897c77dc9548a540fa8fc8efd2c60d0100b4c40400000000",
-    "4c4f2e46ff6df1bebd686b4ef461caece665fa95ebbc34a880bcf092ba3064770100b4c40400000000",
-    "71691613bdfacb218d279d455ed74a5cedae9a323c3e4d6eba0f0e7932816f2c0100b4c40400000000",
-    "d74232b2c5ea2720f6d95728900e70e7afbc4e5f45ca78cfe3383630d5a8412b0100b4c40400000000",
-    "c2fe3ea80084c812d20f995d475dd57bd1e440c586e299dee0818795658016a20100b4c40400000000",
-    "1322f7420ff91bb2aa48bc378f723556fcc753852725571f9fc2be275209a4c90100b4c40400000000",
-    "33c8f84b917307130676c108b58413175d9a890b483a18c0ec110d3f4433827a0100b4c40400000000",
-    "aa1bdf68e6b4610564ad4d4d198b4fb357a58b7b263f1f52eca2277e616f93fa0100b4c40400000000",
-    "4e443503b53035ecb8383f50e1367247eecd2b0eaa47f7b9528bce9d9b8bc5680100b4c40400000000",
-    "e81f880bc0e9b127feaff56573b8802699063d4933d6dc8154cd1746230108c50100b4c40400000000",
-    "2662357e892f8aa4d3fb5e7f286fb1e2d489f1ffd1e683a98733812d7b41d6cb0100b4c40400000000",
-    "ddaea06796f49d39965f61774be0b30c602afa340ff9d1caeb63115d5f133d660100b4c40400000000",
-    "78a780b254859c1682c4ce0373d46db6dc32bcf3462458550a0b4fbf92ad78c10100b4c40400000000",
-    "12801d4e1aee7ade64711c44c91cefed30498f34cd013d197ea48ad00fcb243b0100b4c40400000000",
-    "63f52a5a1324408e14f0eef492318730609e3dab4522961737bd5a61f82906340100b4c40400000000",
-    "976abff2892051775b479efc238c1f34b0590305f36f35d3940cf04b8d8b572a0100b4c40400000000",
-    "3b42f2b146fa6aaf141a7086fa8af202308b2f17708e46a217409ed80033fc9b0100b4c40400000000",
-    "de6dc0040707b1d17cae5116ab40f2b63f3f9ca329dbe989df4dfa12600de7f60100b4c40400000000",
-    "50188eac8ba58b2c68d5dd57a1a6e8f758b4356de5caf18181fa224389fdacbd0100b4c40400000000",
-    "65c8be033ce14b9b93413049d1aba797206abd36cf1813fce6e015dcc0b03bd50100b4c40400000000",
-    "89ccfa53c40ed2213cce8235c1674a1b0b9a6121fa881534cec8ffd09099000f0100b4c40400000000",
-    "1fff63b72db15d92cf379a47731c0cc121bb9f53137b5f7c3a2a7c7c0d9ebf0b0100b4c40400000000"
+    "48255264d89abe43437ae2271548f8c2625cac13d37f303ba44ec5d5eafd141001a0acb90300000000",
+    "e18f5342b25a8d2053226f0808ea429bdc1fade65abc2d5635b02cd6bb94db8001a0acb90300000000",
+    "23a3a18a33b2a37f1c095630a250ddce1f15538b2bab3337181304f20d5e2b0c01a0acb90300000000",
+    "310fff5c16f5f0f815acd8831100ec4c613142627116288227559f8b3a446c3901a0acb90300000000",
+    "56df97d190594c10170dd7cd695ee1052ea0df412e724dd7eec17cc46266507501a0acb90300000000",
+    "0a539b84c0c53c597573d90f1897e211f15b78ec0542361fd5f481ca7577e53701a0acb90300000000",
+    "887cade74d37b46d07d1c2a9b954acc77e13bf2c2d2853aef6bea1e023c0aa8c01a0acb90300000000",
+    "80ee10c689c586d0dd98b5cbc0879732467494ac3550a27f41b8fd675f49117c01a0acb90300000000",
+    "09dc69d45bcc4c5c9cfcf0ac7b7e8baec9c96a4be2f808f259a2bcfe51ced60601a0acb90300000000",
+    "c574624d0d45dfaf942bc84c8bb84b30c321305b6392030421b9ae24eb6187f301a0acb90300000000",
+    "ec53f7b7e83c5a32e7f03d2ceeb15dbbf6005595ac34fef4938f1a4ae6555fbd01a0acb90300000000",
+    "28261dc1ca39bc7043f0b3bb6bbe59c0614c612a47722abb07f047047ac9b4bf01a0acb90300000000",
+    "5c6181de9d57a9baff5f2f53c0fcd69bddc37a43f25b2f5e9af1393deac861b701a0acb90300000000",
+    "f45711f481ec7e41e0887079467a6d992066f05f166e3dd34752982fd418006d01a0acb90300000000",
+    "79bf87d431189647c80045fc6012cbe244d72efcbac51611a8c138f4a0dda00501a0acb90300000000",
+    "707bb7bc745a55c688dcf930d68327749ff3969e0f2002c427d6ef55165f1edf01a0acb90300000000",
+    "c5fe6324aa6e748622f93a11057fcec98e19b5cc07077b85a1a4358d93224c5201a0acb90300000000",
+    "3bfa1ee7909764d8ae6df89dee8215e45f3d0a31d7f0790a62347a4c2f3d750001a0acb90300000000",
+    "4994c2bd4f3c62f706c722db72b6c4a6ae23959c524091d16f09b21bcc42c66501a0acb90300000000",
+    "eb1577fcc085efee220378bf2a8a91c236a745d86e16d9784d55fedf11c547b201a0acb90300000000",
+    "a7b665bc8bf6b75a1099e1d19a2909d366ba88ff931c6b2eca988e2303ad7dd801a0acb90300000000",
+    "9539c0f496a09d47beb148006e496ded57fc27ac7faf831f7f4b3dcbb1360e8d01a0acb90300000000",
+    "68e23bfee9e16b0485c5931f1f3803232946a279cbd27217862207d3609dfd9801a0acb90300000000",
+    "243d85168cdcf06aecf667ec13883400a1feac78bcf9e757405b636be9317fb001a0acb90300000000",
+    "da804bb66daf802f5d8d442dc7ceb2a52e9f3039d7dc17379e7708035127783a01a0acb90300000000",
+    "a96c86ab1e53a314b9f1066975f605c3bb584697d732a5bdd614f2a5a3ef257a01a0acb90300000000",
+    "67efab8cdf541fde0f16b2c904e1353621ea067e9c855bab40278327a5504dc901a0acb90300000000",
+    "572bdc9d745e95f23571ebd5f3aac4cbfe80b31aee9e0f1f1dcd071ca6676b0301a0acb90300000000",
+    "381ce6c36384ac7919b9b8b2f06f900745f41c9f53bdc5c0bead4b3223864ad801a0acb90300000000",
+    "1e121ab1e5ae81d80b9701f2d48c13f8f79e9f8b1edb81a0ab919fa887d5038701a0acb90300000000",
+    "b8473e4cdc2f468541210ed8269d3633dad706fe34e8d58eb424ed86ac7ccd9801a0acb90300000000",
+    "c478ba5291eb3c386d41a26b64ef9d131afc0cb8e1d4dc2559eb0ca7b864e32201a0acb90300000000",
+    "88c78e9b59c9c78a1f51140e54267411102456ef8b1d37d280c2be68b4ee0f2201a0acb90300000000",
+    "6129146e6ed223986f8407a86de33190bc383fba2c1808ceea9f2700fa511c9401a0acb90300000000",
+    "29863ded6157911dabe9f33b7defffa23afd1ddb7a893aea7e5a78fae4d7954e01a0acb90300000000",
+    "ad08beb1e9c26384432e5efb271ee2a78d439e27dad6437575eaca2e31a9b4cf01a0acb90300000000",
+    "b5c7b86f838d8b235f3d7cb46ffda9c2c96cef2d4e08afdab43e43d8cbb3167501a0acb90300000000",
+    "d4f5965e5b55195f2213ce9f81d60aa56bc68785d1ba09c73e7a7f9ca2dbe4b301a0acb90300000000",
+    "5d5dcebfd2f9684b767930bdb3de6f67a0a425a6540f5632a7b02a50156749e901a0acb90300000000",
+    "14db834c58a7b8047082d8349e2a3122087b80809895a02e43871e0d02eaf99b01a0acb90300000000",
+    "1426ac945468e42fcbb49b0b41918a3a57b02eaf7bd9db1137a7400f888ab8bb01a0acb90300000000",
+    "cf1872d9c4b672ee9b83f08e76374b609a01de7d7993e2570db329d745e0a3ce01a0acb90300000000",
+    "3b1c8ce9f0b23b672869eeaeb24992ff80897c77dc9548a540fa8fc8efd2c60d01a0acb90300000000",
+    "4c4f2e46ff6df1bebd686b4ef461caece665fa95ebbc34a880bcf092ba30647701a0acb90300000000",
+    "71691613bdfacb218d279d455ed74a5cedae9a323c3e4d6eba0f0e7932816f2c01a0acb90300000000",
+    "d74232b2c5ea2720f6d95728900e70e7afbc4e5f45ca78cfe3383630d5a8412b01a0acb90300000000",
+    "c2fe3ea80084c812d20f995d475dd57bd1e440c586e299dee0818795658016a201a0acb90300000000",
+    "1322f7420ff91bb2aa48bc378f723556fcc753852725571f9fc2be275209a4c901a0acb90300000000",
+    "33c8f84b917307130676c108b58413175d9a890b483a18c0ec110d3f4433827a01a0acb90300000000",
+    "aa1bdf68e6b4610564ad4d4d198b4fb357a58b7b263f1f52eca2277e616f93fa01a0acb90300000000",
+    "4e443503b53035ecb8383f50e1367247eecd2b0eaa47f7b9528bce9d9b8bc56801a0acb90300000000",
+    "e81f880bc0e9b127feaff56573b8802699063d4933d6dc8154cd1746230108c501a0acb90300000000",
+    "2662357e892f8aa4d3fb5e7f286fb1e2d489f1ffd1e683a98733812d7b41d6cb01a0acb90300000000",
+    "ddaea06796f49d39965f61774be0b30c602afa340ff9d1caeb63115d5f133d6601a0acb90300000000",
+    "78a780b254859c1682c4ce0373d46db6dc32bcf3462458550a0b4fbf92ad78c101a0acb90300000000",
+    "12801d4e1aee7ade64711c44c91cefed30498f34cd013d197ea48ad00fcb243b01a0acb90300000000",
+    "63f52a5a1324408e14f0eef492318730609e3dab4522961737bd5a61f829063401a0acb90300000000",
+    "976abff2892051775b479efc238c1f34b0590305f36f35d3940cf04b8d8b572a01a0acb90300000000",
+    "3b42f2b146fa6aaf141a7086fa8af202308b2f17708e46a217409ed80033fc9b01a0acb90300000000",
+    "de6dc0040707b1d17cae5116ab40f2b63f3f9ca329dbe989df4dfa12600de7f601a0acb90300000000",
+    "50188eac8ba58b2c68d5dd57a1a6e8f758b4356de5caf18181fa224389fdacbd01a0acb90300000000",
+    "65c8be033ce14b9b93413049d1aba797206abd36cf1813fce6e015dcc0b03bd501a0acb90300000000",
+    "89ccfa53c40ed2213cce8235c1674a1b0b9a6121fa881534cec8ffd09099000f01a0acb90300000000",
+    "1fff63b72db15d92cf379a47731c0cc121bb9f53137b5f7c3a2a7c7c0d9ebf0b01a0acb90300000000"
    ],
-   "root": "118ceed978933ce4df9a0ae2dee4d28a5e4e95f4ae438cddb292c343cc834227"
+   "root": "700535fb03dda7fe66f38b9fb72d40b862a9ebf65a6aef33fbdcaa9fc3f69c73"
   },
   {
    "name": "all_tied_pairwise",
@@ -56470,47 +56470,47 @@
      "score_half": 21,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "760000000"
+     "amount_lamports": "593750000"
     },
     {
      "index": 1,
      "score_half": 21,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "760000000"
+     "amount_lamports": "593750000"
     },
     {
      "index": 2,
      "score_half": 21,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "760000000"
+     "amount_lamports": "593750000"
     },
     {
      "index": 3,
      "score_half": 21,
      "zones": 0,
      "rank": 1,
-     "amount_lamports": "760000000"
+     "amount_lamports": "593750000"
     }
    ],
    "leaf_order": "0,1,2,3",
    "payouts": [
     {
      "entry_index": 0,
-     "amount": "760000000"
+     "amount": "593750000"
     },
     {
      "entry_index": 1,
-     "amount": "760000000"
+     "amount": "593750000"
     },
     {
      "entry_index": 2,
-     "amount": "760000000"
+     "amount": "593750000"
     },
     {
      "entry_index": 3,
-     "amount": "760000000"
+     "amount": "593750000"
     }
    ]
   }
@@ -56587,67 +56587,67 @@
    "payouts": [
     {
      "entry_index": 0,
-     "amount": "1070000000"
+     "amount": "835937500"
     },
     {
      "entry_index": 1,
-     "amount": "1070000000"
+     "amount": "835937500"
     },
     {
      "entry_index": 2,
-     "amount": "510000000"
+     "amount": "398437500"
     },
     {
      "entry_index": 3,
-     "amount": "390000000"
+     "amount": "304687500"
     },
     {
      "entry_index": 4,
-     "amount": "250000000"
+     "amount": "195312500"
     },
     {
      "entry_index": 5,
-     "amount": "250000000"
+     "amount": "195312500"
     },
     {
      "entry_index": 6,
-     "amount": "250000000"
+     "amount": "195312500"
     },
     {
      "entry_index": 7,
-     "amount": "250000000"
+     "amount": "195312500"
     },
     {
      "entry_index": 8,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 9,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 10,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 11,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 12,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 13,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 14,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 15,
-     "amount": "135000000"
+     "amount": "105468750"
     }
    ]
   },
@@ -56721,67 +56721,67 @@
    "payouts": [
     {
      "entry_index": 0,
-     "amount": "1350000000"
+     "amount": "1054687500"
     },
     {
      "entry_index": 1,
-     "amount": "790000000"
+     "amount": "617187500"
     },
     {
      "entry_index": 2,
-     "amount": "510000000"
+     "amount": "398437500"
     },
     {
      "entry_index": 3,
-     "amount": "296666668"
+     "amount": "231770834"
     },
     {
      "entry_index": 4,
-     "amount": "296666666"
+     "amount": "231770833"
     },
     {
      "entry_index": 5,
-     "amount": "296666666"
+     "amount": "231770833"
     },
     {
      "entry_index": 6,
-     "amount": "250000000"
+     "amount": "195312500"
     },
     {
      "entry_index": 7,
-     "amount": "250000000"
+     "amount": "195312500"
     },
     {
      "entry_index": 8,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 9,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 10,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 11,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 12,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 13,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 14,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 15,
-     "amount": "135000000"
+     "amount": "105468750"
     }
    ]
   },
@@ -56856,71 +56856,71 @@
    "payouts": [
     {
      "entry_index": 0,
-     "amount": "1350000000"
+     "amount": "1054687500"
     },
     {
      "entry_index": 1,
-     "amount": "790000000"
+     "amount": "617187500"
     },
     {
      "entry_index": 2,
-     "amount": "510000000"
+     "amount": "398437500"
     },
     {
      "entry_index": 3,
-     "amount": "390000000"
+     "amount": "304687500"
     },
     {
      "entry_index": 4,
-     "amount": "250000000"
+     "amount": "195312500"
     },
     {
      "entry_index": 5,
-     "amount": "250000000"
+     "amount": "195312500"
     },
     {
      "entry_index": 6,
-     "amount": "250000000"
+     "amount": "195312500"
     },
     {
      "entry_index": 7,
-     "amount": "250000000"
+     "amount": "195312500"
     },
     {
      "entry_index": 8,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 9,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 10,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 11,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 12,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 13,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 14,
-     "amount": "135000000"
+     "amount": "105468750"
     },
     {
      "entry_index": 15,
-     "amount": "67500000"
+     "amount": "52734375"
     },
     {
      "entry_index": 16,
-     "amount": "67500000"
+     "amount": "52734375"
     }
    ]
   },
@@ -56933,259 +56933,259 @@
    "payouts": [
     {
      "entry_index": 0,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 1,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 2,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 3,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 4,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 5,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 6,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 7,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 8,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 9,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 10,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 11,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 12,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 13,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 14,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 15,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 16,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 17,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 18,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 19,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 20,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 21,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 22,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 23,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 24,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 25,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 26,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 27,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 28,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 29,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 30,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 31,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 32,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 33,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 34,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 35,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 36,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 37,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 38,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 39,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 40,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 41,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 42,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 43,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 44,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 45,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 46,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 47,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 48,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 49,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 50,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 51,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 52,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 53,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 54,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 55,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 56,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 57,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 58,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 59,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 60,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 61,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 62,
-     "amount": "80000000"
+     "amount": "62500000"
     },
     {
      "entry_index": 63,
-     "amount": "80000000"
+     "amount": "62500000"
     }
    ]
   },
@@ -57259,67 +57259,67 @@
    "payouts": [
     {
      "entry_index": 0,
-     "amount": "10125000000"
+     "amount": "7910156250"
     },
     {
      "entry_index": 1,
-     "amount": "5925000000"
+     "amount": "4628906250"
     },
     {
      "entry_index": 2,
-     "amount": "3825000000"
+     "amount": "2988281250"
     },
     {
      "entry_index": 3,
-     "amount": "2225000000"
+     "amount": "1738281250"
     },
     {
      "entry_index": 4,
-     "amount": "2225000000"
+     "amount": "1738281250"
     },
     {
      "entry_index": 5,
-     "amount": "2225000000"
+     "amount": "1738281250"
     },
     {
      "entry_index": 6,
-     "amount": "1875000000"
+     "amount": "1464843750"
     },
     {
      "entry_index": 7,
-     "amount": "1875000000"
+     "amount": "1464843750"
     },
     {
      "entry_index": 8,
-     "amount": "1012500000"
+     "amount": "791015625"
     },
     {
      "entry_index": 9,
-     "amount": "1012500000"
+     "amount": "791015625"
     },
     {
      "entry_index": 10,
-     "amount": "1012500000"
+     "amount": "791015625"
     },
     {
      "entry_index": 11,
-     "amount": "1012500000"
+     "amount": "791015625"
     },
     {
      "entry_index": 12,
-     "amount": "1012500000"
+     "amount": "791015625"
     },
     {
      "entry_index": 13,
-     "amount": "1012500000"
+     "amount": "791015625"
     },
     {
      "entry_index": 14,
-     "amount": "1012500000"
+     "amount": "791015625"
     },
     {
      "entry_index": 15,
-     "amount": "1012500000"
+     "amount": "791015625"
     }
    ]
   }
@@ -57327,156 +57327,156 @@
  "tier_tables": [
   {
    "entry_lamports": "100000000",
-   "pot_lamports": "5120000000",
+   "pot_lamports": "4000000000",
    "bands": [
-    "1350000000",
-    "790000000",
-    "510000000",
-    "390000000",
-    "250000000",
-    "250000000",
-    "250000000",
-    "250000000",
-    "135000000",
-    "135000000",
-    "135000000",
-    "135000000",
-    "135000000",
-    "135000000",
-    "135000000",
-    "135000000"
+    "1054687500",
+    "617187500",
+    "398437500",
+    "304687500",
+    "195312500",
+    "195312500",
+    "195312500",
+    "195312500",
+    "105468750",
+    "105468750",
+    "105468750",
+    "105468750",
+    "105468750",
+    "105468750",
+    "105468750",
+    "105468750"
    ]
   },
   {
    "entry_lamports": "500000000",
-   "pot_lamports": "25600000000",
+   "pot_lamports": "20000000000",
    "bands": [
-    "6750000000",
-    "3950000000",
-    "2550000000",
-    "1950000000",
-    "1250000000",
-    "1250000000",
-    "1250000000",
-    "1250000000",
-    "675000000",
-    "675000000",
-    "675000000",
-    "675000000",
-    "675000000",
-    "675000000",
-    "675000000",
-    "675000000"
+    "5273437500",
+    "3085937500",
+    "1992187500",
+    "1523437500",
+    "976562500",
+    "976562500",
+    "976562500",
+    "976562500",
+    "527343750",
+    "527343750",
+    "527343750",
+    "527343750",
+    "527343750",
+    "527343750",
+    "527343750",
+    "527343750"
    ]
   },
   {
    "entry_lamports": "750000000",
-   "pot_lamports": "38400000000",
+   "pot_lamports": "30000000000",
    "bands": [
-    "10125000000",
-    "5925000000",
-    "3825000000",
-    "2925000000",
-    "1875000000",
-    "1875000000",
-    "1875000000",
-    "1875000000",
-    "1012500000",
-    "1012500000",
-    "1012500000",
-    "1012500000",
-    "1012500000",
-    "1012500000",
-    "1012500000",
-    "1012500000"
+    "7910156250",
+    "4628906250",
+    "2988281250",
+    "2285156250",
+    "1464843750",
+    "1464843750",
+    "1464843750",
+    "1464843750",
+    "791015625",
+    "791015625",
+    "791015625",
+    "791015625",
+    "791015625",
+    "791015625",
+    "791015625",
+    "791015625"
    ]
   },
   {
    "entry_lamports": "1000000000",
-   "pot_lamports": "51200000000",
+   "pot_lamports": "40000000000",
    "bands": [
-    "13500000000",
-    "7900000000",
-    "5100000000",
-    "3900000000",
-    "2500000000",
-    "2500000000",
-    "2500000000",
-    "2500000000",
-    "1350000000",
-    "1350000000",
-    "1350000000",
-    "1350000000",
-    "1350000000",
-    "1350000000",
-    "1350000000",
-    "1350000000"
+    "10546875000",
+    "6171875000",
+    "3984375000",
+    "3046875000",
+    "1953125000",
+    "1953125000",
+    "1953125000",
+    "1953125000",
+    "1054687500",
+    "1054687500",
+    "1054687500",
+    "1054687500",
+    "1054687500",
+    "1054687500",
+    "1054687500",
+    "1054687500"
    ]
   },
   {
    "entry_lamports": "2500000000",
-   "pot_lamports": "128000000000",
+   "pot_lamports": "100000000000",
    "bands": [
-    "33750000000",
-    "19750000000",
-    "12750000000",
-    "9750000000",
-    "6250000000",
-    "6250000000",
-    "6250000000",
-    "6250000000",
-    "3375000000",
-    "3375000000",
-    "3375000000",
-    "3375000000",
-    "3375000000",
-    "3375000000",
-    "3375000000",
-    "3375000000"
+    "26367187500",
+    "15429687500",
+    "9960937500",
+    "7617187500",
+    "4882812500",
+    "4882812500",
+    "4882812500",
+    "4882812500",
+    "2636718750",
+    "2636718750",
+    "2636718750",
+    "2636718750",
+    "2636718750",
+    "2636718750",
+    "2636718750",
+    "2636718750"
    ]
   },
   {
    "entry_lamports": "5000000000",
-   "pot_lamports": "256000000000",
+   "pot_lamports": "200000000000",
    "bands": [
-    "67500000000",
-    "39500000000",
-    "25500000000",
-    "19500000000",
-    "12500000000",
-    "12500000000",
-    "12500000000",
-    "12500000000",
-    "6750000000",
-    "6750000000",
-    "6750000000",
-    "6750000000",
-    "6750000000",
-    "6750000000",
-    "6750000000",
-    "6750000000"
+    "52734375000",
+    "30859375000",
+    "19921875000",
+    "15234375000",
+    "9765625000",
+    "9765625000",
+    "9765625000",
+    "9765625000",
+    "5273437500",
+    "5273437500",
+    "5273437500",
+    "5273437500",
+    "5273437500",
+    "5273437500",
+    "5273437500",
+    "5273437500"
    ]
   },
   {
    "entry_lamports": "7500000000",
-   "pot_lamports": "384000000000",
+   "pot_lamports": "300000000000",
    "bands": [
-    "101250000000",
-    "59250000000",
-    "38250000000",
-    "29250000000",
-    "18750000000",
-    "18750000000",
-    "18750000000",
-    "18750000000",
-    "10125000000",
-    "10125000000",
-    "10125000000",
-    "10125000000",
-    "10125000000",
-    "10125000000",
-    "10125000000",
-    "10125000000"
+    "79101562500",
+    "46289062500",
+    "29882812500",
+    "22851562500",
+    "14648437500",
+    "14648437500",
+    "14648437500",
+    "14648437500",
+    "7910156250",
+    "7910156250",
+    "7910156250",
+    "7910156250",
+    "7910156250",
+    "7910156250",
+    "7910156250",
+    "7910156250"
    ]
   }
  ],

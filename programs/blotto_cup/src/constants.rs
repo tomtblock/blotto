@@ -41,22 +41,24 @@ pub const TIER_ENTRY_LAMPORTS: [u64; N_TIERS] = [
     7_500_000_000,
 ];
 
-/// Configured tiers' INITIAL pots (D-A1 revised): FIXED constants —
-/// 5.12 / 25.6 / 38.4 / 51.2 / 128 / 256 / 384 SOL — funded from the
-/// platform treasury at `open_pool`, BEFORE any pass is sold. The founder's
-/// stated derivation for the initial values is 80% of price × 64; on-chain
-/// a pot is a constant, never arithmetic over entries or balances (the
-/// standing-rules grep asserts exactly that). Every value is a multiple of
-/// 1024 lamports so the band table divides with zero residue (prize_math
-/// tests assert per tier).
+/// Configured tiers' INITIAL pots (D-A1 revised; amounts re-ratified by
+/// D-E1, 2026-09-06): FIXED constants — 4 / 20 / 30 / 40 / 100 / 200 /
+/// 300 SOL — funded from the platform treasury at `open_pool`, BEFORE any
+/// pass is sold. The founder's stated derivation for these values is
+/// 62.5% of price × 64 (equivalently price / 8 × 5 × 64, exact in integer
+/// arithmetic at every tier); the derivation is history, the constant is
+/// the law — on-chain a pot is a constant, never arithmetic over entries
+/// or balances (the standing-rules grep asserts exactly that). Every value
+/// is a multiple of 1024 lamports so the band table divides with zero
+/// residue (prize_math tests assert per tier).
 pub const TIER_POT_LAMPORTS: [u64; N_TIERS] = [
-    5_120_000_000,
-    25_600_000_000,
-    38_400_000_000,
-    51_200_000_000,
-    128_000_000_000,
-    256_000_000_000,
-    384_000_000_000,
+    4_000_000_000,
+    20_000_000_000,
+    30_000_000_000,
+    40_000_000_000,
+    100_000_000_000,
+    200_000_000_000,
+    300_000_000_000,
 ];
 
 /// Number of paid places (PID §6: top 16).
@@ -66,17 +68,19 @@ pub const PAID_RANKS: usize = 16;
 ///
 /// # Derivation (PID §6 — shown, not asserted)
 ///
-/// PID §6 publishes exact SOL amounts for the 0.1 tier, whose pot is
-/// 80% × 6.4 = 5.12 SOL:
+/// The 1024ths are unchanged by D-E1; only the pot they divide moved.
+/// At the D-E1 tier-0 pot (62.5% × 6.4 = 4 SOL) the published amounts
+/// become (PID §6 reissue pending — the founder document still shows the
+/// pre-D-E1 5.12-pot amounts until counsel signs the reissue):
 ///
-/// | Place  | SOL   | fraction of 5.12 | ×1024 |
-/// |--------|-------|------------------|-------|
-/// | 1st    | 1.350 | 135/512          | 270   |
-/// | 2nd    | 0.790 |  79/512          | 158   |
-/// | 3rd    | 0.510 |  51/512          | 102   |
-/// | 4th    | 0.390 |  39/512          |  78   |
-/// | 5–8th  | 0.250 |  25/512 each     |  50   |
-/// | 9–16th | 0.135 |  27/1024 each    |  27   |
+/// | Place  | SOL        | fraction of 4    | ×1024 |
+/// |--------|------------|------------------|-------|
+/// | 1st    | 1.0546875  | 135/512          | 270   |
+/// | 2nd    | 0.6171875  |  79/512          | 158   |
+/// | 3rd    | 0.3984375  |  51/512          | 102   |
+/// | 4th    | 0.3046875  |  39/512          |  78   |
+/// | 5–8th  | 0.1953125  |  25/512 each     |  50   |
+/// | 9–16th | 0.10546875 |  27/1024 each    |  27   |
 ///
 /// 270 + 158 + 102 + 78 + 4×50 + 8×27 = **1024 exactly**, so the pot divides
 /// with zero residual for every tier (each tier's pot is a multiple of 1024

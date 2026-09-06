@@ -67,7 +67,7 @@ const soon = (seconds: number): string => String(Math.floor(Date.now() / 1000) +
 const past = (seconds: number): string => String(Math.floor(Date.now() / 1000) - seconds);
 
 const TIER0_ENTRY = '100000000'; // 0.1 SOL
-const TIER0_POT = '5120000000'; // 5.12 SOL
+const TIER0_POT = '4000000000'; // 4 SOL (D-E1: entry / 8 * 5 * 64)
 const SEALING_PUBKEY = '11'.repeat(32);
 
 export interface Scenario {
@@ -128,11 +128,14 @@ function entries(pool: string, count: number, over: Partial<EntryRow> = {}): Ent
 
 /** The 16 paid seats, descending. Amounts are decimal strings — never floats. */
 const PAID_SEATS = [3, 7, 12, 1, 22, 40, 9, 55, 18, 31, 5, 61, 27, 44, 2, 50];
+// The REAL tier-0 band amounts at the D-E1 pot (4 SOL × band/1024) — the
+// fixture pays exactly what the program would, so preview screens carry
+// truthful figures.
 const PAID_AMOUNTS = [
-  '1536000000', '1024000000', '716800000', '512000000',
-  '358400000', '256000000', '179200000', '128000000',
-  '89600000', '64000000', '51200000', '38400000',
-  '25600000', '19200000', '12800000', '12800000',
+  '1054687500', '617187500', '398437500', '304687500',
+  '195312500', '195312500', '195312500', '195312500',
+  '105468750', '105468750', '105468750', '105468750',
+  '105468750', '105468750', '105468750', '105468750',
 ];
 
 function results(): ResultRow[] {

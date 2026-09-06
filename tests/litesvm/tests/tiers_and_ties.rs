@@ -132,37 +132,37 @@ fn tie_case_splits_the_pot_and_pays_a_paid_set_past_sixteen() {
     env.open_ready_pool(1, 0);
     let players = fill_and_reveal(&mut env, 1);
 
-    // Tier 0 pot = 5.12 SOL, band unit = pot/1024 = 5_000_000 lamports.
+    // Tier 0 pot = 4 SOL (D-E1), band unit = pot/1024 = 3_906_250 lamports.
     // Ranking fixture: seats 0..2 solo at ranks 1–3; seats 3–5 tied at
     // rank 4 (occupying positions 4–6, combined 78+50+50 = 178 units,
-    // 890_000_000 / 3 = 296_666_666 rem 2 → the remainder goes to the tied
+    // 695_312_500 / 3 = 231_770_833 rem 1 → the remainder goes to the tied
     // group's lowest seat); seats 6..14 solo at ranks 7–15; seats 15–17
     // tied at rank 16 (positions 16–18 — only position 16 is a paid band,
     // so the combined prize is 27 units split three ways). The paid set is
     // 18 seats: D3-B pays every tied member, past the 16-place table.
     let payouts: Vec<(u16, u64)> = vec![
-        (0, 1_350_000_000),
-        (1, 790_000_000),
-        (2, 510_000_000),
-        (3, 296_666_668), // tied 4th, +2 lamports remainder (lowest seat)
-        (4, 296_666_666), // tied 4th
-        (5, 296_666_666), // tied 4th
-        (6, 250_000_000),
-        (7, 250_000_000),
-        (8, 135_000_000),
-        (9, 135_000_000),
-        (10, 135_000_000),
-        (11, 135_000_000),
-        (12, 135_000_000),
-        (13, 135_000_000),
-        (14, 135_000_000),
-        (15, 45_000_000), // tied 16th: 135_000_000 / 3
-        (16, 45_000_000), // tied 16th — position 17, still paid
-        (17, 45_000_000), // tied 16th — position 18, still paid
+        (0, 1_054_687_500),
+        (1, 617_187_500),
+        (2, 398_437_500),
+        (3, 231_770_834), // tied 4th, +1 lamport remainder (lowest seat)
+        (4, 231_770_833), // tied 4th
+        (5, 231_770_833), // tied 4th
+        (6, 195_312_500),
+        (7, 195_312_500),
+        (8, 105_468_750),
+        (9, 105_468_750),
+        (10, 105_468_750),
+        (11, 105_468_750),
+        (12, 105_468_750),
+        (13, 105_468_750),
+        (14, 105_468_750),
+        (15, 35_156_250), // tied 16th: 105_468_750 / 3
+        (16, 35_156_250), // tied 16th — position 17, still paid
+        (17, 35_156_250), // tied 16th — position 18, still paid
     ];
     assert_eq!(
         payouts.iter().map(|&(_, a)| a).sum::<u64>(),
-        5_120_000_000,
+        4_000_000_000,
         "split-pot list conserves the pot exactly"
     );
     commit(&mut env, 1, &payouts);
