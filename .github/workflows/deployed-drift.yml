@@ -1,0 +1,68 @@
+# Is the DEPLOYED devnet program still the program `main` describes?
+#
+# Incident 2026-09-05: the devnet program was nine days stale. Commit 357a435
+# changed `init_config`'s arguments; the binary on chain was built 88 minutes
+# earlier and never replaced. `solana program show` named the right id, the
+# right authority and a recent-looking slot; `anchor build` said "Finished".
+# Nothing in CI compared the deployed bytes to a commit, so nothing caught it —
+# and the mismatch surfaced only when an irreversible `init_config` proposal was
+# simulated minutes before it would have been signed.
+#
+# WHY THIS IS NOT A PR GATE: a PR that changes the program is SUPPOSED
+# to differ from what is deployed — that is the point of the PR. Drift is a
+# question about main and about the cluster, so this runs after merge, on a
+# schedule, and on demand. Running it on PRs would fail every program change and
+# train everyone to ignore it.
+#
+# Simulation only: `sigVerify: false`, nothing signed, no state written. Safe to
+# run against any cluster at any time, including while a rehearsal is in flight.
+
+name: deployed-drift
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'programs/**'
+      - 'scripts/check-deployed.ts'
+      - '.github/workflows/deployed-drift.yml'
+  schedule:
+    # Daily. Drift can appear with no commit at all — someone deploys a stale
+    # artifact, or an upgrade lands from another machine — so a push trigger
+    # alone would not have caught the 2026-09-05 incident either.
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+    inputs:
+      rpc:
+        description: 'RPC URL to check against (default: public devnet)'
+        required: false
+        type: string
+
+concurrency:
+  group: deployed-drift-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  wire-contract:
+    name: deployed program matches source
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install root tooling
+        run: npm install --no-audit --no-fund
+
+      # The script proves its own detector fires before reporting any verdict —
+      # a check that can only pass is the same fault it exists to catch.
+      - name: Compare the deployed wire contract against this commit
+        env:
+          BLOTTO_RPC_URL: ${{ inputs.rpc || secrets.BLOTTO_DEVNET_RPC_URL || '' }}
+        run: npm run --silent check-deployed
