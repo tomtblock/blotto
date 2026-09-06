@@ -1,0 +1,81 @@
+# The automation signer must not exist in a deployable bundle (C7 / B-e).
+#
+# Stage D 5.1 drives 64 automated entrants through the real front end, which
+# needs a keypair-backed signer injected at `window.__BLOTTO_TEST_SIGNER__`.
+# That path must be impossible to reach in anything shipped to players: it
+# admits a signer with no wallet and no Privy modal.
+#
+# The runbook's C7 asks for a grep of a production build as the gate, and it
+# was right to. The first implementation REASONED that Next inlines
+# NEXT_PUBLIC_* and the minifier would drop the dead branch. It does not, for
+# an UNSET variable — Next leaves a runtime lookup against a bundled shim, so
+# nothing is dead and nothing is dropped. A build with the flag unset shipped
+# the injection path. next.config.ts now normalises the flag to "0" so the
+# ordinary case inlines as a literal and the branch really is eliminated.
+#
+# So this lane asserts BOTH directions. A one-sided check would have passed
+# happily against the broken build above, because the string was there and
+# nobody looked. Requiring the string to APPEAR with the flag on proves the
+# grep can still find it — a check that can only pass is not a gate.
+
+name: app-test-signer
+
+on:
+  pull_request:
+    paths:
+      - 'app/**'
+      - '.github/workflows/app-test-signer.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - '.github/workflows/app-test-signer.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: app-test-signer-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  bundle-gate:
+    name: the injection point is absent unless deliberately enabled
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Build as deployed (flag unset) — the injection must be ABSENT
+        run: |
+          rm -rf .next
+          npx next build
+          if grep -rq "__BLOTTO_TEST_SIGNER__" .next/static; then
+            echo "::error::A deployable bundle contains the automation signer's injection point. It admits a signer with no wallet and no Privy modal. Check next.config.ts still normalises NEXT_PUBLIC_ALLOW_TEST_SIGNER, and see app/src/wallet/auth-provider.tsx."
+            grep -rl "__BLOTTO_TEST_SIGNER__" .next/static
+            exit 1
+          fi
+          echo "absent from the deployable bundle, as required"
+
+      - name: Build with the flag on — the injection must be PRESENT
+        env:
+          NEXT_PUBLIC_ALLOW_TEST_SIGNER: '1'
+        run: |
+          rm -rf .next
+          npx next build
+          if ! grep -rq "__BLOTTO_TEST_SIGNER__" .next/static; then
+            echo "::error::With the flag ON the injection point is still missing, so the check above proves nothing — it would pass against any build, including one that leaked. Either the flag no longer enables the path, or the grep no longer matches it."
+            exit 1
+          fi
+          echo "present when deliberately enabled — the check above is a real gate"
