@@ -22,6 +22,7 @@ import { Stat } from '@/components/ui/stat';
 import { Countdown } from '@/components/ui/countdown';
 import { ProgressRing } from '@/components/ui/progress-ring';
 import { HeroPentagon } from '@/components/home/hero-pentagon';
+import { PreloaderGate } from '@/components/preloader/PreloaderGate';
 
 export default async function PlayPage() {
   const api = indexerApi();
@@ -49,6 +50,10 @@ export default async function PlayPage() {
 
   return (
     <>
+      {/* First-visit curtain — root route only, and only until Enter is
+          pressed once (the gate reads its flag client-side). Deep links
+          never mount it because only this page renders it. */}
+      <PreloaderGate />
       <AppHeader />
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 pb-24">
         <h1 className="mb-5 max-w-[22ch] font-display text-[34px] leading-[38px] font-extrabold text-ink sm:text-[56px] sm:leading-[58px]">

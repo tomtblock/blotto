@@ -67,6 +67,17 @@ export const COPY = {
     balanceRetry: 'Check again',
     topUp: 'Add SOL',
   },
+  preloader: {
+    // First-visit gate only (root route, once). The line is the same
+    // brand statement as shell.tagline, lowercased for the pink surface.
+    enter: 'Enter',
+    skip: 'Skip',
+    line: 'sixty-four players \u00b7 seven battles \u00b7 top sixteen paid',
+    // Visually hidden equivalent of the decorative video, for screen readers.
+    srIntro: 'Blotto Cup. Sixty-four players, seven battles, top sixteen paid.',
+    dialogLabel: 'Blotto Cup intro',
+  },
+
   pool: {
     entrantsOf: (n: number) => `${n} / 64 entered`,
     fillDeadline: 'Pool closes for entries in',
