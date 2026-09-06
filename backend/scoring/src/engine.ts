@@ -130,13 +130,15 @@ export function rankOrder(results: readonly PlayerResult[]): number[] {
 /**
  * D3-B split-pot prize assignment. A tie group whose members share rank r
  * with size s occupies positions r..r+s-1; its combined prize is the sum of
- * the band amounts of those positions that are ≤ 16 (positions past the
- * table pay zero). Each member takes floor(combined / s); the indivisible
- * lamport remainder goes to the group's lowest entry index. Every tied
- * member with a nonzero share is paid — the paid set can exceed 16 seats.
+ * the band amounts of those positions that are ≤ PAID_RANKS (positions
+ * past the table pay zero). Each member takes floor(combined / s); the
+ * indivisible lamport remainder goes to the group's lowest entry index.
+ * Every tied member with a nonzero share is paid. Under D-E2 (one paid
+ * place) that means: the sole rank-1 player takes the pot, or a tie for
+ * first splits it; nobody ranked second or lower is paid.
  *
  * Returns a NEW array in seat order with `amountLamports` filled. The sum
- * of all amounts equals the sum of the 16 band amounts (the whole pot),
+ * of all amounts equals the sum of the band amounts (the whole pot),
  * exactly — conservation is asserted, not assumed.
  */
 export function assignPrizes(results: readonly PlayerResult[], pot: bigint): PlayerResult[] {
@@ -168,8 +170,8 @@ export function assignPrizes(results: readonly PlayerResult[], pot: bigint): Pla
     }
   }
   // With n players the occupied positions are 1..n, so the expected total
-  // is the first min(16, n) bands — the whole pot whenever n ≥ 16 (every
-  // real pool: pools seal at 64).
+  // is the first min(PAID_RANKS, n) bands — the whole pot for any pool with
+  // at least one player (pools run with 52..64, D-E4).
   let expected = 0n;
   for (let pos = 1; pos <= Math.min(PAID_RANKS, out.length); pos++) {
     expected += (pot * PRIZE_BANDS_1024[pos - 1]) / 1024n;

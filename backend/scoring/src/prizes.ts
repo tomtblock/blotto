@@ -1,12 +1,13 @@
 /**
- * Prize amounts (roadmap 2.1; PID §6 as derived in
- * programs/blotto_cup/src/constants.rs).
+ * Prize amounts (roadmap 2.1; D-E2 winner-takes-all, ratified 2026-09-06,
+ * as pinned in programs/blotto_cup/src/constants.rs).
  *
- * Bands are exact 1024ths of the pot, NOT the PID's rounded percentage
- * column (which sums to 100.02% and would misallocate — the on-chain crate
- * pins this with a test, and so does this module). The pot of every
- * configured tier is a multiple of 1024 lamports, so every division here is
- * exact with zero residual.
+ * One paid place: the ranked-first player receives the whole pot. A tie for
+ * first splits it exactly (D3-B's rule, unchanged — see `assignPrizes`).
+ * The band table keeps its 1024ths shape so the pot's 1024-multiple
+ * invariant and the on-chain tests still mean something; under D-E2 it has
+ * one entry, 1024/1024. The sixteen-band table it replaces lives in git
+ * history and on the revert branch.
  *
  * All lamport arithmetic is BIGINT. A prize amount must never pass through a
  * JavaScript number: lamport values exceed 2^53 at the upper tiers and a
@@ -14,6 +15,29 @@
  */
 
 export const CAPACITY = 64n;
+
+/**
+ * The smallest field that runs (D-E4, ratified 2026-09-06) — a TS mirror of
+ * `constants.rs::MIN_SEATS`. A pool with at least this many entrants when
+ * its deadline passes seals and plays; below it, the pool refunds. Break-
+ * even is 40 seats at every tier (pot = price × 40), so 52 leaves twelve
+ * seats of margin on the worst run. A seat count, never a percentage.
+ */
+export const MIN_SEATS = 52n;
+
+/**
+ * The go-timer the 52nd entry starts, in seconds (D-E4 §11.3, option B) —
+ * a TS mirror of `constants.rs::GO_TIMER_SECS`. The pool's deadline becomes
+ * `min(fill_deadline, now + GO_TIMER_SECS)`; when it passes, the pool runs
+ * with everyone seated. PROPOSAL: six hours is the architect's figure
+ * pending the founder's number — change it in constants.rs and here
+ * together.
+ */
+export const GO_TIMER_SECS = 6n * 3600n;
+
+/** The fill deadline set at `open_pool`, in seconds — mirrors
+ * `constants.rs::FILL_DEADLINE_SECS` (R7: 72 hours). */
+export const FILL_DEADLINE_SECS = 72n * 3600n;
 
 /**
  * The seven configured entry prices (D1, ratified 2026-08-27), tier 0..6 —
@@ -55,12 +79,11 @@ export const TIER_POT_LAMPORTS: readonly bigint[] = [
   300_000_000_000n,
 ];
 
-export const PAID_RANKS = 16;
+/** D-E2: one paid place. Mirrors `constants.rs::PAID_RANKS`. */
+export const PAID_RANKS = 1;
 
-/** Rank 1 → rank 16, in 1024ths of the pot. Sums to exactly 1024. */
-export const PRIZE_BANDS_1024: readonly bigint[] = [
-  270n, 158n, 102n, 78n, 50n, 50n, 50n, 50n, 27n, 27n, 27n, 27n, 27n, 27n, 27n, 27n,
-];
+/** Rank 1 → rank `PAID_RANKS`, in 1024ths of the pot. Sums to exactly 1024. */
+export const PRIZE_BANDS_1024: readonly bigint[] = [1024n];
 
 /**
  * The LAUNCH-TABLE pot for a tier (D-A1 revised). Settlement code must not
@@ -87,8 +110,8 @@ export function potForEntry(entryLamports: bigint): bigint {
 }
 
 /**
- * The prize for `rank` (1-based). Ranks 17..64 are real ranks with zero
- * prize — they appear in the results tree with amount 0.
+ * The prize for `rank` (1-based). Every rank past `PAID_RANKS` is a real
+ * rank with zero prize — it appears in the results tree with amount 0.
  */
 export function amountForRank(pot: bigint, rank: number): bigint {
   if (!Number.isInteger(rank) || rank < 1) {
