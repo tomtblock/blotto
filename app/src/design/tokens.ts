@@ -77,19 +77,27 @@ export const palette = {
    * migrated; they are deleted together in the final PR of the v4
    * sequence, never silently before.
    * ———————————————————————————————————————————————————————————————— */
-  brandPink: '#ff3daa',
-  brandYellow: '#ffd400',
-  brandCream: '#fff4e6',
-  brandPalePink: '#ffb3d9',
-  brandDeepMagenta: '#c2186e',
-  brandCoral: '#ff7a45',
-  brandSlate: '#3a3f4b',
-  gameBase: '#3a0a20',
-  gameRaised: '#4a1030',
-  gameInk: '#fff4e6',
-  gameInkMuted: '#ffb3d9',
-  gameAction: '#ff3daa',
-  gamePrize: '#ffd400',
+  brandPink: '#ff7ac8',
+  brandYellow: '#ffde59',
+  /* The vinyl's edge: gradient rim and seam stroke on the Blot's body.
+   * Material rendering only — never a surface, never type. */
+  brandYellowDeep: '#e6b800',
+  /* The Blot's visor. Material, like the seam — never a surface. */
+  blotVisor: '#2a1030',
+  brandCream: '#fff6ec',
+  brandPalePink: '#ffc7e3',
+  brandDeepMagenta: '#d63c8c',
+  brandCoral: '#ff9a6b',
+
+  gameBase: '#5e1b40',
+  gameRaised: '#72244f',
+  gameInk: '#fff6ec',
+  gameInkMuted: '#ffc7e3',
+  gameAction: '#ff7ac8',
+  gamePrize: '#ffde59',
+  /* Dials, hardware, object details — moved from the brand layer in the
+   * candy revision (2026-09-06): hardware belongs with the controls. */
+  gameSlate: '#4b4f5c',
 
   /* Class ladder placeholders (founder-owned, PID D2). */
   class0: '#9e9ea7',
