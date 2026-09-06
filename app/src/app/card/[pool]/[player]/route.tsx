@@ -66,6 +66,18 @@ export async function GET(
             padding: '56px 96px',
           }}
         >
+          {/*
+            * ONE child, deliberately. Satori (what ImageResponse renders with)
+            * rejects a <div> holding more than one child unless it declares an
+            * explicit display, and this line previously held three — the
+            * title, the literal " · Pool #", and the id. Every card request
+            * 500'd as a result, for every pool, and nothing noticed because
+            * nothing rendered this route: it is an image, so it never appears
+            * in a page test, and the share button that links to it only shows
+            * for a signed-in entrant of a settled pool. Found 2026-09-06 by
+            * screenshotting every screen. Interpolating into a single string
+            * sidesteps the rule rather than satisfying it by decoration.
+            */}
           <div
             style={{
               fontSize: 30,
@@ -75,7 +87,7 @@ export async function GET(
               fontWeight: 700,
             }}
           >
-            {COPY.shell.title} · Pool #{pool?.id ?? '?'}
+            {`${COPY.shell.title} · Pool #${pool?.id ?? '?'}`}
           </div>
           <div
             style={{

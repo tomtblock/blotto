@@ -29,22 +29,25 @@ interface Row {
   readonly href: string;
   readonly label: string;
   readonly what: string;
+  /** Stable file-safe name. `scripts/capture-screens.mjs` reads these off the
+   *  rendered page, so the screenshot set can never drift from this index. */
+  readonly name: string;
   /** Needs a signed-in wallet to show its interesting state. */
   readonly auth?: boolean;
 }
 
 const STANDALONE: Row[] = [
-  { href: '/', label: '/', what: 'Home — the live pool, or the empty state when none is open.' },
-  { href: '/pools', label: '/pools', what: 'The pool list, with every lifecycle state present at once.' },
-  { href: '/play', label: '/play', what: 'The entry session: age gate, seven battles, review, sealed submit.', auth: true },
-  { href: '/profile', label: '/profile', what: 'Career, prize totals, the cosmetic class collection.', auth: true },
-  { href: '/verify', label: '/verify', what: 'The public recompute page. Works signed out, by design.' },
-  { href: '/rules', label: '/rules', what: 'Rules and the §8.6 statements.' },
-  { href: '/custody', label: '/custody', what: 'How the pass and the sealed entry are held.' },
-  { href: '/signin', label: '/signin', what: 'The signed-out entry point.' },
-  { href: '/admin/treasury', label: '/admin/treasury', what: 'Treasury by tier — one row per status (open, settling, openable, short).' },
-  { href: '/admin/review', label: '/admin/review', what: 'The detection review queue.' },
-  { href: '/dev/components', label: '/dev/components', what: 'The design-system gallery — tokens and components in isolation.' },
+  { href: '/', name: 'home', label: '/', what: 'Home — the live pool, or the empty state when none is open.' },
+  { href: '/pools', name: 'pools', label: '/pools', what: 'The pool list, with every lifecycle state present at once.' },
+  { href: '/play', name: 'play', label: '/play', what: 'The entry session: age gate, seven battles, review, sealed submit.', auth: true },
+  { href: '/profile', name: 'profile', label: '/profile', what: 'Career, prize totals, the cosmetic class collection.', auth: true },
+  { href: '/verify', name: 'verify', label: '/verify', what: 'The public recompute page. Works signed out, by design.' },
+  { href: '/rules', name: 'rules', label: '/rules', what: 'Rules and the §8.6 statements.' },
+  { href: '/custody', name: 'custody', label: '/custody', what: 'How the pass and the sealed entry are held.' },
+  { href: '/signin', name: 'signin', label: '/signin', what: 'The signed-out entry point.' },
+  { href: '/admin/treasury', name: 'admin-treasury', label: '/admin/treasury', what: 'Treasury by tier — one row per status (open, settling, openable, short).' },
+  { href: '/admin/review', name: 'admin-review', label: '/admin/review', what: 'The detection review queue.' },
+  { href: '/dev/components', name: 'dev-components', label: '/dev/components', what: 'The design-system gallery — tokens and components in isolation.' },
 ];
 
 function Section({ title, note, children }: { title: string; note?: string; children: React.ReactNode }) {
@@ -57,10 +60,11 @@ function Section({ title, note, children }: { title: string; note?: string; chil
   );
 }
 
-function RowLink({ href, label, what, auth }: Row) {
+function RowLink({ href, label, what, auth, name }: Row) {
   return (
     <Link
       href={href}
+      data-capture={name}
       className="flex flex-col gap-0.5 border-b border-line px-4 py-3 last:border-b-0 hover:bg-raised"
     >
       <span className="font-mono text-[13px] text-ink">
@@ -118,18 +122,21 @@ export default function PreviewIndexPage() {
             <div className="flex gap-4 px-4 pt-1.5 pb-3">
               <Link
                 href={`/pools/${s.summary.pool}`}
+                data-capture={`pool-${s.key}`}
                 className="font-mono text-[13px] text-prize hover:underline"
               >
                 pool page
               </Link>
               <Link
                 href={`/pools/${s.summary.pool}/results`}
+                data-capture={`results-${s.key}`}
                 className="font-mono text-[13px] text-prize hover:underline"
               >
                 results
               </Link>
               <Link
                 href={`/card/${s.summary.pool}/${FIXTURE_PLAYER}`}
+                data-capture={`card-${s.key}`}
                 className="font-mono text-[13px] text-prize hover:underline"
               >
                 share card

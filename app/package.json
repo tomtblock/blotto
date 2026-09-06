@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "journey": "playwright test",
-    "lighthouse": "node scripts/lighthouse-gate.mjs"
+    "lighthouse": "node scripts/lighthouse-gate.mjs",
+    "capture": "node scripts/capture-screens.mjs"
   },
   "dependencies": {
     "@noble/hashes": "^1.8.0",

@@ -57,3 +57,6 @@ coverage
 # App build output
 app/.next
 *.tsbuildinfo
+
+# Generated screenshot sets (npm run capture) — delivered as a zip, not committed.
+app/screens/
