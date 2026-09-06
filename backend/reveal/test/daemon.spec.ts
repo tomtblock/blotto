@@ -77,8 +77,9 @@ async function makeWorld(): Promise<World> {
   return { chain, custody, store, publisher, daemon, clock };
 }
 
-/** Enter `n` players into an Open pool with real sealed ciphertexts; seal
- * the pool (the 64th register's effect) when it fills. */
+/** Enter `n` players into an Open pool with real sealed ciphertexts, then
+ * apply the program's post-entry transitions (the go-timer at 52, the seal
+ * at 64) exactly as `register` would. */
 async function enterPlayers(w: World, poolId: bigint, n: number): Promise<string[]> {
   const key = w.chain.openedWith.get(poolId.toString());
   if (!key) throw new Error(`pool ${poolId} was never opened`);
@@ -103,8 +104,8 @@ async function enterPlayers(w: World, poolId: bigint, n: number): Promise<string
     });
     pool.entrants = entries.length;
     await w.store.put(poolId, player, seal(encodePayload(payload), key.publicKey));
+    w.chain.applyEntryTransitions(poolId);
   }
-  if (pool.entrants === 64) w.chain.sealPool(poolId);
   return players;
 }
 
@@ -207,7 +208,121 @@ describe('the daemon (C8): the product loop', () => {
     expect((await w.chain.getPool(1n)).state).to.equal('Closed');
     expect(r.opened).to.deep.equal([{ poolId: 2n, tier: 0 }]);
   });
+
+  it('nothing happens AT the deadline — both instructions compare strictly', async () => {
+    const w = await makeWorld();
+    await w.daemon.tick();
+    await enterPlayers(w, 1n, 3);
+    w.clock.t = (await w.chain.getPool(1n)).fillDeadline; // equal, not past
+    const r = await w.daemon.tick();
+    expect(r.errors).to.deep.equal([]);
+    expect(r.refundsTriggered).to.deep.equal([]);
+    expect(r.sealedAtDeadline).to.deep.equal([]);
+    expect((await w.chain.getPool(1n)).state).to.equal('Open');
+  });
 });
+
+describe('the daemon (C8): the minimum field (D-E4)', () => {
+  it('the 52nd seat starts the go-timer: the deadline shortens to now + 6h, once', async () => {
+    const w = await makeWorld();
+    await w.daemon.tick(); // opens pool 1 at t = 1_000
+    const opened = (await w.chain.getPool(1n)).fillDeadline;
+    expect(opened).to.equal(1_000n + 72n * 3600n);
+
+    await enterPlayers(w, 1n, 51);
+    expect((await w.chain.getPool(1n)).fillDeadline).to.equal(opened, '51 seats: untouched');
+
+    w.clock.t = 5_000n;
+    await enterPlayers(w, 1n, 1); // the 52nd
+    const go = (await w.chain.getPool(1n)).fillDeadline;
+    expect(go).to.equal(5_000n + w.chain.goTimerSecs);
+
+    w.clock.t = 9_000n;
+    await enterPlayers(w, 1n, 5); // 57 seats — later entries never extend it
+    expect((await w.chain.getPool(1n)).fillDeadline).to.equal(go);
+  });
+
+  it('a 52-seat pool past its go-deadline seals, cranks to Paid and the tier reopens', async function () {
+    this.timeout(30000);
+    const w = await makeWorld();
+    await w.daemon.tick(); // opens pool 1
+    await enterPlayers(w, 1n, 52);
+
+    // Before the go-deadline: Open, nothing to do.
+    const idle = await w.daemon.tick();
+    expect(idle.sealedAtDeadline).to.deep.equal([]);
+    expect(idle.cranked).to.deep.equal([]);
+    expect((await w.chain.getPool(1n)).state).to.equal('Open');
+
+    w.clock.t = (await w.chain.getPool(1n)).fillDeadline + 1n;
+    const r = await w.daemon.tick();
+    expect(r.errors).to.deep.equal([]);
+    expect(r.sealedAtDeadline).to.deep.equal([1n]);
+    expect(r.refundsTriggered).to.deep.equal([]);
+    expect(r.cranked).to.deep.equal([{ poolId: 1n, finalState: 'Paid' }]);
+    expect(r.opened).to.deep.equal([{ poolId: 2n, tier: 0 }]);
+
+    // Conservation over the real 52-seat field: the paid set carries
+    // exactly the pot, and nobody outside rank 1 is in it (D-E2).
+    const pool = await w.chain.getPool(1n);
+    expect(pool.entrants).to.equal(52);
+    let total = 0n;
+    for (const c of pool.payouts) total += c.amountLamports;
+    expect(total).to.equal(potForTier(0));
+    let paid = 0n;
+    for (const v of w.chain.paid.values()) paid += v;
+    expect(paid).to.equal(potForTier(0));
+    // The seal turned the entries into revenue: nothing refundable remains
+    // and the treasury holds the 52 entries less the pot it funded.
+    expect((await w.chain.getConfig()).platformRefundable).to.equal(0n);
+  });
+
+  it('a 63-seat pool seals the same way; a 51-seat pool refunds instead', async function () {
+    this.timeout(30000);
+    const w = await makeWorld();
+    await w.daemon.tick(); // pool 1
+    await enterPlayers(w, 1n, 63);
+    w.clock.t = (await w.chain.getPool(1n)).fillDeadline + 1n;
+    const r1 = await w.daemon.tick();
+    expect(r1.errors).to.deep.equal([]);
+    expect(r1.sealedAtDeadline).to.deep.equal([1n]);
+    expect(r1.cranked).to.deep.equal([{ poolId: 1n, finalState: 'Paid' }]);
+    expect(r1.opened).to.deep.equal([{ poolId: 2n, tier: 0 }]);
+
+    const players = await enterPlayers(w, 2n, 51);
+    w.clock.t = (await w.chain.getPool(2n)).fillDeadline + 1n;
+    const r2 = await w.daemon.tick();
+    expect(r2.errors).to.deep.equal([]);
+    expect(r2.sealedAtDeadline).to.deep.equal([]);
+    expect(r2.refundsTriggered).to.deep.equal([2n]);
+    expect(r2.cranked).to.deep.equal([{ poolId: 2n, finalState: 'Closed' }]);
+    for (const p of players) {
+      expect(w.chain.paid.get(p)).to.equal(TIER_ENTRY_LAMPORTS[0]); // 100% back (R7)
+    }
+  });
+
+  it('the seal is refused below 52 and the refund is refused at 52 (the guards mirror the program)', async () => {
+    const w = await makeWorld();
+    await w.daemon.tick();
+    await enterPlayers(w, 1n, 51);
+    w.clock.t = (await w.chain.getPool(1n)).fillDeadline + 1n;
+    await expectRejects(() => w.chain.sealAtDeadline(1n), 'FieldBelowMinimum');
+    await enterPlayers(w, 1n, 1); // 52 — the go-timer cannot extend a past deadline
+    await expectRejects(() => w.chain.triggerRefund(1n), 'FieldReached');
+    await w.chain.sealAtDeadline(1n);
+    expect((await w.chain.getPool(1n)).state).to.equal('Sealed');
+  });
+});
+
+async function expectRejects(fn: () => Promise<unknown>, message: string): Promise<void> {
+  let caught = '';
+  try {
+    await fn();
+  } catch (e) {
+    caught = String(e);
+  }
+  expect(caught, `expected ${message}`).to.include(message);
+}
 
 describe('the daemon (C8): resume after a crash', () => {
   it('a key created before the crash is republished, never regenerated', async () => {

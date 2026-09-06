@@ -3,10 +3,12 @@
  * long-running process the product loop needs:
  *
  *   - SETTLE: every Sealed pool goes through the crank (2.4) to Paid; an
- *     Open pool past its fill deadline is refund-triggered and drained.
+ *     Open pool past its deadline is sealed and cranked when it holds the
+ *     minimum field (52..63 entrants, D-E4) and refund-triggered and
+ *     drained when it does not.
  *   - KEEP: every open tier always has exactly one Open pool. The moment a
- *     tier's slot frees (the 64th `register` seals the pool, or
- *     `trigger_refund` fires — both clear `Config.active_pool_by_tier`),
+ *     tier's slot frees (the pool reaches Paid or Closed — sequential
+ *     pools, D-A1 revised — which clears `Config.active_pool_by_tier`),
  *     the next tick opens the successor: sealing key from custody →
  *     `open_pool` → `commit_vrf_seed` → `create_pass_collection`.
  *
@@ -36,6 +38,7 @@
  * crank itself took in Phase 2.
  */
 
+import { MIN_SEATS } from '../../scoring/src';
 import type { KeeperChain, PoolStateName } from './chain';
 import { nextOpenable, type TierPoolStates } from './treasury';
 import type { CrankOutcome } from './crank';
@@ -100,8 +103,12 @@ export interface TickReport {
   opened: { poolId: bigint; tier: number }[];
   /** Pools the crank ran for, with the state each rested at. */
   cranked: { poolId: bigint; finalState: string }[];
-  /** Open pools past deadline whose refund fork this tick triggered. */
+  /** Open pools past deadline whose refund fork this tick triggered (fewer
+   * than 52 entrants, D-E4). */
   refundsTriggered: bigint[];
+  /** Open pools past deadline this tick sealed at 52..63 entrants (D-E4);
+   * each is cranked in the same tick. */
+  sealedAtDeadline: bigint[];
   /** Launch-completion steps performed (VRF commits, collections). */
   completed: { poolId: bigint; step: 'vrf' | 'pass_collection' }[];
   /** Every caught failure — the tick continues past each. */
@@ -128,12 +135,24 @@ export function makeDaemon(deps: DaemonDeps): Daemon {
   async function settleOne(poolId: bigint, report: TickReport): Promise<boolean> {
     let pool = await deps.chain.getPool(poolId);
 
-    if (pool.state === 'Open' && deps.now() >= pool.fillDeadline) {
-      // R7: the fill deadline passed below 64 — trigger the refund fork.
-      // (A full pool can never be Open: the 64th `register` seals it.)
-      await deps.chain.triggerRefund(poolId);
-      report.refundsTriggered.push(poolId);
-      log('trigger_refund', { poolId: poolId.toString() });
+    // The deadline is STRICTLY past, exactly as both instructions compare
+    // `Clock` on-chain — at `now == fill_deadline` neither would land.
+    // (A full pool can never be Open: the 64th `register` seals it.)
+    if (pool.state === 'Open' && deps.now() > pool.fillDeadline) {
+      if (BigInt(pool.entrants) >= MIN_SEATS) {
+        // D-E4: the minimum field is met — seal and play. The effective
+        // deadline is the go-timer's when the 52nd seat landed early enough,
+        // or the 72h fill deadline otherwise; the chain view carries
+        // whichever applies.
+        await deps.chain.sealAtDeadline(poolId);
+        report.sealedAtDeadline.push(poolId);
+        log('seal_at_deadline', { poolId: poolId.toString(), entrants: pool.entrants });
+      } else {
+        // R7: the deadline passed below the minimum field — the refund fork.
+        await deps.chain.triggerRefund(poolId);
+        report.refundsTriggered.push(poolId);
+        log('trigger_refund', { poolId: poolId.toString() });
+      }
       pool = await deps.chain.getPool(poolId);
     }
 
@@ -182,6 +201,7 @@ export function makeDaemon(deps: DaemonDeps): Daemon {
       opened: [],
       cranked: [],
       refundsTriggered: [],
+      sealedAtDeadline: [],
       completed: [],
       errors: [],
     };

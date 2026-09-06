@@ -5,7 +5,13 @@
  * rehearsal drives.
  */
 
-import { TIER_ENTRY_LAMPORTS, TIER_POT_LAMPORTS } from '../../scoring/src';
+import {
+  FILL_DEADLINE_SECS,
+  GO_TIMER_SECS,
+  MIN_SEATS,
+  TIER_ENTRY_LAMPORTS,
+  TIER_POT_LAMPORTS,
+} from '../../scoring/src';
 
 export type PoolStateName = 'Open' | 'Sealed' | 'Scored' | 'Paid' | 'Refunding' | 'Closed';
 
@@ -25,6 +31,11 @@ export interface ChainPoolView {
    * into the prize vault before any pass is sold. Settlement reads THIS —
    * never the launch table, which the founder can change between pools. */
   potLamports: bigint;
+  /** The EFFECTIVE deadline: the 72h fill deadline set at open, shortened
+   * in place by the go-timer once the 52nd seat lands (D-E4, stored as the
+   * proposal's option B without a new field — `register` writes
+   * `min(fill_deadline, now + GO_TIMER_SECS)`). Past it, a pool with
+   * ≥ 52 entrants seals and plays; one below 52 refunds. */
   fillDeadline: bigint;
   /** `Pool.vrf_seed` non-zero — `register` requires it (the daemon completes it). */
   vrfCommitted: boolean;
@@ -87,6 +98,12 @@ export interface SettlementChain {
   releaseEscrow(poolId: bigint, player: string): Promise<void>;
   /** Escrowed share → the platform wallet (review upheld the flag). */
   forfeitEscrow(poolId: bigint, player: string): Promise<void>;
+  /** `seal_at_deadline` (D-E4): an Open pool past its deadline with 52..63
+   * entrants seals and plays. Permissionless on-chain — the settlement
+   * signer merely pays the fee; the seal is a function of state and time. */
+  sealAtDeadline(poolId: bigint): Promise<void>;
+  /** `trigger_refund` (R7 as amended by D-E4): an Open pool past its
+   * deadline with FEWER than 52 entrants refunds. */
   triggerRefund(poolId: bigint): Promise<void>;
   refund(poolId: bigint, player: string): Promise<void>;
 }
@@ -147,7 +164,10 @@ export class FakeChain implements KeeperChain {
   /** `Config`, or null until initConfig — mirrors the uninitialized PDA. */
   config: ChainConfigView | null = null;
   /** R7 deadline offset applied by openPool, seconds. Tests may shrink it. */
-  fillDeadlineSecs = 72n * 3600n;
+  fillDeadlineSecs = FILL_DEADLINE_SECS;
+  /** D-E4 go-timer started by the 52nd entry, seconds (the shared mirror of
+   * `constants.rs::GO_TIMER_SECS`). Tests may shrink it. */
+  goTimerSecs = GO_TIMER_SECS;
   /** The platform treasury PDA's balance (D-A1 revised). Deposits via
    * `fundPlatform`; `openPool` moves pots out; refunds pay from here. */
   platform = 0n;
@@ -166,7 +186,8 @@ export class FakeChain implements KeeperChain {
   }
 
   /** The v2 register money model: 100% of the price into the treasury,
-   * tracked refundable until seal. Pushes the entry and, at 64, seals. */
+   * tracked refundable until seal. Pushes the entry, then applies the
+   * program's post-entry transitions (go-timer at 52, seal at 64). */
   registerEntry(poolId: bigint, entry: ChainEntryView): void {
     const p = this.pools.get(poolId.toString());
     if (!p) throw new Error(`no pool ${poolId}`);
@@ -178,6 +199,23 @@ export class FakeChain implements KeeperChain {
     p.entrants = list.length;
     this.platform += p.entryLamports;
     this.refundableByPool.set(key, (this.refundableByPool.get(key) ?? 0n) + p.entryLamports);
+    this.applyEntryTransitions(poolId);
+  }
+
+  /** `register`'s steps 7a/7b, mirrored: at 52..63 entrants the go-timer
+   * shortens the deadline to `min(fill_deadline, now + GO_TIMER_SECS)`
+   * (idempotent — a later entry's larger `now` never moves it again); at 64
+   * the pool seals. Public so test helpers that push entries directly can
+   * apply the same transitions the program would. */
+  applyEntryTransitions(poolId: bigint): void {
+    const p = this.pools.get(poolId.toString());
+    if (!p) throw new Error(`no pool ${poolId}`);
+    if (p.state !== 'Open') return;
+    p.entrants = this.entries.get(poolId.toString())?.length ?? p.entrants;
+    if (BigInt(p.entrants) >= MIN_SEATS && p.entrants < 64) {
+      const goDeadline = this.now() + this.goTimerSecs;
+      if (goDeadline < p.fillDeadline) p.fillDeadline = goDeadline;
+    }
     if (p.entrants === 64) this.sealPool(poolId);
   }
 
@@ -288,9 +326,23 @@ export class FakeChain implements KeeperChain {
     void poolId;
   }
 
+  async sealAtDeadline(poolId: bigint): Promise<void> {
+    const p = this.pools.get(poolId.toString())!;
+    // The program's four guards (seal.rs), mirrored in order.
+    if (p.state !== 'Open') throw new Error('PoolNotOpen');
+    if (!(this.now() > p.fillDeadline)) throw new Error('DeadlineNotPassed');
+    if (BigInt(p.entrants) < MIN_SEATS) throw new Error('FieldBelowMinimum');
+    if (p.entrants >= 64) throw new Error('PoolFull');
+    this.sealPool(poolId);
+  }
+
   async triggerRefund(poolId: bigint): Promise<void> {
     const p = this.pools.get(poolId.toString())!;
+    // The program's three guards (refund.rs), mirrored in order — the
+    // deadline is STRICTLY past, exactly as `Clock` is compared on-chain.
     if (p.state !== 'Open') throw new Error('PoolNotOpen');
+    if (!(this.now() > p.fillDeadline)) throw new Error('DeadlineNotPassed');
+    if (BigInt(p.entrants) >= MIN_SEATS) throw new Error('FieldReached');
     p.state = p.entrants === 0 ? 'Closed' : 'Refunding';
     // The untouched pot returns to the treasury (refund.rs).
     this.platform += p.potLamports;
@@ -445,9 +497,10 @@ export class FakeChain implements KeeperChain {
     return this.passCollections.has(poolId.toString());
   }
 
-  /** Test helper mirroring the 64th `register`: the pool seals and its
-   * entries become revenue. The tier slot is NOT freed here — SEQUENTIAL
-   * pools (D-A1 revised): only Paid or Closed clears it. */
+  /** The seal itself — the 64th `register`'s effect and `seal_at_deadline`'s
+   * alike (the program's shared `seal_pool`): the pool seals and its entries
+   * become revenue. The tier slot is NOT freed here — SEQUENTIAL pools
+   * (D-A1 revised): only Paid or Closed clears it. */
   sealPool(poolId: bigint): void {
     const p = this.pools.get(poolId.toString())!;
     p.state = 'Sealed';
