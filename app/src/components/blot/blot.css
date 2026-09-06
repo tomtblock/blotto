@@ -1,0 +1,136 @@
+/*
+ * The Blot's mood motion — the ONLY movement this stylesheet owns.
+ *
+ * Brief §3 made structural: idle breathing is JS (a ±3% sine on puff,
+ * brand surfaces only — see BlotMorph); `focused` never moves on its own;
+ * `locked` settles with ONE heart pulse (420 ms) and ONE visor blink
+ * (180 ms); `paid` raises one arm ONCE — the single celebratory pose the
+ * Blot ever strikes. Nothing here loops, nothing shakes, nothing flashes
+ * above 3 Hz. `prefers-reduced-motion` collapses all of it to stills.
+ */
+
+.blot-root {
+  position: relative;
+  display: inline-block;
+}
+
+.blot-root .blot-svg {
+  display: block;
+  overflow: visible;
+}
+
+/* locked — one beat: heart pulses once, visor blinks once. */
+.blot-mood-locked .blot-heart {
+  animation: blot-heart-pulse 420ms ease-out 1;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+.blot-mood-locked .blot-visor {
+  animation: blot-visor-blink 180ms ease-in-out 1;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+
+/* paid — the one celebratory pose: a single point, right arm up. */
+.blot-mood-paid .blot-arm-right {
+  animation: blot-arm-point 700ms var(--ease-juice) 1 forwards;
+  transform-origin: 20% 20%;
+  transform-box: fill-box;
+}
+
+@keyframes blot-heart-pulse {
+  0% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(1.25);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes blot-visor-blink {
+  0%,
+  100% {
+    transform: scaleY(1);
+  }
+  50% {
+    transform: scaleY(0.1);
+  }
+}
+
+@keyframes blot-arm-point {
+  to {
+    transform: rotate(-70deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blot-mood-locked .blot-heart,
+  .blot-mood-locked .blot-visor,
+  .blot-mood-paid .blot-arm-right {
+    animation: none;
+  }
+}
+
+/* --- The dial (brief §4: 14u track, pink fill, 28u yellow knob) --------- */
+
+.blot-dial {
+  -webkit-appearance: none;
+  appearance: none;
+  /* ≥44px touch target even though the drawn knob is 28px. */
+  height: 44px;
+  background: transparent;
+  cursor: pointer;
+}
+.blot-dial:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+.blot-dial::-webkit-slider-runnable-track {
+  height: 14px;
+  border-radius: 7px;
+  background: linear-gradient(
+    to right,
+    var(--color-game-action) 0%,
+    var(--color-game-action) var(--dial-fill, 0%),
+    var(--color-game-raised) var(--dial-fill, 0%),
+    var(--color-game-raised) 100%
+  );
+}
+.blot-dial::-moz-range-track {
+  height: 14px;
+  border-radius: 7px;
+  background: var(--color-game-raised);
+}
+.blot-dial::-moz-range-progress {
+  height: 14px;
+  border-radius: 7px;
+  background: var(--color-game-action);
+}
+.blot-dial::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 28px;
+  height: 28px;
+  margin-top: -7px; /* centre the 28px knob on the 14px track */
+  border-radius: 50%;
+  border: none;
+  background: var(--color-brand-yellow);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+.blot-dial::-moz-range-thumb {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: var(--color-brand-yellow);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+/* Focus ring: 3u cream on berry (brief §7). */
+.blot-dial:focus-visible {
+  outline: 3px solid var(--color-brand-cream);
+  outline-offset: 4px;
+  border-radius: 7px;
+}

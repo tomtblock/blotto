@@ -16,6 +16,21 @@ import { RankBadge } from "@/components/ui/rank-badge";
 import { PrizeTable } from "@/components/ui/prize-table";
 import { ToastProvider, useToast } from "@/components/ui/toast";
 import { Sheet } from "@/components/ui/sheet";
+import { BlotMorph } from "@/components/blot/BlotMorph";
+import { StatDials } from "@/components/blot/StatDials";
+import { Timer } from "@/components/blot/Timer";
+import { SHAPE_REFERENCES } from "@/components/blot/blotGeometry";
+import { rebalance } from "@/components/blot/rebalance";
+import { useBlotSprings, usePrefersReducedMotion } from "@/components/blot/springs";
+import { EVEN_SPLIT, type Allocation } from "@/battle/allocation";
+import {
+  RUN_CLOCK_BUDGET_MS,
+  clockStarted,
+  newRunClock,
+  remainingMs,
+  startClock,
+} from "@/battle/run-clock";
+import { useEffect } from "react";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -84,6 +99,65 @@ function ToastDemoButtons() {
       <Button intent="quiet" onClick={() => toast.show("Prize paid to your wallet", "prize")}>
         Show prize toast
       </Button>
+    </div>
+  );
+}
+
+
+/*
+ * The live dial playground — the battle screen's core loop in miniature:
+ * one shape, five dials, zero seams. The Blot on the pink field, the
+ * dials and clock on the plum card (two-layer rule), springs shared
+ * between the body and the resting knobs so the budget visibly flows.
+ * The clock starts on the FIRST dial change, exactly as in a real run.
+ */
+function BlotPlayground() {
+  const [target, setTarget] = useState<Allocation>(EVEN_SPLIT);
+  const [dragStat, setDragStat] = useState<number | null>(null);
+  const [clock, setClock] = useState(() => newRunClock());
+  const [now, setNow] = useState(() => Date.now());
+  const reduced = usePrefersReducedMotion();
+  const { display, velocity } = useBlotSprings(target, reduced);
+
+  useEffect(() => {
+    if (!clockStarted(clock)) return;
+    const id = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(id);
+  }, [clock]);
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-line">
+      <div className="flex items-center justify-center bg-brand-pink py-6">
+        <BlotMorph
+          allocation={target}
+          display={display}
+          velocity={velocity}
+          dragStat={dragStat}
+          mood="focused"
+          size={240}
+        />
+      </div>
+      <div className="flex flex-col gap-5 bg-game-base p-5 sm:flex-row sm:items-start">
+        <div className="min-w-0 flex-1">
+          <StatDials
+            target={target}
+            display={display}
+            dragStat={dragStat}
+            onDrag={(k, t) => {
+              setClock((c) => startClock(c, Date.now()));
+              setTarget((a) => rebalance(a, k, t));
+            }}
+            onDragStart={setDragStat}
+            onDragEnd={() => setDragStat(null)}
+            onEvenSplit={() => setTarget(EVEN_SPLIT)}
+          />
+        </div>
+        <Timer
+          remainingMs={remainingMs(clock, now)}
+          budgetMs={RUN_CLOCK_BUDGET_MS}
+          started={clockStarted(clock)}
+        />
+      </div>
     </div>
   );
 }
@@ -251,6 +325,52 @@ export function Gallery() {
             ))}
           </div>
         </Section>
+
+        <Section title="The Blot — ten reference bodies">
+          <p className="mb-4 max-w-2xl text-[13px] leading-5 text-ink-muted">
+            The allocation made flesh: one continuous inflated outline, recomputed from the
+            five stats. These ten are a READOUT vocabulary for review against the Higgsfield
+            renders — never presented to a player as targets (PID §4.3).
+          </p>
+          <div className="grid grid-cols-2 gap-4 rounded-2xl bg-brand-pink p-5 sm:grid-cols-5">
+            {SHAPE_REFERENCES.map((ref) => (
+              <div key={ref.code} className="flex flex-col items-center gap-1">
+                <BlotMorph
+                  allocation={ref.allocation as unknown as Allocation}
+                  size={110}
+                  mood="focused"
+                  reduceMotion
+                />
+                <span className="font-mono text-[11px] uppercase tracking-wide text-game-base">
+                  {ref.code} · {ref.name}
+                </span>
+              </div>
+            ))}
+          </div>
+        </Section>
+
+        <Section title="BlotMorph + StatDials + Timer — live">
+          <BlotPlayground />
+        </Section>
+
+        <Section title="Blot moods">
+          <div className="flex flex-wrap items-end gap-6 rounded-2xl bg-brand-pink p-5">
+            {(["idle", "focused", "locked", "paid"] as const).map((mood) => (
+              <div key={mood} className="flex flex-col items-center gap-1">
+                <BlotMorph allocation={EVEN_SPLIT} size={120} mood={mood} />
+                <span className="font-mono text-[11px] uppercase tracking-wide text-game-base">
+                  {mood}
+                </span>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 max-w-2xl text-[13px] leading-5 text-ink-muted">
+            idle breathes (brand surfaces only); focused never moves on its own; locked fires
+            one heart pulse and one visor blink; paid raises one arm once. Reduced motion
+            collapses all of it to stills.
+          </p>
+        </Section>
+
       </main>
     </ToastProvider>
   );
