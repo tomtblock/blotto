@@ -374,7 +374,31 @@ as a Stage E open item so it is not a surprise later.
 
 ---
 
-## C3 — `init_config` **[BOTH] ⚠⚠ THE IRREVERSIBLE ONE**
+## C3 — `init_config` — **DONE 2026-09-06 00:16Z**
+
+**Executed.** Squads proposal `GW8y…Vj5i`, execution signature
+`ogPsdSWbtwgW8fhby9LhpmVzYynziSENbDP8Q47Q5UPmXMWgMCDebEjYYfZ2mDNa29QuhBgVSpot7V6V2yKSUTF`,
+devnet slot 493796990. `Config.admin` = `9EEWtzyu…e34Z`, the Squads vault.
+Every field was read back off-chain and checked against the key register: entry
+signer `9Xhw…y8TP`, settlement signer `EaDf…jrSD`, paused false, open tiers
+`[1,0,0,0,0,0,0]`, ceilings = price × 64, min platform 0.5 SOL, next pool id 1 —
+380 of 380 bytes decoded with no residue.
+
+**It nearly went wrong, and the near-miss is the lesson.** The proposal was
+encoded correctly, but the program deployed at `5aawXay…` was the build from
+**before** commit 357a435 — nine days stale. Squads' own inspector decoded the
+payload against the real IDL and showed an argument we had never sent
+("Platform Wallet"); that was dismissed as a display quirk. Simulating the
+instruction returned `InstructionDidNotDeserialize`, which is what actually
+caught it. Had it been signed, the best case was a revert and the worst was a
+`Config` written in a layout the current code cannot read, on a write-once PDA.
+
+The program was rebuilt and redeployed (slot 493789531) and the instruction
+re-simulated to `err: null` before anything was signed.
+
+**`scripts/check-deployed.ts` now makes that check routine** — run
+`npm run check-deployed` before any irreversible instruction, and
+`deployed-drift.yml` runs it after every merge to main and daily.
 
 Whichever key signs becomes admin **permanently**. There is no `set_admin`.
 
@@ -458,6 +482,14 @@ solana program set-upgrade-authority 5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH1
 
 **After this, every deploy is a Squads proposal.** Decide with the architect whether
 to do it before or after the rehearsal's last redeploy. Then retire `GXKX…`.
+
+**ARCHITECT RECOMMENDATION (2026-09-06): after Stage D, not before.** Two
+reasons, both from the C3 near-miss. The deployed binary drifted from source for
+nine days undetected, and Stage D is the first time the program runs anything
+beyond `init_config` on a real cluster — so expect fixes. Today a fix is one
+command; after C4 it is a Squads proposal, on the exact path where a stale
+deploy is hardest to spot. Move the authority once the code has stopped
+changing, and gate it on `npm run check-deployed` passing.
 
 **Top up `GXKX…` before running this.** It holds ~0.108 SOL after funding Irys three
 times on 2026-08-29; a transfer that runs out of gas mid-authority-change is the one
