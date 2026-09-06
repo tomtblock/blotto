@@ -1,18 +1,17 @@
-//! D1/D2/D3-B acceptance against the compiled artifact: a 0.75 SOL and a
-//! 7.5 SOL pool fill and settle with the exact band amounts at the D-E1
-//! pots (vault drained to zero), and a tie-case pool settles a split-pot
-//! payout list — an 18-seat paid set straddling position 17, with a
-//! visible integer-division remainder going to the tied group's lowest
-//! seat.
+//! D1/D2/D3-B/D-E2 acceptance against the compiled artifact: a 0.75 SOL
+//! and a 7.5 SOL pool fill and settle with the winner taking the exact pot
+//! (vault drained to zero), and a tie-case pool settles a split-pot payout
+//! list — a three-way tie for first, with the visible one-lamport remainder
+//! going to the tied group's lowest seat, and nobody else paid.
 
 use blotto_litesvm_tests::*;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Keypair;
 use solana_sdk::signer::Signer;
 
-/// Pay every committed seat in batches of six and return the per-seat
-/// lamport deltas, asserting the vault ends at exactly zero and the pool
-/// lands in `Paid`.
+/// Pay every committed seat in one batch and return the per-seat lamport
+/// deltas, asserting the vault ends at exactly zero and the pool lands in
+/// `Paid`.
 fn pay_all_and_measure(
     env: &mut Env,
     pool_id: u64,
@@ -67,7 +66,7 @@ fn commit(env: &mut Env, pool_id: u64, payouts: &[(u16, u64)]) {
 }
 
 #[test]
-fn tier_2_and_tier_6_pools_settle_with_the_report_table_amounts() {
+fn tier_2_and_tier_6_pools_pay_the_winner_the_exact_pot() {
     let Some(mut env) = Env::new() else { return };
     let admin = env.admin.pubkey();
     env.send(
@@ -79,89 +78,40 @@ fn tier_2_and_tier_6_pools_settle_with_the_report_table_amounts() {
     // ---- tier 2: 0.75 SOL entry, 30 SOL pot (D-E1) ----
     env.open_ready_pool(1, 2);
     let players = fill_and_reveal(&mut env, 1);
-    let payouts = band_payouts(TIER_POTS[2]); // 30 SOL fixed pot
-                                              // The D-E1 tier-2 prize table, to the lamport
-                                              // (band unit = 30e9 / 1024 = 29_296_875).
-    let expected_t2: [u64; 16] = [
-        7_910_156_250, // 1st: 270 units
-        4_628_906_250,
-        2_988_281_250,
-        2_285_156_250,
-        1_464_843_750,
-        1_464_843_750,
-        1_464_843_750,
-        1_464_843_750,
-        791_015_625,
-        791_015_625,
-        791_015_625,
-        791_015_625,
-        791_015_625,
-        791_015_625,
-        791_015_625,
-        791_015_625,
-    ];
-    assert_eq!(payouts.iter().map(|&(_, a)| a).sum::<u64>(), 30_000_000_000);
-    for (i, &(seat, amount)) in payouts.iter().enumerate() {
-        assert_eq!((seat, amount), (i as u16, expected_t2[i]));
-    }
+    let payouts = winner_payout(TIER_POTS[2]);
+    assert_eq!(payouts, vec![(0, 30_000_000_000)], "1st: 30 SOL, the pot");
     commit(&mut env, 1, &payouts);
     let deltas = pay_all_and_measure(&mut env, 1, &players, &payouts);
-    assert_eq!(deltas, expected_t2.to_vec());
+    assert_eq!(deltas, vec![30_000_000_000]);
 
     // ---- tier 6: 7.5 SOL entry, 300 SOL pot (D-E1) ----
-    // register_player's 10 SOL airdrop covers the entry; the pot maths scale
-    // by exactly 10× the tier-2 numbers (7.5 = 10 × 0.75).
+    // register_player's 10 SOL airdrop covers the entry; the pot is exactly
+    // 10× the tier-2 pot (7.5 = 10 × 0.75).
     env.open_ready_pool(2, 6);
     let players = fill_and_reveal(&mut env, 2);
-    let payouts = band_payouts(TIER_POTS[6]); // 300 SOL fixed pot
-    assert_eq!(
-        payouts.iter().map(|&(_, a)| a).sum::<u64>(),
-        300_000_000_000
-    );
-    let expected_t6: Vec<u64> = expected_t2.iter().map(|a| a * 10).collect();
-    assert_eq!(payouts[0].1, 79_101_562_500, "1st: 79.1015625 SOL");
-    for (i, &(seat, amount)) in payouts.iter().enumerate() {
-        assert_eq!((seat, amount), (i as u16, expected_t6[i]));
-    }
+    let payouts = winner_payout(TIER_POTS[6]);
+    assert_eq!(payouts, vec![(0, 300_000_000_000)], "1st: 300 SOL, the pot");
     commit(&mut env, 2, &payouts);
     let deltas = pay_all_and_measure(&mut env, 2, &players, &payouts);
-    assert_eq!(deltas, expected_t6);
+    assert_eq!(deltas, vec![300_000_000_000]);
 }
 
 #[test]
-fn tie_case_splits_the_pot_and_pays_a_paid_set_past_sixteen() {
+fn tie_for_first_splits_the_pot_and_pays_nobody_else() {
     let Some(mut env) = Env::new() else { return };
     env.open_ready_pool(1, 0);
     let players = fill_and_reveal(&mut env, 1);
 
-    // Tier 0 pot = 4 SOL (D-E1), band unit = pot/1024 = 3_906_250 lamports.
-    // Ranking fixture: seats 0..2 solo at ranks 1–3; seats 3–5 tied at
-    // rank 4 (occupying positions 4–6, combined 78+50+50 = 178 units,
-    // 695_312_500 / 3 = 231_770_833 rem 1 → the remainder goes to the tied
-    // group's lowest seat); seats 6..14 solo at ranks 7–15; seats 15–17
-    // tied at rank 16 (positions 16–18 — only position 16 is a paid band,
-    // so the combined prize is 27 units split three ways). The paid set is
-    // 18 seats: D3-B pays every tied member, past the 16-place table.
-    let payouts: Vec<(u16, u64)> = vec![
-        (0, 1_054_687_500),
-        (1, 617_187_500),
-        (2, 398_437_500),
-        (3, 231_770_834), // tied 4th, +1 lamport remainder (lowest seat)
-        (4, 231_770_833), // tied 4th
-        (5, 231_770_833), // tied 4th
-        (6, 195_312_500),
-        (7, 195_312_500),
-        (8, 105_468_750),
-        (9, 105_468_750),
-        (10, 105_468_750),
-        (11, 105_468_750),
-        (12, 105_468_750),
-        (13, 105_468_750),
-        (14, 105_468_750),
-        (15, 35_156_250), // tied 16th: 105_468_750 / 3
-        (16, 35_156_250), // tied 16th — position 17, still paid
-        (17, 35_156_250), // tied 16th — position 18, still paid
-    ];
+    // Tier 0 pot = 4 SOL (D-E1). Ranking fixture: seats 0..2 tied for first
+    // — 4_000_000_000 / 3 = 1_333_333_333 remainder 1, the lamport to the
+    // tied group's lowest seat (D3-B's remainder rule under D-E2, proposal
+    // E1 §2.4); every other seat ranks below the paid line and is not in
+    // the committed list at all.
+    let payouts = tied_first_payouts(4_000_000_000, 3);
+    assert_eq!(
+        payouts,
+        vec![(0, 1_333_333_334), (1, 1_333_333_333), (2, 1_333_333_333)]
+    );
     assert_eq!(
         payouts.iter().map(|&(_, a)| a).sum::<u64>(),
         4_000_000_000,
@@ -178,16 +128,38 @@ fn tie_case_splits_the_pot_and_pays_a_paid_set_past_sixteen() {
         payouts.iter().map(|&(_, a)| a).collect::<Vec<u64>>()
     );
     let pv = read_pool(&env.svm, &pool_pda(1));
-    assert_eq!(pv.paid_mask, (1u64 << 18) - 1, "bits 0..17 set");
+    assert_eq!(pv.paid_mask, 0b111, "bits 0..2 set");
 
-    // Seat 18 (position 19) is outside the paid set.
+    // Seat 3 (second place) is outside the paid set.
     let settlement = env.settlement.insecure_clone();
-    let (p, e) = &players[18];
-    let ix = pay_prizes_ix(&settlement.pubkey(), 1, &[18], &[(p.pubkey(), *e)]);
+    let (p, e) = &players[3];
+    let ix = pay_prizes_ix(&settlement.pubkey(), 1, &[3], &[(p.pubkey(), *e)]);
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
     // The pool is already Paid, so the state gate fires first.
     assert!(
         err.contains("6027") || err.contains("6045"),
-        "seat 18 must not be payable: {err}"
+        "seat 3 must not be payable: {err}"
+    );
+}
+
+/// The everyone-tied shape: 64 ways, exact at every tier (pot = price × 40
+/// and every price is a whole number of hundredths of a SOL).
+#[test]
+fn a_sixty_four_way_tie_splits_the_pot_with_zero_remainder() {
+    let Some(mut env) = Env::new() else { return };
+    env.open_ready_pool(1, 0);
+    let players = fill_and_reveal(&mut env, 1);
+    let payouts = tied_first_payouts(TIER_POTS[0], 64);
+    assert!(
+        payouts.iter().all(|&(_, a)| a == 62_500_000),
+        "4 SOL / 64 each"
+    );
+    commit(&mut env, 1, &payouts);
+    let deltas = pay_all_and_measure(&mut env, 1, &players, &payouts);
+    assert!(deltas.iter().all(|&d| d == 62_500_000));
+    assert_eq!(
+        read_pool(&env.svm, &pool_pda(1)).paid_mask,
+        u64::MAX,
+        "all 64 bits"
     );
 }

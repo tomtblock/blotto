@@ -1,7 +1,11 @@
 //! Roadmap 4.5's acceptance test, against the compiled artifact: with the
-//! KYC-at-claim switch on, a 1st-place share escrows instead of paying; a
-//! `kyc_tier >= 1` packet presented at `release_escrow` releases it, a
-//! tier-0 packet does not; with the switch off, the share pays directly.
+//! KYC-at-claim switch on, a share above the threshold escrows instead of
+//! paying; a `kyc_tier >= 1` packet presented at `release_escrow` releases
+//! it, a tier-0 packet does not; with the switch off, the share pays
+//! directly. D-E5 keeps the switch at 0; these tests keep the branch honest
+//! for whoever flips it — under D-E2 the winner's share IS the pot, so a
+//! threshold below the smallest pot escrows every payout (§13's warning),
+//! and only a tie for first can produce a share under it.
 
 use blotto_litesvm_tests::*;
 use solana_sdk::clock::Clock;
@@ -10,9 +14,9 @@ use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Keypair;
 use solana_sdk::signer::Signer;
 
-const FIRST_PLACE: u64 = 1_054_687_500; // tier-0 rank 1 at the D-E1 pot
+const POT: u64 = 4_000_000_000; // tier 0 (D-E1); the winner's share (D-E2)
 
-fn fill_and_commit(env: &mut Env) -> Vec<(Keypair, Pubkey)> {
+fn fill_and_commit(env: &mut Env, payouts: &[(u16, u64)]) -> Vec<(Keypair, Pubkey)> {
     env.open_ready_pool(1, 0);
     let mut players = Vec::new();
     for _ in 0..64 {
@@ -31,7 +35,7 @@ fn fill_and_commit(env: &mut Env) -> Vec<(Keypair, Pubkey)> {
     )
     .unwrap();
     let mut args = [1u8; 32].to_vec();
-    args.extend_from_slice(&encode_payouts(&band_payouts(TIER_POTS[0])));
+    args.extend_from_slice(&encode_payouts(payouts));
     env.send(
         &[settle_ix(&settlement.pubkey(), 1, "commit_results", &args)],
         &[&settlement],
@@ -40,11 +44,17 @@ fn fill_and_commit(env: &mut Env) -> Vec<(Keypair, Pubkey)> {
     players
 }
 
-fn pay_rank_one(env: &mut Env, players: &[(Keypair, Pubkey)]) {
+fn pay_seats(env: &mut Env, players: &[(Keypair, Pubkey)], seats: &[u16]) {
     let settlement = env.settlement.insecure_clone();
-    let (p, e) = &players[0]; // seat 0 = rank 1 under the band payout list
-    let ix = pay_prizes_ix(&settlement.pubkey(), 1, &[0], &[(p.pubkey(), *e)]);
-    env.send(&[ix], &[&settlement]).expect("pay rank 1");
+    let metas: Vec<(Pubkey, Pubkey)> = seats
+        .iter()
+        .map(|&s| {
+            let (p, e) = &players[s as usize];
+            (p.pubkey(), *e)
+        })
+        .collect();
+    let ix = pay_prizes_ix(&settlement.pubkey(), 1, seats, &metas);
+    env.send(&[ix], &[&settlement]).expect("pay");
 }
 
 fn set_kyc_threshold(env: &mut Env, lamports: u64) {
@@ -54,40 +64,36 @@ fn set_kyc_threshold(env: &mut Env, lamports: u64) {
 }
 
 #[test]
-fn switch_off_pays_first_place_directly() {
+fn switch_off_pays_the_winner_directly() {
     let Some(mut env) = Env::new() else { return };
-    let players = fill_and_commit(&mut env);
+    let players = fill_and_commit(&mut env, &winner_payout(POT));
     let before = env.balance(&players[0].0.pubkey());
-    pay_rank_one(&mut env, &players);
-    assert_eq!(env.balance(&players[0].0.pubkey()) - before, FIRST_PLACE);
+    pay_seats(&mut env, &players, &[0]);
+    assert_eq!(env.balance(&players[0].0.pubkey()) - before, POT);
     assert_eq!(read_entry(&env.svm, &players[0].1).escrow_lamports, 0);
 }
 
 #[test]
-fn switch_on_escrows_first_place_and_kyc_packet_releases_it() {
+fn switch_on_escrows_the_winner_and_a_kyc_packet_releases_it() {
     let Some(mut env) = Env::new() else { return };
-    // Threshold below 1st place, above 9th–16th: only the big shares escrow.
+    // Any threshold below the pot escrows the winner's whole share (§13):
+    // under winner-takes-all this is an all-or-nothing gate at every tier.
     set_kyc_threshold(&mut env, 1_000_000_000);
-    let players = fill_and_commit(&mut env);
+    let players = fill_and_commit(&mut env, &winner_payout(POT));
     let before = env.balance(&players[0].0.pubkey());
-    pay_rank_one(&mut env, &players);
-    // Escrowed, not paid.
+    pay_seats(&mut env, &players, &[0]);
+    // Escrowed, not paid — the whole pot sits in the vault on the Entry.
     assert_eq!(env.balance(&players[0].0.pubkey()), before);
+    assert_eq!(read_entry(&env.svm, &players[0].1).escrow_lamports, POT);
+    assert_eq!(env.balance(&vault_pda(1)), POT);
     assert_eq!(
-        read_entry(&env.svm, &players[0].1).escrow_lamports,
-        FIRST_PLACE
+        read_pool(&env.svm, &pool_pda(1)).state,
+        3,
+        "Paid (escrowed)"
     );
 
-    // A small share stays direct even with the switch on.
-    let settlement = env.settlement.insecure_clone();
-    let (p9, e9) = &players[8]; // seat 8 = rank 9
-    let b9 = env.balance(&p9.pubkey());
-    let ix = pay_prizes_ix(&settlement.pubkey(), 1, &[8], &[(p9.pubkey(), *e9)]);
-    env.send(&[ix], &[&settlement]).unwrap();
-    // Rank 9 at the D-E1 pot: 4e9 × 27/1024 — under the 1 SOL threshold.
-    assert_eq!(env.balance(&p9.pubkey()) - b9, 105_468_750);
-
     // Release without any packet: rejected (PacketMissing).
+    let settlement = env.settlement.insecure_clone();
     let ix = release_escrow_ix(
         &settlement.pubkey(),
         1,
@@ -108,11 +114,37 @@ fn switch_on_escrows_first_place_and_kyc_packet_releases_it() {
     let err = env.send(&[sig_ix, ix.clone()], &[&settlement]).unwrap_err();
     assert!(err.contains("6020"), "{err}");
 
-    // Release with a tier-1 packet: the share lands.
+    // Release with a tier-1 packet: the pot lands.
     let tier1 = encode_packet(&players[0].0.pubkey(), &pool, 8, 1, 1, 1, now);
     let sig_ix = ed25519_ix(&signer, &tier1);
     env.send(&[sig_ix, ix], &[&settlement])
         .expect("release with KYC");
-    assert_eq!(env.balance(&players[0].0.pubkey()) - before, FIRST_PLACE);
+    assert_eq!(env.balance(&players[0].0.pubkey()) - before, POT);
     assert_eq!(read_entry(&env.svm, &players[0].1).escrow_lamports, 0);
+    assert_eq!(env.balance(&vault_pda(1)), 0);
+}
+
+/// The gate is a threshold on the SHARE, not the pot: a tie for first whose
+/// per-player share falls under it pays directly even with the switch on.
+#[test]
+fn switch_on_pays_tied_shares_under_the_threshold_directly() {
+    let Some(mut env) = Env::new() else { return };
+    set_kyc_threshold(&mut env, 3_000_000_000);
+    let payouts = tied_first_payouts(POT, 2); // 2 SOL each, under 3 SOL
+    let players = fill_and_commit(&mut env, &payouts);
+    let before: Vec<u64> = players[..2]
+        .iter()
+        .map(|(p, _)| env.balance(&p.pubkey()))
+        .collect();
+    pay_seats(&mut env, &players, &[0, 1]);
+    for (i, (p, e)) in players[..2].iter().enumerate() {
+        assert_eq!(
+            env.balance(&p.pubkey()) - before[i],
+            POT / 2,
+            "seat {i} paid direct"
+        );
+        assert_eq!(read_entry(&env.svm, e).escrow_lamports, 0);
+    }
+    assert_eq!(env.balance(&vault_pda(1)), 0, "vault drained");
+    assert_eq!(read_pool(&env.svm, &pool_pda(1)).state, 3, "Paid");
 }
