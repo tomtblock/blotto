@@ -9,7 +9,7 @@
 # refund). A CI test asserts it." History: the roadmap's §1.4 added a fourth
 # mover, forfeit-to-treasury (Phase 1 report). Since the founder ruling of
 # 2026-09-07 (prompt v2 §E — forfeited money never reaches the operator) the
-# exit set is: pay_prizes, release_escrow, promote_on_forfeit, refund
+# exit set is: pay_prizes, release_escrow, pay_next_place, refund
 # (trigger_refund's pot return and the per-entry refund both live in
 # refund.rs). `forfeit_escrow` is NO LONGER an exit — check (h) below pins
 # that, and that nothing in escrow.rs can address the treasury at all.
@@ -109,7 +109,7 @@ if [ -d "$PROG" ]; then
   fi
   # (h) 2026-09-07: escrow.rs never names the treasury (no PLATFORM_SEED, no
   # platform_debit, no `platform` account), and the forfeit handler moves no
-  # lamports — a forfeited share can only leave the vault by promotion.
+  # lamports — a forfeited share can only leave the vault by next-place payout.
   if grep -nE 'PLATFORM_SEED|platform_debit|\bplatform\b\s*:' $PROG/instructions/escrow.rs >/dev/null; then
     echo "standing-rule 6 FAILED: escrow.rs can address the platform treasury"
     fail=1

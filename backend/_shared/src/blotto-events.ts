@@ -267,7 +267,7 @@ export function registerBlottoEventLayouts(): void {
 
   // Since 2026-09-07 (founder ruling 4) a forfeit moves NOTHING: the share
   // stays in the pool's vault (`destination` = the vault itself) until
-  // `PrizePromoted` pays it to the next eligible place. The treasury report
+  // `NextPlacePaid` pays it to the next eligible place. The treasury report
   // must NOT credit the platform on this event.
   layout('EscrowForfeited', (r) => ({
     pool: r.pubkey(),
@@ -277,9 +277,9 @@ export function registerBlottoEventLayouts(): void {
   }));
 
   // A forfeited share paid, whole, to the next eligible place: `rank` is the
-  // promoted player's committed competition rank (1 for a tied first-place
+  // paid player's committed competition rank (1 for a tied first-place
   // member, 1 + k for the next rank after a k-way tie).
-  layout('PrizePromoted', (r) => ({
+  layout('NextPlacePaid', (r) => ({
     pool: r.pubkey(),
     from: r.pubkey(),
     to: r.pubkey(),
