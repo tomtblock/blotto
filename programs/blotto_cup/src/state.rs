@@ -3,9 +3,11 @@
 //! Layouts per TECH-ARCH §3.1 as amended by roadmap §1.4:
 //! `Config` gains `open_tiers`, `vault_ceiling_lamports`,
 //! `kyc_required_above_lamports`, `detection_hard_block`; `Pool` gains
-//! `timer_seconds` and (per R10) the 16 winners committed alongside the results
-//! root; `Entry` gains `escrow_lamports` and loses `claimed` (there is no claim
-//! step — prizes are pushed).
+//! `timer_seconds` and (per R10) the settled payout list committed alongside
+//! the results root — one paid place since D-E2, so that list is normally a
+//! single seat and only a tie for first makes it longer; `Entry` gains
+//! `escrow_lamports` and loses `claimed` (there is no claim step — prizes are
+//! pushed).
 //!
 //! Every field traces to TECH-ARCH §3.1 or a register row; nothing is invented.
 
@@ -24,8 +26,10 @@ pub const CONFIG_SEED: &[u8] = b"config";
 pub const POOL_SEED: &[u8] = b"pool";
 
 /// Prize vault PDA: `[VAULT_SEED, pool_id.to_le_bytes()]`. A zero-data
-/// system-owned account holding the 80% prize pot. Lamports leave it only
-/// through the exits enumerated in `vault.rs`.
+/// system-owned account holding the tier's FIXED pot, moved in from the
+/// treasury at `open_pool` before any entry (D-A1 revised — the pot is a
+/// constant, never a share of entries). Lamports leave it only through the
+/// exits enumerated in `vault.rs`.
 pub const VAULT_SEED: &[u8] = b"vault";
 
 /// Platform treasury PDA: `[PLATFORM_SEED]` — one per program (D-A1

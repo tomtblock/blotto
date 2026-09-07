@@ -3,14 +3,21 @@
  * devnet pool and getting the money back afterwards.
  *
  * WHY THIS EXISTS. Every budget number for the twenty-pool rehearsal assumes
- * the prize money returns to the bank. One pool moves 6.4 SOL of entries in
- * and pays 5.12 SOL of prizes out to sixteen winner wallets; if those wallets
- * are never swept, the bank funds every pool from scratch and is empty by
- * pool 4. The run still LOOKS fine while that happens — pools fill, settle and
- * verify exactly as they should — which is why pool 1 asserts the bank's net
- * change rather than trusting it: about **−0.41 SOL** if the sweep works,
- * about **−5.5** if it silently does not. A 13x difference is impossible to
- * miss if someone looks, so look.
+ * the prize money returns to the bank. At tier 0 one full pool moves 6.4 SOL
+ * of entries in and pays a 4 SOL pot out — since D-E2 to ONE winner wallet,
+ * or to the members of a tie for first; if those wallets are never swept, the
+ * bank funds every pool from scratch and empties within a handful of pools.
+ * The run still LOOKS fine while that happens — pools fill, settle and verify
+ * exactly as they should — which is why pool 1 asserts the bank's net change
+ * rather than trusting it: a small loss (fees and rent) if the sweep works,
+ * something close to a whole pot if it silently does not. The gap is an order
+ * of magnitude, impossible to miss if someone looks, so look.
+ *
+ * NOT WIRED YET. `fundEntrants`, `sweepToBank` and `readBank` have no runner:
+ * the rehearsal that CI runs is the offline one in `orchestrator.ts`, and the
+ * live twenty-pool devnet run this file was written for is still ahead of us
+ * (see the Road to Mainnet checklist). The pure parts — derivation, the
+ * ledger, `assertSweepWorked` — are covered by `test/bank.spec.ts`.
  *
  * THE DESIGN DECISION WORTH KNOWING. Entrant wallets are DERIVED, not
  * generated. A random keypair per entrant is simpler and loses money: if the

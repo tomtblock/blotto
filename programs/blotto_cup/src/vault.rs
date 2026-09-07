@@ -7,9 +7,12 @@
 //! call sites — which the CI check pins to exactly `pay_prizes.rs`, `escrow.rs`
 //! and `refund.rs`.
 //!
-//! The PRIZE-VAULT exit set is `pay_prizes`, `release_escrow`, `refund`
-//! (the pot returning to the treasury at `trigger_refund` — same file), and
-//! `forfeit_escrow`. There is no admin escape hatch and no
+//! The PRIZE-VAULT exit set is `pay_prizes`, `release_escrow`,
+//! `pay_next_place` (both in `escrow.rs`) and `refund` (the pot returning to
+//! the treasury at `trigger_refund` — same file). **`forfeit_escrow` is not
+//! an exit**: since the founder ruling of 2026-09-07 it moves no lamports at
+//! all, and a forfeited share leaves the vault only by `pay_next_place`,
+//! which pays players. There is no admin escape hatch and no
 //! recover-stuck-funds path (CLAUDE.md hard rule). D-A1 v2 adds the
 //! PLATFORM TREASURY PDA — a separate account, not a fifth vault exit —
 //! whose debit call sites are exactly `open_pool.rs` (pot funding),

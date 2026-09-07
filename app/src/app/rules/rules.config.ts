@@ -88,8 +88,6 @@ export function availability(): Availability {
   };
 }
 
-export const CURRENT_TERMS_VERSION: number = terms.version;
-
 export type RulesSection =
   | { id: string; heading: string; kind: 'text'; body: string; appendix?: string }
   | { id: string; heading: string; kind: 'tiers'; body: string; rows: TierRow[] }
