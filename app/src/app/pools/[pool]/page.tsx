@@ -1,14 +1,14 @@
 /*
- * The pool page (roadmap 3.2; restyled by v3 D2; D-E2/D-E4 2026-09-06): the
- * fixture in full — the seat ring, the fixed prize pool and the one-line
- * rule for who receives it, the clock (the 72h fill deadline, or the
- * go-timer once the minimum field is seated) — and the §8.6 "decisions are
- * final" statement ABOVE the enter control, which is a legal-position
- * requirement, not layout taste.
+ * The pool page (roadmap 3.2; restyled by v3 D2; D-E2/D-E4 2026-09-06,
+ * option A 2026-09-07): the fixture in full — the seat ring, the fixed
+ * prize pool and the one-line rule for who receives it, the ONE clock (the
+ * fill deadline set at open, 12 h at launch, derived from the server's
+ * time) — and the §8.6 "decisions are final" statement ABOVE the enter
+ * control, which is a legal-position requirement, not layout taste.
  */
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { GO_TIMER_SECS, MIN_SEATS, TIER_POT_LAMPORTS } from '@blotto/scoring';
+import { DEFAULT_FILL_DEADLINE_SECS, MIN_SEATS, TIER_POT_LAMPORTS } from '@blotto/scoring';
 import { COPY } from '@/copy';
 import { indexerApi, live } from '@/data/api';
 import { lamportsToSol } from '@/data/format';
@@ -21,7 +21,7 @@ import { ProgressRing } from '@/components/ui/progress-ring';
 import { Countdown } from '@/components/ui/countdown';
 
 const MIN_SEATS_N = Number(MIN_SEATS);
-const GO_TIMER_HOURS = Number(GO_TIMER_SECS / 3600n);
+const FILL_HOURS = Number(DEFAULT_FILL_DEADLINE_SECS / 3600n);
 
 export default async function PoolPage({ params }: { params: Promise<{ pool: string }> }) {
   const { pool: poolId } = await params;
@@ -41,10 +41,6 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
   const pool = poolLive.value;
   if (!pool) notFound();
   const open = pool.state === 'Open';
-  // D-E4: once the minimum field is seated the on-chain deadline IS the
-  // go-deadline (register shortened it in place); the indexer's
-  // `go_deadline` says which clock the player is looking at.
-  const goTimerRunning = open && pool.go_deadline !== null && pool.go_deadline !== undefined;
   // D-E1 §1.4: a pool carries the pot it OPENED with; when the launch
   // table has since moved, say the guarantee rather than look like a cut.
   const potDiffers =
@@ -94,23 +90,19 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
                 {open && (
                   <Countdown
                     deadlineUnix={pool.fill_deadline}
-                    label={goTimerRunning ? COPY.pool.goTimer : COPY.pool.fillDeadline}
+                    serverTimeUnix={pool.server_time}
+                    label={COPY.pool.fillDeadline}
                   />
                 )}
               </div>
             </div>
           </div>
-          {goTimerRunning && (
-            <p className="mt-3 text-[13px] leading-5 text-ink-muted">
-              {COPY.pool.goTimerNote(MIN_SEATS_N)}
-            </p>
-          )}
         </Card>
 
         <section className="mb-6 flex flex-col gap-2 text-[13px] leading-5 text-ink-muted">
           <p>{COPY.pool.prizeRule}</p>
           <p>{COPY.pool.sealed}</p>
-          <p>{COPY.pool.refundRule(MIN_SEATS_N, GO_TIMER_HOURS)}</p>
+          <p>{COPY.pool.refundRule(MIN_SEATS_N, FILL_HOURS)}</p>
           <p>
             <Link href="/rules" className="underline underline-offset-2 hover:text-ink">
               {COPY.rules.title}

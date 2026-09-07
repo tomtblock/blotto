@@ -2,7 +2,8 @@
  * The rules tab's single data source (D-B6, ratified 2026-08-27). EVERY
  * number rendered on the rules page derives here from the same shared
  * constants the prize path uses — TIER_ENTRY_LAMPORTS / TIER_POT_LAMPORTS /
- * MIN_SEATS / GO_TIMER_SECS from @blotto/scoring (pinned to the Python
+ * MIN_SEATS / DEFAULT_FILL_DEADLINE_SECS / DEFAULT_COOLDOWN_SECS from
+ * @blotto/scoring (pinned to the Python
  * oracle and, via LiteSVM, to the on-chain program) — and from the
  * founder-owned config files (territories, terms). No hand-typed figures,
  * so the page cannot drift from what the program pays or enforces.
@@ -12,7 +13,8 @@
  */
 
 import {
-  GO_TIMER_SECS,
+  DEFAULT_COOLDOWN_SECS,
+  DEFAULT_FILL_DEADLINE_SECS,
   MIN_SEATS,
   TIER_ENTRY_LAMPORTS,
   TIER_POT_LAMPORTS,
@@ -43,12 +45,16 @@ export function tierRows(): TierRow[] {
   });
 }
 
-/** The field-size numbers the rules prose carries (D-E4), from the shared
- * mirrors of the program constants. Small display integers, not lamports —
- * the Number conversion is exact. */
+/** The field-size and timing numbers the rules prose carries (D-E4; the
+ * 2026-09-07 rulings), from the shared mirrors of the program constants.
+ * Small display integers, not lamports — the Number conversion is exact.
+ * `fillDeadlineHours` and `cooldownMinutes` are the LAUNCH values seeded
+ * into Config (the admin can change them for future pools; the prose
+ * follows this mirror, which follows the program). */
 export const FIELD_RULES = {
   minSeats: Number(MIN_SEATS),
-  goTimerHours: Number(GO_TIMER_SECS / 3600n),
+  fillDeadlineHours: Number(DEFAULT_FILL_DEADLINE_SECS / 3600n),
+  cooldownMinutes: Number(DEFAULT_COOLDOWN_SECS / 60n),
 } as const;
 
 /** Display names for the ISO codes the schedule can carry today; an
@@ -94,7 +100,7 @@ export type RulesSection =
 export function rulesSections(): RulesSection[] {
   const rows = tierRows();
   const r = COPY.rules;
-  const { minSeats, goTimerHours } = FIELD_RULES;
+  const { minSeats, fillDeadlineHours, cooldownMinutes } = FIELD_RULES;
   return [
     {
       id: 'how-to-enter',
@@ -102,11 +108,20 @@ export function rulesSections(): RulesSection[] {
       kind: 'text',
       body: r.howToEnter(minSeats),
     },
-    { id: 'price', heading: r.headings.price, kind: 'tiers', body: r.priceIntro, rows },
+    {
+      id: 'price',
+      heading: r.headings.price,
+      kind: 'tiers',
+      body: r.priceIntro(cooldownMinutes),
+      rows,
+    },
     // D-E2: one paid place — the prize IS the pot in the tier table above,
     // so this section is the rule, not a second table.
     { id: 'prizes', heading: r.headings.prizes, kind: 'text', body: r.prizeIntro },
     { id: 'scoring', heading: r.headings.scoring, kind: 'text', body: r.scoring },
+    // R9-b (founder addendum 2026-09-07): the timer rule and its effect,
+    // its own section — and the same wording sits on the battle screen.
+    { id: 'battle-timer', heading: r.headings.battleTimer, kind: 'text', body: r.battleTimer },
     { id: 'ties', heading: r.headings.ties, kind: 'text', body: r.ties },
     { id: 'randomness', heading: r.headings.randomness, kind: 'text', body: r.randomness },
     { id: 'sealing', heading: r.headings.sealing, kind: 'text', body: r.sealing },
@@ -114,14 +129,19 @@ export function rulesSections(): RulesSection[] {
       id: 'field-size',
       heading: r.headings.fieldSize,
       kind: 'text',
-      body: r.fieldSize(minSeats, goTimerHours),
+      body: r.fieldSize(minSeats, fillDeadlineHours),
     },
-    { id: 'refund', heading: r.headings.refund, kind: 'text', body: r.refund(minSeats) },
+    {
+      id: 'refund',
+      heading: r.headings.refund,
+      kind: 'text',
+      body: r.refund(minSeats, fillDeadlineHours),
+    },
     {
       id: 'pool-opening',
       heading: r.headings.poolOpening,
       kind: 'text',
-      body: r.poolOpening,
+      body: r.poolOpening(cooldownMinutes),
     },
     {
       id: 'verify',

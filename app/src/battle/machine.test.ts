@@ -77,18 +77,18 @@ describe('locking', () => {
   });
 });
 
-describe('expiry (the one rule a player must be able to predict)', () => {
-  it('locks the current battle as shown and every untouched battle at even split', () => {
+describe('expiry (the one rule a player must be able to predict — R9-b)', () => {
+  it('keeps every locked battle; the on-screen battle and every untouched one enter as the even split', () => {
     let s = begin();
     s = reduce(s, { type: 'dial', stat: 2, target: 70 }); // battle 1 shaped, clock running
     s = reduce(s, { type: 'lock_in' }); // battle 2 opens even
-    s = reduce(s, { type: 'dial', stat: 4, target: 55 }); // battle 2 shaped
+    s = reduce(s, { type: 'dial', stat: 4, target: 55 }); // battle 2 shaped but NOT locked
     s = reduce(s, { type: 'tick', ms: RUN_CLOCK_BUDGET_MS }); // the whole budget burns
     expect(s.phase).toBe('review');
     if (s.phase === 'review') {
       expect(s.expired).toBe(true);
-      expect(s.battles[0][2]).toBe(70);
-      expect(s.battles[1][4]).toBe(55);
+      expect(s.battles[0][2]).toBe(70); // locked in time: kept
+      expect(s.battles[1]).toEqual(EVEN_SPLIT); // on screen, unlocked: the even split
       for (let k = 2; k < BATTLES; k++) expect(s.battles[k]).toEqual(EVEN_SPLIT);
       expect(s.timingsMs).toHaveLength(BATTLES);
       expect(s.timingsMs.slice(2).every((t) => t === 0)).toBe(true);

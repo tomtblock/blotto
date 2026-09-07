@@ -87,20 +87,18 @@ export const COPY = {
     // the shared constant (callers pass MIN_SEATS), never hand-typed.
     entrantsOf: (n: number, minSeats: number) => `${n} / 64 entered · ${minSeats} needed to run`,
     fillDeadline: 'Pool closes for entries in',
-    // D-E4 §11.3: the go-timer label, shown in the pool header once the
-    // minimum field is seated (the indexer's `go_deadline`). The pool WILL
-    // run; entries stay open until the clock ends or the last seat fills.
-    // A fixture clock like fillDeadline — calm, never beside the pay control.
-    goTimer: 'Pool runs in',
-    goTimerNote: (minSeats: number) =>
-      `${minSeats} players are seated, so this pool will run. Entries stay open until the clock ends or all 64 seats fill.`,
+    // Prompt v2 §B.6: the tier's cooldown after a pool settles — shown when
+    // no pool is open, from the on-chain `tier_next_open_at`. A fixture
+    // clock like fillDeadline — calm, never beside a pay control.
+    nextPoolIn: 'Next pool opens in',
     // D-E2: the prize is ONE number — the pot — shown as a Stat, with the
     // rule beside it. The per-position table is gone (a one-row table reads
     // as a bug, not a rule).
     prizeLabel: 'Prize pool',
-    // SUBSTANCE FIXED (D-E2 + D3-B): one paid place; a tie for first splits.
+    // SUBSTANCE FIXED (D-E2 + D3-B; wording per the founder's addendum of
+    // 2026-09-07): one paid place; a tie for first splits equally.
     prizeRule:
-      'The player ranked first receives the full prize pool. If players tie for first, they split it exactly; the indivisible lamport goes to the earliest entry.',
+      'The player ranked first receives the full prize pool. If two or more players are ranked first, they are paid an equal share each; an indivisible remainder of a few lamports goes to the eligible player with the lowest entry number.',
     // PID §8.6: displayed ABOVE the enter button, always.
     decisionsFinal:
       'Decisions are final. Once your seven battles are submitted they cannot be changed or withdrawn.',
@@ -117,10 +115,11 @@ export const COPY = {
     noOpenPool: 'No tournament is open for entries right now.',
     noOpenPoolDetail:
       'A tier opens the moment the prize treasury holds its full prize pool and the previous tournament in that tier has paid out.',
-    // D-E4: the fill rule in one breath — field size, the clock, the refund.
-    // Numbers come from the shared constants via the caller.
-    refundRule: (minSeats: number, goTimerHours: number) =>
-      `Entries stay open for up to 72 hours. Once ${minSeats} players are seated, a ${goTimerHours}-hour clock starts and the pool runs when it ends — or sooner, the moment all 64 seats fill. If fewer than ${minSeats} are seated when time runs out, every entry is refunded in full.`,
+    // D-E4 (option A, 2026-09-07): the fill rule in one breath — field
+    // size, the one clock, the refund. Numbers come from the shared
+    // constants via the caller (12 hours at launch).
+    refundRule: (minSeats: number, fillHours: number) =>
+      `Entries stay open for up to ${fillHours} hours. The pool runs the moment all 64 seats fill, or when time runs out with at least ${minSeats} players seated. If fewer than ${minSeats} are seated when time runs out, every entry is refunded in full.`,
     // Per-tier lobby (the old handover's §5A remainder, closed 2026-08-28).
     tierEntry: (sol: string) => `${sol} SOL entry`,
     tierPot: (sol: string) => `${sol} SOL prize pool`,
@@ -186,8 +185,16 @@ export const COPY = {
     screenOf: (k: number) => `Battle ${k} of 7`,
     evenSplit: 'Even split',
     lockIn: 'Lock in',
-    // R9's disclosure — the rules page carries the long form.
-    timerNote: 'When the timer ends, the battle locks in exactly what the pentagon shows.',
+    // R9-b (founder addendum 2026-09-07, amending R9): an unlocked battle —
+    // the one on screen included — is entered as the even split. The
+    // wording is the founder's, verbatim, and goes on the battle screen as
+    // well as the rules page.
+    timerNote:
+      'Lock each battle before its timer ends. Any battle you have not locked when the timer ends \u2014 including the one on your screen \u2014 is entered as an even split of 20 points in each of the five stats.',
+    // The effect of the default, stated as how the allocation PERFORMS —
+    // never as a chance of anything (the addendum's note for this line).
+    timerEffect:
+      'The even split is the weakest allocation in the game. Against any allocation that concentrates points on three stats, an even split loses that battle three stats to two, every time. Nothing is decided at random: the even split is simply the shape your entry starts from, and leaving it there is a decision like any other.',
     reviewTitle: 'Your seven battles',
     // The two-step seal (v3 D2): arm, then confirm. §8.6 renders above step 2.
     seal: 'Seal my allocation',
@@ -197,16 +204,16 @@ export const COPY = {
     remainingPoints: 'Points to place',
     statNames: ['Strength', 'Speed', 'Heart', 'Wit', 'Durability'] as const,
 
-    /* v4 run (founder brief 2026-09-06). The ninety-second rule text is
-     * the brief's approved line, verbatim; the rules PAGE copy change
-     * remains with counsel (founder open item). */
+    /* v4 run (founder brief 2026-09-06), the timer sentence amended by the
+     * founder's addendum of 2026-09-07 (R9-b): an unlocked battle is
+     * entered as the even split, the one on screen included. */
     approvedTitle: "You're in.",
     begin: 'Make my first Blot',
     ruleNinety:
-      "Ninety seconds for all seven battles. Any battle you don't lock in time is locked at whatever shape it has.",
+      'Ninety seconds for all seven battles. Any battle you have not locked when the timer ends \u2014 including the one on your screen \u2014 is entered as an even split of 20 points in each of the five stats.',
     lockBattle: (n: number) => `Lock in battle ${n}`,
     sevenTitle: 'Seven made',
-    expiredNote: 'Time ran out — every battle locked at the shape it had.',
+    expiredNote: 'Time ran out \u2014 every battle you had not locked was entered as the even split.',
     montageHeadlineFirst: 'I just made my first Blot.',
     montageHeadlineSeven: 'I just made seven Blots.',
     montageFooter: 'BLOTTO CUP \u00b7 blotto.gg \u00b7 18+ only \u00b7 not available in some territories',
@@ -263,15 +270,16 @@ export const COPY = {
   results: {
     paidAutomatically:
       'Prizes are paid automatically when results are committed. No claim step.',
+    // Founder addendum 2026-09-07, ruling 1: the published rule is 12 hours.
     escrowHeld:
-      'This prize share is held pending review. It will be released or withheld per the published detection criteria.',
+      'This prize is held by the program while a flag against it is reviewed against the published criteria. If no decision is made within 12 hours, the flag is cleared and the prize is paid.',
     // No denominator: a pool runs with 52..64 players (D-E4) and the career
     // row does not carry its field size.
     rank: (r: number) => `Ranked #${r}`,
     // SUBSTANCE FIXED (D3-B, ratified 2026-08-27; substance amended by D-E2,
     // ratified 2026-09-06 — one paid place): the split-pot tie rule.
     tieNote:
-      'Tied players — equal on battles won and on stats won — share a rank. A tie for first splits the prize pool exactly between the tied players, the indivisible lamport to the earliest entry; no other position is paid. The full ranking with tie labels is recomputable on the Verify page from the published data.',
+      'Tied players \u2014 equal on battles won and on stats won \u2014 share a rank. A tie for first splits the prize pool equally between the tied players, an indivisible remainder of a few lamports to the eligible player with the lowest entry number; no other position is paid. The full ranking with tie labels is recomputable on the Verify page from the published data.',
     // E3 (proposal E1 §4): the verified archive. Drafts pending founder
     // voice review — substance (provenance, recomputability) is the
     // architecture speaking; the wording is the founder's to shape.
@@ -331,9 +339,14 @@ export const COPY = {
     keys: {
       admin: {
         name: 'Admin (multisig)',
-        can: 'Open or close tiers, set ceilings and switches, rotate the two service signers, pause new entries.',
+        can: 'Open or close tiers, set ceilings, switches and pool timings, rotate the service signers and the keeper, pause new entries, and record that a review upheld a flag.',
         cannot:
-          'Move money. No admin instruction transfers a lamport; pausing never blocks settlement or refunds.',
+          'Move money. No admin instruction transfers a lamport \u2014 an upheld flag leaves the prize in the tournament\u2019s own vault for the next eligible player; pausing never blocks settlement or refunds.',
+      },
+      keeper: {
+        name: 'Keeper',
+        can: 'Open the next tournament of a tier once the previous one has paid out or closed and the tier\u2019s cooldown has passed. If it goes quiet for a day, anyone may open the tier instead.',
+        cannot: 'Enter a tournament, move money, or decide when a tournament runs \u2014 the seat count and the clock do.',
       },
       entrySigner: {
         name: 'Entry signer',
@@ -342,9 +355,9 @@ export const COPY = {
       },
       settlementSigner: {
         name: 'Settlement signer',
-        can: 'Open pools, reveal pool secrets after seal, commit results, run the prize payments the program validates.',
+        can: 'Reveal pool secrets after seal, commit results, run the prize payments the program validates, and pay a forfeited prize onward to the next eligible player against the committed results.',
         cannot:
-          'Choose amounts or recipients. The program checks every payout list against the pot and the recorded entries; a wrong list is rejected on-chain.',
+          'Choose amounts or recipients, or enter a tournament. The program checks every payout list against the pot and the recorded entries, and every onward payment against the committed results; a wrong list is rejected on-chain.',
       },
       poolSealing: {
         name: 'Pool sealing keys (one per pool)',
@@ -369,7 +382,7 @@ export const COPY = {
         holderNote: 'Listed in the published reviewer configuration',
         can: 'Sign review decisions on flagged entries; every decision is recorded in a public, signed log.',
         cannot:
-          'Pay themselves. A review decision can only release a held share to its entrant or forfeit it to the platform wallet.',
+          'Pay themselves. A review decision can only release a held prize to its entrant or record that the flag was upheld \u2014 an upheld prize is paid to the next eligible player, never to us.',
       },
     },
   },
@@ -398,38 +411,52 @@ export const COPY = {
     // constants (rules.config passes MIN_SEATS and the go-timer) — the D-B6
     // rule that no figure on this page is hand-typed.
     howToEnter: (minSeats: number) =>
-      `Sign in, pick an open pool, and confirm the 18+ and terms statements — your wallet signs that confirmation once per terms version. Pay the entry price for the tier. You then set seven battles, about ninety seconds in total: each battle splits 100 points across five stats. Your battles are encrypted on your device before any payment moves. A pool has 64 seats and runs with at least ${minSeats} players (see the field-size rule). Decisions are final: a submitted entry cannot be changed or withdrawn (see the refund rule for pools that never reach their minimum field).`,
-    priceIntro:
-      'Seven tiers are configured, each with a fixed prize pool. A tier must be switched on by the operator before pools open in it; at launch only the smallest tier is on. One pool per tier is open at a time, and a new pool of that tier can open the moment one has run and paid out.',
+      `Sign in, pick an open pool, and confirm the 18+ and terms statements — your wallet signs that confirmation once per terms version. Pay the entry price for the tier. You then set seven battles, about ninety seconds in total: each battle splits 100 points across five stats. Your battles are encrypted on your device before any payment moves. One entry per wallet per pool; there is no limit across pools. The keys that run the service — the admin, the keeper, the entry signer and the settlement signer — can never enter. A pool has 64 seats and runs with at least ${minSeats} players (see the field-size rule). Decisions are final: a submitted entry cannot be changed or withdrawn (see the refund rule for pools that never reach their minimum field).`,
+    priceIntro: (cooldownMinutes: number) =>
+      `Seven tiers are configured, each with a fixed prize pool. A tier must be switched on by the operator before pools open in it; at launch only the smallest tier is on. One pool per tier is open at a time, and a new pool of that tier opens ${cooldownMinutes} minutes after the previous one has paid out or closed.`,
     // D-E2 (ratified 2026-09-06): one paid place. No percentage, no multiple.
     prizeIntro:
       'Every pool pays a fixed prize pool, funded from the prize treasury before entries open — the table above shows it per tier beside the entry price, and it is the same whatever size the field turns out to be. The player ranked first receives the whole prize pool; if players tie for first, they split it exactly (see ties). Prizes are paid automatically when results are committed; there is no claim step.',
     // SUBSTANCE FIXED (D3-B): identical-field scoring, exactly as the engine
-    // implements it (backend/scoring/src/engine.ts). Includes the R9
-    // lock-current disclosure.
+    // implements it (backend/scoring/src/engine.ts). The timer rule has its
+    // own section (battleTimer — R9-b).
     scoring:
-      'Every player faces the identical field: your battle 1 is compared against every other entry\u2019s battle 1, and so on for all seven. A battle is won by taking three or more of its five stats; if neither side takes three, it is a draw worth half a win to each. Rankings are ordered by total battles won (a draw counts half), then by total stats won across every comparison. The ordering is fully deterministic: the same sealed battles always produce the same ranking. If the timer on a battle screen runs out, the battle locks exactly what the pentagon shows at that moment \u2014 nothing is ever chosen for you.',
-    // SUBSTANCE FIXED (D3-B; substance amended by D-E2, ratified 2026-09-06):
-    // the split-pot tie rule under one paid place.
+      'Every player faces the identical field: your battle 1 is compared against every other entry\u2019s battle 1, and so on for all seven. A battle is won by taking three or more of its five stats; if neither side takes three, it is a draw worth half a win to each. Rankings are ordered by total battles won (a draw counts half), then by total stats won across every comparison. The ordering is fully deterministic: the same sealed battles always produce the same ranking.',
+    // R9-b (founder addendum 2026-09-07): the battle timer, the founder's
+    // wording verbatim — the rule, then its effect stated as how the
+    // allocation performs, never as a chance of anything.
+    battleTimer:
+      'Lock each battle before its timer ends. Any battle you have not locked when the timer ends \u2014 including the one on your screen \u2014 is entered as an even split of 20 points in each of the five stats. The even split is the weakest allocation in the game. Against any allocation that concentrates points on three stats, an even split loses that battle three stats to two, every time. Nothing is decided at random: the even split is simply the shape your entry starts from, and leaving it there is a decision like any other.',
+    // SUBSTANCE FIXED (D3-B; D-E2; the founder's addendum of 2026-09-07,
+    // rulings 2 and 3, wording verbatim): ranking, ties, and where a
+    // forfeited first-place share goes — always to a player, never to us.
     ties:
-      'Two players are tied when their battles won AND stats won are both equal. Tied players share the same rank. Because one position is paid, only a tie for first affects prizes: the players tied for first split the prize pool evenly, and if the split leaves an indivisible remainder of a few lamports, it goes to the tied player who entered the pool earliest. Every player tied for first is paid; nobody ranked below first is paid. Seat order never decides who ranks above whom.',
+      'Players are ranked by battles won, then by total stats won. Players who remain equal on both share a rank. Entry order plays no part in ranking or in deciding who is paid. It determines only where an indivisible remainder of a few lamports falls when a prize cannot be divided exactly. Your entry number is recorded when you enter and is visible to you before the tournament closes. No random process is used at any stage of ranking or payment. ' +
+      'If two or more players are ranked first, they are paid an equal share of the prize pool each; nobody ranked below first is paid. ' +
+      'If a player ranked first is not paid because a flag against them is upheld, their share is divided equally between the remaining eligible players ranked first. If none of the players ranked first is eligible, the whole prize pool passes to the next rank and is divided equally between the eligible players there. Any indivisible remainder goes to the eligible player with the lowest entry number. ' +
+      'A prize is always paid to a player. It is never returned to us. ' +
+      'Where more than one player shares the rank a prize passes to, we identify that group. The published rule is that they share equally, with any remainder going to the lowest entry number. The results bundle we publish after every tournament lets anyone check that we identified the group correctly.',
     // SUBSTANCE FIXED: randomness scope (PID §8.3/§8.4).
     randomness:
       'Randomness from a Switchboard VRF seed, combined with a later slot hash, decides ONE thing: which character class artwork your pass shows. Class is cosmetic. It does not affect any stat, any battle, any score, any rank, or any prize \u2014 nothing in the scoring path reads it. Scoring and prizes depend only on the sealed battles every player submitted. Every class draw is replayable from published on-chain data.',
-    // SUBSTANCE FIXED: the sealing lifecycle (TECH-ARCH §5).
+    // SUBSTANCE FIXED: the sealing lifecycle (TECH-ARCH §5), the founder's
+    // addendum wording of 2026-09-07 (ruling 5) — the key is generated and
+    // held by our systems, export-locked; said plainly.
     sealing:
-      'Your seven battles are encrypted on your device, before payment, to a pool key that nobody \u2014 the operator included \u2014 can open while the pool is filling. A hash of your battles is recorded on-chain at entry. When the pool runs, the pool secret is published on-chain: at that moment everyone\u2019s battles become readable and checkable against the hashes committed at entry, and anyone can re-run the scoring.',
-    // D-E4 (ratified 2026-09-06): the minimum field and the go-timer.
+      'Your battles are encrypted on your device before they are submitted. The key that can decrypt them is generated and held by our systems, locked against export, and is not released until the tournament closes and no further entry is possible. Until that moment no battle in the tournament can be read, by us or by anyone else. A hash of your battles is recorded on-chain at entry. When the tournament runs, the pool secret is published on-chain: at that moment everyone\u2019s battles become readable and checkable against the hashes committed at entry, and anyone can re-run the scoring.',
+    // D-E4 (ratified 2026-09-06; option A per the founder's ruling of
+    // 2026-09-07): the minimum field and the ONE clock, 12 hours at launch.
     // SUBSTANCE FIXED: the seat count and the clock decide when a pool runs
     // \u2014 never the operator; the start and the refund are both permissionless.
-    fieldSize: (minSeats: number, goTimerHours: number) =>
-      `A pool has 64 seats and runs with at least ${minSeats} players. Entries stay open until the pool fills or its clock ends: the ${goTimerHours}-hour clock starts the moment the ${minSeats}th player is seated, and when it ends the pool runs with everyone seated \u2014 or earlier, the moment the 64th seat fills. Nobody decides when a pool runs; the seat count and the clock do, and anyone can trigger the start once the clock has ended. The prize pool is the same whatever the field size.`,
-    refund: (minSeats: number) =>
-      `A pool whose clock runs out with fewer than ${minSeats} players seated \u2014 at most 72 hours after it opened \u2014 refunds every entry in full and closes. Your entry payment is held by the program until the pool runs, so the refund never depends on the operator. Anyone can trigger the refund once the deadline passes; no one\u2019s permission is needed.`,
-    // D-A1 revised (master prompt v2, 2026-08-27): the pool-opening rule.
-    // SUBSTANCE FIXED: sequential pools + pre-funded fixed pots.
-    poolOpening:
-      'Each tier runs one tournament at a time. A tier opens when the prize treasury holds its full prize pool and the previous tournament in that tier has paid out. Prize pools are fixed per tier and are funded before entries open.',
+    fieldSize: (minSeats: number, fillHours: number) =>
+      `A pool has 64 seats and runs with at least ${minSeats} players. Entries stay open for up to ${fillHours} hours from the moment the pool opens. The pool runs the moment the 64th seat fills, or when the ${fillHours} hours end with at least ${minSeats} players seated. Nobody decides when a pool runs; the seat count and the clock do, and anyone can trigger the start once the clock has ended. The prize pool is the same whatever the field size.`,
+    refund: (minSeats: number, fillHours: number) =>
+      `A pool whose clock runs out with fewer than ${minSeats} players seated \u2014 ${fillHours} hours after it opened \u2014 refunds every entry in full and closes. Your entry payment is held by the program until the pool runs, so the refund never depends on the operator. Anyone can trigger the refund once the deadline passes; no one\u2019s permission is needed.`,
+    // D-A1 revised (master prompt v2, 2026-08-27): the pool-opening rule,
+    // plus the cooldown (prompt v2 §B.6). SUBSTANCE FIXED: sequential pools
+    // + pre-funded fixed pots + the cooldown between them.
+    poolOpening: (cooldownMinutes: number) =>
+      `Each tier runs one tournament at a time. A tier opens when the prize treasury holds its full prize pool, the previous tournament in that tier has paid out or closed, and ${cooldownMinutes} minutes have passed since. Prize pools are fixed per tier and are funded before entries open.`,
     verify:
       'Every number a player is paid is recomputable by that player. The Verify page decrypts the published battles with the revealed pool secret, re-runs the same scoring engine in your browser, rebuilds the results tree, and compares it against what was committed on-chain. Nothing on that page trusts the operator.',
     verifyLink: 'Open the Verify page',
@@ -456,19 +483,23 @@ export const COPY = {
       '(3) duplicate or near-duplicate battle sets across entries; ' +
       '(4) the same device or network origin behind multiple entries in one pool; ' +
       '(5) a score far outside the field’s distribution. ' +
-      'No single soft signal flags an entry — a flag needs two independent signals — with two exceptions ' +
-      'that are conclusive on their own: exactly identical battle sets, and two entries from the same device. ' +
-      'A flag never decides anything by itself: it only sends the entry to the signed review process below.',
-    // C10: the review PROCESS is mechanical and stated now; the criteria
-    // wording above stays founder/counsel prose (R4).
+      'These signals are computed for every tournament and published with the review log. Nothing is flagged automatically: a flag is a decision by a named reviewer that an entry meets one of the criteria above, ' +
+      'and a flag never decides anything by itself \u2014 it only sends the entry to the signed review process below.',
+    // C10 + the founder's addendum of 2026-09-07 (ruling 1, wording
+    // verbatim): resolving, review and appeal. The published rule is 12
+    // hours; the program's seven-day release is the safeguard, not the rule.
     reviewProcess:
-      'How review works: before any prize is paid, an entry that meets a published criterion can be flagged. A flagged share is not paid out — it is held by the program, in the same vault, while a named member of the operating multisig reviews the entry against the published criteria. Every decision is recorded in a public log signed by the reviewer who made it: what was decided, when, and which criterion it cited. A cleared share is released to the player in full; an upheld one is forfeited. Nothing about review is discretionary money movement — the program only ever releases to the entrant or forfeits to the operator, and the signed log shows which happened and why.',
+      'When a tournament closes, results are published and the tournament enters resolving. Resolving lasts up to 12 hours. ' +
+      'During resolving we check the winning wallet against published sanctions lists, as we are required to. Where an entry has been flagged against the integrity criteria published above, a named reviewer decides that flag against those criteria. A flagged prize is held by the program: it is not paid to us and it is not paid to anyone else while the review runs. ' +
+      'If no decision is made within 12 hours, the flag is cleared and the prize is paid. Separately, and as a safeguard against our own failure, the program allows anyone at all to release a held prize to the player it belongs to after seven days, without our involvement. ' +
+      'You may appeal within 7 days of being notified, and the appeal is decided by a different reviewer within a further 7 days. Every decision is published in a signed log naming the reviewer, the time, and the criterion cited. If an appeal succeeds after the prize has been paid to another player, we pay the appealing player the full prize ourselves. We do not seek to recover a prize already paid.',
     headings: {
       howToEnter: 'How to enter',
       price: 'Price and prize pool per tier',
       prizes: 'Who is paid',
       scoring: 'How scoring works',
-      ties: 'How ties are resolved',
+      battleTimer: 'The battle timer',
+      ties: 'Ranking, ties and forfeited prizes',
       randomness: 'What randomness does \u2014 and does not do',
       sealing: 'Sealing: when your battles are encrypted and revealed',
       fieldSize: 'How many players a pool runs with',

@@ -18,6 +18,7 @@ import type {
   ResultRow,
   RivalRow,
   SealedEntryRow,
+  TiersResponse,
   TreasuryTiers,
 } from './types';
 import { FIXTURE_API } from './fixture';
@@ -67,6 +68,9 @@ class HttpIndexerApi implements IndexerApi {
   }
   async getTreasury() {
     return this.get<TreasuryTiers>('/treasury');
+  }
+  async getTiers() {
+    return this.get<TiersResponse>('/tiers');
   }
   async getLeaderboard(pool: string) {
     // 404 = no VERIFIED archive for this pool (the read API fails closed;

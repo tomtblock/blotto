@@ -21,6 +21,7 @@ import { lamportsToSol } from '@/data/format';
 import { AppHeader } from '@/components/shell/app-header';
 import { TabBar } from '@/components/shell/tab-bar';
 import { Countdown } from '@/components/ui/countdown';
+import type { TiersResponse } from '@/data/types';
 import { HeroClip } from '@/components/landing/HeroClip';
 import { LiveDemo } from '@/components/landing/LiveDemo';
 import { PreloaderGate } from '@/components/preloader/PreloaderGate';
@@ -67,15 +68,34 @@ function SeatRing({ entrants }: { entrants: number }) {
   );
 }
 
+/** The soonest `next_open_at` still in the future, by the SERVER's clock —
+ * null when no tier is cooling down (nothing to count toward). */
+function soonestNextOpen(
+  tiers: TiersResponse | null
+): { nextOpenAt: string; serverTime: string } | null {
+  if (!tiers) return null;
+  const now = BigInt(tiers.server_time);
+  let best: bigint | null = null;
+  for (const t of tiers.tiers) {
+    const at = BigInt(t.next_open_at);
+    if (at > now && (best === null || at < best)) best = at;
+  }
+  return best === null ? null : { nextOpenAt: best.toString(), serverTime: tiers.server_time };
+}
+
 export default async function LandingPage() {
   const api = indexerApi();
   // SSR outage guard: a dead indexer degrades this page, never kills it.
-  const [poolsLive, treasuryLive] = await Promise.all([
+  const [poolsLive, treasuryLive, tiersLive] = await Promise.all([
     live(() => api.listPools()),
     live(() => api.getTreasury()),
+    live(() => api.getTiers()),
   ]);
   const pools = poolsLive.ok ? poolsLive.value : [];
   const treasury = treasuryLive.ok ? treasuryLive.value : null;
+  // Prompt v2 §B.6: the soonest tier still cooling down, for the "next pool
+  // opens in" clock when nothing is open. Server time, never the device's.
+  const nextOpen = tiersLive.ok ? soonestNextOpen(tiersLive.value) : null;
   const open = pools.filter((p) => p.state === 'Open').sort((a, b) => a.tier - b.tier);
   const hero = open[0];
   const openByTier = new Map(open.map((p) => [p.tier, p]));
@@ -171,11 +191,11 @@ export default async function LandingPage() {
                       {/* PHASE-E1-REVIEW (D18): this clock already sits in the
                           same card as the Enter link, against the rule the
                           Countdown documents. Not moved here — flagged for
-                          the founder; the go-timer label swap is the only
-                          change. */}
+                          the founder. It derives from the server's time. */}
                       <Countdown
                         deadlineUnix={hero.fill_deadline}
-                        label={hero.go_deadline ? COPY.pool.goTimer : COPY.pool.fillDeadline}
+                        serverTimeUnix={hero.server_time}
+                        label={COPY.pool.fillDeadline}
                       />
                     </div>
                   </div>
@@ -200,6 +220,15 @@ export default async function LandingPage() {
                 <p className="mt-1 max-w-prose text-[13px] leading-5 text-game-ink-muted">
                   {COPY.pool.noOpenPoolDetail}
                 </p>
+                {nextOpen && (
+                  <div className="mt-4">
+                    <Countdown
+                      deadlineUnix={nextOpen.nextOpenAt}
+                      serverTimeUnix={nextOpen.serverTime}
+                      label={COPY.pool.nextPoolIn}
+                    />
+                  </div>
+                )}
               </div>
             )}
           </section>

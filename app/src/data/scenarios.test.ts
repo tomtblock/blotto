@@ -85,11 +85,12 @@ describe('the preview scenarios', () => {
     }
   });
 
-  it('the go-timer fixtures carry the effective deadline in both fields (D-E4)', () => {
+  it('every summary carries the server clock the countdowns derive from', () => {
+    const decimal = /^\d+$/;
     for (const s of SCENARIOS) {
-      if (s.summary.go_deadline === null) continue;
-      expect(s.summary.go_deadline, s.key).toBe(s.summary.fill_deadline);
-      expect(s.summary.entrants, `${s.key} below the minimum field`).toBeGreaterThanOrEqual(52);
+      expect(s.summary.server_time, s.key).toMatch(decimal);
+      // Option A: one clock per pool — no go-deadline field exists any more.
+      expect('go_deadline' in s.summary, s.key).toBe(false);
     }
   });
 

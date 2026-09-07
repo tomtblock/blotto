@@ -22,9 +22,17 @@ import { useEffect, useState } from "react";
 export interface CountdownProps {
   /** Unix seconds, decimal string or number. */
   deadlineUnix: string | number;
+  /**
+   * The SERVER's clock when the data was read (unix seconds; the read API's
+   * `server_time`). Prompt v2 §F: every timer derives "now" from the server,
+   * never from the device — the offset between server time and the device
+   * clock is captured once, at mount, and applied to every tick. Absent
+   * (fixtures, the gallery) the device clock is used as is.
+   */
+  serverTimeUnix?: string | number;
   /** Label above the clock ("Entries close", "Opens in"). */
   label?: string;
-  /** Injectable clock for tests. */
+  /** Injectable clock for tests (device milliseconds). */
   now?: () => number;
 }
 
@@ -50,13 +58,19 @@ const pad = (n: number) => String(n).padStart(2, "0");
 /** The deterministic pre-tick placeholder (same width class as the clock). */
 const PLACEHOLDER = "--:--:--";
 
-export function Countdown({ deadlineUnix, label, now = Date.now }: CountdownProps) {
+export function Countdown({ deadlineUnix, serverTimeUnix, label, now = Date.now }: CountdownProps) {
   const deadline = Number(deadlineUnix);
+  const serverTime = serverTimeUnix === undefined ? null : Number(serverTimeUnix);
   // null until the first client tick — see the hydration rule above.
   const [t, setT] = useState<Remaining | null>(null);
 
   useEffect(() => {
-    const tick = () => setT(remaining(deadline, now()));
+    // Captured once per mount: how far the device clock sits from the
+    // server's. The server time is a snapshot from the read, so it is only
+    // ever slightly behind — the offset absorbs a wrong device clock, which
+    // is the failure this exists for.
+    const offsetMs = serverTime === null ? 0 : serverTime * 1000 - now();
+    const tick = () => setT(remaining(deadline, now() + offsetMs));
     // First tick right after mount (async, so hydration completes first),
     // then once a second.
     const first = setTimeout(tick, 0);
@@ -65,7 +79,7 @@ export function Countdown({ deadlineUnix, label, now = Date.now }: CountdownProp
       clearTimeout(first);
       clearInterval(id);
     };
-  }, [deadline, now]);
+  }, [deadline, serverTime, now]);
 
   const clock =
     t === null
