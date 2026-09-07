@@ -243,8 +243,14 @@ Stated plainly, because two of these are published as though they were.
    until then. The flag bit stays set (`clear_flag` refuses a settled entry by
    design); the escrow reaching zero is the record that review ended without
    an upheld flag.
-3. **The appeal route.** Published as a 7-day window decided by a second
-   reviewer. The review service records decisions but has no appeal path.
+3. **A second reviewer.** The appeal route is built (Stage E): the affected
+   wallet lodges within seven days of an upheld flag, signed over its own
+   canonical message and appended to the same signed log; a registry member
+   *other than the reviewer who upheld the flag* decides it; the form is on
+   the results page for that wallet only; every row re-verifies from the log
+   alone (`backend/detection/src/appeals.ts`). What is missing is founder-owned:
+   `config/reviewers.json` holds one member, so an appeal can be lodged but
+   none can be decided, and the service says so at boot (audit O15).
 4. **The territory list** covers Belgium and Australia only. The jurisdictions
    the founder listed (Australia, Belgium, India, the United States, the UAE and
    the GCC, China, Hong Kong, Singapore, Malaysia, Indonesia, and sanctioned

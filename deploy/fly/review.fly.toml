@@ -10,6 +10,8 @@ primary_region = "fra"
 
 [env]
   BLOTTO_REVIEW_PORT = "8083"
+  # Behind Fly's proxy: the rate limiter keys on Fly-Client-IP (Stage E).
+  BLOTTO_TRUST_PROXY = "1"
 
 [http_service]
   internal_port = 8083

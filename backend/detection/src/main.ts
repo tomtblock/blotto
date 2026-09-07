@@ -2,6 +2,11 @@
  * The review service's deployment entry (E5): env → deps → serve.
  *
  *   BLOTTO_REVIEW_PORT           default 8083
+ *   BLOTTO_TRUST_PROXY           "1" ONLY behind our own proxy (Fly) — the
+ *                                rate limiter's client key (Stage E)
+ *   BLOTTO_API_CORS_ORIGINS etc. BR-005 hygiene (_shared/http-hygiene.ts);
+ *                                the app's origin MUST be allowlisted or the
+ *                                browser's POSTs are refused at preflight
  *   BLOTTO_DATABASE_URL          Postgres (the append-only decision log)
  *   BLOTTO_REVIEWERS_PATH        default config/reviewers.json (founder-owned)
  *   BLOTTO_RPC_URL               default devnet
@@ -30,6 +35,7 @@ import {
 } from '../../reveal/node_modules/@solana/web3.js';
 import { loadPostgresConfig } from '../../_shared/src/config';
 import { createPool } from '../../_shared/src/db';
+import { loadHygieneConfig } from '../../_shared/src/http-hygiene';
 import { Web3Chain } from '../../reveal/src/chain-web3';
 import { serveReviewApi } from './server';
 import { parseReviewerRegistry } from './auth';
@@ -87,6 +93,17 @@ export function main(env: NodeJS.ProcessEnv = process.env): void {
       registry,
       actions: reviewActionsFromChain(chain, resolvePoolId),
       log: new PgDecisionLog(db),
+      trustProxyHeader: env.BLOTTO_TRUST_PROXY === '1',
+      // Posture from env, widened in CODE to this service's browser-facing
+      // POST surface (the entry server's rule: methods are a property of
+      // the code, never of a deployment).
+      hygiene: (() => {
+        const base = loadHygieneConfig(env);
+        return {
+          ...base,
+          cors: { ...base.cors, allowMethods: 'GET, POST, OPTIONS', allowHeaders: 'content-type' },
+        };
+      })(),
     },
     port
   );
@@ -97,6 +114,16 @@ export function main(env: NodeJS.ProcessEnv = process.env): void {
     console.warn(
       `${SERVICE}: reviewers registry is EMPTY — no review decision will verify. ` +
         `Fill config/reviewers.json (BLOTTO_REVIEWERS_PATH) before the detection drill.`
+    );
+  }
+  // The published appeal rule needs a SECOND reviewer: an appeal is decided
+  // by someone other than the reviewer who upheld the flag, and with one
+  // member no appeal can ever be decided. Said at boot, not at the first
+  // appeal (audit O15; config/reviewers.json is founder-owned).
+  if (registry.members.length === 1) {
+    console.warn(
+      `${SERVICE}: reviewers registry has ONE member — appeals can be lodged but NONE can be ` +
+        `decided (the published rule requires a different reviewer). Add a second member.`
     );
   }
   console.log(

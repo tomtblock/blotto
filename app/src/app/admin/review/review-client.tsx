@@ -51,7 +51,10 @@ export function ReviewClient() {
     }
   }, [pool]);
 
-  const act = async (player: string, action: 'clear' | 'forfeit' | 'release' | 'flag') => {
+  const act = async (
+    player: string,
+    action: 'clear' | 'forfeit' | 'release' | 'flag' | 'appeal_upheld' | 'appeal_dismissed'
+  ) => {
     if (!REVIEW_API) {
       setStatus('review service not configured (NEXT_PUBLIC_REVIEW_API_URL)');
       return;
@@ -99,13 +102,30 @@ export function ReviewClient() {
       }),
     });
     setStatus(
-      res.ok
-        ? `${action}: ${player.slice(0, 8)}… recorded`
-        : res.status === 401
-          ? 'refused: this wallet is not in the reviewer list'
-          : `failed: ${res.status}`
+      res.status === 202
+        ? `${action}: ${player.slice(0, 8)}… recorded — land forfeit_escrow with scripts/admin.ts (admin key)`
+        : res.ok
+          ? `${action}: ${player.slice(0, 8)}… recorded`
+          : res.status === 401
+            ? 'refused: this wallet is not in the reviewer list'
+            : res.status === 409
+              ? `refused: ${((await res.json().catch(() => ({}))) as { error?: string }).error ?? 'rule'}`
+              : `failed: ${res.status}`
     );
     if (res.ok) await load();
+  };
+
+  // Stage E: an entry has an OPEN appeal when its latest lodge follows its
+  // latest forfeit and no appeal decision follows the lodge — the same rule
+  // the service enforces (appeals.ts); the buttons merely offer it.
+  const openAppeal = (player: string): boolean => {
+    const rows = log.filter((d) => d.player === player);
+    const last = (kinds: string[]) =>
+      rows.filter((d) => kinds.includes(d.action)).map((d) => Date.parse(d.decidedAt)).sort((a, b) => b - a)[0];
+    const forfeit = last(['forfeit']);
+    const lodged = last(['appeal_lodged']);
+    const decided = last(['appeal_upheld', 'appeal_dismissed']);
+    return forfeit !== undefined && lodged !== undefined && lodged >= forfeit && !(decided !== undefined && decided >= lodged);
   };
 
   return (
@@ -157,6 +177,16 @@ export function ReviewClient() {
                     <button type="button" className="rounded border px-2 py-1" onClick={() => act(e.player, 'forfeit')}>
                       Forfeit
                     </button>
+                    {openAppeal(e.player) && (
+                      <>
+                        <button type="button" className="rounded border px-2 py-1" onClick={() => act(e.player, 'appeal_upheld')}>
+                          Uphold appeal
+                        </button>
+                        <button type="button" className="rounded border px-2 py-1" onClick={() => act(e.player, 'appeal_dismissed')}>
+                          Dismiss appeal
+                        </button>
+                      </>
+                    )}
                   </div>
                 </td>
               </tr>

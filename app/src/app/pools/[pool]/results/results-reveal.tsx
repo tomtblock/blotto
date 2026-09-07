@@ -76,7 +76,7 @@ export function ResultsReveal({ rows }: { rows: RevealRow[] }) {
                 </>
               ) : (
                 <span title={COPY.results.escrowHeld} className="text-[13px] font-medium">
-                  held for review
+                  {COPY.results.heldForReview}
                 </span>
               )}
             </span>

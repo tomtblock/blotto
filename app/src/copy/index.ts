@@ -283,6 +283,35 @@ export const COPY = {
     // Founder addendum 2026-09-07, ruling 1: the published rule is 12 hours.
     escrowHeld:
       'This prize is held by the program while a flag against it is reviewed against the published criteria. If no decision is made within 12 hours, the flag is cleared and the prize is paid.',
+    // The held-row label (was a raw string in results-reveal.tsx until
+    // Stage E — every user-facing string lives here).
+    heldForReview: 'held for review',
+    // Phase 2 Stage E: the appeal route. Substance is the rules page's own
+    // sentences (7 days to lodge, a different reviewer, a further 7 days,
+    // an upheld appeal after payment honoured from our own funds); wording
+    // is a draft pending founder voice review like every line in this file.
+    appeal: {
+      title: 'Appeal this decision',
+      note:
+        'A reviewer upheld a flag against your entry and your prize passed to the next eligible player. You may appeal within 7 days. A different reviewer decides the appeal within a further 7 days, and every decision is published in the signed log. If your appeal succeeds, we pay you the full prize ourselves.',
+      groundsLabel: 'Your grounds',
+      windowNote: (until: string) => `Appeals close ${until ? `at ${until}` : 'seven days after the decision'}. Your wallet signs the appeal; nothing else is submitted.`,
+      submit: 'Sign and lodge the appeal',
+      lodgedOn: (at: string) => `Your appeal was lodged at ${at}. A different reviewer will decide it within 7 days; the decision is published in the signed log.`,
+      upheld: 'Your appeal was upheld. We pay you the full prize ourselves.',
+      dismissed: 'Your appeal was dismissed. The decision and its reason are in the signed log.',
+      outcome: {
+        lodged: 'Lodged.',
+        not_configured: 'The review service is not configured in this build.',
+        cannot_sign: 'This wallet cannot sign messages, and an appeal must be wallet-signed.',
+        declined: 'Signing was declined. Nothing was submitted.',
+        refused: 'The signature did not verify as this entry’s wallet.',
+        window_closed: 'The appeal window for this decision has closed.',
+        already_lodged: 'An appeal is already lodged for this entry.',
+        nothing_to_appeal: 'There is no upheld flag on this entry to appeal.',
+        failed: 'The review service did not accept the appeal. Try again.',
+      } as Record<string, string>,
+    },
     // No denominator: a pool runs with 52..64 players (D-E4) and the career
     // row does not carry its field size.
     rank: (r: number) => `Ranked #${r}`,
