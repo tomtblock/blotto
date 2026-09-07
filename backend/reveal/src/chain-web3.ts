@@ -166,6 +166,8 @@ export class Web3Chain implements KeeperChain {
       vrfCommitted: d.subarray(116, 148).some((b) => b !== 0),
       secretRevealed: d[158] !== 0,
       resultsCommitted: committed,
+      // root occupies bytes 159..191, between secret_revealed and committed.
+      resultsRootHex: committed ? d.subarray(159, 191).toString('hex') : null,
       paidMask: d.readBigUInt64LE(834),
       payouts,
       entrants: d.readUInt16LE(33),

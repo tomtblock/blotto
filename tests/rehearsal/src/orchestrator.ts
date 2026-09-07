@@ -93,6 +93,7 @@ export async function runOfflinePool(
     poolId,
     tier: 0,
     state: 'Sealed',
+    resultsRootHex: null,
     vrfCommitted: true,
     entryLamports: 100_000_000n,
     potLamports: potForTier(0),

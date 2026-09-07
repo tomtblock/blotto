@@ -7,6 +7,8 @@ export * from './daemon';
 export * from './health';
 export * from './startup';
 export * from './missing';
+export * from './ranking';
+export * from './next-place';
 export * from './publisher';
 export * from './publisher-irys';
 export * from './treasury';

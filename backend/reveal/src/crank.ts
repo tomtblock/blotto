@@ -39,7 +39,8 @@ import {
   type PlayerResult,
   type PoolKeyCustody,
 } from './deps';
-import { scoreWithMissing, type PoolEntryInput } from './missing';
+import { scoreWithMissing } from './missing';
+import { buildRanking, revealEntries } from './ranking';
 
 /** What the detection pipeline sees per entry (backend/detection). */
 export interface RevealedForDetection {
@@ -133,57 +134,18 @@ export async function crankPool(deps: CrankDeps, poolId: bigint): Promise<CrankO
   }
 
   // ---- 2. Decrypt + verify ----------------------------------------------
+  // The loop itself lives in ranking.ts, because the next-place driver
+  // recomputes the same ranking long after settlement and the two must
+  // never disagree.
   const chainEntries = await deps.chain.getEntries(poolId);
   chainEntries.sort((a, b) => a.index - b.index);
-  const keypair = { secretKey: secret, publicKey: publicKeyOf(secret) };
-  const bundleEntries: RevealBundleEntry[] = [];
-  const scoringInput: PoolEntryInput[] = [];
-  const allLosses: string[] = [];
-
-  for (const e of chainEntries) {
-    const stored = await deps.ciphertexts.get(poolId, e.player);
-    let status = 'ok';
-    let battles: BattleSet | null = null;
-    let payloadFields: { salt: Uint8Array; timingsMs: readonly number[]; deviceHash: Uint8Array } | null = null;
-
-    if (!stored) {
-      status = 'missing_ciphertext';
-    } else {
-      const opened = sealOpen(stored.ciphertext, keypair);
-      if (!opened) {
-        status = 'decrypt_failed';
-      } else {
-        try {
-          const payload = decodePayload(opened);
-          const h = hex(battlesHash(payload.battles, payload.salt));
-          if (h !== e.battlesHash) {
-            status = 'hash_mismatch';
-          } else {
-            battles = payload.battles;
-            payloadFields = payload;
-          }
-        } catch {
-          status = 'decrypt_failed';
-        }
-      }
-    }
-
-    if (battles === null) {
-      allLosses.push(e.player);
-      step('entry:scored-all-losses', { player: e.player, status });
-    }
-    scoringInput.push({ index: e.index, battles });
-    bundleEntries.push({
-      player: e.player,
-      index: e.index,
-      battles: battles ? hex(encode35(battles)) : null,
-      salt: payloadFields ? hex(payloadFields.salt) : null,
-      timings_ms: payloadFields ? [...payloadFields.timingsMs] : null,
-      device_hash: payloadFields ? hex(payloadFields.deviceHash) : null,
-      battles_hash: e.battlesHash,
-      status,
-    });
-  }
+  const { bundleEntries, scoringInput, allLosses } = await revealEntries(
+    deps.ciphertexts,
+    poolId,
+    secret,
+    chainEntries,
+    step
+  );
 
   // ---- 3. Score + prizes + tree ------------------------------------------
   // D3-B: competition ranks (tied players share one), split-pot amounts.
@@ -191,17 +153,11 @@ export async function crankPool(deps: CrankDeps, poolId: bigint): Promise<CrankO
   // never derived from the entry price.
   const pot = pool.potLamports;
   const results = assignPrizes(scoreWithMissing(scoringInput), pot);
-  // Published leaf order: rank asc, entry index asc (ranks repeat).
-  const byRank = [...results].sort((a, b) => a.rank - b.rank || a.index - b.index);
   const playerAt = (index: number) => chainEntries[index].player;
-  const leaves = byRank.map((r) =>
-    leafBytes({
-      player: base58Decode(playerAt(r.index)),
-      rank: r.rank,
-      amountLamports: r.amountLamports,
-    })
-  );
-  const root = merkleRoot(leaves);
+  // Published leaf order (rank asc, entry index asc) is built in one place —
+  // see ranking.ts, which the next-place driver reuses to prove against the
+  // root committed here.
+  const { rows: byRank, root } = buildRanking(results, playerAt);
   // The on-chain payout list: every seat with a nonzero share, seat-sorted.
   const payouts = results
     .filter((r) => r.amountLamports > 0n)
@@ -218,7 +174,7 @@ export async function crankPool(deps: CrankDeps, poolId: bigint): Promise<CrankO
     entries: bundleEntries,
     results: byRank.map((r) => ({
       index: r.index,
-      player: playerAt(r.index),
+      player: r.player,
       score_half: r.scoreHalf,
       zones: r.zones,
       rank: r.rank,
@@ -297,12 +253,4 @@ export async function crankPool(deps: CrankDeps, poolId: bigint): Promise<CrankO
   pool = await deps.chain.getPool(poolId);
   step('done', { state: pool.state, paidMask: pool.paidMask.toString() });
   return { poolId, finalState: pool.state, stepsTaken: steps, bundleUri };
-}
-
-/** Encode a battle set back to its canonical 35 bytes (local, tiny). */
-function encode35(battles: BattleSet): Uint8Array {
-  const out = new Uint8Array(35);
-  let o = 0;
-  for (const b of battles) for (const v of b) out[o++] = v;
-  return out;
 }

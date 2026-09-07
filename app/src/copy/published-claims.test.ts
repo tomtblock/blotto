@@ -86,7 +86,7 @@ const PROMISES: readonly Promised[] = [
     // the upheld flag) and appeal decisions refused to the reviewer who
     // upheld the flag, all in the one signed log; the form is on the
     // results page for the affected wallet. The second reviewer the rule
-    // needs is a founder-owned registry entry (audit O15).
+    // needs is a founder-owned registry entry (audit O24).
     proof: 'backend/detection/src/appeals.ts',
   },
   {

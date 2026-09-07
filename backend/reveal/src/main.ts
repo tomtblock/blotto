@@ -311,6 +311,7 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
   const daemon = makeDaemon({
     chain,
     custody,
+    ciphertexts,
     vrf,
     crank: (poolId) => crankPool({ chain, custody, ciphertexts, publisher, detect }, poolId),
     now,

@@ -76,6 +76,7 @@ async function makeWorld(): Promise<World> {
   const daemon = makeDaemon({
     chain,
     custody,
+    ciphertexts: store,
     vrf: new StubVrfCoordinator(chain, base58Encode(sha('randomness'))),
     crank: (poolId) =>
       crankPool({ chain, custody, ciphertexts: store, publisher }, poolId),
@@ -554,7 +555,7 @@ describe('the daemon (C8): resume after a crash', () => {
     expect(r.released).to.deep.equal([], 'a forfeited share is never auto-released');
     for (const p of held) expect(w.chain.escrowed.get(p)).to.not.equal(undefined, 'still held');
     // And a forfeited hold does not pin the pool as non-terminal: the
-    // sweep treats it as decided (its route is pay_next_place, audit O14).
+    // sweep treats it as decided (its route is pay_next_place, audit O23).
     const r2 = await w.daemon.tick();
     expect(r2.errors).to.deep.equal([]);
     expect(r2.released).to.deep.equal([]);
@@ -592,6 +593,108 @@ describe('the daemon (C8): resume after a crash', () => {
     expect(w.chain.escrowed.size).to.equal(0, 'released on the retry');
     const releasedAll = [...r1.released, ...r2.released].map((x) => x.player).sort();
     expect(releasedAll).to.deep.equal(held.sort());
+  });
+
+  it('the next-place driver: an upheld flag on the winner pays the share to the next rank (O23)', async function () {
+    this.timeout(120000);
+    // Pass 1: settle a pool naturally to learn who the scoring engine ranks
+    // first. The field is deterministic (players are seeded by pool id and
+    // index), so pass 2 reproduces it exactly.
+    const probe = await makeWorld();
+    await probe.daemon.tick();
+    await enterPlayers(probe, 1n, 64);
+    await probe.daemon.tick();
+    const winnerSeat = (await probe.chain.getPool(1n)).payouts[0].entryIndex;
+
+    // Pass 2: the same field, but the winner is flagged BEFORE settlement —
+    // the only order the program allows (`flag_entry` refuses a settled
+    // entry), and therefore the only way a prize is ever escrowed.
+    const w = await makeWorld();
+    await w.daemon.tick();
+    const players = await enterPlayers(w, 1n, 64);
+    await w.chain.flagEntry(1n, players[winnerSeat]);
+    const pot = potForTier(0);
+
+    const r1 = await w.daemon.tick();
+    expect(r1.errors).to.deep.equal([]);
+    expect(r1.cranked).to.deep.equal([{ poolId: 1n, finalState: 'Paid' }]);
+    expect(r1.nextPlacePaid).to.deep.equal([], 'nothing is forfeited yet');
+    const winner = players[winnerSeat];
+    expect(w.chain.escrowed.get(winner)).to.equal(pot, "the winner's prize is held");
+
+    // Review upholds the flag. Nothing moves at forfeit — the share waits
+    // here, and before this driver existed it waited forever.
+    await w.chain.forfeitEscrow(1n, winner);
+    expect(w.chain.escrowed.get(winner)).to.equal(pot, 'still held after the forfeit');
+    const platformBefore = w.chain.platform;
+
+    const r2 = await w.daemon.tick();
+    expect(r2.errors).to.deep.equal([]);
+    expect(r2.nextPlacePaid.length).to.be.greaterThan(0, 'the share moved on');
+    for (const p of r2.nextPlacePaid) {
+      expect(p.from).to.equal(winner);
+      expect(p.to).to.not.equal(winner, 'never back to the forfeiter');
+    }
+    expect(w.chain.platform).to.equal(platformBefore, 'not one lamport to us');
+    expect(w.chain.escrowed.get(winner) ?? 0n).to.equal(0n, 'the share is fully divided');
+    expect(w.chain.paid.get(winner) ?? 0n).to.equal(0n, 'the forfeiter keeps nothing');
+
+    // Conservation, and the published division: equally among the players at
+    // the next rank, the indivisible remainder to the lowest entry number.
+    let paid = 0n;
+    for (const v of w.chain.paid.values()) paid += v;
+    expect(paid).to.equal(pot, 'the pot is conserved to the lamport');
+
+    const { recomputeRanking } = await import('../src/ranking');
+    const ranking = await recomputeRanking(
+      w.store,
+      1n,
+      await w.custody.exportSecret(1n),
+      await w.chain.getEntries(1n),
+      pot,
+      (await w.chain.getPool(1n)).resultsRootHex
+    );
+    const atNextRank = ranking.rows.filter((r) => r.rank === 2);
+    expect(r2.nextPlacePaid.map((p) => p.to).sort()).to.deep.equal(
+      atNextRank.map((r) => r.player).sort()
+    );
+    const share = pot / BigInt(atNextRank.length);
+    const remainder = pot - share * BigInt(atNextRank.length);
+    const lowestSeat = Math.min(...atNextRank.map((r) => r.index));
+    for (const r of atNextRank) {
+      const expected = r.index === lowestSeat ? share + remainder : share;
+      expect(w.chain.paid.get(r.player), `seat ${r.index}`).to.equal(expected);
+    }
+
+    // Idempotent: the pool is terminal now and nothing is carried twice.
+    const r3 = await w.daemon.tick();
+    expect(r3.errors).to.deep.equal([]);
+    expect(r3.nextPlacePaid).to.deep.equal([]);
+  });
+
+  it('the sweep does not go terminal on a pool whose share is still held or forfeited (O23)', async function () {
+    this.timeout(120000);
+    // The floor advances over a terminal PREFIX. A pool that settles with a
+    // held share must therefore not read as terminal, or the sweep would
+    // walk past it and never come back to carry the share onward.
+    const probe = await makeWorld();
+    await probe.daemon.tick();
+    await enterPlayers(probe, 1n, 64);
+    await probe.daemon.tick();
+    const winnerSeat = (await probe.chain.getPool(1n)).payouts[0].entryIndex;
+
+    const w = await makeWorld();
+    await w.daemon.tick();
+    const players = await enterPlayers(w, 1n, 64);
+    await w.chain.flagEntry(1n, players[winnerSeat]);
+    await w.daemon.tick(); // settles; the prize is escrowed under the flag
+
+    // Held: a second pool opens for the tier, and pool 1 is still swept.
+    await w.chain.forfeitEscrow(1n, players[winnerSeat]);
+    const before = w.chain.escrowed.get(players[winnerSeat]);
+    expect(before).to.equal(potForTier(0));
+    const r = await w.daemon.tick();
+    expect(r.nextPlacePaid.length).to.be.greaterThan(0, 'the sweep came back to pool 1');
   });
 
   it('a key created before the crash is republished, never regenerated', async () => {
@@ -640,6 +743,7 @@ describe('the daemon (C8): resume after a crash', () => {
     const daemon = makeDaemon({
       chain: w.chain,
       custody: w.custody,
+      ciphertexts: w.store,
       vrf: flaky,
       crank: (id) =>
         crankPool(
@@ -670,6 +774,7 @@ describe('the daemon (C8): double-run', () => {
     const second = makeDaemon({
       chain: w.chain,
       custody: w.custody,
+      ciphertexts: w.store,
       vrf: new StubVrfCoordinator(w.chain, 'stub'),
       crank: (id) =>
         crankPool(
@@ -698,6 +803,7 @@ describe('the daemon (C8): double-run', () => {
     const second = makeDaemon({
       chain: w.chain,
       custody: w.custody,
+      ciphertexts: w.store,
       vrf: new StubVrfCoordinator(w.chain, 'stub'),
       crank: (id) =>
         crankPool(
@@ -751,6 +857,7 @@ describe('the daemon (C8): run loop', () => {
     const daemon = makeDaemon({
       chain,
       custody: w.custody,
+      ciphertexts: w.store,
       vrf: new StubVrfCoordinator(w.chain, 'stub'),
       crank: async (id) => ({ poolId: id, finalState: 'Paid', stepsTaken: [] }),
       now: () => w.clock.t,
@@ -818,6 +925,7 @@ describe('the daemon (proposal E1 §5.3): the keeper-cost seam', () => {
     const daemon = makeDaemon({
       chain,
       custody,
+      ciphertexts: store,
       vrf: new StubVrfCoordinator(chain, base58Encode(sha('randomness'))),
       crank: (poolId) => crankPool({ chain, custody, ciphertexts: store, publisher }, poolId),
       now: () => clock.t,
@@ -859,6 +967,7 @@ describe('the daemon (E3 §4.4): the bundle-announce seam', () => {
     const daemon = makeDaemon({
       chain: w.chain,
       custody: w.custody,
+      ciphertexts: w.store,
       vrf: new StubVrfCoordinator(w.chain, base58Encode(sha('randomness'))),
       crank: (poolId) =>
         crankPool({ chain: w.chain, custody: w.custody, ciphertexts: w.store, publisher: w.publisher }, poolId),
@@ -894,6 +1003,7 @@ describe('the daemon (E3 §4.4): the bundle-announce seam', () => {
     const daemon = makeDaemon({
       chain: w.chain,
       custody: w.custody,
+      ciphertexts: w.store,
       vrf: new StubVrfCoordinator(w.chain, base58Encode(sha('randomness'))),
       crank: (poolId) =>
         crankPool({ chain: w.chain, custody: w.custody, ciphertexts: w.store, publisher: w.publisher }, poolId),
