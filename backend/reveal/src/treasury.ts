@@ -60,7 +60,7 @@ export function idleTierReserve(config: ChainConfigView, excludeTier: number | n
  *      available ≥ needed.
  *
  * The keeper gate itself is not mirrored: the daemon signs as the keeper,
- * and the liveness fallback exists for OTHER signers, not for it.
+ * and since 2026-09-07 no other signer may open a pool at all (audit O9b).
  *
  * The D2 pass-sale ceiling is deliberately NOT mirrored here: the keeper
  * lets the program rule on it (a ceiling change between poll and send

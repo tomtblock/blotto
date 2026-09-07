@@ -25,7 +25,6 @@ import {
   DEFAULT_COOLDOWN_SECS,
   DEFAULT_FILL_DEADLINE_SECS,
   ESCROW_AUTO_RELEASE_SECS,
-  LIVENESS_FALLBACK_SECS,
   MIN_SEATS,
   PAID_RANKS,
   PRIZE_BANDS_1024,
@@ -95,8 +94,12 @@ describe('the TS mirror of programs/blotto_cup/src/constants.rs', () => {
   it('DEFAULT_COOLDOWN_SECS', () =>
     expect(rustScalar('DEFAULT_COOLDOWN_SECS')).to.equal(DEFAULT_COOLDOWN_SECS));
 
-  it('LIVENESS_FALLBACK_SECS — the keeper fallback', () =>
-    expect(rustScalar('LIVENESS_FALLBACK_SECS')).to.equal(LIVENESS_FALLBACK_SECS));
+  it('the keeper liveness fallback is gone from BOTH sides (audit O9b)', () => {
+    // Removed 2026-09-07: `open_pool` is keeper-only. Pinned as an absence,
+    // because a constant that comes back on one side only is exactly the
+    // drift this suite exists to catch.
+    expect(rust.includes('pub const LIVENESS_FALLBACK_SECS')).to.equal(false);
+  });
 
   it('ESCROW_AUTO_RELEASE_SECS — the safeguard, never the published rule', () =>
     expect(rustScalar('ESCROW_AUTO_RELEASE_SECS')).to.equal(ESCROW_AUTO_RELEASE_SECS));

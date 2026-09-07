@@ -160,7 +160,7 @@ pub struct NextPlacePaid {
     pub group_size: u16,
 }
 
-/// `set_keeper`: the key allowed to open pools before the liveness fallback.
+/// `set_keeper`: the only key allowed to open pools.
 #[event]
 pub struct KeeperSet {
     pub keeper: Pubkey,

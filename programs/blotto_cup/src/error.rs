@@ -129,7 +129,7 @@ pub enum ErrorCode {
     #[msg("Pot must be below the minimum field's entries (MIN_SEATS × price)")]
     PotExceedsMinimumField,
     // 6054 — prompt v2 / founder rulings 2026-09-07 (appended, never inserted)
-    #[msg("Only the keeper may open a pool before the liveness fallback")]
+    #[msg("Only the keeper may open a pool")]
     NotKeeper,
     #[msg("Tier is cooling down; its next pool cannot open yet")]
     TierCoolingDown,
@@ -165,4 +165,8 @@ pub enum ErrorCode {
     /// the last payment would leave the remainder stranded.
     #[msg("Split arguments disagree with the group or with earlier payments of this share")]
     NextPlaceSplitMismatch,
+
+    // 6064 — audit A7 / O18 (appended 2026-09-07, never inserted).
+    #[msg("The keeper may not be the zero key")]
+    KeeperMustNotBeZero,
 }

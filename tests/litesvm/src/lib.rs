@@ -273,7 +273,7 @@ pub fn set_treasury_policy_ix(admin: &Pubkey, reserve_pots: u8, min: u64) -> Ins
 }
 
 /// `set_keeper(new_keeper)` — rotate the key `open_pool` requires before
-/// the liveness fallback (prompt v2 §A).
+/// (prompt v2 §A; keeper-only with no fallback since 2026-09-07).
 pub fn set_keeper_ix(admin: &Pubkey, keeper: &Pubkey) -> Instruction {
     admin_ix(admin, "set_keeper", keeper.as_ref())
 }
@@ -320,10 +320,10 @@ pub fn admin_ix(admin: &Pubkey, name: &str, arg_bytes: &[u8]) -> Instruction {
     }
 }
 
-/// `open_pool` — keeper-gated since 2026-09-07 (prompt v2 §A): `opener` is
-/// `Config.keeper`, or any funded signer once the tier's liveness fallback
-/// applies (24 h idle past its cooldown; a never-settled tier counts as
-/// idle since the epoch). Pays the Pool's rent.
+/// `open_pool` — keeper-gated (prompt v2 §A): `opener` must be
+/// `Config.keeper` and nobody else. The 24-hour liveness fallback that once
+/// let any signer open an idle tier was removed by the founder ruling of
+/// 2026-09-07 (audit O9b). Pays the Pool's rent.
 pub fn open_pool_ix(
     opener: &Pubkey,
     pool_id: u64,
@@ -1048,7 +1048,7 @@ impl Env {
 
     /// `open_ready_pool` with an explicit opener — for tests that rotate the
     /// keeper away from the settlement signer and then need a pool. The
-    /// opener must be `Config.keeper` (or the tier must be past its liveness
+    /// opener must be `Config.keeper` (there is no longer any liveness
     /// window); the collection is still created by the settlement signer,
     /// which is only its payer.
     pub fn open_ready_pool_as(&mut self, opener: &Keypair, pool_id: u64, tier: u8) {

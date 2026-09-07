@@ -48,6 +48,10 @@ pub struct MigrateConfig<'info> {
 }
 
 pub fn handle_migrate_config(ctx: Context<MigrateConfig>, keeper: Pubkey) -> Result<()> {
+    // The zero key is refused here too (audit A7): this instruction runs
+    // once, against a live deployment, and writes the keeper into raw bytes
+    // — a typo would leave every tier unopenable with no self-heal behind it.
+    require!(keeper != Pubkey::default(), ErrorCode::KeeperMustNotBeZero);
     let config_info = ctx.accounts.config.to_account_info();
 
     // ---- 1. Prove this is the old Config and the caller is its admin -----
@@ -97,13 +101,12 @@ pub fn handle_migrate_config(ctx: Context<MigrateConfig>, keeper: Pubkey) -> Res
     // PHASE-E1-REVIEW: Solana 3.x names the in-place grow `resize`
     // (`realloc` is the deprecated spelling); the new bytes are zeroed.
     config_info.resize(Config::SPACE)?;
-    // Every tier's liveness clock starts at the migration, not at the epoch.
-    // A zero there puts `open_pool`'s fallback window (`0 + LIVENESS_FALLBACK_SECS`)
-    // decades in the past, so ANY signer could open a tier's first pool after
-    // the upgrade — and the opener chooses the pool's sealing key, which our
-    // custody would then not hold. `now` costs the keeper nothing (`open_pool`
-    // requires `now >= tier_next_open_at`) and holds a stranger off for a full
-    // fallback window. Same reasoning as `handle_set_open_tiers`.
+    // Every tier's cooldown stamp starts at the migration, not at the epoch:
+    // `open_pool` requires `now >= tier_next_open_at`, and a zero would let
+    // the keeper open every tier the instant the upgrade landed rather than
+    // after its cooldown. (Before 2026-09-07 this field was also the origin
+    // of a liveness fallback, and a zero there was the far worse bug — see
+    // `open_pool.rs` for why that fallback no longer exists.)
     let now = Clock::get()?.unix_timestamp;
     {
         let mut data = config_info.try_borrow_mut_data()?;

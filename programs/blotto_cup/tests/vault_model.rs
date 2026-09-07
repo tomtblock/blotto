@@ -206,7 +206,7 @@ impl Model {
     }
 
     /// `open_pool` — sequential rule + treasury policy gate + pot funding.
-    /// (The keeper gate, the cooldown and the liveness fallback are clock and
+    /// (The keeper gate and the cooldown are clock and
     /// key checks with no money in them — LiteSVM's job.)
     fn open_pool(&mut self) {
         let live = self.opened && !matches!(self.state, St::Paid | St::Closed);

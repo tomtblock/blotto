@@ -96,8 +96,8 @@ pub mod blotto_cup {
         instructions::handle_migrate_config(ctx, keeper)
     }
 
-    /// Rotate the keeper — the key `open_pool` requires before the 24 h
-    /// liveness fallback.
+    /// Rotate the keeper — the only key `open_pool` accepts. Refuses the
+    /// zero key (audit A7).
     pub fn set_keeper(ctx: Context<AdminOnly>, new_keeper: Pubkey) -> Result<()> {
         instructions::handle_set_keeper(ctx, new_keeper)
     }

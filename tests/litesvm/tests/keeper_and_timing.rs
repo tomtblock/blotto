@@ -5,7 +5,7 @@
 //!     layout in place, admin-only, once; every other instruction is dead
 //!     between the upgrade and that transaction, and alive after it;
 //!   - the keeper opens pools; a tier idle for 24 h past its cooldown opens
-//!     for anyone (the liveness fallback). Since the security fix of
+//!     for anyone (the liveness fallback, removed 2026-09-07). Since the security fix of
 //!     2026-09-07 a tier that has never settled a pool is NOT open to anyone:
 //!     `init_config`, `migrate_config` and `set_open_tiers` all stamp
 //!     `tier_next_open_at`, because at zero the fallback window sits decades
@@ -24,7 +24,6 @@ use solana_sdk::signer::Signer;
 
 const FILL_DEADLINE_SECS: i64 = 12 * 60 * 60; // DEFAULT_FILL_DEADLINE_SECS
 const COOLDOWN_SECS: i64 = 5 * 60; // DEFAULT_COOLDOWN_SECS
-const LIVENESS_FALLBACK_SECS: i64 = 24 * 60 * 60;
 
 fn now(env: &Env) -> i64 {
     env.svm.get_sysvar::<Clock>().unix_timestamp
@@ -146,7 +145,7 @@ fn migrate_config_grows_the_old_account_once_and_revives_every_instruction() {
 }
 
 #[test]
-fn the_keeper_opens_pools_and_a_stale_tier_opens_for_anyone() {
+fn the_keeper_opens_pools_and_nobody_else_ever_does() {
     let Some(mut env) = Env::new() else { return };
     let admin = env.admin.pubkey();
     let settlement = env.settlement.insecure_clone();
@@ -170,17 +169,14 @@ fn the_keeper_opens_pools_and_a_stale_tier_opens_for_anyone() {
 
     // A tier that has never settled a pool is NOT open to strangers.
     //
-    // Until 2026-09-07 `tier_next_open_at` was seeded to zero, which put the
-    // fallback window (`0 + LIVENESS_FALLBACK_SECS`) decades in the past and
-    // let any signer open a tier's first pool. That mattered because the
-    // opener supplies `sealing_pubkey` and `sealing_secret_hash`: a pool
+    // The opener supplies `sealing_pubkey` and `sealing_secret_hash`: a pool
     // carrying a stranger's sealing key can never be revealed by us, so it
     // can never be settled — and once it seals with `MIN_SEATS` it can no
-    // longer refund either, stranding the pot AND every entry. `init_config`
-    // now stamps `now`, so the keeper opens immediately and a stranger waits
-    // a full fallback window.
+    // longer refund either, stranding the pot AND every entry. That is why
+    // the 24-hour liveness fallback was removed outright on 2026-09-07
+    // (founder ruling; audit O9b) rather than narrowed.
     let seeded_at = read_config(&env.svm).tier_next_open_at[0];
-    assert!(seeded_at > 0, "init_config stamps the liveness clock");
+    assert!(seeded_at > 0, "init_config stamps the cooldown clock");
     let err = open_as(&mut env, &settlement, 1).unwrap_err();
     assert!(
         err.contains("6054") || err.contains("NotKeeper"),
@@ -223,20 +219,59 @@ fn the_keeper_opens_pools_and_a_stale_tier_opens_for_anyone() {
     );
     open_as(&mut env, &keeper, 2).expect("the keeper opens");
 
-    // The liveness fallback: settle again, then leave the tier idle for the
-    // cooldown plus 24 h — a stranger opens it.
+    // NO AMOUNT OF IDLE TIME opens a tier to anyone else. This is the whole
+    // of the 2026-09-07 ruling: a year of neglect is still not a licence to
+    // choose a pool's sealing key. A frozen tier strands nothing — no pool
+    // means no money at risk — and the admin can rotate the keeper.
     close_empty(&mut env, 2);
-    let next_open_at = read_config(&env.svm).tier_next_open_at[0];
-    env.advance_time(COOLDOWN_SECS + LIVENESS_FALLBACK_SECS - 1);
     let stranger = funded_keypair(&mut env);
-    let err = open_as(&mut env, &stranger, 3).unwrap_err();
+    for days in [1i64, 30, 365] {
+        env.advance_time(days * 24 * 60 * 60);
+        let err = open_as(&mut env, &stranger, 3).unwrap_err();
+        assert!(
+            err.contains("6054") || err.contains("NotKeeper"),
+            "idle {days} day(s) is still not a licence: {err}"
+        );
+        let err = open_as(&mut env, &admin_kp, 3).unwrap_err();
+        assert!(err.contains("6054"), "nor is being the admin: {err}");
+    }
+    // Only the keeper, however long it has been.
+    open_as(&mut env, &keeper, 3).expect("the keeper opens, whenever it likes");
+}
+
+/// The keeper may never be set to the zero key (audit A7 / O18).
+///
+/// It was always a typo rather than a policy, but it used to self-heal: the
+/// 24-hour liveness fallback would let anyone open the tier. With that gone
+/// (O9b) a keeper nobody holds freezes every tier's next open until an admin
+/// notices, so both writers refuse it.
+#[test]
+fn the_keeper_may_not_be_the_zero_key() {
+    let Some(mut env) = Env::new() else { return };
+    let admin = env.admin.pubkey();
+
+    let err = env
+        .send(&[set_keeper_ix(&admin, &Pubkey::default())], &[])
+        .unwrap_err();
     assert!(
-        err.contains("6054"),
-        "one second before the fallback: {err}"
+        err.contains("6064") || err.contains("KeeperMustNotBeZero"),
+        "set_keeper must refuse the zero key: {err}"
     );
-    env.advance_time(1);
-    assert_eq!(now(&env), next_open_at + LIVENESS_FALLBACK_SECS);
-    open_as(&mut env, &stranger, 3).expect("a stale tier opens for anyone (liveness)");
+    assert_eq!(
+        read_config(&env.svm).keeper,
+        env.settlement.pubkey(),
+        "the keeper is unchanged"
+    );
+
+    // The same guard on the one-shot migration, which writes raw bytes.
+    downgrade_config_to_v1(&mut env.svm);
+    let err = env
+        .send(&[migrate_config_ix(&admin, &Pubkey::default())], &[])
+        .unwrap_err();
+    assert!(
+        err.contains("6064") || err.contains("KeeperMustNotBeZero"),
+        "migrate_config must refuse the zero key: {err}"
+    );
 }
 
 #[test]
@@ -359,40 +394,34 @@ fn set_pool_timing_applies_to_future_pools_only() {
     assert_eq!(read_config(&env.svm).tier_next_open_at[1], now(&env) + 60);
 }
 
-/// Enabling a tier restarts its liveness clock — the 2026-09-07 security fix.
+/// Enabling a tier restamps its cooldown clock, and never shortens a running
+/// one.
 ///
-/// `open_pool`'s fallback is measured from `tier_next_open_at`. `init_config`
-/// stamps every tier at deployment, but a tier can stay disabled for months,
-/// so by the time it is switched on that stamp is already a full fallback
-/// window old and the FIRST pool of the tier could be opened by any signer
-/// watching for `TiersOpened`. The opener chooses `sealing_pubkey` and
-/// `sealing_secret_hash`, so a stranger's pool carries a secret our custody
-/// does not hold: `reveal_pool_secret` can never land, `commit_results` is
-/// blocked behind it, and a pool that reaches `MIN_SEATS` can no longer
-/// refund either — the pot and every entry stranded with no instruction able
-/// to move them.
-///
-/// So enabling a tier stamps `now`: the keeper opens immediately (`open_pool`
-/// requires `now >= tier_next_open_at`, and `now >= now` holds) and a stranger
-/// waits a full fallback window from the moment of enablement.
+/// `tier_next_open_at` serves one purpose since 2026-09-07: `open_pool`
+/// requires `now >= tier_next_open_at`, so it is the tier's cooldown. (It was
+/// ALSO the origin of a liveness fallback window until the founder ruling of
+/// that date removed the fallback — audit O9b. A stale stamp used to be a
+/// security hole; now it only means the keeper may open at once, which is
+/// correct.) `set_open_tiers` stamps `max(stamp, now)` on the
+/// disabled-to-enabled edge, which keeps a running cooldown intact and keeps
+/// the published "next pool opens in" instant meaningful.
 #[test]
-fn enabling_a_tier_starts_its_liveness_clock() {
+fn enabling_a_tier_restamps_its_cooldown_without_shortening_one() {
     let Some(mut env) = Env::new() else { return };
     let admin = env.admin.pubkey();
     let settlement = env.settlement.insecure_clone();
     let keeper = funded_keypair(&mut env);
     env.send(&[set_keeper_ix(&admin, &keeper.pubkey())], &[])
         .expect("set_keeper");
-    env.fund_platform(TIER_POTS.iter().sum::<u64>() * 2);
+    env.fund_platform(TIER_POTS.iter().sum::<u64>() * 3);
 
     // Tier 1 is disabled at launch and carries the deployment stamp.
     let deployed_at = now(&env);
     assert!(!read_config(&env.svm).open_tiers[1]);
     assert_eq!(read_config(&env.svm).tier_next_open_at[1], deployed_at);
 
-    // Leave it disabled for well over a fallback window. Nobody can open a
-    // disabled tier, keeper included.
-    env.advance_time(LIVENESS_FALLBACK_SECS * 30);
+    // Months disabled. Nobody can open a disabled tier — keeper included.
+    env.advance_time(30 * 24 * 60 * 60);
     let stranger = funded_keypair(&mut env);
     let open_tier1 = |env: &mut Env, opener: &Keypair, id: u64| -> Result<(), String> {
         let ix = open_pool_ix(&opener.pubkey(), id, 1, [9; 32], env.sealing_secret_hash);
@@ -406,40 +435,37 @@ fn enabling_a_tier_starts_its_liveness_clock() {
     let err = open_tier1(&mut env, &keeper, 1).unwrap_err();
     assert!(err.contains("6006") || err.contains("TierNotOpen"), "{err}");
 
-    // Enable it. The stamp moves to the moment of enablement — had it stayed
-    // at `deployed_at`, the fallback window would already be a month past.
+    // Enable it: the stamp moves to now, and tier 0 (already enabled) is
+    // left exactly as it was.
     env.send(
         &[admin_ix(&admin, "set_open_tiers", &[1, 1, 0, 0, 0, 0, 0])],
         &[],
     )
     .expect("set_open_tiers");
     let enabled_at = now(&env);
-    assert!(enabled_at > deployed_at + LIVENESS_FALLBACK_SECS);
     let cfg = read_config(&env.svm);
     assert!(cfg.open_tiers[1]);
-    assert_eq!(cfg.tier_next_open_at[1], enabled_at, "clock restarts here");
-    // Tier 0 was already enabled and is left alone.
+    assert_eq!(
+        cfg.tier_next_open_at[1], enabled_at,
+        "restamped on the edge"
+    );
     assert_eq!(
         cfg.tier_next_open_at[0], deployed_at,
-        "an enabled tier is not restamped"
+        "an already-enabled tier is not restamped"
     );
 
-    // A stranger cannot open the tier's first pool — this is the hole.
+    // Still the keeper's alone, however long the tier sat disabled.
     let err = open_tier1(&mut env, &stranger, 1).unwrap_err();
     assert!(
         err.contains("6054") || err.contains("NotKeeper"),
-        "a newly enabled tier is the keeper's to open first: {err}"
+        "a newly enabled tier is the keeper's: {err}"
     );
-    // Nor can the settlement signer, which is no longer the keeper.
     let err = open_tier1(&mut env, &settlement, 1).unwrap_err();
-    assert!(err.contains("6054"), "{err}");
-
-    // The keeper can, immediately: the stamp is `now`, not `now + cooldown`.
+    assert!(err.contains("6054"), "nor the settlement signer: {err}");
     open_tier1(&mut env, &keeper, 1).expect("the keeper opens at once");
 
-    // And the fallback still works, measured from the stamp: freeing the slot
-    // stamps `now + cooldown`, and the window runs from THAT, so a stranger
-    // waits the cooldown and then a full window.
+    // Now the property that stamp still carries: a tier disabled and
+    // re-enabled DURING its cooldown does not get a shorter one.
     close_empty_tier(&mut env, 1);
     let freed_at = read_config(&env.svm).tier_next_open_at[1];
     assert_eq!(
@@ -447,13 +473,28 @@ fn enabling_a_tier_starts_its_liveness_clock() {
         now(&env) + COOLDOWN_SECS,
         "the slot stamps its cooldown"
     );
-    let window_opens_in = freed_at - now(&env) + LIVENESS_FALLBACK_SECS;
-    env.advance_time(window_opens_in - 1);
-    let err = open_tier1(&mut env, &stranger, 2).unwrap_err();
-    assert!(err.contains("6054"), "one second early: {err}");
-    env.advance_time(1);
-    assert_eq!(now(&env), freed_at + LIVENESS_FALLBACK_SECS);
-    open_tier1(&mut env, &stranger, 2).expect("the liveness fallback still holds");
+    env.send(
+        &[admin_ix(&admin, "set_open_tiers", &[1, 0, 0, 0, 0, 0, 0])],
+        &[],
+    )
+    .expect("disable tier 1 mid-cooldown");
+    env.send(
+        &[admin_ix(&admin, "set_open_tiers", &[1, 1, 0, 0, 0, 0, 0])],
+        &[],
+    )
+    .expect("re-enable it");
+    assert_eq!(
+        read_config(&env.svm).tier_next_open_at[1],
+        freed_at,
+        "a cooldown still running is never shortened by a re-enable"
+    );
+    let err = open_tier1(&mut env, &keeper, 2).unwrap_err();
+    assert!(
+        err.contains("6055") || err.contains("TierCoolingDown"),
+        "the cooldown still holds the keeper: {err}"
+    );
+    env.advance_time(COOLDOWN_SECS);
+    open_tier1(&mut env, &keeper, 2).expect("past the cooldown, the keeper opens");
 }
 
 /// `close_empty` for a pool on any tier: advance past the deadline and take
