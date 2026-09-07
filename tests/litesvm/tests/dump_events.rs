@@ -58,7 +58,7 @@ fn lifecycle_log_fixture() {
     let Some(mut env) = Env::new() else { return };
 
     // Pool 1: full lifecycle with two flagged tied winners — escrow release,
-    // an admin forfeit (moves nothing) and the promotion of the forfeited
+    // an admin forfeit (moves nothing) and the next-place payout of the forfeited
     // share to the cleared tied member (ruling 4, 2026-09-07).
     env.open_ready_pool(1, 0);
     let mut players: Vec<(Keypair, Pubkey)> = Vec::new();
@@ -81,7 +81,7 @@ fn lifecycle_log_fixture() {
     env.send(&[ix], &[&settlement]).unwrap();
     // D-E2 over D3-B: commit a two-way tie for first (seats 0 and 1, pot / 2
     // each — both flagged above, so the fixture carries escrow on BOTH paid
-    // seats) under a REAL results root (the promotion below proves against
+    // seats) under a REAL results root (the next-place payout below proves against
     // it), then pay both in one batch.
     let payouts = tied_first_payouts(TIER_POTS[0], 2);
     let wallets: Vec<Pubkey> = players.iter().map(|(p, _)| p.pubkey()).collect();
@@ -101,11 +101,11 @@ fn lifecycle_log_fixture() {
     );
     env.send(&[ix], &[&settlement]).unwrap();
     // Admin forfeit (EscrowForfeited with destination = the pool's vault),
-    // then the promotion to seat 0 — the tied member whose review cleared —
-    // as PrizePromoted.
+    // then the next-place payout to seat 0 — the tied member whose review cleared —
+    // as NextPlacePaid.
     let ix = forfeit_escrow_ix(&env.admin.pubkey(), 1, &players[1].1);
     env.send(&[ix], &[]).unwrap();
-    let ix = promote_on_forfeit_ix(
+    let ix = pay_next_place_ix(
         &settlement.pubkey(),
         1,
         &players[1].1,

@@ -3,11 +3,11 @@
 //! eligible highest place, (iii) refunds below the minimum field — and a
 //! forfeited share never reaches the operator.
 //!
-//!   - promotion waits for Paid, needs a forfeited source, and pays the
+//!   - next-place payout waits for Paid, needs a forfeited source, and pays the
 //!     WHOLE share to one target proven against the committed results root;
 //!   - a first-place target must be a committed seat; a next-rank target
 //!     must hold rank `1 + k` and every tied seat must be shown forfeited —
-//!     a pending review blocks the promotion rather than being skipped;
+//!     a pending review blocks the next-place payout rather than being skipped;
 //!   - a wrong rank, a forged proof, a flagged target and a stranger's
 //!     signature are refused;
 //!   - the seven-day auto-release: a random keypair pays an un-forfeited
@@ -67,7 +67,7 @@ fn forfeit(env: &mut Env, entry: &Pubkey) {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn promote(
+fn pay_next_place(
     env: &mut Env,
     scene: &Scene,
     from: usize,
@@ -79,7 +79,7 @@ fn promote(
 ) -> Result<(), String> {
     let settlement = env.settlement.insecure_clone();
     let w: Vec<Pubkey> = witnesses.iter().map(|&i| scene.players[i].1).collect();
-    let ix = promote_on_forfeit_ix(
+    let ix = pay_next_place_ix(
         &settlement.pubkey(),
         1,
         &scene.players[from].1,
@@ -102,13 +102,13 @@ fn both_tied_winners_forfeit_and_the_next_rank_is_paid_in_full() {
     let proof_2 = merkle_proof(&scene.leaves, 2);
 
     // Forfeit seat 0. Seat 1's review is still open (flagged, held): seat 2
-    // cannot be promoted past it — the pending review must resolve first.
+    // cannot be paid onward past it — the pending review must resolve first.
     forfeit(&mut env, &scene.players[0].1);
-    let err = promote(&mut env, &scene, 0, 2, 3, 0, &proof_2, &[1]).unwrap_err();
-    assert!(err.contains("6066") || err.contains("PromotionReviewPending"), "{err}");
+    let err = pay_next_place(&mut env, &scene, 0, 2, 3, 0, &proof_2, &[1]).unwrap_err();
+    assert!(err.contains("6066") || err.contains("NextPlaceReviewPending"), "{err}");
     // Nor can seat 0's share go to seat 1 (its review is pending).
     let proof_1 = merkle_proof(&scene.leaves, 1);
-    let err = promote(&mut env, &scene, 0, 1, 1, POT / 2, &proof_1, &[]).unwrap_err();
+    let err = pay_next_place(&mut env, &scene, 0, 1, 1, POT / 2, &proof_1, &[]).unwrap_err();
     assert!(err.contains("6066"), "{err}");
 
     // Review upholds seat 1's flag too. Now seat 2 (rank 3, the next
@@ -117,20 +117,20 @@ fn both_tied_winners_forfeit_and_the_next_rank_is_paid_in_full() {
     let before = env.balance(&scene.players[2].0.pubkey());
     // Witness list must be exactly the OTHER tied seat, and it must be the
     // right account: an empty list, or the wrong seat, is refused.
-    let err = promote(&mut env, &scene, 0, 2, 3, 0, &proof_2, &[]).unwrap_err();
-    assert!(err.contains("6060") || err.contains("PromotionTargetIneligible"), "{err}");
-    let err = promote(&mut env, &scene, 0, 2, 3, 0, &proof_2, &[3]).unwrap_err();
+    let err = pay_next_place(&mut env, &scene, 0, 2, 3, 0, &proof_2, &[]).unwrap_err();
+    assert!(err.contains("6060") || err.contains("NextPlaceIneligible"), "{err}");
+    let err = pay_next_place(&mut env, &scene, 0, 2, 3, 0, &proof_2, &[3]).unwrap_err();
     assert!(err.contains("6030") || err.contains("EntryMismatch"), "{err}");
-    promote(&mut env, &scene, 0, 2, 3, 0, &proof_2, &[1]).expect("seat 0's share → rank 3");
-    promote(&mut env, &scene, 1, 2, 3, 0, &proof_2, &[0]).expect("seat 1's share → rank 3");
+    pay_next_place(&mut env, &scene, 0, 2, 3, 0, &proof_2, &[1]).expect("seat 0's share → rank 3");
+    pay_next_place(&mut env, &scene, 1, 2, 3, 0, &proof_2, &[0]).expect("seat 1's share → rank 3");
     assert_eq!(
         env.balance(&scene.players[2].0.pubkey()) - before,
         POT,
         "the next eligible place received the whole pot"
     );
     let e2 = read_entry(&env.svm, &scene.players[2].1);
-    assert_eq!(e2.promoted_lamports, POT);
-    assert!(e2.settled, "a promoted seat is settled (its flag window closes)");
+    assert_eq!(e2.next_place_lamports, POT);
+    assert!(e2.settled, "a seat paid this way is settled (its flag window closes)");
     assert_eq!(env.balance(&vault_pda(1)), 0, "the vault reaps");
     assert_eq!(env.balance(&platform_pda()), platform_before, "the operator got nothing");
     // The forfeited players' shares are gone from their entries.
@@ -139,7 +139,7 @@ fn both_tied_winners_forfeit_and_the_next_rank_is_paid_in_full() {
 }
 
 #[test]
-fn promotion_refuses_a_wrong_rank_a_forged_proof_and_a_flagged_target() {
+fn next_place_refuses_a_wrong_rank_a_forged_proof_and_a_flagged_target() {
     let Some(mut env) = Env::new() else { return };
     let scene = tied_pool_with_flagged_winners(&mut env, &[0, 1]);
     let settlement = env.settlement.insecure_clone();
@@ -149,25 +149,25 @@ fn promotion_refuses_a_wrong_rank_a_forged_proof_and_a_flagged_target() {
     // Seat 3 holds rank 4: not first, not the next rank (3) — refused even
     // with a valid proof of ITS rank.
     let proof_3 = merkle_proof(&scene.leaves, 3);
-    let err = promote(&mut env, &scene, 0, 3, 4, 0, &proof_3, &[1]).unwrap_err();
-    assert!(err.contains("6059") || err.contains("PromotionRankInvalid"), "{err}");
+    let err = pay_next_place(&mut env, &scene, 0, 3, 4, 0, &proof_3, &[1]).unwrap_err();
+    assert!(err.contains("6059") || err.contains("NextPlaceRankInvalid"), "{err}");
     // Claiming rank 3 for seat 3 fails the proof.
-    let err = promote(&mut env, &scene, 0, 3, 3, 0, &proof_3, &[1]).unwrap_err();
+    let err = pay_next_place(&mut env, &scene, 0, 3, 3, 0, &proof_3, &[1]).unwrap_err();
     assert!(err.contains("6061") || err.contains("InvalidMerkleProof"), "{err}");
     // Seat 2 with a tampered proof (one side bit flipped) fails.
     let mut forged = merkle_proof(&scene.leaves, 2);
     forged[0].1 = !forged[0].1;
-    let err = promote(&mut env, &scene, 0, 2, 3, 0, &forged, &[1]).unwrap_err();
+    let err = pay_next_place(&mut env, &scene, 0, 2, 3, 0, &forged, &[1]).unwrap_err();
     assert!(err.contains("6061"), "{err}");
     // Seat 2 with the wrong amount in the leaf fails (the leaf is verified
     // as committed; the paid amount is the share, never the leaf).
     let proof_2 = merkle_proof(&scene.leaves, 2);
-    let err = promote(&mut env, &scene, 0, 2, 3, 1, &proof_2, &[1]).unwrap_err();
+    let err = pay_next_place(&mut env, &scene, 0, 2, 3, 1, &proof_2, &[1]).unwrap_err();
     assert!(err.contains("6061"), "{err}");
-    // A stranger cannot promote.
+    // A stranger cannot pay the next place.
     let stranger = Keypair::new();
     env.svm.airdrop(&stranger.pubkey(), 1_000_000_000).unwrap();
-    let ix = promote_on_forfeit_ix(
+    let ix = pay_next_place_ix(
         &stranger.pubkey(), 1, &scene.players[0].1, &scene.players[2].1,
         &scene.players[2].0.pubkey(), 3, 0, &proof_2, &[scene.players[1].1],
     );
@@ -176,28 +176,28 @@ fn promotion_refuses_a_wrong_rank_a_forged_proof_and_a_flagged_target() {
     // A flagged (unsettled) target is under review: refused.
     let ix = flag_ix(&settlement.pubkey(), 1, &scene.players[2].1, "flag_entry");
     env.send(&[ix], &[&settlement]).unwrap();
-    let err = promote(&mut env, &scene, 0, 2, 3, 0, &proof_2, &[1]).unwrap_err();
-    assert!(err.contains("6066") || err.contains("PromotionReviewPending"), "{err}");
+    let err = pay_next_place(&mut env, &scene, 0, 2, 3, 0, &proof_2, &[1]).unwrap_err();
+    assert!(err.contains("6066") || err.contains("NextPlaceReviewPending"), "{err}");
     // Cleared, it is eligible again.
     let ix = flag_ix(&settlement.pubkey(), 1, &scene.players[2].1, "clear_flag");
     env.send(&[ix], &[&settlement]).unwrap();
-    promote(&mut env, &scene, 0, 2, 3, 0, &proof_2, &[1]).expect("cleared target");
+    pay_next_place(&mut env, &scene, 0, 2, 3, 0, &proof_2, &[1]).expect("cleared target");
     // The source must be forfeited: seat 1 IS; seat 2 (no escrow) is not.
     let proof_3 = merkle_proof(&scene.leaves, 3);
-    let err = promote(&mut env, &scene, 2, 3, 4, 0, &proof_3, &[0, 1]).unwrap_err();
+    let err = pay_next_place(&mut env, &scene, 2, 3, 4, 0, &proof_3, &[0, 1]).unwrap_err();
     assert!(err.contains("6058") || err.contains("EscrowNotForfeited"), "{err}");
     let _ = &scene.payouts;
 }
 
 #[test]
-fn promotion_waits_for_paid() {
+fn next_place_payout_waits_for_paid() {
     let Some(mut env) = Env::new() else { return };
     // Pay seat 0 only: the pool stays Scored (seat 1 unpaid).
     let scene = tied_pool_with_flagged_winners(&mut env, &[0]);
     assert_eq!(read_pool(&env.svm, &pool_pda(1)).state, 2, "Scored");
     forfeit(&mut env, &scene.players[0].1);
     let proof_1 = merkle_proof(&scene.leaves, 1);
-    let err = promote(&mut env, &scene, 0, 1, 1, POT / 2, &proof_1, &[]).unwrap_err();
+    let err = pay_next_place(&mut env, &scene, 0, 1, 1, POT / 2, &proof_1, &[]).unwrap_err();
     assert!(err.contains("6027") || err.contains("ResultsNotCommitted"), "{err}");
     // Paying seat 1 (its own share escrows) reaches Paid; seat 1's review
     // is pending, so the forfeited share still waits.
@@ -207,14 +207,14 @@ fn promotion_waits_for_paid() {
     );
     env.send(&[ix], &[&settlement]).unwrap();
     assert_eq!(read_pool(&env.svm, &pool_pda(1)).state, 3, "Paid");
-    let err = promote(&mut env, &scene, 0, 1, 1, POT / 2, &proof_1, &[]).unwrap_err();
+    let err = pay_next_place(&mut env, &scene, 0, 1, 1, POT / 2, &proof_1, &[]).unwrap_err();
     assert!(err.contains("6066"), "{err}");
     // Release clears seat 1 (a settled, released flag is history): it takes
     // seat 0's share as the cleared tied member.
     let ix = release_escrow_ix(&settlement.pubkey(), 1, &scene.players[1].1, &scene.players[1].0.pubkey());
     env.send(&[ix], &[&settlement]).unwrap();
     let before = env.balance(&scene.players[1].0.pubkey());
-    promote(&mut env, &scene, 0, 1, 1, POT / 2, &proof_1, &[]).expect("cleared tied member");
+    pay_next_place(&mut env, &scene, 0, 1, 1, POT / 2, &proof_1, &[]).expect("cleared tied member");
     assert_eq!(env.balance(&scene.players[1].0.pubkey()) - before, POT / 2);
     assert_eq!(env.balance(&vault_pda(1)), 0);
 }
@@ -256,10 +256,10 @@ fn a_held_share_auto_releases_to_its_player_after_seven_days_unless_forfeited() 
     let settlement = env.settlement.insecure_clone();
     let err = release_by(&mut env, &settlement, 1).unwrap_err();
     assert!(err.contains("6057"), "not even the reviewed path: {err}");
-    assert_eq!(env.balance(&vault_pda(1)), POT / 2, "the forfeited share awaits promotion");
+    assert_eq!(env.balance(&vault_pda(1)), POT / 2, "the forfeited share awaits next-place payout");
     // ...to seat 0, the cleared tied member, with no witnesses (seat 0 is
     // the lower seat).
     let proof_0 = merkle_proof(&scene.leaves, 0);
-    promote(&mut env, &scene, 1, 0, 1, POT / 2, &proof_0, &[]).expect("promote");
+    pay_next_place(&mut env, &scene, 1, 0, 1, POT / 2, &proof_0, &[]).expect("pay onward");
     assert_eq!(env.balance(&vault_pda(1)), 0);
 }

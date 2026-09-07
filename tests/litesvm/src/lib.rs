@@ -548,11 +548,11 @@ pub fn forfeit_escrow_ix(admin: &Pubkey, pool_id: u64, entry: &Pubkey) -> Instru
 /// sibling hash, then `sibling_on_right` as one byte.
 pub type ProofStep = ([u8; 32], bool);
 
-/// `promote_on_forfeit(pool_id, rank, amount, proof)` — settlement-signed;
+/// `pay_next_place(pool_id, rank, amount, proof)` — settlement-signed;
 /// `witnesses` are the Entry accounts of the first-place seats that must be
 /// shown forfeited, in ascending seat order (see `escrow.rs`).
 #[allow(clippy::too_many_arguments)]
-pub fn promote_on_forfeit_ix(
+pub fn pay_next_place_ix(
     settlement: &Pubkey,
     pool_id: u64,
     from_entry: &Pubkey,
@@ -563,7 +563,7 @@ pub fn promote_on_forfeit_ix(
     proof: &[ProofStep],
     witnesses: &[Pubkey],
 ) -> Instruction {
-    let mut data = disc("promote_on_forfeit").to_vec();
+    let mut data = disc("pay_next_place").to_vec();
     data.extend_from_slice(&pool_id.to_le_bytes());
     data.push(rank);
     data.extend_from_slice(&amount.to_le_bytes());
@@ -836,13 +836,13 @@ pub struct EntryView {
     /// The 2026-09-07 tail (appended after `bump`@190).
     pub escrowed_at: i64,
     pub forfeited: bool,
-    pub promoted_lamports: u64,
+    pub next_place_lamports: u64,
 }
 
 pub fn read_entry(svm: &LiteSVM, entry: &Pubkey) -> EntryView {
     let data = svm.get_account(entry).expect("entry account").data;
     // flagged@179, settled@180, refunded@181, escrow_lamports@182, bump@190;
-    // tail: escrowed_at@191, forfeited@199, promoted_lamports@200 — 208 in
+    // tail: escrowed_at@191, forfeited@199, next_place_lamports@200 — 208 in
     // all (`Entry::SPACE`).
     assert_eq!(
         data.len(),
@@ -858,7 +858,7 @@ pub fn read_entry(svm: &LiteSVM, entry: &Pubkey) -> EntryView {
         escrow_lamports: u64::from_le_bytes(data[182..190].try_into().unwrap()),
         escrowed_at: i64::from_le_bytes(data[191..199].try_into().unwrap()),
         forfeited: data[199] != 0,
-        promoted_lamports: u64::from_le_bytes(data[200..208].try_into().unwrap()),
+        next_place_lamports: u64::from_le_bytes(data[200..208].try_into().unwrap()),
     }
 }
 

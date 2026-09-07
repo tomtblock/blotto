@@ -155,11 +155,11 @@ fn full_lifecycle_pays_the_pot_to_the_lamport() {
 
 /// Escrow under D-E2 is all-or-nothing per paid seat (proposal E1 §12): the
 /// fixture uses a two-way tie for first so the three escrow paths — release,
-/// forfeit and promotion — run against real paid seats in one pool. Since
+/// forfeit and next-place payout — run against real paid seats in one pool. Since
 /// 2026-09-07 (founder ruling 4) a forfeit moves NOTHING and the share is
-/// promoted to the next eligible place; the treasury never sees it.
+/// paid to the next eligible place; the treasury never sees it.
 #[test]
-fn flagged_winners_escrow_then_release_forfeit_and_promote() {
+fn flagged_winners_escrow_then_release_forfeit_and_next_place() {
     let Some(mut env) = Env::new() else { return };
     env.open_ready_pool(1, 0);
     let mut players: Vec<(Keypair, Pubkey)> = Vec::new();
@@ -176,7 +176,7 @@ fn flagged_winners_escrow_then_release_forfeit_and_promote() {
     }
 
     // Reveal + commit a two-way tie for first: seats 0 and 1, pot / 2 each,
-    // under a REAL results root (promotion verifies against it).
+    // under a REAL results root (next-place payout verifies against it).
     let secret = env.pool_secret;
     let ix = settle_ix(&settlement.pubkey(), 1, "reveal_pool_secret", &secret);
     env.send(&[ix], &[&settlement]).unwrap();
@@ -250,7 +250,7 @@ fn flagged_winners_escrow_then_release_forfeit_and_promote() {
     let proof = merkle_proof(&leaves, 0);
     assert_eq!(ranks[0], 1);
     let before = env.balance(&players[0].0.pubkey());
-    let ix = promote_on_forfeit_ix(
+    let ix = pay_next_place_ix(
         &settlement.pubkey(),
         1,
         &players[1].1,
@@ -261,15 +261,15 @@ fn flagged_winners_escrow_then_release_forfeit_and_promote() {
         &proof,
         &[],
     );
-    env.send(&[ix], &[&settlement]).expect("promote to the cleared tied member");
+    env.send(&[ix], &[&settlement]).expect("pay onward to the cleared tied member");
     assert_eq!(env.balance(&players[0].0.pubkey()) - before, POT / 2, "the whole share");
     let e1 = read_entry(&env.svm, &players[0].1);
-    assert_eq!(e1.promoted_lamports, POT / 2);
+    assert_eq!(e1.next_place_lamports, POT / 2);
     assert_eq!(read_entry(&env.svm, &players[1].1).escrow_lamports, 0);
     assert_eq!(env.balance(&vault_pda(1)), 0, "vault ends at exactly zero");
     assert_eq!(env.balance(&platform_pda()), platform_before, "still nothing to the operator");
-    // And the same share cannot be promoted twice.
-    let ix = promote_on_forfeit_ix(
+    // And the same share cannot be paid onward twice.
+    let ix = pay_next_place_ix(
         &settlement.pubkey(), 1, &players[1].1, &players[0].1, &players[0].0.pubkey(), 1, POT / 2, &proof, &[],
     );
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
