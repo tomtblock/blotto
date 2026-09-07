@@ -89,6 +89,7 @@ describe('the offline dress rehearsal', () => {
       poolId: 9n,
       tier: 0,
       state: 'Refunding',
+      resultsRootHex: null,
       vrfCommitted: true,
       entryLamports: 100_000_000n,
       potLamports: potForTier(0),
