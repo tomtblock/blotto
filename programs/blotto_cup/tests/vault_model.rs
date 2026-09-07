@@ -7,32 +7,45 @@
 //! step it asserts the two-wallet ledger identities:
 //!
 //! ```text
-//! vault    == Σ pots funded − Σ paid − Σ released − Σ forfeited
+//! vault    == Σ pots funded − Σ paid − Σ released − Σ next-place payouts
 //!             − Σ pot returns (refund fork)
-//! platform == Σ deposits + Σ entry payments + Σ pot returns + Σ forfeits
+//! platform == Σ deposits + Σ entry payments + Σ pot returns
 //!             − Σ pots funded − Σ refunds − Σ withdrawals
 //! ```
 //!
-//! plus the policy properties: the treasury always covers the refundable sum
+//! Note what is NOT in either identity since the 2026-09-07 ruling: a
+//! forfeit. `forfeit_escrow` moves nothing — the share stays in its pool's
+//! vault, marked, until `pay_next_place` pays it to the next eligible
+//! place. No term carries lamports from a vault to the platform any more;
+//! if one ever reappears, the platform identity fails.
+//!
+//! Plus the policy properties: the treasury always covers the refundable sum
 //! (`withdraw_platform`'s floor and `open_pool`'s availability gate both
-//! subtract it), `platform_reserved` tracks exactly the live pool's pot, and
-//! a below-floor withdrawal is refused with nothing moved. Terminal
-//! conditions: a fully settled pool leaves its vault holding exactly the
-//! outstanding escrow (zero once escrow settles), and a fully refunded pool
-//! leaves the vault at zero with every entrant repaid their exact price —
-//! R7's "full refund" is exact, not approximate.
+//! subtract it); once the treasury has ever stood at `min_platform +
+//! refundable` no program action takes it below (prompt v2 PR0 — deposits
+//! are the only way UP to the floor, so the property is armed by the first
+//! deposit that reaches it and holds from then on); `platform_reserved`
+//! tracks exactly the live pool's pot; a below-floor withdrawal is refused
+//! with nothing moved. Terminal conditions: a fully settled pool leaves its
+//! vault holding exactly the outstanding escrow (zero once escrow settles —
+//! released or paid onward), and a fully refunded pool leaves the vault at zero
+//! with every entrant repaid their exact price — R7's "full refund" is
+//! exact, not approximate.
 //!
 //! Pools are SEQUENTIAL (D-A1 revised): the model re-opens a new pool only
 //! after the previous reached `Paid` or `Closed`, mirroring
 //! `active_pool_by_tier`, and the ledger identities run ACROSS pools.
 //!
-//! D-E4 (2026-09-06) adds the second seal path: past the deadline a pool at
-//! or above `MIN_SEATS` seals (`seal_at_deadline`) and below it refunds
-//! (`trigger_refund`). The model abstracts the clock the same way it always
-//! did for the refund fork — the deadline is assumed past whenever either
-//! op fires — and mirrors the field guard on both, so the fork is decided by
-//! seat count exactly as on-chain. The invariants are UNCHANGED by D-E2 and
-//! D-E4; only the operation set and the refund proptest's domain moved.
+//! D-E4 (2026-09-06, option A per the 2026-09-07 ruling) adds the second
+//! seal path: past the deadline a pool at or above `MIN_SEATS` seals
+//! (`seal_at_deadline`) and below it refunds (`trigger_refund`). The model
+//! abstracts the clock the same way it always did for the refund fork — the
+//! deadline is assumed past whenever either op fires — and mirrors the field
+//! guard on both, so the fork is decided by seat count exactly as on-chain.
+//! The auto-release (`release_escrow` by anyone after seven days) is the
+//! same lamport movement as the reviewed release; the model has no clock and
+//! models one `release`. The next-place payout's rank proof is the LiteSVM suite's job;
+//! here `pay_next_place` mirrors only the money and the eligibility flags.
 //!
 //! What this does and does not prove: it proves the arithmetic and the state
 //! machine conserve lamports under any interleaving the program permits. It
@@ -63,7 +76,22 @@ struct EntryModel {
     flagged: bool,
     settled: bool,
     refunded: bool,
+    /// Review upheld the flag: the escrow below can only be paid to the next place.
+    forfeited: bool,
     escrow: u64,
+    /// Forfeited shares paid onward TO this entry (`Entry.next_place_lamports`).
+    next_place: u64,
+}
+
+impl EntryModel {
+    /// `escrow.rs::review_pending` — a flag review not yet resolved.
+    fn review_pending(&self) -> bool {
+        self.flagged && !self.forfeited && (!self.settled || self.escrow > 0)
+    }
+    /// An eligible next-place payout target (`pay_next_place`'s checks on `to`).
+    fn eligible(&self) -> bool {
+        self.exists && !self.refunded && !self.forfeited && !self.review_pending()
+    }
 }
 
 /// The model. Lamport balances are u128 in the LEDGER (so an overflow bug in
@@ -77,6 +105,9 @@ struct Model {
     platform: u128,
     reserved: u128,
     refundable: u128,
+    /// Armed the first time the treasury stands at `min_platform +
+    /// refundable`; from then on no program action may take it below.
+    floor_armed: bool,
     // The live pool (sequential — at most one). `None` before the first open
     // and irrelevant after terminal states; the terminal pool stays so its
     // escrow can settle.
@@ -100,7 +131,7 @@ struct Model {
     total_paid: u128,
     total_refunded: u128,
     total_released: u128,
-    total_forfeited: u128,
+    total_next_place: u128,
     total_withdrawn: u128,
     pools_settled: u32,
 }
@@ -114,6 +145,7 @@ impl Model {
             platform: 0,
             reserved: 0,
             refundable: 0,
+            floor_armed: false,
             state: St::Closed,
             opened: false,
             entrants: 0,
@@ -129,7 +161,7 @@ impl Model {
             total_paid: 0,
             total_refunded: 0,
             total_released: 0,
-            total_forfeited: 0,
+            total_next_place: 0,
             total_withdrawn: 0,
             pools_settled: 0,
         }
@@ -170,6 +202,8 @@ impl Model {
     }
 
     /// `open_pool` — sequential rule + treasury policy gate + pot funding.
+    /// (The keeper gate, the cooldown and the liveness fallback are clock and
+    /// key checks with no money in them — LiteSVM's job.)
     fn open_pool(&mut self) {
         let live = self.opened && !matches!(self.state, St::Paid | St::Closed);
         if live {
@@ -278,9 +312,8 @@ impl Model {
         // Seeded tie-group sizes over the ranking: group size 1..=4, plus a
         // seeded chance of one giant group at the top (the everyone-tied
         // shape the oracle also pins).
-        let potv = self.pot;
-        let mut payouts: Vec<(usize, u64)> = Vec::new();
-        let mut pos: usize = 0; // 0-based position; rank = pos + 1
+        let mut sizes: Vec<usize> = Vec::new();
+        let mut pos: usize = 0;
         let mut g = seed ^ 0x9e37_79b9_7f4a_7c15;
         while pos < n {
             g = g
@@ -292,6 +325,23 @@ impl Model {
                 1 + (g as usize % 4).min(n - pos - 1)
             };
             let size = size.min(n - pos);
+            sizes.push(size);
+            pos += size;
+        }
+        self.commit_ranking(&ranking, &sizes);
+    }
+
+    /// `commit_results` with an explicit ranking and tie-group sizes (the
+    /// seeded `commit` and the shaped tests both land here).
+    fn commit_ranking(&mut self, ranking: &[usize], sizes: &[usize]) {
+        assert_eq!(self.state, St::Sealed);
+        let n = self.entrants;
+        assert_eq!(ranking.len(), n);
+        assert_eq!(sizes.iter().sum::<usize>(), n);
+        let potv = self.pot;
+        let mut payouts: Vec<(usize, u64)> = Vec::new();
+        let mut pos: usize = 0; // 0-based position; rank = pos + 1
+        for &size in sizes {
             let (each, remainder) = split_group(potv, (pos + 1) as u16, size as u16);
             let group = &ranking[pos..pos + size];
             let lowest_seat = *group.iter().min().unwrap();
@@ -318,7 +368,12 @@ impl Model {
         self.state = St::Scored;
     }
 
-    /// `pay_prizes` on a batch of seats (D3-B).
+    /// `pay_prizes` on a batch of seats (D3-B). Mirrors the NET effect of
+    /// the on-chain call: a seat the program would reject (not committed,
+    /// already paid, already settled) is skipped and the rest land — the
+    /// same state a caller reaches by dropping that seat and resending, so
+    /// the invariants see every reachable state. `pay_atomic` mirrors the
+    /// all-or-nothing transaction itself.
     fn pay(&mut self, seats: &[u16]) {
         if !self.opened || self.state != St::Scored {
             return;
@@ -326,27 +381,65 @@ impl Model {
         for &seat in seats {
             let seat = seat as usize % CAP;
             let Some(&(_, amount)) = self.committed.iter().find(|&&(s, _)| s == seat) else {
-                continue; // handler rejects SeatNotInPayouts; model skips — same net state
+                continue; // handler rejects SeatNotInPayouts
             };
             let bit = 1u64 << seat;
             if self.paid_mask & bit != 0 {
-                continue; // handler reverts the batch; model skips — same net state
+                continue; // handler rejects RankAlreadySettled
             }
-            let e = &mut self.entries[seat];
-            if e.settled {
-                continue;
+            if self.entries[seat].settled {
+                continue; // handler rejects EntryAlreadySettled
             }
-            let escrowed = e.flagged || (self.kyc_above > 0 && amount > self.kyc_above);
-            if escrowed {
-                e.escrow += amount;
-            } else {
-                assert!(self.vault >= amount as u128, "vault underflow at pay");
-                self.vault -= amount as u128;
-                self.total_paid += amount as u128;
-            }
-            e.settled = true;
-            self.paid_mask |= bit;
+            self.pay_one(seat, amount);
         }
+        self.finish_if_all_paid();
+    }
+
+    /// `pay_prizes` as ONE transaction: every seat is checked first; any
+    /// rejection reverts the whole batch (nothing moves, `false`), else all
+    /// land. Prompt v2 §C.5: a wide tie is paid across several batches and
+    /// a failing batch must leave the pool resumable.
+    fn pay_atomic(&mut self, seats: &[u16]) -> bool {
+        if !self.opened || self.state != St::Scored || seats.is_empty() {
+            return false;
+        }
+        let mut seen: u64 = 0;
+        for &seat in seats {
+            let seat = seat as usize;
+            if seat >= CAP || !self.committed.iter().any(|&(s, _)| s == seat) {
+                return false;
+            }
+            let bit = 1u64 << seat;
+            if self.paid_mask & bit != 0 || seen & bit != 0 || self.entries[seat].settled {
+                return false;
+            }
+            seen |= bit;
+        }
+        for &seat in seats {
+            let seat = seat as usize;
+            let amount = self.committed.iter().find(|&&(s, _)| s == seat).unwrap().1;
+            self.pay_one(seat, amount);
+        }
+        self.finish_if_all_paid();
+        true
+    }
+
+    fn pay_one(&mut self, seat: usize, amount: u64) {
+        let kyc_above = self.kyc_above;
+        let e = &mut self.entries[seat];
+        let escrowed = e.flagged || (kyc_above > 0 && amount > kyc_above);
+        if escrowed {
+            e.escrow += amount;
+        } else {
+            assert!(self.vault >= amount as u128, "vault underflow at pay");
+            self.vault -= amount as u128;
+            self.total_paid += amount as u128;
+        }
+        e.settled = true;
+        self.paid_mask |= 1u64 << seat;
+    }
+
+    fn finish_if_all_paid(&mut self) {
         if self
             .committed
             .iter()
@@ -359,9 +452,12 @@ impl Model {
         }
     }
 
+    /// `release_escrow` — vault → player. The reviewed path and the
+    /// seven-day auto-release move the same lamports; both are this.
+    /// Refused once forfeited (`EscrowForfeitedAlready`).
     fn release(&mut self, i: usize) {
         let e = &mut self.entries[i];
-        if !e.exists || e.escrow == 0 {
+        if !e.exists || e.escrow == 0 || e.forfeited {
             return;
         }
         let amount = e.escrow as u128;
@@ -371,18 +467,42 @@ impl Model {
         e.escrow = 0;
     }
 
-    /// `forfeit_escrow` — vault → platform TREASURY (D-A1 revised).
+    /// `forfeit_escrow` (admin) — records the upheld flag. NO LAMPORTS MOVE
+    /// (founder ruling 4, 2026-09-07): the share stays in the vault, on the
+    /// entry, until paid onward. The ledger tallies are untouched on purpose —
+    /// a forfeit that changed a balance would break an identity.
     fn forfeit(&mut self, i: usize) {
         let e = &mut self.entries[i];
-        if !e.exists || e.escrow == 0 || !e.flagged {
+        if !e.exists || e.escrow == 0 || !e.flagged || e.forfeited {
             return;
         }
-        let amount = e.escrow as u128;
-        assert!(self.vault >= amount, "vault underflow at forfeit");
-        self.vault -= amount;
-        self.platform += amount;
-        self.total_forfeited += amount;
-        e.escrow = 0;
+        e.forfeited = true;
+    }
+
+    /// `pay_next_place` — the forfeited share, whole, vault → the next
+    /// eligible place. Requires a Paid pool, a forfeited `from` with escrow,
+    /// and an eligible `to` (exists, not refunded / forfeited / under
+    /// review, not `from`). The rank proof and the lowest-seat witness rule
+    /// are the on-chain suite's business; the money is modelled here.
+    fn pay_next_place(&mut self, from: usize, to: usize) {
+        if !self.opened || self.state != St::Paid || from == to {
+            return;
+        }
+        let f = self.entries[from];
+        if !f.exists || !f.forfeited || f.escrow == 0 {
+            return; // EscrowNotForfeited / NoEscrow
+        }
+        if !self.entries[to].eligible() {
+            return; // NextPlaceIneligible / NextPlaceReviewPending
+        }
+        let share = f.escrow as u128;
+        assert!(self.vault >= share, "vault underflow at next-place payout");
+        self.vault -= share;
+        self.total_next_place += share;
+        self.entries[from].escrow = 0;
+        let t = &mut self.entries[to];
+        t.next_place += f.escrow;
+        t.settled = true;
     }
 
     /// `trigger_refund` — the untouched pot returns to the treasury. D-E4:
@@ -435,22 +555,19 @@ impl Model {
     }
 
     /// The two-wallet ledger identities, checked after EVERY operation.
-    fn assert_invariant(&self) {
+    fn assert_invariant(&mut self) {
         assert_eq!(
             self.vault,
             self.total_pots_funded
                 - self.total_paid
                 - self.total_released
-                - self.total_forfeited
+                - self.total_next_place
                 - self.total_pot_returns,
             "vault ledger identity broken"
         );
         assert_eq!(
             self.platform,
-            self.total_deposits
-                + self.total_entries_in
-                + self.total_pot_returns
-                + self.total_forfeited
+            self.total_deposits + self.total_entries_in + self.total_pot_returns
                 - self.total_pots_funded
                 - self.total_refunded
                 - self.total_withdrawn,
@@ -462,6 +579,20 @@ impl Model {
             self.platform >= self.refundable,
             "treasury cannot cover refundable entries"
         );
+        // Prompt v2 PR0: once at the floor, never below it by any program
+        // action. Armed by the deposit that first reaches it (the only way
+        // up); `withdraw` and `open_pool` both keep `min_platform` above
+        // what they take, `register` raises both sides, `refund` lowers
+        // both sides by the same price.
+        let floor = self.min_platform as u128 + self.refundable;
+        if self.platform >= floor {
+            self.floor_armed = true;
+        } else {
+            assert!(
+                !self.floor_armed,
+                "treasury fell below min_platform + refundable"
+            );
+        }
         // `reserved` tracks exactly the live pool's pot.
         let live = self.opened && !matches!(self.state, St::Paid | St::Closed);
         let expected_reserved = if live && self.state != St::Refunding {
@@ -489,12 +620,22 @@ impl Model {
             self.refundable, expected_refundable,
             "platform_refundable drifted"
         );
-        // Escrow is backed: the vault always covers every recorded claim.
+        // Escrow is backed: the vault always covers every recorded claim —
+        // forfeited claims included (they are still claims, on the next
+        // eligible place rather than the flagged player).
         let escrow_total: u128 = self.entries.iter().map(|e| e.escrow as u128).sum();
         assert!(
             self.vault >= escrow_total,
             "escrow claims exceed vault balance"
         );
+        // A forfeited share never lands on the forfeiter, and a forfeit is
+        // never recorded without a flag.
+        for e in &self.entries {
+            if e.forfeited {
+                assert!(e.flagged, "forfeit without a flag");
+                assert_eq!(e.next_place, 0, "a forfeiter received a next-place payout");
+            }
+        }
         // Every balance the program would hold in a u64 fits one.
         assert!(self.vault <= u64::MAX as u128 && self.platform <= u64::MAX as u128);
     }
@@ -515,6 +656,30 @@ impl Model {
             }
             _ => {}
         }
+    }
+
+    /// Settle every outstanding escrow the way the operator would: release
+    /// the unforfeited holds, pay each forfeited share to the lowest
+    /// eligible seat. Returns the lamports that could NOT be paid onward (no
+    /// eligible seat exists — every entrant flagged), which stay in the
+    /// vault as claims.
+    fn settle_all_escrow(&mut self) -> u128 {
+        for i in 0..CAP {
+            if !self.entries[i].forfeited {
+                self.release(i);
+            }
+        }
+        let mut stuck: u128 = 0;
+        for from in 0..CAP {
+            if !self.entries[from].forfeited || self.entries[from].escrow == 0 {
+                continue;
+            }
+            match (0..CAP).find(|&t| t != from && self.entries[t].eligible()) {
+                Some(to) => self.pay_next_place(from, to),
+                None => stuck += self.entries[from].escrow as u128,
+            }
+        }
+        stuck
     }
 }
 
@@ -540,6 +705,8 @@ enum Op {
     Pay(Vec<u16>),
     Release(usize),
     Forfeit(usize),
+    /// Ruling 4 (ii): a forfeited share to the next eligible place.
+    NextPlace(usize, usize),
     TriggerRefund,
     /// D-E4: the second seal path. Weighted like `TriggerRefund` — rare
     /// enough that pools mostly fill, common enough that every fill in
@@ -559,6 +726,7 @@ fn op_strategy() -> impl Strategy<Value = Op> {
         4 => proptest::collection::vec(0u16..CAPACITY, 1..=12).prop_map(Op::Pay),
         2 => (0usize..CAP).prop_map(Op::Release),
         2 => (0usize..CAP).prop_map(Op::Forfeit),
+        2 => (0usize..CAP, 0usize..CAP).prop_map(|(f, t)| Op::NextPlace(f, t)),
         1 => Just(Op::TriggerRefund),
         1 => Just(Op::SealAtDeadline),
         3 => (0usize..CAP).prop_map(Op::Refund),
@@ -594,6 +762,7 @@ proptest! {
                 Op::Pay(seats) => m.pay(&seats),
                 Op::Release(i) => m.release(i % CAP),
                 Op::Forfeit(i) => m.forfeit(i % CAP),
+                Op::NextPlace(f, t) => m.pay_next_place(f % CAP, t % CAP),
                 Op::TriggerRefund => m.trigger_refund(),
                 Op::SealAtDeadline => m.seal_at_deadline(),
                 Op::Refund(i) => m.refund(i % CAP),
@@ -605,9 +774,11 @@ proptest! {
 
     /// The happy path, exhaustively: bootstrap the treasury, open (pot funds
     /// BEFORE any entry), fill, commit, pay all committed seats, settle all
-    /// escrow — the vault must end at EXACTLY zero for every tier and every
-    /// flag pattern, and the treasury must hold the bootstrap + all 64 entry
-    /// payments − the pot + any forfeits.
+    /// escrow (release the even holds, forfeit the odd ones and pay each
+    /// forfeited share to the next eligible seat) — the vault must end at
+    /// EXACTLY zero for every tier and every flag pattern, and the treasury
+    /// must hold the bootstrap + all 64 entry payments − the pot. No forfeit
+    /// term: forfeited money never reaches the treasury (ruling 4).
     #[test]
     fn full_lifecycle_drains_the_vault_to_zero(
         tier in 0usize..TIER_ENTRY_LAMPORTS.len(),
@@ -637,19 +808,29 @@ proptest! {
         m.assert_invariant();
         prop_assert_eq!(m.state, St::Paid);
         prop_assert_eq!(m.reserved, 0u128);
-        // Settle escrow: release the even seats' holds, forfeit the odd
-        // seats' (forfeit requires the flag; release covers the rest).
+        // Forfeit the odd flagged seats (forfeit requires the flag; the
+        // rest release), then settle everything.
         for (i, &seat) in paid_seats.iter().enumerate() {
-            if i % 2 == 0 { m.release(seat) } else { m.forfeit(seat) }
-            m.release(seat); // no-op unless the forfeit was refused
+            if i % 2 == 1 { m.forfeit(seat); }
             m.assert_invariant();
         }
-        prop_assert_eq!(m.vault, 0u128, "vault must end at exactly zero");
+        let vault_before = m.vault;
+        let stuck = m.settle_all_escrow();
+        m.assert_invariant();
+        prop_assert_eq!(m.vault, stuck, "vault must end at exactly the claims no eligible seat can take");
+        // A forfeited share is stuck only when NO eligible seat exists —
+        // every seat flagged, which needs an everyone-tied commit with every
+        // bit set. Then the claims are still in the vault, on their entries.
+        if stuck > 0 {
+            prop_assert!(m.entries.iter().all(|e| !e.exists || e.flagged));
+        }
+        prop_assert!(m.vault <= vault_before);
         // Treasury conservation across the pool: bootstrap + entries − pot
-        // paid out + forfeits back in.
-        let expected = pot as u128 + CAP as u128 * price as u128
-            - m.total_pots_funded + m.total_forfeited;
+        // paid out. Forfeits contribute NOTHING (ruling 4).
+        let expected = pot as u128 + CAP as u128 * price as u128 - m.total_pots_funded;
         prop_assert_eq!(m.platform, expected, "treasury drifted over the lifecycle");
+        prop_assert_eq!(m.total_paid + m.total_released + m.total_next_place + stuck, pot as u128,
+            "the pot reached players (or stayed as their claims), never the operator");
     }
 
     /// The refund fork, exhaustively: any fill BELOW the minimum field (D-E4
@@ -728,6 +909,65 @@ proptest! {
         prop_assert!(m.platform > pot as u128, "the minimum field clears the pot with margin");
     }
 
+    /// Prompt v2 §C.5 — the widest tie a minimum field can produce, paid in
+    /// batches as ONE transaction each: a 52-way tie for first at every
+    /// tier, batches of twelve, with one batch that FAILS (it repeats an
+    /// already-paid seat) and reverts whole — nothing moves, the pool stays
+    /// Scored — then resumes. The pot is conserved to the lamport, the
+    /// indivisible remainder sits on the lowest seat, and the vault reaps.
+    #[test]
+    fn a_52_way_tie_settles_across_batches_and_survives_a_failed_batch(
+        tier in 0usize..TIER_ENTRY_LAMPORTS.len(),
+        bad_batch in 0usize..5,
+    ) {
+        let price = TIER_ENTRY_LAMPORTS[tier];
+        let pot = TIER_POT_LAMPORTS[tier];
+        let mut m = Model::new(price, pot, 0, 0);
+        m.fund(pot);
+        m.open_pool();
+        for _ in 0..MIN { m.register(); }
+        m.seal_at_deadline();
+        prop_assert_eq!(m.state, St::Sealed);
+        // Everyone tied for first, in seat order.
+        let ranking: Vec<usize> = (0..MIN).collect();
+        m.commit_ranking(&ranking, &[MIN]);
+        prop_assert_eq!(m.committed.len(), MIN, "every seat is paid in a 52-way tie");
+        let each = pot / MIN as u64;
+        let rem = pot % MIN as u64;
+        prop_assert_eq!(m.committed[0].1, each + rem, "remainder to the lowest seat");
+        prop_assert!(m.committed[1..].iter().all(|&(_, a)| a == each));
+
+        let batches: Vec<Vec<u16>> = (0..MIN as u16)
+            .collect::<Vec<_>>()
+            .chunks(12)
+            .map(|c| c.to_vec())
+            .collect();
+        prop_assert_eq!(batches.len(), 5);
+        let mut paid_so_far: u128 = 0;
+        for (i, batch) in batches.iter().enumerate() {
+            if i == bad_batch && i > 0 {
+                // Resend a seat from the previous batch alongside this one:
+                // the program rejects the whole transaction.
+                let mut bad = batch.clone();
+                bad.push(batches[i - 1][0]);
+                let vault_before = m.vault;
+                let mask_before = m.paid_mask;
+                prop_assert!(!m.pay_atomic(&bad), "a batch with a paid seat must fail");
+                prop_assert_eq!(m.vault, vault_before, "a failed batch moved lamports");
+                prop_assert_eq!(m.paid_mask, mask_before, "a failed batch marked a seat");
+                prop_assert_eq!(m.state, St::Scored, "a failed batch changed state");
+                m.assert_invariant();
+            }
+            prop_assert!(m.pay_atomic(batch), "resume with the clean batch");
+            paid_so_far += batch.iter().map(|&s| m.committed.iter().find(|&&(c, _)| c == s as usize).unwrap().1 as u128).sum::<u128>();
+            prop_assert_eq!(m.total_paid, paid_so_far);
+            m.assert_invariant();
+        }
+        prop_assert_eq!(m.state, St::Paid);
+        prop_assert_eq!(m.vault, 0u128, "the vault reaps after the last batch");
+        prop_assert_eq!(m.total_paid, pot as u128, "52 shares sum to the pot exactly");
+    }
+
     /// `withdraw_platform`'s floor: a withdrawal that would dip below
     /// min + idle-tier reserve + refundable is refused with NOTHING moved,
     /// and one exactly at the floor succeeds.
@@ -751,5 +991,48 @@ proptest! {
         m.withdraw(surplus);
         prop_assert_eq!(m.platform, floor, "at-floor withdraw refused");
         m.assert_invariant();
+    }
+
+    /// Ruling 4 as a property: over any sequence, the lamports that leave a
+    /// vault go to players (paid, released, paid onward) or back to the treasury
+    /// ONLY as an untouched pot on the refund fork — never as a forfeit. The
+    /// forfeit tally the old model kept is gone; this pins that nothing
+    /// re-introduces one by checking the platform against deposits + entries
+    /// + pot returns − pots − refunds − withdrawals with no other term.
+    #[test]
+    fn forfeited_money_never_reaches_the_treasury(
+        tier in 0usize..TIER_ENTRY_LAMPORTS.len(),
+        seed in any::<u64>(),
+    ) {
+        let price = TIER_ENTRY_LAMPORTS[tier];
+        let pot = TIER_POT_LAMPORTS[tier];
+        let mut m = Model::new(price, pot, 0, 0);
+        m.fund(pot);
+        m.open_pool();
+        for _ in 0..CAP { m.register(); }
+        m.commit(seed);
+        // Flag and forfeit EVERY committed seat.
+        let paid_seats: Vec<usize> = m.committed.iter().map(|&(s, _)| s).collect();
+        for &s in &paid_seats { m.flag(s, true); }
+        m.pay(&paid_seats.iter().map(|&s| s as u16).collect::<Vec<_>>());
+        for &s in &paid_seats { m.forfeit(s); }
+        let treasury_before = m.platform;
+        let vault_before = m.vault;
+        prop_assert_eq!(vault_before, pot as u128, "every share is held");
+        // A forfeit moved nothing.
+        m.assert_invariant();
+        prop_assert_eq!(m.platform, treasury_before);
+        // Releasing a forfeited share is refused.
+        for &s in &paid_seats { m.release(s); }
+        prop_assert_eq!(m.vault, vault_before, "a forfeited share cannot be released");
+        // Next-place payout pays the next eligible seat(s); the treasury is untouched
+        // throughout, and the vault reaps unless the whole field is flagged
+        // (a 64-way tie — then the claims stay in the vault).
+        let stuck = m.settle_all_escrow();
+        m.assert_invariant();
+        prop_assert_eq!(m.platform, treasury_before, "a forfeit reached the treasury");
+        prop_assert_eq!(m.vault, stuck);
+        prop_assert_eq!(m.total_next_place + stuck, pot as u128);
+        prop_assert!(m.entries.iter().all(|e| !e.forfeited || e.next_place == 0));
     }
 }

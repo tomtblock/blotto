@@ -7,13 +7,16 @@
 //! # Two invariants that outrank any instruction added later
 //!
 //! **The prize vault has no withdraw instruction.** Its only lamport exits
-//! are `pay_prizes`, `release_escrow`, `trigger_refund`'s pot return and
-//! `forfeit_escrow` (D-A1 revised: `refund` repays entries from the
-//! TREASURY, and the refund fork returns the untouched pot treasury-ward).
-//! The platform treasury is a separate account with its own single gated
-//! exit, `withdraw_platform` — a new account, not a fifth exit on the prize
-//! vault. There is no escape hatch and no recover-stuck-funds instruction;
-//! the standing-rules CI check pins `vault.rs`'s call sites.
+//! are `pay_prizes`, `release_escrow`, `pay_next_place` and
+//! `trigger_refund`'s pot return (D-A1 revised: `refund` repays entries
+//! from the TREASURY, and the refund fork returns the untouched pot
+//! treasury-ward). `forfeit_escrow` moves nothing since 2026-09-07 (founder
+//! ruling 4): a forfeited share stays in its pool's vault until it is
+//! paid onward to the next eligible player — forfeited money never reaches
+//! the operator. The platform treasury is a separate account with its own
+//! single gated exit, `withdraw_platform` — a new account, not another exit
+//! on the prize vault. There is no escape hatch and no recover-stuck-funds
+//! instruction; the standing-rules CI check pins `vault.rs`'s call sites.
 //!
 //! **There is no instruction that can thaw a character pass.** See `pass.rs`.
 //!
@@ -33,6 +36,9 @@ pub mod entry_packet;
 pub mod error;
 pub mod events;
 pub mod instructions;
+pub mod merkle;
+#[cfg(test)]
+mod merkle_vectors;
 pub mod pass;
 pub mod prize_math;
 pub mod slot_hashes;
@@ -66,6 +72,7 @@ pub mod blotto_cup {
         ctx: Context<InitConfig>,
         entry_signer: Pubkey,
         settlement_signer: Pubkey,
+        keeper: Pubkey,
         vault_ceiling_lamports: [u64; N_TIERS],
         treasury_min_platform_lamports: u64,
     ) -> Result<()> {
@@ -73,9 +80,33 @@ pub mod blotto_cup {
             ctx,
             entry_signer,
             settlement_signer,
+            keeper,
             vault_ceiling_lamports,
             treasury_min_platform_lamports,
         )
+    }
+
+    /// One-shot growth of a pre-2026-09-07 Config account to the current
+    /// layout (admin-signed; refused once migrated). Runs immediately after
+    /// the upgrade — every other instruction fails until it has.
+    pub fn migrate_config(ctx: Context<MigrateConfig>, keeper: Pubkey) -> Result<()> {
+        instructions::handle_migrate_config(ctx, keeper)
+    }
+
+    /// Rotate the keeper — the key `open_pool` requires before the 24 h
+    /// liveness fallback.
+    pub fn set_keeper(ctx: Context<AdminOnly>, new_keeper: Pubkey) -> Result<()> {
+        instructions::handle_set_keeper(ctx, new_keeper)
+    }
+
+    /// The fill deadline for pools opened from now on and the per-tier
+    /// cooldown (founder-owned; never touches an open pool).
+    pub fn set_pool_timing(
+        ctx: Context<AdminOnly>,
+        fill_deadline_seconds: i64,
+        cooldown_seconds: i64,
+    ) -> Result<()> {
+        instructions::handle_set_pool_timing(ctx, fill_deadline_seconds, cooldown_seconds)
     }
 
     /// Kill switch: blocks `register` only — settlement and refunds keep
@@ -156,9 +187,10 @@ pub mod blotto_cup {
 
     // ---- Pool lifecycle -------------------------------------------------
 
-    /// Anyone: open a pool in a tier (D-A1 revised — permissionless; the
-    /// gates are the tier's enablement, the SEQUENTIAL rule, and the
-    /// treasury policy; the pot funds from the treasury before any entry).
+    /// The keeper (or anyone, once a tier has sat idle past the liveness
+    /// fallback): open a pool in a tier. The gates are the tier's
+    /// enablement, the SEQUENTIAL rule plus its cooldown, and the treasury
+    /// policy; the pot funds from the treasury before any entry.
     pub fn open_pool(
         ctx: Context<OpenPool>,
         pool_id: u64,
@@ -184,8 +216,8 @@ pub mod blotto_cup {
     }
 
     /// Enter a pool: pay, submit the sealed battles hash, receive the class
-    /// and the frozen pass. The 64th entry seals the pool; the entry that
-    /// reaches the minimum field starts the go-timer (D-E4).
+    /// and the frozen pass. The 64th entry seals the pool. The four service
+    /// keys cannot enter.
     pub fn register(ctx: Context<Register>, pool_id: u64, battles_hash: [u8; 32]) -> Result<()> {
         instructions::handle_register(ctx, pool_id, battles_hash)
     }
@@ -244,15 +276,29 @@ pub mod blotto_cup {
         instructions::handle_clear_flag(ctx, pool_id)
     }
 
-    /// Pay an escrowed share to its player (KYC packet required above the
-    /// switch's threshold).
+    /// Pay an escrowed share to its player: the settlement signer after
+    /// review (KYC packet required above the switch's threshold), or anyone
+    /// once the 7-day auto-release window has passed.
     pub fn release_escrow(ctx: Context<ReleaseEscrow>, pool_id: u64) -> Result<()> {
         instructions::handle_release_escrow(ctx, pool_id)
     }
 
-    /// Move an upheld flag's escrowed share to the platform treasury.
+    /// Admin: record that review upheld a flag. The share stays in the vault
+    /// until paid onward — it never reaches the operator.
     pub fn forfeit_escrow(ctx: Context<ForfeitEscrow>, pool_id: u64) -> Result<()> {
         instructions::handle_forfeit_escrow(ctx, pool_id)
+    }
+
+    /// Pay a forfeited share to the next eligible place, proven against the
+    /// committed results root (founder ruling 4 (ii)).
+    pub fn pay_next_place<'info>(
+        ctx: Context<'info, PayNextPlace<'info>>,
+        pool_id: u64,
+        rank: u8,
+        amount: u64,
+        proof: Vec<crate::merkle::ProofStep>,
+    ) -> Result<()> {
+        instructions::handle_pay_next_place(ctx, pool_id, rank, amount, proof)
     }
 
     // ---- Refund fork (R7) -----------------------------------------------

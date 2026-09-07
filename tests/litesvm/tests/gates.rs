@@ -229,9 +229,12 @@ fn lowering_a_ceiling_blocks_the_next_open_not_the_open_pool() {
 
     // Free the tier slot via the refund fork, then try the NEXT open: the
     // lowered ceiling is what blocks it.
-    env.advance_time(72 * 3600 + 1);
+    env.advance_time(12 * 3600 + 1);
     let ix = trigger_refund_ix(&settlement.pubkey(), 1);
     env.send(&[ix], &[&settlement]).unwrap();
+    // Closed stamps the tier's cooldown (prompt v2 §B.6); wait it out so the
+    // ceiling — not the cooldown — is what the next open trips on.
+    env.advance_time(5 * 60);
     let ix = open_pool_ix(&settlement.pubkey(), 2, 0, [9; 32], env.sealing_secret_hash);
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
     assert!(

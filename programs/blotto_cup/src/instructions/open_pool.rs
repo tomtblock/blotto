@@ -1,11 +1,16 @@
-//! `open_pool` (roadmap 1.2 as revised by D-A1 v2, 2026-08-27) —
-//! PERMISSIONLESS: any signer may open the next pool of a tier once the
-//! program's own gates pass. The daemon has no discretion; the checks here
-//! ARE the policy:
+//! `open_pool` (roadmap 1.2 as revised by D-A1 v2, 2026-08-27; keeper-gated
+//! since 2026-09-07, prompt v2 §A) — the KEEPER opens the next pool of a
+//! tier once the program's own gates pass. The daemon has no discretion
+//! over WHETHER a pool opens; the checks here ARE the policy:
 //!
+//!   0. the signer is `Config.keeper` — unless the tier's slot has been free
+//!      for `LIVENESS_FALLBACK_SECS`, when ANY signer may open it (a dead
+//!      daemon must not freeze a tier; the multisig controls who opens pools
+//!      by rotating the keeper, not by signing every open);
 //!   1. the tier is enabled (R6 switch);
 //!   2. the tier's previous pool reached `Paid` or `Closed` (SEQUENTIAL
-//!      pools per tier — the `active_pool_by_tier` slot clears only there);
+//!      pools per tier — the `active_pool_by_tier` slot clears only there)
+//!      AND its cooldown has elapsed (`tier_next_open_at`, prompt v2 §B.6);
 //!   3. the D2 ceiling caps the pool's pass sales (price × 64);
 //!   4. the treasury policy holds: after funding this pot, the treasury
 //!      still has `min` + `reserve_pots` further pots of every OTHER
@@ -15,7 +20,9 @@
 //!
 //! On success EXACTLY `tier.pot` moves from the platform treasury into the
 //! new pool's prize vault, before any pass is sold. No partial pots; a pot
-//! never scales with entries or balances.
+//! never scales with entries or balances. The pool's deadline is
+//! `now + Config.fill_deadline_seconds` (12 h at launch), copied here so a
+//! later `set_pool_timing` never moves it.
 //!
 //! The pool id is `Config.next_pool_id`, passed as an argument (Anchor PDA
 //! seeds must be derivable from instruction inputs) and checked against the
@@ -23,7 +30,7 @@
 
 use anchor_lang::prelude::*;
 
-use crate::constants::{CAPACITY, FILL_DEADLINE_SECS, LAUNCH_CLASS_COUNTERS, TIMER_SECONDS};
+use crate::constants::{CAPACITY, LAUNCH_CLASS_COUNTERS, LIVENESS_FALLBACK_SECS, TIMER_SECONDS};
 use crate::error::ErrorCode;
 use crate::events::PoolOpened;
 use crate::instructions::treasury::idle_tier_reserve;
@@ -32,8 +39,9 @@ use crate::state::{Config, Pool, PoolState, CONFIG_SEED, PLATFORM_SEED, POOL_SEE
 #[derive(Accounts)]
 #[instruction(pool_id: u64)]
 pub struct OpenPool<'info> {
-    /// Permissionless — pays the Pool account's rent. The program's own
-    /// gates (module doc) decide whether a pool opens, not the signer.
+    /// The keeper (`Config.keeper`), or anyone once the liveness fallback
+    /// applies — decided in the handler, not by `has_one`, because the
+    /// fallback is a function of the tier's state. Pays the Pool's rent.
     #[account(mut)]
     pub opener: Signer<'info>,
 
@@ -95,6 +103,20 @@ pub fn handle_open_pool(
         ctx.accounts.config.active_pool_by_tier[tier_idx] == 0,
         ErrorCode::TierAlreadyHasOpenPool
     );
+    // Prompt v2 §B.6: the cooldown stamped when the slot freed.
+    let now = Clock::get()?.unix_timestamp;
+    let next_open_at = ctx.accounts.config.tier_next_open_at[tier_idx];
+    require!(now >= next_open_at, ErrorCode::TierCoolingDown);
+    // Prompt v2 §A.2/§A.3: the keeper opens pools; anyone may once the tier
+    // has sat idle for the liveness window past its cooldown (a tier that
+    // never settled a pool has `0` here and is open to any signer — the
+    // pre-upgrade posture, and harmless: the gates below still decide).
+    if ctx.accounts.opener.key() != ctx.accounts.config.keeper {
+        let fallback_at = next_open_at
+            .checked_add(LIVENESS_FALLBACK_SECS)
+            .ok_or(ErrorCode::Overflow)?;
+        require!(now >= fallback_at, ErrorCode::NotKeeper);
+    }
 
     let entry_lamports = ctx.accounts.config.tier_price_lamports[tier_idx];
     let pot_lamports = ctx.accounts.config.tier_pot_lamports[tier_idx];
@@ -133,7 +155,12 @@ pub fn handle_open_pool(
         .checked_add(pot_lamports)
         .ok_or(ErrorCode::Overflow)?;
 
-    let now = Clock::get()?.unix_timestamp;
+    // Copied at open (like price and pot): a later `set_pool_timing` never
+    // moves the deadline players entered under. 12 h at launch (ruling
+    // 2026-09-07, supersedes R7's 72 h).
+    let fill_deadline = now
+        .checked_add(config.fill_deadline_seconds)
+        .ok_or(ErrorCode::Overflow)?;
     let pool = &mut ctx.accounts.pool;
     pool.id = pool_id;
     pool.tier = tier;
@@ -141,7 +168,7 @@ pub fn handle_open_pool(
     pool.pot_lamports = pot_lamports;
     pool.entrants = 0;
     pool.opened_at = now;
-    pool.fill_deadline = now + FILL_DEADLINE_SECS; // R7: 72h
+    pool.fill_deadline = fill_deadline;
     pool.state = PoolState::Open;
     pool.sealing_pubkey = sealing_pubkey;
     pool.sealing_secret_hash = sealing_secret_hash;

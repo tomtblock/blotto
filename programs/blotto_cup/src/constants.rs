@@ -13,30 +13,47 @@ pub const STATS: usize = 5;
 /// Battles per entry (PID §4.5, TECH-ARCH §2).
 pub const BATTLES: usize = 7;
 
-/// Fill deadline: 72 hours (PID §2, roadmap R7).
-pub const FILL_DEADLINE_SECS: i64 = 72 * 60 * 60;
+/// The fill deadline seeded into `Config.fill_deadline_seconds` at
+/// `init_config` / `migrate_config`: 12 hours (founder ruling 2026-09-07,
+/// implementation prompt v2 — supersedes R7's 72 hours). The LIVE value is
+/// Config state, copied onto each Pool at `open_pool`, so a later change
+/// never touches a pool players already entered; this constant is only the
+/// seed and the tests' reference. `set_pool_timing` changes the live value.
+pub const DEFAULT_FILL_DEADLINE_SECS: i64 = 12 * 60 * 60;
 
-/// Minimum field for a pool to play (D-E4, founder decision 2026-09-06). A
-/// pool at or above this when its deadline passes seals and plays for the
-/// full pot (`seal_at_deadline`); below it, every entry refunds in full (R7
-/// unchanged, threshold moved from 64). 52/64 is the first integer at or
-/// above the founder's 80% — expressed ONLY as a seat count, never as a
-/// percentage, anywhere in the program, the engine or the copy.
+/// The cooldown between a tier's pool settling (`Paid` / `Closed`) and its
+/// next `open_pool`, seeded into `Config.cooldown_seconds`: 5 minutes
+/// (implementation prompt v2 §B.5). Stamped as `Config.tier_next_open_at`
+/// when the slot frees, so the "next pool opens in" countdown is on-chain
+/// state, not a client guess.
+pub const DEFAULT_COOLDOWN_SECS: i64 = 5 * 60;
+
+/// Keeper liveness fallback (prompt v2 §A.3): `open_pool` is gated on
+/// `Config.keeper`, but a tier whose slot has been free for this long may be
+/// opened by ANY signer — a dead daemon must not freeze a tier permanently.
+/// Measured from the tier's `tier_next_open_at` (the moment its cooldown
+/// ended); a tier that never had a pool (`0`) is open to any signer.
+pub const LIVENESS_FALLBACK_SECS: i64 = 24 * 60 * 60;
+
+/// Escrow auto-release (prompt v2 §E.3): once a share has sat in escrow
+/// this long without review, ANY signer may release it to the player.
+/// Inaction pays the player, never the operator.
+pub const ESCROW_AUTO_RELEASE_SECS: i64 = 7 * 24 * 60 * 60;
+
+/// Minimum field for a pool to play (D-E4, founder decision 2026-09-06;
+/// option A per the founder's ruling of 2026-09-07 — the go-timer was
+/// removed). A pool seals at the 64th entry, or at its deadline when it
+/// holds at least this many seats (`seal_at_deadline`); below it, every
+/// entry refunds in full (R7 unchanged, threshold moved from 64). Nothing in
+/// between. 52/64 is the first integer at or above the founder's 80% —
+/// expressed ONLY as a seat count, never as a percentage, anywhere in the
+/// program, the engine or the copy.
 ///
 /// Must clear break-even at every tier: `MIN_SEATS × price > pot`. At the
 /// D-E1 pots break-even is 40 seats (pot = price × 40 by derivation), so 52
 /// carries a 12-seat buffer — asserted in `prize_math` tests against the
 /// constants and enforced at `set_tier_economics` against the live values.
 pub const MIN_SEATS: u16 = 52;
-
-/// The go-timer (D-E4 §11.3, option B): once a pool holds `MIN_SEATS`, its
-/// deadline shortens to `now + GO_TIMER_SECS` if that is sooner than the
-/// 72h fill deadline (never later — the fill deadline is a ceiling). Stored
-/// by shortening `Pool.fill_deadline` in place, so no account layout changes
-/// and every reader of the deadline keeps its meaning: the moment entries
-/// close. PROPOSAL VALUE — 6 hours is the proposal's float (founder-owned;
-/// change here, it is a program upgrade like `FILL_DEADLINE_SECS`).
-pub const GO_TIMER_SECS: i64 = 6 * 60 * 60;
 
 /// Per-screen timer, seconds (roadmap R9: 15s visible, lock-current on timeout).
 /// Stored on each `Pool` so a later founder change to Config does not silently

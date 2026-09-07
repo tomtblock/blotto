@@ -59,17 +59,15 @@ pub struct PoolSealed {
     pub entrants: u16,
 }
 
-/// D-E4 §11.3 (option B): the pool reached `MIN_SEATS` and its deadline
-/// shortened to `go_deadline` (= min(fill deadline, now + GO_TIMER_SECS)).
-/// Emitted once, by the `register` that first shortens the deadline; the
-/// indexer projects it onto the pool's close time and the app swaps the
-/// 72h countdown for the final window. Never emitted when the shortening
-/// would not move the deadline (the 52nd seat landing inside the last
-/// go-timer window of the 72h) — the deadline players entered under stands.
+/// A tier's slot freed (its pool reached `Paid` or `Closed`) and its
+/// cooldown started: the next pool in the tier may open at `next_open_at`
+/// (prompt v2 §B.6). The app's "next pool in" countdown reads this, not a
+/// client guess.
 #[event]
-pub struct GoTimerStarted {
-    pub pool: Pubkey,
-    pub go_deadline: i64,
+pub struct TierSlotFreed {
+    pub tier: u8,
+    pub pool_id: u64,
+    pub next_open_at: i64,
 }
 
 #[event]
@@ -131,16 +129,55 @@ pub struct EscrowReleased {
     pub amount: u64,
 }
 
+/// Review upheld a flag (admin-signed `forfeit_escrow`). Since 2026-09-07
+/// (founder ruling 4) NO LAMPORT MOVES here: the share stays in the pool's
+/// own vault, marked forfeited on the Entry, until `pay_next_place`
+/// pays it to the next eligible place. `destination` is therefore the vault
+/// itself — kept on the wire so the destination policy stays auditable per
+/// event and old decoders keep decoding.
 #[event]
 pub struct EscrowForfeited {
     pub pool: Pubkey,
     pub player: Pubkey,
     pub amount: u64,
-    /// Where the forfeit went: the platform wallet (see the PHASE-1-REVIEW
-    /// note in `instructions/escrow.rs` — the roadmap's forward-to-successor-vault design would
-    /// strand the lamports). Emitted rather than implied so the destination
-    /// policy is auditable per event.
     pub destination: Pubkey,
+}
+
+/// A forfeited share paid to the next eligible place (`pay_next_place`,
+/// founder ruling 4 (ii)): `rank` is the paid player's committed
+/// competition rank (1 for a tied first-place member, 1 + k for the next
+/// rank after a k-way tie), proven against `Pool.results_root`; `amount` is
+/// the forfeited share paid, the whole of it.
+#[event]
+pub struct NextPlacePaid {
+    pub pool: Pubkey,
+    pub from: Pubkey,
+    pub to: Pubkey,
+    pub rank: u8,
+    pub amount: u64,
+}
+
+/// `set_keeper`: the key allowed to open pools before the liveness fallback.
+#[event]
+pub struct KeeperSet {
+    pub keeper: Pubkey,
+}
+
+/// `set_pool_timing`: the fill deadline applied to pools opened from now on
+/// and the per-tier cooldown. Never touches an open pool.
+#[event]
+pub struct PoolTimingSet {
+    pub fill_deadline_seconds: i64,
+    pub cooldown_seconds: i64,
+}
+
+/// `migrate_config`: the one-shot growth of the Config account for the
+/// 2026-09-07 layout, with the values it seeded.
+#[event]
+pub struct ConfigMigrated {
+    pub keeper: Pubkey,
+    pub fill_deadline_seconds: i64,
+    pub cooldown_seconds: i64,
 }
 
 #[event]

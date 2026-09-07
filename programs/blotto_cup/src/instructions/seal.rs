@@ -1,8 +1,9 @@
-//! `seal_at_deadline` (D-E4, founder decision 2026-09-06) — the second seal
-//! path. The first is the 64th `register`; this one closes a pool that
-//! reached the minimum field but not capacity when its deadline passes
-//! (the 72h fill deadline, or the go-timer that shortened it — `Pool.
-//! fill_deadline` is the one moment entries close either way).
+//! `seal_at_deadline` (D-E4, founder decision 2026-09-06; option A per the
+//! ruling of 2026-09-07) — the second seal path. The first is the 64th
+//! `register`; this one closes a pool that reached the minimum field but
+//! not capacity when its deadline passes (`Pool.fill_deadline`, set once at
+//! open from `Config.fill_deadline_seconds` — 12 h at launch — and never
+//! rewritten).
 //!
 //! PERMISSIONLESS AND PURE, by design and by test. Under winner-takes-all,
 //! field size is the winner's competition: a 52-seat pool and a 64-seat pool

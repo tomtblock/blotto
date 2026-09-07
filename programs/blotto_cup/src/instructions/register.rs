@@ -21,18 +21,22 @@
 //!      in the scoring path, PID §8.4);
 //!   5. pass mint — bare member of the frozen Collection (`pass.rs`);
 //!   6. state writes + `EntryRegistered`;
-//!   7. (a) at or above `MIN_SEATS` the go-timer (D-E4 §11.3, option B):
-//!      the deadline shortens in place to `now + GO_TIMER_SECS` when that is
-//!      sooner, `GoTimerStarted` once; (b) the 64th entry: seal via
-//!      `seal_pool` — refunds are now impossible, so the pool's entry
-//!      payments leave `platform_refundable` and become withdrawable
-//!      revenue. The tier slot is NOT freed here: pools per tier are
-//!      SEQUENTIAL (D-A1 revised supersedes R14) and the slot clears only
-//!      when the pool reaches `Paid` or `Closed`. `seal_pool` is shared
-//!      with `seal_at_deadline` (`seal.rs`), the second seal path.
+//!   7. the 64th entry seals via `seal_pool` — refunds are now impossible,
+//!      so the pool's entry payments leave `platform_refundable` and become
+//!      withdrawable revenue. The tier slot is NOT freed here: pools per
+//!      tier are SEQUENTIAL (D-A1 revised supersedes R14) and the slot
+//!      clears only when the pool reaches `Paid` or `Closed`. `seal_pool` is
+//!      shared with `seal_at_deadline` (`seal.rs`), the second seal path
+//!      (D-E4 option A, founder ruling 2026-09-07: seal at 64, or at the
+//!      deadline with at least `MIN_SEATS`; nothing in between — the
+//!      go-timer of §11.3 option B was removed).
 //!
 //! One entry per wallet per pool is structural: the Entry PDA is keyed
 //! `[b"entry", pool, player]`, so a second `register` fails at `init`.
+//! Entries per wallet are uncapped ACROSS pools (ratified; the rules page
+//! says so). The four service keys — admin, keeper, entry signer,
+//! settlement signer — can never enter (prompt v2 §A.4): they are all in
+//! Config, so the ban is four comparisons and publicly checkable.
 //!
 //! The three deserialized accounts are `Box`ed: `Pool` alone is ~750 bytes
 //! (the committed winners are 512), and unboxed the generated `try_accounts`
@@ -43,10 +47,10 @@ use anchor_lang::prelude::*;
 
 use blotto_randomness::{derive_class_randomness, weighted_class_draw};
 
-use crate::constants::{CAPACITY, GO_TIMER_SECS, MIN_SEATS};
+use crate::constants::CAPACITY;
 use crate::entry_packet::verify_entry_packet;
 use crate::error::ErrorCode;
-use crate::events::{EntryRegistered, GoTimerStarted, PoolSealed};
+use crate::events::{EntryRegistered, PoolSealed};
 use crate::pass::{mint_pass_cpi, MPL_CORE_ID};
 use crate::slot_hashes::{delayed_slot_hash, SLOT_HASHES_SYSVAR_ID};
 use crate::state::{
@@ -132,6 +136,19 @@ pub fn handle_register(
 
     // ---- 1. Gates -------------------------------------------------------
     require!(!ctx.accounts.config.paused, ErrorCode::Paused);
+    // Prompt v2 §A.4: the operator's own keys never enter. Published as an
+    // on-chain fact; the list is exactly Config's four service keys.
+    {
+        let cfg = &ctx.accounts.config;
+        let player = ctx.accounts.player.key();
+        require!(
+            player != cfg.admin
+                && player != cfg.keeper
+                && player != cfg.entry_signer
+                && player != cfg.settlement_signer,
+            ErrorCode::ServiceKeyCannotEnter
+        );
+    }
     require!(
         ctx.accounts.pool.state == PoolState::Open,
         ErrorCode::PoolNotOpen
@@ -232,6 +249,9 @@ pub fn handle_register(
     entry.refunded = false;
     entry.escrow_lamports = 0;
     entry.bump = ctx.bumps.entry;
+    entry.escrowed_at = 0;
+    entry.forfeited = false;
+    entry.next_place_lamports = 0;
 
     let pool = &mut ctx.accounts.pool;
     pool.entrants += 1;
@@ -247,26 +267,9 @@ pub fn handle_register(
         terms_version: packet.terms_version,
     });
 
-    // ---- 7a. The minimum field starts the go-timer (D-E4 §11.3, option B)
-    // Applied on EVERY register at or above MIN_SEATS, not only the 52nd:
-    // `min` makes it idempotent (a later register has a larger `now`, so
-    // the first shortening stands) and transition-safe (a pool already past
-    // 52 when this code deploys shortens on its next entry). When the 52nd
-    // seat lands inside the last GO_TIMER_SECS of the 72h, the fill deadline
-    // is already the sooner of the two and nothing changes — the deadline
-    // players entered under is never pushed later.
-    if pool.entrants >= MIN_SEATS && pool.entrants < CAPACITY {
-        let go_deadline = now.checked_add(GO_TIMER_SECS).ok_or(ErrorCode::Overflow)?;
-        if go_deadline < pool.fill_deadline {
-            pool.fill_deadline = go_deadline;
-            emit!(GoTimerStarted {
-                pool: pool_key,
-                go_deadline,
-            });
-        }
-    }
-
-    // ---- 7b. The 64th entry seals ---------------------------------------
+    // ---- 7. The 64th entry seals ----------------------------------------
+    // (Option A, founder ruling 2026-09-07: no go-timer — the deadline set
+    // at open is never rewritten; `seal_at_deadline` handles 52..63 there.)
     if pool.entrants == CAPACITY {
         debug_assert_eq!(
             pool.class_counters.iter().map(|&c| c as u32).sum::<u32>(),

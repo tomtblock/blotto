@@ -10,9 +10,12 @@
 
 use anchor_lang::prelude::*;
 
-use crate::constants::{N_TIERS, TIER_ENTRY_LAMPORTS, TIER_POT_LAMPORTS};
+use crate::constants::{
+    DEFAULT_COOLDOWN_SECS, DEFAULT_FILL_DEADLINE_SECS, N_TIERS, TIER_ENTRY_LAMPORTS,
+    TIER_POT_LAMPORTS,
+};
 use crate::error::ErrorCode;
-use crate::events::TiersOpened;
+use crate::events::{KeeperSet, PoolTimingSet, TiersOpened};
 use crate::state::{Config, CONFIG_SEED, PLATFORM_SEED};
 
 // ---------------------------------------------------------------------------
@@ -23,6 +26,7 @@ use crate::state::{Config, CONFIG_SEED, PLATFORM_SEED};
 pub struct InitConfig<'info> {
     /// Becomes `Config.admin`. Deployed with the devnet Squads vault signing
     /// (roadmap 1.1), so admin is the multisig from the first transaction.
+    /// Also signs `forfeit_escrow` since 2026-09-07 (prompt v2 §E.2).
     #[account(mut)]
     pub admin: Signer<'info>,
 
@@ -59,6 +63,7 @@ pub fn handle_init_config(
     ctx: Context<InitConfig>,
     entry_signer: Pubkey,
     settlement_signer: Pubkey,
+    keeper: Pubkey,
     vault_ceiling_lamports: [u64; N_TIERS],
     treasury_min_platform_lamports: u64,
 ) -> Result<()> {
@@ -66,6 +71,16 @@ pub fn handle_init_config(
     config.admin = ctx.accounts.admin.key();
     config.entry_signer = entry_signer;
     config.settlement_signer = settlement_signer;
+    // Prompt v2 §A: the keeper opens pools; the multisig controls WHO opens
+    // pools by holding this rotation, not by signing every open.
+    config.keeper = keeper;
+    // Prompt v2 §B.5, founder ruling 2026-09-07: 12 h to fill, 5 min between
+    // a tier's pools. Config state so a later change is one admin
+    // transaction; copied onto each pool at open so it never moves a
+    // deadline players entered under.
+    config.fill_deadline_seconds = DEFAULT_FILL_DEADLINE_SECS;
+    config.cooldown_seconds = DEFAULT_COOLDOWN_SECS;
+    config.tier_next_open_at = [0; N_TIERS];
     config.paused = false;
     // R6 as amended by D1: seven tiers configured; open at launch: 0.1
     // ONLY. Written out, not computed, so the launch policy is readable.
@@ -126,9 +141,42 @@ pub fn handle_rotate_entry_signer(ctx: Context<AdminOnly>, new_signer: Pubkey) -
     Ok(())
 }
 
-/// Rotate the settlement signer (open/reveal/commit/pay/flag/escrow signer).
+/// Rotate the settlement signer (reveal/commit/pay/flag/release/pay_next_place).
 pub fn handle_set_settlement_signer(ctx: Context<AdminOnly>, new_signer: Pubkey) -> Result<()> {
     ctx.accounts.config.settlement_signer = new_signer;
+    Ok(())
+}
+
+/// Rotate the keeper — the key `open_pool` requires before the liveness
+/// fallback (prompt v2 §A.1). Emits `KeeperSet` so the ledger records who
+/// may open pools, the way `TiersOpened` records which tiers.
+pub fn handle_set_keeper(ctx: Context<AdminOnly>, new_keeper: Pubkey) -> Result<()> {
+    ctx.accounts.config.keeper = new_keeper;
+    emit!(KeeperSet { keeper: new_keeper });
+    Ok(())
+}
+
+/// The fill deadline applied to pools opened from now on, and the per-tier
+/// cooldown (prompt v2 §B.5). Both founder-owned numbers (12 h and 5 min at
+/// launch — ruling 2026-09-07); both must be positive. A change never
+/// touches an open pool: every pool copies its deadline at open, and a
+/// tier's `tier_next_open_at` was stamped with the cooldown in force when
+/// its slot freed.
+pub fn handle_set_pool_timing(
+    ctx: Context<AdminOnly>,
+    fill_deadline_seconds: i64,
+    cooldown_seconds: i64,
+) -> Result<()> {
+    require!(
+        fill_deadline_seconds > 0 && cooldown_seconds > 0,
+        ErrorCode::InvalidTiming
+    );
+    ctx.accounts.config.fill_deadline_seconds = fill_deadline_seconds;
+    ctx.accounts.config.cooldown_seconds = cooldown_seconds;
+    emit!(PoolTimingSet {
+        fill_deadline_seconds,
+        cooldown_seconds,
+    });
     Ok(())
 }
 

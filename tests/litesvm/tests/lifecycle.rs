@@ -44,12 +44,11 @@ fn full_lifecycle_pays_the_pot_to_the_lamport() {
     assert_eq!(pv.entrants, 64);
     assert_eq!(pv.state, 1, "Sealed");
     assert_eq!(pv.class_counters, [0u16; 5], "bag empties exactly at seal");
-    // D-E4: the 52nd seat started the go-timer — the deadline moved EARLIER
-    // (the clock does not advance between registers in LiteSVM, so the
-    // shortened value is exactly open-time + GO_TIMER_SECS) and never later.
-    assert!(
-        pv.fill_deadline < opened_deadline,
-        "the go-timer shortened the deadline at the 52nd seat"
+    // Option A (2026-09-07): the deadline set at open is never rewritten —
+    // not by the 52nd seat (the go-timer is gone), not by the 64th.
+    assert_eq!(
+        pv.fill_deadline, opened_deadline,
+        "the fill deadline is set once at open and never moves"
     );
     assert_eq!(
         env.balance(&vault_pda(1)),
@@ -155,10 +154,12 @@ fn full_lifecycle_pays_the_pot_to_the_lamport() {
 }
 
 /// Escrow under D-E2 is all-or-nothing per paid seat (proposal E1 §12): the
-/// fixture uses a two-way tie for first so BOTH escrow paths — release and
-/// forfeit — run against real paid seats in one pool.
+/// fixture uses a two-way tie for first so the three escrow paths — release,
+/// forfeit and promotion — run against real paid seats in one pool. Since
+/// 2026-09-07 (founder ruling 4) a forfeit moves NOTHING and the share is
+/// promoted to the next eligible place; the treasury never sees it.
 #[test]
-fn flagged_winners_escrow_then_release_and_forfeit() {
+fn flagged_winners_escrow_then_release_forfeit_and_promote() {
     let Some(mut env) = Env::new() else { return };
     env.open_ready_pool(1, 0);
     let mut players: Vec<(Keypair, Pubkey)> = Vec::new();
@@ -166,6 +167,7 @@ fn flagged_winners_escrow_then_release_and_forfeit() {
         players.push(env.register_player(1).unwrap());
     }
     let settlement = env.settlement.insecure_clone();
+    let admin = env.admin.pubkey();
 
     // Flag both tied winners before payout.
     for (_, entry) in players.iter().take(2) {
@@ -173,13 +175,16 @@ fn flagged_winners_escrow_then_release_and_forfeit() {
         env.send(&[ix], &[&settlement]).expect("flag");
     }
 
-    // Reveal + commit a two-way tie for first: seats 0 and 1, pot / 2 each.
+    // Reveal + commit a two-way tie for first: seats 0 and 1, pot / 2 each,
+    // under a REAL results root (promotion verifies against it).
     let secret = env.pool_secret;
     let ix = settle_ix(&settlement.pubkey(), 1, "reveal_pool_secret", &secret);
     env.send(&[ix], &[&settlement]).unwrap();
     let payouts = tied_first_payouts(POT, 2);
     assert_eq!(payouts, vec![(0, POT / 2), (1, POT / 2)]);
-    let mut commit_args = [1u8; 32].to_vec();
+    let wallets: Vec<Pubkey> = players.iter().map(|(p, _)| p.pubkey()).collect();
+    let (leaves, ranks) = results_leaves(&wallets, &payouts);
+    let mut commit_args = merkle_root(&leaves).to_vec();
     commit_args.extend_from_slice(&encode_payouts(&payouts));
     let ix = settle_ix(&settlement.pubkey(), 1, "commit_results", &commit_args);
     env.send(&[ix], &[&settlement]).unwrap();
@@ -187,22 +192,30 @@ fn flagged_winners_escrow_then_release_and_forfeit() {
     // Pay both seats in one batch.
     let metas: Vec<(Pubkey, Pubkey)> = players[..2].iter().map(|(p, e)| (p.pubkey(), *e)).collect();
     let ix = pay_prizes_ix(&settlement.pubkey(), 1, &[0, 1], &metas);
+    let paid_at = env.svm.get_sysvar::<solana_sdk::clock::Clock>().unix_timestamp;
     env.send(&[ix], &[&settlement]).expect("pay");
 
-    // Both escrowed; their lamports still in the vault; the pool is Paid.
+    // Both escrowed; their lamports still in the vault; the pool is Paid;
+    // the auto-release clock started.
     let e1 = read_entry(&env.svm, &players[0].1);
     let e2 = read_entry(&env.svm, &players[1].1);
     assert_eq!(e1.escrow_lamports, POT / 2);
     assert_eq!(e2.escrow_lamports, POT / 2);
+    assert_eq!(e1.escrowed_at, paid_at, "escrowed_at stamped at pay");
+    assert!(!e1.forfeited && !e2.forfeited);
     assert_eq!(env.balance(&vault_pda(1)), POT);
     assert_eq!(read_pool(&env.svm, &pool_pda(1)).state, 3, "Paid");
 
     // Forfeiting an unflagged (no-escrow) entry: rejected.
-    let ix = forfeit_escrow_ix(&settlement.pubkey(), 1, &players[2].1);
-    let err = env.send(&[ix], &[&settlement]).unwrap_err();
+    let ix = forfeit_escrow_ix(&admin, 1, &players[2].1);
+    let err = env.send(&[ix], &[]).unwrap_err();
     assert!(err.contains("6036") || err.contains("NoEscrow"), "{err}");
+    // The settlement signer cannot forfeit — admin only (prompt v2 §E.2).
+    let ix = forfeit_escrow_ix(&settlement.pubkey(), 1, &players[1].1);
+    let err = env.send(&[ix], &[&settlement]).unwrap_err();
+    assert!(err.contains("2001") || err.contains("ConstraintHasOne"), "{err}");
 
-    // Release seat 0's share to its player.
+    // Release seat 0's share to its player (review cleared it).
     let before = env.balance(&players[0].0.pubkey());
     let ix = release_escrow_ix(
         &settlement.pubkey(),
@@ -213,13 +226,54 @@ fn flagged_winners_escrow_then_release_and_forfeit() {
     env.send(&[ix], &[&settlement]).expect("release");
     assert_eq!(env.balance(&players[0].0.pubkey()) - before, POT / 2);
 
-    // Forfeit seat 1's share (still flagged) to the platform treasury.
-    let before = env.balance(&platform_pda());
-    let ix = forfeit_escrow_ix(&settlement.pubkey(), 1, &players[1].1);
-    env.send(&[ix], &[&settlement]).expect("forfeit");
-    assert_eq!(env.balance(&platform_pda()) - before, POT / 2);
+    // Forfeit seat 1's share (still flagged): NOTHING moves — not to the
+    // treasury, not anywhere. The entry is marked; the vault keeps the share.
+    let platform_before = env.balance(&platform_pda());
+    let ix = forfeit_escrow_ix(&admin, 1, &players[1].1);
+    env.send(&[ix], &[]).expect("forfeit");
+    assert_eq!(env.balance(&platform_pda()), platform_before, "no lamport reaches the operator");
+    assert_eq!(env.balance(&vault_pda(1)), POT / 2, "the share stays in the vault");
+    let e2 = read_entry(&env.svm, &players[1].1);
+    assert!(e2.forfeited);
+    assert_eq!(e2.escrow_lamports, POT / 2, "the claim is still recorded");
+    // A forfeited share can no longer be released — by anyone, ever.
+    let ix = release_escrow_ix(&settlement.pubkey(), 1, &players[1].1, &players[1].0.pubkey());
+    let err = env.send(&[ix], &[&settlement]).unwrap_err();
+    assert!(err.contains("6057") || err.contains("EscrowForfeitedAlready"), "{err}");
+    let ix = forfeit_escrow_ix(&admin, 1, &players[1].1);
+    let err = env.send(&[ix], &[]).unwrap_err();
+    assert!(err.contains("6057"), "a second forfeit is refused: {err}");
 
+    // Promote seat 1's share to seat 0 — the tied member whose review
+    // cleared (released): rank 1, in the committed list, a lower seat than
+    // the forfeiter, so no witnesses. Proven against the committed root.
+    let proof = merkle_proof(&leaves, 0);
+    assert_eq!(ranks[0], 1);
+    let before = env.balance(&players[0].0.pubkey());
+    let ix = promote_on_forfeit_ix(
+        &settlement.pubkey(),
+        1,
+        &players[1].1,
+        &players[0].1,
+        &players[0].0.pubkey(),
+        1,
+        POT / 2,
+        &proof,
+        &[],
+    );
+    env.send(&[ix], &[&settlement]).expect("promote to the cleared tied member");
+    assert_eq!(env.balance(&players[0].0.pubkey()) - before, POT / 2, "the whole share");
+    let e1 = read_entry(&env.svm, &players[0].1);
+    assert_eq!(e1.promoted_lamports, POT / 2);
+    assert_eq!(read_entry(&env.svm, &players[1].1).escrow_lamports, 0);
     assert_eq!(env.balance(&vault_pda(1)), 0, "vault ends at exactly zero");
+    assert_eq!(env.balance(&platform_pda()), platform_before, "still nothing to the operator");
+    // And the same share cannot be promoted twice.
+    let ix = promote_on_forfeit_ix(
+        &settlement.pubkey(), 1, &players[1].1, &players[0].1, &players[0].0.pubkey(), 1, POT / 2, &proof, &[],
+    );
+    let err = env.send(&[ix], &[&settlement]).unwrap_err();
+    assert!(err.contains("6036") || err.contains("NoEscrow"), "{err}");
 }
 
 #[test]
@@ -241,8 +295,9 @@ fn refund_fork_returns_the_full_entry() {
         "{err}"
     );
 
-    // Past the deadline: registers reject, trigger lands (any signer).
-    env.advance_time(72 * 3600 + 1);
+    // Past the deadline (12 h at launch — `Config.fill_deadline_seconds`):
+    // registers reject, trigger lands (any signer).
+    env.advance_time(12 * 3600 + 1);
     let err = env.register_player(1).unwrap_err();
     assert!(
         err.contains("6011") || err.contains("DeadlinePassed"),

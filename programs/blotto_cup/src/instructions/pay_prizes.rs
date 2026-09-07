@@ -80,6 +80,7 @@ pub fn handle_pay_prizes<'info>(
 
     let pool_key = ctx.accounts.pool.key();
     let kyc_above = ctx.accounts.config.kyc_required_above_lamports;
+    let now = Clock::get()?.unix_timestamp;
 
     let mut payouts: Vec<PayoutRecord> = Vec::with_capacity(seats.len());
 
@@ -121,6 +122,9 @@ pub fn handle_pay_prizes<'info>(
                 .escrow_lamports
                 .checked_add(amount)
                 .ok_or(ErrorCode::Overflow)?;
+            // Starts the auto-release clock (prompt v2 §E.3): inaction pays
+            // the player `ESCROW_AUTO_RELEASE_SECS` from now.
+            entry.escrowed_at = now;
         } else {
             crate::vault::vault_debit(
                 &ctx.accounts.system_program,
@@ -163,9 +167,8 @@ pub fn handle_pay_prizes<'info>(
             .checked_sub(ctx.accounts.pool.pot_lamports)
             .ok_or(ErrorCode::Overflow)?;
         let tier_idx = ctx.accounts.pool.tier as usize;
-        if ctx.accounts.config.active_pool_by_tier[tier_idx] == ctx.accounts.pool.id {
-            ctx.accounts.config.active_pool_by_tier[tier_idx] = 0;
-        }
+        let pool_id = ctx.accounts.pool.id;
+        crate::instructions::slot::free_tier_slot(&mut ctx.accounts.config, tier_idx, pool_id, now)?;
     }
 
     emit!(PrizesPaid {
