@@ -34,10 +34,12 @@
 #     TURNKEY_API_BASE_URL, TURNKEY_API_PUBLIC_KEY, TURNKEY_API_PRIVATE_KEY,
 #     TURNKEY_ORGANIZATION_ID, ENTRY_SIGNER_KEY_ID, ENTRY_SIGNER_PUBLIC_KEY_HEX
 #     GEO_VENDOR_URL, GEO_VENDOR_API_KEY
-#   Packet service — sanctions screening (Phase 2 Stage B). OPTIONAL vendor
-#   keys, staged when present and cleared when absent; the mirrored OFAC SDN
-#   list (SANCTIONS_OFAC_SDN=1, no credential) is staged on EVERY run, so the
-#   service always has at least one real list and never the dev stub
+#   Sanctions screening — the PACKET service at entry (Stage B) and the
+#   DAEMON at resolving (Stage F), staged identically for both. OPTIONAL
+#   vendor keys, staged when present and cleared when absent; the mirrored
+#   OFAC SDN list (SANCTIONS_OFAC_SDN=1, no credential) is staged on EVERY
+#   run, so each service always has at least one real list and never the dev
+#   stub. Both refuse to start with no source configured
 #     SANCTIONS_CHAINALYSIS_API_KEY, SANCTIONS_OPENSANCTIONS_API_KEY
 #   Daemon (C5) — deployed only once all of these exist
 #     TURNKEY_USER_ID, SWITCHBOARD_QUEUE, IRYS_UPLOAD_KEY,
@@ -394,6 +396,26 @@ jobs:
           # randomness at all. SWITCHBOARD_QUEUE is set above; make sure the
           # stub selector is not sitting alongside it.
           flyctl secrets unset --app "$DAEMON_APP" --stage RANDOMNESS_ACCOUNT || true
+
+          # Sanctions screening at RESOLVING (Phase 2 Stage F), staged exactly
+          # as the packet service's is at entry: the credential-free OFAC SDN
+          # mirror unconditionally, vendor keys when present, and never the
+          # development stub. The daemon refuses to start with no source, so
+          # this block is what keeps it bootable — and what makes the promise
+          # "we check the winning wallet" true of the deployed daemon rather
+          # than only of the code.
+          flyctl secrets set --app "$DAEMON_APP" --stage SANCTIONS_OFAC_SDN="1"
+          flyctl secrets unset --app "$DAEMON_APP" --stage SANCTIONS_STUB_LISTED || true
+          flyctl secrets unset --app "$DAEMON_APP" --stage ALLOW_STUB_SANCTIONS || true
+          for n in SANCTIONS_CHAINALYSIS_API_KEY SANCTIONS_OPENSANCTIONS_API_KEY; do
+            if [ -n "${!n:-}" ]; then
+              flyctl secrets set --app "$DAEMON_APP" --stage "$n=${!n}"
+              echo "sanctions: $n staged"
+            else
+              flyctl secrets unset --app "$DAEMON_APP" --stage "$n" || true
+              echo "sanctions: $n absent — the OFAC SDN mirror is the source"
+            fi
+          done
 
       - name: Deploy daemon
         if: steps.pre.outputs.deploy_daemon == 'true'

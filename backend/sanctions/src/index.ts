@@ -7,3 +7,4 @@ export * from './chainalysis';
 export * from './opensanctions';
 export * from './ofac-sdn';
 export * from './select';
+export * from './wire';
