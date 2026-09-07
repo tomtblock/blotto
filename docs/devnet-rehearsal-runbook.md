@@ -787,6 +787,22 @@ would have to settle or refund before it.
    passes and it refunds. **If any pool sits in Sealed/Scored/Refunding, or
    Open with entries, stop here.** Recorded CLEAR on 2026-09-07T00:06:14Z
    (one Open pool, id 1, 0 entrants).
+   **Live state, read 2026-09-07T02:31:13Z.** One pool: id 1, tier 0, Open,
+   **0 entrants**, deadline 1788929242 = 2026-09-09 04:47:22 UTC — about
+   fifty hours after this reading. Drain verdict CLEAR. Config is still the
+   PRE-MIGRATION 380-byte account, and its prize table is still the
+   pre-D-E1 one (tier 0: 5.12 SOL, not 4). Treasury 0.88 SOL, with 5.12 SOL
+   recorded as reserved against pool 1's vault.
+
+   **Pool 1 cannot be closed before its deadline.** `trigger_refund`
+   requires the deadline strictly past, so pool 1 holds the tier-0 slot
+   until 2026-09-09 04:47:22 UTC and no successor can open before then.
+   That splits this window in two (steps 3–5 now, steps 6–7 after the
+   deadline) and is the reason the pause stays on in between: a pool opened
+   under the old rules must never take an entry while the site describes
+   the new ones. Its own pot (5.12 SOL) and its 72-hour deadline are
+   pre-upgrade values the new copy contradicts.
+
 3. **Program upgrade.** From the PR4 merge commit, with the artifact built by
    `anchor build --ignore-keys` (the same command CI ran green):
 
@@ -812,6 +828,23 @@ would have to settle or refund before it.
    (`migrate_config`, `set_keeper`, `set_pool_timing`, `pay_next_place`).
    Until 3b has landed the daemon's `getConfig` refuses the account by name
    ("pre-migration layout") — that message is the check, not a fault.
+   3c. **The prize table — the founder sends it.** Config still carries the
+   pre-D-E1 pots. Until this lands, any pool that opens advertises 5.12 SOL
+   while the rules page says 4, and the two cannot both be true on the same
+   site. Seven instructions, one transaction, one per tier, prepared by the
+   architect and sent by the founder (never by the architect):
+
+   ```bash
+   # tier 0 shown; the prepared transaction carries all seven
+   npx ts-node --transpile-only scripts/admin.ts set-tier-economics --tier 0 --price 0.1sol --pot 4sol
+   ```
+
+   The program now refuses a pot at or above the minimum field's entries
+   (`PotExceedsMinimumField`); every ratified pot clears that guard with
+   room. Pool 1 is unaffected — it copied its pot at open, and its refund
+   returns that same 5.12 SOL to the treasury, which is what
+   `platform_reserved` is holding.
+
 4. **Backend deploy + migrate.** The manual `workflow_dispatch` deploy from
    the PR4 merge commit; then `npm run migrate` in `backend/indexer` (0012
    is already applied; 0013 adds `tier_status` and
@@ -822,10 +855,24 @@ would have to settle or refund before it.
 5. **Frontend.** Vercel deploys `main` on the PR4 merge. `config/terms.json`
    stays at version 2: the addendum folds every change since v2 was cut into
    it (no v3), so no wallet re-accepts again.
-6. **Unpause and watch one pool.** `set_paused(false)`; the keeper opens the
-   next tier-0 pool under the new rules (the first open of a never-settled
-   tier needs no keeper — the liveness fallback holds from the epoch; every
-   later open is the keeper's). Watch it to Paid: exactly one winner (or a
+6. **Wait out pool 1, then unpause.** Pool 1 closes only once its deadline
+   passes (2026-09-09 04:47:22 UTC). A running daemon does this by itself:
+   the SETTLE sweep calls `trigger_refund` every tick and it lands the
+   moment the deadline is past; with 0 entrants the pool goes straight to
+   `Closed`, its 5.12 SOL pot returns to the treasury (bringing it to
+   6.0 SOL), the tier slot frees and the cooldown is stamped. If no daemon
+   is running, send it by hand — it is permissionless:
+
+   ```bash
+   npx ts-node --transpile-only scripts/admin.ts pools   # confirm pool 1 is Closed
+   ```
+
+   Only then `set_paused(false)`; the keeper opens the next tier-0 pool
+   under the new rules (the first open of a never-settled tier needs no
+   keeper — the liveness fallback holds from the epoch; every later open is
+   the keeper's). The treasury covers it: 6.0 SOL against the 4.5 SOL the
+   policy requires (a 4 SOL pot plus the 0.5 SOL minimum, no other tier
+   enabled). Watch it to Paid: exactly one winner (or a
    tie split conserving the pot), `paid_mask` with one bit per tied seat,
    `TierSlotFreed` with `next_open_at` five minutes out, the successor
    opening on the first tick after it, the verify page green with the
