@@ -533,7 +533,11 @@ impl Model {
             (group.len(), *group.iter().min().unwrap())
         };
         // Fixed by the first payment (the model mirrors the on-chain fields).
-        let total = if f.split_group == 0 { f.escrow } else { f.split_total };
+        let total = if f.split_group == 0 {
+            f.escrow
+        } else {
+            f.split_total
+        };
         if f.split_group != 0 && f.split_group as usize != n {
             return; // NextPlaceSplitMismatch — cannot happen: eligibility is final
         }
@@ -541,7 +545,10 @@ impl Model {
         let rem = total % n as u64;
         let portion = per + if to == lowest { rem } else { 0 };
         assert!(portion > 0 && portion <= f.escrow, "split arithmetic");
-        assert!(self.vault >= portion as u128, "vault underflow at next-place payout");
+        assert!(
+            self.vault >= portion as u128,
+            "vault underflow at next-place payout"
+        );
         self.vault -= portion as u128;
         self.total_next_place += portion as u128;
         let fm = &mut self.entries[from];
@@ -740,7 +747,9 @@ impl Model {
                 .filter(|&s| s != from && self.entries[s].eligible())
                 .collect();
             if group.is_empty() {
-                if let Some(t) = (0..CAP).find(|&t| t != from && !committed.contains(&t) && self.entries[t].eligible()) {
+                if let Some(t) = (0..CAP)
+                    .find(|&t| t != from && !committed.contains(&t) && self.entries[t].eligible())
+                {
                     group.push(t);
                 }
             }
@@ -751,7 +760,10 @@ impl Model {
             for to in group {
                 self.pay_next_place(from, to);
             }
-            assert_eq!(self.entries[from].escrow, 0, "a split leaves nothing behind");
+            assert_eq!(
+                self.entries[from].escrow, 0,
+                "a split leaves nothing behind"
+            );
         }
         stuck
     }

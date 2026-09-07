@@ -168,7 +168,12 @@ pub fn handle_pay_prizes<'info>(
             .ok_or(ErrorCode::Overflow)?;
         let tier_idx = ctx.accounts.pool.tier as usize;
         let pool_id = ctx.accounts.pool.id;
-        crate::instructions::slot::free_tier_slot(&mut ctx.accounts.config, tier_idx, pool_id, now)?;
+        crate::instructions::slot::free_tier_slot(
+            &mut ctx.accounts.config,
+            tier_idx,
+            pool_id,
+            now,
+        )?;
     }
 
     emit!(PrizesPaid {

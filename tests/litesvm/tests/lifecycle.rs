@@ -192,7 +192,10 @@ fn flagged_winners_escrow_then_release_forfeit_and_next_place() {
     // Pay both seats in one batch.
     let metas: Vec<(Pubkey, Pubkey)> = players[..2].iter().map(|(p, e)| (p.pubkey(), *e)).collect();
     let ix = pay_prizes_ix(&settlement.pubkey(), 1, &[0, 1], &metas);
-    let paid_at = env.svm.get_sysvar::<solana_sdk::clock::Clock>().unix_timestamp;
+    let paid_at = env
+        .svm
+        .get_sysvar::<solana_sdk::clock::Clock>()
+        .unix_timestamp;
     env.send(&[ix], &[&settlement]).expect("pay");
 
     // Both escrowed; their lamports still in the vault; the pool is Paid;
@@ -213,7 +216,10 @@ fn flagged_winners_escrow_then_release_forfeit_and_next_place() {
     // The settlement signer cannot forfeit — admin only (prompt v2 §E.2).
     let ix = forfeit_escrow_ix(&settlement.pubkey(), 1, &players[1].1);
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
-    assert!(err.contains("2001") || err.contains("ConstraintHasOne"), "{err}");
+    assert!(
+        err.contains("2001") || err.contains("ConstraintHasOne"),
+        "{err}"
+    );
 
     // Release seat 0's share to its player (review cleared it).
     let before = env.balance(&players[0].0.pubkey());
@@ -231,15 +237,31 @@ fn flagged_winners_escrow_then_release_forfeit_and_next_place() {
     let platform_before = env.balance(&platform_pda());
     let ix = forfeit_escrow_ix(&admin, 1, &players[1].1);
     env.send(&[ix], &[]).expect("forfeit");
-    assert_eq!(env.balance(&platform_pda()), platform_before, "no lamport reaches the operator");
-    assert_eq!(env.balance(&vault_pda(1)), POT / 2, "the share stays in the vault");
+    assert_eq!(
+        env.balance(&platform_pda()),
+        platform_before,
+        "no lamport reaches the operator"
+    );
+    assert_eq!(
+        env.balance(&vault_pda(1)),
+        POT / 2,
+        "the share stays in the vault"
+    );
     let e2 = read_entry(&env.svm, &players[1].1);
     assert!(e2.forfeited);
     assert_eq!(e2.escrow_lamports, POT / 2, "the claim is still recorded");
     // A forfeited share can no longer be released — by anyone, ever.
-    let ix = release_escrow_ix(&settlement.pubkey(), 1, &players[1].1, &players[1].0.pubkey());
+    let ix = release_escrow_ix(
+        &settlement.pubkey(),
+        1,
+        &players[1].1,
+        &players[1].0.pubkey(),
+    );
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
-    assert!(err.contains("6057") || err.contains("EscrowForfeitedAlready"), "{err}");
+    assert!(
+        err.contains("6057") || err.contains("EscrowForfeitedAlready"),
+        "{err}"
+    );
     let ix = forfeit_escrow_ix(&admin, 1, &players[1].1);
     let err = env.send(&[ix], &[]).unwrap_err();
     assert!(err.contains("6057"), "a second forfeit is refused: {err}");
@@ -264,19 +286,41 @@ fn flagged_winners_escrow_then_release_forfeit_and_next_place() {
         true,
         &[],
     );
-    env.send(&[ix], &[&settlement]).expect("pay onward to the cleared tied member");
-    assert_eq!(env.balance(&players[0].0.pubkey()) - before, POT / 2, "the whole share");
+    env.send(&[ix], &[&settlement])
+        .expect("pay onward to the cleared tied member");
+    assert_eq!(
+        env.balance(&players[0].0.pubkey()) - before,
+        POT / 2,
+        "the whole share"
+    );
     let e1 = read_entry(&env.svm, &players[0].1);
     assert_eq!(e1.next_place_lamports, POT / 2);
     let e2 = read_entry(&env.svm, &players[1].1);
     assert_eq!(e2.escrow_lamports, 0);
-    assert_eq!((e2.split_total, e2.split_group_size, e2.split_paid_mask), (POT / 2, 1, 1));
+    assert_eq!(
+        (e2.split_total, e2.split_group_size, e2.split_paid_mask),
+        (POT / 2, 1, 1)
+    );
     assert!(e2.split_remainder_paid);
     assert_eq!(env.balance(&vault_pda(1)), 0, "vault ends at exactly zero");
-    assert_eq!(env.balance(&platform_pda()), platform_before, "still nothing to the operator");
+    assert_eq!(
+        env.balance(&platform_pda()),
+        platform_before,
+        "still nothing to the operator"
+    );
     // And the same share cannot be paid onward twice.
     let ix = pay_next_place_ix(
-        &settlement.pubkey(), 1, &players[1].1, &players[0].1, &players[0].0.pubkey(), 1, POT / 2, &proof, 1, true, &[],
+        &settlement.pubkey(),
+        1,
+        &players[1].1,
+        &players[0].1,
+        &players[0].0.pubkey(),
+        1,
+        POT / 2,
+        &proof,
+        1,
+        true,
+        &[],
     );
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
     assert!(err.contains("6036") || err.contains("NoEscrow"), "{err}");

@@ -512,7 +512,11 @@ mod tests {
     fn account_layouts_are_pinned() {
         assert_eq!(Pool::LEN, 839, "Pool layout changed — read the note above");
         assert_eq!(Pool::SPACE, 847);
-        assert_eq!(Config::LEN_V1, 372, "the pre-migration Config layout is history — never change");
+        assert_eq!(
+            Config::LEN_V1,
+            372,
+            "the pre-migration Config layout is history — never change"
+        );
         assert_eq!(Config::SPACE_V1, 380);
         assert_eq!(Config::TAIL_LEN, 104);
         assert_eq!(

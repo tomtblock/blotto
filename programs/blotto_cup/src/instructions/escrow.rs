@@ -90,7 +90,10 @@ pub fn handle_release_escrow(ctx: Context<ReleaseEscrow>, _pool_id: u64) -> Resu
     require!(amount > 0, ErrorCode::NoEscrow);
     // An upheld flag closes this door for good: the share can only be
     // paid onward (ruling 4 — never back to the flagged player, never to us).
-    require!(!ctx.accounts.entry.forfeited, ErrorCode::EscrowForfeitedAlready);
+    require!(
+        !ctx.accounts.entry.forfeited,
+        ErrorCode::EscrowForfeitedAlready
+    );
 
     let now = Clock::get()?.unix_timestamp;
     let reviewed_path = ctx.accounts.signer.key() == ctx.accounts.config.settlement_signer;
@@ -185,7 +188,10 @@ pub fn handle_forfeit_escrow(ctx: Context<ForfeitEscrow>, _pool_id: u64) -> Resu
     // Forfeiting an UNFLAGGED entry's escrow would let the operator seize a
     // share that is merely waiting on KYC. Only an upheld flag forfeits.
     require!(ctx.accounts.entry.flagged, ErrorCode::ForfeitRequiresFlag);
-    require!(!ctx.accounts.entry.forfeited, ErrorCode::EscrowForfeitedAlready);
+    require!(
+        !ctx.accounts.entry.forfeited,
+        ErrorCode::EscrowForfeitedAlready
+    );
 
     // The share stays in the vault, on this Entry, until paid onward. This is
     // the whole effect: a flag becomes a forfeit; no lamport moves.
@@ -336,17 +342,26 @@ pub fn handle_pay_next_place<'info>(
     // enough to divide against, and `pay_prizes` (which refuses a settled
     // Entry) can never be locked out by this instruction marking a seat
     // settled before its own share landed.
-    require!(pool.state == PoolState::Paid, ErrorCode::ResultsNotCommitted);
+    require!(
+        pool.state == PoolState::Paid,
+        ErrorCode::ResultsNotCommitted
+    );
     require!(from.forfeited, ErrorCode::EscrowNotForfeited);
     let remaining = from.escrow_lamports;
     require!(remaining > 0, ErrorCode::NoEscrow);
     // The member must be eligible (a released flag is history — see
     // `review_pending`) and not yet paid from THIS share.
-    require!(!to.refunded && !to.forfeited, ErrorCode::NextPlaceIneligible);
+    require!(
+        !to.refunded && !to.forfeited,
+        ErrorCode::NextPlaceIneligible
+    );
     require!(!review_pending(to), ErrorCode::NextPlaceReviewPending);
     require!(to.index < 64, ErrorCode::InvalidRank);
     let to_bit = 1u64 << to.index;
-    require!(from.split_paid_mask & to_bit == 0, ErrorCode::RankAlreadySettled);
+    require!(
+        from.split_paid_mask & to_bit == 0,
+        ErrorCode::RankAlreadySettled
+    );
     require!(group_size >= 1, ErrorCode::NextPlaceSplitMismatch);
 
     // ---- The rank the member holds, proven against the committed root ----
@@ -405,7 +420,10 @@ pub fn handle_pay_next_place<'info>(
     // ---- The group size and the remainder recipient ------------------------
     if to_is_first {
         // On-chain arithmetic: the arguments must agree with the group.
-        require!(group_size == eligible_count, ErrorCode::NextPlaceSplitMismatch);
+        require!(
+            group_size == eligible_count,
+            ErrorCode::NextPlaceSplitMismatch
+        );
         require!(
             takes_remainder == (to.index == lowest_eligible),
             ErrorCode::NextPlaceSplitMismatch
@@ -419,16 +437,26 @@ pub fn handle_pay_next_place<'info>(
     if from.split_group_size == 0 {
         // First payment: the dividend is the whole share as it stands.
     } else {
-        require!(from.split_group_size == group_size, ErrorCode::NextPlaceSplitMismatch);
+        require!(
+            from.split_group_size == group_size,
+            ErrorCode::NextPlaceSplitMismatch
+        );
     }
     if takes_remainder {
-        require!(!from.split_remainder_paid, ErrorCode::NextPlaceSplitMismatch);
+        require!(
+            !from.split_remainder_paid,
+            ErrorCode::NextPlaceSplitMismatch
+        );
     }
     let paid_so_far = from.split_paid_mask.count_ones() as u16;
     require!(paid_so_far < group_size, ErrorCode::NextPlaceSplitMismatch);
 
     // ---- The portion --------------------------------------------------------
-    let total = if from.split_group_size == 0 { remaining } else { from.split_total };
+    let total = if from.split_group_size == 0 {
+        remaining
+    } else {
+        from.split_total
+    };
     let n = group_size as u64;
     let per = total / n;
     let rem = total % n;
@@ -467,9 +495,7 @@ pub fn handle_pay_next_place<'info>(
     if takes_remainder {
         from.split_remainder_paid = true;
     }
-    from.escrow_lamports = remaining
-        .checked_sub(portion)
-        .ok_or(ErrorCode::Overflow)?;
+    from.escrow_lamports = remaining.checked_sub(portion).ok_or(ErrorCode::Overflow)?;
     let to = &mut ctx.accounts.to;
     to.next_place_lamports = to
         .next_place_lamports

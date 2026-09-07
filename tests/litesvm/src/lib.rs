@@ -280,7 +280,11 @@ pub fn set_keeper_ix(admin: &Pubkey, keeper: &Pubkey) -> Instruction {
 
 /// `set_pool_timing(fill_deadline_seconds, cooldown_seconds)` — for pools
 /// opened from now on; never touches an open pool.
-pub fn set_pool_timing_ix(admin: &Pubkey, fill_deadline_seconds: i64, cooldown_seconds: i64) -> Instruction {
+pub fn set_pool_timing_ix(
+    admin: &Pubkey,
+    fill_deadline_seconds: i64,
+    cooldown_seconds: i64,
+) -> Instruction {
     let mut args = fill_deadline_seconds.to_le_bytes().to_vec();
     args.extend_from_slice(&cooldown_seconds.to_le_bytes());
     admin_ix(admin, "set_pool_timing", &args)
@@ -634,7 +638,11 @@ pub fn merkle_root(leaves: &[Vec<u8>]) -> [u8; 32] {
     while level.len() > 1 {
         let mut next = Vec::with_capacity(level.len().div_ceil(2));
         for pair in level.chunks(2) {
-            next.push(if pair.len() == 2 { hash_node(&pair[0], &pair[1]) } else { pair[0] });
+            next.push(if pair.len() == 2 {
+                hash_node(&pair[0], &pair[1])
+            } else {
+                pair[0]
+            });
         }
         level = next;
     }
@@ -680,7 +688,11 @@ pub fn merkle_proof(leaves: &[Vec<u8>], index: usize) -> Vec<ProofStep> {
         }
         let mut next = Vec::with_capacity(level.len().div_ceil(2));
         for pair in level.chunks(2) {
-            next.push(if pair.len() == 2 { hash_node(&pair[0], &pair[1]) } else { pair[0] });
+            next.push(if pair.len() == 2 {
+                hash_node(&pair[0], &pair[1])
+            } else {
+                pair[0]
+            });
         }
         level = next;
         i /= 2;

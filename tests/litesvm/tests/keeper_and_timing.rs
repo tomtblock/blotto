@@ -46,7 +46,8 @@ fn close_empty(env: &mut Env, id: u64) {
     env.advance_time(FILL_DEADLINE_SECS + 1);
     let settlement = env.settlement.insecure_clone();
     let ix = trigger_refund_ix(&settlement.pubkey(), id);
-    env.send(&[ix], &[&settlement]).expect("trigger_refund on an empty pool");
+    env.send(&[ix], &[&settlement])
+        .expect("trigger_refund on an empty pool");
     assert_eq!(read_pool(&env.svm, &pool_pda(id)).state, 5, "Closed");
 }
 
@@ -62,7 +63,10 @@ fn migrate_config_grows_the_old_account_once_and_revives_every_instruction() {
     assert_eq!(fresh.keeper, env.settlement.pubkey());
     let ix = migrate_config_ix(&admin, &keeper);
     let err = env.send(&[ix], &[]).unwrap_err();
-    assert!(err.contains("6062") || err.contains("ConfigAlreadyMigrated"), "{err}");
+    assert!(
+        err.contains("6062") || err.contains("ConfigAlreadyMigrated"),
+        "{err}"
+    );
 
     // Devnet's situation after the upgrade: the account is the OLD size.
     downgrade_config_to_v1(&mut env.svm);
@@ -80,7 +84,10 @@ fn migrate_config_grows_the_old_account_once_and_revives_every_instruction() {
     let stranger = funded_keypair(&mut env);
     let ix = migrate_config_ix(&stranger.pubkey(), &keeper);
     let err = env.send(&[ix], &[&stranger]).unwrap_err();
-    assert!(err.contains("6063") || err.contains("ConfigNotMigratable"), "{err}");
+    assert!(
+        err.contains("6063") || err.contains("ConfigNotMigratable"),
+        "{err}"
+    );
 
     // The migration: grows to 484, tops up rent from the admin, writes the
     // tail, touches nothing before it.
@@ -89,12 +96,19 @@ fn migrate_config_grows_the_old_account_once_and_revives_every_instruction() {
     env.send(&[ix], &[]).expect("migrate_config");
     let acct = env.svm.get_account(&config_pda()).unwrap();
     assert_eq!(acct.data.len(), CONFIG_SPACE);
-    assert_eq!(&acct.data[..CONFIG_SPACE_V1], &old_bytes[..], "old bytes untouched");
+    assert_eq!(
+        &acct.data[..CONFIG_SPACE_V1],
+        &old_bytes[..],
+        "old bytes untouched"
+    );
     assert!(
         acct.lamports >= env.svm.minimum_balance_for_rent_exemption(CONFIG_SPACE),
         "rent-exempt at the new size"
     );
-    assert!(env.balance(&admin) < admin_before, "the admin paid the top-up");
+    assert!(
+        env.balance(&admin) < admin_before,
+        "the admin paid the top-up"
+    );
     let cfg = read_config(&env.svm);
     assert_eq!(cfg.keeper, keeper);
     assert_eq!(cfg.fill_deadline_seconds, FILL_DEADLINE_SECS);
@@ -106,11 +120,16 @@ fn migrate_config_grows_the_old_account_once_and_revives_every_instruction() {
     let ix = migrate_config_ix(&admin, &Pubkey::new_unique());
     let err = env.send(&[ix], &[]).unwrap_err();
     assert!(err.contains("6062"), "{err}");
-    assert_eq!(read_config(&env.svm).keeper, keeper, "the tail was not rewritten");
+    assert_eq!(
+        read_config(&env.svm).keeper,
+        keeper,
+        "the tail was not rewritten"
+    );
 
     // And the program is alive again.
     let ix = fund_platform_ix(&admin, 1_000_000_000);
-    env.send(&[ix], &[]).expect("a deposit lands after migration");
+    env.send(&[ix], &[])
+        .expect("a deposit lands after migration");
     env.open_ready_pool(1, 0);
 }
 
@@ -127,9 +146,15 @@ fn the_keeper_opens_pools_and_a_stale_tier_opens_for_anyone() {
         .expect("set_keeper");
     assert_eq!(read_config(&env.svm).keeper, keeper.pubkey());
     let err = env
-        .send(&[set_keeper_ix(&settlement.pubkey(), &settlement.pubkey())], &[&settlement])
+        .send(
+            &[set_keeper_ix(&settlement.pubkey(), &settlement.pubkey())],
+            &[&settlement],
+        )
         .unwrap_err();
-    assert!(err.contains("2001") || err.contains("ConstraintHasOne"), "admin only: {err}");
+    assert!(
+        err.contains("2001") || err.contains("ConstraintHasOne"),
+        "admin only: {err}"
+    );
 
     // A tier that never settled a pool: `tier_next_open_at == 0`, so the
     // liveness fallback already holds and ANY signer opens it — the
@@ -143,11 +168,18 @@ fn the_keeper_opens_pools_and_a_stale_tier_opens_for_anyone() {
     let closed_at = now(&env);
     let cfg = read_config(&env.svm);
     assert_eq!(cfg.active_pool_by_tier[0], 0);
-    assert_eq!(cfg.tier_next_open_at[0], closed_at + COOLDOWN_SECS, "cooldown stamped");
+    assert_eq!(
+        cfg.tier_next_open_at[0],
+        closed_at + COOLDOWN_SECS,
+        "cooldown stamped"
+    );
 
     // Inside the cooldown nobody opens — not even the keeper.
     let err = open_as(&mut env, &keeper, 2).unwrap_err();
-    assert!(err.contains("6055") || err.contains("TierCoolingDown"), "{err}");
+    assert!(
+        err.contains("6055") || err.contains("TierCoolingDown"),
+        "{err}"
+    );
     env.advance_time(COOLDOWN_SECS - 1);
     let err = open_as(&mut env, &keeper, 2).unwrap_err();
     assert!(err.contains("6055"), "one second early: {err}");
@@ -159,7 +191,10 @@ fn the_keeper_opens_pools_and_a_stale_tier_opens_for_anyone() {
     assert!(err.contains("6054") || err.contains("NotKeeper"), "{err}");
     let admin_kp = env.admin.insecure_clone();
     let err = open_as(&mut env, &admin_kp, 2).unwrap_err();
-    assert!(err.contains("6054"), "the admin is not the keeper either: {err}");
+    assert!(
+        err.contains("6054"),
+        "the admin is not the keeper either: {err}"
+    );
     open_as(&mut env, &keeper, 2).expect("the keeper opens");
 
     // The liveness fallback: settle again, then leave the tier idle for the
@@ -169,7 +204,10 @@ fn the_keeper_opens_pools_and_a_stale_tier_opens_for_anyone() {
     env.advance_time(COOLDOWN_SECS + LIVENESS_FALLBACK_SECS - 1);
     let stranger = funded_keypair(&mut env);
     let err = open_as(&mut env, &stranger, 3).unwrap_err();
-    assert!(err.contains("6054"), "one second before the fallback: {err}");
+    assert!(
+        err.contains("6054"),
+        "one second before the fallback: {err}"
+    );
     env.advance_time(1);
     assert_eq!(now(&env), next_open_at + LIVENESS_FALLBACK_SECS);
     open_as(&mut env, &stranger, 3).expect("a stale tier opens for anyone (liveness)");
@@ -180,7 +218,8 @@ fn the_four_service_keys_cannot_enter() {
     let Some(mut env) = Env::new() else { return };
     let admin = env.admin.pubkey();
     let keeper = funded_keypair(&mut env);
-    env.send(&[set_keeper_ix(&admin, &keeper.pubkey())], &[]).unwrap();
+    env.send(&[set_keeper_ix(&admin, &keeper.pubkey())], &[])
+        .unwrap();
     env.open_ready_pool(1, 0);
 
     // The entry signer as a Solana keypair (same ed25519 seed as the
@@ -190,7 +229,9 @@ fn the_four_service_keys_cannot_enter() {
         Pubkey::new_from_array(env.entry_signer.verifying_key().to_bytes()),
         entry_signer.pubkey()
     );
-    env.svm.airdrop(&entry_signer.pubkey(), 10_000_000_000).unwrap();
+    env.svm
+        .airdrop(&entry_signer.pubkey(), 10_000_000_000)
+        .unwrap();
     let admin_kp = env.admin.insecure_clone();
     let settlement = env.settlement.insecure_clone();
 
@@ -226,27 +267,48 @@ fn set_pool_timing_applies_to_future_pools_only() {
     // Pool 1 on tier 0 under the launch timing.
     let t0 = now(&env);
     open_as(&mut env, &settlement, 1).unwrap();
-    assert_eq!(read_pool(&env.svm, &pool_pda(1)).fill_deadline, t0 + FILL_DEADLINE_SECS);
+    assert_eq!(
+        read_pool(&env.svm, &pool_pda(1)).fill_deadline,
+        t0 + FILL_DEADLINE_SECS
+    );
 
     // Zero is refused on either field; the timing is unchanged.
     for (fd, cd) in [(0i64, COOLDOWN_SECS), (FILL_DEADLINE_SECS, 0i64), (-1, 1)] {
-        let err = env.send(&[set_pool_timing_ix(&admin, fd, cd)], &[]).unwrap_err();
-        assert!(err.contains("6065") || err.contains("InvalidTiming"), "{err}");
+        let err = env
+            .send(&[set_pool_timing_ix(&admin, fd, cd)], &[])
+            .unwrap_err();
+        assert!(
+            err.contains("6065") || err.contains("InvalidTiming"),
+            "{err}"
+        );
     }
     let cfg = read_config(&env.svm);
-    assert_eq!((cfg.fill_deadline_seconds, cfg.cooldown_seconds), (FILL_DEADLINE_SECS, COOLDOWN_SECS));
+    assert_eq!(
+        (cfg.fill_deadline_seconds, cfg.cooldown_seconds),
+        (FILL_DEADLINE_SECS, COOLDOWN_SECS)
+    );
     // Admin only.
     let err = env
-        .send(&[set_pool_timing_ix(&settlement.pubkey(), 3600, 60)], &[&settlement])
+        .send(
+            &[set_pool_timing_ix(&settlement.pubkey(), 3600, 60)],
+            &[&settlement],
+        )
         .unwrap_err();
     assert!(err.contains("2001"), "{err}");
 
     // A new timing: one hour, one minute.
-    env.send(&[set_pool_timing_ix(&admin, 3600, 60)], &[]).expect("set_pool_timing");
+    env.send(&[set_pool_timing_ix(&admin, 3600, 60)], &[])
+        .expect("set_pool_timing");
     let cfg = read_config(&env.svm);
-    assert_eq!((cfg.fill_deadline_seconds, cfg.cooldown_seconds), (3600, 60));
+    assert_eq!(
+        (cfg.fill_deadline_seconds, cfg.cooldown_seconds),
+        (3600, 60)
+    );
     // Pool 1's deadline did not move — players entered under 12 h.
-    assert_eq!(read_pool(&env.svm, &pool_pda(1)).fill_deadline, t0 + FILL_DEADLINE_SECS);
+    assert_eq!(
+        read_pool(&env.svm, &pool_pda(1)).fill_deadline,
+        t0 + FILL_DEADLINE_SECS
+    );
     // Pool 2 (tier 1) opens under the new deadline.
     let ix = open_pool_ix(&settlement.pubkey(), 2, 1, [9; 32], env.sealing_secret_hash);
     env.send(&[ix], &[&settlement]).unwrap();
@@ -255,12 +317,18 @@ fn set_pool_timing_applies_to_future_pools_only() {
     // Pool 1 still needs the full 12 h before its fork opens.
     env.advance_time(3601);
     let err = env
-        .send(&[trigger_refund_ix(&settlement.pubkey(), 1)], &[&settlement])
+        .send(
+            &[trigger_refund_ix(&settlement.pubkey(), 1)],
+            &[&settlement],
+        )
         .unwrap_err();
     assert!(err.contains("6012"), "{err}");
     // Pool 2's hour has passed: it refunds, and its tier's cooldown is the
     // NEW one minute.
-    env.send(&[trigger_refund_ix(&settlement.pubkey(), 2)], &[&settlement])
-        .expect("pool 2 past its one-hour deadline");
+    env.send(
+        &[trigger_refund_ix(&settlement.pubkey(), 2)],
+        &[&settlement],
+    )
+    .expect("pool 2 past its one-hour deadline");
     assert_eq!(read_config(&env.svm).tier_next_open_at[1], now(&env) + 60);
 }

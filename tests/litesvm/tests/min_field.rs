@@ -76,10 +76,20 @@ fn the_deadline_is_twelve_hours_from_open_and_no_seat_moves_it() {
     register_n(&mut env, 1, 1);
     let pv = read_pool(&env.svm, &pool);
     assert_eq!(pv.entrants, MIN_SEATS);
-    assert_eq!(pv.state, 0, "still Open at 52 — the deadline decides, not the seat");
-    assert_eq!(pv.fill_deadline, opened, "the 52nd seat moves nothing (option A)");
+    assert_eq!(
+        pv.state, 0,
+        "still Open at 52 — the deadline decides, not the seat"
+    );
+    assert_eq!(
+        pv.fill_deadline, opened,
+        "the 52nd seat moves nothing (option A)"
+    );
     register_n(&mut env, 1, 3);
-    assert_eq!(read_pool(&env.svm, &pool).fill_deadline, opened, "nor any later seat");
+    assert_eq!(
+        read_pool(&env.svm, &pool).fill_deadline,
+        opened,
+        "nor any later seat"
+    );
 }
 
 #[test]
@@ -116,9 +126,15 @@ fn a_52_seat_pool_seals_at_the_deadline_and_pays_the_winner() {
     env.advance_time(FILL_DEADLINE_SECS);
     register_n(&mut env, 1, 1);
     let err = env
-        .send(&[seal_at_deadline_ix(&settlement.pubkey(), 1)], &[&settlement])
+        .send(
+            &[seal_at_deadline_ix(&settlement.pubkey(), 1)],
+            &[&settlement],
+        )
         .unwrap_err();
-    assert!(err.contains("6012"), "at the boundary the pool is still open: {err}");
+    assert!(
+        err.contains("6012"),
+        "at the boundary the pool is still open: {err}"
+    );
 
     // Past it: entries close, a refund is refused (FieldReached), the seal
     // lands — signed by a RANDOM keypair, not the settlement signer.

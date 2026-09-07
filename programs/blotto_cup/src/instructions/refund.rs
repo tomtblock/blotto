@@ -107,7 +107,12 @@ pub fn handle_trigger_refund(ctx: Context<TriggerRefund>, _pool_id: u64) -> Resu
     if pool.state == PoolState::Closed {
         let tier_idx = pool.tier as usize;
         let pool_id = pool.id;
-        crate::instructions::slot::free_tier_slot(&mut ctx.accounts.config, tier_idx, pool_id, now)?;
+        crate::instructions::slot::free_tier_slot(
+            &mut ctx.accounts.config,
+            tier_idx,
+            pool_id,
+            now,
+        )?;
     }
 
     emit!(RefundTriggered {
@@ -187,7 +192,12 @@ pub fn handle_refund(ctx: Context<Refund>, _pool_id: u64) -> Result<()> {
         let now = Clock::get()?.unix_timestamp;
         let tier_idx = pool.tier as usize;
         let pool_id = pool.id;
-        crate::instructions::slot::free_tier_slot(&mut ctx.accounts.config, tier_idx, pool_id, now)?;
+        crate::instructions::slot::free_tier_slot(
+            &mut ctx.accounts.config,
+            tier_idx,
+            pool_id,
+            now,
+        )?;
     }
 
     emit!(Refunded {

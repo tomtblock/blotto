@@ -147,7 +147,11 @@ mod tests {
                     })
                     .collect();
                 assert!(proof.len() <= 6, "a 64-leaf tree needs at most 6 steps");
-                assert!(verify_proof(&leaf, &proof, &root), "leaf rank {}", case.rank);
+                assert!(
+                    verify_proof(&leaf, &proof, &root),
+                    "leaf rank {}",
+                    case.rank
+                );
                 // The same proof against the wrong rank, the wrong amount or
                 // a flipped side bit fails.
                 let bad_rank = leaf_bytes(

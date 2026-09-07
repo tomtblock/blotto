@@ -51,20 +51,32 @@ pub fn handle_migrate_config(ctx: Context<MigrateConfig>, keeper: Pubkey) -> Res
     let config_info = ctx.accounts.config.to_account_info();
 
     // ---- 1. Prove this is the old Config and the caller is its admin -----
-    require_keys_eq!(*config_info.owner, crate::ID, ErrorCode::ConfigNotMigratable);
+    require_keys_eq!(
+        *config_info.owner,
+        crate::ID,
+        ErrorCode::ConfigNotMigratable
+    );
     {
         let data = config_info.try_borrow_data()?;
         if data.len() >= Config::SPACE {
             return Err(ErrorCode::ConfigAlreadyMigrated.into());
         }
-        require!(data.len() == Config::SPACE_V1, ErrorCode::ConfigNotMigratable);
+        require!(
+            data.len() == Config::SPACE_V1,
+            ErrorCode::ConfigNotMigratable
+        );
         require!(
             data[..8] == *Config::DISCRIMINATOR,
             ErrorCode::ConfigNotMigratable
         );
         // `admin` is the first field after the discriminator (state.rs).
-        let stored_admin = Pubkey::try_from(&data[8..40]).map_err(|_| ErrorCode::ConfigNotMigratable)?;
-        require_keys_eq!(stored_admin, ctx.accounts.admin.key(), ErrorCode::ConfigNotMigratable);
+        let stored_admin =
+            Pubkey::try_from(&data[8..40]).map_err(|_| ErrorCode::ConfigNotMigratable)?;
+        require_keys_eq!(
+            stored_admin,
+            ctx.accounts.admin.key(),
+            ErrorCode::ConfigNotMigratable
+        );
     }
 
     // ---- 2. Rent for the larger account, paid by the admin ---------------
