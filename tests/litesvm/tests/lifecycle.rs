@@ -429,9 +429,10 @@ fn a_sanctions_hold_blocks_both_release_paths_and_the_next_place_split() {
     let ix = settle_ix(&settlement.pubkey(), 1, "commit_results", &commit_args);
     env.send(&[ix], &[&settlement]).unwrap();
 
-    // Flag BOTH tied winners so their shares are ESCROWED at payout — the
-    // state a winner is in while resolving runs. (A hold on an already-paid
-    // seat would be too late; the crank screens before it pays.)
+    // Flag BOTH tied winners so their shares are ESCROWED at payout. Here
+    // the flags are the mechanism because this test is about what a hold
+    // does to a share ALREADY in escrow; that a hold escrows a share by
+    // itself is the next test's property.
     for (_, entry) in players.iter().take(2) {
         let ix = flag_ix(&settlement.pubkey(), 1, entry, "flag_entry");
         env.send(&[ix], &[&settlement]).expect("flag");
@@ -560,4 +561,77 @@ fn a_sanctions_hold_blocks_both_release_paths_and_the_next_place_split() {
         .expect("release after the lift");
     assert_eq!(env.balance(&players[0].0.pubkey()) - before, POT / 2);
     assert_eq!(read_entry(&env.svm, &players[0].1).escrow_lamports, 0);
+}
+
+
+/// A hold placed BEFORE payment diverts the share into escrow on its own.
+///
+/// This is the clause that makes every other check in the previous test
+/// reachable. `release_escrow` and `pay_next_place` both only ever see money
+/// that is already escrowed, so without `pay_prizes` escrowing on the hold a
+/// screened-and-matched winner would simply be paid out of the vault and the
+/// hold would guard nothing. The unheld co-winner in the same batch is paid
+/// normally, which is the other half of the property: one wallet is held, the
+/// pool still settles.
+#[test]
+fn a_sanctions_hold_escrows_the_share_at_payout_without_any_flag() {
+    let Some(mut env) = Env::new() else { return };
+    env.open_ready_pool(1, 0);
+    let mut players: Vec<(Keypair, Pubkey)> = Vec::new();
+    for _ in 0..64 {
+        players.push(env.register_player(1).unwrap());
+    }
+    let settlement = env.settlement.insecure_clone();
+
+    let secret = env.pool_secret;
+    let ix = settle_ix(&settlement.pubkey(), 1, "reveal_pool_secret", &secret);
+    env.send(&[ix], &[&settlement]).unwrap();
+    let payouts = tied_first_payouts(POT, 2);
+    let wallets: Vec<Pubkey> = players.iter().map(|(p, _)| p.pubkey()).collect();
+    let (leaves, _ranks) = results_leaves(&wallets, &payouts);
+    let mut commit_args = merkle_root(&leaves).to_vec();
+    commit_args.extend_from_slice(&encode_payouts(&payouts));
+    let ix = settle_ix(&settlement.pubkey(), 1, "commit_results", &commit_args);
+    env.send(&[ix], &[&settlement]).unwrap();
+
+    // Seat 0 matched a list during resolving. The crank places the hold in
+    // the same pass that scored the pool — before it pays. No flag: nothing
+    // about a list membership is a finding against the competition.
+    let ix = sanctions_hold_ix(
+        &settlement.pubkey(),
+        1,
+        &players[0].1,
+        "place_sanctions_hold",
+    );
+    env.send(&[ix], &[&settlement])
+        .expect("place_sanctions_hold");
+    assert!(!read_entry(&env.svm, &players[0].1).flagged);
+
+    let held_before = env.balance(&players[0].0.pubkey());
+    let free_before = env.balance(&players[1].0.pubkey());
+    let metas: Vec<(Pubkey, Pubkey)> = players[..2].iter().map(|(p, e)| (p.pubkey(), *e)).collect();
+    let ix = pay_prizes_ix(&settlement.pubkey(), 1, &[0, 1], &metas);
+    env.send(&[ix], &[&settlement]).expect("pay");
+
+    // The held seat: settled, escrowed, not a lamport moved.
+    let held = read_entry(&env.svm, &players[0].1);
+    assert!(held.settled, "the seat settles — the batch must not revert");
+    assert_eq!(held.escrow_lamports, POT / 2, "the share is escrowed");
+    assert_eq!(
+        env.balance(&players[0].0.pubkey()),
+        held_before,
+        "a held wallet receives nothing at payout"
+    );
+
+    // The co-winner: paid in the same batch, unaffected.
+    assert_eq!(
+        env.balance(&players[1].0.pubkey()) - free_before,
+        POT / 2,
+        "the unheld co-winner is paid normally"
+    );
+    assert_eq!(read_entry(&env.svm, &players[1].1).escrow_lamports, 0);
+
+    // And the pool reached Paid, so the tier's slot is freed and the pot
+    // leaves `platform_reserved`: one held wallet must not strand a tier.
+    assert_eq!(read_pool(&env.svm, &pool_pda(1)).state, 3, "Paid");
 }

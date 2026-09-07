@@ -233,6 +233,10 @@ Stated plainly, because two of these are published as though they were.
    admin-signed to lift, refused by **both** paths of `release_escrow`
    including the seven-day permissionless one, and excluded from
    `eligible()` so a held wallet cannot receive a next-place portion either.
+   A hold standing at payout also makes `pay_prizes` **escrow** the share
+   rather than send it, which is what puts the money where those two checks
+   can see it — the batch is never refused, so one held wallet cannot leave
+   a pool short of `Paid` and strand its tier.
    What is not yet wired is the crank calling the screener on the winner and
    placing the hold — the next change, and the last of the four published
    promises to become fully operational.

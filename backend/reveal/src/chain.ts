@@ -283,7 +283,7 @@ export class FakeChain implements KeeperChain {
   entries = new Map<string, FakeEntry[]>();
   /** Lamports paid per player (base58) — asserted by tests. */
   paid = new Map<string, bigint>();
-  /** Lamports escrowed per player at payout (flagged entries). */
+  /** Lamports escrowed per player at payout (flagged or sanctions-held). */
   escrowed = new Map<string, bigint>();
   /** The clock reading at escrow, per player — `Entry.escrowed_at`. */
   escrowedAt = new Map<string, bigint>();
@@ -424,9 +424,12 @@ export class FakeChain implements KeeperChain {
       const entry = entries.find((e) => e.index === seat);
       if (!entry) throw new Error('EntryMismatch');
       if (entry.settled) throw new Error('EntryAlreadySettled');
-      if (entry.flagged) {
+      if (entry.flagged || this.sanctionsHeld.has(entry.player)) {
         // Escrowed: the lamports stay put (mirrors the program), stamped
-        // with the clock — `Entry.escrowed_at`.
+        // with the clock — `Entry.escrowed_at`. A sanctions hold diverts the
+        // share here for the same reason the program does it: the hold is
+        // enforced on ESCROW, so a held seat paid straight out would slip
+        // past every check downstream.
         this.escrowed.set(
           entry.player,
           (this.escrowed.get(entry.player) ?? 0n) + committed.amountLamports
