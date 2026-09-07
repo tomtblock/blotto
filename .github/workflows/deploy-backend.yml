@@ -398,10 +398,15 @@ jobs:
       - name: Stage review secrets
         if: steps.pre.outputs.deploy_review == 'true'
         run: |
+          # BLOTTO_API_CORS_ORIGINS: since Stage E the review server applies
+          # the same hygiene layer as the entry server, so the app's origin
+          # must be allowlisted or the browser's decision and appeal POSTs
+          # are refused at preflight (the old wildcard is gone).
           flyctl secrets set --app "$REVIEW_APP" --stage \
             BLOTTO_DATABASE_URL="${{ secrets.BLOTTO_DATABASE_URL }}" \
             BLOTTO_RPC_URL="$DEVNET_RPC" \
             BLOTTO_PROGRAM_ID="$PROGRAM_ID" \
+            BLOTTO_API_CORS_ORIGINS="$APP_ORIGIN" \
             SETTLEMENT_SIGNER_KEYPAIR_B64="$SETTLEMENT_SIGNER_KEYPAIR_B64"
 
       - name: Deploy review service

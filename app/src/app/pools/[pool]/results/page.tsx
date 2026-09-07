@@ -17,6 +17,7 @@ import { ArchiveStandings } from './archive-standings';
 import { WhatBeatYouPanel } from './what-beat-you-panel';
 import { ShareResult } from './share-result';
 import { PaidConfetti } from './paid-confetti';
+import { AppealClient } from './appeal-client';
 
 export default async function ResultsPage({ params }: { params: Promise<{ pool: string }> }) {
   const { pool: poolId } = await params;
@@ -114,6 +115,14 @@ export default async function ResultsPage({ params }: { params: Promise<{ pool: 
                 .filter((r) => BigInt(r.amount) > 0n)
                 .map((r) => entryBySeat.get(r.seat)?.player ?? '')
                 .filter(Boolean)}
+            />
+            {/* Stage E: the appeal form, for the signed-in wallet whose own
+                share was forfeited on this pool — nobody else sees it. */}
+            <AppealClient
+              pool={pool.pool}
+              forfeitedPlayers={entries
+                .filter((e) => e.escrow_settled === 'forfeited')
+                .map((e) => e.player)}
             />
             <ShareResult
               pool={pool.pool}

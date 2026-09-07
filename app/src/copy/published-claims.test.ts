@@ -82,8 +82,12 @@ const PROMISES: readonly Promised[] = [
   {
     phrase: 'You may appeal within 7 days',
     commitment: 'An appeal route exists and a different reviewer decides it.',
-    proof: null,
-    gate: 'Phase 2 — the appeal flow. The review service records decisions but has no appeal path.',
+    // Phase 2 Stage E: POST /appeals (player-signed, within seven days of
+    // the upheld flag) and appeal decisions refused to the reviewer who
+    // upheld the flag, all in the one signed log; the form is on the
+    // results page for the affected wallet. The second reviewer the rule
+    // needs is a founder-owned registry entry (audit O15).
+    proof: 'backend/detection/src/appeals.ts',
   },
   {
     phrase: 'We do not seek to recover a prize already paid',
@@ -169,17 +173,15 @@ describe('published claims are registered', () => {
     }
   });
 
-  it('the known gaps are exactly the two that remain of the four the audit recorded', () => {
+  it('the known gaps are exactly the one that remains of the four the audit recorded', () => {
     // Tightening this list is the point. When a Phase 2 stage lands, its
     // promise moves from `proof: null` to a real path and this number drops
-    // (the resolving state left it at Stage C, the 12-hour clock at Stage D).
-    // It must never rise without a deliberate edit here.
+    // (resolving at Stage C, the 12-hour clock at D, the appeal at E). It
+    // must never rise without a deliberate edit here. The last one waits on
+    // a founder decision (the winner check needs an on-chain hold).
     const gaps = PROMISES.filter((p) => p.proof === null);
     expect(gaps.map((p) => p.phrase).sort()).toEqual(
-      [
-        'We check the winning wallet against published sanctions lists'.toLowerCase(),
-        'You may appeal within 7 days',
-      ].sort()
+      ['We check the winning wallet against published sanctions lists'.toLowerCase()].sort()
     );
     for (const g of gaps) {
       expect(g.gate, `gap "${g.phrase}" must name what closes it`).toBeTruthy();

@@ -29,17 +29,31 @@ export class PgDecisionLog implements DecisionLog {
         ORDER BY decided_at, decided_by`,
       [pool]
     );
-    return res.rows.map((r) => {
-      const row = r as Record<string, unknown>;
-      return {
-        pool: String(row.pool),
-        player: String(row.player),
-        action: String(row.action) as Decision['action'],
-        criterion: String(row.criterion),
-        decidedBy: String(row.decided_by),
-        decidedAt: new Date(String(row.decided_at)).toISOString(),
-        signature: String(row.signature),
-      };
-    });
+    return res.rows.map(rowToDecision);
   }
+
+  /** One entry's thread (Stage E) — served by the (pool, player) index of 0015. */
+  async listFor(pool: string, player: string): Promise<Decision[]> {
+    const res = await this.db.query(
+      `SELECT pool, player, action, criterion, decided_by, decided_at, signature
+         FROM review_decisions
+        WHERE pool = $1 AND player = $2
+        ORDER BY decided_at, id`,
+      [pool, player]
+    );
+    return res.rows.map(rowToDecision);
+  }
+}
+
+function rowToDecision(r: unknown): Decision {
+  const row = r as Record<string, unknown>;
+  return {
+    pool: String(row.pool),
+    player: String(row.player),
+    action: String(row.action) as Decision['action'],
+    criterion: String(row.criterion),
+    decidedBy: String(row.decided_by),
+    decidedAt: new Date(String(row.decided_at)).toISOString(),
+    signature: String(row.signature),
+  };
 }

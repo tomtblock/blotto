@@ -186,8 +186,15 @@ cause is a wallet account that cannot receive the transfer.
 
 **A prize is held.** That is escrow, and it is correct behaviour for a flagged
 entry. It leaves by one of three doors: the settlement signer releases it after
-review, anyone releases it after seven days, or the admin forfeits it and it is
-divided among the other eligible players at that rank. It cannot come to us.
+review — and the daemon does this itself at twelve hours if no decision has been
+made (the published rule; Stage D) — anyone releases it after seven days, or the
+admin forfeits it and it is divided among the other eligible players at that
+rank. It cannot come to us. A forfeit decided on the review page is logged at
+once and answers "recorded"; you then land `forfeit-escrow` with the admin key.
+The player may appeal within seven days from the results page; a *different*
+reviewer decides it on the review page, which needs a second member in
+`config/reviewers.json`. Nothing in any service yet drives `pay_next_place`
+(audit O14), so a forfeited share stays in the vault until that lands.
 
 **The treasury will not fund a pot.** `open_pool` refuses unless, after funding,
 the treasury still holds the minimum balance plus one further pot for every
