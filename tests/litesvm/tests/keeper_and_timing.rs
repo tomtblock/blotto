@@ -254,7 +254,7 @@ fn the_keeper_may_not_be_the_zero_key() {
         .send(&[set_keeper_ix(&admin, &Pubkey::default())], &[])
         .unwrap_err();
     assert!(
-        err.contains("6064") || err.contains("KeeperMustNotBeZero"),
+        err.contains("6068") || err.contains("KeeperMustNotBeZero"),
         "set_keeper must refuse the zero key: {err}"
     );
     assert_eq!(
@@ -269,7 +269,7 @@ fn the_keeper_may_not_be_the_zero_key() {
         .send(&[migrate_config_ix(&admin, &Pubkey::default())], &[])
         .unwrap_err();
     assert!(
-        err.contains("6064") || err.contains("KeeperMustNotBeZero"),
+        err.contains("6068") || err.contains("KeeperMustNotBeZero"),
         "migrate_config must refuse the zero key: {err}"
     );
 }
