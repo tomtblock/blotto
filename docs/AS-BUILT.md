@@ -225,14 +225,17 @@ reissue it**; the divergences are listed so the reissue is a single pass.
 
 Stated plainly, because two of these are published as though they were.
 
-1. **Sanctions screening of the winner.** The rules page says the *winning*
-   wallet is checked against published sanctions lists during resolving. What
-   exists is screening at *entry*: the packet service screens every entrant
-   through `backend/sanctions/` (Chainalysis, OpenSanctions and a mirrored
-   OFAC SDN list, any combination; Phase 2 Stages A–B) and refuses to start
-   with no source configured. The daemon does not screen the winner; that is
-   Stage F, gated on the founder's decision recorded in the audit, because a
-   match at resolving cannot be held with the escrow that exists.
+1. **The crank's call to screen the winner.** Screening runs at *entry*
+   (Stages A–B): the packet service screens every entrant through
+   `backend/sanctions/` and refuses to start with no source configured. The
+   on-chain **sanctions hold** the resolving check needs now exists too
+   (Stage F, `instructions/sanctions.rs`): settlement-signed to place,
+   admin-signed to lift, refused by **both** paths of `release_escrow`
+   including the seven-day permissionless one, and excluded from
+   `eligible()` so a held wallet cannot receive a next-place portion either.
+   What is not yet wired is the crank calling the screener on the winner and
+   placing the hold — the next change, and the last of the four published
+   promises to become fully operational.
 2. *Resolving, the 12-hour clock and the next-place payment are all built*
    (Stages C, D and the O23 driver). The daemon divides an upheld flag's
    share among the eligible players at the rank it passes to, recomputing

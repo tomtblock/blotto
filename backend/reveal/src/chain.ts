@@ -107,6 +107,11 @@ export interface ChainEntryView {
    * (0 once released, or never escrowed). A settled, flagged, not-forfeited
    * entry with a positive escrow is a share UNDER REVIEW. */
   escrowLamports: bigint;
+  /** `Entry.sanctions_hold` (Phase 2 Stage F): the winner matched a
+   * published sanctions list at resolving. BOTH paths of `release_escrow`
+   * refuse while it is set, and the entry can receive no next-place portion.
+   * It is NOT an integrity flag and shares nothing with one. */
+  sanctionsHold: boolean;
   /** `Entry.escrowed_at`: the on-chain unix second the share was escrowed
    * at `pay_prizes` — the clock both the program's seven-day safeguard and
    * the daemon's twelve-hour release (Phase 2 Stage D) run from. 0 when
@@ -116,11 +121,15 @@ export interface ChainEntryView {
 
 /**
  * What the in-memory chain STORES per entry: the on-chain fields the fake
- * keeps on the entry itself. Escrow lamports and the escrow timestamp live
- * in the fake's own maps (as they always have) and are joined in at
- * `getEntries`, so a test that pushes entries directly writes only these.
+ * keeps on the entry itself. Escrow lamports, the escrow timestamp and the
+ * sanctions hold live in the fake's own maps (as escrow always has) and are
+ * joined in at `getEntries`, so a test that pushes entries directly writes
+ * only these.
  */
-export type FakeEntry = Omit<ChainEntryView, 'escrowLamports' | 'escrowedAt'>;
+export type FakeEntry = Omit<
+  ChainEntryView,
+  'escrowLamports' | 'escrowedAt' | 'sanctionsHold'
+>;
 
 /** One Merkle proof step in the program's argument shape (mirrors
  * `merkle.rs::ProofStep`; the scoring engine's `ProofStep` is the same
@@ -139,6 +148,13 @@ export interface SettlementChain {
   flagEntry(poolId: bigint, player: string): Promise<void>;
   /** Review's reversal of a flag on a not-yet-settled entry (R11/4.4). */
   clearFlag(poolId: bigint, player: string): Promise<void>;
+  /** Place a sanctions hold (Phase 2 Stage F, settlement-signed): both paths
+   * of `release_escrow` then refuse and the entry can receive no next-place
+   * portion. Nothing moves. Allowed AFTER settlement, unlike `flagEntry`. */
+  placeSanctionsHold(poolId: bigint, player: string): Promise<void>;
+  /** Lift a hold placed on a false positive — ADMIN-signed, so a client
+   * without the admin key must throw (as `forfeitEscrow` does). */
+  liftSanctionsHold(poolId: bigint, player: string): Promise<void>;
   /** Escrowed share → the player: the reviewed path (settlement-signed; KYC
    * packet per R3 when the switch applies). Anyone may land the same call
    * seven days after escrow (`ESCROW_AUTO_RELEASE_SECS`) — the on-chain
@@ -235,10 +251,17 @@ export function reviewPending(
 
 /** `escrow.rs::eligible`, mirrored. See `reviewPending` for why it is exported. */
 export function eligibleFor(
-  e: Pick<ChainEntryView, 'flagged' | 'forfeited' | 'settled' | 'refunded'>,
+  e: Pick<ChainEntryView, 'flagged' | 'forfeited' | 'settled' | 'refunded'> &
+    Partial<Pick<ChainEntryView, 'sanctionsHold'>>,
   escrow: bigint
 ): boolean {
-  return !e.refunded && !e.forfeited && !reviewPending(e, escrow);
+  // The sanctions clause mirrors `escrow.rs::eligible` (Stage F): a held
+  // entry is not forfeited, so without it a held winner would still count as
+  // an eligible member of the first-place group and the next-place split
+  // would pay a listed wallet.
+  return (
+    !e.refunded && !e.forfeited && e.sanctionsHold !== true && !reviewPending(e, escrow)
+  );
 }
 
 /** The forfeiter-side split book-keeping (`Entry.split_*`). */
@@ -264,6 +287,8 @@ export class FakeChain implements KeeperChain {
   escrowed = new Map<string, bigint>();
   /** The clock reading at escrow, per player — `Entry.escrowed_at`. */
   escrowedAt = new Map<string, bigint>();
+  /** Players under a sanctions hold (Stage F) — `Entry.sanctions_hold`. */
+  sanctionsHeld = new Set<string>();
   revealed = new Map<string, Uint8Array>();
   committedRoots = new Map<string, Uint8Array>();
   /** Published sealing keys per pool, captured at openPool — asserted by tests. */
@@ -353,6 +378,7 @@ export class FakeChain implements KeeperChain {
       ...e,
       escrowLamports: this.escrowed.get(e.player) ?? 0n,
       escrowedAt: this.escrowedAt.get(e.player) ?? 0n,
+      sanctionsHold: this.sanctionsHeld.has(e.player),
     }));
   }
 
@@ -444,6 +470,9 @@ export class FakeChain implements KeeperChain {
     const e = (this.entries.get(poolId.toString()) ?? []).find((x) => x.player === player);
     // An upheld flag closes this door for good (escrow.rs).
     if (e?.forfeited) throw new Error('EscrowForfeitedAlready');
+    // A sanctions hold closes BOTH doors — checked above the path split in
+    // the program, so the seven-day auto-release cannot pay a listed wallet.
+    if (this.sanctionsHeld.has(player)) throw new Error('SanctionsHoldActive');
     this.escrowed.delete(player);
     this.paid.set(player, (this.paid.get(player) ?? 0n) + amount);
   }
@@ -455,6 +484,20 @@ export class FakeChain implements KeeperChain {
   forfeited = new Map<string, bigint>();
   /** Per forfeiter: the split's book-keeping (`Entry.split_*`). */
   splits = new Map<string, SplitState>();
+
+  async placeSanctionsHold(poolId: bigint, player: string): Promise<void> {
+    const e = (this.entries.get(poolId.toString()) ?? []).find((x) => x.player === player);
+    if (!e) throw new Error('EntryMismatch');
+    if (this.sanctionsHeld.has(player)) throw new Error('SanctionsHoldActive');
+    this.sanctionsHeld.add(player);
+  }
+
+  async liftSanctionsHold(poolId: bigint, player: string): Promise<void> {
+    const e = (this.entries.get(poolId.toString()) ?? []).find((x) => x.player === player);
+    if (!e) throw new Error('EntryMismatch');
+    if (!this.sanctionsHeld.has(player)) throw new Error('NoSanctionsHold');
+    this.sanctionsHeld.delete(player);
+  }
 
   async forfeitEscrow(poolId: bigint, player: string): Promise<void> {
     const amount = this.escrowed.get(player) ?? 0n;

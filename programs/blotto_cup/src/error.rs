@@ -169,4 +169,10 @@ pub enum ErrorCode {
     // 6064 — audit A7 / O18 (appended 2026-09-07, never inserted).
     #[msg("The keeper may not be the zero key")]
     KeeperMustNotBeZero,
+
+    // 6065-6066 — Phase 2 Stage F, the sanctions hold (appended).
+    #[msg("A sanctions hold is in force on this entry")]
+    SanctionsHoldActive,
+    #[msg("No sanctions hold is in force on this entry")]
+    NoSanctionsHold,
 }

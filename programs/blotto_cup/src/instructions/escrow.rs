@@ -94,6 +94,16 @@ pub fn handle_release_escrow(ctx: Context<ReleaseEscrow>, _pool_id: u64) -> Resu
         !ctx.accounts.entry.forfeited,
         ErrorCode::EscrowForfeitedAlready
     );
+    // A SANCTIONS HOLD closes BOTH doors — this check sits above the
+    // path split on purpose (Phase 2 Stage F). The seven-day auto-release
+    // exists so our own failure cannot strand a prize, and it cannot tell a
+    // sanctions hold from an integrity flag: without this line, anyone at
+    // all could pay a listed wallet a week after settlement and we could not
+    // stop them. See `sanctions.rs`.
+    require!(
+        !ctx.accounts.entry.sanctions_hold,
+        ErrorCode::SanctionsHoldActive
+    );
 
     let now = Clock::get()?.unix_timestamp;
     let reviewed_path = ctx.accounts.signer.key() == ctx.accounts.config.settlement_signer;
@@ -269,9 +279,17 @@ fn review_pending(entry: &Entry) -> bool {
 }
 
 /// Eligible to receive a passed-on share: not refunded, not forfeited, no
-/// review pending. Applied to `to` and to every committed peer.
+/// review pending, and no sanctions hold. Applied to `to` and to every
+/// committed peer.
+///
+/// The sanctions clause (Phase 2 Stage F) is what stops a forfeited share
+/// being divided INTO a listed wallet: a held entry is not forfeited, so
+/// without it a held winner would still count as an eligible member of the
+/// first-place group. It reads the entry's own field rather than a separate
+/// account precisely so this classification sees it — the peers arrive here
+/// as `Entry` accounts and nothing else.
 fn eligible(entry: &Entry) -> bool {
-    !entry.refunded && !entry.forfeited && !review_pending(entry)
+    !entry.refunded && !entry.forfeited && !entry.sanctions_hold && !review_pending(entry)
 }
 
 /// The committed seats other than `from` and `to`, ascending — the exact

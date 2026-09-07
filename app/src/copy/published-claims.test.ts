@@ -60,12 +60,12 @@ const PROMISES: readonly Promised[] = [
   {
     phrase: 'we check the winning wallet against published sanctions lists',
     commitment: 'The winning wallet is screened against sanctions lists before payment.',
-    proof: null,
-    // Screening exists and runs at ENTRY (backend/sanctions, wired in the
-    // packet service since Stage B): a listed wallet never holds a seat. The
-    // published sentence is about the WINNER at resolving, which needs an
-    // on-chain hold the program does not have — Stage F, founder-gated.
-    gate: 'Phase 2 Stage F — the winner check at resolving. Entry screening is live (backend/packet/src/sanctions-wiring.ts); the resolving-time check needs a sanctions hold that both paths of release_escrow refuse.',
+    // Screening runs at ENTRY (Stage B) and the on-chain hold the resolving
+    // check needs now exists (Stage F): both paths of `release_escrow`
+    // refuse it, and a held entry can receive no next-place portion. The
+    // crank-side screening call that places it is the next change; this
+    // points at the mechanism that makes the promise keepable.
+    proof: 'programs/blotto_cup/src/instructions/sanctions.rs',
   },
   {
     phrase: 'If no decision is made within 12 hours, the flag is cleared and the prize is paid',
@@ -173,16 +173,14 @@ describe('published claims are registered', () => {
     }
   });
 
-  it('the known gaps are exactly the one that remains of the four the audit recorded', () => {
-    // Tightening this list is the point. When a Phase 2 stage lands, its
-    // promise moves from `proof: null` to a real path and this number drops
-    // (resolving at Stage C, the 12-hour clock at D, the appeal at E). It
-    // must never rise without a deliberate edit here. The last one waits on
-    // a founder decision (the winner check needs an on-chain hold).
+  it('no promise is a declared gap any more', () => {
+    // All four the audit recorded now point at a mechanism: resolving at
+    // Stage C, the 12-hour clock at D, the appeal at E, and the sanctions
+    // hold the winner check needs at F. This must never rise without a
+    // deliberate edit here — a new `proof: null` means we published
+    // something we cannot yet keep.
     const gaps = PROMISES.filter((p) => p.proof === null);
-    expect(gaps.map((p) => p.phrase).sort()).toEqual(
-      ['We check the winning wallet against published sanctions lists'.toLowerCase()].sort()
-    );
+    expect(gaps.map((p) => p.phrase)).toEqual([]);
     for (const g of gaps) {
       expect(g.gate, `gap "${g.phrase}" must name what closes it`).toBeTruthy();
     }

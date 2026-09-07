@@ -46,7 +46,19 @@ const N_TIERS = 7;
 const CONFIG_SPACE = 484;
 const CONFIG_SPACE_V1 = 380;
 /** `Entry::SPACE` since the same upgrade (state.rs). */
-const ENTRY_SPACE = 208;
+/**
+ * `Entry::SPACE` — the byte length of an Entry account, used as the
+ * `getProgramAccounts` size filter.
+ *
+ * IT MUST EQUAL THE PROGRAM'S. It did not: this read 208 while the program
+ * had been 227 since the split fields landed on 2026-09-07, so the filter
+ * matched nothing and `getEntries` returned an empty array against any real
+ * cluster — the crank would have seen a pool with no entrants on the first
+ * live settlement. Nothing caught it because every test drives `FakeChain`
+ * and devnet has not settled a pool yet. `test/entry-layout.spec.ts` now
+ * pins it to `state.rs`, which is the durable half of this fix.
+ */
+export const ENTRY_SPACE = 228;
 
 const INSTRUCTIONS_SYSVAR = new PublicKey('Sysvar1nstructions1111111111111111111111111');
 
@@ -400,7 +412,9 @@ export class Web3Chain implements KeeperChain {
     // | class 1 | pass_asset 32 | entered_at 8 | slot_hash 32 | flagged 1
     // (179) | settled 1 (180) | refunded 1 (181) | escrow 8 (182) | bump 1
     // (190) | — the 2026-09-07 tail: escrowed_at 8 (191) | forfeited 1 (199)
-    // | next_place_lamports 8 (200) — 208 in all (`Entry::SPACE`).
+    // | next_place_lamports 8 (200) | split_total 8 (208) | split_paid_mask
+    // 8 (216) | split_group_size 2 (224) | split_remainder_paid 1 (226)
+    // | — Stage F: sanctions_hold 1 (227) — 228 in all (`Entry::SPACE`).
     const accounts = await this.cfg.connection.getProgramAccounts(this.cfg.programId, {
       commitment: 'confirmed',
       filters: [{ dataSize: ENTRY_SPACE }, { memcmp: { offset: 8, bytes: pool.toBase58() } }],
@@ -418,6 +432,7 @@ export class Web3Chain implements KeeperChain {
           forfeited: d[199] !== 0,
           escrowLamports: d.readBigUInt64LE(182),
           escrowedAt: d.readBigInt64LE(191),
+          sanctionsHold: d[227] !== 0,
         };
       })
       .sort((a, b) => a.index - b.index);
@@ -549,6 +564,37 @@ export class Web3Chain implements KeeperChain {
           { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
         ],
         data: Buffer.concat([disc('release_escrow'), le]),
+      }),
+    ]);
+  }
+
+  /** `place_sanctions_hold` — settlement-signed (Phase 2 Stage F). Shares
+   * the `FlagEntry` account shape; nothing moves. */
+  async placeSanctionsHold(poolId: bigint, player: string): Promise<void> {
+    await this.sendFlagIx('place_sanctions_hold', poolId, player);
+  }
+
+  /** `lift_sanctions_hold` — ADMIN-signed, so this client throws unless it
+   * holds the admin key (the same posture as `forfeitEscrow`). */
+  async liftSanctionsHold(poolId: bigint, player: string): Promise<void> {
+    const admin = this.admin('lift_sanctions_hold');
+    const poolKey = this.poolPda(poolId);
+    const le = Buffer.alloc(8);
+    le.writeBigUInt64LE(poolId);
+    await this.send([
+      new TransactionInstruction({
+        programId: this.cfg.programId,
+        keys: [
+          { pubkey: admin.publicKey, isSigner: true, isWritable: false },
+          { pubkey: this.configPda(), isSigner: false, isWritable: false },
+          { pubkey: poolKey, isSigner: false, isWritable: false },
+          {
+            pubkey: this.entryPda(poolKey, new PublicKey(player)),
+            isSigner: false,
+            isWritable: true,
+          },
+        ],
+        data: Buffer.concat([disc('lift_sanctions_hold'), le]),
       }),
     ]);
   }

@@ -504,6 +504,12 @@ pub fn flag_ix(settlement: &Pubkey, pool_id: u64, entry: &Pubkey, name: &str) ->
     }
 }
 
+/// `place_sanctions_hold` (settlement-signed) / `lift_sanctions_hold`
+/// (admin-signed) — Phase 2 Stage F. Same account order as `flag_ix`.
+pub fn sanctions_hold_ix(signer: &Pubkey, pool_id: u64, entry: &Pubkey, name: &str) -> Instruction {
+    flag_ix(signer, pool_id, entry, name)
+}
+
 /// `release_escrow` — `signer` is the settlement signer (the reviewed path)
 /// or, once the seven-day auto-release window has passed, anyone.
 pub fn release_escrow_ix(
@@ -797,7 +803,7 @@ pub const CONFIG_SPACE_V1: usize = 380;
 /// Config's account size since 2026-09-07 (`Config::SPACE`).
 pub const CONFIG_SPACE: usize = 484;
 /// Entry's account size since 2026-09-07 (`Entry::SPACE`).
-pub const ENTRY_SPACE: usize = 227;
+pub const ENTRY_SPACE: usize = 228;
 
 /// The treasury- and timing-relevant slice of Config (offsets mirror
 /// state.rs).
@@ -861,6 +867,8 @@ pub struct EntryView {
     pub split_paid_mask: u64,
     pub split_group_size: u16,
     pub split_remainder_paid: bool,
+    /// Phase 2 Stage F: the sanctions hold (`sanctions_hold`@227).
+    pub sanctions_hold: bool,
 }
 
 pub fn read_entry(svm: &LiteSVM, entry: &Pubkey) -> EntryView {
@@ -868,7 +876,7 @@ pub fn read_entry(svm: &LiteSVM, entry: &Pubkey) -> EntryView {
     // flagged@179, settled@180, refunded@181, escrow_lamports@182, bump@190;
     // tail: escrowed_at@191, forfeited@199, next_place_lamports@200,
     // split_total@208, split_paid_mask@216, split_group_size@224,
-    // split_remainder_paid@226 — 227 in all (`Entry::SPACE`).
+    // split_remainder_paid@226, sanctions_hold@227 — 228 (`Entry::SPACE`).
     assert_eq!(
         data.len(),
         ENTRY_SPACE,
@@ -888,6 +896,7 @@ pub fn read_entry(svm: &LiteSVM, entry: &Pubkey) -> EntryView {
         split_paid_mask: u64::from_le_bytes(data[216..224].try_into().unwrap()),
         split_group_size: u16::from_le_bytes([data[224], data[225]]),
         split_remainder_paid: data[226] != 0,
+        sanctions_hold: data[227] != 0,
     }
 }
 

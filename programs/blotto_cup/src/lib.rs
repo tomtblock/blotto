@@ -270,6 +270,19 @@ pub mod blotto_cup {
 
     /// Flag an entry (detection layer, R11): its prize share escrows at
     /// `pay_prizes` instead of paying.
+    /// Place a sanctions hold on an entry (Phase 2 Stage F, settlement-signed).
+    /// BOTH paths of `release_escrow` then refuse, and the entry can receive
+    /// no next-place portion. Nothing moves; see `instructions/sanctions.rs`.
+    pub fn place_sanctions_hold(ctx: Context<PlaceSanctionsHold>, pool_id: u64) -> Result<()> {
+        instructions::handle_place_sanctions_hold(ctx, pool_id)
+    }
+
+    /// Lift a sanctions hold (ADMIN-signed) — a match review established was
+    /// a false positive. The entry returns to the ordinary release path.
+    pub fn lift_sanctions_hold(ctx: Context<LiftSanctionsHold>, pool_id: u64) -> Result<()> {
+        instructions::handle_lift_sanctions_hold(ctx, pool_id)
+    }
+
     pub fn flag_entry(ctx: Context<FlagEntry>, pool_id: u64) -> Result<()> {
         instructions::handle_flag_entry(ctx, pool_id)
     }
