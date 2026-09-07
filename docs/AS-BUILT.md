@@ -221,11 +221,14 @@ reissue it**; the divergences are listed so the reissue is a single pass.
 
 Stated plainly, because two of these are published as though they were.
 
-1. **Sanctions screening.** The rules page says the winning wallet is checked
-   against published sanctions lists. The screening seam and its three
-   adapters exist (`backend/sanctions/`, Phase 2 Stage A) but nothing calls
-   them yet: the packet service still wires its `SanctionsList` seam to an
-   always-clear stub, and the daemon does not screen at all.
+1. **Sanctions screening of the winner.** The rules page says the *winning*
+   wallet is checked against published sanctions lists during resolving. What
+   exists is screening at *entry*: the packet service screens every entrant
+   through `backend/sanctions/` (Chainalysis, OpenSanctions and a mirrored
+   OFAC SDN list, any combination; Phase 2 Stages A–B) and refuses to start
+   with no source configured. The daemon does not screen the winner; that is
+   Stage F, gated on the founder's decision recorded in the audit, because a
+   match at resolving cannot be held with the escrow that exists.
 2. **The `Resolving` state and the 12-hour review clock.** The rules page says a
    settled pool enters resolving for up to 12 hours and that an undecided flag
    is then cleared and paid. There is no such state and no such timer; the

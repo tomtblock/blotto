@@ -31,6 +31,18 @@ describe('buildSanctions', () => {
     expect(b.ofac).to.equal(null);
   });
 
+  it('the stub is configured from the env it was handed, not from process.env', async () => {
+    // Regression: the first cut constructed the stub without arguments, so it
+    // read process.env and ignored the list the selector had been given.
+    const b = buildSanctions(
+      { SANCTIONS_STUB_LISTED: ' addr-A , addr-B ', ALLOW_STUB_SANCTIONS: '1' },
+      'test'
+    );
+    expect((await b.check.screen('addr-A')).listed).to.equal(true);
+    expect((await b.check.screen('addr-B')).listed).to.equal(true);
+    expect((await b.check.screen('addr-C')).listed).to.equal(false);
+  });
+
   it('a vendor key wins over the stub even when both are set', () => {
     const b = buildSanctions(
       { SANCTIONS_CHAINALYSIS_API_KEY: 'k', SANCTIONS_STUB_LISTED: '', ALLOW_STUB_SANCTIONS: '1' },

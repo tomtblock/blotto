@@ -34,6 +34,11 @@
 #     TURNKEY_API_BASE_URL, TURNKEY_API_PUBLIC_KEY, TURNKEY_API_PRIVATE_KEY,
 #     TURNKEY_ORGANIZATION_ID, ENTRY_SIGNER_KEY_ID, ENTRY_SIGNER_PUBLIC_KEY_HEX
 #     GEO_VENDOR_URL, GEO_VENDOR_API_KEY
+#   Packet service — sanctions screening (Phase 2 Stage B). OPTIONAL vendor
+#   keys, staged when present and cleared when absent; the mirrored OFAC SDN
+#   list (SANCTIONS_OFAC_SDN=1, no credential) is staged on EVERY run, so the
+#   service always has at least one real list and never the dev stub
+#     SANCTIONS_CHAINALYSIS_API_KEY, SANCTIONS_OPENSANCTIONS_API_KEY
 #   Daemon (C5) — deployed only once all of these exist
 #     TURNKEY_USER_ID, SWITCHBOARD_QUEUE, IRYS_UPLOAD_KEY,
 #     SETTLEMENT_SIGNER_KEYPAIR_B64
@@ -85,6 +90,8 @@ jobs:
       ENTRY_SIGNER_PUBLIC_KEY_HEX: ${{ secrets.ENTRY_SIGNER_PUBLIC_KEY_HEX }}
       GEO_VENDOR_URL: ${{ secrets.GEO_VENDOR_URL }}
       GEO_VENDOR_API_KEY: ${{ secrets.GEO_VENDOR_API_KEY }}
+      SANCTIONS_CHAINALYSIS_API_KEY: ${{ secrets.SANCTIONS_CHAINALYSIS_API_KEY }}
+      SANCTIONS_OPENSANCTIONS_API_KEY: ${{ secrets.SANCTIONS_OPENSANCTIONS_API_KEY }}
       SWITCHBOARD_QUEUE: ${{ secrets.SWITCHBOARD_QUEUE }}
       IRYS_UPLOAD_KEY: ${{ secrets.IRYS_UPLOAD_KEY }}
       SETTLEMENT_SIGNER_KEYPAIR_B64: ${{ secrets.SETTLEMENT_SIGNER_KEYPAIR_B64 }}
@@ -339,6 +346,25 @@ jobs:
           else
             flyctl secrets set --app "$PACKET_APP" --stage GEO_STUB_COUNTRY="GB"
           fi
+
+          # Sanctions screening (Phase 2 Stage B). The OFAC SDN mirror is a
+          # public list with no credential, so it is staged unconditionally:
+          # the service then has a real screener on every deploy, and the
+          # development stub is NEVER staged by this workflow — not even under
+          # allow_dev_credentials. Vendor keys add sources when present; an
+          # absent key is cleared so a revoked vendor cannot linger.
+          flyctl secrets set --app "$PACKET_APP" --stage SANCTIONS_OFAC_SDN="1"
+          flyctl secrets unset --app "$PACKET_APP" --stage SANCTIONS_STUB_LISTED || true
+          flyctl secrets unset --app "$PACKET_APP" --stage ALLOW_STUB_SANCTIONS || true
+          for n in SANCTIONS_CHAINALYSIS_API_KEY SANCTIONS_OPENSANCTIONS_API_KEY; do
+            if [ -n "${!n:-}" ]; then
+              flyctl secrets set --app "$PACKET_APP" --stage "$n=${!n}"
+              echo "sanctions: $n staged"
+            else
+              flyctl secrets unset --app "$PACKET_APP" --stage "$n" || true
+              echo "sanctions: $n absent — the OFAC SDN mirror is the source"
+            fi
+          done
 
       - name: Deploy packet service
         run: flyctl deploy . --config deploy/fly/packet.fly.toml --remote-only --yes --ha=false --build-arg BLOTTO_BUILD_COMMIT="$GITHUB_SHA"

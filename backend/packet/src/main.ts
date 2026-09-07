@@ -24,10 +24,15 @@
  *       GEO_CACHE_TTL_MS (900000; 0 disables the per-IP cache)
  *     GEO_STUB_COUNTRY [+ GEO_STUB_REGION/GEO_STUB_VPN]  (dev stub)
  *
- * Sanctions: no vendor is wired in this repository yet — the deployment
- * ships the same always-clear answer the suite pins, with the vendor need
- * recorded in docs/hosting.md. The territory schedule (fail-closed) is the
- * operative geographic gate at launch.
+ *   Sanctions (Phase 2, Stage B — `sanctions-wiring.ts`), any of:
+ *     SANCTIONS_CHAINALYSIS_API_KEY            (Chainalysis, primary)
+ *     SANCTIONS_OPENSANCTIONS_API_KEY          (OpenSanctions, cross-check)
+ *     SANCTIONS_OFAC_SDN=1                     (mirrored OFAC SDN list; no
+ *       credential — loaded before the service listens, refreshed on a
+ *       schedule; refuses to answer past SANCTIONS_OFAC_MAX_AGE_HOURS)
+ *     SANCTIONS_STUB_LISTED + ALLOW_STUB_SANCTIONS=1   (dev only)
+ *   Nothing configured → the service does not start. Until 2026-09-07 this
+ *   seam was wired to an always-clear answer; a packet was never screened.
  */
 
 import { randomBytes } from 'crypto';
@@ -38,6 +43,7 @@ import { loadHygieneConfig } from '../../_shared/src/http-hygiene';
 import { PgCiphertextStore } from '../../sealing/src/store';
 import { serveEntryApi } from './server';
 import { buildSigner } from './signer-select';
+import { wireSanctions } from './sanctions-wiring';
 import { StubGeoLookup, VendorHttpGeoLookup } from './geo-adapters';
 import { IpLocateGeoLookup } from './geo-iplocate';
 import { CachingGeoLookup } from './geo-cache';
@@ -95,7 +101,7 @@ function buildGeo(env: NodeJS.ProcessEnv): GeoLookup {
  */
 const REPO_ROOT = resolve(__dirname, '..', '..', '..');
 
-export function main(env: NodeJS.ProcessEnv = process.env): void {
+export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> {
   // FIRST line, before anything can fail: which code is actually running.
   // Both of 2026-08-31's incidents were a deploy shipping code older than
   // the fix, diagnosed only by comparing a commit on a web page against a
@@ -109,13 +115,15 @@ export function main(env: NodeJS.ProcessEnv = process.env): void {
   const termsVersion = loadTermsVersion(
     env.BLOTTO_TERMS_PATH ?? resolve(REPO_ROOT, 'config', 'terms.json')
   );
+  // Selected, loaded and scheduled BEFORE the listener opens: no request is
+  // ever answered by a screener that is not ready. Throws → no service.
+  const sanctions = await wireSanctions(env);
 
   serveEntryApi(
     {
       packet: {
         geo: buildGeo(env),
-        // No sanctions vendor is wired yet (module doc; docs/hosting.md).
-        sanctions: { isSanctioned: async () => false },
+        sanctions: sanctions.list,
         signer: buildSigner(env),
         attestations: new PgAttestationStore(db),
         config: { territories, kycTier: 0, termsVersion },
@@ -146,10 +154,8 @@ export function main(env: NodeJS.ProcessEnv = process.env): void {
 }
 
 if (require.main === module) {
-  try {
-    main();
-  } catch (err) {
+  main().catch((err: unknown) => {
     console.error(`${SERVICE}: fatal:`, err instanceof Error ? err.message : err);
     process.exit(1);
-  }
+  });
 }

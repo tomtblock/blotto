@@ -99,7 +99,14 @@ export function buildSanctions(env: NodeJS.ProcessEnv, service: string): BuiltSa
       );
     }
     console.warn(`${service}: sanctions = STUB (SANCTIONS_STUB_LISTED, ALLOW_STUB_SANCTIONS=1) — NOT a vendor. Development only.`);
-    return { check: new StubSanctionsCheck(), ofac: null, describe: ['stub'] };
+    // Parsed from the env THIS call was handed, never from process.env: the
+    // selector's whole reason for being a function of `env` is that a test
+    // (and a service booted with an explicit environment) sees exactly what
+    // it passed.
+    const listed = env.SANCTIONS_STUB_LISTED.split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    return { check: new StubSanctionsCheck(listed), ofac: null, describe: ['stub'] };
   }
 
   throw new Error(
