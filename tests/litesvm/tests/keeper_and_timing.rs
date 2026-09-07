@@ -437,11 +437,18 @@ fn enabling_a_tier_starts_its_liveness_clock() {
     // The keeper can, immediately: the stamp is `now`, not `now + cooldown`.
     open_tier1(&mut env, &keeper, 1).expect("the keeper opens at once");
 
-    // And the fallback still works, measured from the stamp: once the tier is
-    // free again and a full window has passed, a stranger may open it.
+    // And the fallback still works, measured from the stamp: freeing the slot
+    // stamps `now + cooldown`, and the window runs from THAT, so a stranger
+    // waits the cooldown and then a full window.
     close_empty_tier(&mut env, 1);
     let freed_at = read_config(&env.svm).tier_next_open_at[1];
-    env.advance_time(LIVENESS_FALLBACK_SECS - 1);
+    assert_eq!(
+        freed_at,
+        now(&env) + COOLDOWN_SECS,
+        "the slot stamps its cooldown"
+    );
+    let window_opens_in = freed_at - now(&env) + LIVENESS_FALLBACK_SECS;
+    env.advance_time(window_opens_in - 1);
     let err = open_tier1(&mut env, &stranger, 2).unwrap_err();
     assert!(err.contains("6054"), "one second early: {err}");
     env.advance_time(1);
