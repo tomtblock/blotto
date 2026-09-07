@@ -81,6 +81,10 @@ struct EntryModel {
     escrow: u64,
     /// Forfeited shares paid onward TO this entry (`Entry.next_place_lamports`).
     next_place: u64,
+    /// The split book-keeping on a forfeiter (`Entry.split_*`).
+    split_total: u64,
+    split_paid: u64,
+    split_group: u16,
 }
 
 impl EntryModel {
@@ -479,11 +483,16 @@ impl Model {
         e.forfeited = true;
     }
 
-    /// `pay_next_place` — the forfeited share, whole, vault → the next
-    /// eligible place. Requires a Paid pool, a forfeited `from` with escrow,
-    /// and an eligible `to` (exists, not refunded / forfeited / under
-    /// review, not `from`). The rank proof and the lowest-seat witness rule
-    /// are the on-chain suite's business; the money is modelled here.
+    /// `pay_next_place` — one member's portion of a forfeited share, vault →
+    /// the next eligible place (addendum ruling 3: an EQUAL split among the
+    /// eligible players at the rank the share passes to; remainder to the
+    /// lowest seat). Requires a Paid pool, a forfeited `from` with escrow,
+    /// and an eligible `to` not yet paid from this share. The group: the
+    /// eligible committed seats other than `from` when any exists (first
+    /// place — `to` must be one of them); otherwise `to` is treated as a
+    /// next-rank member and the signer's asserted group size is modelled as
+    /// 1 (the rank proof and the completeness disclosure are the on-chain
+    /// suite's business; the money is modelled here).
     fn pay_next_place(&mut self, from: usize, to: usize) {
         if !self.opened || self.state != St::Paid || from == to {
             return;
@@ -495,13 +504,60 @@ impl Model {
         if !self.entries[to].eligible() {
             return; // NextPlaceIneligible / NextPlaceReviewPending
         }
-        let share = f.escrow as u128;
-        assert!(self.vault >= share, "vault underflow at next-place payout");
-        self.vault -= share;
-        self.total_next_place += share;
-        self.entries[from].escrow = 0;
+        if f.split_paid & (1u64 << to) != 0 {
+            return; // RankAlreadySettled — this member already took its portion
+        }
+        // A pending review anywhere in the first-place group blocks the split.
+        let committed: Vec<usize> = self.committed.iter().map(|&(s, _)| s).collect();
+        if committed
+            .iter()
+            .any(|&s| s != from && self.entries[s].review_pending())
+        {
+            return; // NextPlaceReviewPending
+        }
+        let group: Vec<usize> = committed
+            .iter()
+            .copied()
+            .filter(|&s| s != from && self.entries[s].eligible())
+            .collect();
+        let (n, lowest) = if group.is_empty() {
+            // Next rank: `to` must be outside the committed list.
+            if committed.contains(&to) {
+                return;
+            }
+            (1usize, to)
+        } else {
+            if !group.contains(&to) {
+                return; // NextPlaceRankInvalid — a first-place member exists
+            }
+            (group.len(), *group.iter().min().unwrap())
+        };
+        // Fixed by the first payment (the model mirrors the on-chain fields).
+        let total = if f.split_group == 0 { f.escrow } else { f.split_total };
+        if f.split_group != 0 && f.split_group as usize != n {
+            return; // NextPlaceSplitMismatch — cannot happen: eligibility is final
+        }
+        let per = total / n as u64;
+        let rem = total % n as u64;
+        let portion = per + if to == lowest { rem } else { 0 };
+        assert!(portion > 0 && portion <= f.escrow, "split arithmetic");
+        assert!(self.vault >= portion as u128, "vault underflow at next-place payout");
+        self.vault -= portion as u128;
+        self.total_next_place += portion as u128;
+        let fm = &mut self.entries[from];
+        if fm.split_group == 0 {
+            fm.split_group = n as u16;
+            fm.split_total = total;
+        }
+        fm.split_paid |= 1u64 << to;
+        fm.escrow -= portion;
+        // The last member's payment empties the share exactly (on-chain the
+        // program requires it; the model asserts the arithmetic delivers it).
+        if fm.split_paid.count_ones() as usize == n {
+            assert_eq!(fm.escrow, 0, "the split must sum to the share");
+        }
         let t = &mut self.entries[to];
-        t.next_place += f.escrow;
+        t.next_place += portion;
         t.settled = true;
     }
 
@@ -659,10 +715,10 @@ impl Model {
     }
 
     /// Settle every outstanding escrow the way the operator would: release
-    /// the unforfeited holds, pay each forfeited share to the lowest
-    /// eligible seat. Returns the lamports that could NOT be paid onward (no
-    /// eligible seat exists — every entrant flagged), which stay in the
-    /// vault as claims.
+    /// the unforfeited holds, then split each forfeited share among the
+    /// eligible players at the rank it passes to. Returns the lamports that
+    /// could NOT be paid onward (no eligible seat exists — every entrant
+    /// flagged), which stay in the vault as claims.
     fn settle_all_escrow(&mut self) -> u128 {
         for i in 0..CAP {
             if !self.entries[i].forfeited {
@@ -674,10 +730,28 @@ impl Model {
             if !self.entries[from].forfeited || self.entries[from].escrow == 0 {
                 continue;
             }
-            match (0..CAP).find(|&t| t != from && self.entries[t].eligible()) {
-                Some(to) => self.pay_next_place(from, to),
-                None => stuck += self.entries[from].escrow as u128,
+            // Every eligible member of the group takes its portion: the
+            // eligible committed seats, else the lowest eligible seat as a
+            // next-rank group of one.
+            let committed: Vec<usize> = self.committed.iter().map(|&(s, _)| s).collect();
+            let mut group: Vec<usize> = committed
+                .iter()
+                .copied()
+                .filter(|&s| s != from && self.entries[s].eligible())
+                .collect();
+            if group.is_empty() {
+                if let Some(t) = (0..CAP).find(|&t| t != from && !committed.contains(&t) && self.entries[t].eligible()) {
+                    group.push(t);
+                }
             }
+            if group.is_empty() {
+                stuck += self.entries[from].escrow as u128;
+                continue;
+            }
+            for to in group {
+                self.pay_next_place(from, to);
+            }
+            assert_eq!(self.entries[from].escrow, 0, "a split leaves nothing behind");
         }
         stuck
     }

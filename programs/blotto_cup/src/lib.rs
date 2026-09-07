@@ -297,8 +297,18 @@ pub mod blotto_cup {
         rank: u8,
         amount: u64,
         proof: Vec<crate::merkle::ProofStep>,
+        group_size: u16,
+        takes_remainder: bool,
     ) -> Result<()> {
-        instructions::handle_pay_next_place(ctx, pool_id, rank, amount, proof)
+        instructions::handle_pay_next_place(
+            ctx,
+            pool_id,
+            rank,
+            amount,
+            proof,
+            group_size,
+            takes_remainder,
+        )
     }
 
     // ---- Refund fork (R7) -----------------------------------------------

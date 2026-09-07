@@ -114,6 +114,8 @@ fn lifecycle_log_fixture() {
         1,
         TIER_POTS[0] / 2,
         &merkle_proof(&leaves, 0),
+        1,
+        true,
         &[],
     );
     env.send(&[ix], &[&settlement]).unwrap();

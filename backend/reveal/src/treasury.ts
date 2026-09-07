@@ -52,9 +52,15 @@ export function idleTierReserve(config: ChainConfigView, excludeTier: number | n
  *   2. SEQUENTIAL — no live pool in the tier (`active_pool_by_tier` clears
  *      only at Paid/Closed; `poolStates` is advisory context for the
  *      reason string — the SLOT is the gate, exactly as on-chain);
- *   3. available = platform balance − refundable entries;
+ *   3. the tier's cooldown has elapsed (`tier_next_open_at`, prompt v2
+ *      §B.6) — when `now` is given; a tier still cooling down is treated
+ *      like a busy one (the slot is free, the clock is not);
+ *   4. available = platform balance − refundable entries;
  *      needed = pot + min + idle-tier reserve (this tier excluded);
  *      available ≥ needed.
+ *
+ * The keeper gate itself is not mirrored: the daemon signs as the keeper,
+ * and the liveness fallback exists for OTHER signers, not for it.
  *
  * The D2 pass-sale ceiling is deliberately NOT mirrored here: the keeper
  * lets the program rule on it (a ceiling change between poll and send
@@ -63,16 +69,22 @@ export function idleTierReserve(config: ChainConfigView, excludeTier: number | n
 export function nextOpenable(
   config: ChainConfigView,
   platformBalance: bigint,
-  poolStates: TierPoolStates
+  poolStates: TierPoolStates,
+  now?: bigint
 ): NextOpenable {
   const available = platformBalance - config.platformRefundable;
   let firstShort: { tier: number; shortfall: bigint } | null = null;
   let sawBusy = false;
+  const cooling: string[] = [];
   for (let t = 0; t < config.openTiers.length; t++) {
     if (!config.openTiers[t]) continue;
     if (config.activePoolByTier[t] !== 0n) {
       sawBusy = true;
       continue; // sequential: the prior pool is not yet Paid/Closed
+    }
+    if (now !== undefined && now < config.tierNextOpenAt[t]) {
+      cooling.push(`tier ${t}: cooling down until ${config.tierNextOpenAt[t]}`);
+      continue; // the slot is free; the cooldown is not over
     }
     const needed =
       config.tierPotLamports[t] + config.treasuryMinPlatformLamports + idleTierReserve(config, t);
@@ -92,14 +104,15 @@ export function nextOpenable(
       shortfallLamports: firstShort.shortfall,
     };
   }
-  if (sawBusy) {
+  if (sawBusy || cooling.length > 0) {
     const busy = poolStates
       .map((s, t) => (config.activePoolByTier[t] !== 0n ? `tier ${t}: ${s}` : null))
       .filter((x): x is string => x !== null)
+      .concat(cooling)
       .join(', ');
     return {
       tier: null,
-      reason: `every enabled tier has a live pool (${busy})`,
+      reason: `every enabled tier has a live pool or is cooling down (${busy})`,
       shortfallLamports: 0n,
     };
   }

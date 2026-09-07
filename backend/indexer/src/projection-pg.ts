@@ -113,7 +113,7 @@ export class PgProjection implements Projection {
 
   async reset(): Promise<void> {
     await this.db.query(
-      'TRUNCATE pools, entries, results, payouts, profiles, player_history'
+      'TRUNCATE pools, entries, results, payouts, profiles, player_history, tier_status'
     );
   }
 }

@@ -159,4 +159,10 @@ pub enum ErrorCode {
     /// skips a pending one.
     #[msg("A first-place review is still pending; resolve it before paying the next place")]
     NextPlaceReviewPending,
+    /// 6067 — `pay_next_place`: the split arguments disagree with the group
+    /// (group size or remainder flag differs from the on-chain first-place
+    /// group, or from the size fixed by this share's earlier payments), or
+    /// the last payment would leave the remainder stranded.
+    #[msg("Split arguments disagree with the group or with earlier payments of this share")]
+    NextPlaceSplitMismatch,
 }

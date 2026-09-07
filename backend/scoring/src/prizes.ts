@@ -26,18 +26,39 @@ export const CAPACITY = 64n;
 export const MIN_SEATS = 52n;
 
 /**
- * The go-timer the 52nd entry starts, in seconds (D-E4 §11.3, option B) —
- * a TS mirror of `constants.rs::GO_TIMER_SECS`. The pool's deadline becomes
- * `min(fill_deadline, now + GO_TIMER_SECS)`; when it passes, the pool runs
- * with everyone seated. PROPOSAL: six hours is the architect's figure
- * pending the founder's number — change it in constants.rs and here
- * together.
+ * The fill deadline `open_pool` seeds into every new pool, in seconds — a
+ * TS mirror of `constants.rs::DEFAULT_FILL_DEADLINE_SECS` (12 hours,
+ * founder ruling 2026-09-07, superseding R7's 72 h). Since the same ruling
+ * it lives in `Config.fill_deadline_seconds` (changeable by the admin's
+ * `set_pool_timing`, never touching an open pool); this constant is the
+ * launch value and what the rules page states. Option A: a pool seals at
+ * the 64th seat or at this deadline with at least `MIN_SEATS`, and refunds
+ * below — there is no second clock (the go-timer of the first cut is gone).
  */
-export const GO_TIMER_SECS = 6n * 3600n;
+export const DEFAULT_FILL_DEADLINE_SECS = 12n * 3600n;
 
-/** The fill deadline set at `open_pool`, in seconds — mirrors
- * `constants.rs::FILL_DEADLINE_SECS` (R7: 72 hours). */
-export const FILL_DEADLINE_SECS = 72n * 3600n;
+/**
+ * The per-tier cooldown after a pool settles (Paid or Closed) before the
+ * tier's next pool may open — `constants.rs::DEFAULT_COOLDOWN_SECS`, seeded
+ * into `Config.cooldown_seconds` (prompt v2 §B.6). The app's "next pool in"
+ * countdown reads the on-chain `tier_next_open_at`, not this.
+ */
+export const DEFAULT_COOLDOWN_SECS = 5n * 60n;
+
+/**
+ * How long a tier may sit idle past its cooldown before ANY signer (not only
+ * the keeper) may open its next pool — `constants.rs::LIVENESS_FALLBACK_SECS`
+ * (prompt v2 §A.3). A dead daemon cannot freeze a tier.
+ */
+export const LIVENESS_FALLBACK_SECS = 24n * 3600n;
+
+/**
+ * How long after a share is escrowed anyone may release it to its player —
+ * `constants.rs::ESCROW_AUTO_RELEASE_SECS` (prompt v2 §E.3): inaction pays
+ * the player. An upheld flag (`forfeit_escrow`, admin-signed) closes this
+ * door; the share is then paid to the next eligible place instead.
+ */
+export const ESCROW_AUTO_RELEASE_SECS = 7n * 24n * 3600n;
 
 /**
  * The seven configured entry prices (D1, ratified 2026-08-27), tier 0..6 —

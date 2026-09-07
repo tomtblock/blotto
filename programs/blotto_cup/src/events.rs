@@ -143,11 +143,13 @@ pub struct EscrowForfeited {
     pub destination: Pubkey,
 }
 
-/// A forfeited share paid to the next eligible place (`pay_next_place`,
-/// founder ruling 4 (ii)): `rank` is the paid player's committed
-/// competition rank (1 for a tied first-place member, 1 + k for the next
-/// rank after a k-way tie), proven against `Pool.results_root`; `amount` is
-/// the forfeited share paid, the whole of it.
+/// One member's portion of a forfeited share (`pay_next_place`, founder
+/// ruling 4 (ii) and addendum ruling 3): `rank` is the paid player's
+/// committed competition rank (1 for a tied first-place member, 1 + k for
+/// the next rank after a k-way tie), proven against `Pool.results_root`;
+/// `amount` is THIS member's portion — the share divided by `group_size`,
+/// plus the indivisible remainder for the lowest entry number of the group.
+/// The event stream for one forfeited share sums to that share exactly.
 #[event]
 pub struct NextPlacePaid {
     pub pool: Pubkey,
@@ -155,6 +157,7 @@ pub struct NextPlacePaid {
     pub to: Pubkey,
     pub rank: u8,
     pub amount: u64,
+    pub group_size: u16,
 }
 
 /// `set_keeper`: the key allowed to open pools before the liveness fallback.

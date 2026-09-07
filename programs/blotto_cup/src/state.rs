@@ -343,14 +343,34 @@ pub struct Entry {
     /// Lamports this entry received by next-place payout from a forfeited share
     /// (`pay_next_place`) — on top of any committed payout.
     pub next_place_lamports: u64,
+    // ---- The split (founder ruling 3 of the 2026-09-07 addendum): a
+    // forfeited share is divided EQUALLY among the eligible players at the
+    // rank it passes to, one member per `pay_next_place` call. These four
+    // fields live on the FORFEITER's Entry and make the split idempotent
+    // and exact across calls.
+    /// The share as it stood when the first split payment went out (the
+    /// dividend); 0 until then. `escrow_lamports` counts down from it.
+    pub split_total: u64,
+    /// Bit per SEAT already paid from this forfeited share.
+    pub split_paid_mask: u64,
+    /// The size of the group the share is divided among, fixed by the first
+    /// payment (recomputed and checked on-chain at first place; asserted
+    /// by the settlement signer at the next rank — disclosed residual, see
+    /// `escrow.rs`). 0 = no payment yet.
+    pub split_group_size: u16,
+    /// The indivisible remainder has been paid (to the lowest entry number
+    /// of the group — verified at first place, asserted at the next rank).
+    pub split_remainder_paid: bool,
 }
 
 impl Entry {
     /// The pre-2026-09-07 layout (183); pre-upgrade Entries, if any, are
     /// this size and are read by offset only up to here.
     pub const LEN_V1: usize = 32 + 32 + 2 + 32 + 1 + 32 + 8 + 32 + 1 + 1 + 1 + 8 + 1;
-    /// escrowed_at (8) + forfeited (1) + next_place_lamports (8).
-    pub const TAIL_LEN: usize = 8 + 1 + 8;
+    /// escrowed_at (8) + forfeited (1) + next_place_lamports (8) +
+    /// split_total (8) + split_paid_mask (8) + split_group_size (2) +
+    /// split_remainder_paid (1).
+    pub const TAIL_LEN: usize = 8 + 1 + 8 + 8 + 8 + 2 + 1;
     pub const LEN: usize = Self::LEN_V1 + Self::TAIL_LEN;
     pub const SPACE: usize = 8 + Self::LEN;
 }
@@ -502,9 +522,9 @@ mod tests {
         );
         assert_eq!(Config::SPACE, 484);
         assert_eq!(Entry::LEN_V1, 183);
-        assert_eq!(Entry::TAIL_LEN, 17);
-        assert_eq!(Entry::LEN, 200);
-        assert_eq!(Entry::SPACE, 208);
+        assert_eq!(Entry::TAIL_LEN, 36);
+        assert_eq!(Entry::LEN, 219);
+        assert_eq!(Entry::SPACE, 227);
     }
 
     #[test]
@@ -526,6 +546,10 @@ mod tests {
             escrowed_at: i64::MAX,
             forfeited: true,
             next_place_lamports: u64::MAX,
+            split_total: u64::MAX,
+            split_paid_mask: u64::MAX,
+            split_group_size: u16::MAX,
+            split_remainder_paid: true,
         };
         let mut buf = Vec::new();
         e.serialize(&mut buf).unwrap();

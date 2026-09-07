@@ -26,16 +26,24 @@ import type { DecodedEvent } from './shared';
 export type ProjectionOp =
   | {
       kind: 'upsert';
-      table: 'pools' | 'entries' | 'results' | 'payouts' | 'profiles' | 'player_history';
+      table:
+        | 'pools'
+        | 'entries'
+        | 'results'
+        | 'payouts'
+        | 'profiles'
+        | 'player_history'
+        | 'tier_status';
       key: Record<string, string | number>;
       set: Record<string, unknown>;
     }
   | {
       kind: 'increment';
-      table: 'pools' | 'entries' | 'profiles';
+      table: 'pools' | 'entries' | 'profiles' | 'player_history';
       key: Record<string, string | number>;
       field: string;
-      /** Decimal string — increments are numeric and may exceed 2^53. */
+      /** Decimal string — increments are numeric and may exceed 2^53; a
+       * negative string decrements. */
       by: string;
     }
   | {
@@ -160,16 +168,17 @@ export function projectEvent(e: DecodedEvent): ProjectionOp[] {
         },
       ];
     }
-    case 'GoTimerStarted':
-      // D-E4: the 52nd entry shortened the on-chain `fill_deadline` in place
-      // to the go deadline. Mirror both: `fill_deadline` stays THE effective
-      // deadline for every reader; `go_deadline` says the timer started.
+    case 'TierSlotFreed':
+      // Prompt v2 §B.6: the tier's slot freed (Paid or Closed) and its
+      // cooldown started — the "next pool in" countdown's source. One row
+      // per tier (0013_tier_status.sql). `pools.go_deadline` (0012) is no
+      // longer written: the go-timer was removed before any deployment.
       return [
         {
           kind: 'upsert',
-          table: 'pools',
-          key: { pool: e.pool as string },
-          set: { fill_deadline: e.go_deadline, go_deadline: e.go_deadline },
+          table: 'tier_status',
+          key: { tier: e.tier as number },
+          set: { next_open_at: e.next_open_at, last_pool_id: e.pool_id },
         },
       ];
     case 'PoolSealed':
@@ -286,12 +295,64 @@ export function projectEvent(e: DecodedEvent): ProjectionOp[] {
         },
       ];
     case 'EscrowForfeited':
+      // Review upheld the flag (2026-09-07: nothing moves — the share stays
+      // in the vault until NextPlacePaid). The forfeiter's career record
+      // stops counting the seat as paid: the prize is no longer theirs, and
+      // the next-place payouts below will attribute it to whoever receives
+      // it, so the pool's history still sums to the pot.
       return [
         {
           kind: 'upsert',
           table: 'entries',
           key: { pool: e.pool as string, player: e.player as string },
           set: { escrow_settled: 'forfeited' },
+        },
+        {
+          kind: 'upsert',
+          table: 'player_history',
+          key: { pool: e.pool as string, player: e.player as string },
+          set: { paid: false, amount_lamports: '0' },
+        },
+        {
+          kind: 'increment',
+          table: 'profiles',
+          key: { player: e.player as string },
+          field: 'seats_paid',
+          by: '-1',
+        },
+      ];
+    case 'NextPlacePaid':
+      // One member's portion of a forfeited share (addendum ruling 3): the
+      // receiving entry's `next_place_lamports`, its profile total, and its
+      // career row (paid, amount accumulated — a tied member may hold its
+      // own committed payout as well).
+      return [
+        {
+          kind: 'increment',
+          table: 'entries',
+          key: { pool: e.pool as string, player: e.to as string },
+          field: 'next_place_lamports',
+          by: e.amount as string,
+        },
+        {
+          kind: 'increment',
+          table: 'profiles',
+          key: { player: e.to as string },
+          field: 'total_won_lamports',
+          by: e.amount as string,
+        },
+        {
+          kind: 'upsert',
+          table: 'player_history',
+          key: { pool: e.pool as string, player: e.to as string },
+          set: { paid: true },
+        },
+        {
+          kind: 'increment',
+          table: 'player_history',
+          key: { pool: e.pool as string, player: e.to as string },
+          field: 'amount_lamports',
+          by: e.amount as string,
         },
       ];
     case 'RefundTriggered':

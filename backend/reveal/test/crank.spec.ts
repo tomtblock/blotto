@@ -83,7 +83,15 @@ async function buildSealedPool(sabotage: {
       sabotage.hashMismatch === i
         ? hex(sha(`wrong:${i}`))
         : hex(battlesHash(b, payload.salt));
-    entries.push({ player, index: i, battlesHash: onChainHash, flagged: false, refunded: false });
+    entries.push({
+      player,
+      index: i,
+      battlesHash: onChainHash,
+      flagged: false,
+      refunded: false,
+      settled: false,
+      forfeited: false,
+    });
     if (sabotage.missing === i) continue; // never stored
     if (sabotage.garbage === i) {
       await store.put(1n, player, sha(`garbage:${i}`)); // not a sealed box
@@ -241,6 +249,8 @@ describe('the settlement crank', () => {
         battlesHash: '00'.repeat(32),
         flagged: false,
         refunded: false,
+        settled: false,
+        forfeited: false,
       }))
     );
     const custody = new LocalCustody(async () => false);

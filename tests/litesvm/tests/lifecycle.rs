@@ -244,9 +244,10 @@ fn flagged_winners_escrow_then_release_forfeit_and_next_place() {
     let err = env.send(&[ix], &[]).unwrap_err();
     assert!(err.contains("6057"), "a second forfeit is refused: {err}");
 
-    // Promote seat 1's share to seat 0 — the tied member whose review
-    // cleared (released): rank 1, in the committed list, a lower seat than
-    // the forfeiter, so no witnesses. Proven against the committed root.
+    // Seat 1's share passes to the remaining eligible first-place player:
+    // seat 0, whose review cleared (released). A group of ONE — the whole
+    // share, seat 0 the lowest entry number — proven against the committed
+    // root; no other committed seats exist to pass as peers.
     let proof = merkle_proof(&leaves, 0);
     assert_eq!(ranks[0], 1);
     let before = env.balance(&players[0].0.pubkey());
@@ -259,18 +260,23 @@ fn flagged_winners_escrow_then_release_forfeit_and_next_place() {
         1,
         POT / 2,
         &proof,
+        1,
+        true,
         &[],
     );
     env.send(&[ix], &[&settlement]).expect("pay onward to the cleared tied member");
     assert_eq!(env.balance(&players[0].0.pubkey()) - before, POT / 2, "the whole share");
     let e1 = read_entry(&env.svm, &players[0].1);
     assert_eq!(e1.next_place_lamports, POT / 2);
-    assert_eq!(read_entry(&env.svm, &players[1].1).escrow_lamports, 0);
+    let e2 = read_entry(&env.svm, &players[1].1);
+    assert_eq!(e2.escrow_lamports, 0);
+    assert_eq!((e2.split_total, e2.split_group_size, e2.split_paid_mask), (POT / 2, 1, 1));
+    assert!(e2.split_remainder_paid);
     assert_eq!(env.balance(&vault_pda(1)), 0, "vault ends at exactly zero");
     assert_eq!(env.balance(&platform_pda()), platform_before, "still nothing to the operator");
     // And the same share cannot be paid onward twice.
     let ix = pay_next_place_ix(
-        &settlement.pubkey(), 1, &players[1].1, &players[0].1, &players[0].0.pubkey(), 1, POT / 2, &proof, &[],
+        &settlement.pubkey(), 1, &players[1].1, &players[0].1, &players[0].0.pubkey(), 1, POT / 2, &proof, 1, true, &[],
     );
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
     assert!(err.contains("6036") || err.contains("NoEscrow"), "{err}");

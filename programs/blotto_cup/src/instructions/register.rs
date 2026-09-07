@@ -252,6 +252,10 @@ pub fn handle_register(
     entry.escrowed_at = 0;
     entry.forfeited = false;
     entry.next_place_lamports = 0;
+    entry.split_total = 0;
+    entry.split_paid_mask = 0;
+    entry.split_group_size = 0;
+    entry.split_remainder_paid = false;
 
     let pool = &mut ctx.accounts.pool;
     pool.entrants += 1;

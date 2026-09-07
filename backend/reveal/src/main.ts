@@ -14,6 +14,10 @@
  *   BLOTTO_PROGRAM_ID            default the declared id
  *   BLOTTO_DATABASE_URL          Postgres (ciphertexts + published pool keys)
  *   SETTLEMENT_SIGNER_KEYPAIR    path to the settlement keypair JSON
+ *   KEEPER_KEYPAIR               optional — the key `open_pool` requires
+ *                                (`Config.keeper`, prompt v2 §A). Absent =
+ *                                the settlement signer opens pools too, the
+ *                                devnet posture until E6 splits the keys
  *   SWITCHBOARD_QUEUE            the Switchboard On-Demand queue (base58) —
  *                                selects the PRODUCTION VRF coordinator
  *                                (vrf-switchboard.ts): fresh Randomness
@@ -31,8 +35,13 @@
  *
  * One seam stays open, on the record (docs/hosting.md):
  *   - the detection ipHash rides empty (the hashed-IP capture at ciphertext
- *     submission is not stored yet) — device correlation, the R11 hard
- *     block, still runs on the sealed device hash.
+ *     submission is not stored yet) — device correlation still runs on the
+ *     sealed device hash, in SHADOW mode (below).
+ *
+ * Detection is MANUAL-ONLY (prompt v2 §E, recorded 2026-09-07): the pipeline
+ * runs on every pool and its report is logged, but the crank's `detect`
+ * hook returns no auto-flags — a flag is a signed human decision through
+ * the review path (backend/detection, `flag_entry`), never the daemon's.
  */
 
 import { readFileSync } from 'fs';
@@ -177,10 +186,22 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
       })
     : null;
 
+  const keeperSigner = env.KEEPER_KEYPAIR
+    ? Keypair.fromSecretKey(
+        new Uint8Array(JSON.parse(readFileSync(env.KEEPER_KEYPAIR, 'utf8')) as number[])
+      )
+    : undefined;
+  log(
+    keeperSigner
+      ? `keeper ${keeperSigner.publicKey.toBase58()} opens pools (KEEPER_KEYPAIR set)`
+      : 'keeper = the settlement signer (KEEPER_KEYPAIR unset — the devnet posture)'
+  );
+
   const chain: Web3Chain = new Web3Chain({
     connection,
     programId: new PublicKey(env.BLOTTO_PROGRAM_ID ?? DEFAULT_PROGRAM_ID),
     settlementSigner,
+    keeperSigner,
     makeVrfRevealIx: swCoordinator
       ? (account) => swCoordinator.makeVrfRevealIx(account)
       : undefined,
@@ -230,8 +251,11 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
     )
   );
 
-  // R11: the detection hook, exactly as the rehearsal wires it (hard blocks
-  // flag before payout; the full report is shadow-mode logged).
+  // R11 in SHADOW mode (manual-only detection, 2026-09-07): the report is
+  // computed and logged for every pool with findings; NOTHING is flagged by
+  // the daemon. `report.hardBlocks` is deliberately not returned — a flag
+  // is a reviewer's signed decision (backend/detection), and the crank's
+  // hook is kept as the seam it always was.
   const detect = async (id: bigint, revealed: RevealedForDetection[]): Promise<string[]> => {
     const report = detectPool(
       id.toString(),
@@ -249,9 +273,9 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
       { fullEscrowTier: false }
     );
     if (report.findings.length > 0) {
-      console.log(`${SERVICE}: detection pool=${id}`, JSON.stringify(report));
+      console.log(`${SERVICE}: detection (shadow) pool=${id}`, JSON.stringify(report));
     }
-    return report.hardBlocks;
+    return [];
   };
 
   // E3 §4.4 (live path): after the crank publishes a bundle, tell the

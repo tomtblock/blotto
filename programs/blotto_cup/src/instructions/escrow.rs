@@ -16,26 +16,17 @@
 //!     deliberate multi-party act may take one) records that review upheld
 //!     the flag. NO LAMPORTS MOVE: the share stays in the vault, marked
 //!     `forfeited`, and can only ever leave by next-place payout.
-//!   - `pay_next_place` pays a forfeited share to the next eligible
-//!     place: a member of the tied first-place group who is not flagged (the
-//!     committed payout list IS that group under one paid place), or — when
-//!     no tied member is eligible — a player at the next competition rank,
-//!     proven against `Pool.results_root` by a Merkle proof. One target per
-//!     call, the whole share, so every step is verifiable and small.
-//!
-//! # What the program verifies, and what it cannot
-//!
-//! The committed payout list gives the program every first-place seat, so
-//! it verifies that a first-place target is the LOWEST-seat eligible tied
-//! member (every lower tied seat is passed as an Entry account and shown to
-//! be the forfeiter, flagged or forfeited), and that a next-rank target is
-//! reached only when EVERY tied member is ineligible. Within the next-rank
-//! group the program cannot verify "lowest seat" — those seats are not
-//! on-chain — so the settlement signer picks a member of that rank, proven
-//! by the Merkle proof to hold exactly that rank; the published rule is the
-//! lowest eligible seat, the bundle makes any deviation visible, and the
-//! signer cannot route the money to itself or the operator (the four-key
-//! ban in `register`, and no treasury destination exists here).
+//!   - `pay_next_place` divides a forfeited share EQUALLY among the
+//!     eligible players at the rank it passes to (addendum ruling 3,
+//!     2026-09-07): the remaining eligible members of the tied first-place
+//!     group (the committed payout list IS that group under one paid
+//!     place), or — when none of them is eligible — the eligible players at
+//!     the next competition rank, each proven against `Pool.results_root`
+//!     by a Merkle proof. One member per call, the indivisible remainder to
+//!     the lowest entry number; the handler's doc explains what is verified
+//!     on-chain (everything, at first place) and what is asserted by the
+//!     settlement signer and disclosed (the group's completeness at the
+//!     next rank).
 //!
 //! # Forfeit destination (history)
 //!
@@ -238,11 +229,12 @@ pub struct PayNextPlace<'info> {
     #[account(mut, seeds = [VAULT_SEED, &pool_id.to_le_bytes()], bump = pool.vault_bump)]
     pub vault: UncheckedAccount<'info>,
 
-    /// The forfeited entry (`forfeited`, `escrow_lamports > 0`).
+    /// The forfeited entry (`forfeited`, `escrow_lamports > 0`). Carries the
+    /// split's book-keeping (`split_*`, state.rs).
     #[account(mut, constraint = from.pool == pool.key() @ ErrorCode::EntryMismatch)]
     pub from: Box<Account<'info, Entry>>,
 
-    /// The entry being paid — the next eligible place.
+    /// The member being paid this call.
     #[account(
         mut,
         constraint = to.pool == pool.key() @ ErrorCode::EntryMismatch,
@@ -255,9 +247,10 @@ pub struct PayNextPlace<'info> {
     pub to_player: UncheckedAccount<'info>,
 
     pub system_program: Program<'info, System>,
-    // remaining_accounts: the Entry accounts that PROVE `to` is the next
-    // eligible place — see `ineligibility_witnesses` for exactly which seats,
-    // in ascending seat order.
+    // remaining_accounts: EVERY committed (first-place) seat's Entry except
+    // `from` and `to`, in ascending seat order — see `committed_peers`. At
+    // first place they classify the group (eligible / forfeited / pending);
+    // at the next rank every one of them must be forfeited.
 }
 
 /// A flag that review has not yet resolved: the entry is flagged and not
@@ -269,27 +262,69 @@ fn review_pending(entry: &Entry) -> bool {
     entry.flagged && !entry.forfeited && (!entry.settled || entry.escrow_lamports > 0)
 }
 
-/// Which committed (first-place) seats must be shown ineligible for `to`
-/// to be the next eligible place: every committed seat below `to`'s own
-/// when `to` is itself a tied first-place member; every committed seat when
-/// `to` sits at the next rank. The forfeiter is excluded (it is known
-/// ineligible — it is the `from` account).
-fn ineligibility_witnesses(pool: &Pool, from_index: u16, to_index: u16, to_is_first: bool) -> Vec<u16> {
+/// Eligible to receive a passed-on share: not refunded, not forfeited, no
+/// review pending. Applied to `to` and to every committed peer.
+fn eligible(entry: &Entry) -> bool {
+    !entry.refunded && !entry.forfeited && !review_pending(entry)
+}
+
+/// The committed seats other than `from` and `to`, ascending — the exact
+/// remaining-accounts list this instruction demands.
+fn committed_peers(pool: &Pool, from_index: u16, to_index: u16) -> Vec<u16> {
     let len = pool.payouts_len as usize;
     pool.payouts[..len]
         .iter()
         .map(|p| p.entry_index)
-        .filter(|&s| s != from_index)
-        .filter(|&s| !to_is_first || s < to_index)
+        .filter(|&s| s != from_index && s != to_index)
         .collect()
 }
 
+/// `pay_next_place` — one member's portion of a forfeited share.
+///
+/// # The split (addendum ruling 3, 2026-09-07)
+///
+/// A forfeited first-place share is divided EQUALLY among the remaining
+/// eligible players ranked first; if none is eligible, the whole share
+/// passes to the next competition rank and is divided equally among the
+/// eligible players there. The indivisible remainder goes to the eligible
+/// player with the lowest entry number (the same rule `split_group` applies
+/// to a tie). One call pays one member: `portion = split_total / n`, plus
+/// the remainder when `takes_remainder`. The forfeiter's Entry fixes `n`
+/// (`split_group_size`) and the dividend (`split_total`) at the first
+/// payment and records each paid seat (`split_paid_mask`), so the calls are
+/// idempotent per member and the n portions sum to the share exactly —
+/// batching the way `pay_prizes` batches, not one transaction for all.
+///
+/// # What is verified where
+///
+/// At FIRST PLACE the group is on-chain: the committed payout list IS the
+/// rank-1 group under one paid place, so every member's Entry is passed and
+/// the program computes the eligible set, its size and its lowest seat
+/// itself; `group_size` and `takes_remainder` must match or the call fails
+/// (`NextPlaceSplitMismatch`). Eligibility of a settled committed seat is
+/// FINAL once no review is pending among them (a released share cannot be
+/// forfeited, a settled entry cannot be flagged), so `n` cannot drift
+/// between calls. A pending review blocks the split rather than being paid
+/// past.
+///
+/// At the NEXT RANK the group is not on-chain. Each claimed member is proven
+/// to hold rank `1 + k` by a Merkle proof against `results_root`; what the
+/// program cannot prove is that the presented group is COMPLETE — the
+/// settlement signer asserts `group_size` (fixed at the first payment and
+/// checked against every later one) and which member takes the remainder
+/// (exactly once, and before the share runs out). Under-presenting members
+/// would inflate the presented members' portions; this is the disclosed
+/// residual (addendum ruling 4): the published bundle names the whole
+/// group, so any deviation is visible, and the signer cannot route money to
+/// itself or the operator (the four-key ban; no treasury path here).
 pub fn handle_pay_next_place<'info>(
     ctx: Context<'info, PayNextPlace<'info>>,
     _pool_id: u64,
     rank: u8,
     amount: u64,
     proof: Vec<ProofStep>,
+    group_size: u16,
+    takes_remainder: bool,
 ) -> Result<()> {
     let pool = &ctx.accounts.pool;
     let from = &ctx.accounts.from;
@@ -298,27 +333,25 @@ pub fn handle_pay_next_place<'info>(
 
     // Only a Paid pool pays onward: every committed seat is settled, so each
     // first-place member's standing (paid / held / forfeited) is final
-    // enough to rank against, and `pay_prizes` (which refuses a settled
-    // Entry) can never be locked out by this instruction marking a seat settled
-    // before its own share landed.
+    // enough to divide against, and `pay_prizes` (which refuses a settled
+    // Entry) can never be locked out by this instruction marking a seat
+    // settled before its own share landed.
     require!(pool.state == PoolState::Paid, ErrorCode::ResultsNotCommitted);
     require!(from.forfeited, ErrorCode::EscrowNotForfeited);
-    let share = from.escrow_lamports;
-    require!(share > 0, ErrorCode::NoEscrow);
-    // The target must be eligible: not refunded, not forfeited, and not
-    // under a live review. A flag is a live concern while the entry is
-    // unsettled, or settled with its share still held; a flagged entry whose
-    // share was RELEASED was cleared by review (the flag bit cannot be
-    // cleared after settlement — `flags.rs`) and is eligible again.
-    require!(
-        !to.refunded && !to.forfeited,
-        ErrorCode::NextPlaceIneligible
-    );
+    let remaining = from.escrow_lamports;
+    require!(remaining > 0, ErrorCode::NoEscrow);
+    // The member must be eligible (a released flag is history — see
+    // `review_pending`) and not yet paid from THIS share.
+    require!(!to.refunded && !to.forfeited, ErrorCode::NextPlaceIneligible);
     require!(!review_pending(to), ErrorCode::NextPlaceReviewPending);
+    require!(to.index < 64, ErrorCode::InvalidRank);
+    let to_bit = 1u64 << to.index;
+    require!(from.split_paid_mask & to_bit == 0, ErrorCode::RankAlreadySettled);
+    require!(group_size >= 1, ErrorCode::NextPlaceSplitMismatch);
 
-    // ---- The rank the target holds, proven against the committed root ----
-    // The leaf is verified AS COMMITTED (rank and amount as published — under
-    // one paid place a next-rank leaf carries amount 0); what is PAID is the
+    // ---- The rank the member holds, proven against the committed root ----
+    // The leaf is verified AS COMMITTED (rank and amount as published — a
+    // next-rank leaf carries amount 0); what is PAID is a portion of the
     // forfeited share, never the leaf's amount.
     let leaf = leaf_bytes(&to.player, rank, amount);
     require!(
@@ -326,47 +359,94 @@ pub fn handle_pay_next_place<'info>(
         ErrorCode::InvalidMerkleProof
     );
 
-    // ---- Next eligible place (ruling 4 (ii)) ------------------------------
+    // ---- Which rank the share passes to -----------------------------------
     let len = pool.payouts_len as usize;
     let committed: &[crate::state::Payout] = &pool.payouts[..len];
     let to_in_committed = committed.iter().any(|p| p.entry_index == to.index);
     let to_is_first = rank == 1;
     if to_is_first {
-        // A tied first-place member: must be in the committed list.
         require!(to_in_committed, ErrorCode::NextPlaceRankInvalid);
     } else {
-        // The next competition rank after a k-way tie for first is 1 + k,
-        // and the committed list is exactly that group under one paid place.
+        // The next competition rank after a k-way tie for first is 1 + k.
         require!(
             !to_in_committed && (rank as usize) == 1 + len,
             ErrorCode::NextPlaceRankInvalid
         );
     }
 
-    // Every committed seat that would outrank the target must be proven
-    // ineligible: the forfeiter itself (known), or an Entry passed as a
-    // remaining account that is flagged or forfeited. Owner + discriminator
-    // are checked by `Account::try_from`; only this program creates Entry
-    // accounts, and each is bound to this pool and to the expected seat.
-    let witnesses = ineligibility_witnesses(pool, from.index, to.index, to_is_first);
+    // ---- Every other committed seat, classified ---------------------------
+    // Owner + discriminator are checked by `Account::try_from`; only this
+    // program creates Entry accounts, and each is bound to this pool and to
+    // the expected seat. A pending review anywhere in the group blocks the
+    // split: a review is never paid past.
+    let peers = committed_peers(pool, from.index, to.index);
     require!(
-        ctx.remaining_accounts.len() == witnesses.len(),
+        ctx.remaining_accounts.len() == peers.len(),
         ErrorCode::NextPlaceIneligible
     );
-    for (seat, info) in witnesses.iter().zip(ctx.remaining_accounts.iter()) {
-        let witness: Account<'info, Entry> = Account::try_from(info)?;
-        require!(witness.pool == pool_key, ErrorCode::EntryMismatch);
-        require!(witness.index == *seat, ErrorCode::EntryMismatch);
-        // Ineligible means FORFEITED — review upheld the flag. A seat whose
-        // review is still open is neither eligible nor ineligible: the
-        // payout waits (a review must never be skipped by paying past
-        // it), and a released seat is eligible and would have to be
-        // the target itself.
-        require!(!review_pending(&witness), ErrorCode::NextPlaceReviewPending);
-        require!(witness.forfeited, ErrorCode::NextPlaceIneligible);
+    // The eligible first-place group, `to` included when it is a member.
+    let mut eligible_count: u16 = if to_is_first { 1 } else { 0 };
+    let mut lowest_eligible: u16 = if to_is_first { to.index } else { u16::MAX };
+    for (seat, info) in peers.iter().zip(ctx.remaining_accounts.iter()) {
+        let peer: Account<'info, Entry> = Account::try_from(info)?;
+        require!(peer.pool == pool_key, ErrorCode::EntryMismatch);
+        require!(peer.index == *seat, ErrorCode::EntryMismatch);
+        require!(!review_pending(&peer), ErrorCode::NextPlaceReviewPending);
+        if eligible(&peer) {
+            eligible_count += 1;
+            lowest_eligible = lowest_eligible.min(peer.index);
+        } else {
+            // Ineligible means FORFEITED (a settled committed seat is never
+            // refunded, and pending was excluded above).
+            require!(peer.forfeited, ErrorCode::NextPlaceIneligible);
+        }
     }
 
-    // ---- Pay the whole forfeited share to the next eligible player -------
+    // ---- The group size and the remainder recipient ------------------------
+    if to_is_first {
+        // On-chain arithmetic: the arguments must agree with the group.
+        require!(group_size == eligible_count, ErrorCode::NextPlaceSplitMismatch);
+        require!(
+            takes_remainder == (to.index == lowest_eligible),
+            ErrorCode::NextPlaceSplitMismatch
+        );
+    } else {
+        // The next rank is reached only when NO first-place member is
+        // eligible (every peer forfeited — proven above).
+        require!(eligible_count == 0, ErrorCode::NextPlaceIneligible);
+    }
+    // Fixed by the first payment of this share, checked by every later one.
+    if from.split_group_size == 0 {
+        // First payment: the dividend is the whole share as it stands.
+    } else {
+        require!(from.split_group_size == group_size, ErrorCode::NextPlaceSplitMismatch);
+    }
+    if takes_remainder {
+        require!(!from.split_remainder_paid, ErrorCode::NextPlaceSplitMismatch);
+    }
+    let paid_so_far = from.split_paid_mask.count_ones() as u16;
+    require!(paid_so_far < group_size, ErrorCode::NextPlaceSplitMismatch);
+
+    // ---- The portion --------------------------------------------------------
+    let total = if from.split_group_size == 0 { remaining } else { from.split_total };
+    let n = group_size as u64;
+    let per = total / n;
+    let rem = total % n;
+    let portion = if takes_remainder {
+        per.checked_add(rem).ok_or(ErrorCode::Overflow)?
+    } else {
+        per
+    };
+    require!(portion > 0, ErrorCode::NextPlaceSplitMismatch);
+    require!(portion <= remaining, ErrorCode::NextPlaceSplitMismatch);
+    // The last member's payment must empty the share exactly: an unpaid
+    // remainder would otherwise be stranded in the vault.
+    let is_last = paid_so_far + 1 == group_size;
+    if is_last {
+        require!(portion == remaining, ErrorCode::NextPlaceSplitMismatch);
+    }
+
+    // ---- Pay this member's portion ------------------------------------------
     // Paid to the wallet directly, like the auto-release: this path presents
     // a KYC packet to nobody. §13 interaction recorded — inert while the
     // switch is at 0 (D-E5); turning it on must revisit this path too.
@@ -376,14 +456,24 @@ pub fn handle_pay_next_place<'info>(
         &ctx.accounts.to_player.to_account_info(),
         pool.id,
         pool.vault_bump,
-        share,
+        portion,
     )?;
     let from = &mut ctx.accounts.from;
-    from.escrow_lamports = 0;
+    if from.split_group_size == 0 {
+        from.split_group_size = group_size;
+        from.split_total = total;
+    }
+    from.split_paid_mask |= to_bit;
+    if takes_remainder {
+        from.split_remainder_paid = true;
+    }
+    from.escrow_lamports = remaining
+        .checked_sub(portion)
+        .ok_or(ErrorCode::Overflow)?;
     let to = &mut ctx.accounts.to;
     to.next_place_lamports = to
         .next_place_lamports
-        .checked_add(share)
+        .checked_add(portion)
         .ok_or(ErrorCode::Overflow)?;
     // A seat paid this way outside the committed list has no `paid_mask` bit;
     // `settled` is its record (and closes the flag window, as for any paid
@@ -395,7 +485,8 @@ pub fn handle_pay_next_place<'info>(
         from: from.player,
         to: to.player,
         rank,
-        amount: share,
+        amount: portion,
+        group_size,
     });
 
     Ok(())

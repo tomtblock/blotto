@@ -276,15 +276,19 @@ export function registerBlottoEventLayouts(): void {
     destination: r.pubkey(),
   }));
 
-  // A forfeited share paid, whole, to the next eligible place: `rank` is the
-  // paid player's committed competition rank (1 for a tied first-place
-  // member, 1 + k for the next rank after a k-way tie).
+  // One member's portion of a forfeited share (addendum ruling 3): `rank`
+  // is the paid player's committed competition rank (1 for a tied
+  // first-place member, 1 + k for the next rank after a k-way tie);
+  // `amount` is this member's portion — the share over `group_size`, plus
+  // the remainder for the lowest entry number. The events for one forfeited
+  // share sum to that share exactly.
   layout('NextPlacePaid', (r) => ({
     pool: r.pubkey(),
     from: r.pubkey(),
     to: r.pubkey(),
     rank: r.u8(),
     amount: r.u64(),
+    group_size: r.u16(),
   }));
 
   layout('RefundTriggered', (r) => ({

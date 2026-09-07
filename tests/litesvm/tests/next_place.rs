@@ -1,13 +1,19 @@
-//! Founder ruling 4 (2026-09-07) against the compiled artifact: the vault
-//! pays (i) first place, (ii) if first place is not eligible, the next
-//! eligible highest place, (iii) refunds below the minimum field — and a
-//! forfeited share never reaches the operator.
+//! Founder ruling 4 (2026-09-07) and addendum ruling 3 against the compiled
+//! artifact: the vault pays (i) first place, (ii) if first place is not
+//! eligible, the next eligible place, (iii) refunds below the minimum field
+//! — a forfeited share never reaches the operator, and it is divided
+//! EQUALLY among the eligible players at the rank it passes to, with the
+//! indivisible remainder to the lowest entry number.
 //!
-//!   - next-place payout waits for Paid, needs a forfeited source, and pays the
-//!     WHOLE share to one target proven against the committed results root;
-//!   - a first-place target must be a committed seat; a next-rank target
-//!     must hold rank `1 + k` and every tied seat must be shown forfeited —
-//!     a pending review blocks the next-place payout rather than being skipped;
+//!   - the payout waits for Paid, needs a forfeited source, and pays one
+//!     member per call, idempotent per member, summing to the share exactly;
+//!   - at first place the group is on-chain: the program computes the
+//!     eligible set, its size and its lowest seat from the committed seats'
+//!     Entries and refuses arguments that disagree; a pending review blocks
+//!     the split rather than being paid past;
+//!   - at the next rank each member is proven by a Merkle proof; the group
+//!     size is the settlement signer's assertion, fixed by the first payment
+//!     and checked by every later one, and the remainder cannot be stranded;
 //!   - a wrong rank, a forged proof, a flagged target and a stranger's
 //!     signature are refused;
 //!   - the seven-day auto-release: a random keypair pays an un-forfeited
@@ -28,24 +34,42 @@ struct Scene {
     payouts: Vec<(u16, u64)>,
 }
 
-/// A 64-seat pool with a two-way tie for first (seats 0 and 1), both tied
-/// seats flagged before payout so both shares escrow; committed under a
-/// real results root; `pay` says whether to pay both seats (→ Paid).
-fn tied_pool_with_flagged_winners(env: &mut Env, pay: &[u16]) -> Scene {
+/// A 64-seat pool with a k-way tie for first (seats 0..k), every tied seat
+/// flagged before payout so every share escrows; committed under a real
+/// results root whose unpaid seats hold ranks `1 + k, 2 + k, …` in seat
+/// order, EXCEPT that the seats in `next_rank_group` all share rank
+/// `1 + k` (a tie at the next competition rank). `pay` lists the seats to
+/// settle (→ Paid when it is the whole group).
+fn tied_pool(env: &mut Env, k: u16, next_rank_group: &[u16], pay: &[u16]) -> Scene {
     env.open_ready_pool(1, 0);
     let players: Vec<(Keypair, Pubkey)> = (0..64).map(|_| env.register_player(1).unwrap()).collect();
     let settlement = env.settlement.insecure_clone();
-    for (_, entry) in players.iter().take(2) {
+    for (_, entry) in players.iter().take(k as usize) {
         let ix = flag_ix(&settlement.pubkey(), 1, entry, "flag_entry");
         env.send(&[ix], &[&settlement]).unwrap();
     }
     let secret = env.pool_secret;
     let ix = settle_ix(&settlement.pubkey(), 1, "reveal_pool_secret", &secret);
     env.send(&[ix], &[&settlement]).unwrap();
-    let payouts = tied_first_payouts(POT, 2);
-    let wallets: Vec<Pubkey> = players.iter().map(|(p, _)| p.pubkey()).collect();
-    let (leaves, ranks) = results_leaves(&wallets, &payouts);
-    assert_eq!(&ranks[..4], &[1, 1, 3, 4], "next competition rank after a 2-way tie is 3");
+    let payouts = tied_first_payouts(POT, k);
+    // Leaves: the tie for first, then the next-rank group at rank 1 + k,
+    // then the rest one rank each.
+    let mut next_rank = 1 + k as usize + usize::from(!next_rank_group.is_empty());
+    let leaves: Vec<Vec<u8>> = players
+        .iter()
+        .enumerate()
+        .map(|(seat, (p, _))| {
+            if (seat as u16) < k {
+                leaf_bytes(&p.pubkey(), 1, payouts[seat].1)
+            } else if next_rank_group.contains(&(seat as u16)) {
+                leaf_bytes(&p.pubkey(), 1 + k as u8, 0)
+            } else {
+                let r = next_rank as u8;
+                next_rank += 1;
+                leaf_bytes(&p.pubkey(), r, 0)
+            }
+        })
+        .collect();
     let mut args = merkle_root(&leaves).to_vec();
     args.extend_from_slice(&encode_payouts(&payouts));
     let ix = settle_ix(&settlement.pubkey(), 1, "commit_results", &args);
@@ -61,24 +85,45 @@ fn tied_pool_with_flagged_winners(env: &mut Env, pay: &[u16]) -> Scene {
     Scene { players, leaves, payouts }
 }
 
-fn forfeit(env: &mut Env, entry: &Pubkey) {
+fn forfeit(env: &mut Env, scene: &Scene, seat: usize) {
     let admin = env.admin.pubkey();
-    env.send(&[forfeit_escrow_ix(&admin, 1, entry)], &[]).expect("forfeit");
+    env.send(&[forfeit_escrow_ix(&admin, 1, &scene.players[seat].1)], &[])
+        .expect("forfeit");
+}
+
+fn release(env: &mut Env, scene: &Scene, seat: usize) {
+    let settlement = env.settlement.insecure_clone();
+    let (p, e) = &scene.players[seat];
+    env.send(&[release_escrow_ix(&settlement.pubkey(), 1, e, &p.pubkey())], &[&settlement])
+        .expect("release");
+}
+
+/// Every committed seat except `from` and `to`, ascending — the peers the
+/// instruction demands.
+fn peers(scene: &Scene, from: usize, to: usize) -> Vec<Pubkey> {
+    scene
+        .payouts
+        .iter()
+        .map(|&(s, _)| s as usize)
+        .filter(|&s| s != from && s != to)
+        .map(|s| scene.players[s].1)
+        .collect()
 }
 
 #[allow(clippy::too_many_arguments)]
-fn pay_next_place(
+fn pay(
     env: &mut Env,
     scene: &Scene,
     from: usize,
     to: usize,
     rank: u8,
     amount: u64,
-    proof: &[ProofStep],
-    witnesses: &[usize],
-) -> Result<(), String> {
+    group_size: u16,
+    takes_remainder: bool,
+) -> Result<u64, String> {
     let settlement = env.settlement.insecure_clone();
-    let w: Vec<Pubkey> = witnesses.iter().map(|&i| scene.players[i].1).collect();
+    let proof = merkle_proof(&scene.leaves, to);
+    let before = env.balance(&scene.players[to].0.pubkey());
     let ix = pay_next_place_ix(
         &settlement.pubkey(),
         1,
@@ -87,118 +132,185 @@ fn pay_next_place(
         &scene.players[to].0.pubkey(),
         rank,
         amount,
-        proof,
-        &w,
+        &proof,
+        group_size,
+        takes_remainder,
+        &peers(scene, from, to),
     );
-    env.send(&[ix], &[&settlement])
+    env.send(&[ix], &[&settlement])?;
+    Ok(env.balance(&scene.players[to].0.pubkey()) - before)
+}
+
+fn assert_err(r: Result<u64, String>, code: &str, name: &str) {
+    let err = r.expect_err(name);
+    assert!(err.contains(code) || err.contains(name), "expected {name}: {err}");
 }
 
 #[test]
-fn both_tied_winners_forfeit_and_the_next_rank_is_paid_in_full() {
+fn a_forfeited_first_place_share_splits_equally_among_the_eligible_tied_players() {
     let Some(mut env) = Env::new() else { return };
-    let scene = tied_pool_with_flagged_winners(&mut env, &[0, 1]);
+    // Three tied for first: seat 0 committed 1_333_333_334 (the remainder),
+    // seats 1 and 2 committed 1_333_333_333 each.
+    let scene = tied_pool(&mut env, 3, &[], &[0, 1, 2]);
     assert_eq!(read_pool(&env.svm, &pool_pda(1)).state, 3, "Paid");
+    assert_eq!(scene.payouts, vec![(0, 1_333_333_334), (1, 1_333_333_333), (2, 1_333_333_333)]);
     let platform_before = env.balance(&platform_pda());
-    let proof_2 = merkle_proof(&scene.leaves, 2);
 
-    // Forfeit seat 0. Seat 1's review is still open (flagged, held): seat 2
-    // cannot be paid onward past it — the pending review must resolve first.
-    forfeit(&mut env, &scene.players[0].1);
-    let err = pay_next_place(&mut env, &scene, 0, 2, 3, 0, &proof_2, &[1]).unwrap_err();
-    assert!(err.contains("6066") || err.contains("NextPlaceReviewPending"), "{err}");
-    // Nor can seat 0's share go to seat 1 (its review is pending).
-    let proof_1 = merkle_proof(&scene.leaves, 1);
-    let err = pay_next_place(&mut env, &scene, 0, 1, 1, POT / 2, &proof_1, &[]).unwrap_err();
-    assert!(err.contains("6066"), "{err}");
+    // Review: seat 1 upheld (forfeited); seats 0 and 2 still under review —
+    // the split waits for them.
+    forfeit(&mut env, &scene, 1);
+    assert_err(pay(&mut env, &scene, 1, 0, 1, 1_333_333_334, 2, true), "6066", "NextPlaceReviewPending");
+    release(&mut env, &scene, 0);
+    assert_err(pay(&mut env, &scene, 1, 0, 1, 1_333_333_334, 2, true), "6066", "NextPlaceReviewPending");
+    release(&mut env, &scene, 2);
 
-    // Review upholds seat 1's flag too. Now seat 2 (rank 3, the next
-    // competition rank) is the next eligible place for BOTH shares.
-    forfeit(&mut env, &scene.players[1].1);
-    let before = env.balance(&scene.players[2].0.pubkey());
-    // Witness list must be exactly the OTHER tied seat, and it must be the
-    // right account: an empty list, or the wrong seat, is refused.
-    let err = pay_next_place(&mut env, &scene, 0, 2, 3, 0, &proof_2, &[]).unwrap_err();
-    assert!(err.contains("6060") || err.contains("NextPlaceIneligible"), "{err}");
-    let err = pay_next_place(&mut env, &scene, 0, 2, 3, 0, &proof_2, &[3]).unwrap_err();
-    assert!(err.contains("6030") || err.contains("EntryMismatch"), "{err}");
-    pay_next_place(&mut env, &scene, 0, 2, 3, 0, &proof_2, &[1]).expect("seat 0's share → rank 3");
-    pay_next_place(&mut env, &scene, 1, 2, 3, 0, &proof_2, &[0]).expect("seat 1's share → rank 3");
-    assert_eq!(
-        env.balance(&scene.players[2].0.pubkey()) - before,
-        POT,
-        "the next eligible place received the whole pot"
-    );
-    let e2 = read_entry(&env.svm, &scene.players[2].1);
-    assert_eq!(e2.next_place_lamports, POT);
-    assert!(e2.settled, "a seat paid this way is settled (its flag window closes)");
+    // Both cleared: the eligible first-place group is {0, 2}, n = 2, the
+    // remainder to seat 0. Arguments that disagree with the group fail.
+    let share = 1_333_333_333u64;
+    assert_err(pay(&mut env, &scene, 1, 0, 1, 1_333_333_334, 1, true), "6067", "NextPlaceSplitMismatch");
+    assert_err(pay(&mut env, &scene, 1, 0, 1, 1_333_333_334, 3, true), "6067", "NextPlaceSplitMismatch");
+    assert_err(pay(&mut env, &scene, 1, 0, 1, 1_333_333_334, 2, false), "6067", "NextPlaceSplitMismatch");
+    assert_err(pay(&mut env, &scene, 1, 2, 1, 1_333_333_333, 2, true), "6067", "NextPlaceSplitMismatch");
+    // Seat 0 takes its portion plus the one-lamport remainder.
+    let got0 = pay(&mut env, &scene, 1, 0, 1, 1_333_333_334, 2, true).expect("seat 0's portion");
+    assert_eq!(got0, share / 2 + 1);
+    let e1 = read_entry(&env.svm, &scene.players[1].1);
+    assert_eq!(e1.split_total, share);
+    assert_eq!(e1.split_group_size, 2);
+    assert_eq!(e1.split_paid_mask, 1 << 0);
+    assert!(e1.split_remainder_paid);
+    assert_eq!(e1.escrow_lamports, share - got0);
+    // Paying seat 0 again is refused; the group size cannot change now.
+    assert_err(pay(&mut env, &scene, 1, 0, 1, 1_333_333_334, 2, true), "6030", "RankAlreadySettled");
+    assert_err(pay(&mut env, &scene, 1, 2, 1, 1_333_333_333, 2, true), "6067", "NextPlaceSplitMismatch");
+    // Seat 2 takes the other half; the share is exhausted to the lamport.
+    let got2 = pay(&mut env, &scene, 1, 2, 1, 1_333_333_333, 2, false).expect("seat 2's portion");
+    assert_eq!(got2, share / 2);
+    assert_eq!(got0 + got2, share, "the portions sum to the share exactly");
+    let e1 = read_entry(&env.svm, &scene.players[1].1);
+    assert_eq!(e1.escrow_lamports, 0);
+    assert_eq!(e1.split_paid_mask, 0b101);
+    assert_eq!(read_entry(&env.svm, &scene.players[0].1).next_place_lamports, got0);
+    assert_eq!(read_entry(&env.svm, &scene.players[2].1).next_place_lamports, got2);
     assert_eq!(env.balance(&vault_pda(1)), 0, "the vault reaps");
     assert_eq!(env.balance(&platform_pda()), platform_before, "the operator got nothing");
-    // The forfeited players' shares are gone from their entries.
-    assert_eq!(read_entry(&env.svm, &scene.players[0].1).escrow_lamports, 0);
-    assert_eq!(read_entry(&env.svm, &scene.players[1].1).escrow_lamports, 0);
+    assert_err(pay(&mut env, &scene, 1, 2, 1, 1_333_333_333, 2, false), "6036", "NoEscrow");
 }
 
 #[test]
-fn next_place_refuses_a_wrong_rank_a_forged_proof_and_a_flagged_target() {
+fn when_no_first_place_player_is_eligible_the_share_splits_at_the_next_rank() {
     let Some(mut env) = Env::new() else { return };
-    let scene = tied_pool_with_flagged_winners(&mut env, &[0, 1]);
-    let settlement = env.settlement.insecure_clone();
-    forfeit(&mut env, &scene.players[0].1);
-    forfeit(&mut env, &scene.players[1].1);
+    // Three tied for first, all to be forfeited; seats 3 and 4 tie at the
+    // next competition rank (4).
+    let scene = tied_pool(&mut env, 3, &[3, 4], &[0, 1, 2]);
+    let platform_before = env.balance(&platform_pda());
+    forfeit(&mut env, &scene, 0);
+    // Seats 1 and 2 still under review: the next rank is not reached yet.
+    assert_err(pay(&mut env, &scene, 0, 3, 4, 0, 2, true), "6066", "NextPlaceReviewPending");
+    forfeit(&mut env, &scene, 1);
+    forfeit(&mut env, &scene, 2);
 
-    // Seat 3 holds rank 4: not first, not the next rank (3) — refused even
-    // with a valid proof of ITS rank.
-    let proof_3 = merkle_proof(&scene.leaves, 3);
-    let err = pay_next_place(&mut env, &scene, 0, 3, 4, 0, &proof_3, &[1]).unwrap_err();
-    assert!(err.contains("6059") || err.contains("NextPlaceRankInvalid"), "{err}");
-    // Claiming rank 3 for seat 3 fails the proof.
-    let err = pay_next_place(&mut env, &scene, 0, 3, 3, 0, &proof_3, &[1]).unwrap_err();
-    assert!(err.contains("6061") || err.contains("InvalidMerkleProof"), "{err}");
-    // Seat 2 with a tampered proof (one side bit flipped) fails.
+    // Seat 1's share (1_333_333_333) → the rank-4 group of two: per
+    // 666_666_666, remainder 1 to the lowest entry number (seat 3, the
+    // signer's assertion at this rank — disclosed).
+    let share = 1_333_333_333u64;
+    // A first-place rank for a next-rank seat, or the wrong next rank, fails
+    // the proof; a rank-1 claim for a committed seat that is forfeited fails
+    // eligibility.
+    assert_err(pay(&mut env, &scene, 1, 3, 1, 0, 2, true), "6061", "InvalidMerkleProof");
+    assert_err(pay(&mut env, &scene, 1, 3, 5, 0, 2, true), "6061", "InvalidMerkleProof");
+    assert_err(pay(&mut env, &scene, 1, 2, 1, 1_333_333_333, 1, true), "6060", "NextPlaceIneligible");
+    // Seat 4 first, without the remainder: a plain portion.
+    let got4 = pay(&mut env, &scene, 1, 4, 4, 0, 2, false).expect("seat 4's portion");
+    assert_eq!(got4, share / 2);
+    // The group size is now fixed for this share, and the remainder cannot
+    // be left stranded: the LAST member's payment must empty the share, so
+    // seat 3 without the remainder flag is refused.
+    assert_err(pay(&mut env, &scene, 1, 3, 4, 0, 3, true), "6067", "NextPlaceSplitMismatch");
+    assert_err(pay(&mut env, &scene, 1, 3, 4, 0, 2, false), "6067", "NextPlaceSplitMismatch");
+    let got3 = pay(&mut env, &scene, 1, 3, 4, 0, 2, true).expect("seat 3's portion + remainder");
+    assert_eq!(got3, share / 2 + 1);
+    assert_eq!(got3 + got4, share);
+    // The remainder was spent: nothing more can claim it.
+    assert_err(pay(&mut env, &scene, 1, 3, 4, 0, 2, true), "6036", "NoEscrow");
+    assert_eq!(read_entry(&env.svm, &scene.players[1].1).escrow_lamports, 0);
+
+    // Seat 0's share (1_333_333_334, remainder 0 over two): the last member's
+    // payment must empty the share — paying seat 4 first without the
+    // remainder flag is fine, then seat 3 closes it.
+    let share0 = 1_333_333_334u64;
+    let a = pay(&mut env, &scene, 0, 4, 4, 0, 2, false).expect("seat 4 first");
+    assert_eq!(a, share0 / 2);
+    let b = pay(&mut env, &scene, 0, 3, 4, 0, 2, true).expect("seat 3 closes the share");
+    assert_eq!(a + b, share0);
+    // Seat 2's share: a signer asserting a group of ONE pays it whole to one
+    // member — the under-presentation the addendum discloses. On-chain it
+    // is a valid call; the published bundle is what makes it visible.
+    let whole = pay(&mut env, &scene, 2, 3, 4, 0, 1, true).expect("asserted group of one");
+    assert_eq!(whole, share);
+
+    assert_eq!(env.balance(&vault_pda(1)), 0, "the vault reaps");
+    assert_eq!(env.balance(&platform_pda()), platform_before, "the operator got nothing");
+    let e3 = read_entry(&env.svm, &scene.players[3].1);
+    assert!(e3.settled, "a paid next-rank seat is settled (its flag window closes)");
+    assert_eq!(e3.next_place_lamports, got3 + b + whole);
+    assert_eq!(read_entry(&env.svm, &scene.players[4].1).next_place_lamports, got4 + a);
+}
+
+#[test]
+fn the_payout_refuses_a_flagged_target_a_stranger_and_a_forged_proof() {
+    let Some(mut env) = Env::new() else { return };
+    let scene = tied_pool(&mut env, 2, &[], &[0, 1]);
+    let settlement = env.settlement.insecure_clone();
+    forfeit(&mut env, &scene, 0);
+    forfeit(&mut env, &scene, 1);
+
+    // Seat 3 holds rank 4: not first, not the next rank (3) — refused with a
+    // valid proof of ITS rank.
+    assert_err(pay(&mut env, &scene, 0, 3, 4, 0, 1, true), "6059", "NextPlaceRankInvalid");
+    // A tampered proof (one side bit flipped) fails.
     let mut forged = merkle_proof(&scene.leaves, 2);
     forged[0].1 = !forged[0].1;
-    let err = pay_next_place(&mut env, &scene, 0, 2, 3, 0, &forged, &[1]).unwrap_err();
+    let ix = pay_next_place_ix(
+        &settlement.pubkey(), 1, &scene.players[0].1, &scene.players[2].1,
+        &scene.players[2].0.pubkey(), 3, 0, &forged, 1, true, &peers(&scene, 0, 2),
+    );
+    let err = env.send(&[ix], &[&settlement]).unwrap_err();
     assert!(err.contains("6061"), "{err}");
-    // Seat 2 with the wrong amount in the leaf fails (the leaf is verified
-    // as committed; the paid amount is the share, never the leaf).
-    let proof_2 = merkle_proof(&scene.leaves, 2);
-    let err = pay_next_place(&mut env, &scene, 0, 2, 3, 1, &proof_2, &[1]).unwrap_err();
-    assert!(err.contains("6061"), "{err}");
+    // The wrong amount in the leaf fails (the leaf is verified as committed;
+    // the paid amount is the portion, never the leaf).
+    assert_err(pay(&mut env, &scene, 0, 2, 3, 1, 1, true), "6061", "InvalidMerkleProof");
     // A stranger cannot pay the next place.
     let stranger = Keypair::new();
     env.svm.airdrop(&stranger.pubkey(), 1_000_000_000).unwrap();
     let ix = pay_next_place_ix(
         &stranger.pubkey(), 1, &scene.players[0].1, &scene.players[2].1,
-        &scene.players[2].0.pubkey(), 3, 0, &proof_2, &[scene.players[1].1],
+        &scene.players[2].0.pubkey(), 3, 0, &merkle_proof(&scene.leaves, 2), 1, true,
+        &peers(&scene, 0, 2),
     );
     let err = env.send(&[ix], &[&stranger]).unwrap_err();
     assert!(err.contains("2001") || err.contains("ConstraintHasOne"), "{err}");
-    // A flagged (unsettled) target is under review: refused.
+    // A flagged (unsettled) target is under review: refused. Cleared, it is
+    // eligible again.
     let ix = flag_ix(&settlement.pubkey(), 1, &scene.players[2].1, "flag_entry");
     env.send(&[ix], &[&settlement]).unwrap();
-    let err = pay_next_place(&mut env, &scene, 0, 2, 3, 0, &proof_2, &[1]).unwrap_err();
-    assert!(err.contains("6066") || err.contains("NextPlaceReviewPending"), "{err}");
-    // Cleared, it is eligible again.
+    assert_err(pay(&mut env, &scene, 0, 2, 3, 0, 1, true), "6066", "NextPlaceReviewPending");
     let ix = flag_ix(&settlement.pubkey(), 1, &scene.players[2].1, "clear_flag");
     env.send(&[ix], &[&settlement]).unwrap();
-    pay_next_place(&mut env, &scene, 0, 2, 3, 0, &proof_2, &[1]).expect("cleared target");
-    // The source must be forfeited: seat 1 IS; seat 2 (no escrow) is not.
-    let proof_3 = merkle_proof(&scene.leaves, 3);
-    let err = pay_next_place(&mut env, &scene, 2, 3, 4, 0, &proof_3, &[0, 1]).unwrap_err();
-    assert!(err.contains("6058") || err.contains("EscrowNotForfeited"), "{err}");
-    let _ = &scene.payouts;
+    let got = pay(&mut env, &scene, 0, 2, 3, 0, 1, true).expect("cleared target");
+    assert_eq!(got, POT / 2);
+    // The source must be forfeited: seat 2 (no escrow, not forfeited) is not.
+    assert_err(pay(&mut env, &scene, 2, 3, 4, 0, 1, true), "6058", "EscrowNotForfeited");
 }
 
 #[test]
-fn next_place_payout_waits_for_paid() {
+fn the_payout_waits_for_paid() {
     let Some(mut env) = Env::new() else { return };
     // Pay seat 0 only: the pool stays Scored (seat 1 unpaid).
-    let scene = tied_pool_with_flagged_winners(&mut env, &[0]);
+    let scene = tied_pool(&mut env, 2, &[], &[0]);
     assert_eq!(read_pool(&env.svm, &pool_pda(1)).state, 2, "Scored");
-    forfeit(&mut env, &scene.players[0].1);
-    let proof_1 = merkle_proof(&scene.leaves, 1);
-    let err = pay_next_place(&mut env, &scene, 0, 1, 1, POT / 2, &proof_1, &[]).unwrap_err();
-    assert!(err.contains("6027") || err.contains("ResultsNotCommitted"), "{err}");
+    forfeit(&mut env, &scene, 0);
+    assert_err(pay(&mut env, &scene, 0, 1, 1, POT / 2, 1, true), "6027", "ResultsNotCommitted");
     // Paying seat 1 (its own share escrows) reaches Paid; seat 1's review
     // is pending, so the forfeited share still waits.
     let settlement = env.settlement.insecure_clone();
@@ -207,22 +319,19 @@ fn next_place_payout_waits_for_paid() {
     );
     env.send(&[ix], &[&settlement]).unwrap();
     assert_eq!(read_pool(&env.svm, &pool_pda(1)).state, 3, "Paid");
-    let err = pay_next_place(&mut env, &scene, 0, 1, 1, POT / 2, &proof_1, &[]).unwrap_err();
-    assert!(err.contains("6066"), "{err}");
+    assert_err(pay(&mut env, &scene, 0, 1, 1, POT / 2, 1, true), "6066", "NextPlaceReviewPending");
     // Release clears seat 1 (a settled, released flag is history): it takes
-    // seat 0's share as the cleared tied member.
-    let ix = release_escrow_ix(&settlement.pubkey(), 1, &scene.players[1].1, &scene.players[1].0.pubkey());
-    env.send(&[ix], &[&settlement]).unwrap();
-    let before = env.balance(&scene.players[1].0.pubkey());
-    pay_next_place(&mut env, &scene, 0, 1, 1, POT / 2, &proof_1, &[]).expect("cleared tied member");
-    assert_eq!(env.balance(&scene.players[1].0.pubkey()) - before, POT / 2);
+    // seat 0's share as the only eligible tied member.
+    release(&mut env, &scene, 1);
+    let got = pay(&mut env, &scene, 0, 1, 1, POT / 2, 1, true).expect("cleared tied member");
+    assert_eq!(got, POT / 2);
     assert_eq!(env.balance(&vault_pda(1)), 0);
 }
 
 #[test]
 fn a_held_share_auto_releases_to_its_player_after_seven_days_unless_forfeited() {
     let Some(mut env) = Env::new() else { return };
-    let scene = tied_pool_with_flagged_winners(&mut env, &[0, 1]);
+    let scene = tied_pool(&mut env, 2, &[], &[0, 1]);
     let paid_at = env.svm.get_sysvar::<Clock>().unix_timestamp;
     assert_eq!(read_entry(&env.svm, &scene.players[0].1).escrowed_at, paid_at);
     let stranger = Keypair::new();
@@ -241,7 +350,7 @@ fn a_held_share_auto_releases_to_its_player_after_seven_days_unless_forfeited() 
     assert!(err.contains("6064"), "one second early: {err}");
 
     // Forfeit seat 1 inside the window: the auto-release can never reach it.
-    forfeit(&mut env, &scene.players[1].1);
+    forfeit(&mut env, &scene, 1);
 
     // The window passes: the stranger releases seat 0's share to seat 0's
     // wallet (never to the stranger); seat 1's forfeited share stays put.
@@ -256,10 +365,9 @@ fn a_held_share_auto_releases_to_its_player_after_seven_days_unless_forfeited() 
     let settlement = env.settlement.insecure_clone();
     let err = release_by(&mut env, &settlement, 1).unwrap_err();
     assert!(err.contains("6057"), "not even the reviewed path: {err}");
-    assert_eq!(env.balance(&vault_pda(1)), POT / 2, "the forfeited share awaits next-place payout");
-    // ...to seat 0, the cleared tied member, with no witnesses (seat 0 is
-    // the lower seat).
-    let proof_0 = merkle_proof(&scene.leaves, 0);
-    pay_next_place(&mut env, &scene, 1, 0, 1, POT / 2, &proof_0, &[]).expect("pay onward");
+    assert_eq!(env.balance(&vault_pda(1)), POT / 2, "the forfeited share awaits its next-place payout");
+    // ...to seat 0, the cleared tied member — the whole share, a group of one.
+    let got = pay(&mut env, &scene, 1, 0, 1, POT / 2, 1, true).expect("pay the next place");
+    assert_eq!(got, POT / 2);
     assert_eq!(env.balance(&vault_pda(1)), 0);
 }

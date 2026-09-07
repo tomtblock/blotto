@@ -548,9 +548,10 @@ pub fn forfeit_escrow_ix(admin: &Pubkey, pool_id: u64, entry: &Pubkey) -> Instru
 /// sibling hash, then `sibling_on_right` as one byte.
 pub type ProofStep = ([u8; 32], bool);
 
-/// `pay_next_place(pool_id, rank, amount, proof)` — settlement-signed;
-/// `witnesses` are the Entry accounts of the first-place seats that must be
-/// shown forfeited, in ascending seat order (see `escrow.rs`).
+/// `pay_next_place(pool_id, rank, amount, proof, group_size,
+/// takes_remainder)` — settlement-signed; `peers` are the Entry accounts of
+/// EVERY other committed (first-place) seat — all but `from` and `to` — in
+/// ascending seat order (see `escrow.rs` `committed_peers`).
 #[allow(clippy::too_many_arguments)]
 pub fn pay_next_place_ix(
     settlement: &Pubkey,
@@ -561,7 +562,9 @@ pub fn pay_next_place_ix(
     rank: u8,
     amount: u64,
     proof: &[ProofStep],
-    witnesses: &[Pubkey],
+    group_size: u16,
+    takes_remainder: bool,
+    peers: &[Pubkey],
 ) -> Instruction {
     let mut data = disc("pay_next_place").to_vec();
     data.extend_from_slice(&pool_id.to_le_bytes());
@@ -572,6 +575,8 @@ pub fn pay_next_place_ix(
         data.extend_from_slice(sibling);
         data.push(u8::from(*on_right));
     }
+    data.extend_from_slice(&group_size.to_le_bytes());
+    data.push(u8::from(takes_remainder));
     let mut accounts = vec![
         AccountMeta::new_readonly(*settlement, true),
         AccountMeta::new_readonly(config_pda(), false),
@@ -582,7 +587,7 @@ pub fn pay_next_place_ix(
         AccountMeta::new(*to_player, false),
         AccountMeta::new_readonly(system_program_id(), false),
     ];
-    for w in witnesses {
+    for w in peers {
         accounts.push(AccountMeta::new_readonly(*w, false));
     }
     Instruction {
@@ -780,7 +785,7 @@ pub const CONFIG_SPACE_V1: usize = 380;
 /// Config's account size since 2026-09-07 (`Config::SPACE`).
 pub const CONFIG_SPACE: usize = 484;
 /// Entry's account size since 2026-09-07 (`Entry::SPACE`).
-pub const ENTRY_SPACE: usize = 208;
+pub const ENTRY_SPACE: usize = 227;
 
 /// The treasury- and timing-relevant slice of Config (offsets mirror
 /// state.rs).
@@ -837,13 +842,19 @@ pub struct EntryView {
     pub escrowed_at: i64,
     pub forfeited: bool,
     pub next_place_lamports: u64,
+    /// The split book-keeping on a FORFEITER's entry (addendum ruling 3).
+    pub split_total: u64,
+    pub split_paid_mask: u64,
+    pub split_group_size: u16,
+    pub split_remainder_paid: bool,
 }
 
 pub fn read_entry(svm: &LiteSVM, entry: &Pubkey) -> EntryView {
     let data = svm.get_account(entry).expect("entry account").data;
     // flagged@179, settled@180, refunded@181, escrow_lamports@182, bump@190;
-    // tail: escrowed_at@191, forfeited@199, next_place_lamports@200 — 208 in
-    // all (`Entry::SPACE`).
+    // tail: escrowed_at@191, forfeited@199, next_place_lamports@200,
+    // split_total@208, split_paid_mask@216, split_group_size@224,
+    // split_remainder_paid@226 — 227 in all (`Entry::SPACE`).
     assert_eq!(
         data.len(),
         ENTRY_SPACE,
@@ -859,6 +870,10 @@ pub fn read_entry(svm: &LiteSVM, entry: &Pubkey) -> EntryView {
         escrowed_at: i64::from_le_bytes(data[191..199].try_into().unwrap()),
         forfeited: data[199] != 0,
         next_place_lamports: u64::from_le_bytes(data[200..208].try_into().unwrap()),
+        split_total: u64::from_le_bytes(data[208..216].try_into().unwrap()),
+        split_paid_mask: u64::from_le_bytes(data[216..224].try_into().unwrap()),
+        split_group_size: u16::from_le_bytes([data[224], data[225]]),
+        split_remainder_paid: data[226] != 0,
     }
 }
 

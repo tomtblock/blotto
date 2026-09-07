@@ -46,9 +46,25 @@ const USAGE = `blotto-cup admin CLI
 commands
   status                    read Config + platform treasury balance
   init-config               one-time setup (admin = the signing key)
-      --entry-signer <pubkey> --settlement-signer <pubkey>
+      --entry-signer <pubkey> --settlement-signer <pubkey> --keeper <pubkey>
       --ceilings <7 comma-separated lamport values>
       --min-platform <lamports | SOL decimal ending in "sol", e.g. 2sol>
+  migrate-config            the ONE-SHOT 2026-09-07 layout migration: grows
+                            the live Config (380 → 484 bytes) and seeds the
+                            keeper + timings. Run right after the upgrade,
+                            before anything else (runbook step 3b)
+      --keeper <pubkey>
+  set-keeper                the key open_pool requires before the 24 h
+                            liveness fallback (prompt v2 §A)
+      --keeper <pubkey>
+  set-pool-timing           the fill deadline for pools opened from now on
+                            and the per-tier cooldown (never touches an
+                            open pool); both in seconds, both > 0
+      --fill-deadline <seconds> --cooldown <seconds>
+  forfeit-escrow            ADMIN-signed since 2026-09-07: record that review
+                            upheld a flag. Moves nothing — the share stays in
+                            the pool's vault until pay_next_place
+      --pool-id <u64> --player <pubkey>
   set-open-tiers            which tiers may open pools (founder-owned)
       --tiers <7 comma-separated 0/1, e.g. 1,0,0,0,0,0,0>
   set-paused                the kill switch: blocks register, and ONLY
@@ -156,6 +172,15 @@ class Pdas {
   platform(): PublicKey {
     return this.pda([Buffer.from('platform')]);
   }
+  pool(id: bigint): PublicKey {
+    return this.pda([Buffer.from('pool'), u64le(id)]);
+  }
+  vault(id: bigint): PublicKey {
+    return this.pda([Buffer.from('vault'), u64le(id)]);
+  }
+  entry(pool: PublicKey, player: PublicKey): PublicKey {
+    return this.pda([Buffer.from('entry'), pool.toBuffer(), player.toBuffer()]);
+  }
 }
 
 interface Ctx {
@@ -244,6 +269,14 @@ async function cmdStatus(ctx: Ctx): Promise<void> {
     pots.push(d.readBigUInt64LE(224 + 8 * t));
   }
   const platform = await ctx.connection.getAccountInfo(ctx.pdas.platform(), 'confirmed');
+  if (d.length === CONFIG_SPACE_V1) {
+    console.log(
+      'config: PRE-MIGRATION LAYOUT (380 bytes) — every other instruction fails until ' +
+        '`migrate-config` runs (runbook step 3b)'
+    );
+  } else if (d.length !== CONFIG_SPACE) {
+    console.log(`config: ${d.length} bytes on chain; source says Config::SPACE = ${CONFIG_SPACE}`);
+  }
   console.log(`admin:             ${new PublicKey(d.subarray(8, 40)).toBase58()}`);
   console.log(`entry signer:      ${new PublicKey(d.subarray(40, 72)).toBase58()}`);
   console.log(`settlement signer: ${new PublicKey(d.subarray(72, 104)).toBase58()}`);
@@ -256,12 +289,27 @@ async function cmdStatus(ctx: Ctx): Promise<void> {
   console.log(`reserved:          ${d.readBigUInt64LE(289)} lamports`);
   console.log(`refundable:        ${d.readBigUInt64LE(297)} lamports`);
   console.log(`next pool id:      ${d.readBigUInt64LE(315)}`);
+  if (d.length >= CONFIG_SPACE) {
+    // The 2026-09-07 tail (keeper 380, fill_deadline_seconds 412,
+    // cooldown_seconds 420, tier_next_open_at 428).
+    const nextOpen: bigint[] = [];
+    for (let t = 0; t < N_TIERS; t++) nextOpen.push(d.readBigInt64LE(428 + 8 * t));
+    console.log(`keeper:            ${new PublicKey(d.subarray(380, 412)).toBase58()}`);
+    console.log(`fill deadline:     ${d.readBigInt64LE(412)} s`);
+    console.log(`cooldown:          ${d.readBigInt64LE(420)} s`);
+    console.log(`tier next open at: [${nextOpen.join(', ')}] (unix s; 0 = never settled)`);
+  }
   console.log(`platform balance:  ${BigInt(platform?.lamports ?? 0)} lamports`);
 }
+
+/** `Config::SPACE` since 2026-09-07 and the pre-migration size (state.rs). */
+const CONFIG_SPACE = 484;
+const CONFIG_SPACE_V1 = 380;
 
 async function cmdInitConfig(ctx: Ctx): Promise<void> {
   const entrySigner = new PublicKey(need(ctx.cli, 'entry-signer'));
   const settlementSigner = new PublicKey(need(ctx.cli, 'settlement-signer'));
+  const keeper = new PublicKey(need(ctx.cli, 'keeper'));
   const ceilings = need(ctx.cli, 'ceilings')
     .split(',')
     .map((v) => parseAmount(v));
@@ -286,12 +334,92 @@ async function cmdInitConfig(ctx: Ctx): Promise<void> {
           disc('init_config'),
           entrySigner.toBuffer(),
           settlementSigner.toBuffer(),
+          keeper.toBuffer(),
           ceilingsBuf,
           u64le(minPlatform),
         ]),
       }),
     ],
     'the account becoming admin'
+  );
+}
+
+/** `migrate_config(keeper)` — admin-signed, one-shot; the admin pays the
+ * rent top-up (hence `isWritable` on the signer). Refused by the program
+ * once the account is already 484 bytes. */
+async function cmdMigrateConfig(ctx: Ctx): Promise<void> {
+  const keeper = new PublicKey(need(ctx.cli, 'keeper'));
+  const admin = signerPubkey(ctx.cli);
+  await deliver(
+    ctx,
+    [
+      new TransactionInstruction({
+        programId: ctx.programId,
+        keys: [
+          { pubkey: admin, isSigner: true, isWritable: true },
+          { pubkey: ctx.pdas.config(), isSigner: false, isWritable: true },
+          { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+        ],
+        data: Buffer.concat([disc('migrate_config'), keeper.toBuffer()]),
+      }),
+    ],
+    'admin'
+  );
+}
+
+async function cmdSetKeeper(ctx: Ctx): Promise<void> {
+  const keeper = new PublicKey(need(ctx.cli, 'keeper'));
+  await deliver(ctx, [adminOnlyIx(ctx, 'set_keeper', keeper.toBuffer())], 'admin');
+}
+
+/** Seconds as an integer string; the program refuses 0 (InvalidTiming). */
+function parseSeconds(raw: string, flag: string): bigint {
+  if (!/^[0-9]+$/.test(raw.trim())) throw new Error(`--${flag} must be integer seconds, got ${raw}`);
+  const v = BigInt(raw.trim());
+  if (v <= 0n) throw new Error(`--${flag} must be greater than zero`);
+  return v;
+}
+
+async function cmdSetPoolTiming(ctx: Ctx): Promise<void> {
+  const fill = parseSeconds(need(ctx.cli, 'fill-deadline'), 'fill-deadline');
+  const cooldown = parseSeconds(need(ctx.cli, 'cooldown'), 'cooldown');
+  const i64le = (v: bigint): Buffer => {
+    const b = Buffer.alloc(8);
+    b.writeBigInt64LE(v);
+    return b;
+  };
+  await deliver(
+    ctx,
+    [adminOnlyIx(ctx, 'set_pool_timing', Buffer.concat([i64le(fill), i64le(cooldown)]))],
+    'admin'
+  );
+}
+
+/** `forfeit_escrow(pool_id)` — admin-signed since 2026-09-07 (prompt v2
+ * §E.2): review upheld a flag. The vault is listed read-only and the
+ * treasury not at all: nothing moves, the share waits for `pay_next_place`. */
+async function cmdForfeitEscrow(ctx: Ctx): Promise<void> {
+  const poolIdRaw = need(ctx.cli, 'pool-id');
+  if (!/^[0-9]+$/.test(poolIdRaw)) throw new Error(`--pool-id must be an integer, got ${poolIdRaw}`);
+  const poolId = BigInt(poolIdRaw);
+  const player = new PublicKey(need(ctx.cli, 'player'));
+  const pool = ctx.pdas.pool(poolId);
+  await deliver(
+    ctx,
+    [
+      new TransactionInstruction({
+        programId: ctx.programId,
+        keys: [
+          { pubkey: signerPubkey(ctx.cli), isSigner: true, isWritable: false },
+          { pubkey: ctx.pdas.config(), isSigner: false, isWritable: false },
+          { pubkey: pool, isSigner: false, isWritable: false },
+          { pubkey: ctx.pdas.vault(poolId), isSigner: false, isWritable: false },
+          { pubkey: ctx.pdas.entry(pool, player), isSigner: false, isWritable: true },
+        ],
+        data: Buffer.concat([disc('forfeit_escrow'), u64le(poolId)]),
+      }),
+    ],
+    'admin'
   );
 }
 
@@ -495,6 +623,14 @@ async function main(): Promise<void> {
       return cmdStatus(ctx);
     case 'init-config':
       return cmdInitConfig(ctx);
+    case 'migrate-config':
+      return cmdMigrateConfig(ctx);
+    case 'set-keeper':
+      return cmdSetKeeper(ctx);
+    case 'set-pool-timing':
+      return cmdSetPoolTiming(ctx);
+    case 'forfeit-escrow':
+      return cmdForfeitEscrow(ctx);
     case 'set-open-tiers':
       return cmdSetOpenTiers(ctx);
     case 'set-paused':
