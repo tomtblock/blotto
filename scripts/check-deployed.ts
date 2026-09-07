@@ -49,8 +49,23 @@ const N_TIERS = 7;
 const DEFAULT_PROGRAM_ID = '5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17';
 const DEFAULT_RPC = 'https://api.devnet.solana.com';
 
-/** Anchor's `InstructionDidNotDeserialize` — the one verdict that fails a run. */
+/** Anchor's `InstructionDidNotDeserialize` — the deployed program has the
+ * instruction but rejected our argument bytes. */
 const ERR_DID_NOT_DESERIALIZE = 102;
+
+/**
+ * Anchor's `InstructionFallbackNotFound` — the discriminator matched NO
+ * instruction, i.e. the deployed program does not have this instruction at all.
+ *
+ * This used to be treated as a pass, on the reading that "anything other than
+ * 102 means the bytes were understood". They were not: nothing read them. An
+ * absent instruction is the plainest possible form of the drift this script
+ * exists to detect, and passing it made the report actively misleading — on
+ * 2026-09-07 the pre-upgrade devnet program was missing `migrate_config`,
+ * `set_keeper`, `set_pool_timing` and `pay_next_place`, and this script called
+ * all four "ok" and announced "15 of 16 pass".
+ */
+const ERR_FALLBACK_NOT_FOUND = 101;
 
 /** `Config::SPACE` in programs/blotto_cup/src/state.rs (8 + LEN) since the
  * 2026-09-07 upgrade; the pre-migration account is `CONFIG_SPACE_V1`. */
@@ -187,6 +202,27 @@ function payNextPlaceCheck(): WireCheck {
   };
 }
 
+/**
+ * `place_sanctions_hold` / `lift_sanctions_hold` (Phase 2 Stage F) — the pair
+ * that stops a listed wallet being paid. Identical argument shape and account
+ * order; only the signer role differs (settlement places, admin lifts), and
+ * the signer is supplied by the caller, so one builder covers both.
+ *
+ * These were missing until 2026-09-07. `check-deployed.ts` was written for the
+ * PR4 reconciliation upgrade and never extended, so the daily drift check
+ * would have reported "matches this branch" while blind to the two newest
+ * instructions in the program — the ones that keep a sanctions hold enforced.
+ * A wire-contract checker that does not know about an instruction cannot
+ * notice it missing, which is the whole failure this script exists to catch.
+ */
+function sanctionsHoldCheck(name: 'place_sanctions_hold' | 'lift_sanctions_hold'): WireCheck {
+  return {
+    name,
+    signature: 'pool_id: u64',
+    args: u64le(1n),
+  };
+}
+
 /** `init_config`'s own account list — it creates the Config PDA, so it takes
  *  the platform PDA and the System Program too (InitConfig in admin.rs). */
 function initConfigCheck(entrySigner: PublicKey, settlementSigner: PublicKey): WireCheck {
@@ -274,6 +310,16 @@ async function checkOne(
       name: check.name,
       ok: false,
       detail: `DEPLOYED PROGRAM REJECTED THE ARGUMENTS (Anchor 102) — source says: ${check.signature}`,
+    };
+  }
+
+  if (code === ERR_FALLBACK_NOT_FOUND) {
+    return {
+      name: check.name,
+      ok: false,
+      detail:
+        'DEPLOYED PROGRAM HAS NO SUCH INSTRUCTION (Anchor 101) — this branch declares it; ' +
+        'the deployed build predates it. Redeploy.',
     };
   }
 
@@ -464,6 +510,29 @@ async function main(): Promise<void> {
       settlement
     )
   );
+
+  // place / lift_sanctions_hold: [signer, config, pool, entry]. The Entry is a
+  // placeholder — it does not exist, so account validation fails long after
+  // the arguments deserialize, which is a pass for a wire-contract check.
+  for (const [name, signer] of [
+    ['place_sanctions_hold', settlement],
+    ['lift_sanctions_hold', admin],
+  ] as const) {
+    verdicts.push(
+      await checkOne(
+        connection,
+        programId,
+        sanctionsHoldCheck(name),
+        [
+          { pubkey: signer, isSigner: true, isWritable: false },
+          { pubkey: config, isSigner: false, isWritable: false },
+          { pubkey: poolPda, isSigner: false, isWritable: false },
+          { pubkey: PublicKey.unique(), isSigner: false, isWritable: true },
+        ],
+        signer
+      )
+    );
+  }
 
   const layout = await checkConfigAccount(connection, config);
   if (layout !== null) verdicts.push(layout);
