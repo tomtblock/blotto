@@ -222,7 +222,10 @@ reissue it**; the divergences are listed so the reissue is a single pass.
 Stated plainly, because two of these are published as though they were.
 
 1. **Sanctions screening.** The rules page says the winning wallet is checked
-   against published sanctions lists. No screening code exists.
+   against published sanctions lists. The screening seam and its three
+   adapters exist (`backend/sanctions/`, Phase 2 Stage A) but nothing calls
+   them yet: the packet service still wires its `SanctionsList` seam to an
+   always-clear stub, and the daemon does not screen at all.
 2. **The `Resolving` state and the 12-hour review clock.** The rules page says a
    settled pool enters resolving for up to 12 hours and that an undecided flag
    is then cleared and paid. There is no such state and no such timer; the

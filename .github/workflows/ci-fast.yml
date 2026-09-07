@@ -78,6 +78,7 @@ jobs:
             backend/scoring/package-lock.json
             backend/class-digest/package-lock.json
             backend/sealing/package-lock.json
+            backend/sanctions/package-lock.json
             backend/reveal/package-lock.json
             backend/indexer/package-lock.json
             backend/packet/package-lock.json
@@ -89,13 +90,13 @@ jobs:
       # before any tests run.
       - name: install
         run: |
-          for pkg in _shared scoring class-digest sealing reveal indexer packet detection; do
+          for pkg in _shared scoring class-digest sealing sanctions reveal indexer packet detection; do
             (cd "backend/$pkg" && npm ci --no-audit --no-fund)
           done
 
       - name: typecheck + test
         run: |
-          for pkg in _shared scoring class-digest sealing reveal indexer packet detection; do
+          for pkg in _shared scoring class-digest sealing sanctions reveal indexer packet detection; do
             echo "=== backend/$pkg ==="
             (cd "backend/$pkg" && npm run typecheck && npm test)
           done
