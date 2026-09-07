@@ -59,22 +59,6 @@ export async function saveStill(still: Omit<StoredStill, 'key' | 'lockedAt'>): P
   }
 }
 
-export async function stillsForPool(pool: string): Promise<StoredStill[]> {
-  try {
-    const db = await openDb();
-    const rows = await new Promise<StoredStill[]>((resolve, reject) => {
-      const tx = db.transaction(STORE, 'readonly');
-      const req = tx.objectStore(STORE).index('pool').getAll(pool);
-      req.onsuccess = () => resolve(req.result as StoredStill[]);
-      req.onerror = () => reject(req.error ?? new Error('IndexedDB read failed'));
-    });
-    db.close();
-    return rows.sort((a, b) => a.battle - b.battle);
-  } catch {
-    return [];
-  }
-}
-
 export async function allStills(): Promise<StoredStill[]> {
   try {
     const db = await openDb();

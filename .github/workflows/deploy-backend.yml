@@ -287,7 +287,9 @@ jobs:
             BLOTTO_DATABASE_URL="${{ secrets.BLOTTO_DATABASE_URL }}" \
             BLOTTO_RPC_URL="$DEVNET_RPC" \
             BLOTTO_PROGRAM_ID="$PROGRAM_ID" \
-            BLOTTO_API_CORS_ORIGINS="$APP_ORIGIN"
+            BLOTTO_API_CORS_ORIGINS="$APP_ORIGIN" \
+            BLOTTO_API_RATE_LIMIT_ENABLED="1" \
+            BLOTTO_API_SECURITY_HEADERS_ENABLED="1"
           # Generate-once: the webhook receiver refuses to start without a
           # secret (E6 fail-closed). Helius gets this value when the webhook
           # is created (docs/hosting.md); until then nothing calls it. This
@@ -304,7 +306,9 @@ jobs:
         run: |
           flyctl secrets set --app "$PACKET_APP" --stage \
             BLOTTO_DATABASE_URL="${{ secrets.BLOTTO_DATABASE_URL }}" \
-            BLOTTO_API_CORS_ORIGINS="$APP_ORIGIN"
+            BLOTTO_API_CORS_ORIGINS="$APP_ORIGIN" \
+            BLOTTO_API_RATE_LIMIT_ENABLED="1" \
+            BLOTTO_API_SECURITY_HEADERS_ENABLED="1"
 
           # Entry signer — independent of geo (see preflight).
           if [ "${{ steps.pre.outputs.signer_mode }}" = "turnkey" ]; then
@@ -407,6 +411,8 @@ jobs:
             BLOTTO_RPC_URL="$DEVNET_RPC" \
             BLOTTO_PROGRAM_ID="$PROGRAM_ID" \
             BLOTTO_API_CORS_ORIGINS="$APP_ORIGIN" \
+            BLOTTO_API_RATE_LIMIT_ENABLED="1" \
+            BLOTTO_API_SECURITY_HEADERS_ENABLED="1" \
             SETTLEMENT_SIGNER_KEYPAIR_B64="$SETTLEMENT_SIGNER_KEYPAIR_B64"
 
       - name: Deploy review service
