@@ -23,7 +23,13 @@ import {
   seal,
   type SealedPayload,
 } from '../../sealing/src';
-import { battlesHash, potForTier, TIER_ENTRY_LAMPORTS, type BattleSet } from '../../scoring/src';
+import {
+  battlesHash,
+  potForTier,
+  REVIEW_WINDOW_SECS,
+  TIER_ENTRY_LAMPORTS,
+  type BattleSet,
+} from '../../scoring/src';
 import { base58Encode } from '../../_shared/src/blotto-events';
 
 const sha = (s: string) => new Uint8Array(createHash('sha256').update(s).digest());
@@ -472,6 +478,122 @@ async function expectRejects(fn: () => Promise<unknown>, message: string): Promi
 }
 
 describe('the daemon (C8): resume after a crash', () => {
+  it('the review clock: a flagged share still held at twelve hours is released, not a second before (Stage D)', async function () {
+    this.timeout(60000);
+    const w = await makeWorld();
+    await w.daemon.tick(); // opens pool 1
+    const players = await enterPlayers(w, 1n, 64); // seals
+    // Flag every seat before settlement so whoever wins is paid INTO
+    // escrow — the winner is the scoring engine's to decide, not the test's.
+    for (const p of players) await w.chain.flagEntry(1n, p);
+    const settledAt = w.clock.t;
+    const r1 = await w.daemon.tick();
+    expect(r1.errors).to.deep.equal([]);
+    expect(r1.cranked).to.deep.equal([{ poolId: 1n, finalState: 'Paid' }]);
+    expect(r1.released).to.deep.equal([], 'nothing releases in the settling tick');
+    const held = [...w.chain.escrowed.entries()];
+    expect(held.length).to.be.greaterThan(0, 'the winning share is held');
+    let heldTotal = 0n;
+    for (const [, v] of held) heldTotal += v;
+    expect(heldTotal).to.equal(potForTier(0), 'the whole pot is under review');
+    for (const [player] of held) {
+      expect(w.chain.escrowedAt.get(player)).to.equal(settledAt, 'escrowed_at is the settlement instant');
+    }
+
+    // One second short of the window: still held, still resolving.
+    w.clock.t = settledAt + REVIEW_WINDOW_SECS - 1n;
+    const r2 = await w.daemon.tick();
+    expect(r2.errors).to.deep.equal([]);
+    expect(r2.released).to.deep.equal([]);
+    expect(w.chain.escrowed.size).to.equal(held.length);
+
+    // At the window: released to the players, the flag bit untouched (the
+    // program refuses clear_flag on a settled entry — the escrow reaching
+    // zero is the record), the pot conserved.
+    w.clock.t = settledAt + REVIEW_WINDOW_SECS;
+    const r3 = await w.daemon.tick();
+    expect(r3.errors).to.deep.equal([]);
+    expect(r3.released.map((x) => x.player).sort()).to.deep.equal(held.map(([p]) => p).sort());
+    expect(w.chain.escrowed.size).to.equal(0);
+    let paid = 0n;
+    for (const [player, v] of w.chain.paid) {
+      if (held.some(([p]) => p === player)) paid += v;
+    }
+    expect(paid).to.equal(potForTier(0));
+    const after = await w.chain.getEntries(1n);
+    for (const [player] of held) {
+      const e = after.find((x) => x.player === player)!;
+      expect(e.flagged).to.equal(true);
+      expect(e.escrowLamports).to.equal(0n);
+    }
+
+    // Idempotent: the next tick has nothing left to release.
+    const r4 = await w.daemon.tick();
+    expect(r4.released).to.deep.equal([]);
+    expect(r4.errors).to.deep.equal([]);
+  });
+
+  it('the review clock never touches a forfeited share (Stage D)', async function () {
+    this.timeout(60000);
+    const w = await makeWorld();
+    await w.daemon.tick();
+    const players = await enterPlayers(w, 1n, 64);
+    for (const p of players) await w.chain.flagEntry(1n, p);
+    const settledAt = w.clock.t;
+    await w.daemon.tick();
+    const held = [...w.chain.escrowed.keys()];
+    expect(held.length).to.be.greaterThan(0);
+
+    // Review upholds every held share: forfeited, waiting for
+    // pay_next_place — the clock must leave each exactly where it is.
+    for (const p of held) await w.chain.forfeitEscrow(1n, p);
+
+    w.clock.t = settledAt + REVIEW_WINDOW_SECS + 24n * 3600n;
+    const r = await w.daemon.tick();
+    expect(r.errors).to.deep.equal([]);
+    expect(r.released).to.deep.equal([], 'a forfeited share is never auto-released');
+    for (const p of held) expect(w.chain.escrowed.get(p)).to.not.equal(undefined, 'still held');
+    // And a forfeited hold does not pin the pool as non-terminal: the
+    // sweep treats it as decided (its route is pay_next_place, audit O14).
+    const r2 = await w.daemon.tick();
+    expect(r2.errors).to.deep.equal([]);
+    expect(r2.released).to.deep.equal([]);
+  });
+
+  it('the review clock: a failed release is a tick error and is retried next tick (Stage D)', async function () {
+    this.timeout(60000);
+    const w = await makeWorld();
+    await w.daemon.tick();
+    const players = await enterPlayers(w, 1n, 64);
+    for (const p of players) await w.chain.flagEntry(1n, p);
+    const settledAt = w.clock.t;
+    await w.daemon.tick();
+    const held = [...w.chain.escrowed.keys()];
+    expect(held.length).to.be.greaterThan(0);
+
+    // An RPC fault at the wrong moment: the first release throws.
+    const real = w.chain.releaseEscrow.bind(w.chain);
+    let failOnce = true;
+    w.chain.releaseEscrow = async (poolId, player) => {
+      if (failOnce) {
+        failOnce = false;
+        throw new Error('rpc down');
+      }
+      return real(poolId, player);
+    };
+
+    w.clock.t = settledAt + REVIEW_WINDOW_SECS;
+    const r1 = await w.daemon.tick();
+    expect(r1.errors.map((e) => e.action)).to.include('settle');
+    expect(w.chain.escrowed.size).to.be.greaterThan(0, 'the faulted share is still held');
+
+    const r2 = await w.daemon.tick();
+    expect(r2.errors).to.deep.equal([]);
+    expect(w.chain.escrowed.size).to.equal(0, 'released on the retry');
+    const releasedAll = [...r1.released, ...r2.released].map((x) => x.player).sort();
+    expect(releasedAll).to.deep.equal(held.sort());
+  });
+
   it('a key created before the crash is republished, never regenerated', async () => {
     const w = await makeWorld();
     // The crash window: createPoolKey succeeded, open_pool never landed.

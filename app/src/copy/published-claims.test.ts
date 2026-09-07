@@ -70,8 +70,14 @@ const PROMISES: readonly Promised[] = [
   {
     phrase: 'If no decision is made within 12 hours, the flag is cleared and the prize is paid',
     commitment: 'An undecided flag is cleared and paid at the 12-hour mark.',
-    proof: null,
-    gate: 'Phase 2 — the daemon-side 12-hour commitment. The program has only the seven-day permissionless release, which is the safeguard and is published as such.',
+    // The daemon's review clock (Phase 2 Stage D): a settled, flagged,
+    // still-escrowed, not-forfeited share is released to its player once
+    // REVIEW_WINDOW_SECS has passed since the on-chain escrowed_at. The
+    // flag BIT stays set — clear_flag refuses a settled entry by design —
+    // so "cleared" is loose by one word; the outcome is exactly as
+    // published. The program's own seven-day permissionless release
+    // remains the safeguard behind it.
+    proof: 'backend/reveal/src/daemon.ts',
   },
   {
     phrase: 'You may appeal within 7 days',
@@ -163,15 +169,14 @@ describe('published claims are registered', () => {
     }
   });
 
-  it('the known gaps are exactly the three that remain of the four the audit recorded', () => {
+  it('the known gaps are exactly the two that remain of the four the audit recorded', () => {
     // Tightening this list is the point. When a Phase 2 stage lands, its
     // promise moves from `proof: null` to a real path and this number drops
-    // (the resolving state left it at Stage C). It must never rise without a
-    // deliberate edit here.
+    // (the resolving state left it at Stage C, the 12-hour clock at Stage D).
+    // It must never rise without a deliberate edit here.
     const gaps = PROMISES.filter((p) => p.proof === null);
     expect(gaps.map((p) => p.phrase).sort()).toEqual(
       [
-        'If no decision is made within 12 hours, the flag is cleared and the prize is paid',
         'We check the winning wallet against published sanctions lists'.toLowerCase(),
         'You may appeal within 7 days',
       ].sort()

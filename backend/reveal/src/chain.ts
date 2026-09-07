@@ -100,7 +100,24 @@ export interface ChainEntryView {
   /** Review upheld the flag: the held share can only go to the next
    * eligible place (2026-09-07). */
   forfeited: boolean;
+  /** `Entry.escrow`: lamports still held in the pool vault for this seat
+   * (0 once released, or never escrowed). A settled, flagged, not-forfeited
+   * entry with a positive escrow is a share UNDER REVIEW. */
+  escrowLamports: bigint;
+  /** `Entry.escrowed_at`: the on-chain unix second the share was escrowed
+   * at `pay_prizes` — the clock both the program's seven-day safeguard and
+   * the daemon's twelve-hour release (Phase 2 Stage D) run from. 0 when
+   * never escrowed. */
+  escrowedAt: bigint;
 }
+
+/**
+ * What the in-memory chain STORES per entry: the on-chain fields the fake
+ * keeps on the entry itself. Escrow lamports and the escrow timestamp live
+ * in the fake's own maps (as they always have) and are joined in at
+ * `getEntries`, so a test that pushes entries directly writes only these.
+ */
+export type FakeEntry = Omit<ChainEntryView, 'escrowLamports' | 'escrowedAt'>;
 
 /** One Merkle proof step in the program's argument shape (mirrors
  * `merkle.rs::ProofStep`; the scoring engine's `ProofStep` is the same
@@ -199,12 +216,12 @@ export interface KeeperChain extends SettlementChain {
 }
 
 /** `escrow.rs::review_pending`, mirrored: a flag review not yet resolved. */
-function reviewPending(e: ChainEntryView, escrow: bigint): boolean {
+function reviewPending(e: FakeEntry, escrow: bigint): boolean {
   return e.flagged && !e.forfeited && (!e.settled || escrow > 0n);
 }
 
 /** `escrow.rs::eligible`, mirrored. */
-function eligibleFor(e: ChainEntryView, escrow: bigint): boolean {
+function eligibleFor(e: FakeEntry, escrow: bigint): boolean {
   return !e.refunded && !e.forfeited && !reviewPending(e, escrow);
 }
 
@@ -224,11 +241,13 @@ interface SplitState {
  */
 export class FakeChain implements KeeperChain {
   pools = new Map<string, ChainPoolView>();
-  entries = new Map<string, ChainEntryView[]>();
+  entries = new Map<string, FakeEntry[]>();
   /** Lamports paid per player (base58) — asserted by tests. */
   paid = new Map<string, bigint>();
   /** Lamports escrowed per player at payout (flagged entries). */
   escrowed = new Map<string, bigint>();
+  /** The clock reading at escrow, per player — `Entry.escrowed_at`. */
+  escrowedAt = new Map<string, bigint>();
   revealed = new Map<string, Uint8Array>();
   committedRoots = new Map<string, Uint8Array>();
   /** Published sealing keys per pool, captured at openPool — asserted by tests. */
@@ -275,7 +294,7 @@ export class FakeChain implements KeeperChain {
   /** The v2 register money model: 100% of the price into the treasury,
    * tracked refundable until seal. Pushes the entry, then applies the
    * program's post-entry transition (the seal at 64). */
-  registerEntry(poolId: bigint, entry: ChainEntryView): void {
+  registerEntry(poolId: bigint, entry: FakeEntry): void {
     const p = this.pools.get(poolId.toString());
     if (!p) throw new Error(`no pool ${poolId}`);
     if (p.state !== 'Open') throw new Error('PoolNotOpen');
@@ -309,7 +328,11 @@ export class FakeChain implements KeeperChain {
   }
 
   async getEntries(poolId: bigint): Promise<ChainEntryView[]> {
-    return (this.entries.get(poolId.toString()) ?? []).map((e) => ({ ...e }));
+    return (this.entries.get(poolId.toString()) ?? []).map((e) => ({
+      ...e,
+      escrowLamports: this.escrowed.get(e.player) ?? 0n,
+      escrowedAt: this.escrowedAt.get(e.player) ?? 0n,
+    }));
   }
 
   async revealPoolSecret(poolId: bigint, secret: Uint8Array): Promise<void> {
@@ -355,11 +378,13 @@ export class FakeChain implements KeeperChain {
       if (!entry) throw new Error('EntryMismatch');
       if (entry.settled) throw new Error('EntryAlreadySettled');
       if (entry.flagged) {
-        // Escrowed: the lamports stay put (mirrors the program).
+        // Escrowed: the lamports stay put (mirrors the program), stamped
+        // with the clock — `Entry.escrowed_at`.
         this.escrowed.set(
           entry.player,
           (this.escrowed.get(entry.player) ?? 0n) + committed.amountLamports
         );
+        this.escrowedAt.set(entry.player, this.now());
       } else {
         this.paid.set(
           entry.player,
