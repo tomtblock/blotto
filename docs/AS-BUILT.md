@@ -223,26 +223,39 @@ reissue it**; the divergences are listed so the reissue is a single pass.
 
 ## 6. What is not built
 
-Stated plainly, because two of these are published as though they were.
+Stated plainly, because these were once published as though they were built.
 
-1. **The crank's call to screen the winner.** Screening runs at *entry*
-   (Stages A–B): the packet service screens every entrant through
-   `backend/sanctions/` and refuses to start with no source configured. The
-   on-chain **sanctions hold** the resolving check needs now exists too
-   (Stage F, `instructions/sanctions.rs`): settlement-signed to place,
-   admin-signed to lift, refused by **both** paths of `release_escrow`
-   including the seven-day permissionless one, and excluded from
-   both of `pay_next_place`'s eligibility checks — `eligible()`, which
-   classifies the committed peers, and the inline check on the recipient —
-   so a held wallet can neither be counted in a first-place group nor be
-   paid a next-place portion.
-   A hold standing at payout also makes `pay_prizes` **escrow** the share
-   rather than send it, which is what puts the money where those two checks
-   can see it — the batch is never refused, so one held wallet cannot leave
-   a pool short of `Paid` and strand its tier.
-   What is not yet wired is the crank calling the screener on the winner and
-   placing the hold — the next change, and the last of the four published
-   promises to become fully operational.
+1. *Sanctions screening now runs at BOTH ends of a pool's life* (Stages A–B
+   and F), so the last of the four published promises the audit recorded is
+   operational. At **entry**, the packet service screens every entrant
+   through `backend/sanctions/` and refuses to start with no source
+   configured. At **resolving**, the crank screens every wallet in the
+   committed payout list — a tie for first has several, and each is a
+   winning wallet — and places an on-chain **sanctions hold**
+   (`instructions/sanctions.rs`, settlement-signed to place, admin-signed to
+   lift) on any it must not pay. Both services select, load and refresh
+   their lists through the same wiring (`sanctions/src/wire.ts`), so the two
+   ends cannot drift apart.
+
+   What a hold does: `pay_prizes` **escrows** that share instead of sending
+   it, both paths of `release_escrow` — including the seven-day
+   permissionless one — refuse to let it out, and **both** of
+   `pay_next_place`'s eligibility checks refuse it: `eligible()`, which
+   classifies the committed peers, and the inline check on the recipient. A
+   held wallet is therefore neither counted in a first-place group nor paid
+   a next-place portion — and a hold on one winner does not strand a
+   forfeited share, which simply passes to the next rank. The
+   batch is never refused, so one held wallet cannot leave a pool short of
+   `Paid` and strand its tier. A screening that **cannot answer** holds too:
+   the pool settles and one payment waits for a human, because paying a
+   wallet nobody could check is the one outcome the promise forbids. It is
+   emphatically not a flag — list membership carries no reviewer, no
+   criterion and no finding about play, and no path here moves a lamport.
+
+   Still counsel's, not the code's: where a confirmed match's money finally
+   goes. Held indefinitely as blocked property is the conventional answer,
+   and the hold is built so any answer can be supplied later. What is not
+   built, and will not be, is a path to the operator.
 2. *Resolving, the 12-hour clock and the next-place payment are all built*
    (Stages C, D and the O23 driver). The daemon divides an upheld flag's
    share among the eligible players at the rank it passes to, recomputing

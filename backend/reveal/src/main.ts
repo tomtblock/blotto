@@ -32,6 +32,13 @@
  *   TURNKEY_API_BASE_URL/_PUBLIC_KEY/_PRIVATE_KEY, TURNKEY_ORGANIZATION_ID,
  *   TURNKEY_USER_ID              pool-key custody (R21)
  *   IRYS_UPLOAD_KEY, IRYS_NETWORK  bundle publishing
+ *   SANCTIONS_*                  the winner check at resolving (Stage F) —
+ *                                same variables and same selector as the
+ *                                packet service (`sanctions/src/select.ts`).
+ *                                The daemon REFUSES TO START with no source
+ *                                configured: it would otherwise pay winners
+ *                                unscreened while the rules page says it
+ *                                checks them
  *
  * One seam stays open, on the record (docs/hosting.md):
  *   - the detection ipHash rides empty (the hashed-IP capture at ciphertext
@@ -56,6 +63,8 @@ import {
   type PoolKeyCustody,
 } from '../../sealing/src';
 import { detectPool } from '../../detection/src/pipeline';
+import { wireScreening } from '../../sanctions/src';
+import { makeWinnerScreen } from './winner-screening';
 import { Web3Chain } from './chain-web3';
 import { crankPool, type RevealedForDetection } from './crank';
 import { makeDaemon, StubVrfCoordinator, type VrfCoordinator } from './daemon';
@@ -76,6 +85,10 @@ const DEFAULT_RPC = 'https://api.devnet.solana.com';
  */
 const SWITCHBOARD_BUDGET_MS = 45_000;
 const IRYS_BUDGET_MS = 45_000;
+// The OFAC mirror is a single file download; the vendor adapters do no work
+// at boot at all. Shorter than the two above because nothing here waits on
+// an oracle, and a mirror that cannot load in 30s will not load in 45.
+const SANCTIONS_BUDGET_MS = 30_000;
 
 function requireEnv(env: NodeJS.ProcessEnv, name: string): string {
   const v = env[name];
@@ -278,6 +291,24 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
     return [];
   };
 
+  // Stage F: the winner check at resolving. Selected, loaded and scheduled
+  // by the SAME wiring the packet service uses at entry, so the two ends of
+  // a pool's life cannot drift apart. A throw here ends the process: with no
+  // source configured the daemon would pay winners unscreened, and the rules
+  // page says it checks them. What the daemon does with a screening that
+  // cannot ANSWER is the other half, and lives in `winner-screening.ts`: it
+  // holds the payment for a human rather than stalling the pool.
+  const sanctions = await step(
+    'sanctions screening',
+    SANCTIONS_BUDGET_MS,
+    () => wireScreening(env, SERVICE),
+    log
+  );
+  console.log(`${SERVICE}: sanctions = ${sanctions.describe.join('; ')}`);
+  const screenWinners = makeWinnerScreen(sanctions.check, (stage, detail) =>
+    console.log(`${SERVICE}: ${stage}`, JSON.stringify(detail ?? {}))
+  );
+
   // E3 §4.4 (live path): after the crank publishes a bundle, tell the
   // indexer where it is — POST /bundles on the webhook server, same shared
   // secret as the Helius deliveries (one secret, one receiver). Optional:
@@ -313,7 +344,8 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
     custody,
     ciphertexts,
     vrf,
-    crank: (poolId) => crankPool({ chain, custody, ciphertexts, publisher, detect }, poolId),
+    crank: (poolId) =>
+      crankPool({ chain, custody, ciphertexts, publisher, detect, screenWinners }, poolId),
     now,
     announceBundle,
     log: (stage, detail) => console.log(`${SERVICE}: ${stage}`, JSON.stringify(detail ?? {})),

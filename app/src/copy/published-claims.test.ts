@@ -60,12 +60,15 @@ const PROMISES: readonly Promised[] = [
   {
     phrase: 'we check the winning wallet against published sanctions lists',
     commitment: 'The winning wallet is screened against sanctions lists before payment.',
-    // Screening runs at ENTRY (Stage B) and the on-chain hold the resolving
-    // check needs now exists (Stage F): both paths of `release_escrow`
-    // refuse it, and a held entry can receive no next-place portion. The
-    // crank-side screening call that places it is the next change; this
-    // points at the mechanism that makes the promise keepable.
-    proof: 'programs/blotto_cup/src/instructions/sanctions.rs',
+    // Fully operational at both ends (Stage F). At ENTRY the packet service
+    // screens every entrant (Stage B). At RESOLVING the crank screens every
+    // wallet in the committed payout list and places an on-chain
+    // `sanctions_hold` on any it must not pay: `pay_prizes` then escrows
+    // that share instead of sending it, both paths of `release_escrow`
+    // refuse to let it out, and a held entry can receive no next-place
+    // portion either. A screening that cannot answer holds too — the one
+    // outcome the promise forbids is paying a wallet nobody checked.
+    proof: 'backend/reveal/src/winner-screening.ts',
   },
   {
     phrase: 'If no decision is made within 12 hours, the flag is cleared and the prize is paid',
@@ -175,8 +178,8 @@ describe('published claims are registered', () => {
 
   it('no promise is a declared gap any more', () => {
     // All four the audit recorded now point at a mechanism: resolving at
-    // Stage C, the 12-hour clock at D, the appeal at E, and the sanctions
-    // hold the winner check needs at F. This must never rise without a
+    // Stage C, the 12-hour clock at D, the appeal at E, and the winner
+    // check with its sanctions hold at F. This must never rise without a
     // deliberate edit here — a new `proof: null` means we published
     // something we cannot yet keep.
     const gaps = PROMISES.filter((p) => p.proof === null);
