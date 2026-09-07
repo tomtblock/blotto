@@ -846,12 +846,32 @@ would have to settle or refund before it.
    scripts/deploy-devnet.sh        # extend-if-grown + anchor deploy, deploy keypair GXKX…agXY (C4 not yet done)
    ```
 
-   3b. **Migrate Config — immediately, before anything else.** The founder
-   sends, with the admin key:
+   3b. **Migrate Config — immediately, before anything else.**
+
+   ⚠ **CORRECTED 2026-09-07.** This step previously showed the command below
+   as a DIRECT send "with the admin key". That cannot work. `Config.admin` is
+   `9EEW…e34Z`, which is **off the ed25519 curve** — it is the Squads *vault*,
+   a PDA, and nobody holds a secret key for it. Direct mode signs with
+   `FEE_PAYER_KEYPAIR`, which is not the admin, and `handle_migrate_config`
+   checks the signer against the admin stored in the old Config bytes. It
+   reverts. The same applies to every other admin instruction in this
+   runbook, `set-paused` and `set-tier-economics` included: since C3 moved
+   the admin to the vault, **all of them are Squads proposals**.
+
+   Emit the instruction, review it, then create / approve / execute it as a
+   Squads transaction (the C3 flow at line 439):
 
    ```bash
-   npx ts-node --transpile-only scripts/admin.ts migrate-config --keeper EaDfwMWwW712L4YgdhBgEqbzzpdVP17e5mvY9LPwjrSD
+   npx ts-node --transpile-only scripts/admin.ts migrate-config \
+     --keeper EaDfwMWwW712L4YgdhBgEqbzzpdVP17e5mvY9LPwjrSD \
+     --emit-proposal --admin 9EEWtzyu72a3DKJVUkCaeYX4HuBKD59xXCcENnDVe34Z
    ```
+
+   Expected `dataBase64`:
+   `XIM6adKa4MHJqmycVO2xyFhASNYHIdfUnmiEYfwtgtExaZXxnHJ9Cg==`
+   (discriminator + the keeper pubkey), across three accounts — admin
+   `9EEW…` signer AND writable (it pays the rent top-up), config `6Q3H…`
+   writable, and the System Program.
 
    The keeper is the **settlement signer's public key** on devnet (the one
    daemon key opens and settles; `KEEPER_KEYPAIR` splits them later without
@@ -860,8 +880,14 @@ would have to settle or refund before it.
    second send fails cleanly (`ConfigAlreadyMigrated`, 6062). Then
    `admin.ts status` shows the keeper and the timings, and
    `scripts/check-deployed.ts` must report the Config account at 484
-   bytes, the new error variants (6054–6067) and the new instructions
-   (`migrate_config`, `set_keeper`, `set_pool_timing`, `pay_next_place`).
+   bytes and the new instructions — `migrate_config`, `set_keeper`,
+   `set_pool_timing`, `pay_next_place`, and (added 2026-09-07)
+   `place_sanctions_hold` and `lift_sanctions_hold`. Error variants now run
+   to **6070**, not 6067: three were appended for the keeper guard and the
+   sanctions hold. Note the checker itself was fixed the same day (#81) —
+   it had been treating "this instruction does not exist in the deployed
+   program" (Anchor 101) as a PASS, so before that fix it reported 15 of 16
+   green against a build missing six instructions.
    Until 3b has landed the daemon's `getConfig` refuses the account by name
    ("pre-migration layout") — that message is the check, not a fault.
    3c. **The prize table — the founder sends it.** Config still carries the
