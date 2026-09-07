@@ -57,7 +57,11 @@ const PROMISES: readonly Promised[] = [
     phrase: 'we check the winning wallet against published sanctions lists',
     commitment: 'The winning wallet is screened against sanctions lists before payment.',
     proof: null,
-    gate: 'Phase 2 — sanctions screening. No screening code exists anywhere in the repository.',
+    // Screening exists and runs at ENTRY (backend/sanctions, wired in the
+    // packet service since Stage B): a listed wallet never holds a seat. The
+    // published sentence is about the WINNER at resolving, which needs an
+    // on-chain hold the program does not have — Stage F, founder-gated.
+    gate: 'Phase 2 Stage F — the winner check at resolving. Entry screening is live (backend/packet/src/sanctions-wiring.ts); the resolving-time check needs a sanctions hold that both paths of release_escrow refuse.',
   },
   {
     phrase: 'If no decision is made within 12 hours, the flag is cleared and the prize is paid',

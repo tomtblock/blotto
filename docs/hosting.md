@@ -108,7 +108,7 @@ RPC via `backfill`, and `sync` runs one backfill before serving.
 | Irys funded wallet | bundle publishing | `IRYS_UPLOAD_KEY` |
 | Switchboard On-Demand queue (public config, not a credential) | VRF commit on live devnet | `SWITCHBOARD_QUEUE` — the production coordinator (`backend/reveal/src/vrf-switchboard.ts`) creates a fresh Randomness account per pool and bundles the reveal with `commit_vrf_seed`; `RANDOMNESS_ACCOUNT` selects the tests/bench stub instead; the daemon refuses to start with neither |
 | Mail provider (founder's pick) | D3 email notifications | a dispatch job reading `notify_optin`, resolving addresses via the sign-in provider |
-| Sanctions screening vendor | packet issuance hardening | the packet main ships the suite's always-clear answer; territory gating (fail-closed) is the operative geographic control at launch |
+| Sanctions screening — vendor keys (optional beside the mirror) | a second and third source at entry; the winner check at resolving (Stage F) | `SANCTIONS_CHAINALYSIS_API_KEY`, `SANCTIONS_OPENSANCTIONS_API_KEY`. The mirrored OFAC SDN list (`SANCTIONS_OFAC_SDN=1`) needs no credential and is staged on every deploy, so entry screening is live without a vendor; the packet service refuses to start with no source at all |
 
 ## Sequencing (first devnet bring-up)
 

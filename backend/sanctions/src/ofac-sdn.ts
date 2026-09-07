@@ -129,7 +129,8 @@ export class OfacSdnMirror implements SanctionsCheck {
   private snapshot: OfacMirrorSnapshot | null = null;
   private readonly url: string;
   private readonly fetchImpl: typeof fetch;
-  private readonly maxAgeMs: number;
+  /** Past this age since `loadedAt`, `screen` refuses. Public so a caller can pace `refresh()` under it. */
+  readonly maxAgeMs: number;
   private readonly now: () => Date;
 
   constructor(private readonly o: OfacSdnOptions = {}) {

@@ -72,6 +72,14 @@ services:
       GEO_STUB_COUNTRY: ${GEO_STUB_COUNTRY:-}
       GEO_STUB_REGION: ${GEO_STUB_REGION:-}
       GEO_STUB_VPN: ${GEO_STUB_VPN:-}
+      # Sanctions: the OFAC SDN mirror by default (public list, no key —
+      # the service downloads it at boot); vendor keys add sources. Set
+      # SANCTIONS_OFAC_SDN=0 with the stub pair only for an offline run.
+      SANCTIONS_OFAC_SDN: ${SANCTIONS_OFAC_SDN:-1}
+      SANCTIONS_CHAINALYSIS_API_KEY: ${SANCTIONS_CHAINALYSIS_API_KEY:-}
+      SANCTIONS_OPENSANCTIONS_API_KEY: ${SANCTIONS_OPENSANCTIONS_API_KEY:-}
+      SANCTIONS_STUB_LISTED: ${SANCTIONS_STUB_LISTED:-}
+      ALLOW_STUB_SANCTIONS: ${ALLOW_STUB_SANCTIONS:-}
     ports:
       - '8082:8082'
     depends_on:

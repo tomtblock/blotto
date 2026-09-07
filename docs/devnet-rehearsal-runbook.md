@@ -370,9 +370,12 @@ the swap that line must be GONE. The endpoint tells you what an answer was; the 
 line tells you which code path produced it — and only the second one catches a
 vendor variable that quietly went missing.
 
-**Not in scope, but open:** sanctions screening has no vendor wired at all —
-`backend/packet/src/main.ts` ships the always-clear answer the suite pins. Record it
-as a Stage E open item so it is not a surprise later.
+**Not in scope, but open (as written 2026-09-01):** sanctions screening had no vendor
+wired at all — `backend/packet/src/main.ts` shipped the always-clear answer the suite
+pinned. **Superseded 2026-09-07:** the packet service now screens every entrant
+(`backend/sanctions/`, wired by `backend/packet/src/sanctions-wiring.ts`) and refuses
+to start with no screener configured; the deploy workflow stages the OFAC SDN mirror
+on every run. What remains open is the *winner* check at resolving — audit O10.
 
 ---
 

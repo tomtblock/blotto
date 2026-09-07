@@ -103,6 +103,8 @@ name in the run's first step, before anything is deployed.
 | `ENTRY_SIGNER_PUBLIC_KEY_HEX` | that key's public key, hex | packet |
 | `GEO_VENDOR_URL` | the geo vendor | packet |
 | `GEO_VENDOR_API_KEY` | the geo vendor | packet |
+| `SANCTIONS_CHAINALYSIS_API_KEY` | Chainalysis (optional — the OFAC SDN mirror runs without it) | packet |
+| `SANCTIONS_OPENSANCTIONS_API_KEY` | OpenSanctions (optional, cross-check) | packet |
 | `TURNKEY_USER_ID` | Turnkey console | daemon |
 | `SWITCHBOARD_QUEUE` | Switchboard On-Demand queue (public config) | daemon |
 | `IRYS_UPLOAD_KEY` | the funded Irys wallet's secret key, base58 | daemon |
@@ -162,6 +164,12 @@ site shows the real (empty) devnet state.
   says so in the log as `LOOKUP FAILED (this is NOT a territory
   decision)`, which is how it tells itself apart from a real country
   block.
+- **Sanctions screening is live at entry** (since 2026-09-07). Every run
+  stages `SANCTIONS_OFAC_SDN=1`, so the packet service downloads the OFAC
+  SDN list before it listens and refuses to start if it cannot; the two
+  vendor keys are optional and add sources when present. A listed wallet
+  gets the same generic refusal as a blocked territory. The development
+  stub is never staged by this workflow.
 - **One secret is generated automatically** — the Helius webhook shared
   secret, on first deploy, kept stable across redeploys. It is ours to
   issue: no external party holds an authoritative copy. Nothing else is
