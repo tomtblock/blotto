@@ -9,7 +9,7 @@
   },
   "scripts": {
     "test": "anchor test",
-    "setup": "for p in _shared scoring class-digest sealing reveal indexer packet detection; do (cd \"backend/$p\" && npm ci --no-audit --no-fund) || exit 1; done && (cd app && npm ci --no-audit --no-fund)",
+    "setup": "for p in _shared scoring class-digest sealing sanctions reveal indexer packet detection; do (cd \"backend/$p\" && npm ci --no-audit --no-fund) || exit 1; done && (cd app && npm ci --no-audit --no-fund)",
     "admin": "ts-node --transpile-only scripts/admin.ts",
     "check-deployed": "ts-node --transpile-only scripts/check-deployed.ts"
   },

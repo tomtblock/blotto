@@ -1,0 +1,117 @@
+<?xml version="1.0" standalone="yes"?>
+<sdnList xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/XML">
+  <publshInformation>
+    <Publish_Date>09/04/2026</Publish_Date>
+    <Record_Count>19329</Record_Count>
+  </publshInformation>
+  <sdnEntry>
+    <uid>56360</uid>
+    <firstName>Rolan</firstName>
+    <lastName>SOKOLOVSKI</lastName>
+    <sdnType>Individual</sdnType>
+    <remarks>(Linked To: WEDDING, Ryan James)</remarks>
+    <programList>
+      <program>ILLICIT-DRUGS-EO14059</program>
+    </programList>
+    <idList>
+      <id>
+        <uid>194570</uid>
+        <idType>Digital Currency Address - TRX</idType>
+        <idNumber>TCu5onCzXuqxjvVzdB2tR4FLuF66d4yRqf</idNumber>
+      </id>
+      <id>
+        <uid>194571</uid>
+        <idType>Digital Currency Address - TRX</idType>
+        <idNumber>TBcLqqqyZjNj1ptuXFgj5H768NhNU5nDyn</idNumber>
+      </id>
+      <id>
+        <uid>194579</uid>
+        <idType>Digital Currency Address - SOL</idType>
+        <idNumber>42RLPACwZPx3vYYmxSueqsogfynBDqXK298EDsNoyoHi</idNumber>
+      </id>
+      <id>
+        <uid>194565</uid>
+        <idType>Gender</idType>
+        <idNumber>Male</idNumber>
+      </id>
+      <id>
+        <uid>194572</uid>
+        <idType>Digital Currency Address - XBT</idType>
+        <idNumber>37fKFZQGMqdBkjSUub1jCDWGgSHwv9VxfZ</idNumber>
+      </id>
+      <id>
+        <uid>194573</uid>
+        <idType>Digital Currency Address - XBT</idType>
+        <idNumber>1JPqJ8sxLBvdHBqMqSFBmUkoh2vAuCUNvs</idNumber>
+      </id>
+      <id>
+        <uid>194574</uid>
+        <idType>Digital Currency Address - ETH</idType>
+        <idNumber>0x5d5b5dafecbf31bdb08bfd3edad4f2694372d0ef</idNumber>
+      </id>
+      <id>
+        <uid>194575</uid>
+        <idType>Digital Currency Address - ETH</idType>
+        <idNumber>0xc103b7dc095c904b92081eef0c1640081ec01c10</idNumber>
+      </id>
+      <id>
+        <uid>194576</uid>
+        <idType>Digital Currency Address - ETH</idType>
+        <idNumber>0xe1e4c5e5ed8f03ae61b581e2def126025f2b9401</idNumber>
+      </id>
+    </idList>
+    <addressList>
+      <address>
+        <uid>86271</uid>
+        <city>Maple</city>
+        <stateOrProvince>Ontario</stateOrProvince>
+        <country>Canada</country>
+      </address>
+    </addressList>
+    <nationalityList>
+      <nationality>
+        <uid>94567</uid>
+        <country>Canada</country>
+        <mainEntry>true</mainEntry>
+      </nationality>
+    </nationalityList>
+    <dateOfBirthList>
+      <dateOfBirthItem>
+        <uid>94566</uid>
+        <dateOfBirth>01 Mar 1988</dateOfBirth>
+        <mainEntry>true</mainEntry>
+      </dateOfBirthItem>
+    </dateOfBirthList>
+    <placeOfBirthList>
+      <placeOfBirthItem>
+        <uid>94811</uid>
+        <placeOfBirth>Lithuania</placeOfBirth>
+        <mainEntry>true</mainEntry>
+      </placeOfBirthItem>
+    </placeOfBirthList>
+  </sdnEntry>
+<sdnEntry>
+    <uid>36</uid>
+    <lastName>AEROCARIBBEAN AIRLINES</lastName>
+    <sdnType>Entity</sdnType>
+    <programList>
+      <program>CUBA</program>
+    </programList>
+    <akaList>
+      <aka>
+        <uid>12</uid>
+        <type>a.k.a.</type>
+        <category>strong</category>
+        <lastName>AERO-CARIBBEAN</lastName>
+      </aka>
+    </akaList>
+    <addressList>
+      <address>
+        <uid>25</uid>
+        <city>Havana</city>
+        <country>Cuba</country>
+      </address>
+    </addressList>
+  </sdnEntry>
+
+</sdnList>
