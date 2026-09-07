@@ -4,7 +4,8 @@
  *
  *   export secret → reveal_pool_secret → decrypt every ciphertext → verify
  *   against Entry.battles_hash → publish the reveal bundle → score → build
- *   the results tree → commit_results → pay_prizes in batches → done.
+ *   the results tree → screen the winning wallets → commit_results →
+ *   pay_prizes in batches → done.
  *
  * IDEMPOTENT AND RESUMABLE: every step reads the pool's CURRENT on-chain
  * state and skips what already happened — a crashed crank rerun on the same
@@ -41,6 +42,7 @@ import {
 } from './deps';
 import { scoreWithMissing } from './missing';
 import { buildRanking, revealEntries } from './ranking';
+import type { ScreenWinners } from './winner-screening';
 
 /** What the detection pipeline sees per entry (backend/detection). */
 export interface RevealedForDetection {
@@ -69,6 +71,15 @@ export interface CrankDeps {
    * are not about detection).
    */
   detect?: (poolId: bigint, entries: RevealedForDetection[]) => Promise<string[]>;
+  /**
+   * Winner screening (Phase 2 Stage F): given the wallets about to be paid,
+   * return the ones to place a `sanctions_hold` on. Runs between the payout
+   * list being known and `commit_results`, so a hold is always in place
+   * before `pay_prizes` can send the share. Absent = no screening (tests
+   * that are not about it); the daemon's `main.ts` always supplies it, and
+   * refuses to boot with no source configured.
+   */
+  screenWinners?: ScreenWinners;
   /** Structured progress log — the crank narrates every step it takes. */
   log?: (step: string, detail?: Record<string, unknown>) => void;
   /** Ranks per pay_prizes transaction. 4 fits comfortably in one packet. */
@@ -216,6 +227,39 @@ export async function crankPool(deps: CrankDeps, poolId: bigint): Promise<CrankO
         step('flag_entry', { player });
       }
     }
+  }
+
+  // ---- 4c. Screen the winners → holds BEFORE payment (Stage F) ----------
+  // The published promise: "during resolving we check the winning wallet
+  // against published sanctions lists". Every wallet in the committed payout
+  // list is screened — a tie for first has several, and each is a winning
+  // wallet. A hold makes `pay_prizes` escrow that share instead of sending
+  // it, so it must be placed before the pool is paid, and it is placed
+  // before `commit_results` so a crank that dies between the two resumes
+  // with the hold already on-chain.
+  //
+  // A hold is NOT a flag. Nothing here calls `flagEntry`, nothing here is
+  // published as an integrity finding, and no path here moves a lamport.
+  if (deps.screenWinners) {
+    const winners = payouts.map((p) => playerAt(p.entryIndex));
+    const held = new Set(chainEntries.filter((e) => e.sanctionsHold).map((e) => e.player));
+    const holds = await deps.screenWinners(poolId, winners);
+    for (const h of holds) {
+      // Idempotent: the program refuses a second placement, and a resumed
+      // crank must not turn its own earlier hold into a crash.
+      if (held.has(h.player)) {
+        step('sanctions_hold:already', { player: h.player, reason: h.reason });
+        continue;
+      }
+      await deps.chain.placeSanctionsHold(poolId, h.player);
+      step('place_sanctions_hold', {
+        player: h.player,
+        reason: h.reason,
+        lists: h.matches.map((m) => `${m.source}/${m.listName}`),
+        ...(h.error ? { error: h.error } : {}),
+      });
+    }
+    step('winners-screened', { screened: winners.length, held: holds.length });
   }
 
   // ---- 5. Commit ---------------------------------------------------------

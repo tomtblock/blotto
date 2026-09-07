@@ -134,9 +134,10 @@ and safe. Everything else is founder-signed.
 | `fund-platform-wallet` | Deposits into the treasury. Anyone can |
 | `withdraw-platform` | The one treasury exit, floor-guarded on-chain |
 | `forfeit-escrow` | Records that review upheld a flag. **Moves no lamports** |
+| `lift-sanctions-hold` | Clears a hold review found to be a false positive. **Moves no lamports** |
 | `register-signers` | Rotates the entry and settlement signers |
 
-Two worth thinking twice about:
+Three worth thinking twice about:
 
 **`set-kyc-threshold`.** Under one paid place the winner's payout *is* the whole
 pot, so any threshold below the smallest pot (4 SOL) escrows **every** payout at
@@ -148,6 +149,15 @@ KYC packet at all; turning the switch on means revisiting both first.
 admin-signed for that reason and it is the only admin action that touches a
 player's money. The share does not come to us: it stays in that pool's vault
 until `pay_next_place` divides it among the other eligible players at that rank.
+
+**`lift-sanctions-hold`.** The only way a held share ever moves again. Use it
+when a review establishes the match was a false positive — the entry returns to
+the ordinary path and the player is paid, by review or by the seven-day
+safeguard, which by then has usually already run. Do not use it to release a
+match you believe is real: that is counsel's call, not an operator's, and the
+share is safe where it is. There is no command to *place* a hold; the crank
+places one from a screening, and an operator withholding a prize by hand is the
+thing the published sentence promises we do not do.
 
 ## 6. Watching a pool through its life
 
@@ -169,9 +179,11 @@ by re-reading the chain, and `pay_prizes` re-sending a settled seat reverts
 rather than double-paying.
 
 **Sealing and refunding are permissionless.** If the daemon is down, anyone can
-call `seal_at_deadline` or `trigger_refund`. If a tier's slot has been free for
-24 hours past its cooldown, anyone can open its next pool. None of that needs
-us, which is the point.
+call `seal_at_deadline` or `trigger_refund`, so a pool that took money always
+either settles or refunds without us. Opening a pool is not in that set:
+`open_pool` is the keeper's alone (the 24-hour liveness fallback was removed on
+2026-09-07 — it let a stranger choose a pool's sealing key). A dead keeper stops
+new pools starting; it strands nothing that is already running.
 
 ## 7. When something is wrong
 
@@ -184,8 +196,26 @@ deliberately does nothing rather than fight it. Re-check both.
 by seat against the committed list, so the failure names the seat. The usual
 cause is a wallet account that cannot receive the transfer.
 
-**A prize is held.** That is escrow, and it is correct behaviour for a flagged
-entry. It leaves by one of three doors: the settlement signer releases it after
+**A prize is held.** That is escrow. Two different things put a share there and
+they leave by different doors, so read the entry before acting: `flagged` is an
+integrity flag, `sanctions_hold` is a list match. `admin.ts pools` and the
+daemon's log line at payout both say which.
+
+*A sanctions hold* (Stage F). The crank screened the wallet against published
+lists before paying and would not send the share. It leaves by exactly one
+door: `lift-sanctions-hold`, admin-signed, after a review establishes the match
+was a false positive — then the ordinary flagged-entry doors below apply and
+the seven-day safeguard has usually already run, so the player is paid
+immediately. Nothing else moves it: not the twelve-hour clock, not the
+seven-day release, not a forfeit, not us. If the reason logged was
+`screening_unavailable` rather than `listed`, no list matched anything — the
+screener could not answer. Fix the screener, re-screen the wallet by hand, and
+lift if it is clean. Where a *confirmed* match's money finally goes is
+counsel's question, still open; until it is answered the share stays in the
+pool's vault, which is the safest place for it.
+
+*An integrity flag.* Correct behaviour for a flagged entry. It leaves by one of
+three doors: the settlement signer releases it after
 review — and the daemon does this itself at twelve hours if no decision has been
 made (the published rule; Stage D) — anyone releases it after seven days, or the
 admin forfeits it and it is divided among the other eligible players at that

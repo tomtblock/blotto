@@ -70,6 +70,14 @@ commands
                             upheld a flag. Moves nothing — the share stays in
                             the pool's vault until pay_next_place
       --pool-id <u64> --player <pubkey>
+  lift-sanctions-hold       ADMIN-signed: clear a sanctions hold a review
+                            established was a false positive. The entry
+                            returns to the ordinary path and the share is
+                            released to the player by review or by the
+                            seven-day safeguard. There is deliberately no
+                            command to PLACE one — the crank does that from
+                            a screening, never an operator by hand
+      --pool-id <u64> --player <pubkey>
   set-open-tiers            which tiers may open pools (founder-owned)
       --tiers <7 comma-separated 0/1, e.g. 1,0,0,0,0,0,0>
   set-paused                the kill switch: blocks register, and ONLY
@@ -479,6 +487,42 @@ async function cmdForfeitEscrow(ctx: Ctx): Promise<void> {
   );
 }
 
+/**
+ * Lift a sanctions hold (Phase 2 Stage F). Admin-signed, like
+ * `forfeit-escrow` and for the same reason: taking a hold OFF a wallet a
+ * published list matched is a multi-party act, and on mainnet this is a
+ * Squads proposal that leaves a record of who cleared it.
+ *
+ * Its counterpart, `place_sanctions_hold`, is settlement-signed and has NO
+ * command here on purpose. A hold is what a screening produced; an operator
+ * placing one by hand would be withholding a prize on a judgement nobody
+ * screened, which is exactly what the published sentence promises we do not
+ * do. Nothing here moves a lamport either way.
+ */
+async function cmdLiftSanctionsHold(ctx: Ctx): Promise<void> {
+  const poolIdRaw = need(ctx.cli, 'pool-id');
+  if (!/^[0-9]+$/.test(poolIdRaw)) throw new Error(`--pool-id must be an integer, got ${poolIdRaw}`);
+  const poolId = BigInt(poolIdRaw);
+  const player = new PublicKey(need(ctx.cli, 'player'));
+  const pool = ctx.pdas.pool(poolId);
+  await deliver(
+    ctx,
+    [
+      new TransactionInstruction({
+        programId: ctx.programId,
+        keys: [
+          { pubkey: signerPubkey(ctx.cli), isSigner: true, isWritable: false },
+          { pubkey: ctx.pdas.config(), isSigner: false, isWritable: false },
+          { pubkey: pool, isSigner: false, isWritable: false },
+          { pubkey: ctx.pdas.entry(pool, player), isSigner: false, isWritable: true },
+        ],
+        data: Buffer.concat([disc('lift_sanctions_hold'), u64le(poolId)]),
+      }),
+    ],
+    'admin'
+  );
+}
+
 /** AdminOnly-struct instructions share this account order. */
 function adminOnlyIx(ctx: Ctx, name: string, args: Buffer): TransactionInstruction {
   return new TransactionInstruction({
@@ -689,6 +733,8 @@ async function main(): Promise<void> {
       return cmdSetPoolTiming(ctx);
     case 'forfeit-escrow':
       return cmdForfeitEscrow(ctx);
+    case 'lift-sanctions-hold':
+      return cmdLiftSanctionsHold(ctx);
     case 'set-open-tiers':
       return cmdSetOpenTiers(ctx);
     case 'set-paused':
