@@ -15,6 +15,7 @@ import { TabBar } from '@/components/shell/tab-bar';
 import { Card } from '@/components/ui/card';
 import { LiveDataUnavailable } from '@/components/shell/live-unavailable';
 import { PoolStateBlot } from '@/components/pools/PoolStateBlot';
+import { poolStateLabel } from '@/components/pools/pool-state-label';
 
 export default async function PoolsPage() {
   // SSR outage guard: a dead indexer degrades this page, never kills it.
@@ -23,9 +24,11 @@ export default async function PoolsPage() {
 
   // E3: settled (Paid) pools move to the archive strip below — the tier
   // lanes stay about pools someone can still watch or join. Closed refund
-  // pools keep their lane row: they have no results to archive.
-  const active = pools.filter((p) => p.state !== 'Paid');
-  const archived = pools.filter((p) => p.state === 'Paid');
+  // pools keep their lane row: they have no results to archive. A RESOLVING
+  // pool (Stage C: paid, with a share still under review inside the
+  // published window) is still one to watch, so it stays in its lane.
+  const active = pools.filter((p) => p.state !== 'Paid' || p.resolving);
+  const archived = pools.filter((p) => p.state === 'Paid' && !p.resolving);
 
   // Group by tier, tiers ascending; a tier appears only when it has pools.
   const byTier = new Map<number, typeof pools>();
@@ -89,7 +92,11 @@ export default async function PoolsPage() {
                                 pool's lifecycle as a Blot shape. No amount
                                 shares this row — prize figures stay in the
                                 tier header above. */}
-                            <PoolStateBlot state={p.state} entrants={p.entrants} />
+                            <PoolStateBlot
+                              state={p.state}
+                              entrants={p.entrants}
+                              resolving={p.resolving}
+                            />
                             <span className="tnum font-mono text-[12px] text-ink-muted">
                               #{p.id}
                             </span>
@@ -97,7 +104,7 @@ export default async function PoolsPage() {
                               {COPY.pool.entrantsOf(p.entrants, Number(MIN_SEATS))}
                             </span>
                             <span className="ml-auto rounded-full border border-line px-2.5 py-0.5 text-[11px] uppercase tracking-[0.1em] text-ink-muted">
-                              {p.state}
+                              {poolStateLabel(p)}
                             </span>
                           </Card>
                         </Link>

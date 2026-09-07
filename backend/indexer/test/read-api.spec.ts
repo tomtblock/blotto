@@ -34,9 +34,50 @@ describe('read API routing', () => {
     const body = res.body as Array<Record<string, unknown>>;
     expect(body[0].entry_lamports).to.equal('100000000');
     expect(body[0].entrants).to.equal(23);
+    // Stage C: the derived fields are always present, defaulting closed.
+    expect(body[0].held_shares).to.equal(0);
+    expect(body[0].resolving).to.equal(false);
+    expect(body[0].resolving_until).to.equal(null);
 
     const one = await handleRead(db(() => [row]), `/pools/${POOL}`);
     expect(one.status).to.equal(200);
+  });
+
+  it('derives "resolving" from held shares and the published window (Stage C)', async () => {
+    // A pool the indexer saw settle at t=1000 with one share still held.
+    const base = {
+      pool: POOL, id: '9', tier: 0, entry_lamports: '100000000', fill_deadline: '0',
+      timer_seconds: 15, state: 'Paid', entrants: '64', sealing_pubkey: '11'.repeat(32),
+      results_root: 'dd'.repeat(32), secret: 'cc'.repeat(32),
+    };
+    const held = { ...base, held_shares: 1, settled_at: '1000' };
+    const inside = (await handleRead(db(() => [held]), `/pools/${POOL}`, () => 1000 + 11 * 3600))
+      .body as Record<string, unknown>;
+    expect(inside.held_shares).to.equal(1);
+    expect(inside.resolving).to.equal(true);
+    expect(inside.resolving_until).to.equal(String(1000 + 12 * 3600));
+    expect(inside.server_time).to.equal(String(1000 + 11 * 3600));
+
+    // The window closes at exactly twelve hours — not resolving from then on,
+    // however many shares are still held (that is the daemon's failure to
+    // show, not a state to hide behind).
+    const atClose = (await handleRead(db(() => [held]), `/pools/${POOL}`, () => 1000 + 12 * 3600))
+      .body as Record<string, unknown>;
+    expect(atClose.resolving).to.equal(false);
+    expect(atClose.held_shares).to.equal(1);
+
+    // Every share decided → not resolving, even inside the window.
+    const decided = { ...base, held_shares: 0, settled_at: '1000' };
+    const r = (await handleRead(db(() => [decided]), `/pools/${POOL}`, () => 1000 + 60)).body as Record<string, unknown>;
+    expect(r.resolving).to.equal(false);
+    expect(r.resolving_until).to.equal(String(1000 + 12 * 3600));
+
+    // Never settled (Open, or a row from before this column existed) → no window at all.
+    const open = { ...base, state: 'Open' };
+    const o = (await handleRead(db(() => [open]), `/pools/${POOL}`, () => 5)).body as Record<string, unknown>;
+    expect(o.held_shares).to.equal(0);
+    expect(o.resolving).to.equal(false);
+    expect(o.resolving_until).to.equal(null);
   });
 
   it('404s a missing pool, 400s a malformed address', async () => {
@@ -271,6 +312,10 @@ describe('read API — the /pools filters (E3)', () => {
     const sql = calls[0].sql.replace(/\s+/g, ' ');
     expect(sql).to.include('WHERE state = $1 AND tier = $2 AND id < $3');
     expect(sql).to.include('ORDER BY id DESC LIMIT $4');
+    // Stage C: the held-share and settled-at subqueries ride in the SAME
+    // statement — one round trip per page, not one per pool.
+    expect(sql).to.include('AS held_shares');
+    expect(sql).to.include("ev.name = 'PrizesPaid'");
     expect(calls[0].params).to.deep.equal(['Paid', 2, '50', 10]);
   });
 
@@ -279,7 +324,9 @@ describe('read API — the /pools filters (E3)', () => {
       const { q, calls } = capturing();
       expect((await handleRead(q, path)).status).to.equal(200);
       const sql = calls[0].sql.replace(/\s+/g, ' ');
-      expect(sql).to.not.include('WHERE');
+      // No OUTER filter: the statement goes straight from the pools table
+      // to the ordering. (The Stage C subqueries carry their own WHEREs.)
+      expect(sql).to.include('FROM pools p ORDER BY id DESC LIMIT $1');
       expect(calls[0].params).to.deep.equal([100]);
     }
   });

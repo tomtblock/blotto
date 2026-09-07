@@ -229,10 +229,15 @@ Stated plainly, because two of these are published as though they were.
    with no source configured. The daemon does not screen the winner; that is
    Stage F, gated on the founder's decision recorded in the audit, because a
    match at resolving cannot be held with the escrow that exists.
-2. **The `Resolving` state and the 12-hour review clock.** The rules page says a
-   settled pool enters resolving for up to 12 hours and that an undecided flag
-   is then cleared and paid. There is no such state and no such timer; the
-   program has only the seven-day permissionless safeguard.
+2. **The 12-hour review clock.** The rules page says an undecided flag is
+   cleared and the prize paid within 12 hours. No such timer exists yet; the
+   program has only the seven-day permissionless safeguard (Stage D builds the
+   daemon-side release). *Resolving itself is built* (Stage C): not a
+   `PoolState` but a flag the read API derives — a pool is resolving while it
+   carries a held share and `REVIEW_WINDOW_SECS` has not passed since the
+   indexer saw its `PrizesPaid` — served as `held_shares` / `resolving` /
+   `resolving_until` on every pool row and rendered as the RESOLVING badge with
+   a countdown on both pool pages.
 3. **The appeal route.** Published as a 7-day window decided by a second
    reviewer. The review service records decisions but has no appeal path.
 4. **The territory list** covers Belgium and Australia only. The jurisdictions

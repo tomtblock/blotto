@@ -99,6 +99,11 @@ function poolSummary(over: Partial<PoolSummary> & { pool: string; id: string }):
     entrants: 0,
     results_root: null,
     secret: null,
+    // Stage C: derived by the read API; closed by default, opened by the
+    // escrow scenario below.
+    held_shares: 0,
+    resolving: false,
+    resolving_until: null,
     server_time: serverNow(),
     ...over,
   };
@@ -334,7 +339,7 @@ export const SCENARIOS: readonly Scenario[] = [
   },
   {
     key: 'escrow',
-    what: "Paid, but the viewer's own share is held in escrow — the KYC/review copy.",
+    what: "Paid, but the viewer's own share is held in escrow — the KYC/review copy, and the RESOLVING badge with its countdown.",
     summary: poolSummary({
       pool: ESCROW,
       id: 'FIXTURE-ESCROW',
@@ -343,6 +348,11 @@ export const SCENARIOS: readonly Scenario[] = [
       fill_deadline: past(30 * HOUR),
       results_root: 'ef'.repeat(32),
       secret: 'ab'.repeat(32),
+      // Settled six hours ago with one share held: six hours of the
+      // published twelve-hour window remain.
+      held_shares: 1,
+      resolving: true,
+      resolving_until: soon(6 * HOUR),
     }),
     entries: entries(ESCROW, 64, {}).map((e) =>
       e.idx === 3 ? { ...e, flagged: true } : e

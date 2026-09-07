@@ -94,6 +94,20 @@ describe('the preview scenarios', () => {
     }
   });
 
+  it('resolving (Stage C) is derived from held shares, never asserted alone', () => {
+    for (const s of SCENARIOS) {
+      // The read API's rule, mirrored: no held share → never resolving; a
+      // resolving pool carries the window's end as a decimal string.
+      if (s.summary.held_shares === 0) expect(s.summary.resolving, s.key).toBe(false);
+      if (s.summary.resolving) {
+        expect(s.summary.held_shares, s.key).toBeGreaterThan(0);
+        expect(s.summary.resolving_until, s.key).toMatch(/^\d+$/);
+      }
+    }
+    const escrow = SCENARIOS.find((s) => s.key === 'escrow');
+    expect(escrow?.summary.resolving).toBe(true);
+  });
+
   it('carries every amount as a decimal string, never a float', () => {
     const decimal = /^\d+$/;
     for (const s of SCENARIOS) {

@@ -127,7 +127,7 @@ controls that do not exist in this repository at this commit:
 
 | Published | Status |
 |---|---|
-| "the tournament enters resolving. Resolving lasts up to 12 hours" | **Not built.** There is no `Resolving` pool state; the states are Open, Sealed, Scored, Paid, Refunding, Closed |
+| "the tournament enters resolving. Resolving lasts up to 12 hours" | **Built as a derived state** (Stage C, 2026-09-07). Not a pool state on-chain — the states remain Open, Sealed, Scored, Paid, Refunding, Closed — but the read API marks a pool *resolving* while it carries a held share and 12 hours (`REVIEW_WINDOW_SECS`) have not passed since its prizes settled, and the app shows the badge and countdown. A pool with no held share is never resolving, which is what "up to" means |
 | "During resolving we check the winning wallet against published sanctions lists" | **Partly built.** Screening is live at *entry* (§5): every entrant is checked and a listed wallet never holds a seat. The check on the *winner* at *resolving* is not built; it needs an on-chain hold the program does not have, and the founder's decision on it is recorded in `docs/AUDIT-2026-09-07.md` (O10) |
 | "If no decision is made within 12 hours, the flag is cleared and the prize is paid" | **Not built.** No 12-hour timer exists. The program has only the seven-day permissionless release, which is published — correctly — as a safeguard rather than as the deadline |
 | "You may appeal within 7 days … decided by a different reviewer" | **Not built.** The review service records signed decisions; there is no appeal path |

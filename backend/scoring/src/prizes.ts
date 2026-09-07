@@ -53,6 +53,20 @@ export const DEFAULT_COOLDOWN_SECS = 5n * 60n;
 export const LIVENESS_FALLBACK_SECS = 24n * 3600n;
 
 /**
+ * The published resolving window — "Resolving lasts up to 12 hours … If no
+ * decision is made within 12 hours, the flag is cleared and the prize is
+ * paid" (rules page, founder addendum 2026-09-07). Not an on-chain
+ * quantity: the program's only clock on a held share is the seven-day
+ * safeguard below. Two things read this and must agree: the read API, which
+ * derives a pool's "resolving" from its held shares and this window (Phase 2
+ * Stage C), and the settlement daemon, which releases a still-held share to
+ * its player once the window has passed (Stage D). The rules copy states
+ * the number in words; `app/src/copy/published-claims.test.ts` pins the two
+ * together.
+ */
+export const REVIEW_WINDOW_SECS = 12n * 3600n;
+
+/**
  * How long after a share is escrowed anyone may release it to its player —
  * `constants.rs::ESCROW_AUTO_RELEASE_SECS` (prompt v2 §E.3): inaction pays
  * the player. An upheld flag (`forfeit_escrow`, admin-signed) closes this

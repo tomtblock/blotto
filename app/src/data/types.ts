@@ -22,6 +22,18 @@ export interface PoolSummary {
   entrants: number;
   results_root: string | null;
   secret: string | null;
+  /**
+   * Phase 2 Stage C — RESOLVING, derived by the read API rather than stored
+   * on-chain: `held_shares` is the count of escrowed payouts whose entry has
+   * not settled either way; `resolving` is true while at least one is held
+   * AND the published review window (12 hours from the indexer's sight of
+   * `PrizesPaid`) has not passed; `resolving_until` is that window's end,
+   * unix seconds as a decimal string, null for a pool that never settled.
+   * A pool with no held share is never resolving.
+   */
+  held_shares: number;
+  resolving: boolean;
+  resolving_until: string | null;
   /** The read API's clock at response time (unix seconds, decimal string).
    * Every countdown derives "now" from THIS plus an offset captured once,
    * never from the device's clock. */
