@@ -6,12 +6,17 @@
  */
 
 import {
-  FILL_DEADLINE_SECS,
-  GO_TIMER_SECS,
+  DEFAULT_COOLDOWN_SECS,
+  DEFAULT_FILL_DEADLINE_SECS,
+  LIVENESS_FALLBACK_SECS,
   MIN_SEATS,
   TIER_ENTRY_LAMPORTS,
   TIER_POT_LAMPORTS,
+  leafBytes,
+  verifyProof,
+  type ProofStep,
 } from '../../scoring/src';
+import { base58Decode } from '../../_shared/src/blotto-events';
 
 export type PoolStateName = 'Open' | 'Sealed' | 'Scored' | 'Paid' | 'Refunding' | 'Closed';
 
@@ -31,11 +36,10 @@ export interface ChainPoolView {
    * into the prize vault before any pass is sold. Settlement reads THIS —
    * never the launch table, which the founder can change between pools. */
   potLamports: bigint;
-  /** The EFFECTIVE deadline: the 72h fill deadline set at open, shortened
-   * in place by the go-timer once the 52nd seat lands (D-E4, stored as the
-   * proposal's option B without a new field — `register` writes
-   * `min(fill_deadline, now + GO_TIMER_SECS)`). Past it, a pool with
-   * ≥ 52 entrants seals and plays; one below 52 refunds. */
+  /** The moment entries close: open time + `Config.fill_deadline_seconds`
+   * (12 h at launch), set ONCE and never rewritten (option A, founder ruling
+   * 2026-09-07 — the go-timer that shortened it is gone). Past it, a pool
+   * with ≥ 52 entrants seals and plays; one below 52 refunds. */
   fillDeadline: bigint;
   /** `Pool.vrf_seed` non-zero — `register` requires it (the daemon completes it). */
   vrfCommitted: boolean;
@@ -70,6 +74,17 @@ export interface ChainConfigView {
   platformReserved: bigint;
   /** Entry payments of pools that can still refund — program-held (R7). */
   platformRefundable: bigint;
+  /** The key `open_pool` requires before the liveness fallback (prompt v2
+   * §A; base58). The settlement signer on devnet until E6 splits them. */
+  keeper: string;
+  /** `Config.fill_deadline_seconds` — copied onto each pool at open. */
+  fillDeadlineSeconds: bigint;
+  /** `Config.cooldown_seconds` — stamped into `tierNextOpenAt` when a tier's
+   * slot frees. */
+  cooldownSeconds: bigint;
+  /** Per tier: the earliest unix second its next pool may open; 0n = the
+   * tier never settled a pool. */
+  tierNextOpenAt: bigint[];
 }
 
 export interface ChainEntryView {
@@ -80,7 +95,17 @@ export interface ChainEntryView {
   battlesHash: string;
   flagged: boolean;
   refunded: boolean;
+  /** `pay_prizes` (or a next-place payout) closed this seat. */
+  settled: boolean;
+  /** Review upheld the flag: the held share can only go to the next
+   * eligible place (2026-09-07). */
+  forfeited: boolean;
 }
+
+/** One Merkle proof step in the program's argument shape (mirrors
+ * `merkle.rs::ProofStep`; the scoring engine's `ProofStep` is the same
+ * data under camelCase — `toChainProof` converts). */
+export type ChainProofStep = ProofStep;
 
 export interface SettlementChain {
   getPool(poolId: bigint): Promise<ChainPoolView>;
@@ -94,10 +119,38 @@ export interface SettlementChain {
   flagEntry(poolId: bigint, player: string): Promise<void>;
   /** Review's reversal of a flag on a not-yet-settled entry (R11/4.4). */
   clearFlag(poolId: bigint, player: string): Promise<void>;
-  /** Escrowed share → the player (review cleared it; KYC path per R3). */
+  /** Escrowed share → the player: the reviewed path (settlement-signed; KYC
+   * packet per R3 when the switch applies). Anyone may land the same call
+   * seven days after escrow (`ESCROW_AUTO_RELEASE_SECS`) — the on-chain
+   * auto-release; implementations sign with whatever key they hold. */
   releaseEscrow(poolId: bigint, player: string): Promise<void>;
-  /** Escrowed share → the platform wallet (review upheld the flag). */
+  /** Review upheld the flag — ADMIN-signed since 2026-09-07 (founder ruling
+   * 4): the share stays in the pool's vault, marked forfeited, and NO
+   * lamport moves. An implementation without the admin key must throw. */
   forfeitEscrow(poolId: bigint, player: string): Promise<void>;
+  /**
+   * `pay_next_place` (ruling 4 (ii), addendum ruling 3): ONE member's
+   * portion of a forfeited share — `to` at committed `rank` with committed
+   * `amount` (the leaf as published; a next-rank leaf carries 0), proven by
+   * `proof` against `Pool.results_root`; the share is divided equally
+   * among `groupSize` eligible members, the indivisible remainder to the
+   * member with `takesRemainder` (the lowest entry number). `peers` are the
+   * base58 wallets of every OTHER committed (first-place) seat — all but
+   * `from` and `to` — in ascending seat order (escrow.rs `committed_peers`);
+   * at first place the program recomputes the group from them and refuses
+   * arguments that disagree, at the next rank they must all be forfeited.
+   */
+  payNextPlace(
+    poolId: bigint,
+    from: string,
+    to: string,
+    rank: number,
+    amount: bigint,
+    proof: readonly ChainProofStep[],
+    groupSize: number,
+    takesRemainder: boolean,
+    peers: readonly string[]
+  ): Promise<void>;
   /** `seal_at_deadline` (D-E4): an Open pool past its deadline with 52..63
    * entrants seals and plays. Permissionless on-chain — the settlement
    * signer merely pays the fee; the seal is a function of state and time. */
@@ -115,7 +168,9 @@ export interface SettlementChain {
  * those rejections as thrown errors, never by silently succeeding. */
 export interface KeeperChain extends SettlementChain {
   getConfig(): Promise<ChainConfigView>;
-  /** `open_pool`: settlement-signed; `poolId` must equal `nextPoolId`. */
+  /** `open_pool`: KEEPER-signed (prompt v2 §A — `Config.keeper`, or any
+   * signer once the tier's liveness fallback holds); `poolId` must equal
+   * `nextPoolId`; refused while the tier cools down. */
   openPool(
     poolId: bigint,
     tier: number,
@@ -135,11 +190,30 @@ export interface KeeperChain extends SettlementChain {
   initConfig(args: {
     entrySigner: string;
     settlementSigner: string;
+    keeper: string;
     vaultCeilingLamports: bigint[];
     treasuryMinPlatformLamports: bigint;
   }): Promise<void>;
   /** The platform treasury PDA's lamport balance (the keeper's policy input). */
   getPlatformBalance(): Promise<bigint>;
+}
+
+/** `escrow.rs::review_pending`, mirrored: a flag review not yet resolved. */
+function reviewPending(e: ChainEntryView, escrow: bigint): boolean {
+  return e.flagged && !e.forfeited && (!e.settled || escrow > 0n);
+}
+
+/** `escrow.rs::eligible`, mirrored. */
+function eligibleFor(e: ChainEntryView, escrow: bigint): boolean {
+  return !e.refunded && !e.forfeited && !reviewPending(e, escrow);
+}
+
+/** The forfeiter-side split book-keeping (`Entry.split_*`). */
+interface SplitState {
+  total: bigint;
+  paidMask: bigint;
+  groupSize: number;
+  remainderPaid: boolean;
 }
 
 /**
@@ -163,11 +237,10 @@ export class FakeChain implements KeeperChain {
   passCollections = new Set<string>();
   /** `Config`, or null until initConfig — mirrors the uninitialized PDA. */
   config: ChainConfigView | null = null;
-  /** R7 deadline offset applied by openPool, seconds. Tests may shrink it. */
-  fillDeadlineSecs = FILL_DEADLINE_SECS;
-  /** D-E4 go-timer started by the 52nd entry, seconds (the shared mirror of
-   * `constants.rs::GO_TIMER_SECS`). Tests may shrink it. */
-  goTimerSecs = GO_TIMER_SECS;
+  /** The key `openPool` "signs" with — the keeper at init (the settlement
+   * signer, the devnet posture). Tests set another string to exercise the
+   * keeper gate and the liveness fallback. */
+  opener = 'settle';
   /** The platform treasury PDA's balance (D-A1 revised). Deposits via
    * `fundPlatform`; `openPool` moves pots out; refunds pay from here. */
   platform = 0n;
@@ -185,13 +258,28 @@ export class FakeChain implements KeeperChain {
     this.platform += amount;
   }
 
+  /** `set_pool_timing` (admin): future pools' deadline and the cooldown. */
+  setPoolTiming(fillDeadlineSeconds: bigint, cooldownSeconds: bigint): void {
+    if (!this.config) throw new Error('config account not found');
+    if (fillDeadlineSeconds <= 0n || cooldownSeconds <= 0n) throw new Error('InvalidTiming');
+    this.config.fillDeadlineSeconds = fillDeadlineSeconds;
+    this.config.cooldownSeconds = cooldownSeconds;
+  }
+
+  /** `set_keeper` (admin). */
+  setKeeper(keeper: string): void {
+    if (!this.config) throw new Error('config account not found');
+    this.config.keeper = keeper;
+  }
+
   /** The v2 register money model: 100% of the price into the treasury,
    * tracked refundable until seal. Pushes the entry, then applies the
-   * program's post-entry transitions (go-timer at 52, seal at 64). */
+   * program's post-entry transition (the seal at 64). */
   registerEntry(poolId: bigint, entry: ChainEntryView): void {
     const p = this.pools.get(poolId.toString());
     if (!p) throw new Error(`no pool ${poolId}`);
     if (p.state !== 'Open') throw new Error('PoolNotOpen');
+    if (this.now() > p.fillDeadline) throw new Error('DeadlinePassed');
     const key = poolId.toString();
     const list = this.entries.get(key) ?? [];
     list.push(entry);
@@ -202,20 +290,15 @@ export class FakeChain implements KeeperChain {
     this.applyEntryTransitions(poolId);
   }
 
-  /** `register`'s steps 7a/7b, mirrored: at 52..63 entrants the go-timer
-   * shortens the deadline to `min(fill_deadline, now + GO_TIMER_SECS)`
-   * (idempotent — a later entry's larger `now` never moves it again); at 64
-   * the pool seals. Public so test helpers that push entries directly can
-   * apply the same transitions the program would. */
+  /** `register`'s post-entry transition, mirrored: at 64 the pool seals.
+   * Nothing happens at 52 (option A — the deadline, set once at open,
+   * decides; the go-timer is gone). Public so test helpers that push
+   * entries directly can apply the same transition the program would. */
   applyEntryTransitions(poolId: bigint): void {
     const p = this.pools.get(poolId.toString());
     if (!p) throw new Error(`no pool ${poolId}`);
     if (p.state !== 'Open') return;
     p.entrants = this.entries.get(poolId.toString())?.length ?? p.entrants;
-    if (BigInt(p.entrants) >= MIN_SEATS && p.entrants < 64) {
-      const goDeadline = this.now() + this.goTimerSecs;
-      if (goDeadline < p.fillDeadline) p.fillDeadline = goDeadline;
-    }
     if (p.entrants === 64) this.sealPool(poolId);
   }
 
@@ -270,6 +353,7 @@ export class FakeChain implements KeeperChain {
       if (p.paidMask & bit) throw new Error('RankAlreadySettled');
       const entry = entries.find((e) => e.index === seat);
       if (!entry) throw new Error('EntryMismatch');
+      if (entry.settled) throw new Error('EntryAlreadySettled');
       if (entry.flagged) {
         // Escrowed: the lamports stay put (mirrors the program).
         this.escrowed.set(
@@ -282,6 +366,7 @@ export class FakeChain implements KeeperChain {
           (this.paid.get(entry.player) ?? 0n) + committed.amountLamports
         );
       }
+      entry.settled = true;
       p.paidMask |= bit;
     }
     if (p.payouts.every((x) => p.paidMask & (1n << BigInt(x.entryIndex)))) {
@@ -296,34 +381,153 @@ export class FakeChain implements KeeperChain {
   async flagEntry(poolId: bigint, player: string): Promise<void> {
     const e = (this.entries.get(poolId.toString()) ?? []).find((x) => x.player === player);
     if (!e) throw new Error('EntryMismatch');
+    if (e.settled) throw new Error('EntryAlreadySettled');
     e.flagged = true;
   }
 
   async clearFlag(poolId: bigint, player: string): Promise<void> {
     const e = (this.entries.get(poolId.toString()) ?? []).find((x) => x.player === player);
     if (!e) throw new Error('EntryMismatch');
+    if (e.settled) throw new Error('EntryAlreadySettled');
     e.flagged = false;
   }
 
   async releaseEscrow(poolId: bigint, player: string): Promise<void> {
     const amount = this.escrowed.get(player) ?? 0n;
     if (amount === 0n) throw new Error('NoEscrow');
+    const e = (this.entries.get(poolId.toString()) ?? []).find((x) => x.player === player);
+    // An upheld flag closes this door for good (escrow.rs).
+    if (e?.forfeited) throw new Error('EscrowForfeitedAlready');
     this.escrowed.delete(player);
     this.paid.set(player, (this.paid.get(player) ?? 0n) + amount);
-    void poolId;
   }
 
-  /** Forfeited lamports per player — asserted by tests (platform-bound). */
+  /** Forfeited (held, awaiting the next-place payout) lamports per player —
+   * asserted by tests. Since 2026-09-07 NOTHING moves at forfeit: the share
+   * stays in `escrowed` AND is recorded here; `payNextPlace` draws both
+   * down, portion by portion. */
   forfeited = new Map<string, bigint>();
+  /** Per forfeiter: the split's book-keeping (`Entry.split_*`). */
+  splits = new Map<string, SplitState>();
 
   async forfeitEscrow(poolId: bigint, player: string): Promise<void> {
     const amount = this.escrowed.get(player) ?? 0n;
     if (amount === 0n) throw new Error('NoEscrow');
-    this.escrowed.delete(player);
-    this.forfeited.set(player, (this.forfeited.get(player) ?? 0n) + amount);
-    // D-A1 revised: the forfeit destination is the platform treasury PDA.
-    this.platform += amount;
-    void poolId;
+    const e = (this.entries.get(poolId.toString()) ?? []).find((x) => x.player === player);
+    if (!e) throw new Error('EntryMismatch');
+    if (!e.flagged) throw new Error('ForfeitRequiresFlag');
+    if (e.forfeited) throw new Error('EscrowForfeitedAlready');
+    e.forfeited = true;
+    this.forfeited.set(player, amount);
+    // No lamport moves: not to the treasury, not anywhere (ruling 4).
+  }
+
+  async payNextPlace(
+    poolId: bigint,
+    from: string,
+    to: string,
+    rank: number,
+    amount: bigint,
+    proof: readonly ChainProofStep[],
+    groupSize: number,
+    takesRemainder: boolean,
+    peers: readonly string[]
+  ): Promise<void> {
+    const key = poolId.toString();
+    const p = this.pools.get(key)!;
+    const entries = this.entries.get(key) ?? [];
+    const fromEntry = entries.find((x) => x.player === from);
+    const toEntry = entries.find((x) => x.player === to);
+    if (!fromEntry || !toEntry) throw new Error('EntryMismatch');
+    if (from === to) throw new Error('NextPlaceIneligible');
+    const escrowOf = (player: string): bigint => this.escrowed.get(player) ?? 0n;
+    // The program's checks (escrow.rs `handle_pay_next_place`), in order.
+    if (p.state !== 'Paid') throw new Error('ResultsNotCommitted');
+    if (!fromEntry.forfeited) throw new Error('EscrowNotForfeited');
+    const remaining = escrowOf(from);
+    if (remaining === 0n) throw new Error('NoEscrow');
+    if (toEntry.refunded || toEntry.forfeited) throw new Error('NextPlaceIneligible');
+    if (reviewPending(toEntry, escrowOf(to))) throw new Error('NextPlaceReviewPending');
+    const split: SplitState = this.splits.get(from) ?? {
+      total: 0n,
+      paidMask: 0n,
+      groupSize: 0,
+      remainderPaid: false,
+    };
+    const toBit = 1n << BigInt(toEntry.index);
+    if (split.paidMask & toBit) throw new Error('RankAlreadySettled');
+    if (groupSize < 1) throw new Error('NextPlaceSplitMismatch');
+    const root = this.committedRoots.get(key);
+    if (!root) throw new Error('ResultsNotCommitted');
+    const leaf = leafBytes({ player: base58Decode(to), rank, amountLamports: amount });
+    if (!verifyProof(leaf, proof, root)) throw new Error('InvalidMerkleProof');
+    const committed = p.payouts.map((x) => x.entryIndex);
+    const toInCommitted = committed.includes(toEntry.index);
+    const toIsFirst = rank === 1;
+    if (toIsFirst) {
+      if (!toInCommitted) throw new Error('NextPlaceRankInvalid');
+    } else if (toInCommitted || rank !== 1 + committed.length) {
+      throw new Error('NextPlaceRankInvalid');
+    }
+    // Every other committed seat, classified.
+    const expectedPeers = committed.filter((s) => s !== fromEntry.index && s !== toEntry.index);
+    if (peers.length !== expectedPeers.length) throw new Error('NextPlaceIneligible');
+    let eligibleCount = toIsFirst ? 1 : 0;
+    let lowestEligible = toIsFirst ? toEntry.index : Number.MAX_SAFE_INTEGER;
+    expectedPeers.forEach((seat, i) => {
+      const peer = entries.find((x) => x.player === peers[i]);
+      if (!peer || peer.index !== seat) throw new Error('EntryMismatch');
+      if (reviewPending(peer, escrowOf(peer.player))) throw new Error('NextPlaceReviewPending');
+      if (eligibleFor(peer, escrowOf(peer.player))) {
+        eligibleCount += 1;
+        lowestEligible = Math.min(lowestEligible, peer.index);
+      } else if (!peer.forfeited) {
+        throw new Error('NextPlaceIneligible');
+      }
+    });
+    if (toIsFirst) {
+      if (groupSize !== eligibleCount) throw new Error('NextPlaceSplitMismatch');
+      if (takesRemainder !== (toEntry.index === lowestEligible)) {
+        throw new Error('NextPlaceSplitMismatch');
+      }
+    } else if (eligibleCount !== 0) {
+      throw new Error('NextPlaceIneligible');
+    }
+    if (split.groupSize !== 0 && split.groupSize !== groupSize) {
+      throw new Error('NextPlaceSplitMismatch');
+    }
+    if (takesRemainder && split.remainderPaid) throw new Error('NextPlaceSplitMismatch');
+    let paidSoFar = 0;
+    for (let b = 0n; b < 64n; b++) if (split.paidMask & (1n << b)) paidSoFar++;
+    if (paidSoFar >= groupSize) throw new Error('NextPlaceSplitMismatch');
+    // The portion.
+    const total = split.groupSize === 0 ? remaining : split.total;
+    const n = BigInt(groupSize);
+    const per = total / n;
+    const rem = total % n;
+    const portion = takesRemainder ? per + rem : per;
+    if (portion <= 0n || portion > remaining) throw new Error('NextPlaceSplitMismatch');
+    if (paidSoFar + 1 === groupSize && portion !== remaining) {
+      throw new Error('NextPlaceSplitMismatch'); // the last payment empties the share
+    }
+    // Pay: vault → the member; the forfeiter's records move on.
+    if (split.groupSize === 0) {
+      split.groupSize = groupSize;
+      split.total = total;
+    }
+    split.paidMask |= toBit;
+    if (takesRemainder) split.remainderPaid = true;
+    this.splits.set(from, split);
+    const left = remaining - portion;
+    if (left === 0n) {
+      this.escrowed.delete(from);
+      this.forfeited.delete(from);
+    } else {
+      this.escrowed.set(from, left);
+      this.forfeited.set(from, left);
+    }
+    this.paid.set(to, (this.paid.get(to) ?? 0n) + portion);
+    toEntry.settled = true;
   }
 
   async sealAtDeadline(poolId: bigint): Promise<void> {
@@ -380,6 +584,7 @@ export class FakeChain implements KeeperChain {
       activePoolByTier: [...this.config.activePoolByTier],
       tierPriceLamports: [...this.config.tierPriceLamports],
       tierPotLamports: [...this.config.tierPotLamports],
+      tierNextOpenAt: [...this.config.tierNextOpenAt],
       platformReserved: this.reserved,
       platformRefundable: this.refundable,
     };
@@ -402,12 +607,14 @@ export class FakeChain implements KeeperChain {
   async initConfig(args: {
     entrySigner: string;
     settlementSigner: string;
+    keeper: string;
     vaultCeilingLamports: bigint[];
     treasuryMinPlatformLamports: bigint;
   }): Promise<void> {
     if (this.config) throw new Error('already in use'); // Anchor `init` on an existing PDA
     // Launch policy baked into the handler: only tier 0 open, ids from 1,
-    // prices and pots from the launch tables, reserve_pots = 1.
+    // prices and pots from the launch tables, reserve_pots = 1, the
+    // 2026-09-07 timings at their defaults, no tier ever settled.
     this.config = {
       paused: false,
       openTiers: [true, false, false, false, false, false, false],
@@ -419,6 +626,10 @@ export class FakeChain implements KeeperChain {
       treasuryMinPlatformLamports: args.treasuryMinPlatformLamports,
       platformReserved: 0n,
       platformRefundable: 0n,
+      keeper: args.keeper,
+      fillDeadlineSeconds: DEFAULT_FILL_DEADLINE_SECS,
+      cooldownSeconds: DEFAULT_COOLDOWN_SECS,
+      tierNextOpenAt: [0n, 0n, 0n, 0n, 0n, 0n, 0n],
     };
   }
 
@@ -434,6 +645,14 @@ export class FakeChain implements KeeperChain {
     if (tier < 0 || tier >= cfg.openTiers.length) throw new Error('UnknownTier');
     if (!cfg.openTiers[tier]) throw new Error('TierNotOpen');
     if (cfg.activePoolByTier[tier] !== 0n) throw new Error('TierAlreadyHasOpenPool');
+    // Prompt v2 §B.6 / §A: the cooldown, then the keeper gate with its
+    // liveness fallback (open_pool.rs, in the program's order).
+    const now = this.now();
+    const nextOpenAt = cfg.tierNextOpenAt[tier];
+    if (now < nextOpenAt) throw new Error('TierCoolingDown');
+    if (this.opener !== cfg.keeper && now < nextOpenAt + LIVENESS_FALLBACK_SECS) {
+      throw new Error('NotKeeper');
+    }
     // The treasury policy gate (open_pool.rs): available = balance minus
     // refundable entries; after funding this pot the remainder must cover
     // the minimum plus one further pot of every OTHER enabled idle tier.
@@ -451,14 +670,14 @@ export class FakeChain implements KeeperChain {
     // Fund the pot: treasury → the pool's prize vault, before any entry.
     this.platform -= pot;
     this.reserved += pot;
-    const now = this.now();
     this.pools.set(poolId.toString(), {
       poolId,
       tier,
       state: 'Open',
       entryLamports: cfg.tierPriceLamports[tier],
       potLamports: pot,
-      fillDeadline: now + this.fillDeadlineSecs,
+      // Copied at open from Config (never moved by a later set_pool_timing).
+      fillDeadline: now + cfg.fillDeadlineSeconds,
       vrfCommitted: false,
       secretRevealed: false,
       resultsCommitted: false,
@@ -508,9 +727,11 @@ export class FakeChain implements KeeperChain {
     this.refundableByPool.delete(poolId.toString());
   }
 
+  /** `slot.rs::free_tier_slot`: clear the slot and stamp the cooldown. */
   private clearActiveSlot(poolId: bigint, tier: number): void {
     if (this.config && this.config.activePoolByTier[tier] === poolId) {
       this.config.activePoolByTier[tier] = 0n;
+      this.config.tierNextOpenAt[tier] = this.now() + this.config.cooldownSeconds;
     }
   }
 }

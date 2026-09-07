@@ -57,6 +57,11 @@ export const FIXTURE_API: IndexerApi = {
     // scenarios encode that by carrying rows only where `secret` is set.
     return SCENARIO_BY_POOL.get(pool)?.sealedEntries ?? [];
   },
+  async getTiers() {
+    // The fixture has no settled tier to count toward; the clock is the
+    // fixture's own (it IS the server here).
+    return { server_time: String(Math.floor(Date.now() / 1000)), tiers: [] };
+  },
   async getTreasury() {
     return FIXTURE_TREASURY;
   },

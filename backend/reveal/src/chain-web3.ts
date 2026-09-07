@@ -27,6 +27,7 @@ import type {
   ChainConfigView,
   ChainEntryView,
   ChainPoolView,
+  ChainProofStep,
   CommittedPayout,
   KeeperChain,
   PoolStateName,
@@ -39,6 +40,16 @@ const MPL_CORE_ID = new PublicKey('CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d'
 
 const N_TIERS = 7;
 
+/** `Config::SPACE` since the 2026-09-07 upgrade (state.rs). An account
+ * still at the OLD size (380) is the pre-migration layout — every read
+ * refuses it by name so the operator runs `admin.ts migrate-config`. */
+const CONFIG_SPACE = 484;
+const CONFIG_SPACE_V1 = 380;
+/** `Entry::SPACE` since the same upgrade (state.rs). */
+const ENTRY_SPACE = 208;
+
+const INSTRUCTIONS_SYSVAR = new PublicKey('Sysvar1nstructions1111111111111111111111111');
+
 function disc(name: string): Buffer {
   return createHash('sha256').update(`global:${name}`).digest().subarray(0, 8);
 }
@@ -48,8 +59,14 @@ export interface Web3ChainConfig {
   programId: PublicKey;
   /** Signs reveal / commit / pay — the settlement signer (Turnkey-backed in prod). */
   settlementSigner: Keypair;
-  /** Signs `init_config` only. Absent in the long-running daemon — the admin
-   * is the Squads vault and setup is a deploy-time step, not a daemon step. */
+  /** Signs `open_pool` — `Config.keeper` (prompt v2 §A). Defaults to the
+   * settlement signer: devnet's `migrate_config` names that key as keeper,
+   * so splitting the two later (E6) is an env change (`KEEPER_KEYPAIR`). */
+  keeperSigner?: Keypair;
+  /** Signs the ADMIN instructions this client can build — `init_config`,
+   * `migrate_config`, `forfeit_escrow` (admin-signed since 2026-09-07).
+   * Absent in the long-running daemon and the review server — the admin is
+   * the Squads vault; those are CLI / proposal steps, not service steps. */
   adminSigner?: Keypair;
   /**
    * Switchboard On-Demand seam: given the Randomness account, return the
@@ -88,14 +105,32 @@ export class Web3Chain implements KeeperChain {
     return this.pda([Buffer.from('entry'), pool.toBuffer(), player.toBuffer()]);
   }
 
-  private async send(ixs: TransactionInstruction[]): Promise<void> {
+  private async send(
+    ixs: TransactionInstruction[],
+    signers: Keypair[] = [this.cfg.settlementSigner]
+  ): Promise<void> {
     const tx = new Transaction().add(
       ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }),
       ...ixs
     );
-    await sendAndConfirmTransaction(this.cfg.connection, tx, [this.cfg.settlementSigner], {
+    await sendAndConfirmTransaction(this.cfg.connection, tx, signers, {
       commitment: 'confirmed',
     });
+  }
+
+  private keeper(): Keypair {
+    return this.cfg.keeperSigner ?? this.cfg.settlementSigner;
+  }
+
+  private admin(what: string): Keypair {
+    const admin = this.cfg.adminSigner;
+    if (!admin) {
+      throw new Error(
+        `${what} is admin-signed: this client holds no admin key ` +
+          `(use scripts/admin.ts — --emit-proposal for the Squads vault)`
+      );
+    }
+    return admin;
   }
 
   async getPool(poolId: bigint): Promise<ChainPoolView> {
@@ -147,16 +182,29 @@ export class Web3Chain implements KeeperChain {
     // pots 7×8 (224) | reserve_pots 1 (280) | min_platform 8 (281) |
     // reserved 8 (289) | refundable 8 (297) | platform_bump 1 (305) |
     // kyc 8 (306) | detection 1 (314) | next_pool_id 8 (315) |
-    // active_by_tier 7×8 (323) | bump 1 (379).
+    // active_by_tier 7×8 (323) | bump 1 (379) | — the 2026-09-07 tail,
+    // appended AFTER bump: keeper 32 (380) | fill_deadline_seconds 8 (412) |
+    // cooldown_seconds 8 (420) | tier_next_open_at 7×8 (428) — 484 in all.
+    if (d.length === CONFIG_SPACE_V1) {
+      throw new Error(
+        'Config is the pre-migration layout (380 bytes): run `admin.ts migrate-config` ' +
+          'before anything else (runbook step 3b)'
+      );
+    }
+    if (d.length !== CONFIG_SPACE) {
+      throw new Error(`Config account is ${d.length} bytes; source says ${CONFIG_SPACE}`);
+    }
     const openTiers: boolean[] = [];
     const activePoolByTier: bigint[] = [];
     const tierPriceLamports: bigint[] = [];
     const tierPotLamports: bigint[] = [];
+    const tierNextOpenAt: bigint[] = [];
     for (let t = 0; t < N_TIERS; t++) {
       openTiers.push(d[105 + t] !== 0);
       activePoolByTier.push(d.readBigUInt64LE(323 + 8 * t));
       tierPriceLamports.push(d.readBigUInt64LE(168 + 8 * t));
       tierPotLamports.push(d.readBigUInt64LE(224 + 8 * t));
+      tierNextOpenAt.push(d.readBigInt64LE(428 + 8 * t));
     }
     return {
       paused: d[104] !== 0,
@@ -169,6 +217,10 @@ export class Web3Chain implements KeeperChain {
       treasuryMinPlatformLamports: d.readBigUInt64LE(281),
       platformReserved: d.readBigUInt64LE(289),
       platformRefundable: d.readBigUInt64LE(297),
+      keeper: new PublicKey(d.subarray(380, 412)).toBase58(),
+      fillDeadlineSeconds: d.readBigInt64LE(412),
+      cooldownSeconds: d.readBigInt64LE(420),
+      tierNextOpenAt,
     };
   }
 
@@ -185,28 +237,33 @@ export class Web3Chain implements KeeperChain {
   ): Promise<void> {
     const le = Buffer.alloc(8);
     le.writeBigUInt64LE(poolId);
-    await this.send([
-      new TransactionInstruction({
-        programId: this.cfg.programId,
-        keys: [
-          // Permissionless since D-A1 revised — the settlement signer is
-          // simply the daemon's funded keypair here.
-          { pubkey: this.cfg.settlementSigner.publicKey, isSigner: true, isWritable: true },
-          { pubkey: this.configPda(), isSigner: false, isWritable: true },
-          { pubkey: this.poolPda(poolId), isSigner: false, isWritable: true },
-          { pubkey: this.vaultPda(poolId), isSigner: false, isWritable: true },
-          { pubkey: this.platformPda(), isSigner: false, isWritable: true },
-          { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-        ],
-        data: Buffer.concat([
-          disc('open_pool'),
-          le,
-          Buffer.from([tier]),
-          Buffer.from(sealingPubkey),
-          Buffer.from(sealingSecretHash),
-        ]),
-      }),
-    ]);
+    const keeper = this.keeper();
+    await this.send(
+      [
+        new TransactionInstruction({
+          programId: this.cfg.programId,
+          keys: [
+            // Keeper-signed since 2026-09-07 (prompt v2 §A): `Config.keeper`
+            // pays the Pool's rent; any signer only after the liveness
+            // fallback (open_pool.rs).
+            { pubkey: keeper.publicKey, isSigner: true, isWritable: true },
+            { pubkey: this.configPda(), isSigner: false, isWritable: true },
+            { pubkey: this.poolPda(poolId), isSigner: false, isWritable: true },
+            { pubkey: this.vaultPda(poolId), isSigner: false, isWritable: true },
+            { pubkey: this.platformPda(), isSigner: false, isWritable: true },
+            { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+          ],
+          data: Buffer.concat([
+            disc('open_pool'),
+            le,
+            Buffer.from([tier]),
+            Buffer.from(sealingPubkey),
+            Buffer.from(sealingSecretHash),
+          ]),
+        }),
+      ],
+      [keeper]
+    );
   }
 
   async commitVrfSeed(poolId: bigint, randomnessAccount: string): Promise<void> {
@@ -261,11 +318,11 @@ export class Web3Chain implements KeeperChain {
   async initConfig(args: {
     entrySigner: string;
     settlementSigner: string;
+    keeper: string;
     vaultCeilingLamports: bigint[];
     treasuryMinPlatformLamports: bigint;
   }): Promise<void> {
-    const admin = this.cfg.adminSigner;
-    if (!admin) throw new Error('init_config needs adminSigner (deploy-time only)');
+    const admin = this.admin('init_config');
     if (args.vaultCeilingLamports.length !== N_TIERS) {
       throw new Error(`vault ceilings must list exactly ${N_TIERS} tiers`);
     }
@@ -286,9 +343,30 @@ export class Web3Chain implements KeeperChain {
           disc('init_config'),
           new PublicKey(args.entrySigner).toBuffer(),
           new PublicKey(args.settlementSigner).toBuffer(),
+          new PublicKey(args.keeper).toBuffer(),
           ceilings,
           minBuf,
         ]),
+      })
+    );
+    await sendAndConfirmTransaction(this.cfg.connection, tx, [admin], {
+      commitment: 'confirmed',
+    });
+  }
+
+  /** `migrate_config(keeper)` — the one-shot 2026-09-07 layout migration,
+   * admin-signed (a CLI step, runbook 3b; never a service step). */
+  async migrateConfig(keeper: string): Promise<void> {
+    const admin = this.admin('migrate_config');
+    const tx = new Transaction().add(
+      new TransactionInstruction({
+        programId: this.cfg.programId,
+        keys: [
+          { pubkey: admin.publicKey, isSigner: true, isWritable: true },
+          { pubkey: this.configPda(), isSigner: false, isWritable: true },
+          { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+        ],
+        data: Buffer.concat([disc('migrate_config'), new PublicKey(keeper).toBuffer()]),
       })
     );
     await sendAndConfirmTransaction(this.cfg.connection, tx, [admin], {
@@ -317,14 +395,13 @@ export class Web3Chain implements KeeperChain {
   async getEntries(poolId: bigint): Promise<ChainEntryView[]> {
     const pool = this.poolPda(poolId);
     // Entry layout: disc 8 | pool 32 | player 32 | index 2 | battles_hash 32
-    // | class 1 | pass_asset 32 | entered_at 8 | slot_hash 32 | flagged 1 |
-    // settled 1 | refunded 1 | escrow 8 | bump 1.
+    // | class 1 | pass_asset 32 | entered_at 8 | slot_hash 32 | flagged 1
+    // (179) | settled 1 (180) | refunded 1 (181) | escrow 8 (182) | bump 1
+    // (190) | — the 2026-09-07 tail: escrowed_at 8 (191) | forfeited 1 (199)
+    // | next_place_lamports 8 (200) — 208 in all (`Entry::SPACE`).
     const accounts = await this.cfg.connection.getProgramAccounts(this.cfg.programId, {
       commitment: 'confirmed',
-      filters: [
-        { dataSize: 8 + 32 + 32 + 2 + 32 + 1 + 32 + 8 + 32 + 1 + 1 + 1 + 8 + 1 },
-        { memcmp: { offset: 8, bytes: pool.toBase58() } },
-      ],
+      filters: [{ dataSize: ENTRY_SPACE }, { memcmp: { offset: 8, bytes: pool.toBase58() } }],
     });
     return accounts
       .map(({ account }) => {
@@ -335,6 +412,8 @@ export class Web3Chain implements KeeperChain {
           battlesHash: d.subarray(74, 106).toString('hex'),
           flagged: d[179] !== 0,
           refunded: d[181] !== 0,
+          settled: d[180] !== 0,
+          forfeited: d[199] !== 0,
         };
       })
       .sort((a, b) => a.index - b.index);
@@ -445,10 +524,13 @@ export class Web3Chain implements KeeperChain {
     const playerKey = new PublicKey(player);
     const le = Buffer.alloc(8);
     le.writeBigUInt64LE(poolId);
-    // With the KYC-at-claim switch ON and the share above the threshold, the
-    // program additionally requires a kyc_tier ≥ 1 packet as an Ed25519
-    // instruction in this transaction (R3). The switch is OFF at launch
-    // (D-B4); the KYC-path variant lands with the switch's activation.
+    // The settlement signer takes the REVIEWED path (escrow.rs). With the
+    // KYC-at-claim switch ON and the share above the threshold, the program
+    // additionally requires a kyc_tier ≥ 1 packet as an Ed25519 instruction
+    // in this transaction (R3). The switch is OFF at launch (D-B4, D-E5);
+    // the KYC-path variant lands with the switch's activation. (Any other
+    // signer would take the seven-day auto-release path with the same
+    // accounts — the program decides by comparing the signer.)
     await this.send([
       new TransactionInstruction({
         programId: this.cfg.programId,
@@ -459,11 +541,7 @@ export class Web3Chain implements KeeperChain {
           { pubkey: this.vaultPda(poolId), isSigner: false, isWritable: true },
           { pubkey: this.entryPda(poolKey, playerKey), isSigner: false, isWritable: true },
           { pubkey: playerKey, isSigner: false, isWritable: true },
-          {
-            pubkey: new PublicKey('Sysvar1nstructions1111111111111111111111111'),
-            isSigner: false,
-            isWritable: false,
-          },
+          { pubkey: INSTRUCTIONS_SYSVAR, isSigner: false, isWritable: false },
           { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
         ],
         data: Buffer.concat([disc('release_escrow'), le]),
@@ -472,23 +550,89 @@ export class Web3Chain implements KeeperChain {
   }
 
   async forfeitEscrow(poolId: bigint, player: string): Promise<void> {
+    // Admin-signed since 2026-09-07 (founder ruling 4 / prompt v2 §E.2):
+    // taking a prize away is a multi-party act. Nothing moves — the vault is
+    // listed read-only, the treasury not at all (standing-rules check (h)).
+    const admin = this.admin('forfeit_escrow');
     const poolKey = this.poolPda(poolId);
     const le = Buffer.alloc(8);
     le.writeBigUInt64LE(poolId);
+    await this.send(
+      [
+        new TransactionInstruction({
+          programId: this.cfg.programId,
+          keys: [
+            { pubkey: admin.publicKey, isSigner: true, isWritable: false },
+            { pubkey: this.configPda(), isSigner: false, isWritable: false },
+            { pubkey: poolKey, isSigner: false, isWritable: false },
+            { pubkey: this.vaultPda(poolId), isSigner: false, isWritable: false },
+            { pubkey: this.entryPda(poolKey, new PublicKey(player)), isSigner: false, isWritable: true },
+          ],
+          data: Buffer.concat([disc('forfeit_escrow'), le]),
+        }),
+      ],
+      [admin]
+    );
+  }
+
+  async payNextPlace(
+    poolId: bigint,
+    from: string,
+    to: string,
+    rank: number,
+    amount: bigint,
+    proof: readonly ChainProofStep[],
+    groupSize: number,
+    takesRemainder: boolean,
+    peers: readonly string[]
+  ): Promise<void> {
+    const poolKey = this.poolPda(poolId);
+    const toKey = new PublicKey(to);
+    const le = Buffer.alloc(8);
+    le.writeBigUInt64LE(poolId);
+    // Borsh: rank u8 | amount u64 | Vec<ProofStep { sibling [u8;32],
+    // sibling_on_right bool }> (u32 length prefix) | group_size u16 |
+    // takes_remainder bool.
+    const amountBuf = Buffer.alloc(8);
+    amountBuf.writeBigUInt64LE(amount);
+    const len = Buffer.alloc(4);
+    len.writeUInt32LE(proof.length);
+    const steps = proof.map((s) =>
+      Buffer.concat([Buffer.from(s.sibling), Buffer.from([s.siblingOnRight ? 1 : 0])])
+    );
+    const groupBuf = Buffer.alloc(2);
+    groupBuf.writeUInt16LE(groupSize);
+    const tail = Buffer.concat([groupBuf, Buffer.from([takesRemainder ? 1 : 0])]);
+    const keys = [
+      { pubkey: this.cfg.settlementSigner.publicKey, isSigner: true, isWritable: false },
+      { pubkey: this.configPda(), isSigner: false, isWritable: false },
+      { pubkey: poolKey, isSigner: false, isWritable: false },
+      { pubkey: this.vaultPda(poolId), isSigner: false, isWritable: true },
+      { pubkey: this.entryPda(poolKey, new PublicKey(from)), isSigner: false, isWritable: true },
+      { pubkey: this.entryPda(poolKey, toKey), isSigner: false, isWritable: true },
+      { pubkey: toKey, isSigner: false, isWritable: true },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      // remaining accounts: every OTHER committed (first-place) Entry, in
+      // ascending seat order (escrow.rs `committed_peers`).
+      ...peers.map((w) => ({
+        pubkey: this.entryPda(poolKey, new PublicKey(w)),
+        isSigner: false,
+        isWritable: false,
+      })),
+    ];
     await this.send([
       new TransactionInstruction({
         programId: this.cfg.programId,
-        keys: [
-          { pubkey: this.cfg.settlementSigner.publicKey, isSigner: true, isWritable: false },
-          { pubkey: this.configPda(), isSigner: false, isWritable: false },
-          { pubkey: poolKey, isSigner: false, isWritable: false },
-          { pubkey: this.vaultPda(poolId), isSigner: false, isWritable: true },
-          { pubkey: this.entryPda(poolKey, new PublicKey(player)), isSigner: false, isWritable: true },
-          // D-A1 revised: forfeits land in the platform treasury PDA.
-          { pubkey: this.platformPda(), isSigner: false, isWritable: true },
-          { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-        ],
-        data: Buffer.concat([disc('forfeit_escrow'), le]),
+        keys,
+        data: Buffer.concat([
+          disc('pay_next_place'),
+          le,
+          Buffer.from([rank]),
+          amountBuf,
+          len,
+          ...steps,
+          tail,
+        ]),
       }),
     ]);
   }

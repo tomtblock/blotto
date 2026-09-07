@@ -52,8 +52,10 @@ const DEFAULT_RPC = 'https://api.devnet.solana.com';
 /** Anchor's `InstructionDidNotDeserialize` — the one verdict that fails a run. */
 const ERR_DID_NOT_DESERIALIZE = 102;
 
-/** `Config::SPACE` in programs/blotto_cup/src/state.rs (8 + LEN). */
-const CONFIG_SPACE = 380;
+/** `Config::SPACE` in programs/blotto_cup/src/state.rs (8 + LEN) since the
+ * 2026-09-07 upgrade; the pre-migration account is `CONFIG_SPACE_V1`. */
+const CONFIG_SPACE = 484;
+const CONFIG_SPACE_V1 = 380;
 
 // ---------------------------------------------------------------------------
 // Encoding helpers — the same wire contract scripts/admin.ts encodes against.
@@ -136,22 +138,77 @@ function adminChecks(somePubkey: PublicKey): WireCheck[] {
       signature: 'reserve_pots: u8, min_platform_lamports: u64',
       args: Buffer.concat([u8b(1), u64le(500_000_000n)]),
     },
+    // 2026-09-07 upgrade (prompt v2 §A / §B).
+    {
+      name: 'set_keeper',
+      signature: 'new_keeper: Pubkey',
+      args: somePubkey.toBuffer(),
+    },
+    {
+      name: 'set_pool_timing',
+      signature: 'fill_deadline_seconds: i64, cooldown_seconds: i64',
+      args: Buffer.concat([i64le(43_200n), i64le(300n)]),
+    },
   ];
+}
+
+function i64le(v: bigint): Buffer {
+  const b = Buffer.alloc(8);
+  b.writeBigInt64LE(v);
+  return b;
+}
+
+/** `migrate_config(keeper)` — its own account list (admin mut, config as an
+ *  UncheckedAccount, the System Program). A live post-migration account
+ *  reverts with ConfigAlreadyMigrated, which is a pass here. */
+function migrateConfigCheck(keeper: PublicKey): WireCheck {
+  return {
+    name: 'migrate_config',
+    signature: 'keeper: Pubkey',
+    args: keeper.toBuffer(),
+  };
+}
+
+/** `pay_next_place` — the widest argument shape the upgrade adds. Account
+ *  validation fails long after the arguments deserialize (the placeholder
+ *  Entries do not exist), which is a pass for a wire-contract check. */
+function payNextPlaceCheck(): WireCheck {
+  const step = Buffer.concat([Buffer.alloc(32, 1), boolb(true)]);
+  const proofLen = Buffer.alloc(4);
+  proofLen.writeUInt32LE(2);
+  const group = Buffer.alloc(2);
+  group.writeUInt16LE(2);
+  return {
+    name: 'pay_next_place',
+    signature:
+      'pool_id: u64, rank: u8, amount: u64, proof: Vec<ProofStep { sibling: [u8; 32], ' +
+      'sibling_on_right: bool }>, group_size: u16, takes_remainder: bool',
+    args: Buffer.concat([u64le(1n), u8b(1), u64le(0n), proofLen, step, step, group, boolb(true)]),
+  };
 }
 
 /** `init_config`'s own account list — it creates the Config PDA, so it takes
  *  the platform PDA and the System Program too (InitConfig in admin.rs). */
 function initConfigCheck(entrySigner: PublicKey, settlementSigner: PublicKey): WireCheck {
-  const ceilings = [6.4, 32, 48, 64, 160, 320, 480].map((sol) =>
-    u64le(BigInt(Math.round(sol * 1e9)))
-  );
+  // Launch ceilings in lamports (price × 64 per tier; tier 0 = 6.4 SOL) —
+  // integers, never a float-rounded SOL figure.
+  const ceilings = [
+    6_400_000_000n,
+    32_000_000_000n,
+    48_000_000_000n,
+    64_000_000_000n,
+    160_000_000_000n,
+    320_000_000_000n,
+    480_000_000_000n,
+  ].map(u64le);
   return {
     name: 'init_config',
     signature:
-      'entry_signer: Pubkey, settlement_signer: Pubkey, ' +
+      'entry_signer: Pubkey, settlement_signer: Pubkey, keeper: Pubkey, ' +
       'vault_ceiling_lamports: [u64; N_TIERS], treasury_min_platform_lamports: u64',
     args: Buffer.concat([
       entrySigner.toBuffer(),
+      settlementSigner.toBuffer(),
       settlementSigner.toBuffer(),
       ...ceilings,
       u64le(500_000_000n),
@@ -279,7 +336,9 @@ async function checkConfigAccount(
     ok,
     detail: ok
       ? `${info.data.length} bytes — matches Config::SPACE`
-      : `${info.data.length} bytes on chain, source says Config::SPACE = ${CONFIG_SPACE}`,
+      : info.data.length === CONFIG_SPACE_V1
+        ? `${info.data.length} bytes — the PRE-MIGRATION layout: run \`admin.ts migrate-config\` (runbook step 3b)`
+        : `${info.data.length} bytes on chain, source says Config::SPACE = ${CONFIG_SPACE}`,
   };
 }
 
@@ -355,6 +414,54 @@ async function main(): Promise<void> {
         { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       ],
       admin
+    )
+  );
+
+  verdicts.push(
+    await checkOne(
+      connection,
+      programId,
+      migrateConfigCheck(admin),
+      [
+        { pubkey: admin, isSigner: true, isWritable: true },
+        { pubkey: config, isSigner: false, isWritable: true },
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      ],
+      admin
+    )
+  );
+
+  // pay_next_place: settlement signer, config, pool, vault, from, to,
+  // to_player, system program — placeholders where no real account is
+  // needed for the ARGUMENTS to deserialize.
+  const poolPda = PublicKey.findProgramAddressSync(
+    [Buffer.from('pool'), u64le(1n)],
+    programId
+  )[0];
+  const vaultPda = PublicKey.findProgramAddressSync(
+    [Buffer.from('vault'), u64le(1n)],
+    programId
+  )[0];
+  const settlement =
+    configInfo && configInfo.data.length >= 104
+      ? new PublicKey(configInfo.data.subarray(72, 104))
+      : admin;
+  verdicts.push(
+    await checkOne(
+      connection,
+      programId,
+      payNextPlaceCheck(),
+      [
+        { pubkey: settlement, isSigner: true, isWritable: false },
+        { pubkey: config, isSigner: false, isWritable: false },
+        { pubkey: poolPda, isSigner: false, isWritable: false },
+        { pubkey: vaultPda, isSigner: false, isWritable: true },
+        { pubkey: PublicKey.unique(), isSigner: false, isWritable: true },
+        { pubkey: PublicKey.unique(), isSigner: false, isWritable: true },
+        { pubkey: PublicKey.unique(), isSigner: false, isWritable: true },
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      ],
+      settlement
     )
   );
 

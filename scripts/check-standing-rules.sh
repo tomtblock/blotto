@@ -6,10 +6,13 @@
 # backend/scoring/ and pay_prizes for `class` and fails on any hit."
 #
 # Rule 6 — "The vault has exactly three exits (pay_prizes, release_escrow,
-# refund). A CI test asserts it." NOTE, recorded in the Phase 1 report: the
-# roadmap's own §1.4 also routes forfeited escrow OUT of the vault, so the true
-# exit set is FOUR movers (forfeit destination: the platform treasury — see the
-# PHASE-1-REVIEW note in instructions/escrow.rs).
+# refund). A CI test asserts it." History: the roadmap's §1.4 added a fourth
+# mover, forfeit-to-treasury (Phase 1 report). Since the founder ruling of
+# 2026-09-07 (prompt v2 §E — forfeited money never reaches the operator) the
+# exit set is: pay_prizes, release_escrow, pay_next_place, refund
+# (trigger_refund's pot return and the per-entry refund both live in
+# refund.rs). `forfeit_escrow` is NO LONGER an exit — check (h) below pins
+# that, and that nothing in escrow.rs can address the treasury at all.
 # This check asserts the exact enumerated set below and fails on any other
 # occurrence of a vault debit, which is the rule's actual intent: no exit that
 # is not on the list.
@@ -102,6 +105,21 @@ if [ -d "$PROG" ]; then
   # belt-and-braces pot assertion via `.lamports()`), and must not debit it.
   if grep -nE 'accounts\.vault\.to_account_info|vault_debit\(' $PROG/instructions/register.rs >/dev/null; then
     echo "standing-rule 6 FAILED: register.rs moves lamports to/from the prize vault"
+    fail=1
+  fi
+  # (h) 2026-09-07: escrow.rs never names the treasury (no PLATFORM_SEED, no
+  # platform_debit, no `platform` account), and the forfeit handler moves no
+  # lamports — a forfeited share can only leave the vault by next-place payout.
+  if grep -nE 'PLATFORM_SEED|platform_debit|\bplatform\b\s*:' $PROG/instructions/escrow.rs >/dev/null; then
+    echo "standing-rule 6 FAILED: escrow.rs can address the platform treasury"
+    fail=1
+  fi
+  forfeit_body="$(awk '/^pub fn handle_forfeit_escrow/{on=1} on{print} on && /^}/{exit}' $PROG/instructions/escrow.rs)"
+  if [ -z "$forfeit_body" ]; then
+    echo "standing-rule 6 FAILED: handle_forfeit_escrow not found in escrow.rs"
+    fail=1
+  elif echo "$forfeit_body" | grep -qE 'vault_debit\(|invoke|transfer'; then
+    echo "standing-rule 6 FAILED: forfeit_escrow moves lamports"
     fail=1
   fi
   # (g) no pot arithmetic: a pot is a fixed value copied at open, never

@@ -61,8 +61,10 @@ pub struct Config {
     pub admin: Pubkey,
     /// Signs entry packets (Turnkey-custodied, sign-only). Rotatable.
     pub entry_signer: Pubkey,
-    /// Signs `open_pool`, `reveal_pool_secret`, `commit_results`, `pay_prizes`,
-    /// flag/escrow instructions (Turnkey-custodied). Rotatable.
+    /// Signs `reveal_pool_secret`, `commit_results`, `pay_prizes`, flags,
+    /// `release_escrow` (the reviewed path) and `pay_next_place`
+    /// (Turnkey-custodied). Rotatable. `open_pool` is the keeper's
+    /// (tail field below); `forfeit_escrow` is the admin's.
     pub settlement_signer: Pubkey,
     /// Blocks `register` when true (admin kill switch).
     pub paused: bool,
@@ -115,16 +117,47 @@ pub struct Config {
     /// open while the previous is unsettled).
     pub active_pool_by_tier: [u64; N_TIERS],
     pub bump: u8,
+    // ---- Fields appended by the 2026-09-07 upgrade (prompt v2 §A/§B/§G).
+    // APPENDED AFTER `bump` ON PURPOSE: every off-chain reader addresses the
+    // fields above by fixed byte offset, and the live devnet Config was
+    // allocated at the old size. Appending keeps every existing offset
+    // valid; `migrate_config` grows the account once and writes this tail.
+    // The next layout change goes here too, never above this line.
+    /// The keeper: the one key allowed to call `open_pool` before the
+    /// liveness fallback (`LIVENESS_FALLBACK_SECS`). Set at init / migrate,
+    /// rotatable by admin (`set_keeper`). The daemon holds it; on devnet it
+    /// is the settlement signer until E6 splits the keys.
+    pub keeper: Pubkey,
+    /// The fill deadline applied at `open_pool` (`Pool.fill_deadline =
+    /// now + this`). Seeded `DEFAULT_FILL_DEADLINE_SECS`; `set_pool_timing`
+    /// changes it — never a pool already open.
+    pub fill_deadline_seconds: i64,
+    /// The pause between a tier's pool settling and its next open. Seeded
+    /// `DEFAULT_COOLDOWN_SECS`.
+    pub cooldown_seconds: i64,
+    /// Per tier: the earliest unix time its next pool may open, stamped
+    /// `now + cooldown_seconds` whenever the tier's slot frees (`Paid` /
+    /// `Closed`). 0 = the tier has never settled a pool. Read by `open_pool`
+    /// (the cooldown gate and the keeper liveness fallback) and by the app's
+    /// "next pool in" countdown via `TierSlotFreed`.
+    pub tier_next_open_at: [i64; N_TIERS],
 }
 
 impl Config {
-    /// 3 pubkeys (96) + paused (1) + open_tiers (N_TIERS) + ceilings
-    /// (8·N_TIERS) + prices (8·N_TIERS) + pots (8·N_TIERS) + reserve_pots
-    /// (1) + min_platform (8) + reserved (8) + refundable (8) +
-    /// platform_bump (1) + kyc threshold (8) + detection switch (1) +
-    /// next_pool_id (8) + active_pool_by_tier (8·N_TIERS) + bump (1).
-    pub const LEN: usize =
+    /// The pre-2026-09-07 layout, in bytes after the discriminator: 3 pubkeys
+    /// (96), paused (1), open_tiers (N_TIERS), ceilings (8·N_TIERS),
+    /// prices (8·N_TIERS), pots (8·N_TIERS), reserve_pots (1),
+    /// min_platform (8), reserved (8), refundable (8), platform_bump (1),
+    /// kyc threshold (8), detection switch (1), next_pool_id (8),
+    /// active_pool_by_tier (8·N_TIERS), bump (1) — 372 in all.
+    /// `migrate_config` accepts exactly this size and nothing else.
+    pub const LEN_V1: usize =
         32 * 3 + 1 + N_TIERS + 8 * N_TIERS * 4 + 1 + 8 + 8 + 8 + 1 + 8 + 1 + 8 + 1;
+    pub const SPACE_V1: usize = 8 + Self::LEN_V1;
+    /// The appended tail: keeper (32) + fill_deadline_seconds (8) +
+    /// cooldown_seconds (8) + tier_next_open_at (8·N_TIERS).
+    pub const TAIL_LEN: usize = 32 + 8 + 8 + 8 * N_TIERS;
+    pub const LEN: usize = Self::LEN_V1 + Self::TAIL_LEN;
     pub const SPACE: usize = 8 + Self::LEN;
 }
 
@@ -138,13 +171,14 @@ impl Config {
 pub enum PoolState {
     /// Accepting entries.
     Open,
-    /// 64th entry landed. No further entries; the pool secret may be exported.
+    /// The 64th entry landed, or the deadline passed with at least
+    /// `MIN_SEATS` (D-E4). No further entries; the pool secret may be exported.
     Sealed,
-    /// Results root + winners committed. Awaiting `pay_prizes`.
+    /// Results root + payout list committed. Awaiting `pay_prizes`.
     Scored,
-    /// All 16 ranks settled (paid or escrowed).
+    /// Every committed seat settled (paid or escrowed).
     Paid,
-    /// Deadline passed below 64. Entries refunded in full.
+    /// Deadline passed below `MIN_SEATS`. Entries refunded in full.
     Refunding,
     /// Terminal: every entrant refunded.
     Closed,
@@ -180,13 +214,12 @@ pub struct Pool {
     /// seal anywhere in `MIN_SEATS..=CAPACITY`; this is the field it played.
     pub entrants: u16,
     pub opened_at: i64,
-    /// The moment entries close: `opened_at + FILL_DEADLINE_SECS` (72h, R7),
-    /// SHORTENED in place to `now + GO_TIMER_SECS` by the `register` that
-    /// brings the pool to `MIN_SEATS` when that is sooner (D-E4 §11.3, option
-    /// B — the go-timer lives here rather than in a new field so the account
-    /// layout, and every reader of it, is unchanged; `GoTimerStarted`
-    /// carries the original-vs-shortened distinction off-chain). Past it,
-    /// `seal_at_deadline` (≥ MIN_SEATS) or `trigger_refund` (< MIN_SEATS).
+    /// The moment entries close: `opened_at + Config.fill_deadline_seconds`
+    /// as it stood at open (12 h by default — founder ruling 2026-09-07),
+    /// copied here so a later `set_pool_timing` never moves a deadline
+    /// players entered under. Never rewritten (option A: the go-timer of
+    /// D-E4 §11.3 was removed by the same ruling). Past it, `seal_at_deadline`
+    /// (≥ MIN_SEATS) or `trigger_refund` (< MIN_SEATS).
     pub fill_deadline: i64,
     pub state: PoolState,
     /// X25519 public key entries are sealed to (TECH-ARCH §5). Published at open.
@@ -290,12 +323,55 @@ pub struct Entry {
     pub settled: bool,
     pub refunded: bool,
     /// Prize share held in the vault pending review (flag) or KYC (R3 switch).
+    /// After `forfeit_escrow` the lamports STAY here (and in the vault) with
+    /// `forfeited = true`, until `pay_next_place` pays them to the next
+    /// eligible player — forfeited money never reaches the operator (founder
+    /// ruling 2026-09-07).
     pub escrow_lamports: u64,
     pub bump: u8,
+    // ---- Appended by the 2026-09-07 upgrade (prompt v2 §E). After `bump`
+    // for the same reason as Config's tail: the readers address the fields
+    // above by offset. Entries are created per `register`, so pre-upgrade
+    // Entries exist only in pools opened before it (devnet: none).
+    /// When `pay_prizes` escrowed the share (unix seconds; 0 = never).
+    /// `release_escrow` becomes permissionless `ESCROW_AUTO_RELEASE_SECS`
+    /// after this — inaction pays the player.
+    pub escrowed_at: i64,
+    /// Review upheld the flag (`forfeit_escrow`, admin-signed). The share can
+    /// no longer be released to this player; only paid onward.
+    pub forfeited: bool,
+    /// Lamports this entry received by next-place payout from a forfeited share
+    /// (`pay_next_place`) — on top of any committed payout.
+    pub next_place_lamports: u64,
+    // ---- The split (founder ruling 3 of the 2026-09-07 addendum): a
+    // forfeited share is divided EQUALLY among the eligible players at the
+    // rank it passes to, one member per `pay_next_place` call. These four
+    // fields live on the FORFEITER's Entry and make the split idempotent
+    // and exact across calls.
+    /// The share as it stood when the first split payment went out (the
+    /// dividend); 0 until then. `escrow_lamports` counts down from it.
+    pub split_total: u64,
+    /// Bit per SEAT already paid from this forfeited share.
+    pub split_paid_mask: u64,
+    /// The size of the group the share is divided among, fixed by the first
+    /// payment (recomputed and checked on-chain at first place; asserted
+    /// by the settlement signer at the next rank — disclosed residual, see
+    /// `escrow.rs`). 0 = no payment yet.
+    pub split_group_size: u16,
+    /// The indivisible remainder has been paid (to the lowest entry number
+    /// of the group — verified at first place, asserted at the next rank).
+    pub split_remainder_paid: bool,
 }
 
 impl Entry {
-    pub const LEN: usize = 32 + 32 + 2 + 32 + 1 + 32 + 8 + 32 + 1 + 1 + 1 + 8 + 1;
+    /// The pre-2026-09-07 layout (183); pre-upgrade Entries, if any, are
+    /// this size and are read by offset only up to here.
+    pub const LEN_V1: usize = 32 + 32 + 2 + 32 + 1 + 32 + 8 + 32 + 1 + 1 + 1 + 8 + 1;
+    /// escrowed_at (8) + forfeited (1) + next_place_lamports (8) +
+    /// split_total (8) + split_paid_mask (8) + split_group_size (2) +
+    /// split_remainder_paid (1).
+    pub const TAIL_LEN: usize = 8 + 1 + 8 + 8 + 8 + 2 + 1;
+    pub const LEN: usize = Self::LEN_V1 + Self::TAIL_LEN;
     pub const SPACE: usize = 8 + Self::LEN;
 }
 
@@ -367,10 +443,22 @@ mod tests {
             next_pool_id: 1,
             active_pool_by_tier: [0; N_TIERS],
             bump: 255,
+            keeper: Pubkey::new_unique(),
+            fill_deadline_seconds: i64::MAX,
+            cooldown_seconds: i64::MAX,
+            tier_next_open_at: [i64::MAX; N_TIERS],
         };
         let mut buf = Vec::new();
         c.serialize(&mut buf).unwrap();
         assert_eq!(buf.len(), Config::LEN, "Config::LEN is stale");
+        // The tail is exactly the appended fields, in order, after the V1
+        // bytes — what `migrate_config` writes by hand.
+        assert_eq!(buf.len(), Config::LEN_V1 + Config::TAIL_LEN);
+        assert_eq!(&buf[Config::LEN_V1..Config::LEN_V1 + 32], c.keeper.as_ref());
+        assert_eq!(
+            &buf[Config::LEN_V1 + 32..Config::LEN_V1 + 40],
+            &i64::MAX.to_le_bytes()
+        );
     }
 
     #[test]
@@ -410,23 +498,37 @@ mod tests {
     /// The account layouts are load-bearing beyond this crate: the LiteSVM
     /// harness, `backend/reveal/src/chain-web3.ts` and `scripts/admin.ts`
     /// read them by hard-coded byte offsets, and every live account on-chain
-    /// was allocated at these sizes — an appended field would make every
-    /// pre-upgrade Pool/Config one field short and undeserialisable (a pool
-    /// that can neither take entries nor refund holds its pot with no exit).
-    /// D-E4 was therefore built WITHOUT a new field (the go-timer shortens
-    /// `fill_deadline` in place). These pins turn a future layout change
-    /// into a deliberate, reviewed act rather than a side effect.
+    /// was allocated at its size. A field INSERTED anywhere moves every
+    /// offset behind it and makes every pre-upgrade account undeserialisable
+    /// (a pool that can neither take entries nor refund holds its pot with no
+    /// exit). The rule since the 2026-09-07 upgrade: new fields are APPENDED
+    /// after `bump`, the readers learn the tail, and an account that must
+    /// grow gets a migration instruction in the same upgrade
+    /// (`migrate_config`). `Pool::LEN` is 839 — not the 834 the proposal and
+    /// prompt v2 repeat (that number is `paid_mask`'s byte offset, D1/D14;
+    /// the founder's note against it is in the decision register). These
+    /// pins turn a layout change into a deliberate, reviewed act.
     #[test]
     fn account_layouts_are_pinned() {
         assert_eq!(Pool::LEN, 839, "Pool layout changed — read the note above");
         assert_eq!(Pool::SPACE, 847);
         assert_eq!(
-            Config::LEN,
+            Config::LEN_V1,
             372,
-            "Config layout changed — read the note above"
+            "the pre-migration Config layout is history — never change"
         );
-        assert_eq!(Config::SPACE, 380);
-        assert_eq!(Entry::LEN, 183);
+        assert_eq!(Config::SPACE_V1, 380);
+        assert_eq!(Config::TAIL_LEN, 104);
+        assert_eq!(
+            Config::LEN,
+            476,
+            "Config layout changed — append after the tail and ship a migration"
+        );
+        assert_eq!(Config::SPACE, 484);
+        assert_eq!(Entry::LEN_V1, 183);
+        assert_eq!(Entry::TAIL_LEN, 36);
+        assert_eq!(Entry::LEN, 219);
+        assert_eq!(Entry::SPACE, 227);
     }
 
     #[test]
@@ -445,9 +547,17 @@ mod tests {
             refunded: false,
             escrow_lamports: u64::MAX,
             bump: 255,
+            escrowed_at: i64::MAX,
+            forfeited: true,
+            next_place_lamports: u64::MAX,
+            split_total: u64::MAX,
+            split_paid_mask: u64::MAX,
+            split_group_size: u16::MAX,
+            split_remainder_paid: true,
         };
         let mut buf = Vec::new();
         e.serialize(&mut buf).unwrap();
         assert_eq!(buf.len(), Entry::LEN, "Entry::LEN is stale");
+        assert_eq!(buf.len(), Entry::LEN_V1 + Entry::TAIL_LEN);
     }
 }

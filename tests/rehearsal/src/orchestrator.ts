@@ -83,6 +83,8 @@ export async function runOfflinePool(
       battlesHash: Buffer.from(battlesHash(payload.battles, payload.salt)).toString('hex'),
       flagged: false,
       refunded: false,
+      settled: false,
+      forfeited: false,
     });
     void store.put(poolId, player, seal(encodePayload(payload), publicKey));
   });

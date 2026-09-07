@@ -69,6 +69,9 @@ fn open_blocked_while_the_tiers_prior_pool_is_unpaid() {
     let ix = pay_prizes_ix(&settlement.pubkey(), 1, &[0], &[(p.pubkey(), *e)]);
     env.send(&[ix], &[&settlement]).unwrap();
     assert_eq!(read_config(&env.svm).active_pool_by_tier[0], 0);
+    // ...after the cooldown (prompt v2 §B.6) — `keeper_and_timing.rs` pins
+    // the cooldown itself; here it is just waited out.
+    env.advance_time(5 * 60);
     let ix = open_pool_ix(&settlement.pubkey(), 2, 0, [9; 32], env.sealing_secret_hash);
     env.send(&[ix], &[&settlement])
         .expect("Paid unlocks the tier's next pool");
@@ -263,7 +266,7 @@ fn seven_tier_ladder_unlocks_at_exact_thresholds_from_bootstrap() {
 
 /// The tier-0 revenue loop end-to-end: a full pool nets the treasury
 /// +2.4 SOL (6.4 SOL of entries in, the 4 SOL D-E1 pot out and paid), and
-/// the tier immediately reopens from its own retained pot-return economics.
+/// the tier reopens after its cooldown from its own retained economics.
 #[test]
 fn a_paid_pool_grows_the_treasury_by_its_net_margin() {
     let Some(mut env) = Env::new() else { return };
@@ -281,6 +284,7 @@ fn a_paid_pool_grows_the_treasury_by_its_net_margin() {
     // bootstrap is 64 × 0.0375 = 2.4 SOL (D-E1), and the tier can fund its
     // next pot from the balance alone.
     assert_eq!(env.balance(&platform_pda()), 64 * TIER_PRICES[0]);
+    env.advance_time(5 * 60); // the tier's cooldown
     let ix = open_pool_ix(&settlement.pubkey(), 2, 0, [9; 32], env.sealing_secret_hash);
     env.send(&[ix], &[&settlement])
         .expect("the tier funds its own next pot from revenue");

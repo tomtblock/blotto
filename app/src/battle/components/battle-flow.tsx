@@ -193,6 +193,10 @@ export function BattleFlow({ poolAddress, onConfirm }: BattleFlowProps) {
             <Timer remainingMs={state.budgetMs} budgetMs={state.budgetMs} started={false} size={84} />
           </div>
           <p className="max-w-prose text-[15px] leading-6 text-ink-muted">{COPY.battle.ruleNinety}</p>
+          {/* R9-b: the effect of the default, stated as performance (the
+              founder's addendum wording) — on the battle screen, not only
+              the rules page. */}
+          <p className="max-w-prose text-[13px] leading-5 text-ink-muted">{COPY.battle.timerEffect}</p>
           <Button size="lg" onClick={() => dispatch({ type: 'begin' })}>
             {COPY.battle.begin}
           </Button>

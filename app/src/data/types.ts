@@ -11,14 +11,10 @@ export interface PoolSummary {
   entry_lamports: string;
   /** The pool's FIXED pot (D-A1 revised), from `PoolOpened.pot_lamports`. */
   pot_lamports: string;
-  /** The EFFECTIVE deadline, unix seconds, decimal string: the 72h fill
-   * deadline, shortened in place to the go-deadline once the 52nd seat
-   * lands (D-E4). Always the clock to show. */
+  /** The moment entries close, unix seconds, decimal string: set once at
+   * open (12 h at launch — `Config.fill_deadline_seconds`), never rewritten
+   * (option A, 2026-09-07). The one clock to show. */
   fill_deadline: string;
-  /** Set once the minimum field is seated and the go-timer started (D-E4);
-   * then equal to `fill_deadline`. Null until then — and null for pools
-   * indexed before the go-timer existed. */
-  go_deadline: string | null;
   timer_seconds: number;
   state: 'Open' | 'Sealed' | 'Scored' | 'Paid' | 'Refunding' | 'Closed';
   /** Hex, 32 bytes — the X25519 key entries seal to (from PoolOpened). */
@@ -26,6 +22,23 @@ export interface PoolSummary {
   entrants: number;
   results_root: string | null;
   secret: string | null;
+  /** The read API's clock at response time (unix seconds, decimal string).
+   * Every countdown derives "now" from THIS plus an offset captured once,
+   * never from the device's clock. */
+  server_time: string;
+}
+
+/** One tier's cooldown stamp (prompt v2 §B.6), from GET /tiers. */
+export interface TierStatusRow {
+  tier: number;
+  /** Unix seconds, decimal string; the tier's next pool may open from here. */
+  next_open_at: string;
+  last_pool_id: string | null;
+}
+
+export interface TiersResponse {
+  server_time: string;
+  tiers: TierStatusRow[];
 }
 
 export interface EntryRow {
@@ -151,6 +164,8 @@ export interface IndexerApi {
   getRivals(player: string): Promise<RivalRow[]>;
   getSealedEntries(pool: string): Promise<SealedEntryRow[]>;
   getTreasury(): Promise<TreasuryTiers | null>;
+  /** GET /tiers — the per-tier cooldown stamps plus the server's clock. */
+  getTiers(): Promise<TiersResponse | null>;
   /** E3: null when the pool has no VERIFIED archive (fail-closed 404). */
   getLeaderboard(pool: string): Promise<PoolLeaderboard | null>;
 }

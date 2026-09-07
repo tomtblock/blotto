@@ -13,9 +13,13 @@
  *   EntryRegistered                     → +price (100% of a pass sale)
  *   RefundTriggered                     → +pot (the untouched pot returns)
  *   Refunded                            → −price (the full refund)
- *   EscrowForfeited                     → +amount (forfeits land here)
  *   TiersOpened                         → which tiers count toward the
  *                                         idle-tier reserve (E1 PR3a)
+ *
+ * NOT in the list since 2026-09-07 (founder ruling 4): `EscrowForfeited`.
+ * A forfeit moves nothing — the share stays in the pool's vault until
+ * `NextPlacePaid` pays it to the next eligible place. No event credits the
+ * treasury with a player's prize, and the report must never learn one.
  *
  * so the balance is a pure replay, and the anchors pin it exactly whenever
  * a deposit or withdrawal has occurred.
@@ -76,7 +80,7 @@ export interface TreasuryReport {
   enablement_source: 'ledger' | 'launch_default';
   /** One tier-0 pool's margin — pass sales in, pot out — at the two ends of
    * the field a pool can run with (D-E4): the 52-seat minimum and a full 64.
-   * A pool that seals at the go-deadline lands somewhere in between. */
+   * A pool sealed at its deadline lands somewhere in between. */
   tier0_margin_lamports: { minimum_field: string; full: string };
   /** Tier-0 pools needed to cover the first shortfall if every one of them
    * FILLS (the best case); null when nothing is short or the margin is not
@@ -172,9 +176,6 @@ export async function treasuryReport(db: Queryable): Promise<TreasuryReport> {
         }
         break;
       }
-      case 'EscrowForfeited':
-        balance += BigInt(e.amount as string);
-        break;
       case 'RefundTriggered': {
         const p = pool();
         if (p) {

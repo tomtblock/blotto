@@ -741,33 +741,42 @@ open items decided · **[YOU]** read and sign off.
 
 ---
 
-## D-E2 / D-E4 — the winner-takes-all + minimum-field upgrade: drain, upgrade, revert
+## E1 PR4 — the reconciliation upgrade: drain, upgrade, migrate, revert
 
-*Proposal E1 §8, §11.6. One drain, one upgrade, one terms event, one counsel
-opinion. PR3a (GitHub #64) carries the program; PR3b carries everything
-off-chain. **PR3b does not merge and
-nothing here runs until counsel has signed off on the reissued PID §6 +
-§8.5.** Nothing in this section moves a lamport; every step is a deploy or a
-query.*
+*Proposal E1 §8, §11.6 and the founder rulings of 2026-09-07 (register
+D-E6/D-E7). One drain, one upgrade, one migration transaction, one terms
+version (2 — nothing since it was cut becomes a v3). PR3a (GitHub #64) and
+PR3b (#65) merged undeployed; PR4 carries the program that actually
+ships: the 12-hour deadline in Config, the keeper, the cooldown, the
+escrow redesign (admin forfeit, the equal split of a forfeited share, the
+7-day safeguard release), `migrate_config`, and every off-chain mirror.
+Counsel's gate sits on mainnet and public announcement, not on this
+rehearsal. Nothing in this section moves a lamport to the operator; every
+step is a deploy, a query, or an admin transaction the FOUNDER sends.*
 
-Why a drain at all: the prize rule is enforced by the **scoring engine** (the
-crank and the verify page), not by the program — `commit_results` accepts any
-list that conserves the pot. So the rule flips when the backend deploys, and
-the drain must hold from the moment `set_paused` lands until the backend and
-the frontend are both on the new code. A pool that opened under top-16 copy
-must not be settled by a winner-takes-all engine, and vice versa.
+Why a drain: the prize rule is enforced by the **scoring engine** (the crank
+and the verify page), not by the program — `commit_results` accepts any list
+that conserves the pot. So the rule flips when the backend deploys, and the
+drain must hold from the moment `set_paused` lands until the backend and the
+frontend are both on the new code.
 
-Under B′ (the go-timer stored by shortening `fill_deadline`, no new account
-field) the upgrade does **not** strand any pre-upgrade account: an Open pool
-opened before the upgrade keeps taking entries and simply gains the go-timer
-on its next entry past 52. So the drain gate is the fairness gate only.
+Why a migration: Config grows by 104 bytes (keeper, the two timings,
+`tier_next_open_at`). The live account is 380 bytes; after the upgrade
+**every instruction that reads Config fails** — `set_paused(false)`
+included — until `migrate_config` grows it. Pool accounts are untouched
+(`Pool::LEN` stays 839). Entry accounts grew too, but devnet holds none
+(pool 1 has 0 entrants); a pool opened before the upgrade with entries
+would have to settle or refund before it.
 
-1. **Pause new entries.** `set_paused(true)` from the admin key. Settlement,
+1. **Pause new entries.** `set_paused(true)` from the admin key (the
+   founder sends it; `admin.ts set-paused --paused true`). Settlement,
    refunds and `seal_at_deadline` keep working — pause blocks `register`
    only.
-2. **Drain query — record it.** Every pool must be `Open` (0 entrants is
-   ideal), `Paid` or `Closed`; **zero** `Sealed` / `Scored` / `Refunding`.
-   Run and keep the output, timestamped, before the upgrade transaction:
+2. **Drain query — record it.** Every pool must be `Open` with **0
+   entrants**, `Paid` or `Closed`; **zero** `Sealed` / `Scored` /
+   `Refunding`, and no Open pool holding entries (an Entry account of the
+   old size cannot be read by the new program). Run and keep the output,
+   timestamped, before the upgrade transaction:
 
    ```bash
    npx ts-node --transpile-only scripts/admin.ts pools   # read-only; prints every pool and a timestamped drain verdict
@@ -775,48 +784,84 @@ on its next entry past 52. So the drain gate is the fairness gate only.
 
    If an Open pool holds entries, wait: it either fills (settles under the
    OLD engine — fine, the old copy still describes it) or its deadline
-   passes and it refunds. Do not upgrade over a pool that is mid-settlement.
-   **If any pool sits in Sealed/Scored/Refunding, stop here.**
-3. **Program upgrade.** From the PR3a merge commit, with the artifact built by
+   passes and it refunds. **If any pool sits in Sealed/Scored/Refunding, or
+   Open with entries, stop here.** Recorded CLEAR on 2026-09-07T00:06:14Z
+   (one Open pool, id 1, 0 entrants).
+3. **Program upgrade.** From the PR4 merge commit, with the artifact built by
    `anchor build --ignore-keys` (the same command CI ran green):
 
    ```bash
    scripts/deploy-devnet.sh        # extend-if-grown + anchor deploy, deploy keypair GXKX…agXY (C4 not yet done)
    ```
 
-   Then `scripts/check-deployed.ts` must report the new error variants
-   (`FieldBelowMinimum` 6051, `FieldReached` 6052, `PotExceedsMinimumField`
-   6053) and the `seal_at_deadline` instruction.
+   3b. **Migrate Config — immediately, before anything else.** The founder
+   sends, with the admin key:
+
+   ```bash
+   npx ts-node --transpile-only scripts/admin.ts migrate-config --keeper EaDfwMWwW712L4YgdhBgEqbzzpdVP17e5mvY9LPwjrSD
+   ```
+
+   The keeper is the **settlement signer's public key** on devnet (the one
+   daemon key opens and settles; `KEEPER_KEYPAIR` splits them later without
+   a program change). The transaction grows the account to 484 bytes, tops
+   up its rent from the admin, and seeds 12 h / 5 min / no cooldowns. A
+   second send fails cleanly (`ConfigAlreadyMigrated`, 6062). Then
+   `admin.ts status` shows the keeper and the timings, and
+   `scripts/check-deployed.ts` must report the Config account at 484
+   bytes, the new error variants (6054–6067) and the new instructions
+   (`migrate_config`, `set_keeper`, `set_pool_timing`, `pay_next_place`).
+   Until 3b has landed the daemon's `getConfig` refuses the account by name
+   ("pre-migration layout") — that message is the check, not a fault.
 4. **Backend deploy + migrate.** The manual `workflow_dispatch` deploy from
-   the PR3b merge commit; then `npm run migrate` in `backend/indexer`
-   (0012 adds `pools.go_deadline`). The daemon now seals 52–63-seat pools at
-   their deadline and pays one winner; the indexer projects
-   `GoTimerStarted` and replays `TiersOpened` into the treasury report.
-5. **Frontend.** Vercel deploys `main` on the PR3b merge. `config/terms.json`
-   is version 2: every wallet re-accepts once at the gate (the D17 test pins
-   that a version-1 record never satisfies version 2).
+   the PR4 merge commit; then `npm run migrate` in `backend/indexer` (0012
+   is already applied; 0013 adds `tier_status` and
+   `entries.next_place_lamports`). The daemon now opens pools as the
+   keeper, seals 52–63-seat pools at their 12-hour deadline, pays one
+   winner, waits out the five-minute cooldown, and flags nothing on its own
+   (detection runs in shadow mode; a flag is a reviewer's signed decision).
+5. **Frontend.** Vercel deploys `main` on the PR4 merge. `config/terms.json`
+   stays at version 2: the addendum folds every change since v2 was cut into
+   it (no v3), so no wallet re-accepts again.
 6. **Unpause and watch one pool.** `set_paused(false)`; the keeper opens the
-   next tier-0 pool under the new rules. Watch it to Paid: exactly one
-   winner (or a tie split conserving the pot), `paid_mask` with one bit per
-   tied seat, the verify page green with the wallet disconnected.
+   next tier-0 pool under the new rules (the first open of a never-settled
+   tier needs no keeper — the liveness fallback holds from the epoch; every
+   later open is the keeper's). Watch it to Paid: exactly one winner (or a
+   tie split conserving the pot), `paid_mask` with one bit per tied seat,
+   `TierSlotFreed` with `next_open_at` five minutes out, the successor
+   opening on the first tick after it, the verify page green with the
+   wallet disconnected, and the landing's "next pool opens in" clock
+   counting from the server's time.
+
+**The forfeit path, if a review ever upholds a flag on devnet.** The review
+service cannot forfeit (admin-signed since 2026-09-07 — it holds no admin
+key; its `forfeit` decision row is the record). The founder sends
+`admin.ts forfeit-escrow --pool-id <id> --player <wallet>` (or
+`--emit-proposal --admin <vault>` on mainnet), which moves nothing; the
+settlement signer then pays the share onward with `pay_next_place`, one
+eligible member per call, the program checking the group at first place
+and the Merkle proof at the next rank. A held share nobody decides on is
+released to its player by anyone after seven days — the safeguard, not the
+published 12-hour rule, which is the operator's commitment to decide.
 
 **Abort criteria (§8.2).** Any of: the drain query shows a Sealed/Scored/
-Refunding pool; `check-deployed` disagrees with the built artifact; the
-first pool's committed list does not conserve the pot; the verify page
-disagrees with the on-chain root. On abort, revert (below) before
-unpausing.
+Refunding pool or an Open pool with entries; `check-deployed` disagrees with
+the built artifact; `migrate_config` fails for any reason other than
+`ConfigAlreadyMigrated` on a resend; the first pool's committed list does
+not conserve the pot; the verify page disagrees with the on-chain root. On
+abort, revert (below) before unpausing.
 
 **Revert.** Branch `revert/pre-d-e2` is `main` at `844a7c5` — the last
 commit before PR3a: `PAID_RANKS = 16`, the original band table, no minimum
-field. It was CI-green when it merged (#62/#63). To revert: redeploy the
-program from that branch (`scripts/deploy-devnet.sh`), redeploy the backend
-and frontend from it, and set `config/terms.json` back only if counsel says
-the version-2 terms must be withdrawn — otherwise leave version 2 (the
-re-prompt already happened). Pools opened under the new program between
-upgrade and revert must be drained first, exactly as in step 2: the
-program's `trigger_refund` still refunds below 52 on either build, but a
-52–63-seat pool sealed by the new build must be settled by the NEW engine
-before the old one is redeployed.
+field, the 380-byte Config. It was CI-green when it merged (#62/#63). To
+revert: redeploy the program from that branch (`scripts/deploy-devnet.sh`),
+redeploy the backend and frontend from it, and leave `config/terms.json` at
+version 2 (the re-prompt already happened). **Config cannot be shrunk
+back**: the old program reads the first 380 bytes of the migrated account
+by exact-size Borsh and refuses a 484-byte account, so a revert after 3b
+needs a fresh Config — a new program id, or a close-and-reinit path the
+program does not have. Revert BEFORE 3b if at all; after it, fix forward.
+Pools opened under the new program between upgrade and revert must be
+drained first, exactly as in step 2.
 
 ## RECOVERY NOTES
 

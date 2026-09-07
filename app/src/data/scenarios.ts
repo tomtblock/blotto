@@ -66,6 +66,8 @@ const HOUR = 3600;
 /** Deadlines are relative to render time so countdowns animate rather than sit dead. */
 const soon = (seconds: number): string => String(Math.floor(Date.now() / 1000) + seconds);
 const past = (seconds: number): string => String(Math.floor(Date.now() / 1000) - seconds);
+/** The fixture's `server_time` — the fixture IS the server here. */
+const serverNow = (): string => String(Math.floor(Date.now() / 1000));
 
 const TIER0_ENTRY = '100000000'; // 0.1 SOL
 const TIER0_POT = '4000000000'; // 4 SOL (D-E1: entry / 8 * 5 * 64)
@@ -90,14 +92,14 @@ function poolSummary(over: Partial<PoolSummary> & { pool: string; id: string }):
     tier: 0,
     entry_lamports: TIER0_ENTRY,
     pot_lamports: TIER0_POT,
-    fill_deadline: soon(72 * HOUR),
-    go_deadline: null,
+    fill_deadline: soon(12 * HOUR),
     timer_seconds: 15,
     state: 'Open',
     sealing_pubkey: SEALING_PUBKEY,
     entrants: 0,
     results_root: null,
     secret: null,
+    server_time: serverNow(),
     ...over,
   };
 }
@@ -222,15 +224,12 @@ export const SCENARIOS: readonly Scenario[] = [
   },
   {
     key: 'filling',
-    what: 'Almost full (61/64), the go-timer running — the pool will run either way.',
+    what: 'Almost full (61/64), four hours left — the pool will run either way.',
     summary: poolSummary({
       pool: FILLING,
       id: 'FIXTURE-FILLING',
       entrants: 61,
-      // D-E4: the 52nd seat shortened the deadline to the go-deadline; the
-      // indexer serves both fields equal from then on.
       fill_deadline: soon(4 * HOUR),
-      go_deadline: soon(4 * HOUR),
     }),
     entries: entries(FILLING, 61),
     results: [],
@@ -239,13 +238,12 @@ export const SCENARIOS: readonly Scenario[] = [
   },
   {
     key: 'field',
-    what: 'The minimum field (55/64): seated past 52, the go-timer just started.',
+    what: 'The minimum field (55/64): seated past 52 with the clock still running.',
     summary: poolSummary({
       pool: FIELD,
       id: 'FIXTURE-FIELD',
       entrants: 55,
       fill_deadline: soon(6 * HOUR - 5 * 60),
-      go_deadline: soon(6 * HOUR - 5 * 60),
     }),
     entries: entries(FIELD, 55),
     results: [],
@@ -254,14 +252,13 @@ export const SCENARIOS: readonly Scenario[] = [
   },
   {
     key: 'field-paid',
-    what: 'A 55-player pool that ran at its go-deadline and paid — the archive over a short field.',
+    what: 'A 55-player pool that ran at its deadline and paid — the archive over a short field.',
     summary: poolSummary({
       pool: FIELD_PAID,
       id: 'FIXTURE-FIELD-PAID',
       state: 'Paid',
       entrants: 55,
       fill_deadline: past(20 * HOUR),
-      go_deadline: past(20 * HOUR),
       results_root: 'ef'.repeat(32),
       secret: 'ab'.repeat(32),
     }),

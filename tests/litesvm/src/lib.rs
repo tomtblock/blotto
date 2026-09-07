@@ -200,12 +200,14 @@ pub fn init_config_ix(
     admin: &Pubkey,
     entry_signer: &Pubkey,
     settlement_signer: &Pubkey,
+    keeper: &Pubkey,
     vault_ceilings: [u64; 7],
     treasury_min_platform_lamports: u64,
 ) -> Instruction {
     let mut data = disc("init_config").to_vec();
     data.extend_from_slice(entry_signer.as_ref());
     data.extend_from_slice(settlement_signer.as_ref());
+    data.extend_from_slice(keeper.as_ref());
     for c in vault_ceilings {
         data.extend_from_slice(&c.to_le_bytes());
     }
@@ -270,6 +272,40 @@ pub fn set_treasury_policy_ix(admin: &Pubkey, reserve_pots: u8, min: u64) -> Ins
     admin_ix(admin, "set_treasury_policy", &args)
 }
 
+/// `set_keeper(new_keeper)` — rotate the key `open_pool` requires before
+/// the liveness fallback (prompt v2 §A).
+pub fn set_keeper_ix(admin: &Pubkey, keeper: &Pubkey) -> Instruction {
+    admin_ix(admin, "set_keeper", keeper.as_ref())
+}
+
+/// `set_pool_timing(fill_deadline_seconds, cooldown_seconds)` — for pools
+/// opened from now on; never touches an open pool.
+pub fn set_pool_timing_ix(
+    admin: &Pubkey,
+    fill_deadline_seconds: i64,
+    cooldown_seconds: i64,
+) -> Instruction {
+    let mut args = fill_deadline_seconds.to_le_bytes().to_vec();
+    args.extend_from_slice(&cooldown_seconds.to_le_bytes());
+    admin_ix(admin, "set_pool_timing", &args)
+}
+
+/// `migrate_config(keeper)` — the one-shot 2026-09-07 layout migration.
+/// The admin pays the rent top-up (hence `mut`).
+pub fn migrate_config_ix(admin: &Pubkey, keeper: &Pubkey) -> Instruction {
+    let mut data = disc("migrate_config").to_vec();
+    data.extend_from_slice(keeper.as_ref());
+    Instruction {
+        program_id: program_id(),
+        accounts: vec![
+            AccountMeta::new(*admin, true),
+            AccountMeta::new(config_pda(), false),
+            AccountMeta::new_readonly(system_program_id(), false),
+        ],
+        data,
+    }
+}
+
 /// Admin-only setters share one account shape.
 pub fn admin_ix(admin: &Pubkey, name: &str, arg_bytes: &[u8]) -> Instruction {
     let mut data = disc(name).to_vec();
@@ -284,8 +320,10 @@ pub fn admin_ix(admin: &Pubkey, name: &str, arg_bytes: &[u8]) -> Instruction {
     }
 }
 
-/// `open_pool` — PERMISSIONLESS since D-A1 revised; `opener` is any funded
-/// signer (pays the Pool's rent).
+/// `open_pool` — keeper-gated since 2026-09-07 (prompt v2 §A): `opener` is
+/// `Config.keeper`, or any funded signer once the tier's liveness fallback
+/// applies (24 h idle past its cooldown; a never-settled tier counts as
+/// idle since the epoch). Pays the Pool's rent.
 pub fn open_pool_ix(
     opener: &Pubkey,
     pool_id: u64,
@@ -466,8 +504,10 @@ pub fn flag_ix(settlement: &Pubkey, pool_id: u64, entry: &Pubkey, name: &str) ->
     }
 }
 
+/// `release_escrow` — `signer` is the settlement signer (the reviewed path)
+/// or, once the seven-day auto-release window has passed, anyone.
 pub fn release_escrow_ix(
-    settlement: &Pubkey,
+    signer: &Pubkey,
     pool_id: u64,
     entry: &Pubkey,
     player: &Pubkey,
@@ -477,7 +517,7 @@ pub fn release_escrow_ix(
     Instruction {
         program_id: program_id(),
         accounts: vec![
-            AccountMeta::new_readonly(*settlement, true),
+            AccountMeta::new_readonly(*signer, true),
             AccountMeta::new_readonly(config_pda(), false),
             AccountMeta::new_readonly(pool_pda(pool_id), false),
             AccountMeta::new(vault_pda(pool_id), false),
@@ -490,22 +530,174 @@ pub fn release_escrow_ix(
     }
 }
 
-pub fn forfeit_escrow_ix(settlement: &Pubkey, pool_id: u64, entry: &Pubkey) -> Instruction {
+/// `forfeit_escrow` — ADMIN-signed since 2026-09-07; moves no lamports
+/// (the vault is listed read-only, the platform is not listed at all).
+pub fn forfeit_escrow_ix(admin: &Pubkey, pool_id: u64, entry: &Pubkey) -> Instruction {
     let mut data = disc("forfeit_escrow").to_vec();
     data.extend_from_slice(&pool_id.to_le_bytes());
     Instruction {
         program_id: program_id(),
         accounts: vec![
-            AccountMeta::new_readonly(*settlement, true),
+            AccountMeta::new_readonly(*admin, true),
             AccountMeta::new_readonly(config_pda(), false),
             AccountMeta::new_readonly(pool_pda(pool_id), false),
-            AccountMeta::new(vault_pda(pool_id), false),
+            AccountMeta::new_readonly(vault_pda(pool_id), false),
             AccountMeta::new(*entry, false),
-            AccountMeta::new(platform_pda(), false),
-            AccountMeta::new_readonly(system_program_id(), false),
         ],
         data,
     }
+}
+
+/// One Merkle proof step as the program's `ProofStep` Borsh-encodes it:
+/// sibling hash, then `sibling_on_right` as one byte.
+pub type ProofStep = ([u8; 32], bool);
+
+/// `pay_next_place(pool_id, rank, amount, proof, group_size,
+/// takes_remainder)` — settlement-signed; `peers` are the Entry accounts of
+/// EVERY other committed (first-place) seat — all but `from` and `to` — in
+/// ascending seat order (see `escrow.rs` `committed_peers`).
+#[allow(clippy::too_many_arguments)]
+pub fn pay_next_place_ix(
+    settlement: &Pubkey,
+    pool_id: u64,
+    from_entry: &Pubkey,
+    to_entry: &Pubkey,
+    to_player: &Pubkey,
+    rank: u8,
+    amount: u64,
+    proof: &[ProofStep],
+    group_size: u16,
+    takes_remainder: bool,
+    peers: &[Pubkey],
+) -> Instruction {
+    let mut data = disc("pay_next_place").to_vec();
+    data.extend_from_slice(&pool_id.to_le_bytes());
+    data.push(rank);
+    data.extend_from_slice(&amount.to_le_bytes());
+    data.extend_from_slice(&(proof.len() as u32).to_le_bytes());
+    for (sibling, on_right) in proof {
+        data.extend_from_slice(sibling);
+        data.push(u8::from(*on_right));
+    }
+    data.extend_from_slice(&group_size.to_le_bytes());
+    data.push(u8::from(takes_remainder));
+    let mut accounts = vec![
+        AccountMeta::new_readonly(*settlement, true),
+        AccountMeta::new_readonly(config_pda(), false),
+        AccountMeta::new_readonly(pool_pda(pool_id), false),
+        AccountMeta::new(vault_pda(pool_id), false),
+        AccountMeta::new(*from_entry, false),
+        AccountMeta::new(*to_entry, false),
+        AccountMeta::new(*to_player, false),
+        AccountMeta::new_readonly(system_program_id(), false),
+    ];
+    for w in peers {
+        accounts.push(AccountMeta::new_readonly(*w, false));
+    }
+    Instruction {
+        program_id: program_id(),
+        accounts,
+        data,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The results tree (mirrors backend/scoring/src/merkle.ts and merkle.rs)
+// ---------------------------------------------------------------------------
+
+/// A results leaf: player ‖ rank (u8) ‖ amount (u64 LE) — 41 bytes.
+pub fn leaf_bytes(player: &Pubkey, rank: u8, amount: u64) -> Vec<u8> {
+    let mut out = Vec::with_capacity(41);
+    out.extend_from_slice(player.as_ref());
+    out.push(rank);
+    out.extend_from_slice(&amount.to_le_bytes());
+    out
+}
+
+fn hash_leaf(leaf: &[u8]) -> [u8; 32] {
+    let mut h = Sha256::new();
+    h.update([0u8]);
+    h.update(leaf);
+    h.finalize().into()
+}
+
+fn hash_node(l: &[u8; 32], r: &[u8; 32]) -> [u8; 32] {
+    let mut h = Sha256::new();
+    h.update([1u8]);
+    h.update(l);
+    h.update(r);
+    h.finalize().into()
+}
+
+/// Root of the results tree over `leaves` (rank order, as the engine
+/// publishes them): sha256(0x00 ‖ leaf) leaves, sha256(0x01 ‖ l ‖ r) nodes,
+/// an odd node PROMOTED unchanged (never duplicated).
+pub fn merkle_root(leaves: &[Vec<u8>]) -> [u8; 32] {
+    let mut level: Vec<[u8; 32]> = leaves.iter().map(|l| hash_leaf(l)).collect();
+    assert!(!level.is_empty());
+    while level.len() > 1 {
+        let mut next = Vec::with_capacity(level.len().div_ceil(2));
+        for pair in level.chunks(2) {
+            next.push(if pair.len() == 2 {
+                hash_node(&pair[0], &pair[1])
+            } else {
+                pair[0]
+            });
+        }
+        level = next;
+    }
+    level[0]
+}
+
+/// Results leaves for a pool whose committed list is `payouts` (the rank-1
+/// group, seat-sorted) and whose remaining seats place strictly below it,
+/// one per rank in seat order: seat s ∉ payouts gets rank `1 + k + (its
+/// position among the unpaid seats)` and amount 0. Leaves are in seat
+/// order; the root is order-agnostic to the verifier as long as the proof
+/// matches. Returns (leaves, rank per seat).
+pub fn results_leaves(players: &[Pubkey], payouts: &[(u16, u64)]) -> (Vec<Vec<u8>>, Vec<u8>) {
+    let k = payouts.len();
+    let mut next_rank = 1 + k;
+    let mut leaves = Vec::with_capacity(players.len());
+    let mut ranks = Vec::with_capacity(players.len());
+    for (seat, player) in players.iter().enumerate() {
+        let (rank, amount) = match payouts.iter().find(|&&(s, _)| s as usize == seat) {
+            Some(&(_, amount)) => (1u8, amount),
+            None => {
+                let r = next_rank as u8;
+                next_rank += 1;
+                (r, 0)
+            }
+        };
+        leaves.push(leaf_bytes(player, rank, amount));
+        ranks.push(rank);
+    }
+    (leaves, ranks)
+}
+
+/// Proof for `leaves[index]`: each step is (sibling, sibling_on_right); a
+/// promoted node contributes no step.
+pub fn merkle_proof(leaves: &[Vec<u8>], index: usize) -> Vec<ProofStep> {
+    let mut level: Vec<[u8; 32]> = leaves.iter().map(|l| hash_leaf(l)).collect();
+    let mut i = index;
+    let mut proof = Vec::new();
+    while level.len() > 1 {
+        let sibling = i ^ 1;
+        if sibling < level.len() {
+            proof.push((level[sibling], sibling > i));
+        }
+        let mut next = Vec::with_capacity(level.len().div_ceil(2));
+        for pair in level.chunks(2) {
+            next.push(if pair.len() == 2 {
+                hash_node(&pair[0], &pair[1])
+            } else {
+                pair[0]
+            });
+        }
+        level = next;
+        i /= 2;
+    }
+    proof
 }
 
 pub fn trigger_refund_ix(signer: &Pubkey, pool_id: u64) -> Instruction {
@@ -550,9 +742,9 @@ pub fn refund_ix(signer: &Pubkey, pool_id: u64, entry: &Pubkey, player: &Pubkey)
 pub struct PoolView {
     pub pot_lamports: u64,
     pub entrants: u16,
-    /// The moment entries close (unix seconds). D-E4: shortened in place by
-    /// the go-timer once the pool holds `MIN_SEATS` — the layout is
-    /// unchanged, only the value moves.
+    /// The moment entries close (unix seconds): open time +
+    /// `Config.fill_deadline_seconds`, set once and never rewritten
+    /// (option A, 2026-09-07 — the go-timer that shortened it is gone).
     pub fill_deadline: i64,
     pub state: u8, // 0 Open, 1 Sealed, 2 Scored, 3 Paid, 4 Refunding, 5 Closed
     pub class_counters: [u16; 5],
@@ -567,9 +759,9 @@ pub fn read_pool(svm: &LiteSVM, pool: &Pubkey) -> PoolView {
     // Layout since D-A1 v2 (`pot_lamports` u64 inserted after
     // entry_lamports@17): pot@25, entrants@33, fill_deadline@43, state@51,
     // vrf_seed@116, class_counters@148, payouts_len@192, payouts@194,
-    // paid_mask@834, refunded_count@842. Unchanged by D-E4 (the go-timer
-    // rewrites fill_deadline's VALUE, not the layout) — `Pool::LEN` is
-    // pinned at 839 in state.rs for exactly this reason.
+    // paid_mask@834, refunded_count@842. Unchanged by D-E4 and by the
+    // 2026-09-07 upgrade (Config and Entry grew; Pool did not) —
+    // `Pool::LEN` is pinned at 839 in state.rs, not the proposal's 834.
     assert_eq!(
         data.len(),
         847,
@@ -599,12 +791,25 @@ pub fn read_pool(svm: &LiteSVM, pool: &Pubkey) -> PoolView {
     }
 }
 
-/// The treasury-relevant slice of Config (offsets mirror state.rs).
+/// Config's pre-migration account size (`Config::SPACE_V1`) — what devnet
+/// holds until `migrate_config` runs.
+pub const CONFIG_SPACE_V1: usize = 380;
+/// Config's account size since 2026-09-07 (`Config::SPACE`).
+pub const CONFIG_SPACE: usize = 484;
+/// Entry's account size since 2026-09-07 (`Entry::SPACE`).
+pub const ENTRY_SPACE: usize = 227;
+
+/// The treasury- and timing-relevant slice of Config (offsets mirror
+/// state.rs).
 pub struct ConfigView {
+    pub keeper: Pubkey,
     pub platform_reserved: u64,
     pub platform_refundable: u64,
     pub active_pool_by_tier: [u64; 7],
     pub next_pool_id: u64,
+    pub fill_deadline_seconds: i64,
+    pub cooldown_seconds: i64,
+    pub tier_next_open_at: [i64; 7],
 }
 
 pub fn read_config(svm: &LiteSVM) -> ConfigView {
@@ -613,14 +818,28 @@ pub fn read_config(svm: &LiteSVM) -> ConfigView {
     // settlement_signer@72, paused@104, open_tiers@105, ceilings@112,
     // prices@168, pots@224, reserve_pots@280, min_platform@281,
     // reserved@289, refundable@297, platform_bump@305, kyc@306,
-    // detection@314, next_pool_id@315, active_pool_by_tier@323, bump@379.
+    // detection@314, next_pool_id@315, active_pool_by_tier@323, bump@379;
+    // the 2026-09-07 tail, appended AFTER bump: keeper@380,
+    // fill_deadline_seconds@412, cooldown_seconds@420,
+    // tier_next_open_at@428 — 484 in all (`Config::SPACE`).
+    assert_eq!(
+        data.len(),
+        CONFIG_SPACE,
+        "Config account size drifted from the pinned layout"
+    );
     ConfigView {
+        keeper: Pubkey::new_from_array(data[380..412].try_into().unwrap()),
         platform_reserved: u64::from_le_bytes(data[289..297].try_into().unwrap()),
         platform_refundable: u64::from_le_bytes(data[297..305].try_into().unwrap()),
         active_pool_by_tier: core::array::from_fn(|i| {
             u64::from_le_bytes(data[323 + 8 * i..331 + 8 * i].try_into().unwrap())
         }),
         next_pool_id: u64::from_le_bytes(data[315..323].try_into().unwrap()),
+        fill_deadline_seconds: i64::from_le_bytes(data[412..420].try_into().unwrap()),
+        cooldown_seconds: i64::from_le_bytes(data[420..428].try_into().unwrap()),
+        tier_next_open_at: core::array::from_fn(|i| {
+            i64::from_le_bytes(data[428 + 8 * i..436 + 8 * i].try_into().unwrap())
+        }),
     }
 }
 
@@ -631,10 +850,28 @@ pub struct EntryView {
     pub settled: bool,
     pub refunded: bool,
     pub escrow_lamports: u64,
+    /// The 2026-09-07 tail (appended after `bump`@190).
+    pub escrowed_at: i64,
+    pub forfeited: bool,
+    pub next_place_lamports: u64,
+    /// The split book-keeping on a FORFEITER's entry (addendum ruling 3).
+    pub split_total: u64,
+    pub split_paid_mask: u64,
+    pub split_group_size: u16,
+    pub split_remainder_paid: bool,
 }
 
 pub fn read_entry(svm: &LiteSVM, entry: &Pubkey) -> EntryView {
     let data = svm.get_account(entry).expect("entry account").data;
+    // flagged@179, settled@180, refunded@181, escrow_lamports@182, bump@190;
+    // tail: escrowed_at@191, forfeited@199, next_place_lamports@200,
+    // split_total@208, split_paid_mask@216, split_group_size@224,
+    // split_remainder_paid@226 — 227 in all (`Entry::SPACE`).
+    assert_eq!(
+        data.len(),
+        ENTRY_SPACE,
+        "Entry account size drifted from the pinned layout"
+    );
     EntryView {
         index: u16::from_le_bytes([data[72], data[73]]),
         class: data[106],
@@ -642,7 +879,25 @@ pub fn read_entry(svm: &LiteSVM, entry: &Pubkey) -> EntryView {
         settled: data[180] != 0,
         refunded: data[181] != 0,
         escrow_lamports: u64::from_le_bytes(data[182..190].try_into().unwrap()),
+        escrowed_at: i64::from_le_bytes(data[191..199].try_into().unwrap()),
+        forfeited: data[199] != 0,
+        next_place_lamports: u64::from_le_bytes(data[200..208].try_into().unwrap()),
+        split_total: u64::from_le_bytes(data[208..216].try_into().unwrap()),
+        split_paid_mask: u64::from_le_bytes(data[216..224].try_into().unwrap()),
+        split_group_size: u16::from_le_bytes([data[224], data[225]]),
+        split_remainder_paid: data[226] != 0,
     }
+}
+
+/// Rewrite the Config account as the PRE-migration layout: the first 380
+/// bytes, rent-exempt for 380. Stands in for the account devnet holds
+/// between the upgrade and `migrate_config` (the tail is simply absent —
+/// the old program never wrote one).
+pub fn downgrade_config_to_v1(svm: &mut LiteSVM) {
+    let mut acct = svm.get_account(&config_pda()).expect("config account");
+    acct.data.truncate(CONFIG_SPACE_V1);
+    acct.lamports = svm.minimum_balance_for_rent_exemption(CONFIG_SPACE_V1);
+    svm.set_account(config_pda(), acct).unwrap();
 }
 
 /// Write a fake committed VRF seed straight into the Pool account
@@ -662,6 +917,7 @@ pub fn patch_vrf_seed(svm: &mut LiteSVM, pool: &Pubkey, seed: [u8; 32]) {
 pub struct Env {
     pub svm: LiteSVM,
     pub admin: Keypair,
+    /// The settlement signer — also the keeper at init (devnet posture).
     pub settlement: Keypair,
     pub entry_signer: SigningKey,
     pub pool_secret: [u8; 32],
@@ -715,9 +971,12 @@ impl Env {
             }
         });
         // Launch treasury minimum: 0 (the reserve-pots term still applies).
+        // Keeper = the settlement signer, the devnet posture (one daemon
+        // key opens and settles); tests of the keeper gate rotate it.
         let ix = init_config_ix(
             &admin.pubkey(),
             &entry_signer_pk,
+            &settlement.pubkey(),
             &settlement.pubkey(),
             ceilings,
             0,
@@ -772,7 +1031,9 @@ impl Env {
         self.send(&[ix], &[]).expect("fund_platform_wallet");
     }
 
-    /// Open pool `pool_id` on `tier` and give it a VRF seed + pass Collection.
+    /// Open pool `pool_id` on `tier` (signed by the settlement signer, the
+    /// keeper at init) and give it a VRF seed + pass Collection. Does NOT
+    /// wait out a cooldown — a test re-opening a tier advances the clock.
     /// Tops the treasury up first so the D-A1 policy gate passes regardless of
     /// which tiers a test has enabled: the tier's own pot plus one further pot
     /// of every tier (a safe upper bound on the idle-tier reserve). Tests that

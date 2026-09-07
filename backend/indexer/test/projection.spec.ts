@@ -3,8 +3,10 @@
  *
  * The fixture is REAL: `fixtures/lifecycle-logs.json` holds the transaction
  * logs of a full lifecycle (64 entries, flags, reveal, a two-way tie for
- * first committed, payout, escrow release + forfeit), a refund-fork pool,
- * and a minimum-field pool (52 entries start the go-timer, the deadline
+ * first committed, payout, an escrow release, an admin forfeit and the
+ * forfeited share paid to the cleared tied player — 2026-09-07), the admin
+ * events of the upgrade (keeper, timings, a real Config migration), a
+ * refund-fork pool, and a minimum-field pool (52 entries, the 12 h deadline
  * passes, `seal_at_deadline` seals, the winner takes the pot — D-E4),
  * executed by the compiled program in LiteSVM
  * (tests/litesvm/tests/dump_events.rs). So this suite checks the TypeScript
@@ -85,16 +87,23 @@ describe('blotto event decoding against real emitted bytes', () => {
       'EscrowForfeited',
       'RefundTriggered',
       'Refunded',
-      'GoTimerStarted',
       'TiersOpened',
+      'TierSlotFreed',
+      'NextPlacePaid',
+      'KeeperSet',
+      'PoolTimingSet',
+      'ConfigMigrated',
     ]) {
       expect(counts.get(name) ?? 0, name).to.be.greaterThan(0);
     }
     expect(counts.get('EntryRegistered')).to.equal(118); // 64 + 2 refund pool + 52 min-field pool
-    // The go-timer starts once per pool that reaches 52 seats: the full pool
-    // on its way to 64 and the minimum-field pool. It never fires for the
-    // two-entry refund pool.
-    expect(counts.get('GoTimerStarted')).to.equal(2);
+    // Every tier-slot release stamps a cooldown: pool 1 Paid, pool 2 Closed,
+    // pool 3 Paid.
+    expect(counts.get('TierSlotFreed')).to.equal(3);
+    // One forfeited share, one eligible tied player: a group of one.
+    expect(counts.get('NextPlacePaid')).to.equal(1);
+    // The go-timer never existed on any deployment; its event is gone.
+    expect(counts.get('GoTimerStarted') ?? 0).to.equal(0);
     // Two seals: the 64th-seat seal (inside `register`) and the deadline seal.
     expect(counts.get('PoolSealed')).to.equal(2);
   });
@@ -120,16 +129,23 @@ describe('blotto event decoding against real emitted bytes', () => {
     for (const p of [fullPool!, minFieldPool!]) {
       expect(p.pot_lamports).to.equal(POT);
       expect(p.secret).to.equal('2a'.repeat(32)); // the harness secret
-      expect(p.results_root).to.equal('01'.repeat(32));
     }
-    // D-E4: both pools that passed 52 seats carry the go-deadline, and the
-    // effective deadline was shortened to it in place; the two-entry refund
-    // pool never started a timer.
-    for (const p of [fullPool!, minFieldPool!]) {
-      expect(p.go_deadline, 'go_deadline set').to.be.a('string');
-      expect(p.fill_deadline).to.equal(p.go_deadline);
-    }
-    expect(closedPool!.go_deadline).to.equal(undefined);
+    // The full pool committed a REAL results root (its forfeited share is
+    // paid onward against it); the minimum-field pool's is the harness pin.
+    expect(fullPool!.results_root).to.match(/^[0-9a-f]{64}$/);
+    expect(fullPool!.results_root).to.not.equal('01'.repeat(32));
+    expect(minFieldPool!.results_root).to.equal('01'.repeat(32));
+    // Option A (2026-09-07): no pool carries a go-deadline — the deadline
+    // set at open is the only clock.
+    for (const p of pools) expect(p.go_deadline).to.equal(undefined);
+    // Prompt v2 §B.6: the tier's cooldown stamp, from the LAST slot release
+    // (pool 3, Paid), with the pool that freed it.
+    const tierStatus = Object.values(snap.tier_status);
+    expect(tierStatus.length).to.equal(1);
+    expect(tierStatus[0].tier).to.equal(0);
+    expect(tierStatus[0].next_open_at).to.be.a('string');
+    expect(BigInt(tierStatus[0].next_open_at as string) > 0n).to.equal(true);
+    expect(tierStatus[0].last_pool_id).to.equal(String(minFieldPool!.id));
     // Pools 1 and 3 had their seeds patched directly (no event); pool 2's
     // landed via a real commit_vrf_seed with value 0x4d bytes.
     expect(fullPool!.vrf_seed).to.equal(undefined);
@@ -177,23 +193,29 @@ describe('blotto event decoding against real emitted bytes', () => {
 
     // Profiles (R15): in the full pool both tied seats were flagged and
     // escrowed; seat 0's escrow was released (its share credited via
-    // EscrowReleased) and seat 1's forfeited (nothing credited). The
-    // minimum-field winner was paid directly and holds the whole pot.
+    // EscrowReleased) and seat 1's forfeited — then paid to seat 0, the
+    // one eligible tied player (NextPlacePaid), so seat 0 holds the whole
+    // pot and seat 1 no longer counts a paid seat. The minimum-field winner
+    // was paid directly and holds the whole pot.
     const fullSeat0 = payouts.find((p) => p.pool === fullPool!.pool && p.seat === 0)!;
     const fullSeat1 = payouts.find((p) => p.pool === fullPool!.pool && p.seat === 1)!;
     const profileOf = (player: unknown): Row =>
       Object.values(snap.profiles).find((p) => p.player === player)!;
-    expect(profileOf(fullSeat0.player).total_won_lamports).to.equal('2000000000');
+    expect(profileOf(fullSeat0.player).total_won_lamports).to.equal(POT);
     expect(profileOf(fullSeat0.player).seats_paid).to.equal('1');
     expect(profileOf(fullSeat0.player).pools_entered).to.equal('1');
     expect(profileOf(fullSeat1.player).total_won_lamports).to.equal(undefined);
+    expect(profileOf(fullSeat1.player).seats_paid).to.equal('0');
     expect(profileOf(solo[0].player).total_won_lamports).to.equal(POT);
     expect(profileOf(solo[0].player).seats_paid).to.equal('1');
+    const seat0Entry = entries.find((e) => e.pool === fullPool!.pool && e.player === fullSeat0.player)!;
+    expect(seat0Entry.next_place_lamports).to.equal('2000000000');
 
     // Player history (D-A2 v2): one row per entry across all three pools,
-    // each carrying tier, pot, and the running entry count; exactly the
-    // three committed seats are marked paid, with the pool's fixed pot
-    // attached.
+    // each carrying tier, pot, and the running entry count. Two rows are
+    // marked paid — seat 0 of the full pool (its own share plus the
+    // forfeited one) and the minimum-field winner; the forfeited seat is
+    // unmarked with amount 0 — and each pool's rows still sum to the pot.
     const history = Object.values(snap.player_history);
     expect(history.length).to.equal(118);
     for (const h of history) {
@@ -202,7 +224,10 @@ describe('blotto event decoding against real emitted bytes', () => {
       expect(h.pot_lamports).to.equal(POT);
     }
     const paidRows = history.filter((h) => h.paid === true);
-    expect(paidRows.length).to.equal(3);
+    expect(paidRows.length).to.equal(2);
+    const forfeitedRow = history.find((h) => h.pool === fullPool!.pool && h.player === fullSeat1.player)!;
+    expect(forfeitedRow.paid).to.equal(false);
+    expect(forfeitedRow.amount_lamports).to.equal('0');
     const paidAmounts = paidRows.map((h) => ({ pool: h.pool, amount: h.amount_lamports }));
     expect(sumFor(paidAmounts, fullPool!.pool)).to.equal(POT);
     expect(sumFor(paidAmounts, minFieldPool!.pool)).to.equal(POT);

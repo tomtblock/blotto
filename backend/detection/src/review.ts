@@ -4,9 +4,14 @@
  * the settlement seam. The review PAGE renders this; the criteria the
  * decisions cite are published (rules page, Phase 6 copy).
  *
- * The chain actions themselves (`flag_entry`, `clear_flag`,
- * `forfeit_escrow`, `release_escrow`) are the settlement signer's; the seam
- * here is deliberately narrow — a review backend holds no other authority.
+ * The chain actions `flag_entry`, `clear_flag` and `release_escrow` are the
+ * settlement signer's; the seam here is deliberately narrow — a review
+ * backend holds no other authority. `forfeit_escrow` is ADMIN-signed since
+ * 2026-09-07 (prompt v2 §E.2 — taking a prize away is a multi-party act):
+ * the review server holds no admin key, so a `forfeit` decision through
+ * this seam fails loudly on chain and is landed by the operator with
+ * `scripts/admin.ts forfeit-escrow` (a Squads proposal on mainnet). The
+ * signed decision row is still the review's record either way.
  */
 
 export interface ReviewActions {

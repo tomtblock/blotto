@@ -27,6 +27,12 @@
  *   GET /profiles/:player              → ProfileRow
  *   GET /profiles/:player/history      → career rows off player_history (D3)
  *   GET /profiles/:player/rivals       → most-shared co-entrants (D3)
+ *   GET /tiers                         → per-tier `next_open_at` (the
+ *                                        cooldown stamp, prompt v2 §B.6)
+ *                                        plus `server_time`
+ *   GET /time                          → { server_time } — the clock every
+ *                                        countdown in the app derives from
+ *                                        (never the device's Date.now())
  *   GET /treasury                      → TreasuryReport (D-A1 revised) —
  *                                        assembled from the raw event
  *                                        ledger (treasury-report.ts)
@@ -63,28 +69,39 @@ export interface ReadApiResult {
 
 const B58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
-function poolRow(r: Record<string, unknown>): Json {
+/** Unix seconds, as the API's clock. Injectable so the routing suite can
+ * pin it; every countdown in the app derives from THIS (via `server_time`),
+ * never from the device clock. */
+export type Now = () => number;
+const wallClock: Now = () => Math.floor(Date.now() / 1000);
+
+function poolRow(r: Record<string, unknown>, now: Now): Json {
   return {
     pool: r.pool,
     id: r.id === null ? null : String(r.id),
     tier: r.tier,
     entry_lamports: r.entry_lamports === null ? null : String(r.entry_lamports),
     pot_lamports: r.pot_lamports === null || r.pot_lamports === undefined ? null : String(r.pot_lamports),
+    // Set once at open (12 h at launch), never rewritten — option A, the
+    // 2026-09-07 ruling; the go-timer and its `go_deadline` are gone.
     fill_deadline: r.fill_deadline === null ? null : String(r.fill_deadline),
-    // D-E4: set once the 52nd entry started the go-timer (then equal to
-    // fill_deadline, which it shortened); null before that.
-    go_deadline: r.go_deadline === null || r.go_deadline === undefined ? null : String(r.go_deadline),
     timer_seconds: r.timer_seconds,
     state: r.state,
     entrants: Number(r.entrants),
     sealing_pubkey: r.sealing_pubkey,
     results_root: r.results_root ?? null,
     secret: r.secret ?? null,
+    // The clock the app's countdowns derive from (unix seconds, string).
+    server_time: String(now()),
   };
 }
 
 /** Dispatch one GET. Unknown path → 404. */
-export async function handleRead(db: Queryable, path: string): Promise<ReadApiResult> {
+export async function handleRead(
+  db: Queryable,
+  path: string,
+  now: Now = wallClock
+): Promise<ReadApiResult> {
   // E3: the path may carry a query string (the /pools filters). Before
   // this, query strings 404ed by falling into the path split.
   const qIndex = path.indexOf('?');
@@ -97,8 +114,30 @@ export async function handleRead(db: Queryable, path: string): Promise<ReadApiRe
     return { status: 200, body: { ok: true, service: 'indexer-read-api' } };
   }
 
+  if (parts[0] === 'time' && parts.length === 1) {
+    return { status: 200, body: { server_time: String(now()) } };
+  }
+
+  if (parts[0] === 'tiers' && parts.length === 1) {
+    // Prompt v2 §B.6: the per-tier cooldown stamp, for the "next pool in"
+    // countdown. Tiers with no row never settled a pool (next_open_at 0).
+    const res = await db.query('SELECT tier, next_open_at, last_pool_id FROM tier_status ORDER BY tier ASC');
+    const rows = res.rows as Array<{ tier: number; next_open_at: unknown; last_pool_id: unknown }>;
+    return {
+      status: 200,
+      body: {
+        server_time: String(now()),
+        tiers: rows.map((t) => ({
+          tier: Number(t.tier),
+          next_open_at: String(t.next_open_at),
+          last_pool_id: t.last_pool_id === null ? null : String(t.last_pool_id),
+        })),
+      },
+    };
+  }
+
   if (parts[0] === 'pools' && parts.length === 1) {
-    return poolsList(db, query);
+    return poolsList(db, query, now);
   }
 
   if (parts[0] === 'pools' && parts.length >= 2) {
@@ -108,7 +147,7 @@ export async function handleRead(db: Queryable, path: string): Promise<ReadApiRe
     if (parts.length === 2) {
       const res = await db.query('SELECT * FROM pools WHERE pool = $1', [pool]);
       if (res.rows.length === 0) return { status: 404, body: { error: 'not found' } };
-      return { status: 200, body: poolRow(res.rows[0]) };
+      return { status: 200, body: poolRow(res.rows[0], now) };
     }
     if (parts[2] === 'entries') {
       const res = await db.query(
@@ -235,7 +274,7 @@ const POOL_STATES = new Set(['Open', 'Sealed', 'Scored', 'Paid', 'Refunding', 'C
  * pool id (exclusive), newest first, so the archive list walks backwards
  * with ?state=Paid&before=<last id on the page>.
  */
-async function poolsList(db: Queryable, query: URLSearchParams): Promise<ReadApiResult> {
+async function poolsList(db: Queryable, query: URLSearchParams, now: Now): Promise<ReadApiResult> {
   const where: string[] = [];
   const params: unknown[] = [];
 
@@ -272,7 +311,7 @@ async function poolsList(db: Queryable, query: URLSearchParams): Promise<ReadApi
     `SELECT * FROM pools${clause} ORDER BY id DESC LIMIT $${params.length}`,
     params
   );
-  return { status: 200, body: res.rows.map(poolRow) };
+  return { status: 200, body: res.rows.map((r) => poolRow(r, now)) };
 }
 
 /**

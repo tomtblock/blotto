@@ -21,11 +21,12 @@ import { TIER_ENTRY_LAMPORTS, TIER_POT_LAMPORTS } from '../../scoring/src';
 
 const sha = (s: string) => new Uint8Array(createHash('sha256').update(s).digest());
 
-async function chainWith(min: bigint): Promise<FakeChain> {
-  const chain = new FakeChain(() => 1_000n);
+async function chainWith(min: bigint, now: () => bigint = () => 1_000n): Promise<FakeChain> {
+  const chain = new FakeChain(now);
   await chain.initConfig({
     entrySigner: 'entry',
     settlementSigner: 'settle',
+    keeper: 'settle',
     vaultCeilingLamports: TIER_ENTRY_LAMPORTS.map((e) => e * 64n),
     treasuryMinPlatformLamports: min,
   });
@@ -197,7 +198,8 @@ describe('the zero-slack cascade (proposal E1 §6.3)', () => {
 
 describe('the keeper under the sequential rule (v2-named case)', () => {
   it('does nothing while a tier’s prior pool is unpaid', async () => {
-    const chain = await chainWith(0n);
+    const clock = { t: 1_000n };
+    const chain = await chainWith(0n, () => clock.t);
     chain.fundPlatform(100_000_000_000n);
     const custody = new LocalCustody(async (id) => {
       const p = await chain.getPool(id);
@@ -209,13 +211,21 @@ describe('the keeper under the sequential rule (v2-named case)', () => {
       custody,
       vrf: new StubVrfCoordinator(chain, 'stub'),
       crank: async (poolId) => ({ poolId, finalState: 'Sealed', stepsTaken: [] }),
-      now: () => 1_000n,
+      now: () => clock.t,
     });
 
     const r1 = await daemon.tick();
     expect(r1.opened).to.deep.equal([{ poolId: 1n, tier: 0 }]);
     chain.entries.set('1', [
-      { player: 'w1', index: 0, battlesHash: '00', flagged: false, refunded: false },
+      {
+        player: 'w1',
+        index: 0,
+        battlesHash: '00',
+        flagged: false,
+        refunded: false,
+        settled: false,
+        forfeited: false,
+      },
     ]);
     chain.sealPool(1n); // 64th register's effect: Sealed, slot STILL held
 
@@ -233,6 +243,10 @@ describe('the keeper under the sequential rule (v2-named case)', () => {
     await chain.payPrizes(1n, [0]);
     expect((await chain.getPool(1n)).state).to.equal('Paid');
 
+    // Paid frees the slot; the tier still waits out its cooldown.
+    const held = await daemon.tick();
+    expect(held.opened).to.deep.equal([]);
+    clock.t += (await chain.getConfig()).cooldownSeconds;
     const r3 = await daemon.tick();
     expect(r3.opened).to.deep.equal([{ poolId: 2n, tier: 0 }]);
   });

@@ -205,12 +205,17 @@ export function registerBlottoEventLayouts(): void {
     entrants: r.u16(),
   }));
 
-  // D-E4 §11.3 (option B): the pool reached the minimum field and its close
-  // time shortened to `go_deadline` (unix seconds, decimal string). Emitted
-  // once per pool, only when the shortening actually moved the deadline.
-  layout('GoTimerStarted', (r) => ({
-    pool: r.pubkey(),
-    go_deadline: r.i64(),
+  // (`GoTimerStarted` — the first cut's option-B go-timer — was removed by
+  // the 2026-09-07 ruling before any deployment emitted it; no ledger holds
+  // one, so its layout is simply gone.)
+
+  // Prompt v2 §B.6: a tier's slot freed (Paid or Closed) and its cooldown
+  // started — the "next pool in" countdown's source. `next_open_at` is unix
+  // seconds as a decimal string.
+  layout('TierSlotFreed', (r) => ({
+    tier: r.u8(),
+    pool_id: r.u64(),
+    next_open_at: r.i64(),
   }));
 
   layout('PoolSecretRevealed', (r) => ({
@@ -260,11 +265,30 @@ export function registerBlottoEventLayouts(): void {
     amount: r.u64(),
   }));
 
+  // Since 2026-09-07 (founder ruling 4) a forfeit moves NOTHING: the share
+  // stays in the pool's vault (`destination` = the vault itself) until
+  // `NextPlacePaid` pays it to the next eligible place. The treasury report
+  // must NOT credit the platform on this event.
   layout('EscrowForfeited', (r) => ({
     pool: r.pubkey(),
     player: r.pubkey(),
     amount: r.u64(),
     destination: r.pubkey(),
+  }));
+
+  // One member's portion of a forfeited share (addendum ruling 3): `rank`
+  // is the paid player's committed competition rank (1 for a tied
+  // first-place member, 1 + k for the next rank after a k-way tie);
+  // `amount` is this member's portion — the share over `group_size`, plus
+  // the remainder for the lowest entry number. The events for one forfeited
+  // share sum to that share exactly.
+  layout('NextPlacePaid', (r) => ({
+    pool: r.pubkey(),
+    from: r.pubkey(),
+    to: r.pubkey(),
+    rank: r.u8(),
+    amount: r.u64(),
+    group_size: r.u16(),
   }));
 
   layout('RefundTriggered', (r) => ({
@@ -309,5 +333,22 @@ export function registerBlottoEventLayouts(): void {
   // Borsh bools, one byte each.
   layout('TiersOpened', (r) => ({
     open_tiers: Array.from({ length: 7 }, () => r.bool()),
+  }));
+
+  // ---- 2026-09-07 admin events (prompt v2 §A, §B, §G) ----
+
+  layout('KeeperSet', (r) => ({
+    keeper: r.pubkey(),
+  }));
+
+  layout('PoolTimingSet', (r) => ({
+    fill_deadline_seconds: r.i64(),
+    cooldown_seconds: r.i64(),
+  }));
+
+  layout('ConfigMigrated', (r) => ({
+    keeper: r.pubkey(),
+    fill_deadline_seconds: r.i64(),
+    cooldown_seconds: r.i64(),
   }));
 }

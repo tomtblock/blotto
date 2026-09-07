@@ -57,7 +57,9 @@ fn commit_vrf_for_real(env: &mut Env, pool_id: u64) {
 fn lifecycle_log_fixture() {
     let Some(mut env) = Env::new() else { return };
 
-    // Pool 1: full lifecycle with a flagged winner, escrow release+forfeit.
+    // Pool 1: full lifecycle with two flagged tied winners — escrow release,
+    // an admin forfeit (moves nothing) and the next-place payout of the forfeited
+    // share to the cleared tied member (ruling 4, 2026-09-07).
     env.open_ready_pool(1, 0);
     let mut players: Vec<(Keypair, Pubkey)> = Vec::new();
     for _ in 0..64 {
@@ -79,9 +81,13 @@ fn lifecycle_log_fixture() {
     env.send(&[ix], &[&settlement]).unwrap();
     // D-E2 over D3-B: commit a two-way tie for first (seats 0 and 1, pot / 2
     // each — both flagged above, so the fixture carries escrow on BOTH paid
-    // seats), then pay both in one batch.
-    let mut args = [1u8; 32].to_vec();
-    args.extend_from_slice(&encode_payouts(&tied_first_payouts(TIER_POTS[0], 2)));
+    // seats) under a REAL results root (the next-place payout below proves against
+    // it), then pay both in one batch.
+    let payouts = tied_first_payouts(TIER_POTS[0], 2);
+    let wallets: Vec<Pubkey> = players.iter().map(|(p, _)| p.pubkey()).collect();
+    let (leaves, _ranks) = results_leaves(&wallets, &payouts);
+    let mut args = merkle_root(&leaves).to_vec();
+    args.extend_from_slice(&encode_payouts(&payouts));
     let ix = settle_ix(&settlement.pubkey(), 1, "commit_results", &args);
     env.send(&[ix], &[&settlement]).unwrap();
     let metas: Vec<(Pubkey, Pubkey)> = players[..2].iter().map(|(p, e)| (p.pubkey(), *e)).collect();
@@ -94,7 +100,24 @@ fn lifecycle_log_fixture() {
         &players[0].0.pubkey(),
     );
     env.send(&[ix], &[&settlement]).unwrap();
-    let ix = forfeit_escrow_ix(&settlement.pubkey(), 1, &players[1].1);
+    // Admin forfeit (EscrowForfeited with destination = the pool's vault),
+    // then the next-place payout to seat 0 — the tied member whose review cleared —
+    // as NextPlacePaid.
+    let ix = forfeit_escrow_ix(&env.admin.pubkey(), 1, &players[1].1);
+    env.send(&[ix], &[]).unwrap();
+    let ix = pay_next_place_ix(
+        &settlement.pubkey(),
+        1,
+        &players[1].1,
+        &players[0].1,
+        &players[0].0.pubkey(),
+        1,
+        TIER_POTS[0] / 2,
+        &merkle_proof(&leaves, 0),
+        1,
+        true,
+        &[],
+    );
     env.send(&[ix], &[&settlement]).unwrap();
 
     // A fixture round of the treasury instructions (D-A1 v2): a deposit and
@@ -118,9 +141,22 @@ fn lifecycle_log_fixture() {
         &[1, 0, 0, 0, 0, 0, 0],
     );
     env.send(&[ix], &[]).unwrap();
+    // The 2026-09-07 admin events, restated at their launch values
+    // (KeeperSet, PoolTimingSet), and ConfigMigrated from a real migration
+    // of an old-size account (the tail is rewritten to the same values).
+    let ix = set_keeper_ix(&env.admin.pubkey(), &settlement.pubkey());
+    env.send(&[ix], &[]).unwrap();
+    let ix = set_pool_timing_ix(&env.admin.pubkey(), 12 * 60 * 60, 5 * 60);
+    env.send(&[ix], &[]).unwrap();
+    downgrade_config_to_v1(&mut env.svm);
+    let ix = migrate_config_ix(&env.admin.pubkey(), &settlement.pubkey());
+    env.send(&[ix], &[]).unwrap();
 
     // Pool 2: the refund fork — opened by hand so the VRF seed lands via a
-    // REAL commit_vrf_seed (emitting PoolVrfSeeded into the fixture).
+    // REAL commit_vrf_seed (emitting PoolVrfSeeded into the fixture). Tier
+    // 0 cooled down while pool 1's events above were produced (5 min);
+    // wait it out explicitly so the fixture does not depend on that.
+    env.advance_time(5 * 60);
     let ix = open_pool_ix(&settlement.pubkey(), 2, 0, [9; 32], env.sealing_secret_hash);
     env.send(&[ix], &[&settlement]).unwrap();
     commit_vrf_for_real(&mut env, 2);
@@ -128,7 +164,7 @@ fn lifecycle_log_fixture() {
     env.send(&[ix], &[&settlement]).unwrap();
     let refunders: Vec<(Keypair, Pubkey)> =
         (0..2).map(|_| env.register_player(2).unwrap()).collect();
-    env.advance_time(72 * 3600 + 1);
+    env.advance_time(12 * 3600 + 1);
     let ix = trigger_refund_ix(&settlement.pubkey(), 2);
     env.send(&[ix], &[&settlement]).unwrap();
     for (player, entry) in &refunders {
@@ -136,12 +172,14 @@ fn lifecycle_log_fixture() {
         env.send(&[ix], &[&settlement]).unwrap();
     }
 
-    // Pool 3: the minimum-field path (D-E4) — 52 seats start the go-timer
-    // (GoTimerStarted), the deadline passes, `seal_at_deadline` closes the
-    // pool (PoolSealed with entrants = 52), and the winner takes the pot.
+    // Pool 3: the minimum-field path (D-E4, option A) — 52 seats, the 12 h
+    // deadline passes, `seal_at_deadline` closes the pool (PoolSealed with
+    // entrants = 52), and the winner takes the pot. Pool 2 closing stamped
+    // the tier's cooldown (TierSlotFreed); wait it out.
+    env.advance_time(5 * 60);
     env.open_ready_pool(3, 0);
     let field: Vec<(Keypair, Pubkey)> = (0..52).map(|_| env.register_player(3).unwrap()).collect();
-    env.advance_time(6 * 3600 + 1);
+    env.advance_time(12 * 3600 + 1);
     let ix = seal_at_deadline_ix(&settlement.pubkey(), 3);
     env.send(&[ix], &[&settlement]).unwrap();
     let ix = settle_ix(&settlement.pubkey(), 3, "reveal_pool_secret", &secret);

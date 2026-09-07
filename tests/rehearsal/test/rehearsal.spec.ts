@@ -107,6 +107,8 @@ describe('the offline dress rehearsal', () => {
         battlesHash: '00'.repeat(32),
         flagged: false,
         refunded: false,
+        settled: false,
+        forfeited: false,
       }))
     );
     const outcome = await crankPool(

@@ -6,11 +6,13 @@
  *     Open pool past its deadline is sealed and cranked when it holds the
  *     minimum field (52..63 entrants, D-E4) and refund-triggered and
  *     drained when it does not.
- *   - KEEP: every open tier always has exactly one Open pool. The moment a
+ *   - KEEP: every open tier always has exactly one Open pool. Once a
  *     tier's slot frees (the pool reaches Paid or Closed — sequential
- *     pools, D-A1 revised — which clears `Config.active_pool_by_tier`),
- *     the next tick opens the successor: sealing key from custody →
- *     `open_pool` → `commit_vrf_seed` → `create_pass_collection`.
+ *     pools, D-A1 revised — which clears `Config.active_pool_by_tier`) AND
+ *     its cooldown has elapsed (`Config.tier_next_open_at`, prompt v2
+ *     §B.6 — five minutes at launch), the next tick opens the successor:
+ *     sealing key from custody → `open_pool` (keeper-signed, prompt v2 §A)
+ *     → `commit_vrf_seed` → `create_pass_collection`.
  *
  * POLL-BASED AND IDEMPOTENT. There is no local database: every tick reads
  * the chain's CURRENT state and does only what is missing, so a crashed
@@ -140,10 +142,8 @@ export function makeDaemon(deps: DaemonDeps): Daemon {
     // (A full pool can never be Open: the 64th `register` seals it.)
     if (pool.state === 'Open' && deps.now() > pool.fillDeadline) {
       if (BigInt(pool.entrants) >= MIN_SEATS) {
-        // D-E4: the minimum field is met — seal and play. The effective
-        // deadline is the go-timer's when the 52nd seat landed early enough,
-        // or the 72h fill deadline otherwise; the chain view carries
-        // whichever applies.
+        // D-E4 (option A): the minimum field is met — seal and play. One
+        // clock: the deadline set at open (12 h at launch), never moved.
         await deps.chain.sealAtDeadline(poolId);
         report.sealedAtDeadline.push(poolId);
         log('seal_at_deadline', { poolId: poolId.toString(), entrants: pool.entrants });
@@ -237,8 +237,8 @@ export function makeDaemon(deps: DaemonDeps): Daemon {
 
     // ---- OPEN: the treasury policy decides (D-A1 revised) ----------------
     // `nextOpenable` mirrors `open_pool`'s gates exactly (sequential rule +
-    // policy floor), lowest tier first; loop until it says none, so one
-    // tick opens every tier the treasury can carry.
+    // cooldown + policy floor), lowest tier first; loop until it says none,
+    // so one tick opens every tier the treasury can carry.
     if (!cfg.paused) {
       for (let guard = 0; guard < cfg.openTiers.length; guard++) {
         try {
@@ -252,7 +252,7 @@ export function makeDaemon(deps: DaemonDeps): Daemon {
               return (await deps.chain.getPool(id)).state;
             })
           );
-          const verdict = nextOpenable(cur, balance, states);
+          const verdict = nextOpenable(cur, balance, states, deps.now());
           if (verdict.tier === null) {
             log('keeper:hold', { reason: verdict.reason });
             break;

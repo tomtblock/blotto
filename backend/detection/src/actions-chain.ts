@@ -4,7 +4,9 @@
  * pool IDS (the PDA seed) — `resolvePoolId` bridges them (deployment wires
  * it to a Pool-account read: the id is the first field after the
  * discriminator). The chain client itself is `@blotto/reveal`'s
- * `Web3Chain`, the same settlement-signed client the daemon drives.
+ * `Web3Chain`, the same settlement-signed client the daemon drives — which
+ * holds NO admin key, so `forfeitEscrow` (admin-signed since 2026-09-07)
+ * throws here by design; see review.ts.
  */
 
 import type { SettlementChain } from '../../reveal/src/chain';

@@ -128,4 +128,41 @@ pub enum ErrorCode {
     FieldReached,
     #[msg("Pot must be below the minimum field's entries (MIN_SEATS × price)")]
     PotExceedsMinimumField,
+    // 6054 — prompt v2 / founder rulings 2026-09-07 (appended, never inserted)
+    #[msg("Only the keeper may open a pool before the liveness fallback")]
+    NotKeeper,
+    #[msg("Tier is cooling down; its next pool cannot open yet")]
+    TierCoolingDown,
+    #[msg("Service keys (admin, keeper, entry signer, settlement signer) cannot enter")]
+    ServiceKeyCannotEnter,
+    #[msg("Escrow was forfeited; it can only be paid to the next place, not released")]
+    EscrowForfeitedAlready,
+    #[msg("Escrow has not been forfeited; nothing to pay the next place")]
+    EscrowNotForfeited,
+    #[msg("Next-place payout rank must be first place or the next competition rank")]
+    NextPlaceRankInvalid,
+    #[msg("Next-place payout target is not the next eligible place")]
+    NextPlaceIneligible,
+    #[msg("Merkle proof does not reach the committed results root")]
+    InvalidMerkleProof,
+    #[msg("Config already carries the migrated layout")]
+    ConfigAlreadyMigrated,
+    #[msg("Config account is not the pre-migration layout")]
+    ConfigNotMigratable,
+    #[msg("Escrow auto-release is not due yet")]
+    AutoReleaseNotDue,
+    #[msg("Pool timings must be positive")]
+    InvalidTiming,
+    /// 6066 — `pay_next_place`: a first-place seat that must be shown
+    /// ineligible is still under review (flagged, escrow held, not yet
+    /// forfeited or released). Resolve the review first; next-place payout never
+    /// skips a pending one.
+    #[msg("A first-place review is still pending; resolve it before paying the next place")]
+    NextPlaceReviewPending,
+    /// 6067 — `pay_next_place`: the split arguments disagree with the group
+    /// (group size or remainder flag differs from the on-chain first-place
+    /// group, or from the size fixed by this share's earlier payments), or
+    /// the last payment would leave the remainder stranded.
+    #[msg("Split arguments disagree with the group or with earlier payments of this share")]
+    NextPlaceSplitMismatch,
 }

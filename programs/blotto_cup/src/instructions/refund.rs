@@ -103,12 +103,16 @@ pub fn handle_trigger_refund(ctx: Context<TriggerRefund>, _pool_id: u64) -> Resu
 
     // The tier slot frees only when the pool is fully settled (sequential
     // pools, D-A1 revised): here on the straight-to-Closed empty path, else
-    // when the last `refund` closes the pool.
+    // when the last `refund` closes the pool. Freeing stamps the cooldown.
     if pool.state == PoolState::Closed {
         let tier_idx = pool.tier as usize;
-        if ctx.accounts.config.active_pool_by_tier[tier_idx] == pool.id {
-            ctx.accounts.config.active_pool_by_tier[tier_idx] = 0;
-        }
+        let pool_id = pool.id;
+        crate::instructions::slot::free_tier_slot(
+            &mut ctx.accounts.config,
+            tier_idx,
+            pool_id,
+            now,
+        )?;
     }
 
     emit!(RefundTriggered {
@@ -183,11 +187,17 @@ pub fn handle_refund(ctx: Context<Refund>, _pool_id: u64) -> Result<()> {
     pool.refunded_count += 1;
     if pool.refunded_count == pool.entrants {
         pool.state = PoolState::Closed;
-        // Fully refunded — the tier's slot frees (sequential pools).
+        // Fully refunded — the tier's slot frees and its cooldown starts
+        // (sequential pools; prompt v2 §B.6).
+        let now = Clock::get()?.unix_timestamp;
         let tier_idx = pool.tier as usize;
-        if ctx.accounts.config.active_pool_by_tier[tier_idx] == pool.id {
-            ctx.accounts.config.active_pool_by_tier[tier_idx] = 0;
-        }
+        let pool_id = pool.id;
+        crate::instructions::slot::free_tier_slot(
+            &mut ctx.accounts.config,
+            tier_idx,
+            pool_id,
+            now,
+        )?;
     }
 
     emit!(Refunded {

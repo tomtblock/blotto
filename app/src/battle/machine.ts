@@ -122,9 +122,12 @@ function lockCurrent(s: BattleScreenState): BattleFlowState {
   return freshScreen(s.screen + 1, { ...s, locked, timingsMs: timings });
 }
 
-/** Expiry: current screen locks as shown; unvisited battles lock even. */
+/** Expiry (R9-b, founder addendum 2026-09-07): every battle NOT locked —
+ * the one on screen included, whatever shape it had — is entered as the
+ * even split. Only `lock_in` records a shape; running out of time never
+ * does. Deterministic: same inputs, same result, always. */
 function lockAllRemaining(s: BattleScreenState): ReviewState {
-  const battles = [...s.locked, s.alloc];
+  const battles = [...s.locked, EVEN_SPLIT];
   const timings = [...s.timingsMs, Math.min(s.screenElapsedMs, s.budgetMs)];
   while (battles.length < BATTLES) {
     battles.push(EVEN_SPLIT);
