@@ -229,15 +229,20 @@ Stated plainly, because two of these are published as though they were.
    with no source configured. The daemon does not screen the winner; that is
    Stage F, gated on the founder's decision recorded in the audit, because a
    match at resolving cannot be held with the escrow that exists.
-2. **The 12-hour review clock.** The rules page says an undecided flag is
-   cleared and the prize paid within 12 hours. No such timer exists yet; the
-   program has only the seven-day permissionless safeguard (Stage D builds the
-   daemon-side release). *Resolving itself is built* (Stage C): not a
-   `PoolState` but a flag the read API derives — a pool is resolving while it
-   carries a held share and `REVIEW_WINDOW_SECS` has not passed since the
-   indexer saw its `PrizesPaid` — served as `held_shares` / `resolving` /
-   `resolving_until` on every pool row and rendered as the RESOLVING badge with
-   a countdown on both pool pages.
+2. **The next-place payment after an upheld flag.** Nothing in any service
+   or script calls `pay_next_place` (audit O14): an upheld flag's share sits
+   in the pool vault, correctly refused by every release path, with no
+   operator route to the next eligible place. The program side is complete;
+   the driver is not. *Resolving and the 12-hour clock are built* (Stages C
+   and D): resolving is a flag the read API derives — a pool is resolving
+   while it carries a held share and `REVIEW_WINDOW_SECS` has not passed since
+   the indexer saw its `PrizesPaid` — rendered as the RESOLVING badge with a
+   countdown; and the daemon's review clock releases a settled, flagged,
+   still-escrowed, not-forfeited share to its player once the same window has
+   passed since the on-chain `escrowed_at`, holding the pool non-terminal
+   until then. The flag bit stays set (`clear_flag` refuses a settled entry by
+   design); the escrow reaching zero is the record that review ended without
+   an upheld flag.
 3. **The appeal route.** Published as a 7-day window decided by a second
    reviewer. The review service records decisions but has no appeal path.
 4. **The territory list** covers Belgium and Australia only. The jurisdictions

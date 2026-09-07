@@ -6,6 +6,19 @@
  *     Open pool past its deadline is sealed and cranked when it holds the
  *     minimum field (52..63 entrants, D-E4) and refund-triggered and
  *     drained when it does not.
+ *   - THE REVIEW CLOCK (Phase 2 Stage D): the rules page's "if no decision
+ *     is made within 12 hours, the flag is cleared and the prize is paid".
+ *     A settled pool's flagged, still-escrowed, not-forfeited share is
+ *     released to its player once `REVIEW_WINDOW_SECS` has passed since
+ *     the on-chain `escrowed_at` — the settlement signer's reviewed path
+ *     of `release_escrow`. A pool with such a share outstanding is NOT
+ *     terminal for the sweep, so the floor holds and every tick re-checks
+ *     it until the last hold is decided or released. Mechanically the flag
+ *     bit stays set (`clear_flag` refuses a settled entry by design); the
+ *     escrow falling to zero is the record that review ended without an
+ *     upheld flag. A share escrowed for KYC alone (not flagged) is left
+ *     to its packet. A FORFEITED share is never touched here: it waits
+ *     for `pay_next_place`, which no service drives yet (audit O14).
  *   - KEEP: every open tier always has exactly one Open pool. Once a
  *     tier's slot frees (the pool reaches Paid or Closed — sequential
  *     pools, D-A1 revised — which clears `Config.active_pool_by_tier`) AND
@@ -40,7 +53,7 @@
  * crank itself took in Phase 2.
  */
 
-import { MIN_SEATS } from '../../scoring/src';
+import { MIN_SEATS, REVIEW_WINDOW_SECS } from '../../scoring/src';
 import type { KeeperChain, PoolStateName } from './chain';
 import { nextOpenable, type TierPoolStates } from './treasury';
 import type { CrankOutcome } from './crank';
@@ -113,6 +126,9 @@ export interface TickReport {
   sealedAtDeadline: bigint[];
   /** Launch-completion steps performed (VRF commits, collections). */
   completed: { poolId: bigint; step: 'vrf' | 'pass_collection' }[];
+  /** Held shares released to their players by the review clock this tick
+   * (Phase 2 Stage D): the twelve-hour window passed with no decision. */
+  released: { poolId: bigint; player: string }[];
   /** Every caught failure — the tick continues past each. */
   errors: DaemonError[];
 }
@@ -177,7 +193,34 @@ export function makeDaemon(deps: DaemonDeps): Daemon {
       pool = await deps.chain.getPool(poolId);
     }
 
-    return TERMINAL.has(pool.state);
+    // ---- THE REVIEW CLOCK (Phase 2 Stage D) -----------------------------
+    // Held-for-review = settled into escrow under a flag and not forfeited.
+    // Released once the published window has passed since the on-chain
+    // escrow instant; otherwise it keeps the pool non-terminal so the
+    // sweep returns next tick. A throw from `releaseEscrow` propagates to
+    // the sweep's per-pool catch and is retried the same way.
+    let holdOutstanding = false;
+    if (pool.state === 'Scored' || pool.state === 'Paid') {
+      const now = deps.now();
+      for (const e of await deps.chain.getEntries(poolId)) {
+        const underReview = e.settled && e.flagged && !e.forfeited && e.escrowLamports > 0n;
+        if (!underReview) continue;
+        if (now >= e.escrowedAt + REVIEW_WINDOW_SECS) {
+          await deps.chain.releaseEscrow(poolId, e.player);
+          report.released.push({ poolId, player: e.player });
+          log('release_escrow', {
+            poolId: poolId.toString(),
+            player: e.player,
+            escrowedAt: e.escrowedAt.toString(),
+            reason: 'review window passed with no decision',
+          });
+        } else {
+          holdOutstanding = true;
+        }
+      }
+    }
+
+    return TERMINAL.has(pool.state) && !holdOutstanding;
   }
 
   /** Land whatever launch steps the tier's Open pool still misses. */
@@ -203,6 +246,7 @@ export function makeDaemon(deps: DaemonDeps): Daemon {
       refundsTriggered: [],
       sealedAtDeadline: [],
       completed: [],
+      released: [],
       errors: [],
     };
 

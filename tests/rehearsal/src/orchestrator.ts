@@ -22,7 +22,7 @@ import {
   FakeChain,
   MemoryPublisher,
   crankPool,
-  type ChainEntryView,
+  type FakeEntry,
   type CrankOutcome,
   type RevealedForDetection,
 } from '../../../backend/reveal/src';
@@ -66,7 +66,7 @@ export async function runOfflinePool(
   const { publicKey } = await custody.createPoolKey(poolId);
   const population = options.population ?? poolPopulation(poolSeed);
   const players: string[] = [];
-  const entries: ChainEntryView[] = [];
+  const entries: FakeEntry[] = [];
 
   population.forEach((entrant, i) => {
     const player = base58Encode(sha(`player:${poolSeed}:${i}`));

@@ -414,6 +414,8 @@ export class Web3Chain implements KeeperChain {
           refunded: d[181] !== 0,
           settled: d[180] !== 0,
           forfeited: d[199] !== 0,
+          escrowLamports: d.readBigUInt64LE(182),
+          escrowedAt: d.readBigInt64LE(191),
         };
       })
       .sort((a, b) => a.index - b.index);

@@ -10,7 +10,7 @@ import {
   FakeChain,
   MemoryPublisher,
   scoreWithMissing,
-  type ChainEntryView,
+  type FakeEntry,
 } from '../src';
 import {
   LocalCustody,
@@ -66,7 +66,7 @@ async function buildSealedPool(sabotage: {
   const { publicKey } = await custody.createPoolKey(1n);
   const players: string[] = [];
   const battles: BattleSet[] = [];
-  const entries: ChainEntryView[] = [];
+  const entries: FakeEntry[] = [];
 
   for (let i = 0; i < 64; i++) {
     const player = base58Encode(sha(`player:${i}`));

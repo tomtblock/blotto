@@ -108,6 +108,7 @@ export function healthPayload(
               cranked: state.lastTick.report.cranked.length,
               refundsTriggered: state.lastTick.report.refundsTriggered.length,
               sealedAtDeadline: state.lastTick.report.sealedAtDeadline.length,
+              released: state.lastTick.report.released.length,
               errors: state.lastTick.report.errors.length,
             },
     },
