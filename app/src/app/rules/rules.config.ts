@@ -2,20 +2,20 @@
  * The rules tab's single data source (D-B6, ratified 2026-08-27). EVERY
  * number rendered on the rules page derives here from the same shared
  * constants the prize path uses — TIER_ENTRY_LAMPORTS / TIER_POT_LAMPORTS /
- * amountForRank from @blotto/scoring (pinned to the Python oracle and, via
- * LiteSVM, to the on-chain program) — and from the founder-owned config
- * files (territories, terms). No hand-typed figures, so the page cannot
- * drift from what the program pays.
+ * MIN_SEATS / GO_TIMER_SECS from @blotto/scoring (pinned to the Python
+ * oracle and, via LiteSVM, to the on-chain program) — and from the
+ * founder-owned config files (territories, terms). No hand-typed figures,
+ * so the page cannot drift from what the program pays or enforces.
  *
  * All lamport arithmetic is bigint; formatting to SOL happens at the edge
  * through the same float-free formatter the rest of the app uses.
  */
 
 import {
-  PAID_RANKS,
+  GO_TIMER_SECS,
+  MIN_SEATS,
   TIER_ENTRY_LAMPORTS,
   TIER_POT_LAMPORTS,
-  amountForRank,
 } from '@blotto/scoring';
 import territories from '@config/territories.json';
 import terms from '@config/terms.json';
@@ -25,9 +25,8 @@ import { lamportsToSol } from '@/data/format';
 export interface TierRow {
   tier: number;
   entrySol: string;
+  /** The FIXED prize pool — under D-E2 the winner's prize, whole. */
   potSol: string;
-  /** Prize per position 1..16, SOL strings. */
-  prizesSol: string[];
 }
 
 /** One row per configured tier, straight from the shared constants. */
@@ -40,12 +39,17 @@ export function tierRows(): TierRow[] {
       tier,
       entrySol: lamportsToSol(entry.toString()),
       potSol: lamportsToSol(pot.toString()),
-      prizesSol: Array.from({ length: PAID_RANKS }, (_, i) =>
-        lamportsToSol(amountForRank(pot, i + 1).toString())
-      ),
     };
   });
 }
+
+/** The field-size numbers the rules prose carries (D-E4), from the shared
+ * mirrors of the program constants. Small display integers, not lamports —
+ * the Number conversion is exact. */
+export const FIELD_RULES = {
+  minSeats: Number(MIN_SEATS),
+  goTimerHours: Number(GO_TIMER_SECS / 3600n),
+} as const;
 
 /** Display names for the ISO codes the schedule can carry today; an
  * unmapped code renders as the code itself (never silently dropped). */
@@ -83,7 +87,6 @@ export const CURRENT_TERMS_VERSION: number = terms.version;
 export type RulesSection =
   | { id: string; heading: string; kind: 'text'; body: string; appendix?: string }
   | { id: string; heading: string; kind: 'tiers'; body: string; rows: TierRow[] }
-  | { id: string; heading: string; kind: 'prizes'; body: string; rows: TierRow[] }
   | { id: string; heading: string; kind: 'availability'; body: string; data: Availability }
   | { id: string; heading: string; kind: 'verify'; body: string; href: string; linkText: string };
 
@@ -91,15 +94,29 @@ export type RulesSection =
 export function rulesSections(): RulesSection[] {
   const rows = tierRows();
   const r = COPY.rules;
+  const { minSeats, goTimerHours } = FIELD_RULES;
   return [
-    { id: 'how-to-enter', heading: r.headings.howToEnter, kind: 'text', body: r.howToEnter },
+    {
+      id: 'how-to-enter',
+      heading: r.headings.howToEnter,
+      kind: 'text',
+      body: r.howToEnter(minSeats),
+    },
     { id: 'price', heading: r.headings.price, kind: 'tiers', body: r.priceIntro, rows },
-    { id: 'prizes', heading: r.headings.prizes, kind: 'prizes', body: r.prizeIntro, rows },
+    // D-E2: one paid place — the prize IS the pot in the tier table above,
+    // so this section is the rule, not a second table.
+    { id: 'prizes', heading: r.headings.prizes, kind: 'text', body: r.prizeIntro },
     { id: 'scoring', heading: r.headings.scoring, kind: 'text', body: r.scoring },
     { id: 'ties', heading: r.headings.ties, kind: 'text', body: r.ties },
     { id: 'randomness', heading: r.headings.randomness, kind: 'text', body: r.randomness },
     { id: 'sealing', heading: r.headings.sealing, kind: 'text', body: r.sealing },
-    { id: 'refund', heading: r.headings.refund, kind: 'text', body: r.refund },
+    {
+      id: 'field-size',
+      heading: r.headings.fieldSize,
+      kind: 'text',
+      body: r.fieldSize(minSeats, goTimerHours),
+    },
+    { id: 'refund', heading: r.headings.refund, kind: 'text', body: r.refund(minSeats) },
     {
       id: 'pool-opening',
       heading: r.headings.poolOpening,

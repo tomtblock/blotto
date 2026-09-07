@@ -18,14 +18,18 @@ Scoring rules implemented (PID §4.4/§5, TECH-ARCH §6):
     index never breaks a rank
   - prizes: the pot is the tier's FIXED constant (D-A1 revised, funded from
     the prize treasury at open_pool, never derived from entries — the launch
-    table below); a tie group at rank r of size s occupies
-    positions r..r+s-1 and its combined prize is the sum of the band amounts
-    of those positions that are <= 16 (PRIZE_BANDS_1024[p-1]/1024 of the pot
-    each — exact 1024ths, NOT the rounded bps column, see
+    table below); ONE paid place (D-E2, ratified 2026-09-06): a tie group at
+    rank r of size s occupies positions r..r+s-1 and its combined prize is
+    the sum of the band amounts of those positions that are <= PAID_RANKS
+    (PRIZE_BANDS_1024[p-1]/1024 of the pot each — the table is [1024], so
+    position 1 is the whole pot and every other position is zero; see
     programs/blotto_cup/src/constants.rs); each member takes
     floor(combined/s), the indivisible remainder goes to the group's lowest
-    entry index; every tied member with a nonzero share is paid (the paid
-    set can exceed 16 seats)
+    entry index; every tied member with a nonzero share is paid — so the
+    winner takes the pot, or a tie for first splits it, and nobody else is
+    paid
+  - field size: a pool runs with 52..64 players (D-E4, MIN_SEATS = 52); the
+    n = 52 and n = 58 pool vectors below cover the minimum-field path
   - results leaf: sha256(0x00 || player(32) || rank(u8) || amount(u64 LE)),
     node: sha256(0x01 || left || right); an odd node is PROMOTED, not
     duplicated; leaves ordered (rank asc, entry index asc)
@@ -46,7 +50,9 @@ import sys
 STATS = 5
 BATTLES = 7
 CAPACITY = 64
-PRIZE_BANDS_1024 = [270, 158, 102, 78, 50, 50, 50, 50, 27, 27, 27, 27, 27, 27, 27, 27]
+MIN_SEATS = 52  # D-E4: the smallest field that runs
+PAID_RANKS = 1  # D-E2: winner takes all
+PRIZE_BANDS_1024 = [1024]
 ENTRY_LAMPORTS = 100_000_000  # the 0.1 SOL tier anchors every amount vector
 # The launch economics table (D1 prices; D-A1 revised FIXED pots) — mirrors
 # constants.rs. A pot is a table entry, never arithmetic over entries.
@@ -135,7 +141,7 @@ def score_pool(players: list[list[list[int]]]) -> list[dict]:
 
 
 def band_amount(pot: int, position: int) -> int:
-    if 1 <= position <= 16:
+    if 1 <= position <= PAID_RANKS:
         return pot * PRIZE_BANDS_1024[position - 1] // 1024
     return 0
 
@@ -155,7 +161,7 @@ def assign_prizes(results: list[dict], pot: int) -> dict[int, int]:
         low = min(seats)
         for seat in seats:
             amounts[seat] = each + (rem if seat == low else 0)
-    expected = sum(band_amount(pot, p) for p in range(1, min(16, len(results)) + 1))
+    expected = sum(band_amount(pot, p) for p in range(1, min(PAID_RANKS, len(results)) + 1))
     assert sum(amounts.values()) == expected, "split-pot conservation failed"
     return amounts
 
@@ -267,9 +273,10 @@ def pool_vector(
 
 
 def split_case(name: str, group_sizes: list[int], entry_lamports: int) -> dict:
-    """A constructed ranking with the given tie-group sizes over 64 seats,
-    fed through the SAME assign_prizes as the real pools."""
-    assert sum(group_sizes) == CAPACITY
+    """A constructed ranking with the given tie-group sizes over a field of
+    52..64 seats (D-E4), fed through the SAME assign_prizes as the real
+    pools."""
+    assert MIN_SEATS <= sum(group_sizes) <= CAPACITY, name
     results = []
     rank = 1
     seat = 0
@@ -314,6 +321,13 @@ def main() -> None:
                 f"tier_{entry}", tier_players, with_tree=True, entry_lamports=entry
             )
         )
+    # Minimum-field pools (D-E4): a pool that sealed at its go-deadline with
+    # 52 or 58 players. Same rules, a shorter leaf list, the whole pot to
+    # rank 1 — the tree over n < 64 leaves exercises the odd node being
+    # carried up unhashed at different depths.
+    for n in (MIN_SEATS, 58):
+        players = [battles_from_counter(800_000 + n * 1000 + i * 100) for i in range(n)]
+        pools.append(pool_vector(f"field_{n}", players, with_tree=True))
     # Edge cases. Identical battle sets are exact ties (D3-B): every member
     # shares rank 1 and the pot splits evenly.
     even = [[20, 20, 20, 20, 20] for _ in range(BATTLES)]
@@ -324,25 +338,34 @@ def main() -> None:
         pool_vector("all_tied_pairwise", [[alloc] * BATTLES] * 4, with_tree=False)
     )
 
-    # D3-B split-pot cases, through the same assign_prizes as the pools:
-    # a two-way tie for 1st; a three-way tie at 4th-6th with a visible
-    # integer remainder (890_000_000 / 3 leaves 2 lamports to the lowest
-    # seat); a two-way tie at 16th whose paid set is 17 seats; and a 64-way
-    # tie splitting the whole pot.
+    # D3-B split-pot cases under D-E2, through the same assign_prizes as the
+    # pools: a two-way tie for 1st at EVERY tier (pot / 2, exact — every pot
+    # is even); a three-way tie for 1st at tier 0 with the visible integer
+    # remainder (4_000_000_000 / 3 leaves 1 lamport to the lowest seat); a
+    # tie for SECOND, which pays exactly one seat (nothing below first is
+    # paid); a 64-way tie splitting the whole pot; and the same shapes over
+    # a 52-seat field.
     split_cases = [
-        split_case("two_way_first", [2] + [1] * 62, ENTRY_LAMPORTS),
-        split_case("three_way_4_6", [1, 1, 1, 3] + [1] * 58, ENTRY_LAMPORTS),
-        split_case("straddle_17", [1] * 15 + [2] + [1] * 47, ENTRY_LAMPORTS),
+        split_case(f"two_way_first_tier_{entry}", [2] + [1] * 62, entry)
+        for entry in TIER_ENTRY_LAMPORTS
+    ] + [
+        split_case("three_way_first", [3] + [1] * 61, ENTRY_LAMPORTS),
+        split_case("tie_for_second", [1, 2] + [1] * 61, ENTRY_LAMPORTS),
         split_case("all_identical_64", [64], ENTRY_LAMPORTS),
-        split_case("three_way_4_6_tier_0_75", [1, 1, 1, 3] + [1] * 58, 750_000_000),
+        split_case("two_way_first_field_52", [2] + [1] * 50, ENTRY_LAMPORTS),
+        split_case("three_way_first_field_52", [3] + [1] * 49, ENTRY_LAMPORTS),
+        split_case("all_identical_52", [52], ENTRY_LAMPORTS),
     ]
 
-    # Per-tier prize tables: the 16 band amounts at every configured tier.
+    # Per-tier prize tables: the band amounts at every configured tier — one
+    # band under D-E2, equal to the pot.
     tier_tables = [
         {
             "entry_lamports": str(entry),
             "pot_lamports": str(pot_for_entry(entry)),
-            "bands": [str(band_amount(pot_for_entry(entry), p)) for p in range(1, 17)],
+            "bands": [
+                str(band_amount(pot_for_entry(entry), p)) for p in range(1, PAID_RANKS + 1)
+            ],
         }
         for entry in (100_000_000, 500_000_000, 750_000_000, 1_000_000_000,
                       2_500_000_000, 5_000_000_000, 7_500_000_000)
@@ -383,12 +406,16 @@ def main() -> None:
             ">=3 stats else draw; score in half-points (win 2, draw 1); rank by "
             "score desc, zones desc; equal on both = TIED, shared competition "
             "rank (D3-B), tie group splits the combined band prize of its "
-            "occupied positions <= 16 evenly, remainder to the lowest seat; "
+            "occupied positions <= PAID_RANKS (= 1, D-E2: the winner takes the "
+            "pot) evenly, remainder to the lowest seat; a pool runs with 52..64 "
+            "players (D-E4); "
             "leaf sha256(0x00||player||rank_u8||amount_u64le), node "
             "sha256(0x01||l||r), odd node promoted, leaves (rank asc, seat asc)"
         ),
         "entry_lamports": str(ENTRY_LAMPORTS),
         "pot_lamports": str(POT),
+        "paid_ranks": PAID_RANKS,
+        "min_seats": MIN_SEATS,
         "prize_bands_1024": PRIZE_BANDS_1024,
         "battle_cases": hand_battle_cases(),
         "pools": pools,

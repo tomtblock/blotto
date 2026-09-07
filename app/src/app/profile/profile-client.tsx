@@ -156,10 +156,10 @@ export function ProfileClient() {
           {COPY.profile.lifetime}
         </h2>
         <div className="flex flex-wrap items-end gap-x-10 gap-y-4">
-          <Stat label="Pools entered" value={profile.pools_entered} />
-          <Stat label="Paid finishes" value={profile.seats_paid} tone="brand" />
+          <Stat label={COPY.profile.poolsEntered} value={profile.pools_entered} />
+          <Stat label={COPY.profile.prizeFinishes} value={profile.seats_paid} tone="brand" />
           <Stat
-            label="Total prizes"
+            label={COPY.profile.totalPrizes}
             value={lamportsToSol(profile.total_won_lamports)}
             unit="SOL"
             tone="prize"

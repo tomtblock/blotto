@@ -221,7 +221,8 @@ input that differs between the rows below is how the entrant allocated
 stats across the seven battles. The spread between **random** (valid
 allocations with no intent) and **optimised** (a tuned three-stat plan) is
 the measured effect of that choice under the published scoring rule
-(battles won, then stats won; ties split evenly per D3-B):
+(battles won, then stats won; the ranked-first player takes the pot, a tie
+for first splitting it evenly per D3-B):
 
 | Class | Entrants | Rank-1 rate | Paid-seat rate | Eliminated from the paid set | Mean payout share of pot |
 |---|---|---|---|---|---|
@@ -238,9 +239,10 @@ which all 64 entrants play the SAME strategy class (with within-class
 uniqueness — no two entrants in a pool share an allocation set, see
 Methodology). When everyone is equally skilled, outcomes should spread
 toward the everyone-equal baseline: rank-1 rate near 1/64 (≈ 1.563%),
-paid-seat rate set by how the class's allocations tie under D3-B, and mean
-payout share at exactly 1.5625% of the pot (conservation forces the class
-total to equal the pot; the spread is who takes which slice).
+paid-seat rate equal to it (one paid place under D-E2: the paid set IS the
+rank-1 group, a tie for first splitting the pot per D3-B), and mean payout
+share at exactly 1.5625% of the pot (conservation forces the class total to
+equal the pot; the spread is who takes which slice).
 
 | Class (all 64 seats) | Entrants | Rank-1 rate | Paid-seat rate | Eliminated from the paid set | Mean payout share of pot |
 |---|---|---|---|---|---|
@@ -273,8 +275,10 @@ skill competition's outcomes should have.
 - **Definitions**: *rank-1 rate* — share of a class's entrants whose
   competition rank was 1 (ties share rank 1); *paid-seat rate* — share
   whose seat appears in the committed payout list (nonzero amount under the
-  D3-B split); *mean payout share* — the class's total committed lamports
-  over (pot × class entrants), in percent.
+  D3-B split — with one paid place, D-E2, this equals the rank-1 rate and
+  the column is kept so the two definitions are seen to agree); *mean
+  payout share* — the class's total committed lamports over (pot × class
+  entrants), in percent.
 - **Pipeline**: the real settlement crank over the offline chain mirror
   (\`FakeChain\`) — decrypt, score, rank, split-pot assignment, Merkle
   commitment, batched payout — with conservation asserted on every pool

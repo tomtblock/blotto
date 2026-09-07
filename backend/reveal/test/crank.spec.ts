@@ -135,9 +135,13 @@ describe('the settlement crank', () => {
     expect(bundle.scored_as_all_losses).to.deep.equal([]);
     expect(bundle.results_root).to.equal(hex(t.chain.committedRoots.get('1')!));
 
-    // Every committed seat got exactly its split-pot amount; total = pot.
+    // The committed set is exactly the rank-1 group (D-E2: one paid place,
+    // a tie for first splits the pot); every committed seat got exactly
+    // its split-pot amount; total = pot.
     const committed = (await t.chain.getPool(1n)).payouts;
-    expect(committed.length).to.be.at.least(16);
+    const winners = engine.filter((r) => r.rank === 1).map((r) => r.index);
+    expect(committed.map((c) => c.entryIndex)).to.deep.equal(winners);
+    expect(engine.filter((r) => r.rank > 1).every((r) => r.amountLamports === 0n)).to.equal(true);
     for (const c of committed) {
       expect(t.chain.paid.get(t.players[c.entryIndex])).to.equal(c.amountLamports);
       expect(c.amountLamports).to.equal(engine[c.entryIndex].amountLamports);
@@ -166,12 +170,16 @@ describe('the settlement crank', () => {
     const t = await buildSealedPool({});
     const deps = { chain: t.chain, custody: t.custody, ciphertexts: t.store, publisher: t.publisher };
 
-    // First run, but the chain dies after the first pay batch.
+    // First run, but the RPC dies AFTER the first pay batch landed and
+    // before its confirmation came back — the crash window that tempts a
+    // resumed crank into paying the same seats again. (Under D-E2 the paid
+    // set is usually one batch, so the crash has to sit after the landing,
+    // not between batches.)
     const original = t.chain.payPrizes.bind(t.chain);
     let batches = 0;
-    t.chain.payPrizes = async (poolId, ranks) => {
-      if (batches++ === 1) throw new Error('rpc died');
-      return original(poolId, ranks);
+    t.chain.payPrizes = async (poolId, seats) => {
+      await original(poolId, seats);
+      if (batches++ === 0) throw new Error('rpc died after the batch landed');
     };
     let failed = false;
     try {
@@ -187,7 +195,7 @@ describe('the settlement crank', () => {
     const pot = potForTier(0);
     let total = 0n;
     for (const v of t.chain.paid.values()) total += v;
-    expect(total).to.equal(pot, 'no rank paid twice, none skipped');
+    expect(total).to.equal(pot, 'no seat paid twice, none skipped');
   });
 
   it('scores lost, garbage and mismatched ciphertexts as all losses and publishes them', async function () {

@@ -20,7 +20,9 @@ import {
   merkleRoot,
   merkleProof,
   verifyProof,
+  PAID_RANKS,
   PRIZE_BANDS_1024,
+  TIER_ENTRY_LAMPORTS,
   type Allocation,
   type BattleSet,
   type PlayerResult,
@@ -44,7 +46,7 @@ describe('battle outcomes (hand-checked cases)', () => {
   }
 });
 
-describe('pool vectors (20 four-player + 5 full + edge cases)', () => {
+describe('pool vectors (20 four-player + 5 full + minimum-field + edge cases)', () => {
   for (const pool of vectors.pools) {
     it(pool.name, () => {
       const players: BattleSet[] = pool.players.map((p: any) => p.battles);
@@ -107,7 +109,7 @@ describe('split-pot cases (D3-B, through the same assignPrizes)', () => {
   for (const c of vectors.split_cases) {
     it(c.name, () => {
       // Rebuild the constructed ranking the oracle described: consecutive
-      // tie groups over 64 seats.
+      // tie groups over a 52..64-seat field.
       const results: PlayerResult[] = [];
       let rank = 1;
       let seat = 0;
@@ -129,19 +131,55 @@ describe('split-pot cases (D3-B, through the same assignPrizes)', () => {
       expect(total).to.equal(pot);
     });
   }
-  it('the straddle-17 case pays 17 seats', () => {
-    const c = vectors.split_cases.find((x: any) => x.name === 'straddle_17');
-    expect(c.payouts.length).to.equal(17);
+  it('a two-way tie for first halves the pot exactly at every tier (D-E2)', () => {
+    const cases = vectors.split_cases.filter((x: any) =>
+      String(x.name).startsWith('two_way_first_tier_')
+    );
+    expect(cases.length).to.equal(7);
+    for (const c of cases) {
+      const pot = potForEntry(BigInt(c.entry_lamports));
+      expect(c.payouts.map((p: any) => p.entry_index)).to.deep.equal([0, 1]);
+      for (const p of c.payouts) expect(BigInt(p.amount)).to.equal(pot / 2n);
+    }
   });
-  it('the three-way 4th-6th remainder goes to the lowest seat', () => {
-    const c = vectors.split_cases.find((x: any) => x.name === 'three_way_4_6');
-    const tied = c.payouts.slice(3, 6).map((p: any) => BigInt(p.amount));
-    // D-E1 pot 4 SOL: combined 4th-6th = 3_906_250 × 178 = 695_312_500,
-    // mod 3 = 1 — the single indivisible lamport lands on the lowest seat.
-    expect(tied[0]).to.equal(tied[1] + 1n);
-    expect(tied[1]).to.equal(tied[2]);
-    expect((tied[0] + tied[1] + tied[2]) % 3n).to.equal(1n);
+  it('the three-way tie for first leaves one lamport on the lowest seat', () => {
+    for (const name of ['three_way_first', 'three_way_first_field_52']) {
+      const c = vectors.split_cases.find((x: any) => x.name === name);
+      expect(c.payouts.length, name).to.equal(3);
+      const tied = c.payouts.map((p: any) => BigInt(p.amount));
+      // D-E1 pot 4 SOL: 4_000_000_000 / 3 = 1_333_333_333 remainder 1 — the
+      // single indivisible lamport lands on the lowest seat.
+      expect(tied).to.deep.equal([1_333_333_334n, 1_333_333_333n, 1_333_333_333n]);
+    }
   });
+  it('a tie for second pays exactly one seat — nothing below first is paid', () => {
+    const c = vectors.split_cases.find((x: any) => x.name === 'tie_for_second');
+    expect(c.payouts).to.deep.equal([{ entry_index: 0, amount: '4000000000' }]);
+  });
+  it('an everyone-tied 52-seat field splits the pot with a visible remainder', () => {
+    const c = vectors.split_cases.find((x: any) => x.name === 'all_identical_52');
+    expect(c.payouts.length).to.equal(52);
+    // 4_000_000_000 / 52 = 76_923_076 remainder 48: the lowest seat takes
+    // the 48 indivisible lamports; conservation is checked above.
+    expect(BigInt(c.payouts[0].amount)).to.equal(76_923_076n + 48n);
+    expect(BigInt(c.payouts[1].amount)).to.equal(76_923_076n);
+  });
+});
+
+describe('minimum-field pool vectors (D-E4)', () => {
+  for (const n of [52, 58]) {
+    it(`field_${n}: ${n} leaves, one winner, the whole pot`, () => {
+      const pool = vectors.pools.find((x: any) => x.name === `field_${n}`);
+      expect(pool, `field_${n} present`).to.exist;
+      expect(pool.players.length).to.equal(n);
+      expect(pool.leaves_hex.length).to.equal(n);
+      const pot = potForEntry(BigInt(pool.entry_lamports));
+      const total = pool.payouts.reduce((a: bigint, p: any) => a + BigInt(p.amount), 0n);
+      expect(total).to.equal(pot);
+      const winners = pool.results.filter((r: any) => r.rank === 1);
+      expect(pool.payouts.length).to.equal(winners.length);
+    });
+  }
 });
 
 describe('per-tier prize tables (D1)', () => {
@@ -156,7 +194,8 @@ describe('per-tier prize tables (D1)', () => {
     it(`entry ${t.entry_lamports}`, () => {
       const pot = potForEntry(BigInt(t.entry_lamports));
       expect(pot.toString()).to.equal(t.pot_lamports);
-      for (let r = 1; r <= 16; r++) {
+      expect(t.bands.length).to.equal(PAID_RANKS);
+      for (let r = 1; r <= PAID_RANKS; r++) {
         expect(amountForRank(pot, r).toString()).to.equal(t.bands[r - 1]);
       }
     });
@@ -199,12 +238,14 @@ describe('prize bands', () => {
     expect(PRIZE_BANDS_1024.reduce((a, b) => a + b, 0n)).to.equal(1024n);
     expect(vectors.prize_bands_1024.map(BigInt)).to.deep.equal([...PRIZE_BANDS_1024]);
   });
-  it('the 16 prizes sum to the pot exactly, ranks 17+ take zero', () => {
-    const pot = potForEntry(100_000_000n);
-    let paid = 0n;
-    for (let r = 1; r <= 16; r++) paid += amountForRank(pot, r);
-    expect(paid).to.equal(pot);
-    expect(amountForRank(pot, 17)).to.equal(0n);
-    expect(amountForRank(pot, 64)).to.equal(0n);
+  it('one paid place: rank 1 is the pot, every lower rank takes zero (D-E2)', () => {
+    expect(PAID_RANKS).to.equal(1);
+    expect(vectors.paid_ranks).to.equal(PAID_RANKS);
+    for (let tier = 0; tier < 7; tier++) {
+      const pot = potForEntry(TIER_ENTRY_LAMPORTS[tier]);
+      expect(amountForRank(pot, 1)).to.equal(pot);
+      expect(amountForRank(pot, 2)).to.equal(0n);
+      expect(amountForRank(pot, 64)).to.equal(0n);
+    }
   });
 });

@@ -14,7 +14,7 @@
  * their re-token is PR 8 of the sequence, shared with every other route.
  */
 import Link from 'next/link';
-import { TIER_ENTRY_LAMPORTS, TIER_POT_LAMPORTS } from '@blotto/scoring';
+import { MIN_SEATS, TIER_ENTRY_LAMPORTS, TIER_POT_LAMPORTS } from '@blotto/scoring';
 import { COPY } from '@/copy';
 import { indexerApi, live } from '@/data/api';
 import { lamportsToSol } from '@/data/format';
@@ -155,7 +155,7 @@ export default async function LandingPage() {
                   <SeatRing entrants={hero.entrants} />
                   <div className="min-w-0 flex-1">
                     <p className="text-[12px] uppercase tracking-[0.14em] text-game-ink-muted">
-                      {COPY.pool.prizeTableTitle}
+                      {COPY.pool.prizeLabel}
                     </p>
                     <p className="tnum font-display text-[44px] font-extrabold leading-[48px] text-game-prize">
                       {lamportsToSol(hero.pot_lamports)}
@@ -168,7 +168,15 @@ export default async function LandingPage() {
                           SOL entry
                         </span>
                       </span>
-                      <Countdown deadlineUnix={hero.fill_deadline} label={COPY.pool.fillDeadline} />
+                      {/* PHASE-E1-REVIEW (D18): this clock already sits in the
+                          same card as the Enter link, against the rule the
+                          Countdown documents. Not moved here — flagged for
+                          the founder; the go-timer label swap is the only
+                          change. */}
+                      <Countdown
+                        deadlineUnix={hero.fill_deadline}
+                        label={hero.go_deadline ? COPY.pool.goTimer : COPY.pool.fillDeadline}
+                      />
                     </div>
                   </div>
                 </div>
@@ -280,7 +288,9 @@ export default async function LandingPage() {
                         openPool ? 'text-game-action' : 'text-game-ink-muted'
                       }`}
                     >
-                      {openPool ? `${label} · ${COPY.pool.entrantsOf(openPool.entrants)}` : label}
+                      {openPool
+                        ? `${label} · ${COPY.pool.entrantsOf(openPool.entrants, Number(MIN_SEATS))}`
+                        : label}
                       {shortBy ? <span className="tnum block text-[11px]">{shortBy}</span> : null}
                     </span>
                   </div>

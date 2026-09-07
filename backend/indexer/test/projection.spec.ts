@@ -122,6 +122,14 @@ describe('blotto event decoding against real emitted bytes', () => {
       expect(p.secret).to.equal('2a'.repeat(32)); // the harness secret
       expect(p.results_root).to.equal('01'.repeat(32));
     }
+    // D-E4: both pools that passed 52 seats carry the go-deadline, and the
+    // effective deadline was shortened to it in place; the two-entry refund
+    // pool never started a timer.
+    for (const p of [fullPool!, minFieldPool!]) {
+      expect(p.go_deadline, 'go_deadline set').to.be.a('string');
+      expect(p.fill_deadline).to.equal(p.go_deadline);
+    }
+    expect(closedPool!.go_deadline).to.equal(undefined);
     // Pools 1 and 3 had their seeds patched directly (no event); pool 2's
     // landed via a real commit_vrf_seed with value 0x4d bytes.
     expect(fullPool!.vrf_seed).to.equal(undefined);

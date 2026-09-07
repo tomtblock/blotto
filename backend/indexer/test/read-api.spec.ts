@@ -64,11 +64,13 @@ describe('read API routing', () => {
   });
 
   it('assembles the treasury report from raw ledger rows (D-A1 revised)', async () => {
-    // Fund 10 SOL, open a tier-0 pool (pot 5.12 out), sell three passes
-    // (0.3 in), then trigger the refund fork (pot back) and refund one.
+    // Fund 10 SOL, enable tiers 0 and 1, open a tier-0 pool (pot 4 SOL
+    // out, D-E1), sell three passes (0.3 in), then trigger the refund fork
+    // (pot back) and refund one.
     const rows = [
       { name: 'PlatformFunded', raw: { funder: 'F', amount: '10000000000', platform_balance: '10000000000' } },
-      { name: 'PoolOpened', raw: { pool: POOL, id: '1', tier: 0, entry_lamports: '100000000', pot_lamports: '5120000000', fill_deadline: '0' } },
+      { name: 'TiersOpened', raw: { open_tiers: [true, true, false, false, false, false, false] } },
+      { name: 'PoolOpened', raw: { pool: POOL, id: '1', tier: 0, entry_lamports: '100000000', pot_lamports: '4000000000', fill_deadline: '0' } },
       { name: 'EntryRegistered', raw: { pool: POOL, player: 'P1', index: 0 } },
       { name: 'EntryRegistered', raw: { pool: POOL, player: 'P2', index: 1 } },
       { name: 'EntryRegistered', raw: { pool: POOL, player: 'P3', index: 2 } },
@@ -76,15 +78,30 @@ describe('read API routing', () => {
     const res = await handleRead(db(() => rows), '/treasury');
     expect(res.status).to.equal(200);
     const t = res.body as Record<string, unknown>;
-    // 10 − 5.12 + 0.3 = 5.18 SOL in the treasury.
-    expect(t.platform_balance_lamports).to.equal('5180000000');
-    expect(t.reserved_pot_lamports).to.equal('5120000000');
+    // 10 − 4 + 0.3 = 6.3 SOL in the treasury.
+    expect(t.platform_balance_lamports).to.equal('6300000000');
+    expect(t.reserved_pot_lamports).to.equal('4000000000');
     expect(t.refundable_entry_lamports).to.equal('300000000');
+    expect(t.enablement_source).to.equal('ledger');
     const tiers = t.tiers as Array<Record<string, unknown>>;
     expect(tiers[0].status).to.equal('open');
-    expect(tiers[1].status).to.equal('short'); // 25.6 SOL pot, far short
-    // The floor holds the refundable 0.3 plus one pot of every idle tier.
+    expect(tiers[1].status).to.equal('short'); // 20 SOL pot, far short
+    expect(tiers[2].status).to.equal('disabled'); // not enabled: no reserve, never "short"
+    expect(tiers[2].short_by_lamports).to.equal('0');
+    // The floor holds the refundable 0.3 plus one pot of every ENABLED idle
+    // tier (tier 1's 20 SOL); disabled tiers add nothing.
+    expect(t.withdraw_floor_lamports).to.equal('20300000000');
     expect(t.withdrawable_lamports).to.equal('0');
+    // Tier 1 needs 20 SOL against 6.0 available (6.3 − 0.3 refundable):
+    // short by 14 SOL. A full tier-0 pool nets 6.4 − 4 = 2.4 SOL, a
+    // 52-seat one 5.2 − 4 = 1.2 SOL (D-E4): 6 pools best case, 12 worst.
+    expect(tiers[1].short_by_lamports).to.equal('14000000000');
+    expect(t.tier0_margin_lamports).to.deep.equal({
+      minimum_field: '1200000000',
+      full: '2400000000',
+    });
+    expect(t.tier0_pools_to_next_unlock).to.equal('6');
+    expect(t.tier0_pools_to_next_unlock_at_minimum_field).to.equal('12');
 
     // The refund fork: pot returns, one player repaid.
     const rows2 = rows.concat([
@@ -92,7 +109,7 @@ describe('read API routing', () => {
       { name: 'Refunded', raw: { pool: POOL, player: 'P1', amount: '100000000' } },
     ] as never);
     const t2 = (await handleRead(db(() => rows2), '/treasury')).body as Record<string, unknown>;
-    // 5.18 + 5.12 (pot back) − 0.1 (one refund) = 10.2 SOL.
+    // 6.3 + 4 (pot back) − 0.1 (one refund) = 10.2 SOL.
     expect(t2.platform_balance_lamports).to.equal('10200000000');
     expect(t2.reserved_pot_lamports).to.equal('0');
     expect(t2.refundable_entry_lamports).to.equal('200000000');
@@ -100,6 +117,21 @@ describe('read API routing', () => {
     const tiers2 = t2.tiers as Array<Record<string, unknown>>;
     expect(tiers2[0].status).to.equal('settling');
     expect(tiers2[0].live_pool_state).to.equal('Refunding');
+  });
+
+  it('with no TiersOpened on the ledger the report assumes the launch posture: tier 0 only', async () => {
+    const rows = [
+      { name: 'PlatformFunded', raw: { funder: 'F', amount: '10000000000', platform_balance: '10000000000' } },
+    ];
+    const t = (await handleRead(db(() => rows), '/treasury')).body as Record<string, unknown>;
+    expect(t.enablement_source).to.equal('launch_default');
+    const tiers = t.tiers as Array<Record<string, unknown>>;
+    expect(tiers[0].status).to.equal('openable');
+    for (let i = 1; i < 7; i++) expect(tiers[i].status, `tier ${i}`).to.equal('disabled');
+    // The floor is one tier-0 reserve pot; nothing is short.
+    expect(t.withdraw_floor_lamports).to.equal('4000000000');
+    expect(t.withdrawable_lamports).to.equal('6000000000');
+    expect(t.tier0_pools_to_next_unlock).to.equal(null);
   });
 
   it('serves the player-history exhibit endpoints (D-A2 v2)', async () => {

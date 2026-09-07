@@ -62,12 +62,34 @@ describe('the preview scenarios', () => {
     for (const s of SCENARIOS) expect(s.entries.length, s.key).toBe(s.summary.entrants);
   });
 
-  it('pays exactly 16 seats where it pays at all, and never above the pot', () => {
+  it('pays the winner the whole pot where it pays at all (D-E2), never above it', () => {
     for (const s of SCENARIOS) {
       if (s.payouts.length === 0) continue;
-      expect(s.payouts.length, s.key).toBe(16);
+      // One paid place: the fixture's winner is the viewer's seat 3.
+      expect(s.payouts.length, s.key).toBe(1);
+      expect(s.payouts[0].seat, s.key).toBe(3);
       const total = s.payouts.reduce((acc, p) => acc + BigInt(p.amount), 0n);
-      expect(total <= BigInt(s.summary.pot_lamports), `${s.key} pays above its pot`).toBe(true);
+      expect(total, `${s.key} pays exactly its pot`).toBe(BigInt(s.summary.pot_lamports));
+    }
+  });
+
+  it('a settled pool’s archive ranks the paid seat first and everyone else at zero', () => {
+    for (const s of SCENARIOS) {
+      if (!s.leaderboard) continue;
+      expect(s.leaderboard.rows.length, s.key).toBe(s.summary.entrants);
+      const first = s.leaderboard.rows.filter((r) => r.rank === 1);
+      expect(first.map((r) => r.seat), s.key).toEqual(s.payouts.map((p) => p.seat));
+      for (const r of s.leaderboard.rows) {
+        if (r.rank !== 1) expect(r.amount_lamports, `${s.key} seat ${r.seat}`).toBe('0');
+      }
+    }
+  });
+
+  it('the go-timer fixtures carry the effective deadline in both fields (D-E4)', () => {
+    for (const s of SCENARIOS) {
+      if (s.summary.go_deadline === null) continue;
+      expect(s.summary.go_deadline, s.key).toBe(s.summary.fill_deadline);
+      expect(s.summary.entrants, `${s.key} below the minimum field`).toBeGreaterThanOrEqual(52);
     }
   });
 
@@ -94,7 +116,7 @@ describe('the fixture API over the catalogue', () => {
   it('answers each pool with its own rows and unknown pools with nothing', async () => {
     const paid = SCENARIOS.find((s) => s.key === 'paid')!;
     expect((await FIXTURE_API.getPool(paid.summary.pool))?.state).toBe('Paid');
-    expect(await FIXTURE_API.getPayouts(paid.summary.pool)).toHaveLength(16);
+    expect(await FIXTURE_API.getPayouts(paid.summary.pool)).toHaveLength(1);
     expect(await FIXTURE_API.getPool('F1XTUREnope1111111111111111111111111111111111')).toBeNull();
     expect(await FIXTURE_API.getPayouts('F1XTUREnope1111111111111111111111111111111111')).toHaveLength(0);
   });

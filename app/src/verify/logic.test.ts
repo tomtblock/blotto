@@ -152,7 +152,11 @@ describe('verifyPool', () => {
 
   it('a payout routed to a different wallet turns payouts red', () => {
     const { bundle, chain } = fixture();
-    chain.payouts[0].player = chain.payouts[1].player;
+    // Under D-E2 the paid set is usually one seat, so the wrong wallet is
+    // any OTHER entrant's — not a second payout row.
+    const winner = chain.payouts[0];
+    const other = bundle.entries.find((e) => e.index !== winner.entryIndex)!;
+    winner.player = other.player;
     const report = verifyPool(bundle, chain);
     expect(report.checks.find((c) => c.name === 'payouts')!.ok).toBe(false);
   });

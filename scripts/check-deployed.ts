@@ -129,7 +129,7 @@ function adminChecks(somePubkey: PublicKey): WireCheck[] {
     {
       name: 'set_tier_economics',
       signature: 'tier: u8, price_lamports: u64, pot_lamports: u64',
-      args: Buffer.concat([u8b(0), u64le(100_000_000n), u64le(5_120_000_000n)]),
+      args: Buffer.concat([u8b(0), u64le(100_000_000n), u64le(4_000_000_000n)]),
     },
     {
       name: 'set_treasury_policy',

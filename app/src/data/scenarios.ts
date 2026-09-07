@@ -91,6 +91,7 @@ function poolSummary(over: Partial<PoolSummary> & { pool: string; id: string }):
     entry_lamports: TIER0_ENTRY,
     pot_lamports: TIER0_POT,
     fill_deadline: soon(72 * HOUR),
+    go_deadline: null,
     timer_seconds: 15,
     state: 'Open',
     sealing_pubkey: SEALING_PUBKEY,
@@ -129,17 +130,13 @@ function entries(pool: string, count: number, over: Partial<EntryRow> = {}): Ent
   }));
 }
 
-/** The 16 paid seats, descending. Amounts are decimal strings — never floats. */
-const PAID_SEATS = [3, 7, 12, 1, 22, 40, 9, 55, 18, 31, 5, 61, 27, 44, 2, 50];
-// The REAL tier-0 band amounts at the D-E1 pot (4 SOL × band/1024) — the
+/** The paid seats, descending — ONE under D-E2 (winner takes all): the
+ * viewer's seat 3. Amounts are decimal strings — never floats. */
+const PAID_SEATS = [3];
+// The REAL tier-0 amount at the D-E1 pot: the whole 4 SOL to rank 1 — the
 // fixture pays exactly what the program would, so preview screens carry
 // truthful figures.
-const PAID_AMOUNTS = [
-  '1054687500', '617187500', '398437500', '304687500',
-  '195312500', '195312500', '195312500', '195312500',
-  '105468750', '105468750', '105468750', '105468750',
-  '105468750', '105468750', '105468750', '105468750',
-];
+const PAID_AMOUNTS = [TIER0_POT];
 
 function results(): ResultRow[] {
   return PAID_SEATS.map((seat, i) => ({ seat, amount: PAID_AMOUNTS[i] }));
@@ -156,16 +153,17 @@ function payouts(pool: string, escrowSeat: number | null = null): PayoutRow[] {
 }
 
 /**
- * The full 64-row verified-archive ranking (E3) for a settled scenario.
- * Paid seats carry the same amounts as `results()`; everyone else ranks
- * below them at zero. `score_half` is in HALF-POINT integer units across
- * the seven battles (max 14) and descends with rank so the table reads
- * plausibly — a display fixture, not a scored pool.
+ * The full verified-archive ranking (E3) for a settled scenario, over the
+ * pool's real field size. The paid seat carries the same amount as
+ * `results()`; everyone else ranks below it at zero (D-E2). `score_half`
+ * is in HALF-POINT integer units across the seven battles (max 14) and
+ * descends with rank so the table reads plausibly — a display fixture, not
+ * a scored pool.
  */
-function leaderboard(pool: string): PoolLeaderboard {
-  const byIdx = entries(pool, 64);
+function leaderboard(pool: string, field = 64): PoolLeaderboard {
+  const byIdx = entries(pool, field);
   const paidRank = new Map(PAID_SEATS.map((seat, i) => [seat, i + 1]));
-  const unpaid = Array.from({ length: 64 }, (_, s) => s).filter((s) => !paidRank.has(s));
+  const unpaid = Array.from({ length: field }, (_, s) => s).filter((s) => !paidRank.has(s));
   const rows = [
     ...PAID_SEATS.map((seat, i) => ({
       seat,
@@ -178,9 +176,9 @@ function leaderboard(pool: string): PoolLeaderboard {
     ...unpaid.map((seat, i) => ({
       seat,
       player: byIdx[seat].player,
-      rank: 17 + i,
-      score_half: Math.max(1, 6 - Math.floor(i / 10)),
-      zones: Math.max(1, 8 - Math.floor(i / 8)),
+      rank: PAID_SEATS.length + 1 + i,
+      score_half: Math.max(1, 12 - Math.floor(i / 6)),
+      zones: Math.max(1, 18 - Math.floor(i / 4)),
       amount_lamports: '0',
     })),
   ];
@@ -209,6 +207,8 @@ const ESCROW = fixtureId('escrow');
 const REFUNDING = fixtureId('refunding');
 const CLOSED = fixtureId('c1osed');
 const DEADLINE = fixtureId('dead1ine');
+const FIELD = fixtureId('fie1d');
+const FIELD_PAID = fixtureId('fie1dpaid');
 
 export const SCENARIOS: readonly Scenario[] = [
   {
@@ -222,17 +222,54 @@ export const SCENARIOS: readonly Scenario[] = [
   },
   {
     key: 'filling',
-    what: 'Almost full (61/64) with hours left — the pressure state.',
+    what: 'Almost full (61/64), the go-timer running — the pool will run either way.',
     summary: poolSummary({
       pool: FILLING,
       id: 'FIXTURE-FILLING',
       entrants: 61,
+      // D-E4: the 52nd seat shortened the deadline to the go-deadline; the
+      // indexer serves both fields equal from then on.
       fill_deadline: soon(4 * HOUR),
+      go_deadline: soon(4 * HOUR),
     }),
     entries: entries(FILLING, 61),
     results: [],
     payouts: [],
     sealedEntries: [],
+  },
+  {
+    key: 'field',
+    what: 'The minimum field (55/64): seated past 52, the go-timer just started.',
+    summary: poolSummary({
+      pool: FIELD,
+      id: 'FIXTURE-FIELD',
+      entrants: 55,
+      fill_deadline: soon(6 * HOUR - 5 * 60),
+      go_deadline: soon(6 * HOUR - 5 * 60),
+    }),
+    entries: entries(FIELD, 55),
+    results: [],
+    payouts: [],
+    sealedEntries: [],
+  },
+  {
+    key: 'field-paid',
+    what: 'A 55-player pool that ran at its go-deadline and paid — the archive over a short field.',
+    summary: poolSummary({
+      pool: FIELD_PAID,
+      id: 'FIXTURE-FIELD-PAID',
+      state: 'Paid',
+      entrants: 55,
+      fill_deadline: past(20 * HOUR),
+      go_deadline: past(20 * HOUR),
+      results_root: 'ef'.repeat(32),
+      secret: 'ab'.repeat(32),
+    }),
+    entries: entries(FIELD_PAID, 55),
+    results: results(),
+    payouts: payouts(FIELD_PAID),
+    sealedEntries: sealed(55),
+    leaderboard: leaderboard(FIELD_PAID, 55),
   },
   {
     key: 'deadline',
@@ -320,7 +357,7 @@ export const SCENARIOS: readonly Scenario[] = [
   },
   {
     key: 'refunding',
-    what: 'The deadline passed below 64 — the refund fork (R7), entries returned.',
+    what: 'The deadline passed below the 52-seat minimum — the refund fork (R7/D-E4), entries returned.',
     summary: poolSummary({
       pool: REFUNDING,
       id: 'FIXTURE-REFUNDING',
@@ -358,8 +395,10 @@ export const SCENARIO_BY_POOL: ReadonlyMap<string, Scenario> = new Map(
 export const FIXTURE_PROFILE: ProfileRow = {
   player: FIXTURE_PLAYER,
   pools_entered: '9',
-  seats_paid: '4',
-  total_won_lamports: '2841600000',
+  // Two prize finishes on record below (the escrowed one is credited only
+  // on release, so it is not in total_won).
+  seats_paid: '2',
+  total_won_lamports: TIER0_POT,
   // Cosmetic collection counts, fixed class order (Goblin..Titan).
   class_counts: [3, 2, 2, 1, 1],
 };
@@ -372,10 +411,11 @@ export const FIXTURE_CAREER: CareerRow[] = [
     seat: 3,
     entries_to_date: '9',
     paid: true,
-    amount_lamports: '1536000000',
+    // D-E2: the winner's amount IS the pot.
+    amount_lamports: TIER0_POT,
     pot_lamports: TIER0_POT,
     state: 'Paid',
-    // E3: seat 3 leads PAID_SEATS, so the verified archive ranks it first.
+    // E3: seat 3 is PAID_SEATS' one entry, so the verified archive ranks it first.
     rank: 1,
   },
   {
@@ -385,7 +425,7 @@ export const FIXTURE_CAREER: CareerRow[] = [
     seat: 3,
     entries_to_date: '8',
     paid: true,
-    amount_lamports: '1536000000',
+    amount_lamports: TIER0_POT,
     pot_lamports: TIER0_POT,
     state: 'Paid',
   },

@@ -12,13 +12,14 @@ input that differs between the rows below is how the entrant allocated
 stats across the seven battles. The spread between **random** (valid
 allocations with no intent) and **optimised** (a tuned three-stat plan) is
 the measured effect of that choice under the published scoring rule
-(battles won, then stats won; ties split evenly per D3-B):
+(battles won, then stats won; the ranked-first player takes the pot, a tie
+for first splitting it evenly per D3-B):
 
 | Class | Entrants | Rank-1 rate | Paid-seat rate | Eliminated from the paid set | Mean payout share of pot |
 |---|---|---|---|---|---|
-| random | 3200 | 0.000% | 0.15% | 99.84% | 0.0041% |
-| heuristic | 3200 | 1.093% | 33.84% | 66.15% | 1.6114% |
-| optimised | 3200 | 5.156% | 66.03% | 33.96% | 4.6343% |
+| random | 3200 | 0.000% | 0.00% | 100.00% | 0.0000% |
+| heuristic | 3200 | 1.093% | 1.09% | 98.90% | 1.0937% |
+| optimised | 3200 | 5.156% | 5.15% | 94.84% | 5.1562% |
 
 The everyone-equal baseline for a 64-seat pool is a mean payout share of
 **1.5625%** (1/64) per entrant. The gap between the rows above — produced
@@ -31,15 +32,16 @@ which all 64 entrants play the SAME strategy class (with within-class
 uniqueness — no two entrants in a pool share an allocation set, see
 Methodology). When everyone is equally skilled, outcomes should spread
 toward the everyone-equal baseline: rank-1 rate near 1/64 (≈ 1.563%),
-paid-seat rate set by how the class's allocations tie under D3-B, and mean
-payout share at exactly 1.5625% of the pot (conservation forces the class
-total to equal the pot; the spread is who takes which slice).
+paid-seat rate equal to it (one paid place under D-E2: the paid set IS the
+rank-1 group, a tie for first splitting the pot per D3-B), and mean payout
+share at exactly 1.5625% of the pot (conservation forces the class total to
+equal the pot; the spread is who takes which slice).
 
 | Class (all 64 seats) | Entrants | Rank-1 rate | Paid-seat rate | Eliminated from the paid set | Mean payout share of pot |
 |---|---|---|---|---|---|
-| random | 12800 | 1.562% | 25.00% | 74.99% | 1.5625% |
-| heuristic | 12800 | 1.562% | 25.00% | 75.00% | 1.5625% |
-| optimised | 12800 | 1.562% | 25.00% | 75.00% | 1.5625% |
+| random | 12800 | 1.562% | 1.56% | 98.43% | 1.5625% |
+| heuristic | 12800 | 1.562% | 1.56% | 98.43% | 1.5625% |
+| optimised | 12800 | 1.562% | 1.56% | 98.43% | 1.5625% |
 
 Reading: among equals, no entrant holds an edge — the mean share sits at
 the baseline for every class. Skill differentiates BETWEEN classes (the
@@ -68,8 +70,10 @@ skill competition's outcomes should have.
 - **Definitions**: *rank-1 rate* — share of a class's entrants whose
   competition rank was 1 (ties share rank 1); *paid-seat rate* — share
   whose seat appears in the committed payout list (nonzero amount under the
-  D3-B split); *mean payout share* — the class's total committed lamports
-  over (pot × class entrants), in percent.
+  D3-B split — with one paid place, D-E2, this equals the rank-1 rate and
+  the column is kept so the two definitions are seen to agree); *mean
+  payout share* — the class's total committed lamports over (pot × class
+  entrants), in percent.
 - **Pipeline**: the real settlement crank over the offline chain mirror
   (`FakeChain`) — decrypt, score, rank, split-pot assignment, Merkle
   commitment, batched payout — with conservation asserted on every pool

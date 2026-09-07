@@ -19,6 +19,7 @@
  * entry and prize figures live in the tier header, not the row.
  */
 
+import { MIN_SEATS } from '@blotto/scoring';
 import type { Allocation } from '@/battle/allocation';
 import { EVEN_SPLIT } from '@/battle/allocation';
 import { BlotMorph } from '@/components/blot/BlotMorph';
@@ -33,8 +34,10 @@ const SHAPE_FOR_STATE: Record<PoolSummary['state'], Allocation> = {
   Closed: EVEN_SPLIT,
 };
 
-/** Open pools that are nearly full brace: the Tank from 48 seats up. */
+/** Open pools that have reached the minimum field brace: the Tank from the
+ * 52nd seat up (D-E4 — the pool will run from here). */
 const FILLING: Allocation = [10, 10, 10, 10, 60];
+const FILLING_FROM = Number(MIN_SEATS);
 
 export function PoolStateBlot({
   state,
@@ -43,7 +46,8 @@ export function PoolStateBlot({
   state: PoolSummary['state'];
   entrants: number;
 }) {
-  const allocation = state === 'Open' && entrants >= 48 ? FILLING : SHAPE_FOR_STATE[state];
+  const allocation =
+    state === 'Open' && entrants >= FILLING_FROM ? FILLING : SHAPE_FOR_STATE[state];
   return (
     <span className={state === 'Closed' ? 'opacity-40' : undefined} aria-hidden="true">
       <BlotMorph allocation={allocation} size={48} mood="focused" reduceMotion />

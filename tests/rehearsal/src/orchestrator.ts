@@ -99,7 +99,10 @@ export async function runOfflinePool(
     resultsCommitted: false,
     paidMask: 0n,
     payouts: [],
-    entrants: 64,
+    // The real field size: a pool seals at 64, or at 52..63 when its
+    // deadline passes (D-E4). The crank commits over `entrants`, so a
+    // population smaller than 64 rehearses the minimum-field path.
+    entrants: population.length,
   });
   chain.entries.set(poolId.toString(), entries);
 

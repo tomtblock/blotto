@@ -493,6 +493,25 @@ export class Web3Chain implements KeeperChain {
     ]);
   }
 
+  async sealAtDeadline(poolId: bigint): Promise<void> {
+    const le = Buffer.alloc(8);
+    le.writeBigUInt64LE(poolId);
+    // Permissionless on-chain (any signer); the settlement signer pays the
+    // fee here because it is the key the daemon holds. No lamports move —
+    // the seal only reclassifies the pool's entries as revenue.
+    await this.send([
+      new TransactionInstruction({
+        programId: this.cfg.programId,
+        keys: [
+          { pubkey: this.cfg.settlementSigner.publicKey, isSigner: true, isWritable: false },
+          { pubkey: this.configPda(), isSigner: false, isWritable: true },
+          { pubkey: this.poolPda(poolId), isSigner: false, isWritable: true },
+        ],
+        data: Buffer.concat([disc('seal_at_deadline'), le]),
+      }),
+    ]);
+  }
+
   async triggerRefund(poolId: bigint): Promise<void> {
     const le = Buffer.alloc(8);
     le.writeBigUInt64LE(poolId);
