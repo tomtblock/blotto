@@ -45,12 +45,9 @@ export const DEFAULT_FILL_DEADLINE_SECS = 12n * 3600n;
  */
 export const DEFAULT_COOLDOWN_SECS = 5n * 60n;
 
-/**
- * How long a tier may sit idle past its cooldown before ANY signer (not only
- * the keeper) may open its next pool — `constants.rs::LIVENESS_FALLBACK_SECS`
- * (prompt v2 §A.3). A dead daemon cannot freeze a tier.
- */
-export const LIVENESS_FALLBACK_SECS = 24n * 3600n;
+// The keeper liveness fallback mirrored here was removed from the program on
+// 2026-09-07 (founder ruling; audit O9b). `open_pool` is keeper-only, with no
+// time-based exception, so there is no constant left to mirror.
 
 /**
  * The published resolving window — "Resolving lasts up to 12 hours … If no

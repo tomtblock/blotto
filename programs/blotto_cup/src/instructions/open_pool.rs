@@ -3,10 +3,20 @@
 //! tier once the program's own gates pass. The daemon has no discretion
 //! over WHETHER a pool opens; the checks here ARE the policy:
 //!
-//!   0. the signer is `Config.keeper` — unless the tier's slot has been free
-//!      for `LIVENESS_FALLBACK_SECS`, when ANY signer may open it (a dead
-//!      daemon must not freeze a tier; the multisig controls who opens pools
-//!      by rotating the keeper, not by signing every open);
+//!   0. the signer is `Config.keeper`. FULL STOP, since the founder ruling
+//!      of 2026-09-07 (audit O9b/A5b). Until then a tier idle for
+//!      `LIVENESS_FALLBACK_SECS` could be opened by ANY signer, so that a
+//!      dead daemon could not freeze it — but the opener also chooses the
+//!      pool's `sealing_pubkey`, and a pool sealed to a key our custody does
+//!      not hold can never be revealed, therefore never settled, and once it
+//!      reaches `MIN_SEATS` it can no longer refund either: the pot and up
+//!      to 64 entries with no on-chain route to anyone.
+//!
+//!      A frozen tier strands nothing — no pool means no money at risk — and
+//!      the admin can rotate the keeper at any time. Sealing and refunding an
+//!      EXISTING pool stay permissionless, and those are the properties that
+//!      actually protect players. So the fallback bought very little and
+//!      risked everything, and it is gone;
 //!   1. the tier is enabled (R6 switch);
 //!   2. the tier's previous pool reached `Paid` or `Closed` (SEQUENTIAL
 //!      pools per tier — the `active_pool_by_tier` slot clears only there)
@@ -30,7 +40,7 @@
 
 use anchor_lang::prelude::*;
 
-use crate::constants::{CAPACITY, LAUNCH_CLASS_COUNTERS, LIVENESS_FALLBACK_SECS, TIMER_SECONDS};
+use crate::constants::{CAPACITY, LAUNCH_CLASS_COUNTERS, TIMER_SECONDS};
 use crate::error::ErrorCode;
 use crate::events::PoolOpened;
 use crate::instructions::treasury::idle_tier_reserve;
@@ -39,9 +49,10 @@ use crate::state::{Config, Pool, PoolState, CONFIG_SEED, PLATFORM_SEED, POOL_SEE
 #[derive(Accounts)]
 #[instruction(pool_id: u64)]
 pub struct OpenPool<'info> {
-    /// The keeper (`Config.keeper`), or anyone once the liveness fallback
-    /// applies — decided in the handler, not by `has_one`, because the
-    /// fallback is a function of the tier's state. Pays the Pool's rent.
+    /// The keeper (`Config.keeper`) — the only signer this instruction
+    /// accepts. Checked in the handler rather than by `has_one` so the
+    /// refusal carries `NotKeeper` alongside the tier's other gates.
+    /// Pays the Pool's rent.
     #[account(mut)]
     pub opener: Signer<'info>,
 
@@ -107,28 +118,15 @@ pub fn handle_open_pool(
     let now = Clock::get()?.unix_timestamp;
     let next_open_at = ctx.accounts.config.tier_next_open_at[tier_idx];
     require!(now >= next_open_at, ErrorCode::TierCoolingDown);
-    // Prompt v2 §A.2/§A.3: the keeper opens pools; anyone may once the tier
-    // has sat idle for the liveness window past its cooldown.
-    //
-    // `tier_next_open_at` is never stale for a freshly enabled tier —
-    // `init_config` and `migrate_config` stamp `now` for every tier, and
-    // `set_open_tiers` restamps a tier it enables. That is a security
-    // property, not tidiness: at zero (or after months disabled) the window
-    // below is already in the past, so the FIRST pool of a tier could be
-    // opened by any signer, and the opener chooses `sealing_pubkey` /
-    // `sealing_secret_hash`.
-    // A pool carrying a stranger's sealing key cannot be revealed by us and
-    // therefore cannot be settled — and if it seals with at least `MIN_SEATS`
-    // it can no longer refund either, stranding both the pot and the entries.
-    // The belt-and-braces refusal below makes a zero unusable by a non-keeper
-    // even if some future path forgets to stamp one.
-    if ctx.accounts.opener.key() != ctx.accounts.config.keeper {
-        require!(next_open_at > 0, ErrorCode::NotKeeper);
-        let fallback_at = next_open_at
-            .checked_add(LIVENESS_FALLBACK_SECS)
-            .ok_or(ErrorCode::Overflow)?;
-        require!(now >= fallback_at, ErrorCode::NotKeeper);
-    }
+    // Prompt v2 §A.2, as amended by the founder ruling of 2026-09-07: the
+    // KEEPER opens pools, and nobody else, ever. See the module doc for why
+    // the liveness fallback that used to sit here was removed rather than
+    // narrowed — the opener chooses the pool's sealing key, and that is not
+    // a decision any passing signer may make.
+    require!(
+        ctx.accounts.opener.key() == ctx.accounts.config.keeper,
+        ErrorCode::NotKeeper
+    );
 
     let entry_lamports = ctx.accounts.config.tier_price_lamports[tier_idx];
     let pot_lamports = ctx.accounts.config.tier_pot_lamports[tier_idx];

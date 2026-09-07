@@ -88,7 +88,7 @@ pub fn handle_init_config(
     // `handle_set_open_tiers`. At `0` the fallback window is decades past and
     // any signer could open a tier's first pool, choosing its sealing key.
     // `now` lets the keeper open immediately (`now >= now`) and holds a
-    // stranger off for a full `LIVENESS_FALLBACK_SECS`.
+    // the keeper open at once, which is all it now governs.
     let now = Clock::get()?.unix_timestamp;
     config.tier_next_open_at = [now; N_TIERS];
     config.vault_ceiling_lamports = vault_ceiling_lamports;
@@ -153,10 +153,20 @@ pub fn handle_set_settlement_signer(ctx: Context<AdminOnly>, new_signer: Pubkey)
     Ok(())
 }
 
-/// Rotate the keeper — the key `open_pool` requires before the liveness
-/// fallback (prompt v2 §A.1). Emits `KeeperSet` so the ledger records who
-/// may open pools, the way `TiersOpened` records which tiers.
+/// Rotate the keeper — the ONLY key `open_pool` accepts (prompt v2 §A.1, as
+/// amended 2026-09-07: the liveness fallback is gone). Emits `KeeperSet` so
+/// the ledger records who may open pools, the way `TiersOpened` records
+/// which tiers.
+///
+/// The zero key is refused (audit A7). It is a typo, not a policy: with the
+/// fallback removed there is no longer a 24-hour self-heal behind it, so a
+/// keeper nobody holds would freeze every tier's next open until an admin
+/// noticed and rotated it. Cheap to refuse, tedious to diagnose.
 pub fn handle_set_keeper(ctx: Context<AdminOnly>, new_keeper: Pubkey) -> Result<()> {
+    require!(
+        new_keeper != Pubkey::default(),
+        ErrorCode::KeeperMustNotBeZero
+    );
     ctx.accounts.config.keeper = new_keeper;
     emit!(KeeperSet { keeper: new_keeper });
     Ok(())
@@ -193,26 +203,20 @@ pub fn handle_set_pool_timing(
 ///
 /// # Starting the liveness clock (security fix, 2026-09-07)
 ///
-/// Enabling a tier restarts its liveness clock: any tier this call takes
+/// Enabling a tier restamps its cooldown clock: any tier this call takes
 /// from disabled to enabled gets `tier_next_open_at = max(stamp, now)`.
-/// `open_pool`'s liveness fallback is measured from that field, and a tier
-/// can sit disabled for months — so a stamp left from `init_config` (or from
-/// the tier's last pool) would already be a full fallback window old the
-/// moment the tier was switched on, and the FIRST pool of the tier could be
-/// opened by any signer watching for `TiersOpened`. That matters because the
-/// opener chooses the pool's sealing key — a stranger's pool carries a secret
-/// our custody does not hold, which cannot be revealed and therefore cannot
-/// be settled. Stamping `now` costs the keeper nothing (`open_pool` requires
-/// `now >= tier_next_open_at`, and `now >= now` holds) and puts a stranger a
-/// full fallback window away. `max` keeps a cooldown that is still running:
-/// a tier disabled and re-enabled inside its cooldown does not shorten it.
 ///
-/// A tier that stays enabled is left alone. The fallback exists so a DEAD
-/// KEEPER cannot freeze a tier, not to limit the admin: an admin who wants a
-/// tier frozen disables it, and nobody can open a disabled tier. Restamping
-/// only on the disabled-to-enabled edge therefore adds no admin power, while
-/// restamping on every call would let the admin push the fallback away from
-/// an enabled tier indefinitely — which is exactly what it exists to prevent.
+/// `max` is the whole point — a tier disabled and re-enabled inside its
+/// cooldown does not get a shorter one — and stamping `now` over a stale
+/// value keeps the app's published "next pool opens in" instant meaningful
+/// rather than months in the past.
+///
+/// It carried a SECURITY role until 2026-09-07, when the same field was also
+/// the origin of `open_pool`'s liveness fallback and a stale stamp meant any
+/// signer could open a newly enabled tier's first pool. The founder ruling of
+/// that date removed the fallback outright (audit O9b), so `open_pool` is
+/// keeper-only and a stale stamp now means only "the keeper may open at
+/// once", which is correct. See `open_pool.rs`.
 pub fn handle_set_open_tiers(ctx: Context<AdminOnly>, open_tiers: [bool; N_TIERS]) -> Result<()> {
     let now = Clock::get()?.unix_timestamp;
     let config = &mut ctx.accounts.config;

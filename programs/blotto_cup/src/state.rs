@@ -127,10 +127,11 @@ pub struct Config {
     // allocated at the old size. Appending keeps every existing offset
     // valid; `migrate_config` grows the account once and writes this tail.
     // The next layout change goes here too, never above this line.
-    /// The keeper: the one key allowed to call `open_pool` before the
-    /// liveness fallback (`LIVENESS_FALLBACK_SECS`). Set at init / migrate,
-    /// rotatable by admin (`set_keeper`). The daemon holds it; on devnet it
-    /// is the settlement signer until E6 splits the keys.
+    /// The keeper: the ONLY key allowed to call `open_pool` (the liveness
+    /// fallback was removed 2026-09-07 — see `open_pool.rs`). Set at init /
+    /// migrate, rotatable by admin (`set_keeper`), and never the zero key.
+    /// The daemon holds it; on devnet it is the settlement signer until E6
+    /// splits the keys.
     pub keeper: Pubkey,
     /// The fill deadline applied at `open_pool` (`Pool.fill_deadline =
     /// now + this`). Seeded `DEFAULT_FILL_DEADLINE_SECS`; `set_pool_timing`
@@ -142,7 +143,7 @@ pub struct Config {
     /// Per tier: the earliest unix time its next pool may open, stamped
     /// `now + cooldown_seconds` whenever the tier's slot frees (`Paid` /
     /// `Closed`). 0 = the tier has never settled a pool. Read by `open_pool`
-    /// (the cooldown gate and the keeper liveness fallback) and by the app's
+    /// (the cooldown gate) and by the app's
     /// "next pool in" countdown via `TierSlotFreed`.
     pub tier_next_open_at: [i64; N_TIERS],
 }

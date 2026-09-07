@@ -58,8 +58,9 @@ commands
                             keeper + timings. Run right after the upgrade,
                             before anything else (runbook step 3b)
       --keeper <pubkey>
-  set-keeper                the key open_pool requires before the 24 h
-                            liveness fallback (prompt v2 §A)
+  set-keeper                the ONLY key open_pool accepts (prompt v2 §A;
+                            the 24 h liveness fallback was removed
+                            2026-09-07). May not be the zero key
       --keeper <pubkey>
   set-pool-timing           the fill deadline for pools opened from now on
                             and the per-tier cooldown (never touches an

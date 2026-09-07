@@ -8,7 +8,6 @@
 import {
   DEFAULT_COOLDOWN_SECS,
   DEFAULT_FILL_DEADLINE_SECS,
-  LIVENESS_FALLBACK_SECS,
   MIN_SEATS,
   TIER_ENTRY_LAMPORTS,
   TIER_POT_LAMPORTS,
@@ -78,7 +77,7 @@ export interface ChainConfigView {
   platformReserved: bigint;
   /** Entry payments of pools that can still refund — program-held (R7). */
   platformRefundable: bigint;
-  /** The key `open_pool` requires before the liveness fallback (prompt v2
+  /** The only key `open_pool` accepts (prompt v2
    * §A; base58). The settlement signer on devnet until E6 splits them. */
   keeper: string;
   /** `Config.fill_deadline_seconds` — copied onto each pool at open. */
@@ -189,9 +188,9 @@ export interface SettlementChain {
  * those rejections as thrown errors, never by silently succeeding. */
 export interface KeeperChain extends SettlementChain {
   getConfig(): Promise<ChainConfigView>;
-  /** `open_pool`: KEEPER-signed (prompt v2 §A — `Config.keeper`, or any
-   * signer once the tier's liveness fallback holds); `poolId` must equal
-   * `nextPoolId`; refused while the tier cools down. */
+  /** `open_pool`: KEEPER-signed (prompt v2 §A — `Config.keeper` and nobody
+   * else since 2026-09-07); `poolId` must equal `nextPoolId`; refused while
+   * the tier cools down. */
   openPool(
     poolId: bigint,
     tier: number,
@@ -275,7 +274,7 @@ export class FakeChain implements KeeperChain {
   config: ChainConfigView | null = null;
   /** The key `openPool` "signs" with — the keeper at init (the settlement
    * signer, the devnet posture). Tests set another string to exercise the
-   * keeper gate and the liveness fallback. */
+   * keeper gate. */
   opener = 'settle';
   /** The platform treasury PDA's balance (D-A1 revised). Deposits via
    * `fundPlatform`; `openPool` moves pots out; refunds pay from here. */
@@ -692,14 +691,13 @@ export class FakeChain implements KeeperChain {
     if (tier < 0 || tier >= cfg.openTiers.length) throw new Error('UnknownTier');
     if (!cfg.openTiers[tier]) throw new Error('TierNotOpen');
     if (cfg.activePoolByTier[tier] !== 0n) throw new Error('TierAlreadyHasOpenPool');
-    // Prompt v2 §B.6 / §A: the cooldown, then the keeper gate with its
-    // liveness fallback (open_pool.rs, in the program's order).
+    // Prompt v2 §B.6 / §A: the cooldown, then the keeper gate (open_pool.rs,
+    // in the program's order). Keeper-only with no time-based exception since
+    // the founder ruling of 2026-09-07 — audit O9b.
     const now = this.now();
     const nextOpenAt = cfg.tierNextOpenAt[tier];
     if (now < nextOpenAt) throw new Error('TierCoolingDown');
-    if (this.opener !== cfg.keeper && now < nextOpenAt + LIVENESS_FALLBACK_SECS) {
-      throw new Error('NotKeeper');
-    }
+    if (this.opener !== cfg.keeper) throw new Error('NotKeeper');
     // The treasury policy gate (open_pool.rs): available = balance minus
     // refundable entries; after funding this pot the remainder must cover
     // the minimum plus one further pot of every OTHER enabled idle tier.

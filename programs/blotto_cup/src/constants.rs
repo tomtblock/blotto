@@ -31,12 +31,14 @@ pub const DEFAULT_FILL_DEADLINE_SECS: i64 = 12 * 60 * 60;
 /// state, not a client guess.
 pub const DEFAULT_COOLDOWN_SECS: i64 = 5 * 60;
 
-/// Keeper liveness fallback (prompt v2 §A.3): `open_pool` is gated on
-/// `Config.keeper`, but a tier whose slot has been free for this long may be
-/// opened by ANY signer — a dead daemon must not freeze a tier permanently.
-/// Measured from the tier's `tier_next_open_at` (the moment its cooldown
-/// ended); a tier that never had a pool (`0`) is open to any signer.
-pub const LIVENESS_FALLBACK_SECS: i64 = 24 * 60 * 60;
+// The keeper liveness fallback that used to live here (prompt v2 §A.3) was
+// REMOVED by the founder ruling of 2026-09-07 (audit O9b/A5b). It let any
+// signer open a tier idle for 24 hours, so that a dead daemon could not
+// freeze it — but the opener also chooses the pool's sealing key, and a pool
+// sealed to a key our custody does not hold can never be revealed, therefore
+// never settled, and past `MIN_SEATS` it can no longer refund either. A
+// frozen tier strands nothing; that pool would strand everything. See
+// `open_pool.rs` for the full reasoning.
 
 /// Escrow auto-release (prompt v2 §E.3): once a share has sat in escrow
 /// this long without review, ANY signer may release it to the player.

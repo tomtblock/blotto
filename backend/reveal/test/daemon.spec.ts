@@ -252,31 +252,32 @@ describe('the daemon (C8): the product loop', () => {
     expect((await w.daemon.tick()).opened).to.deep.equal([{ poolId: 2n, tier: 0 }]);
   });
 
-  it('the keeper gate: a stranger opens a tier only after the liveness fallback', async () => {
+  it('the keeper gate: a stranger never opens a tier, however long it idles (O9b)', async () => {
     const w = await makeWorld();
-    // A never-settled tier (tier_next_open_at = 0) is open to any signer
-    // once the clock is 24 h past the epoch — on a real cluster, always.
+    // The 24-hour liveness fallback was removed on 2026-09-07: a daemon
+    // signing with anything but the keeper opens nothing, ever. A frozen
+    // tier strands no money; a pool opened by a stranger would strand all
+    // of it, because the opener chooses the sealing key.
     w.clock.t = 100_000n;
     w.chain.opener = 'stranger';
-    expect((await w.daemon.tick()).opened).to.deep.equal([{ poolId: 1n, tier: 0 }]);
-    w.clock.t = (await w.chain.getPool(1n)).fillDeadline + 1n;
-    await w.daemon.tick(); // closes pool 1; cooldown stamped
-    const nextOpenAt = (await w.chain.getConfig()).tierNextOpenAt[0];
-    // Past the cooldown, a non-keeper is refused until 24 h have passed.
-    w.clock.t = nextOpenAt;
-    const refused = await w.daemon.tick();
-    expect(refused.opened).to.deep.equal([]);
-    expect(refused.errors.map((e) => e.message).join()).to.include('NotKeeper');
-    w.clock.t = nextOpenAt + 24n * 3600n - 1n;
-    expect((await w.daemon.tick()).opened).to.deep.equal([]);
-    w.clock.t = nextOpenAt + 24n * 3600n;
-    expect((await w.daemon.tick()).opened).to.deep.equal([{ poolId: 2n, tier: 0 }]);
-    // The keeper itself never waits past the cooldown.
+    const first = await w.daemon.tick();
+    expect(first.opened).to.deep.equal([]);
+    expect(first.errors.map((e) => e.message).join()).to.include('NotKeeper');
+    for (const days of [1n, 30n, 365n]) {
+      w.clock.t += days * 24n * 3600n;
+      expect((await w.daemon.tick()).opened, `after ${days} day(s)`).to.deep.equal([]);
+    }
+    // The keeper opens immediately, whenever it likes.
     w.chain.opener = 'settle';
-    w.clock.t = (await w.chain.getPool(2n)).fillDeadline + 1n;
-    await w.daemon.tick();
-    w.clock.t = (await w.chain.getConfig()).tierNextOpenAt[0];
-    expect((await w.daemon.tick()).opened).to.deep.equal([{ poolId: 3n, tier: 0 }]);
+    expect((await w.daemon.tick()).opened).to.deep.equal([{ poolId: 1n, tier: 0 }]);
+    // And the cooldown still governs the keeper, exactly as before.
+    w.clock.t = (await w.chain.getPool(1n)).fillDeadline + 1n;
+    await w.daemon.tick(); // closes pool 1; the cooldown is stamped
+    const nextOpenAt = (await w.chain.getConfig()).tierNextOpenAt[0];
+    w.clock.t = nextOpenAt - 1n;
+    expect((await w.daemon.tick()).opened).to.deep.equal([], 'one second early');
+    w.clock.t = nextOpenAt;
+    expect((await w.daemon.tick()).opened).to.deep.equal([{ poolId: 2n, tier: 0 }]);
   });
 
   it('nothing happens AT the deadline — both instructions compare strictly', async () => {

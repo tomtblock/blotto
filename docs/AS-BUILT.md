@@ -108,13 +108,17 @@ once.
 `set_tier_economics`, `set_treasury_policy`, `withdraw_platform`,
 `forfeit_escrow`.
 
-*Keeper (or anyone after the 24-hour liveness fallback).* `open_pool`. The
-fallback is measured from `tier_next_open_at`, which is stamped whenever a tier
-becomes usable — at `init_config`, at `migrate_config`, and each time
-`set_open_tiers` takes a tier from disabled to enabled. That is a security property, not
-tidiness: the opener supplies the pool's sealing key, so a pool opened by anyone
-but us can never be revealed and therefore never settled. See the audit's §2.1
-and A5b.
+*Keeper only.* `open_pool`. **Nobody else, at any idle time**, since the
+founder ruling of 2026-09-07 (audit O9b/A5b). The 24-hour liveness fallback
+that used to let any signer open a long-idle tier is gone: the opener supplies
+the pool's sealing key, so a pool opened by anyone but us can never be
+revealed, therefore never settled, and past `MIN_SEATS` it can no longer
+refund either — the pot and up to 64 entries with no on-chain route to anyone.
+A frozen tier strands nothing by comparison, and the admin can rotate the
+keeper at any time. Sealing and refunding an *existing* pool remain
+permissionless, which is what actually protects players. `tier_next_open_at`
+survives as the tier's cooldown alone, and the keeper may never be the zero
+key (audit A7).
 
 *Anyone.* `fund_platform_wallet`, `commit_vrf_seed`, `create_pass_collection`,
 `seal_at_deadline`, `trigger_refund`, `refund`, and `release_escrow` once the

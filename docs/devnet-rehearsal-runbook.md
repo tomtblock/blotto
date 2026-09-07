@@ -905,7 +905,7 @@ would have to settle or refund before it.
 
    Only then `set_paused(false)`; the keeper opens the next tier-0 pool
    under the new rules (the first open of a never-settled tier needs no
-   keeper — the liveness fallback holds from the epoch; every later open is
+   keeper — as written, before the fallback was removed 2026-09-07; every later open is
    the keeper's). The treasury covers it: 6.0 SOL against the 4.5 SOL the
    policy requires (a 4 SOL pot plus the 0.5 SOL minimum, no other tier
    enabled). Watch it to Paid: exactly one winner (or a
