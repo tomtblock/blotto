@@ -57,13 +57,16 @@ acknowledge what is sacrificed.
   *would anyone pay money for this, and does it improve the chance of winning?* Both must be no.
   This is the load-bearing rule for the legal position and the thing every future feature request
   will try to erode.
-- **The prize vault has no withdraw instruction** (TECH-ARCH §3.2 as amended by roadmap R10/§1.4).
-  The only lamport exits are `pay_prizes`, `release_escrow`, `refund`, and `forfeit_escrow`
-  (escrow forfeited to the next pool's vault or the platform wallet — roadmap §1.4; note its prose
-  says "three exits" but its own design adds forfeit, recorded in the Phase 1 report). Do not add
-  another, do not add an admin escape hatch, and do not add a "recover stuck funds" path.
-  `scripts/check-standing-rules.sh` asserts the exact exit set in CI; an auditor confirms there is
-  no other route.
+- **The prize vault has no withdraw instruction** (TECH-ARCH §3.2 as amended by roadmap R10/§1.4
+  and by the founder rulings of 2026-09-07 — register D-E6/D-E7). The only lamport exits are
+  `pay_prizes`, `release_escrow`, `pay_next_place`, and `refund` (`trigger_refund`'s pot return
+  lives in the same file). **`forfeit_escrow` moves nothing**: an upheld flag leaves the share in
+  its pool's vault until `pay_next_place` divides it among the eligible players at the rank it
+  passes to — a prize is always paid to a player and never returns to the operator (history: the
+  roadmap's §1.4 forfeit-to-treasury exit stood from Phase 1 until 2026-09-07). Do not add another
+  exit, do not add an admin escape hatch, and do not add a "recover stuck funds" path.
+  `scripts/check-standing-rules.sh` asserts the exact exit set in CI and that `escrow.rs` cannot
+  address the treasury; an auditor confirms there is no other route.
 - **Allocation invariant: five `u8` summing to exactly 100, in the fixed stat order**
   Strength, Speed, Heart, Wit, Durability (PID §4.6, TECH-ARCH §2). The program rejects anything
   else. The client must be unable to submit anything else. This invariant is what makes the 7% draw
