@@ -5,7 +5,9 @@
  * whose SHAPE reads the pool's lifecycle, drawn from the ten-body readout
  * vocabulary. open=even, filling=durability (the Tank braces as seats
  * fill), sealed=wit, scored=heart, paid=strength, escrow=speed,
- * closed=even at 40%.
+ * closed=even at 40%. "escrow" is the derived RESOLVING flag (Phase 2
+ * Stage C): a settled pool with a held share inside the published window
+ * wears the Speed body whatever its on-chain state.
  *
  * PHASE-4-REVIEW: the brief says "refunding=mixed-b" without defining it
  * anywhere in the handoff (the scenario doc's "mixed" is a colour pairing,
@@ -38,16 +40,23 @@ const SHAPE_FOR_STATE: Record<PoolSummary['state'], Allocation> = {
  * 52nd seat up (D-E4 — the pool will run from here). */
 const FILLING: Allocation = [10, 10, 10, 10, 60];
 const FILLING_FROM = Number(MIN_SEATS);
+/** Resolving (Stage C): a held share under review — the brief's "escrow=speed". */
+const RESOLVING: Allocation = [10, 60, 10, 10, 10];
 
 export function PoolStateBlot({
   state,
   entrants,
+  resolving = false,
 }: {
   state: PoolSummary['state'];
   entrants: number;
+  resolving?: boolean;
 }) {
-  const allocation =
-    state === 'Open' && entrants >= FILLING_FROM ? FILLING : SHAPE_FOR_STATE[state];
+  const allocation = resolving
+    ? RESOLVING
+    : state === 'Open' && entrants >= FILLING_FROM
+      ? FILLING
+      : SHAPE_FOR_STATE[state];
   return (
     <span className={state === 'Closed' ? 'opacity-40' : undefined} aria-hidden="true">
       <BlotMorph allocation={allocation} size={48} mood="focused" reduceMotion />

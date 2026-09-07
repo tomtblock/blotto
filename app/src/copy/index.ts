@@ -132,6 +132,16 @@ export const COPY = {
     // recomputable) is the architecture speaking.
     archiveTitle: 'Archive',
     archiveNote: 'Settled tournaments. Every result here is recomputable from published data.',
+    // Phase 2 Stage C: the derived RESOLVING badge — the published process
+    // ("the tournament enters resolving. Resolving lasts up to 12 hours")
+    // made visible on the pool a held share belongs to. Label + countdown
+    // label + one-line note. Substance is the rules page's own sentence
+    // (the hours come from the shared constant via the caller); wording is
+    // a draft pending founder voice review like every line in this file.
+    resolving: 'Resolving',
+    resolvingEndsIn: 'Resolving ends in',
+    resolvingNote: (hours: number) =>
+      `Results are published. A prize on this tournament is held while a flag against it is reviewed. If no decision is made within ${hours} hours, the flag is cleared and the prize is paid.`,
   },
   // The landing page's game explainer (founder ask 2026-08-28). Substance
   // must match the rules tab and PRODUCT-FACTS; wording is founder-voiced

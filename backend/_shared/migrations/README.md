@@ -19,9 +19,14 @@ learned rather than written.
 - **Each migration runs in its own transaction.** A migration that cannot be
   applied atomically should be split until it can.
 - **Runnable from a clean database.** The first run applies everything, so a fresh
-  environment and a long-lived one converge on the same schema. This is checked by
-  the end-to-end harness, which resets its database every run
-  (`tests/e2e/lib/postgres.sh`).
+  environment and a long-lived one converge on the same schema. **Nothing checks
+  this automatically today** (recorded 2026-09-07): `tests/e2e/` holds three
+  library scripts and a fixture carried from the predecessor, no stage scripts,
+  and no workflow runs it — the earlier claim that "the end-to-end harness resets
+  its database every run" described a harness that does not exist here. The
+  indexer image's `sync` entry applies every migration at boot, so a fresh Fly
+  machine is the de-facto check; a clean-database migration run in CI is on the
+  audit's open items.
 - **On-chain quantities are `NUMERIC`, never `BIGINT` or `DOUBLE PRECISION`.**
   Lamport amounts are `u64` and exceed both a signed 64-bit integer's range and a
   double's exact-integer range. A prize amount rounded by a float is a payment bug.

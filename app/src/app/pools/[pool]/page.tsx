@@ -8,7 +8,12 @@
  */
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { DEFAULT_FILL_DEADLINE_SECS, MIN_SEATS, TIER_POT_LAMPORTS } from '@blotto/scoring';
+import {
+  DEFAULT_FILL_DEADLINE_SECS,
+  MIN_SEATS,
+  REVIEW_WINDOW_SECS,
+  TIER_POT_LAMPORTS,
+} from '@blotto/scoring';
 import { COPY } from '@/copy';
 import { indexerApi, live } from '@/data/api';
 import { lamportsToSol } from '@/data/format';
@@ -19,9 +24,11 @@ import { Card } from '@/components/ui/card';
 import { Stat } from '@/components/ui/stat';
 import { ProgressRing } from '@/components/ui/progress-ring';
 import { Countdown } from '@/components/ui/countdown';
+import { poolStateLabel } from '@/components/pools/pool-state-label';
 
 const MIN_SEATS_N = Number(MIN_SEATS);
 const FILL_HOURS = Number(DEFAULT_FILL_DEADLINE_SECS / 3600n);
+const REVIEW_HOURS = Number(REVIEW_WINDOW_SECS / 3600n);
 
 export default async function PoolPage({ params }: { params: Promise<{ pool: string }> }) {
   const { pool: poolId } = await params;
@@ -55,7 +62,7 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
         <header className="mb-5 flex items-baseline gap-3">
           <h1 className="font-display text-[24px] font-bold text-ink">Pool #{pool.id}</h1>
           <span className="rounded-full border border-line px-2.5 py-0.5 text-[12px] uppercase tracking-[0.1em] text-ink-muted">
-            {pool.state}
+            {poolStateLabel(pool)}
           </span>
           <Link
             href={`/verify?pool=${pool.pool}`}
@@ -64,6 +71,23 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
             Verify this pool
           </Link>
         </header>
+
+        {pool.resolving && pool.resolving_until !== null && (
+          <Card className="mb-5 flex flex-col gap-2 p-5">
+            {/* Stage C: the published resolving window, counted down from the
+                server's clock like every other timer, with the rule beside it.
+                The window's start is the indexer's sight of PrizesPaid; the
+                daemon acts on the on-chain escrow timestamp (Stage D). */}
+            <Countdown
+              deadlineUnix={pool.resolving_until}
+              serverTimeUnix={pool.server_time}
+              label={COPY.pool.resolvingEndsIn}
+            />
+            <p className="max-w-prose text-[13px] leading-5 text-ink-muted">
+              {COPY.pool.resolvingNote(REVIEW_HOURS)}
+            </p>
+          </Card>
+        )}
 
         <Card live={open} className="mb-5 p-5">
           {potDiffers && (

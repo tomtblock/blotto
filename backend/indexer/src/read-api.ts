@@ -8,7 +8,9 @@
  *                                        ?state=&tier=&before=<id>&limit=
  *                                        (E3: the archive list is
  *                                        /pools?state=Paid, paged by id)
- *   GET /pools/:pool                   → PoolSummary
+ *   GET /pools/:pool                   → PoolSummary (+ held_shares,
+ *                                        resolving, resolving_until — Stage C,
+ *                                        derived, see `resolvingOf`)
  *   GET /pools/:pool/entries           → EntryRow[]
  *   GET /pools/:pool/results           → ResultRow[]
  *   GET /pools/:pool/leaderboard       → the VERIFIED archive ranking (E3):
@@ -52,6 +54,7 @@ import {
   applyHygiene,
   type HygieneConfig,
 } from '../../_shared/src/http-hygiene';
+import { REVIEW_WINDOW_SECS } from '../../scoring/src/prizes';
 import type { Queryable } from './shared';
 import { treasuryReport } from './treasury-report';
 import {
@@ -75,7 +78,46 @@ const B58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 export type Now = () => number;
 const wallClock: Now = () => Math.floor(Date.now() / 1000);
 
+/**
+ * The columns the two pool queries add to `pools.*` for the derived
+ * "resolving" flag (Phase 2 Stage C). A HELD SHARE is a payout escrowed at
+ * `PrizesPaid` whose entry has not settled either way (`escrow_settled IS
+ * NULL`; 0003). `settled_at` is when this indexer first saw the pool's
+ * `PrizesPaid` — an observation of the on-chain `Entry.escrowed_at`, which
+ * is what the daemon acts on (Stage D) and what a player can verify; the
+ * two differ by ingest latency, seconds against a twelve-hour window.
+ */
+const POOL_DERIVED_COLUMNS = `
+  (SELECT count(*)::int FROM payouts py
+     JOIN entries en ON en.pool = py.pool AND en.player = py.player
+    WHERE py.pool = p.pool AND py.escrowed AND en.escrow_settled IS NULL) AS held_shares,
+  (SELECT floor(extract(epoch FROM min(ev.ingested_at)))::text FROM events ev
+    WHERE ev.name = 'PrizesPaid' AND ev.raw->>'pool' = p.pool) AS settled_at`;
+
+const POOL_SELECT = `SELECT p.*,${POOL_DERIVED_COLUMNS} FROM pools p`;
+
+/**
+ * "Resolving", derived rather than stored (Phase 2 Stage C): a pool is
+ * resolving from the moment its prizes settle until either every held share
+ * on it is decided or the published window has passed, whichever comes
+ * first. A pool with no held share never resolves — "up to 12 hours" means
+ * exactly that. No `PoolState` variant carries this; the program's states
+ * are unchanged and the copy describes a process the operator runs.
+ */
+export function resolvingOf(
+  heldShares: number,
+  settledAt: number | null,
+  nowUnix: number
+): { resolving: boolean; resolving_until: string | null } {
+  if (settledAt === null) return { resolving: false, resolving_until: null };
+  const until = settledAt + Number(REVIEW_WINDOW_SECS);
+  return { resolving: heldShares > 0 && nowUnix < until, resolving_until: String(until) };
+}
+
 function poolRow(r: Record<string, unknown>, now: Now): Json {
+  const heldShares = r.held_shares === undefined || r.held_shares === null ? 0 : Number(r.held_shares);
+  const settledAt = r.settled_at === undefined || r.settled_at === null ? null : Number(r.settled_at);
+  const nowUnix = now();
   return {
     pool: r.pool,
     id: r.id === null ? null : String(r.id),
@@ -91,8 +133,11 @@ function poolRow(r: Record<string, unknown>, now: Now): Json {
     sealing_pubkey: r.sealing_pubkey,
     results_root: r.results_root ?? null,
     secret: r.secret ?? null,
+    // Stage C: held shares and the derived resolving flag (see `resolvingOf`).
+    held_shares: heldShares,
+    ...resolvingOf(heldShares, settledAt, nowUnix),
     // The clock the app's countdowns derive from (unix seconds, string).
-    server_time: String(now()),
+    server_time: String(nowUnix),
   };
 }
 
@@ -145,7 +190,7 @@ export async function handleRead(
     if (!B58.test(pool)) return { status: 400, body: { error: 'bad pool address' } };
 
     if (parts.length === 2) {
-      const res = await db.query('SELECT * FROM pools WHERE pool = $1', [pool]);
+      const res = await db.query(`${POOL_SELECT} WHERE pool = $1`, [pool]);
       if (res.rows.length === 0) return { status: 404, body: { error: 'not found' } };
       return { status: 200, body: poolRow(res.rows[0], now) };
     }
@@ -308,7 +353,7 @@ async function poolsList(db: Queryable, query: URLSearchParams, now: Now): Promi
 
   const clause = where.length > 0 ? ` WHERE ${where.join(' AND ')}` : '';
   const res = await db.query(
-    `SELECT * FROM pools${clause} ORDER BY id DESC LIMIT $${params.length}`,
+    `${POOL_SELECT}${clause} ORDER BY id DESC LIMIT $${params.length}`,
     params
   );
   return { status: 200, body: res.rows.map((r) => poolRow(r, now)) };

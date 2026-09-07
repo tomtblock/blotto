@@ -27,6 +27,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { REVIEW_WINDOW_SECS } from '@blotto/scoring';
 import { COPY } from './index';
 import { rulesSections } from '@/app/rules/rules.config';
 
@@ -50,8 +51,11 @@ const PROMISES: readonly Promised[] = [
   {
     phrase: 'the tournament enters resolving',
     commitment: 'A settled pool occupies a named "resolving" state before prizes are final.',
-    proof: null,
-    gate: 'Phase 2 — the Resolving state. No such pool state exists; PoolState is Open, Sealed, Scored, Paid, Refunding, Closed.',
+    // Derived, not stored (Phase 2 Stage C): the read API computes it from
+    // held shares and REVIEW_WINDOW_SECS, and both pool pages render it.
+    // No PoolState variant was added — the copy describes a process the
+    // operator runs, not a guarantee the chain enforces.
+    proof: 'backend/indexer/src/read-api.ts',
   },
   {
     phrase: 'we check the winning wallet against published sanctions lists',
@@ -159,22 +163,32 @@ describe('published claims are registered', () => {
     }
   });
 
-  it('the known gaps are exactly the four the audit recorded', () => {
-    // Tightening this list is the point. When Phase 2 lands, its promise
-    // moves from `proof: null` to a real path and this number drops. It must
-    // never rise without a deliberate edit here.
+  it('the known gaps are exactly the three that remain of the four the audit recorded', () => {
+    // Tightening this list is the point. When a Phase 2 stage lands, its
+    // promise moves from `proof: null` to a real path and this number drops
+    // (the resolving state left it at Stage C). It must never rise without a
+    // deliberate edit here.
     const gaps = PROMISES.filter((p) => p.proof === null);
     expect(gaps.map((p) => p.phrase).sort()).toEqual(
       [
         'If no decision is made within 12 hours, the flag is cleared and the prize is paid',
         'We check the winning wallet against published sanctions lists'.toLowerCase(),
         'You may appeal within 7 days',
-        'the tournament enters resolving',
       ].sort()
     );
     for (const g of gaps) {
       expect(g.gate, `gap "${g.phrase}" must name what closes it`).toBeTruthy();
     }
+  });
+
+  it('the resolving window the copy states is the constant the code acts on', () => {
+    // The founder's sentence says the number in words; the read API's badge
+    // (Stage C) and the daemon's release (Stage D) read REVIEW_WINDOW_SECS.
+    // If one moves without the other, this is where it shows.
+    const hours = Number(REVIEW_WINDOW_SECS / 3600n);
+    expect(COPY.rules.reviewProcess).toContain(`Resolving lasts up to ${hours} hours`);
+    expect(COPY.rules.reviewProcess).toContain(`If no decision is made within ${hours} hours`);
+    expect(COPY.pool.resolvingNote(hours)).toContain(`within ${hours} hours`);
   });
 
   it('no operational "we" promise in the review copy is unregistered', () => {
