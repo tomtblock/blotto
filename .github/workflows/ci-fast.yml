@@ -1,19 +1,20 @@
 # ci-fast — the always-on lane.
 #
-# Carried from the predecessor repository's ci-fast, with the services and web jobs
-# dropped: this
-# repository has no service or web suite yet (Phase 0 carried the plumbing, not a
-# runnable service). Add those lanes back in the phase that makes them runnable.
-#
-# Two jobs:
-#   rust      — fmt, clippy -D warnings, cargo test across the workspace
-#   node      — the backend TypeScript suites (scoring oracle vectors, sealing,
-#               crank, indexer projection over real emitted bytes) + typecheck
-#   gitleaks  — filesystem scan of the checkout, pinned binary, checksum-verified
+# Four jobs:
+#   rust           — fmt, clippy -D warnings, cargo test across the workspace
+#                    (the program's unit tests and the 10k-case vault fuzz)
+#   node           — every backend package (typecheck + test), the offline
+#                    twenty-pool rehearsal, and the app's lint / typecheck /
+#                    test / build
+#   gitleaks       — filesystem scan of the checkout, pinned binary,
+#                    checksum-verified
+#   standing-rules — the PID §8.7 language gate, the two structural greps, and
+#                    the env-example coverage check
 #
 # No Solana CLI or Anchor install here — nothing in this lane builds SBF. The
-# on-chain suite (anchor build / anchor test against a local validator) is a
-# separate lane, added when programs/blotto_cup has accounts to test against.
+# compiled artifact and the LiteSVM suite that drives it are the separate
+# `on-chain` lane, which runs when on-chain code changes. A change to
+# programs/ or tests/litesvm/ is NOT verified by this lane alone.
 name: ci-fast
 
 on:

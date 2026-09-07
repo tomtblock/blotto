@@ -1,5 +1,16 @@
 # Transition Report — `anarchy-fun` → `blotto-cup`
 
+> **HISTORICAL — the Phase 0 record, not the current state.** Written when
+> nothing was provisioned and the program had never been deployed. Since then
+> the program has been deployed to devnet, the backend services run on Fly, the
+> frontend on Vercel, and key custody is partly in Turnkey — so the "not
+> provisioned" rows below and the note about the lost program keypair describe a
+> moment that has passed. For **what is provisioned and who holds which key
+> today**, read [`docs/OPERATING-MANUAL.md`](docs/OPERATING-MANUAL.md) §8 and
+> [`docs/hosting.md`](docs/hosting.md). This file stays as the record of the
+> transition and of what was decommissioned. (Recorded by the audit of
+> 2026-09-07.)
+
 **Phase 0, per `REPO-TRANSITION-PLAYBOOK.md` §7.** Companion to `EXTRACTION-REPORT.md`, which
 records what was carried; this one records keys, infrastructure and what still has to be
 decommissioned.
