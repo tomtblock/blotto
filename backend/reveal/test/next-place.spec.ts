@@ -16,7 +16,7 @@
 import { expect } from 'chai';
 import { createHash } from 'crypto';
 import { FakeChain, planNextPlace, payNextPlacePortions, type ChainEntryView } from '../src';
-import { buildRanking } from '../src/ranking';
+import { buildRanking, proofForRow } from '../src/ranking';
 import { TIER_ENTRY_LAMPORTS, TIER_POT_LAMPORTS, type PlayerResult } from '../../scoring/src';
 import { base58Encode } from '../../_shared/src/blotto-events';
 
@@ -254,5 +254,57 @@ describe('payNextPlacePortions — the program judges the arguments', () => {
     }
     expect(refused).to.match(/NoEscrow|RankAlreadySettled/);
     expect(chain.paid.get(player(0))).to.equal(POT);
+  });
+
+  it('REGRESSION: the program refuses a held wallet AS THE RECIPIENT, not just as a peer', async () => {
+    // The recipient is checked inline in `handle_pay_next_place`, NOT by
+    // `eligible()` — which only classifies the peers. Stage F added the
+    // sanctions clause to `eligible()` alone, so a held wallet was excluded
+    // from the group and paid as `to` regardless. The driver never chooses
+    // such a recipient (it plans with `eligibleFor`), so this drives the
+    // refusal directly: the program is the last line, and it has to hold.
+    const { chain, ranking, entries } = await settledPool([0, 1]);
+    entries[1].flagged = true;
+    await chain.payPrizes(1n, [0, 1]);
+    await chain.forfeitEscrow(1n, player(1));
+    await chain.placeSanctionsHold(1n, player(0));
+
+    const live = await chain.getEntries(1n);
+    const plan = planNextPlace(ranking, live, [0, 1], live[1]);
+    // The driver skips the held seat and passes the share ONWARD, which is
+    // the right answer: a hold on one winner must not strand the forfeited
+    // half. Seat 0 is the only other first-place seat and it is held, so
+    // there is no eligible committed recipient and the share goes to the
+    // next competition rank (1 + 2 committed seats = 3).
+    expect(plan.blocker).to.equal(null);
+    expect(plan.portions).to.not.be.empty;
+    expect(plan.portions.every((x) => x.rank === 3)).to.equal(true);
+    expect(plan.portions.some((x) => x.to === player(0))).to.equal(
+      false,
+      'the held wallet is never a recipient'
+    );
+
+    // And if something did argue it anyway, the chain refuses.
+    let refused = '';
+    try {
+      await chain.payNextPlace(
+        1n,
+        player(1),
+        player(0),
+        1,
+        POT / 2n,
+        proofForRow(
+          ranking,
+          ranking.rows.findIndex((r) => r.player === player(0))
+        ),
+        1,
+        true,
+        []
+      );
+    } catch (e) {
+      refused = String(e);
+    }
+    expect(refused).to.contain('SanctionsHoldActive');
+    expect(chain.paid.get(player(0)) ?? 0n).to.equal(POT / 2n, 'only its own prize, never the forfeited half');
   });
 });

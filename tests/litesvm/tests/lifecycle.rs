@@ -533,7 +533,7 @@ fn a_sanctions_hold_blocks_both_release_paths_and_the_next_place_split() {
     );
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
     assert!(
-        err.contains("6060") || err.contains("NextPlaceIneligible"),
+        err.contains("6069") || err.contains("SanctionsHoldActive"),
         "a held wallet must not receive a forfeited share: {err}"
     );
 

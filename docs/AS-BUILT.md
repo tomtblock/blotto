@@ -232,7 +232,10 @@ Stated plainly, because two of these are published as though they were.
    (Stage F, `instructions/sanctions.rs`): settlement-signed to place,
    admin-signed to lift, refused by **both** paths of `release_escrow`
    including the seven-day permissionless one, and excluded from
-   `eligible()` so a held wallet cannot receive a next-place portion either.
+   both of `pay_next_place`'s eligibility checks — `eligible()`, which
+   classifies the committed peers, and the inline check on the recipient —
+   so a held wallet can neither be counted in a first-place group nor be
+   paid a next-place portion.
    A hold standing at payout also makes `pay_prizes` **escrow** the share
    rather than send it, which is what puts the money where those two checks
    can see it — the batch is never refused, so one held wallet cannot leave

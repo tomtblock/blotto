@@ -539,6 +539,11 @@ export class FakeChain implements KeeperChain {
     const remaining = escrowOf(from);
     if (remaining === 0n) throw new Error('NoEscrow');
     if (toEntry.refunded || toEntry.forfeited) throw new Error('NextPlaceIneligible');
+    // The RECIPIENT's sanctions guard. The program checks `to` inline rather
+    // than through `eligible()` — which classifies the PEERS — so the hold
+    // has to be refused in both places or a held wallet is excluded from the
+    // group and paid as the recipient anyway.
+    if (this.sanctionsHeld.has(to)) throw new Error('SanctionsHoldActive');
     if (reviewPending(toEntry, escrowOf(to))) throw new Error('NextPlaceReviewPending');
     const split: SplitState = this.splits.get(from) ?? {
       total: 0n,
