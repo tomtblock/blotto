@@ -770,7 +770,7 @@ on its next entry past 52. So the drain gate is the fairness gate only.
    Run and keep the output, timestamped, before the upgrade transaction:
 
    ```bash
-   npx tsx scripts/check-deployed.ts --pools   # or the indexer: GET /pools?state=Sealed etc.
+   npx ts-node --transpile-only scripts/admin.ts pools   # read-only; prints every pool and a timestamped drain verdict
    ```
 
    If an Open pool holds entries, wait: it either fills (settles under the

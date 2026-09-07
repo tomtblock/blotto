@@ -45,6 +45,10 @@ const USAGE = `blotto-cup admin CLI
 
 commands
   status                    read Config + platform treasury balance
+  pools                     read every pool's state — the drain query the
+                            D-E2/D-E4 runbook section records before an
+                            upgrade (read-only; exits 1 while any pool is
+                            Sealed, Scored or Refunding)
   init-config               one-time setup (admin = the signing key)
       --entry-signer <pubkey> --settlement-signer <pubkey>
       --ceilings <7 comma-separated lamport values>
@@ -156,6 +160,9 @@ class Pdas {
   platform(): PublicKey {
     return this.pda([Buffer.from('platform')]);
   }
+  pool(id: bigint): PublicKey {
+    return this.pda([Buffer.from('pool'), u64le(id)]);
+  }
 }
 
 interface Ctx {
@@ -257,6 +264,57 @@ async function cmdStatus(ctx: Ctx): Promise<void> {
   console.log(`refundable:        ${d.readBigUInt64LE(297)} lamports`);
   console.log(`next pool id:      ${d.readBigUInt64LE(315)}`);
   console.log(`platform balance:  ${BigInt(platform?.lamports ?? 0)} lamports`);
+}
+
+const POOL_STATES = ['Open', 'Sealed', 'Scored', 'Paid', 'Refunding', 'Closed'] as const;
+/** States in which a pool is mid-settlement — the drain gate of the
+ * D-E2/D-E4 runbook section (proposal E1 §8): no upgrade or backend deploy
+ * while any pool sits here, because the prize rule is enforced by the
+ * engine that settles it. */
+const MID_SETTLEMENT = new Set(['Sealed', 'Scored', 'Refunding']);
+
+/** Read-only: every pool 1..next_pool_id−1 by fixed offsets (state.rs since
+ * D-A1 v2 — the same offsets chain-web3.ts::getPool and the LiteSVM readers
+ * pin: id 8 | tier 16 | entry 17 | pot 25 | entrants 33 | opened_at 35 |
+ * fill_deadline 43 | state 51), then the drain verdict, timestamped so the
+ * output can be kept as the record the runbook asks for. */
+async function cmdPools(ctx: Ctx): Promise<void> {
+  const cfg = await ctx.connection.getAccountInfo(ctx.pdas.config(), 'confirmed');
+  if (!cfg) {
+    console.log('config: NOT INITIALISED (run init-config)');
+    return;
+  }
+  const next = cfg.data.readBigUInt64LE(315);
+  console.log(`drain query at ${new Date().toISOString()} — program ${ctx.programId.toBase58()}`);
+  console.log('id    tier  state      entrants  pot_lamports     fill_deadline (unix)');
+  const blocking: bigint[] = [];
+  const tally = new Map<string, number>();
+  for (let id = 1n; id < next; id++) {
+    const info = await ctx.connection.getAccountInfo(ctx.pdas.pool(id), 'confirmed');
+    if (!info) {
+      console.log(`${id.toString().padEnd(5)} (no account — gap in the id sequence)`);
+      continue;
+    }
+    const d = info.data;
+    const state = POOL_STATES[d[51]] ?? `unknown(${d[51]})`;
+    tally.set(state, (tally.get(state) ?? 0) + 1);
+    if (MID_SETTLEMENT.has(state)) blocking.push(id);
+    console.log(
+      `${id.toString().padEnd(5)} ${String(d[16]).padEnd(5)} ${state.padEnd(10)} ` +
+        `${String(d.readUInt16LE(33)).padEnd(9)} ${d.readBigUInt64LE(25).toString().padEnd(16)} ` +
+        `${d.readBigInt64LE(43)}`
+    );
+  }
+  console.log(
+    `pools: ${next - 1n} — ` +
+      [...tally.entries()].map(([s, n]) => `${s} ${n}`).join(', ')
+  );
+  if (blocking.length === 0) {
+    console.log('drain: CLEAR — no pool is Sealed, Scored or Refunding');
+  } else {
+    console.log(`drain: BLOCKED — mid-settlement pool ids: ${blocking.join(', ')}`);
+    process.exitCode = 1;
+  }
 }
 
 async function cmdInitConfig(ctx: Ctx): Promise<void> {
@@ -493,6 +551,8 @@ async function main(): Promise<void> {
   switch (cli.command) {
     case 'status':
       return cmdStatus(ctx);
+    case 'pools':
+      return cmdPools(ctx);
     case 'init-config':
       return cmdInitConfig(ctx);
     case 'set-open-tiers':
