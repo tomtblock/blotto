@@ -1042,17 +1042,27 @@ impl Env {
     /// assert exact treasury numbers do their own funding and call
     /// `open_pool_ix` directly.
     pub fn open_ready_pool(&mut self, pool_id: u64, tier: u8) {
+        let settlement = self.settlement.insecure_clone();
+        self.open_ready_pool_as(&settlement, pool_id, tier);
+    }
+
+    /// `open_ready_pool` with an explicit opener — for tests that rotate the
+    /// keeper away from the settlement signer and then need a pool. The
+    /// opener must be `Config.keeper` (or the tier must be past its liveness
+    /// window); the collection is still created by the settlement signer,
+    /// which is only its payer.
+    pub fn open_ready_pool_as(&mut self, opener: &Keypair, pool_id: u64, tier: u8) {
         let bootstrap = TIER_POTS[tier as usize] + TIER_POTS.iter().sum::<u64>();
         self.fund_platform(bootstrap);
         let ix = open_pool_ix(
-            &self.settlement.pubkey(),
+            &opener.pubkey(),
             pool_id,
             tier,
             [9u8; 32],
             self.sealing_secret_hash,
         );
+        self.send(&[ix], &[opener]).expect("open_pool");
         let settlement = self.settlement.insecure_clone();
-        self.send(&[ix], &[&settlement]).expect("open_pool");
         patch_vrf_seed(&mut self.svm, &pool_pda(pool_id), [5u8; 32]);
         let ix = create_pass_collection_ix(&self.settlement.pubkey(), pool_id);
         self.send(&[ix], &[&settlement])
