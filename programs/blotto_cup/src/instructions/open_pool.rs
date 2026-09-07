@@ -108,10 +108,20 @@ pub fn handle_open_pool(
     let next_open_at = ctx.accounts.config.tier_next_open_at[tier_idx];
     require!(now >= next_open_at, ErrorCode::TierCoolingDown);
     // Prompt v2 §A.2/§A.3: the keeper opens pools; anyone may once the tier
-    // has sat idle for the liveness window past its cooldown (a tier that
-    // never settled a pool has `0` here and is open to any signer — the
-    // pre-upgrade posture, and harmless: the gates below still decide).
+    // has sat idle for the liveness window past its cooldown.
+    //
+    // `tier_next_open_at` is never left at zero for an enabled tier —
+    // `init_config`, `migrate_config` and `set_open_tiers` all stamp `now`.
+    // That is a security property, not tidiness: at zero the window below is
+    // decades in the past, so the FIRST pool of a tier could be opened by any
+    // signer, and the opener chooses `sealing_pubkey` / `sealing_secret_hash`.
+    // A pool carrying a stranger's sealing key cannot be revealed by us and
+    // therefore cannot be settled — and if it seals with at least `MIN_SEATS`
+    // it can no longer refund either, stranding both the pot and the entries.
+    // The belt-and-braces refusal below makes a zero unusable by a non-keeper
+    // even if some future path forgets to stamp one.
     if ctx.accounts.opener.key() != ctx.accounts.config.keeper {
+        require!(next_open_at > 0, ErrorCode::NotKeeper);
         let fallback_at = next_open_at
             .checked_add(LIVENESS_FALLBACK_SECS)
             .ok_or(ErrorCode::Overflow)?;

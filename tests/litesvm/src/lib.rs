@@ -803,6 +803,7 @@ pub const ENTRY_SPACE: usize = 227;
 /// state.rs).
 pub struct ConfigView {
     pub keeper: Pubkey,
+    pub open_tiers: [bool; 7],
     pub platform_reserved: u64,
     pub platform_refundable: u64,
     pub active_pool_by_tier: [u64; 7],
@@ -829,6 +830,7 @@ pub fn read_config(svm: &LiteSVM) -> ConfigView {
     );
     ConfigView {
         keeper: Pubkey::new_from_array(data[380..412].try_into().unwrap()),
+        open_tiers: core::array::from_fn(|i| data[105 + i] != 0),
         platform_reserved: u64::from_le_bytes(data[289..297].try_into().unwrap()),
         platform_refundable: u64::from_le_bytes(data[297..305].try_into().unwrap()),
         active_pool_by_tier: core::array::from_fn(|i| {

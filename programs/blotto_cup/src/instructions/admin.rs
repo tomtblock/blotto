@@ -80,11 +80,17 @@ pub fn handle_init_config(
     // deadline players entered under.
     config.fill_deadline_seconds = DEFAULT_FILL_DEADLINE_SECS;
     config.cooldown_seconds = DEFAULT_COOLDOWN_SECS;
-    config.tier_next_open_at = [0; N_TIERS];
     config.paused = false;
     // R6 as amended by D1: seven tiers configured; open at launch: 0.1
     // ONLY. Written out, not computed, so the launch policy is readable.
     config.open_tiers = [true, false, false, false, false, false, false];
+    // Every tier's liveness clock starts NOW, not at the epoch — see
+    // `handle_set_open_tiers`. At `0` the fallback window is decades past and
+    // any signer could open a tier's first pool, choosing its sealing key.
+    // `now` lets the keeper open immediately (`now >= now`) and holds a
+    // stranger off for a full `LIVENESS_FALLBACK_SECS`.
+    let now = Clock::get()?.unix_timestamp;
+    config.tier_next_open_at = [now; N_TIERS];
     config.vault_ceiling_lamports = vault_ceiling_lamports;
     // D-A1 revised: prices and pots are Config state, seeded from the launch
     // constants; `set_tier_economics` changes them later (never an open pool).
@@ -184,8 +190,32 @@ pub fn handle_set_pool_timing(
 /// opinion; higher tiers only by explicit founder decision). Emits
 /// `TiersOpened` so the events ledger — and the treasury report replayed
 /// from it — knows enablement, not just the keeper reading live Config.
+///
+/// # Starting the liveness clock (security fix, 2026-09-07)
+///
+/// Enabling a tier also stamps `tier_next_open_at` for any tier that has
+/// never had one, because `open_pool`'s liveness fallback is measured from
+/// that field: at `0` the fallback window (`0 + LIVENESS_FALLBACK_SECS`) is
+/// decades in the past, so the FIRST pool of a never-used tier could be
+/// opened by any signer the moment the tier was switched on. That matters
+/// because the opener chooses the pool's sealing key — a stranger's pool
+/// carries a secret our custody does not hold, which cannot be revealed and
+/// therefore cannot be settled. Stamping `now` costs the keeper nothing
+/// (`open_pool` requires `now >= tier_next_open_at`, and `now >= now` holds)
+/// and puts a stranger a full fallback window away.
+///
+/// A tier that already carries a stamp is left alone: re-stamping on every
+/// call would let an admin extend a freeze indefinitely, which is exactly
+/// what the fallback exists to prevent.
 pub fn handle_set_open_tiers(ctx: Context<AdminOnly>, open_tiers: [bool; N_TIERS]) -> Result<()> {
-    ctx.accounts.config.open_tiers = open_tiers;
+    let now = Clock::get()?.unix_timestamp;
+    let config = &mut ctx.accounts.config;
+    for (tier, &enabled) in open_tiers.iter().enumerate() {
+        if enabled && config.tier_next_open_at[tier] == 0 {
+            config.tier_next_open_at[tier] = now;
+        }
+    }
+    config.open_tiers = open_tiers;
     emit!(TiersOpened { open_tiers });
     Ok(())
 }

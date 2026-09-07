@@ -108,7 +108,13 @@ once.
 `set_tier_economics`, `set_treasury_policy`, `withdraw_platform`,
 `forfeit_escrow`.
 
-*Keeper (or anyone after the 24-hour liveness fallback).* `open_pool`.
+*Keeper (or anyone after the 24-hour liveness fallback).* `open_pool`. The
+fallback is measured from `tier_next_open_at`, which is stamped whenever a tier
+becomes usable — at `init_config`, at `migrate_config`, and when `set_open_tiers`
+enables a tier that has never carried one. That is a security property, not
+tidiness: the opener supplies the pool's sealing key, so a pool opened by anyone
+but us can never be revealed and therefore never settled. See the audit's §2.1
+and A5b.
 
 *Anyone.* `fund_platform_wallet`, `commit_vrf_seed`, `create_pass_collection`,
 `seal_at_deadline`, `trigger_refund`, `refund`, and `release_escrow` once the
