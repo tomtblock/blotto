@@ -8,8 +8,10 @@ owns; everywhere else a fact appears, it appears as a pointer.
 
 | Subject | Canonical document | Update rule |
 |---|---|---|
-| **Phase order, step scope, gates, and the ratified decision register (R1–R21)** | `BUILD-ROADMAP_v1.0.md` | Founder-ratified 2026-08-26. **Where it and TECH-ARCH v0.2 disagree, the roadmap wins** — the deltas are its §1.3/§1.4, to be absorbed into TECH-ARCH v0.3 |
-| Product intent, game design, prizes, legal characterisation | `PID_Blotto-Cup_v0.5.md` | Founder-owned. Superseded only by a later PID version |
+| **What the system actually is — services, program, money model, and what is not built** | `AS-BUILT.md` | Architect-owned. Written from the code; re-verified against a green suite whenever it changes. **Where it and TECH-ARCH v0.2 disagree, this file is right about what exists** and TECH-ARCH is right about what was intended |
+| Running it — deploys, admin transactions, incidents, keys | `OPERATING-MANUAL.md` | Architect-owned; the founder owns the standing rules inside it |
+| **Phase order, step scope, gates, and the ratified decision register (R1–R21, D-A…D-E)** | `BUILD-ROADMAP_v1.0.md` | Founder-ratified 2026-08-26. **Where it and TECH-ARCH v0.2 disagree, the roadmap wins** — the deltas are its §1.3/§1.4. The register rows are current; the phase step tables are the plan as ratified and are not updated as the build moves past them |
+| Product intent, game design, prizes, legal characterisation | `PID_Blotto-Cup_v0.5.md` | Founder-owned. Superseded only by a later PID version. **Materially behind the build since 2026-09-06 — see the conflict list below** |
 | The allocation interaction (pentagon radar, live normalisation, "Even split") | `PID_Blotto-Cup_v0.5.md` §4 | Founder-owned. **Overrides** TECH-ARCH §10 — see the conflict note below |
 | Forbidden and preferred language | `PID_Blotto-Cup_v0.5.md` §8.7, as amended by register row D-B7 (full list in `../CONTRIBUTING.md` → "The language gate") | Founder + counsel. Enforced by the CI word grep |
 | System architecture, accounts, instructions, events, constants | `TECH-ARCHITECTURE_Blotto-Cup_v0.2.md` | Architect-owned |
@@ -43,15 +45,42 @@ owns; everywhere else a fact appears, it appears as a pointer.
 The build roadmap's §1.3/§1.4 is the authoritative list of everything it changes in
 TECH-ARCH v0.2 (payout model, Config/Pool fields, TypeScript scoring, no partial
 fill, §12 replaced). Those are ratified decisions, not open conflicts — TECH-ARCH
-v0.3 absorbs them. One older conflict remains recorded here so nobody resolves it
-the wrong way:
+v0.3 absorbs them.
 
-- **TECH-ARCH §10 still describes "five steppers with quick-set chips 0/25/50/75/100".**
-  That sentence is **stale and overridden by PID v0.5 §4**: the allocation interaction is a
-  draggable pentagon radar with live normalisation, no quick-set chips, no presets, and "Even split"
-  as the only button. PID §4.3 explains why — any prominent discrete target clusters the population
-  and drives the draw rate up. Build to the PID. TECH-ARCH §10 should be corrected in its next
-  revision.
+### The PID is behind the build (recorded 2026-09-07; founder-owned to fix)
+
+The E1 decisions of 2026-09-06 and the founder rulings of 2026-09-07 changed the
+prize structure, the prize amounts, the fill deadline and the minimum field.
+`PID_Blotto-Cup_v0.5.md` has not been reissued since, so the founder's own
+product document — and the one counsel reads — now describes a materially
+different competition from the one that is built. **Nobody may edit the PID but
+the founder**, so every divergence is listed here instead, for a single v0.6
+pass. `AS-BUILT.md` §5 carries the same table with the code-side detail.
+
+| PID location | Says | The build, since |
+|---|---|---|
+| §1 summary, §6 heading and table, §2 table, §7 flow diagram | Top 16 paid; the prize pool is 80% of entries; the platform retains 20% | **One paid place** (D-E2, 2026-09-06). Pots are fixed constants funded from the treasury before entries open; the operator's margin is entries minus the pot |
+| §2 table | Prize pools 5.12 / 25.60 SOL | **4 / 20 / 30 / 40 / 100 / 200 / 300 SOL** across seven tiers (D-E1, 2026-09-06) |
+| §2 rolling-pools paragraph | Fill deadline 72 hours; 32–63 entrants run at reduced size; fewer than 32 refunds | **12 hours** (D-E6); **52–63 run**, fewer than 52 refunds (D-E4) |
+| §5 | Prose implies entry order can affect ranking | Entry order decides only the indivisible remainder and the published leaf order. Rank comes from battles won then stats won (D3-B) |
+| §8.3 evidence table | "Paid 16 who are genuinely top-16" | One paid place. The skill evidence needs restating as a rank-1 rate |
+| §1 summary | "Unflagged winners claim immediately" | There is no claim step; prizes are pushed (R10) |
+
+### TECH-ARCH v0.2 is behind the build
+
+It has not been reissued since August 2026. Read it for intent, and `AS-BUILT.md`
+for what exists. The divergences that would mislead a reader:
+
+- **§10 describes "five steppers with quick-set chips 0/25/50/75/100".** Stale and
+  overridden by PID v0.5 §4: the allocation interaction is a draggable pentagon
+  with live normalisation, no chips, no presets, and "Even split" as the only
+  button. PID §4.3 explains why — any prominent discrete target clusters the
+  population and drives the draw rate up.
+- **The instruction table says `register` splits 80/20 between vault and
+  platform.** It credits 100% to the treasury; the pot was moved into the vault at
+  `open_pool`, before any entry, and `register` cannot touch a vault at all.
+- **§3.2 and §13 describe a `claim` instruction and a claim step.** Neither
+  exists; prizes are pushed.
 
 ## Where history lives
 
@@ -61,9 +90,17 @@ the wrong way:
   reason for a decision — cite the PID or the architecture doc.
 - **`archive/`** — superseded Blotto Cup documents kept as evidence. Nothing here is authoritative
   either. See `archive/README.md`.
+- **`phase-reports/`** — one report per completed step: what was built, the
+  judgement calls made under uncertainty, and the numbers as they stood *that
+  day*. They are a record of decisions, **not a description of the current
+  build**, and several carry superseded tables (the top-sixteen prize bands and
+  the 80% pot in `step-tiers-and-ties.md`, the paid-seat rates in
+  `step-skill-evidence.md`). Cite one for *why* something was done; never for
+  *what the system does now* — that is `AS-BUILT.md`.
+- **`design/flows/`** — the founder's screen mockups, one per surface.
 
-Both directories are excluded from the CI word grep precisely because they are historical. Every
-other directory in this repository is live and must pass it.
+`reference/` and `archive/` are excluded from the CI word grep precisely because they are
+historical. Every other directory in this repository is live and must pass it.
 
 ## What is in `reference/`
 
