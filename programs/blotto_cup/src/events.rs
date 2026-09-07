@@ -239,3 +239,22 @@ pub struct Refunded {
     /// The FULL entry (vault share + platform share) — R7.
     pub amount: u64,
 }
+
+/// A sanctions hold was placed on an entry (Phase 2 Stage F). Published so
+/// the hold is as checkable as every other decision this program records —
+/// and deliberately distinct from `EntryFlagged`, because it is not one.
+#[event]
+pub struct SanctionsHoldPlaced {
+    pub pool: Pubkey,
+    pub player: Pubkey,
+    pub placed_at: i64,
+}
+
+/// A sanctions hold was lifted (admin-signed): the match was a false
+/// positive and the entry returns to the ordinary release path.
+#[event]
+pub struct SanctionsHoldLifted {
+    pub pool: Pubkey,
+    pub player: Pubkey,
+    pub lifted_at: i64,
+}

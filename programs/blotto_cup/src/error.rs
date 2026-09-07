@@ -166,7 +166,44 @@ pub enum ErrorCode {
     #[msg("Split arguments disagree with the group or with earlier payments of this share")]
     NextPlaceSplitMismatch,
 
-    // 6064 — audit A7 / O18 (appended 2026-09-07, never inserted).
+    // 6068 — audit A7 / O18 (appended 2026-09-07, never inserted).
     #[msg("The keeper may not be the zero key")]
     KeeperMustNotBeZero,
+
+    // 6069-6070 — Phase 2 Stage F, the sanctions hold (appended).
+    #[msg("A sanctions hold is in force on this entry")]
+    SanctionsHoldActive,
+    #[msg("No sanctions hold is in force on this entry")]
+    NoSanctionsHold,
+}
+
+#[cfg(test)]
+mod error_numbers {
+    use super::ErrorCode;
+
+    /// Anchor numbers a variant by its POSITION in the enum, so every number
+    /// written in a comment above is really a claim about all the variants
+    /// before it. The three appended for the keeper guard and the sanctions
+    /// hold were each documented four short, and no test noticed: the LiteSVM
+    /// assertions read `err.contains("6065") || err.contains("SanctionsHold\
+    /// Active")`, and the name matched. This pins the numbers themselves.
+    ///
+    /// A failure here means a variant was INSERTED rather than appended,
+    /// which renumbers everything after it — an on-chain wire-contract change
+    /// that silently invalidates every client checking a number. Append
+    /// instead, and add the new variant here.
+    #[test]
+    fn appended_variants_keep_the_numbers_the_clients_check() {
+        for (code, expected) in [
+            (ErrorCode::AutoReleaseNotDue, 6064u32),
+            (ErrorCode::InvalidTiming, 6065),
+            (ErrorCode::NextPlaceReviewPending, 6066),
+            (ErrorCode::NextPlaceSplitMismatch, 6067),
+            (ErrorCode::KeeperMustNotBeZero, 6068),
+            (ErrorCode::SanctionsHoldActive, 6069),
+            (ErrorCode::NoSanctionsHold, 6070),
+        ] {
+            assert_eq!(u32::from(code), expected, "{code:?}");
+        }
+    }
 }

@@ -366,6 +366,25 @@ pub struct Entry {
     /// The indivisible remainder has been paid (to the lowest entry number
     /// of the group — verified at first place, asserted at the next rank).
     pub split_remainder_paid: bool,
+    // ---- Appended by Phase 2 Stage F (2026-09-07). Entries are created per
+    // `register`, and the redeploy drains every pool to 0 entrants first
+    // (runbook step 2), so no pre-upgrade Entry outlives this.
+    /// A SANCTIONS HOLD: this wallet matched a published sanctions list when
+    /// the pool's winner was screened at resolving. It is NOT an integrity
+    /// flag and shares nothing with one — no reviewer decides it, it cites no
+    /// published criterion, and it never passes the share to another player.
+    ///
+    /// While it is set, BOTH paths of `release_escrow` refuse (the
+    /// settlement signer's and the seven-day permissionless one), and the
+    /// entry is not `eligible` to receive a next-place portion either. The
+    /// share simply stays in the pool's vault as blocked property.
+    ///
+    /// Only `lift_sanctions_hold` (ADMIN-signed) clears it, for a match that
+    /// review establishes was a false positive. There is deliberately no
+    /// instruction that moves a held share anywhere: what happens to blocked
+    /// property is counsel's answer, and until it is given the money stays
+    /// where no operator instruction can reach it.
+    pub sanctions_hold: bool,
 }
 
 impl Entry {
@@ -374,8 +393,8 @@ impl Entry {
     pub const LEN_V1: usize = 32 + 32 + 2 + 32 + 1 + 32 + 8 + 32 + 1 + 1 + 1 + 8 + 1;
     /// escrowed_at (8) + forfeited (1) + next_place_lamports (8) +
     /// split_total (8) + split_paid_mask (8) + split_group_size (2) +
-    /// split_remainder_paid (1).
-    pub const TAIL_LEN: usize = 8 + 1 + 8 + 8 + 8 + 2 + 1;
+    /// split_remainder_paid (1) + sanctions_hold (1, Stage F).
+    pub const TAIL_LEN: usize = 8 + 1 + 8 + 8 + 8 + 2 + 1 + 1;
     pub const LEN: usize = Self::LEN_V1 + Self::TAIL_LEN;
     pub const SPACE: usize = 8 + Self::LEN;
 }
@@ -531,9 +550,9 @@ mod tests {
         );
         assert_eq!(Config::SPACE, 484);
         assert_eq!(Entry::LEN_V1, 183);
-        assert_eq!(Entry::TAIL_LEN, 36);
-        assert_eq!(Entry::LEN, 219);
-        assert_eq!(Entry::SPACE, 227);
+        assert_eq!(Entry::TAIL_LEN, 37);
+        assert_eq!(Entry::LEN, 220);
+        assert_eq!(Entry::SPACE, 228);
     }
 
     #[test]
@@ -559,6 +578,7 @@ mod tests {
             split_paid_mask: u64::MAX,
             split_group_size: u16::MAX,
             split_remainder_paid: true,
+            sanctions_hold: true,
         };
         let mut buf = Vec::new();
         e.serialize(&mut buf).unwrap();

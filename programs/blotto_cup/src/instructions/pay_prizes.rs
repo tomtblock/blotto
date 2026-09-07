@@ -22,8 +22,22 @@
 //! # Escrow at payout
 //!
 //! A seat's share is escrowed (left in the vault, recorded on the Entry)
-//! rather than paid when the entry is flagged (R11) or when the KYC-at-claim
-//! switch is on and the share exceeds it (R3, roadmap 4.5).
+//! rather than paid when the entry is flagged (R11), when a sanctions hold
+//! stands against it (Phase 2 Stage F), or when the KYC-at-claim switch is
+//! on and the share exceeds it (R3, roadmap 4.5).
+//!
+//! The hold's clause is load-bearing, not decorative. A hold is checked by
+//! `release_escrow` and by `pay_next_place`'s eligibility test — both of
+//! which only ever see money that is ALREADY in escrow. Without this clause
+//! a held seat would be paid straight out of the vault here and the hold
+//! would guard an empty escrow: it must divert the share, not merely refuse
+//! to let it out afterwards.
+//!
+//! Note what this does NOT do: it does not refuse the batch. Refusing would
+//! revert every seat in it, leave the pool short of `Paid` forever, and so
+//! strand the tier's slot and the treasury's reserved pot on one held
+//! wallet. Escrowing settles the seat, reaches `Paid`, and leaves exactly
+//! one wallet's share unmoved.
 
 use anchor_lang::prelude::*;
 
@@ -113,8 +127,11 @@ pub fn handle_pay_prizes<'info>(
         require_keys_eq!(*wallet_info.key, entry.player, ErrorCode::WinnerMismatch);
         require!(!entry.settled, ErrorCode::EntryAlreadySettled);
 
-        // Escrow: detection flag (R11) or KYC-at-claim switch (R3/4.5).
-        let escrowed = entry.flagged || (kyc_above > 0 && amount > kyc_above);
+        // Escrow: detection flag (R11), sanctions hold (Stage F), or the
+        // KYC-at-claim switch (R3/4.5). See the module doc on why a held
+        // seat is escrowed here rather than refused.
+        let escrowed =
+            entry.flagged || entry.sanctions_hold || (kyc_above > 0 && amount > kyc_above);
         if escrowed {
             // The lamports stay in the vault; the claim on them is recorded
             // on the Entry and settled later by release/forfeit.

@@ -396,3 +396,249 @@ fn refund_fork_returns_the_full_entry() {
     );
     assert_eq!(cfg.active_pool_by_tier[0], 0, "slot freed at Closed");
 }
+
+/// PHASE 2 STAGE F — a sanctions hold blocks every route to the money.
+///
+/// The published sentence is that we check the WINNING wallet against
+/// published sanctions lists during resolving. What that needs on-chain is a
+/// hold that survives the two things an integrity flag does not survive: the
+/// seven-day permissionless release, and the next-place split. This test is
+/// that property, end to end, against the real program.
+#[test]
+fn a_sanctions_hold_blocks_both_release_paths_and_the_next_place_split() {
+    const AUTO_RELEASE_SECS: i64 = 7 * 24 * 60 * 60;
+    let Some(mut env) = Env::new() else { return };
+    env.open_ready_pool(1, 0);
+    let mut players: Vec<(Keypair, Pubkey)> = Vec::new();
+    for _ in 0..64 {
+        players.push(env.register_player(1).unwrap());
+    }
+    let settlement = env.settlement.insecure_clone();
+    let admin = env.admin.pubkey();
+
+    // A two-way tie for first, so the split has somewhere to go — seat 0 is
+    // the wallet that will match a list, seat 1 its co-winner.
+    let secret = env.pool_secret;
+    let ix = settle_ix(&settlement.pubkey(), 1, "reveal_pool_secret", &secret);
+    env.send(&[ix], &[&settlement]).unwrap();
+    let payouts = tied_first_payouts(POT, 2);
+    let wallets: Vec<Pubkey> = players.iter().map(|(p, _)| p.pubkey()).collect();
+    let (leaves, _ranks) = results_leaves(&wallets, &payouts);
+    let mut commit_args = merkle_root(&leaves).to_vec();
+    commit_args.extend_from_slice(&encode_payouts(&payouts));
+    let ix = settle_ix(&settlement.pubkey(), 1, "commit_results", &commit_args);
+    env.send(&[ix], &[&settlement]).unwrap();
+
+    // Seat 0 matched a list; seat 1 is FLAGGED and will be forfeited. Only
+    // seat 1 is flagged, and that is load-bearing for route 3 below: a
+    // flagged, escrowed, unforfeited seat is "review pending", and
+    // `pay_next_place` refuses the whole division while any committed seat
+    // is — so a flag on seat 0 would fire that gate first and the sanctions
+    // clause in `eligible()` would never be reached. Seat 0's share is
+    // escrowed by the HOLD alone.
+    let ix = flag_ix(&settlement.pubkey(), 1, &players[1].1, "flag_entry");
+    env.send(&[ix], &[&settlement]).expect("flag");
+
+    // Placing is the settlement signer's, not the admin's.
+    let ix = sanctions_hold_ix(&admin, 1, &players[0].1, "place_sanctions_hold");
+    let err = env.send(&[ix], &[]).unwrap_err();
+    assert!(
+        err.contains("2001") || err.contains("ConstraintHasOne"),
+        "placing is the settlement signer's, not the admin's: {err}"
+    );
+    let ix = sanctions_hold_ix(
+        &settlement.pubkey(),
+        1,
+        &players[0].1,
+        "place_sanctions_hold",
+    );
+    env.send(&[ix], &[&settlement])
+        .expect("place_sanctions_hold");
+    assert!(read_entry(&env.svm, &players[0].1).sanctions_hold);
+    assert!(!read_entry(&env.svm, &players[0].1).flagged);
+
+    let metas: Vec<(Pubkey, Pubkey)> = players[..2].iter().map(|(p, e)| (p.pubkey(), *e)).collect();
+    let ix = pay_prizes_ix(&settlement.pubkey(), 1, &[0, 1], &metas);
+    env.send(&[ix], &[&settlement]).expect("pay");
+    assert_eq!(read_entry(&env.svm, &players[0].1).escrow_lamports, POT / 2);
+    // Twice is refused, so a double placement is visible rather than silent.
+    // Note this lands AFTER the pool is Paid: unlike `flag_entry`, a hold is
+    // allowed after settlement, which is the whole point — the winner is
+    // screened at resolving, when the share may already sit in escrow.
+    let ix = sanctions_hold_ix(
+        &settlement.pubkey(),
+        1,
+        &players[0].1,
+        "place_sanctions_hold",
+    );
+    let err = env.send(&[ix], &[&settlement]).unwrap_err();
+    assert!(
+        err.contains("6069") || err.contains("SanctionsHoldActive"),
+        "{err}"
+    );
+
+    // ---- Route 1: the reviewed release. Refused. -------------------------
+    let ix = release_escrow_ix(
+        &settlement.pubkey(),
+        1,
+        &players[0].1,
+        &players[0].0.pubkey(),
+    );
+    let err = env.send(&[ix], &[&settlement]).unwrap_err();
+    assert!(
+        err.contains("6069") || err.contains("SanctionsHoldActive"),
+        "{err}"
+    );
+
+    // ---- Route 2: the seven-day permissionless release. Also refused. ----
+    // This is the one an integrity flag does NOT survive, and the reason the
+    // hold could not simply reuse `flag_entry`.
+    env.advance_time(AUTO_RELEASE_SECS + 1);
+    let stranger = Keypair::new();
+    env.svm.airdrop(&stranger.pubkey(), 10_000_000_000).unwrap();
+    let ix = release_escrow_ix(&stranger.pubkey(), 1, &players[0].1, &players[0].0.pubkey());
+    let err = env.send(&[ix], &[&stranger]).unwrap_err();
+    assert!(
+        err.contains("6069") || err.contains("SanctionsHoldActive"),
+        "the auto-release must not pay a listed wallet: {err}"
+    );
+    assert_eq!(
+        read_entry(&env.svm, &players[0].1).escrow_lamports,
+        POT / 2,
+        "the share is still in the vault"
+    );
+
+    // ---- Route 3: as a RECIPIENT of someone else's forfeited share. ------
+    // Seat 1's flag is upheld, so its half is divided among the eligible
+    // players ranked first. Seat 0 is the only other first-place seat, is not
+    // forfeited, and — because it was never flagged — is not under review
+    // either, so the division's review gate passes and the check that decides
+    // is `eligible()`. Without its sanctions clause seat 0 would be the
+    // recipient and the split would pay a listed wallet.
+    let ix = forfeit_escrow_ix(&admin, 1, &players[1].1);
+    env.send(&[ix], &[]).expect("forfeit seat 1");
+    let peers: Vec<Pubkey> = vec![];
+    let ix = pay_next_place_ix(
+        &settlement.pubkey(),
+        1,
+        &players[1].1,
+        &players[0].1,
+        &players[0].0.pubkey(),
+        1,
+        POT / 2,
+        &merkle_proof(&leaves, 0),
+        1,
+        true,
+        &peers,
+    );
+    let err = env.send(&[ix], &[&settlement]).unwrap_err();
+    assert!(
+        err.contains("6069") || err.contains("SanctionsHoldActive"),
+        "a held wallet must not receive a forfeited share: {err}"
+    );
+
+    // ---- The lift: admin only, and it restores the ordinary path. --------
+    let ix = sanctions_hold_ix(
+        &settlement.pubkey(),
+        1,
+        &players[0].1,
+        "lift_sanctions_hold",
+    );
+    let err = env.send(&[ix], &[&settlement]).unwrap_err();
+    assert!(
+        err.contains("2001") || err.contains("ConstraintHasOne"),
+        "lifting is the admin's: {err}"
+    );
+    let ix = sanctions_hold_ix(&admin, 1, &players[0].1, "lift_sanctions_hold");
+    env.send(&[ix], &[]).expect("lift_sanctions_hold");
+    assert!(!read_entry(&env.svm, &players[0].1).sanctions_hold);
+    // Lifting twice is refused.
+    let ix = sanctions_hold_ix(&admin, 1, &players[0].1, "lift_sanctions_hold");
+    let err = env.send(&[ix], &[]).unwrap_err();
+    assert!(
+        err.contains("6070") || err.contains("NoSanctionsHold"),
+        "{err}"
+    );
+
+    // With the hold gone the seven-day safeguard works again, and the player
+    // is paid — a false positive costs the player time, never the prize.
+    let before = env.balance(&players[0].0.pubkey());
+    let ix = release_escrow_ix(&stranger.pubkey(), 1, &players[0].1, &players[0].0.pubkey());
+    env.send(&[ix], &[&stranger])
+        .expect("release after the lift");
+    assert_eq!(env.balance(&players[0].0.pubkey()) - before, POT / 2);
+    assert_eq!(read_entry(&env.svm, &players[0].1).escrow_lamports, 0);
+}
+
+
+/// A hold placed BEFORE payment diverts the share into escrow on its own.
+///
+/// This is the clause that makes every other check in the previous test
+/// reachable. `release_escrow` and `pay_next_place` both only ever see money
+/// that is already escrowed, so without `pay_prizes` escrowing on the hold a
+/// screened-and-matched winner would simply be paid out of the vault and the
+/// hold would guard nothing. The unheld co-winner in the same batch is paid
+/// normally, which is the other half of the property: one wallet is held, the
+/// pool still settles.
+#[test]
+fn a_sanctions_hold_escrows_the_share_at_payout_without_any_flag() {
+    let Some(mut env) = Env::new() else { return };
+    env.open_ready_pool(1, 0);
+    let mut players: Vec<(Keypair, Pubkey)> = Vec::new();
+    for _ in 0..64 {
+        players.push(env.register_player(1).unwrap());
+    }
+    let settlement = env.settlement.insecure_clone();
+
+    let secret = env.pool_secret;
+    let ix = settle_ix(&settlement.pubkey(), 1, "reveal_pool_secret", &secret);
+    env.send(&[ix], &[&settlement]).unwrap();
+    let payouts = tied_first_payouts(POT, 2);
+    let wallets: Vec<Pubkey> = players.iter().map(|(p, _)| p.pubkey()).collect();
+    let (leaves, _ranks) = results_leaves(&wallets, &payouts);
+    let mut commit_args = merkle_root(&leaves).to_vec();
+    commit_args.extend_from_slice(&encode_payouts(&payouts));
+    let ix = settle_ix(&settlement.pubkey(), 1, "commit_results", &commit_args);
+    env.send(&[ix], &[&settlement]).unwrap();
+
+    // Seat 0 matched a list during resolving. The crank places the hold in
+    // the same pass that scored the pool — before it pays. No flag: nothing
+    // about a list membership is a finding against the competition.
+    let ix = sanctions_hold_ix(
+        &settlement.pubkey(),
+        1,
+        &players[0].1,
+        "place_sanctions_hold",
+    );
+    env.send(&[ix], &[&settlement])
+        .expect("place_sanctions_hold");
+    assert!(!read_entry(&env.svm, &players[0].1).flagged);
+
+    let held_before = env.balance(&players[0].0.pubkey());
+    let free_before = env.balance(&players[1].0.pubkey());
+    let metas: Vec<(Pubkey, Pubkey)> = players[..2].iter().map(|(p, e)| (p.pubkey(), *e)).collect();
+    let ix = pay_prizes_ix(&settlement.pubkey(), 1, &[0, 1], &metas);
+    env.send(&[ix], &[&settlement]).expect("pay");
+
+    // The held seat: settled, escrowed, not a lamport moved.
+    let held = read_entry(&env.svm, &players[0].1);
+    assert!(held.settled, "the seat settles — the batch must not revert");
+    assert_eq!(held.escrow_lamports, POT / 2, "the share is escrowed");
+    assert_eq!(
+        env.balance(&players[0].0.pubkey()),
+        held_before,
+        "a held wallet receives nothing at payout"
+    );
+
+    // The co-winner: paid in the same batch, unaffected.
+    assert_eq!(
+        env.balance(&players[1].0.pubkey()) - free_before,
+        POT / 2,
+        "the unheld co-winner is paid normally"
+    );
+    assert_eq!(read_entry(&env.svm, &players[1].1).escrow_lamports, 0);
+
+    // And the pool reached Paid, so the tier's slot is freed and the pot
+    // leaves `platform_reserved`: one held wallet must not strand a tier.
+    assert_eq!(read_pool(&env.svm, &pool_pda(1)).state, 3, "Paid");
+}

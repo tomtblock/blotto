@@ -94,6 +94,16 @@ pub fn handle_release_escrow(ctx: Context<ReleaseEscrow>, _pool_id: u64) -> Resu
         !ctx.accounts.entry.forfeited,
         ErrorCode::EscrowForfeitedAlready
     );
+    // A SANCTIONS HOLD closes BOTH doors — this check sits above the
+    // path split on purpose (Phase 2 Stage F). The seven-day auto-release
+    // exists so our own failure cannot strand a prize, and it cannot tell a
+    // sanctions hold from an integrity flag: without this line, anyone at
+    // all could pay a listed wallet a week after settlement and we could not
+    // stop them. See `sanctions.rs`.
+    require!(
+        !ctx.accounts.entry.sanctions_hold,
+        ErrorCode::SanctionsHoldActive
+    );
 
     let now = Clock::get()?.unix_timestamp;
     let reviewed_path = ctx.accounts.signer.key() == ctx.accounts.config.settlement_signer;
@@ -269,9 +279,23 @@ fn review_pending(entry: &Entry) -> bool {
 }
 
 /// Eligible to receive a passed-on share: not refunded, not forfeited, no
-/// review pending. Applied to `to` and to every committed peer.
+/// review pending, and no sanctions hold. Applied to `to` and to every
+/// committed peer.
+///
+/// The sanctions clause (Phase 2 Stage F) keeps a held entry out of the
+/// eligible group, so it is neither counted in `group_size` nor eligible to
+/// take the remainder. It reads the entry's own field rather than a separate
+/// account precisely so this classification sees it — the peers arrive here
+/// as `Entry` accounts and nothing else.
+///
+/// This predicate does NOT cover the RECIPIENT: `handle_pay_next_place`
+/// checks `to` inline, and that check carries its own sanctions guard. Two
+/// places, deliberately (the recipient's failures want distinct error
+/// codes), which means a rule added to one must be added to the other — the
+/// omission that let a held wallet be paid as `to` while being excluded as a
+/// peer.
 fn eligible(entry: &Entry) -> bool {
-    !entry.refunded && !entry.forfeited && !review_pending(entry)
+    !entry.refunded && !entry.forfeited && !entry.sanctions_hold && !review_pending(entry)
 }
 
 /// The committed seats other than `from` and `to`, ascending — the exact
@@ -351,10 +375,19 @@ pub fn handle_pay_next_place<'info>(
     require!(remaining > 0, ErrorCode::NoEscrow);
     // The member must be eligible (a released flag is history — see
     // `review_pending`) and not yet paid from THIS share.
+    //
+    // NOTE the recipient is checked HERE, inline, and NOT through
+    // `eligible()` — that predicate classifies the PEERS, to count the
+    // group and find the lowest seat. The two must be kept in step by hand,
+    // and were not: Stage F added the sanctions clause to `eligible()` only,
+    // which stopped a held wallet being counted in the group while leaving
+    // it perfectly able to receive the share as `to`. A hold has to refuse
+    // on both sides or it refuses on neither that matters.
     require!(
         !to.refunded && !to.forfeited,
         ErrorCode::NextPlaceIneligible
     );
+    require!(!to.sanctions_hold, ErrorCode::SanctionsHoldActive);
     require!(!review_pending(to), ErrorCode::NextPlaceReviewPending);
     require!(to.index < 64, ErrorCode::InvalidRank);
     let to_bit = 1u64 << to.index;
