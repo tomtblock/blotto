@@ -58,34 +58,6 @@ function useCopyAddress(value: string) {
   return { copyState, textRef, selectText, copy };
 }
 
-/** Card form: truncated address + explicit copy button (signing spike). */
-export function CopyableAddress({ value }: { value: string }) {
-  const { copyState, textRef, selectText, copy } = useCopyAddress(value);
-  const showFull = copyState === "failed";
-  return (
-    <div className="flex flex-col gap-1">
-      <span
-        ref={textRef}
-        data-testid="wallet-address"
-        onClick={showFull ? selectText : undefined}
-        className={`font-mono text-xs ${showFull ? "break-all select-all" : ""}`}
-      >
-        {showFull ? value : truncateAddress(value)}
-      </span>
-      <button
-        onClick={copy}
-        className="self-start rounded border border-overlay px-2 py-1 font-mono text-xs"
-      >
-        {copyState === "idle"
-          ? "copy full address"
-          : copyState === "copied"
-            ? "copied ✓"
-            : "copy blocked — full address shown + selected, long-press to copy"}
-      </button>
-    </div>
-  );
-}
-
 /**
  * Pill form for the app header: the address itself is the tap-to-copy
  * control (users tap it expecting exactly that). Failure reveals the full

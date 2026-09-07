@@ -17,12 +17,6 @@
 import { createHash } from 'crypto';
 
 export type StrategyName = 'random' | 'consistent' | 'clustered' | 'scripted_uniform';
-export const STRATEGIES: readonly StrategyName[] = [
-  'random',
-  'consistent',
-  'clustered',
-  'scripted_uniform',
-];
 
 export interface GeneratedEntrant {
   /** A `StrategyName`, or a ladder class from `ladder.ts` (D-A2). */

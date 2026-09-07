@@ -166,13 +166,13 @@ bootstrap. At a pessimistic 0.006 the 20-pool minimum rises to 28.0 / 24.3 / 24.
 reported before pool 2 runs.
 
 **End-of-rehearsal recovery** is step 5.2a in Stage D: `min_platform + reserve_pots ×
-pot[0]` (5.62 SOL) is locked only while tier 0 is *enabled and idle*, so disabling the
-tier after the last pool drops the reserve term and a final `withdraw-platform`
-recovers 5.12 SOL.
+pot[0]` is locked only while tier 0 is *enabled and idle*, so disabling the tier after
+the last pool drops the reserve term and a final `withdraw-platform` recovers one pot.
 
 The treasury floor is not a suggestion: `open_pool` requires
 `platform.lamports − platform_refundable ≥ pot + min_platform + idle_tier_reserve`.
-With tier 0 only, that is `5.12 + 0.5 = 5.62 SOL` before pool 1 can open at all.
+With tier 0 only, that is **`4 + 0.5 = 4.5 SOL`** before pool 1 can open at all
+(D-E1; it was 5.62 when the table above was computed — see the Stage D banner).
 
 ```
 # repeat; devnet rate-limits, so space these out over several sittings
@@ -609,11 +609,13 @@ pool 1 and **reports before pool 2 runs**.
 **Pool 1 carries two explicit pass/fail gates, not observations.**
 
 1. **The prize sweep-back works.** Every budget number assumes the harness returns
-   the 5.12 SOL of prize money from the 16 winner wallets to the bank. Assert it:
-   the bank's net change across pool 1 must be about **−0.41 SOL**, not −5.5. If the
-   sweep-back silently does not happen the run still *looks* fine, and the bank is
-   empty by pool 4. A 13× difference is impossible to miss if someone looks — so
-   look, and record the number.
+   the pot from the winning wallet — since D-E2 that is **4 SOL from one wallet**,
+   or from the members of a tie for first, not 5.12 SOL from sixteen. Assert it:
+   the bank's net change across pool 1 must be about **−0.41 SOL** (the per-pool
+   rent burn, unchanged) and **not about −4.41** (rent plus a whole pot that never
+   came back). If the sweep-back silently does not happen the run still *looks*
+   fine and the bank empties within a handful of pools. A tenfold difference is
+   impossible to miss if someone looks — so look, and record the number.
 2. **Measured rent decides the sweep cadence** (below). Record the bank's net change
    per pool; that single figure carries rent, fees and any leak at once.
 
@@ -623,6 +625,34 @@ it.
 ---
 
 # STAGE D — THE REHEARSAL
+
+> ⚠ **STAGE D'S MONEY ARITHMETIC IS SUPERSEDED — recompute before running it.**
+> Recorded 2026-09-07 by repository audit. Every figure in Stage D and in "The
+> sweep" below was computed under the pre-D-E1/D-E2 economics: a tier-0 pot of
+> 5.12 SOL paid to sixteen winner wallets, a treasury gain of about 1.28 SOL per
+> pool, and a 5.62 SOL floor before pool 1 could open. Three inputs changed:
+>
+> | Input | Then | Now |
+> |---|---|---|
+> | Tier-0 pot | 5.12 SOL | **4 SOL** (D-E1) |
+> | Wallets a pot is swept back from | 16 | **1**, or the members of a tie for first (D-E2) |
+> | Treasury gain per full tier-0 pool | +1.28 SOL | **+2.4 SOL** (6.4 SOL of entries in, 4 SOL of pot out) |
+> | Floor before pool 1 can open, tier 0 only | 5.62 SOL | **4.5 SOL** (pot 4 + `min_platform` 0.5) |
+>
+> Those four are exact, and so is the pool-1 gate, which has been corrected
+> below: the per-pool rent burn (~0.41 SOL) has not changed, so a working sweep
+> still shows about **−0.41 SOL** and a failed one now shows about **−4.41**
+> rather than −5.5.
+>
+> What is **not** recomputed here is the twenty-pool working-capital table
+> (25.4 / 22.0 / 21.6 / 20.3) and the every-2-pools sweep cadence derived from
+> it. Both fold rent, fees and cycle timing into a model whose derivation is not
+> written down, and both move in the operator's favour under the new numbers (a
+> smaller pot to float, a larger gain per pool). **Recompute them from a measured
+> pool 1 before committing to twenty**, which is what pool 1 was always for.
+>
+> The *procedure* below is unaffected: the sequence, the gates, the failure paths
+> and the Squads discipline all still stand.
 
 **5.1 Twenty pools.** 64 entrants, four strategies, through the real front end. Per
 pool: fill time, crank time, final state, conservation to the lamport, committed root
@@ -643,7 +673,8 @@ matching the published bundle.
 1. `set-open-tiers --tiers 0,0,0,0,0,0,0` — tier 0 stops being an enabled-and-idle
    tier, so the `reserve_pots × pot[0]` term leaves the withdraw floor.
 2. `withdraw-platform --amount <treasury − 0.5 SOL> --destination <bank>` — recovers
-   the 5.12 SOL that was locked behind the reserve.
+   what was locked behind the reserve (one tier-0 pot: **4 SOL** since D-E1, not the
+   5.12 this step was written against).
 3. `status` — confirm `open tiers: [0, 0, 0, 0, 0, 0, 0]` and the treasury at its
    `min_platform` floor.
 
@@ -660,9 +691,11 @@ Timings go into `docs/devnet-rehearsal.md`.
 
 ## The sweep, and what "unattended" actually means
 
-**`withdraw_platform` sweep every 2 pools, destination = the bank wallet.** Each pool
-nets the treasury about +1.28 SOL (6.4 SOL of entries in, 5.12 SOL of pot out) while
-the bank bleeds the same amount, so the sweep is what keeps the bank solvent. It is
+**`withdraw_platform` sweep every 2 pools, destination = the bank wallet.** Each full
+tier-0 pool nets the treasury **+2.4 SOL** (6.4 SOL of entries in, a 4 SOL pot out —
+D-E1/D-E2; it was +1.28 when this cadence was written) while the bank bleeds the same
+amount, so the sweep is what keeps the bank solvent. **The every-2-pools cadence was
+derived from the old figure and needs recomputing with the rest of Stage D.** It is
 an admin instruction, so **every sweep is a Squads proposal the founder approves and
 executes by hand.**
 

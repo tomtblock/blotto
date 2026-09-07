@@ -4,9 +4,25 @@
  *
  * The allocation invariant — five non-negative integers in the FIXED stat
  * order Strength, Speed, Heart, Wit, Durability, summing to exactly 100 — is
- * the client invariant that makes the 7% draw rate real. It is enforced here
- * (the engine refuses malformed input) exactly as the program enforces it
- * on-chain; a mismatch between the two is a defect in this file.
+ * the client invariant that makes the 7% draw rate real.
+ *
+ * WHERE IT IS ENFORCED, precisely, because the answer is not "on-chain". The
+ * program never sees an allocation: `register` takes only `battles_hash`, and
+ * the plaintext exists nowhere it can read until the pool secret is revealed.
+ * That is the sealing property, and it costs exactly this — the two real
+ * enforcement points are
+ *
+ *   1. the CLIENT, at submission (`app/src/battle/allocation.ts` holds the
+ *      same rule, and the interaction cannot express a violating shape); and
+ *   2. THIS MODULE, at reveal — `decodeBattleSet` refuses a malformed set, so
+ *      an entry whose sealed bytes break the rule cannot be scored as if it
+ *      had played. The crank treats that refusal exactly like a lost
+ *      ciphertext: the entry is scored all-losses (`backend/reveal/src/crank.ts`
+ *      catches the throw, `missing.ts` defines the rule) and the bundle
+ *      publishes its status, so one malformed entry can never halt a pool's
+ *      settlement.
+ *
+ * A mismatch between (1) and (2) is a defect in one of them.
  *
  * Pure module: no I/O, no Date, no randomness.
  */

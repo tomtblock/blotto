@@ -97,6 +97,14 @@ pub fn handle_migrate_config(ctx: Context<MigrateConfig>, keeper: Pubkey) -> Res
     // PHASE-E1-REVIEW: Solana 3.x names the in-place grow `resize`
     // (`realloc` is the deprecated spelling); the new bytes are zeroed.
     config_info.resize(Config::SPACE)?;
+    // Every tier's liveness clock starts at the migration, not at the epoch.
+    // A zero there puts `open_pool`'s fallback window (`0 + LIVENESS_FALLBACK_SECS`)
+    // decades in the past, so ANY signer could open a tier's first pool after
+    // the upgrade — and the opener chooses the pool's sealing key, which our
+    // custody would then not hold. `now` costs the keeper nothing (`open_pool`
+    // requires `now >= tier_next_open_at`) and holds a stranger off for a full
+    // fallback window. Same reasoning as `handle_set_open_tiers`.
+    let now = Clock::get()?.unix_timestamp;
     {
         let mut data = config_info.try_borrow_mut_data()?;
         let mut off = Config::SPACE_V1;
@@ -107,7 +115,7 @@ pub fn handle_migrate_config(ctx: Context<MigrateConfig>, keeper: Pubkey) -> Res
         data[off..off + 8].copy_from_slice(&DEFAULT_COOLDOWN_SECS.to_le_bytes());
         off += 8;
         for _ in 0..N_TIERS {
-            data[off..off + 8].copy_from_slice(&0i64.to_le_bytes());
+            data[off..off + 8].copy_from_slice(&now.to_le_bytes());
             off += 8;
         }
         debug_assert_eq!(off, Config::SPACE);

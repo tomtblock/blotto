@@ -120,12 +120,25 @@ fn pool_opening_gates_hold() {
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
     assert!(err.contains("6041") || err.contains("WrongPoolId"), "{err}");
 
-    // PERMISSIONLESS (D-A1 revised): any funded signer opens pool 1; a
-    // second tier-0 pool violates the sequential rule.
+    // KEEPER-GATED since 2026-09-07 (prompt v2 §A): a stranger is refused
+    // until the tier's liveness fallback holds. This assertion used to read
+    // "permissionless — any funded signer opens pool 1", carried from the
+    // D-A1 posture; it kept passing after the keeper role landed only because
+    // `tier_next_open_at` was seeded to zero, which put the fallback window
+    // decades in the past. That was the hole the 2026-09-07 fix closed, and
+    // this is the test that should have caught it.
     let mallory = Keypair::new();
     env.svm.airdrop(&mallory.pubkey(), 10_000_000_000).unwrap();
     let ix = open_pool_ix(&mallory.pubkey(), 1, 0, [9; 32], env.sealing_secret_hash);
-    env.send(&[ix], &[&mallory]).expect("permissionless open");
+    let err = env.send(&[ix], &[&mallory]).unwrap_err();
+    assert!(
+        err.contains("6054") || err.contains("NotKeeper"),
+        "a stranger cannot open a fresh tier's pool: {err}"
+    );
+    // The keeper (the init default is the settlement signer) opens it, and a
+    // second tier-0 pool then violates the sequential rule.
+    let ix = open_pool_ix(&settlement.pubkey(), 1, 0, [9; 32], env.sealing_secret_hash);
+    env.send(&[ix], &[&settlement]).expect("the keeper opens");
     let ix = open_pool_ix(&settlement.pubkey(), 2, 0, [9; 32], env.sealing_secret_hash);
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
     assert!(

@@ -19,13 +19,13 @@ that, founder-and-counsel), not a roadmap, not marketing.
 |---|---|---|
 | Players per pool | up to 64 seats; a pool **runs with at least 52** (the minimum field) | `programs/blotto_cup/src/constants.rs` `CAPACITY`, `MIN_SEATS`; D-E4 (ratified 2026-09-06) |
 | Minimum field and the one clock | option A (founder ruling 2026-09-07): the pool seals at the 64th seat, or — when its deadline passes with 52–63 seated — by `seal_at_deadline`, which anyone can call; below 52 at the deadline it refunds. The 52nd seat changes nothing; there is no second clock (the go-timer of the first cut was removed before any deployment). Nothing the operator holds decides when a pool runs | `instructions/register.rs`; `instructions/seal.rs` (permissionless); D-E4 as amended by D-E6 |
-| Battles per entry | 7 | `constants.rs` `BATTLES` |
-| Stats per battle | 5 (Strength, Speed, Heart, Wit, Durability, fixed order) | `constants.rs` `STATS`; PID §4.6 |
-| Allocation invariant | five u8 summing to **exactly 100**; the program rejects anything else | `programs/blotto_cup/src/instructions/register.rs`; client invariant in `app/src/battle/allocation.ts` |
+| Battles per entry | 7 | `backend/scoring/src/allocation.ts` `BATTLES`; `app/src/battle/machine.ts` |
+| Stats per battle | 5 (Strength, Speed, Heart, Wit, Durability, fixed order) | `backend/scoring/src/allocation.ts` `STATS` / `STAT_NAMES`; PID §4.6 |
+| Allocation invariant | five integers in [0, 100] summing to **exactly 100**, in the fixed stat order. **It is not enforced on-chain, and cannot be**: the program receives only `sha256(battles‖salt)` and the plaintext exists nowhere it can read until the pool secret is published — that is the sealing property. The two enforcement points are the client at submission (the interaction cannot express a violating shape) and the scoring engine at reveal, which refuses a malformed set. A set that breaks the rule is scored **all losses**, exactly as a lost ciphertext is, and its status is published in the bundle; one malformed entry can never halt a pool's settlement | `backend/scoring/src/allocation.ts` (`assertAllocation`, `decodeBattleSet`); `backend/reveal/src/crank.ts` and `missing.ts` for the all-losses rule; `app/src/battle/allocation.ts` for the client |
 | Per-screen timer | 15 seconds, visible; ninety seconds for the run. When time runs out, every battle the player has NOT locked — the one on screen included — is entered as the even split (20 in each stat); nothing is ever chosen at random. The even split's effect is published as how it performs (loses three stats to two against any three-stat concentration), never as a chance | `constants.rs` `TIMER_SECONDS`; `app/src/battle/machine.ts` `lockAllRemaining`; R9 as amended by R9-b (founder addendum 2026-09-07); `COPY.rules.battleTimer` |
 | Fill deadline | **12 hours** from open (`Config.fill_deadline_seconds`, seeded from `DEFAULT_FILL_DEADLINE_SECS`; the admin's `set_pool_timing` changes it for FUTURE pools only — a pool keeps the deadline players entered under); a pool whose deadline passes with **fewer than 52** entrants refunds every entry in full (`trigger_refund` refuses at 52 and above — `FieldReached`) | `constants.rs` `DEFAULT_FILL_DEADLINE_SECS`, `MIN_SEATS`; `instructions/open_pool.rs`, `refund.rs`; D-E6 (founder ruling 1, 2026-09-07) |
 | Cooldown between pools | a tier's next pool may open **5 minutes** after the previous one reached Paid or Closed (`Config.cooldown_seconds`, stamped into `tier_next_open_at` when the slot frees; `TierSlotFreed` carries it and the app's "next pool opens in" clock reads it) | `constants.rs` `DEFAULT_COOLDOWN_SECS`; `instructions/slot.rs`; prompt v2 §B.6 |
-| Who opens pools | the **keeper** (`Config.keeper`, admin-rotatable via `set_keeper`); a tier idle for 24 hours past its cooldown may be opened by any signer (the liveness fallback), and a tier that never settled a pool is open to any signer. The keeper holds no discretion over WHETHER a pool opens — the program's gates decide | `instructions/open_pool.rs`; `constants.rs` `LIVENESS_FALLBACK_SECS`; prompt v2 §A |
+| Who opens pools | the **keeper** (`Config.keeper`, admin-rotatable via `set_keeper`); a tier idle for 24 hours past its cooldown may be opened by any signer (the liveness fallback), so a dead keeper cannot freeze a tier permanently. A tier's clock starts when the tier becomes usable — `init_config`, `migrate_config` and `set_open_tiers` all stamp it — so a tier's FIRST pool is the keeper's to open (security fix, 2026-09-07: an unstamped clock left the fallback always satisfied, and the opener chooses the pool's sealing key). The keeper holds no discretion over WHETHER a pool opens — the program's gates decide | `instructions/open_pool.rs`, `admin.rs`, `migrate.rs`; `constants.rs` `LIVENESS_FALLBACK_SECS`; prompt v2 §A |
 | Who may enter | one entry per wallet per pool (the Entry PDA is `[entry, pool, player]`); no limit across pools; the four service keys — admin, keeper, entry signer, settlement signer — are refused by the program (`ServiceKeyCannotEnter`) | `instructions/register.rs`; prompt v2 §A.4; founder ruling 7 (2026-09-07) |
 | Scoring | identical-field: battle k vs every other entry's battle k; a battle is won on ≥3 of 5 stats, else a draw worth half a win each; ranking by battles won then stats won; fully deterministic | `backend/scoring/src/engine.ts` (`compareBattle`, `scorePool`), pinned to the Python oracle fixture |
 | Ties | equal on both criteria ⇒ shared competition rank; the tie group splits the combined prize of the positions it occupies evenly — with one paid place that means a tie for first splits the pot and no other tie affects prizes; an indivisible lamport remainder goes to the eligible player with the lowest entry number; seat order never decides rank | D3-B (ratified 2026-08-27) under D-E2; `assignPrizes` in the scoring engine; `prize_math::split_group` |
@@ -106,13 +106,35 @@ Source: `scripts/check-language.sh`; process: `CONTRIBUTING.md`.
 - No instruction that can unfreeze a pass.
 - No randomness anywhere in scoring, ranking, or prizes.
 - No plaintext path to a sealed allocation before the pool closes.
-- No claim step, and no discretionary payment: every payout is validated
-  on-chain against the committed list.
+- No claim step, and no discretionary payment: every ordinary payout is
+  validated on-chain against the committed payout list, and a share passed on
+  after a forfeit is validated against the committed results root by a Merkle
+  proof. The one residual is disclosed in §1 — at the next rank the program
+  cannot prove the presented group is complete.
 - No operator control over when a pool runs: the 64th seat, or the
   deadline with at least 52 seated, seals it — and the deadline seal is
   callable by anyone.
 - No urgency, near-miss, or consecutive-play-reward retention mechanics
   (the v3 do-not-build list; its vocabulary fails CI).
+
+## 9. Published commitments that are NOT yet implemented
+
+Recorded 2026-09-07 by repository audit, and listed here rather than left to
+be discovered. The rules page and the terms carry the founder's ratified
+wording for the resolving and review process. Four of its undertakings describe
+controls that do not exist in this repository at this commit:
+
+| Published | Status |
+|---|---|
+| "the tournament enters resolving. Resolving lasts up to 12 hours" | **Not built.** There is no `Resolving` pool state; the states are Open, Sealed, Scored, Paid, Refunding, Closed |
+| "During resolving we check the winning wallet against published sanctions lists" | **Not built.** No screening vendor is wired anywhere. The packet service's own header records that it ships an always-clear answer, and its seam is at *entry*, not at *resolving* on the winner |
+| "If no decision is made within 12 hours, the flag is cleared and the prize is paid" | **Not built.** No 12-hour timer exists. The program has only the seven-day permissionless release, which is published — correctly — as a safeguard rather than as the deadline |
+| "You may appeal within 7 days … decided by a different reviewer" | **Not built.** The review service records signed decisions; there is no appeal path |
+
+The operative geographic control at launch is the territory schedule, which is
+fail-closed and does work (§5). These four are on the Road to Mainnet checklist
+in `docs/AUDIT-2026-09-07.md`, and `app/src/copy/published-claims.test.ts` fails
+the build if the set changes without this section changing with it.
 
 ---
 

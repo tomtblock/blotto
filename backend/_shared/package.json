@@ -13,7 +13,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@solana/web3.js": "^1.95.0",
     "pg": "^8.13.0"
   },
   "devDependencies": {

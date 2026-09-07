@@ -7,11 +7,14 @@
 /// Seats per pool (PID §2, TECH-ARCH §2).
 pub const CAPACITY: u16 = 64;
 
-/// Stats per battle (TECH-ARCH §2): Strength, Speed, Heart, Wit, Durability.
-pub const STATS: usize = 5;
-
-/// Battles per entry (PID §4.5, TECH-ARCH §2).
-pub const BATTLES: usize = 7;
+// The battle shape — seven battles of five stats summing to 100 — is
+// deliberately NOT a constant here. This program never sees an allocation:
+// `register` takes only `battles_hash`, and the plaintext appears after the
+// pool secret is revealed. The shape is enforced where it can be, by the
+// client at submission and by the scoring engine at reveal, and both read
+// `STATS` / `BATTLES` / `ALLOCATION_SUM` from `backend/scoring/src/allocation.ts`.
+// Unused mirrors of them lived here until 2026-09-07 and implied an on-chain
+// check that does not exist.
 
 /// The fill deadline seeded into `Config.fill_deadline_seconds` at
 /// `init_config` / `migrate_config`: 12 hours (founder ruling 2026-09-07,

@@ -11,16 +11,23 @@
  * default posture, while the enabled posture is proven by its own two-state pass. Deploy ≠ go-live,
  * the same rule every BR gate follows.
  *
- * ## ⚠ EVERY NUMBER HERE IS A PROPOSAL — `AWAITING_RATIFICATION`
+ * ## ⚠ DEFAULT-OFF IS NO LONGER A SAFE DEFAULT — the services are public now
  *
- * Nothing in canon gives a rate limit, a window, a burst, a `Retry-After`, or an allowed origin:
- * `docs/Roadmap.md`'s 10.F line says "rate limiting/CORS/CDN" and stops, and the services are not
- * deployed to any public URL yet (D-07 scopes Vercel to the frontend), so there is not even a
- * browser origin to inherit. The values below therefore follow the established
- * `PROPOSED_FALLBACK_DELAY_MS` / `PROPOSED_FALLBACK_MODEL_VERSION` pattern: a `PROPOSED_`-prefixed
- * exported const, reached ONLY as an env-overridable default, never inlined at a use site, and
- * escalated to the founder in `docs/qa/phase-0-constants-register.md` §A. **Test the MECHANISM
- * against the configured value; do not assert these numbers are canon.**
+ * This module was written while nothing was deployed to a public URL, which is why the safe
+ * default was "change nothing". Since then the indexer's read API, the packet service and the
+ * review service all run on Fly behind public hostnames (`docs/hosting.md`), so **every knob left
+ * unset is a public JSON API with no rate limit and no security headers**. The flags are not in
+ * any committed Fly config; if they are on, they are on as deploy-time secrets, and
+ * `fly secrets list` is how you find out. Turning them on for each public service is an open item
+ * in `docs/AUDIT-2026-09-07.md`.
+ *
+ * Two things this does NOT change. The webhook stays unlimited by design (below). And the numbers
+ * below remain PROPOSALS: nothing founder-ratified gives a rate limit, a window, a burst, a
+ * `Retry-After`, or an allowed origin, so they are `PROPOSED_`-prefixed exported consts, reached
+ * ONLY as env-overridable defaults and never inlined at a use site. **Test the MECHANISM against
+ * the configured value; do not assert these numbers are canon.** (The two predecessor documents
+ * this paragraph used to cite, `docs/Roadmap.md` and `docs/qa/phase-0-constants-register.md`, were
+ * never carried into this repository.)
  *
  * ## What this module deliberately does NOT do
  *

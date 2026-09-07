@@ -803,6 +803,7 @@ pub const ENTRY_SPACE: usize = 227;
 /// state.rs).
 pub struct ConfigView {
     pub keeper: Pubkey,
+    pub open_tiers: [bool; 7],
     pub platform_reserved: u64,
     pub platform_refundable: u64,
     pub active_pool_by_tier: [u64; 7],
@@ -829,6 +830,7 @@ pub fn read_config(svm: &LiteSVM) -> ConfigView {
     );
     ConfigView {
         keeper: Pubkey::new_from_array(data[380..412].try_into().unwrap()),
+        open_tiers: core::array::from_fn(|i| data[105 + i] != 0),
         platform_reserved: u64::from_le_bytes(data[289..297].try_into().unwrap()),
         platform_refundable: u64::from_le_bytes(data[297..305].try_into().unwrap()),
         active_pool_by_tier: core::array::from_fn(|i| {
@@ -1040,17 +1042,27 @@ impl Env {
     /// assert exact treasury numbers do their own funding and call
     /// `open_pool_ix` directly.
     pub fn open_ready_pool(&mut self, pool_id: u64, tier: u8) {
+        let settlement = self.settlement.insecure_clone();
+        self.open_ready_pool_as(&settlement, pool_id, tier);
+    }
+
+    /// `open_ready_pool` with an explicit opener — for tests that rotate the
+    /// keeper away from the settlement signer and then need a pool. The
+    /// opener must be `Config.keeper` (or the tier must be past its liveness
+    /// window); the collection is still created by the settlement signer,
+    /// which is only its payer.
+    pub fn open_ready_pool_as(&mut self, opener: &Keypair, pool_id: u64, tier: u8) {
         let bootstrap = TIER_POTS[tier as usize] + TIER_POTS.iter().sum::<u64>();
         self.fund_platform(bootstrap);
         let ix = open_pool_ix(
-            &self.settlement.pubkey(),
+            &opener.pubkey(),
             pool_id,
             tier,
             [9u8; 32],
             self.sealing_secret_hash,
         );
+        self.send(&[ix], &[opener]).expect("open_pool");
         let settlement = self.settlement.insecure_clone();
-        self.send(&[ix], &[&settlement]).expect("open_pool");
         patch_vrf_seed(&mut self.svm, &pool_pda(pool_id), [5u8; 32]);
         let ix = create_pass_collection_ix(&self.settlement.pubkey(), pool_id);
         self.send(&[ix], &[&settlement])

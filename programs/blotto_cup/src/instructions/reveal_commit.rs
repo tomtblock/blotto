@@ -6,11 +6,12 @@
 //! verifiability spine (TECH-ARCH §5; tradeoff order #3). The hash committed
 //! at `open_pool` makes the reveal checkable: a wrong secret cannot land.
 //!
-//! Commit stores the Merkle root of the full 64-place ranking AND the 16
-//! winners in rank order (R10 as amended — see the Phase 1 report: the
-//! roadmap's single-transaction `pay_prizes(payouts[16], proofs)` cannot fit
-//! Solana's 1232-byte transaction limit, so the winners commit here, once,
-//! and `pay_prizes` batches against them with amounts derived on-chain).
+//! Commit stores the Merkle root of the full ranking AND the settled payout
+//! list, seat-sorted (R10 as amended — see the Phase 1 report: the roadmap's
+//! single-transaction `pay_prizes(payouts, proofs)` cannot fit Solana's
+//! 1232-byte transaction limit, so the list commits here, once, and
+//! `pay_prizes` batches against it). Under D-E2 that list is one seat, or the
+//! members of a tie for first.
 
 use anchor_lang::prelude::*;
 use solana_sha256_hasher::hash as sha256;

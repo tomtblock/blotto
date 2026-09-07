@@ -1,11 +1,12 @@
 # app/src/rules
 
-**Status: empty scaffold created in Phase 0. New work — nothing was carried here.**
+The published rules page. Built; the page renders from `app/src/app/rules/rules.config.ts`, whose
+section bodies come from `app/src/copy/` and whose numbers come from the shared constants rather
+than being typed in.
 
-## What Phase 3 must build here
+## What this page must always state, before payment
 
-The published rules page. This is compliance item C4 and it blocks launch, so its contents are not a
-matter of taste. It must state, before payment:
+Compliance item C4. It blocks launch, so its contents are not a matter of taste:
 
 - The scoring formula in full, and that every player faces the identical field — no pairing, no
   bracket, no clock.
@@ -17,7 +18,9 @@ matter of taste. It must state, before payment:
 - The fixed prize pool per tier: the winner receives it whole; a tie for first splits it equally;
   a forfeited share passes to the next eligible players and never to the operator.
 - How sealing works, described accurately — see the fixed wording in `backend/sealing/README.md`.
-- The detection criteria and the appeal route.
+- The detection criteria and the appeal route. ⚠ The appeal route is **published and not built** —
+  see `01_PRODUCT_FACTS` §9 and the audit's open items; `app/src/copy/published-claims.test.ts`
+  holds the register.
 - The restricted-territory schedule, matching the block actually enforced (PID §9).
 - The Squads vault address and signer list (playbook §4.2).
 
