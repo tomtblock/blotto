@@ -30,6 +30,16 @@ use crate::state::{Config, CONFIG_SEED, PLATFORM_SEED};
 /// The policy reserve for tiers with no live pool: `reserve_pots` further
 /// pots of every enabled tier whose `active_pool_by_tier` slot is empty,
 /// optionally excluding one tier (the one being opened right now).
+///
+/// The sum is accumulated in `u128` because it is a product that can grow
+/// (`threat-tm-403`), and saturates rather than truncating on the way back to
+/// `u64`. That direction matters: this value is a FLOOR, so overstating it
+/// blocks a withdrawal that might have been fine, while understating it — which
+/// is what a wrapping `as u64` would do — would release money the policy is
+/// meant to hold. The sum is unreachable at any configured tier (seven tiers of
+/// 300 SOL at the maximum reserve is a rounding error against `u64::MAX`); the
+/// saturation is here so the direction of failure is chosen rather than left to
+/// a cast.
 pub fn idle_tier_reserve(config: &Config, exclude_tier: Option<usize>) -> u64 {
     let mut reserve: u128 = 0;
     for t in 0..N_TIERS {
@@ -37,11 +47,12 @@ pub fn idle_tier_reserve(config: &Config, exclude_tier: Option<usize>) -> u64 {
             continue;
         }
         if config.open_tiers[t] && config.active_pool_by_tier[t] == 0 {
-            reserve +=
-                (config.tier_pot_lamports[t] as u128) * (config.treasury_reserve_pots as u128);
+            reserve = reserve.saturating_add(
+                (config.tier_pot_lamports[t] as u128) * (config.treasury_reserve_pots as u128),
+            );
         }
     }
-    reserve as u64
+    u64::try_from(reserve).unwrap_or(u64::MAX)
 }
 
 // ---------------------------------------------------------------------------
