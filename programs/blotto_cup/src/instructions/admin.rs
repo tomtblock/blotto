@@ -193,26 +193,33 @@ pub fn handle_set_pool_timing(
 ///
 /// # Starting the liveness clock (security fix, 2026-09-07)
 ///
-/// Enabling a tier also stamps `tier_next_open_at` for any tier that has
-/// never had one, because `open_pool`'s liveness fallback is measured from
-/// that field: at `0` the fallback window (`0 + LIVENESS_FALLBACK_SECS`) is
-/// decades in the past, so the FIRST pool of a never-used tier could be
-/// opened by any signer the moment the tier was switched on. That matters
-/// because the opener chooses the pool's sealing key — a stranger's pool
-/// carries a secret our custody does not hold, which cannot be revealed and
-/// therefore cannot be settled. Stamping `now` costs the keeper nothing
-/// (`open_pool` requires `now >= tier_next_open_at`, and `now >= now` holds)
-/// and puts a stranger a full fallback window away.
+/// Enabling a tier restarts its liveness clock: any tier this call takes
+/// from disabled to enabled gets `tier_next_open_at = max(stamp, now)`.
+/// `open_pool`'s liveness fallback is measured from that field, and a tier
+/// can sit disabled for months — so a stamp left from `init_config` (or from
+/// the tier's last pool) would already be a full fallback window old the
+/// moment the tier was switched on, and the FIRST pool of the tier could be
+/// opened by any signer watching for `TiersOpened`. That matters because the
+/// opener chooses the pool's sealing key — a stranger's pool carries a secret
+/// our custody does not hold, which cannot be revealed and therefore cannot
+/// be settled. Stamping `now` costs the keeper nothing (`open_pool` requires
+/// `now >= tier_next_open_at`, and `now >= now` holds) and puts a stranger a
+/// full fallback window away. `max` keeps a cooldown that is still running:
+/// a tier disabled and re-enabled inside its cooldown does not shorten it.
 ///
-/// A tier that already carries a stamp is left alone: re-stamping on every
-/// call would let an admin extend a freeze indefinitely, which is exactly
-/// what the fallback exists to prevent.
+/// A tier that stays enabled is left alone. The fallback exists so a DEAD
+/// KEEPER cannot freeze a tier, not to limit the admin: an admin who wants a
+/// tier frozen disables it, and nobody can open a disabled tier. Restamping
+/// only on the disabled-to-enabled edge therefore adds no admin power, while
+/// restamping on every call would let the admin push the fallback away from
+/// an enabled tier indefinitely — which is exactly what it exists to prevent.
 pub fn handle_set_open_tiers(ctx: Context<AdminOnly>, open_tiers: [bool; N_TIERS]) -> Result<()> {
     let now = Clock::get()?.unix_timestamp;
     let config = &mut ctx.accounts.config;
     for (tier, &enabled) in open_tiers.iter().enumerate() {
-        if enabled && config.tier_next_open_at[tier] == 0 {
-            config.tier_next_open_at[tier] = now;
+        let was_enabled = config.open_tiers[tier];
+        if enabled && !was_enabled {
+            config.tier_next_open_at[tier] = config.tier_next_open_at[tier].max(now);
         }
     }
     config.open_tiers = open_tiers;

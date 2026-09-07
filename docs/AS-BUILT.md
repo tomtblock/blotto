@@ -110,8 +110,8 @@ once.
 
 *Keeper (or anyone after the 24-hour liveness fallback).* `open_pool`. The
 fallback is measured from `tier_next_open_at`, which is stamped whenever a tier
-becomes usable — at `init_config`, at `migrate_config`, and when `set_open_tiers`
-enables a tier that has never carried one. That is a security property, not
+becomes usable — at `init_config`, at `migrate_config`, and each time
+`set_open_tiers` takes a tier from disabled to enabled. That is a security property, not
 tidiness: the opener supplies the pool's sealing key, so a pool opened by anyone
 but us can never be revealed and therefore never settled. See the audit's §2.1
 and A5b.
