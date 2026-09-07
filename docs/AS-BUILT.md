@@ -259,6 +259,6 @@ cd app && npm run lint && npm run typecheck && npm test && npm run build
 ./scripts/check-env-examples.sh    # every env var a service reads is documented
 ```
 
-At the time of writing that is 785 tests, all green: 54 program unit tests
-(including a 10,000-case vault fuzz), 40 LiteSVM integration tests against the
+At the time of writing that is 786 tests, all green: 54 program unit tests
+(including a 10,000-case vault fuzz), 41 LiteSVM integration tests against the
 compiled artifact, 404 backend tests, 22 rehearsal tests and 265 app tests.
