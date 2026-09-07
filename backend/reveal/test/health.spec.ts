@@ -31,6 +31,7 @@ function report(errors = 0): TickReport {
     refundsTriggered: [],
     sealedAtDeadline: [],
     released: [],
+    nextPlacePaid: [],
     completed: [],
     // A real TickReport, not a cast: a fixture that lies about its own shape
     // is how a summary quietly stops matching what it summarises.
@@ -87,6 +88,7 @@ describe('the daemon health payload', () => {
       refundsTriggered: 0,
       sealedAtDeadline: 0,
       released: 0,
+      nextPlacePaid: 0,
       errors: 2,
     });
   });

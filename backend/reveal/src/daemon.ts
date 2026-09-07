@@ -17,8 +17,12 @@
  *     bit stays set (`clear_flag` refuses a settled entry by design); the
  *     escrow falling to zero is the record that review ended without an
  *     upheld flag. A share escrowed for KYC alone (not flagged) is left
- *     to its packet. A FORFEITED share is never touched here: it waits
- *     for `pay_next_place`, which no service drives yet (audit O23).
+ *     to its packet. A FORFEITED share is never released here — it is the
+ *     next-place step's, below.
+ *   - THE NEXT-PLACE STEP (audit O23): a share whose flag review UPHELD is
+ *     divided among the eligible players at the rank it passes to, with
+ *     `pay_next_place`. Until this existed the program could do it and
+ *     nothing asked, so an upheld share sat in the vault indefinitely.
  *   - KEEP: every open tier always has exactly one Open pool. Once a
  *     tier's slot frees (the pool reaches Paid or Closed — sequential
  *     pools, D-A1 revised — which clears `Config.active_pool_by_tier`) AND
@@ -55,9 +59,11 @@
 
 import { MIN_SEATS, REVIEW_WINDOW_SECS } from '../../scoring/src';
 import type { KeeperChain, PoolStateName } from './chain';
+import { planNextPlace, payNextPlacePortions, type NextPlacePaid } from './next-place';
+import { recomputeRanking } from './ranking';
 import { nextOpenable, type TierPoolStates } from './treasury';
 import type { CrankOutcome } from './crank';
-import type { PoolKeyCustody } from './deps';
+import type { CiphertextStore, PoolKeyCustody } from './deps';
 
 /**
  * Owns landing `commit_vrf_seed` for one pool — the whole Switchboard
@@ -85,6 +91,11 @@ export class StubVrfCoordinator implements VrfCoordinator {
 export interface DaemonDeps {
   chain: KeeperChain;
   custody: PoolKeyCustody;
+  /** The sealed entries — the next-place step recomputes a settled pool's
+   * published ranking from these plus the pool secret, rather than fetching
+   * a bundle back (see ranking.ts). The crank already receives its own
+   * handle to the same store. */
+  ciphertexts: CiphertextStore;
   vrf: VrfCoordinator;
   /** Run the settlement crank for one pool (crank.ts composed with its own
    * deps; injectable so daemon tests can observe or fail it). */
@@ -129,6 +140,9 @@ export interface TickReport {
   /** Held shares released to their players by the review clock this tick
    * (Phase 2 Stage D): the twelve-hour window passed with no decision. */
   released: { poolId: bigint; player: string }[];
+  /** Portions of upheld-flag shares paid on to the next eligible place this
+   * tick (audit O23). One entry per recipient, not per forfeiter. */
+  nextPlacePaid: NextPlacePaid[];
   /** Every caught failure — the tick continues past each. */
   errors: DaemonError[];
 }
@@ -220,7 +234,43 @@ export function makeDaemon(deps: DaemonDeps): Daemon {
       }
     }
 
-    return TERMINAL.has(pool.state) && !holdOutstanding;
+    // ---- THE NEXT-PLACE STEP (audit O23) --------------------------------
+    // A forfeited share has exactly one way out of the vault, and this is
+    // it. Only a Paid pool qualifies (the program refuses before that), and
+    // the ranking is recomputed rather than fetched — see ranking.ts.
+    let sharesOutstanding = false;
+    if (pool.state === 'Paid') {
+      const entries = await deps.chain.getEntries(poolId);
+      const forfeited = entries.filter((e) => e.forfeited && e.escrowLamports > 0n);
+      if (forfeited.length > 0) {
+        sharesOutstanding = true;
+        const secret = await deps.custody.exportSecret(poolId);
+        const ranking = await recomputeRanking(
+          deps.ciphertexts,
+          poolId,
+          secret,
+          entries,
+          pool.potLamports,
+          pool.resultsRootHex ?? null
+        );
+        const committedSeats = pool.payouts.map((p) => p.entryIndex);
+        for (const f of forfeited) {
+          const plan = planNextPlace(ranking, entries, committedSeats, f);
+          if (plan.blocker !== null) {
+            log('pay_next_place:holding', {
+              poolId: poolId.toString(),
+              from: f.player,
+              reason: plan.blocker,
+            });
+            continue;
+          }
+          const paid = await payNextPlacePortions(deps.chain, poolId, plan.portions, log);
+          report.nextPlacePaid.push(...paid);
+        }
+      }
+    }
+
+    return TERMINAL.has(pool.state) && !holdOutstanding && !sharesOutstanding;
   }
 
   /** Land whatever launch steps the tier's Open pool still misses. */
@@ -247,6 +297,7 @@ export function makeDaemon(deps: DaemonDeps): Daemon {
       sealedAtDeadline: [],
       completed: [],
       released: [],
+      nextPlacePaid: [],
       errors: [],
     };
 

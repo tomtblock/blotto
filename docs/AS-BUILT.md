@@ -229,11 +229,13 @@ Stated plainly, because two of these are published as though they were.
    with no source configured. The daemon does not screen the winner; that is
    Stage F, gated on the founder's decision recorded in the audit, because a
    match at resolving cannot be held with the escrow that exists.
-2. **The next-place payment after an upheld flag.** Nothing in any service
-   or script calls `pay_next_place` (audit O23): an upheld flag's share sits
-   in the pool vault, correctly refused by every release path, with no
-   operator route to the next eligible place. The program side is complete;
-   the driver is not. *Resolving and the 12-hour clock are built* (Stages C
+2. *Resolving, the 12-hour clock and the next-place payment are all built*
+   (Stages C, D and the O23 driver). The daemon divides an upheld flag's
+   share among the eligible players at the rank it passes to, recomputing
+   the published ranking from the pool secret and the sealed entries to
+   prove each recipient's leaf against the committed root — so the promise
+   "an upheld prize is paid to the next eligible player, never to us" is
+   now reachable rather than merely true on-chain. In detail (Stages C
    and D): resolving is a flag the read API derives — a pool is resolving
    while it carries a held share and `REVIEW_WINDOW_SECS` has not passed since
    the indexer saw its `PrizesPaid` — rendered as the RESOLVING badge with a

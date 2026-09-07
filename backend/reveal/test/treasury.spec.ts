@@ -16,7 +16,7 @@ import {
   nextOpenable,
   type TierPoolStates,
 } from '../src';
-import { LocalCustody } from '../../sealing/src';
+import { LocalCustody, MemoryCiphertextStore } from '../../sealing/src';
 import { TIER_ENTRY_LAMPORTS, TIER_POT_LAMPORTS } from '../../scoring/src';
 
 const sha = (s: string) => new Uint8Array(createHash('sha256').update(s).digest());
@@ -209,6 +209,7 @@ describe('the keeper under the sequential rule (v2-named case)', () => {
     const daemon = makeDaemon({
       chain,
       custody,
+      ciphertexts: new MemoryCiphertextStore(),
       vrf: new StubVrfCoordinator(chain, 'stub'),
       crank: async (poolId) => ({ poolId, finalState: 'Sealed', stepsTaken: [] }),
       now: () => clock.t,

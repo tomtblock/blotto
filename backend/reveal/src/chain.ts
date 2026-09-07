@@ -45,6 +45,10 @@ export interface ChainPoolView {
   vrfCommitted: boolean;
   secretRevealed: boolean;
   resultsCommitted: boolean;
+  /** `Pool.results_root` as hex once committed, else null. The next-place
+   * driver proves against it, and checks its recomputed ranking reproduces
+   * it before building a single proof (`ranking.ts`). */
+  resultsRootHex: string | null;
   /** One bit per SEAT (u64 on-chain) — bigint, seats run 0..63. */
   paidMask: bigint;
   /** Seat-sorted committed payout list; empty until committed. */
@@ -215,13 +219,26 @@ export interface KeeperChain extends SettlementChain {
   getPlatformBalance(): Promise<bigint>;
 }
 
-/** `escrow.rs::review_pending`, mirrored: a flag review not yet resolved. */
-function reviewPending(e: FakeEntry, escrow: bigint): boolean {
+/**
+ * `escrow.rs::review_pending`, mirrored: a flag review not yet resolved.
+ *
+ * EXPORTED because the next-place driver (`next-place.ts`) must classify
+ * recipients by exactly the rule the program applies. Two copies of this
+ * predicate would be two chances to offer the program a split it refuses —
+ * or worse, one it accepts and we did not intend.
+ */
+export function reviewPending(
+  e: Pick<ChainEntryView, 'flagged' | 'forfeited' | 'settled'>,
+  escrow: bigint
+): boolean {
   return e.flagged && !e.forfeited && (!e.settled || escrow > 0n);
 }
 
-/** `escrow.rs::eligible`, mirrored. */
-function eligibleFor(e: FakeEntry, escrow: bigint): boolean {
+/** `escrow.rs::eligible`, mirrored. See `reviewPending` for why it is exported. */
+export function eligibleFor(
+  e: Pick<ChainEntryView, 'flagged' | 'forfeited' | 'settled' | 'refunded'>,
+  escrow: bigint
+): boolean {
   return !e.refunded && !e.forfeited && !reviewPending(e, escrow);
 }
 
@@ -324,7 +341,12 @@ export class FakeChain implements KeeperChain {
   async getPool(poolId: bigint): Promise<ChainPoolView> {
     const p = this.pools.get(poolId.toString());
     if (!p) throw new Error(`no pool ${poolId}`);
-    return { ...p, payouts: p.payouts.map((x) => ({ ...x })) };
+    const root = this.committedRoots.get(poolId.toString());
+    return {
+      ...p,
+      payouts: p.payouts.map((x) => ({ ...x })),
+      resultsRootHex: root ? Buffer.from(root).toString('hex') : null,
+    };
   }
 
   async getEntries(poolId: bigint): Promise<ChainEntryView[]> {
@@ -699,6 +721,7 @@ export class FakeChain implements KeeperChain {
       poolId,
       tier,
       state: 'Open',
+      resultsRootHex: null,
       entryLamports: cfg.tierPriceLamports[tier],
       potLamports: pot,
       // Copied at open from Config (never moved by a later set_pool_timing).

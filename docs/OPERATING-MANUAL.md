@@ -193,8 +193,12 @@ rank. It cannot come to us. A forfeit decided on the review page is logged at
 once and answers "recorded"; you then land `forfeit-escrow` with the admin key.
 The player may appeal within seven days from the results page; a *different*
 reviewer decides it on the review page, which needs a second member in
-`config/reviewers.json`. Nothing in any service yet drives `pay_next_place`
-(audit O23), so a forfeited share stays in the vault until that lands.
+`config/reviewers.json`. The daemon
+drives `pay_next_place` itself (audit O23): on the tick after a forfeit it
+divides the share among the eligible players at the rank it passes to, and
+holds off while any other committed seat is still under review. A pool with a
+held or forfeited share never reads as settled to the sweep, so it keeps being
+revisited until the last lamport has reached a player.
 
 **The treasury will not fund a pot.** `open_pool` refuses unless, after funding,
 the treasury still holds the minimum balance plus one further pot for every
