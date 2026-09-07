@@ -119,7 +119,7 @@ export function main(env: NodeJS.ProcessEnv = process.env): void {
   // The published appeal rule needs a SECOND reviewer: an appeal is decided
   // by someone other than the reviewer who upheld the flag, and with one
   // member no appeal can ever be decided. Said at boot, not at the first
-  // appeal (audit O15; config/reviewers.json is founder-owned).
+  // appeal (audit O24; config/reviewers.json is founder-owned).
   if (registry.members.length === 1) {
     console.warn(
       `${SERVICE}: reviewers registry has ONE member — appeals can be lodged but NONE can be ` +

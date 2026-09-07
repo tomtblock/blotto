@@ -18,7 +18,7 @@
  *     escrow falling to zero is the record that review ended without an
  *     upheld flag. A share escrowed for KYC alone (not flagged) is left
  *     to its packet. A FORFEITED share is never touched here: it waits
- *     for `pay_next_place`, which no service drives yet (audit O14).
+ *     for `pay_next_place`, which no service drives yet (audit O23).
  *   - KEEP: every open tier always has exactly one Open pool. Once a
  *     tier's slot frees (the pool reaches Paid or Closed — sequential
  *     pools, D-A1 revised — which clears `Config.active_pool_by_tier`) AND

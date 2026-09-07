@@ -230,7 +230,7 @@ Stated plainly, because two of these are published as though they were.
    Stage F, gated on the founder's decision recorded in the audit, because a
    match at resolving cannot be held with the escrow that exists.
 2. **The next-place payment after an upheld flag.** Nothing in any service
-   or script calls `pay_next_place` (audit O14): an upheld flag's share sits
+   or script calls `pay_next_place` (audit O23): an upheld flag's share sits
    in the pool vault, correctly refused by every release path, with no
    operator route to the next eligible place. The program side is complete;
    the driver is not. *Resolving and the 12-hour clock are built* (Stages C
@@ -250,7 +250,7 @@ Stated plainly, because two of these are published as though they were.
    the results page for that wallet only; every row re-verifies from the log
    alone (`backend/detection/src/appeals.ts`). What is missing is founder-owned:
    `config/reviewers.json` holds one member, so an appeal can be lodged but
-   none can be decided, and the service says so at boot (audit O15).
+   none can be decided, and the service says so at boot (audit O24).
 4. **The territory list** covers Belgium and Australia only. The jurisdictions
    the founder listed (Australia, Belgium, India, the United States, the UAE and
    the GCC, China, Hong Kong, Singapore, Malaysia, Indonesia, and sanctioned

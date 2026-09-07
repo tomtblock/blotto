@@ -215,7 +215,7 @@ describe('POST /appeals and the appeal decisions', () => {
     expect(twice.body).to.deep.equal({ error: 'no_open_appeal' });
 
     // With ONE member the appeal can be lodged but never decided — the
-    // registry blocker the service warns about at boot (audit O15).
+    // registry blocker the service warns about at boot (audit O24).
     const solo = world([alice]);
     await handleReviewRoute(solo.deps, 'POST', '/decisions', reviewerRow(alice, 'forfeit', T0));
     solo.now.t = T0 + DAY;

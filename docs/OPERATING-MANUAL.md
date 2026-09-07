@@ -194,7 +194,7 @@ once and answers "recorded"; you then land `forfeit-escrow` with the admin key.
 The player may appeal within seven days from the results page; a *different*
 reviewer decides it on the review page, which needs a second member in
 `config/reviewers.json`. Nothing in any service yet drives `pay_next_place`
-(audit O14), so a forfeited share stays in the vault until that lands.
+(audit O23), so a forfeited share stays in the vault until that lands.
 
 **The treasury will not fund a pot.** `open_pool` refuses unless, after funding,
 the treasury still holds the minimum balance plus one further pot for every

@@ -554,7 +554,7 @@ describe('the daemon (C8): resume after a crash', () => {
     expect(r.released).to.deep.equal([], 'a forfeited share is never auto-released');
     for (const p of held) expect(w.chain.escrowed.get(p)).to.not.equal(undefined, 'still held');
     // And a forfeited hold does not pin the pool as non-terminal: the
-    // sweep treats it as decided (its route is pay_next_place, audit O14).
+    // sweep treats it as decided (its route is pay_next_place, audit O23).
     const r2 = await w.daemon.tick();
     expect(r2.errors).to.deep.equal([]);
     expect(r2.released).to.deep.equal([]);
