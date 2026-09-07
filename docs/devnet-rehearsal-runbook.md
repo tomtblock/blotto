@@ -779,7 +779,7 @@ would have to settle or refund before it.
    timestamped, before the upgrade transaction:
 
    ```bash
-   npx ts-node --transpile-only scripts/admin.ts pools     # GitHub #66; or the indexer: GET /pools?state=Sealed etc.
+   npx ts-node --transpile-only scripts/admin.ts pools   # read-only; prints every pool and a timestamped drain verdict
    ```
 
    If an Open pool holds entries, wait: it either fills (settles under the
