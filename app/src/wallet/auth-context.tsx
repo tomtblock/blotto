@@ -17,8 +17,13 @@ export const AuthContext = createContext<Auth>({
   status: "initializing",
   walletAddress: null,
   signers: [],
+  detectedWallets: [],
+  lastError: null,
+  clearError: noProvider,
   signInWithSocial: noProvider,
+  signInWithWallet: async () => noProvider(),
   connectWallet: noProvider,
+  setActiveWallet: noProvider,
   signOut: noProvider,
 });
 

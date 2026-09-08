@@ -34,6 +34,7 @@ import {
   type BalanceGateState,
 } from '@/entry/balance-gate';
 import { checkGeoGate, type GeoGateState } from '@/entry/geo-gate';
+import type { AddFundsOptions } from '@/wallet/types';
 import {
   TERMS_VERSION,
   hasLocalAttestation,
@@ -43,6 +44,18 @@ import { RevealHost } from './reveal-host';
 
 /** D-C: the top-up prompt ships behind a flag, OFF by default. */
 const TOPUP_ENABLED = process.env.NEXT_PUBLIC_TOPUP_ENABLED === '1';
+/** Devnet only — a faucet link where a real player hits the balance wall. */
+const FAUCET_ENABLED = process.env.NEXT_PUBLIC_DEVNET_FAUCET === '1';
+const FAUCET_URL = 'https://faucet.solana.com/';
+/**
+ * How long a signed-in wallet may lack a signer before the screen says so.
+ * Right after sign-in the address can arrive from the provider's linked
+ * accounts a beat before its wallet connects; that gap is normal. Past this
+ * it is the reconnect failure the money-journey trace found: an address with
+ * no signer behind it, which used to let a player play all seven battles and
+ * press confirm into nothing.
+ */
+const SIGNER_WAIT_MS = 8_000;
 
 /* v3 D2: every empty/error state on the entry path is designed, not a bare
  * sentence — same panel shape whatever stopped the flow. */
@@ -105,6 +118,14 @@ export function PlayClient() {
   }, []);
 
   const wallet = auth.status === 'signed-in' ? auth.walletAddress : null;
+  const hasSigner =
+    wallet !== null && auth.status === 'signed-in' && auth.signers.some((s) => s.address === wallet);
+  const [signerWaitExpired, setSignerWaitExpired] = useState(false);
+  useEffect(() => {
+    if (hasSigner || wallet === null) return;
+    const t = setTimeout(() => setSignerWaitExpired(true), SIGNER_WAIT_MS);
+    return () => clearTimeout(t);
+  }, [hasSigner, wallet]);
 
   const balanceKey = wallet && pool ? `${wallet}:${pool.id}:${balanceRun}` : null;
   useEffect(() => {
@@ -197,6 +218,21 @@ export function PlayClient() {
   if (!auth.walletAddress) {
     return <PendingPanel label="Resolving your wallet" />;
   }
+  if (!hasSigner) {
+    // Signed in, address known, nothing that can sign for it. Hold, then say
+    // so — never let the ninety seconds start against a wallet that cannot
+    // confirm at the end.
+    return signerWaitExpired ? (
+      <StatePanel title={COPY.gate.signerMissingTitle}>
+        <p>{COPY.gate.signerMissing}</p>
+        <Link href="/wallet" className="mt-1 text-brand underline underline-offset-2">
+          {COPY.gate.signerMissingLink}
+        </Link>
+      </StatePanel>
+    ) : (
+      <PendingPanel label={COPY.gate.signerConnecting} />
+    );
+  }
 
   if (done) {
     // v3 D2: the sealed confirmation is a designed moment, not a sentence.
@@ -285,7 +321,7 @@ function BalanceGateView({
   state: BalanceGateState | 'checking';
   entryLamports: string;
   wallet: string;
-  addFunds: ((address: string) => Promise<void>) | undefined;
+  addFunds: ((address: string, options?: AddFundsOptions) => Promise<void>) | undefined;
   onRecheck: () => void;
   children: React.ReactNode;
 }) {
@@ -313,7 +349,10 @@ function BalanceGateView({
               onClick={async () => {
                 setFunding(true);
                 try {
-                  await addFunds(wallet);
+                  // Straight onto the deposit-address screen: on devnet no
+                  // card or exchange provider sells SOL, so it is the only
+                  // funding method that can work here.
+                  await addFunds(wallet, { method: 'receive' });
                 } catch (error) {
                   // Exiting the funding flow lands here, and so does a
                   // provider REFUSAL — notably the SDK's "Wallet funding is
@@ -343,6 +382,19 @@ function BalanceGateView({
             {COPY.gate.balanceRetry}
           </Button>
         </div>
+        {FAUCET_ENABLED && state.state === 'insufficient' ? (
+          <p className="mt-1 text-[13px] leading-5 text-ink-muted">
+            <a
+              href={FAUCET_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="text-brand underline underline-offset-2"
+            >
+              {COPY.wallet.faucet}
+            </a>{' '}
+            — {COPY.wallet.faucetNote}
+          </p>
+        ) : null}
       </div>
     </StatePanel>
   );

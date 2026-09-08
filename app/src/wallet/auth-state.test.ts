@@ -5,7 +5,9 @@
  * provider must treat those rebuilds as the SAME state or setState
  * re-enters forever (React #185, whole page down). The first test here is
  * the incident: callback-identity churn alone must compare equal. The
- * rest pin that every change a consumer can observe still gets through.
+ * rest pin that every change a consumer can observe still gets through —
+ * including the fields added for the wallet screen on 2026-09-08, each of
+ * which would otherwise be swallowed by the guard.
  */
 import { describe, expect, it } from "vitest";
 import { sameAuthState } from "./auth-state";
@@ -32,10 +34,17 @@ function snapshot(overrides: Partial<Auth> = {}): Auth {
     status: "signed-in",
     walletAddress: ADDRESS,
     signers: [signer(ADDRESS, "embedded")],
+    detectedWallets: [{ id: "phantom", name: "Phantom", icon: "data:," }],
+    lastError: null,
+    clearError: () => {},
     signInWithSocial: () => {},
+    signInWithWallet: async () => {},
     connectWallet: () => {},
+    setActiveWallet: () => {},
     signOut: async () => {},
     addFunds: async () => {},
+    exportWallet: async () => {},
+    linkWallet: () => {},
     ...overrides,
   };
 }
@@ -49,6 +58,12 @@ describe("sameAuthState", () => {
     expect(sameAuthState(snapshot(), snapshot({ status: "signed-out" }))).toBe(
       false,
     );
+  });
+
+  it("sees the unavailable reason change", () => {
+    expect(
+      sameAuthState(snapshot(), snapshot({ unavailable: "rejected" })),
+    ).toBe(false);
   });
 
   it("sees a wallet address change", () => {
@@ -84,8 +99,14 @@ describe("sameAuthState", () => {
     ).toBe(false);
   });
 
-  it("sees the funding seam appearing or disappearing, but not its identity", () => {
+  it("sees the optional seams appearing or disappearing, but not their identity", () => {
     expect(sameAuthState(snapshot(), snapshot({ addFunds: undefined }))).toBe(
+      false,
+    );
+    expect(
+      sameAuthState(snapshot(), snapshot({ exportWallet: undefined })),
+    ).toBe(false);
+    expect(sameAuthState(snapshot(), snapshot({ linkWallet: undefined }))).toBe(
       false,
     );
     expect(
@@ -94,5 +115,45 @@ describe("sameAuthState", () => {
         snapshot({ addFunds: undefined }),
       ),
     ).toBe(true);
+  });
+
+  it("sees a detected wallet appear, disappear or change", () => {
+    expect(sameAuthState(snapshot(), snapshot({ detectedWallets: [] }))).toBe(
+      false,
+    );
+    expect(
+      sameAuthState(
+        snapshot(),
+        snapshot({
+          detectedWallets: [{ id: "solflare", name: "Solflare", icon: "data:," }],
+        }),
+      ),
+    ).toBe(false);
+    // A fresh icon string for the same wallet is not a change.
+    expect(
+      sameAuthState(
+        snapshot(),
+        snapshot({
+          detectedWallets: [{ id: "phantom", name: "Phantom", icon: "data:,x" }],
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("sees a failure appear, clear, or recur", () => {
+    const failed = { code: "exited_auth_flow", at: 1 };
+    expect(sameAuthState(snapshot(), snapshot({ lastError: failed }))).toBe(
+      false,
+    );
+    expect(
+      sameAuthState(snapshot({ lastError: failed }), snapshot({ lastError: failed })),
+    ).toBe(true);
+    // The same code again, later, is a new occurrence the surface must show.
+    expect(
+      sameAuthState(
+        snapshot({ lastError: failed }),
+        snapshot({ lastError: { code: "exited_auth_flow", at: 2 } }),
+      ),
+    ).toBe(false);
   });
 });
