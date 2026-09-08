@@ -32,6 +32,7 @@
  * is `/dev/preview`, which hard-404s outside development.
  */
 
+import { TIER_POT_LAMPORTS } from '@blotto/scoring';
 import type {
   CareerRow,
   EntryRow,
@@ -466,7 +467,14 @@ export const FIXTURE_RIVALS: RivalRow[] = [
   { player: fixtureId('Riva13'), pools_shared: '2', paid_in_shared: '0' },
 ];
 
-/** One tier of each treasury status, so the admin view shows every branch. */
+/*
+ * One tier of each treasury status, so the admin view shows every branch.
+ *
+ * Pots are read from the published table, never typed here: this fixture is
+ * the answer to `getTreasury()` about the CURRENT tier economics, so a
+ * hand-typed pot goes stale in silence — tiers 1-3 carried the pre-D-E1
+ * 25.6 / 38.4 / 51.2 SOL pots long after D-E1 set them to 20 / 30 / 40.
+ */
 export const FIXTURE_TREASURY: TreasuryTiers = {
   tiers: [
     {
@@ -480,7 +488,7 @@ export const FIXTURE_TREASURY: TreasuryTiers = {
     {
       tier: 1,
       price_lamports: '500000000',
-      pot_lamports: '25600000000',
+      pot_lamports: TIER_POT_LAMPORTS[1].toString(), // 20 SOL
       status: 'settling',
       live_pool_state: 'Sealed',
       short_by_lamports: '0',
@@ -488,7 +496,7 @@ export const FIXTURE_TREASURY: TreasuryTiers = {
     {
       tier: 2,
       price_lamports: '750000000',
-      pot_lamports: '38400000000',
+      pot_lamports: TIER_POT_LAMPORTS[2].toString(), // 30 SOL
       status: 'openable',
       live_pool_state: null,
       short_by_lamports: '0',
@@ -496,10 +504,13 @@ export const FIXTURE_TREASURY: TreasuryTiers = {
     {
       tier: 3,
       price_lamports: '1000000000',
-      pot_lamports: '51200000000',
+      pot_lamports: TIER_POT_LAMPORTS[3].toString(), // 40 SOL
       status: 'short',
       live_pool_state: null,
-      short_by_lamports: '12800000000',
+      // A shortfall only means anything against the pot it is short of, and
+      // the landing page paints this number, so derive it: a quarter of the
+      // tier-3 pot (10 SOL of 40).
+      short_by_lamports: (TIER_POT_LAMPORTS[3] / 4n).toString(),
     },
   ],
 };

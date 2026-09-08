@@ -32,13 +32,19 @@ test('landing: hero fixture card with the 18+ line above the fold', async ({ pag
   await shot(page, 'landing', info.project.name);
 });
 
-test('pool page: prize table from the fixed pot, §8.6 above the enter control', async ({
+test('pool page: the fixed pot as one Stat, §8.6 above the enter control', async ({
   page,
 }, info) => {
   await page.goto(`/pools/${POOL}`);
-  // The fixed 4 SOL pot (D-E1) pays 1st exactly 270/1024.
-  await expect(page.getByRole('table')).toContainText('1st');
-  await expect(page.getByRole('table')).toContainText('1.0546875');
+  // D-E2: ONE paid place. The pool page shows the pot the pool OPENED with
+  // as a single Stat (the tier-0 fixture's fixed 4 SOL, D-E1) with the rule
+  // beside it. The per-position table is gone — assert it stays gone.
+  await expect(page.getByText('Prize pool', { exact: true })).toBeVisible();
+  await expect(page.locator('.text-prize').first()).toHaveText('4SOL');
+  await expect(
+    page.getByText('The player ranked first receives the full prize pool.')
+  ).toBeVisible();
+  await expect(page.getByRole('table')).toHaveCount(0);
   const finalText = page.getByText(/Decisions are final/);
   await expect(finalText).toBeVisible();
   const enter = page.getByRole('link', { name: 'Enter this tournament' });

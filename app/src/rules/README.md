@@ -18,9 +18,12 @@ Compliance item C4. It blocks launch, so its contents are not a matter of taste:
 - The fixed prize pool per tier: the winner receives it whole; a tie for first splits it equally;
   a forfeited share passes to the next eligible players and never to the operator.
 - How sealing works, described accurately — see the fixed wording in `backend/sealing/README.md`.
-- The detection criteria and the appeal route. ⚠ The appeal route is **published and not built** —
-  see `01_PRODUCT_FACTS` §9 and the audit's open items; `app/src/copy/published-claims.test.ts`
-  holds the register.
+- The detection criteria and the appeal route. Built in Phase 2 Stage E —
+  `backend/detection/src/appeals.ts` (lodged within 7 days of an upheld flag, decided by a registry
+  member other than the one who upheld it, every row in the one signed log). Blocked in practice by
+  audit item O24: `config/reviewers.json` holds one member, so an appeal can be lodged but not yet
+  decided, and the review service says so at boot. See `01_PRODUCT_FACTS` §9;
+  `app/src/copy/published-claims.test.ts` holds the register and now declares no gaps.
 - The restricted-territory schedule, matching the block actually enforced (PID §9).
 - The Squads vault address and signer list (playbook §4.2).
 

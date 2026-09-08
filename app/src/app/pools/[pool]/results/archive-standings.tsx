@@ -1,10 +1,10 @@
 /*
- * E3 (proposal E1 §4): the verified-archive standings — the full 64-row
- * ranking, rendered ONLY when the read API served a leaderboard, which it
- * does only for a pool whose published bundle recomputed to the on-chain
- * commitment. No leaderboard → this section simply is not on the page;
- * "unverified" and "no archive" are deliberately indistinguishable here,
- * exactly as they are at the API.
+ * E3 (proposal E1 §4): the verified-archive standings — the full ranking,
+ * one row per seated player, rendered ONLY when the read API served a
+ * leaderboard, which it does only for a pool whose published bundle
+ * recomputed to the on-chain commitment. No leaderboard → this section
+ * simply is not on the page; "unverified" and "no archive" are deliberately
+ * indistinguishable here, exactly as they are at the API.
  *
  * The battle-score column displays `score_half` (half-point integer units,
  * seven battles, max 14) as points — integer arithmetic only, display only:

@@ -6,7 +6,9 @@
  * it ships on a real screen. Dev-only (see page.tsx).
  */
 import { useState } from "react";
+import { TIER_POT_LAMPORTS } from "@blotto/scoring";
 import { palette, type as typeTokens, motion, elevation } from "@/design/tokens";
+import { lamportsToSol } from "@/data/format";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Stat } from "@/components/ui/stat";
@@ -78,15 +80,29 @@ function MotionDemo({ name, animateClass }: { name: string; animateClass: string
   );
 }
 
+/* Every SOL figure on this page is the tier-0 pot — the smallest of the seven
+ * fixed pots, funded from the treasury before entries open. Derived from the
+ * shared table (backend/scoring/src/prizes.ts) rather than typed, so the
+ * gallery cannot drift from the founder’s numbers. Renders as "4". */
+const DEMO_POT_SOL = lamportsToSol(TIER_POT_LAMPORTS[0].toString());
+
+/* Half the pot, in integer lamports — what each of two players tied for first
+ * is paid. Renders as "2". */
+const DEMO_TIE_SHARE_SOL = lamportsToSol((TIER_POT_LAMPORTS[0] / 2n).toString());
+
 /* Static example rows for the PrizeTable demo — amounts are display strings
- * by design (the component does no arithmetic; see prize-table.tsx). */
-const DEMO_PRIZE_ROWS = [
-  { position: "1st", amountSol: "1.44", rank: 1 },
-  { position: "2nd", amountSol: "0.88", rank: 2 },
-  { position: "3rd", amountSol: "0.56", rank: 3 },
-  { position: "4th", amountSol: "0.40", rank: 4 },
-  { position: "5th–8th", amountSol: "0.24", rank: 5 },
-  { position: "9th–16th", amountSol: "0.12", rank: 9 },
+ * by design (the component does no arithmetic; see prize-table.tsx). There is
+ * ONE paid place: the player ranked first takes the whole prize pool, so the
+ * ordinary table is a single row. */
+const DEMO_PRIZE_ROWS = [{ position: "1st", amountSol: DEMO_POT_SOL, rank: 1 }];
+
+/* The case worth looking at: a tie for first. Tied players all share rank 1 and
+ * split the pool equally in integer lamports; any indivisible remainder goes to
+ * the tied player with the lowest entry number, which is why the rows name one.
+ * Two tied at tier 0 is 2 SOL each, exactly. */
+const DEMO_TIE_PRIZE_ROWS = [
+  { position: "1st (tied, entry 7)", amountSol: DEMO_TIE_SHARE_SOL, rank: 1 },
+  { position: "1st (tied, entry 31)", amountSol: DEMO_TIE_SHARE_SOL, rank: 1 },
 ];
 
 function ToastDemoButtons() {
@@ -255,10 +271,13 @@ export function Gallery() {
 
         <Section title="Stat">
           <div className="flex flex-wrap items-end gap-10">
-            <Stat label="Prize pool" value="3.84" unit="SOL" tone="prize" />
+            {/* The two prize figures are the same number on purpose: the winner’s
+                prize IS the pool, so "your prize" can only ever be the whole pot
+                — or an equal share of it on a tie for first. */}
+            <Stat label="Prize pool" value={DEMO_POT_SOL} unit="SOL" tone="prize" />
             <Stat label="Seats filled" value="23/64" tone="brand" />
             <Stat label="Battles" value="7" />
-            <Stat label="Your prize" value="0.88" unit="SOL" tone="prize" size="moment" />
+            <Stat label="Your prize" value={DEMO_POT_SOL} unit="SOL" tone="prize" size="moment" />
           </div>
         </Section>
 
@@ -276,23 +295,38 @@ export function Gallery() {
 
         <Section title="RankBadge">
           <div className="flex flex-wrap items-center gap-4">
+            {/* Only rank 1 may wear the prize accent — there is one paid place, and
+                players tied for first all share rank 1, so no rank below first is
+                ever in the paid set. */}
             <RankBadge rank={1} paid />
-            <RankBadge rank={3} paid />
-            <RankBadge rank={16} paid />
+            <RankBadge rank={2} />
+            <RankBadge rank={3} />
+            <RankBadge rank={16} />
             <RankBadge rank={22} />
             <RankBadge rank={41} />
-            <RankBadge rank={2} paid size="moment" />
+            <RankBadge rank={1} paid size="moment" />
           </div>
         </Section>
 
         <Section title="PrizeTable">
-          <Card className="p-5">
-            <PrizeTable
-              rows={DEMO_PRIZE_ROWS}
-              highlightRank={5}
-              caption="Example prize structure with your row highlighted"
-            />
-          </Card>
+          <div className="grid gap-5 sm:grid-cols-2">
+            <Card className="p-5">
+              <PrizeTable
+                rows={DEMO_PRIZE_ROWS}
+                highlightRank={1}
+                caption="The one paid place — the winner takes the whole prize pool, your row highlighted"
+              />
+            </Card>
+            <Card className="p-5">
+              {/* No highlightRank here: the highlight matches on rank, and every
+                  player tied for first is rank 1, so setting it would light both
+                  rows rather than one player’s. */}
+              <PrizeTable
+                rows={DEMO_TIE_PRIZE_ROWS}
+                caption="A tie for first — the tied players share rank 1 and split the prize pool equally"
+              />
+            </Card>
+          </div>
         </Section>
 
         <Section title="Toast">

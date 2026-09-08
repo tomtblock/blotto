@@ -7,20 +7,22 @@
  * log line whose bytes are `sha256("event:<Name>")[..8]` — the 8-byte discriminator
  * — followed by the Borsh-serialized fields in struct-declaration order.
  *
- * ## TODO(phase-2): register this product's events
+ * ## Where this product's layouts live
  *
- * The layout registry starts EMPTY, so `decodeEventsFromLogs` currently recognises
- * nothing and the ledger stays empty. Phase 2 calls `registerEventLayout` once per
- * event in TECH-ARCH §3.3:
+ * This module is the mechanism only — an empty registry plus the register and
+ * decode plumbing. The blotto_cup layouts are declared in `./blotto-events.ts`,
+ * whose idempotent `registerBlottoEventLayouts()` (re-exported from the package
+ * index) mirrors the `#[event]` structs in
+ * `programs/blotto_cup/src/{events.rs, vrf.rs, pass.rs}` field for field. THAT
+ * MODULE, NOT THIS COMMENT, IS THE EVENT LIST — do not duplicate the set here,
+ * it will drift. Note it does not yet cover every emitted event:
+ * `SanctionsHoldPlaced` and `SanctionsHoldLifted` have no layout. TECH-ARCH
+ * §3.3's `Claimed` is not among them either: roadmap 1.8 replaced it with
+ * `PrizesPaid` and R10 removed the claim step (prizes are pushed).
  *
- *   PoolOpened
- *   EntryRegistered { player, index, battles_hash, class, slot_hash }
- *   PoolSealed
- *   PoolSecretRevealed { secret }
- *   ResultsCommitted { root }
- *   Claimed
- *   EntryFlagged
- *   Refunded
+ * Registration is per process: any service that calls `decodeEventsFromLogs`
+ * must call `registerBlottoEventLayouts()` once at start, or it recognises
+ * nothing and leaves its ledger empty.
  *
  * TECH-ARCH §3.3 states the property these events exist to satisfy: **every
  * recomputation input is in the log.** A player who does not trust the operator
@@ -101,8 +103,8 @@ export type UndecodableObserver = (eventName: string) => void;
  * One event's decoder, keyed by the hex of its 8-byte discriminator.
  *
  * `body` receives the payload with the discriminator already stripped. Register
- * one with `registerEventLayout`; none are registered in Phase 0 — see the TODO
- * at the top of this file.
+ * one with `registerEventLayout`; this product's layouts are declared in
+ * `./blotto-events.ts` — see the header of this file.
  */
 export interface EventLayout {
   name: string;

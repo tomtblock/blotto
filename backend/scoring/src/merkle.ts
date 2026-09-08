@@ -1,7 +1,8 @@
 /**
  * The results Merkle tree (roadmap 2.1; TECH-ARCH §6/§7 as amended by R10).
  *
- * The tree commits the FULL 64-place ranking; only its root goes on-chain
+ * The tree commits the pool's FULL ranking — one leaf per seat in the field,
+ * 52..64 under D-E4; only its root goes on-chain
  * (`commit_results`). Since R10 removed per-payout proof verification from
  * the program (winners are committed directly — see the Phase 1 report), the
  * tree's consumer is the verify page: a player recomputes the ranking from
@@ -26,7 +27,7 @@ export interface ResultsLeaf {
   player: Uint8Array;
   /** 1-based rank. */
   rank: number;
-  /** Prize in lamports (0 for ranks 17..64). */
+  /** Prize in lamports (0 for every rank below the paid line — under D-E2, ranks 2..n). */
   amountLamports: bigint;
 }
 
