@@ -37,6 +37,7 @@ import {
 import { testSignerFromWindow } from "../tx/test-signer";
 import { AuthContext } from "./auth-context";
 import { sameAuthState } from "./auth-state";
+import { useDetectedSolanaWallets } from "./standard-wallets";
 import type { Auth } from "./types";
 
 const PrivyBridge = dynamic(() => import("./privy-bridge"), { ssr: false });
@@ -45,10 +46,15 @@ const INITIALIZING: Auth = {
   status: "initializing",
   walletAddress: null,
   signers: [],
+  detectedWallets: [],
+  lastError: null,
   // Inert until the bridge loads — the header shows no sign-in affordance
   // in the initializing state, so these cannot be reached from the UI.
+  clearError: () => {},
   signInWithSocial: () => {},
+  signInWithWallet: async () => {},
   connectWallet: () => {},
+  setActiveWallet: () => {},
   signOut: async () => {},
 };
 
@@ -91,8 +97,13 @@ function unconfiguredAuth(reason: "absent" | "rejected"): Auth {
     unavailable: reason,
     walletAddress: null,
     signers: [],
+    detectedWallets: [],
+    lastError: null,
+    clearError: () => {},
     signInWithSocial: warn,
+    signInWithWallet: async () => warn(),
     connectWallet: warn,
+    setActiveWallet: warn,
     signOut: async () => warn(),
   };
 }
@@ -133,10 +144,15 @@ function testSignerAuth(): Auth | null {
     status: "signed-in",
     walletAddress: signer.address,
     signers: [signer],
+    detectedWallets: [],
+    lastError: null,
     // A driven browser never reaches these: the header renders no sign-in
     // affordance while signed in, and the run drives the play flow directly.
+    clearError: () => {},
     signInWithSocial: () => {},
+    signInWithWallet: async () => {},
     connectWallet: () => {},
+    setActiveWallet: () => {},
     signOut: async () => {},
   };
 }
@@ -188,6 +204,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // triggers the cascading re-render this file's update-loop rule exists to
   // prevent, and eslint refuses it.
   const injected = useMemo(() => testSignerAuth(), []);
+  // Detection is a fact about the browser, not the provider: the sign-in
+  // surface lists a registered wallet as DETECTED before the SDK has loaded,
+  // and in a build with no credential at all. The bridge reads the same
+  // store, so the live value agrees.
+  const detected = useDetectedSolanaWallets();
 
   // See the update-loop rule above. Keeping the previous object also keeps
   // its callback closures; that is safe — the SDK's functions dispatch to
@@ -208,10 +229,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo<Auth>(() => {
     if (injected) return injected;
     if (live) return live;
-    if (!appId) return unconfiguredAuth("absent");
-    if (bridgeRejected) return unconfiguredAuth("rejected");
-    return INITIALIZING;
-  }, [injected, live, appId, bridgeRejected]);
+    if (!appId) return { ...unconfiguredAuth("absent"), detectedWallets: detected };
+    if (bridgeRejected) return { ...unconfiguredAuth("rejected"), detectedWallets: detected };
+    return { ...INITIALIZING, detectedWallets: detected };
+  }, [injected, live, appId, bridgeRejected, detected]);
 
   return (
     <AuthContext.Provider value={value}>

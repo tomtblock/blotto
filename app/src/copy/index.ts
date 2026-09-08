@@ -35,11 +35,16 @@ export const COPY = {
   signin: {
     title: 'Sign in',
     subtitle:
-      'Sign in with an account and a wallet is created for you, or connect a Solana wallet you already use.',
+      'Sign in with an account and a wallet is made for you, or use a Solana wallet you already have.',
     google: 'Continue with Google',
     apple: 'Continue with Apple',
     twitter: 'Continue with X',
-    walletDivider: 'or',
+    // The provider modal's own subtitle (capped at 100 characters by the SDK).
+    modalMessage: 'Seven sealed battles. The winner takes the prize pool.',
+    walletDivider: 'or connect a wallet',
+    detected: 'Detected',
+    moreWallets: 'More wallets',
+    moreWalletsNote: 'Solflare, Backpack, a mobile wallet, or a QR code',
     wallet: 'Connect a wallet',
     // Rendered only in builds without sign-in credentials (previews, local
     // dev) — the buttons would silently do nothing otherwise.
@@ -51,8 +56,75 @@ export const COPY = {
     // difference between "not set up yet" and "set up wrongly".
     unavailableRejected:
       'Sign-in is temporarily unavailable. We have been notified — please try again shortly.',
+    // What the page says when a sign-in attempt does not complete, by the
+    // provider's error code (plus the few this app raises itself). Until
+    // 2026-09-08 no failure reached the page at all: the provider hook was
+    // called without an error handler, so a switched-off provider or a
+    // rejected origin produced a button that did nothing and said nothing.
+    // PHASE-N-REVIEW: plain sentences pending the founder's wording.
+    errors: {
+      exited_auth_flow: 'Sign-in was closed before it finished. Nothing happened.',
+      oauth_user_denied: 'The account provider did not give permission, so sign-in stopped.',
+      allowlist_rejected:
+        'Sign-in is not switched on for this web address yet. We have been notified.',
+      disallowed_login_method: 'This sign-in method is not switched on yet.',
+      too_many_requests: 'Too many attempts in a short time. Wait a moment and try again.',
+      unknown_connect_wallet_error: 'The wallet did not connect. Check it is unlocked and try again.',
+      generic_connect_wallet_error: 'The wallet did not connect. Check it is unlocked and try again.',
+      exited_link_flow: 'Adding a wallet was closed before it finished.',
+      blotto_wallet_not_detected: 'That wallet is no longer detected in this browser.',
+      blotto_wallet_no_account: 'The wallet connected but offered no Solana account.',
+      blotto_wallet_declined: 'The wallet declined the request. Nothing happened.',
+      blotto_wallet_signin_failed: 'The wallet signed in, but the sign-in could not be completed.',
+    } as Record<string, string>,
+    errorFallback: 'Sign-in did not complete. Try again, or use a different method.',
     signedInAs: 'Signed in as',
     continueLink: 'Go to the arena',
+  },
+  // The wallet screen (2026-09-08): the one place a player sees what they
+  // hold, adds to it, takes it out, or chooses which wallet plays. Every
+  // amount shown is bigint-derived; nothing here is a float.
+  // PHASE-N-REVIEW: plain sentences pending the founder's wording.
+  wallet: {
+    title: 'Your wallet',
+    signInFirst: 'Sign in to see your wallet.',
+    balanceLabel: 'In your wallet now',
+    wonLabel: 'Won to date',
+    balanceUnavailable: 'Balance could not be read right now.',
+    refresh: 'Refresh',
+    whichEmbedded: 'Blotto wallet, made at sign-in',
+    whichExternal: (name: string) => `${name} wallet`,
+    pickerLabel: 'Play and be paid with',
+    addSol: 'Add SOL',
+    receiveTitle: 'Add SOL to this wallet',
+    receiveSubtitle: 'Send SOL from any wallet or exchange to the address shown.',
+    faucet: 'Get test SOL',
+    faucetNote:
+      'This is a test network. SOL here has no value and cannot be bought; a faucet gives it away.',
+    send: 'Send SOL',
+    sendTitle: 'Send SOL',
+    sendTo: 'To (Solana address)',
+    sendAmount: 'Amount (SOL)',
+    sendMax: 'Max',
+    sendConfirm: 'Send',
+    sendSending: 'Sending…',
+    sendDone: 'Sent.',
+    sendSignature: 'Signature',
+    sendInvalidAddress: 'That is not a valid Solana address.',
+    sendZero: 'Enter an amount above zero.',
+    sendTooMuch: 'That is more than this wallet can send after transaction costs.',
+    sendNote:
+      'Sends go anywhere on Solana: another wallet, or an exchange where SOL can be sold for your currency. A send cannot be reversed.',
+    exportTitle: 'Move my wallet to Phantom',
+    exportExplain:
+      'You will be shown this wallet’s private key on a screen we cannot read. Paste it into Phantom under “Import private key” and this wallet, with everything in it, lives in Phantom from then on. Never share the key with anyone.',
+    exportConfirm: 'Show my private key',
+    linkTitle: 'Use a different wallet',
+    linkExplain:
+      'Connect a wallet you already have — Phantom, Solflare, Backpack — to this account. You choose which one plays and is paid.',
+    // Shown inside the provider's connect modal.
+    linkDescription: 'Connect a wallet to your Blotto account.',
+    explorer: 'View on explorer',
   },
   gate: {
     ageAttestation:
@@ -76,6 +148,15 @@ export const COPY = {
       'Your wallet balance could not be checked. Entry stays closed until it can be.',
     balanceRetry: 'Check again',
     topUp: 'Add SOL',
+    // The signed-in-but-cannot-sign state (2026-09-08): a returning player
+    // whose wallet did not reconnect used to get a normal-looking screen,
+    // play all seven battles, press confirm — and nothing happened,
+    // permanently, with no error. Now the play screen holds here instead.
+    signerConnecting: 'Connecting your wallet',
+    signerMissingTitle: 'Your wallet is not ready',
+    signerMissing:
+      'This wallet is signed in but cannot sign yet. Reconnect it from your wallet page, or sign out and in again, before entering.',
+    signerMissingLink: 'Open your wallet',
   },
   preloader: {
     // First-visit gate only (root route, once). The line is the same

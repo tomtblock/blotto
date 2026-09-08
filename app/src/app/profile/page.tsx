@@ -3,6 +3,7 @@
 import { COPY } from '@/copy';
 import { AppHeader } from '@/components/shell/app-header';
 import { TabBar } from '@/components/shell/tab-bar';
+import { WalletCard } from '@/components/wallet/wallet-card';
 import { ProfileClient } from './profile-client';
 
 export default function ProfilePage() {
@@ -14,6 +15,11 @@ export default function ProfilePage() {
           {COPY.profile.title}
         </h1>
         <p className="mb-6 text-[13px] leading-5 text-ink-muted">{COPY.profile.readOnlyNote}</p>
+        {/* "In your wallet now" sits above "won to date" so the two are never
+            read as one number. */}
+        <div className="mb-6">
+          <WalletCard />
+        </div>
         <ProfileClient />
       </main>
       <TabBar />

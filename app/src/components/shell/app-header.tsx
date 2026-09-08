@@ -3,17 +3,38 @@
 import Link from "next/link";
 import { COPY } from "@/copy";
 import { useAuth } from "@/wallet/auth-context";
+import { useBalance } from "@/wallet/use-balance";
+import { formatSolShort } from "@/data/format";
 import { CopyableAddressPill } from "@/components/copyable-address";
 import { NotificationsBell } from "./notifications";
 
 /*
  * App header — wordmark + auth state. Signed out: a sign-in affordance
- * (brand, the D-08 hero path starts here). Signed in: the truncated wallet
- * address as a tap-to-copy pill (house pattern — users tap the address
- * expecting a copy; profile lives in the tab bar) + a disconnect
- * affordance. Depends on useAuth only, never on the provider SDK (D-08
- * swappability).
+ * (brand, the D-08 hero path starts here). Signed in: the live balance of
+ * the active wallet (tap → the wallet screen) beside the truncated address
+ * as a tap-to-copy pill (house pattern — users tap the address expecting a
+ * copy) + a disconnect affordance. Depends on useAuth only, never on the
+ * provider SDK (D-08 swappability).
+ *
+ * The balance is new on 2026-09-08: until then nothing in the product ever
+ * showed a player what they held, and a winner had no way to confirm a prize
+ * had arrived. It reads through `useBalance`, a bigint end to end.
  */
+
+function BalancePill({ wallet }: { wallet: string }) {
+  const { data, isError } = useBalance(wallet);
+  const figure = data !== undefined ? formatSolShort(data) : isError ? "–" : "…";
+  return (
+    <Link
+      href="/wallet"
+      data-testid="header-balance"
+      title={COPY.wallet.title}
+      className="tnum rounded-full border border-line px-3 py-1.5 font-mono text-xs text-ink hover:border-brand"
+    >
+      ◎ {figure}
+    </Link>
+  );
+}
 
 export function AppHeader() {
   const { status, walletAddress, signOut } = useAuth();
@@ -34,6 +55,7 @@ export function AppHeader() {
         ) : status === "signed-in" && walletAddress ? (
           <span className="flex items-center gap-2">
             <NotificationsBell />
+            <BalancePill wallet={walletAddress} />
             <CopyableAddressPill value={walletAddress} />
             <button
               type="button"
