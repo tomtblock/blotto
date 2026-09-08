@@ -10,6 +10,7 @@
  * outside the CSS pipeline, so tokens cannot be referenced by name).
  */
 import { ImageResponse } from 'next/og';
+import { CAPACITY } from '@blotto/scoring';
 import { COPY } from '@/copy';
 import { indexerApi, live } from '@/data/api';
 import { lamportsToSol } from '@/data/format';
@@ -110,7 +111,10 @@ export async function GET(
           </div>
           <div style={{ fontSize: 34, color: INK_MUTED, display: 'flex', gap: 14 }}>
             {entry ? COPY.reveal.classNames[entry.class] : ''}
-            {entry ? ` · seat ${entry.idx + 1} of 64` : ' · of 64'}
+            {/* Seat count from the published constant, never typed: this card
+              * is the most redistributed surface in the product, so a capacity
+              * change must not leave a wrong number on every shared image. */}
+            {entry ? ` · seat ${entry.idx + 1} of ${CAPACITY}` : ` · of ${CAPACITY}`}
           </div>
         </div>
         <div style={{ marginTop: 36, fontSize: 24, color: INK_MUTED }}>

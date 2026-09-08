@@ -49,9 +49,10 @@ export default async function ResultsPage({ params }: { params: Promise<{ pool: 
   }
   if (!pageLive.value) notFound();
   const { pool, results, payouts, entries, archive } = pageLive.value;
-  // D3-B: the committed list is keyed by seat; a tie group's members split
-  // the combined prize, so the paid set can exceed 16 rows. Rank labels are
-  // not on-chain — the verify page recomputes them from the published data.
+  // D3-B under D-E2: the committed list is keyed by seat and one place is
+  // paid, so the paid set is a single row unless a tie for first splits the
+  // pot across several. Rank labels are not on-chain — the verify page
+  // recomputes them from the published data.
   const payoutBySeat = new Map(payouts.map((p) => [p.seat, p]));
   const entryBySeat = new Map(entries.map((e) => [e.idx, e]));
   const rows: RevealRow[] = [...results]

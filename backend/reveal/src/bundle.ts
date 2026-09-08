@@ -49,13 +49,16 @@ export interface RevealBundle {
   entry_lamports: string;
   entries: RevealBundleEntry[];
   results: RevealBundleResult[];
-  /** The committed payout list (D3-B), seat-sorted — can exceed 16 rows. */
+  /**
+   * The committed payout list (D3-B), seat-sorted — under D-E2 that is the
+   * single paid place, or one row per member of a tie for first.
+   */
   payouts: RevealBundlePayout[];
   results_root: string; // hex 32 — must equal the on-chain commitment
   /**
    * The published lost-ciphertext rule applied to this pool: entries scored
-   * as all losses, listed so the fee-refund obligation (from the platform
-   * share — an off-chain payment) is explicit and auditable.
+   * as all losses, listed so the entry-refund obligation (from the platform
+   * treasury — an off-chain payment) is explicit and auditable.
    */
   scored_as_all_losses: string[]; // base58
 }

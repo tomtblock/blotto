@@ -23,12 +23,14 @@
  * into one of four product-specific tables, and every one of those tables
  * described the old product. The ledger below is generic and complete on its own.
  *
- * TODO(phase-2): add this product's derived tables and a projection back onto this
- * seam, driven by the TECH-ARCH §3.3 event list. The ledger stays the source of
- * truth and the derived tables stay a pure function of it — which is what
- * `rederive()` exists to prove. A derived table that cannot be rebuilt from the
- * ledger alone has become a second source of truth, and the reveal, scoring and
- * claim pipeline depends on there being only one.
+ * The projection is attached (roadmap 2.5, R15): `./projection` derives `pools`,
+ * `entries`, `results`, `payouts`, `profiles`, `player_history` and `tier_status`
+ * from the TECH-ARCH §3.3 events, and it commits in the SAME transaction as the
+ * ledger append. The ledger stays the source of truth and the derived tables stay
+ * a pure function of it — which is what `rederive()` exists to prove. A derived
+ * table that cannot be rebuilt from the ledger alone has become a second source of
+ * truth, and the reveal, scoring, detection and read-API pipelines depend on there
+ * being only one.
  */
 
 import { eventFromJson, type DecodedEvent } from './shared';

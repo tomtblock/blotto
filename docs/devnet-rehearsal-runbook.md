@@ -663,7 +663,10 @@ matching the published bundle.
 
 **5.2 Failure paths**, ledger reconciled after each:
 
-- 63-entry pool past a shortened deadline → all refunded in full including the 20%
+- Sub-52-entry pool past a shortened deadline → `trigger_refund` returns the untouched
+  pot to the treasury and every entry is refunded in full from the treasury; separately
+  confirm a 63-entry pool at the same deadline SEALS instead (`trigger_refund` reverts
+  `FieldReached`, `refund.rs:73`, since 63 ≥ `MIN_SEATS` 52)
 - **Pause mid-fill, then resume** — two Squads proposals, **scheduled in advance with
   you at a keyboard**. **Blocked on B-c**: `admin.ts` cannot emit a `set_paused`
   proposal today.

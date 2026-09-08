@@ -144,6 +144,46 @@ const PROMISES: readonly Promised[] = [
     commitment: 'The pool secret is operator-generated, export-locked until the pool closes.',
     proof: 'backend/sealing/src/custody.ts',
   },
+  {
+    phrase: 'no battle in the tournament can be read, by us or by anyone else',
+    commitment: 'Not even the operator can read a sealed battle before the tournament closes.',
+    // The same mechanism as the promise above, stated from our side: the
+    // export policy is a TYPE every custody implementation must honour, and
+    // it refuses the pool secret until the pool is sealed or past its fill
+    // deadline. Sealing is a property, not a promise — this line is the
+    // property said out loud.
+    proof: 'backend/sealing/src/custody.ts',
+  },
+  {
+    phrase: 'It is never returned to us',
+    commitment: 'A forfeited first-place share is never taken by the operator.',
+    // The founder's ruling of 2026-09-07: `forfeit_escrow` moves nothing, an
+    // upheld flag leaves the share in its own pool vault, and the only
+    // lamport exits are pay_prizes, release_escrow, pay_next_place and
+    // refund. The standing-rules check asserts that exact exit set — and
+    // that escrow.rs cannot address the treasury — so a route back to us
+    // fails the build.
+    proof: 'scripts/check-standing-rules.sh',
+  },
+  {
+    phrase: 'we identify that group',
+    commitment: 'The operator names the players a passed-on prize is divided between.',
+    // No judgement is involved: `rankOrder` shares a rank only when battles
+    // won AND stats won are equal, and `assignPrizes` splits the pot equally
+    // across that group with the indivisible remainder going to the lowest
+    // entry index. The crank pays from that same computation.
+    proof: 'backend/scoring/src/engine.ts',
+  },
+  {
+    phrase: 'The results bundle we publish after every tournament',
+    commitment:
+      'A bundle is published for every settled tournament, carrying what a player needs to check the group we identified.',
+    // Tradeoff order #3, made concrete: the bundle carries every entry's
+    // revealed battles and every player's score, rank and amount, so a
+    // reader recomputes the shared rank rather than taking our word for it.
+    // The verify page does exactly that in the browser.
+    proof: 'backend/reveal/src/bundle.ts',
+  },
 ];
 
 /**
@@ -199,16 +239,16 @@ describe('published claims are registered', () => {
     expect(COPY.pool.resolvingNote(hours)).toContain(`within ${hours} hours`);
   });
 
-  it('no operational "we" promise in the review copy is unregistered', () => {
-    // The review appendix is where operational promises collect. Every
-    // sentence of it that says what WE do must be covered by a registered
-    // phrase, so a new promise cannot be added without landing here.
-    const appendix = COPY.rules.reviewProcess;
-    const sentences = appendix
+  it('no operational "we" promise on the rules page is unregistered', () => {
+    // Operational promises are not confined to the review appendix — the
+    // ties section makes three of its own. Every sentence of the RENDERED
+    // page that says what WE do must be covered by a registered phrase, so
+    // a new promise cannot be added anywhere on it without landing here.
+    const sentences = copy
       .split(/(?<=\.)\s+/)
       .map((s) => s.trim())
       .filter((s) => /\b(we|us|our)\b/i.test(s));
-    expect(sentences.length, 'the review copy should still make operational promises').toBeGreaterThan(0);
+    expect(sentences.length, 'the rules page should still make operational promises').toBeGreaterThan(0);
     const registered = PROMISES.map((p) => p.phrase.toLowerCase());
     for (const s of sentences) {
       const covered = registered.some((phrase) => s.toLowerCase().includes(phrase));
