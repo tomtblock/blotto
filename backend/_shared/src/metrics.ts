@@ -82,6 +82,15 @@ export const ALERT = {
      * the archive stops serving that pool either way (fail-closed).
      */
     archiveRootMismatch: 'indexer archive bundle root mismatch',
+    /**
+     * The `sync` boot path's catch-up backfill failed.
+     *
+     * Deliberately non-fatal since 2026-09-08 — the service keeps serving and
+     * the webhook keeps ingesting — which is exactly why it must be loud. A
+     * failure here means the recovery path for dropped webhooks is not running,
+     * and nothing else in the system will notice.
+     */
+    startupBackfillFailed: 'indexer startup backfill failed',
   },
 } as const;
 

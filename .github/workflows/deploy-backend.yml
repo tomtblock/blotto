@@ -304,6 +304,21 @@ jobs:
       - name: Deploy indexer
         run: flyctl deploy . --config deploy/fly/indexer.fly.toml --remote-only --yes --ha=false --build-arg BLOTTO_BUILD_COMMIT="$GITHUB_SHA"
 
+      # Incident 2026-09-08: this step failed with "timeout reached waiting for
+      # health checks to pass", which says the machine never answered and
+      # nothing about WHY. The job aborted here, so the daemon's log dump below
+      # never ran, and the only witness — the boot log — was reachable solely
+      # through the Fly dashboard. The cause was in the first three lines of it
+      # (`migrate:` printed, `backfill:` never did).
+      #
+      # `--no-tail` so it returns; `|| true` so a log fetch that itself fails
+      # cannot mask the deploy failure that brought us here.
+      - name: Indexer boot log (on failure)
+        if: failure()
+        run: |
+          echo "--- last 120 indexer log lines ---"
+          flyctl logs --app "$INDEXER_APP" --no-tail 2>/dev/null | tail -120 || true
+
       - name: Stage packet secrets
         run: |
           flyctl secrets set --app "$PACKET_APP" --stage \
