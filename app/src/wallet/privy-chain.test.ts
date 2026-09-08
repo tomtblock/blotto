@@ -42,11 +42,11 @@ const IDENTIFIER_CHAR = /[A-Za-z0-9_$]/;
  * Reads the argument text of every `name(…)` invocation, paren-matched so a
  * nested object or arrow inside the arguments does not truncate the slice.
  *
- * Scanned by hand rather than with a pattern: the §8.7 language gate's `xp\b`
- * rule matches the identifier `RegExp`, so building the search pattern the
- * obvious way fails CI. That is a false positive in the gate — the banned term
- * is standalone "XP" and the rule is missing its leading word boundary — and
- * it is being fixed where the gate lives, not worked around here. This scan is
+ * Scanned by hand rather than with a regular expression: one rule in the §8.7
+ * language gate lacked a leading word boundary and matched the identifier of
+ * JavaScript's regular-expression constructor, so building the search pattern
+ * the obvious way failed CI. That is a false positive in the gate (fixed where
+ * the gate lives, #85), not something to work around here — and this scan is
  * no worse for the job either way.
  */
 function callArguments(source: string, name: string): string[] {
