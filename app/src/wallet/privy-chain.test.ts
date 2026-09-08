@@ -74,8 +74,11 @@ function callArguments(source: string, name: string): string[] {
 }
 
 describe('the Privy bridge', () => {
-  it('pins the one chain this app configures to devnet', () => {
-    expect(bridge).toContain('const SOLANA_CHAIN = "solana:devnet" as const;');
+  it('takes the one chain this app configures from the cluster module, never a local literal', () => {
+    expect(bridge).toContain('import { SOLANA_CHAIN } from "@/chain/cluster";');
+    // No chain literal of its own: the cluster variable is the only source.
+    expect(bridge).not.toMatch(/const SOLANA_CHAIN\s*=/);
+    expect(bridge).not.toMatch(/["'`]solana:(devnet|mainnet)["'`]/);
   });
 
   it.each(CHAIN_TAKING_CALLS)('names the chain on every %s call', (name) => {

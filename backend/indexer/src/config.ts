@@ -13,12 +13,13 @@ import {
   required,
   type PostgresConfig,
 } from './shared';
+import { PUBLIC_DEVNET_RPC_URL, resolveRpcUrl } from '../../_shared/src/cluster';
 
 /** Default program ID — the `declare_id!` in programs/blotto_cup/src/lib.rs. Overridable per env.
  * C12 fix: this had drifted from the program's actual declared id. */
 export const DEFAULT_PROGRAM_ID = '5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17';
-/** Dev default RPC — overridable. Devnet for dev; mainnet-beta in production via env. */
-export const DEFAULT_RPC_URL = 'https://api.devnet.solana.com';
+/** The devnet fallback; the endpoint itself follows BLOTTO_CLUSTER (_shared/src/cluster.ts). */
+export const DEFAULT_RPC_URL = PUBLIC_DEVNET_RPC_URL;
 
 export const INDEXER_ENV = {
   webhookSecret: 'BLOTTO_HELIUS_WEBHOOK_SECRET',
@@ -56,7 +57,7 @@ export function loadIndexerConfig(
 ): IndexerConfig {
   return {
     postgres: loadPostgresConfig(env),
-    rpcUrl: optional(env, INDEXER_ENV.rpcUrl, DEFAULT_RPC_URL),
+    rpcUrl: resolveRpcUrl({ BLOTTO_CLUSTER: env.BLOTTO_CLUSTER, BLOTTO_RPC_URL: env.BLOTTO_RPC_URL }),
     programId: optional(env, INDEXER_ENV.programId, DEFAULT_PROGRAM_ID),
     commitment: parseCommitment(optional(env, INDEXER_ENV.commitment, 'finalized')),
     webhookPort: parsePositiveInt(env, INDEXER_ENV.port, 8080),

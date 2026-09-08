@@ -37,7 +37,9 @@ import {
 
 const N_TIERS = 7;
 const DEFAULT_PROGRAM_ID = '5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17';
-const DEFAULT_RPC = 'https://api.devnet.solana.com';
+import { resolveRpcUrl } from '../backend/_shared/src/cluster';
+/** The devnet fallback; the endpoint follows BLOTTO_CLUSTER / BLOTTO_RPC_URL (RPC_URL kept as an alias). */
+const DEFAULT_RPC = resolveRpcUrl({ BLOTTO_CLUSTER: process.env.BLOTTO_CLUSTER, BLOTTO_RPC_URL: process.env.BLOTTO_RPC_URL ?? process.env.RPC_URL });
 
 const USAGE = `blotto-cup admin CLI
 

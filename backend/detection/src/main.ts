@@ -34,6 +34,7 @@ import {
   PublicKey,
 } from '../../reveal/node_modules/@solana/web3.js';
 import { loadPostgresConfig } from '../../_shared/src/config';
+import { resolveRpcUrl } from '../../_shared/src/cluster';
 import { createPool } from '../../_shared/src/db';
 import { loadHygieneConfig } from '../../_shared/src/http-hygiene';
 import { Web3Chain } from '../../reveal/src/chain-web3';
@@ -44,7 +45,7 @@ import { reviewActionsFromChain } from './actions-chain';
 
 const SERVICE = 'review';
 const DEFAULT_PROGRAM_ID = '5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17';
-const DEFAULT_RPC = 'https://api.devnet.solana.com';
+// The RPC endpoint follows BLOTTO_CLUSTER — _shared/src/cluster.ts.
 
 export function main(env: NodeJS.ProcessEnv = process.env): void {
   // The same standard the packet service and daemon carry: say which code is
@@ -69,7 +70,8 @@ export function main(env: NodeJS.ProcessEnv = process.env): void {
   if (!keypairPath) {
     throw new Error(`${SERVICE}: SETTLEMENT_SIGNER_KEYPAIR is not set (path to the keypair JSON)`);
   }
-  const connection = new Connection(env.BLOTTO_RPC_URL ?? DEFAULT_RPC, {
+  const rpcUrl = resolveRpcUrl(env);
+  const connection = new Connection(rpcUrl, {
     commitment: 'confirmed',
   });
   const chain = new Web3Chain({
@@ -127,7 +129,7 @@ export function main(env: NodeJS.ProcessEnv = process.env): void {
     );
   }
   console.log(
-    `${SERVICE}: chain = ${env.BLOTTO_RPC_URL ?? DEFAULT_RPC} program ${env.BLOTTO_PROGRAM_ID ?? DEFAULT_PROGRAM_ID}`
+    `${SERVICE}: chain = ${rpcUrl} program ${env.BLOTTO_PROGRAM_ID ?? DEFAULT_PROGRAM_ID}`
   );
   console.log(`${SERVICE}: listening on :${port} (${registry.members.length} reviewer(s))`);
 }
