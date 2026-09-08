@@ -11,9 +11,10 @@
  * parameterizes here; it does not copy.
  *
  * Everything below moved VERBATIM from the predecessor (which re-exported the
- * glyphs so its consumers and the packs.test.ts import allowlist are
- * untouched). Colour rules unchanged: violet/magenta family only, tokens
- * via color-mix, no raw hex, no gold.
+ * glyphs so its own consumers and import allowlist were untouched; that
+ * allowlist and the test it named do not exist in this repository). Colour
+ * rules unchanged: violet/magenta family only, tokens via color-mix, no raw
+ * hex, no gold.
  * (as amended in 4d).
  */
 

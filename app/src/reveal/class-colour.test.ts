@@ -1,11 +1,14 @@
 /*
  * Tell colour-mapping guard (10.C Step 4): the class→token map is exhaustive
- * and the gold token is UNREACHABLE for classes 0–4 (D-03a / reveal-spec §1:
- * gold strictly = class 5).
+ * and the TOP class's token is UNREACHABLE for every lesser class. This
+ * product has five classes, 0–4 (types.ts); the predecessor's D-03a /
+ * reveal-spec §1 pinned "gold strictly = the rarest of six tiers", carried
+ * across by POSITION as class 4, Titan, whose token tokens.css pins to the
+ * gold value (--color-class-4 = --color-rarity-gold = #ffd24a).
  *
  * Scope note: these assertions are at the token-NAME level — vitest cannot
  * resolve CSS. The rendered-result half (the resolved gold VALUE appearing
- * for class 5 and no other classIndex) is the visual guard's job
+ * for class 4 and no other classIndex) is the visual guard's job
  * (scripts/verify-reveal-takeover.mjs, both engines).
  */
 

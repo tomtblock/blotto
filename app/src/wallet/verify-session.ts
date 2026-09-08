@@ -36,14 +36,14 @@
  *
  * SDK NOTE. Uses `@privy-io/server-auth` (stable v1.x; token verification is its purpose,
  * via local `jose` JWT checks). Privy's newer `@privy-io/node` SDK was rejected here: it is
- * pre-1.0 (0.x) and pulls a `@solana/kit@^5` peer that conflicts with this app's kit
+ * pre-1.0 (0.x) and requires a `@solana/kit@^5` peer that conflicts with this app's kit
  * version — a heavy footprint for a pure token-verify primitive.
  */
 
 import { PrivyClient, type AuthTokenClaims } from "@privy-io/server-auth";
 import { assertServerOnly } from "./server-guard";
 
-// Server-only, defence-in-depth: if this module is ever pulled into a client bundle it
+// Server-only, defence-in-depth: if this module is ever imported into a client bundle it
 // throws the moment it runs in a browser, rather than leaking the app secret path.
 assertServerOnly("wallet/verify-session");
 

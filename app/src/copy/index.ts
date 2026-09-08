@@ -201,7 +201,7 @@ export const COPY = {
     lockedTier: 'Opens when the treasury covers it',
     noOpenPool: 'No tournament is open for entries right now.',
     noOpenPoolDetail:
-      'A tier opens the moment the prize treasury holds its full prize pool and the previous tournament in that tier has paid out.',
+      'A tier opens once the prize treasury holds its full prize pool, the previous tournament in that tier has paid out or closed, and the tier\u2019s short cooldown has passed.',
     // D-E4 (option A, 2026-09-07): the fill rule in one breath — field
     // size, the one clock, the refund. Numbers come from the shared
     // constants via the caller (12 hours at launch).
@@ -267,7 +267,7 @@ export const COPY = {
       {
         title: 'The winner takes the prize pool',
         body:
-          'Ranking is by battles won. The player ranked first is paid the full prize pool automatically — it is funded before entries open. A tie for first splits it exactly.',
+          'Ranking is by battles won, then by stats won. The player ranked first is paid the full prize pool automatically — it is funded before entries open. A tie for first splits it exactly.',
       },
       {
         title: 'Check the math yourself',
@@ -471,7 +471,7 @@ export const COPY = {
       },
       keeper: {
         name: 'Keeper',
-        can: 'Open the next tournament of a tier once the previous one has paid out or closed and the tier\u2019s cooldown has passed. If it goes quiet for a day, anyone may open the tier instead.',
+        can: 'Open the next tournament of a tier once the previous one has paid out or closed and the tier\u2019s cooldown has passed. Nobody else can open a tournament, however long a tier sits idle: if the keeper stops, no new tournament opens and no money is at risk — sealing and refunding a tournament that is already running stay open to anyone, and the admin can rotate the keeper at any time.',
         cannot: 'Enter a tournament, move money, or decide when a tournament runs \u2014 the seat count and the clock do.',
       },
       entrySigner: {

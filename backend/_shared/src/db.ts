@@ -5,7 +5,7 @@
  * literal is baked in (it comes from `loadPostgresConfig`).
  *
  * This is a thin wrapper over `pg.Pool` — a `query` passthrough and a `tx` helper that runs a
- * callback inside a single `BEGIN/COMMIT` (rolled back on throw). The indexer needs the
+ * callback inside a single `BEGIN/COMMIT` (reverted on throw). The indexer needs the
  * transaction so a `(signature, event_index)` ledger insert and its derived-table projection
  * commit atomically: a row is either in the ledger AND projected, or in neither.
  *

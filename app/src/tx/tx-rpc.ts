@@ -35,7 +35,7 @@ export interface SignatureStatus {
 }
 
 /** A landed transaction's outcome-bearing surface (10.C Step 5b): the log
- * messages carry the Anchor `emit!` events — the PackOpened parse's input. */
+ * messages carry the Anchor `emit!` events — the event decoder's input. */
 export interface ConfirmedTransaction {
   slot: bigint;
   /** On-chain execution error (null = the tx succeeded). */

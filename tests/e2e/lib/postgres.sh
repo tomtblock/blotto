@@ -9,7 +9,7 @@
 #   blotto-e2e-postgres : 55432 : blotto_e2e
 # Nothing here touches :5432, so a dev bench keeps running through an end-to-end run.
 #
-# Migrated through the indexer's OWN migrate path, not a hand-rolled schema — the migrations
+# Migrated through the indexer's OWN migrate path, not a hand-written schema — the migrations
 # are part of what the end-to-end run is proving. Today that is
 # backend/_shared/migrations/0001_events_ledger.sql, the generic event ledger and nothing else;
 # the derived tables are Phase 2 work against the TECH-ARCH §3.3 event list.

@@ -1,7 +1,13 @@
 /**
  * Scoring with missing entries — the published lost-ciphertext rule
- * (TECH-ARCH §5): "a lost ciphertext means that entry is scored as all
- * losses and its fee is refunded from the platform share."
+ * (TECH-ARCH §5): a lost ciphertext means that entry is scored as all
+ * losses and its entry price is refunded from the platform treasury (an
+ * off-chain payment). TECH-ARCH §5 still words that refund as coming
+ * "from the platform share"; that phrasing predates D-A1 (revised) —
+ * `register` credits 100% of an entry to the treasury, the pot is a fixed
+ * constant funded from the treasury at `open_pool`, and the 80/20 split is
+ * gone (state.rs PLATFORM_SEED, prize_math.rs, and the TECH-ARCH divergence
+ * list in docs/INDEX.md).
  *
  * Made precise here, because "all losses" needs a definition players can
  * recompute (tradeoff order #3):

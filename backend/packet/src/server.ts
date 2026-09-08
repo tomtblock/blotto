@@ -231,7 +231,7 @@ function clientIp(req: IncomingMessage, trustProxy: boolean): string {
 
 export function serveEntryApi(deps: EntryServerDeps, port: number): Server {
   // BR-005 wiring: one hygiene decision per request, BEFORE the router. The
-  // previous hand-rolled `access-control-allow-origin: *` is gone — the
+  // previous hand-written `access-control-allow-origin: *` is gone — the
   // allowlist (BLOTTO_API_CORS_ORIGINS) is the one CORS mechanism, and it
   // covers every response shape (JSON, 204, and the 500 catch) plus the
   // browser preflight the POST surface needs.

@@ -192,8 +192,8 @@ export function revealReducer(
     case "retry":
       // 3f retry: back to a clean pre-entry state — indistinguishable from
       // a fresh takeover, nothing carried over, credit untouched (the
-      // machine holds no credit field at all; packs.test.ts-style key
-      // assertions pin that in machine.test.ts).
+      // machine holds no credit field at all; whole-key assertions pin that
+      // in machine.test.ts).
       return state.beat === "failed" ? INITIAL_REVEAL_STATE : state;
   }
 }

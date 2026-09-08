@@ -123,8 +123,8 @@ export function BlotMorph({
 
   const scene = useMemo(() => blotScene(shown, puffScale), [shown, puffScale]);
 
-  /* Visor tilt toward the corner being pulled: ±6° · clamp(velocity).
-   * Horizontal lean only — the top corner (Strength) pulls straight up,
+  /* Visor tilt toward the corner being dragged: ±6° · clamp(velocity).
+   * Horizontal lean only — the top corner (Strength) lifts straight up,
    * so its tilt is zero by construction. */
   let visorTilt = 0;
   if (dragStat !== null && dragStat >= 0 && dragStat < 5 && !reduced) {

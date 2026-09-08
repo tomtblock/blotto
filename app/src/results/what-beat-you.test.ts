@@ -49,7 +49,7 @@ describe('what finished above you', () => {
     const battles = decryptSeatBattles(hex(kp.secretKey), rows);
     const results = [
       { seat: 0, amount: '0' },
-      { seat: 1, amount: '1350000000' },
+      { seat: 1, amount: '4000000000' },
     ];
     const above = whatFinishedAbove(0, results, battles);
     expect(above.length).toBe(1);

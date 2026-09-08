@@ -75,8 +75,10 @@ export interface ExecuteTradeParams {
   holdBeforeSend?: (context: { blockhash: string }) => Promise<void>;
   /**
    * Additional LOCAL keypairs whose signatures the transaction requires
-   * beyond the wallet's — e.g. pack_open's fresh `nft_asset` signer
+   * beyond the wallet's — e.g. a mint instruction's fresh `nft_asset` signer
    * (`CreateV2` requires the new asset account's signature; 10.C Step 5b).
+   * The predecessor instruction this was written against does not exist in
+   * this program; the two-signer SHAPE it needed is what survives here.
    *
    * ORDER IS LOAD-BEARING (founder-resolved Gate 1 ruling, 10.C Step 5b):
    * the WALLET signs FIRST, these keypairs partial-sign LOCALLY AFTER, via

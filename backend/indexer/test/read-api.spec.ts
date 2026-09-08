@@ -91,8 +91,8 @@ describe('read API routing', () => {
       { name: 'PoolOpened', raw: { pool: POOL, entry_lamports: '100000000', sealing_secret_hash: 'aa'.repeat(32) } },
       { name: 'EntryRegistered', raw: { pool: POOL, player: 'P1', battles_hash: 'bb'.repeat(32) } },
       { name: 'PoolSecretRevealed', raw: { pool: POOL, secret: 'cc'.repeat(32) } },
-      { name: 'ResultsCommitted', raw: { pool: POOL, root: 'dd'.repeat(32), payouts: [{ entry_index: 0, amount: '1350000000' }] } },
-      { name: 'PrizesPaid', raw: { pool: POOL, payouts: [{ player: 'P1', entry_index: 0, amount: '1350000000', escrowed: false }] } },
+      { name: 'ResultsCommitted', raw: { pool: POOL, root: 'dd'.repeat(32), payouts: [{ entry_index: 0, amount: '4000000000' }] } },
+      { name: 'PrizesPaid', raw: { pool: POOL, payouts: [{ player: 'P1', entry_index: 0, amount: '4000000000', escrowed: false }] } },
     ];
     const res = await handleRead(db(() => rows), `/pools/${POOL}/verify-record`);
     expect(res.status).to.equal(200);
@@ -100,8 +100,8 @@ describe('read API routing', () => {
     expect(r.revealedSecretHex).to.equal('cc'.repeat(32));
     expect(r.resultsRootHex).to.equal('dd'.repeat(32));
     expect((r.battlesHashByPlayer as Record<string, string>).P1).to.equal('bb'.repeat(32));
-    expect(r.committedPayouts).to.deep.equal([{ entryIndex: 0, amount: '1350000000' }]);
-    expect(r.payouts).to.deep.equal([{ player: 'P1', entryIndex: 0, amount: '1350000000' }]);
+    expect(r.committedPayouts).to.deep.equal([{ entryIndex: 0, amount: '4000000000' }]);
+    expect(r.payouts).to.deep.equal([{ player: 'P1', entryIndex: 0, amount: '4000000000' }]);
   });
 
   it('assembles the treasury report from raw ledger rows (D-A1 revised)', async () => {
@@ -228,8 +228,8 @@ describe('read API — D3 routes', () => {
         seat: 3,
         entries_to_date: '1',
         paid: true,
-        amount_lamports: '1350000000',
-        pot_lamports: '5120000000',
+        amount_lamports: '4000000000',
+        pot_lamports: '4000000000',
         state: 'Paid',
       },
     ];
@@ -239,7 +239,7 @@ describe('read API — D3 routes', () => {
     );
     expect(res.status).to.equal(200);
     const body = res.body as Array<Record<string, unknown>>;
-    expect(body[0].amount_lamports).to.equal('1350000000');
+    expect(body[0].amount_lamports).to.equal('4000000000');
     expect(body[0].paid).to.equal(true);
   });
 

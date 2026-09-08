@@ -24,7 +24,7 @@ fixed prize pool, funded from the treasury before entries opened.
 | [`CLAUDE.md`](CLAUDE.md) | The hard rules. Short, and none of them bend. |
 | [`docs/INDEX.md`](docs/INDEX.md) | Which document is canonical for which subject. |
 | [`docs/OPERATING-MANUAL.md`](docs/OPERATING-MANUAL.md) | Running it: deploys, admin transactions, the daemon, what to do when something breaks. |
-| [`docs/PID_Blotto-Cup_v0.5.md`](docs/PID_Blotto-Cup_v0.5.md) | What the product is and why. Founder-owned, and ahead of the build in places — `AS-BUILT.md` §5 lists every one. |
+| [`docs/PID_Blotto-Cup_v0.5.md`](docs/PID_Blotto-Cup_v0.5.md) | What the product is and why. Founder-owned, and materially **behind** the build since 2026-09-06 — `AS-BUILT.md` §5 lists every divergence. |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Process, the pre-commit hook, and the language gate. |
 
 ## Running it locally

@@ -6,7 +6,7 @@ a funded Irys upload wallet, and a deployed frontend. The OFFLINE half of
 the rehearsal (same orchestrator, same crank, same detection, `FakeChain`
 instead of devnet) runs in CI today: `tests/rehearsal/` settles twenty
 64-entrant pools with the pot conserved to the lamport in each, notes the
-scripted bot in shadow mode, and drains the 63-entry refund fork in full.
+scripted bot in shadow mode, and drains the 51-entry refund fork in full.
 
 ## Prerequisites (founder-owned, once)
 
@@ -109,8 +109,11 @@ scripted bot in shadow mode, and drains the 63-entry refund fork in full.
    through the REAL frontend via `tests/rehearsal/playwright/entry-flow.spec.ts`
    (`APP_URL=… npx playwright test`).
 5. **5.2 — failure paths, once each:**
-   - 63 entries, shortened deadline → `trigger_refund` → all 63 refunded in
-     full including the 20% (the fees PDA drains to zero);
+   - 51 entries, shortened deadline → `trigger_refund` → all 51 entry
+     payments refunded in full from the platform treasury, and the pool's
+     untouched pot returns to the treasury; a pool at 52 or more seals and
+     plays instead (`seal_at_deadline`; `FieldReached` refuses the refund at
+     or above `MIN_SEATS` = 52);
    - `set_paused` mid-fill → `register` rejects → unpause → fill resumes;
    - Turnkey export refusal on an open pool past deadline → the refund path
      runs (the crank's `export-refused` step, then `trigger_refund`).
