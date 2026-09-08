@@ -304,21 +304,6 @@ jobs:
       - name: Deploy indexer
         run: flyctl deploy . --config deploy/fly/indexer.fly.toml --remote-only --yes --ha=false --build-arg BLOTTO_BUILD_COMMIT="$GITHUB_SHA"
 
-      # Incident 2026-09-08: this step failed with "timeout reached waiting for
-      # health checks to pass", which says the machine never answered and
-      # nothing about WHY. The job aborted here, so the daemon's log dump below
-      # never ran, and the only witness — the boot log — was reachable solely
-      # through the Fly dashboard. The cause was in the first three lines of it
-      # (`migrate:` printed, `backfill:` never did).
-      #
-      # `--no-tail` so it returns; `|| true` so a log fetch that itself fails
-      # cannot mask the deploy failure that brought us here.
-      - name: Indexer boot log (on failure)
-        if: failure()
-        run: |
-          echo "--- last 120 indexer log lines ---"
-          flyctl logs --app "$INDEXER_APP" --no-tail 2>/dev/null | tail -120 || true
-
       - name: Stage packet secrets
         run: |
           flyctl secrets set --app "$PACKET_APP" --stage \
@@ -545,6 +530,28 @@ jobs:
           done
           exit $fail
 
+
+      # Incident 2026-09-08, twice. A deploy step failed with "timeout reached
+      # waiting for health checks to pass" — which names the symptom and nothing
+      # about the cause — and the job aborted before the daemon's log dump below.
+      # The only witness was the boot log, reachable solely through the Fly
+      # dashboard, and both causes were in its first few lines.
+      #
+      # This is a SINGLE step near the END of the job on purpose. A dump placed
+      # next to one deploy step only runs if the failure happened before it, so
+      # the first version of this covered the indexer and was already skipped by
+      # the time the packet service failed.
+      #
+      # `--no-tail` so each call returns; `|| true` so a log fetch that itself
+      # fails cannot mask the deploy failure that brought us here.
+      - name: Boot logs for every app (on failure)
+        if: failure()
+        run: |
+          for app in "$INDEXER_APP" "$PACKET_APP" "$DAEMON_APP" "$REVIEW_APP"; do
+            echo "::group::last 80 log lines — $app"
+            flyctl logs --app "$app" --no-tail 2>/dev/null | tail -80 || true
+            echo "::endgroup::"
+          done
 
       # The startup lines are the acceptance criterion, not the endpoints:
       # they name which code path is live, where a healthy endpoint only

@@ -85,10 +85,18 @@ const DEFAULT_RPC = 'https://api.devnet.solana.com';
  */
 const SWITCHBOARD_BUDGET_MS = 45_000;
 const IRYS_BUDGET_MS = 45_000;
-// The OFAC mirror is a single file download; the vendor adapters do no work
-// at boot at all. Shorter than the two above because nothing here waits on
-// an oracle, and a mirror that cannot load in 30s will not load in 45.
-const SANCTIONS_BUDGET_MS = 30_000;
+// Was 30s, on the reasoning that "the OFAC mirror is a single file download"
+// and so needed less than the oracle steps above. The premise was right and
+// the number was wrong: that single file is the ~29 MB SDN export, fetched
+// across the Atlantic and then parsed, and 30s never covered it. It had never
+// been measured because SANCTIONS_OFAC_SDN was first staged for the daemon in
+// the release of 2026-09-08, the same release whose packet-service boot failed
+// on exactly this load.
+//
+// 150s is set against the mirror's own fetch timeout (120s, `ofac-sdn.ts`)
+// plus room to parse. A budget shorter than the operation it wraps cannot
+// report anything useful — it fires first and reports only itself.
+const SANCTIONS_BUDGET_MS = 150_000;
 
 function requireEnv(env: NodeJS.ProcessEnv, name: string): string {
   const v = env[name];

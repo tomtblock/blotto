@@ -26,3 +26,13 @@ primary_region = "fra"
   grace_period = "30s"
   method = "GET"
   path = "/health"
+
+# DECLARED, not defaulted. The review service is the lightest of the four and
+# has never failed on memory — this is here because "no [[vm]] block" silently
+# means 256 MB, and that default has now taken down two of the other three
+# (daemon 2026-09-06, packet 2026-09-08). An undeclared limit is not a small
+# limit chosen; it is no limit chosen. 512 MB matches the indexer, whose
+# footprint this service's most resembles.
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

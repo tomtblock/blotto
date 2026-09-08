@@ -72,6 +72,17 @@ export interface OfacSdnOptions {
   fetchImpl?: typeof fetch;
   /** Answer only while the last successful load is younger than this. Default 36 h. */
   maxAgeMs?: number;
+  /**
+   * Abort the download after this long. Default 2 minutes.
+   *
+   * The fetch had NO bound until 2026-09-08. It runs in a required boot path in
+   * both callers — the packet service will not listen until it returns, and the
+   * daemon budgets it — so an endpoint that accepts the connection and then
+   * stalls hung the boot with no deadline and no log line. A bound turns that
+   * into a named failure at a known time. It is generous on purpose: the
+   * document is ~29 MB and a slow transfer is not a fault.
+   */
+  timeoutMs?: number;
   now?: () => Date;
 }
 
@@ -129,6 +140,7 @@ export class OfacSdnMirror implements SanctionsCheck {
   private snapshot: OfacMirrorSnapshot | null = null;
   private readonly url: string;
   private readonly fetchImpl: typeof fetch;
+  private readonly timeoutMs: number;
   /** Past this age since `loadedAt`, `screen` refuses. Public so a caller can pace `refresh()` under it. */
   readonly maxAgeMs: number;
   private readonly now: () => Date;
@@ -136,6 +148,7 @@ export class OfacSdnMirror implements SanctionsCheck {
   constructor(private readonly o: OfacSdnOptions = {}) {
     this.url = o.url ?? OFAC_SDN_XML_URL;
     this.fetchImpl = o.fetchImpl ?? fetch;
+    this.timeoutMs = o.timeoutMs ?? 120_000;
     this.maxAgeMs = o.maxAgeMs ?? 36 * 60 * 60 * 1000;
     this.now = o.now ?? (() => new Date());
   }
@@ -196,8 +209,30 @@ export class OfacSdnMirror implements SanctionsCheck {
 
   private async download(): Promise<string> {
     // fetch follows the 302 to the presigned S3 URL by default.
-    const res = await this.fetchImpl(this.url, { headers: { accept: 'application/xml' } });
+    //
+    // The signal covers the WHOLE exchange, redirect and body included, because
+    // `res.text()` is where a ~29 MB transfer actually spends its time — a
+    // timeout that stopped at the response head would bound the part that never
+    // hangs and leave the part that does.
+    const signal = AbortSignal.timeout(this.timeoutMs);
+    let res: Response;
+    try {
+      res = await this.fetchImpl(this.url, {
+        headers: { accept: 'application/xml' },
+        signal,
+      });
+    } catch (err) {
+      throw signal.aborted
+        ? new Error(`ofac-sdn: timed out after ${this.timeoutMs}ms fetching ${this.url}`)
+        : err;
+    }
     if (!res.ok) throw new Error(`ofac-sdn: HTTP ${res.status} fetching ${this.url}`);
-    return res.text();
+    try {
+      return await res.text();
+    } catch (err) {
+      throw signal.aborted
+        ? new Error(`ofac-sdn: timed out after ${this.timeoutMs}ms reading ${this.url}`)
+        : err;
+    }
   }
 }
