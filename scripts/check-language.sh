@@ -53,13 +53,13 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 # `packet` and `package`, and this repository has a `backend/packet/` service —
 # a gate that cries wolf gets exclusions bolted onto it until it means nothing.
 # `pack(s|ed|ing)` matches the banned forms and leaves `packet`/`package` alone.
-PATTERN='casino|gambl|disguised|dopamine|shill|degen|the house|pump|bonding|lottery|jackpot|\bodds\b|\bpack(s|ed|ing)?\b|\bpack[_-]|\bpull(s|ed|ing)?\b|\bbet(s|ting|ted)?\b|wager|rake|\broll(s|ed|ing)?\b|\broll[_-]|\bdeal(s|t|ing)?\b|anarchy|xp\b|graduat|trending|magic eden|synthetic|promotion|sweepstake'
+PATTERN='casino|gambl|disguised|dopamine|shill|degen|the house|pump|bonding|lottery|jackpot|\bodds\b|\bpack(s|ed|ing)?\b|\bpack[_-]|\bpull(s|ed|ing)?\b|\bbet(s|ting|ted)?\b|wager|rake|\broll(s|ed|ing)?\b|\broll[_-]|\bdeal(s|t|ing)?\b|anarchy|\bxp\b|graduat|trending|magic eden|synthetic|promotion|sweepstake'
 
 # CamelCase compounds, matched CASE-SENSITIVELY because the main sweep runs
 # `grep -i` and so cannot see the seam between `Pack` and `Opened`. Kept as a
 # separate pattern for exactly that reason: it is the one check here that must
 # NOT be case-insensitive.
-PATTERN_CAMEL='\b(Pack|Roll|Pull|Bet|Deal|Odds|Rake|Wager|Gambl|Lotter|Jackpot|Casino)[A-Z]'
+PATTERN_CAMEL='\b(Pack|Roll|Pull|Bet|Deal|Odds|Rake|Wager|Gambl|Lotter|Jackpot|Casino)[A-Z]|[a-z]Xp\b'
 
 # D-B7 (ratified 2026-08-27): the amended lexicon. Five further groups, each a
 # distinct failure mode. Public copy describes MECHANICS instead — "sealed-
@@ -200,7 +200,8 @@ for probe in \
   pack packs packed packing pack_open \
   odds jackpot rake \
   deal deals dealt dealing \
-  roll rolls rolled rolling roll_open
+  roll rolls rolled rolling roll_open \
+  xp XP
 do
   if ! printf '%s' "$probe" | grep -qiE "($PATTERN|$PATTERN_B7|$PATTERN_D3)"; then
     selftest_failures="${selftest_failures}${selftest_failures:+, }$probe"
@@ -208,7 +209,7 @@ do
 done
 
 # CamelCase probes go to the case-SENSITIVE pattern.
-for probe in PackOpened RollCalled PullRequested BetPlaced DealClosed; do
+for probe in PackOpened RollCalled PullRequested BetPlaced DealClosed playerXp; do
   if ! printf '%s' "$probe" | grep -qE "$PATTERN_CAMEL"; then
     selftest_failures="${selftest_failures}${selftest_failures:+, }$probe"
   fi
@@ -217,9 +218,18 @@ done
 # And the words that MUST NOT trip it. A gate that flags `packet` gets
 # exclusions bolted onto it until it means nothing, and this repository ships a
 # `backend/packet/` service — so this is a live constraint, not a hypothetical.
-for safe in packet packets package packages rollback payroll better between; do
+for safe in packet packets package packages rollback payroll better between \
+  RegExp regexp expiry export; do
   if printf '%s' "$safe" | grep -qiE "($PATTERN|$PATTERN_B7|$PATTERN_D3)"; then
     selftest_failures="${selftest_failures}${selftest_failures:+, }FALSE-POSITIVE:$safe"
+  fi
+  # The CamelCase sweep is a second way to flag the same word, so the
+  # must-not-trip list has to clear that pattern too. `RegExp` is why: the
+  # `xp` rule shipped without a leading word boundary and matched it, so a
+  # test that scanned source with a built pattern failed CI on its own
+  # identifier (2026-09-08).
+  if printf '%s' "$safe" | grep -qE "$PATTERN_CAMEL"; then
+    selftest_failures="${selftest_failures}${selftest_failures:+, }FALSE-POSITIVE-CAMEL:$safe"
   fi
 done
 
