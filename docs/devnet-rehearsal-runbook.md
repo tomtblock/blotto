@@ -1152,3 +1152,96 @@ Three things worth keeping:
    puts the TypeScript compiler's memory cost in the runtime. Compiling at image
    build and running plain `node` is the real fix, deferred deliberately to its
    own change rather than attempted mid-rehearsal.
+
+---
+
+## E2 — tier economics: six proposals to reconcile the chain with D-E1
+
+**Status: prepared 2026-09-08, awaiting founder execution.** Not urgent — see
+"why this is not on fire" below — but the chain currently contradicts the
+ratified numbers and nothing in CI catches it.
+
+### What is wrong
+
+`set_tier_economics` was run for tier 0 during the O25 sitting (2026-09-07,
+5.12 → 4 SOL). The other six tiers still hold the **pre-D-E1 table**:
+
+| tier | on chain | ratified (D-E1, `constants.rs` `TIER_POT_LAMPORTS`) |
+|---|---|---|
+| 0 | 4.00 SOL | 4 ✅ |
+| 1 | 25.60 | **20** |
+| 2 | 38.40 | **30** |
+| 3 | 51.20 | **40** |
+| 4 | 128.00 | **100** |
+| 5 | 256.00 | **200** |
+| 6 | 384.00 | **300** |
+
+Entry prices are already correct at every tier and are **not changed** by these
+proposals — `set_tier_economics` writes both fields, so each one passes the
+existing price back unchanged alongside the corrected pot.
+
+### Why this is not on fire
+
+`open_tiers` reads `[true, false, false, false, false, false, false]`, so only
+tier 0 can open a pool. Nothing can be opened at a wrong pot today, and
+`handle_set_tier_economics` never touches a pool that is already open — every
+pool copies its price and pot at `open_pool`.
+
+### Why it should still be done before a tier opens
+
+The day `set_open_tiers` enables tier 1, `open_pool` funds its vault from the
+treasury at whatever the config says. At 25.6 SOL that is 5.6 SOL more than the
+ratified pot, taken from the treasury, paid to one winner, and published as the
+prize. Correcting it afterwards does not un-publish it.
+
+### The six proposals
+
+Squads, one per tier, in any order. Same shape as the O25 Part 4 proposal:
+
+| | Address | Signer | Writable |
+|---|---|---|---|
+| Program | `5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17` | — | — |
+| Account 1 (admin) | `9EEWtzyu72a3DKJVUkCaeYX4HuBKD59xXCcENnDVe34Z` | **yes** | no |
+| Account 2 (config) | `6Q3HReRVp4fND7wCuYSpRDPbz5KsQR7cbEwApVUhPzDa` | no | **yes** |
+
+No System Program. Account 1 is **not** writable — nothing is being paid for.
+
+**Data, base58:**
+
+| tier | pot | data (base58) |
+|---|---|---|
+| 1 | 20 SOL | `kCreiVvDcePFMrTTBWdKnTA8KLqp2QNMh9` |
+| 2 | 30 SOL | `kCreiVvDcePGBEWjYCzPcHtGE9e8wwG44o` |
+| 3 | 40 SOL | `kCreiVvDcePGT8GMwdeqD5kQ8zFNWFDoVH` |
+| 4 | 100 SOL | `kCreiVvDcePGzm4LXQWLZaixsej4wVaMHh` |
+| 5 | 200 SOL | `kCreiVvDcePHYNMfdoaQtcMbncmuL3Djhh` |
+| 6 | 300 SOL | `kCreiVvDcePJ5yf17XMCPBTVfQVYWeTWjh` |
+
+Each payload is 25 bytes: the 8-byte discriminator `6b5f56f42c22a726`
+(= `sha256("global:set_tier_economics")[..8]`), the tier as one byte, then the
+price and the pot as little-endian `u64`. Every one was decoded back to its
+three fields and checked against **both** on-chain guards before being written
+here:
+
+- `pot > 0 && pot % 1024 == 0` — the band table divides in 1024ths, and a pot
+  off that grid would strand a residue in the vault.
+- `pot < MIN_SEATS × price` (52 × price) — the break-even rule. Tier 3 is the
+  tightest at 40 < 52; tier 1 the next at 20 < 26.
+
+Regenerate any of them with:
+
+```
+npx ts-node --transpile-only scripts/admin.ts set-tier-economics \
+  --tier <N> --price <P>sol --pot <POT>sol \
+  --emit-proposal --admin 9EEWtzyu72a3DKJVUkCaeYX4HuBKD59xXCcENnDVe34Z
+```
+
+**Simulate each one before signing.** The C3 near-miss is the reason: a
+correctly-encoded proposal against a stale deployed program produced an
+inspector reading nobody expected, and only simulation caught it.
+
+### Verify afterwards
+
+Read the Config PDA and check all seven pots against the ratified table. The
+account is 484 bytes; `tier_pot_lamports` is seven little-endian `u64` at byte
+offset 224.
