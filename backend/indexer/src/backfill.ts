@@ -136,6 +136,25 @@ export async function runBackfill(
   return result;
 }
 
+/**
+ * The catch-up floor for a boot-time backfill: the ingest watermark, or
+ * `undefined` when the ledger is empty.
+ *
+ * `undefined` deliberately means "no floor" — `runBackfill` then walks the whole
+ * history, which is the right thing on a first run against an empty ledger and
+ * the wrong thing to make a service's health depend on. That is why `cmdSync`
+ * serves BEFORE it calls this (`index.ts`, incident 2026-09-08).
+ *
+ * `runBackfill` stops at `slot < minSlot`, strictly, so passing the watermark
+ * re-walks the watermark slot itself. A slot can hold more than one of our
+ * transactions, and only some of them may have been ingested before the process
+ * died, so the overlap is load-bearing: an off-by-one the other way would leave
+ * a permanent hole that only a full `backfill` run could repair.
+ */
+export async function catchUpFloor(store: EventStore): Promise<bigint | undefined> {
+  return (await store.lastIngestedSlot()) ?? undefined;
+}
+
 /** Production `BackfillRpc` over a read-only web3.js `Connection`. */
 /**
  * The slice of a web3.js `Connection` this wrapper actually uses.

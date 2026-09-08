@@ -26,6 +26,7 @@ import { InMemoryEventStore } from '../src/store';
 import { ingestTransaction, type IngestContext, type TxContext } from '../src/ingest';
 import { handleWebhookPayload } from '../src/webhook';
 import {
+  catchUpFloor,
   runBackfill,
   Web3BackfillRpc,
   type BackfillConnection,
@@ -391,5 +392,80 @@ describe('re-derive replays the ledger alone', () => {
     // one. TODO(phase-2): assert the derived tables come back identical once they
     // exist; that comparison is what actually proves re-derivability.
     expect(store.ledger()).to.have.length(3);
+  });
+});
+
+/**
+ * The `sync` boot path's catch-up bound (incident 2026-09-08).
+ *
+ * `cmdSync` walks back only to the ingest watermark instead of replaying the
+ * program's whole history on every boot. These cover the composition
+ * `lastIngestedSlot -> catchUpFloor -> runBackfill.minSlot`, which is the wiring
+ * that was missing — `runBackfill` itself always honoured `minSlot`.
+ */
+describe('catch-up bound — the boot backfill walks back only to the watermark', () => {
+  /** Pages the whole history in one page, and counts what was actually fetched. */
+  function countingRpc(history: readonly { signature: string; slot: bigint }[]) {
+    const fetched: string[] = [];
+    const rpc: BackfillRpc = {
+      async getSignatures({ before }) {
+        return before ? [] : history.map((h) => ({ signature: h.signature, slot: Number(h.slot) }));
+      },
+      async getTransaction(signature) {
+        fetched.push(signature);
+        const hit = history.find((h) => h.signature === signature);
+        return hit ? { slot: hit.slot, logs: txCtx(signature, hit.slot).logs } : null;
+      },
+    };
+    return { rpc, fetched };
+  }
+
+  // Newest first, the order `getSignaturesForAddress` returns.
+  const HISTORY = [
+    { signature: 'newest', slot: 900n },
+    { signature: 'recent', slot: 800n },
+    { signature: 'watermark', slot: 700n },
+    { signature: 'ancient', slot: 100n },
+  ];
+
+  it('an empty ledger has no floor, so the first run walks the whole history', async () => {
+    const store = new InMemoryEventStore();
+    expect(await catchUpFloor(store)).to.equal(undefined);
+
+    const { rpc, fetched } = countingRpc(HISTORY);
+    const r = await runBackfill(store, SILENT_MONITOR, INGEST, rpc, {
+      minSlot: await catchUpFloor(store),
+    });
+    expect(fetched, 'every signature reached').to.have.length(4);
+    expect(r.inserted).to.equal(4);
+  });
+
+  it('a populated ledger stops at the watermark and never reaches older history', async () => {
+    const store = new InMemoryEventStore();
+    await ingestTransaction(store, SILENT_MONITOR, INGEST, txCtx('watermark', 700n));
+    expect(await catchUpFloor(store)).to.equal(700n);
+
+    const { rpc, fetched } = countingRpc(HISTORY);
+    const r = await runBackfill(store, SILENT_MONITOR, INGEST, rpc, {
+      minSlot: await catchUpFloor(store),
+    });
+
+    // The bound is `slot < minSlot`, strictly — so slot 700 is re-walked and
+    // slot 100 is never touched. That overlap is deliberate: a slot can hold
+    // more of our transactions than were ingested before the process died.
+    expect(fetched).to.deep.equal(['newest', 'recent', 'watermark']);
+    expect(fetched, 'the pre-watermark history is not re-fetched').to.not.include('ancient');
+    expect(r.inserted, 'only the two genuinely new transactions').to.equal(2);
+    expect(r.duplicates, 'the watermark slot re-walks to a duplicate, not a gap').to.equal(1);
+  });
+
+  it('the unbounded walk still reaches below the watermark — the repair path is intact', async () => {
+    const store = new InMemoryEventStore();
+    await ingestTransaction(store, SILENT_MONITOR, INGEST, txCtx('watermark', 700n));
+
+    // What the `backfill` CLI command passes: no floor at all.
+    const { rpc, fetched } = countingRpc(HISTORY);
+    await runBackfill(store, SILENT_MONITOR, INGEST, rpc, { minSlot: undefined });
+    expect(fetched, 'a gap below the watermark is still repairable').to.include('ancient');
   });
 });

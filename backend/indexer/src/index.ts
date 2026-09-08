@@ -17,13 +17,13 @@
  * nothing hard-coded. Ingest health reports through `Monitor` (logging default; Step 6 alerting).
  */
 import { loadHygieneConfig } from '../../_shared/src/http-hygiene';
-import { buildMonitor, loadMonitor, createPool, METRIC, type Monitor } from './shared';
+import { buildMonitor, loadMonitor, createPool, ALERT, METRIC, type Monitor } from './shared';
 import { loadIndexerConfig, requireWebhookSecret } from './config';
 import { migrate } from './migrate';
 import { PgEventStore } from './store-pg';
 import { createWebhookServer } from './webhook';
 import { serveReadApi } from './read-api';
-import { runBackfill, Web3BackfillRpc } from './backfill';
+import { catchUpFloor, runBackfill, Web3BackfillRpc } from './backfill';
 import { backfillArchive } from './archive';
 
 const SERVICE = 'indexer';
@@ -72,14 +72,35 @@ async function cmdServe(monitor: Monitor): Promise<void> {
   console.log(`${SERVICE}: read API listening on :${config.readApiPort}`);
 }
 
-async function cmdBackfill(monitor: Monitor): Promise<void> {
+/**
+ * Backfill.
+ *
+ * `bounded: false` (the `backfill` CLI command) walks the program's WHOLE
+ * signature history. That is the deliberate reconciliation tool: it is the only
+ * thing that can repair a gap BELOW the ingest watermark, which a bounded walk
+ * by construction cannot reach.
+ *
+ * `bounded: true` (the `sync` boot path) stops at `lastIngestedSlot()` — the
+ * ingest watermark — so a restart re-reads only what it missed while it was
+ * down. `runBackfill` stops at `slot < minSlot`, strictly, so the watermark slot
+ * itself is re-walked and its rows land as duplicates: an overlap of one slot
+ * rather than a gap, which is the correct side to err on for a recovery path.
+ */
+async function cmdBackfill(monitor: Monitor, opts: { bounded?: boolean } = {}): Promise<void> {
   const config = loadIndexerConfig();
   const pool = createPool(config.postgres);
   const store = new PgEventStore(pool);
   const rpc = new Web3BackfillRpc(config.rpcUrl, config.programId, config.commitment);
   try {
+    // A null watermark means an empty ledger — there is no floor to stop at, so
+    // even the bounded walk is a full one. That is right for a first run, and it
+    // is precisely why `cmdSync` no longer waits for this before serving.
+    const minSlot = opts.bounded ? await catchUpFloor(store) : undefined;
+    console.log(
+      `backfill: walking ${minSlot === undefined ? 'the full history' : `back to slot ${minSlot}`}`
+    );
     const result = await runBackfill(store, monitor,
-      { commitment: config.commitment, program: config.programId }, rpc);
+      { commitment: config.commitment, program: config.programId }, rpc, { minSlot });
     console.log(
       `backfill: ${result.transactions} tx, ${result.inserted} inserted, ${result.duplicates} duplicates`
     );
@@ -121,10 +142,38 @@ async function cmdRederive(monitor: Monitor): Promise<void> {
   }
 }
 
+/**
+ * The deployment entry (C12).
+ *
+ * ORDER IS LOAD-BEARING: migrate, SERVE, then catch up in the background.
+ *
+ * Incident 2026-09-08. This ran migrate → backfill → serve, so nothing answered
+ * `/health` until the catch-up walk finished — and that walk was unbounded (no
+ * `minSlot`), replaying the program's entire history against the public devnet
+ * RPC on every boot. The cost grew with the program's age until it crossed Fly's
+ * health-check patience (`deploy/fly/indexer.fly.toml`: 30s grace), the deploy
+ * was declared failed, and the app went down entirely — `min_machines_running =
+ * 1` with no healthy machine means no service at all.
+ *
+ * Serving first breaks the dependency: boot health now rests only on the
+ * database, and a backfill that is slow, rate-limited or failing outright no
+ * longer takes the service down with it. The webhook is the primary ingest path
+ * and is live from the moment we listen; the backfill is the recovery path, and
+ * a recovery path must never be able to cause the outage it exists to recover
+ * from.
+ */
 async function cmdSync(monitor: Monitor): Promise<void> {
   await cmdMigrate(monitor);
-  await cmdBackfill(monitor);
   await cmdServe(monitor);
+  void cmdBackfill(monitor, { bounded: true }).catch((err: unknown) => {
+    // Logged, never rethrown: an unhandled rejection here would kill a process
+    // that is otherwise healthy and serving. The next boot retries, and the
+    // `backfill` command is the manual repair.
+    console.error(`${SERVICE}: startup backfill failed (service is serving):`, err);
+    monitor.alert(ALERT.indexer.startupBackfillFailed, {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  });
 }
 
 export async function main(argv: readonly string[] = process.argv.slice(2)): Promise<void> {
