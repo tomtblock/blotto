@@ -62,7 +62,7 @@ pass. `AS-BUILT.md` §5 carries the same table with the code-side detail.
 |---|---|---|
 | §1 summary, §6 heading and table, §2 table, §7 flow diagram | Top 16 paid; the prize pool is 80% of entries; the platform retains 20% | **One paid place** (D-E2, 2026-09-06). Pots are fixed constants funded from the treasury before entries open; the operator's margin is entries minus the pot |
 | §2 table | Prize pools 5.12 / 25.60 SOL | **4 / 20 / 30 / 40 / 100 / 200 / 300 SOL** across seven tiers (D-E1, 2026-09-06) |
-| §2 rolling-pools paragraph | Fill deadline 72 hours; 32–63 entrants run at reduced size; fewer than 32 refunds | **12 hours** (D-E6); **52–63 run**, fewer than 52 refunds (D-E4) |
+| §2 pool-cadence paragraph | Fill deadline 72 hours; 32–63 entrants run at reduced size; fewer than 32 refunds | **12 hours** (D-E6); **52–63 run**, fewer than 52 refunds (D-E4) |
 | §5 | Prose implies entry order can affect ranking | Entry order decides only the indivisible remainder and the published leaf order. Rank comes from battles won then stats won (D3-B) |
 | §8.3 evidence table | "Paid 16 who are genuinely top-16" | One paid place. The skill evidence needs restating as a rank-1 rate |
 | §1 summary | "Unflagged winners claim immediately" | There is no claim step; prizes are pushed (R10) |

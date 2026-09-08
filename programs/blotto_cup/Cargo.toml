@@ -69,7 +69,7 @@ switchboard-on-demand = { version = "=0.12.1", default-features = false, feature
 # and do not fail the build; `cargo clippy -D warnings` stays clean.
 mpl-core = "=0.12.0"
 
-# switchboard-on-demand transitively pulls solana-program v4 -> k256 -> rand_core
+# switchboard-on-demand transitively brings in solana-program v4 -> k256 -> rand_core
 # -> getrandom v0.2, which refuses to compile for the Solana BPF target unless a
 # backend is selected. The `custom` feature satisfies getrandom's target gate; the
 # random code paths (secp256k1 recover / ZK) are never invoked by

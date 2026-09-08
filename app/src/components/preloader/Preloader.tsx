@@ -2,7 +2,7 @@
 
 /*
  * <Preloader /> — the first-visit curtain (preloader prompt v2; Figma page
- * 08 is intent). A 15-second reveal: 0–10 s the camera pulls back from a
+ * 08 is intent). A 15-second reveal: 0–10 s the camera draws back from a
  * crowd of Blots to the inflated BLOTTO word; 10–15 s hold, the O's churn,
  * and the film loops its last five seconds until the visitor presses
  * Enter. One Enter, one quiet Skip, the age/territory line — nothing

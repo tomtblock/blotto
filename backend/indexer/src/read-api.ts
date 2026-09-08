@@ -495,7 +495,7 @@ async function verifyRecord(db: Queryable, pool: string): Promise<ReadApiResult>
 
 /** The thin HTTP wrapper. GET-only; everything else is 405.
  *
- * BR-005 wiring (2026-08-28): the hand-rolled `access-control-allow-origin:
+ * BR-005 wiring (2026-08-28): the hand-written `access-control-allow-origin:
  * *` is replaced by the shared hygiene layer — `BLOTTO_API_CORS_ORIGINS`
  * is the one CORS mechanism, exact-match origins only. Unconfigured means
  * NO CORS headers: a browser on another origin (the verify page's

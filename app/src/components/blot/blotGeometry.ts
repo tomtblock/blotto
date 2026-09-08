@@ -269,7 +269,7 @@ export interface BlotScene {
   /**
    * Camera zoom that keeps the WHOLE scene inside the 1000-unit frame:
    * renderers scale everything about the centre by this factor. 1 for
-   * every ordinary body; pulls back continuously as a corner stretches
+   * every ordinary body; recedes continuously as a corner stretches
    * toward 3.6R (a Spike at 60 fits at ~0.6). PHASE-4-REVIEW: the brief
    * does not specify framing for shapes that outgrow the stage; zooming
    * beats cropping because the reference renders always show the full

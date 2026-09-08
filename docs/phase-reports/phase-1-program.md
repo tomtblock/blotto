@@ -45,7 +45,7 @@ Test coverage:
 
 ### 1. Forfeited escrow goes to the platform wallet, not the next pool's vault
 
-Roadmap 1.5: forfeit "rolls to the next open pool's vault of the same tier, or
+Roadmap 1.5: forfeit "passes to the next open pool's vault of the same tier, or
 platform wallet if none." **Not implemented as written**, deliberately: a
 pool's vault exits pay amounts derived strictly from its *own* entries (band ×
 its pot, or its refunds). Lamports parked in a successor's vault could never

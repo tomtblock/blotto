@@ -166,7 +166,7 @@ describe('the scene', () => {
     expect(blotScene([10, 10, 100, 10, 10]).heart.r).toBeCloseTo(112, 6);
   });
 
-  it('zooms to fit: 1 for ordinary bodies, pulls back continuously for extremes', () => {
+  it('zooms to fit: 1 for ordinary bodies, recedes continuously for extremes', () => {
     expect(blotScene([20, 20, 20, 20, 20]).fit).toBe(1);
     const spike = blotScene([60, 10, 10, 10, 10]).fit;
     expect(spike).toBeLessThan(1);
