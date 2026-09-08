@@ -21,17 +21,30 @@ import {
   homogeneousPopulation,
   ladderPopulation,
   type LadderClass,
+  FULL_FIELD,
+  MIN_FIELD,
 } from './ladder';
 import { runOfflinePool } from './orchestrator';
 import type { GeneratedEntrant } from './strategies';
 
 export interface StudyParams {
-  /** Number of 64-entrant pools PER RUN (the ratified floor is 200 — the
-   * mixed run and each of the three homogeneous runs all use this count). */
+  /** Number of pools PER RUN (the ratified floor is 200 — the mixed run and
+   * each of the three homogeneous runs all use this count, at every field
+   * size). */
   pools: number;
   /** Base seed; the mixed run's pool p uses seed baseSeed + p; each
    * homogeneous run offsets by a fixed stride so no pools collide. */
   baseSeed: number;
+  /**
+   * Field sizes to study. Default: a FULL pool and the MINIMUM one.
+   *
+   * Added 2026-09-08. Until then the study ran only full 64-seat pools,
+   * while D-E4 lets a pool seal and play at 52..63. Publishing a skill claim
+   * measured at one field size, for a competition offered at several, leaves
+   * the obvious question — what happens in the smallest field the rules
+   * allow? — answered by nobody. Now it is answered here.
+   */
+  fields?: readonly number[];
 }
 
 export interface ClassRow {
@@ -45,11 +58,23 @@ export interface ClassRow {
   paidLamports: bigint;
 }
 
-export interface StudyResult {
-  params: StudyParams;
+/** One field size's complete results. */
+export interface FieldResult {
+  /** Seats per pool in this run. */
+  seats: number;
   /** The mixed-field run's per-class rows, ladder order. */
   rows: ClassRow[];
-  /** The three homogeneous runs (all 64 entrants one class), by class. */
+  /** The homogeneous runs (every seat one class), by class. */
+  homogeneous: ClassRow[];
+}
+
+export interface StudyResult {
+  params: StudyParams;
+  /** Every field size studied, in the order given. */
+  fields: FieldResult[];
+  /** The FULL-field run's rows — the historical shape of this result, kept
+   *  so existing callers and assertions keep meaning what they meant. */
+  rows: ClassRow[];
   homogeneous: ClassRow[];
   csv: string;
   report: string;
@@ -121,8 +146,25 @@ async function runSeries(
  * homogeneous uniform pool is a single 64-way tie, not a study run). */
 const HOMOGENEOUS: readonly LadderClass[] = ['random', 'heuristic', 'optimised'];
 
-export async function runSkillEvidence(params: StudyParams): Promise<StudyResult> {
-  const pot = potForTier(0);
+/**
+ * Seed offset for field-size index `k`.
+ *
+ * Index 0 offsets by ZERO on purpose: the full-field study keeps the exact
+ * seeds it has always used, so adding a second field size cannot silently
+ * move the numbers this document has been publishing. Any change to the
+ * 64-seat rows after this commit is a real change in the engine, not an
+ * artefact of restructuring — which is the property the nightly diff exists
+ * to protect.
+ */
+const fieldSeedOffset = (k: number): number => k * 100_000_000;
+
+async function runFieldStudy(
+  params: StudyParams,
+  seats: number,
+  fieldIndex: number,
+  pot: bigint
+): Promise<FieldResult> {
+  const offset = fieldSeedOffset(fieldIndex);
   const newRows = () =>
     new Map<LadderClass, ClassRow>(
       LADDER.map((cls) => [cls, { cls, entrants: 0, rankOne: 0, paidSeats: 0, paidLamports: 0n }])
@@ -132,15 +174,15 @@ export async function runSkillEvidence(params: StudyParams): Promise<StudyResult
   const mixed = newRows();
   await runSeries(
     params.pools,
-    (p) => params.baseSeed + p,
-    (seed) => ladderPopulation(seed),
+    (p) => params.baseSeed + offset + p,
+    (seed) => ladderPopulation(seed, seats),
     mixed,
     pot
   );
   const rows = LADDER.map((cls) => mixed.get(cls)!);
 
-  // ---- The homogeneous-field runs (v2 amendment): one class fills all 64
-  // seats, so every entrant in the pool is "equally skilled" — the outcome
+  // ---- The homogeneous-field runs (v2 amendment): one class fills every
+  // seat, so every entrant in the pool is "equally skilled" — the outcome
   // spread measures the residual, allocation-level variation alone.
   // Seed strides keep the three runs' pools disjoint from the mixed run's.
   const homogeneous: ClassRow[] = [];
@@ -148,23 +190,48 @@ export async function runSkillEvidence(params: StudyParams): Promise<StudyResult
     const tally = newRows();
     await runSeries(
       params.pools,
-      (p) => params.baseSeed + (i + 1) * 1_000_000 + p,
-      (seed) => homogeneousPopulation(cls, seed),
+      (p) => params.baseSeed + offset + (i + 1) * 1_000_000 + p,
+      (seed) => homogeneousPopulation(cls, seed, seats),
       tally,
       pot
     );
     homogeneous.push(tally.get(cls)!);
   }
 
-  const csv = renderCsv(rows, homogeneous, pot);
-  const report = renderReport(params, rows, homogeneous, pot);
-  return { params, rows, homogeneous, csv, report };
+  return { seats, rows, homogeneous };
 }
 
-function csvLine(run: string, r: ClassRow, pot: bigint): string {
+export async function runSkillEvidence(params: StudyParams): Promise<StudyResult> {
+  const pot = potForTier(0);
+  const sizes = params.fields ?? [FULL_FIELD, MIN_FIELD];
+  if (sizes.length === 0) throw new Error('a study needs at least one field size');
+
+  const fields: FieldResult[] = [];
+  for (const [k, seats] of sizes.entries()) {
+    fields.push(await runFieldStudy(params, seats, k, pot));
+  }
+
+  // The full field is the reference run when one is present; otherwise the
+  // first, so a single-field study still has a well-defined `rows`.
+  const primary = fields.find((f) => f.seats === FULL_FIELD) ?? fields[0];
+
+  const csv = renderCsv(fields, pot);
+  const report = renderReport(params, fields, pot);
+  return {
+    params,
+    fields,
+    rows: primary.rows,
+    homogeneous: primary.homogeneous,
+    csv,
+    report,
+  };
+}
+
+function csvLine(run: string, seats: number, r: ClassRow, pot: bigint): string {
   const n = BigInt(r.entrants);
   return [
     run,
+    seats,
     r.cls,
     r.entrants,
     pct(BigInt(r.rankOne), n, 3),
@@ -176,12 +243,14 @@ function csvLine(run: string, r: ClassRow, pot: bigint): string {
   ].join(',');
 }
 
-function renderCsv(rows: ClassRow[], homogeneous: ClassRow[], pot: bigint): string {
+function renderCsv(fields: FieldResult[], pot: bigint): string {
   const lines = [
-    'run,class,entrants,rank1_rate_pct,paid_seat_rate_pct,eliminated_rate_pct,mean_payout_share_pct,total_paid_lamports',
+    'run,seats,class,entrants,rank1_rate_pct,paid_seat_rate_pct,eliminated_rate_pct,mean_payout_share_pct,total_paid_lamports',
   ];
-  for (const r of rows) lines.push(csvLine('mixed', r, pot));
-  for (const r of homogeneous) lines.push(csvLine('homogeneous', r, pot));
+  for (const f of fields) {
+    for (const r of f.rows) lines.push(csvLine('mixed', f.seats, r, pot));
+    for (const r of f.homogeneous) lines.push(csvLine('homogeneous', f.seats, r, pot));
+  }
   return lines.join('\n') + '\n';
 }
 
@@ -194,18 +263,47 @@ function tableRow(r: ClassRow, pot: bigint): string {
   )}% | ${pct(n - BigInt(r.paidSeats), n, 2)}% | ${pct(r.paidLamports, pot * n, 4)}% |`;
 }
 
-function renderReport(
-  params: StudyParams,
-  rows: ClassRow[],
-  homogeneous: ClassRow[],
-  pot: bigint
-): string {
-  const byCls = new Map(rows.map((r) => [r.cls, r]));
-  const headline = (['random', 'heuristic', 'optimised'] as const)
-    .map((cls) => tableRow(byCls.get(cls)!, pot))
+/** A headline/uniform row prefixed with its field size. */
+function fieldRow(seats: number, r: ClassRow, pot: bigint): string {
+  const n = BigInt(r.entrants);
+  return `| ${seats} | ${r.cls} | ${r.entrants} | ${pct(BigInt(r.rankOne), n, 3)}% | ${pct(
+    BigInt(r.paidSeats),
+    n,
+    2
+  )}% | ${pct(n - BigInt(r.paidSeats), n, 2)}% | ${pct(r.paidLamports, pot * n, 4)}% |`;
+}
+
+/** The everyone-equal baseline for a field: one seat's share, as a percent. */
+function baselinePct(seats: number): string {
+  return pct(1n, BigInt(seats), 4);
+}
+
+const SKILL_CLASSES = ['random', 'heuristic', 'optimised'] as const;
+
+function renderReport(params: StudyParams, fields: FieldResult[], pot: bigint): string {
+  const headline = fields
+    .flatMap((f) => {
+      const byCls = new Map(f.rows.map((r) => [r.cls, r]));
+      return SKILL_CLASSES.map((cls) => fieldRow(f.seats, byCls.get(cls)!, pot));
+    })
     .join('\n');
-  const uniformRow = tableRow(byCls.get('uniform')!, pot);
-  const homogeneousTable = homogeneous.map((r) => tableRow(r, pot)).join('\n');
+
+  const defaultRows = fields
+    .map((f) => {
+      const u = f.rows.find((r) => r.cls === 'uniform')!;
+      return fieldRow(f.seats, u, pot);
+    })
+    .join('\n');
+
+  const homogeneousTable = fields
+    .flatMap((f) => f.homogeneous.map((r) => fieldRow(f.seats, r, pot)))
+    .join('\n');
+
+  const baselines = fields
+    .map((f) => `${baselinePct(f.seats)}% in a ${f.seats}-seat pool`)
+    .join(', and ');
+
+  const sizes = fields.map((f) => f.seats).join(' and ');
 
   return `# Skill evidence — outcome statistics by strategy class
 
@@ -213,6 +311,12 @@ function renderReport(
 by hand. Deterministic: the same parameters reproduce this file byte for
 byte, and the nightly CI job re-runs the study and diffs it against this
 committed copy.*
+
+Every run below is measured at **two field sizes**: ${sizes} seats. 64 is a
+full pool; 52 is the smallest field the rules allow a pool to play at (D-E4 —
+a pool whose deadline passes holding 52..63 entrants runs rather than
+refunding). A claim measured only at full capacity would leave the obvious
+question about the shortest field unanswered.
 
 ## Headline: considered play against unconsidered play
 
@@ -224,46 +328,78 @@ the measured effect of that choice under the published scoring rule
 (battles won, then stats won; the ranked-first player takes the pot, a tie
 for first splitting it evenly per D3-B):
 
-| Class | Entrants | Rank-1 rate | Paid-seat rate | Eliminated from the paid set | Mean payout share of pot |
-|---|---|---|---|---|---|
+| Seats | Class | Entrants | Rank-1 rate | Paid-seat rate | Eliminated from the paid set | Mean payout share of pot |
+|---|---|---|---|---|---|---|
 ${headline}
 
-The everyone-equal baseline for a 64-seat pool is a mean payout share of
-**1.5625%** (1/64) per entrant. The gap between the rows above — produced
-purely by allocation choices — is the product's skill evidence.
+The everyone-equal baseline — what one seat is worth if nothing an entrant
+does matters — is ${baselines}. The gap between the rows above, produced
+purely by allocation choices, is the product's skill evidence, and it holds
+at both field sizes.
+
+## Leaving the allocation on its default
+
+The allocation screen opens on an even split — 20/20/20/20/20 across
+Strength, Speed, Heart, Wit and Durability — and stays there until the
+player moves it. The \`uniform\` class IS that state: it is byte-identical to
+the app's \`EVEN_SPLIT\` (\`app/src/battle/allocation.ts\`, the constant every
+screen opens on), so these rows are the measured outcome for a player who
+opens the flow, touches nothing, and locks in all seven battles.
+
+| Seats | Class | Entrants | Rank-1 rate | Paid-seat rate | Eliminated from the paid set | Mean payout share of pot |
+|---|---|---|---|---|---|---|
+${defaultRows}
+
+**The claim here is stronger than a statistical one, and it should be read
+as the stronger claim.** A battle is won by taking three of the five stats.
+Against any opponent who concentrates on three, the flat split loses those
+three and takes only the two the opponent starved — so it loses that battle
+3–2 by construction, not on average. A player who leaves the default does
+not merely do worse than one who thinks: across every pool in this study, at
+both field sizes, they never place first and never take a lamport.
+
+That is also precisely why these rows are kept OUT of the headline
+comparison above. Measuring "skill" against a shape that cannot win a battle
+would overstate the effect — the honest measure of skill is the spread
+between entrants who are all genuinely competing, which is what the headline
+table reports.
 
 ## Fields of equally-skilled entrants
 
-The v2 amendment's control runs: **${params.pools} pools per class** in
-which all 64 entrants play the SAME strategy class (with within-class
+The v2 amendment's control runs: **${params.pools} pools per class, per field
+size**, in which every seat plays the SAME strategy class (with within-class
 uniqueness — no two entrants in a pool share an allocation set, see
-Methodology). When everyone is equally skilled, outcomes should spread
-toward the everyone-equal baseline: rank-1 rate near 1/64 (≈ 1.563%),
-paid-seat rate equal to it (one paid place under D-E2: the paid set IS the
-rank-1 group, a tie for first splitting the pot per D3-B), and mean payout
-share at exactly 1.5625% of the pot (conservation forces the class total to
-equal the pot; the spread is who takes which slice).
+Methodology). When everyone is equally skilled, outcomes should spread toward
+the everyone-equal baseline: rank-1 rate near one seat's share, paid-seat
+rate equal to it (one paid place under D-E2: the paid set IS the rank-1
+group, a tie for first splitting the pot per D3-B), and mean payout share at
+exactly that baseline (conservation forces the class total to equal the pot;
+the spread is who takes which slice).
 
-| Class (all 64 seats) | Entrants | Rank-1 rate | Paid-seat rate | Eliminated from the paid set | Mean payout share of pot |
-|---|---|---|---|---|---|
+| Seats | Class | Entrants | Rank-1 rate | Paid-seat rate | Eliminated from the paid set | Mean payout share of pot |
+|---|---|---|---|---|---|---|
 ${homogeneousTable}
 
 Reading: among equals, no entrant holds an edge — the mean share sits at
-the baseline for every class. Skill differentiates BETWEEN classes (the
-headline table); within a class it cannot, which is exactly the shape a
-skill competition's outcomes should have.
+the baseline for every class, at both field sizes. Skill differentiates
+BETWEEN classes (the headline table); within a class it cannot, which is
+exactly the shape a skill competition's outcomes should have.
 
 ## Methodology
 
-- **Runs**: one mixed-field run (${params.pools} pools × 64 entrants:
-  16 per class, seat order shuffled per pool by a seeded Fisher–Yates so
+- **Runs**: at EACH field size (${sizes} seats), one mixed-field run
+  (${params.pools} pools, equal numbers of each class — 16 per class at 64
+  seats, 13 at 52 — seat order shuffled per pool by a seeded Fisher–Yates so
   class is uncorrelated with seat index) and three homogeneous-field runs
-  (${params.pools} pools × 64 entrants of one class each, for random /
-  heuristic / optimised).
-- **Seeds**: base seed **${params.baseSeed}**. Mixed-run pool p uses seed
-  baseSeed + p (p = 1..${params.pools}); homogeneous run i (1 = random,
-  2 = heuristic, 3 = optimised) uses baseSeed + i×1,000,000 + p. Every
-  entrant stream is sha256 of a labelled seed string — no wall clock, no
+  (${params.pools} pools of one class each, for random / heuristic /
+  optimised).
+- **Seeds**: base seed **${params.baseSeed}**. Field size k offsets every
+  seed by k × 100,000,000; the FULL field is index 0, so its seeds — and
+  therefore its published numbers — are unchanged by the addition of a second
+  field size. Within a field, mixed-run pool p uses baseSeed + offset + p
+  (p = 1..${params.pools}); homogeneous run i (1 = random, 2 = heuristic,
+  3 = optimised) uses baseSeed + offset + i×1,000,000 + p. Every entrant
+  stream is sha256 of a labelled seed string — no wall clock, no
   \`Math.random\` — so a run is reproducible from its parameters alone.
 - **Within-class uniqueness**: no two entrants of one class in one pool
   share the identical seven-battle allocation set. The jitter model moves
@@ -271,7 +407,8 @@ skill competition's outcomes should have.
   residual full-set collision is repaired deterministically by regenerating
   the later entrant with a bumped salt (\`ensureUniqueWithinClass\`,
   \`tests/rehearsal/src/ladder.ts\`). The uniform class is exempt —
-  20/20/20/20/20 is its definition (see the appendix).
+  20/20/20/20/20 is its definition, which is also why no homogeneous uniform
+  run exists: it would be a single n-way tie.
 - **Definitions**: *rank-1 rate* — share of a class's entrants whose
   competition rank was 1 (ties share rank 1); *paid-seat rate* — share
   whose seat appears in the committed payout list (nonzero amount under the
@@ -300,27 +437,11 @@ skill competition's outcomes should have.
 ## Strategy classes
 
 Documented in \`tests/rehearsal/strategies/README.md\`:
+**uniform** (the app's default even split — see "Leaving the allocation on
+its default" above),
 **random** (valid free-integer allocations, no intent),
 **heuristic** (three-stat concentration, steep split),
-**optimised** (the same family, tuned: one-upped trio values funded from the
-off-stats, per-entrant trio rotation, wider jitter),
-and **uniform** (the appendix's structural baseline).
-
-## Appendix: the uniform baseline
-
-| Class | Entrants | Rank-1 rate | Paid-seat rate | Eliminated from the paid set | Mean payout share of pot |
-|---|---|---|---|---|---|
-${uniformRow}
-
-The flat 20/20/20/20/20 split is not a strategy but a STRUCTURAL baseline:
-against any three-stat concentration it loses that battle 3–2 (the
-concentrated side takes its three funded stats; the flat side takes the two
-starved ones), so a uniform entrant loses every battle against every
-concentrating opponent by construction. Its row is reported for
-completeness and kept out of the headline comparison — measuring "skill"
-against a shape that cannot win a battle would overstate the effect. The
-uniform class is also exempt from within-class uniqueness (the flat split
-IS the class), which is why a homogeneous uniform run does not exist: it
-would be a single 64-way tie by definition.
+and **optimised** (the same family, tuned: one-upped trio values funded from
+the off-stats, per-entrant trio rotation, wider jitter).
 `;
 }
