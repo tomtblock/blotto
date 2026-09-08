@@ -35,6 +35,7 @@ import {
 } from '@/entry/balance-gate';
 import { checkGeoGate, type GeoGateState } from '@/entry/geo-gate';
 import type { AddFundsOptions } from '@/wallet/types';
+import { isMainnet } from '@/chain/cluster';
 import {
   TERMS_VERSION,
   hasLocalAttestation,
@@ -349,10 +350,10 @@ function BalanceGateView({
               onClick={async () => {
                 setFunding(true);
                 try {
-                  // Straight onto the deposit-address screen: on devnet no
-                  // card or exchange provider sells SOL, so it is the only
-                  // funding method that can work here.
-                  await addFunds(wallet, { method: 'receive' });
+                  // Straight onto the deposit-address screen on devnet: no
+                  // card or exchange provider sells devnet SOL, so it is the
+                  // only funding method that can work there.
+                  await addFunds(wallet, { method: isMainnet() ? 'any' : 'receive' });
                 } catch (error) {
                   // Exiting the funding flow lands here, and so does a
                   // provider REFUSAL — notably the SDK's "Wallet funding is

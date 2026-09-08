@@ -303,6 +303,7 @@ jobs:
         run: |
           flyctl secrets set --app "$INDEXER_APP" --stage \
             BLOTTO_DATABASE_URL="${{ secrets.BLOTTO_DATABASE_URL }}" \
+            BLOTTO_CLUSTER="devnet" \
             BLOTTO_RPC_URL="$DEVNET_RPC" \
             BLOTTO_PROGRAM_ID="$PROGRAM_ID" \
             BLOTTO_API_CORS_ORIGINS="$APP_ORIGIN" \
@@ -396,6 +397,7 @@ jobs:
         run: |
           flyctl secrets set --app "$DAEMON_APP" --stage \
             BLOTTO_DATABASE_URL="${{ secrets.BLOTTO_DATABASE_URL }}" \
+            BLOTTO_CLUSTER="devnet" \
             BLOTTO_RPC_URL="$DEVNET_RPC" \
             BLOTTO_PROGRAM_ID="$PROGRAM_ID" \
             SETTLEMENT_SIGNER_KEYPAIR_B64="$SETTLEMENT_SIGNER_KEYPAIR_B64" \
@@ -446,6 +448,7 @@ jobs:
           # are refused at preflight (the old wildcard is gone).
           flyctl secrets set --app "$REVIEW_APP" --stage \
             BLOTTO_DATABASE_URL="${{ secrets.BLOTTO_DATABASE_URL }}" \
+            BLOTTO_CLUSTER="devnet" \
             BLOTTO_RPC_URL="$DEVNET_RPC" \
             BLOTTO_PROGRAM_ID="$PROGRAM_ID" \
             BLOTTO_API_CORS_ORIGINS="$APP_ORIGIN" \

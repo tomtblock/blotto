@@ -15,6 +15,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { cluster } from './cluster';
 import { DEFAULT_DEVNET_RPC_URL, looksLikeMainnet, rpcUrl } from './rpc';
 
 describe('the RPC endpoint', () => {
@@ -22,11 +23,15 @@ describe('the RPC endpoint', () => {
     expect(looksLikeMainnet(DEFAULT_DEVNET_RPC_URL)).toBe(false);
   });
 
-  it('is not mainnet in whatever environment this build runs in', () => {
+  it('is not mainnet unless this build says it is for mainnet', () => {
     // The gate: NEXT_PUBLIC_SOLANA_RPC_URL is read at build time and baked
     // into the client bundle, so a mainnet value here is a mainnet value in
-    // every visitor's browser.
-    expect(looksLikeMainnet(rpcUrl()), `NEXT_PUBLIC_SOLANA_RPC_URL = ${rpcUrl()}`).toBe(false);
+    // every visitor's browser. Mainnet is never inferred from the URL — only
+    // NEXT_PUBLIC_SOLANA_CLUSTER=mainnet admits one (cluster.test.ts holds
+    // the full contract).
+    expect(looksLikeMainnet(rpcUrl()), `NEXT_PUBLIC_SOLANA_RPC_URL = ${rpcUrl()}`).toBe(
+      cluster() === 'mainnet',
+    );
   });
 
   it('recognises the mainnet hostnames it is meant to catch', () => {

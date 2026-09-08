@@ -58,19 +58,19 @@ import {
 } from "./standard-wallets";
 import type { TxSigner } from "@/tx/types";
 import { rpcUrl } from "@/chain/rpc";
+import { SOLANA_CHAIN } from "@/chain/cluster";
 
 /*
- * The ONLY Solana chain this app configures. Signing AND funding calls pass
- * it EXPLICITLY — Privy's per-request default is mainnet, and an implicit
- * default is exactly what broke the first on-device signing attempt
+ * The ONLY Solana chain this app configures — `SOLANA_CHAIN`, derived from
+ * the one build-time cluster variable (chain/cluster.ts). Signing AND funding
+ * calls pass it EXPLICITLY — Privy's per-request default is mainnet, and an
+ * implicit default is exactly what broke the first on-device signing attempt
  * (PR #102 P0: "No RPC configuration found for chain solana:mainnet") and
- * what pointed the funding flow at mainnet until 2026-09-08 (PR #86).
- * Mainnet stays UNCONFIGURED by construction (the previews-never-mainnet
- * rule, lib/chain/rpc.ts) until 10.F says otherwise — a call that drifts to
- * mainnet must keep failing loudly, not silently succeed. Pinned by
- * privy-chain.test.ts.
+ * what pointed the funding flow at mainnet until 2026-09-08 (PR #86). A
+ * devnet build configures no mainnet at all (the previews-never-mainnet
+ * rule), so a call that drifts must keep failing loudly, not silently
+ * succeed. Pinned by privy-chain.test.ts.
  */
-const SOLANA_CHAIN = "solana:devnet" as const;
 
 /**
  * Devnet RPC config for Privy's signing path (config.solana.rpcs, per the

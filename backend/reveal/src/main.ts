@@ -54,6 +54,7 @@
 import { readFileSync } from 'fs';
 import { Connection, Keypair, PublicKey } from '@solana/web3.js';
 import { loadPostgresConfig } from '../../_shared/src/config';
+import { resolveRpcUrl } from '../../_shared/src/cluster';
 import { createPool } from '../../_shared/src/db';
 import {
   PgCiphertextStore,
@@ -75,7 +76,8 @@ import { assertCanPayFees, formatSol, step } from './startup';
 
 const SERVICE = 'daemon';
 const DEFAULT_PROGRAM_ID = '5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17';
-const DEFAULT_RPC = 'https://api.devnet.solana.com';
+// The RPC endpoint follows BLOTTO_CLUSTER (devnet by default, mainnet only
+// by name and never without an explicit endpoint) — _shared/src/cluster.ts.
 
 /**
  * Budgets for the two startup steps that leave the process and talk to a
@@ -163,7 +165,8 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
   enter('connecting');
   const db = createPool(loadPostgresConfig(env));
 
-  const connection = new Connection(env.BLOTTO_RPC_URL ?? DEFAULT_RPC, {
+  const rpcUrl = resolveRpcUrl(env);
+  const connection = new Connection(rpcUrl, {
     commitment: 'confirmed',
   });
   const settlementSigner = Keypair.fromSecretKey(
@@ -266,7 +269,7 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
         irysUploaderFromEnv({
           IRYS_UPLOAD_KEY: env.IRYS_UPLOAD_KEY,
           IRYS_NETWORK: env.IRYS_NETWORK,
-          BLOTTO_RPC_URL: env.BLOTTO_RPC_URL ?? DEFAULT_RPC,
+          BLOTTO_RPC_URL: rpcUrl,
         }),
       log
     )

@@ -47,7 +47,9 @@ import {
 
 const N_TIERS = 7;
 const DEFAULT_PROGRAM_ID = '5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17';
-const DEFAULT_RPC = 'https://api.devnet.solana.com';
+import { resolveRpcUrl } from '../backend/_shared/src/cluster';
+/** The endpoint follows BLOTTO_CLUSTER / BLOTTO_RPC_URL — _shared/src/cluster.ts. */
+const DEFAULT_RPC = resolveRpcUrl({ BLOTTO_CLUSTER: process.env.BLOTTO_CLUSTER, BLOTTO_RPC_URL: process.env.BLOTTO_RPC_URL });
 
 /** Anchor's `InstructionDidNotDeserialize` — the deployed program has the
  * instruction but rejected our argument bytes. */

@@ -25,11 +25,14 @@
  * including previews.
  */
 
+import { PUBLIC_DEVNET_RPC_URL, defaultRpcUrl } from "./cluster";
+
 /**
  * The devnet fallback. Deliberately a public endpoint and deliberately devnet:
- * see the rule at the top of this file.
+ * see the rule at the top of this file. Since 2026-09-08 the cluster itself
+ * is one build-time variable (`./cluster.ts`); mainnet has NO fallback at all.
  */
-export const DEFAULT_DEVNET_RPC_URL = "https://api.devnet.solana.com";
+export const DEFAULT_DEVNET_RPC_URL = PUBLIC_DEVNET_RPC_URL;
 
 /**
  * The RPC endpoint this build talks to.
@@ -38,7 +41,7 @@ export const DEFAULT_DEVNET_RPC_URL = "https://api.devnet.solana.com";
  * directly — the fallback is the safety property, and an inline read skips it.
  */
 export function rpcUrl(): string {
-  return process.env.NEXT_PUBLIC_SOLANA_RPC_URL || DEFAULT_DEVNET_RPC_URL;
+  return process.env.NEXT_PUBLIC_SOLANA_RPC_URL || defaultRpcUrl();
 }
 
 /**

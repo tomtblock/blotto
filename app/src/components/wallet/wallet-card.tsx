@@ -28,6 +28,7 @@ import { useAuth } from "@/wallet/auth-context";
 import { balanceQueryKey, useBalance } from "@/wallet/use-balance";
 import { formatSolShort, lamportsToSol, solToLamports } from "@/data/format";
 import { rpcUrl } from "@/chain/rpc";
+import { explorerTxUrl, isMainnet } from "@/chain/cluster";
 import { makeTxRpc } from "@/tx/tx-rpc";
 import { checkSend, maxSendableLamports, sendSol } from "@/tx/send-sol";
 import type { TradeResult } from "@/tx/execute";
@@ -40,8 +41,12 @@ import { CopyableAddressPill } from "@/components/copyable-address";
 /** Devnet only — see .env.example. Inlined at build; absent in real-money builds. */
 const FAUCET_ENABLED = process.env.NEXT_PUBLIC_DEVNET_FAUCET === "1";
 const FAUCET_URL = "https://faucet.solana.com/";
-const EXPLORER = (signature: string) =>
-  `https://explorer.solana.com/tx/${signature}?cluster=devnet`;
+/*
+ * On devnet the deposit-address screen is the only funding method that can
+ * work (no card or exchange provider sells devnet SOL); on mainnet the
+ * provider chooses among whatever methods the dashboard has switched on.
+ */
+const FUNDING_METHOD = isMainnet() ? ("any" as const) : ("receive" as const);
 
 export function WalletCard() {
   const auth = useAuth();
@@ -139,7 +144,7 @@ export function WalletCard() {
             onClick={async () => {
               setFunding(true);
               try {
-                await auth.addFunds?.(wallet, { method: "receive" });
+                await auth.addFunds?.(wallet, { method: FUNDING_METHOD });
               } catch (error) {
                 // The provider's refusal ("funding is not enabled") lands
                 // here; logged so an operator can see it. What the player
@@ -258,7 +263,7 @@ function SendForm({
         <p className="text-[13px] text-ink-muted">
           {COPY.wallet.sendSignature}:{" "}
           <a
-            href={EXPLORER(phase.signature)}
+            href={explorerTxUrl(phase.signature)}
             target="_blank"
             rel="noreferrer"
             className="font-mono break-all text-brand underline underline-offset-2"
