@@ -46,9 +46,14 @@ export default function RulesPage() {
     <>
       <AppHeader />
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 pb-24">
-        <h1 className="mb-6 font-display text-[34px] leading-[38px] font-extrabold text-ink">
+        <h1 className="mb-2 font-display text-[34px] leading-[38px] font-extrabold text-ink">
           {COPY.rules.title}
         </h1>
+        <p className="mb-6 text-[15px]">
+          <Link href="/fair-play" className="text-brand underline underline-offset-2 hover:text-brand-hot">
+            {COPY.rules.fairPlayLink}
+          </Link>
+        </p>
         {rulesSections().map((s) => (
           <section key={s.id} id={s.id} className="mb-9">
             <h2 className="mb-2 font-display text-[24px] leading-[30px] font-bold text-ink">

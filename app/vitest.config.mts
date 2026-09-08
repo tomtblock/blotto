@@ -41,6 +41,8 @@ export default defineConfig({
         new URL("../backend/detection/src", import.meta.url),
       ),
       "@config": fileURLToPath(new URL("../config", import.meta.url)),
+      // Generated evidence the Fair play page imports (docs/skill-evidence).
+      "@docs": fileURLToPath(new URL("../docs", import.meta.url)),
     },
   },
   test: {

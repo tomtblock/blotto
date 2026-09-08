@@ -273,6 +273,9 @@ export default async function LandingPage() {
               <Link href="/verify" className="underline underline-offset-2">
                 {COPY.howItWorks.verifyLink}
               </Link>
+              <Link href="/fair-play" className="underline underline-offset-2">
+                {COPY.howItWorks.fairPlayLink}
+              </Link>
             </p>
           </section>
 

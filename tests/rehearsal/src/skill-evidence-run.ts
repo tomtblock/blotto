@@ -12,6 +12,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { runSkillEvidence } from './skill-evidence';
+import { renderJson } from './skill-evidence-json';
 
 async function main(): Promise<void> {
   const pools = Number(process.env.SKILL_EVIDENCE_POOLS ?? 200);
@@ -25,11 +26,15 @@ async function main(): Promise<void> {
   const dir = join(__dirname, '..', '..', '..', 'docs', 'skill-evidence');
   const csvPath = join(dir, 'results.csv');
   const reportPath = join(dir, 'REPORT.md');
+  // The same rows as JSON, for the app's Fair play page (a JSON import).
+  const jsonPath = join(dir, 'results.json');
+  const json = renderJson(result.csv);
 
   if (check) {
     const committedCsv = readFileSync(csvPath, 'utf8');
     const committedReport = readFileSync(reportPath, 'utf8');
-    if (committedCsv !== result.csv || committedReport !== result.report) {
+    const committedJson = readFileSync(jsonPath, 'utf8');
+    if (committedCsv !== result.csv || committedReport !== result.report || committedJson !== json) {
       console.error(
         'skill-evidence drift: a fresh run differs from the committed artifacts.\n' +
           'The scoring or settlement path changed outcomes — regenerate with\n' +
@@ -44,7 +49,8 @@ async function main(): Promise<void> {
   mkdirSync(dir, { recursive: true });
   writeFileSync(csvPath, result.csv);
   writeFileSync(reportPath, result.report);
-  console.log(`wrote ${csvPath} and ${reportPath} (${pools} pools, ${elapsed}s)`);
+  writeFileSync(jsonPath, json);
+  console.log(`wrote ${csvPath}, ${reportPath} and ${jsonPath} (${pools} pools, ${elapsed}s)`);
   for (const line of result.csv.trim().split('\n')) console.log('  ' + line);
 }
 

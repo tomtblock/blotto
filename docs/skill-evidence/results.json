@@ -1,0 +1,169 @@
+{
+  "columns": [
+    "run",
+    "seats",
+    "class",
+    "entrants",
+    "rank1_rate_pct",
+    "paid_seat_rate_pct",
+    "eliminated_rate_pct",
+    "mean_payout_share_pct",
+    "total_paid_lamports"
+  ],
+  "rows": [
+    {
+      "run": "mixed",
+      "seats": "64",
+      "class": "uniform",
+      "entrants": "3200",
+      "rank1_rate_pct": "0.000",
+      "paid_seat_rate_pct": "0.00",
+      "eliminated_rate_pct": "100.00",
+      "mean_payout_share_pct": "0.0000",
+      "total_paid_lamports": "0"
+    },
+    {
+      "run": "mixed",
+      "seats": "64",
+      "class": "random",
+      "entrants": "3200",
+      "rank1_rate_pct": "0.000",
+      "paid_seat_rate_pct": "0.00",
+      "eliminated_rate_pct": "100.00",
+      "mean_payout_share_pct": "0.0000",
+      "total_paid_lamports": "0"
+    },
+    {
+      "run": "mixed",
+      "seats": "64",
+      "class": "heuristic",
+      "entrants": "3200",
+      "rank1_rate_pct": "1.093",
+      "paid_seat_rate_pct": "1.09",
+      "eliminated_rate_pct": "98.90",
+      "mean_payout_share_pct": "1.0937",
+      "total_paid_lamports": "140000000000"
+    },
+    {
+      "run": "mixed",
+      "seats": "64",
+      "class": "optimised",
+      "entrants": "3200",
+      "rank1_rate_pct": "5.156",
+      "paid_seat_rate_pct": "5.15",
+      "eliminated_rate_pct": "94.84",
+      "mean_payout_share_pct": "5.1562",
+      "total_paid_lamports": "660000000000"
+    },
+    {
+      "run": "homogeneous",
+      "seats": "64",
+      "class": "random",
+      "entrants": "12800",
+      "rank1_rate_pct": "1.562",
+      "paid_seat_rate_pct": "1.56",
+      "eliminated_rate_pct": "98.43",
+      "mean_payout_share_pct": "1.5625",
+      "total_paid_lamports": "800000000000"
+    },
+    {
+      "run": "homogeneous",
+      "seats": "64",
+      "class": "heuristic",
+      "entrants": "12800",
+      "rank1_rate_pct": "1.562",
+      "paid_seat_rate_pct": "1.56",
+      "eliminated_rate_pct": "98.43",
+      "mean_payout_share_pct": "1.5625",
+      "total_paid_lamports": "800000000000"
+    },
+    {
+      "run": "homogeneous",
+      "seats": "64",
+      "class": "optimised",
+      "entrants": "12800",
+      "rank1_rate_pct": "1.562",
+      "paid_seat_rate_pct": "1.56",
+      "eliminated_rate_pct": "98.43",
+      "mean_payout_share_pct": "1.5625",
+      "total_paid_lamports": "800000000000"
+    },
+    {
+      "run": "mixed",
+      "seats": "52",
+      "class": "uniform",
+      "entrants": "2600",
+      "rank1_rate_pct": "0.000",
+      "paid_seat_rate_pct": "0.00",
+      "eliminated_rate_pct": "100.00",
+      "mean_payout_share_pct": "0.0000",
+      "total_paid_lamports": "0"
+    },
+    {
+      "run": "mixed",
+      "seats": "52",
+      "class": "random",
+      "entrants": "2600",
+      "rank1_rate_pct": "0.038",
+      "paid_seat_rate_pct": "0.03",
+      "eliminated_rate_pct": "99.96",
+      "mean_payout_share_pct": "0.0384",
+      "total_paid_lamports": "4000000000"
+    },
+    {
+      "run": "mixed",
+      "seats": "52",
+      "class": "heuristic",
+      "entrants": "2600",
+      "rank1_rate_pct": "1.384",
+      "paid_seat_rate_pct": "1.38",
+      "eliminated_rate_pct": "98.61",
+      "mean_payout_share_pct": "1.3846",
+      "total_paid_lamports": "144000000000"
+    },
+    {
+      "run": "mixed",
+      "seats": "52",
+      "class": "optimised",
+      "entrants": "2600",
+      "rank1_rate_pct": "6.269",
+      "paid_seat_rate_pct": "6.26",
+      "eliminated_rate_pct": "93.73",
+      "mean_payout_share_pct": "6.2692",
+      "total_paid_lamports": "652000000000"
+    },
+    {
+      "run": "homogeneous",
+      "seats": "52",
+      "class": "random",
+      "entrants": "10400",
+      "rank1_rate_pct": "1.923",
+      "paid_seat_rate_pct": "1.92",
+      "eliminated_rate_pct": "98.07",
+      "mean_payout_share_pct": "1.9230",
+      "total_paid_lamports": "800000000000"
+    },
+    {
+      "run": "homogeneous",
+      "seats": "52",
+      "class": "heuristic",
+      "entrants": "10400",
+      "rank1_rate_pct": "1.923",
+      "paid_seat_rate_pct": "1.92",
+      "eliminated_rate_pct": "98.07",
+      "mean_payout_share_pct": "1.9230",
+      "total_paid_lamports": "800000000000"
+    },
+    {
+      "run": "homogeneous",
+      "seats": "52",
+      "class": "optimised",
+      "entrants": "10400",
+      "rank1_rate_pct": "1.923",
+      "paid_seat_rate_pct": "1.92",
+      "eliminated_rate_pct": "98.07",
+      "mean_payout_share_pct": "1.9230",
+      "total_paid_lamports": "800000000000"
+    }
+  ]
+}

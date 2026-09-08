@@ -127,9 +127,12 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
           <p>{COPY.pool.prizeRule}</p>
           <p>{COPY.pool.sealed}</p>
           <p>{COPY.pool.refundRule(MIN_SEATS_N, FILL_HOURS)}</p>
-          <p>
+          <p className="flex gap-4">
             <Link href="/rules" className="underline underline-offset-2 hover:text-ink">
               {COPY.rules.title}
+            </Link>
+            <Link href="/fair-play" className="underline underline-offset-2 hover:text-ink">
+              {COPY.fairPlay.title}
             </Link>
           </p>
         </section>
