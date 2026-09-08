@@ -119,3 +119,74 @@ describe('OfacSdnMirror', () => {
     expect(threw).to.equal(true);
   });
 });
+
+/**
+ * The download bound (incident 2026-09-08).
+ *
+ * `download()` had no timeout, and it runs inside a required boot path: the
+ * packet service does not open its listener until the mirror has loaded. An
+ * endpoint that accepted the connection and then stalled hung the boot with no
+ * deadline and no log line — the platform reported only that health checks had
+ * not passed.
+ */
+describe('OfacSdnMirror — the download is bounded', () => {
+  /** Accepts the request and never answers, like a stalled transfer. */
+  const neverAnswers: typeof fetch = (_url, init) =>
+    new Promise((_resolve, reject) => {
+      const signal = (init as RequestInit | undefined)?.signal;
+      signal?.addEventListener('abort', () => reject(signal.reason));
+    });
+
+  it('aborts a stalled fetch and names the timeout rather than hanging', async () => {
+    const mirror = new OfacSdnMirror({ fetchImpl: neverAnswers, timeoutMs: 50 });
+    const started = Date.now();
+    let message = '';
+    try {
+      await mirror.refresh();
+    } catch (err) {
+      message = err instanceof Error ? err.message : String(err);
+    }
+    expect(message, 'the error says it timed out, and after how long').to.match(
+      /ofac-sdn: timed out after 50ms/
+    );
+    expect(
+      Date.now() - started,
+      'it returned on its own deadline, not on the test runner giving up'
+    ).to.be.lessThan(5_000);
+  });
+
+  it('passes a real abort signal to fetch, so the bound covers the transfer', async () => {
+    let seen: AbortSignal | undefined;
+    const capture: typeof fetch = async (_url, init) => {
+      seen = (init as RequestInit | undefined)?.signal ?? undefined;
+      return new Response(XML, { status: 200 });
+    };
+    await new OfacSdnMirror({ fetchImpl: capture, timeoutMs: 60_000 }).refresh();
+    expect(seen, 'fetch was given a signal').to.be.instanceOf(AbortSignal);
+    expect(seen?.aborted, 'and it is live, not already spent').to.equal(false);
+  });
+
+  it('a stalled BODY is bounded too, not only the response head', async () => {
+    // The ~29 MB transfer spends its time in res.text(); a bound that stopped
+    // at the head would cover the part that never hangs.
+    const headThenStall: typeof fetch = async (_url, init) => {
+      const signal = (init as RequestInit | undefined)?.signal;
+      return {
+        ok: true,
+        status: 200,
+        text: () =>
+          new Promise<string>((_resolve, reject) => {
+            signal?.addEventListener('abort', () => reject(signal.reason));
+          }),
+      } as unknown as Response;
+    };
+    const mirror = new OfacSdnMirror({ fetchImpl: headThenStall, timeoutMs: 50 });
+    let message = '';
+    try {
+      await mirror.refresh();
+    } catch (err) {
+      message = err instanceof Error ? err.message : String(err);
+    }
+    expect(message).to.match(/ofac-sdn: timed out after 50ms reading/);
+  });
+});

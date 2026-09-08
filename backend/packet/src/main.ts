@@ -117,7 +117,21 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
   );
   // Selected, loaded and scheduled BEFORE the listener opens: no request is
   // ever answered by a screener that is not ready. Throws → no service.
+  //
+  // This is the longest step in the boot by a wide margin — the OFAC mirror is
+  // a ~29 MB download and parse — and until 2026-09-08 it happened in silence.
+  // The deploy that failed on it reported only "timeout reached waiting for
+  // health checks to pass", which names the symptom and not one thing about the
+  // cause. Bracketing it with logs makes the next occurrence readable: a boot
+  // that stops after the first line was still loading, and the elapsed time on
+  // the second says how close to the platform's grace period the real load runs.
+  console.log(`${SERVICE}: loading sanctions sources (the OFAC mirror is ~29 MB)...`);
+  const sanctionsStartedAt = Date.now();
   const sanctions = await wireSanctions(env);
+  console.log(
+    `${SERVICE}: sanctions ready in ${Date.now() - sanctionsStartedAt}ms — ` +
+      `${sanctions.describe.join('; ')}`
+  );
 
   serveEntryApi(
     {

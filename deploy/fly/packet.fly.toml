@@ -19,9 +19,38 @@ primary_region = "fra"
   auto_start_machines = true
   min_machines_running = 1
 
+# Incident 2026-09-08. `grace_period` was 30s and the deploy failed with
+# "timeout reached waiting for health checks to pass", twice, taking the service
+# down with it.
+#
+# The packet service does not listen until `wireSanctions` has downloaded and
+# parsed the ~29 MB OFAC SDN export (main.ts: "no request is ever answered by a
+# screener that is not ready"). That ordering is DELIBERATE and stays — a
+# service that answers an entry it cannot screen is the failure this project
+# cannot have. What was wrong was the number: 30s never covered a transatlantic
+# 29 MB download plus a parse, and this was the first release to stage
+# SANCTIONS_OFAC_SDN, so the budget had never been tested against the real load.
+#
+# 180s is the load's real budget, not a nudge: the mirror's own fetch timeout is
+# 120s, so the grace period has to outlast the thing it is waiting for or it
+# reports failure before the failure it is waiting on can report itself.
 [[http_service.checks]]
   interval = "15s"
   timeout = "5s"
-  grace_period = "30s"
+  grace_period = "180s"
   method = "GET"
   path = "/health"
+
+# DECLARED, not defaulted — the 2026-09-06 daemon lesson, applied to the service
+# that had also never had it. With no [[vm]] block Fly gives the machine 256 MB,
+# and this service now materialises that ~29 MB export as a JavaScript string
+# (`res.text()` — UTF-16, so ~58 MB) and then regex-scans it into a Map. Peak is
+# a multiple of the document, on top of ts-node and the Turnkey SDK.
+#
+# 1 GB matches the daemon after its OOM on the same class of load. It is
+# deliberately generous: the alternative to over-provisioning by a few hundred
+# megabytes is another failed deploy, and an OOM kill is the one failure a
+# process cannot log its way out of.
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"

@@ -35,7 +35,17 @@ const SERVICE = 'daemon';
  * 120s leaves generous headroom for a slow RPC without letting a genuinely
  * wedged process sit there looking fine.
  */
-export const STARTUP_BUDGET_MS = 120_000;
+// Raised from 120s on 2026-09-08. This is the budget for the WHOLE start, and
+// the start grew: Switchboard (45s) + Irys (45s) + the OFAC mirror (150s) can
+// legitimately exceed two minutes now that the daemon screens winners. A stuck
+// detector that fires during a healthy boot is worse than none — it restarts a
+// process that was going to succeed, forever, and every restart begins the same
+// slow load again.
+//
+// It stays a real bound rather than being removed: past this the daemon has
+// genuinely failed to start and a restart is the right answer. The number is
+// the sum of the steps it must contain, plus slack, and it moves when they do.
+export const STARTUP_BUDGET_MS = 300_000;
 
 /** Where initialisation has got to. `ready` means the tick loop is running. */
 export type DaemonPhase = 'starting' | 'connecting' | 'switchboard' | 'irys' | 'ready';
