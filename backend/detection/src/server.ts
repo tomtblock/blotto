@@ -29,7 +29,7 @@
  * a pure function over parsed bodies, same pattern as the entry server, so
  * the suite runs without sockets; the socket layer applies BR-005 hygiene
  * (CORS allowlist, rate limit, security headers) exactly as the entry
- * server does — the hand-rolled `access-control-allow-origin: *` this file
+ * server does — the hand-written `access-control-allow-origin: *` this file
  * carried until Stage E is gone.
  */
 

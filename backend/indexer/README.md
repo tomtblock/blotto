@@ -72,7 +72,7 @@ walk whenever a page contained failed transactions.
 
 Ingests at `finalized` by default, so a reorg rollback is moot at the cost of a few
 seconds of latency. `confirmed` is available via config for a lower-latency read
-that a caller must be prepared to see rolled back.
+that a caller must be prepared to see reverted.
 
 ## Threat notes
 

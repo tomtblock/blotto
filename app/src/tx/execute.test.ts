@@ -293,7 +293,7 @@ describe("executeTrade — post-broadcast failures", () => {
   });
 });
 
-describe("executeTrade — local partial signers (two-signer pack_open, 10.C Step 5b)", () => {
+describe("executeTrade — local partial signers (two-signer mint, 10.C Step 5b)", () => {
   it("wallet signs FIRST, local keypair partial-signs AFTER — both signatures on the sent tx, wallet's preserved", async () => {
     const { generateKeyPairSigner, getBase64Encoder, getTransactionDecoder } =
       await import("@solana/kit");

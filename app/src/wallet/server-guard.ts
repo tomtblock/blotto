@@ -14,7 +14,7 @@
  *  1. Secrets are plain (non-`NEXT_PUBLIC_`) env vars, so Next never inlines them
  *     into a client bundle — they read `undefined` client-side regardless.
  *  2. Every server-only module calls `assertServerOnly()` at import time. If such
- *     a module is ever pulled into a client bundle it throws the moment it runs in
+ *     a module is ever imported into a client bundle it throws the moment it runs in
  *     a browser — a loud failure in dev and build, not a silent leak.
  *  3. Structural: no client component imports these modules.
  *

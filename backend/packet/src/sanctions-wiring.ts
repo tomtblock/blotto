@@ -12,7 +12,7 @@
  * refusing to accept. That module's header carries the posture; what remains
  * here is this service's half of the fork.
  *
- * In its own module for the reason `signer-select.ts` gives: `main.ts` pulls
+ * In its own module for the reason `signer-select.ts` gives: `main.ts` imports
  * in Postgres and the sealing store and cannot be unit-tested, and the branch
  * that fails on devnet is always the untested one. Everything here is
  * exercised by `test/sanctions-wiring.spec.ts` through `issuePacket` itself,
