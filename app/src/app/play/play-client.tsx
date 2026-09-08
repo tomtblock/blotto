@@ -314,10 +314,25 @@ function BalanceGateView({
                 setFunding(true);
                 try {
                   await addFunds(wallet);
-                } catch {
-                  // Exited the funding flow — the recheck below stays available.
+                } catch (error) {
+                  // Exiting the funding flow lands here, and so does a
+                  // provider REFUSAL — notably the SDK's "Wallet funding is
+                  // not enabled" throw when funding is switched off in the
+                  // Privy dashboard, which is its state today. This catch
+                  // was empty until 2026-09-08, so that refusal produced a
+                  // tap with no window, no message and nothing in the log.
+                  // PHASE-N-REVIEW: logged, not surfaced. Telling the player
+                  // apart from a deliberate exit needs the SDK's
+                  // onUserExited callback, and the sentence they would read
+                  // is founder-owned copy (CLAUDE.md: user-facing language).
+                  // Recorded as a founder decision rather than invented here.
+                  console.error('top-up flow did not open:', error);
                 }
                 setFunding(false);
+                // NOTE: addFunds resolves when the funding window OPENS, not
+                // when funds arrive (the SDK warns they can take minutes), so
+                // this re-read is expected to still show the old balance. The
+                // manual "Check again" below is what actually catches it.
                 onRecheck();
               }}
             >

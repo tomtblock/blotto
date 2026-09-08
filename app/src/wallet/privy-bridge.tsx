@@ -155,8 +155,26 @@ function PrivyAdapter({ onAuth }: { onAuth: (auth: Auth) => void }) {
       signOut: logout,
       // C9: Privy's funding flow, exposed as the provider-neutral seam. The
       // top-up button additionally hides behind NEXT_PUBLIC_TOPUP_ENABLED.
+      //
+      // The chain is EXPLICIT for the same reason it is on signTransaction
+      // above: the SDK's own default for an unspecified Solana funding
+      // request is MAINNET (SolanaFundingConfig.chain is optional). Omitting
+      // it here — as this call did until 2026-09-08 — pointed the funding
+      // flow at mainnet while every balance read, signature and settlement
+      // in this app is devnet, so a player could have spent real money into
+      // a wallet the app then reports as empty. Verified against the
+      // installed SDK's `SolanaFundingConfig` and against the live Privy app
+      // config, which has funding disabled — which is the only reason the
+      // button was unreachable rather than wrong.
+      //
+      // This resolves when the funding MODAL OPENS, not when funds arrive
+      // (the SDK's own note: "funds can take a few minutes to arrive").
+      // Callers must not read it as completion.
       addFunds: async (fundAddress: string) => {
-        await fundWallet({ address: fundAddress });
+        await fundWallet({
+          address: fundAddress,
+          options: { chain: SOLANA_CHAIN },
+        });
       },
     };
   }, [ready, authenticated, user, wallets, signTransaction, signMessage, fundWallet, login, logout]);
