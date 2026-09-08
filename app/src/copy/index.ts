@@ -45,6 +45,12 @@ export const COPY = {
     // dev) — the buttons would silently do nothing otherwise.
     unavailable:
       'Sign-in is not configured in this preview build. The buttons below are inactive.',
+    // The OTHER way sign-in can be off: a credential is present but the
+    // provider rejected it. Distinguished from `unavailable` because the two
+    // need different fixes, and because a player deserves to know the
+    // difference between "not set up yet" and "set up wrongly".
+    unavailableRejected:
+      'Sign-in is temporarily unavailable. We have been notified — please try again shortly.',
     signedInAs: 'Signed in as',
     continueLink: 'Go to the arena',
   },
