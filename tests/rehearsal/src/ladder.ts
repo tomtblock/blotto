@@ -9,6 +9,14 @@
  * outcome statistics per class (`docs/skill-evidence/REPORT.md`).
  *
  *   uniform    — 20/20/20/20/20 every battle: the zero-thought baseline.
+ *                THIS IS THE APP'S ACTUAL DEFAULT. `app/src/battle/allocation.ts`
+ *                exports `EVEN_SPLIT = [20, 20, 20, 20, 20]` and comments it
+ *                "every screen opens here"; `battle/machine.ts` starts every one
+ *                of the seven battles there. So a player who opens the flow,
+ *                touches nothing and locks in produces EXACTLY a uniform
+ *                entrant — which is what lets the exhibit say what happens if
+ *                you leave the pentagon alone. `test/default-player.spec.ts`
+ *                pins the two together so neither can drift in silence.
  *   random     — valid free-integer allocations with no intent behind them.
  *   heuristic  — a considered plan: concentrate on three stats per battle
  *                (a battle is won by taking three of five), steep split,
@@ -30,6 +38,29 @@ export type LadderClass = 'uniform' | 'random' | 'heuristic' | 'optimised';
 export const LADDER: readonly LadderClass[] = ['uniform', 'random', 'heuristic', 'optimised'];
 
 const sha = (s: string) => createHash('sha256').update(s).digest();
+
+/**
+ * Runaway guard for the de-duplication loop — NOT a seat count.
+ *
+ * It bounds how many times a colliding entrant may be regenerated with a
+ * bumped salt before we call it a bug. It read as a bare `64` until seat
+ * counts became a parameter (n=52, D-E4's minimum field), where a reader
+ * could easily mistake it for the field size. It is not: it is a ceiling on
+ * retries, and it is unrelated to how many players are in the pool.
+ */
+const DEDUPE_SALT_LIMIT = 64;
+
+/**
+ * Field sizes the study runs. 64 is a full pool (CAPACITY); 52 is the
+ * MINIMUM a pool may seal and run at (D-E4 — a pool whose deadline passes
+ * with 52..63 entrants plays out rather than refunding).
+ *
+ * Both must divide by the number of ladder classes so a mixed field carries
+ * equal numbers of each, leaving class membership uncorrelated with anything:
+ * 64/4 = 16 and 52/4 = 13, both exact.
+ */
+export const FULL_FIELD = 64;
+export const MIN_FIELD = 52;
 
 /** All ten 3-of-5 stat trios, in a fixed order. */
 const TRIOS: readonly (readonly [number, number, number])[] = [
@@ -159,7 +190,9 @@ export function ensureUniqueWithinClass(
     let salt = 0;
     while (set.has(key)) {
       salt += 1;
-      if (salt > 64) throw new Error(`cannot de-duplicate ${e.strategy} entrant ${i}`);
+      if (salt > DEDUPE_SALT_LIMIT) {
+        throw new Error(`cannot de-duplicate ${e.strategy} entrant ${i}`);
+      }
       const fresh = generateLadderEntrant(e.strategy as LadderClass, seedOf(i), salt);
       entrants[i] = fresh;
       e = fresh;
@@ -170,20 +203,34 @@ export function ensureUniqueWithinClass(
 }
 
 /**
- * One study pool: 16 entrants of each class, seat order shuffled by a
- * seeded Fisher–Yates so class membership is uncorrelated with seat index
+ * One study pool: `seats / 4` entrants of each class, seat order shuffled by
+ * a seeded Fisher–Yates so class membership is uncorrelated with seat index
  * (seat order places the indivisible remainder of a tie split and the leaf
  * order — never who is paid — but the study removes even that correlation).
+ *
+ * `seats` defaults to a full pool. Pass MIN_FIELD to measure the shortest
+ * field the rules allow: the claim being published is about the competition
+ * as offered, and a pool that seals at 52 is as real as one that fills.
  */
-export function ladderPopulation(poolSeed: number): GeneratedEntrant[] {
+export function ladderPopulation(
+  poolSeed: number,
+  seats: number = FULL_FIELD
+): GeneratedEntrant[] {
+  if (seats % LADDER.length !== 0) {
+    throw new Error(
+      `field of ${seats} does not divide by ${LADDER.length} classes — ` +
+        'an unequal mixed field would correlate class with seat count'
+    );
+  }
+  const per = seats / LADDER.length;
   const out: GeneratedEntrant[] = [];
   LADDER.forEach((cls, c) => {
-    for (let i = 0; i < 16; i++) {
+    for (let i = 0; i < per; i++) {
       out.push(generateLadderEntrant(cls, poolSeed * 1000 + c * 100 + i));
     }
   });
-  // Pre-shuffle, index i belongs to class floor(i/16), member i%16.
-  ensureUniqueWithinClass(out, (i) => poolSeed * 1000 + Math.floor(i / 16) * 100 + (i % 16));
+  // Pre-shuffle, index i belongs to class floor(i/per), member i%per.
+  ensureUniqueWithinClass(out, (i) => poolSeed * 1000 + Math.floor(i / per) * 100 + (i % per));
   for (let i = out.length - 1; i > 0; i--) {
     const h = sha(`shuffle:${poolSeed}:${i}`);
     const j = (h[0] | (h[1] << 8)) % (i + 1);
@@ -193,19 +240,25 @@ export function ladderPopulation(poolSeed: number): GeneratedEntrant[] {
 }
 
 /**
- * A HOMOGENEOUS-field pool (v2's A2 amendment): all 64 entrants from one
- * class — the "equally-skilled entrants" runs whose outcome spread the
- * report compares against the everyone-equal baseline (each seat expecting
- * 1/64 of the pot). Uniqueness within the class enforced as above (a
- * homogeneous uniform pool would be one 64-way tie by definition and is not
- * part of the study).
+ * A HOMOGENEOUS-field pool (v2's A2 amendment): every seat from one class —
+ * the "equally-skilled entrants" runs whose outcome spread the report
+ * compares against the everyone-equal baseline (each seat expecting 1/`seats`
+ * of the pot). Uniqueness within the class enforced as above (a homogeneous
+ * uniform pool would be one n-way tie by definition and is not part of the
+ * study).
  */
-export function homogeneousPopulation(cls: LadderClass, poolSeed: number): GeneratedEntrant[] {
+export function homogeneousPopulation(
+  cls: LadderClass,
+  poolSeed: number,
+  seats: number = FULL_FIELD
+): GeneratedEntrant[] {
   if (cls === 'uniform') {
-    throw new Error('a homogeneous uniform pool is a single 64-way tie — not a study run');
+    throw new Error(
+      `a homogeneous uniform pool is a single ${seats}-way tie — not a study run`
+    );
   }
   const out: GeneratedEntrant[] = [];
-  for (let i = 0; i < 64; i++) {
+  for (let i = 0; i < seats; i++) {
     out.push(generateLadderEntrant(cls, poolSeed * 1000 + i));
   }
   ensureUniqueWithinClass(out, (i) => poolSeed * 1000 + i);
