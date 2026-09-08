@@ -65,7 +65,18 @@ on:
         type: boolean
         default: false
 
-concurrency: deploy-backend
+# Incident 2026-09-08: a run whose deploy step had already FAILED held this
+# group for 85 minutes, because its `always()` log-printing step never
+# returned and the job had no timeout. The founder pressed Run workflow twice
+# on the fixed commit; the first retry was displaced from the queue by the
+# second, and neither executed a step. Deploys are decisions made by a person
+# watching — a new one supersedes a stuck one rather than waiting behind it.
+# Tradeoff, on the record: cancelling mid-run can leave the four services on
+# mixed builds. That is the same state as a failed run, and the next run
+# redeploys all four in order.
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: true
 
 env:
   FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
@@ -80,6 +91,11 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # A healthy full deploy is ~15-20 minutes now that the packet service and
+    # the daemon wait out a ~29 MB sanctions download each. 45 is headroom on
+    # that, and a ceiling on how long a hang can block the next attempt: without
+    # this GitHub's default is six hours (incident 2026-09-08, above).
+    timeout-minutes: 45
     env:
       # Mapped once so the shell can test presence without repeating the
       # secrets context; an unset secret arrives as the empty string.
@@ -558,6 +574,11 @@ jobs:
       # says an answer came back. Printed here so the run itself records it.
       - name: Print the signer and VRF path each service chose
         if: always()
+        # The step that wedged on 2026-09-08. `flyctl logs --no-tail` against an
+        # app with no healthy machine did not return, and an `always()` step
+        # with no bound kept a finished-in-every-way-that-matters job alive.
+        # This is a courtesy printout; five minutes is more than it needs.
+        timeout-minutes: 5
         run: |
           echo "--- packet: entry signer + geo ---"
           flyctl logs --app "$PACKET_APP" --no-tail 2>/dev/null | grep -E "entry signer|GEO STUB" | tail -5 || echo "(no matching line yet)"
