@@ -1,17 +1,17 @@
 {
-  "version": 1,
+  "version": 2,
   "programId": "5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17",
-  "upgradeAuthority": null,
+  "upgradeAuthority": "GXKXLYHBWBAhp7LWNMEZbsuwGb3WHeoDBsmhfndwagXY (single operator key on devnet; moves to the multisig before mainnet)",
   "multisig": {
-    "threshold": null,
-    "memberCount": null,
+    "threshold": 1,
+    "memberCount": 1,
     "timelockHours": null
   },
   "keys": {
-    "admin": null,
-    "entrySigner": null,
-    "settlementSigner": null,
-    "irysUploadWallet": null
+    "admin": "9EEWtzyu72a3DKJVUkCaeYX4HuBKD59xXCcENnDVe34Z (Squads vault of multisig 9EL1m9wvqGSznHJ8zkS5YaXQnG4gq4aNYsbGnP1TmFyN)",
+    "entrySigner": "9XhwKrXjKwFdYJatxYMZYyfB6nFLbmdFNSuM5JTyy8TP (Turnkey, non-exportable)",
+    "settlementSigner": "EaDfwMWwW712L4YgdhBgEqbzzpdVP17e5mvY9LPwjrSD (also the keeper on devnet)",
+    "irysUploadWallet": "HG56vMbHkPHybYVLtvJqhusZfVmtbPfaZmHCYMQAw7uL"
   },
-  "updated": "2026-08-27"
+  "updated": "2026-09-08"
 }

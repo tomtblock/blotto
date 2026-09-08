@@ -1,5 +1,12 @@
 /* C13 specs: the disclosure derives from config; unset values are an
- * explicit null (rendered "not yet set") — never a fabricated number. */
+ * explicit null (rendered "not yet set") — never a fabricated number.
+ *
+ * Until 2026-09-08 the committed config was entirely unset, and these tests
+ * pinned that. The devnet register is now recorded in config/custody.json
+ * (the C4 follow-up the runbook asked for), so the tests pin the other half
+ * of the contract: every displayed value is the committed one, verbatim, and
+ * the one value still unset (the upgrade timelock — Squads has none
+ * configured) still renders as null rather than as an invented number. */
 import { describe, expect, it } from 'vitest';
 import custodyConfig from '@config/custody.json';
 import { custodyView } from './custody.config';
@@ -12,10 +19,23 @@ describe('custodyView', () => {
     expect(view.programId.value).toBe('5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17');
   });
 
-  it('unset multisig values are null — no invented threshold or timelock', () => {
-    // The committed launch config has these unset; the page must say so.
-    expect(view.upgradeAuthority.value).toBeNull();
-    expect(view.threshold.value).toBeNull();
+  it('every displayed value is the committed config value, verbatim', () => {
+    expect(view.upgradeAuthority.value).toBe(custodyConfig.upgradeAuthority);
+    expect(view.upgradeAuthority.value).toContain('GXKXLYHBWBAhp7LWNMEZbsuwGb3WHeoDBsmhfndwagXY');
+    const byName = new Map(view.keys.map((k) => [k.name, k]));
+    expect(byName.get('Admin (multisig)')!.holder).toBe(custodyConfig.keys.admin);
+    expect(byName.get('Admin (multisig)')!.holder).toContain(
+      '9EEWtzyu72a3DKJVUkCaeYX4HuBKD59xXCcENnDVe34Z',
+    );
+    expect(byName.get('Entry signer')!.holder).toBe(custodyConfig.keys.entrySigner);
+    expect(byName.get('Settlement signer')!.holder).toBe(custodyConfig.keys.settlementSigner);
+    expect(byName.get('Publishing wallet')!.holder).toBe(custodyConfig.keys.irysUploadWallet);
+  });
+
+  it('an unset value is null — no invented threshold or timelock', () => {
+    // The timelock is genuinely unset on devnet (Squads has none configured);
+    // the page must say "not yet set", never show a number.
+    expect(custodyConfig.multisig.timelockHours).toBeNull();
     expect(view.timelock.value).toBeNull();
     // And no view value anywhere fabricates a number for an unset field.
     for (const v of [view.upgradeAuthority, view.threshold, view.timelock]) {
@@ -23,7 +43,7 @@ describe('custodyView', () => {
     }
   });
 
-  it('every key row carries can/cannot mechanics; unprovisioned holders are null', () => {
+  it('every key row carries can/cannot mechanics; the sealing holder follows provisioning', () => {
     expect(view.keys.length).toBe(7);
     for (const k of view.keys) {
       expect(k.name.length).toBeGreaterThan(3);
@@ -31,8 +51,11 @@ describe('custodyView', () => {
       expect(k.cannot.length).toBeGreaterThan(20);
     }
     const byName = new Map(view.keys.map((k) => [k.name, k]));
-    expect(byName.get('Admin (multisig)')!.holder).toBeNull();
-    expect(byName.get('Pool sealing keys (one per pool)')!.holder).toBeNull();
+    // The per-pool sealing keys' holder is architecture, shown only once the
+    // settlement signer (and with it custody) is provisioned — which it is.
+    const sealing = byName.get('Pool sealing keys (one per pool)')!;
+    expect(custodyConfig.keys.settlementSigner).not.toBeNull();
+    expect(sealing.holder).not.toBeNull();
   });
 
   it('threshold renders as "n of m" only when BOTH halves are set', () => {
@@ -42,5 +65,7 @@ describe('custodyView', () => {
       expect(view.threshold.value).not.toMatch(/null|undefined|NaN/);
       expect(view.threshold.value).toMatch(/^\d+ of \d+$/);
     }
+    // The devnet multisig is 1-of-1 and the page must say exactly that.
+    expect(view.threshold.value).toBe('1 of 1');
   });
 });

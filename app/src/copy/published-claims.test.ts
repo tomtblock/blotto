@@ -58,6 +58,15 @@ const PROMISES: readonly Promised[] = [
     proof: 'backend/indexer/src/read-api.ts',
   },
   {
+    phrase: 'your wallet is checked against published sanctions lists',
+    commitment: 'Every entrant is screened against sanctions lists before an entry is accepted.',
+    // Stage B: the packet service screens every entrant through the shared
+    // wiring and refuses the packet on a failed screening. Disclosed on the
+    // rules page and the Fair play page from 2026-09-08; it had been true
+    // and unstated.
+    proof: 'backend/packet/src/sanctions-wiring.ts',
+  },
+  {
     phrase: 'we check the winning wallet against published sanctions lists',
     commitment: 'The winning wallet is screened against sanctions lists before payment.',
     // Fully operational at both ends (Stage F). At ENTRY the packet service

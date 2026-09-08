@@ -27,7 +27,8 @@
       "@blotto/packet/*": ["../backend/packet/src/*"],
       "@blotto/reveal/*": ["../backend/reveal/src/*"],
       "@blotto/detection/*": ["../backend/detection/src/*"],
-      "@config/*": ["../config/*"]
+      "@config/*": ["../config/*"],
+      "@docs/*": ["../docs/*"]
     }
   },
   "include": [

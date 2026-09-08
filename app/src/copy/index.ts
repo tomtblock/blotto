@@ -189,8 +189,11 @@ export const COPY = {
     // PID §8.6: displayed ABOVE the enter button, always.
     decisionsFinal:
       'Decisions are final. Once your seven battles are submitted they cannot be changed or withdrawn.',
+    // Says the same thing as rules.sealing in one line. It used to say "a key
+    // nobody holds", which is not what is built: the key is generated and
+    // held by our systems, locked against export until the pool closes.
     sealed:
-      'Battles are encrypted to a key nobody holds until the pool closes, and their hash is recorded on-chain at entry.',
+      'Battles are encrypted on your device to a key our systems hold locked against export until the pool closes; their hash is recorded on-chain at entry.',
     enter: 'Enter this tournament',
     ageTerritoryNote: '18+ only · not available in some territories',
     // D-E1 §1.4 (option A): shown on any pool whose on-chain pot differs
@@ -257,7 +260,10 @@ export const COPY = {
       {
         title: 'Set seven battles',
         body:
-          'For each battle, split exactly 100 points across Strength, Speed, Heart, Wit and Durability — fifteen seconds per screen. Your battles are encrypted on your device before you pay; nobody can read them until the pool closes.',
+          // PHASE-N-REVIEW: said "fifteen seconds per screen" (R9); the client
+          // runs one ninety-second budget for all seven (R9-b, run-clock.ts),
+          // and two other strings already say so. Founder may veto.
+          'For each battle, split exactly 100 points across Strength, Speed, Heart, Wit and Durability — about ninety seconds for all seven. Your battles are encrypted on your device before you pay; nobody can read them until the pool closes.',
       },
       {
         title: 'Everyone fights everyone',
@@ -277,6 +283,40 @@ export const COPY = {
     ],
     rulesLink: 'Read the full rules',
     verifyLink: 'Verify a result',
+    fairPlayLink: 'Fair play',
+  },
+  // The Fair play page (2026-09-08): what keeps the competition fair, who
+  // may enter, how to check it. Every sentence describes a MECHANISM; none
+  // asserts a status (D-B7). PHASE-N-REVIEW: the founder's working title is
+  // different; counsel decides the final one — it is this one key.
+  fairPlay: {
+    title: 'Fair play',
+    intro:
+      'What keeps this competition fair, who may enter, and how to check any of it yourself.',
+    skillHeading: 'Skill, measured',
+    skillIntro:
+      'Two hundred pools were played with the same scoring engine that pays every real pool, at both field sizes. The only thing that differed between the players below was how they split their points across the seven battles. A player who leaves every battle on the default even split never placed first — not rarely, never: against any battle that concentrates its points on three stats, an even split takes only the two that were left short, and loses three to two by construction.',
+    skillHeadings: { player: 'Player', full: 'First place, 64 seats', min: 'First place, 52 seats' },
+    skillRows: {
+      uniform: 'Leaves the default split',
+      random: 'Splits at random',
+      heuristic: 'Follows a plan',
+      optimised: 'Follows a tuned plan',
+    } as Record<string, string>,
+    skillNote:
+      'Every figure above is recomputable from the published study inputs, and the engine that scored them is the one that runs on the Verify page in your browser.',
+    screeningHeading: 'Every wallet is checked',
+    screening:
+      'Before an entry is accepted, the wallet is checked against published sanctions lists. Before any prize is paid, every wallet in the payout list is checked again. The lists are refreshed from their publishers several times a day. If a check cannot be answered, the prize is held rather than paid; it is never paid to a wallet nobody checked.',
+    ageHeading: 'Adults only',
+    availabilityHeading: 'Where you can enter',
+    randomnessHeading: 'Nothing random decides a result',
+    checkHeading: 'Check it yourself',
+    checkIntro:
+      'Nothing on this page asks you to take our word for it. Three pages let you look for yourself.',
+    checkVerify: 'Recompute any result on the Verify page',
+    checkCustody: 'See who holds which keys, and what each cannot do',
+    checkRules: 'Read the full rules',
   },
   battle: {
     screenOf: (k: number) => `Battle ${k} of 7`,
@@ -455,8 +495,10 @@ export const COPY = {
     programIdNote:
       'The on-chain program holding all entry funds. Prize and refund payments are made by the program itself; its instruction set contains no other way for money to leave.',
     upgradeAuthorityLabel: 'Upgrade authority',
+    // PHASE-N-REVIEW: said "held by a multisig" while the devnet value is a
+    // single operator key; the page must describe what is built.
     upgradeAuthorityNote:
-      'The only key that can change the program code. Held by a multisig: an upgrade requires the stated number of signatures.',
+      'The only key that can change the program code. Before mainnet it moves to the multisig, so an upgrade requires the stated number of signatures; on devnet today it is a single operator key while the rehearsal runs.',
     thresholdLabel: 'Signatures required',
     timelockLabel: 'Upgrade timelock',
     inventoryHeading: 'Key inventory',
@@ -537,7 +579,7 @@ export const COPY = {
     // constants (rules.config passes MIN_SEATS and the go-timer) — the D-B6
     // rule that no figure on this page is hand-typed.
     howToEnter: (minSeats: number) =>
-      `Sign in, pick an open pool, and confirm the 18+ and terms statements — your wallet signs that confirmation once per terms version. Pay the entry price for the tier. You then set seven battles, about ninety seconds in total: each battle splits 100 points across five stats. Your battles are encrypted on your device before any payment moves. One entry per wallet per pool; there is no limit across pools. The keys that run the service — the admin, the keeper, the entry signer and the settlement signer — can never enter. A pool has 64 seats and runs with at least ${minSeats} players (see the field-size rule). Decisions are final: a submitted entry cannot be changed or withdrawn (see the refund rule for pools that never reach their minimum field).`,
+      `Sign in, pick an open pool, and confirm the 18+ and terms statements — your wallet signs that confirmation once per terms version. Pay the entry price for the tier. Before an entry is accepted, your wallet is checked against published sanctions lists; every winning wallet is checked again before payment. You then set seven battles, about ninety seconds in total: each battle splits 100 points across five stats. Your battles are encrypted on your device before any payment moves. One entry per wallet per pool; there is no limit across pools. The keys that run the service — the admin, the keeper, the entry signer and the settlement signer — can never enter. A pool has 64 seats and runs with at least ${minSeats} players (see the field-size rule). Decisions are final: a submitted entry cannot be changed or withdrawn (see the refund rule for pools that never reach their minimum field).`,
     priceIntro: (cooldownMinutes: number) =>
       `Seven tiers are configured, each with a fixed prize pool. A tier must be switched on by the operator before pools open in it; at launch only the smallest tier is on. One pool per tier is open at a time, and a new pool of that tier opens ${cooldownMinutes} minutes after the previous one has paid out or closed.`,
     // D-E2 (ratified 2026-09-06): one paid place. No percentage, no multiple.
@@ -619,6 +661,7 @@ export const COPY = {
       'During resolving we check the winning wallet against published sanctions lists, as we are required to. Where an entry has been flagged against the integrity criteria published above, a named reviewer decides that flag against those criteria. A flagged prize is held by the program: it is not paid to us and it is not paid to anyone else while the review runs. ' +
       'If no decision is made within 12 hours, the flag is cleared and the prize is paid. Separately, and as a safeguard against our own failure, the program allows anyone at all to release a held prize to the player it belongs to after seven days, without our involvement. ' +
       'You may appeal within 7 days of being notified, and the appeal is decided by a different reviewer within a further 7 days. Every decision is published in a signed log naming the reviewer, the time, and the criterion cited. If an appeal succeeds after the prize has been paid to another player, we pay the appealing player the full prize ourselves. We do not seek to recover a prize already paid.',
+    fairPlayLink: 'What keeps this fair, and who may enter',
     headings: {
       howToEnter: 'How to enter',
       price: 'Price and prize pool per tier',
