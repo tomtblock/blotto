@@ -18,6 +18,17 @@ export type SocialProvider = "google" | "apple" | "twitter";
 export interface Auth {
   status: AuthStatus;
   /**
+   * Set only when sign-in cannot work, and why. Absent means it can.
+   *
+   * A surface must not decide this for itself from the environment. The
+   * sign-in page used to read NEXT_PUBLIC_PRIVY_APP_ID directly, which is
+   * non-empty even when the value is malformed — so with a bad credential the
+   * buttons rendered ENABLED and did nothing when clicked, silently. Measured
+   * in a real browser 2026-09-08. Only the provider knows whether the SDK
+   * actually came up, so only the provider says.
+   */
+  unavailable?: "absent" | "rejected";
+  /**
    * Base58 pubkey of the active Solana wallet (embedded or connected), or
    * null while initializing / signed out / before a wallet exists.
    */

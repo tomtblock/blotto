@@ -19,7 +19,14 @@ import type { SocialProvider } from "@/wallet/types";
 import { Button } from "@/components/ui/button";
 import { CopyableAddressPill } from "@/components/copyable-address";
 
-const CONFIGURED = Boolean(process.env.NEXT_PUBLIC_PRIVY_APP_ID);
+/*
+ * Whether sign-in works is asked of the AUTH PROVIDER, not of the
+ * environment. This read `Boolean(process.env.NEXT_PUBLIC_PRIVY_APP_ID)`,
+ * which is true for any non-empty string — so a malformed app ID rendered
+ * these buttons ENABLED and clicking one did nothing at all, with no
+ * explanation on screen. The provider is the only thing that knows whether
+ * the SDK actually initialised, so it is the thing that is asked.
+ */
 
 const SOCIALS: Array<{ provider: SocialProvider; label: string }> = [
   { provider: "google", label: COPY.signin.google },
@@ -28,7 +35,8 @@ const SOCIALS: Array<{ provider: SocialProvider; label: string }> = [
 ];
 
 export function SignInClient() {
-  const { status, walletAddress, signInWithSocial, connectWallet } = useAuth();
+  const { status, walletAddress, signInWithSocial, connectWallet, unavailable } =
+    useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -50,7 +58,7 @@ export function SignInClient() {
   }
 
   const busy = status === "initializing";
-  const disabled = busy || !CONFIGURED;
+  const disabled = busy || unavailable !== undefined;
 
   return (
     <div className="flex flex-col gap-3 pt-1">
@@ -58,9 +66,11 @@ export function SignInClient() {
         {COPY.signin.subtitle}
       </p>
 
-      {!CONFIGURED ? (
+      {unavailable ? (
         <p className="mb-1 rounded-lg border border-line px-4 py-3 text-[13px] leading-5 text-ink-muted">
-          {COPY.signin.unavailable}
+          {unavailable === "absent"
+            ? COPY.signin.unavailable
+            : COPY.signin.unavailableRejected}
         </p>
       ) : null}
 

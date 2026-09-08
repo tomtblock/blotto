@@ -12,10 +12,28 @@
  * Without NEXT_PUBLIC_PRIVY_APP_ID the app still renders (signed-out,
  * sign-in disabled with a console warning) — previews and local dev must
  * not crash before credentials exist.
+ *
+ * The same is now true when the app ID is PRESENT BUT INVALID. Measured
+ * 2026-09-08 by driving a real browser at a build carrying a malformed ID:
+ * `PrivyProvider` throws during render ("Cannot initialize the Privy provider
+ * with an invalid Privy app ID"), and because the bridge sits beside
+ * `{children}` under this provider, that throw took the WHOLE PAGE down —
+ * every button gone, replaced by "This page couldn't load", which tells an
+ * operator nothing about the cause. One mistyped character in a deployment
+ * setting is enough. The bridge is now isolated behind an error boundary:
+ * it renders nothing visible, so containing its failure costs nothing, and
+ * sign-in degrades to the same honest disabled state as an absent ID.
  */
 
 import dynamic from "next/dynamic";
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import {
+  Component,
+  useCallback,
+  useMemo,
+  useState,
+  type ErrorInfo,
+  type ReactNode,
+} from "react";
 import { testSignerFromWindow } from "../tx/test-signer";
 import { AuthContext } from "./auth-context";
 import { sameAuthState } from "./auth-state";
@@ -49,15 +67,28 @@ const INITIALIZING: Auth = {
  * `setLive` to the bridge unguarded.
  */
 
-/** Renders when Privy credentials are absent: app works, sign-in is inert. */
-function unconfiguredAuth(): Auth {
-  const warn = () =>
-    console.warn(
-      "[auth] NEXT_PUBLIC_PRIVY_APP_ID is not set — sign-in is disabled. " +
-        "See app/.env.example.",
-    );
+/**
+ * Renders when sign-in cannot work: the app works, sign-in is inert.
+ *
+ * `reason` distinguishes the two ways to get here, because they need
+ * different fixes and an operator reading the console must be able to tell
+ * them apart: no credential at all, versus a credential the provider
+ * rejected.
+ */
+function unconfiguredAuth(reason: "absent" | "rejected"): Auth {
+  const message =
+    reason === "absent"
+      ? "[auth] NEXT_PUBLIC_PRIVY_APP_ID is not set — sign-in is disabled. " +
+        "See app/.env.example."
+      : "[auth] the Privy provider rejected NEXT_PUBLIC_PRIVY_APP_ID — sign-in " +
+        "is disabled. The value is set but not valid: check it against the app " +
+        "ID in the Privy dashboard (Configuration -> App settings -> Basics), " +
+        "and remember NEXT_PUBLIC_ values are baked in at BUILD time, so a " +
+        "corrected value needs a redeploy.";
+  const warn = () => console.warn(message);
   return {
     status: "signed-out",
+    unavailable: reason,
     walletAddress: null,
     signers: [],
     signInWithSocial: warn,
@@ -110,9 +141,46 @@ function testSignerAuth(): Auth | null {
   };
 }
 
+/**
+ * Contains a throw from the lazy bridge.
+ *
+ * A class, because React error boundaries can only be classes — there is no
+ * hook form. It renders its children unchanged until one of them throws, and
+ * nothing at all afterwards; the bridge is invisible either way, so the page
+ * is unaffected apart from sign-in going inert.
+ */
+class BridgeBoundary extends Component<
+  { children: ReactNode; onFailure: (error: Error) => void },
+  { failed: boolean }
+> {
+  state = { failed: false };
+
+  static getDerivedStateFromError(): { failed: boolean } {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo): void {
+    // Logged in full HERE, where the real cause is still in hand. The context
+    // fallback can only offer generic advice; this is the line that names the
+    // provider's own complaint.
+    console.error(
+      "[auth] the Privy bridge failed to initialise — sign-in is disabled:",
+      error?.message ?? error,
+      info?.componentStack ?? "",
+    );
+    this.props.onFailure(error);
+  }
+
+  render(): ReactNode {
+    return this.state.failed ? null : this.props.children;
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
   const [live, setLive] = useState<Auth | null>(null);
+  // Set once, by the boundary below, when the bridge cannot initialise.
+  const [bridgeRejected, setBridgeRejected] = useState(false);
   // Resolved once, during render. `testSignerAuth` reads `window`, so this is
   // null on the server and stays null in every deployable build — the whole
   // branch is eliminated there (see next.config.ts), so no ordinary render
@@ -131,14 +199,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
-  const value = useMemo<Auth>(
-    () => injected ?? live ?? (appId ? INITIALIZING : unconfiguredAuth()),
-    [injected, live, appId],
-  );
+  // Guarded so a repeated failure cannot re-enter the update loop this file's
+  // rule exists to prevent: the flag only ever goes false -> true, once.
+  const onBridgeFailure = useCallback(() => {
+    setBridgeRejected((prev) => (prev ? prev : true));
+  }, []);
+
+  const value = useMemo<Auth>(() => {
+    if (injected) return injected;
+    if (live) return live;
+    if (!appId) return unconfiguredAuth("absent");
+    if (bridgeRejected) return unconfiguredAuth("rejected");
+    return INITIALIZING;
+  }, [injected, live, appId, bridgeRejected]);
 
   return (
     <AuthContext.Provider value={value}>
-      {appId ? <PrivyBridge appId={appId} onAuth={onAuth} /> : null}
+      {appId && !bridgeRejected ? (
+        <BridgeBoundary onFailure={onBridgeFailure}>
+          <PrivyBridge appId={appId} onAuth={onAuth} />
+        </BridgeBoundary>
+      ) : null}
       {children}
     </AuthContext.Provider>
   );
