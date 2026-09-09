@@ -111,13 +111,18 @@ export function SignInClient() {
       ) : null}
 
       {errorText ? (
-        <p
+        <div
           role="status"
           data-testid="signin-error"
           className="mb-1 rounded-lg border border-brand/50 bg-brand/10 px-4 py-3 text-[13px] leading-5 text-ink"
         >
-          {errorText}
-        </p>
+          <p>{errorText}</p>
+          {lastError?.detail ? (
+            <p className="mt-1 font-mono text-[11px] leading-4 break-words text-ink-muted">
+              {lastError.detail}
+            </p>
+          ) : null}
+        </div>
       ) : null}
 
       {/* Hero: Google on a light ground, the mark in its own colours. */}

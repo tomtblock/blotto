@@ -67,7 +67,7 @@ function deps(
     },
     signer: new LocalPacketSigner(new Uint8Array(32).fill(7)),
     attestations: overrides.attestations ?? attested(),
-    config: { territories: DEFAULT_TERRITORY_SCHEDULE, kycTier: 0, termsVersion: 1 },
+    config: { territories: DEFAULT_TERRITORY_SCHEDULE, kycTier: 0, termsVersion: 1, termsUpdated: '2026-09-06' },
     now: () => 1_756_000_000n,
     nonce: () => 42n,
   };

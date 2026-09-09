@@ -140,7 +140,7 @@ export async function handleEntryRoute(
     }
     const stored = await acceptAttestation(
       deps.packet.attestations,
-      deps.packet.config.termsVersion,
+      { version: deps.packet.config.termsVersion, updated: deps.packet.config.termsUpdated },
       deps.packet.now,
       {
         wallet: b.wallet as string,

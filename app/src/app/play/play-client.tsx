@@ -36,11 +36,7 @@ import {
 import { checkGeoGate, type GeoGateState } from '@/entry/geo-gate';
 import type { AddFundsOptions } from '@/wallet/types';
 import { isMainnet } from '@/chain/cluster';
-import {
-  TERMS_VERSION,
-  hasLocalAttestation,
-  submitAttestation,
-} from '@/entry/attestation';
+import { hasLocalAttestation, submitAttestation } from '@/entry/attestation';
 import { RevealHost } from './reveal-host';
 import { SealedPanel } from './sealed-panel';
 
@@ -512,49 +508,149 @@ function AttestationGate({
   if (attested) return <>{children}</>;
 
   // v3 D2: the clickwrap is a full-screen moment — the whole viewport is the
-  // agreement, nothing competes with it. Each statement is a large tap
-  // target; the confirm stays disabled until both are checked.
+  // agreement, nothing competes with it. Founder 2026-09-09: each statement
+  // is a designed tile with its own check mark, not a browser checkbox; the
+  // confirm stays disabled until both are confirmed, and the page says what
+  // the wallet prompt that follows is.
+  const statements = [
+    { checked: ageChecked, set: setAgeChecked, text: COPY.gate.ageAttestation, link: null },
+    {
+      checked: termsChecked,
+      set: setTermsChecked,
+      text: COPY.gate.termsAcceptance,
+      link: { href: '/rules', label: COPY.gate.gateReadTerms },
+    },
+  ] as const;
+  const confirmedCount = statements.filter((st) => st.checked).length;
+  const ready = confirmedCount === statements.length;
+
   return (
     <section className="animate-settle flex min-h-[70vh] flex-col justify-center gap-6">
-      <h2 className="font-display text-[34px] leading-[38px] font-extrabold text-ink">
-        {COPY.gate.gateTitle}
-      </h2>
-      <div className="flex flex-col gap-3">
-        {(
-          [
-            { checked: ageChecked, set: setAgeChecked, text: COPY.gate.ageAttestation },
-            {
-              checked: termsChecked,
-              set: setTermsChecked,
-              text: COPY.gate.termsAcceptance(TERMS_VERSION),
-            },
-          ] as const
-        ).map((row, i) => (
-          <label
-            key={i}
-            className={
-              'flex cursor-pointer items-start gap-4 rounded-2xl border p-5 transition-colors ' +
-              (row.checked ? 'border-brand/60 bg-raised' : 'border-line bg-raised hover:border-brand/30')
-            }
-          >
-            <input
-              type="checkbox"
-              checked={row.checked}
-              onChange={(e) => row.set(e.target.checked)}
-              className="mt-0.5 h-5 w-5 shrink-0 accent-(--color-brand)"
-            />
-            <span className="text-[15px] leading-6 text-ink">{row.text}</span>
-          </label>
-        ))}
+      <div className="flex flex-col gap-2">
+        <h2 className="font-display text-[34px] leading-[38px] font-extrabold text-ink">
+          {COPY.gate.gateTitle}
+        </h2>
+        <p className="max-w-prose text-[15px] leading-6 text-ink-muted">{COPY.gate.gateIntro}</p>
       </div>
+      <ol className="flex flex-col gap-3">
+        {statements.map((st, i) => (
+          <li key={i}>
+            <StatementTile
+              index={i + 1}
+              of={statements.length}
+              checked={st.checked}
+              onChange={st.set}
+              text={st.text}
+              link={st.link}
+              disabled={attesting}
+            />
+          </li>
+        ))}
+      </ol>
       {attestError && (
         <p className="text-[14px] leading-5 text-price-down" role="alert">
           {COPY.gate.attestFailed}
         </p>
       )}
-      <Button size="lg" disabled={!ageChecked || !termsChecked || attesting} onClick={onAttest}>
-        {attesting ? '…' : COPY.gate.ageConfirm}
-      </Button>
+      <div className="flex flex-col gap-3">
+        <Button size="lg" disabled={!ready || attesting} onClick={onAttest} data-testid="gate-confirm">
+          {attesting ? COPY.gate.gateSigning : COPY.gate.ageConfirm}
+        </Button>
+        <p className="text-[13px] leading-5 text-ink-muted" aria-live="polite">
+          {ready ? COPY.gate.gateSignNote : `${confirmedCount} / ${statements.length}`}
+        </p>
+      </div>
     </section>
+  );
+}
+
+/**
+ * One statement of the clickwrap: a large tap target whose whole face is
+ * the control. The real checkbox is kept for assistive tech and tests but
+ * drawn by us — a ring that fills with the brand colour and a check mark
+ * when confirmed — so the two statements read as part of the product, not
+ * as a form. A "read the terms" link sits inside the tile without toggling it.
+ */
+function StatementTile({
+  index,
+  of,
+  checked,
+  onChange,
+  text,
+  link,
+  disabled,
+}: {
+  index: number;
+  of: number;
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  text: string;
+  link: { href: string; label: string } | null;
+  disabled: boolean;
+}) {
+  return (
+    <label
+      data-testid={`gate-statement-${index}`}
+      data-checked={checked ? 'true' : 'false'}
+      className={
+        'group relative flex cursor-pointer items-start gap-4 rounded-2xl border p-5 transition-[border-color,background-color,box-shadow] ' +
+        (checked
+          ? 'border-brand bg-brand/10 shadow-[0_0_0_1px_var(--color-brand)]'
+          : 'border-line bg-raised hover:border-brand/40') +
+        (disabled ? ' cursor-default opacity-70' : '')
+      }
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.checked)}
+        className="peer sr-only"
+      />
+      <span
+        aria-hidden
+        className={
+          'mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full border-2 transition-[background-color,border-color,transform] ' +
+          'peer-focus-visible:ring-2 peer-focus-visible:ring-brand-cream peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-(--color-base) ' +
+          (checked
+            ? 'scale-100 border-brand bg-brand text-(--color-base)'
+            : 'border-line bg-base text-transparent group-hover:border-brand/60')
+        }
+      >
+        <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none">
+          <path
+            d="M4 10.5l4 4 8-9"
+            stroke="currentColor"
+            strokeWidth="2.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col gap-1.5">
+        <span className="flex items-center justify-between gap-3">
+          <span className="font-mono text-[11px] tracking-[0.14em] whitespace-nowrap text-ink-muted uppercase">
+            {COPY.gate.gateStep(index, of)}
+          </span>
+          {checked ? (
+            <span className="shrink-0 rounded-full bg-brand px-2 py-0.5 font-mono text-[10px] tracking-[0.12em] text-(--color-base) uppercase">
+              {COPY.gate.gateConfirmed}
+            </span>
+          ) : null}
+        </span>
+        <span className="text-[16px] leading-6 text-ink">{text}</span>
+        {link ? (
+          <Link
+            href={link.href}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="w-fit text-[13px] text-brand underline underline-offset-2"
+          >
+            {link.label}
+          </Link>
+        ) : null}
+      </span>
+    </label>
   );
 }

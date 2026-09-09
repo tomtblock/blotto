@@ -46,7 +46,7 @@ function deps(
     sanctions: { isSanctioned: async () => false },
     signer: new LocalPacketSigner(new Uint8Array(32).fill(7)),
     attestations,
-    config: { territories, kycTier: 0, termsVersion: 1 },
+    config: { territories, kycTier: 0, termsVersion: 1, termsUpdated: '2026-09-06' },
     now: () => 1_756_000_000n,
     nonce: () => 42n,
   };

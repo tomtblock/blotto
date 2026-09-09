@@ -47,7 +47,7 @@ import { wireSanctions } from './sanctions-wiring';
 import { StubGeoLookup, VendorHttpGeoLookup } from './geo-adapters';
 import { IpLocateGeoLookup } from './geo-iplocate';
 import { CachingGeoLookup } from './geo-cache';
-import { loadTermsVersion } from './attestations';
+import { loadTerms } from './attestations';
 import { loadTerritorySchedule } from './territories';
 import { PgAttestationStore, PgNotifyPreferenceStore } from './stores-pg';
 import type { GeoLookup } from './service';
@@ -112,9 +112,8 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
   const territories = loadTerritorySchedule(
     env.BLOTTO_TERRITORIES_PATH ?? resolve(REPO_ROOT, 'config', 'territories.json')
   );
-  const termsVersion = loadTermsVersion(
-    env.BLOTTO_TERMS_PATH ?? resolve(REPO_ROOT, 'config', 'terms.json')
-  );
+  const terms = loadTerms(env.BLOTTO_TERMS_PATH ?? resolve(REPO_ROOT, 'config', 'terms.json'));
+  const termsVersion = terms.version;
   // Selected, loaded and scheduled BEFORE the listener opens: no request is
   // ever answered by a screener that is not ready. Throws → no service.
   //
@@ -140,7 +139,7 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
         sanctions: sanctions.list,
         signer: buildSigner(env),
         attestations: new PgAttestationStore(db),
-        config: { territories, kycTier: 0, termsVersion },
+        config: { territories, kycTier: 0, termsVersion, termsUpdated: terms.updated },
         now: () => BigInt(Math.floor(Date.now() / 1000)),
         nonce: () => BigInt('0x' + randomBytes(8).toString('hex')),
       },

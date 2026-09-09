@@ -132,8 +132,18 @@ export const COPY = {
     // D-B4: the versioned clickwrap around the line above. SUBSTANCE FIXED:
     // acceptance is recorded with the wallet's signature and the terms
     // version; the wording of what is being accepted must stay accurate.
-    termsAcceptance: (version: number) =>
-      `I accept the terms (version ${version}). My wallet signs this statement and the acceptance is recorded.`,
+    // Founder 2026-09-09: no version number on screen or in the signed
+    // statement; the edition is named by its date (the message binds it).
+    termsAcceptance:
+      'I accept the Blotto Cup terms. My wallet signs this statement once and the acceptance is recorded.',
+    // The redesigned gate (2026-09-09): a short lead, a step label per
+    // statement, and what the wallet prompt that follows is. PHASE-N-REVIEW.
+    gateIntro: 'Two statements, then your wallet signs them once. Signing is free and moves nothing.',
+    gateStep: (n: number, of: number) => `Statement ${n} of ${of}`,
+    gateConfirmed: 'Confirmed',
+    gateSignNote: 'Your wallet will show the statement and ask you to sign it.',
+    gateSigning: 'Waiting for your wallet…',
+    gateReadTerms: 'Read the rules and terms',
     attestFailed:
       'The confirmation could not be recorded. Check your connection and try again.',
     // Founder 2026-09-09 ("taking ages to load"): a hold names itself when it

@@ -42,6 +42,12 @@ export interface DetectedWallet {
 export interface AuthFailure {
   code: string;
   at: number;
+  /**
+   * The provider's own words for the failure, when it gave any — shown small
+   * under the plain-language line so a screenshot of the page carries the
+   * cause (founder 2026-09-09: "could not be completed" said nothing usable).
+   */
+  detail?: string;
 }
 
 /**

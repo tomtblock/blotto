@@ -15,6 +15,7 @@ import {
   acceptAttestation,
   attestationMessage,
   issuePacket,
+  loadTerms,
   loadTermsVersion,
   type PacketServiceDeps,
 } from '../src';
@@ -24,9 +25,15 @@ const kp = nacl.sign.keyPair.fromSeed(new Uint8Array(32).fill(11));
 const WALLET = base58Encode(kp.publicKey);
 const POOL = base58Encode(new Uint8Array(32).fill(4));
 
-function sign(wallet: string, version: number): string {
+/** Two editions of the terms, as config/terms.json would declare them. */
+const TERMS = {
+  1: { version: 1, updated: '2026-09-06' },
+  2: { version: 2, updated: '2026-09-07' },
+} as const;
+
+function sign(wallet: string, version: 1 | 2): string {
   return Buffer.from(
-    nacl.sign.detached(attestationMessage(wallet, version), kp.secretKey)
+    nacl.sign.detached(attestationMessage(wallet, TERMS[version]), kp.secretKey)
   ).toString('base64');
 }
 
@@ -36,23 +43,31 @@ function deps(store: MemoryAttestationStore, termsVersion = 1): PacketServiceDep
     sanctions: { isSanctioned: async () => false },
     signer: new LocalPacketSigner(new Uint8Array(32).fill(7)),
     attestations: store,
-    config: { territories: DEFAULT_TERRITORY_SCHEDULE, kycTier: 0, termsVersion },
+    config: { territories: DEFAULT_TERRITORY_SCHEDULE, kycTier: 0, termsVersion, termsUpdated: '2026-09-06' },
     now: () => 1_756_000_000n,
     nonce: () => 42n,
   };
 }
 
 describe('config/terms.json', () => {
+  const path = join(__dirname, '..', '..', '..', 'config', 'terms.json');
   it('parses and carries a positive version', () => {
-    const v = loadTermsVersion(join(__dirname, '..', '..', '..', 'config', 'terms.json'));
+    const v = loadTermsVersion(path);
     expect(v).to.be.at.least(1);
+  });
+  it('carries the edition date the signed statement names, and the statement never says "version"', () => {
+    const terms = loadTerms(path);
+    expect(terms.updated).to.match(/^\d{4}-\d{2}-\d{2}$/);
+    const text = new TextDecoder().decode(attestationMessage(WALLET, terms));
+    expect(text).to.contain('terms dated');
+    expect(text.toLowerCase()).to.not.contain('version');
   });
 });
 
 describe('acceptAttestation', () => {
   it('stores a wallet-signed acceptance of the current version', async () => {
     const store = new MemoryAttestationStore();
-    const ok = await acceptAttestation(store, 1, () => 1_756_000_000n, {
+    const ok = await acceptAttestation(store, TERMS[1], () => 1_756_000_000n, {
       wallet: WALLET,
       termsVersion: 1,
       signature: sign(WALLET, 1),
@@ -74,7 +89,7 @@ describe('acceptAttestation', () => {
       { wallet: 'not-base58!', termsVersion: 1, signature: sign(WALLET, 1) },
     ];
     for (const c of cases) {
-      expect(await acceptAttestation(store, 1, () => 0n, c), JSON.stringify(c)).to.equal(false);
+      expect(await acceptAttestation(store, TERMS[1], () => 0n, c), JSON.stringify(c)).to.equal(false);
     }
     expect(await store.get(WALLET)).to.equal(null);
   });
@@ -82,7 +97,7 @@ describe('acceptAttestation', () => {
   it('a signature from a DIFFERENT key than the wallet is refused', async () => {
     const store = new MemoryAttestationStore();
     const otherWallet = base58Encode(new Uint8Array(32).fill(9));
-    const ok = await acceptAttestation(store, 1, () => 0n, {
+    const ok = await acceptAttestation(store, TERMS[1], () => 0n, {
       wallet: otherWallet,
       termsVersion: 1,
       signature: sign(otherWallet, 1), // signed by kp, not otherWallet's key
@@ -98,7 +113,7 @@ describe('issuance ties to the attestation record', () => {
       GENERIC_REJECTION
     );
 
-    await acceptAttestation(empty, 1, () => 0n, {
+    await acceptAttestation(empty, TERMS[1], () => 0n, {
       wallet: WALLET,
       termsVersion: 1,
       signature: sign(WALLET, 1),
@@ -111,7 +126,7 @@ describe('issuance ties to the attestation record', () => {
 
   it('a terms-version bump re-gates a previously attested wallet', async () => {
     const store = new MemoryAttestationStore();
-    await acceptAttestation(store, 1, () => 0n, {
+    await acceptAttestation(store, TERMS[1], () => 0n, {
       wallet: WALLET,
       termsVersion: 1,
       signature: sign(WALLET, 1),
@@ -121,7 +136,7 @@ describe('issuance ties to the attestation record', () => {
       GENERIC_REJECTION
     );
     // Re-attesting at v2 restores issuance.
-    await acceptAttestation(store, 2, () => 0n, {
+    await acceptAttestation(store, TERMS[2], () => 0n, {
       wallet: WALLET,
       termsVersion: 2,
       signature: sign(WALLET, 2),
