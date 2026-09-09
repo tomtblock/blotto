@@ -21,18 +21,13 @@ import { lamportsToSol } from '@/data/format';
 import { AppHeader } from '@/components/shell/app-header';
 import { TabBar } from '@/components/shell/tab-bar';
 import { Countdown } from '@/components/ui/countdown';
-import type { TiersResponse } from '@/data/types';
 import { HeroClip } from '@/components/landing/HeroClip';
-import { LiveDemo } from '@/components/landing/LiveDemo';
-import { PreloaderGate } from '@/components/preloader/PreloaderGate';
 
-const RAIL_STILLS = [
-  '/motion/landing/rail_vending.jpg',
-  '/motion/landing/rail_scale.jpg',
-  '/motion/landing/rail_blender.jpg',
-  '/motion/landing/rail_letterbox.jpg',
-  '/motion/landing/rail_mirror.jpg',
-];
+/** The tier `open_tiers` enables at launch (D-E1): 0.1 SOL entry, 4 SOL prize pool. */
+const LAUNCH_TIER = 0;
+import { LiveDemo } from '@/components/landing/LiveDemo';
+import { HowItWorksCarousel } from '@/components/landing/HowItWorksCarousel';
+import { PreloaderGate } from '@/components/preloader/PreloaderGate';
 
 /** Seat-fill ring in game colours (the arena ProgressRing is blue). */
 function SeatRing({ entrants }: { entrants: number }) {
@@ -68,34 +63,17 @@ function SeatRing({ entrants }: { entrants: number }) {
   );
 }
 
-/** The soonest `next_open_at` still in the future, by the SERVER's clock —
- * null when no tier is cooling down (nothing to count toward). */
-function soonestNextOpen(
-  tiers: TiersResponse | null
-): { nextOpenAt: string; serverTime: string } | null {
-  if (!tiers) return null;
-  const now = BigInt(tiers.server_time);
-  let best: bigint | null = null;
-  for (const t of tiers.tiers) {
-    const at = BigInt(t.next_open_at);
-    if (at > now && (best === null || at < best)) best = at;
-  }
-  return best === null ? null : { nextOpenAt: best.toString(), serverTime: tiers.server_time };
-}
-
 export default async function LandingPage() {
   const api = indexerApi();
   // SSR outage guard: a dead indexer degrades this page, never kills it.
-  const [poolsLive, treasuryLive, tiersLive] = await Promise.all([
+  const [poolsLive, treasuryLive] = await Promise.all([
     live(() => api.listPools()),
     live(() => api.getTreasury()),
-    live(() => api.getTiers()),
   ]);
   const pools = poolsLive.ok ? poolsLive.value : [];
   const treasury = treasuryLive.ok ? treasuryLive.value : null;
   // Prompt v2 §B.6: the soonest tier still cooling down, for the "next pool
   // opens in" clock when nothing is open. Server time, never the device's.
-  const nextOpen = tiersLive.ok ? soonestNextOpen(tiersLive.value) : null;
   const open = pools.filter((p) => p.state === 'Open').sort((a, b) => a.tier - b.tier);
   const hero = open[0];
   const openByTier = new Map(open.map((p) => [p.tier, p]));
@@ -108,48 +86,70 @@ export default async function LandingPage() {
       <PreloaderGate />
       <AppHeader />
       <div className="bg-brand-pink">
-        <main className="mx-auto w-full max-w-5xl flex-1 px-4 pt-8 pb-28 sm:px-6">
-          {/* ——— Hero: inflated headline + the kettle, side by side on 1440. */}
-          <section className="grid items-center gap-6 lg:grid-cols-2 lg:gap-10">
-            <div>
-              <h1 className="focus:outline-none font-display text-[64px] font-extrabold uppercase leading-[0.92] tracking-tight text-brand-yellow [text-shadow:0_5px_0_rgba(94,27,64,0.22)] sm:text-[96px] lg:text-[116px]">
-                {COPY.landing.heroTitle}
-              </h1>
-              <p className="mt-4 max-w-[30ch] font-display text-[22px] font-bold leading-7 text-brand-berry sm:text-[26px] sm:leading-8">
-                {COPY.shell.tagline}
-              </p>
-              <div className="mt-6 flex flex-wrap items-center gap-4">
-                {hero && (
-                  <Link
-                    href={`/pools/${hero.pool}`}
-                    className="rounded-full bg-game-base px-8 py-3.5 font-display text-[18px] font-bold uppercase tracking-wide text-game-ink shadow-[0_6px_20px_rgba(94,27,64,0.35)] hover:bg-game-raised"
-                  >
-                    {COPY.pool.enter}
-                  </Link>
-                )}
-                <a
-                  href="#demo"
-                  className="rounded-full border-2 border-brand-berry px-6 py-3 font-mono text-[13px] uppercase tracking-wide text-brand-berry hover:bg-brand-berry/10"
+        {/* ——— Hero (founder 2026-09-09): the montage covers the whole hero and
+            the words sit stacked, left-aligned, on a plum scrim. Ten
+            existing landscape loops from the same series as the old kettle
+            clip, cut into one 51 s crossfaded reel; poster-first, muted,
+            looping, and a still under reduced motion (HeroClip). The section
+            is full-bleed; everything below stays in the 5xl column. */}
+        <section className="relative isolate overflow-hidden bg-brand-berry">
+          <HeroClip
+            mp4="/motion/landing/hero_montage.mp4"
+            webm="/motion/landing/hero_montage.webm"
+            poster="/motion/landing/hero_montage_poster.jpg"
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+          {/* Legibility scrim: heavy at the text edge, clear on the right so the
+              reel reads; a soft fade into the page pink along the bottom. */}
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 bg-[linear-gradient(90deg,rgba(94,27,64,0.92)_0%,rgba(94,27,64,0.74)_40%,rgba(94,27,64,0.22)_72%,rgba(94,27,64,0.05)_100%)] lg:bg-[linear-gradient(90deg,rgba(94,27,64,0.9)_0%,rgba(94,27,64,0.62)_34%,rgba(94,27,64,0.08)_60%,rgba(94,27,64,0)_100%)]"
+          />
+          <div
+            aria-hidden="true"
+            className="absolute inset-x-0 bottom-0 h-24 bg-[linear-gradient(180deg,transparent_0%,var(--color-brand-pink)_100%)]"
+          />
+          <div className="relative mx-auto flex w-full max-w-5xl flex-col justify-end px-4 pt-28 pb-10 sm:px-6 sm:pt-36 lg:min-h-[720px] lg:pt-44 lg:pb-16">
+            <h1 className="focus:outline-none max-w-[9ch] font-display text-[64px] font-extrabold uppercase leading-[0.92] tracking-tight text-brand-yellow [text-shadow:0_5px_0_rgba(42,16,48,0.35)] sm:text-[96px] lg:text-[116px]">
+              {COPY.landing.heroTitle}
+            </h1>
+            <p className="mt-4 font-display text-[22px] font-bold leading-7 text-brand-cream sm:text-[26px] sm:leading-8">
+              {/* Founder 2026-09-09: one sentence per line. The string stays
+                  whole in COPY (the shell and the e2e text match use it);
+                  only the line breaks are decided here. */}
+              {COPY.shell.tagline.split(/(?<=\.)\s+/).map((line) => (
+                <span key={line} className="block">
+                  {line}{' '}
+                </span>
+              ))}
+            </p>
+            <div className="mt-6 flex flex-wrap items-center gap-4">
+              {hero && (
+                <Link
+                  href={`/pools/${hero.pool}`}
+                  className="rounded-full bg-brand-yellow px-8 py-3.5 font-display text-[18px] font-bold uppercase tracking-wide text-game-base shadow-[0_6px_20px_rgba(42,16,48,0.35)] hover:bg-brand-cream"
                 >
-                  {COPY.landing.tryDials}
-                </a>
-              </div>
-              {/* v3 D2: visible without scrolling on mobile. */}
-              <p className="mt-4 text-[12px] tracking-[0.02em] text-brand-berry">
-                {COPY.pool.ageTerritoryNote}
-                {' · '}
-                <Link href="/rules" className="underline underline-offset-2">
-                  {COPY.rules.title}
+                  {COPY.pool.enter}
                 </Link>
-              </p>
+              )}
+              <a
+                href="#demo"
+                className="rounded-full border-2 border-brand-cream px-6 py-3 font-mono text-[13px] uppercase tracking-wide text-brand-cream hover:bg-brand-cream/10"
+              >
+                {COPY.landing.tryDials}
+              </a>
             </div>
-            <HeroClip
-              mp4="/motion/landing/hero_kettle.mp4"
-              webm="/motion/landing/hero_kettle.webm"
-              poster="/motion/landing/hero_kettle_poster.jpg"
-              className="w-full rounded-3xl shadow-[0_12px_40px_rgba(94,27,64,0.25)]"
-            />
-          </section>
+            {/* v3 D2: visible without scrolling on mobile (the hero is content-height there). */}
+            <p className="mt-5 text-[12px] tracking-[0.02em] text-brand-cream/90">
+              {COPY.pool.ageTerritoryNote}
+              {' · '}
+              <Link href="/rules" className="underline underline-offset-2">
+                {COPY.rules.title}
+              </Link>
+            </p>
+          </div>
+        </section>
+        <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-28 sm:px-6">
 
           {/* ——— The open pool: plum card, every number on the game layer. */}
           <section className="mt-10">
@@ -214,23 +214,10 @@ export default async function LandingPage() {
                   {COPY.pool.ageTerritoryNote}
                 </p>
               </div>
-            ) : (
-              <div className="rounded-2xl bg-game-base p-6">
-                <p className="text-[16px] font-medium text-game-ink">{COPY.pool.noOpenPool}</p>
-                <p className="mt-1 max-w-prose text-[13px] leading-5 text-game-ink-muted">
-                  {COPY.pool.noOpenPoolDetail}
-                </p>
-                {nextOpen && (
-                  <div className="mt-4">
-                    <Countdown
-                      deadlineUnix={nextOpen.nextOpenAt}
-                      serverTimeUnix={nextOpen.serverTime}
-                      label={COPY.pool.nextPoolIn}
-                    />
-                  </div>
-                )}
-              </div>
-            )}
+            ) : null /* PHASE-N-REVIEW: the "no tournament is open" card was removed
+                        at the founder's direction (2026-09-09). In that state the
+                        page shows the hero, the demo, the steps and the ladder;
+                        the ladder carries the per-tier status. */}
           </section>
 
           {/* ——— The live demo: the toy is the pitch. */}
@@ -241,31 +228,12 @@ export default async function LandingPage() {
             <LiveDemo />
           </section>
 
-          {/* ——— How it works: the five ratified steps, scene stills. */}
+          {/* ——— How it works: the five ratified steps, one animated scene at a time. */}
           <section className="mt-12">
             <h2 className="mb-4 font-display text-[28px] font-extrabold leading-8 text-brand-berry">
               {COPY.howItWorks.title}
             </h2>
-            <ol className="-mx-4 flex snap-x gap-4 overflow-x-auto px-4 pb-2 lg:mx-0 lg:grid lg:grid-cols-5 lg:overflow-visible lg:px-0">
-              {COPY.howItWorks.steps.map((step, i) => (
-                <li
-                  key={step.title}
-                  className="w-[240px] shrink-0 snap-start overflow-hidden rounded-2xl bg-brand-cream lg:w-auto"
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element -- local still, fixed card, no next/image needed */}
-                  <img src={RAIL_STILLS[i]} alt="" className="aspect-[4/3] w-full object-cover" />
-                  <div className="p-4">
-                    <p className="font-mono text-[11px] uppercase tracking-wide text-brand-deep-magenta">
-                      Step {i + 1}
-                    </p>
-                    <h3 className="mt-1 font-display text-[17px] font-bold leading-5 text-brand-berry">
-                      {step.title}
-                    </h3>
-                    <p className="mt-2 text-[12px] leading-4.5 text-brand-berry/80">{step.body}</p>
-                  </div>
-                </li>
-              ))}
-            </ol>
+            <HowItWorksCarousel steps={COPY.howItWorks.steps} />
             <p className="mt-4 flex gap-5 text-[13px] text-brand-berry">
               <Link href="/rules" className="underline underline-offset-2">
                 {COPY.howItWorks.rulesLink}
@@ -288,21 +256,28 @@ export default async function LandingPage() {
               {TIER_ENTRY_LAMPORTS.map((entry, tier) => {
                 const openPool = openByTier.get(tier);
                 const status = tierStatus.get(tier);
+                // Founder 2026-09-09: only the launch tier (tier 0, the 4 SOL
+                // prize pool) shows its live status; every other tier reads
+                // "Coming soon" until it is switched on. `LAUNCH_TIER` is the
+                // one tier `open_tiers` enables at launch (D-E1).
+                const comingSoon = tier !== LAUNCH_TIER && !openPool;
                 const label = openPool
                   ? COPY.fixtures.statusOpen
-                  : status?.status === 'settling'
-                    ? COPY.fixtures.statusSettling
-                    : status?.status === 'openable'
-                      ? COPY.fixtures.statusOpenable
-                      : COPY.fixtures.statusShort;
+                  : comingSoon
+                    ? COPY.fixtures.statusComingSoon
+                    : status?.status === 'settling'
+                      ? COPY.fixtures.statusSettling
+                      : status?.status === 'openable'
+                        ? COPY.fixtures.statusOpenable
+                        : COPY.fixtures.statusShort;
                 const shortBy =
-                  !openPool && status?.status === 'short' && BigInt(status.short_by_lamports) > 0n
+                  !openPool && !comingSoon && status?.status === 'short' && BigInt(status.short_by_lamports) > 0n
                     ? COPY.fixtures.shortBy(lamportsToSol(status.short_by_lamports))
                     : null;
                 const row = (
                   <div
                     className={`flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-game-raised px-4 py-3.5 sm:px-5 ${
-                      openPool ? 'bg-game-raised/40' : ''
+                      openPool ? 'bg-game-raised/40' : comingSoon ? 'opacity-70' : ''
                     }`}
                   >
                     <span className="tnum w-24 font-display text-[17px] font-bold text-game-ink">
