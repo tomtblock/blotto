@@ -285,6 +285,10 @@ export const COPY = {
     rulesLink: 'Read the full rules',
     verifyLink: 'Verify a result',
     fairPlayLink: 'Fair play',
+    // The one-at-a-time carousel (2026-09-09).
+    stepOf: (n: number, of: number) => `Step ${n} of ${of}`,
+    prevStep: 'Previous step',
+    nextStep: 'Next step',
   },
   // The Fair play page (2026-09-08): what keeps the competition fair, who
   // may enter, how to check it. Every sentence describes a MECHANISM; none

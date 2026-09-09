@@ -26,15 +26,8 @@ import { HeroClip } from '@/components/landing/HeroClip';
 /** The tier `open_tiers` enables at launch (D-E1): 0.1 SOL entry, 4 SOL prize pool. */
 const LAUNCH_TIER = 0;
 import { LiveDemo } from '@/components/landing/LiveDemo';
+import { HowItWorksCarousel } from '@/components/landing/HowItWorksCarousel';
 import { PreloaderGate } from '@/components/preloader/PreloaderGate';
-
-const RAIL_STILLS = [
-  '/motion/landing/rail_vending.jpg',
-  '/motion/landing/rail_scale.jpg',
-  '/motion/landing/rail_blender.jpg',
-  '/motion/landing/rail_letterbox.jpg',
-  '/motion/landing/rail_mirror.jpg',
-];
 
 /** Seat-fill ring in game colours (the arena ProgressRing is blue). */
 function SeatRing({ entrants }: { entrants: number }) {
@@ -235,31 +228,12 @@ export default async function LandingPage() {
             <LiveDemo />
           </section>
 
-          {/* ——— How it works: the five ratified steps, scene stills. */}
+          {/* ——— How it works: the five ratified steps, one animated scene at a time. */}
           <section className="mt-12">
             <h2 className="mb-4 font-display text-[28px] font-extrabold leading-8 text-brand-berry">
               {COPY.howItWorks.title}
             </h2>
-            <ol className="-mx-4 flex snap-x gap-4 overflow-x-auto px-4 pb-2 lg:mx-0 lg:grid lg:grid-cols-5 lg:overflow-visible lg:px-0">
-              {COPY.howItWorks.steps.map((step, i) => (
-                <li
-                  key={step.title}
-                  className="w-[240px] shrink-0 snap-start overflow-hidden rounded-2xl bg-brand-cream lg:w-auto"
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element -- local still, fixed card, no next/image needed */}
-                  <img src={RAIL_STILLS[i]} alt="" className="aspect-[4/3] w-full object-cover" />
-                  <div className="p-4">
-                    <p className="font-mono text-[11px] uppercase tracking-wide text-brand-deep-magenta">
-                      Step {i + 1}
-                    </p>
-                    <h3 className="mt-1 font-display text-[17px] font-bold leading-5 text-brand-berry">
-                      {step.title}
-                    </h3>
-                    <p className="mt-2 text-[12px] leading-4.5 text-brand-berry/80">{step.body}</p>
-                  </div>
-                </li>
-              ))}
-            </ol>
+            <HowItWorksCarousel steps={COPY.howItWorks.steps} />
             <p className="mt-4 flex gap-5 text-[13px] text-brand-berry">
               <Link href="/rules" className="underline underline-offset-2">
                 {COPY.howItWorks.rulesLink}
