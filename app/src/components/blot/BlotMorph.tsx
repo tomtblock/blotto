@@ -23,6 +23,14 @@
  *
  * Two-layer rule: the Blot never shares a frame with a paid amount or a
  * stat number that is not its own dial. This component renders no text.
+ *
+ * FACE (founder 2026-09-09): the visor bows into a smile or a wince, two
+ * brows tilt and lift, two cheeks blush — all pure geometry off the visor
+ * box (expression.ts), chosen by which stat is under the player's hand and
+ * which way it is moving, and held for half a second after the hand lifts.
+ * At rest the face is REST_EXPRESSION, the one the lock-in still wears.
+ * MATERIAL: a diagonal sheen, stitched seam and a hard specular dot make
+ * the vinyl read as the Higgsfield renders do. Geometry is unchanged.
  */
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
@@ -30,6 +38,7 @@ import { STAT_NAMES, type Allocation } from '@/battle/allocation';
 import { palette } from '@/design/tokens';
 import { BASE_RADIUS, blotScene, UNIT } from './blotGeometry';
 import { useBlotSprings, usePrefersReducedMotion } from './springs';
+import { REST_EXPRESSION, brows, cheeks, expressionFor, visorPath, type Expression } from './expression';
 import './blot.css';
 
 export type BlotMood = 'idle' | 'focused' | 'locked' | 'paid';
@@ -135,6 +144,29 @@ export function BlotMorph({
   const dragging = dragStat !== null;
   const heartR = scene.heart.r * (dragging ? 1.1 : 1);
 
+  /* The face. While a dial is held the expression follows the stat and its
+   * direction of travel; when the hand lifts the last face holds 500 ms
+   * and then settles to rest. Reduced motion: rest face, always. */
+  const liveExpr: Expression = useMemo(() => {
+    if (reduced || dragStat === null || dragStat < 0 || dragStat > 4) return REST_EXPRESSION;
+    const v = vels[dragStat] ?? 0;
+    const dir = v > 0 ? 1 : v < 0 ? -1 : 0;
+    return expressionFor(dragStat, dir, Math.min(1, Math.abs(v) / 120 + 0.35));
+  }, [reduced, dragStat, vels]);
+  const [held, setHeld] = useState<Expression>(REST_EXPRESSION);
+  useEffect(() => {
+    if (dragStat !== null) {
+      setHeld(liveExpr);
+      return;
+    }
+    const t = setTimeout(() => setHeld(REST_EXPRESSION), 500);
+    return () => clearTimeout(t);
+  }, [dragStat, liveExpr]);
+  const face = dragStat !== null ? liveExpr : held;
+  const browPair = brows(scene.visor, face);
+  const cheekPair = cheeks(scene.visor, face);
+  const visorD = visorPath(scene.visor, face);
+
   const label = blotAriaLabel(allocation);
   const announced = useThrottledLabel(label);
 
@@ -178,6 +210,13 @@ export function BlotMorph({
           <linearGradient id={`${uid}-limb`} x1="0%" y1="0%" x2="0%" y2="100%">
             <stop offset="0%" stopColor={palette.brandYellow} />
             <stop offset="100%" stopColor={palette.blotShade} />
+          </linearGradient>
+          {/* Diagonal sheen: the vinyl's broad soft highlight. */}
+          <linearGradient id={`${uid}-sheen`} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor={palette.brandCream} stopOpacity="0.28" />
+            <stop offset="38%" stopColor={palette.brandCream} stopOpacity="0.06" />
+            <stop offset="60%" stopColor={palette.brandCream} stopOpacity="0" />
+            <stop offset="100%" stopColor={palette.blotAmbient} stopOpacity="0.12" />
           </linearGradient>
           {/* Tight, fixed filter regions: never recreated per frame. */}
           <filter
@@ -287,13 +326,23 @@ export function BlotMorph({
             strokeWidth="10"
             strokeLinejoin="round"
           />
-          {/* Stitched vinyl seam. */}
+          {/* Broad diagonal sheen. */}
+          <path d={scene.bodyPath} fill={`url(#${uid}-sheen)`} />
+          {/* Stitched vinyl seam: the seam line, then the stitches over it. */}
           <path
             d={scene.seamPath}
             fill="none"
             stroke={palette.blotSeam}
-            strokeWidth="3"
-            opacity="0.8"
+            strokeWidth="4"
+            opacity="0.85"
+          />
+          <path
+            d={scene.seamPath}
+            fill="none"
+            stroke={palette.blotRim}
+            strokeWidth="2"
+            strokeDasharray="10 12"
+            opacity="0.7"
           />
         </g>
 
@@ -310,20 +359,19 @@ export function BlotMorph({
           <circle cx={scene.heart.cx} cy={scene.heart.cy} r={heartR} fill={palette.blotHeart} opacity="0.6" />
         </g>
 
-        {/* Visor — fixed size, clamped inside the outline, tilts on drag. */}
+        {/* Cheeks — blush under the visor's outer ends. */}
+        <g className="blot-cheeks">
+          <ellipse cx={cheekPair.left.cx} cy={cheekPair.left.cy} rx={cheekPair.left.rx} ry={cheekPair.left.ry} fill={palette.blotHeart} opacity={cheekPair.left.opacity} filter={`url(#${uid}-heart-blur)`} />
+          <ellipse cx={cheekPair.right.cx} cy={cheekPair.right.cy} rx={cheekPair.right.rx} ry={cheekPair.right.ry} fill={palette.blotHeart} opacity={cheekPair.right.opacity} filter={`url(#${uid}-heart-blur)`} />
+        </g>
+
+        {/* Visor — the eye-band; bows into a smile or a wince, tilts on drag. */}
         <g
           className="blot-visor"
           transform={visorTilt !== 0 ? `rotate(${visorTilt.toFixed(2)} ${scene.visor.cx} ${scene.visor.cy})` : undefined}
         >
-          <rect
-            x={scene.visor.cx - scene.visor.width / 2}
-            y={scene.visor.cy - scene.visor.height / 2}
-            width={scene.visor.width}
-            height={scene.visor.height}
-            rx={scene.visor.rx}
-            fill={palette.blotVisor}
-          />
-          {/* Specular line along the visor's top edge. */}
+          <path d={visorD} fill={palette.blotVisor} />
+          {/* Specular line along the visor's top edge, and one hard eye-shine. */}
           <rect
             x={scene.visor.cx - scene.visor.width / 2 + scene.visor.rx}
             y={scene.visor.cy - scene.visor.height / 2 + 8}
@@ -333,6 +381,31 @@ export function BlotMorph({
             fill={palette.brandCream}
             opacity="0.45"
           />
+          <ellipse
+            cx={scene.visor.cx - scene.visor.width * 0.3}
+            cy={scene.visor.cy - scene.visor.height * 0.08}
+            rx={Math.max(8, scene.visor.height * 0.16)}
+            ry={Math.max(6, scene.visor.height * 0.11)}
+            fill={palette.brandCream}
+            opacity="0.85"
+          />
+        </g>
+
+        {/* Brows — two capsules that tilt and lift with the expression. */}
+        <g className="blot-brows">
+          {[browPair.left, browPair.right].map((b, i) => (
+            <rect
+              key={i}
+              x={b.x - b.length / 2}
+              y={b.y - b.thickness / 2}
+              width={b.length}
+              height={b.thickness}
+              rx={b.thickness / 2}
+              fill={palette.blotVisor}
+              opacity="0.92"
+              transform={`rotate(${b.angle.toFixed(2)} ${b.x} ${b.y})`}
+            />
+          ))}
         </g>
 
         {/* Body specular — slides with the corners' centroid. */}

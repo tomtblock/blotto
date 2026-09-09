@@ -2,12 +2,17 @@
 
 /*
  * <StatDials /> — five dials, one per stat in the fixed order, on the
- * berry card (architect brief §4; Figma page 07, node 34:13). Each row:
- * mono label, a 14u pink-filled track with a 28u yellow knob, the live
- * integer in the display face. The knob colour is the founder's call, on
- * the record: the brief and the prototype both draw the yellow knob
- * inside the plum card — the "yellow = paid amounts" reservation applies
- * to NUMBERS, and yellow never wears a number here (the value is ink).
+ * plum deck of the machine (architect brief §4; founder 2026-09-09: "the
+ * dials need to be more prominent and flashy … when a dial is increased it
+ * should be heating up and skills which are decreasing are showing blue
+ * for cold"). Each row: mono label, an 18u track with a 34u yellow knob,
+ * the live integer in the display face. The knob colour is the founder's
+ * call, on the record: yellow never wears a number here (the value is ink).
+ *
+ * TEMPERATURE: a row that is being raised glows toward the hot red and a
+ * row giving way cools toward the blue (dial-thermals.ts); the glow decays
+ * to the plain dial about a second after the hand stops. The colour is
+ * feedback, never a value — the number stays ink.
  *
  * Built on native <input type="range"> so pointer capture, grab-anywhere
  * tracks and slider semantics come from the platform; the keyboard map
@@ -26,6 +31,9 @@
 
 import { useCallback, useRef } from 'react';
 import { STAT_NAMES, type Allocation } from '@/battle/allocation';
+import { COPY } from '@/copy';
+import { usePrefersReducedMotion } from './springs';
+import { useDialThermals } from './dial-thermals';
 import './blot.css';
 
 export interface StatDialsProps {
@@ -57,6 +65,7 @@ function DialRow({
   k,
   target,
   shown,
+  temperature,
   dragStat,
   onDrag,
   onDragStart,
@@ -66,6 +75,7 @@ function DialRow({
   k: number;
   target: Allocation;
   shown: number;
+  temperature: number;
   dragStat: number | null;
   onDrag: (k: number, t: number) => void;
   onDragStart?: (k: number) => void;
@@ -95,10 +105,20 @@ function DialRow({
   // The dragged row pins to the target (dial and number never disagree);
   // resting rows glide on the spring display.
   const knob = dragStat === k ? value : shown;
+  const heat = Math.max(0, temperature);
+  const cold = Math.max(0, -temperature);
+  const active = dragStat === k;
 
   return (
-    <div className="flex items-center gap-3">
-      <span className="w-24 shrink-0 font-mono text-[13px] uppercase tracking-wide text-game-ink-muted">
+    <div
+      className={`blot-dial-row flex items-center gap-3${active ? ' is-active' : ''}`}
+      style={{
+        ['--dial-fill' as string]: `${knob}%`,
+        ['--dial-heat' as string]: heat.toFixed(3),
+        ['--dial-cold' as string]: cold.toFixed(3),
+      }}
+    >
+      <span className="blot-dial-label w-24 shrink-0 font-mono text-[12px] uppercase tracking-[0.12em]">
         {name}
       </span>
       <input
@@ -130,9 +150,8 @@ function DialRow({
         }}
         onKeyUp={onDragEnd}
         className="blot-dial min-w-0 flex-1"
-        style={{ ['--dial-fill' as string]: `${knob}%` }}
       />
-      <span className="tnum w-12 shrink-0 text-right font-display text-[28px] font-bold leading-none text-game-ink">
+      <span className="blot-dial-readout tnum w-14 shrink-0 text-right font-display text-[32px] font-extrabold leading-none">
         {value}
       </span>
     </div>
@@ -149,14 +168,17 @@ export function StatDials({
   onEvenSplit,
   disabled = false,
 }: StatDialsProps) {
+  const reduced = usePrefersReducedMotion();
+  const temps = useDialThermals(target, reduced);
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3.5">
       {STAT_NAMES.map((_, k) => (
         <DialRow
           key={STAT_NAMES[k]}
           k={k}
           target={target}
           shown={display[k] ?? target[k]}
+          temperature={temps[k] ?? 0}
           dragStat={dragStat}
           onDrag={onDrag}
           onDragStart={onDragStart}
@@ -171,7 +193,7 @@ export function StatDials({
           disabled={disabled}
           className="self-start rounded-full px-3 py-1.5 font-mono text-[12px] uppercase tracking-wide text-game-ink-muted underline decoration-game-ink-muted/50 underline-offset-4 hover:text-game-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-cream disabled:opacity-50"
         >
-          Even split
+          {COPY.battle.evenSplit}
         </button>
       )}
     </div>
