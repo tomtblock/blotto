@@ -318,6 +318,17 @@ export const COPY = {
     checkCustody: 'See who holds which keys, and what each cannot do',
     checkRules: 'Read the full rules',
   },
+  /** The transaction seam's three player-reachable program refusals (app/src/tx/errors.ts). */
+  tx: {
+    // PHASE-N-REVIEW: plain sentences pending the founder's wording. Each says
+    // what happened and that nothing settled; none invites a blind retry.
+    entriesPaused:
+      "Entries are paused right now, so this one was not accepted and nothing settled. Try again a little later.",
+    poolFull:
+      "This pool filled before your entry reached it, so nothing settled. Another pool in this tier opens once this one has been paid out.",
+    deadlinePassed:
+      "This pool stopped taking entries at its deadline before your entry reached it, so nothing settled.",
+  },
   battle: {
     screenOf: (k: number) => `Battle ${k} of 7`,
     evenSplit: 'Even split',

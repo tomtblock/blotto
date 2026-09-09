@@ -86,6 +86,17 @@ the deploy automation can only *use* them.
 3. Click **New repository secret** again:
    - Name: `BLOTTO_DATABASE_URL` — Secret: paste the connection string
      from Step 3 → **Add secret**.
+4. Three more values are yours to set here and change later without a code
+   change (each falls back to a sensible default when absent — see
+   `go-live-devnet.md` for the night they were introduced):
+   - Secret `BLOTTO_DEVNET_RPC_URL` — a **devnet** Helius RPC URL. Every
+     service and the drift check use it; the deploy refuses a mainnet-looking one.
+   - Secret `BLOTTO_HELIUS_WEBHOOK_SECRET` — the exact Auth-header string you
+     typed into the Helius webhook (`hosting.md`, E6).
+   - **Variable** (the *Variables* tab, not *Secrets*) `BLOTTO_APP_ORIGINS` —
+     every browser origin the services may answer, comma-separated, each
+     `https://…` with no trailing slash: your domain, its www form, the
+     Vercel address.
 
 ### The credentialed secrets (added as each one is provisioned)
 
@@ -138,9 +149,15 @@ If it fails, copy the red step's message to me and I'll fix it.
 
 1. Open **vercel.com** → the **blotto** project → **Settings** →
    **Environment Variables**.
-2. Add these two, for the **Production** environment:
+2. Add these, for the **Production** environment:
    - `NEXT_PUBLIC_INDEXER_URL` → `https://blotto-indexer.fly.dev`
    - `NEXT_PUBLIC_ENTRY_API_URL` → `https://blotto-packet.fly.dev`
+   - `NEXT_PUBLIC_REVIEW_API_URL` → `https://blotto-review.fly.dev`
+   - `NEXT_PUBLIC_SOLANA_CLUSTER` → `devnet`
+   - `NEXT_PUBLIC_SOLANA_RPC_URL` → the same devnet Helius URL as the
+     `BLOTTO_DEVNET_RPC_URL` secret (this one is public — it ships in the browser)
+   - `NEXT_PUBLIC_DEVNET_FAUCET` → `1` (testers' "Get test SOL" link)
+   The full table, with what each does, is in `go-live-devnet.md` §3.
 3. Go to the **Deployments** tab, open the **⋯** menu on the newest
    deployment → **Redeploy** (env changes need a redeploy to take effect).
 

@@ -26,6 +26,7 @@
  * the wrong reason for a failure, confidently.
  */
 
+import { COPY } from "@/copy";
 import type { TxFailure, TxFailureKind } from "./types";
 
 /**
@@ -45,6 +46,15 @@ export const PROGRAM_ERROR_CODES: Readonly<Record<number, TxFailureKind>> = {
   6002: "program-rejected", // InvalidRandomnessAccount
   6003: "program-rejected", // RandomnessNotResolved
   6004: "program-rejected", // VrfSeedNotCommitted
+  // The three `register` refusals a player can meet from the play screen.
+  // Positions verified against error.rs on 2026-09-09: 6005 Paused, 6006
+  // TierNotOpen … 6010 PoolFull, 6011 DeadlinePassed. Inserting a variant
+  // above any of these in error.rs renumbers them — errors.test.ts pins the
+  // three positions against the Rust source so that drift fails a test
+  // instead of showing a player the wrong reason.
+  6005: "entries-paused", // Paused
+  6010: "pool-full", // PoolFull
+  6011: "deadline-passed", // DeadlinePassed
 };
 
 /**
@@ -74,6 +84,9 @@ export const FAILURE_COPY: Record<TxFailureKind, string> = {
     "The network window for this transaction lapsed before it confirmed. Nothing settled — you can try again.",
   "program-rejected":
     "The program declined this transaction, so nothing settled. The pool may have filled or closed — check the pool page before trying again.",
+  "entries-paused": COPY.tx.entriesPaused,
+  "pool-full": COPY.tx.poolFull,
+  "deadline-passed": COPY.tx.deadlinePassed,
   "rpc-failure":
     "The network request did not go through. Check your connection and try again.",
   // The transaction LANDED; only the read-back failed. See property 2 above.
