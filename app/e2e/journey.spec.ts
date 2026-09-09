@@ -18,16 +18,19 @@ const SHOTS = '../docs/phase-reports/screenshots/step-ui-arena';
 const shot = (page: Page, name: string, project: string) =>
   page.screenshot({ path: `${SHOTS}/${name}-${project}.png`, fullPage: true });
 
-test('landing: hero fixture card with the 18+ line above the fold', async ({ page }, info) => {
+test('landing: montage hero, the enter control, the 18+ line above the fold', async ({ page }, info) => {
   await page.goto('/');
   await expect(
     page.getByText('Sixty-four seats. Seven battles. The winner takes the prize pool.')
   ).toBeVisible();
-  // The live fixture card and its seat ring.
-  await expect(page.getByRole('img', { name: /of 64 seats filled/ })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Enter this tournament' })).toBeVisible();
+  // Founder 2026-09-09: the hero is the full-bleed montage (the seat ring
+  // left the hero with the "Pools are now open" card); the open fixture
+  // pool is entered from the hero's control.
+  await expect(page.locator('video[poster*="hero_montage"]')).toHaveCount(1);
+  await expect(page.getByRole('link', { name: 'Enter this tournament' }).first()).toBeVisible();
   // v3 D2: 18+/territory visible WITHOUT SCROLLING at this viewport.
-  const note = page.getByText('18+ only · not available in some territories');
+  // The hero's own line is the first of several on the page.
+  const note = page.getByText('18+ only · not available in some territories').first();
   await expect(note).toBeInViewport();
   await shot(page, 'landing', info.project.name);
 });
