@@ -21,7 +21,19 @@ import { lamportsToSol } from '@/data/format';
 import { AppHeader } from '@/components/shell/app-header';
 import { TabBar } from '@/components/shell/tab-bar';
 import { Countdown } from '@/components/ui/countdown';
-import { HeroClip } from '@/components/landing/HeroClip';
+import { HeroClip, type ClipTier } from '@/components/landing/HeroClip';
+
+/**
+ * The hero reel in three cuts of the same 2160p master (founder
+ * 2026-09-09: 4K, super clear). A wide screen streams the 2160p cut, a
+ * laptop the 1080p, a phone the 720p — the browser picks the first tier
+ * whose media query matches (HeroClip).
+ */
+const HERO_TIERS: readonly ClipTier[] = [
+  { mp4: '/motion/landing/hero_montage_2160.mp4', webm: '/motion/landing/hero_montage_2160.webm', media: '(min-width: 1600px)' },
+  { mp4: '/motion/landing/hero_montage_1080.mp4', webm: '/motion/landing/hero_montage_1080.webm', media: '(min-width: 768px)' },
+  { mp4: '/motion/landing/hero_montage.mp4', webm: '/motion/landing/hero_montage.webm' },
+];
 
 /** The tier `open_tiers` enables at launch (D-E1): 0.1 SOL entry, 4 SOL prize pool. */
 const LAUNCH_TIER = 0;
@@ -94,8 +106,7 @@ export default async function LandingPage() {
             is full-bleed; everything below stays in the 5xl column. */}
         <section className="relative isolate overflow-hidden bg-brand-berry">
           <HeroClip
-            mp4="/motion/landing/hero_montage.mp4"
-            webm="/motion/landing/hero_montage.webm"
+            tiers={HERO_TIERS}
             poster="/motion/landing/hero_montage_poster.jpg"
             className="absolute inset-0 h-full w-full object-cover"
           />
