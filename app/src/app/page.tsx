@@ -93,55 +93,70 @@ export default async function LandingPage() {
       <PreloaderGate />
       <AppHeader />
       <div className="bg-brand-pink">
-        <main className="mx-auto w-full max-w-5xl flex-1 px-4 pt-8 pb-28 sm:px-6">
-          {/* ——— Hero: inflated headline + the kettle, side by side on 1440. */}
-          <section className="grid items-center gap-6 lg:grid-cols-2 lg:gap-10">
-            <div>
-              <h1 className="focus:outline-none font-display text-[64px] font-extrabold uppercase leading-[0.92] tracking-tight text-brand-yellow [text-shadow:0_5px_0_rgba(94,27,64,0.22)] sm:text-[96px] lg:text-[116px]">
-                {COPY.landing.heroTitle}
-              </h1>
-              <p className="mt-4 font-display text-[22px] font-bold leading-7 text-brand-berry sm:text-[26px] sm:leading-8">
-                {/* Founder 2026-09-09: one sentence per line. The string stays
-                    whole in COPY (the shell and the e2e text match use it);
-                    only the line breaks are decided here. */}
-                {COPY.shell.tagline.split(/(?<=\.)\s+/).map((line) => (
-                  <span key={line} className="block">
-                    {line}{' '}
-                  </span>
-                ))}
-              </p>
-              <div className="mt-6 flex flex-wrap items-center gap-4">
-                {hero && (
-                  <Link
-                    href={`/pools/${hero.pool}`}
-                    className="rounded-full bg-game-base px-8 py-3.5 font-display text-[18px] font-bold uppercase tracking-wide text-game-ink shadow-[0_6px_20px_rgba(94,27,64,0.35)] hover:bg-game-raised"
-                  >
-                    {COPY.pool.enter}
-                  </Link>
-                )}
-                <a
-                  href="#demo"
-                  className="rounded-full border-2 border-brand-berry px-6 py-3 font-mono text-[13px] uppercase tracking-wide text-brand-berry hover:bg-brand-berry/10"
+        {/* ——— Hero (founder 2026-09-09): the montage covers the whole hero and
+            the words sit stacked, left-aligned, on a plum scrim. Ten
+            existing landscape loops from the same series as the old kettle
+            clip, cut into one 51 s crossfaded reel; poster-first, muted,
+            looping, and a still under reduced motion (HeroClip). The section
+            is full-bleed; everything below stays in the 5xl column. */}
+        <section className="relative isolate overflow-hidden bg-brand-berry">
+          <HeroClip
+            mp4="/motion/landing/hero_montage.mp4"
+            webm="/motion/landing/hero_montage.webm"
+            poster="/motion/landing/hero_montage_poster.jpg"
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+          {/* Legibility scrim: heavy at the text edge, clear on the right so the
+              reel reads; a soft fade into the page pink along the bottom. */}
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 bg-[linear-gradient(90deg,rgba(94,27,64,0.92)_0%,rgba(94,27,64,0.74)_40%,rgba(94,27,64,0.22)_72%,rgba(94,27,64,0.05)_100%)] lg:bg-[linear-gradient(90deg,rgba(94,27,64,0.9)_0%,rgba(94,27,64,0.62)_34%,rgba(94,27,64,0.08)_60%,rgba(94,27,64,0)_100%)]"
+          />
+          <div
+            aria-hidden="true"
+            className="absolute inset-x-0 bottom-0 h-24 bg-[linear-gradient(180deg,transparent_0%,var(--color-brand-pink)_100%)]"
+          />
+          <div className="relative mx-auto flex w-full max-w-5xl flex-col justify-end px-4 pt-28 pb-10 sm:px-6 sm:pt-36 lg:min-h-[720px] lg:pt-44 lg:pb-16">
+            <h1 className="focus:outline-none max-w-[9ch] font-display text-[64px] font-extrabold uppercase leading-[0.92] tracking-tight text-brand-yellow [text-shadow:0_5px_0_rgba(42,16,48,0.35)] sm:text-[96px] lg:text-[116px]">
+              {COPY.landing.heroTitle}
+            </h1>
+            <p className="mt-4 font-display text-[22px] font-bold leading-7 text-brand-cream sm:text-[26px] sm:leading-8">
+              {/* Founder 2026-09-09: one sentence per line. The string stays
+                  whole in COPY (the shell and the e2e text match use it);
+                  only the line breaks are decided here. */}
+              {COPY.shell.tagline.split(/(?<=\.)\s+/).map((line) => (
+                <span key={line} className="block">
+                  {line}{' '}
+                </span>
+              ))}
+            </p>
+            <div className="mt-6 flex flex-wrap items-center gap-4">
+              {hero && (
+                <Link
+                  href={`/pools/${hero.pool}`}
+                  className="rounded-full bg-brand-yellow px-8 py-3.5 font-display text-[18px] font-bold uppercase tracking-wide text-game-base shadow-[0_6px_20px_rgba(42,16,48,0.35)] hover:bg-brand-cream"
                 >
-                  {COPY.landing.tryDials}
-                </a>
-              </div>
-              {/* v3 D2: visible without scrolling on mobile. */}
-              <p className="mt-4 text-[12px] tracking-[0.02em] text-brand-berry">
-                {COPY.pool.ageTerritoryNote}
-                {' · '}
-                <Link href="/rules" className="underline underline-offset-2">
-                  {COPY.rules.title}
+                  {COPY.pool.enter}
                 </Link>
-              </p>
+              )}
+              <a
+                href="#demo"
+                className="rounded-full border-2 border-brand-cream px-6 py-3 font-mono text-[13px] uppercase tracking-wide text-brand-cream hover:bg-brand-cream/10"
+              >
+                {COPY.landing.tryDials}
+              </a>
             </div>
-            <HeroClip
-              mp4="/motion/landing/hero_kettle.mp4"
-              webm="/motion/landing/hero_kettle.webm"
-              poster="/motion/landing/hero_kettle_poster.jpg"
-              className="w-full rounded-3xl shadow-[0_12px_40px_rgba(94,27,64,0.25)]"
-            />
-          </section>
+            {/* v3 D2: visible without scrolling on mobile (the hero is content-height there). */}
+            <p className="mt-5 text-[12px] tracking-[0.02em] text-brand-cream/90">
+              {COPY.pool.ageTerritoryNote}
+              {' · '}
+              <Link href="/rules" className="underline underline-offset-2">
+                {COPY.rules.title}
+              </Link>
+            </p>
+          </div>
+        </section>
+        <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-28 sm:px-6">
 
           {/* ——— The open pool: plum card, every number on the game layer. */}
           <section className="mt-10">
