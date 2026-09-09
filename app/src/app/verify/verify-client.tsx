@@ -15,6 +15,7 @@
  */
 
 import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { COPY } from '@/copy';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -25,7 +26,10 @@ const FIELD =
   'outline-none focus-visible:border-brand';
 
 export function VerifyClient() {
-  const [pool, setPool] = useState('');
+  // The pool page links here with ?pool=<address> (founder 2026-09-09: the
+  // address arrives filled in; the guide below says what to press next).
+  const params = useSearchParams();
+  const [pool, setPool] = useState(() => params.get('pool') ?? '');
   const [bundleUri, setBundleUri] = useState('');
   const [bundleText, setBundleText] = useState('');
   const [recordText, setRecordText] = useState('');
@@ -79,13 +83,36 @@ export function VerifyClient() {
         {COPY.verify.title}
       </h1>
       <p className="max-w-prose text-[15px] leading-6 text-ink-muted">{COPY.verify.explainer}</p>
+
+      <Card className="flex flex-col gap-3 p-5" data-testid="verify-guide">
+        <h2 className="font-display text-[20px] font-bold text-ink">{COPY.verify.howTitle}</h2>
+        <ol className="flex flex-col gap-3">
+          {COPY.verify.howSteps.map((step, i) => (
+            <li key={i} className="flex gap-3">
+              <span
+                aria-hidden
+                className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-brand font-mono text-[12px] font-bold text-(--color-base)"
+              >
+                {i + 1}
+              </span>
+              <p className="text-[14px] leading-6 text-ink">{step}</p>
+            </li>
+          ))}
+        </ol>
+        <p className="text-[13px] leading-5 text-ink-muted">{COPY.verify.howVerdict}</p>
+        <p className="text-[13px] leading-5 text-ink-muted">{COPY.verify.howWhen}</p>
+      </Card>
+
       <Card className="flex flex-col gap-3 p-4">
         <label className="flex flex-col gap-1.5 text-[13px] text-ink-muted">
-          Pool address (fetches the on-chain record)
+          <span>
+            <span className="mr-2 font-mono text-[11px] text-brand">1</span>
+            {COPY.verify.poolLabel}
+          </span>
           <input className={FIELD} value={pool} onChange={(e) => setPool(e.target.value)} />
         </label>
         <label className="flex flex-col gap-1.5 text-[13px] text-ink-muted">
-          Published bundle URI (the pool page links it)
+          {COPY.verify.bundleLabel}
           <input
             className={FIELD}
             value={bundleUri}
@@ -98,11 +125,12 @@ export function VerifyClient() {
           disabled={fetching || (!pool.trim() && !bundleUri.trim())}
           onClick={autoFetch}
         >
-          {fetching ? '…' : 'Fetch both'}
+          <span className="mr-2 font-mono text-[11px] text-brand">2</span>
+          {fetching ? '…' : COPY.verify.fetchBoth}
         </Button>
       </Card>
       <label className="flex flex-col gap-1.5 text-[13px] text-ink-muted">
-        Published reveal bundle (JSON)
+        {COPY.verify.bundleField}
         <textarea
           className={`h-32 ${FIELD}`}
           value={bundleText}
@@ -110,15 +138,16 @@ export function VerifyClient() {
         />
       </label>
       <label className="flex flex-col gap-1.5 text-[13px] text-ink-muted">
-        On-chain record (JSON — from the events, or the read API&apos;s /verify-record)
+        {COPY.verify.recordField}
         <textarea
           className={`h-32 ${FIELD}`}
           value={recordText}
           onChange={(e) => setRecordText(e.target.value)}
         />
       </label>
-      <Button size="lg" onClick={run}>
-        Recompute
+      <Button size="lg" onClick={run} disabled={!bundleText.trim() || !recordText.trim()}>
+        <span className="mr-2 font-mono text-[12px] opacity-70">3</span>
+        {COPY.verify.recompute}
       </Button>
       {error && (
         <p className="text-[14px] leading-5 text-price-down" role="alert">

@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { AppHeader } from '@/components/shell/app-header';
 import { TabBar } from '@/components/shell/tab-bar';
 import { VerifyClient } from './verify-client';
@@ -9,7 +10,9 @@ export default function VerifyPage() {
     <>
       <AppHeader />
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 pb-24">
-        <VerifyClient />
+        <Suspense>
+          <VerifyClient />
+        </Suspense>
       </main>
       <TabBar />
     </>

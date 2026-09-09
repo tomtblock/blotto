@@ -23,6 +23,7 @@
 
 import { useEffect, useReducer, useState } from 'react';
 import { COPY } from '@/copy';
+import * as revealCopy from '@/reveal/copy';
 import {
   INITIAL_REVEAL_STATE,
   revealReducer,
@@ -115,10 +116,16 @@ export function RevealHost({
           className="rounded-lg border px-8 py-10 text-center"
           style={{ borderColor: `var(${classColorToken(visual.class)})` }}
         >
-          <p className="text-2xl">{COPY.reveal.classNames[visual.class]}</p>
+          <p className="font-mono text-[11px] tracking-[0.14em] uppercase opacity-70">
+            {COPY.reveal.rarityNames[visual.class]} · {COPY.reveal.rarityOf(COPY.reveal.rarityCounts[visual.class])}
+          </p>
+          <p className="mt-1 text-2xl">{COPY.reveal.classNames[visual.class]}</p>
           <p className="mt-2 text-sm opacity-70">{COPY.reveal.cardSeat(visual.entryIndex)}</p>
           <p className="mt-1 font-mono text-xs opacity-50">{truncateAddress(visual.asset)}</p>
         </div>
+        <p className="max-w-prose text-center text-[13px] leading-5 opacity-70">
+          {revealCopy.EGG_NO_EFFECT}
+        </p>
         <button
           type="button"
           className="rounded bg-brand px-6 py-2 text-(--color-base)"
@@ -138,6 +145,9 @@ export function RevealHost({
           visual={visual as Parameters<typeof RevealStage>[0]['visual'] & { beat: RevealStageBeat }}
           onTap={() => dispatch({ kind: 'tap' })}
         />
+      )}
+      {(visual.beat === 'entry' || visual.beat === 'revealing' || visual.beat === 'strain') && (
+        <EggGuide confirming={visual.beat === 'strain'} />
       )}
       {visual.beat === 'failed' && (
         <div className="flex max-w-prose flex-col gap-3 text-center" aria-live="polite">
@@ -160,6 +170,34 @@ export function RevealHost({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * The words around the egg (founder 2026-09-09): what the tapping is, how
+ * the rarity works, and that it changes nothing about the competition.
+ * Class-NEUTRAL text — it names all five looks equally and never the one
+ * this entry drew, which the machine has not revealed yet.
+ */
+function EggGuide({ confirming }: { confirming: boolean }) {
+  return (
+    <section
+      className="animate-settle flex w-full max-w-md flex-col gap-3 px-2 text-center"
+      data-testid="egg-guide"
+      aria-live="polite"
+    >
+      <h2 className="font-display text-[22px] leading-7 font-bold text-ink">{revealCopy.EGG_TITLE}</h2>
+      <p className="text-[14px] leading-6 text-ink-muted">
+        {confirming ? revealCopy.EGG_CONFIRMING : revealCopy.EGG_WHAT}
+      </p>
+      <div className="rounded-2xl border border-line bg-raised px-4 py-3 text-left">
+        <p className="font-mono text-[11px] tracking-[0.14em] text-ink-muted uppercase">
+          {revealCopy.EGG_RARITY_TITLE}
+        </p>
+        <p className="mt-1 text-[13px] leading-5 text-ink">{revealCopy.EGG_RARITY}</p>
+        <p className="mt-2 text-[13px] leading-5 text-ink-muted">{revealCopy.EGG_NO_EFFECT}</p>
+      </div>
+    </section>
   );
 }
 

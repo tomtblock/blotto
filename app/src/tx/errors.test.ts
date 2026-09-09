@@ -61,12 +61,12 @@ describe("extractCustomProgramError", () => {
 
   it("survives BigInt payloads in the detail text (no [object Object])", () => {
     const failure = classifyRpcError(
-      { err: { InstructionError: [2n, { Custom: 6000n }] }, logs: [] },
+      { err: { InstructionError: [2n, { Custom: 6001n }] }, logs: [] },
       false,
     );
     expect(failure.kind).toBe("program-rejected");
     expect(failure.detail).not.toContain("[object Object]");
-    expect(failure.detail).toContain("6000");
+    expect(failure.detail).toContain("6001");
   });
 
   it("reads a JSON-embedded Custom code from wrapped contexts", () => {
@@ -113,9 +113,31 @@ describe("classifySigningError", () => {
 });
 
 describe("classifyRpcError", () => {
-  it("maps a known program error code to program-rejected", () => {
+  it("names a pool that left Open (PoolNotOpen, 6000) as pool-closed", () => {
     const failure = classifyRpcError(
       { err: { InstructionError: [2, { Custom: 6000 }] }, logs: [] },
+      false,
+    );
+    expect(failure.kind).toBe("pool-closed");
+    expect(failure.message).toContain("no longer taking entries");
+  });
+
+  it("names a second entry from the same wallet (the entry account 'already in use') as already-entered", () => {
+    // The runtime's own text for `init` on an existing PDA — founder 2026-09-09:
+    // this read as "the network request did not go through".
+    const failure = classifyRpcError(
+      new Error(
+        "Transaction simulation failed: Error processing Instruction 1: custom program error: 0x0 — Allocate: account Address { address: 7xK…, base: None } already in use",
+      ),
+      false,
+    );
+    expect(failure.kind).toBe("already-entered");
+    expect(failure.message).toContain("already entered");
+  });
+
+  it("maps a known program error code to program-rejected", () => {
+    const failure = classifyRpcError(
+      { err: { InstructionError: [2, { Custom: 6001 }] }, logs: [] },
       false,
     );
     expect(failure.kind).toBe("program-rejected");
