@@ -21,12 +21,17 @@
 import type { Allocation } from '@/battle/allocation';
 import { palette } from '@/design/tokens';
 import { blotScene, UNIT } from './blotGeometry';
+import { REST_EXPRESSION, brows, cheeks, visorPath } from './expression';
 
 export const STILL_SIZE = 1024;
 
 /** The standalone SVG document for one locked allocation. */
 export function blotStillSvg(allocation: Allocation, size: number = STILL_SIZE): string {
   const s = blotScene(allocation);
+  // The still wears the REST face (expression.ts): same allocation, same face.
+  const face = REST_EXPRESSION;
+  const browPair = brows(s.visor, face);
+  const cheekPair = cheeks(s.visor, face);
   const legHL = Math.max(0, s.legs.bottom - s.legs.left.top);
   const legHR = Math.max(0, s.legs.bottom - s.legs.right.top);
   const f = (v: number) => v.toFixed(2);
@@ -51,6 +56,12 @@ export function blotStillSvg(allocation: Allocation, size: number = STILL_SIZE):
     `<stop offset="0%" stop-color="${palette.brandYellow}"/>` +
     `<stop offset="100%" stop-color="${palette.blotShade}"/>` +
     `</linearGradient>` +
+    `<linearGradient id="sh" x1="0%" y1="0%" x2="100%" y2="100%">` +
+    `<stop offset="0%" stop-color="${palette.brandCream}" stop-opacity="0.28"/>` +
+    `<stop offset="38%" stop-color="${palette.brandCream}" stop-opacity="0.06"/>` +
+    `<stop offset="60%" stop-color="${palette.brandCream}" stop-opacity="0"/>` +
+    `<stop offset="100%" stop-color="${palette.blotAmbient}" stop-opacity="0.12"/>` +
+    `</linearGradient>` +
     `<filter id="sb" filterUnits="userSpaceOnUse" x="-200" y="${UNIT - 300}" width="${UNIT + 400}" height="500">` +
     `<feGaussianBlur stdDeviation="22"/></filter>` +
     `<filter id="hb" filterUnits="userSpaceOnUse" x="200" y="200" width="600" height="600">` +
@@ -72,11 +83,17 @@ export function blotStillSvg(allocation: Allocation, size: number = STILL_SIZE):
     `<path d="${s.bodyPath}" fill="url(#b)"/>` +
     `<path d="${s.bodyPath}" fill="url(#ao)"/>` +
     `<path d="${s.bodyPath}" fill="none" stroke="url(#r)" stroke-width="10" stroke-linejoin="round"/>` +
-    `<path d="${s.seamPath}" fill="none" stroke="${palette.blotSeam}" stroke-width="3" opacity="0.8"/>` +
+    `<path d="${s.bodyPath}" fill="url(#sh)"/>` +
+    `<path d="${s.seamPath}" fill="none" stroke="${palette.blotSeam}" stroke-width="4" opacity="0.85"/>` +
+    `<path d="${s.seamPath}" fill="none" stroke="${palette.blotRim}" stroke-width="2" stroke-dasharray="10 12" opacity="0.7"/>` +
     `<circle cx="${f(s.heart.cx)}" cy="${f(s.heart.cy)}" r="${f(s.heart.r * 1.35)}" fill="${palette.blotHeart}" opacity="0.45" filter="url(#hb)"/>` +
     `<circle cx="${f(s.heart.cx)}" cy="${f(s.heart.cy)}" r="${f(s.heart.r)}" fill="${palette.blotHeart}" opacity="0.6"/>` +
-    `<rect x="${f(s.visor.cx - s.visor.width / 2)}" y="${f(s.visor.cy - s.visor.height / 2)}" width="${f(s.visor.width)}" height="${s.visor.height}" rx="${f(s.visor.rx)}" fill="${palette.blotVisor}"/>` +
+    `<ellipse cx="${f(cheekPair.left.cx)}" cy="${f(cheekPair.left.cy)}" rx="${f(cheekPair.left.rx)}" ry="${f(cheekPair.left.ry)}" fill="${palette.blotHeart}" opacity="${cheekPair.left.opacity.toFixed(2)}" filter="url(#hb)"/>` +
+    `<ellipse cx="${f(cheekPair.right.cx)}" cy="${f(cheekPair.right.cy)}" rx="${f(cheekPair.right.rx)}" ry="${f(cheekPair.right.ry)}" fill="${palette.blotHeart}" opacity="${cheekPair.right.opacity.toFixed(2)}" filter="url(#hb)"/>` +
+    `<path d="${visorPath(s.visor, face)}" fill="${palette.blotVisor}"/>` +
     `<rect x="${f(s.visor.cx - s.visor.width / 2 + s.visor.rx)}" y="${f(s.visor.cy - s.visor.height / 2 + 8)}" width="${f(Math.max(0, s.visor.width - s.visor.rx * 2))}" height="6" rx="3" fill="${palette.brandCream}" opacity="0.45"/>` +
+    `<ellipse cx="${f(s.visor.cx - s.visor.width * 0.3)}" cy="${f(s.visor.cy - s.visor.height * 0.08)}" rx="${f(Math.max(8, s.visor.height * 0.16))}" ry="${f(Math.max(6, s.visor.height * 0.11))}" fill="${palette.brandCream}" opacity="0.85"/>` +
+    [browPair.left, browPair.right].map((b) => `<rect x="${f(b.x - b.length / 2)}" y="${f(b.y - b.thickness / 2)}" width="${f(b.length)}" height="${f(b.thickness)}" rx="${f(b.thickness / 2)}" fill="${palette.blotVisor}" opacity="0.92" transform="rotate(${b.angle.toFixed(2)} ${f(b.x)} ${f(b.y)})"/>`).join('') +
     `<ellipse cx="${f(s.specular.cx)}" cy="${f(s.specular.cy)}" rx="${s.specular.rx}" ry="${s.specular.ry}" fill="${palette.brandCream}" opacity="0.32" filter="url(#pb)"/>` +
     `</g>` +
     `</svg>`

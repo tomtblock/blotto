@@ -1,0 +1,99 @@
+/* The rack of seven under the machine (seven-tiles.tsx). Tokens only. */
+.seven-tiles {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 10px 8px 8px;
+  list-style: none;
+  border-radius: 16px;
+  background: linear-gradient(180deg, var(--color-game-base), color-mix(in oklab, var(--color-game-base), black 14%));
+  box-shadow:
+    0 0 0 2px rgba(255, 122, 200, 0.45),
+    inset 0 2px 0 rgba(255, 246, 236, 0.06);
+}
+.seven-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.seven-tile-still {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 10px;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--color-game-raised), black 25%);
+  box-shadow: inset 0 0 0 1px rgba(255, 246, 236, 0.08);
+  transition: box-shadow 200ms ease-out;
+}
+.seven-tile-still img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.seven-tile.is-locked .seven-tile-still {
+  background: var(--color-brand-cream);
+  box-shadow:
+    0 0 0 2px var(--color-brand-pink),
+    0 0 12px 2px rgba(255, 122, 200, 0.45);
+}
+.seven-tile-number {
+  font-family: var(--font-display, inherit);
+  font-weight: 800;
+  font-size: 18px;
+  color: var(--color-game-ink-muted);
+  opacity: 0.6;
+}
+/* The five numbers under a tile: three on the first line, two on the
+   second at phone widths (a 7-column rack leaves ~44px per tile), one line
+   from 640px up. Always the fixed stat order. */
+.seven-tile-stats {
+  font-family: var(--font-mono, monospace);
+  font-size: 9px;
+  letter-spacing: 0.01em;
+  line-height: 1.15;
+  color: var(--color-game-ink-muted);
+  text-align: center;
+  max-width: 100%;
+  min-height: 2.3em;
+  word-spacing: 0.1em;
+}
+@media (min-width: 640px) {
+  .seven-tiles { gap: 10px; padding: 14px 12px 12px; }
+  .seven-tile-stats { font-size: 11px; min-height: 1.15em; }
+}
+
+/* A tile's locked face mounts when its battle locks and settles in from the
+   chute once; the crescendo lifts all seven. */
+.seven-tile.is-locked .seven-tile-still {
+  animation: seven-tile-settle 520ms var(--ease-juice, cubic-bezier(0.2, 0.9, 0.3, 1.2)) 1 both;
+}
+.seven-tiles.is-crescendo .seven-tile.is-locked .seven-tile-still {
+  animation: seven-tile-lift 700ms var(--ease-juice, ease-out) 1 both;
+}
+.seven-tiles.is-crescendo .seven-tile:nth-child(2) .seven-tile-still { animation-delay: 60ms; }
+.seven-tiles.is-crescendo .seven-tile:nth-child(3) .seven-tile-still { animation-delay: 120ms; }
+.seven-tiles.is-crescendo .seven-tile:nth-child(4) .seven-tile-still { animation-delay: 180ms; }
+.seven-tiles.is-crescendo .seven-tile:nth-child(5) .seven-tile-still { animation-delay: 240ms; }
+.seven-tiles.is-crescendo .seven-tile:nth-child(6) .seven-tile-still { animation-delay: 300ms; }
+.seven-tiles.is-crescendo .seven-tile:nth-child(7) .seven-tile-still { animation-delay: 360ms; }
+@keyframes seven-tile-settle {
+  0% { transform: translateY(-18px) scale(0.7); opacity: 0; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+@keyframes seven-tile-lift {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.12) translateY(-4px); }
+  100% { transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .seven-tile.is-locked .seven-tile-still,
+  .seven-tiles.is-crescendo .seven-tile.is-locked .seven-tile-still {
+    animation: none;
+  }
+}

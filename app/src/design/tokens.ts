@@ -115,6 +115,12 @@ export const palette = {
   /* Dials, hardware, object details — moved from the brand layer in the
    * candy revision (2026-09-06): hardware belongs with the controls. */
   gameSlate: '#4b4f5c',
+  /* Dial temperature (founder 2026-09-09): a stat being RAISED heats its
+   * dial toward this red; a stat being LOWERED (the other four giving way)
+   * cools toward this blue. Feedback pigments only — they never carry a
+   * number, never paint a surface, and decay to the plain dial in ~1 s. */
+  dialHot: '#ff4b3a',
+  dialCold: '#59c4ff',
 
   /* Class ladder placeholders (founder-owned, PID D2). */
   class0: '#9e9ea7',
