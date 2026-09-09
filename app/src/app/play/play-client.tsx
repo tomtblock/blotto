@@ -92,11 +92,23 @@ function PendingPanel({ label }: { label: string }) {
   );
 }
 
-export function PlayClient() {
+/** Ceiling on the browser's fallback read of the pool. */
+const POOL_LOAD_TIMEOUT_MS = 8_000;
+
+/** The server's read of the pool: `null` when the server could not read. */
+export type InitialPool = { pool: PoolSummary | null } | null;
+
+export function PlayClient({ initial = null }: { initial?: InitialPool }) {
   const params = useSearchParams();
   const poolId = params.get('pool');
   const auth = useAuth();
-  const [pool, setPool] = useState<PoolSummary | null>(null);
+  const [pool, setPool] = useState<PoolSummary | null>(initial?.pool ?? null);
+  // 'loading' | 'missing' (the indexer has no such pool) | 'failed' (the
+  // read did not complete — cross-origin refusal, timeout, outage).
+  const [poolLoad, setPoolLoad] = useState<'loading' | 'missing' | 'failed' | 'ok'>(
+    initial ? (initial.pool ? 'ok' : 'missing') : 'loading'
+  );
+  const [poolRun, setPoolRun] = useState(0);
   // D-B3: the territory pre-flight. Nothing that can take money renders
   // until the verdict is an explicit 'allowed' — fail-closed by default.
   const [geo, setGeo] = useState<GeoGateState>('checking');
@@ -116,9 +128,28 @@ export function PlayClient() {
   const rpc = useMemo(() => makeTxRpc(rpcUrl()), []);
 
   useEffect(() => {
-    if (!poolId) return;
-    indexerApi().getPool(poolId).then(setPool);
-  }, [poolId]);
+    if (!poolId || pool || poolLoad !== 'loading') return;
+    let cancelled = false;
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('pool: timeout')), POOL_LOAD_TIMEOUT_MS)
+    );
+    Promise.race([indexerApi().getPool(poolId), timeout])
+      .then((p) => {
+        if (cancelled) return;
+        if (p) {
+          setPool(p);
+          setPoolLoad('ok');
+        } else {
+          setPoolLoad('missing');
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setPoolLoad('failed');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [poolId, pool, poolLoad, poolRun]);
 
   useEffect(() => {
     let cancelled = false;
@@ -209,7 +240,36 @@ export function PlayClient() {
       </StatePanel>
     );
   }
-  if (!pool) return <PendingPanel label="Loading the pool" />;
+  if (!pool) {
+    if (poolLoad === 'missing') {
+      return (
+        <StatePanel title={COPY.gate.poolMissingTitle}>
+          <p>{COPY.gate.poolMissing}</p>
+          <Link href="/" className="mt-1 text-brand underline underline-offset-2">
+            Back to Play
+          </Link>
+        </StatePanel>
+      );
+    }
+    if (poolLoad === 'failed') {
+      return (
+        <StatePanel title={COPY.gate.poolLoadFailedTitle}>
+          <p>{COPY.gate.poolLoadFailed}</p>
+          <Button
+            intent="quiet"
+            className="self-start"
+            onClick={() => {
+              setPoolLoad('loading');
+              setPoolRun((n) => n + 1);
+            }}
+          >
+            {COPY.gate.poolLoadRetry}
+          </Button>
+        </StatePanel>
+      );
+    }
+    return <PendingPanel label="Loading the pool" />;
+  }
 
   // D-B3: territory gate ahead of everything, including the attestation.
   if (geo === 'checking') return <PendingPanel label="Checking availability" />;

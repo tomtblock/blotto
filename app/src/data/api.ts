@@ -23,11 +23,22 @@ import type {
 } from './types';
 import { FIXTURE_API } from './fixture';
 
+/**
+ * Ceiling on one read of the indexer, server or browser. Without it a
+ * hung indexer hangs the server render of every page that reads it
+ * (founder 2026-09-09: the entry page "taking far too long"); with it the
+ * read throws, `live` degrades the page and the browser fallback takes over.
+ */
+const READ_TIMEOUT_MS = 8_000;
+
 class HttpIndexerApi implements IndexerApi {
   constructor(private readonly base: string) {}
 
   private async get<T>(path: string): Promise<T | null> {
-    const res = await fetch(`${this.base}${path}`, { cache: 'no-store' });
+    const res = await fetch(`${this.base}${path}`, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(READ_TIMEOUT_MS),
+    });
     if (res.status === 404) return null;
     if (!res.ok) throw new Error(`indexer read API ${path}: ${res.status}`);
     return (await res.json()) as T;

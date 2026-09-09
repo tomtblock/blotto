@@ -142,6 +142,13 @@ export const COPY = {
     slowHold: 'This is taking longer than usual. If it does not move on, reload the page and try again.',
     territoryRecheckNote: 'If your connection dropped during the check, this can show by mistake.',
     territoryRecheck: 'Check again',
+    // The pool read's two failure shapes, each with a way on. PHASE-N-REVIEW.
+    poolMissingTitle: 'That pool is not here',
+    poolMissing: 'No tournament with this address is listed. It may have closed, or the link may be old.',
+    poolLoadFailedTitle: 'The pool could not be loaded',
+    poolLoadFailed:
+      'The tournament data did not arrive. Try again; if it keeps happening, tell us the web address you opened the site from.',
+    poolLoadRetry: 'Try again',
     ageConfirm: 'Confirm and continue',
     gateTitle: 'Before you enter',
     territoryBlocked:
