@@ -10,13 +10,15 @@
  * issuance; the device cache only decides whether to SHOW the clickwrap.
  */
 
-import { attestationMessage } from '@blotto/shared/attestation-message';
+import { attestationMessage, type TermsEdition } from '@blotto/shared/attestation-message';
 import termsConfig from '@config/terms.json';
 
-export { attestationMessage };
+export { attestationMessage, type TermsEdition };
 
+/** The founder-owned current terms edition (config/terms.json): version + date. */
+export const TERMS: TermsEdition = { version: termsConfig.version, updated: termsConfig.updated };
 /** The founder-owned current terms version (config/terms.json). */
-export const TERMS_VERSION: number = termsConfig.version;
+export const TERMS_VERSION: number = TERMS.version;
 
 const cacheKey = (wallet: string, version: number) => `blotto:attested:v${version}:${wallet}`;
 
@@ -49,23 +51,23 @@ export async function submitAttestation(
   entryApiBase: string | undefined,
   signer: AttestationSigner | undefined,
   wallet: string,
-  version: number = TERMS_VERSION,
+  terms: TermsEdition = TERMS,
   fetchImpl: typeof fetch = fetch
 ): Promise<boolean> {
   if (!entryApiBase || !signer?.signMessage) return false;
   try {
-    const signature = await signer.signMessage(attestationMessage(wallet, version));
+    const signature = await signer.signMessage(attestationMessage(wallet, terms));
     const res = await fetchImpl(`${entryApiBase}/attestation`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         wallet,
-        termsVersion: version,
+        termsVersion: terms.version,
         signature: Buffer.from(signature).toString('base64'),
       }),
     });
     if (res.status !== 204) return false;
-    rememberLocalAttestation(wallet, version);
+    rememberLocalAttestation(wallet, terms.version);
     return true;
   } catch {
     return false;

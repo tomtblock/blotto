@@ -249,7 +249,7 @@ describe('the geo decision is named in the log, never in the answer', () => {
   const deps = (lookup: () => Promise<{ country: string; vpnOrProxy: boolean }>) =>
     ({
       geo: { lookup },
-      config: { territories: TERRITORIES, termsVersion: 1, kycTier: 0 },
+      config: { territories: TERRITORIES, termsVersion: 1, termsUpdated: '2026-09-06', kycTier: 0 },
     }) as never;
 
   it('names a LOOKUP FAILURE distinctly from a territory decision', async () => {

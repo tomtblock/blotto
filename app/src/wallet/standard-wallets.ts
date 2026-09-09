@@ -61,7 +61,21 @@ export function featureOf<T>(wallet: Wallet, name: string): T | null {
   return f ? (f as T) : null;
 }
 
-/** Display rows for the sign-in surface: external Solana wallets, one per id. */
+/**
+ * The order the sign-in surface lists wallets in: the wallets the product
+ * is built around first (founder: Phantom is the one that matters), then
+ * everything else in the order the browser registered it. A wallet that
+ * merely happens to register first — a multi-chain extension that also
+ * speaks Solana — must not sit above Phantom.
+ */
+const PREFERRED_ORDER = ["phantom", "solflare", "backpack"];
+
+function rank(id: string): number {
+  const i = PREFERRED_ORDER.indexOf(id);
+  return i === -1 ? PREFERRED_ORDER.length : i;
+}
+
+/** Display rows for the sign-in surface: external Solana wallets, one per id, Phantom first. */
 export function toDetected(wallets: readonly Wallet[]): DetectedWallet[] {
   const seen = new Set<string>();
   const out: DetectedWallet[] = [];
@@ -72,7 +86,11 @@ export function toDetected(wallets: readonly Wallet[]): DetectedWallet[] {
     seen.add(id);
     out.push({ id, name: w.name, icon: w.icon });
   }
-  return out;
+  // Stable sort: equal ranks keep registration order.
+  return out
+    .map((row, i) => ({ row, i }))
+    .sort((a, b) => rank(a.row.id) - rank(b.row.id) || a.i - b.i)
+    .map(({ row }) => row);
 }
 
 export function findStandardWallet(wallets: readonly Wallet[], id: string): Wallet | null {
@@ -130,8 +148,27 @@ export interface SiwsDeps {
     walletClientType?: string;
     connectorType?: string;
   }): Promise<unknown>;
-  /** Ed25519 signature bytes → the base58 text the provider's endpoint takes. */
+  /**
+   * Ed25519 signature bytes → the text the provider's endpoint takes. The
+   * bridge supplies BASE64: that is what the provider's own wallet modal
+   * sends for a plain-text Solana sign-in (read from the installed SDK,
+   * 2026-09-09), and a base58 string — what this seam sent until then — is
+   * refused by the provider as an unverifiable signature, which surfaced as
+   * "the wallet signed in, but the sign-in could not be completed".
+   */
   encodeSignature(bytes: Uint8Array): string;
+}
+
+/**
+ * Ed25519 signature bytes → base64, the form the provider's SIWS endpoint
+ * verifies for a plain-text message (its own modal: `base64.encode` from
+ * @scure/base). Written over btoa so it runs in the browser bundle
+ * without a Buffer polyfill.
+ */
+export function signatureToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary);
 }
 
 export type SiwsOutcome =

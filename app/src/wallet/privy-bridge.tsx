@@ -38,11 +38,7 @@ import {
   useSignTransaction,
   useWallets,
 } from "@privy-io/react-auth/solana";
-import {
-  createSolanaRpc,
-  createSolanaRpcSubscriptions,
-  getBase58Decoder,
-} from "@solana/kit";
+import { createSolanaRpc, createSolanaRpcSubscriptions } from "@solana/kit";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { COPY } from "@/copy";
 import type { AddFundsOptions, Auth, AuthFailure, SocialProvider } from "./types";
@@ -50,12 +46,14 @@ import {
   featureOf,
   findStandardWallet,
   isEmbeddedName,
+  signatureToBase64,
   siwsSignIn,
   toDetected,
   useStandardWalletList,
   type SignMessageFeature,
   type SignTransactionFeature,
 } from "./standard-wallets";
+import { pickActiveWallet } from "./active-wallet";
 import type { TxSigner } from "@/tx/types";
 import { rpcUrl } from "@/chain/rpc";
 import { SOLANA_CHAIN } from "@/chain/cluster";
@@ -119,11 +117,17 @@ declare global {
   }
 }
 
+/** One line of the provider's own error text, for the sign-in page's detail row. */
+function shortDetail(detail: string): string {
+  const line = detail.replace(/^Error:\s*/, "").split("\n")[0] ?? detail;
+  return line.length > 160 ? `${line.slice(0, 157)}…` : line;
+}
+
 function PrivyAdapter({ onAuth }: { onAuth: (auth: Auth) => void }) {
   const { ready, authenticated, user, logout } = usePrivy();
   const [lastError, setLastError] = useState<AuthFailure | null>(null);
-  const fail = useCallback((code: string) => {
-    setLastError({ code, at: Date.now() });
+  const fail = useCallback((code: string, detail?: string) => {
+    setLastError(detail ? { code, at: Date.now(), detail } : { code, at: Date.now() });
   }, []);
   const clearError = useCallback(() => setLastError(null), []);
 
@@ -199,9 +203,13 @@ function PrivyAdapter({ onAuth }: { onAuth: (auth: Auth) => void }) {
       const outcome = await siwsSignIn(w, {
         generateSiwsMessage,
         loginWithSiws,
-        // Privy's SIWS endpoint takes the Ed25519 signature base58-encoded,
-        // the same form its own modal sends.
-        encodeSignature: (bytes) => getBase58Decoder().decode(bytes),
+        // INCIDENT 2026-09-09 (founder: "the wallet signed in, but the
+        // sign-in could not be completed"): this sent the signature BASE58,
+        // and the provider refused every one. The provider's own modal
+        // encodes a plain-text Solana sign-in signature as BASE64 (its
+        // SiwsFlow: `base64.encode(signature)` from @scure/base, read from
+        // the installed SDK), so that is what its endpoint verifies.
+        encodeSignature: signatureToBase64,
       });
       if (outcome.ok) {
         setLastError(null);
@@ -213,17 +221,32 @@ function PrivyAdapter({ onAuth }: { onAuth: (auth: Auth) => void }) {
         return;
       }
       if (outcome.detail) console.error("[auth] wallet sign-in failed:", outcome.detail);
-      fail(outcome.code);
+      fail(outcome.code, outcome.detail ? shortDetail(outcome.detail) : undefined);
     },
     [standardWallets, login, generateSiwsMessage, loginWithSiws, fail],
   );
 
   const value = useMemo<Auth>(() => {
-    const linkedSolana = user?.linkedAccounts.find(
-      (a) => a.type === "wallet" && a.chainType === "solana",
-    );
-    const linkedAddress =
-      linkedSolana && "address" in linkedSolana ? linkedSolana.address : null;
+    /*
+     * The wallets that belong to THIS account, in the provider's own record:
+     * the embedded wallet made at a social sign-in, a wallet the player
+     * signed in with, a wallet they attached on the wallet screen. This set
+     * — not "whatever is connected in the browser" — decides which wallet
+     * enters and is paid.
+     *
+     * INCIDENT 2026-09-09 (founder: "it will connect me to a MetaMask
+     * wallet"): a Solana-enabled MetaMask exposes its account to the page at
+     * the wallet-standard level without the player choosing it here, and
+     * the previous default — "the first external signer" — picked it up
+     * ahead of the Phantom wallet the player had actually signed in with.
+     * The attestation prompt then went to MetaMask, which could not sign it.
+     */
+    const linkedAddresses = new Set<string>();
+    for (const a of user?.linkedAccounts ?? []) {
+      if (a.type === "wallet" && a.chainType === "solana" && "address" in a) {
+        linkedAddresses.add(a.address);
+      }
+    }
 
     // Each wallet Privy reports as connected, as a TxSigner (10.B Step 2 tx
     // seam): one signing interface for both paths — the embedded wallet
@@ -289,6 +312,10 @@ function PrivyAdapter({ onAuth }: { onAuth: (auth: Auth) => void }) {
       if (!signTx) continue;
       for (const account of w.accounts) {
         if (known.has(account.address)) continue;
+        // Only an account this player's provider record names. An account
+        // some other extension merely exposes to the page is not theirs to
+        // enter with, and must never become the active wallet by accident.
+        if (!linkedAddresses.has(account.address)) continue;
         known.add(account.address);
         standardSigners.push({
           address: account.address,
@@ -325,11 +352,8 @@ function PrivyAdapter({ onAuth }: { onAuth: (auth: Auth) => void }) {
      * is following the player's own action, not a surprise. The picker on the
      * wallet screen lets them switch back, and the choice persists.
      */
-    const external = signers.find((s) => s.kind === "external");
-    const walletAddress =
-      chosen && signers.some((s) => s.address === chosen)
-        ? chosen
-        : (external?.address ?? signers[0]?.address ?? linkedAddress ?? null);
+    // The rule and its reasons live in active-wallet.ts, unit-pinned.
+    const walletAddress = pickActiveWallet({ signers, linked: linkedAddresses, chosen });
 
     const hasEmbedded = signers.some((s) => s.kind === "embedded");
 

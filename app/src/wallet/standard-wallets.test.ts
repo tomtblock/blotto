@@ -2,8 +2,10 @@
  * The provider-free half of wallet sign-in, against a fake wallet-standard
  * wallet: which wallets the sign-in surface lists, and the exact sequence a
  * one-tap sign-in performs — connect, ask the provider for its message, have
- * the wallet sign THOSE bytes, hand the provider the base58 signature under
+ * the wallet sign THOSE bytes, hand the provider the ENCODED signature under
  * the wallet's id — with every failure returned as an outcome, never thrown.
+ * (The encoding itself is the bridge's: base64, as the provider's own modal
+ * sends — see the bridge's `encodeSignature` and its test.)
  *
  * This is the evidence the sandboxed browser cannot give: it cannot reach
  * the provider's API, so the sequence is proven here with the provider's two
@@ -15,6 +17,7 @@ import type { Wallet, WalletAccount } from "@wallet-standard/base";
 import {
   findStandardWallet,
   isExternalSolanaWallet,
+  signatureToBase64,
   siwsSignIn,
   toDetected,
   walletId,
@@ -79,7 +82,7 @@ function deps(over: Partial<SiwsDeps> = {}): SiwsDeps & { calls: Record<string, 
       calls.login.push(i);
       return { id: "did:privy:test" };
     },
-    encodeSignature: (b) => `b58(${b.length})`,
+    encodeSignature: (b) => `b64(${b.length})`,
     ...over,
   };
 }
@@ -96,6 +99,18 @@ describe("which wallets the sign-in surface lists", () => {
     expect(rows[1]).toMatchObject({ name: "Ctrl Wallet" });
   });
 
+  it("lists Phantom first even when a multi-chain wallet registered before it", () => {
+    // Founder 2026-09-09: MetaMask (Solana-enabled) registered ahead of Phantom
+    // and sat above it on the sign-in page.
+    const rows = toDetected([
+      fakeWallet({ name: "MetaMask", chains: ["eip155:1", "solana:mainnet"] }),
+      fakeWallet({ name: "Ctrl Wallet", chains: ["solana:mainnet"] }),
+      fakeWallet({ name: "Phantom" }),
+      fakeWallet({ name: "Solflare" }),
+    ]);
+    expect(rows.map((r) => r.id)).toEqual(["phantom", "solflare", "metamask", "ctrl-wallet"]);
+  });
+
   it("lists one row per wallet id even if a wallet registers twice", () => {
     expect(toDetected([fakeWallet({}), fakeWallet({})])).toHaveLength(1);
   });
@@ -110,7 +125,7 @@ describe("which wallets the sign-in surface lists", () => {
 });
 
 describe("siwsSignIn", () => {
-  it("connects, signs the provider's message bytes, and logs in with a base58 signature under the wallet's id", async () => {
+  it("connects, signs the provider's message bytes, and logs in with the encoded signature under the wallet's id", async () => {
     const record = { signed: [] as Uint8Array[], connects: 0 };
     const d = deps();
     const out = await siwsSignIn(fakeWallet({ features: fullFeatures(record) }), d);
@@ -122,7 +137,7 @@ describe("siwsSignIn", () => {
     expect(new TextDecoder().decode(record.signed[0])).toContain(ADDRESS);
     expect(d.calls.login).toEqual([
       {
-        signature: "b58(64)",
+        signature: "b64(64)",
         message: expect.stringContaining("Nonce: abc"),
         walletClientType: "phantom",
         connectorType: "injected",
@@ -183,5 +198,13 @@ describe("siwsSignIn", () => {
     expect(out).toMatchObject({ ok: false, code: "blotto_wallet_signin_failed" });
     expect(record.signed).toHaveLength(0);
     expect(d.calls.login).toHaveLength(0);
+  });
+});
+
+describe("signatureToBase64", () => {
+  it("encodes a 64-byte Ed25519 signature exactly as base64 (the provider's own modal form)", () => {
+    const sig = new Uint8Array(64).map((_, i) => (i * 37 + 11) & 0xff);
+    expect(signatureToBase64(sig)).toBe(Buffer.from(sig).toString("base64"));
+    expect(signatureToBase64(sig)).toHaveLength(88);
   });
 });

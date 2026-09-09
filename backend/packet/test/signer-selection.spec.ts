@@ -115,7 +115,7 @@ describe('a failed issuance is generic to the caller, diagnosable by the operato
             }),
             put: async () => undefined,
           },
-          config: { territories: TERRITORIES, termsVersion: 1, kycTier: 0 },
+          config: { territories: TERRITORIES, termsVersion: 1, termsUpdated: '2026-09-06', kycTier: 0 },
           now: () => 0n,
           nonce: () => 0n,
           signer: {

@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import nacl from 'tweetnacl';
 import { attestationMessage as serviceMessage } from '@blotto/packet/attestations';
 import {
+  TERMS,
   TERMS_VERSION,
   attestationMessage,
   hasLocalAttestation,
@@ -21,15 +22,33 @@ const shim = new Map<string, string>();
   setItem: (k: string, v: string) => void shim.set(k, v),
 };
 
+const T1 = { version: 1, updated: '2026-08-27' };
+const T2 = { version: 2, updated: '2026-09-06' };
+const T3 = { version: 3, updated: '2026-10-01' };
+
 describe('the attestation message', () => {
   it('is byte-identical between the app and the packet service', () => {
-    expect(attestationMessage(WALLET, 3)).toEqual(serviceMessage(WALLET, 3));
+    expect(attestationMessage(WALLET, T3)).toEqual(serviceMessage(WALLET, T3));
   });
-  it('binds the wallet and the version into the signed text', () => {
-    const text = new TextDecoder().decode(attestationMessage(WALLET, 2));
+  it('binds the wallet and the terms DATE into the signed text, and never says "version"', () => {
+    const text = new TextDecoder().decode(attestationMessage(WALLET, T2));
     expect(text).toContain('18 or older');
-    expect(text).toContain('version 2');
+    expect(text).toContain('terms dated 6 September 2026');
     expect(text).toContain(WALLET);
+    // Founder 2026-09-09: the statement a wallet shows must not talk about
+    // version numbers. The edition is bound by its date instead.
+    expect(text.toLowerCase()).not.toContain('version');
+    expect(text).not.toContain('v2');
+  });
+  it('a new edition changes the bytes even when the wording is otherwise identical', () => {
+    expect(attestationMessage(WALLET, T2)).not.toEqual(attestationMessage(WALLET, T3));
+  });
+  it('the current edition in config carries a date the message can name', () => {
+    expect(TERMS.version).toBe(TERMS_VERSION);
+    expect(() => attestationMessage(WALLET, TERMS)).not.toThrow();
+  });
+  it('refuses a malformed date rather than signing "undefined"', () => {
+    expect(() => attestationMessage(WALLET, { version: 2, updated: 'soon' })).toThrow();
   });
 });
 
@@ -42,18 +61,18 @@ describe('submitAttestation (fail-closed)', () => {
     (async () => ({ status, ok: status < 300, json: async () => ({}) })) as never;
 
   it('true only on a 204 from the entry service', async () => {
-    expect(await submitAttestation('https://e', signer, WALLET, 1, answering(204))).toBe(true);
+    expect(await submitAttestation('https://e', signer, WALLET, T1, answering(204))).toBe(true);
     expect(hasLocalAttestation(WALLET, 1)).toBe(true);
   });
 
   it('false without an API, without signMessage, on refusal, and on network failure', async () => {
-    expect(await submitAttestation(undefined, signer, WALLET, 1, answering(204))).toBe(false);
-    expect(await submitAttestation('https://e', {}, WALLET, 1, answering(204))).toBe(false);
-    expect(await submitAttestation('https://e', signer, WALLET, 1, answering(403))).toBe(false);
+    expect(await submitAttestation(undefined, signer, WALLET, T1, answering(204))).toBe(false);
+    expect(await submitAttestation('https://e', {}, WALLET, T1, answering(204))).toBe(false);
+    expect(await submitAttestation('https://e', signer, WALLET, T1, answering(403))).toBe(false);
     const failing: typeof fetch = (async () => {
       throw new Error('offline');
     }) as never;
-    expect(await submitAttestation('https://e', signer, WALLET, 1, failing)).toBe(false);
+    expect(await submitAttestation('https://e', signer, WALLET, T1, failing)).toBe(false);
   });
 
   it('the device cache is keyed by version — a bump re-prompts', () => {

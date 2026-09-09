@@ -41,6 +41,8 @@ export interface PacketServiceConfig {
   kycTier: number;
   /** Current terms version from `config/terms.json` (D-B4). */
   termsVersion: number;
+  /** The date of that edition (`updated` in the same file) — named in the signed statement. */
+  termsUpdated: string;
 }
 
 export interface PacketRequest {

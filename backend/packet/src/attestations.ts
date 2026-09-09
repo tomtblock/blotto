@@ -17,10 +17,10 @@
 
 import nacl from 'tweetnacl';
 import { readFileSync } from 'fs';
-import { attestationMessage } from '../../_shared/src/attestation-message';
+import { attestationMessage, type TermsEdition } from '../../_shared/src/attestation-message';
 import { base58Decode } from './shared';
 
-export { attestationMessage };
+export { attestationMessage, type TermsEdition };
 
 export interface AttestationRecord {
   /** Base58 wallet. */
@@ -51,19 +51,30 @@ export class MemoryAttestationStore implements AttestationStore {
   }
 }
 
-/** Current terms version, from the founder-owned config/terms.json. */
-export function loadTermsVersion(path: string): number {
-  const doc = JSON.parse(readFileSync(path, 'utf8')) as { version?: unknown };
+/**
+ * The current terms edition, from the founder-owned config/terms.json: the
+ * version the packet carries and the date the signed statement names.
+ */
+export function loadTerms(path: string): TermsEdition {
+  const doc = JSON.parse(readFileSync(path, 'utf8')) as { version?: unknown; updated?: unknown };
   if (!Number.isInteger(doc.version) || (doc.version as number) < 1) {
     throw new Error('terms config: version must be a positive integer');
   }
-  return doc.version as number;
+  if (typeof doc.updated !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(doc.updated)) {
+    throw new Error('terms config: updated must be a YYYY-MM-DD date');
+  }
+  return { version: doc.version as number, updated: doc.updated };
+}
+
+/** Current terms version only — kept for callers that need just the number. */
+export function loadTermsVersion(path: string): number {
+  return loadTerms(path).version;
 }
 
 export interface AttestationSubmission {
   wallet: string;
   termsVersion: number;
-  /** Base64 Ed25519 signature over `attestationMessage(wallet, termsVersion)`. */
+  /** Base64 Ed25519 signature over `attestationMessage(wallet, currentTerms)`. */
   signature: string;
 }
 
@@ -74,11 +85,11 @@ export interface AttestationSubmission {
  */
 export async function acceptAttestation(
   store: AttestationStore,
-  currentVersion: number,
+  currentTerms: TermsEdition,
   now: () => bigint,
   submission: AttestationSubmission
 ): Promise<boolean> {
-  if (submission.termsVersion !== currentVersion) return false;
+  if (submission.termsVersion !== currentTerms.version) return false;
   let signature: Uint8Array;
   let pubkey: Uint8Array;
   try {
@@ -88,7 +99,7 @@ export async function acceptAttestation(
     return false;
   }
   if (signature.length !== 64 || pubkey.length !== 32) return false;
-  const message = attestationMessage(submission.wallet, submission.termsVersion);
+  const message = attestationMessage(submission.wallet, currentTerms);
   if (!nacl.sign.detached.verify(message, signature, pubkey)) return false;
   await store.put({
     wallet: submission.wallet,
