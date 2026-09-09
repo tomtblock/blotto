@@ -31,6 +31,9 @@ interface Item {
   toResults: boolean;
 }
 
+/** How often an open tab re-reads the player's pools for a new state. */
+const POLL_MS = 60_000;
+
 const seenKey = (wallet: string) => `blotto:notify-seen:${wallet}`;
 const emailKey = (wallet: string) => `blotto:notify-email:${wallet}`;
 
@@ -84,10 +87,16 @@ export function NotificationsBell() {
   const [emailBusy, setEmailBusy] = useState(false);
   const [emailError, setEmailError] = useState(false);
 
+  // Founder 2026-09-09: "users can be alerted when a pool fills so they can
+  // go and check the result." While the site is open the bell re-reads the
+  // career every POLL_MS; a pool of yours reaching a new state raises a
+  // toast the moment it lands, not only on the next visit. (Email and push
+  // for the closed-tab case are a separate delivery, not this poll.)
   useEffect(() => {
     if (!wallet) return;
     let cancelled = false;
-    indexerApi()
+    let known: Set<string> | null = null;
+    const load = () => indexerApi()
       .getCareer(wallet)
       .then((career) => {
         if (cancelled) return;
@@ -109,14 +118,22 @@ export function NotificationsBell() {
         setItems(next.reverse());
         const seen = readSeen(wallet);
         setUnseen(next.filter((i) => !seen.has(i.key)).length);
+        // A state that arrived since the last read is announced once.
+        if (known) {
+          for (const i of next) if (!known.has(i.key)) toast.show(i.message);
+        }
+        known = new Set(next.map((i) => i.key));
       })
       .catch(() => {
         // The bell renders with nothing — the pages still show live state.
       });
+    void load();
+    const id = setInterval(() => void load(), POLL_MS);
     return () => {
       cancelled = true;
+      clearInterval(id);
     };
-  }, [wallet]);
+  }, [wallet, toast]);
 
   const openSheet = useCallback(() => {
     setOpen(true);

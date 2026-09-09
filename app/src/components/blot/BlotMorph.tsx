@@ -169,9 +169,17 @@ export function BlotMorph({
     const floor = dragStat !== null ? 0.35 : 0;
     return expressionFor(k, dir, Math.min(1, Math.abs(v) / 120 + floor));
   }, [reduced, dragStat, vels]);
-  const browPair = brows(scene.visor, face);
-  const cheekPair = cheeks(scene.visor, face);
-  const visorD = visorPath(scene.visor, face);
+  // The reference toy wears a wider, deeper visor than the geometry's box;
+  // the face helpers take the enlarged box so brows and cheeks follow it.
+  const visorBox = {
+    ...scene.visor,
+    width: scene.visor.width * 1.22,
+    height: scene.visor.height * 1.32,
+    rx: scene.visor.rx * 1.3,
+  };
+  const browPair = brows(visorBox, face);
+  const cheekPair = cheeks(visorBox, face);
+  const visorD = visorPath(visorBox, face);
 
   const label = blotAriaLabel(allocation);
   const announced = useThrottledLabel(label);
@@ -224,6 +232,54 @@ export function BlotMorph({
             <stop offset="60%" stopColor={palette.brandCream} stopOpacity="0" />
             <stop offset="100%" stopColor={palette.blotAmbient} stopOpacity="0.12" />
           </linearGradient>
+          {/* THE MATERIAL (founder 2026-09-09: "far more detailed … like the
+              Higgsfield assets"): inflated vinyl. The silhouette's blurred
+              alpha is a height map; a point light above-left gives it
+              diffuse roundness and a tight specular, so the SAME outline the
+              allocation draws reads as a puffed, glossy toy. Region is fixed
+              in user space so the filter never re-allocates per frame. */}
+          <filter
+            id={`${uid}-puff`}
+            filterUnits="userSpaceOnUse"
+            x="-300"
+            y="-300"
+            width={UNIT + 600}
+            height={UNIT + 600}
+            colorInterpolationFilters="sRGB"
+          >
+            <feGaussianBlur in="SourceAlpha" stdDeviation="34" result="bump" />
+            <feDiffuseLighting in="bump" surfaceScale="16" diffuseConstant="1.05" lightingColor="#ffffff" result="diff">
+              <fePointLight x="300" y="120" z="720" />
+            </feDiffuseLighting>
+            <feComposite in="diff" in2="SourceAlpha" operator="in" result="diffIn" />
+            {/* shaded = graphic × (0.42 + 0.58 × diffuse) */}
+            <feComposite in="SourceGraphic" in2="diffIn" operator="arithmetic" k1="0.58" k2="0.42" k3="0" k4="0" result="shaded" />
+            <feSpecularLighting in="bump" surfaceScale="18" specularConstant="0.9" specularExponent="26" lightingColor={palette.brandCream} result="spec">
+              <fePointLight x="280" y="100" z="560" />
+            </feSpecularLighting>
+            <feComposite in="spec" in2="SourceAlpha" operator="in" result="specIn" />
+            <feComposite in="specIn" in2="shaded" operator="arithmetic" k1="0" k2="0.85" k3="1" k4="0" />
+          </filter>
+          {/* Visor glass: near-black plum, lit along its top. */}
+          <linearGradient id={`${uid}-glass`} x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor={palette.blotShade} stopOpacity="0.55" />
+            <stop offset="18%" stopColor={palette.blotVisor} />
+            <stop offset="100%" stopColor={palette.blotVisor} />
+          </linearGradient>
+          <linearGradient id={`${uid}-glass-shine`} x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor={palette.brandCream} stopOpacity="0.55" />
+            <stop offset="45%" stopColor={palette.brandCream} stopOpacity="0.08" />
+            <stop offset="100%" stopColor={palette.brandCream} stopOpacity="0" />
+          </linearGradient>
+          {/* The heart's glow: a wide soft bloom across the lower face. */}
+          <radialGradient id={`${uid}-bloom`} cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor={palette.blotHeart} stopOpacity="0.9" />
+            <stop offset="35%" stopColor={palette.blotHeart} stopOpacity="0.5" />
+            <stop offset="100%" stopColor={palette.blotHeart} stopOpacity="0" />
+          </radialGradient>
+          <clipPath id={`${uid}-bodyclip`}>
+            <path d={scene.bodyPath} />
+          </clipPath>
           {/* Tight, fixed filter regions: never recreated per frame. */}
           <filter
             id={`${uid}-shadow-blur`}
@@ -275,6 +331,9 @@ export function BlotMorph({
           filter={`url(#${uid}-shadow-blur)`}
         />
 
+        {/* Everything made of vinyl — limbs and body — is lit as one puffed
+            silhouette; the seams, face and glow are drawn crisp on top. */}
+        <g filter={`url(#${uid}-puff)`}>
         {/* Legs: capsules from the live outline down to the ground line. */}
         {legHL > 0 && (
           <rect
@@ -334,35 +393,52 @@ export function BlotMorph({
           />
           {/* Broad diagonal sheen. */}
           <path d={scene.bodyPath} fill={`url(#${uid}-sheen)`} />
-          {/* Stitched vinyl seam: the seam line, then the stitches over it. */}
-          <path
-            d={scene.seamPath}
-            fill="none"
-            stroke={palette.blotSeam}
-            strokeWidth="4"
-            opacity="0.85"
-          />
-          <path
-            d={scene.seamPath}
-            fill="none"
-            stroke={palette.blotRim}
-            strokeWidth="2"
-            strokeDasharray="10 12"
-            opacity="0.7"
-          />
+        </g>
         </g>
 
-        {/* Heart glow: blurred halo under a sharp core. */}
-        <g className="blot-heart">
+        {/* Quilted panels: each corner's panel pillows toward the light. */}
+        <g clipPath={`url(#${uid}-bodyclip)`} opacity="0.55">
+          {scene.corners.map((c, i) => (
+            <ellipse
+              key={i}
+              cx={500 + (c.x - 500) * 0.58 - 30}
+              cy={480 + (c.y - 480) * 0.58 - 30}
+              rx={95}
+              ry={70}
+              fill={palette.brandCream}
+              opacity="0.28"
+              filter={`url(#${uid}-spec-blur)`}
+            />
+          ))}
+        </g>
+
+        {/* Stitched vinyl seams as a groove: shadow edge, lit edge, thread. */}
+        <g className="blot-seams" fill="none" strokeLinecap="round" strokeLinejoin="round">
+          <path d={scene.seamPath} stroke={palette.blotAmbient} strokeWidth="7" opacity="0.28" transform="translate(2 3)" />
+          <path d={scene.seamPath} stroke={palette.brandCream} strokeWidth="3" opacity="0.35" transform="translate(-2 -2)" />
+          <path d={scene.seamPath} stroke={palette.blotSeam} strokeWidth="3.5" opacity="0.9" />
+          <path d={scene.seamPath} stroke={palette.brandCream} strokeWidth="1.6" strokeDasharray="9 11" opacity="0.75" />
+        </g>
+
+        {/* Heart glow: a wide bloom across the lower face, clipped to the body,
+            with the core under it. */}
+        <g className="blot-heart" clipPath={`url(#${uid}-bodyclip)`}>
+          <ellipse
+            cx={scene.heart.cx}
+            cy={scene.heart.cy + heartR * 0.2}
+            rx={heartR * 3.4}
+            ry={heartR * 2.6}
+            fill={`url(#${uid}-bloom)`}
+            opacity="0.8"
+          />
           <circle
             cx={scene.heart.cx}
             cy={scene.heart.cy}
-            r={heartR * 1.35}
+            r={heartR * 1.15}
             fill={palette.blotHeart}
-            opacity="0.45"
+            opacity="0.55"
             filter={`url(#${uid}-heart-blur)`}
           />
-          <circle cx={scene.heart.cx} cy={scene.heart.cy} r={heartR} fill={palette.blotHeart} opacity="0.6" />
         </g>
 
         {/* Cheeks — blush under the visor's outer ends. */}
@@ -376,24 +452,18 @@ export function BlotMorph({
           className="blot-visor"
           transform={visorTilt !== 0 ? `rotate(${visorTilt.toFixed(2)} ${scene.visor.cx} ${scene.visor.cy})` : undefined}
         >
-          <path d={visorD} fill={palette.blotVisor} />
-          {/* Specular line along the visor's top edge, and one hard eye-shine. */}
-          <rect
-            x={scene.visor.cx - scene.visor.width / 2 + scene.visor.rx}
-            y={scene.visor.cy - scene.visor.height / 2 + 8}
-            width={Math.max(0, scene.visor.width - scene.visor.rx * 2)}
-            height="6"
-            rx="3"
-            fill={palette.brandCream}
-            opacity="0.45"
-          />
+          {/* The glass: a soft drop into the vinyl, the dark band, a curved
+              shine along its top, one hard eye-shine. */}
+          <path d={visorD} fill={palette.blotAmbient} opacity="0.35" transform="translate(0 5)" />
+          <path d={visorD} fill={`url(#${uid}-glass)`} />
+          <path d={visorD} fill={`url(#${uid}-glass-shine)`} transform={`translate(${visorBox.cx} ${visorBox.cy}) scale(0.92 0.55) translate(${-visorBox.cx} ${-visorBox.cy - visorBox.height * 0.3})`} />
           <ellipse
-            cx={scene.visor.cx - scene.visor.width * 0.3}
-            cy={scene.visor.cy - scene.visor.height * 0.08}
-            rx={Math.max(8, scene.visor.height * 0.16)}
-            ry={Math.max(6, scene.visor.height * 0.11)}
+            cx={visorBox.cx - visorBox.width * 0.3}
+            cy={visorBox.cy - visorBox.height * 0.12}
+            rx={Math.max(9, visorBox.height * 0.15)}
+            ry={Math.max(6, visorBox.height * 0.1)}
             fill={palette.brandCream}
-            opacity="0.85"
+            opacity="0.9"
           />
         </g>
 
