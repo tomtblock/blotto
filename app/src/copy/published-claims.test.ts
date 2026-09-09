@@ -24,7 +24,7 @@
  * It asserts that somebody decided, in writing, that we can honour it.
  */
 
-import { readFileSync, existsSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { REVIEW_WINDOW_SECS } from '@blotto/scoring';

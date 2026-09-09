@@ -70,6 +70,12 @@ export type TxFailureKind =
   | "insufficient-sol"
   | "blockhash-expired"
   | "program-rejected"
+  // The three program refusals a player can actually meet at `register`,
+  // split out of "program-rejected" on 2026-09-09 (the generic sentence
+  // guessed at "filled or closed" and was wrong for a pause).
+  | "entries-paused"
+  | "pool-full"
+  | "deadline-passed"
   | "rpc-failure"
   | "outcome-unreadable"
   | "outcome-mismatch";

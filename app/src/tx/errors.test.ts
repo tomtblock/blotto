@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   classifyRpcError,
@@ -124,9 +126,10 @@ describe("classifyRpcError", () => {
   });
 
   it("maps every code in the program map, and falls through for one that is not in it", () => {
-    for (const code of Object.keys(PROGRAM_ERROR_CODES).map(Number)) {
-      const failure = classifyRpcError({ InstructionError: [1, { Custom: code }] }, true);
-      expect(failure.kind, `code ${code}`).toBe("program-rejected");
+    for (const [code, kind] of Object.entries(PROGRAM_ERROR_CODES)) {
+      const failure = classifyRpcError({ InstructionError: [1, { Custom: Number(code) }] }, true);
+      expect(failure.kind, `code ${code}`).toBe(kind);
+      expect(failure.message.length, `code ${code} has copy`).toBeGreaterThan(20);
     }
     // An UNRECOGNISED custom code must NOT be guessed at. This is the property
     // worth pinning: a program error the client does not know about is reported
@@ -179,5 +182,35 @@ describe("classifyRpcError", () => {
   it("keeps every copy string distinct (each surface reads differently)", () => {
     const messages = Object.values(FAILURE_COPY);
     expect(new Set(messages).size).toBe(messages.length);
+  });
+});
+
+describe("the player-reachable refusals", () => {
+  it("say what happened, per refusal, instead of guessing", () => {
+    const paused = classifyRpcError("custom program error: 0x1775", false); // 6005
+    expect(paused.kind).toBe("entries-paused");
+    expect(paused.message.toLowerCase()).toContain("paused");
+    const full = classifyRpcError({ InstructionError: [1, { Custom: 6010 }] }, false);
+    expect(full.kind).toBe("pool-full");
+    expect(full.message.toLowerCase()).toContain("filled");
+    const late = classifyRpcError({ InstructionError: [1, { Custom: 6011 }] }, false);
+    expect(late.kind).toBe("deadline-passed");
+    expect(late.message.toLowerCase()).toContain("deadline");
+  });
+
+  it("sit at the positions error.rs declares them at (Anchor numbers from 6000 in declaration order)", () => {
+    // Read the Rust source rather than trusting the comment beside the map:
+    // an inserted variant renumbers every later one silently.
+    const source = readFileSync(
+      fileURLToPath(new URL("../../../programs/blotto_cup/src/error.rs", import.meta.url)),
+      "utf8",
+    );
+    const variants = source
+      .split("\n")
+      .map((line) => /^\s+([A-Z][A-Za-z0-9]*),\s*$/.exec(line)?.[1])
+      .filter((v): v is string => v !== undefined);
+    expect(variants.indexOf("Paused")).toBe(6005 - 6000);
+    expect(variants.indexOf("PoolFull")).toBe(6010 - 6000);
+    expect(variants.indexOf("DeadlinePassed")).toBe(6011 - 6000);
   });
 });

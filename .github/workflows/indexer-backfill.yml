@@ -1,0 +1,65 @@
+# Rebuild the indexer from the chain, on demand.
+#
+# Why this exists (2026-09-09): the indexer's boot-time catch-up walks the
+# program's whole history when its ledger is empty, and that walk runs on
+# whatever RPC the service was given. On the public devnet endpoint it
+# rate-limits and the service comes up serving an empty read API — the site
+# then says "No tournament is open" while a pool is open on chain. This
+# workflow runs the same `backfill` (and, if asked, `re-derive`) inside the
+# running indexer machine, with the machine's own secrets, and prints what it
+# inserted. Idempotent: the ledger's (signature, event_index) key makes a
+# second run insert nothing.
+#
+# Read-only against the chain; writes only to the indexer's own database.
+name: indexer-backfill
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "backfill = walk the chain into the ledger · re-derive = rebuild derived tables from the ledger · both"
+        required: true
+        default: both
+        type: choice
+        options: [backfill, re-derive, both]
+
+concurrency:
+  group: indexer-backfill
+  cancel-in-progress: false
+
+env:
+  FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+  INDEXER_APP: blotto-indexer
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Preflight
+        run: |
+          if [ -z "$FLY_API_TOKEN" ]; then echo "::error::FLY_API_TOKEN is not set"; exit 1; fi
+          flyctl status --app "$INDEXER_APP"
+
+      - name: Walk the chain into the ledger
+        if: inputs.mode == 'backfill' || inputs.mode == 'both'
+        run: |
+          # Runs in the service's working directory (/app/backend/indexer) with
+          # the machine's secrets (database, RPC, program id) already in env.
+          flyctl ssh console --app "$INDEXER_APP" \
+            -C "npx ts-node --transpile-only src/index.ts backfill"
+
+      - name: Rebuild the derived tables from the ledger
+        if: inputs.mode == 're-derive' || inputs.mode == 'both'
+        run: |
+          flyctl ssh console --app "$INDEXER_APP" \
+            -C "npx ts-node --transpile-only src/index.ts re-derive"
+
+      - name: What the read API now serves
+        run: |
+          echo "--- /pools ---"
+          curl -sS --max-time 20 "https://$INDEXER_APP.fly.dev/pools" | head -c 2000; echo
+          echo "--- /tiers ---"
+          curl -sS --max-time 20 "https://$INDEXER_APP.fly.dev/tiers" | head -c 1000; echo

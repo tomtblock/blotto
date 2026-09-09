@@ -84,8 +84,19 @@ env:
   PACKET_APP: blotto-packet
   DAEMON_APP: blotto-daemon
   REVIEW_APP: blotto-review
-  APP_ORIGIN: https://blotto-jade.vercel.app
-  DEVNET_RPC: https://api.devnet.solana.com
+  # The three values the FOUNDER owns and changes without a code change
+  # (2026-09-09, the go-live night): the browser origins the services answer,
+  # the RPC every service talks to, and the webhook secret shared with Helius.
+  # Each falls back to the value that was hard-coded here until then, so a
+  # repository with none of them set deploys exactly as before.
+  #   Settings → Secrets and variables → Actions → Variables:
+  #     BLOTTO_APP_ORIGINS   comma-separated https origins, no trailing slash
+  #   … → Secrets:
+  #     BLOTTO_DEVNET_RPC_URL          a DEVNET Helius URL (also read by deployed-drift)
+  #     BLOTTO_HELIUS_WEBHOOK_SECRET   the Auth-header value typed into the Helius webhook
+  APP_ORIGIN: ${{ vars.BLOTTO_APP_ORIGINS || 'https://blotto-jade.vercel.app' }}
+  DEVNET_RPC: ${{ secrets.BLOTTO_DEVNET_RPC_URL || 'https://api.devnet.solana.com' }}
+  HELIUS_WEBHOOK_SECRET: ${{ secrets.BLOTTO_HELIUS_WEBHOOK_SECRET }}
   PROGRAM_ID: 5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17
 
 jobs:
@@ -224,9 +235,26 @@ jobs:
           echo "deploy_review=$review" >> "$GITHUB_OUTPUT"
           echo "signer_mode=$signer_mode" >> "$GITHUB_OUTPUT"
           echo "geo_mode=$geo_mode" >> "$GITHUB_OUTPUT"
+          # Refuse a mainnet-looking RPC outright: this workflow stages
+          # BLOTTO_CLUSTER=devnet, and the services refuse to start on the
+          # mismatch — better to stop here than to find out from four crash loops.
+          case "$DEVNET_RPC" in
+            *[Mm]ainnet*) echo "::error::BLOTTO_DEVNET_RPC_URL looks like mainnet; this is the devnet deploy"; exit 1;;
+          esac
+          for o in ${APP_ORIGIN//,/ }; do
+            case "$o" in
+              https://*/) echo "::error::origin '$o' has a trailing slash — the allowlist is exact-match"; exit 1;;
+              https://*) ;;
+              *) echo "::error::origin '$o' must start with https://"; exit 1;;
+            esac
+          done
+
           echo "--- plan ---"
           echo "indexer: yes | packet: yes | daemon: $daemon | review: $review"
           echo "packet entry signer: $signer_mode | packet geo: $geo_mode"
+          # The RPC URL carries an API key in its query string; print the host only.
+          echo "rpc host: ${DEVNET_RPC%%\?*} | origins: $APP_ORIGIN"
+          if [ -n "$HELIUS_WEBHOOK_SECRET" ]; then echo "webhook secret: from repository secret"; else echo "webhook secret: generated once, kept"; fi
 
       - name: Create the Fly apps (first run only)
         run: |
@@ -309,11 +337,20 @@ jobs:
             BLOTTO_API_CORS_ORIGINS="$APP_ORIGIN" \
             BLOTTO_API_RATE_LIMIT_ENABLED="1" \
             BLOTTO_API_SECURITY_HEADERS_ENABLED="1"
-          # Generate-once: the webhook receiver refuses to start without a
-          # secret (E6 fail-closed). Helius gets this value when the webhook
-          # is created (docs/hosting.md); until then nothing calls it. This
-          # is ours to issue — no external party holds an authoritative copy.
-          if ! flyctl secrets list --app "$INDEXER_APP" | grep -q BLOTTO_HELIUS_WEBHOOK_SECRET; then
+          # The webhook receiver refuses to start without a secret (E6
+          # fail-closed). Two sources, in order of preference:
+          #   1. the repository secret BLOTTO_HELIUS_WEBHOOK_SECRET — the same
+          #      string the founder typed into the Helius webhook's Auth header.
+          #      Staged on EVERY run so a rotation is one secret update + one deploy.
+          #   2. generate-once (the pre-2026-09-09 behaviour) when no repository
+          #      secret exists — but that value can never be read back out of Fly,
+          #      so a webhook cannot be created against it. Kept only so an
+          #      environment without a webhook yet still boots.
+          if [ -n "$HELIUS_WEBHOOK_SECRET" ]; then
+            flyctl secrets set --app "$INDEXER_APP" --stage \
+              BLOTTO_HELIUS_WEBHOOK_SECRET="$HELIUS_WEBHOOK_SECRET"
+          elif ! flyctl secrets list --app "$INDEXER_APP" | grep -q BLOTTO_HELIUS_WEBHOOK_SECRET; then
+            echo "::warning::no BLOTTO_HELIUS_WEBHOOK_SECRET repository secret — generating one the Helius webhook cannot be told about"
             flyctl secrets set --app "$INDEXER_APP" --stage \
               BLOTTO_HELIUS_WEBHOOK_SECRET="$(openssl rand -hex 32)"
           fi
