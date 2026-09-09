@@ -249,8 +249,9 @@ export const COPY = {
 
   howItWorks: {
     title: 'How it works',
-    pentagonCaption:
-      'Five stats. One hundred points. Where you put them is the whole game.',
+    // Founder wording, 2026-09-09 (replaces "Five stats. One hundred points.
+    // Where you put them is the whole game.").
+    pentagonCaption: 'Spread Your Skill. Outsmart Your Opponent. Best Strategy Wins.',
     steps: [
       {
         title: 'Take a seat',
@@ -376,7 +377,11 @@ export const COPY = {
   // v3 D3: retention surfaces — mastery and standing only. Factual state
   // changes, never pressure; the do-not-build vocabulary is CI-enforced.
   fixtures: {
-    title: 'Fixtures',
+    // PHASE-N-REVIEW: the founder asked for a word other than "Fixtures"
+    // (2026-09-09); "Prize pools" is the proposal, from the approved lexicon.
+    title: 'Prize pools',
+    /** Tiers not yet switched on (everything but the launch tier). */
+    statusComingSoon: 'Coming soon',
     statusOpen: 'Taking entries',
     statusSettling: 'Settling',
     statusOpenable: 'Covered — opens next',

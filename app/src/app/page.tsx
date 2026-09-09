@@ -21,8 +21,10 @@ import { lamportsToSol } from '@/data/format';
 import { AppHeader } from '@/components/shell/app-header';
 import { TabBar } from '@/components/shell/tab-bar';
 import { Countdown } from '@/components/ui/countdown';
-import type { TiersResponse } from '@/data/types';
 import { HeroClip } from '@/components/landing/HeroClip';
+
+/** The tier `open_tiers` enables at launch (D-E1): 0.1 SOL entry, 4 SOL prize pool. */
+const LAUNCH_TIER = 0;
 import { LiveDemo } from '@/components/landing/LiveDemo';
 import { PreloaderGate } from '@/components/preloader/PreloaderGate';
 
@@ -68,34 +70,17 @@ function SeatRing({ entrants }: { entrants: number }) {
   );
 }
 
-/** The soonest `next_open_at` still in the future, by the SERVER's clock —
- * null when no tier is cooling down (nothing to count toward). */
-function soonestNextOpen(
-  tiers: TiersResponse | null
-): { nextOpenAt: string; serverTime: string } | null {
-  if (!tiers) return null;
-  const now = BigInt(tiers.server_time);
-  let best: bigint | null = null;
-  for (const t of tiers.tiers) {
-    const at = BigInt(t.next_open_at);
-    if (at > now && (best === null || at < best)) best = at;
-  }
-  return best === null ? null : { nextOpenAt: best.toString(), serverTime: tiers.server_time };
-}
-
 export default async function LandingPage() {
   const api = indexerApi();
   // SSR outage guard: a dead indexer degrades this page, never kills it.
-  const [poolsLive, treasuryLive, tiersLive] = await Promise.all([
+  const [poolsLive, treasuryLive] = await Promise.all([
     live(() => api.listPools()),
     live(() => api.getTreasury()),
-    live(() => api.getTiers()),
   ]);
   const pools = poolsLive.ok ? poolsLive.value : [];
   const treasury = treasuryLive.ok ? treasuryLive.value : null;
   // Prompt v2 §B.6: the soonest tier still cooling down, for the "next pool
   // opens in" clock when nothing is open. Server time, never the device's.
-  const nextOpen = tiersLive.ok ? soonestNextOpen(tiersLive.value) : null;
   const open = pools.filter((p) => p.state === 'Open').sort((a, b) => a.tier - b.tier);
   const hero = open[0];
   const openByTier = new Map(open.map((p) => [p.tier, p]));
@@ -115,8 +100,15 @@ export default async function LandingPage() {
               <h1 className="focus:outline-none font-display text-[64px] font-extrabold uppercase leading-[0.92] tracking-tight text-brand-yellow [text-shadow:0_5px_0_rgba(94,27,64,0.22)] sm:text-[96px] lg:text-[116px]">
                 {COPY.landing.heroTitle}
               </h1>
-              <p className="mt-4 max-w-[30ch] font-display text-[22px] font-bold leading-7 text-brand-berry sm:text-[26px] sm:leading-8">
-                {COPY.shell.tagline}
+              <p className="mt-4 font-display text-[22px] font-bold leading-7 text-brand-berry sm:text-[26px] sm:leading-8">
+                {/* Founder 2026-09-09: one sentence per line. The string stays
+                    whole in COPY (the shell and the e2e text match use it);
+                    only the line breaks are decided here. */}
+                {COPY.shell.tagline.split(/(?<=\.)\s+/).map((line) => (
+                  <span key={line} className="block">
+                    {line}{' '}
+                  </span>
+                ))}
               </p>
               <div className="mt-6 flex flex-wrap items-center gap-4">
                 {hero && (
@@ -214,23 +206,10 @@ export default async function LandingPage() {
                   {COPY.pool.ageTerritoryNote}
                 </p>
               </div>
-            ) : (
-              <div className="rounded-2xl bg-game-base p-6">
-                <p className="text-[16px] font-medium text-game-ink">{COPY.pool.noOpenPool}</p>
-                <p className="mt-1 max-w-prose text-[13px] leading-5 text-game-ink-muted">
-                  {COPY.pool.noOpenPoolDetail}
-                </p>
-                {nextOpen && (
-                  <div className="mt-4">
-                    <Countdown
-                      deadlineUnix={nextOpen.nextOpenAt}
-                      serverTimeUnix={nextOpen.serverTime}
-                      label={COPY.pool.nextPoolIn}
-                    />
-                  </div>
-                )}
-              </div>
-            )}
+            ) : null /* PHASE-N-REVIEW: the "no tournament is open" card was removed
+                        at the founder's direction (2026-09-09). In that state the
+                        page shows the hero, the demo, the steps and the ladder;
+                        the ladder carries the per-tier status. */}
           </section>
 
           {/* ——— The live demo: the toy is the pitch. */}
@@ -288,21 +267,28 @@ export default async function LandingPage() {
               {TIER_ENTRY_LAMPORTS.map((entry, tier) => {
                 const openPool = openByTier.get(tier);
                 const status = tierStatus.get(tier);
+                // Founder 2026-09-09: only the launch tier (tier 0, the 4 SOL
+                // prize pool) shows its live status; every other tier reads
+                // "Coming soon" until it is switched on. `LAUNCH_TIER` is the
+                // one tier `open_tiers` enables at launch (D-E1).
+                const comingSoon = tier !== LAUNCH_TIER && !openPool;
                 const label = openPool
                   ? COPY.fixtures.statusOpen
-                  : status?.status === 'settling'
-                    ? COPY.fixtures.statusSettling
-                    : status?.status === 'openable'
-                      ? COPY.fixtures.statusOpenable
-                      : COPY.fixtures.statusShort;
+                  : comingSoon
+                    ? COPY.fixtures.statusComingSoon
+                    : status?.status === 'settling'
+                      ? COPY.fixtures.statusSettling
+                      : status?.status === 'openable'
+                        ? COPY.fixtures.statusOpenable
+                        : COPY.fixtures.statusShort;
                 const shortBy =
-                  !openPool && status?.status === 'short' && BigInt(status.short_by_lamports) > 0n
+                  !openPool && !comingSoon && status?.status === 'short' && BigInt(status.short_by_lamports) > 0n
                     ? COPY.fixtures.shortBy(lamportsToSol(status.short_by_lamports))
                     : null;
                 const row = (
                   <div
                     className={`flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-game-raised px-4 py-3.5 sm:px-5 ${
-                      openPool ? 'bg-game-raised/40' : ''
+                      openPool ? 'bg-game-raised/40' : comingSoon ? 'opacity-70' : ''
                     }`}
                   >
                     <span className="tnum w-24 font-display text-[17px] font-bold text-game-ink">
