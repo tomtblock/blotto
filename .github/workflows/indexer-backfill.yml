@@ -1,14 +1,18 @@
 # Rebuild the indexer from the chain, on demand.
 #
-# Why this exists (2026-09-09): the indexer's boot-time catch-up walks the
-# program's whole history when its ledger is empty, and that walk runs on
-# whatever RPC the service was given. On the public devnet endpoint it
-# rate-limits and the service comes up serving an empty read API — the site
-# then says "No tournament is open" while a pool is open on chain. This
-# workflow runs the same `backfill` (and, if asked, `re-derive`) inside the
-# running indexer machine, with the machine's own secrets, and prints what it
-# inserted. Idempotent: the ledger's (signature, event_index) key makes a
-# second run insert nothing.
+# Why this exists (2026-09-09): the indexer's boot-time catch-up is best-effort
+# (it never blocks serving), so a service that comes up with an empty ledger
+# needs a hand-run walk of the chain. This workflow runs the same `backfill`
+# (and, if asked, `re-derive`) inside the running indexer machine, with the
+# machine's own secrets, and prints what it inserted. Idempotent: the ledger's
+# (signature, event_index) key makes a second run insert nothing.
+#
+# Correction, same day: the first version of this header blamed public-RPC
+# rate limiting for the empty read API. The real cause was in the service —
+# it never registered its event layouts, so every walk decoded nothing
+# ("16 tx, 0 inserted"). See the INCIDENT note in backend/indexer/src/index.ts.
+# Read the "inserted" count in the log: zero on a chain with pools is a code
+# defect, not a slow RPC.
 #
 # Read-only against the chain; writes only to the indexer's own database.
 name: indexer-backfill
