@@ -29,6 +29,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { COPY } from '@/copy';
+import { XMark } from '@/wallet/wallet-icons';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Sheet } from '@/components/ui/sheet';
@@ -227,6 +228,23 @@ export function BattleFlow({ poolAddress, onConfirm }: BattleFlowProps) {
     }
   }, [montage]);
 
+  /* Founder 2026-09-09: a direct door to X. The web intent takes text only,
+   * so the image is downloaded alongside for the player to attach. */
+  const postOnX = useCallback(() => {
+    if (!montage) return;
+    const text = hasSealedBefore() ? COPY.battle.shareTextSeven : COPY.battle.shareTextFirst;
+    const a = document.createElement('a');
+    a.href = montage.url;
+    a.download = 'blotto-seven.png';
+    a.click();
+    window.open(
+      `https://x.com/intent/post?text=${encodeURIComponent(text)}`,
+      '_blank',
+      'noopener,noreferrer'
+    );
+    setShareNote(COPY.battle.shareXNote);
+  }, [montage]);
+
   /* The rack: locked allocations from the machine's record — plus the Blot
    * dropping through the chute right now — zipped with their stills. */
   const lockedAllocs: readonly Allocation[] = battle
@@ -381,14 +399,20 @@ export function BattleFlow({ poolAddress, onConfirm }: BattleFlowProps) {
             {/* eslint-disable-next-line @next/next/no-img-element -- object-URL preview of a canvas composition */}
             <img
               src={montage.url}
-              alt="Your seven Blots, shapes only"
+              alt="Your seven Blotts, shapes only"
               className="w-full max-w-md self-center rounded-2xl"
             />
-            <div className="flex flex-col items-center gap-1">
-              <Button intent="prize" onClick={share}>
-                {COPY.battle.share}
-              </Button>
-              {shareNote && <p className="text-[12px] text-ink-muted">{shareNote}</p>}
+            <div className="flex flex-col items-center gap-2">
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button intent="prize" onClick={share}>
+                  {COPY.battle.share}
+                </Button>
+                <Button intent="quiet" onClick={postOnX} data-testid="share-x">
+                  <XMark size={16} />
+                  <span className="ml-2">{COPY.battle.shareX}</span>
+                </Button>
+              </div>
+              {shareNote && <p className="max-w-prose text-center text-[12px] text-ink-muted">{shareNote}</p>}
             </div>
           </div>
         ) : (

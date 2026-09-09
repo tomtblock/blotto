@@ -76,6 +76,12 @@ export type TxFailureKind =
   | "entries-paused"
   | "pool-full"
   | "deadline-passed"
+  // 2026-09-09 (founder: "tried to enter again from the same wallet and got
+  // a network error"): a second `register` from the same wallet fails at the
+  // entry PDA's `init` ("already in use"), and the pool may have left Open
+  // (PoolNotOpen). Both used to fall through to the generic network sentence.
+  | "already-entered"
+  | "pool-closed"
   | "rpc-failure"
   | "outcome-unreadable"
   | "outcome-mismatch";

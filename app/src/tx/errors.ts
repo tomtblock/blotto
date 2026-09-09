@@ -41,7 +41,7 @@ import type { TxFailure, TxFailureKind } from "./types";
  * kind as it adds errors a player CAN hit (capacity, deadline, packet, proof).
  */
 export const PROGRAM_ERROR_CODES: Readonly<Record<number, TxFailureKind>> = {
-  6000: "program-rejected", // PoolNotOpen
+  6000: "pool-closed", // PoolNotOpen — the pool left Open before the entry reached it
   6001: "program-rejected", // VrfSeedAlreadyCommitted
   6002: "program-rejected", // InvalidRandomnessAccount
   6003: "program-rejected", // RandomnessNotResolved
@@ -87,6 +87,8 @@ export const FAILURE_COPY: Record<TxFailureKind, string> = {
   "entries-paused": COPY.tx.entriesPaused,
   "pool-full": COPY.tx.poolFull,
   "deadline-passed": COPY.tx.deadlinePassed,
+  "already-entered": COPY.tx.alreadyEntered,
+  "pool-closed": COPY.tx.poolClosed,
   "rpc-failure":
     "The network request did not go through. Check your connection and try again.",
   // The transaction LANDED; only the read-back failed. See property 2 above.
@@ -178,6 +180,14 @@ const USER_REJECTED_PATTERN =
 const INSUFFICIENT_PATTERN =
   /insufficient (lamports|funds)|InsufficientFundsFor(Fee|Rent)|attempt to debit an account but found no record of a prior credit/i;
 const BLOCKHASH_PATTERN = /blockhash ?not ?found|block height exceeded/i;
+/*
+ * The runtime's own words when `register` tries to create an entry account
+ * that already exists — `[b"entry", pool, player]` is one per wallet per
+ * pool, so this is exactly "this wallet already entered this pool". It is a
+ * system-program failure, not a custom program code, so it has no entry in
+ * PROGRAM_ERROR_CODES and must be matched on text.
+ */
+const ALREADY_IN_USE_PATTERN = /already in use/i;
 
 /**
  * Classify an error thrown while SIGNING (the wallet prompt). Wallet SDKs
@@ -213,6 +223,9 @@ export function classifyRpcError(source: unknown, broadcast: boolean): TxFailure
     if (kind) return makeFailure(kind, text, broadcast);
   }
 
+  if (ALREADY_IN_USE_PATTERN.test(text)) {
+    return makeFailure("already-entered", text, broadcast);
+  }
   if (source instanceof BlockhashExpiredError || BLOCKHASH_PATTERN.test(text)) {
     return makeFailure("blockhash-expired", text, broadcast);
   }

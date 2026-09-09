@@ -190,7 +190,7 @@ describe("executeTrade — pre-broadcast failures (nothing sent)", () => {
   it("a simulation program error fails before the wallet is even asked to sign", async () => {
     const { result, events, calls, signerCalls } = await run({
       simulation: {
-        err: { InstructionError: [2, { Custom: 6000 }] },
+        err: { InstructionError: [2, { Custom: 6001 }] },
         logs: ["Program log: AnchorError … SlippageExceeded"],
         unitsConsumed: null,
       },
@@ -261,7 +261,7 @@ describe("executeTrade — pre-broadcast failures (nothing sent)", () => {
 describe("executeTrade — post-broadcast failures", () => {
   it("an on-chain program failure after broadcast keeps the signature", async () => {
     const { result, events } = await run({
-      statuses: [null, { confirmed: false, err: { InstructionError: [2, { Custom: 6000 }] } }],
+      statuses: [null, { confirmed: false, err: { InstructionError: [2, { Custom: 6001 }] } }],
     });
     expect(phases(events)).toEqual(["submitting", "pending", "failed"]);
     expect(result).toMatchObject({
