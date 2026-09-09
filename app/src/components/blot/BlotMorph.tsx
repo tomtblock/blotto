@@ -144,25 +144,31 @@ export function BlotMorph({
   const dragging = dragStat !== null;
   const heartR = scene.heart.r * (dragging ? 1.1 : 1);
 
-  /* The face. While a dial is held the expression follows the stat and its
-   * direction of travel; when the hand lifts the last face holds 500 ms
-   * and then settles to rest. Reduced motion: rest face, always. */
-  const liveExpr: Expression = useMemo(() => {
-    if (reduced || dragStat === null || dragStat < 0 || dragStat > 4) return REST_EXPRESSION;
-    const v = vels[dragStat] ?? 0;
-    const dir = v > 0 ? 1 : v < 0 ? -1 : 0;
-    return expressionFor(dragStat, dir, Math.min(1, Math.abs(v) / 120 + 0.35));
-  }, [reduced, dragStat, vels]);
-  const [held, setHeld] = useState<Expression>(REST_EXPRESSION);
-  useEffect(() => {
-    if (dragStat !== null) {
-      setHeld(liveExpr);
-      return;
+  /* The face — a pure function of the motion. While a dial is held the
+   * expression follows that stat and its direction of travel; when the
+   * hand lifts it follows whichever stat is still moving most, so the face
+   * relaxes to rest exactly as the springs settle (no timers, no held
+   * state). Reduced motion: rest face, always. */
+  const face: Expression = useMemo(() => {
+    if (reduced) return REST_EXPRESSION;
+    let k = dragStat !== null && dragStat >= 0 && dragStat < 5 ? dragStat : -1;
+    if (k < 0) {
+      let best = 0;
+      for (let i = 0; i < 5; i++) {
+        const a = Math.abs(vels[i] ?? 0);
+        if (a > best) {
+          best = a;
+          k = i;
+        }
+      }
+      // Below this the springs are settling, not being stretched.
+      if (k < 0 || best < 8) return REST_EXPRESSION;
     }
-    const t = setTimeout(() => setHeld(REST_EXPRESSION), 500);
-    return () => clearTimeout(t);
-  }, [dragStat, liveExpr]);
-  const face = dragStat !== null ? liveExpr : held;
+    const v = vels[k] ?? 0;
+    const dir = v > 0 ? 1 : v < 0 ? -1 : 0;
+    const floor = dragStat !== null ? 0.35 : 0;
+    return expressionFor(k, dir, Math.min(1, Math.abs(v) / 120 + floor));
+  }, [reduced, dragStat, vels]);
   const browPair = brows(scene.visor, face);
   const cheekPair = cheeks(scene.visor, face);
   const visorD = visorPath(scene.visor, face);

@@ -42,6 +42,7 @@ import {
   submitAttestation,
 } from '@/entry/attestation';
 import { RevealHost } from './reveal-host';
+import { SealedPanel } from './sealed-panel';
 
 /** D-C: the top-up prompt ships behind a flag, OFF by default. */
 const TOPUP_ENABLED = process.env.NEXT_PUBLIC_TOPUP_ENABLED === '1';
@@ -236,33 +237,9 @@ export function PlayClient() {
   }
 
   if (done) {
-    // v3 D2: the sealed confirmation is a designed moment, not a sentence.
-    return (
-      <section aria-live="polite" className="animate-settle flex flex-col items-center gap-5 py-14 text-center">
-        <div className="relative h-16 w-16" aria-hidden>
-          <div className="absolute inset-0 rounded-2xl border-2 border-brand" />
-          <div className="absolute inset-0 rounded-2xl" style={{ boxShadow: 'var(--glow-action)' }} />
-          <svg viewBox="0 0 24 24" className="absolute inset-0 m-auto h-8 w-8 text-brand">
-            <path
-              d="m5 13 4.5 4.5L19 8"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </div>
-        <h2 className="font-display text-[34px] leading-[38px] font-extrabold text-ink">Sealed</h2>
-        <p className="max-w-prose text-[15px] leading-6 text-ink-muted">{COPY.pool.sealed}</p>
-        <Link
-          href={`/pools/${pool.pool}`}
-          className="mt-2 flex h-12 items-center justify-center rounded-xl bg-brand px-8 text-[15px] font-semibold text-(--color-base) transition-colors hover:bg-brand-hot"
-        >
-          {COPY.reveal.stalledDismiss}
-        </Link>
-      </section>
-    );
+    // v3 D2: the sealed confirmation is a designed moment, not a sentence;
+    // founder 2026-09-09: the check-back line, the opt-in, the public view.
+    return <SealedPanel poolAddress={pool.pool} />;
   }
 
   // The reveal takeover owns the screen from confirm onward.

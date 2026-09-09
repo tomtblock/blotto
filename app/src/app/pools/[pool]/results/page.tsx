@@ -14,6 +14,7 @@ import { Card } from '@/components/ui/card';
 import { LiveDataUnavailable } from '@/components/shell/live-unavailable';
 import { ResultsReveal, VerifyAlways, type RevealRow } from './results-reveal';
 import { ArchiveStandings } from './archive-standings';
+import { AllBattles } from './all-battles';
 import { WhatBeatYouPanel } from './what-beat-you-panel';
 import { ShareResult } from './share-result';
 import { PaidConfetti } from './paid-confetti';
@@ -131,6 +132,9 @@ export default async function ResultsPage({ params }: { params: Promise<{ pool: 
               paidSeats={results.filter((r) => BigInt(r.amount) > 0n).map((r) => r.seat)}
             />
             {archive && <ArchiveStandings archive={archive} />}
+            {/* Founder 2026-09-09: every battle of every player, from the
+                same verified bundle, after the reveal. */}
+            {archive && <AllBattles uri={archive.uri} />}
           </>
         )}
         <VerifyAlways pool={pool.pool} />

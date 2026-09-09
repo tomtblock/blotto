@@ -196,6 +196,17 @@ export const COPY = {
       'Battles are encrypted on your device to a key our systems hold locked against export until the pool closes; their hash is recorded on-chain at entry.',
     enter: 'Enter this tournament',
     ageTerritoryNote: '18+ only · not available in some territories',
+    // Founder 2026-09-09: "It must be super clear to the user that they
+    // should check back when the pool has reached 64 and concluded." The
+    // size rule is D-E4's (a pool plays at 64, or at its deadline with at
+    // least 52). PHASE-N-REVIEW: drafts; the founder owns the words.
+    checkBackTitle: 'Now the pool fills',
+    checkBack:
+      'Your seven battles are sealed. Nothing more to do here. The pool plays when it reaches 64 players, or at its deadline with at least 52 — every battle is then revealed and scored, and the ranking appears on the pool page. Check back then.',
+    notifyOptIn: 'Email me when this pool has concluded',
+    notifyOptInDone: 'We will email you when a pool you are in has concluded.',
+    viewPool: 'Follow this pool',
+    viewResults: 'Results and every battle',
     // D-E1 §1.4 (option A): shown on any pool whose on-chain pot differs
     // from the CURRENT launch table — the guarantee the architecture
     // already provides, said out loud instead of read as a cut.
@@ -243,6 +254,8 @@ export const COPY = {
     heroTitle: 'Make your Blot',
     tryDials: 'Try the dials',
     demoHint: 'Drag a dial — the other four give way. Nothing to sign, nothing to pay: this one is just to feel it.',
+    // PHASE-N-REVIEW (2026-09-09): the marquee line on the landing machine.
+    demoStatus: 'Practice machine',
     openPoolTitle: 'Open now',
     seatsLabel: 'seats filled',
   },
@@ -372,6 +385,16 @@ export const COPY = {
     backSheetLine: 'Leaving locks nothing and loses nothing — your clock keeps running.',
     backStay: 'Stay',
     backLeave: 'Leave',
+
+    /* The machine (founder 2026-09-09): a locked Blot drops out of the
+     * chute, its still and its five numbers fill one of seven tiles under
+     * the machine, and the seventh lock is the crescendo. PHASE-N-REVIEW:
+     * drafts; the founder owns the words. */
+    tilesLabel: 'Your seven Blots',
+    tileLocked: (n: number, stats: string) => `Battle ${n} locked: ${stats}`,
+    tileEmpty: (n: number) => `Battle ${n} — not yet made`,
+    crescendo: 'All seven made.',
+    crescendoLine: 'Your Blots are in the machine. Seal them to enter the pool.',
   },
   // v3 D3: retention surfaces — mastery and standing only. Factual state
   // changes, never pressure; the do-not-build vocabulary is CI-enforced.
@@ -474,6 +497,22 @@ export const COPY = {
       /** Battle score across the seven battles; a drawn battle counts half. */
       battleScore: 'Battles won',
       prize: 'Prize',
+    },
+    // Founder 2026-09-09: "an environment where everyone can view the
+    // leaderboard and all battles after, for complete transparency." Fed by
+    // the published bundle — the same bytes the Verify page recomputes —
+    // and only after the pool is published. PHASE-N-REVIEW: drafts.
+    allBattles: {
+      title: 'Every battle',
+      note:
+        'All seven battles of every player, read from the published data after the reveal. Five numbers per battle, in the order Strength · Speed · Heart · Wit · Durability.',
+      seat: 'Seat',
+      battle: (n: number) => `B${n}`,
+      notRevealed: 'not revealed',
+      loading: 'Reading the published data…',
+      failed: 'The published data could not be read just now. The link above fetches the same file.',
+      show: 'Show every battle',
+      hide: 'Hide the battles',
     },
   },
   verify: {

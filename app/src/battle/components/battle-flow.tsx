@@ -1,21 +1,29 @@
 'use client';
 
 /*
- * The seven-battle RUN (v4, founder brief 2026-09-06): Approved → seven
- * battle screens around the live Blot → Seven made (montage + share) →
- * the two-step seal. The machine (src/battle/machine.ts) owns every rule;
- * this component feeds ticks and renders state — it never sees a wallet,
- * and sealing still happens outside via `onConfirm`, unchanged.
+ * The seven-battle RUN (v4, founder brief 2026-09-06; the machine, founder
+ * 2026-09-09): Approved → seven battle screens in the MACHINE → Seven made
+ * (crescendo, montage, share) → the two-step seal. The machine reducer
+ * (src/battle/machine.ts) owns every rule; this component feeds ticks and
+ * renders state — it never sees a wallet, and sealing still happens outside
+ * via `onConfirm`, unchanged.
  *
- * Layout is the two-layer rule made literal: the Blot morphs on the PINK
- * stage; every number, dial and control sits on the PLUM card below. The
- * run clock is the calm slate ring — never red, never pulsing — and
+ * The machine (Cabinet.tsx): the Blot in the glass window, the dials on the
+ * deck. Lock-in is choreographed exactly as the founder described it: the
+ * locked Blot DROPS out through the chute, a still of its final shape is
+ * taken, its five numbers are logged, and one of the seven tiles under the
+ * machine fills; the next Blot RISES into the window. The seventh lock is
+ * the crescendo — confetti and all seven tiles lifting together — and then
+ * the seal steps, untouched (PID §8.6 line above every seal control).
+ *
+ * The run clock is the calm slate ring — never red, never pulsing — and
  * starts on the first dial touch (a slow wallet eats nothing).
  *
  * Lock-in captures a 1024×1024 still (shapes only, no numbers) into
  * IndexedDB for the montage and My Blots; capture is best-effort and can
- * never block or delay the seal. Sharing the montage never blocks
- * sealing either — two independent controls on Seven-made.
+ * never block or delay the seal. Sharing the montage never blocks sealing
+ * either. Stills are pictures of the allocation and stay on the device
+ * like the allocation itself (render-still.ts).
  */
 
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
@@ -25,16 +33,21 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Sheet } from '@/components/ui/sheet';
 import { BlotMorph } from '@/components/blot/BlotMorph';
+import { Cabinet } from '@/components/blot/Cabinet';
 import { StatDials } from '@/components/blot/StatDials';
 import { Timer } from '@/components/blot/Timer';
 import { useBlotSprings, usePrefersReducedMotion } from '@/components/blot/springs';
 import { renderBlotStill } from '@/components/blot/render-still';
+import { ConfettiBurst } from '@/components/celebrate/confetti-burst';
 import { EVEN_SPLIT, type Allocation } from '../allocation';
 import { BATTLES, initialState, reduce } from '../machine';
 import { composeMontage } from '../montage';
 import { saveStill } from '../stills';
+import { SevenTiles, type TileEntry } from './seven-tiles';
 
 const TICK_MS = 100;
+/** The drop through the chute (blot.css `.blot-drop`, 780 ms) plus a beat. */
+const LOCK_BEAT_MS = 1000;
 /** Set the first time this wallet seals — flips the share line to "seven". */
 const SEALED_ONCE_KEY = 'blotto.sealed.once';
 
@@ -49,12 +62,18 @@ export function BattleFlow({ poolAddress, onConfirm }: BattleFlowProps) {
   const [state, dispatch] = useReducer(reduce, undefined, () => initialState());
   const confirmed = useRef(false);
   const [sealArmed, setSealArmed] = useState(false);
-  // The 800 ms locked beat: heart pulse + visor blink before the advance.
+  // The lock beat: the Blot drops out of the chute before the advance.
   const [locking, setLocking] = useState(false);
   const [leaveSheet, setLeaveSheet] = useState(false);
   const stillBlobs = useRef<(Blob | null)[]>(Array.from({ length: BATTLES }, () => null));
+  // The rack under the machine: the machine's own record of locked battles
+  // (plus the one dropping right now), each with its still once it renders.
+  // Object URLs are revoked on unmount.
+  const [stillUrls, setStillUrls] = useState<(string | null)[]>([]);
+  const tileUrls = useRef<string[]>([]);
   const [montage, setMontage] = useState<{ url: string; blob: Blob } | null>(null);
   const [shareNote, setShareNote] = useState<string | null>(null);
+  const [celebrated, setCelebrated] = useState(false);
   const reduced = usePrefersReducedMotion();
 
   const battle = state.phase === 'battle' ? state : null;
@@ -82,6 +101,13 @@ export function BattleFlow({ poolAddress, onConfirm }: BattleFlowProps) {
     }
   }, [state, onConfirm]);
 
+  useEffect(() => {
+    const urls = tileUrls.current;
+    return () => {
+      for (const u of urls) URL.revokeObjectURL(u);
+    };
+  }, []);
+
   /* Back navigation during the run: a plum sheet, the factual line, no
    * pressure language beyond the fact. */
   const inBattle = state.phase === 'battle';
@@ -93,14 +119,29 @@ export function BattleFlow({ poolAddress, onConfirm }: BattleFlowProps) {
     return () => window.removeEventListener('popstate', onPop);
   }, [inBattle]);
 
+  /** Attach a rendered still to tile `k` (0-based). */
+  const attachStill = useCallback((k: number, png: Blob) => {
+    const url = URL.createObjectURL(png);
+    tileUrls.current.push(url);
+    setStillUrls((prev) => {
+      const next = prev.slice();
+      while (next.length <= k) next.push(null);
+      next[k] = url;
+      return next;
+    });
+  }, []);
+
   const lockIn = useCallback(() => {
     if (!battle || locking) return;
     const alloc = battle.alloc;
     const battleNo = battle.screen + 1;
-    // Best-effort still — never blocks the run, never blocks the seal.
+    // The tile fills at once with the numbers (derived below from the
+    // machine's record plus this dropping Blot); the still follows when it
+    // renders. Best-effort still — never blocks the run, never the seal.
     renderBlotStill(alloc)
       .then((png) => {
         stillBlobs.current[battleNo - 1] = png;
+        attachStill(battleNo - 1, png);
         return saveStill({ pool: poolAddress, battle: battleNo, allocation: alloc, png });
       })
       .catch(() => {});
@@ -110,12 +151,12 @@ export function BattleFlow({ poolAddress, onConfirm }: BattleFlowProps) {
         setLocking(false);
         dispatch({ type: 'lock_in' });
       },
-      reduced ? 0 : 800
+      reduced ? 0 : LOCK_BEAT_MS
     );
-  }, [battle, locking, poolAddress, reduced]);
+  }, [battle, locking, poolAddress, reduced, attachStill]);
 
-  /* Seven made: make sure all seven stills exist (expiry can skip some),
-   * then compose the montage once. */
+  /* Seven made: make sure all seven stills and tiles exist (expiry can skip
+   * some — those battles are the even split), then compose the montage once. */
   const review = state.phase === 'review' ? state : null;
   useEffect(() => {
     if (!review || montage) return;
@@ -128,6 +169,7 @@ export function BattleFlow({ poolAddress, onConfirm }: BattleFlowProps) {
           try {
             b = await renderBlotStill(review.battles[k]);
             stillBlobs.current[k] = b;
+            if (!cancelled) attachStill(k, b);
             void saveStill({ pool: poolAddress, battle: k + 1, allocation: review.battles[k], png: b });
           } catch {
             b = null;
@@ -152,6 +194,13 @@ export function BattleFlow({ poolAddress, onConfirm }: BattleFlowProps) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once per review entry
   }, [review !== null]);
+
+  /* The crescendo fires once, on entering Seven made. */
+  useEffect(() => {
+    if (!review || celebrated) return;
+    const raf = requestAnimationFrame(() => setCelebrated(true));
+    return () => cancelAnimationFrame(raf);
+  }, [review, celebrated]);
 
   const share = useCallback(async () => {
     if (!montage) return;
@@ -178,87 +227,116 @@ export function BattleFlow({ poolAddress, onConfirm }: BattleFlowProps) {
     }
   }, [montage]);
 
-  /* ——— Approved (ready): YOU'RE IN, the rule, the untouched clock. */
+  /* The rack: locked allocations from the machine's record — plus the Blot
+   * dropping through the chute right now — zipped with their stills. */
+  const lockedAllocs: readonly Allocation[] = battle
+    ? locking
+      ? [...battle.locked, battle.alloc]
+      : battle.locked
+    : review
+      ? review.battles
+      : state.phase === 'confirmed'
+        ? state.battles
+        : [];
+  const tiles: TileEntry[] = lockedAllocs.map((a, k) => ({ allocation: a, stillUrl: stillUrls[k] ?? null }));
+
+  /* ——— Approved (ready): YOU'RE IN, the rule, the untouched clock — the
+   * machine stands lit with the even-split Blot in its window. */
   if (state.phase === 'ready') {
     return (
       <section className="animate-settle flex flex-col gap-5">
-        <div className="flex items-center justify-center rounded-3xl bg-brand-pink py-6">
+        <Cabinet
+          status={COPY.battle.approvedTitle}
+          stageHeight={240}
+          corner={<Timer remainingMs={state.budgetMs} budgetMs={state.budgetMs} started={false} size={72} />}
+          deck={
+            <div className="flex flex-col gap-4">
+              <h2 className="font-display text-[40px] leading-[42px] font-extrabold text-game-ink">
+                {COPY.battle.approvedTitle}
+              </h2>
+              <p className="max-w-prose text-[15px] leading-6 text-game-ink-muted">{COPY.battle.ruleNinety}</p>
+              {/* R9-b: the effect of the default, stated as performance (the
+                  founder's addendum wording) — on the battle screen, not only
+                  the rules page. */}
+              <p className="max-w-prose text-[13px] leading-5 text-game-ink-muted">{COPY.battle.timerEffect}</p>
+              <Button size="lg" onClick={() => dispatch({ type: 'begin' })}>
+                {COPY.battle.begin}
+              </Button>
+            </div>
+          }
+        >
           <BlotMorph allocation={EVEN_SPLIT} size={200} mood="idle" />
-        </div>
-        <Card className="flex flex-col gap-4 p-6">
-          <div className="flex items-start justify-between gap-4">
-            <h2 className="font-display text-[40px] leading-[42px] font-extrabold text-ink">
-              {COPY.battle.approvedTitle}
-            </h2>
-            <Timer remainingMs={state.budgetMs} budgetMs={state.budgetMs} started={false} size={84} />
-          </div>
-          <p className="max-w-prose text-[15px] leading-6 text-ink-muted">{COPY.battle.ruleNinety}</p>
-          {/* R9-b: the effect of the default, stated as performance (the
-              founder's addendum wording) — on the battle screen, not only
-              the rules page. */}
-          <p className="max-w-prose text-[13px] leading-5 text-ink-muted">{COPY.battle.timerEffect}</p>
-          <Button size="lg" onClick={() => dispatch({ type: 'begin' })}>
-            {COPY.battle.begin}
-          </Button>
-        </Card>
+        </Cabinet>
+        <SevenTiles locked={tiles} />
       </section>
     );
   }
 
-  /* ——— Battle N of 7: the Blot on pink, the dials on plum. */
+  /* ——— Battle N of 7: the Blot in the window, the dials on the deck, the
+   * rack of tiles below. */
   if (battle) {
+    const motionClass = locking ? 'blot-drop' : battle.screen > 0 ? 'blot-rise' : '';
     return (
       <section className="flex flex-col gap-4">
-        <div className="relative flex items-center justify-center rounded-3xl bg-brand-pink py-4">
-          <BlotMorph
-            allocation={battle.alloc}
-            display={display}
-            velocity={velocity}
-            dragStat={dragStat}
-            mood={locking ? 'locked' : 'focused'}
-            size={230}
-          />
-          <div className="absolute right-4 top-4">
+        <Cabinet
+          status={COPY.battle.screenOf(battle.screen + 1)}
+          stageHeight={300}
+          corner={
             <Timer
               remainingMs={battle.remainingMs}
               budgetMs={battle.budgetMs}
               started={battle.clockStarted}
               size={72}
             />
-          </div>
-        </div>
-        <Card className="flex flex-col gap-4 p-5">
-          <header className="flex items-center justify-between">
-            <span className="text-[12px] uppercase tracking-[0.14em] text-ink-muted">
-              {COPY.battle.screenOf(battle.screen + 1)}
-            </span>
-            <div className="flex gap-1.5" aria-hidden>
-              {Array.from({ length: BATTLES }, (_, i) => (
-                <span
-                  key={i}
-                  className={
-                    'h-1.5 w-1.5 rounded-full ' +
-                    (i < battle.screen ? 'bg-brand' : i === battle.screen ? 'bg-ink' : 'bg-overlay')
-                  }
-                />
-              ))}
+          }
+          deck={
+            <div className="flex flex-col gap-4">
+              <header className="flex items-center justify-between">
+                <span className="font-mono text-[12px] uppercase tracking-[0.14em] text-game-ink-muted">
+                  {COPY.battle.screenOf(battle.screen + 1)}
+                </span>
+                <div className="flex gap-1.5" aria-hidden>
+                  {Array.from({ length: BATTLES }, (_, i) => (
+                    <span
+                      key={i}
+                      className={
+                        'h-1.5 w-1.5 rounded-full ' +
+                        (i < battle.screen ? 'bg-brand-pink' : i === battle.screen ? 'bg-brand-cream' : 'bg-game-raised')
+                      }
+                    />
+                  ))}
+                </div>
+              </header>
+              <StatDials
+                target={battle.alloc}
+                display={display}
+                dragStat={dragStat}
+                onDrag={(k, t) => dispatch({ type: 'dial', stat: k, target: t })}
+                onDragStart={setDragStat}
+                onDragEnd={() => setDragStat(null)}
+                onEvenSplit={() => dispatch({ type: 'even_split' })}
+                disabled={locking}
+              />
+              <p className="text-[12px] leading-5 text-game-ink-muted">{COPY.battle.ruleNinety}</p>
+              <Button size="lg" disabled={locking} onClick={lockIn}>
+                {COPY.battle.lockBattle(battle.screen + 1)}
+              </Button>
             </div>
-          </header>
-          <StatDials
-            target={battle.alloc}
-            display={display}
-            dragStat={dragStat}
-            onDrag={(k, t) => dispatch({ type: 'dial', stat: k, target: t })}
-            onDragStart={setDragStat}
-            onDragEnd={() => setDragStat(null)}
-            onEvenSplit={() => dispatch({ type: 'even_split' })}
-            disabled={locking}
-          />
-          <p className="text-[12px] leading-5 text-ink-muted">{COPY.battle.ruleNinety}</p>
-          <Button size="lg" disabled={locking} onClick={lockIn}>
-            {COPY.battle.lockBattle(battle.screen + 1)}
-          </Button>
-        </Card>
+          }
+        >
+          {/* Keyed by screen so the next Blot mounts fresh and rises. */}
+          <div key={battle.screen} className={motionClass}>
+            <BlotMorph
+              allocation={battle.alloc}
+              display={display}
+              velocity={velocity}
+              dragStat={dragStat}
+              mood={locking ? 'locked' : 'focused'}
+              size={230}
+            />
+          </div>
+        </Cabinet>
+        <SevenTiles locked={tiles} />
 
         <Sheet open={leaveSheet} onClose={() => setLeaveSheet(false)} title={COPY.battle.backStay}>
           <p className="max-w-prose text-[15px] leading-6 text-ink-muted">
@@ -282,16 +360,22 @@ export function BattleFlow({ poolAddress, onConfirm }: BattleFlowProps) {
     );
   }
 
-  /* ——— Seven made: montage, share, and the untouched two-step seal. */
+  /* ——— Seven made: the crescendo, the rack, montage, share, and the
+   * untouched two-step seal. */
   if (review) {
     return (
       <section className="flex flex-col gap-5">
-        <h2 className="font-display text-[34px] leading-[38px] font-extrabold text-ink">
-          {COPY.battle.sevenTitle}
-        </h2>
+        {celebrated && <ConfettiBurst pieces={52} durationMs={1800} />}
+        <div className="animate-settle flex flex-col gap-1">
+          <h2 className="font-display text-[40px] leading-[42px] font-extrabold text-ink">
+            {COPY.battle.crescendo}
+          </h2>
+          <p className="max-w-prose text-[15px] leading-6 text-ink-muted">{COPY.battle.crescendoLine}</p>
+        </div>
         {review.expired && (
           <p className="text-[14px] leading-5 text-ink-muted">{COPY.battle.expiredNote}</p>
         )}
+        <SevenTiles locked={tiles} crescendo={celebrated} />
         {montage ? (
           <div className="flex flex-col gap-3">
             {/* eslint-disable-next-line @next/next/no-img-element -- object-URL preview of a canvas composition */}
