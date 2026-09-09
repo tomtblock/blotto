@@ -418,6 +418,8 @@ export const COPY = {
      * chute, its still and its five numbers fill one of seven tiles under
      * the machine, and the seventh lock is the crescendo. PHASE-N-REVIEW:
      * drafts; the founder owns the words. */
+    // The rendered Blott's accessible one-liner (BlottRaster).
+    blottAria: (stats: string) => `Your Blott: ${stats}`,
     tilesLabel: 'Your seven Blots',
     tileLocked: (n: number, stats: string) => `Battle ${n} locked: ${stats}`,
     tileEmpty: (n: number) => `Battle ${n} — not yet made`,

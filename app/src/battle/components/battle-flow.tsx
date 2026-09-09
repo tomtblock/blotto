@@ -32,12 +32,13 @@ import { COPY } from '@/copy';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Sheet } from '@/components/ui/sheet';
-import { BlotMorph } from '@/components/blot/BlotMorph';
+import { BlottRaster } from '@/components/blott/BlottRaster';
 import { Cabinet } from '@/components/blot/Cabinet';
 import { StatDials } from '@/components/blot/StatDials';
 import { Timer } from '@/components/blot/Timer';
 import { useBlotSprings, usePrefersReducedMotion } from '@/components/blot/springs';
-import { renderBlotStill } from '@/components/blot/render-still';
+import { renderBlottStill } from '@/components/blott/render-still';
+import { Playground } from '@/components/blott/Antics';
 import { ConfettiBurst } from '@/components/celebrate/confetti-burst';
 import { EVEN_SPLIT, type Allocation } from '../allocation';
 import { BATTLES, initialState, reduce } from '../machine';
@@ -138,7 +139,7 @@ export function BattleFlow({ poolAddress, onConfirm }: BattleFlowProps) {
     // The tile fills at once with the numbers (derived below from the
     // machine's record plus this dropping Blot); the still follows when it
     // renders. Best-effort still — never blocks the run, never the seal.
-    renderBlotStill(alloc)
+    renderBlottStill(alloc)
       .then((png) => {
         stillBlobs.current[battleNo - 1] = png;
         attachStill(battleNo - 1, png);
@@ -167,7 +168,7 @@ export function BattleFlow({ poolAddress, onConfirm }: BattleFlowProps) {
         let b = stillBlobs.current[k];
         if (!b) {
           try {
-            b = await renderBlotStill(review.battles[k]);
+            b = await renderBlottStill(review.battles[k]);
             stillBlobs.current[k] = b;
             if (!cancelled) attachStill(k, b);
             void saveStill({ pool: poolAddress, battle: k + 1, allocation: review.battles[k], png: b });
@@ -265,7 +266,7 @@ export function BattleFlow({ poolAddress, onConfirm }: BattleFlowProps) {
             </div>
           }
         >
-          <BlotMorph allocation={EVEN_SPLIT} size={200} mood="idle" />
+          <BlottRaster allocation={EVEN_SPLIT} size={200} mood="idle" />
         </Cabinet>
         <SevenTiles locked={tiles} />
       </section>
@@ -326,7 +327,7 @@ export function BattleFlow({ poolAddress, onConfirm }: BattleFlowProps) {
         >
           {/* Keyed by screen so the next Blot mounts fresh and rises. */}
           <div key={battle.screen} className={motionClass}>
-            <BlotMorph
+            <BlottRaster
               allocation={battle.alloc}
               display={display}
               velocity={velocity}
@@ -376,6 +377,11 @@ export function BattleFlow({ poolAddress, onConfirm }: BattleFlowProps) {
           <p className="text-[14px] leading-5 text-ink-muted">{COPY.battle.expiredNote}</p>
         )}
         <SevenTiles locked={tiles} crescendo={celebrated} />
+        {/* Founder 2026-09-09: once the seven are made they get to play —
+            the rendered Blotts running, bouncing and napping under the
+            rack. Seeded by each battle's first stat so no two runs match;
+            reads the allocation for nothing else. */}
+        <Playground count={BATTLES} seeds={review.battles.map((b) => b[0])} size={64} />
         {montage ? (
           <div className="flex flex-col gap-3">
             {/* eslint-disable-next-line @next/next/no-img-element -- object-URL preview of a canvas composition */}

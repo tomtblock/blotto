@@ -15,7 +15,7 @@
 import { useState } from 'react';
 import { EVEN_SPLIT, type Allocation } from '@/battle/allocation';
 import { COPY } from '@/copy';
-import { BlotMorph } from '@/components/blot/BlotMorph';
+import { BlottRaster } from '@/components/blott/BlottRaster';
 import { Cabinet } from '@/components/blot/Cabinet';
 import { StatDials } from '@/components/blot/StatDials';
 import { rebalance } from '@/components/blot/rebalance';
@@ -52,7 +52,7 @@ export function LiveDemo() {
         </>
       }
     >
-      <BlotMorph
+      <BlottRaster
         allocation={target}
         display={display}
         velocity={velocity}

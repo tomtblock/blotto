@@ -19,6 +19,7 @@ import { COPY } from '@/copy';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/wallet/auth-context';
 import { submitNotifyPreference } from '@/entry/notify';
+import { BlottSprite } from '@/components/blott/BlottSprite';
 
 const EMAIL_KEY = (wallet: string) => `blotto:notify-email:${wallet}`;
 
@@ -64,6 +65,7 @@ export function SealedPanel({ poolAddress }: { poolAddress: string }) {
           />
         </svg>
       </div>
+      <BlottSprite pose="trophy" size={148} className="blott-sealed" />
       <h2 className="font-display text-[34px] leading-[38px] font-extrabold text-ink">Sealed</h2>
       <p className="max-w-prose text-[15px] leading-6 text-ink-muted">{COPY.pool.sealed}</p>
 
