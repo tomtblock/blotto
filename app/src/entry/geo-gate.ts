@@ -9,6 +9,9 @@
  * browser; the play client owns the React state around it.
  */
 
+/** Ceiling on the availability call before the page treats it as failed. */
+export const GEO_TIMEOUT_MS = 8_000;
+
 export type GeoGateState = 'checking' | 'allowed' | 'blocked';
 
 export async function checkGeoGate(
@@ -17,7 +20,13 @@ export async function checkGeoGate(
 ): Promise<Exclude<GeoGateState, 'checking'>> {
   if (!entryApiBase) return 'blocked';
   try {
-    const res = await fetchImpl(`${entryApiBase}/geo`, { method: 'GET' });
+    // Founder 2026-09-09 ("taking ages to load"): a hung call must not hold
+    // the entry page forever — eight seconds, then the fail-closed answer,
+    // and the page offers "Check again".
+    const res = await fetchImpl(`${entryApiBase}/geo`, {
+      method: 'GET',
+      signal: typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal ? AbortSignal.timeout(GEO_TIMEOUT_MS) : undefined,
+    });
     if (!res.ok) return 'blocked';
     const body = (await res.json()) as { allowed?: unknown };
     return body.allowed === true ? 'allowed' : 'blocked';

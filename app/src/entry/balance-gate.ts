@@ -18,6 +18,9 @@
  */
 export const ENTRY_COST_HEADROOM_LAMPORTS = 10_000_000n;
 
+/** Ceiling on the balance read before the gate reports 'unavailable'. */
+export const BALANCE_TIMEOUT_MS = 8_000;
+
 export type BalanceGateState =
   | { state: 'ok'; haveLamports: bigint }
   | { state: 'insufficient'; needLamports: bigint; haveLamports: bigint }
@@ -31,7 +34,13 @@ export async function checkBalanceGate(
   const needLamports = entryLamports + ENTRY_COST_HEADROOM_LAMPORTS;
   let haveLamports: bigint;
   try {
-    haveLamports = await getBalance(wallet);
+    // Founder 2026-09-09 ("taking ages to load"): a slow RPC answers
+    // 'unavailable' after BALANCE_TIMEOUT_MS instead of waiting forever; the view
+    // offers a re-check.
+    haveLamports = await Promise.race([
+      getBalance(wallet),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('balance: timeout')), BALANCE_TIMEOUT_MS)),
+    ]);
   } catch {
     return { state: 'unavailable' };
   }
