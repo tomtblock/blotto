@@ -49,19 +49,23 @@
   color: var(--color-game-ink-muted);
   opacity: 0.6;
 }
+/* The five numbers under a tile: three on the first line, two on the
+   second at phone widths (a 7-column rack leaves ~44px per tile), one line
+   from 640px up. Always the fixed stat order. */
 .seven-tile-stats {
   font-family: var(--font-mono, monospace);
   font-size: 9px;
-  letter-spacing: 0.02em;
-  line-height: 1;
+  letter-spacing: 0.01em;
+  line-height: 1.15;
   color: var(--color-game-ink-muted);
-  white-space: nowrap;
-  overflow: hidden;
+  text-align: center;
   max-width: 100%;
+  min-height: 2.3em;
+  word-spacing: 0.1em;
 }
 @media (min-width: 640px) {
   .seven-tiles { gap: 10px; padding: 14px 12px 12px; }
-  .seven-tile-stats { font-size: 11px; }
+  .seven-tile-stats { font-size: 11px; min-height: 1.15em; }
 }
 
 /* A tile's locked face mounts when its battle locks and settles in from the

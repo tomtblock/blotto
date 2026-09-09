@@ -20,9 +20,10 @@
 /* Marquee: warm backlit sign. */
 .cab-marquee {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
-  gap: 12px;
+  gap: 4px 12px;
   margin: 0 6px 12px;
   padding: 10px 18px;
   border-radius: 16px;

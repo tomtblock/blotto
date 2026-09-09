@@ -63,7 +63,15 @@ export function SevenTiles({ locked, crescendo = false }: SevenTilesProps) {
               </div>
             )}
             <span className="seven-tile-stats tnum" aria-hidden="true">
-              {entry ? stats : ' '}
+              {entry ? (
+                <>
+                  {entry.allocation.slice(0, 3).join(' ')}
+                  <br />
+                  {entry.allocation.slice(3).join(' ')}
+                </>
+              ) : (
+                ' '
+              )}
             </span>
           </li>
         );
