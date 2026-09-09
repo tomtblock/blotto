@@ -39,7 +39,10 @@ class HttpIndexerApi implements IndexerApi {
       cache: 'no-store',
       signal: AbortSignal.timeout(READ_TIMEOUT_MS),
     });
-    if (res.status === 404) return null;
+    // 404: no such row. 400: the path names something that cannot exist
+    // (a malformed address) — the same answer to a reader, and one a retry
+    // could never change, so it is "not here" rather than a failure.
+    if (res.status === 404 || res.status === 400) return null;
     if (!res.ok) throw new Error(`indexer read API ${path}: ${res.status}`);
     return (await res.json()) as T;
   }
