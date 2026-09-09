@@ -67,7 +67,7 @@ export interface BlotMorphProps {
 
 /** The accessible one-liner (brief §7) — exported for reuse in stills UI. */
 export function blotAriaLabel(allocation: Allocation): string {
-  return `Your Blot: ${allocation.map((v, i) => `${STAT_NAMES[i]} ${v}`).join(', ')}`;
+  return `Your Blott: ${allocation.map((v, i) => `${STAT_NAMES[i]} ${v}`).join(', ')}`;
 }
 
 /** Screen-reader announcements, throttled to once per second (brief §7). */

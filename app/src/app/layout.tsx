@@ -5,6 +5,7 @@ import { AuthProvider } from "@/wallet/auth-provider";
 import { QueryProvider } from "@/query/query-provider";
 import { ToastProvider } from "@/components/ui/toast";
 import "./globals.css";
+import { SiteAntics } from '@/components/blott/SiteAntics';
 
 // The display face (D1): Big Shoulders — a condensed athletic family built
 // for scoreboards and stadium signage, which is exactly what prize amounts,
@@ -59,7 +60,10 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <AuthProvider>
           <QueryProvider>
-            <ToastProvider>{children}</ToastProvider>
+            <ToastProvider>
+              {children}
+              <SiteAntics />
+            </ToastProvider>
           </QueryProvider>
         </AuthProvider>
       </body>
