@@ -136,6 +136,12 @@ export const COPY = {
       `I accept the terms (version ${version}). My wallet signs this statement and the acceptance is recorded.`,
     attestFailed:
       'The confirmation could not be recorded. Check your connection and try again.',
+    // Founder 2026-09-09 ("taking ages to load"): a hold names itself when it
+    // is slow, and the fail-closed territory panel offers one more look.
+    // PHASE-N-REVIEW: drafts.
+    slowHold: 'This is taking longer than usual. If it does not move on, reload the page and try again.',
+    territoryRecheckNote: 'If your connection dropped during the check, this can show by mistake.',
+    territoryRecheck: 'Check again',
     ageConfirm: 'Confirm and continue',
     gateTitle: 'Before you enter',
     territoryBlocked:

@@ -72,12 +72,22 @@ function StatePanel({ title, children }: { title: string; children: React.ReactN
   );
 }
 
-/** A quiet in-progress hold (checks, loads) — never a bare ellipsis. */
+/** After this long a hold says so, rather than looking frozen. */
+const SLOW_HOLD_MS = 4_000;
+
+/** A quiet in-progress hold (checks, loads) — never a bare ellipsis. Past
+ *  SLOW_HOLD_MS it names the stage as slow so a stuck step is reportable. */
 function PendingPanel({ label }: { label: string }) {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setSlow(true), SLOW_HOLD_MS);
+    return () => clearTimeout(t);
+  }, [label]);
   return (
     <section aria-live="polite" className="flex flex-col items-center gap-4 py-14">
       <div className="h-8 w-8 rounded-full border-2 border-overlay border-t-brand motion-safe:animate-rotate" aria-hidden />
       <p className="text-[13px] uppercase tracking-[0.14em] text-ink-muted">{label}</p>
+      {slow && <p className="max-w-prose text-center text-[13px] leading-5 text-ink-muted">{COPY.gate.slowHold}</p>}
     </section>
   );
 }
@@ -90,6 +100,7 @@ export function PlayClient() {
   // D-B3: the territory pre-flight. Nothing that can take money renders
   // until the verdict is an explicit 'allowed' — fail-closed by default.
   const [geo, setGeo] = useState<GeoGateState>('checking');
+  const [geoRun, setGeoRun] = useState(0);
   // C9: the balance pre-flight, equally fail-closed, ahead of the timer.
   // Keyed by (wallet, pool, run): a stale result renders as 'checking'
   // rather than being cleared with a synchronous setState in the effect.
@@ -117,7 +128,7 @@ export function PlayClient() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [geoRun]);
 
   const wallet = auth.status === 'signed-in' ? auth.walletAddress : null;
   const hasSigner =
@@ -203,9 +214,22 @@ export function PlayClient() {
   // D-B3: territory gate ahead of everything, including the attestation.
   if (geo === 'checking') return <PendingPanel label="Checking availability" />;
   if (geo === 'blocked') {
+    // Fail-closed covers a slow or unreachable check too (D-B3), so the
+    // panel offers one more look before the player concludes anything.
     return (
       <StatePanel title="Not available here">
         <p>{COPY.gate.territoryBlocked}</p>
+        <p className="text-[13px]">{COPY.gate.territoryRecheckNote}</p>
+        <Button
+          intent="quiet"
+          className="self-start"
+          onClick={() => {
+            setGeo('checking');
+            setGeoRun((n) => n + 1);
+          }}
+        >
+          {COPY.gate.territoryRecheck}
+        </Button>
       </StatePanel>
     );
   }
