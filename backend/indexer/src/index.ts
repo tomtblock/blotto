@@ -17,7 +17,15 @@
  * nothing hard-coded. Ingest health reports through `Monitor` (logging default; Step 6 alerting).
  */
 import { loadHygieneConfig } from '../../_shared/src/http-hygiene';
-import { buildMonitor, loadMonitor, createPool, ALERT, METRIC, type Monitor } from './shared';
+import {
+  buildMonitor,
+  loadMonitor,
+  createPool,
+  registerBlottoEventLayouts,
+  ALERT,
+  METRIC,
+  type Monitor,
+} from './shared';
 import { loadIndexerConfig, requireWebhookSecret } from './config';
 import { migrate } from './migrate';
 import { PgEventStore } from './store-pg';
@@ -25,6 +33,17 @@ import { createWebhookServer } from './webhook';
 import { serveReadApi } from './read-api';
 import { catchUpFloor, runBackfill, Web3BackfillRpc } from './backfill';
 import { backfillArchive } from './archive';
+
+// INCIDENT 2026-09-09: the decoder's layout table is filled by this call and by
+// nothing else. From 2026-08-27 until today no service made it — only the
+// projection tests did — so `serve`, `sync` and `backfill` all ran with an EMPTY
+// table, every one of our own `Program data:` lines was "unrecognised" (the
+// silent path reserved for other programs' events), and the read API served
+// `[]` while pools were open on chain. Registering at module load, before any
+// command, is deliberate: there is no code path into this service that can
+// decode a transaction without passing through here.
+// (`test/registration.spec.ts` decodes a real devnet OpenPool line through it.)
+registerBlottoEventLayouts();
 
 const SERVICE = 'indexer';
 
