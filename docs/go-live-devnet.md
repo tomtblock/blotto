@@ -31,7 +31,7 @@ on a site that can show them.
 | Pool 1 | open, 0 entrants | fully launched; deadline 2026-09-09 04:47:22 UTC; carries the old 5.12 SOL pot and 72 h deadline copied at open |
 | Treasury | 0.88 SOL | pool 1's refund returns 5.12 SOL, after which pool 2 (4 SOL pot) opens itself |
 | Fly apps | all healthy | daemon ticking every 15 s, keeper wallet 1.99 SOL |
-| Indexer data | **empty** | read API returns `[]`; the site says "No tournament is open" while pool 1 is open. Cause: the boot-time catch-up walk ran on the public RPC. Fix: a Helius RPC and a redeploy (steps 1–2), or the `indexer-backfill` workflow |
+| Indexer data | **empty** | read API returns `[]`; the site says "No tournament is open" while pool 1 is open. Cause (found 2026-09-09 04:30 UTC, after this table was first written): the service never registered its event layouts, so every walk decoded nothing — a code defect, fixed in `backend/indexer/src/index.ts`. Fix: merge that change, redeploy (step 2), then run the `indexer-backfill` workflow once |
 | Live site | today's code | `blotto-jade.vercel.app` serves Fair play, the wallet page and Phantom sign-in; Privy app id baked in; no Helius RPC; no faucet link |
 | Privy | **wrong domains** | allowed domains list holds two stale preview hostnames only |
 | Helius key | **exposed** | the key pasted into chat on 2026-09-08 must be replaced |
@@ -86,13 +86,16 @@ is not available in your region" because the location check fails closed.
 The deploy refuses a trailing slash or a non-https origin at preflight.
 
 Then **Actions → deploy-backend → Run workflow** on `main`, "allow dev
-credentials" unticked. The indexer deploys first; with an empty ledger and a
-Helius RPC its boot-time walk fills the ledger from the program's history.
+credentials" unticked. The indexer deploys first; with an empty ledger its
+boot-time walk fills the ledger from the program's history (sixteen
+transactions today — seconds, on any RPC).
 
-Check: `https://blotto-indexer.fly.dev/pools` shows pool 1 (`Open`, 0
-entrants) within a few minutes of the indexer step; `https://blotto-daemon.fly.dev/health`
-says `"ready":true`. If `/pools` is still `[]` fifteen minutes later, run
-**Actions → indexer-backfill → Run workflow** (mode `both`).
+Check: `https://blotto-indexer.fly.dev/pools` shows pool 1 within a few
+minutes of the indexer step; `https://blotto-daemon.fly.dev/health` says
+`"ready":true`. If `/pools` is still `[]` fifteen minutes later, run
+**Actions → indexer-backfill → Run workflow** (mode `both`) and read the
+`inserted` count in its log: zero on a chain with pools means the code, not
+the RPC (that was the 2026-09-09 incident).
 
 ## 3. Vercel (you, ~10 min) — project `blotto`
 
@@ -207,7 +210,7 @@ wallets, entry, sealing and refunds.
 | "not available in your region" for everyone | domain missing from `BLOTTO_APP_ORIGINS`, or packet down | check `blotto-packet.fly.dev/health`; fix the variable; re-run deploy-backend |
 | "Sign-in is not switched on for this web address yet" | domain not in Privy allowed domains | step 4.1; immediate |
 | sign-in buttons disabled, "temporarily unavailable" | Privy app id missing or rejected in the build | Vercel variable, then Redeploy |
-| "No tournament is open" while a pool is open | indexer has no data | `blotto-indexer.fly.dev/pools`; if `[]`, run indexer-backfill |
+| "No tournament is open" while a pool is open | indexer has no data | `blotto-indexer.fly.dev/pools`; if `[]`, run indexer-backfill and read its `inserted` count (zero = code defect, see the incident note in `backend/indexer/src/index.ts`) |
 | "Entries are paused right now" | paused | step 5 |
 | "Your wallet is not ready" after sign-in | embedded wallet creation off, or Privy still initialising | step 4.3; reload once |
 | "Entering this pool takes about 0.11 SOL…" | not enough test SOL | faucet, or send from your Phantom |
