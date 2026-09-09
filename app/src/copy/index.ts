@@ -159,6 +159,17 @@ export const COPY = {
     poolLoadFailed:
       'The tournament data did not arrive. Try again; if it keeps happening, tell us the web address you opened the site from.',
     poolLoadRetry: 'Try again',
+    // 2026-09-09: the entry page checks the pool's state and this wallet's
+    // existing entry BEFORE the ninety seconds start. PHASE-N-REVIEW.
+    poolClosedTitle: 'This pool has closed',
+    poolClosed: 'It is no longer taking entries. Another pool in this tier opens once this one has concluded.',
+    poolClosedLink: 'See open pools',
+    alreadyEnteredTitle: 'You are already in this pool',
+    alreadyEntered: (seat: number) =>
+      `Seat ${seat} is yours. Your seven battles are sealed and cannot be changed or entered again — one entry per wallet per pool.`,
+    alreadyEnteredPool: 'Open the pool page',
+    alreadyEnteredResults: 'Results and the leaderboard',
+    entriesChecking: 'Checking your entries',
     ageConfirm: 'Confirm and continue',
     gateTitle: 'Before you enter',
     territoryBlocked:
@@ -274,7 +285,7 @@ export const COPY = {
     // Hero voice is a PLACEHOLDER awaiting founder re-voice (brand voice
     // is founder-reserved); everything else on the landing reuses lines
     // already ratified elsewhere in this file.
-    heroTitle: 'Make your Blot',
+    heroTitle: 'Make your Blott',
     tryDials: 'Try the dials',
     demoHint: 'Drag a dial — the other four give way. Nothing to sign, nothing to pay: this one is just to feel it.',
     // PHASE-N-REVIEW (2026-09-09): the marquee line on the landing machine.
@@ -369,6 +380,11 @@ export const COPY = {
       "This pool filled before your entry reached it, so nothing settled. Another pool in this tier opens once this one has been paid out.",
     deadlinePassed:
       "This pool stopped taking entries at its deadline before your entry reached it, so nothing settled.",
+    // 2026-09-09: the two refusals the founder met that read as a network fault.
+    alreadyEntered:
+      "This wallet has already entered this pool, so nothing settled. One entry per wallet per pool is the rule — your seat is held and your battles are sealed. Check the pool page for your entry.",
+    poolClosed:
+      "This pool is no longer taking entries, so nothing settled. Open pools are listed on the Pools tab.",
   },
   battle: {
     screenOf: (k: number) => `Battle ${k} of 7`,
@@ -397,19 +413,22 @@ export const COPY = {
      * founder's addendum of 2026-09-07 (R9-b): an unlocked battle is
      * entered as the even split, the one on screen included. */
     approvedTitle: "You're in.",
-    begin: 'Make my first Blot',
+    begin: 'Make my first Blott',
     ruleNinety:
       'Ninety seconds for all seven battles. Any battle you have not locked when the timer ends \u2014 including the one on your screen \u2014 is entered as an even split of 20 points in each of the five stats.',
     lockBattle: (n: number) => `Lock in battle ${n}`,
     sevenTitle: 'Seven made',
     expiredNote: 'Time ran out \u2014 every battle you had not locked was entered as the even split.',
-    montageHeadlineFirst: 'I just made my first Blot.',
-    montageHeadlineSeven: 'I just made seven Blots.',
+    montageHeadlineFirst: 'I just made my first Blott.',
+    montageHeadlineSeven: 'I just made seven Blotts.',
     montageFooter: 'BLOTTO CUP \u00b7 blotto.gg \u00b7 18+ only \u00b7 not available in some territories',
     share: 'Share',
-    shareTextFirst: 'I just made my first Blot. Join the battle at blotto.gg',
-    shareTextSeven: 'I just made seven Blots. Join the battle at blotto.gg',
+    shareTextFirst: 'I just made my first Blott. Join the battle at blotto.gg',
+    shareTextSeven: 'I just made seven Blotts. Join the battle at blotto.gg',
     shareFallbackCopied: 'Share line copied — the image downloaded to your device.',
+    // Founder 2026-09-09: "users should be able to share this to X".
+    shareX: 'Post on X',
+    shareXNote: 'X opened with your line. The image downloaded to your device — attach it to the post.',
     backSheetLine: 'Leaving locks nothing and loses nothing — your clock keeps running.',
     backStay: 'Stay',
     backLeave: 'Leave',
@@ -418,11 +437,11 @@ export const COPY = {
      * chute, its still and its five numbers fill one of seven tiles under
      * the machine, and the seventh lock is the crescendo. PHASE-N-REVIEW:
      * drafts; the founder owns the words. */
-    tilesLabel: 'Your seven Blots',
+    tilesLabel: 'Your seven Blotts',
     tileLocked: (n: number, stats: string) => `Battle ${n} locked: ${stats}`,
     tileEmpty: (n: number) => `Battle ${n} — not yet made`,
     crescendo: 'All seven made.',
-    crescendoLine: 'Your Blots are in the machine. Seal them to enter the pool.',
+    crescendoLine: 'Your Blotts are in the machine. Seal them to enter the pool.',
   },
   // v3 D3: retention surfaces — mastery and standing only. Factual state
   // changes, never pressure; the do-not-build vocabulary is CI-enforced.
@@ -551,6 +570,22 @@ export const COPY = {
     title: 'Verify a pool',
     explainer:
       'Recompute the whole result yourself: decrypt every sealed battle with the revealed pool secret, score the identical field, rebuild the results tree, and compare it to what was committed on-chain. Nothing here trusts the operator.',
+    // Founder 2026-09-09: more guidance on how to use this page. PHASE-N-REVIEW.
+    howTitle: 'How to use this page',
+    howSteps: [
+      'Open a concluded pool from the Pools tab and press “Verify this pool” — its address arrives here filled in. Or paste any pool address.',
+      'Press “Fetch both”. The on-chain record comes from our read API and the published bundle from its permanent address. If you would rather not trust us for the fetch, paste either one by hand from the chain or the gateway.',
+      'Press “Recompute”. Your browser decrypts every sealed battle with the revealed pool secret, scores the whole field with the same engine the operator runs, rebuilds the results tree and compares its root with the one committed on-chain.',
+    ] as const,
+    howVerdict:
+      'Green means the published result reproduces exactly from the published data. Red means it does not — and that is worth telling us about.',
+    howWhen: 'A pool can be verified once it has concluded and its secret has been revealed; an open pool has nothing to check yet.',
+    poolLabel: 'Pool address (fetches the on-chain record)',
+    bundleLabel: 'Published bundle address (the pool page links it)',
+    fetchBoth: 'Fetch both',
+    bundleField: 'Published reveal bundle (JSON)',
+    recordField: 'On-chain record (JSON — from the events, or the read API’s /verify-record)',
+    recompute: 'Recompute',
     match: 'Recomputed root matches the on-chain commitment.',
     mismatch: 'RECOMPUTED ROOT DOES NOT MATCH — the published data does not reproduce the on-chain result.',
   },
@@ -562,9 +597,9 @@ export const COPY = {
     prizeFinishes: 'Prize finishes',
     totalPrizes: 'Total prizes',
     readOnlyNote: 'Profiles are a read-only record. Nothing here affects any pool.',
-    myBlots: 'My Blots',
+    myBlots: 'My Blotts',
     myBlotsNote:
-      'Every battle you have locked, as its Blot — kept on this device only. Shapes, never numbers.',
+      'Every battle you have locked, as its Blott — kept on this device only. Shapes, never numbers.',
   },
   custody: {
     // C13: the disclosure page. Everything here describes MECHANICS —
@@ -641,6 +676,11 @@ export const COPY = {
     // read by nothing in any scoring or prize path.
     classNames: ['Goblin', 'Knight', 'Wizard', 'Dragon', 'Titan'] as const,
     cardTitle: 'Your character pass',
+    // PID §3 rarity tiers in ladder order, and the count of each per pool of
+    // 64 (LAUNCH_CLASS_COUNTERS in the program — the published bag).
+    rarityNames: ['Common', 'Uncommon', 'Rare', 'Epic', 'Mythic'] as const,
+    rarityCounts: [38, 15, 7, 3, 1] as const,
+    rarityOf: (count: number) => `${count} of every 64 passes`,
     cardSeat: (n: number) => `Seat ${n + 1} of 64`,
     cardDone: 'Continue',
     stalled:

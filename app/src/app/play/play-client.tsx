@@ -91,6 +91,45 @@ function PendingPanel({ label }: { label: string }) {
 /** Ceiling on the browser's fallback read of the pool. */
 const POOL_LOAD_TIMEOUT_MS = 8_000;
 
+/** Ceiling on the existing-entry read; past it the run proceeds. */
+const ENTRIES_TIMEOUT_MS = 6_000;
+
+/**
+ * Reads the pool's entries once and reports this wallet's seat (1-based) or
+ * null. Rendered as its own component, keyed by (pool, wallet), so the read
+ * restarts cleanly when either changes and the page never holds a stale
+ * answer for a different wallet.
+ */
+function EntriesCheck({
+  pool,
+  wallet,
+  onResult,
+}: {
+  pool: string;
+  wallet: string;
+  onResult: (seat: number | null) => void;
+}) {
+  useEffect(() => {
+    let cancelled = false;
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('entries: timeout')), ENTRIES_TIMEOUT_MS)
+    );
+    Promise.race([indexerApi().getEntries(pool), timeout])
+      .then((rows) => {
+        if (cancelled) return;
+        const mine = rows.find((r) => r.player === wallet && !r.refunded);
+        onResult(mine ? mine.idx + 1 : null);
+      })
+      .catch(() => {
+        if (!cancelled) onResult(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pool, wallet, onResult]);
+  return <PendingPanel label={COPY.gate.entriesChecking} />;
+}
+
 /** The server's read of the pool: `null` when the server could not read. */
 export type InitialPool = { pool: PoolSummary | null } | null;
 
@@ -120,6 +159,16 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
   // The in-flight entry: set at confirm, drives the reveal takeover.
   const [revealRun, setRevealRun] = useState<Promise<RevealResult> | null>(null);
   const [done, setDone] = useState(false);
+  /*
+   * 2026-09-09 (founder: "tried to enter again from the same wallet and got
+   * a network error"): the chain holds one entry per wallet per pool, and a
+   * second `register` fails at the entry account's creation. Read the pool's
+   * entries FIRST, so a wallet that is already in sees its seat instead of
+   * ninety seconds of battles that cannot be entered. Keyed by (pool,
+   * wallet); a read that fails or times out lets the run proceed — the tx
+   * classifier still names a duplicate honestly if it comes to that.
+   */
+  const [entered, setEntered] = useState<{ key: string; seat: number | null } | null>(null);
 
   const rpc = useMemo(() => makeTxRpc(rpcUrl()), []);
 
@@ -267,6 +316,20 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
     return <PendingPanel label="Loading the pool" />;
   }
 
+  // The pool must still be taking entries — a stale tab or an old link must
+  // not start a run that the program will refuse (PoolNotOpen). After this
+  // wallet's own entry the sealed panel and the reveal stay put regardless.
+  if (pool.state !== 'Open' && !done && !revealRun) {
+    return (
+      <StatePanel title={COPY.gate.poolClosedTitle}>
+        <p>{COPY.gate.poolClosed}</p>
+        <Link href="/pools" className="mt-1 text-brand underline underline-offset-2">
+          {COPY.gate.poolClosedLink}
+        </Link>
+      </StatePanel>
+    );
+  }
+
   // D-B3: territory gate ahead of everything, including the attestation.
   if (geo === 'checking') return <PendingPanel label="Checking availability" />;
   if (geo === 'blocked') {
@@ -314,6 +377,26 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
     ) : (
       <PendingPanel label={COPY.gate.signerConnecting} />
     );
+  }
+
+  const enteredKey = `${pool.pool}:${auth.walletAddress}`;
+  if (!done && !revealRun) {
+    if (!entered || entered.key !== enteredKey) {
+      return <EntriesCheck key={enteredKey} pool={pool.pool} wallet={auth.walletAddress} onResult={(seat) => setEntered({ key: enteredKey, seat })} />;
+    }
+    if (entered.seat !== null) {
+      return (
+        <StatePanel title={COPY.gate.alreadyEnteredTitle}>
+          <p>{COPY.gate.alreadyEntered(entered.seat)}</p>
+          <Link href={`/pools/${pool.pool}`} className="mt-1 text-brand underline underline-offset-2">
+            {COPY.gate.alreadyEnteredPool}
+          </Link>
+          <Link href={`/pools/${pool.pool}/results`} className="text-brand underline underline-offset-2">
+            {COPY.gate.alreadyEnteredResults}
+          </Link>
+        </StatePanel>
+      );
+    }
   }
 
   if (done) {
