@@ -46,6 +46,7 @@
  * beat's named duration (constants.ts) elapses.
  */
 
+import { entryRecorded } from "@/tx/errors";
 import type { TxFailure } from "@/tx/types";
 import { EXTENDED_TELL_MIN_CLASS, TAP_COUNT } from "./constants";
 import type { RevealOutcome, RevealClass } from "./types";
@@ -80,9 +81,13 @@ export type RevealState =
   | { beat: "unseal"; outcome: ConfirmedOutcome }
   /** Beat 6 — the card, centred, awaiting the explicit dismiss. */
   | { beat: "card"; outcome: ConfirmedOutcome }
-  /** Beat 7 — exit: control returns to the surface behind the takeover. `outcome` is
-   *  null when the takeover was left from failed/stalled (no card). */
-  | { beat: "settled"; outcome: ConfirmedOutcome | null };
+  /** Beat 7 — exit: control returns to the surface behind the takeover.
+   *  `outcome` is set only when the CARD was dismissed; `failure` only when the
+   *  FAILED beat was; a dismiss from stalled carries neither (the transaction
+   *  may still land). The host reads `revealVisual(...).exit` from these —
+   *  audit O25 (2026-09-11): a dismissed failure used to look exactly like a
+   *  dismissed card, and the page behind rendered "Sealed" for both. */
+  | { beat: "settled"; outcome: ConfirmedOutcome | null; failure: TxFailure | null };
 
 export type RevealEvent =
   | { kind: "tap" }
@@ -183,10 +188,13 @@ export function revealReducer(
     case "dismiss":
       // The single explicit exit (Beat 7), plus the honest exits from the
       // failure and come-back states. No dismiss exists mid-sequence.
-      if (state.beat === "card") return { beat: "settled", outcome: state.outcome };
-      if (state.beat === "failed" || state.beat === "stalled") {
-        return { beat: "settled", outcome: null };
+      if (state.beat === "card") {
+        return { beat: "settled", outcome: state.outcome, failure: null };
       }
+      if (state.beat === "failed") {
+        return { beat: "settled", outcome: null, failure: state.failure };
+      }
+      if (state.beat === "stalled") return { beat: "settled", outcome: null, failure: null };
       return state;
 
     case "retry":
@@ -214,7 +222,29 @@ export type RevealVisual =
   | { beat: "tell"; class: RevealClass; extended: boolean }
   | { beat: "unseal"; class: RevealClass }
   | { beat: "card"; class: RevealClass; entryIndex: number; asset: string }
-  | { beat: "settled" };
+  | { beat: "settled"; exit: RevealExit };
+
+/**
+ * What the settled beat hands back to the surface behind the takeover
+ * (audit O25). Three answers, because the page behind has three honest
+ * responses and used to have one:
+ *
+ *   - `entered`: the player holds a seat — the card was dismissed, or the
+ *     failure was one where the entry IS on-chain (`entryRecorded`). The
+ *     sealed panel is the truth.
+ *   - `not-entered`: nothing landed and nothing can — back to the start,
+ *     never to "Sealed".
+ *   - `pending`: left from the come-back state; the transaction was
+ *     broadcast and may still land, so neither a second run nor "Sealed"
+ *     is honest — the pool page is.
+ */
+export type RevealExit = "entered" | "not-entered" | "pending";
+
+export function settledExit(state: Extract<RevealState, { beat: "settled" }>): RevealExit {
+  if (state.outcome !== null) return "entered";
+  if (state.failure === null) return "pending";
+  return entryRecorded(state.failure) ? "entered" : "not-entered";
+}
 
 export function revealVisual(state: RevealState): RevealVisual {
   switch (state.beat) {
@@ -244,7 +274,7 @@ export function revealVisual(state: RevealState): RevealVisual {
         asset: state.outcome.asset,
       };
     case "settled":
-      return { beat: "settled" };
+      return { beat: "settled", exit: settledExit(state) };
   }
 }
 

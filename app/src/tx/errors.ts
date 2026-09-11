@@ -55,7 +55,51 @@ export const PROGRAM_ERROR_CODES: Readonly<Record<number, TxFailureKind>> = {
   6005: "entries-paused", // Paused
   6010: "pool-full", // PoolFull
   6011: "deadline-passed", // DeadlinePassed
+  // 2026-09-11 (audit O27): the fourth refusal a player can meet. The packet
+  // service stamps `issued_at` when the packet is requested — immediately
+  // before the transaction is built — and the program refuses a packet older
+  // than 60 s, so a wallet prompt approved slowly lands a transaction the
+  // chain rejects. Nothing is charged; a retry with a fresh packet is safe.
+  6019: "packet-stale", // PacketStale
 };
+
+/**
+ * Whether a fresh attempt is safe, per kind, where the answer does not depend
+ * on the instance. Absent means "decide from the instance" (`makeFailure`).
+ *
+ *  - The program would refuse again → false (paused, full, past the
+ *    deadline, closed); the page re-reads the pool instead.
+ *  - A seat is already held → false; a retry would be a second entry.
+ *  - The entry landed and only the read-back failed → false, for the same
+ *    reason (PID §8.6: decisions are final on submission).
+ */
+const RETRYABLE_BY_KIND: Readonly<Partial<Record<TxFailureKind, boolean>>> = {
+  "entries-paused": false,
+  "pool-full": false,
+  "deadline-passed": false,
+  "pool-closed": false,
+  "already-entered": false,
+  "outcome-unreadable": false,
+  "outcome-mismatch": false,
+};
+
+/**
+ * The kinds where the ENTRY EXISTS ON-CHAIN despite the failure surface: the
+ * transaction landed and only the read-back failed, or the wallet already
+ * held a seat from an earlier entry. The reveal's exit reads this (audit O25):
+ * a dismissed failure of one of these kinds leaves to the sealed panel, because
+ * the player does hold a seat; any other dismissed failure must not.
+ */
+const ENTRY_RECORDED_KINDS: ReadonlySet<TxFailureKind> = new Set<TxFailureKind>([
+  "outcome-unreadable",
+  "outcome-mismatch",
+  "already-entered",
+]);
+
+/** True when the player holds a seat in spite of the failure shown. */
+export function entryRecorded(failure: Pick<TxFailure, "kind">): boolean {
+  return ENTRY_RECORDED_KINDS.has(failure.kind);
+}
 
 /**
  * The message shown for each failure kind.
@@ -89,6 +133,7 @@ export const FAILURE_COPY: Record<TxFailureKind, string> = {
   "deadline-passed": COPY.tx.deadlinePassed,
   "already-entered": COPY.tx.alreadyEntered,
   "pool-closed": COPY.tx.poolClosed,
+  "packet-stale": COPY.tx.packetStale,
   "rpc-failure":
     "The network request did not go through. Check your connection and try again.",
   // The transaction LANDED; only the read-back failed. See property 2 above.
@@ -109,8 +154,21 @@ export function makeFailure(
   kind: TxFailureKind,
   detail: string,
   broadcast: boolean,
+  /**
+   * Overrides the default: the kind's fixed answer where it has one, else
+   * "safe unless broadcast". The two call sites that must override are in
+   * execute.ts — a lapsed blockhash after broadcast (safe: it can never land)
+   * and the confirmation timeout (unsafe: it still might).
+   */
+  retryable?: boolean,
 ): TxFailure {
-  return { kind, message: FAILURE_COPY[kind], detail, broadcast };
+  return {
+    kind,
+    message: FAILURE_COPY[kind],
+    detail,
+    broadcast,
+    retryable: retryable ?? RETRYABLE_BY_KIND[kind] ?? !broadcast,
+  };
 }
 
 /**
@@ -217,20 +275,27 @@ export function classifyRpcError(source: unknown, broadcast: boolean): TxFailure
   // checked before the runtime's generic text patterns. An UNrecognised custom
   // code deliberately falls through to "rpc-failure" rather than being guessed
   // at — see the module doc.
+  // Everything classified here is DEFINITIVE — a simulation error, a preflight
+  // rejection, or a status the chain reported as failed — so nothing landed
+  // and a fresh attempt is safe unless the kind itself says otherwise
+  // (`RETRYABLE_BY_KIND`). `broadcast` still records whether it was sent.
+  const definitive = (kind: TxFailureKind): TxFailure =>
+    makeFailure(kind, text, broadcast, RETRYABLE_BY_KIND[kind] ?? true);
+
   const customCode = extractCustomProgramError(source);
   if (customCode !== null) {
     const kind = PROGRAM_ERROR_CODES[customCode];
-    if (kind) return makeFailure(kind, text, broadcast);
+    if (kind) return definitive(kind);
   }
 
   if (ALREADY_IN_USE_PATTERN.test(text)) {
-    return makeFailure("already-entered", text, broadcast);
+    return definitive("already-entered");
   }
   if (source instanceof BlockhashExpiredError || BLOCKHASH_PATTERN.test(text)) {
-    return makeFailure("blockhash-expired", text, broadcast);
+    return definitive("blockhash-expired");
   }
   if (INSUFFICIENT_PATTERN.test(text)) {
-    return makeFailure("insufficient-sol", text, broadcast);
+    return definitive("insufficient-sol");
   }
-  return makeFailure("rpc-failure", text, broadcast);
+  return definitive("rpc-failure");
 }

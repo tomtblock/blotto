@@ -267,7 +267,9 @@ describe("executeTrade — post-broadcast failures", () => {
     expect(result).toMatchObject({
       outcome: "failed",
       signature: SIG,
-      failure: { kind: "program-rejected", broadcast: true },
+      // Broadcast, yet the chain REFUSED it, so nothing landed and a fresh
+      // attempt is safe (audit O27).
+      failure: { kind: "program-rejected", broadcast: true, retryable: true },
     });
   });
 
@@ -279,6 +281,8 @@ describe("executeTrade — post-broadcast failures", () => {
     expect(result.failure).toMatchObject({
       kind: "blockhash-expired",
       broadcast: true,
+      // It can never land now: safe to go again.
+      retryable: true,
     });
   });
 
@@ -287,7 +291,8 @@ describe("executeTrade — post-broadcast failures", () => {
       statuses: [null],
       blockhashValid: true,
     });
-    expect(result.failure).toMatchObject({ kind: "rpc-failure", broadcast: true });
+    // Status unknown: it may still land, so a retry could enter twice.
+    expect(result.failure).toMatchObject({ kind: "rpc-failure", broadcast: true, retryable: false });
     expect(result.failure?.detail).toContain("no confirmation within");
     expect(result.signature).toBe(SIG);
   });

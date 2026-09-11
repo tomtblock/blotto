@@ -146,6 +146,7 @@ export function makeLiveEntryServices(cfg: LiveEntryServicesConfig): EntryServic
             message: 'the transaction did not confirm',
             detail: 'executeTrade returned no failure detail',
             broadcast: false,
+            retryable: true,
           },
           result.signature
         );

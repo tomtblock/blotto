@@ -385,6 +385,11 @@ export const COPY = {
       "This wallet has already entered this pool, so nothing settled. One entry per wallet per pool is the rule — your seat is held and your battles are sealed. Check the pool page for your entry.",
     poolClosed:
       "This pool is no longer taking entries, so nothing settled. Open pools are listed on the Pools tab.",
+    // 2026-09-11 (audit O27): the entry packet is good for sixty seconds, so
+    // a wallet approval slower than that is refused on-chain as stale. It
+    // used to read as a network fault, with no way to try again.
+    packetStale:
+      "The approval took longer than an entry allows, so the program declined it. Nothing was entered and nothing was charged. Try again and approve the wallet prompt within a minute.",
   },
   battle: {
     screenOf: (k: number) => `Battle ${k} of 7`,

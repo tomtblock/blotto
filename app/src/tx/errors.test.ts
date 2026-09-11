@@ -4,8 +4,10 @@ import { describe, expect, it } from "vitest";
 import {
   classifyRpcError,
   classifySigningError,
+  entryRecorded,
   extractCustomProgramError,
   FAILURE_COPY,
+  makeFailure,
   PROGRAM_ERROR_CODES,
   BlockhashExpiredError,
 } from "./errors";
@@ -218,6 +220,14 @@ describe("the player-reachable refusals", () => {
     const late = classifyRpcError({ InstructionError: [1, { Custom: 6011 }] }, false);
     expect(late.kind).toBe("deadline-passed");
     expect(late.message.toLowerCase()).toContain("deadline");
+    // Audit O27 (2026-09-11): a wallet approval slower than the packet's
+    // 60-second window used to read as "the network request did not go
+    // through", with no way to try again.
+    const stale = classifyRpcError({ InstructionError: [1, { Custom: 6019 }] }, true);
+    expect(stale.kind).toBe("packet-stale");
+    expect(stale.message.toLowerCase()).toContain("took longer");
+    expect(stale.message.toLowerCase()).toContain("nothing was charged");
+    expect(stale.retryable).toBe(true);
   });
 
   it("sit at the positions error.rs declares them at (Anchor numbers from 6000 in declaration order)", () => {
@@ -234,5 +244,55 @@ describe("the player-reachable refusals", () => {
     expect(variants.indexOf("Paused")).toBe(6005 - 6000);
     expect(variants.indexOf("PoolFull")).toBe(6010 - 6000);
     expect(variants.indexOf("DeadlinePassed")).toBe(6011 - 6000);
+    expect(variants.indexOf("PacketStale")).toBe(6019 - 6000);
+  });
+});
+
+/*
+ * `retryable` (audit O27, 2026-09-11) — whether a fresh attempt can enter
+ * twice. The reveal offers "Try again" from this field alone; before it the
+ * key was `!broadcast`, which withheld the retry from every transaction the
+ * chain had definitively REFUSED after broadcast.
+ */
+describe("retryable and entryRecorded", () => {
+  it("a definitive refusal is retryable whether or not it was broadcast", () => {
+    expect(classifySigningError(new Error("User rejected the request.")).retryable).toBe(true);
+    // Simulation / preflight (not sent).
+    expect(classifyRpcError({ InstructionError: [1, { Custom: 6001 }] }, false).retryable).toBe(true);
+    // The chain confirmed the transaction as FAILED: broadcast, yet nothing landed.
+    const onChain = classifyRpcError({ InstructionError: [1, { Custom: 6001 }] }, true);
+    expect(onChain.broadcast).toBe(true);
+    expect(onChain.retryable).toBe(true);
+    expect(classifyRpcError({ InstructionError: [1, { Custom: 6019 }] }, true).retryable).toBe(true);
+    expect(classifyRpcError(new BlockhashExpiredError("lapsed"), true).retryable).toBe(true);
+    expect(classifyRpcError(new TypeError("fetch failed"), false).retryable).toBe(true);
+  });
+
+  it("is withheld where the program would refuse again, a seat is held, or the answer is unknown", () => {
+    for (const code of [6000, 6005, 6010, 6011]) {
+      expect(classifyRpcError({ InstructionError: [1, { Custom: code }] }, false).retryable, `${code}`).toBe(false);
+    }
+    expect(
+      classifyRpcError(new Error("custom program error: 0x0 — Allocate: account already in use"), false).retryable,
+    ).toBe(false);
+    // The silent-cluster timeout: broadcast, status unknown, it may still land.
+    expect(makeFailure("rpc-failure", "no confirmation within 90s", true, false).retryable).toBe(false);
+    // Post-confirmation kinds: the entry IS recorded.
+    expect(makeFailure("outcome-unreadable", "logs withheld", true).retryable).toBe(false);
+    expect(makeFailure("outcome-mismatch", "event disagrees", true).retryable).toBe(false);
+  });
+
+  it("makeFailure defaults to the kind's fixed answer, else 'safe unless broadcast'", () => {
+    expect(makeFailure("rpc-failure", "build failed", false).retryable).toBe(true);
+    expect(makeFailure("rpc-failure", "status unknown", true).retryable).toBe(false);
+    expect(makeFailure("blockhash-expired", "lapsed", true, true).retryable).toBe(true);
+    expect(makeFailure("pool-full", "full", false).retryable).toBe(false);
+  });
+
+  it("entryRecorded names exactly the kinds where the player holds a seat", () => {
+    const recorded = ["outcome-unreadable", "outcome-mismatch", "already-entered"];
+    for (const kind of Object.keys(FAILURE_COPY) as Array<keyof typeof FAILURE_COPY>) {
+      expect(entryRecorded({ kind }), kind).toBe(recorded.includes(kind));
+    }
   });
 });

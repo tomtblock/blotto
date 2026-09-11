@@ -92,6 +92,8 @@ describe('submitForReveal', () => {
       if (r.kind === 'failed') {
         expect(r.failure.kind).toBe('outcome-unreadable');
         expect(r.failure.broadcast).toBe(true);
+        // The entry IS recorded: a retry would enter twice (PID §8.6).
+        expect(r.failure.retryable).toBe(false);
       }
     }
   });
@@ -102,6 +104,7 @@ describe('submitForReveal', () => {
       message: 'declined',
       detail: 'wallet said no',
       broadcast: false,
+      retryable: true,
     };
     const r = await submitForReveal(
       services(async () => {

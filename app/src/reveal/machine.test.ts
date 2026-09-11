@@ -41,6 +41,7 @@ const FAILURE: TxFailure = {
   message: "test failure",
   detail: "machine.test fixture",
   broadcast: true,
+  retryable: true,
 };
 
 const tap: RevealEvent = { kind: "tap" };
@@ -325,14 +326,22 @@ describe("revealReducer — beat advancement and exit", () => {
       beatElapsed,
       beatElapsed,
     ]);
-    expect(revealReducer(card, dismiss).beat).toBe("settled");
+    expect(revealReducer(card, dismiss)).toEqual({
+      beat: "settled",
+      outcome: fixtureRevealOutcome(1),
+      failure: null,
+    });
+    // A dismissed failure keeps the failure; a dismissed stall keeps nothing
+    // (the transaction may still land). The exit projection reads these.
     expect(replayReveal([failed, dismiss])).toEqual({
       beat: "settled",
       outcome: null,
+      failure: FAILURE,
     });
     expect(replayReveal([...taps(TAP_COUNT), stallTimeout, dismiss])).toEqual({
       beat: "settled",
       outcome: null,
+      failure: null,
     });
     for (const mid of [
       INITIAL_REVEAL_STATE,
@@ -390,6 +399,72 @@ describe("revealReducer — totality and determinism", () => {
       expect(replayReveal(taps(tapCount), tapCount)).toEqual({
         beat: "strain",
       });
+    }
+  });
+});
+
+/*
+ * Audit O25 (2026-09-11): the settled beat used to project to a bare
+ * `{ beat: "settled" }` whatever it was left from, and the page behind
+ * rendered "Your seven battles are sealed" for a dismissed FAILURE exactly as
+ * for a dismissed card. The exit is now part of the projection and pinned
+ * here per failure kind, so a kind added later has to declare which way it
+ * leaves.
+ */
+describe("revealVisual — the exit the settled beat reports (audit O25)", () => {
+  const failedWith = (kind: TxFailure["kind"]): RevealEvent => ({
+    kind: "tx_failed",
+    failure: { ...FAILURE, kind },
+  });
+  const exitAfter = (events: RevealEvent[]) => {
+    const visual = revealVisual(replayReveal(events));
+    expect(visual.beat).toBe("settled");
+    return visual.beat === "settled" ? visual.exit : null;
+  };
+
+  it("a dismissed card is 'entered'", () => {
+    expect(
+      exitAfter([...taps(TAP_COUNT), confirmed(3), beatElapsed, beatElapsed, dismiss]),
+    ).toBe("entered");
+  });
+
+  it("a dismissed failure that landed nothing is 'not-entered' — never 'Sealed'", () => {
+    for (const kind of [
+      "user-rejected",
+      "insufficient-sol",
+      "blockhash-expired",
+      "program-rejected",
+      "entries-paused",
+      "pool-full",
+      "deadline-passed",
+      "pool-closed",
+      "packet-stale",
+      "rpc-failure",
+    ] as const) {
+      expect(exitAfter([failedWith(kind), dismiss]), kind).toBe("not-entered");
+      // …from every failure origin, not only the pre-tap one.
+      expect(exitAfter([...taps(TAP_COUNT), failedWith(kind), dismiss]), kind).toBe("not-entered");
+    }
+  });
+
+  it("a dismissed failure whose entry IS on-chain is 'entered' — the seat is held", () => {
+    for (const kind of ["outcome-unreadable", "outcome-mismatch", "already-entered"] as const) {
+      expect(exitAfter([failedWith(kind), dismiss]), kind).toBe("entered");
+    }
+  });
+
+  it("a dismissed stall is 'pending' — the transaction may still land", () => {
+    expect(exitAfter([...taps(TAP_COUNT), stallTimeout, dismiss])).toBe("pending");
+  });
+
+  it("every failure kind has a declared exit (a new kind cannot fall through silently)", () => {
+    const kinds: TxFailure["kind"][] = [
+      "user-rejected", "insufficient-sol", "blockhash-expired", "program-rejected",
+      "entries-paused", "pool-full", "deadline-passed", "already-entered",
+      "pool-closed", "packet-stale", "rpc-failure", "outcome-unreadable", "outcome-mismatch",
+    ];
+    for (const kind of kinds) {
+      expect(["entered", "not-entered"]).toContain(exitAfter([failedWith(kind), dismiss]));
     }
   });
 });

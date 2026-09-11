@@ -13,7 +13,7 @@
 
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { address } from '@solana/kit';
 import { COPY } from '@/copy';
 import { Button } from '@/components/ui/button';
@@ -135,6 +135,7 @@ export type InitialPool = { pool: PoolSummary | null } | null;
 
 export function PlayClient({ initial = null }: { initial?: InitialPool }) {
   const params = useSearchParams();
+  const router = useRouter();
   const poolId = params.get('pool');
   const auth = useAuth();
   const [pool, setPool] = useState<PoolSummary | null>(initial?.pool ?? null);
@@ -257,8 +258,9 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
     [pool, auth, rpc]
   );
 
-  // The confirmed battles, kept ONLY to power retry after a never-broadcast
-  // failure (a fresh salt + upsert ciphertext + new packet — nothing landed).
+  // The confirmed battles, kept ONLY to power retry after a failure the tx
+  // seam marks `retryable` (a fresh salt + upsert ciphertext + new packet —
+  // nothing landed and nothing can).
   const [lastConfirmed, setLastConfirmed] = useState<{
     battles: readonly Allocation[];
     timingsMs: readonly number[];
@@ -422,7 +424,35 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
               }
             : undefined
         }
-        onDone={() => setDone(true)}
+        onDone={(exit) => {
+          /*
+           * Audit O25 (2026-09-11): the sealed panel is for an entry that
+           * exists. Until this change every exit from the takeover set
+           * `done`, so a player whose transaction had FAILED pressed Back
+           * into "Your seven battles are sealed" with nothing paid.
+           */
+          if (exit === 'entered') {
+            setDone(true);
+            return;
+          }
+          if (exit === 'pending') {
+            // Broadcast and not yet confirmed: it may still land, so neither
+            // a second run nor "Sealed" is honest. The pool page is, and it
+            // shows the entry the moment the network confirms it.
+            router.push(`/pools/${pool.pool}`);
+            return;
+          }
+          // Nothing landed and nothing can. Back to the start of the flow,
+          // through a fresh read of the pool so a closed or paused one says
+          // so before any timer starts, and through the entries check so a
+          // seat this wallet already holds is found rather than re-entered.
+          setRevealRun(null);
+          setLastConfirmed(null);
+          setEntered(null);
+          setPool(null);
+          setPoolLoad('loading');
+          setPoolRun((n) => n + 1);
+        }}
       />
     );
   }
