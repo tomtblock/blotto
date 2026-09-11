@@ -37,11 +37,11 @@ describe('beatTimer', () => {
     expect(
       beatTimer({
         beat: 'failed',
-        failure: { kind: 'rpc-failure', message: 'x', detail: 'y', broadcast: false },
+        failure: { kind: 'rpc-failure', message: 'x', detail: 'y', broadcast: false, retryable: true },
       })
     ).toBeNull();
     expect(beatTimer({ beat: 'stalled' })).toBeNull();
     expect(beatTimer({ beat: 'card', class: 1, entryIndex: 0, asset: 'A' })).toBeNull();
-    expect(beatTimer({ beat: 'settled' })).toBeNull();
+    expect(beatTimer({ beat: 'settled', exit: 'entered' })).toBeNull();
   });
 });

@@ -82,6 +82,10 @@ export type TxFailureKind =
   // (PoolNotOpen). Both used to fall through to the generic network sentence.
   | "already-entered"
   | "pool-closed"
+  // 2026-09-11 (audit O27): the packet is good for sixty seconds, so a wallet
+  // approval slower than that is refused on-chain as `PacketStale` (6019).
+  // It used to fall through to the generic network sentence with no retry.
+  | "packet-stale"
   | "rpc-failure"
   | "outcome-unreadable"
   | "outcome-mismatch";
@@ -98,6 +102,18 @@ export interface TxFailure {
    * indeterminate and the signature (if any) is worth checking.
    */
   broadcast: boolean;
+  /**
+   * Whether a fresh attempt is SAFE: nothing landed and nothing can still
+   * land, so entering again cannot enter twice. Distinct from `broadcast`: a
+   * transaction the chain confirmed as FAILED was broadcast, yet a retry is
+   * safe because the runtime never created the entry. False for the
+   * indeterminate failure (a silent cluster past the timeout — it may still
+   * land) and for every kind where the entry IS on-chain (the `outcome-*`
+   * kinds and `already-entered`), and for refusals the program would repeat
+   * (paused, full, past the deadline, closed). Set at creation by
+   * `errors.ts`; the reveal offers "Try again" from this and nothing else.
+   */
+  retryable: boolean;
 }
 
 /** One timestamped transition, rendered verbatim by the dev state log. */

@@ -297,6 +297,8 @@ export async function executeTrade(p: ExecuteTradeParams): Promise<TradeResult> 
             "blockhash-expired",
             `validity window lapsed before ${txSignature} was seen`,
             true,
+            // Broadcast, but it can never land now — a fresh attempt is safe.
+            true,
           ),
         );
       }
@@ -309,6 +311,8 @@ export async function executeTrade(p: ExecuteTradeParams): Promise<TradeResult> 
       "rpc-failure",
       `no confirmation within ${confirmTimeoutMs / 1000}s — status unknown, check the explorer link`,
       true,
+      // Status unknown: it may still land, so a retry could enter twice.
+      false,
     ),
   );
 }

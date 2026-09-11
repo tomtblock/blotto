@@ -15,10 +15,19 @@
  * machine.test.ts) — nothing here can render a class early because the
  * visual projection carries no class field before the tell.
  *
- * Retry is offered ONLY for a failure that was never broadcast
- * (types.ts's rendering obligation: a landed entry must never see a
- * "try again" — the entry IS recorded and a second submit would enter
- * twice, which PID §8.6 forbids).
+ * Retry is offered ONLY when the failure says a fresh attempt is safe
+ * (`TxFailure.retryable`, decided in tx/errors.ts): nothing landed and
+ * nothing can still land. A landed entry must never see a "try again" — the
+ * entry IS recorded and a second submit would enter twice, which PID §8.6
+ * forbids. Until 2026-09-11 the key was `!broadcast`, which also withheld
+ * the retry from a transaction the chain had definitively REFUSED (a stale
+ * packet, a program error after broadcast) — audit O27.
+ *
+ * Leaving the takeover reports WHICH exit was taken (`RevealExit`, from the
+ * machine's visual): the page behind renders "Sealed" only for `entered`.
+ * Until 2026-09-11 every dismiss reported the same thing, and a player whose
+ * transaction had failed pressed Back into "Your seven battles are sealed" —
+ * audit O25.
  */
 
 import { useEffect, useReducer, useState } from 'react';
@@ -29,6 +38,7 @@ import {
   revealReducer,
   revealVisual,
   type RevealEvent,
+  type RevealExit,
   type RevealState,
 } from '@/reveal/machine';
 import { beatTimer } from '@/reveal/host-timing';
@@ -53,10 +63,13 @@ export function RevealHost({
 }: {
   /** The entry's terminal state — resolves, never rejects (outcome.ts). */
   result: Promise<RevealResult>;
-  /** Re-submit after a NEVER-BROADCAST failure; absent = no retry offered. */
+  /** Re-submit after a failure whose `retryable` is true (nothing landed,
+   *  nothing can); absent = no retry offered. */
   onRetry?: () => Promise<RevealResult>;
-  /** Called when the player dismisses the settled takeover. */
-  onDone: () => void;
+  /** Called once when the player leaves the takeover, with the exit taken:
+   *  `entered` (a seat is held), `not-entered` (nothing landed), or
+   *  `pending` (broadcast, not yet confirmed — it may still land). */
+  onDone: (exit: RevealExit) => void;
 }) {
   const [state, dispatch] = useReducer(
     (s: RevealState, e: RevealEvent) => revealReducer(s, e),
@@ -94,7 +107,7 @@ export function RevealHost({
   }, [beat, extended]);
 
   if (visual.beat === 'settled') {
-    return <SettledExit onDone={onDone} />;
+    return <SettledExit exit={visual.exit} onDone={onDone} />;
   }
 
   if (visual.beat === 'stalled') {
@@ -152,7 +165,7 @@ export function RevealHost({
       {visual.beat === 'failed' && (
         <div className="flex max-w-prose flex-col gap-3 text-center" aria-live="polite">
           <p className="text-sm text-red-400">{visual.failure.message}</p>
-          {onRetry && !visual.failure.broadcast && (
+          {onRetry && visual.failure.retryable && (
             <button
               type="button"
               className="rounded border px-6 py-2"
@@ -201,10 +214,11 @@ function EggGuide({ confirming }: { confirming: boolean }) {
   );
 }
 
-/** Settled is terminal: hand control back exactly once, after mount. */
-function SettledExit({ onDone }: { onDone: () => void }) {
+/** Settled is terminal: hand control back exactly once, after mount, saying
+ *  which exit was taken. */
+function SettledExit({ exit, onDone }: { exit: RevealExit; onDone: (exit: RevealExit) => void }) {
   useEffect(() => {
-    onDone();
+    onDone(exit);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return null;
