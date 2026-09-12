@@ -10,12 +10,19 @@ in CI; the devnet half is a written runbook awaiting provisioning.**
   the pool-cycle orchestrator, and a suite that settles TWENTY 64-entrant
   pools through the real crank + real detection with the pot conserved to
   the lamport in every one; the scripted bot is noted in shadow mode and not
-  blocked (R11 exactly); the 63-entry refund fork drains in full. The same
-  orchestrator takes `Web3Chain` for the devnet run.
+  blocked (R11 exactly); the 63-entry refund fork drains in full.
+
+  The orchestrator does NOT take `Web3Chain` (audit 2026-09-11, G-16): it
+  constructs its own `FakeChain` and returns that concrete type. The devnet
+  run is the DAEMON over `Web3Chain`, per `docs/devnet-rehearsal.md`.
 - **The Playwright entry-flow spec** (5.1's "through the real frontend"):
-  drags the pentagon, asserts the on-screen integers sum to 100 on every
-  screen, sees the §8.6 statement, submits. Gated on `APP_URL` — it belongs
-  to the credentialed run.
+  REMOVED 2026-09-12 (audit 2026-09-11, C-29 / D-32). It described dragging
+  a pentagon and clicking "lock in"; neither selector matches anything in
+  `app/src`, and it skipped itself without `APP_URL`, so it had never run
+  and could not have passed. 5.1's frontend entry is a manual walkthrough on
+  the rehearsal day — see `docs/devnet-rehearsal.md` step 4. The
+  credential-free journey (`app/e2e/journey.spec.ts`) is automated and runs
+  in `ci-fast`.
 - **`docs/devnet-rehearsal.md`**: the full runbook — prerequisites table
   (Squads, Turnkey, Irys, hosting region), deploy + init sequence, the three
   failure paths of 5.2, the 5.4 load targets, and the results table the run

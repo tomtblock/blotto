@@ -19,14 +19,17 @@ learned rather than written.
 - **Each migration runs in its own transaction.** A migration that cannot be
   applied atomically should be split until it can.
 - **Runnable from a clean database.** The first run applies everything, so a fresh
-  environment and a long-lived one converge on the same schema. **Nothing checks
-  this automatically today** (recorded 2026-09-07): `tests/e2e/` holds three
-  library scripts and a fixture carried from the predecessor, no stage scripts,
-  and no workflow runs it — the earlier claim that "the end-to-end harness resets
-  its database every run" described a harness that does not exist here. The
-  indexer image's `sync` entry applies every migration at boot, so a fresh Fly
-  machine is the de-facto check; a clean-database migration run in CI is on the
-  audit's open items.
+  environment and a long-lived one converge on the same schema. **This is checked
+  on every change** since 2026-09-12 (audit 2026-09-11, G-04): the `postgres` job
+  of `ci-fast` drops the `public` schema, applies every file in this directory
+  through `backend/indexer/src/migrate.ts`, and then drives every Postgres-backed
+  store against the schema that produced — `tests/postgres/`. It also proves the
+  per-migration transaction: a fixture migration that creates a table and then
+  fails must leave neither the table nor a `schema_migrations` row behind.
+  (Until then the only check was a fresh Fly machine booting in production; the
+  `tests/e2e/` shell harness that this paragraph used to blame was removed the
+  same day — it called files that were not in the tree and pinned the
+  predecessor's program address.)
 - **A migration that invalidates a DERIVED table must say so, in one line:**
 
   ```sql

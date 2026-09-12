@@ -453,6 +453,18 @@ describe('scoring with missing entries (the published all-losses rule)', () => {
   });
 });
 
+/**
+ * The seat `buildSealedPool`'s untouched field ranks first, and therefore the
+ * seat whose battle set the collusion fixture below duplicates.
+ *
+ * Read off the fixture rather than guessed, and asserted by the collusion
+ * test itself (the committed paid set must be exactly the two colluders), so
+ * a change to the fixture's allocations fails loudly here instead of quietly
+ * hollowing out the escrow assertions — which is precisely what audit G-14
+ * found had already happened.
+ */
+const WINNING_SEAT = 47;
+
 describe('detection wired into the crank (R11, roadmap 4.3)', () => {
   it('two colluding wallets are flagged before payment and their shares escrow', async function () {
     this.timeout(30000);
@@ -482,17 +494,33 @@ describe('detection wired into the crank (R11, roadmap 4.3)', () => {
         return report.hardBlocks;
       },
     };
-    // Make seats 0 and 1 colluders in the STORE before cranking: identical
+    // Make two seats colluders in the STORE before cranking: identical
     // battle sets and one shared device hash. The pool key comes back from
     // custody (the chain is already Sealed, so the export policy passes).
+    //
+    // WHICH SEATS, AND WHY IT MATTERS (audit 2026-09-11, G-14). This used to
+    // put seat 0's battle set on seats 0 and 1. With this fixture's field
+    // the committed paid set is seat 47, so neither colluder was ever in it,
+    // and the escrow half of this test — the half that checks a flagged
+    // winner's share is held rather than paid — sat inside an unguarded `if`
+    // and asserted nothing on every run it had ever made.
+    //
+    // The colluders are now the WINNING seat and one other, sharing the
+    // winning set. Two identical entries draw with each other and score
+    // alike against the whole field, so they tie for first and BOTH land in
+    // the committed payout list — which is the only arrangement in which the
+    // escrow path is reached at all. The assertion below is unconditional
+    // and checks that the paid set really does contain them, so this can
+    // never silently go hollow again.
+    const COLLUDERS = [0, WINNING_SEAT];
     const { seal, encodePayload, publicKeyOf } = require('../../sealing/src');
     const { createHash } = require('crypto');
     const s = (x: string) => new Uint8Array(createHash('sha256').update(x).digest());
     const secret = await t.custody.exportSecret(1n);
     const poolPk = publicKeyOf(secret);
-    for (const seat of [0, 1]) {
+    for (const seat of COLLUDERS) {
       const payload = {
-        battles: t.battles[0], // seat 0's set for both — exact duplicate
+        battles: t.battles[WINNING_SEAT], // the winning set on both — an exact duplicate
         salt: s(`salt:${seat}`),
         timingsMs: [1000, 2000, 3000, 4000, 5000, 6000, 7000],
         deviceHash: s('shared-device'),
@@ -506,24 +534,117 @@ describe('detection wired into the crank (R11, roadmap 4.3)', () => {
 
     const outcome = await crankPool(deps, 1n);
     expect(outcome.finalState).to.equal('Paid');
-    expect(outcome.stepsTaken.filter((x) => x === 'flag_entry').length).to.equal(2);
+    expect(outcome.stepsTaken.filter((x) => x === 'flag_entry').length).to.equal(
+      COLLUDERS.length
+    );
 
-    // If either colluder's seat is in the committed paid set, their share
-    // escrowed instead of paying.
+    // A flagged seat in the committed paid set has its share ESCROWED, not
+    // paid. Unconditional (G-14): the paid set must contain the colluders,
+    // and each of them must be held.
     const pool = await t.chain.getPool(1n);
-    for (const seat of [0, 1]) {
+    const committedSeats = pool.payouts.map((x) => x.entryIndex).sort((a, b) => a - b);
+    expect(
+      committedSeats,
+      'the colluders must BE the paid set, or this test checks nothing about escrow'
+    ).to.deep.equal([...COLLUDERS].sort((a, b) => a - b));
+    for (const seat of COLLUDERS) {
       const player = t.players[seat];
-      if (pool.payouts.some((x) => x.entryIndex === seat)) {
-        expect((t.chain.escrowed.get(player) ?? 0n) > 0n).to.equal(true);
-        expect(t.chain.paid.get(player) ?? 0n).to.equal(0n);
-      }
+      expect(
+        (t.chain.escrowed.get(player) ?? 0n) > 0n,
+        `seat ${seat} is flagged and in the paid set: its share must be held`
+      ).to.equal(true);
+      expect(t.chain.paid.get(player) ?? 0n, `seat ${seat} must not be paid`).to.equal(0n);
     }
+    // Nothing reached any wallet at all: both committed seats are held.
+    expect([...t.chain.paid.values()].filter((v) => v > 0n)).to.deep.equal([]);
     // Total conservation: paid + escrowed == the whole pot.
     const pot = potForTier(0);
     let total = 0n;
     for (const v of t.chain.paid.values()) total += v;
     for (const v of t.chain.escrowed.values()) total += v;
     expect(total).to.equal(pot);
+  });
+
+  it('flags nobody when detection returns nothing — the production contract (G-13)', async function () {
+    this.timeout(30000);
+    // WHAT PRODUCTION ACTUALLY DOES (audit 2026-09-11, G-13). Every crank
+    // detection test in this file injects a `detect` that returns
+    // `report.hardBlocks`. `backend/reveal/src/main.ts` returns an EMPTY
+    // list: under founder ruling D-E9 the report is computed and persisted
+    // for the reviewer, and a flag is a reviewer's signed decision, never the
+    // daemon's. So the behaviour the deployment has — signals run, nothing
+    // is acted on — was asserted nowhere, and a regression that made the
+    // daemon start auto-flagging would have passed every suite here.
+    //
+    // Same colluding field as the test above, so the signals genuinely fire;
+    // only the hook's answer changes.
+    const t = await buildSealedPool({});
+    const { detectPool } = require('../../detection/src');
+    const reports: Array<{ hardBlocks: string[]; reviewRecommended: string[] }> = [];
+    const deps = {
+      chain: t.chain,
+      custody: t.custody,
+      ciphertexts: t.store,
+      publisher: t.publisher,
+      detect: async (_poolId: bigint, entries: RevealedForDetection[]) => {
+        reports.push(
+          detectPool(
+            '1',
+            entries
+              .filter((e) => e.battles !== null)
+              .map((e) => ({
+                player: e.player,
+                index: e.index,
+                battles: e.battles,
+                timingsMs: e.timingsMs ?? [],
+                deviceHash: e.deviceHash ?? '',
+                ipHash: `ip:${e.player}`,
+                scoreHalf: e.scoreHalf,
+              })),
+            { fullEscrowTier: false }
+          )
+        );
+        return [];
+      },
+    };
+    const { seal, encodePayload, publicKeyOf } = require('../../sealing/src');
+    const { createHash } = require('crypto');
+    const s = (x: string) => new Uint8Array(createHash('sha256').update(x).digest());
+    const secret = await t.custody.exportSecret(1n);
+    const poolPk = publicKeyOf(secret);
+    for (const seat of [0, WINNING_SEAT]) {
+      const payload = {
+        battles: t.battles[WINNING_SEAT],
+        salt: s(`salt:${seat}`),
+        timingsMs: [1000, 2000, 3000, 4000, 5000, 6000, 7000],
+        deviceHash: s('shared-device'),
+      };
+      await t.store.put(1n, t.players[seat], seal(encodePayload(payload), poolPk));
+      const { battlesHash } = require('../../scoring/src');
+      const entries = t.chain.entries.get('1')!;
+      entries[seat].battlesHash = Buffer.from(
+        battlesHash(payload.battles, payload.salt)
+      ).toString('hex');
+    }
+
+    const outcome = await crankPool(deps, 1n);
+    expect(outcome.finalState).to.equal('Paid');
+
+    // The signals fired — this is not a pool detection found nothing in.
+    expect(reports.length).to.equal(1);
+    expect(reports[0].hardBlocks.length, 'an exact duplicate IS a hard block').to.be.greaterThan(0);
+
+    // And the crank acted on none of it.
+    expect(
+      outcome.stepsTaken.filter((x) => x === 'flag_entry'),
+      'the daemon must never flag on its own'
+    ).to.deep.equal([]);
+    const chainEntries = await t.chain.getEntries(1n);
+    expect(chainEntries.filter((e) => e.flagged).map((e) => e.index)).to.deep.equal([]);
+    expect([...t.chain.escrowed.values()].filter((v) => v > 0n)).to.deep.equal([]);
+    let paid = 0n;
+    for (const v of t.chain.paid.values()) paid += v;
+    expect(paid, 'the whole pot reached wallets').to.equal(potForTier(0));
   });
 
   it('publishes neither the device hash nor the timings, and still hands both to detection (B-31)', async function () {

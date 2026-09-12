@@ -19,7 +19,9 @@
  *  `startClock`, `clockStarted`, `clockExpired`, `remainingMs`) are an
  *  alternative, timestamp-based expression of the same rules. Nothing in
  *  the run imports them: the only consumer is the dev component gallery
- *  (`app/dev/components`), plus this module's own tests. They are kept
+ *  (`app/dev/components/page.dev.tsx` — a route that exists in development
+ *  only and is not compiled into a production build at all, so these leave
+ *  no bytes in a deployed bundle), plus this module's own tests. They are kept
  *  because the gallery demonstrates the clock in isolation and because the
  *  properties they state — start-once, never-negative, expiry at exactly
  *  the budget — are the specification the reducer is checked against. They

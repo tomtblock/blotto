@@ -1,11 +1,16 @@
 # ci-fast — the always-on lane.
 #
-# Four jobs:
+# Six jobs:
 #   rust           — fmt, clippy -D warnings, cargo test across the workspace
 #                    (the program's unit tests and the 10k-case vault fuzz)
 #   node           — every backend package (typecheck + test), the offline
 #                    twenty-pool rehearsal, and the app's lint / typecheck /
 #                    test / build
+#   postgres       — the migrations applied to an EMPTY database, and every
+#                    Postgres-backed store driven against the schema they
+#                    produce (audit 2026-09-11, A-03 / G-03 / G-04 / G-17)
+#   journey        — the browser journey over the production build in fixture
+#                    mode, at 375px and 1280px (audit 2026-09-11, G-20 / A-33)
 #   gitleaks       — the checkout AND the git history, pinned binary,
 #                    checksum-verified
 #   standing-rules — the PID §8.7 language gate, the structural greps, the
@@ -121,6 +126,169 @@ jobs:
           npm run typecheck
           npm test
           npm run build
+
+  # THE ONLY LANE THAT STARTS A DATABASE (audit 2026-09-11, A-03 / G-03 /
+  # G-04 / G-17). Until now no test in the repository executed a single line
+  # of SQL: all twenty-one migrations, the migration runner and every
+  # Postgres-backed store were driven only through in-memory doubles, and two
+  # live defects came straight out of that shape — the archive rewrote the
+  # served rankings outside any transaction (B-20 / F-05) and the decision log
+  # destroyed the signed timestamp on read-back (A-04). Neither is reachable
+  # by a test that never meets a real schema, a real transaction or a real
+  # unique constraint.
+  #
+  # IT LIVES HERE, NOT IN ITS OWN WORKFLOW, for two reasons. `stop-the-line`
+  # watches `ci-fast` and nothing else (A-12), so a separate lane would be a
+  # red that files no alarm; and a path filter on a suite whose whole purpose
+  # is to catch cross-boundary drift would reintroduce the blind spot it
+  # exists to close — a migration is only ever wrong in company.
+  postgres:
+    name: postgres
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        # Pinned by digest: a service image is as much a dependency as an
+        # action, and `postgres:16` is a moving tag.
+        image: postgres@sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94 # 16, 2026-09-12
+        env:
+          POSTGRES_USER: blotto
+          POSTGRES_PASSWORD: blotto
+          POSTGRES_DB: blotto_ci_test
+        ports:
+          - 5432:5432
+        # The job must not start querying before the server accepts
+        # connections; without this the first spec races the container.
+        options: >-
+          --health-cmd "pg_isready -U blotto"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v4.4.0
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            backend/_shared/package-lock.json
+            backend/scoring/package-lock.json
+            backend/sealing/package-lock.json
+            backend/sanctions/package-lock.json
+            backend/indexer/package-lock.json
+            backend/packet/package-lock.json
+            backend/detection/package-lock.json
+            tests/postgres/package-lock.json
+
+      # The suite imports each store from its own package's source tree, so
+      # every package whose store it drives has to be installed — the same
+      # relative re-export convention the `node` job's ordering comment
+      # describes.
+      - name: install
+        run: |
+          for pkg in _shared scoring sealing sanctions indexer packet detection; do
+            (cd "backend/$pkg" && npm ci --no-audit --no-fund)
+          done
+          (cd tests/postgres && npm ci --no-audit --no-fund)
+
+      - name: typecheck
+        run: cd tests/postgres && npm run typecheck
+
+      # THE GATE IS PROVED BEFORE IT IS TRUSTED. Without
+      # BLOTTO_TEST_DATABASE_URL every case in this package is pending, which
+      # is the right behaviour on a developer machine with no server and
+      # exactly the wrong thing to discover in CI: a lane reporting a green
+      # zero. So the run is checked for the case count it must have.
+      - name: The migrations and every Postgres-backed store
+        env:
+          BLOTTO_TEST_DATABASE_URL: postgres://blotto:blotto@localhost:5432/blotto_ci_test
+        run: |
+          # The default shell on a Linux runner is `bash -e`, WITHOUT
+          # pipefail — so `npm test | tee` would report the exit status of
+          # `tee` and a failing suite would pass this step silently.
+          set -euo pipefail
+          cd tests/postgres
+          npm test 2>&1 | tee /tmp/pg-suite.log
+          passing="$(grep -oE '[0-9]+ passing' /tmp/pg-suite.log | head -1 | cut -d' ' -f1)"
+          pending="$(grep -oE '[0-9]+ pending' /tmp/pg-suite.log | head -1 | cut -d' ' -f1)"
+          echo "passing=${passing:-0} pending=${pending:-0}"
+          if [ "${pending:-0}" -ne 0 ]; then
+            echo "FAIL: ${pending} case(s) were skipped — the database gate did not see its URL" >&2
+            exit 1
+          fi
+          if [ "${passing:-0}" -lt 30 ]; then
+            echo "FAIL: only ${passing:-0} cases ran; this suite has more than that" >&2
+            exit 1
+          fi
+
+  # THE ONLY LANE THAT OPENS A BROWSER (audit 2026-09-11, G-20 / A-33).
+  #
+  # `app/e2e/journey.spec.ts` existed, passed, and was invoked by nothing:
+  # `npm test` is vitest and its include pattern excludes `e2e/`, and no
+  # workflow ran `npm run journey`. So every assertion it makes about what a
+  # player actually sees — the 18+/territory line in the viewport without
+  # scrolling, §8.6 above the enter control, the dev gallery 404ing in a
+  # production build, no horizontal scroll at 375px — was unenforced.
+  #
+  # IT NEEDS A FIXTURE-MODE BUILD. `NEXT_PUBLIC_FIXTURE_DATA=1` is compiled
+  # in, so it has to be on the BUILD and `next start` cannot supply it
+  # (app/playwright.config.ts carries the full reasoning). Without it every
+  # page renders the "live data unavailable" state and every assertion here
+  # fails — which is the deliberate consequence of the A-07 fix.
+  #
+  # The Lighthouse gate is NOT here: it is real, it is maintained, and it
+  # does not currently pass (performance 75 on /, 88 on the pool page against
+  # a threshold of 90, measured 2026-09-12). Blocking every PR on a
+  # pre-existing product deficiency is not what an always-on lane is for, and
+  # lowering a founder-set threshold to make a lane green is not a decision a
+  # workflow gets to take. It runs in `app-lighthouse.yml` instead, where the
+  # numbers are visible and the founder can act on them.
+  journey:
+    name: journey
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v4.4.0
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: install
+        run: cd app && npm ci --no-audit --no-fund
+
+      # Chromium only: playwright.config.ts declares two Chromium projects
+      # (a 375px mobile emulation and a 1280px desktop) and no other engine.
+      - name: install chromium
+        run: cd app && npx playwright install --with-deps chromium
+
+      - name: build (fixture mode)
+        run: cd app && NEXT_PUBLIC_FIXTURE_DATA=1 npm run build
+
+      - name: the browser journey, at both mandated widths
+        run: cd app && npm run journey
+
+      # The journey writes the step report's screenshots as it goes. They are
+      # committed artifacts, so a change here means the UI moved; uploading
+      # them makes that reviewable instead of invisible. Never committed by
+      # CI — this lane has read-only contents permission.
+      - name: Screenshots from this run
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: journey-screenshots
+          path: docs/phase-reports/screenshots/step-ui-arena/
+          if-no-files-found: error
+          retention-days: 7
 
   gitleaks:
     name: gitleaks

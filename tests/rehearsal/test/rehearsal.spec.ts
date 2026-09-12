@@ -69,13 +69,47 @@ describe('the offline dress rehearsal', () => {
     }
   });
 
-  it('detection notes the scripted bot in shadow mode without blocking it', async () => {
+  it('detection runs, reports, and blocks nobody — shadow mode (D-E9)', async () => {
+    // WHAT THIS USED TO ASSERT (audit 2026-09-11, G-13). One entry's
+    // `flagged` was false, under a title that said "shadow mode". Neither
+    // half held up: the harness auto-flagged on hard blocks, which
+    // production has never done, so nothing here was in shadow mode; and
+    // seat 63's flag being false proved only that uniform timing is not a
+    // hard-block signal — a detection pipeline that had silently stopped
+    // running at all would have passed it identically.
+    //
+    // Shadow mode has two halves and both are asserted now: the signals FIRE
+    // (there is a report, and it names the bot), and NOTHING acts on them
+    // (no entry in the pool is flagged, and no share is escrowed).
     const run = await runOfflinePool(42);
-    // Strategy seat 63 is the bot. It must have been PAYABLE (no hard block —
-    // uniform timing alone is not a hard-block signal, R11).
-    const bot = run.players[63];
-    const flagged = (await run.chain.getEntries(run.poolId)).find((e) => e.player === bot)!;
-    expect(flagged.flagged).to.equal(false);
+
+    expect(run.detection.length, 'the crank asked for a report').to.equal(1);
+    const report = run.detection[0];
+    const bot = run.players[63]; // the scripted-timing strategy
+
+    // Half one: the pipeline saw the bot. Uniform timing is a review
+    // recommendation, not a hard block (R11) — so it must appear there and
+    // must NOT appear in hardBlocks.
+    expect(
+      report.findings.length,
+      'a 64-seat field of scripted strategies produces findings'
+    ).to.be.greaterThan(0);
+    expect(report.reviewRecommended, 'the bot is recommended for review').to.include(bot);
+    expect(report.hardBlocks, 'uniform timing alone is never a hard block').to.not.include(bot);
+
+    // Half two: nothing acted on any of it. Not the bot, not anyone.
+    const entries = await run.chain.getEntries(run.poolId);
+    expect(
+      entries.filter((e) => e.flagged).map((e) => e.index),
+      'a flag is a reviewer`s signed decision, never the daemon`s (D-E9)'
+    ).to.deep.equal([]);
+    expect(
+      [...run.chain.escrowed.values()].filter((v) => v > 0n),
+      'nothing escrowed, so the whole pot was paid out'
+    ).to.deep.equal([]);
+    let paid = 0n;
+    for (const v of run.chain.paid.values()) paid += v;
+    expect(paid, 'the pot reached wallets in full').to.equal(potForTier(0));
   });
 
   it('the refund fork drains a 51-entry pool in full (R7 as amended by D-E4)', async () => {

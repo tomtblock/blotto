@@ -42,10 +42,30 @@
 //! version is current is service policy (config/terms.json), not program
 //! state.
 //!
-//! The packet service (`backend/packet/`) and the client instruction builder
-//! (`app/src/tx/blotto-instructions.ts`) encode this SAME layout; the Python
-//! generator `backend/packet/fixtures/gen_vectors.py` is the independent
-//! oracle all three are pinned to.
+//! # Who else writes these bytes, and what pins each one (audit 2026-09-11, F-14)
+//!
+//! The layout is hand-written in four places. The Python generator
+//! `backend/packet/fixtures/gen_vectors.py` is the independent oracle, and
+//! every other copy is now pinned to the vectors it emits:
+//!
+//!   - **this decoder** — `oracle_vectors_decode_to_their_declared_fields`
+//!     below reads `backend/packet/fixtures/vectors.json` and decodes every
+//!     case's bytes;
+//!   - **the issuer**, `backend/packet/src/packet.ts` — pinned by
+//!     `backend/packet/test/packet.spec.ts`;
+//!   - **the integration suite's encoder**,
+//!     `tests/litesvm/src/lib.rs::encode_packet_with_terms`, which is what
+//!     actually drives this verifier against the compiled artifact — pinned
+//!     by `tests/litesvm/tests/packet_layout.rs`;
+//!   - **the oracle itself**, regenerated and diffed by
+//!     `scripts/check-fixtures.sh`.
+//!
+//! The browser does NOT encode a packet: it receives the message from the
+//! packet service as opaque bytes and wraps it in an `Ed25519Program`
+//! instruction (`app/src/entry/register-tx.ts`). Until 2026-09-12 this
+//! paragraph named `app/src/tx/blotto-instructions.ts`, which is not a file
+//! in this repository, and claimed a pinning that existed for one of the
+//! four copies.
 
 use anchor_lang::prelude::*;
 // anchor-lang 1.0's `solana_program` facade does not re-export the checked
@@ -397,5 +417,192 @@ mod tests {
     fn policy_boundary_exactly_60s_is_fresh() {
         let p = packet();
         assert!(check_packet_policy(&p, &p.wallet, &p.pool, p.issued_at + 60, 0).is_ok());
+    }
+
+    // -----------------------------------------------------------------
+    // The Python oracle (audit 2026-09-11, F-14)
+    //
+    // The 85-byte layout is hand-written in four places and the module doc
+    // claimed all of them were pinned to `gen_vectors.py`. One was. This
+    // pins the on-chain decoder — the copy that decides whether real money
+    // moves — directly against the generated vectors, so a field inserted
+    // in Python and not here fails in this crate rather than on devnet.
+    //
+    // WHY THE FILE IS SCANNED RATHER THAN PARSED. The program crate carries
+    // no JSON parser and cannot gain one: a dependency added for a test
+    // still enters the on-chain crate's tree. The same reasoning, and the
+    // same `include_str!` + `#[cfg(test)]` shape, as
+    // `constants::tests::class_counter_mirrors_hold`. The scanner below is
+    // strict — it fails on a missing key rather than returning a default —
+    // and the test asserts the case COUNT first, so a scan that found
+    // nothing cannot pass silently.
+    // -----------------------------------------------------------------
+
+    const PACKET_VECTORS_JSON: &str = include_str!("../../../backend/packet/fixtures/vectors.json");
+
+    /// The quoted string value of `"key"` in one flat JSON object.
+    fn json_str<'a>(obj: &'a str, key: &str) -> &'a str {
+        let needle = format!("\"{key}\":");
+        let at = obj
+            .find(&needle)
+            .unwrap_or_else(|| panic!("vectors.json case has no `{key}`: {obj}"));
+        let rest = &obj[at + needle.len()..];
+        let open = rest
+            .find('"')
+            .unwrap_or_else(|| panic!("`{key}` is not a string in vectors.json"));
+        let tail = &rest[open + 1..];
+        let close = tail
+            .find('"')
+            .unwrap_or_else(|| panic!("`{key}` is unterminated in vectors.json"));
+        &tail[..close]
+    }
+
+    /// The bare integer value of `"key"` in one flat JSON object.
+    fn json_int(obj: &str, key: &str) -> i64 {
+        let needle = format!("\"{key}\":");
+        let at = obj
+            .find(&needle)
+            .unwrap_or_else(|| panic!("vectors.json case has no `{key}`: {obj}"));
+        let rest = &obj[at + needle.len()..];
+        let end = rest
+            .find([',', '\n', '}'])
+            .unwrap_or_else(|| panic!("`{key}` is unterminated in vectors.json"));
+        rest[..end]
+            .trim()
+            .parse()
+            .unwrap_or_else(|e| panic!("`{key}` is not an integer in vectors.json: {e}"))
+    }
+
+    fn unhex(s: &str) -> Vec<u8> {
+        assert!(s.len().is_multiple_of(2), "expected_hex has an odd length");
+        (0..s.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&s[i..i + 2], 16).expect("expected_hex is not hex"))
+            .collect()
+    }
+
+    /// Each case object of the oracle file, as raw text.
+    fn oracle_cases() -> Vec<&'static str> {
+        // The generator writes one flat object per case; splitting on the
+        // object opener keeps each case's keys together and cannot merge two.
+        PACKET_VECTORS_JSON
+            .split("\n  {\n")
+            .skip(1)
+            .map(|rest| &rest[..rest.find('}').expect("unterminated case object")])
+            .collect()
+    }
+
+    #[test]
+    fn oracle_vectors_decode_to_their_declared_fields() {
+        let cases = oracle_cases();
+        assert_eq!(
+            cases.len(),
+            5,
+            "the scan found {} cases in backend/packet/fixtures/vectors.json — regenerate it \
+             with `python3 fixtures/gen_vectors.py --write` from backend/packet/, and if the \
+             case count legitimately changed, change it here too",
+            cases.len()
+        );
+
+        for case in cases {
+            let bytes = unhex(json_str(case, "expected_hex"));
+            assert_eq!(
+                bytes.len(),
+                PACKET_LEN,
+                "the oracle emits {} bytes; PACKET_LEN is {PACKET_LEN}",
+                bytes.len()
+            );
+            let decoded = EntryPacket::decode(&bytes).expect("the oracle's bytes must decode");
+
+            let wallet = Pubkey::try_from(json_str(case, "wallet")).expect("wallet is base58");
+            let pool = Pubkey::try_from(json_str(case, "pool")).expect("pool is base58");
+            assert_eq!(decoded.wallet, wallet, "wallet at offset 0");
+            assert_eq!(decoded.pool, pool, "pool at offset 32");
+            assert_eq!(
+                decoded.nonce,
+                json_str(case, "nonce")
+                    .parse::<u64>()
+                    .expect("nonce is a u64"),
+                "nonce at offset 64"
+            );
+            assert_eq!(
+                decoded.geo_cleared as i64,
+                json_int(case, "geo_cleared"),
+                "geo_cleared at offset 72"
+            );
+            assert_eq!(
+                decoded.age_verified as i64,
+                json_int(case, "age_verified"),
+                "age_verified at offset 73"
+            );
+            assert_eq!(
+                decoded.kyc_tier as i64,
+                json_int(case, "kyc_tier"),
+                "kyc_tier at offset 74"
+            );
+            assert_eq!(
+                decoded.issued_at,
+                json_str(case, "issued_at")
+                    .parse::<i64>()
+                    .expect("issued_at is an i64"),
+                "issued_at at offset 75"
+            );
+            assert_eq!(
+                decoded.terms_version as i64,
+                json_int(case, "terms_version"),
+                "terms_version at offset 83"
+            );
+        }
+    }
+
+    /// The oracle's own cases cover the edges the layout can get wrong: a
+    /// nonce above 2^53 (a JS number would lose it), a non-zero KYC tier, an
+    /// all-zero packet, a terms version past 1, and a packet whose
+    /// `geo_cleared` and `age_verified` DIFFER. Asserted so a future
+    /// regeneration that quietly dropped one is visible.
+    #[test]
+    fn the_oracle_still_covers_the_edges_the_layout_can_get_wrong() {
+        let names: Vec<&str> = oracle_cases().iter().map(|c| json_str(c, "name")).collect();
+        assert_eq!(
+            names,
+            [
+                "baseline",
+                "kyc_tier_1",
+                "uncleared",
+                "terms_v2",
+                // Added 2026-09-12: every other case sets geo_cleared and
+                // age_verified alike, so a layout that swapped those two
+                // adjacent bytes reproduced all four vectors exactly.
+                "geo_without_age",
+            ]
+        );
+
+        let by_name = |want: &str| -> Vec<u8> {
+            for case in oracle_cases() {
+                if json_str(case, "name") == want {
+                    return unhex(json_str(case, "expected_hex"));
+                }
+            }
+            panic!("no oracle case named {want}");
+        };
+        // 2^63 — past what a double can represent exactly.
+        assert_eq!(
+            EntryPacket::decode(&by_name("kyc_tier_1")).unwrap().nonce,
+            1u64 << 63
+        );
+        let uncleared = EntryPacket::decode(&by_name("uncleared")).unwrap();
+        assert_eq!(uncleared.geo_cleared, 0);
+        assert_eq!(uncleared.age_verified, 0);
+        assert_eq!(
+            EntryPacket::decode(&by_name("terms_v2"))
+                .unwrap()
+                .terms_version,
+            2
+        );
+        // The two adjacent flag bytes are distinguishable in at least one
+        // vector, or a swapped pair would decode every case correctly.
+        let asymmetric = EntryPacket::decode(&by_name("geo_without_age")).unwrap();
+        assert_eq!(asymmetric.geo_cleared, 1);
+        assert_eq!(asymmetric.age_verified, 0);
     }
 }

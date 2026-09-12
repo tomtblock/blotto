@@ -106,8 +106,22 @@ scripted bot in shadow mode, and drains the 51-entry refund fork in full.
      `NEXT_PUBLIC_SOLANA_RPC_URL`.
 4. **5.1 — twenty pools.** The rehearsal orchestrator drives 64 wallets per
    pool through the four strategies; at least one pool per run enters
-   through the REAL frontend via `tests/rehearsal/playwright/entry-flow.spec.ts`
-   (`APP_URL=… npx playwright test`).
+   through the REAL frontend, **by hand**.
+
+   *There is no automated spec for that walkthrough (audit 2026-09-11, C-29 /
+   D-32).* `tests/rehearsal/playwright/entry-flow.spec.ts` claimed to be one
+   and was removed on 2026-09-12: it was written against a UI this app no
+   longer has — it looked for a `battle allocation pentagon` group and a
+   `lock in` button, neither of which exists anywhere in `app/src` — and it
+   skipped itself whenever `APP_URL` was unset, which is always. It could
+   never have passed, and nothing would have told you. Writing a replacement
+   needs the deployed stack in front of you, so write it on the rehearsal
+   day against what is actually on screen, not before.
+
+   The credential-free half of the journey — landing, pool page, the entry
+   gate's fail-closed panel, the verify page, at 375px and 1280px — IS
+   automated and runs on every change: `app/e2e/journey.spec.ts`, the
+   `journey` job of `ci-fast`.
 5. **5.2 — failure paths, once each:**
    - 51 entries, shortened deadline → `trigger_refund` → all 51 entry
      payments refunded in full from the platform treasury, and the pool's

@@ -840,6 +840,24 @@ describe('the daemon (C8): double-run', () => {
   });
 });
 
+/**
+ * A backstop for the counted run-loop tests below.
+ *
+ * Those tests stop the loop from inside `afterIteration`, which is exactly
+ * the right condition to assert on — but it means a defect in the loop that
+ * skipped that hook would leave `run()` looping for ever, and a HANG is a
+ * worse failure than a red: mocha reports the timeout but the pending loop
+ * keeps the process alive. This arms an unreferenced timer that aborts
+ * regardless, so a broken loop still terminates; the iteration-count
+ * assertion in each test is what then reports it, because the backstop fires
+ * at a different count from the one the test expects.
+ */
+function failsafe(ac: AbortController, ms = 5_000): () => void {
+  const t = setTimeout(() => ac.abort(), ms);
+  (t as unknown as { unref?: () => void }).unref?.();
+  return () => clearTimeout(t);
+}
+
 describe('the daemon (C8): run loop', () => {
   it('run() ticks until aborted and swallows tick failures', async () => {
     const w = await makeWorld();
@@ -867,11 +885,25 @@ describe('the daemon (C8): run loop', () => {
       crank: async (id) => ({ poolId: id, finalState: 'Paid', stepsTaken: [] }),
       now: () => w.clock.t,
     });
+    // COUNTED, NOT TIMED (audit 2026-09-11, G-18). This used to start the
+    // loop, sleep 40ms of WALL CLOCK, abort, and then assert that more than
+    // two ticks had happened — which is a guess about how many 5ms intervals a
+    // loaded CI runner fits into 40ms. A slow runner failed a correct
+    // daemon; a fast one passed a loop that had stopped after tick three.
+    // The loop is now stopped by the ITERATION COUNT it is being asserted
+    // on, so the assertion and the stopping condition are the same fact.
     const ac = new AbortController();
-    const done = daemon.run(5, ac.signal);
-    await new Promise((r) => setTimeout(r, 40));
-    ac.abort();
+    const stop = failsafe(ac);
+    let iterations = 0;
+    const done = daemon.run(1, ac.signal, {
+      afterIteration: () => {
+        if (++iterations >= 4) ac.abort();
+      },
+    });
     await done;
+    stop();
+    expect(ac.signal.aborted, 'the loop ran to the iteration count and stopped').to.equal(true);
+    expect(iterations).to.equal(4);
     expect(ticks).to.be.greaterThan(2); // survived the first (failing) tick
   });
 
@@ -910,7 +942,8 @@ describe('the daemon (C8): run loop', () => {
     const reports: TickReport[] = [];
     const errors: unknown[] = [];
     const ac = new AbortController();
-    const done = daemon.run(5, ac.signal, {
+    const stop = failsafe(ac);
+    const done = daemon.run(1, ac.signal, {
       beforeTick: () => {
         iteration++;
         order.push('before');
@@ -923,11 +956,16 @@ describe('the daemon (C8): run loop', () => {
         order.push('error');
         errors.push(e);
       },
-      afterIteration: () => order.push('iteration'),
+      // Counted, not timed (G-18): four iterations is what the assertions
+      // below read — a clean one, the failing one, and two more that prove
+      // the loop kept going — so four iterations is what stops it.
+      afterIteration: () => {
+        order.push('iteration');
+        if (iteration >= 4) ac.abort();
+      },
     });
-    await new Promise((r) => setTimeout(r, 60));
-    ac.abort();
     await done;
+    stop();
 
     // A clean iteration is before → after → iteration, in that order.
     expect(order.slice(0, 3)).to.deep.equal(['before', 'after', 'iteration']);
@@ -938,8 +976,8 @@ describe('the daemon (C8): run loop', () => {
     expect(String(errors[0])).to.contain('rpc down');
     // The loop kept going after the failure, and every report it handed back
     // is a real tick report.
-    expect(iteration).to.be.greaterThan(2);
-    expect(reports.length).to.be.greaterThan(1);
+    expect(iteration).to.equal(4);
+    expect(reports.length, 'three clean iterations of the four').to.equal(3);
     for (const r of reports) expect(r.errors).to.be.an('array');
   });
 
@@ -947,19 +985,23 @@ describe('the daemon (C8): run loop', () => {
     const w = await makeWorld();
     let iterations = 0;
     const ac = new AbortController();
-    const done = w.daemon.run(5, ac.signal, {
+    const stop = failsafe(ac);
+    const done = w.daemon.run(1, ac.signal, {
       afterTick: () => {
         throw new Error('health write failed');
       },
       afterIteration: () => {
-        iterations++;
+        // Counted, not timed (G-18). The abort is raised BEFORE the throw,
+        // so the loop is stopped by a hook that then fails — which is the
+        // property under test: a book-keeping hook that throws must stop
+        // neither the iteration nor the sweep.
+        if (++iterations >= 4) ac.abort();
         throw new Error('alert sink down');
       },
     });
-    await new Promise((r) => setTimeout(r, 40));
-    ac.abort();
     await done;
-    expect(iterations).to.be.greaterThan(2);
+    stop();
+    expect(iterations).to.equal(4);
   });
 });
 

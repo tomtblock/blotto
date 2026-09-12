@@ -228,7 +228,8 @@ describes.
 **Tests carried:** `tests/commit-vrf-seed.ts` → `tests/vrf.ts`, symbols renamed, all three cases
 kept (happy path, double-commit rejection, wrong-owner rejection). The Switchboard randomness
 account dumps under `tests/e2e/fixtures/switchboard-randomness/` are carried — public account state,
-not secrets.
+not secrets. *(Removed 2026-09-12 with the rest of `tests/e2e/`; see the note at the
+end of this report.)*
 
 **Result:** `anchor build` **green**; the TypeScript suite **typechecks clean** against the generated
 IDL. `anchor test` cannot be fully green yet, because `open_pool` does not exist — the suite now
@@ -485,6 +486,11 @@ web lanes dropped until those exist); `stop-the-line.yml` (watching `ci-fast`); 
 `Anchor.toml`'s structure including the Surfpool config, the `[[test.genesis]]` mpl-core fixture line
 and the scripts block; `tests/fixtures/mpl_core.so`; and
 `tests/e2e/lib/{common,validator,postgres}.sh` with every reference to the old product renamed.
+*(Struck 2026-09-12, audit 2026-09-11 G-10/G-22: the rename was incomplete —
+`common.sh` still pinned the predecessor's program address — and the three scripts
+called stage files (`tests/e2e/lifecycle/vrf.ts`, `tests/e2e/README.md`) that were
+never carried, so nothing could run them. `tests/e2e/` was removed on that date,
+the randomness fixtures above with it; they had no consumer but those scripts.)*
 
 **Audit ignore lists pruned per instruction.** All four advisories still need suppressing against
 this workspace's own lockfile, re-verified with `cargo tree -i` rather than inherited on trust:
