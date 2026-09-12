@@ -188,33 +188,47 @@ describe('clientKeyFrom', () => {
    */
 
   it('takes the RIGHT-most hop — anything to its left is caller-supplied', () => {
-    expect(clientKeyFrom('1.2.3.4, 10.0.0.1', '10.0.0.1')).to.equal('10.0.0.1');
-    expect(clientKeyFrom(['5.6.7.8, 10.0.0.1'], '10.0.0.1')).to.equal('10.0.0.1');
+    expect(clientKeyFrom('1.2.3.4, 10.0.0.1', '10.0.0.1', undefined, true)).to.equal('10.0.0.1');
+    expect(clientKeyFrom(['5.6.7.8, 10.0.0.1'], '10.0.0.1', undefined, true)).to.equal('10.0.0.1');
   });
 
   it('REGRESSION: an injected left-most hop cannot choose the key', () => {
-    const injected = clientKeyFrom('81.246.0.1, 203.0.113.9', '203.0.113.9');
+    const injected = clientKeyFrom('81.246.0.1, 203.0.113.9', '203.0.113.9', undefined, true);
     expect(injected).to.equal('203.0.113.9');
     expect(injected, 'the caller-supplied value must never win').to.not.equal('81.246.0.1');
   });
 
   it('prefers Fly-Client-IP, which the proxy overwrites rather than appends', () => {
-    expect(clientKeyFrom('81.246.0.1, 1.128.0.1', '10.0.0.1', '203.0.113.9')).to.equal(
+    expect(clientKeyFrom('81.246.0.1, 1.128.0.1', '10.0.0.1', '203.0.113.9', true)).to.equal(
       '203.0.113.9'
     );
   });
 
   it('tolerates whitespace, empty hops and a trailing comma', () => {
-    expect(clientKeyFrom('81.246.0.1 , , 203.0.113.9 ,', '10.0.0.1')).to.equal('203.0.113.9');
-    expect(clientKeyFrom(' , , ', '9.9.9.9'), 'an all-empty header is no header').to.equal(
+    expect(clientKeyFrom('81.246.0.1 , , 203.0.113.9 ,', '10.0.0.1', undefined, true)).to.equal('203.0.113.9');
+    expect(clientKeyFrom(' , , ', '9.9.9.9', undefined, true), 'an all-empty header is no header').to.equal(
       '9.9.9.9'
     );
   });
 
+  it('trusts NO header when the service is exposed directly (audit E-21)', () => {
+    // The paragraph in `clientKeyFrom`'s doc has described this gate since the
+    // day the territory bypass was found, and until 2026-09-12 the function
+    // had no such parameter — every caller gated the headers itself, by
+    // convention. A convention every caller must remember is one a future
+    // caller forgets, and what they would forget is the caller choosing the
+    // verdict of a gate whose whole purpose is that they cannot.
+    expect(
+      clientKeyFrom('81.246.0.1', '203.0.113.9', '81.246.0.1', false),
+      'not the forwarded header, not the Fly header — the socket'
+    ).to.equal('203.0.113.9');
+    expect(clientKeyFrom('81.246.0.1, 1.2.3.4', undefined, '5.6.7.8', false)).to.equal('unknown');
+  });
+
   it('falls back to the socket address, then to a shared bucket', () => {
-    expect(clientKeyFrom(undefined, '9.9.9.9')).to.equal('9.9.9.9');
-    expect(clientKeyFrom('', '9.9.9.9')).to.equal('9.9.9.9');
-    expect(clientKeyFrom(undefined, undefined)).to.equal('unknown');
+    expect(clientKeyFrom(undefined, '9.9.9.9', undefined, true)).to.equal('9.9.9.9');
+    expect(clientKeyFrom('', '9.9.9.9', undefined, true)).to.equal('9.9.9.9');
+    expect(clientKeyFrom(undefined, undefined, undefined, true)).to.equal('unknown');
   });
 });
 
@@ -316,6 +330,9 @@ describe('applyHygiene', () => {
     forwardedFor: undefined,
     remoteAddress: '1.1.1.1',
     origin: undefined,
+    // Every case here is a proxied service, which `trustProxy` now says out
+    // loud rather than leaving to the call site (audit E-21).
+    trustProxy: true,
     ...over,
   });
 
