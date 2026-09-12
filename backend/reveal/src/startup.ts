@@ -185,3 +185,136 @@ export function uploadWalletVerdict(
       `until someone noticed. Fund the address and restart.`,
   };
 }
+
+/**
+ * The unreadable-entry ceiling (audit 2026-09-11, B-08 — the crank's guard
+ * landed in PR #106; THIS is the wiring it lacked, plan 2026-09-12 §5).
+ *
+ * `crank.ts` refuses to commit a pool in which more entries than the ceiling
+ * could not be read back from the ciphertext store. Its default — all but
+ * one — is a logical boundary, not a tuning: it stops only a field that is
+ * entirely unreadable. `main.ts` never set anything, so the deployed daemon
+ * ran on that default and would have settled a 64-entry pool with 63 lost
+ * entries, every seat tied on zero.
+ *
+ * The VALUE is founder-owned (plan §2e recommends a small absolute number).
+ * This parses it and decides what an unset value means per cluster: on
+ * devnet the crank's default applies and is printed, so a rehearsal runs
+ * without the number; on mainnet an unset ceiling refuses to start, the way
+ * every other unconfigured seam here does — a settlement that pays real
+ * money against an unread field is not a default anyone chose.
+ */
+export const UNREADABLE_CEILING_ENV = 'BLOTTO_MAX_UNREADABLE_ENTRIES';
+
+export interface UnreadableCeiling {
+  /** What to hand `CrankDeps.maxUnreadableEntries`; undefined = the crank's default. */
+  ceiling: number | undefined;
+  message: string;
+}
+
+export function parseUnreadableCeiling(
+  raw: string | undefined,
+  cluster: 'mainnet' | 'devnet'
+): UnreadableCeiling {
+  const v = (raw ?? '').trim();
+  if (v === '') {
+    if (cluster === 'mainnet') {
+      throw new Error(
+        `${SERVICE_LABEL}: ${UNREADABLE_CEILING_ENV} is required on mainnet. It is how ` +
+          `many entries may be unreadable before the crank refuses to settle a pool; ` +
+          `without it the crank would commit a 64-entry pool with 63 entries lost. ` +
+          `Set the ratified figure and restart.`
+      );
+    }
+    return {
+      ceiling: undefined,
+      message:
+        `${SERVICE_LABEL}: unreadable-entry ceiling = the crank's default (all but one) — ` +
+        `${UNREADABLE_CEILING_ENV} is unset. Devnet only: mainnet refuses to start without it.`,
+    };
+  }
+  if (!/^\d+$/.test(v)) {
+    throw new Error(
+      `${SERVICE_LABEL}: ${UNREADABLE_CEILING_ENV} must be a whole number of entries (got "${raw}")`
+    );
+  }
+  const ceiling = Number(v);
+  return {
+    ceiling,
+    message: `${SERVICE_LABEL}: unreadable-entry ceiling = ${ceiling} entries (${UNREADABLE_CEILING_ENV})`,
+  };
+}
+
+/**
+ * Whether the daemon will tell the indexer where each settled pool's bundle
+ * is (audit 2026-09-11, D-02).
+ *
+ * The announce is gated on two variables, and until 2026-09-12 neither was
+ * staged for the deployed daemon: every boot logged "bundle announce OFF"
+ * in the same tone as a routine line, the daemon published each bundle to
+ * permanent storage, and no reader — not the archive, not the results page,
+ * not /verify — was ever told where. The fallback, `archive-backfill`, was
+ * scheduled by nothing. A publish nobody can find is the failure mode, so
+ * the silence is now graded: OFF while bundles ARE being published is a
+ * warning on devnet (the scheduled backfill still fills the archive daily)
+ * and a refusal on mainnet, where an unverifiable settlement is real money.
+ */
+export interface AnnounceVerdict {
+  on: boolean;
+  /** OFF while bundles are being published — the archive depends on the backfill. */
+  warn: boolean;
+  /** Mainnet, OFF: do not start. */
+  refuse: boolean;
+  message: string;
+}
+
+export function announceVerdict(
+  env: {
+    BLOTTO_INDEXER_ANNOUNCE_URL?: string;
+    BLOTTO_HELIUS_WEBHOOK_SECRET?: string;
+    IRYS_UPLOAD_KEY?: string;
+  },
+  cluster: 'mainnet' | 'devnet'
+): AnnounceVerdict {
+  const url = (env.BLOTTO_INDEXER_ANNOUNCE_URL ?? '').trim();
+  const secret = (env.BLOTTO_HELIUS_WEBHOOK_SECRET ?? '').trim();
+  if (url !== '' && secret !== '') {
+    return {
+      on: true,
+      warn: false,
+      refuse: false,
+      message: `${SERVICE_LABEL}: bundle announce ON → ${url}`,
+    };
+  }
+  const missing = [
+    url === '' ? 'BLOTTO_INDEXER_ANNOUNCE_URL' : null,
+    secret === '' ? 'BLOTTO_HELIUS_WEBHOOK_SECRET' : null,
+  ]
+    .filter((n) => n !== null)
+    .join(' + ');
+  const publishing = (env.IRYS_UPLOAD_KEY ?? '').trim() !== '';
+  if (!publishing) {
+    return {
+      on: false,
+      warn: false,
+      refuse: false,
+      message: `${SERVICE_LABEL}: bundle announce OFF (${missing} unset) — and no IRYS_UPLOAD_KEY, so nothing is published either`,
+    };
+  }
+  const refuse = cluster === 'mainnet';
+  return {
+    on: false,
+    warn: true,
+    refuse,
+    message:
+      `${SERVICE_LABEL}: bundle announce OFF (${missing} unset) while IRYS_UPLOAD_KEY is set — ` +
+      `every settled pool's bundle will be published where no reader is told to look, and ` +
+      `the verified-results archive fills only when archive-backfill runs ` +
+      `(indexer-backfill.yml, daily). Stage both variables for the daemon ` +
+      `(deploy-backend.yml, "Stage daemon secrets"). ` +
+      (refuse
+        ? 'On mainnet that is an unverifiable settlement of real money: refusing to start.'
+        : 'Devnet: continuing.') +
+      ' Audit 2026-09-11, D-02.',
+  };
+}
