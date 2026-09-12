@@ -62,13 +62,23 @@ fn donate_one_lamport(env: &mut Env, pool_id: u64) {
 ///
 /// Built directly, with no program involved: a rent-exempt zero-data account
 /// and a transfer out that would leave it holding one lamport. A runtime that
-/// enforces the transition refuses it; draining the same account to nothing
-/// stays legal.
+/// enforces the transition refuses it — with the rent error, not just any
+/// error — and draining the same account to nothing stays legal.
+///
+/// The FEE PAYER IS SOMEONE ELSE, deliberately. The first run of this probe
+/// (PR #106) made the probed account the transaction's payer, and the runtime
+/// checks a payer's post-fee balance against rent BEFORE any instruction
+/// runs: both halves then answered `InsufficientFundsForRent` about the fee,
+/// the refusal passed for the wrong reason and the drain failed for no reason
+/// the finding is about. A funded bystander pays the fee, so what the probe
+/// measures is the transfer's post-state and nothing else.
 #[test]
 fn the_harness_enforces_the_rent_state_transition() {
     let Some(mut env) = Env::new() else { return };
 
     let sink = Pubkey::new_unique();
+    let payer = Keypair::new();
+    env.svm.airdrop(&payer.pubkey(), 1_000_000_000).unwrap();
 
     let stranding = Keypair::new();
     env.svm
@@ -76,7 +86,7 @@ fn the_harness_enforces_the_rent_state_transition() {
         .unwrap();
     let refused = env.send(
         &[transfer(&stranding.pubkey(), &sink, VAULT_RENT_CUSHION)],
-        &[&stranding],
+        &[&payer, &stranding],
     );
 
     let draining = Keypair::new();
@@ -85,18 +95,30 @@ fn the_harness_enforces_the_rent_state_transition() {
         .unwrap();
     let allowed = env.send(
         &[transfer(&draining.pubkey(), &sink, VAULT_RENT_CUSHION + 1)],
-        &[&draining],
+        &[&payer, &draining],
     );
 
-    assert!(
-        refused.is_err(),
-        "this harness does NOT enforce the rent-state transition, so the dust \
-         tests below cannot fail and prove nothing. Verify the cushion against \
-         a real validator instead."
-    );
+    match &refused {
+        Err(e) if e.contains("InsufficientFundsForRent") => {}
+        other => panic!(
+            "this harness does NOT enforce the rent-state transition (got {other:?}), so \
+             the dust tests below cannot fail and prove nothing. Verify the cushion \
+             against a real validator instead."
+        ),
+    }
     assert!(
         allowed.is_ok(),
         "draining an account to zero must stay legal: {allowed:?}"
+    );
+    assert_eq!(
+        env.balance(&stranding.pubkey()),
+        VAULT_RENT_CUSHION + 1,
+        "the refused transfer moved nothing"
+    );
+    assert_eq!(
+        env.balance(&draining.pubkey()),
+        0,
+        "the drain emptied the account"
     );
 }
 
