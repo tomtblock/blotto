@@ -1,6 +1,6 @@
 /**
  * The reveal-bundle publisher seam (roadmap 2.4: "publish plaintext set +
- * salts + timings to Irys").
+ * salts + timings to Irys" — the timings left with bundle v2, B-31, 2026-09-12).
  *
  * PHASE-2-REVIEW: the Irys implementation needs a funded upload wallet —
  * founder-provisioned alongside the other Phase 5 credentials — so what
