@@ -11,7 +11,7 @@
  * of a timer it cannot afford to finish.
  */
 
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { address } from '@solana/kit';
@@ -35,8 +35,15 @@ import {
 } from '@/entry/balance-gate';
 import { checkGeoGate, type GeoGateState } from '@/entry/geo-gate';
 import type { AddFundsOptions } from '@/wallet/types';
+import { openFunding } from '@/wallet/funding';
 import { isMainnet } from '@/chain/cluster';
-import { hasLocalAttestation, submitAttestation } from '@/entry/attestation';
+import {
+  hasLocalAttestation,
+  submitAttestation,
+  type AttestationFailure,
+} from '@/entry/attestation';
+import { signInHref } from '@/app/signin/return-to';
+import { runInterruption } from './run-guard';
 import { RevealHost } from './reveal-host';
 import { SealedPanel } from './sealed-panel';
 
@@ -270,16 +277,61 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
     timingsMs: readonly number[];
   } | null>(null);
 
+  /*
+   * C-17 / D-13 (audit 2026-09-11). THE RUN IS THE PLAYER'S WORK, and until
+   * the seal it exists nowhere but inside BattleFlow. Every gate below used
+   * to be re-evaluated on every render, so a wallet reconnect, an active-
+   * address change, or a balance re-check in the middle of the ninety
+   * seconds took the screen away and destroyed all seven allocations with
+   * no message and no recovery.
+   *
+   * The wallet the run BELONGS to is captured when the player begins.
+   * Non-null means a run is on screen, and from that moment:
+   *
+   *   - the pre-flight gates (signer, balance, existing entry, pool state)
+   *     stop being able to unmount the flow — they are PRE-flight, and they
+   *     have already been passed;
+   *   - a genuine change of account is the one thing that does stop it, and
+   *     it SAYS so, offering a deliberate restart rather than silently
+   *     beginning again with nothing on screen.
+   */
+  const [runWallet, setRunWallet] = useState<string | null>(null);
+  /** Set when a seal could not be submitted (no signer at that moment) —
+   * the allocations survive in `lastConfirmed` and the panel offers a retry
+   * rather than a dead "Sealing…" hold. */
+  const [submitBlocked, setSubmitBlocked] = useState(false);
+
   const onConfirm = useCallback(
     async (battles: readonly Allocation[], timingsMs: readonly number[]) => {
+      // Remembered FIRST and unconditionally: it is the player's ninety
+      // seconds, and it must survive whatever the submit does next.
+      setLastConfirmed({ battles, timingsMs });
       const run = startSubmit(battles, timingsMs);
       if (run) {
-        setLastConfirmed({ battles, timingsMs });
+        setSubmitBlocked(false);
         setRevealRun(() => run);
+      } else {
+        // Signed in, but nothing that can sign right now. Never a silent
+        // no-op: the old code returned here and left "Sealing…" on screen
+        // for ever.
+        setSubmitBlocked(true);
       }
     },
     [startSubmit]
   );
+
+  const retrySubmit = useCallback(() => {
+    if (lastConfirmed) void onConfirm(lastConfirmed.battles, lastConfirmed.timingsMs);
+  }, [lastConfirmed, onConfirm]);
+
+  /** A run is on screen: begun, not sealed, not handed to the takeover. */
+  const interruption = runInterruption(runWallet, auth);
+  const runInProgress = interruption !== 'none' && !done && !revealRun;
+  /** Once the run has begun the balance pre-flight has been passed; a later
+   * re-check must not blank the screen the player is playing on. */
+  const balanceForGate: BalanceGateState | 'checking' = runInProgress
+    ? { state: 'ok', haveLamports: 0n }
+    : balance;
 
   if (!poolId) {
     return (
@@ -325,7 +377,9 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
   // The pool must still be taking entries — a stale tab or an old link must
   // not start a run that the program will refuse (PoolNotOpen). After this
   // wallet's own entry the sealed panel and the reveal stay put regardless.
-  if (pool.state !== 'Open' && !done && !revealRun) {
+  // A pool that closes WHILE someone is playing does not take their work
+  // away: they finish, and `register` gives them the honest refusal.
+  if (pool.state !== 'Open' && !done && !revealRun && !runInProgress) {
     return (
       <StatePanel title={COPY.gate.poolClosedTitle}>
         <p>{COPY.gate.poolClosed}</p>
@@ -359,17 +413,54 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
     );
   }
 
-  if (auth.status !== 'signed-in') {
+  /*
+   * A GENUINE account change, told apart from a transient one: the address
+   * is known, signed in, and is not the address this run began with. That
+   * is the only auth event allowed to take a run off the screen, and it
+   * explains itself.
+   */
+  if (runInProgress && interruption === 'account-changed') {
     return (
-      <StatePanel title="Sign in to enter">
-        <p>Entering needs a signed-in wallet — sign in from the header above.</p>
+      <StatePanel title={COPY.gate.walletChangedTitle}>
+        <p>{COPY.gate.walletChanged}</p>
+        <Button
+          intent="quiet"
+          className="self-start"
+          onClick={() => {
+            setRunWallet(null);
+            setLastConfirmed(null);
+            setSubmitBlocked(false);
+            setEntered(null);
+          }}
+        >
+          {COPY.gate.walletChangedRestart}
+        </Button>
       </StatePanel>
     );
   }
-  if (!auth.walletAddress) {
+
+  // Each of the three gates below can flip for a moment during an ordinary
+  // reconnect. Before a run they are the pre-flight; during one they are
+  // not allowed to unmount it (C-17 / D-13).
+  if (auth.status !== 'signed-in' && !runInProgress) {
+    return (
+      <StatePanel title="Sign in to enter">
+        <p>Entering needs a signed-in wallet — sign in from the header above.</p>
+        {/* D-17: the pool travels with them, so signing in returns to THIS
+            tournament rather than to "No pool selected". */}
+        <Link
+          href={signInHref(`/play?pool=${poolId}`)}
+          className="mt-1 text-brand underline underline-offset-2"
+        >
+          {COPY.signin.title}
+        </Link>
+      </StatePanel>
+    );
+  }
+  if (!auth.walletAddress && !runInProgress) {
     return <PendingPanel label="Resolving your wallet" />;
   }
-  if (!hasSigner) {
+  if (!hasSigner && !runInProgress) {
     // Signed in, address known, nothing that can sign for it. Hold, then say
     // so — never let the ninety seconds start against a wallet that cannot
     // confirm at the end.
@@ -385,10 +476,14 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
     );
   }
 
-  const enteredKey = `${pool.pool}:${auth.walletAddress}`;
-  if (!done && !revealRun) {
+  const enteredKey = `${pool.pool}:${wallet}`;
+  // The existing-entry read is pre-flight too: it must not re-run over a
+  // live run and replace it with a spinner (C-17 / D-13). `wallet` is
+  // non-null here off a run — the gates above guarantee it — and the test
+  // is what tells the compiler so.
+  if (!done && !revealRun && !runInProgress && wallet) {
     if (!entered || entered.key !== enteredKey) {
-      return <EntriesCheck key={enteredKey} pool={pool.pool} wallet={auth.walletAddress} onResult={(seat) => setEntered({ key: enteredKey, seat })} />;
+      return <EntriesCheck key={enteredKey} pool={pool.pool} wallet={wallet} onResult={(seat) => setEntered({ key: enteredKey, seat })} />;
     }
     if (entered.seat !== null) {
       return (
@@ -453,6 +548,8 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
           setRevealRun(null);
           setLastConfirmed(null);
           setEntered(null);
+          setRunWallet(null);
+          setSubmitBlocked(false);
           setPool(null);
           setPoolLoad('loading');
           setPoolRun((n) => n + 1);
@@ -461,20 +558,55 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
     );
   }
 
+  /*
+   * The seal could not be submitted — signed in, and nothing able to sign at
+   * that moment. The seven allocations are held in `lastConfirmed`, so this
+   * is a retry, not a restart: pressing try again re-submits the SAME
+   * battles. Before this the confirm silently did nothing.
+   */
+  if (submitBlocked) {
+    return (
+      <StatePanel title={COPY.gate.signerMissingTitle}>
+        <p>{COPY.gate.signerMissing}</p>
+        <div className="mt-1 flex flex-wrap items-center gap-3">
+          <Button intent="quiet" onClick={retrySubmit} disabled={!lastConfirmed}>
+            {COPY.gate.poolLoadRetry}
+          </Button>
+          <Link href="/wallet" className="text-brand underline underline-offset-2">
+            {COPY.gate.signerMissingLink}
+          </Link>
+        </div>
+      </StatePanel>
+    );
+  }
+
+  /*
+   * The wallet the flow below belongs to. During a run it is the address
+   * the run began with — NOT the live one — so a reconnect that briefly
+   * drops or re-reports the address cannot change the `key` and remount the
+   * whole subtree underneath it. Off a run the two are the same value.
+   */
+  const flowWallet = runWallet ?? auth.walletAddress;
+  if (!flowWallet) return <PendingPanel label="Resolving your wallet" />;
+
   return (
     <AttestationGate
-      key={auth.walletAddress}
-      wallet={auth.walletAddress}
-      signer={auth.signers.find((s) => s.address === auth.walletAddress)}
+      key={flowWallet}
+      wallet={flowWallet}
+      signer={auth.signers.find((s) => s.address === flowWallet)}
     >
       <BalanceGateView
-        state={balance}
+        state={balanceForGate}
         entryLamports={pool.entry_lamports}
-        wallet={auth.walletAddress}
+        wallet={flowWallet}
         addFunds={auth.addFunds}
         onRecheck={() => setBalanceRun((n) => n + 1)}
       >
-        <BattleFlow poolAddress={pool.pool} onConfirm={onConfirm} />
+        <BattleFlow
+          poolAddress={pool.pool}
+          onConfirm={onConfirm}
+          onRunStarted={() => setRunWallet(flowWallet)}
+        />
       </BalanceGateView>
     </AttestationGate>
   );
@@ -501,6 +633,9 @@ function BalanceGateView({
   children: React.ReactNode;
 }) {
   const [funding, setFunding] = useState(false);
+  /* D-14: a refusal the player can see, and a route out that does not
+   * depend on the provider's funding flow being switched on at all. */
+  const [fundingFailed, setFundingFailed] = useState(false);
   if (state === 'checking') return <PendingPanel label="Checking your balance" />;
   if (state.state === 'ok') return <>{children}</>;
 
@@ -523,25 +658,27 @@ function BalanceGateView({
               disabled={funding}
               onClick={async () => {
                 setFunding(true);
-                try {
-                  // Straight onto the deposit-address screen on devnet: no
-                  // card or exchange provider sells devnet SOL, so it is the
-                  // only funding method that can work there.
-                  await addFunds(wallet, { method: isMainnet() ? 'any' : 'receive' });
-                } catch (error) {
-                  // Exiting the funding flow lands here, and so does a
-                  // provider REFUSAL — notably the SDK's "Wallet funding is
-                  // not enabled" throw when funding is switched off in the
-                  // Privy dashboard, which is its state today. This catch
-                  // was empty until 2026-09-08, so that refusal produced a
-                  // tap with no window, no message and nothing in the log.
-                  // PHASE-N-REVIEW: logged, not surfaced. Telling the player
-                  // apart from a deliberate exit needs the SDK's
-                  // onUserExited callback, and the sentence they would read
-                  // is founder-owned copy (CLAUDE.md: user-facing language).
-                  // Recorded as a founder decision rather than invented here.
-                  console.error('top-up flow did not open:', error);
-                }
+                setFundingFailed(false);
+                /*
+                 * Straight onto the deposit-address screen on devnet: no
+                 * card or exchange provider sells devnet SOL, so it is the
+                 * only funding method that can work there.
+                 *
+                 * The call returns an OUTCOME (wallet/funding.ts). Until
+                 * 2026-09-11 (audit D-14) a provider refusal — the SDK's
+                 * "Wallet funding is not enabled", its state today — went
+                 * to the console and nowhere else, so with funding
+                 * switched off the only control on this wall was a dead
+                 * button. The sentence below does not claim to know WHICH
+                 * happened: a deliberate exit and a refusal are
+                 * indistinguishable without the SDK's onUserExited
+                 * callback, so it says the window did not open and names
+                 * the route that works either way.
+                 */
+                const outcome = await openFunding(addFunds, wallet, {
+                  method: isMainnet() ? 'any' : 'receive',
+                });
+                setFundingFailed(outcome !== 'opened');
                 setFunding(false);
                 // NOTE: addFunds resolves when the funding window OPENS, not
                 // when funds arrive (the SDK warns they can take minutes), so
@@ -557,6 +694,14 @@ function BalanceGateView({
             {COPY.gate.balanceRetry}
           </Button>
         </div>
+        {fundingFailed ? (
+          <p role="status" data-testid="topup-failed" className="text-[13px] leading-5 text-ink-muted">
+            {COPY.gate.topUpUnavailable}{' '}
+            <Link href="/wallet" className="text-brand underline underline-offset-2">
+              {COPY.gate.topUpWalletPage}
+            </Link>
+          </p>
+        ) : null}
         {FAUCET_ENABLED && state.state === 'insufficient' ? (
           <p className="mt-1 text-[13px] leading-5 text-ink-muted">
             <a
@@ -609,17 +754,36 @@ function AttestationGate({
   );
   const [ageChecked, setAgeChecked] = useState(false);
   const [termsChecked, setTermsChecked] = useState(false);
-  const [attestError, setAttestError] = useState(false);
+  /*
+   * C-13 (audit 2026-09-11): the REASON, not a boolean. Each one gets its
+   * own sentence, because "this wallet cannot sign messages" and "your
+   * connection dropped" have different next steps and only one of them is
+   * worth trying again.
+   */
+  const [attestError, setAttestError] = useState<AttestationFailure | null>(null);
   const [attesting, setAttesting] = useState(false);
+  /** Lets the player stop waiting on a wallet prompt that never answers —
+   * the gate had no exit at all while it waited. */
+  const cancelAttest = useRef<AbortController | null>(null);
 
   const onAttest = useCallback(async () => {
     if (attesting) return;
     setAttesting(true);
-    setAttestError(false);
-    const ok = await submitAttestation(process.env.NEXT_PUBLIC_ENTRY_API_URL, signer, wallet);
+    setAttestError(null);
+    const controller = new AbortController();
+    cancelAttest.current = controller;
+    const result = await submitAttestation(
+      process.env.NEXT_PUBLIC_ENTRY_API_URL,
+      signer,
+      wallet,
+      undefined,
+      undefined,
+      { signal: controller.signal }
+    );
+    cancelAttest.current = null;
     setAttesting(false);
-    if (ok) notifyAttested();
-    else setAttestError(true);
+    if (result.ok) notifyAttested();
+    else setAttestError(result.reason);
   }, [attesting, signer, wallet]);
 
   if (attested) return <>{children}</>;
@@ -665,14 +829,25 @@ function AttestationGate({
         ))}
       </ol>
       {attestError && (
-        <p className="text-[14px] leading-5 text-price-down" role="alert">
-          {COPY.gate.attestFailed}
+        <p className="text-[14px] leading-5 text-price-down" role="alert" data-testid="gate-error">
+          {COPY.gate.attestErrors[attestError]}
         </p>
       )}
       <div className="flex flex-col gap-3">
         <Button size="lg" disabled={!ready || attesting} onClick={onAttest} data-testid="gate-confirm">
           {attesting ? COPY.gate.gateSigning : COPY.gate.ageConfirm}
         </Button>
+        {attesting && (
+          // The way out of a prompt that never came back. Without it the
+          // button stayed disabled and the page was a dead end.
+          <Button
+            intent="quiet"
+            data-testid="gate-cancel"
+            onClick={() => cancelAttest.current?.abort()}
+          >
+            {COPY.gate.attestCancel}
+          </Button>
+        )}
         <p className="text-[13px] leading-5 text-ink-muted" aria-live="polite">
           {ready ? COPY.gate.gateSignNote : `${confirmedCount} / ${statements.length}`}
         </p>

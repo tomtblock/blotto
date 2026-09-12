@@ -108,6 +108,14 @@ export const COPY = {
     addSol: 'Add SOL',
     receiveTitle: 'Add SOL to this wallet',
     receiveSubtitle: 'Send SOL from any wallet or exchange to the address shown.',
+    /*
+     * D-14 (audit 2026-09-11): the provider's refusal went to the console
+     * and the button did nothing a player could see. PHASE-N-REVIEW:
+     * drafted, founder may re-voice. SUBSTANCE: say the window did not
+     * open, and point at the route that always works — the address above.
+     */
+    addSolUnavailable:
+      'The top-up window did not open. Adding SOL by sending it to the address above works from any wallet or exchange.',
     faucet: 'Get test SOL',
     faucetNote:
       'This is a test network. SOL here has no value and cannot be bought; a faucet gives it away.',
@@ -154,8 +162,28 @@ export const COPY = {
     gateSignNote: 'Your wallet will show the statement and ask you to sign it.',
     gateSigning: 'Waiting for your wallet…',
     gateReadTerms: 'Read the rules and terms',
-    attestFailed:
-      'The confirmation could not be recorded. Check your connection and try again.',
+    /*
+     * C-13 (audit 2026-09-11): one sentence per reason, because the next
+     * step differs. PHASE-N-REVIEW: drafted, founder may re-voice.
+     * SUBSTANCE: the two that no retry can fix must not invite one, and a
+     * declined prompt is not an error.
+     */
+    attestErrors: {
+      'not-configured':
+        'Entry is not available from this build of the site. Nothing was signed and nothing was recorded.',
+      'cannot-sign':
+        'This wallet cannot sign the confirmation. Connect a different wallet from your wallet page, then come back.',
+      declined:
+        'The confirmation was not signed. Nothing was recorded — confirm the two statements again when you are ready.',
+      cancelled: 'Waiting stopped. Nothing was signed and nothing was recorded.',
+      'timed-out':
+        'Your wallet did not answer. Open it, check for a pending request, and try again.',
+      refused:
+        'The confirmation was not accepted. Nothing was recorded — please try again, and tell us if it keeps happening.',
+      unreachable:
+        'The confirmation could not be recorded. Check your connection and try again.',
+    } as const,
+    attestCancel: 'Stop waiting',
     // Founder 2026-09-09 ("taking ages to load"): a hold names itself when it
     // is slow, and the fail-closed territory panel offers one more look.
     // PHASE-N-REVIEW: drafts.
@@ -192,10 +220,30 @@ export const COPY = {
       'Your wallet balance could not be checked. Entry stays closed until it can be.',
     balanceRetry: 'Check again',
     topUp: 'Add SOL',
+    /*
+     * D-14 (audit 2026-09-11): the provider's refusal — "Wallet funding is
+     * not enabled", its state today — was swallowed into the console, so
+     * the button did nothing visible and the balance wall had no way out.
+     * PHASE-N-REVIEW: drafted, founder may re-voice. SUBSTANCE: it must say
+     * the flow did not open, and point at the route that always works —
+     * sending SOL to this wallet's own address.
+     */
+    topUpUnavailable:
+      'The top-up window did not open. You can still add SOL by sending it to this wallet’s address — your wallet page shows it and copies it.',
+    topUpWalletPage: 'Open your wallet',
     // The signed-in-but-cannot-sign state (2026-09-08): a returning player
     // whose wallet did not reconnect used to get a normal-looking screen,
     // play all seven battles, press confirm — and nothing happened,
     // permanently, with no error. Now the play screen holds here instead.
+    // C-17 / D-13 (audit 2026-09-11): the run survives a reconnect, and a
+    // GENUINE account change says so instead of silently restarting.
+    // PHASE-N-REVIEW: drafted, founder may re-voice. SUBSTANCE: an entry is
+    // made by one wallet, and the player's own work is never discarded
+    // without them choosing to.
+    walletChangedTitle: 'This browser switched wallets',
+    walletChanged:
+      'You started this run signed in with a different wallet, and an entry is made by one wallet only. Switch back to that wallet to carry on where you left off, or start again with the wallet you are signed in with now.',
+    walletChangedRestart: 'Start again with this wallet',
     signerConnecting: 'Connecting your wallet',
     signerMissingTitle: 'Your wallet is not ready',
     signerMissing:
@@ -400,6 +448,13 @@ export const COPY = {
     // used to read as a network fault, with no way to try again.
     packetStale:
       "The approval took longer than an entry allows, so the program declined it. Nothing was entered and nothing was charged. Try again and approve the wallet prompt within a minute.",
+    // 2026-09-11 (audit D-12): the entry service DECLINED — an availability
+    // or eligibility check, answered before anything was signed. The service
+    // deliberately gives no reason (PID §8: the refusal is generic), so
+    // neither does this; what it must not do is call a refusal a network
+    // fault and offer a retry that can only fail again.
+    entryRefused:
+      "This entry was not accepted. Nothing was signed and nothing was charged. Trying again will not change the answer — the Rules page explains who can enter, and you can ask us about your own entry.",
   },
   battle: {
     screenOf: (k: number) => `Battle ${k} of 7`,
@@ -544,6 +599,11 @@ export const COPY = {
         cannot_sign: 'This wallet cannot sign messages, and an appeal must be wallet-signed.',
         declined: 'Signing was declined. Nothing was submitted.',
         refused: 'The signature did not verify as this entry’s wallet.',
+        // D-33: a fixable local condition, said plainly, with the one
+        // reassurance that matters to someone watching a deadline.
+        // PHASE-N-REVIEW: drafted, founder may re-voice.
+        clock_skew:
+          'Your device’s clock is out of step with the service. Check the time on your device and try again; your appeal window is unaffected.',
         window_closed: 'The appeal window for this decision has closed.',
         already_lodged: 'An appeal is already lodged for this entry.',
         nothing_to_appeal: 'There is no upheld flag on this entry to appeal.',
@@ -615,7 +675,7 @@ export const COPY = {
       'Press “Recompute”. Your browser decrypts every sealed battle with the revealed pool secret, scores the whole field with the same engine the operator runs, rebuilds the results tree and compares its root with the one committed on-chain.',
     ] as const,
     howVerdict:
-      'Green means the published result reproduces exactly from the published data. Red means it does not — and that is worth telling us about.',
+      'Green means the published result reproduces exactly from the published data. Red means it does not — and that is worth telling us about. A third answer, in plain type, means nothing disagreed but something could not be checked yet — each row says which.',
     howWhen: 'A pool can be verified once it has concluded and its secret has been revealed; an open pool has nothing to check yet.',
     poolLabel: 'Pool address (fetches the on-chain record)',
     bundleLabel: 'Published bundle address (the pool page links it)',
@@ -625,6 +685,17 @@ export const COPY = {
     recompute: 'Recompute',
     match: 'Recomputed root matches the on-chain commitment.',
     mismatch: 'RECOMPUTED ROOT DOES NOT MATCH — the published data does not reproduce the on-chain result.',
+    // The third verdict (audit 2026-09-11, D-10 / D-29). PHASE-N-REVIEW:
+    // drafted, founder may re-voice. SUBSTANCE FIXED: it must not read as a
+    // pass — something named below was NOT verified — and it must not
+    // read as a mismatch, because nothing disagreed.
+    incomplete:
+      'Everything checked reproduces from the published data. Some of it could not be checked yet — the rows below say which.',
+    // D-04: where the bundle address comes from, and what it means when we
+    // cannot supply it. PHASE-N-REVIEW: drafted, founder may re-voice.
+    bundleUriFound: 'Bundle address filled in from the published archive.',
+    bundleUriUnavailable:
+      'We could not supply this pool’s bundle address. That happens when the published bundle has not been verified against the on-chain commitment — which is exactly when checking it yourself matters most. The address is in the pool’s own publication record on the gateway, and we will give it to you on request.',
   },
   profile: {
     title: 'Your career',

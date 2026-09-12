@@ -54,6 +54,7 @@ import {
   type SignTransactionFeature,
 } from "./standard-wallets";
 import { pickActiveWallet } from "./active-wallet";
+import { signingUiOptions } from "./signing-ui";
 import type { TxSigner } from "@/tx/types";
 import { rpcUrl } from "@/chain/rpc";
 import { SOLANA_CHAIN } from "@/chain/cluster";
@@ -102,20 +103,6 @@ const WALLET_LIST: NonNullable<
   "detected_solana_wallets",
   "wallet_connect_qr_solana",
 ];
-
-/*
- * SPIKE-ONLY diagnostic flag (10.B Step 2 P0: buy tap kills the page on
- * real iOS Safari). The /design/signing page sets this; when true, embedded
- * signing skips Privy's confirmation modal (showWalletUIs false) so the
- * device pass can isolate whether the modal is the page-killer. Remove with
- * the spike page — the real trade UI (Steps 3/4) decides modal policy
- * deliberately, not via a window global.
- */
-declare global {
-  interface Window {
-    __BLOTTO_SIGN_NO_MODAL__?: boolean;
-  }
-}
 
 /** One line of the provider's own error text, for the sign-in page's detail row. */
 function shortDetail(detail: string): string {
@@ -266,9 +253,10 @@ function PrivyAdapter({ onAuth }: { onAuth: (auth: Auth) => void }) {
             transaction,
             wallet,
             chain: SOLANA_CHAIN,
-            ...(typeof window !== "undefined" && window.__BLOTTO_SIGN_NO_MODAL__
-              ? { options: { uiOptions: { showWalletUIs: false } } }
-              : {}),
+            // The confirmation modal is suppressed ONLY in an automation
+            // build driven by a harness (signing-ui.ts); `{}` — the modal
+            // shown — in everything a player can ever load (audit B-53).
+            ...signingUiOptions(),
           });
           return signedTransaction;
         } catch (error) {

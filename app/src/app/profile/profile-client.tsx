@@ -15,10 +15,11 @@
 import { useEffect, useState } from 'react';
 import { COPY } from '@/copy';
 import { useAuth } from '@/wallet/auth-context';
-import { indexerApi } from '@/data/api';
+import { indexerApi, live, type Live } from '@/data/api';
 import { lamportsToSol } from '@/data/format';
 import type { CareerRow, ProfileRow, RivalRow } from '@/data/types';
 import { Card } from '@/components/ui/card';
+import { LiveDataUnavailable } from '@/components/shell/live-unavailable';
 import { Stat } from '@/components/ui/stat';
 import { MyBlots } from './my-blots';
 
@@ -81,6 +82,23 @@ function Rivals({ rivals }: { rivals: RivalRow[] }) {
   );
 }
 
+/**
+ * What the page shows for a career read (audit 2026-09-11, C-15 / D-16).
+ *
+ * Pure, and separate from the component, because the distinction it draws
+ * is the finding: `null` from the indexer means "this wallet has never
+ * entered", and a FAILED read means "we cannot know right now". They used
+ * to be the same branch, so an outage told a player with a career that they
+ * had no entries.
+ */
+export type ProfileView = 'loading' | 'unavailable' | 'empty' | { row: ProfileRow };
+
+export function profileView(read: Live<ProfileRow | null> | null): ProfileView {
+  if (read === null) return 'loading';
+  if (!read.ok) return 'unavailable';
+  return read.value === null ? 'empty' : { row: read.value };
+}
+
 export function ProfileClient() {
   const auth = useAuth();
   const wallet = auth.status === 'signed-in' ? auth.walletAddress : null;
@@ -89,7 +107,16 @@ export function ProfileClient() {
   // matches the balance gate in play-client).
   const [result, setResult] = useState<{
     wallet: string;
-    row: ProfileRow | null;
+    /*
+     * C-15 / D-16 (audit 2026-09-11). The career read used to collapse into
+     * `row: null` on ANY failure, and `null` is what "this wallet has never
+     * entered" looks like — so an indexer outage rendered "No entries yet."
+     * to a player with a career. `live()` is the guard the codebase already
+     * has for exactly this conflation (data/api.ts): "the indexer says
+     * nothing" and "we could not reach the indexer" are different claims,
+     * and only one of them is about the player.
+     */
+    profile: Live<ProfileRow | null>;
     career: CareerRow[];
     rivals: RivalRow[];
   } | null>(null);
@@ -98,24 +125,23 @@ export function ProfileClient() {
     if (!wallet) return;
     let cancelled = false;
     const api = indexerApi();
-    Promise.all([
-      api.getProfile(wallet),
-      api.getCareer(wallet).catch(() => [] as CareerRow[]),
-      api.getRivals(wallet).catch(() => [] as RivalRow[]),
-    ])
-      .then(([row, career, rivals]) => {
-        if (!cancelled) setResult({ wallet, row, career, rivals });
-      })
-      .catch(() => {
-        if (!cancelled) setResult({ wallet, row: null, career: [], rivals: [] });
-      });
+    void (async () => {
+      const [profile, career, rivals] = await Promise.all([
+        live(() => api.getProfile(wallet)),
+        // Secondary panels: the chart and the rivals list simply do not
+        // render when their read fails. Neither can be mistaken for a
+        // statement about the player, so neither degrades the whole page.
+        api.getCareer(wallet).catch(() => [] as CareerRow[]),
+        api.getRivals(wallet).catch(() => [] as RivalRow[]),
+      ]);
+      if (!cancelled) setResult({ wallet, profile, career, rivals });
+    })();
     return () => {
       cancelled = true;
     };
   }, [wallet]);
 
-  const profile: ProfileRow | null | 'loading' =
-    result && result.wallet === wallet ? result.row : 'loading';
+  const view = profileView(result && result.wallet === wallet ? result.profile : null);
 
   if (!wallet) {
     return (
@@ -128,7 +154,7 @@ export function ProfileClient() {
       </Card>
     );
   }
-  if (profile === 'loading') {
+  if (view === 'loading') {
     return (
       <div aria-live="polite" className="flex flex-col items-center gap-4 py-14">
         <div
@@ -138,7 +164,12 @@ export function ProfileClient() {
       </div>
     );
   }
-  if (!profile) {
+  if (view === 'unavailable') {
+    // The honest degraded state — never "No entries yet", which is a claim
+    // about this player rather than about our own data service.
+    return <LiveDataUnavailable />;
+  }
+  if (view === 'empty') {
     return (
       <Card className="flex flex-col gap-2 p-6">
         <p className="text-[17px] font-medium text-ink">No entries yet.</p>
@@ -149,6 +180,7 @@ export function ProfileClient() {
     );
   }
 
+  const profile = view.row;
   return (
     <div className="animate-rise flex flex-col gap-4">
       <Card className="p-5">

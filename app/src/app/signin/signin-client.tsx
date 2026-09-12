@@ -20,13 +20,14 @@
  */
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { COPY } from "@/copy";
 import { useAuth } from "@/wallet/auth-context";
 import type { SocialProvider } from "@/wallet/types";
 import { AppleMark, GoogleMark, WalletGlyph, XMark } from "@/wallet/wallet-icons";
 import { CopyableAddressPill } from "@/components/copyable-address";
+import { signInDestination } from "./return-to";
 
 /*
  * Whether sign-in works is asked of the AUTH PROVIDER, not of the
@@ -62,9 +63,21 @@ export function SignInClient() {
   const router = useRouter();
   const [busyWallet, setBusyWallet] = useState<string | null>(null);
 
+  /*
+   * D-17 (audit 2026-09-11): where to go afterwards. This used to be a
+   * hard-coded "/play", so a player who arrived from a pool —
+   * `/play?pool=<address>` → "Sign in to enter" → here — was forwarded to
+   * `/play` with no pool and met "No pool selected". The tournament they
+   * had chosen was gone with no explanation. The destination now travels
+   * in the link and is validated (`return-to.ts`): an unvalidated `?next=`
+   * on a sign-in page is an open redirect.
+   */
+  const params = useSearchParams();
+  const destination = signInDestination(params.get("next"));
+
   useEffect(() => {
-    if (status === "signed-in") router.replace("/play");
-  }, [status, router]);
+    if (status === "signed-in") router.replace(destination);
+  }, [status, router, destination]);
 
   if (status === "signed-in" && walletAddress) {
     // Visible for the moment before the redirect lands (and if the user
@@ -73,7 +86,7 @@ export function SignInClient() {
       <div className="flex flex-col items-start gap-3 pt-2">
         <p className="text-[15px] text-ink-muted">{COPY.signin.signedInAs}</p>
         <CopyableAddressPill value={walletAddress} />
-        <Link href="/play" className="text-[15px] text-brand underline underline-offset-2">
+        <Link href={destination} className="text-[15px] text-brand underline underline-offset-2">
           {COPY.signin.continueLink}
         </Link>
       </div>

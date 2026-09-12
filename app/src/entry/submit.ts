@@ -46,8 +46,16 @@ export interface EntryServices {
   ): Promise<string>;
   /** 32 CSPRNG bytes (window.crypto in the browser; injected in tests). */
   randomBytes(n: number): Uint8Array;
-  /** The device fingerprint (Privy, R19) — zeros until C11 wires it. */
-  deviceHash(): Promise<Uint8Array>;
+  /**
+   * The device marker for THIS POOL (C11; R19 called it the Privy
+   * fingerprint — see device.ts for why it is not). Takes the pool because
+   * the value is derived per pool: the same browser entering two pools
+   * produces two unrelated markers, so the published record can never link a
+   * player's entries across tournaments (audit 2026-09-11, B-40). Same
+   * browser, same pool, same marker — which is the whole of what the
+   * detection signal reads.
+   */
+  deviceHash(pool: string): Promise<Uint8Array>;
 }
 
 export interface SubmitInput {
@@ -80,7 +88,7 @@ export async function submitEntry(
     battles: input.battles as never,
     salt,
     timingsMs: input.timingsMs,
-    deviceHash: await services.deviceHash(),
+    deviceHash: await services.deviceHash(input.pool),
   };
   // Throws unless the invariant holds — the last line of client defense.
   const payloadBytes = encodePayload(payload);

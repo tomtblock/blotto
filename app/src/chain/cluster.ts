@@ -14,7 +14,9 @@
  * inferred from a URL and has no public default endpoint at all, so a
  * mainnet build that forgets its RPC fails to build instead of silently
  * borrowing one. `assertClusterInvariants` states the whole contract as
- * data, and the build-time test runs it against the real environment.
+ * data; `clusterGate` at the foot of this file is what RUNS it, from
+ * next.config.ts, before a single file is compiled (audit A-06 / E-02 —
+ * until 2026-09-11 nothing called it but its own test).
  *
  * Next inlines the public build variables at build time, so every read below
  * is a literal property access — never a computed key.
@@ -92,13 +94,15 @@ export function looksLikeDevnetUrl(url: string): boolean {
  *
  *   devnet:  the RPC, if set, must not look like mainnet.
  *   mainnet: the RPC must be set and must not look like devnet; the devnet
- *            faucet link and the automation signer must both be off.
+ *            faucet link, the automation signer and the fixture catalogue
+ *            must all be off.
  */
 export function assertClusterInvariants(env: {
   NEXT_PUBLIC_SOLANA_CLUSTER?: string;
   NEXT_PUBLIC_SOLANA_RPC_URL?: string;
   NEXT_PUBLIC_DEVNET_FAUCET?: string;
   NEXT_PUBLIC_ALLOW_TEST_SIGNER?: string;
+  NEXT_PUBLIC_FIXTURE_DATA?: string;
 }): string[] {
   const problems: string[] = [];
   let c: Cluster;
@@ -123,6 +127,54 @@ export function assertClusterInvariants(env: {
     if (env.NEXT_PUBLIC_ALLOW_TEST_SIGNER === "1") {
       problems.push("mainnet build with NEXT_PUBLIC_ALLOW_TEST_SIGNER=1 — the automation signer is devnet-only");
     }
+    // Audit 2026-09-11 (A-07): the in-repo fixture catalogue is a design
+    // and screenshot tool. A real-money build that serves fabricated
+    // tournaments with an Enter button is the finding itself.
+    if (env.NEXT_PUBLIC_FIXTURE_DATA === "1") {
+      problems.push("mainnet build with NEXT_PUBLIC_FIXTURE_DATA=1 — fixture tournaments are never real money");
+    }
   }
   return problems;
+}
+
+/* Structural, not `NodeJS.ProcessEnv`: `process.env` satisfies it, and so
+ * does a plain object, so a test can state a hostile environment in one
+ * literal without inventing the rest of the process's variables. */
+export type ClusterEnv = Readonly<Record<string, string | undefined>>;
+
+/**
+ * THE GATE ITSELF — run at BUILD TIME from `next.config.ts` (audit
+ * 2026-09-11, A-06 / E-02).
+ *
+ * `assertClusterInvariants` above states the contract as data and has done
+ * since 2026-09-08. What it did not have was a caller: nothing outside
+ * `cluster.test.ts` ever invoked it, so the "build-time gate" the module
+ * header described was dead code in every deployment path. A mainnet build
+ * that forgot its RPC, or a mainnet build with the devnet faucet or the
+ * automation signer left on, would have built and shipped — the exact
+ * cutover mistake the contract exists to stop, with a guard in the repo
+ * that was never asked.
+ *
+ * Next evaluates `next.config.ts` in Node before compiling anything, so a
+ * throw here fails `next build` and `next dev` with the reason. It reads
+ * the SAME `process.env` Next is about to inline into the client bundle, so
+ * a violation here is a violation in every visitor's browser.
+ *
+ * Throwing rather than warning: a warning in build output is a warning
+ * nobody reads on the one deploy that matters.
+ */
+export function clusterGate(env: ClusterEnv = process.env as ClusterEnv): void {
+  const problems = assertClusterInvariants({
+    NEXT_PUBLIC_SOLANA_CLUSTER: env.NEXT_PUBLIC_SOLANA_CLUSTER,
+    NEXT_PUBLIC_SOLANA_RPC_URL: env.NEXT_PUBLIC_SOLANA_RPC_URL,
+    NEXT_PUBLIC_DEVNET_FAUCET: env.NEXT_PUBLIC_DEVNET_FAUCET,
+    NEXT_PUBLIC_ALLOW_TEST_SIGNER: env.NEXT_PUBLIC_ALLOW_TEST_SIGNER,
+    NEXT_PUBLIC_FIXTURE_DATA: env.NEXT_PUBLIC_FIXTURE_DATA,
+  });
+  if (problems.length === 0) return;
+  throw new Error(
+    `refusing to build: the cluster configuration is unsound.\n  - ${problems.join("\n  - ")}\n` +
+      "Fix the environment (app/.env.example documents every variable) — " +
+      "these values are compiled into the browser bundle.",
+  );
 }

@@ -43,10 +43,15 @@ import { Playground } from '@/components/blott/Antics';
 import { ConfettiBurst } from '@/components/celebrate/confetti-burst';
 import { EVEN_SPLIT, type Allocation } from '../allocation';
 import { BATTLES, initialState, reduce } from '../machine';
+import { sampleTick } from '../run-clock';
 import { composeMontage } from '../montage';
 import { saveStill } from '../stills';
 import { SevenTiles, type TileEntry } from './seven-tiles';
 
+/*
+ * How often the run clock is SAMPLED — not how much time each sample is
+ * worth (audit 2026-09-11, F-04). See the effect below.
+ */
 const TICK_MS = 100;
 /** The drop through the chute (blot.css `.blot-drop`, 780 ms) plus a beat. */
 const LOCK_BEAT_MS = 1000;
@@ -57,9 +62,16 @@ export interface BattleFlowProps {
   /** Pool address — keys the lock-in stills in IndexedDB. */
   poolAddress: string;
   onConfirm: (battles: readonly Allocation[], timingsMs: readonly number[]) => void;
+  /**
+   * Fired when the player BEGINS the run — from here until the seal, seven
+   * allocations exist only in this component's state and unmounting it
+   * destroys them. The page uses this to stop transient auth or balance
+   * churn from taking the screen away mid-run (audit C-17 / D-13).
+   */
+  onRunStarted?: () => void;
 }
 
-export function BattleFlow({ poolAddress, onConfirm }: BattleFlowProps) {
+export function BattleFlow({ poolAddress, onConfirm, onRunStarted }: BattleFlowProps) {
   const router = useRouter();
   const [state, dispatch] = useReducer(reduce, undefined, () => initialState());
   const confirmed = useRef(false);
@@ -83,13 +95,55 @@ export function BattleFlow({ poolAddress, onConfirm }: BattleFlowProps) {
   const { display, velocity } = useBlotSprings(allocation, reduced);
   const [dragStat, setDragStat] = useState<number | null>(null);
 
-  /* The wall clock: fixed-interval ticks while a battle screen is live. */
-  const liveScreen = battle && !locking ? battle.screen : -1;
+  /*
+   * THE RUN CLOCK — elapsed time, not timer firings (audit 2026-09-11,
+   * F-04).
+   *
+   * This used to dispatch a FIXED `ms: TICK_MS` on every `setInterval`
+   * callback, so the ninety seconds were ninety seconds' worth of TIMER
+   * FIRINGS. Browsers throttle timers in a background tab hard — to roughly
+   * one per second, and less on mobile — so switching tabs, or being
+   * interrupted by a call, bought arbitrary extra deliberation on a battle
+   * screen and the clock on screen agreed with it. That is a competitive-
+   * integrity defect, not a display one: every player is scored against
+   * every other, so time one player gains is taken from all of them.
+   *
+   * Measured against `performance.now()`, which is monotonic (immune to a
+   * device clock changing under us, and to daylight saving). Throttled or
+   * backgrounded, the next sample simply carries the whole elapsed span, so
+   * a tab that comes back after two minutes finds the run over — which is
+   * what the founder-owned 90 s means.
+   *
+   * INTEGER MILLISECONDS, always: the per-screen timings travel in the
+   * sealed payload as u32s and `encodePayload` refuses a non-integer
+   * outright (backend/sealing/src/payload.ts). The fractional remainder
+   * stays on the baseline rather than being dropped, so the accounting is
+   * exact over the whole run.
+   *
+   * The founder-owned values are untouched: the 90 s budget (run-clock.ts)
+   * and the 15 s per-screen default (R9) are not read or changed here —
+   * only how the passage of time is measured.
+   */
+  const ticking = Boolean(battle) || locking;
+  const tickBaseline = useRef<number | null>(null);
   useEffect(() => {
-    if (liveScreen < 0 && !locking) return;
-    const id = setInterval(() => dispatch({ type: 'tick', ms: TICK_MS }), TICK_MS);
+    if (!ticking) {
+      tickBaseline.current = null;
+      return;
+    }
+    if (tickBaseline.current === null) tickBaseline.current = performance.now();
+    const id = setInterval(() => {
+      const base = tickBaseline.current;
+      if (base === null) return;
+      // The arithmetic — integer ms, remainder carried — lives in
+      // run-clock.ts's `sampleTick`, where it is pinned by tests.
+      const sample = sampleTick(base, performance.now());
+      if (sample.ms <= 0) return;
+      tickBaseline.current = sample.baseline;
+      dispatch({ type: 'tick', ms: sample.ms });
+    }, TICK_MS);
     return () => clearInterval(id);
-  }, [liveScreen, locking]);
+  }, [ticking]);
 
   useEffect(() => {
     if (state.phase === 'confirmed' && !confirmed.current) {
@@ -278,7 +332,14 @@ export function BattleFlow({ poolAddress, onConfirm }: BattleFlowProps) {
                   founder's addendum wording) — on the battle screen, not only
                   the rules page. */}
               <p className="max-w-prose text-[13px] leading-5 text-game-ink-muted">{COPY.battle.timerEffect}</p>
-              <Button size="lg" onClick={() => dispatch({ type: 'begin' })}>
+              <Button
+                size="lg"
+                onClick={() => {
+                  dispatch({ type: 'begin' });
+                  // The page now owns a run: nothing may unmount this.
+                  onRunStarted?.();
+                }}
+              >
                 {COPY.battle.begin}
               </Button>
             </div>

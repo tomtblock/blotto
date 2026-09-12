@@ -27,15 +27,44 @@ import {
 import { base58Decode } from '@blotto/shared/blotto-events';
 import { scoreWithMissing } from '@blotto/reveal/missing';
 
+/**
+ * What one check can say. THREE answers, not two (audit 2026-09-11, D-10
+ * and D-29) — because "this does not reproduce" and "this could not be
+ * checked yet" are different statements about the operator, and a page that
+ * has only green and red has to pick one of them and be wrong:
+ *
+ *  - `pass`       — recomputed, and it matches.
+ *  - `incomplete` — nothing contradicts the chain, and this check did not
+ *    verify everything it is named for. A pool whose results are committed
+ *    but not yet paid (there is nothing to check against yet), and entries
+ *    published without their battles (which cannot be checked against their
+ *    on-chain commitment at all). NEVER a way to hide a mismatch: anything
+ *    that actually disagrees is `fail`.
+ *  - `fail`       — recomputed, and it does not match.
+ */
+export type CheckStatus = 'pass' | 'incomplete' | 'fail';
+
 /** One named check with its outcome — the page renders these as rows. */
 export interface VerifyCheck {
   name: string;
+  status: CheckStatus;
+  /** `false` only for a genuine mismatch — what turns a row red. */
   ok: boolean;
   detail: string;
 }
 
+/**
+ * The report's own verdict, from the checks: any `fail` is a mismatch; any
+ * `incomplete` without a fail is incomplete; everything else matches.
+ * `ok` is reserved for a FULL match, so nothing can call a partially
+ * verified pool verified.
+ */
+export type VerifyVerdict = 'match' | 'incomplete' | 'mismatch';
+
 export interface VerifyReport {
+  /** True only when every check passed — see `verdict` for the three-way. */
   ok: boolean;
+  verdict: VerifyVerdict;
   checks: VerifyCheck[];
 }
 
@@ -170,17 +199,30 @@ function rosterCheck(
   };
 }
 
+/** Fold the rows into the report's own verdict (see `VerifyVerdict`). */
+function verdictOf(checks: readonly VerifyCheck[]): VerifyVerdict {
+  if (checks.some((c) => c.status === 'fail')) return 'mismatch';
+  if (checks.some((c) => c.status === 'incomplete')) return 'incomplete';
+  return 'match';
+}
+
+function report(checks: VerifyCheck[]): VerifyReport {
+  const verdict = verdictOf(checks);
+  return { ok: verdict === 'match', verdict, checks };
+}
+
 export function verifyPool(bundle: PublishedBundle, chain: OnChainRecord): VerifyReport {
   const checks: VerifyCheck[] = [];
-  const push = (name: string, ok: boolean, detail: string) => checks.push({ name, ok, detail });
+  const push = (name: string, status: CheckStatus, detail: string) =>
+    checks.push({ name, status, ok: status !== 'fail', detail });
 
   // 0. The field itself, before anything is computed over it.
   const roster = rosterCheck(bundle, chain);
-  push('roster', roster.ok, roster.detail);
+  push('roster', roster.ok ? 'pass' : 'fail', roster.detail);
   if (!roster.indexable) {
     // Every check below indexes the bundle by seat; without a permutation
     // they would throw rather than report. The report is already red.
-    return { ok: false, checks };
+    return report(checks);
   }
 
   // 1. The revealed secret is the one committed at open, and the bundle
@@ -189,14 +231,35 @@ export function verifyPool(bundle: PublishedBundle, chain: OnChainRecord): Verif
     hex(sha256(unhex(chain.revealedSecretHex))) === chain.sealingSecretHashHex;
   push(
     'secret-commitment',
-    secretHashOk,
+    secretHashOk ? 'pass' : 'fail',
     'sha256(revealed secret) equals the hash committed at open_pool'
   );
-  push('bundle-secret', bundle.secret === chain.revealedSecretHex, 'bundle carries the on-chain secret');
+  push(
+    'bundle-secret',
+    bundle.secret === chain.revealedSecretHex ? 'pass' : 'fail',
+    'bundle carries the on-chain secret'
+  );
 
-  // 2. Every published battle set reproduces the hash committed at entry.
+  /*
+   * 2. Every published battle set reproduces the hash committed at entry.
+   *
+   * An entry published WITHOUT its battles cannot be checked against its
+   * commitment at all — there is nothing to hash. Until 2026-09-11 (D-10)
+   * such an entry was simply skipped and the row stayed green, so a bundle
+   * that published no plaintext at all — every entry `battles: null`,
+   * everyone scored as all losses, everyone tied, the pot split across the
+   * whole field — verified green having checked NOTHING. An unchecked entry
+   * is not a verified entry, so the unchecked ones are counted and the row
+   * says so; the report's verdict follows (`incomplete`, never `match`).
+   *
+   * The published lost-ciphertext rule (TECH-ARCH §5) makes a missing entry
+   * legitimate, which is why this is not a mismatch — but the bundle must
+   * SAY so: an entry that declares `status: 'ok'` and then carries no
+   * battles is self-contradictory, and that is a mismatch.
+   */
   let hashesOk = true;
   let hashCount = 0;
+  const unchecked: string[] = [];
   for (const e of bundle.entries) {
     const committed = chain.battlesHashByPlayer[e.player];
     if (committed === undefined) {
@@ -208,12 +271,23 @@ export function verifyPool(bundle: PublishedBundle, chain: OnChainRecord): Verif
       const battles = decodeBattleSet(unhex(e.battles));
       const h = hex(battlesHash(battles, unhex(e.salt)));
       if (h !== committed || h !== e.battles_hash) hashesOk = false;
+      continue;
     }
+    // Nothing to recompute. Legitimate only where the bundle declares it.
+    unchecked.push(e.player);
+    if (e.status === 'ok') hashesOk = false;
   }
+  const checkedDetail =
+    `sha256(battles ‖ salt) reproduces the on-chain battles_hash for ${hashCount} of ` +
+    `${bundle.entries.length} entries`;
   push(
     'entry-commitments',
-    hashesOk,
-    `sha256(battles ‖ salt) reproduces the on-chain battles_hash for ${hashCount} published entries`
+    hashesOk ? (unchecked.length === 0 ? 'pass' : 'incomplete') : 'fail',
+    unchecked.length === 0
+      ? checkedDetail
+      : `${checkedDetail}; ${unchecked.length} published without battles and CANNOT be checked ` +
+        `against the chain: ${unchecked.slice(0, 3).map(short).join(', ')}` +
+        (unchecked.length > 3 ? ` and ${unchecked.length - 3} more` : '')
   );
 
   // 3. Rescore from the published plaintext (the identical-field engine,
@@ -243,7 +317,7 @@ export function verifyPool(bundle: PublishedBundle, chain: OnChainRecord): Verif
   }
   push(
     'rescore',
-    resultsOk,
+    resultsOk ? 'pass' : 'fail',
     'recomputed scores, zones, competition ranks and split-pot amounts equal the published results'
   );
 
@@ -259,7 +333,11 @@ export function verifyPool(bundle: PublishedBundle, chain: OnChainRecord): Verif
     })
   );
   const root = hex(merkleRoot(leaves));
-  push('results-root', root === chain.resultsRootHex, 'recomputed Merkle root equals the on-chain commitment');
+  push(
+    'results-root',
+    root === chain.resultsRootHex ? 'pass' : 'fail',
+    'recomputed Merkle root equals the on-chain commitment'
+  );
 
   // 5. The committed payout list is exactly the recomputed one: every seat
   //    with a nonzero split-pot share, seat-sorted, to the lamport. (The
@@ -270,20 +348,42 @@ export function verifyPool(bundle: PublishedBundle, chain: OnChainRecord): Verif
     .map((r) => ({ entryIndex: r.index, amount: r.amountLamports.toString() }));
   push(
     'committed-payouts',
-    JSON.stringify(myPayouts) === JSON.stringify(chain.committedPayouts),
+    JSON.stringify(myPayouts) === JSON.stringify(chain.committedPayouts) ? 'pass' : 'fail',
     'the committed payout list is the recomputed split-pot list, seat-sorted'
   );
 
-  // 6. Every settled payout went to the wallet that entered that seat, at
-  //    the committed amount.
+  /*
+   * 6. Every settled payout went to the wallet that entered that seat, at
+   *    the committed amount.
+   *
+   * A pool that has COMMITTED its results but not yet PAID them has no
+   * settled payouts to check, and that is an ordinary stage of settlement —
+   * not a mismatch. Until 2026-09-11 (D-29) an empty list started this check
+   * at false, so the page rendered the full red "the published data does not
+   * reproduce the on-chain result" verdict at every pool between
+   * `commit_results` and `pay_prizes`. It reports the real state instead.
+   */
   const amountBySeat = new Map(myPayouts.map((p) => [p.entryIndex, p.amount]));
-  let payoutsOk = chain.payouts.length > 0;
+  let payoutsOk = true;
   for (const p of chain.payouts) {
     if (p.amount !== amountBySeat.get(p.entryIndex) || playerAt(p.entryIndex) !== p.player) {
       payoutsOk = false;
     }
   }
-  push('payouts', payoutsOk, 'every settled payout is the committed amount to the seat\'s own wallet');
+  const unpaid = myPayouts.length - chain.payouts.length;
+  push(
+    'payouts',
+    !payoutsOk ? 'fail' : chain.payouts.length === 0 ? 'incomplete' : unpaid > 0 ? 'incomplete' : 'pass',
+    !payoutsOk
+      ? "a settled payout is not the committed amount to the seat's own wallet"
+      : chain.payouts.length === 0
+        ? `results are committed but no prize has been paid yet — ${myPayouts.length} committed ` +
+          'seat(s) await settlement, and there is nothing to check against until they are paid'
+        : unpaid > 0
+          ? `${chain.payouts.length} of ${myPayouts.length} committed seats are settled, each the ` +
+            "committed amount to the seat's own wallet; the rest are not paid yet"
+          : "every settled payout is the committed amount to the seat's own wallet",
+  );
 
-  return { ok: checks.every((c) => c.ok), checks };
+  return report(checks);
 }

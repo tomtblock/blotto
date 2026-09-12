@@ -45,15 +45,16 @@ describe('what finished above you', () => {
     expect(battles.get(1)).toEqual(spiky);
   });
 
-  it('recomputes the head-to-head for every seat committed above yours', () => {
+  it('recomputes the head-to-head for every seat that finished above yours', () => {
     const battles = decryptSeatBattles(hex(kp.secretKey), rows);
-    const results = [
-      { seat: 0, amount: '0' },
-      { seat: 1, amount: '4000000000' },
+    const standings = [
+      { seat: 0, rank: 2, amountLamports: '0' },
+      { seat: 1, rank: 1, amountLamports: '4000000000' },
     ];
-    const above = whatFinishedAbove(0, results, battles);
+    const above = whatFinishedAbove(0, standings, battles);
     expect(above.length).toBe(1);
     expect(above[0].seat).toBe(1);
+    expect(above[0].rank).toBe(1);
     // spiky takes 3 of 5 stats in every one of the 7 battles.
     expect(above[0].wins).toBe(0);
     expect(above[0].draws).toBe(0);
@@ -62,6 +63,66 @@ describe('what finished above you', () => {
     expect(above[0].comparisons[0]).toEqual({ outcome: 'loss', statsA: 1, statsB: 3 });
 
     // From the winner's seat, nothing is above.
-    expect(whatFinishedAbove(1, results, battles)).toEqual([]);
+    expect(whatFinishedAbove(1, standings, battles)).toEqual([]);
+  });
+
+  /*
+   * F-07 (audit 2026-09-11). "Above" was decided by PRIZE AMOUNT over the
+   * committed payout list — which holds only the paid seats, and under
+   * D-E2 that is one seat. A player who came fourth of sixty-four was
+   * shown the winner and told that was what finished above them.
+   */
+  describe('above is rank, not money (F-07)', () => {
+    const field = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({
+        seat: i,
+        rank: i + 1,
+        // One paid place (D-E2): every other seat is committed zero.
+        amountLamports: i === 0 ? '4000000000' : '0',
+      }));
+
+    /** Every seat holds a readable battle set, so nothing is dropped for
+     * want of ciphertext — the filtering under test is by rank alone. */
+    const battlesFor = (n: number) =>
+      new Map<number, BattleSet>(
+        Array.from({ length: n }, (_, i) => [i, i % 2 === 0 ? flat : spiky])
+      );
+
+    it('shows EVERY seat ranked above you, not only the paid one', () => {
+      const above = whatFinishedAbove(9, field(16), battlesFor(16));
+      // Ranks 1..9 are above rank 10 — nine of them, in rank order.
+      expect(above.map((r) => r.rank)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+      // The old behaviour could only ever return this one.
+      expect(above.length).toBeGreaterThan(1);
+    });
+
+    it('is ordered best first, by rank', () => {
+      const shuffled = [...field(8)].reverse();
+      const above = whatFinishedAbove(7, shuffled, battlesFor(8));
+      expect(above.map((r) => r.rank)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    });
+
+    it('does not count a seat you TIED with as above you (D3-B)', () => {
+      // Competition ranks: 1, 2, 2, 4 — the other rank 2 is not above.
+      const standings = [
+        { seat: 0, rank: 1, amountLamports: '4000000000' },
+        { seat: 1, rank: 2, amountLamports: '0' },
+        { seat: 2, rank: 2, amountLamports: '0' },
+        { seat: 3, rank: 4, amountLamports: '0' },
+      ];
+      const above = whatFinishedAbove(2, standings, battlesFor(4));
+      expect(above.map((r) => r.seat)).toEqual([0]);
+    });
+
+    it('shows nothing when you are not in the standings, rather than inventing a position', () => {
+      expect(whatFinishedAbove(99, field(8), battlesFor(8))).toEqual([]);
+    });
+
+    it('skips a seat whose battles could not be decrypted, and keeps the rest', () => {
+      const battles = battlesFor(8);
+      battles.delete(3);
+      const above = whatFinishedAbove(7, field(8), battles);
+      expect(above.map((r) => r.seat)).toEqual([0, 1, 2, 4, 5, 6]);
+    });
   });
 });

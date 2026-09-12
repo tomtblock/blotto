@@ -4,10 +4,13 @@
  * its RPC, or a devnet build pointed at mainnet, fails here rather than in
  * a player's browser.
  */
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   SOLANA_CHAIN,
   assertClusterInvariants,
+  clusterGate,
   cluster,
   defaultRpcUrl,
   explorerTxUrl,
@@ -87,16 +90,117 @@ describe('assertClusterInvariants', () => {
   });
 
   it('holds in whatever environment this build runs in', () => {
-    // The gate. NEXT_PUBLIC_* values are read at build time and baked into
-    // the client bundle, so a violation here is a violation in every
-    // visitor's browser.
-    expect(
-      assertClusterInvariants({
-        NEXT_PUBLIC_SOLANA_CLUSTER: process.env.NEXT_PUBLIC_SOLANA_CLUSTER,
-        NEXT_PUBLIC_SOLANA_RPC_URL: process.env.NEXT_PUBLIC_SOLANA_RPC_URL,
-        NEXT_PUBLIC_DEVNET_FAUCET: process.env.NEXT_PUBLIC_DEVNET_FAUCET,
-        NEXT_PUBLIC_ALLOW_TEST_SIGNER: process.env.NEXT_PUBLIC_ALLOW_TEST_SIGNER,
+    // NEXT_PUBLIC_* values are read at build time and baked into the client
+    // bundle, so a violation here is a violation in every visitor's browser.
+    //
+    // E-02: this case alone is VACUOUS in CI, where nothing is set and the
+    // contract is satisfied by construction — it can only ever pass. It is
+    // kept because it is the one case that reads the REAL environment, and
+    // the cases below are what make it a gate rather than a decoration.
+    expect(() => clusterGate()).not.toThrow();
+  });
+});
+
+/*
+ * THE GATE (audit 2026-09-11, A-06 / E-02).
+ *
+ * `assertClusterInvariants` stated the contract and was called by NOTHING
+ * outside this file — the "build-time gate" in the module header was dead
+ * in every deployment path, so a mainnet build with no RPC, or with the
+ * devnet faucet or the automation signer left on, would have built and
+ * shipped. `clusterGate` is the caller, and `next.config.ts` runs it before
+ * Next compiles anything.
+ */
+describe('clusterGate', () => {
+  const ENV = {
+    devnet: {},
+    mainnetOk: {
+      NEXT_PUBLIC_SOLANA_CLUSTER: 'mainnet',
+      NEXT_PUBLIC_SOLANA_RPC_URL: 'https://mainnet.helius-rpc.com/?api-key=x',
+    },
+  } as const;
+
+  it('passes a sound devnet build and a sound mainnet build', () => {
+    expect(() => clusterGate(ENV.devnet)).not.toThrow();
+    expect(() => clusterGate(ENV.mainnetOk)).not.toThrow();
+  });
+
+  /*
+   * The mainnet branch, exercised through the ENTRY POINT the build uses —
+   * not through the pure function beside it. Each of these is a cutover
+   * mistake that would otherwise reach a real-money bundle.
+   */
+  it('REFUSES a mainnet build with no RPC endpoint', () => {
+    expect(() => clusterGate({ NEXT_PUBLIC_SOLANA_CLUSTER: 'mainnet' })).toThrow(
+      /refusing to build/,
+    );
+    expect(() => clusterGate({ NEXT_PUBLIC_SOLANA_CLUSTER: 'mainnet' })).toThrow(
+      /NEXT_PUBLIC_SOLANA_RPC_URL/,
+    );
+  });
+
+  it('REFUSES a mainnet build pointed at devnet', () => {
+    expect(() =>
+      clusterGate({
+        NEXT_PUBLIC_SOLANA_CLUSTER: 'mainnet',
+        NEXT_PUBLIC_SOLANA_RPC_URL: 'https://api.devnet.solana.com',
       }),
-    ).toEqual([]);
+    ).toThrow(/looks like devnet/);
+  });
+
+  it('REFUSES a real-money build with the faucet, the automation signer, or fixtures on', () => {
+    expect(() =>
+      clusterGate({ ...ENV.mainnetOk, NEXT_PUBLIC_DEVNET_FAUCET: '1' }),
+    ).toThrow(/faucet/);
+    expect(() =>
+      clusterGate({ ...ENV.mainnetOk, NEXT_PUBLIC_ALLOW_TEST_SIGNER: '1' }),
+    ).toThrow(/automation signer/);
+    // A-07: fabricated tournaments with an Enter button, for real money.
+    expect(() =>
+      clusterGate({ ...ENV.mainnetOk, NEXT_PUBLIC_FIXTURE_DATA: '1' }),
+    ).toThrow(/fixture tournaments/);
+  });
+
+  it('REFUSES a devnet build pointed at mainnet — a preview must never be', () => {
+    expect(() =>
+      clusterGate({ NEXT_PUBLIC_SOLANA_RPC_URL: 'https://api.mainnet-beta.solana.com' }),
+    ).toThrow(/looks like mainnet/);
+  });
+
+  it('REFUSES a typo in the cluster name rather than quietly building devnet', () => {
+    expect(() => clusterGate({ NEXT_PUBLIC_SOLANA_CLUSTER: 'mainnet-beta' })).toThrow();
+  });
+
+  it('reports EVERY problem at once, so one build says the whole truth', () => {
+    try {
+      clusterGate({
+        NEXT_PUBLIC_SOLANA_CLUSTER: 'mainnet',
+        NEXT_PUBLIC_SOLANA_RPC_URL: 'https://api.devnet.solana.com',
+        NEXT_PUBLIC_DEVNET_FAUCET: '1',
+        NEXT_PUBLIC_ALLOW_TEST_SIGNER: '1',
+      });
+      throw new Error('expected the gate to refuse');
+    } catch (e) {
+      const message = String(e);
+      expect(message).toMatch(/looks like devnet/);
+      expect(message).toMatch(/faucet/);
+      expect(message).toMatch(/automation signer/);
+    }
+  });
+
+  /*
+   * A-06: the finding was not that the contract was wrong — it was that
+   * nothing ran it. A test of the gate that does not also check the gate is
+   * CALLED would have passed happily for the whole time the guard was dead.
+   */
+  it('is actually wired into the build, not just tested here', () => {
+    const config = readFileSync(
+      fileURLToPath(new URL('../../next.config.ts', import.meta.url)),
+      'utf8',
+    );
+    expect(config).toMatch(/import\s*\{\s*clusterGate\s*\}\s*from\s*"\.\/src\/chain\/cluster"/);
+    // Called at module scope — Next evaluates the config before compiling,
+    // so a call inside a lazy export would not be a build-time gate.
+    expect(config).toMatch(/^clusterGate\(\);$/m);
   });
 });

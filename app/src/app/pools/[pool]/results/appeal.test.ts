@@ -1,6 +1,7 @@
 /* Stage E appeal client specs: message parity with the review service and
  * a named outcome for every way lodging can end. */
 import { describe, expect, it } from 'vitest';
+import { COPY } from '@/copy';
 import nacl from 'tweetnacl';
 import { verifyAppealSubmission } from '@blotto/detection/appeals';
 import { canonicalAppealMessage } from '@blotto/detection/appeal-message';
@@ -42,6 +43,28 @@ describe('lodgeAppeal (every ending named)', () => {
     expect(await lodgeAppeal('https://r', signer, POOL, PLAYER, 'g', answering(409, { error: 'nothing_to_appeal' }))).toBe('nothing_to_appeal');
     expect(await lodgeAppeal('https://r', signer, POOL, PLAYER, 'g', answering(401))).toBe('refused');
     expect(await lodgeAppeal('https://r', signer, POOL, PLAYER, 'g', answering(500))).toBe('failed');
+  });
+
+  /*
+   * D-33 (audit 2026-09-11): a 401 has two causes and they need different
+   * sentences. A forfeited player told "the signature did not verify as
+   * this entry's wallet" for a device clock problem goes looking for a
+   * problem that is not there, while the appeal window runs down.
+   */
+  it('tells a clock-skew refusal apart from a signature refusal', async () => {
+    expect(
+      await lodgeAppeal('https://r', signer, POOL, PLAYER, 'g', answering(401, { reason: 'clock_skew' }))
+    ).toBe('clock_skew');
+    expect(
+      await lodgeAppeal('https://r', signer, POOL, PLAYER, 'g', answering(401, { reason: 'signature' }))
+    ).toBe('refused');
+    // An older service, or one that could not tell, keeps the old wording.
+    expect(await lodgeAppeal('https://r', signer, POOL, PLAYER, 'g', answering(401))).toBe('refused');
+    // And the panel has a sentence for it — a missing key renders blank.
+    expect(COPY.results.appeal.outcome.clock_skew).toMatch(/clock/i);
+    expect(COPY.results.appeal.outcome.clock_skew).not.toBe(
+      COPY.results.appeal.outcome.refused
+    );
   });
   it('fails closed without a service, a signer, or consent', async () => {
     expect(await lodgeAppeal(undefined, signer, POOL, PLAYER, 'g', answering(204))).toBe('not_configured');
