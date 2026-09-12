@@ -358,8 +358,11 @@ answer — that is a gap to build if you ever add one, not a property you have.
 2. **[YOU]** On `blotto-packet`: set `GEO_VENDOR_URL` and `GEO_VENDOR_API_KEY` to
    the values the merged adapter documents. ⚠ VERIFY both against that PR — the
    generic seam's URL and header shape are not IPLocate's.
-3. **[YOU]** **Remove `GEO_STUB_COUNTRY`** — while set, one missing vendor variable
-   admits everyone as GB.
+3. **[YOU]** **Remove `GEO_STUB_COUNTRY`** and `ALLOW_STUB_GEO`. Since 2026-09-12 the
+   stub also needs `ALLOW_STUB_GEO=1`, so a missing vendor variable now stops the
+   service rather than admitting everyone as GB (audit 2026-09-11, E-03 / C-31) —
+   but a machine carrying both is still a machine one cleared secret away from the
+   stub, so clear them anyway.
 
 **Verify:** `/geo` → true from a normal address · false for BE and AU · false when
 the vendor is unreachable · false on a malformed answer. Rejections are generic by

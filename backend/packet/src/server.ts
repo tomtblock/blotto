@@ -68,6 +68,12 @@ export interface EntryServerDeps {
    */
   hygiene?: HygieneConfig;
   /**
+   * Where an unhandled route fault goes (audit 2026-09-11, B-13). Defaults
+   * to `console.error`, which is what the deployed services' log drain
+   * reads; injected in tests so a suite can assert the operator was told.
+   */
+  onServerError?: (line: string, err: unknown) => void;
+  /**
    * TEST/DEV ONLY (D-B3 stub): when true, `x-geo-country` / `x-geo-region` /
    * `x-geo-vpn: 1` request headers override the geo lookup for that request.
    * Never set behind anything a player can reach — a client-controlled
@@ -239,6 +245,8 @@ function clientIp(req: IncomingMessage, trustProxy: boolean): string {
   return resolved === 'unknown' ? '' : resolved;
 }
 
+const SERVICE = 'packet';
+
 export function serveEntryApi(deps: EntryServerDeps, port: number): Server {
   // BR-005 wiring: one hygiene decision per request, BEFORE the router. The
   // previous hand-written `access-control-allow-origin: *` is gone — the
@@ -251,6 +259,7 @@ export function serveEntryApi(deps: EntryServerDeps, port: number): Server {
     securityHeadersEnabled: false,
   };
   const limiter = new RateLimiter(hygiene.rateLimit);
+  const onServerError = deps.onServerError ?? ((line: string, err: unknown) => console.error(line, err));
   const server = createServer(async (req, res) => {
     const outcome = applyHygiene(
       {
@@ -301,7 +310,30 @@ export function serveEntryApi(deps: EntryServerDeps, port: number): Server {
           res
             .writeHead(status, { 'content-type': 'application/json', ...baseHeaders })
             .end(JSON.stringify(out));
-      } catch {
+      } catch (err: unknown) {
+        // B-13 (audit 2026-09-11): this used to answer 500 and say nothing
+        // at all. Every fault behind this catch is invisible from outside by
+        // design — the entry gate's refusals are deliberately generic, so an
+        // operator cannot tell a store outage from a correctly refused
+        // entrant by reading responses. The PRE-PAYMENT ciphertext write
+        // goes through here: a player whose sealed allocation failed to
+        // store is about to pay for a pool their entry cannot be revealed
+        // in, and nothing anywhere recorded why.
+        //
+        // What is logged, and what is not: the method, the path and the
+        // error. Never the body — it carries the sealed ciphertext — and
+        // never the caller's address, which is a per-player identifier this
+        // service does not put in its logs.
+        //
+        // PHASE-3-REVIEW: this is a log, not yet an alert. The shared metric
+        // and alert names live in one file that a concurrent change is
+        // holding; the alert wiring lands in the same batch. A log drain
+        // reads this today.
+        onServerError(
+          `${SERVICE}: unhandled fault answering ${req.method ?? '?'} ${req.url ?? '/'} — ` +
+            `the caller got a generic 500`,
+          err
+        );
         res
           .writeHead(500, { 'content-type': 'application/json', ...baseHeaders })
           .end(JSON.stringify({ error: 'internal' }));

@@ -25,6 +25,9 @@
  *     GEO_VENDOR_2_URL + GEO_VENDOR_2_API_KEY  (optional fallback source —
  *       same contract, asked only when the first source cannot answer)
  *     GEO_STUB_COUNTRY [+ GEO_STUB_REGION/GEO_STUB_VPN]  (dev stub)
+ *       + ALLOW_STUB_GEO=1   the opt-in is REQUIRED, so a vendor key lost
+ *         out of band can never silently downgrade a paid deployment to a
+ *         stub that answers every address with one country
  *       optional, per paid source:
  *         GEO_DAILY_CAP          our own ceiling per 24h (unset = none)
  *         GEO_ISSUANCE_RESERVE   lookups only `/packet` may spend
@@ -58,6 +61,7 @@ import { CompositeGeoLookup, type NamedGeoSource } from './geo-composite';
 import { GeoBudget } from './geo-budget';
 import { buildMonitor, loadMonitor } from '../../_shared/src/monitor';
 import type { Monitor } from '../../_shared/src/monitor';
+import { intEnv, optionalIntEnv, portEnv } from '../../_shared/src/env-number';
 import { loadTerms } from './attestations';
 import { loadTerritorySchedule } from './territories';
 import { PgAttestationStore, PgNotifyPreferenceStore } from './stores-pg';
@@ -86,15 +90,15 @@ function buildVendor(
   const vendor = new IpLocateGeoLookup({
     baseUrl: url,
     apiKey,
-    attempts: Number(env.GEO_VENDOR_ATTEMPTS ?? 3),
-    timeoutMs: Number(env.GEO_VENDOR_TIMEOUT_MS ?? 4000),
+    attempts: intEnv(env, 'GEO_VENDOR_ATTEMPTS', 3, { min: 1 }),
+    timeoutMs: intEnv(env, 'GEO_VENDOR_TIMEOUT_MS', 4000, { min: 1 }),
   });
   // The request budget is real: two lookups per entrant (the /geo pre-flight
   // on page load, then /packet) across 64 entrants is 128 per pool, against a
   // DAILY cap over a finite, non-renewing credit balance. The cache changes
   // no verdict — see geo-cache.ts for why — it only stops the same address
   // being asked about twice.
-  const ttlMs = Number(env.GEO_CACHE_TTL_MS ?? 15 * 60 * 1000);
+  const ttlMs = intEnv(env, 'GEO_CACHE_TTL_MS', 15 * 60 * 1000, { min: 0 });
   if (ttlMs > 0) return { lookup: new CachingGeoLookup(vendor, { ttlMs }), cached: true };
   return { lookup: vendor, cached: false };
 }
@@ -114,7 +118,11 @@ function buildVendor(
  * squeeze ordinary traffic. The split is an operator-owned number, so it is a
  * default with an override (`GEO_ISSUANCE_RESERVE`) rather than a constant.
  */
-function buildGeo(env: NodeJS.ProcessEnv, monitor: Monitor): GeoFaces {
+// Exported for its own spec. The stub's opt-in (E-03 / C-31) is a refusal
+// decided entirely by which variables are present, and the only honest way to
+// test a refusal is to drive the selector directly with each combination —
+// booting `main()` would need a database, a signer and a screener first.
+export function buildGeo(env: NodeJS.ProcessEnv, monitor: Monitor): GeoFaces {
   if (env.GEO_VENDOR_URL && env.GEO_VENDOR_API_KEY) {
     const sources: NamedGeoSource[] = [];
     const primary = buildVendor(env.GEO_VENDOR_URL, env.GEO_VENDOR_API_KEY, env);
@@ -125,8 +133,8 @@ function buildGeo(env: NodeJS.ProcessEnv, monitor: Monitor): GeoFaces {
     }
     const composite = new CompositeGeoLookup(sources, monitor);
 
-    const cap = Number(env.GEO_DAILY_CAP ?? 0);
-    if (!Number.isFinite(cap) || cap <= 0) {
+    const cap = intEnv(env, 'GEO_DAILY_CAP', 0, { min: 0 });
+    if (cap <= 0) {
       // No ceiling. Exactly the behaviour before 2026-09-12, minus the
       // silence: a source failure is now a metric and, for a spent allowance
       // or a refused key, an alert.
@@ -138,10 +146,7 @@ function buildGeo(env: NodeJS.ProcessEnv, monitor: Monitor): GeoFaces {
           : '');
       return { issuance: composite, preflight: composite, describe };
     }
-    const reserve =
-      env.GEO_ISSUANCE_RESERVE === undefined
-        ? undefined
-        : Number(env.GEO_ISSUANCE_RESERVE);
+    const reserve = optionalIntEnv(env, 'GEO_ISSUANCE_RESERVE', { min: 0 });
     const budget = new GeoBudget(composite, { dailyCap: cap, reserve, monitor });
     const describe =
       `geo = ${sources.length} source(s), per-address cache ${primary.cached ? 'ON' : 'OFF'}, ` +
@@ -152,13 +157,29 @@ function buildGeo(env: NodeJS.ProcessEnv, monitor: Monitor): GeoFaces {
         : '');
     return { issuance: budget.forIssuance(), preflight: budget.forPreflight(), describe };
   }
-  if (env.GEO_STUB_COUNTRY) {
+  // The dev stub needs the SAME explicit opt-in as every other dev seam here
+  // — `ALLOW_DEV_ENTRY_SIGNER` for the entry signer, `ALLOW_STUB_SANCTIONS`
+  // for the screener (audit 2026-09-11, E-03 / C-31). It was the one
+  // credentialed seam selectable from a single variable, guarded only by
+  // which variables the deploy workflow happened to set. That is not a
+  // guard: a vendor key rotated out of band, or a secret cleared by hand,
+  // drops straight through the branch above into a stub that answers every
+  // address with one country. The territory gate would keep returning
+  // verdicts and keep looking healthy while screening nobody.
+  if (env.GEO_STUB_COUNTRY && env.ALLOW_STUB_GEO === '1') {
     const stub = new StubGeoLookup();
     return {
       issuance: stub,
       preflight: stub,
       describe: `geo = STUB (dev only) — country=${env.GEO_STUB_COUNTRY}`,
     };
+  }
+  if (env.GEO_STUB_COUNTRY) {
+    throw new Error(
+      `${SERVICE}: GEO_STUB_COUNTRY is set but ALLOW_STUB_GEO is not "1" — refusing to screen ` +
+        `entries with the development stub. Set ALLOW_STUB_GEO=1 to opt in (development only), ` +
+        `or configure GEO_VENDOR_URL + GEO_VENDOR_API_KEY.`
+    );
   }
   throw new Error(
     `${SERVICE}: no geo lookup configured — set GEO_VENDOR_URL + GEO_VENDOR_API_KEY (or the dev stub)`
@@ -183,7 +204,7 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
   // the fix, diagnosed only by comparing a commit on a web page against a
   // branch. The service can simply say.
   console.log(`${SERVICE}: build ${env.BLOTTO_BUILD_COMMIT ?? 'unknown'}`);
-  const port = Number(env.BLOTTO_PACKET_PORT ?? 8082);
+  const port = portEnv(env, 'BLOTTO_PACKET_PORT', 8082);
   const db = createPool(loadPostgresConfig(env));
   const territories = loadTerritorySchedule(
     env.BLOTTO_TERRITORIES_PATH ?? resolve(REPO_ROOT, 'config', 'territories.json')

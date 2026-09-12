@@ -72,6 +72,10 @@ services:
       GEO_STUB_COUNTRY: ${GEO_STUB_COUNTRY:-}
       GEO_STUB_REGION: ${GEO_STUB_REGION:-}
       GEO_STUB_VPN: ${GEO_STUB_VPN:-}
+      # The stub needs its own opt-in, like ALLOW_STUB_SANCTIONS below: a
+      # vendor key lost out of band must never fall through to it silently
+      # (audit 2026-09-11, E-03 / C-31).
+      ALLOW_STUB_GEO: ${ALLOW_STUB_GEO:-}
       # Sanctions: the OFAC SDN mirror by default (public list, no key —
       # the service downloads it at boot); vendor keys add sources. Set
       # SANCTIONS_OFAC_SDN=0 with the stub pair only for an offline run.
