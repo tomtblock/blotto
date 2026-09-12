@@ -196,6 +196,31 @@ deliberately does nothing rather than fight it. Re-check both.
 by seat against the committed list, so the failure names the seat. The usual
 cause is a wallet account that cannot receive the transfer.
 
+**The daemon's `/health` answers 503 while it says `ready: true`.** Since
+2026-09-12 that means no tick has completed within the staleness budget
+(fifteen minutes, `STALE_TICK_MS`): the loop is wedged on something that will
+not answer — a vendor socket, an RPC. Fly restarts a machine whose check fails,
+and `backend-watch` probes all four services every fifteen minutes and starts a
+stopped one. The log's last `phase=` and step lines say where it stopped.
+
+**A pool is `Paid` but the results page has no standings and `/verify` finds no
+bundle.** The publish failed after payment. Since 2026-09-12 the daemon owes
+that bundle rather than forgetting it: it records every upload in
+`published_bundles` (migration 0016), retries a Paid pool with no record every
+ten minutes through a publish-only path, announces it when it lands, and raises
+`reveal settled pool still unpublished` after three failures. A pool in this
+state holds the sweep's floor until its bundle is on record, which is deliberate.
+
+**An entry was scored as all losses.** The published lost-ciphertext rule
+applied: the sealed entry could not be read back (missing, undecryptable, or a
+hash mismatch) and was scored zero. The bundle lists the player under
+`scored_as_all_losses`, and since 2026-09-12 the daemon raises `reveal entry
+refund owed after lost ciphertext` naming the pool and the players. The entry
+fee is OWED to each from the platform treasury — an off-chain payment nobody
+else makes. Until the indexer carries a table and the admin CLI a command for
+it (plan batch I1), the alert and the bundle are the record; pay it by hand and
+note the signature beside the pool in the runbook.
+
 **A prize is held.** That is escrow. Two different things put a share there and
 they leave by different doors, so read the entry before acting: `flagged` is an
 integrity flag, `sanctions_hold` is a list match. `admin.ts pools` and the
@@ -219,7 +244,12 @@ three doors: the settlement signer releases it after
 review — and the daemon does this itself at twelve hours if no decision has been
 made (the published rule; Stage D) — anyone releases it after seven days, or the
 admin forfeits it and it is divided among the other eligible players at that
-rank. It cannot come to us. A forfeit decided on the review page is logged at
+rank. Two things stop the twelve-hour clock (2026-09-12): a sanctions hold on
+the same entry, which the program refuses to release on either path, and a
+forfeit already logged by a reviewer — the daemon reads the decision log before
+it releases, and once the window has passed with the on-chain `forfeit-escrow`
+still unlanded it raises `reveal forfeit logged but not landed on chain`: the
+multisig is late, and the share waits in the vault until it signs. It cannot come to us. A forfeit decided on the review page is logged at
 once and answers "recorded"; you then land `forfeit-escrow` with the admin key.
 The player may appeal within seven days from the results page; a *different*
 reviewer decides it on the review page, which needs a second member in

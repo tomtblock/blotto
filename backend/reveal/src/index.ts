@@ -11,5 +11,7 @@ export * from './ranking';
 export * from './next-place';
 export * from './winner-screening';
 export * from './publisher';
+export * from './published-store';
+export * from './priority-fee';
 export * from './publisher-irys';
 export * from './treasury';

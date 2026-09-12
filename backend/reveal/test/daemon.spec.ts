@@ -6,6 +6,7 @@
  * product loop itself: seal → crank to Paid → the tier reopens.
  */
 import { expect } from 'chai';
+import { ALERT, METRIC } from '../../_shared/src/metrics';
 import { createHash } from 'crypto';
 import {
   FakeChain,
@@ -15,6 +16,7 @@ import {
   makeDaemon,
   type Daemon,
   type KeeperChain,
+  MemoryPublishedBundleStore,
 } from '../src';
 import {
   LocalCustody,
@@ -1025,5 +1027,222 @@ describe('the daemon (E3 §4.4): the bundle-announce seam', () => {
     expect(r.errors).to.have.length(1);
     expect(r.errors[0].action).to.equal('announce_bundle');
     expect(r.errors[0].poolId).to.equal('1');
+  });
+});
+
+/*
+ * Two holds the review clock must leave alone, and the bundle a Paid pool
+ * still owes (2026-09-12, audit 2026-09-11: B-30 / C-10 / C-23 / D-26, D-03,
+ * C-09 / B-32 / D-27).
+ */
+class RecordingMonitor {
+  readonly events: { name: string; labels?: Record<string, string> }[] = [];
+  readonly alerts: { reason: string; detail: Record<string, unknown> }[] = [];
+  recordEvent(name: string, labels?: Record<string, string>): void {
+    this.events.push({ name, labels });
+  }
+  reportGauge(): void {}
+  alert(reason: string, detail: Record<string, unknown>): void {
+    this.alerts.push({ reason, detail });
+  }
+  count(name: string, labels?: Record<string, string>): number {
+    return this.events.filter(
+      (e) =>
+        e.name === name &&
+        (!labels || Object.entries(labels).every(([k, v]) => e.labels?.[k] === v))
+    ).length;
+  }
+}
+
+describe('the daemon (C8): the review clock leaves two holds alone (2026-09-12)', () => {
+  it('a flagged share under a sanctions hold is neither released nor a tick error, and the pool stays non-terminal until the hold is lifted', async function () {
+    this.timeout(60000);
+    const w = await makeWorld();
+    const monitor = new RecordingMonitor();
+    const daemon = makeDaemon({
+      chain: w.chain,
+      custody: w.custody,
+      ciphertexts: w.store,
+      vrf: new StubVrfCoordinator(w.chain, base58Encode(sha('randomness'))),
+      crank: (poolId) =>
+        crankPool({ chain: w.chain, custody: w.custody, ciphertexts: w.store, publisher: w.publisher }, poolId),
+      now: () => w.clock.t,
+      monitor,
+    });
+    await daemon.tick();
+    const players = await enterPlayers(w, 1n, 64);
+    // Every seat flagged AND held: whoever wins is paid into escrow under
+    // both. Before 2026-09-12 the clock then threw SanctionsHoldActive on
+    // every tick for ever once the window passed.
+    for (const p of players) {
+      await w.chain.flagEntry(1n, p);
+      await w.chain.placeSanctionsHold(1n, p);
+    }
+    const settledAt = w.clock.t;
+    const r1 = await daemon.tick();
+    expect(r1.errors).to.deep.equal([]);
+    expect(r1.cranked).to.deep.equal([{ poolId: 1n, finalState: 'Paid' }]);
+    const held = [...w.chain.escrowed.keys()];
+    expect(held.length).to.be.greaterThan(0);
+
+    w.clock.t = settledAt + REVIEW_WINDOW_SECS + 3600n;
+    const r2 = await daemon.tick();
+    expect(r2.errors).to.deep.equal([], 'no throw: the clock never calls release_escrow on a held share');
+    expect(r2.released).to.deep.equal([]);
+    expect(r2.held.map((h) => h.reason)).to.deep.equal(held.map(() => 'sanctions_hold'));
+    expect(monitor.count(METRIC.reveal.releaseHeld, { reason: 'sanctions_hold' })).to.equal(held.length);
+    for (const p of held) expect(w.chain.escrowed.get(p)).to.not.equal(undefined, 'still held');
+
+    // Still not terminal: the next tick looks again (and still does nothing).
+    const r3 = await daemon.tick();
+    expect(r3.held.length).to.equal(held.length);
+    expect(r3.errors).to.deep.equal([]);
+
+    // The admin lifts the hold; the clock releases on the next tick.
+    for (const p of held) await w.chain.liftSanctionsHold(1n, p);
+    const r4 = await daemon.tick();
+    expect(r4.errors).to.deep.equal([]);
+    expect(r4.held).to.deep.equal([]);
+    expect(r4.released.map((x) => x.player).sort()).to.deep.equal([...held].sort());
+    expect(w.chain.escrowed.size).to.equal(0);
+  });
+
+  it('a forfeit already in the decision log is never released by the clock; the alert fires once the window passes unlanded; the next-place step pays once the forfeit lands (D-03)', async function () {
+    this.timeout(120000);
+    // Pass 1: learn the winning seat (deterministic field).
+    const probe = await makeWorld();
+    await probe.daemon.tick();
+    await enterPlayers(probe, 1n, 64);
+    await probe.daemon.tick();
+    const winnerSeat = (await probe.chain.getPool(1n)).payouts[0].entryIndex;
+
+    // Pass 2: the winner is flagged before settlement, and the review
+    // service has LOGGED a forfeit that the multisig has not yet landed.
+    const w = await makeWorld();
+    const monitor = new RecordingMonitor();
+    const forfeitLogged = new Set<string>();
+    const daemon = makeDaemon({
+      chain: w.chain,
+      custody: w.custody,
+      ciphertexts: w.store,
+      vrf: new StubVrfCoordinator(w.chain, base58Encode(sha('randomness'))),
+      crank: (poolId) =>
+        crankPool({ chain: w.chain, custody: w.custody, ciphertexts: w.store, publisher: w.publisher }, poolId),
+      now: () => w.clock.t,
+      decisions: { forfeitLogged: async (_pool, player) => forfeitLogged.has(player) },
+      monitor,
+    });
+    await daemon.tick();
+    const players = await enterPlayers(w, 1n, 64);
+    const winner = players[winnerSeat];
+    await w.chain.flagEntry(1n, winner);
+    const settledAt = w.clock.t;
+    const r1 = await daemon.tick();
+    expect(r1.errors).to.deep.equal([]);
+    expect(w.chain.escrowed.get(winner)).to.equal(potForTier(0), "the winner's prize is held");
+    forfeitLogged.add(winner);
+
+    // Inside the window: held, no alert yet (the multisig is not late).
+    w.clock.t = settledAt + REVIEW_WINDOW_SECS - 1n;
+    const r2 = await daemon.tick();
+    expect(r2.released).to.deep.equal([]);
+    expect(r2.held).to.deep.equal([{ poolId: 1n, player: winner, reason: 'forfeit_logged' }]);
+    expect(monitor.alerts).to.deep.equal([]);
+
+    // Past the window: STILL held — before 2026-09-12 this tick paid the
+    // flagged player — and the alert says the on-chain forfeit is late.
+    w.clock.t = settledAt + REVIEW_WINDOW_SECS + 60n;
+    const r3 = await daemon.tick();
+    expect(r3.errors).to.deep.equal([]);
+    expect(r3.released).to.deep.equal([], 'a logged forfeit is never auto-released');
+    expect(w.chain.escrowed.get(winner)).to.equal(potForTier(0));
+    expect(monitor.alerts.map((a) => a.reason)).to.deep.equal([ALERT.reveal.forfeitUnlanded]);
+    expect(monitor.alerts[0].detail).to.include({ poolId: '1', player: winner });
+
+    // The multisig lands the forfeit: the share moves on to the next rank.
+    await w.chain.forfeitEscrow(1n, winner);
+    const platformBefore = w.chain.platform;
+    const r4 = await daemon.tick();
+    expect(r4.errors).to.deep.equal([]);
+    expect(r4.held).to.deep.equal([]);
+    expect(r4.nextPlacePaid.length).to.be.greaterThan(0, 'the share moved on');
+    expect(w.chain.platform).to.equal(platformBefore, 'not one lamport to us');
+  });
+});
+
+describe('the daemon (C8): a Paid pool still owes its bundle (2026-09-12)', () => {
+  it('a publish that failed after payment is retried on a backoff through the publish-only path, alerted after repeated failure, and announced when it lands', async function () {
+    this.timeout(60000);
+    const w = await makeWorld();
+    const monitor = new RecordingMonitor();
+    const published = new MemoryPublishedBundleStore();
+    // The crank pays but its upload fails: exactly the case that used to
+    // leave a Paid pool unverifiable for ever.
+    const failing = { publish: async () => { throw new Error('irys down'); } };
+    let owedCalls = 0;
+    let owedFailuresLeft = 3;
+    const announced: string[] = [];
+    let wall = 1_000_000;
+    const daemon = makeDaemon({
+      chain: w.chain,
+      custody: w.custody,
+      ciphertexts: w.store,
+      vrf: new StubVrfCoordinator(w.chain, base58Encode(sha('randomness'))),
+      crank: (poolId) =>
+        crankPool({ chain: w.chain, custody: w.custody, ciphertexts: w.store, publisher: failing }, poolId),
+      now: () => w.clock.t,
+      nowMs: () => wall,
+      publishRetryMs: 10_000,
+      published,
+      publishOwed: async (poolId) => {
+        owedCalls++;
+        if (owedFailuresLeft > 0) {
+          owedFailuresLeft--;
+          throw new Error('irys still down');
+        }
+        const uri = `memory://owed/${poolId}`;
+        await published.record(poolId, uri, w.clock.t);
+        return uri;
+      },
+      announceBundle: async (_poolId, uri) => { announced.push(uri); },
+      monitor,
+    });
+    await daemon.tick();
+    await enterPlayers(w, 1n, 64);
+
+    // The settling tick: paid, publish failed, the owed pass tries once.
+    const r1 = await daemon.tick();
+    expect(r1.cranked).to.deep.equal([{ poolId: 1n, finalState: 'Paid' }]);
+    expect(owedCalls).to.equal(1);
+    expect(r1.errors.map((e) => e.action)).to.deep.equal(['publish_owed']);
+    expect(r1.published).to.deep.equal([]);
+
+    // Inside the backoff: no attempt, still non-terminal.
+    await daemon.tick();
+    expect(owedCalls).to.equal(1, 'not every fifteen seconds');
+
+    // Two more failures across the backoff: the alert fires on the third.
+    wall += 10_000;
+    await daemon.tick();
+    expect(owedCalls).to.equal(2);
+    expect(monitor.alerts).to.deep.equal([]);
+    wall += 10_000;
+    await daemon.tick();
+    expect(owedCalls).to.equal(3);
+    expect(monitor.alerts.map((a) => a.reason)).to.deep.equal([ALERT.reveal.bundleUnpublished]);
+    expect(monitor.count(METRIC.reveal.bundlePublishFailed)).to.equal(3);
+
+    // Then it lands: recorded, reported, announced — and the pool is done.
+    wall += 10_000;
+    const r5 = await daemon.tick();
+    expect(owedCalls).to.equal(4);
+    expect(r5.errors).to.deep.equal([]);
+    expect(r5.published).to.deep.equal([{ poolId: 1n, uri: 'memory://owed/1' }]);
+    expect(announced).to.deep.equal(['memory://owed/1']);
+    expect(await published.find(1n)).to.equal('memory://owed/1');
+    expect(monitor.count(METRIC.reveal.bundlePublished)).to.equal(1);
+    wall += 10_000;
+    await daemon.tick();
+    expect(owedCalls).to.equal(4, 'a recorded bundle is never re-uploaded');
   });
 });
