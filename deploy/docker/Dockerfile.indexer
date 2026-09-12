@@ -12,9 +12,19 @@ FROM node:22-slim
 ARG BLOTTO_BUILD_COMMIT=unknown
 ENV BLOTTO_BUILD_COMMIT=$BLOTTO_BUILD_COMMIT
 
+# E-22 (audit 2026-09-11): this image used to run as root, and two of the four
+# decode the settlement signer into shared memory at boot. Root inside a
+# container is not root on the host, but it removes the last barrier between a
+# remote-code bug in a public-facing Node service and everything else in the
+# container — the decoded signing key among it. The `node:22-slim` base already
+# ships an unprivileged `node` user (uid 1000); the tree is copied to it, the
+# per-package installs run as it, and nothing here needs a port below 1024.
 WORKDIR /app
-COPY backend backend
-COPY config config
+RUN chown node:node /app
+COPY --chown=node:node backend backend
+COPY --chown=node:node config config
+
+USER node
 
 RUN for d in backend/_shared backend/scoring backend/sealing backend/packet backend/reveal backend/detection backend/indexer; do \
       (cd "$d" && npm ci --no-audit --no-fund); \
