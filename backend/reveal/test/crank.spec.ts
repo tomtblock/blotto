@@ -120,6 +120,65 @@ async function buildSealedPool(sabotage: {
 }
 
 describe('the settlement crank', () => {
+  it('refuses to settle when it read fewer Entry accounts than the pool reports', async function () {
+    this.timeout(30000);
+    const t = await buildSealedPool({});
+    // The Pool account and the Entry accounts are separate reads. Model a
+    // backend a slot behind on the second: the highest seat is missing, so
+    // the remaining entries are still gapless from zero and every
+    // downstream check would pass.
+    const short = t.chain.entries.get('1')!.slice(0, -1);
+    t.chain.entries.set('1', short);
+
+    const deps = {
+      chain: t.chain,
+      custody: t.custody,
+      ciphertexts: t.store,
+      publisher: t.publisher,
+    };
+    let threw: Error | null = null;
+    try {
+      await crankPool(deps, 1n);
+    } catch (e) {
+      threw = e as Error;
+    }
+    expect(threw, 'the crank must refuse an incomplete field').to.not.equal(null);
+    expect(threw!.message).to.match(/incomplete field/);
+    // Nothing was committed and nothing was paid: waiting is the fix.
+    const pool = await t.chain.getPool(1n);
+    expect(pool.resultsCommitted).to.equal(false);
+    expect(pool.paidMask).to.equal(0n);
+  });
+
+  it('refuses to settle a field in which nothing could be read back', async function () {
+    this.timeout(30000);
+    const t = await buildSealedPool({});
+    // Model the ciphertext table having been lost: every entry decrypts to
+    // nothing. The arithmetic is untroubled — every seat ties on zero and
+    // the pot divides evenly — which is exactly why this needs a guard.
+    for (const e of t.chain.entries.get('1')!) {
+      await t.store.put(1n, e.player, new Uint8Array(48 + 127));
+    }
+
+    const deps = {
+      chain: t.chain,
+      custody: t.custody,
+      ciphertexts: t.store,
+      publisher: t.publisher,
+    };
+    let threw: Error | null = null;
+    try {
+      await crankPool(deps, 1n);
+    } catch (e) {
+      threw = e as Error;
+    }
+    expect(threw, 'the crank must refuse a wholly unreadable field').to.not.equal(null);
+    expect(threw!.message).to.match(/could not be read back/);
+    const pool = await t.chain.getPool(1n);
+    expect(pool.resultsCommitted).to.equal(false);
+    expect(pool.paidMask).to.equal(0n);
+  });
+
   it('drives a sealed pool to Paid with every band exact', async function () {
     this.timeout(30000);
     const t = await buildSealedPool({});

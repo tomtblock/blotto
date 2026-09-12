@@ -84,6 +84,14 @@ export interface CrankDeps {
   log?: (step: string, detail?: Record<string, unknown>) => void;
   /** Ranks per pay_prizes transaction. 4 fits comfortably in one packet. */
   payBatchSize?: number;
+  /**
+   * How many entries may be unreadable before the crank refuses to settle
+   * the pool at all. Absent means "all but one": a field in which every
+   * single entry failed is a systems failure, not a set of player mistakes,
+   * and committing against it is irreversible. A ratified figure between one
+   * and all belongs here — see the guard in `crankPool`.
+   */
+  maxUnreadableEntries?: number;
 }
 
 export interface CrankOutcome {
@@ -150,6 +158,23 @@ export async function crankPool(deps: CrankDeps, poolId: bigint): Promise<CrankO
   // never disagree.
   const chainEntries = await deps.chain.getEntries(poolId);
   chainEntries.sort((a, b) => a.index - b.index);
+
+  // The Pool account and the Entry accounts are two separate reads, and an
+  // RPC backend can answer the second from a slot behind the first. A short
+  // result is not an error to any of them: the entries are gapless from
+  // seat 0, so the downstream index check passes, the missing seats are
+  // simply the ones registered last, and the pot is committed against a
+  // field that is short a paying player. `commit_results` cannot be re-run,
+  // so there is no recovery. Wait instead — the sweep retries a throwing
+  // pool on the next tick, and a stale read is exactly what waiting fixes.
+  if (chainEntries.length !== pool.entrants) {
+    throw new Error(
+      `pool ${poolId} reports ${pool.entrants} entrants but only ` +
+        `${chainEntries.length} Entry accounts were read — refusing to settle ` +
+        `against an incomplete field`
+    );
+  }
+
   const { bundleEntries, scoringInput, allLosses } = await revealEntries(
     deps.ciphertexts,
     poolId,
@@ -157,6 +182,29 @@ export async function crankPool(deps: CrankDeps, poolId: bigint): Promise<CrankO
     chainEntries,
     step
   );
+
+  // An entry that cannot be decrypted or does not match its on-chain hash is
+  // scored all losses by a published rule, and one of those is a player
+  // problem. ALL of them is ours: a wiped or restored ciphertext table, a
+  // replica behind, a custody key that does not match the one entries were
+  // sealed to. The arithmetic does not notice — every seat ties on zero, the
+  // pot divides evenly, conservation holds — so without this the crank
+  // commits and pays a result it has every reason to distrust, and paying is
+  // final.
+  //
+  // PHASE-6-REVIEW: the ceiling is a founder-owned number and is NOT set
+  // here. The default refuses only a field that is entirely unreadable,
+  // which is a logical boundary rather than a tuning choice; anything
+  // between one bad entry and all of them needs a ratified figure.
+  const unreadable = allLosses.length;
+  const ceiling = deps.maxUnreadableEntries ?? Math.max(chainEntries.length - 1, 0);
+  if (chainEntries.length > 0 && unreadable > ceiling) {
+    throw new Error(
+      `pool ${poolId}: ${unreadable} of ${chainEntries.length} entries could not ` +
+        `be read back (ceiling ${ceiling}) — refusing to commit a result the ` +
+        `crank cannot stand behind`
+    );
+  }
 
   // ---- 3. Score + prizes + tree ------------------------------------------
   // D3-B: competition ranks (tied players share one), split-pot amounts.
