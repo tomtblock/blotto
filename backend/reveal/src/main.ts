@@ -72,7 +72,8 @@ import { makeDaemon, StubVrfCoordinator, type VrfCoordinator } from './daemon';
 import { makeSwitchboardOps, SwitchboardVrfCoordinator } from './vrf-switchboard';
 import { IrysPublisher, irysUploaderFromEnv } from './publisher-irys';
 import { newDaemonHealth, serveDaemonHealth, type DaemonPhase } from './health';
-import { assertCanPayFees, formatSol, step } from './startup';
+import { assertCanPayFees, formatSol, step, uploadWalletVerdict } from './startup';
+import { base58Decode } from '../../_shared/src/blotto-events';
 
 const SERVICE = 'daemon';
 const DEFAULT_PROGRAM_ID = '5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17';
@@ -274,6 +275,29 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
       log
     )
   );
+  // The upload wallet's balance, checked HERE rather than discovered at the
+  // first settlement (audit 2026-09-11, C-01 — the second half of that fix).
+  // The uploader above already accepted the key, so a key this parse cannot
+  // read is logged and skipped, never a reason to refuse on our own account.
+  try {
+    const uploadWallet = Keypair.fromSecretKey(base58Decode(env.IRYS_UPLOAD_KEY ?? ''));
+    const uploadLamports = BigInt(
+      await connection.getBalance(uploadWallet.publicKey, 'confirmed')
+    );
+    const verdict = uploadWalletVerdict(
+      uploadWallet.publicKey.toBase58(),
+      uploadLamports,
+      env.IRYS_NETWORK === 'mainnet' ? 'mainnet' : 'devnet'
+    );
+    if (verdict.refuse) throw new Error(verdict.message);
+    log(verdict.message);
+  } catch (e) {
+    if (e instanceof Error && /upload wallet .* holds .* below/.test(e.message)) throw e;
+    console.warn(
+      `${SERVICE}: could not read the upload wallet's balance — ` +
+        `${e instanceof Error ? e.message : String(e)}. Uploads will be attempted regardless.`
+    );
+  }
 
   // R11 in SHADOW mode (manual-only detection, 2026-09-07): the report is
   // computed and logged for every pool with findings; NOTHING is flagged by

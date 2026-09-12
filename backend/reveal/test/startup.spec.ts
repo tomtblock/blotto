@@ -12,6 +12,8 @@ import {
   assertCanPayFees,
   formatSol,
   step,
+  uploadWalletVerdict,
+  UPLOAD_WALLET_FLOOR_LAMPORTS,
 } from '../src/startup';
 
 const lines: string[] = [];
@@ -118,5 +120,36 @@ describe('the settlement signer floor', () => {
     expect(formatSol(2_000_000_000n)).to.equal('2.000000000');
     expect(formatSol(0n)).to.equal('0.000000000');
     expect(formatSol(1n)).to.equal('0.000000001');
+  });
+});
+
+/*
+ * The upload wallet (audit 2026-09-11, C-01, second half): an empty wallet
+ * is discovered at startup, not at the first settlement — refused on
+ * mainnet, where uploads are paid, and only recorded on devnet, where they
+ * are free-tier and a refusal would stop a rehearsal for nothing.
+ */
+describe('the upload wallet floor', () => {
+  const ADDRESS = '4ydbVZuNupTPu1cKGCc2cePs95B8iMkrR4TvsCLiwcL1';
+
+  it('REFUSES an empty wallet on mainnet, naming the address, the floor and what it pays for', () => {
+    const v = uploadWalletVerdict(ADDRESS, 0n, 'mainnet');
+    expect(v.refuse).to.equal(true);
+    expect(v.message).to.include(ADDRESS);
+    expect(v.message).to.include('0.010000000 SOL floor');
+    expect(v.message).to.match(/permanent upload/);
+    expect(v.message).to.match(/Fund the address/);
+  });
+
+  it('refuses just below the floor and passes exactly at it', () => {
+    expect(uploadWalletVerdict(ADDRESS, UPLOAD_WALLET_FLOOR_LAMPORTS - 1n, 'mainnet').refuse).to.equal(true);
+    expect(uploadWalletVerdict(ADDRESS, UPLOAD_WALLET_FLOOR_LAMPORTS, 'mainnet').refuse).to.equal(false);
+  });
+
+  it('never refuses on devnet, and says why', () => {
+    const v = uploadWalletVerdict(ADDRESS, 0n, 'devnet');
+    expect(v.refuse).to.equal(false);
+    expect(v.message).to.match(/free-tier/);
+    expect(v.message).to.include(ADDRESS);
   });
 });

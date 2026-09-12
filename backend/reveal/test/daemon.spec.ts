@@ -652,6 +652,7 @@ describe('the daemon (C8): resume after a crash', () => {
       1n,
       await w.custody.exportSecret(1n),
       await w.chain.getEntries(1n),
+      (await w.chain.getPool(1n)).entrants,
       pot,
       (await w.chain.getPool(1n)).resultsRootHex
     );
