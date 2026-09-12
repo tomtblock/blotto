@@ -214,8 +214,16 @@ jobs:
           set -euo pipefail
           cd tests/postgres
           npm test 2>&1 | tee /tmp/pg-suite.log
-          passing="$(grep -oE '[0-9]+ passing' /tmp/pg-suite.log | head -1 | cut -d' ' -f1)"
-          pending="$(grep -oE '[0-9]+ pending' /tmp/pg-suite.log | head -1 | cut -d' ' -f1)"
+          # `|| true` on BOTH, and it is load-bearing rather than defensive.
+          # Mocha prints no "pending" line at all when nothing is pending, so
+          # on a clean run that grep matches nothing and exits 1 — which
+          # `pipefail` propagates out of the pipeline and `set -e` turns into a
+          # failed step. The first run of this lane reported exactly that: 36
+          # passing, 0 failing, step red, and the failure was the guard rather
+          # than the suite. An absent count means zero, which is what the two
+          # tests below already assume.
+          passing="$(grep -oE '[0-9]+ passing' /tmp/pg-suite.log | head -1 | cut -d' ' -f1 || true)"
+          pending="$(grep -oE '[0-9]+ pending' /tmp/pg-suite.log | head -1 | cut -d' ' -f1 || true)"
           echo "passing=${passing:-0} pending=${pending:-0}"
           if [ "${pending:-0}" -ne 0 ]; then
             echo "FAIL: ${pending} case(s) were skipped — the database gate did not see its URL" >&2
