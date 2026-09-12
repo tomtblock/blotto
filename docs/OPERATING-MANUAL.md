@@ -111,6 +111,101 @@ care:
 `docs/devnet-rehearsal-runbook.md` is the current, sequenced runbook for the
 next upgrade window, with the live devnet state recorded in it.
 
+### Upgrading once the authority is a Squads vault
+
+Today the upgrade authority is a single fee-payer key and
+`scripts/deploy-devnet.sh` does the whole upgrade. The moment that authority
+moves to the Squads vault — §8, and a mainnet precondition — **that script can
+no longer upgrade the program**, because the transaction the loader accepts
+must be signed by the authority and the authority is then a multisig. Since
+2026-09-12 the script says so in one line rather than failing inside the CLI:
+it reads the program's on-chain authority before doing anything and refuses if
+it is not the key it was asked to sign with.
+
+The procedure below is what replaces it. Everything in the list above still
+applies unchanged — drain first, `set_paused(true)` before and `(false)`
+after, and the migration transaction is part of the same window, not a
+follow-up. What changes is only *how the new bytes get there*: instead of one
+command, the upload and the switch are separated, and only the switch needs
+the multisig.
+
+1. **Drain, pause, and build.** As above. Build from the exact commit you
+   intend to ship — `anchor build` — and keep the terminal open: every step
+   below refers to `target/deploy/blotto_cup.so` from this build.
+
+2. **Upload the new bytes to a buffer.** A buffer is an ordinary account that
+   holds a candidate program. Writing one changes nothing about the live
+   program, costs only rent and fees, and can be done by anybody — no
+   multisig involved:
+
+       solana program write-buffer target/deploy/blotto_cup.so \
+         -k <deploy keypair> --url <rpc> --max-sign-attempts 100
+
+   It prints a **buffer address**. Write it down; everything after this needs
+   it. If the upload dies part-way the CLI prints the buffer's seed phrase —
+   recover it with `solana-keygen recover` and rerun with `--buffer <file>`
+   rather than starting over.
+
+3. **Check the size, and extend first if the build grew.** The loader will
+   refuse an upgrade whose bytes do not fit the existing programdata account,
+   and it refuses an extension smaller than 10,240 bytes. Compare
+   `solana program show <program id> --url <rpc>`'s *Data Length* against the
+   built `.so`, and if the build is larger:
+
+       solana program extend <program id> <bytes, at least 10240> \
+         -k <deploy keypair> --url <rpc>
+
+   Do this **before** proposing the upgrade. A proposal that fails on
+   execution has to be made again, and the members have to approve twice.
+
+4. **Hand the buffer to the vault.** The loader requires the buffer's
+   authority and the program's upgrade authority to be the same signer, so
+   the buffer must belong to the vault before the vault can consume it:
+
+       solana program set-buffer-authority <buffer address> \
+         --new-buffer-authority <squads vault address> \
+         -k <deploy keypair> --url <rpc>
+
+   After this you can no longer close the buffer yourself — see step 7.
+
+5. **Propose the upgrade in Squads.** Create a transaction whose single
+   instruction is the BPF upgradeable loader's `Upgrade`, with the program,
+   its programdata account, the buffer from step 2, a spill account for the
+   reclaimed rent (the deploy keypair is fine), and the vault as the
+   authority. Squads' own "program upgrade" flow builds this for you from the
+   program id and the buffer address; build it by hand only if that flow is
+   unavailable.
+
+   **Before approving, every member checks the same two things:** the buffer
+   address in the proposal is the one step 2 printed, and the program id is
+   ours. An approval is a signature on whatever bytes that buffer holds.
+
+6. **Approve to the threshold and execute.** Then confirm:
+   `solana program show <program id> --url <rpc>` — *Last Deployed Slot* has
+   moved, and *Authority* is still the vault. If the authority changed,
+   stop and escalate; nothing else in this manual can put it back.
+
+7. **Finish the window.** Run the migration transaction if the upgrade
+   changed an account layout (`npm run admin -- migrate-config`), then
+   `set_paused(false)`, then the smoke checks in
+   `docs/devnet-rehearsal-runbook.md`. If the proposal was abandoned instead,
+   the buffer still holds its rent and now belongs to the vault: reclaim it
+   with a second Squads transaction carrying the loader's `Close`, or leave
+   it — it is a few SOL of rent, not a risk.
+
+**Two properties worth being explicit about.** The bytes are uploaded by one
+person and authorised by several, which is the point: the upload is
+reviewable (anyone can fetch the buffer and compare its hash against a build
+of the commit) and the switch is not unilateral. And nothing in this procedure
+gives the vault a way to reach a prize vault — the loader's `Upgrade` touches
+the program account only.
+
+*Command currency: the Solana CLI moves faster than this document. Check each
+command against `solana program --help` on the version pinned in
+`.github/workflows/on-chain.yml` before a mainnet window, and where the
+Solana Foundation skill and this text differ, the skill wins (CLAUDE.md,
+knowledge currency).*
+
 ## 5. Admin transactions
 
 `npm run admin -- <command>` from the repo root. `status` and `pools` are reads

@@ -41,10 +41,12 @@
 #   run, so each service always has at least one real list and never the dev
 #   stub. Both refuse to start with no source configured
 #     SANCTIONS_CHAINALYSIS_API_KEY, SANCTIONS_OPENSANCTIONS_API_KEY
-#   Daemon (C5) — deployed only once all of these exist
+#   Daemon (C5) — REQUIRED since 2026-09-12 (audit 2026-09-11, E-05); an
+#   absent one refuses the run rather than skipping the service, unless
+#   allow_dev_credentials is ticked
 #     TURNKEY_USER_ID, SWITCHBOARD_QUEUE, IRYS_UPLOAD_KEY,
 #     SETTLEMENT_SIGNER_KEYPAIR_B64
-#   Review service (C6) — deployed only once this exists
+#   Review service (C6) — REQUIRED on the same terms
 #     SETTLEMENT_SIGNER_KEYPAIR_B64
 #
 # BLOTTO_HELIUS_WEBHOOK_SECRET is a shared secret between us and Helius with
@@ -80,7 +82,7 @@ on:
   workflow_dispatch:
     inputs:
       allow_dev_credentials:
-        description: "DEV ONLY: where a production credential is absent, fall back (entry-signer seed / geo stub, which admits every address as GB). Applied per credential — a live Turnkey signer is never replaced. Leave unchecked for the credentialed path."
+        description: "DEV ONLY: where a production credential is absent, fall back (entry-signer seed / geo stub, which admits every address as GB) AND allow a deploy that skips the settlement daemon or the review service. Applied per credential — a live Turnkey signer is never replaced. Leave unchecked for the credentialed path: without it a missing daemon or review secret stops the run instead of shipping two services out of four."
         type: boolean
         default: false
       deploy_despite_red_ci:
@@ -157,6 +159,17 @@ jobs:
       # ingest secret or the RPC URL, and a job that runs `yarn install` has
       # no business holding a deploy credential.
       FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      # E-17 (audit 2026-09-11). This was `${{ secrets.BLOTTO_DATABASE_URL }}`
+      # expanded into four separate `run:` blocks, against this repository's
+      # own rule that a secret reaches a shell through `env:`. Template
+      # expansion pastes the secret into the command line the runner
+      # assembles, where a shell that traces, a `set -x` added while
+      # debugging, or an error message that echoes the failing command can
+      # surface it; and it is invisible to the runner's log masking until the
+      # value happens to match. Routed once here and read as "$BLOTTO_DATABASE_URL"
+      # by every step that needs it — a Postgres URL carries the database
+      # password, which is the credential the whole indexer runs on.
+      BLOTTO_DATABASE_URL: ${{ secrets.BLOTTO_DATABASE_URL }}
       INDEXER_APP: blotto-indexer
       PACKET_APP: blotto-packet
       DAEMON_APP: blotto-daemon
@@ -250,8 +263,11 @@ jobs:
           # that let a broken smoke check pass on 2026-08-29.
           req() { if [ -z "${!1:-}" ]; then missing="$missing $1"; fi; }
 
-          if [ -z "${{ secrets.FLY_API_TOKEN }}" ]; then missing="$missing FLY_API_TOKEN"; fi
-          if [ -z "${{ secrets.BLOTTO_DATABASE_URL }}" ]; then missing="$missing BLOTTO_DATABASE_URL"; fi
+          # Read from `env:`, never `${{ secrets.X }}` (E-17): a template
+          # expansion here would put the token and the database password into
+          # the command line of a step that is printed when it fails.
+          req FLY_API_TOKEN
+          req BLOTTO_DATABASE_URL
 
           # The ingest secret is REQUIRED (audit 2026-09-11, E-19). It used to
           # be optional: absent, the indexer generated one that can never be
@@ -307,27 +323,70 @@ jobs:
             missing="$missing$geo_missing"
           fi
 
+          # The settlement daemon and the review service (audit 2026-09-11,
+          # E-05). These used to be SILENTLY optional: an absent secret set
+          # `daemon=false`, the deploy and stage steps carried `if:`
+          # expressions that simply did not run, and the workflow finished
+          # green having shipped two services out of four. The word "skipped"
+          # appeared once, in a plan line in the middle of a log nobody reads
+          # on a green run — and the two services it skips are the one that
+          # moves money and the one that clears a flagged prize.
+          #
+          # They are now REQUIRED, on the same footing as the entry signer and
+          # the geo vendor: an incomplete set is a refusal, and shipping
+          # without them is the same explicit, audited choice in the Actions
+          # UI that every other downgrade here needs. A deploy that ships two
+          # of four services is a decision, so a person makes it.
+          daemon_missing=""
+          for n in TURNKEY_API_BASE_URL TURNKEY_API_PUBLIC_KEY TURNKEY_API_PRIVATE_KEY \
+                   TURNKEY_ORGANIZATION_ID TURNKEY_USER_ID SWITCHBOARD_QUEUE \
+                   IRYS_UPLOAD_KEY SETTLEMENT_SIGNER_KEYPAIR_B64; do
+            if [ -z "${!n:-}" ]; then daemon_missing="$daemon_missing $n"; fi
+          done
+          review_missing=""
+          if [ -z "${SETTLEMENT_SIGNER_KEYPAIR_B64:-}" ]; then
+            review_missing=" SETTLEMENT_SIGNER_KEYPAIR_B64"
+          fi
+
+          daemon=true
+          if [ -n "$daemon_missing" ]; then
+            if [ "$DEV_CREDS" = "true" ]; then
+              daemon=false
+              echo "::warning::NOT DEPLOYING THE SETTLEMENT DAEMON — no pool will be revealed, scored, committed or paid by this deployment (missing:$daemon_missing)"
+            else
+              missing="$missing$daemon_missing"
+            fi
+          fi
+          review=true
+          if [ -n "$review_missing" ]; then
+            if [ "$DEV_CREDS" = "true" ]; then
+              review=false
+              echo "::warning::NOT DEPLOYING THE REVIEW SERVICE — a flagged prize cannot be cleared or released by this deployment (missing:$review_missing)"
+            else
+              missing="$missing$review_missing"
+            fi
+          fi
+
           if [ -n "$missing" ]; then
             echo "::error::missing repository secret(s):$missing"
             echo "::error::Set them under Settings → Secrets and variables → Actions (docs/deploy-backend.md),"
             echo "::error::or re-run with allow_dev_credentials checked for a pre-C2 development deploy."
+            echo "::error::Nothing was deployed."
             exit 1
-          fi
-
-          # Optional services: deployed when complete, skipped loudly when not.
-          daemon=true
-          for n in TURNKEY_API_BASE_URL TURNKEY_API_PUBLIC_KEY TURNKEY_API_PRIVATE_KEY \
-                   TURNKEY_ORGANIZATION_ID TURNKEY_USER_ID SWITCHBOARD_QUEUE \
-                   IRYS_UPLOAD_KEY SETTLEMENT_SIGNER_KEYPAIR_B64; do
-            if [ -z "${!n:-}" ]; then daemon=false; echo "daemon: waiting on $n"; fi
-          done
-          review=true
-          if [ -z "${SETTLEMENT_SIGNER_KEYPAIR_B64:-}" ]; then
-            review=false; echo "review: waiting on SETTLEMENT_SIGNER_KEYPAIR_B64"
           fi
 
           echo "deploy_daemon=$daemon" >> "$GITHUB_OUTPUT"
           echo "deploy_review=$review" >> "$GITHUB_OUTPUT"
+          # What a person reads at the top of the run page, rather than in the
+          # middle of a step's log. `shipped=2/4` is the fact E-05 says must
+          # not be silent.
+          # Explicit ifs, not `&&` lists: a trailing `&&` that evaluates false
+          # returns non-zero and fails the step under `set -e` — the same
+          # shape that let a broken smoke check pass on 2026-08-29.
+          shipped=2
+          if [ "$daemon" = "true" ]; then shipped=$((shipped + 1)); fi
+          if [ "$review" = "true" ]; then shipped=$((shipped + 1)); fi
+          echo "shipped_count=$shipped" >> "$GITHUB_OUTPUT"
           echo "signer_mode=$signer_mode" >> "$GITHUB_OUTPUT"
           echo "geo_mode=$geo_mode" >> "$GITHUB_OUTPUT"
           # Refuse a mainnet-looking RPC outright: this workflow stages
@@ -431,7 +490,7 @@ jobs:
           echo "INGEST_BASE=https://$INDEXER_APP.fly.dev:8080" >> "$GITHUB_ENV"
 
           flyctl secrets set --app "$INDEXER_APP" --stage \
-            BLOTTO_DATABASE_URL="${{ secrets.BLOTTO_DATABASE_URL }}" \
+            BLOTTO_DATABASE_URL="$BLOTTO_DATABASE_URL" \
             BLOTTO_CLUSTER="devnet" \
             BLOTTO_RPC_URL="$DEVNET_RPC" \
             BLOTTO_PROGRAM_ID="$PROGRAM_ID" \
@@ -476,7 +535,7 @@ jobs:
       - name: Stage packet secrets
         run: |
           flyctl secrets set --app "$PACKET_APP" --stage \
-            BLOTTO_DATABASE_URL="${{ secrets.BLOTTO_DATABASE_URL }}" \
+            BLOTTO_DATABASE_URL="$BLOTTO_DATABASE_URL" \
             BLOTTO_API_CORS_ORIGINS="$APP_ORIGIN" \
             BLOTTO_API_RATE_LIMIT_ENABLED="1" \
             BLOTTO_API_SECURITY_HEADERS_ENABLED="1"
@@ -517,9 +576,21 @@ jobs:
               GEO_VENDOR_API_KEY="$GEO_VENDOR_API_KEY"
             # A lingering stub goes live the moment either vendor variable
             # empties — the exact silent failure this workflow exists to stop.
+            # Both halves are cleared: the opt-in alone is inert, but leaving
+            # it behind means one cleared vendor secret is all that stands
+            # between a paid deployment and the stub.
             flyctl secrets unset --app "$PACKET_APP" --stage GEO_STUB_COUNTRY || true
+            flyctl secrets unset --app "$PACKET_APP" --stage ALLOW_STUB_GEO || true
           else
-            flyctl secrets set --app "$PACKET_APP" --stage GEO_STUB_COUNTRY="GB"
+            # The service now REFUSES the stub without this opt-in (audit
+            # 2026-09-11, E-03 / C-31), exactly as it refuses the dev entry
+            # signer without ALLOW_DEV_ENTRY_SIGNER and the dev screener
+            # without ALLOW_STUB_SANCTIONS. Staged only on this deliberate
+            # development path — without it an allow_dev_credentials deploy
+            # ships a packet service that will not boot.
+            flyctl secrets set --app "$PACKET_APP" --stage \
+              GEO_STUB_COUNTRY="GB" \
+              ALLOW_STUB_GEO="1"
           fi
 
           # Sanctions screening (Phase 2 Stage B). The OFAC SDN mirror is a
@@ -548,7 +619,7 @@ jobs:
         if: steps.pre.outputs.deploy_daemon == 'true'
         run: |
           flyctl secrets set --app "$DAEMON_APP" --stage \
-            BLOTTO_DATABASE_URL="${{ secrets.BLOTTO_DATABASE_URL }}" \
+            BLOTTO_DATABASE_URL="$BLOTTO_DATABASE_URL" \
             BLOTTO_CLUSTER="devnet" \
             BLOTTO_RPC_URL="$DEVNET_RPC" \
             BLOTTO_PROGRAM_ID="$PROGRAM_ID" \
@@ -633,7 +704,7 @@ jobs:
           # must be allowlisted or the browser's decision and appeal POSTs
           # are refused at preflight (the old wildcard is gone).
           flyctl secrets set --app "$REVIEW_APP" --stage \
-            BLOTTO_DATABASE_URL="${{ secrets.BLOTTO_DATABASE_URL }}" \
+            BLOTTO_DATABASE_URL="$BLOTTO_DATABASE_URL" \
             BLOTTO_CLUSTER="devnet" \
             BLOTTO_RPC_URL="$DEVNET_RPC" \
             BLOTTO_PROGRAM_ID="$PROGRAM_ID" \
@@ -842,6 +913,63 @@ jobs:
           echo
           echo "Expected on a credentialed run: 'entry signer = TURNKEY', NO 'GEO STUB' line,"
           echo "and 'VRF = SWITCHBOARD On-Demand'. Anything else means a dev path is live."
+
+      # What did this run actually ship? (audit 2026-09-11, E-05.)
+      #
+      # The run page shows a green tick and a job name. Neither says whether
+      # four services or two were deployed, and the difference between them
+      # is whether anything settles a pool at all. This writes the answer to
+      # the run SUMMARY — the panel at the top of the run page, above the job
+      # list — so "we deployed" and "we deployed the daemon" stop being the
+      # same sentence.
+      #
+      # `always()`, because a failed run's answer ("these two were updated
+      # before it died") is the one someone needs most, and bounded for the
+      # reason the step above is: an unbounded always() step held the deploy
+      # concurrency group for 85 minutes on 2026-09-08.
+      - name: What this run shipped
+        if: always()
+        timeout-minutes: 2
+        env:
+          SHIPPED: ${{ steps.pre.outputs.shipped_count }}
+          DAEMON: ${{ steps.pre.outputs.deploy_daemon }}
+          REVIEW: ${{ steps.pre.outputs.deploy_review }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          if [ -z "${SHIPPED:-}" ]; then
+            echo "### deploy-backend: stopped before preflight decided anything" >> "$GITHUB_STEP_SUMMARY"
+            echo "No service was deployed." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          # On a failed run the table is the PLAN, not the outcome: the job
+          # may have died at the first deploy step. Saying "shipped" there
+          # would be the same kind of false green this step exists to remove.
+          if [ "$JOB_STATUS" = "success" ]; then
+            heading="deploy-backend shipped ${SHIPPED} of 4 services"
+          else
+            heading="deploy-backend did NOT finish (${JOB_STATUS}) — it planned ${SHIPPED} of 4 services, and an unknown number of them were updated before it stopped"
+          fi
+          {
+            echo "### ${heading}"
+            echo
+            echo "| service | in this deploy |"
+            echo "|---|---|"
+            echo "| indexer | yes |"
+            echo "| packet | yes |"
+            echo "| settlement daemon | $([ "$DAEMON" = "true" ] && echo yes || echo "**NO**") |"
+            echo "| review | $([ "$REVIEW" = "true" ] && echo yes || echo "**NO**") |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$SHIPPED" != "4" ]; then
+            {
+              echo
+              echo "A service marked **NO** was not deployed by this run: it is still"
+              echo "running whatever was deployed to it last, or nothing at all."
+              echo "Without the daemon no pool is revealed, scored, committed or paid;"
+              echo "without the review service a flagged prize cannot be cleared."
+              echo "This is only reachable with \`allow_dev_credentials\` ticked."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning::this deploy shipped ${SHIPPED} of 4 services — see the run summary"
+          fi
 
   # Did the backend just ship against a program it no longer matches?
   # (audit 2026-09-11, E-16, second half.)

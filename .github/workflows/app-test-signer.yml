@@ -1,4 +1,5 @@
-# The automation signer must not exist in a deployable bundle (C7 / B-e).
+# The automation signer, and the signing-confirmation suppressor beside it,
+# must not exist in a deployable bundle (C7 / B-e, and audit B-53).
 #
 # Stage D 5.1 drives 64 automated entrants through the real front end, which
 # needs a keypair-backed signer injected at `window.__BLOTTO_TEST_SIGNER__`.
@@ -71,16 +72,22 @@ jobs:
 
       - run: npm ci --no-audit --no-fund
 
-      - name: Build as deployed (flag unset) — the injection must be ABSENT
+      - name: Build as deployed (flag unset) — both injections must be ABSENT
         run: |
           rm -rf .next
           npx next build
-          if grep -rq "__BLOTTO_TEST_SIGNER__" .next/static; then
-            echo "::error::A deployable bundle contains the automation signer's injection point. It admits a signer with no wallet and no Privy modal. Check next.config.ts still normalises NEXT_PUBLIC_ALLOW_TEST_SIGNER, and see app/src/wallet/auth-provider.tsx."
-            grep -rl "__BLOTTO_TEST_SIGNER__" .next/static
-            exit 1
-          fi
-          echo "absent from the deployable bundle, as required"
+          # Two globals, one flag. __BLOTTO_SIGN_NO_MODAL__ suppresses the
+          # embedded wallet's signing confirmation and shipped UNGATED in the
+          # production bundle until 2026-09-12 (audit 2026-09-11, B-53) — its
+          # sibling was gated and proven absent here while it was neither.
+          for global in __BLOTTO_TEST_SIGNER__ __BLOTTO_SIGN_NO_MODAL__; do
+            if grep -rq "$global" .next/static; then
+              echo "::error::A deployable bundle contains $global. Check next.config.ts still normalises NEXT_PUBLIC_ALLOW_TEST_SIGNER, and see app/src/wallet/auth-provider.tsx and app/src/wallet/signing-ui.ts."
+              grep -rl "$global" .next/static
+              exit 1
+            fi
+          done
+          echo "both absent from the deployable bundle, as required"
 
       - name: Build with the flag on — the injection must be PRESENT
         env:
@@ -88,6 +95,12 @@ jobs:
         run: |
           rm -rf .next
           npx next build
+          for global in __BLOTTO_TEST_SIGNER__ __BLOTTO_SIGN_NO_MODAL__; do
+            if ! grep -rq "$global" .next/static; then
+              echo "::error::With the flag ON, $global is missing, so the absence check above proves nothing about it — it would pass against any build, including one that leaked. Either the flag no longer enables that path, or the grep no longer matches it."
+              exit 1
+            fi
+          done
           if ! grep -rq "__BLOTTO_TEST_SIGNER__" .next/static; then
             echo "::error::With the flag ON the injection point is still missing, so the check above proves nothing — it would pass against any build, including one that leaked. Either the flag no longer enables the path, or the grep no longer matches it."
             exit 1

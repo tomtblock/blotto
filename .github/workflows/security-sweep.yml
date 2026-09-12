@@ -1,0 +1,243 @@
+# Dependency advisories — the lane that runs cargo-deny, cargo-audit and
+# npm's advisory check (audit 2026-09-11, findings B-50 / G-21 / G-24).
+#
+# Both Rust configurations have existed since extraction and have been kept
+# current by hand — `deny.toml` and `.cargo/audit.toml` carry the same
+# curated ignore list, each entry justified and re-verified against THIS
+# workspace's Cargo.lock. Neither tool was invoked by any workflow. Every
+# npm install in this repository passes `--no-audit`. So the ignore lists
+# were maintained for a check that never ran, and a newly published advisory
+# against anything we ship would have been noticed by nobody.
+#
+# ── BLOCKING OR ADVISORY? ───────────────────────────────────────────────────
+#
+# Both, split by WHOSE FAULT a red result is.
+#
+#   The RUST half BLOCKS. It can, honestly, because the condition for
+#   blocking is met: `deny.toml` and `.cargo/audit.toml` carry a triaged
+#   ignore list with the reachability finding recorded next to each entry, so
+#   a red result there always means a NEW finding. Both tools were run
+#   against this lockfile on 2026-09-12 before this lane was written:
+#   `cargo deny check advisories` says "advisories ok" and `cargo audit`
+#   reports nothing, so the lane is green the day it lands. (It does warn
+#   that two ignore entries — RUSTSEC-2026-0235 and RUSTSEC-2026-0190 — no
+#   longer match any crate. Stale ignores, worth removing from BOTH files in
+#   one change; they cost nothing today but an ignore that outlives its
+#   reason is exactly what .cargo/audit.toml's own header warns about.)
+#
+#   The NPM half REPORTS and never fails. It cannot honestly block yet: the
+#   tree carries high-severity advisories today with no fix available, all of
+#   them inside ecosystem-pinned dependency trees we do not control —
+#   `bigint-buffer` reached through @solana/web3.js in the settlement
+#   daemon's Irys and Switchboard SDKs, and `axios` reached through the
+#   wallet SDKs in the web app. A lane that is red the day it lands is a lane
+#   people learn to skip, and that is how `--no-audit` ended up on every
+#   install in the first place.
+#
+#   What it would take to make the npm half block: triage the current set
+#   into a committed baseline of advisory ids, each with its reachability
+#   finding written next to it, exactly as .cargo/audit.toml does for Rust —
+#   and then fail on any id NOT in that baseline. That is a piece of work
+#   with a named owner, not something to fake with an untriaged ignore list.
+#   Until it happens the npm output is printed into the run summary, where a
+#   person can see it, rather than into an exit code nobody acts on.
+#
+# On the daily schedule nothing blocks a DEPLOY at all, and the mechanism is
+# deliberately minimal: this workflow is simply not part of the deploy gate.
+# scripts/ci-gate.sh requires ci-fast to be green and on-chain not to be red,
+# and names both; it does not consult this lane, so a red sweep cannot stop a
+# deploy. The schedule is how an advisory published overnight gets noticed
+# without stopping every unrelated change in the repository until someone
+# triages it. Watch it the way backend-watch is watched — Actions failure
+# notifications.
+#
+# It is a separate WORKFLOW, not a job inside ci-fast, for the reason the
+# audit gives: a red advisory must not sit in the same run as a red test,
+# where it competes for attention with a failure someone can actually fix
+# now. And the two halves below are separate JOBS so a Rust advisory and an
+# npm one are reported independently rather than one hiding the other.
+#
+# ── VERSIONS ────────────────────────────────────────────────────────────────
+#
+# The tools are pinned. An advisory lane that silently changes its own
+# judgement between runs is worse than none: "it went red and nothing
+# changed" is unanswerable. Bumping a pin is a change like any other, with
+# the red run it may cause attached to it.
+
+name: security-sweep
+
+permissions:
+  contents: read
+
+on:
+  schedule:
+    # Daily, off the hour. Hosted runners queue at :00 and this lane is never
+    # urgent.
+    - cron: '23 5 * * *'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'Cargo.lock'
+      - 'Cargo.toml'
+      - 'deny.toml'
+      - '.cargo/audit.toml'
+      - '**/package-lock.json'
+      - '**/package.json'
+      - '.github/workflows/security-sweep.yml'
+
+concurrency:
+  group: security-sweep-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_DENY_VERSION: 0.20.2
+  CARGO_AUDIT_VERSION: 0.22.2
+
+jobs:
+  rust-advisories:
+    name: cargo-deny + cargo-audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Same pin as ci-fast's rust lane: a toolchain bump should never be the
+      # reason an advisory result changed.
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable branch, 2026-08
+        with:
+          toolchain: 1.95.0
+
+      # Both tools take minutes to build from source, and neither changes
+      # between runs. Keyed on the versions themselves, so a version bump
+      # misses the cache exactly once.
+      - name: Cache the advisory tools
+        id: cache-tools
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cargo/bin/cargo-deny
+            ~/.cargo/bin/cargo-audit
+          key: advisory-tools-${{ runner.os }}-deny${{ env.CARGO_DENY_VERSION }}-audit${{ env.CARGO_AUDIT_VERSION }}
+
+      - name: Install cargo-deny and cargo-audit (pinned)
+        if: steps.cache-tools.outputs.cache-hit != 'true'
+        run: |
+          cargo install cargo-deny@${CARGO_DENY_VERSION} --locked
+          cargo install cargo-audit@${CARGO_AUDIT_VERSION} --locked
+
+      # BOTH tools run, and the verdict is taken at the end. Stopping at the
+      # first failure would report one tool's findings and hide the other's,
+      # which is the same fault `--no-fail-fast` fixed in the on-chain lane.
+      #
+      # Scope is `advisories` only, as deny.toml's own header states: a
+      # licence/bans/sources policy is a separate decision and is not gated
+      # here. cargo-audit reads .cargo/audit.toml, which carries the same
+      # ignore list with the reachability finding recorded next to each
+      # entry — so a red result from either tool always means a NEW finding.
+      - name: cargo deny check advisories
+        id: deny
+        continue-on-error: true
+        run: cargo deny check advisories
+
+      - name: cargo audit
+        id: audit
+        continue-on-error: true
+        run: cargo audit
+
+      - name: Verdict
+        run: |
+          deny='${{ steps.deny.outcome }}'
+          audit='${{ steps.audit.outcome }}'
+          echo "cargo-deny : $deny"
+          echo "cargo-audit: $audit"
+          if [ "$deny" = "success" ] && [ "$audit" = "success" ]; then
+            echo "no new advisory against anything in Cargo.lock"
+            exit 0
+          fi
+          echo "::error::a NEW dependency advisory — see the two steps above for the RUSTSEC id"
+          echo "::error::Triage it: if it is reachable from the program or a service, move the"
+          echo "::error::dependency. If it is not, add the id to BOTH deny.toml and"
+          echo "::error::.cargo/audit.toml with the reachability finding written next to it —"
+          echo "::error::the two lists must stay identical, and an ignore that outlives its"
+          echo "::error::reason is worse than no gate at all."
+          exit 1
+
+  npm-advisories:
+    name: npm advisories
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v4.4.0
+        with:
+          node-version: 20
+
+      # `npm audit` reads the lockfile and asks the registry; it does not
+      # need node_modules, so nothing is installed here and the job is a
+      # minute rather than ten.
+      #
+      # TWO PASSES, NEITHER BLOCKING (see the header for why, and for what it
+      # would take to change that).
+      #
+      #   The first pass is `--omit=dev --audit-level=high`: the packages
+      #   actually installed into the four service images, at the severities
+      #   worth acting on. Its per-package result goes into the run summary,
+      #   so "which of our services ships a known-vulnerable dependency" is a
+      #   question with a visible answer rather than a buried one.
+      #
+      #   The second is the full tree including dev dependencies, printed in
+      #   collapsed groups. A vitest or typescript advisory is worth seeing
+      #   and is not in any image.
+      #
+      # The root is deliberately NOT audited here: it uses yarn (yarn.lock),
+      # `npm audit` there would want a package-lock.json it must not have,
+      # and the root holds no runtime dependency of any deployed service.
+      - name: npm audit (shipped dependencies — reported, never blocking)
+        run: |
+          flagged=""
+          {
+            echo "### npm advisories in shipped dependencies"
+            echo
+            echo "\`npm audit --omit=dev --audit-level=high\`, per package."
+            echo
+            echo "| package | high or critical |"
+            echo "|---|---|"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for dir in backend/_shared backend/scoring backend/class-digest backend/sealing \
+                     backend/sanctions backend/reveal backend/indexer backend/packet \
+                     backend/detection app tests/rehearsal; do
+            echo "::group::$dir"
+            if (cd "$dir" && npm audit --omit=dev --audit-level=high); then
+              echo "| $dir | none |" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "| $dir | **yes** — see the job log |" >> "$GITHUB_STEP_SUMMARY"
+              flagged="$flagged $dir"
+              echo "::warning::$dir ships a dependency with a high or critical advisory"
+            fi
+            echo "::endgroup::"
+          done
+          if [ -n "$flagged" ]; then
+            {
+              echo
+              echo "Known as of 2026-09-12 and not yet triaged: \`backend/reveal\` (bigint-buffer,"
+              echo "reached through @solana/web3.js, no fix available) and \`app\` (axios,"
+              echo "reached through the wallet SDKs). Anything else in the table above is NEW"
+              echo "and wants a look."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: npm audit (full tree, including dev — reported)
+        if: always()
+        run: |
+          for dir in backend/_shared backend/scoring backend/class-digest backend/sealing \
+                     backend/sanctions backend/reveal backend/indexer backend/packet \
+                     backend/detection app tests/rehearsal; do
+            echo "::group::$dir (dev included)"
+            (cd "$dir" && npm audit) || true
+            echo "::endgroup::"
+          done
