@@ -100,12 +100,18 @@ env:
   # repository with none of them set deploys exactly as before.
   #   Settings → Secrets and variables → Actions → Variables:
   #     BLOTTO_APP_ORIGINS   comma-separated https origins, no trailing slash
+  #     BLOTTO_MAX_UNREADABLE_ENTRIES   the daemon's unreadable-entry ceiling
+  #                                     (plan 2026-09-12 §2e — a founder number;
+  #                                     unset = the crank's devnet default)
   #   … → Secrets:
   #     BLOTTO_DEVNET_RPC_URL          a DEVNET Helius URL (also read by deployed-drift)
   #     BLOTTO_HELIUS_WEBHOOK_SECRET   the Auth-header value typed into the Helius webhook
+  #                                    (staged for the indexer AND, since 2026-09-12, the
+  #                                    daemon, which announces bundles with it — D-02)
   APP_ORIGIN: ${{ vars.BLOTTO_APP_ORIGINS || 'https://blotto-jade.vercel.app' }}
   DEVNET_RPC: ${{ secrets.BLOTTO_DEVNET_RPC_URL || 'https://api.devnet.solana.com' }}
   HELIUS_WEBHOOK_SECRET: ${{ secrets.BLOTTO_HELIUS_WEBHOOK_SECRET }}
+  UNREADABLE_CEILING: ${{ vars.BLOTTO_MAX_UNREADABLE_ENTRIES }}
   PROGRAM_ID: 5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17
 
 jobs:
@@ -460,6 +466,40 @@ jobs:
           # randomness at all. SWITCHBOARD_QUEUE is set above; make sure the
           # stub selector is not sitting alongside it.
           flyctl secrets unset --app "$DAEMON_APP" --stage RANDOMNESS_ACCOUNT || true
+
+          # The bundle announce (audit 2026-09-11, D-02). Until 2026-09-12
+          # neither variable was staged here, so every deployed daemon booted
+          # with "bundle announce OFF": it published each settled pool's
+          # bundle to Irys and told nobody where, and the verified-results
+          # archive — the results page's standings, /verify's auto-fetch —
+          # never filled. The URL is the indexer's webhook service (port
+          # 8080, deploy/fly/indexer.fly.toml); the secret is the one the
+          # indexer step stages above — one secret, one receiver.
+          if [ -n "$HELIUS_WEBHOOK_SECRET" ]; then
+            flyctl secrets set --app "$DAEMON_APP" --stage \
+              BLOTTO_INDEXER_ANNOUNCE_URL="https://$INDEXER_APP.fly.dev:8080/bundles" \
+              BLOTTO_HELIUS_WEBHOOK_SECRET="$HELIUS_WEBHOOK_SECRET"
+          else
+            # A generate-once indexer secret cannot be read back out of Fly,
+            # so the daemon cannot be given it: the announce stays OFF (the
+            # daemon warns at boot; the archive fills by indexer-backfill.yml's
+            # daily archive-backfill) and this run says so where a person
+            # reads it. A stale pair is cleared rather than left to 401.
+            echo "::warning::no BLOTTO_HELIUS_WEBHOOK_SECRET repository secret — the daemon cannot announce bundles; the archive fills only by the scheduled archive-backfill"
+            flyctl secrets unset --app "$DAEMON_APP" --stage BLOTTO_INDEXER_ANNOUNCE_URL BLOTTO_HELIUS_WEBHOOK_SECRET || true
+          fi
+
+          # The unreadable-entry ceiling (plan 2026-09-12 §2e) is a founder
+          # number kept as a repository VARIABLE, beside the app origins, so it
+          # changes without a code change. Unset = the crank's default on
+          # devnet (the daemon prints which); mainnet refuses to start without
+          # it (backend/reveal/src/startup.ts).
+          if [ -n "$UNREADABLE_CEILING" ]; then
+            flyctl secrets set --app "$DAEMON_APP" --stage \
+              BLOTTO_MAX_UNREADABLE_ENTRIES="$UNREADABLE_CEILING"
+          else
+            flyctl secrets unset --app "$DAEMON_APP" --stage BLOTTO_MAX_UNREADABLE_ENTRIES || true
+          fi
 
           # Sanctions screening at RESOLVING (Phase 2 Stage F), staged exactly
           # as the packet service's is at entry: the credential-free OFAC SDN

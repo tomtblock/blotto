@@ -67,6 +67,13 @@ export interface DaemonHealth {
    * read. Lamports, integer — no float touches a balance.
    */
   settlementLamports: bigint | null;
+  /**
+   * Whether the daemon tells the indexer where each settled pool's bundle
+   * is (startup.ts `announceVerdict`, audit 2026-09-11 D-02). Absent until
+   * decided during startup. Reported so `backend-status` shows an archive
+   * that will never fill on its own, rather than the log alone.
+   */
+  announce?: 'on' | 'off';
 }
 
 export function newDaemonHealth(startedAtMs: number = Date.now()): DaemonHealth {
@@ -104,6 +111,7 @@ export function healthPayload(
       uptimeMs,
       settlementSol:
         state.settlementLamports === null ? null : formatSol(state.settlementLamports),
+      bundleAnnounce: state.announce ?? null,
       ...(stuck
         ? {
             error: `still ${state.phase} after ${STARTUP_BUDGET_MS}ms — initialisation is stuck`,

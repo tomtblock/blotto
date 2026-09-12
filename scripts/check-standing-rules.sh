@@ -38,6 +38,19 @@
 #   must fail on each one — and then against the real tree. A gate whose
 #   grep quietly stopped matching would otherwise report a clean tree
 #   forever. Exit 2 means the gate is broken; exit 1 means the tree is.
+#
+# ADDED 2026-09-12 (audit 2026-09-11, finding A-34): check (i) enumerates
+# FUNCTIONS, not files. (b) and (e) allow-list the FILES that may call
+# `vault_debit(` / `platform_debit(`, so a second handler — or a private
+# helper — added to escrow.rs, pay_prizes.rs, refund.rs, open_pool.rs or
+# treasury.rs that called either helper would have passed CI unseen. (i)
+# splits every instructions/*.rs into its top-level fn bodies (the extractor
+# check (h) already used for handle_forfeit_escrow, generalised) and requires
+# every body that calls either helper to be one of the seven named `file:fn`
+# pairs. A call site the extractor cannot place inside any body (an impl
+# block, a macro, a const) is itself a failure: the per-file grep count must
+# equal the count attributed to bodies, so the check can never skip a call
+# site in silence. (b) and (e) stay as the cheap first layer.
 
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -164,6 +177,83 @@ run_checks() {
       fail=1
     fi
   fi
+  # (i) 2026-09-12 (audit 2026-09-11 A-34): (b) and (e) enumerate FILES, so a
+  # second handler or a private helper added to an already-listed file could
+  # call either debit helper unseen. This check enumerates FUNCTIONS. Every
+  # instructions/*.rs is split into its top-level fn bodies: a body starts at
+  # a column-0 `fn NAME` / `pub fn NAME` / `pub(crate) fn NAME` line and ends
+  # at the next column-0 `}` (the extractor (h) uses for handle_forfeit_escrow,
+  # generalised; a fn whose signature line also closes its body — `{ .. }` on
+  # one line — is a complete body on its own). Every body that calls
+  # `vault_debit(` or `platform_debit(` must be one of the named `file:fn`
+  # pairs below, and every call site in the file must sit inside SOME body:
+  # the per-file grep count is compared with the count attributed to bodies,
+  # and any call site the extractor could not place (an impl block, a macro,
+  # a const) fails rather than slipping past. Adding an exit means adding a
+  # pair here, in the open, next to the file-level lists above.
+  local fn_allowed_vault='escrow.rs:handle_release_escrow escrow.rs:handle_pay_next_place pay_prizes.rs:handle_pay_prizes refund.rs:handle_trigger_refund'
+  local fn_allowed_platform='open_pool.rs:handle_open_pool refund.rs:handle_refund treasury.rs:handle_withdraw_platform'
+  local helper fn_allowed total attributed outside kind arg count
+  for f in "$PROG"/instructions/*.rs; do
+    [ -f "$f" ] || continue
+    base="$(basename "$f")"
+    for helper in vault_debit platform_debit; do
+      total="$(grep -o "${helper}(" "$f" 2>/dev/null | wc -l | tr -d '[:space:]')"
+      [ "$total" -eq 0 ] && continue
+      case "$helper" in
+        vault_debit) fn_allowed="$fn_allowed_vault" ;;
+        *)           fn_allowed="$fn_allowed_platform" ;;
+      esac
+      attributed=0
+      outside=""
+      # Records from the extractor: `FN <name> <count>` per top-level body
+      # that contains the helper; `OUT <line> <count>` per call site that is
+      # inside no body at all.
+      while read -r kind arg count; do
+        case "$kind" in
+          FN)
+            attributed=$((attributed + count))
+            case " ${fn_allowed} " in
+              *" ${base}:${arg} "*) ;;
+              *)
+                echo "standing-rule 6(i) FAILED: ${helper} called from unlisted function: ${f}:${arg}"
+                fail=1
+                ;;
+            esac
+            ;;
+          OUT) outside="${outside}${outside:+,}${arg}" ;;
+        esac
+      done <<< "$(awk -v needle="${helper}(" '
+        function count(s,   n, i) {
+          n = 0
+          while ((i = index(s, needle)) > 0) { n++; s = substr(s, i + length(needle)) }
+          return n
+        }
+        /^(pub(\(crate\))? +)?fn +[A-Za-z_][A-Za-z0-9_]*[<(]/ {
+          # A start while a body is still open closes the open one: a missed
+          # closing brace must never let one body swallow the next.
+          if (on && cnt > 0) print "FN", cur, cnt
+          cur = $0
+          sub(/^(pub(\(crate\))? +)?fn +/, "", cur)
+          sub(/[<(].*$/, "", cur)
+          cnt = count($0)
+          if ($0 ~ /\{.*\}[ \t]*$/) { if (cnt > 0) print "FN", cur, cnt; on = 0 } else { on = 1 }
+          next
+        }
+        on {
+          cnt += count($0)
+          if ($0 ~ /^\}/) { if (cnt > 0) print "FN", cur, cnt; on = 0 }
+          next
+        }
+        { n = count($0); if (n > 0) print "OUT", NR, n }
+        END { if (on && cnt > 0) print "FN", cur, cnt }
+      ' "$f")"
+      if [ "$attributed" -ne "$total" ]; then
+        echo "standing-rule 6(i) FAILED: ${helper} called outside any top-level fn body: ${f} (${total} call sites, ${attributed} inside fn bodies; unplaced at line(s) ${outside:-?})"
+        fail=1
+      fi
+    done
+  done
   # (g) no pot arithmetic: a pot is a fixed value copied at open, never
   # derived from entries or balances. Fail on any arithmetic combining
   # pot_lamports with entry counts, entry prices, or live balances.
@@ -201,13 +291,28 @@ printf 'let pot = pool.pot_lamports * pool.entrants as u64;\n' >> "$P/instructio
 printf 'vault_debit(&ctx.accounts.vault.to_account_info(), 1)?;\n' > "$P/instructions/register.rs"
 # 6(h): escrow naming the treasury and a forfeit that moves lamports
 printf 'use PLATFORM_SEED;\npub fn handle_forfeit_escrow() -> Result<()> {\n    vault_debit(&v, 1)?;\n    Ok(())\n}\n' > "$P/instructions/escrow.rs"
+# 6(i): a SECOND handler in an allowed file, and a private helper plus an
+# impl-block method in another allowed file — invisible to the file-level
+# lists (b)/(e); the A-34 gap.
+printf 'pub fn handle_pay_bonus(ctx: Context<PayBonus>, _pool_id: u64) -> Result<()> {\n    vault_debit(&v, 1)?;\n    Ok(())\n}\n' >> "$P/instructions/pay_prizes.rs"
+printf 'fn sweep(a: &AccountInfo, n: u64) -> Result<()> {\n    platform_debit(a, n)?;\n    Ok(())\n}\nimpl Sweeper {\n    fn drain(&self) -> Result<()> {\n        platform_debit(&self.a, 1)?;\n        Ok(())\n    }\n}\n' > "$P/instructions/treasury.rs"
 touch "$P/vault.rs"
 
 probe_out="$(run_checks "$probe" 2>&1 || true)"
 selftest_failures=""
-for expected in '5(class)' '6(a)' '6(b)' '6(c)' '6(d)' '6(e)' '6(f)' '6(g)' '6(h)'; do
+for expected in '5(class)' '6(a)' '6(b)' '6(c)' '6(d)' '6(e)' '6(f)' '6(g)' '6(h)' '6(i)'; do
   if ! printf '%s\n' "$probe_out" | grep -qF "standing-rule ${expected} FAILED"; then
     selftest_failures="${selftest_failures}${selftest_failures:+, }${expected}"
+  fi
+done
+# 6(i) must name the offender by FUNCTION inside a file that (b)/(e) allow —
+# the A-34 gap — and must refuse a call site it cannot place in any fn body.
+for expected in \
+  '6(i):handler-in-allowed-file=vault_debit called from unlisted function: .*/pay_prizes\.rs:handle_pay_bonus$' \
+  '6(i):private-helper=platform_debit called from unlisted function: .*/treasury\.rs:sweep$' \
+  '6(i):outside-fn-body=platform_debit called outside any top-level fn body: .*/treasury\.rs \(2 call sites, 1 inside'; do
+  if ! printf '%s\n' "$probe_out" | grep -qE "standing-rule 6\(i\) FAILED: ${expected#*=}"; then
+    selftest_failures="${selftest_failures}${selftest_failures:+, }${expected%%=*}"
   fi
 done
 # And the failure mode this rewrite exists for: no program source is a

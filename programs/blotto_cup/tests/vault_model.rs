@@ -3,15 +3,26 @@
 //!
 //! A model of the program's money flows is driven through 10k random
 //! instruction sequences. The model calls the SAME arithmetic the handlers
-//! call (`prize_math`), and mirrors each handler's preconditions; after every
-//! step it asserts the two-wallet ledger identities:
+//! call (`prize_math`, `vault::rent_safe`), and mirrors each handler's
+//! preconditions; after every step it asserts the two-wallet ledger
+//! identities:
 //!
 //! ```text
-//! vault    == Σ pots funded − Σ paid − Σ released − Σ next-place payouts
-//!             − Σ pot returns (refund fork)
+//! vaults   == Σ pots funded + Σ cushions funded − Σ paid − Σ released
+//!             − Σ next-place payouts − Σ pot returns (refund fork)
 //! platform == Σ deposits + Σ entry payments + Σ pot returns
-//!             − Σ pots funded − Σ refunds − Σ withdrawals
+//!             − Σ pots funded − Σ cushions funded − Σ refunds − Σ withdrawals
 //! ```
+//!
+//! `vaults` is every prize vault the run has opened: the live pool's plus
+//! what the settled ones still hold. Since 2026-09-12 (audit B-03)
+//! `open_pool` funds a vault with its pot PLUS a rent cushion
+//! (`VAULT_RENT_CUSHION`, the rent-exempt minimum for a zero-data account),
+//! taken from the treasury; the pot leaves by the four exits and the cushion
+//! never does, so a settled vault holds exactly its cushion for ever. The
+//! model has one vault slot, so when it moves on to the next pool it carries
+//! the old vault's balance into `retired_vaults` and the identity keeps
+//! counting it.
 //!
 //! Note what is NOT in either identity since the 2026-09-07 ruling: a
 //! forfeit. `forfeit_escrow` moves nothing — the share stays in its pool's
@@ -25,12 +36,19 @@
 //! refundable` no program action takes it below (prompt v2 PR0 — deposits
 //! are the only way UP to the floor, so the property is armed by the first
 //! deposit that reaches it and holds from then on); `platform_reserved`
-//! tracks exactly the live pool's pot; a below-floor withdrawal is refused
-//! with nothing moved. Terminal conditions: a fully settled pool leaves its
-//! vault holding exactly the outstanding escrow (zero once escrow settles —
-//! released or paid onward), and a fully refunded pool leaves the vault at zero
-//! with every entrant repaid their exact price — R7's "full refund" is
-//! exact, not approximate.
+//! tracks exactly the live pool's pot (the pot alone — never the cushion);
+//! the idle-tier reserve prices an open at what it costs, pot plus cushion;
+//! a below-floor withdrawal is refused with nothing moved. Every lamport
+//! movement passes the runtime's rent-state rule (`vault::rent_safe`: a
+//! zero-data account ends a transaction empty or rent-exempt, never between)
+//! — on the vault as an ASSERTION, because the cushion exists precisely so
+//! that no reachable path can trip it; on the treasury as a mirrored
+//! REFUSAL, because there it can (see `platform_debit` and `fund`). Terminal
+//! conditions: a fully settled pool leaves its vault holding exactly the
+//! outstanding escrow plus the cushion (the cushion alone once escrow
+//! settles — released or paid onward), and a fully refunded pool leaves the
+//! vault at exactly the cushion with every entrant repaid their exact price
+//! — R7's "full refund" is exact, not approximate.
 //!
 //! Pools are SEQUENTIAL (D-A1 revised): the model re-opens a new pool only
 //! after the previous reached `Paid` or `Closed`, mirroring
@@ -54,10 +72,23 @@
 
 use blotto_cup::constants::{CAPACITY, MIN_SEATS, TIER_ENTRY_LAMPORTS, TIER_POT_LAMPORTS};
 use blotto_cup::prize_math::split_group;
+use blotto_cup::vault::rent_safe;
 use proptest::prelude::*;
 
 const CAP: usize = CAPACITY as usize;
 const MIN: usize = MIN_SEATS as usize;
+
+/// The rent cushion every prize vault is funded with on top of its pot
+/// (2026-09-12, audit B-03): the rent-exempt minimum for a ZERO-DATA
+/// account, which the program reads live as `Rent::get()?.minimum_balance(0)`
+/// (`vault::rent_floor`). On the runtime's default rent schedule that is
+/// 3_480 lamports per byte-year × 2 years' exemption threshold × (128 bytes
+/// of per-account overhead + 0 bytes of data) = 890_880 lamports — the
+/// figure `tests/litesvm/src/lib.rs::VAULT_RENT_CUSHION` proved against the
+/// compiled program and `vault.rs`'s own unit tests reason with. The model
+/// pins it: it has no sysvar, and its arithmetic must match the runtime's
+/// to the lamport rather than track it.
+const VAULT_RENT_CUSHION: u64 = 890_880;
 
 /// Mirror of `PoolState` — the model tracks the same machine.
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -119,6 +150,10 @@ struct Model {
     opened: bool,
     entrants: usize,
     vault: u128,
+    /// What the vaults of the pools this single slot has moved past still
+    /// hold — on-chain each pool has its OWN vault, and a settled one keeps
+    /// its cushion for ever; the ledger identity counts them here.
+    retired_vaults: u128,
     /// Bit per SEAT (D3-B), mirroring the program.
     paid_mask: u64,
     /// The committed payout list: (seat, amount), seat-sorted. Built by
@@ -131,6 +166,8 @@ struct Model {
     total_deposits: u128,
     total_entries_in: u128,
     total_pots_funded: u128,
+    /// One cushion per pool opened — treasury out, vault in, never back.
+    total_cushions_funded: u128,
     total_pot_returns: u128,
     total_paid: u128,
     total_refunded: u128,
@@ -154,6 +191,7 @@ impl Model {
             opened: false,
             entrants: 0,
             vault: 0,
+            retired_vaults: 0,
             paid_mask: 0,
             committed: Vec::new(),
             kyc_above,
@@ -161,6 +199,7 @@ impl Model {
             total_deposits: 0,
             total_entries_in: 0,
             total_pots_funded: 0,
+            total_cushions_funded: 0,
             total_pot_returns: 0,
             total_paid: 0,
             total_refunded: 0,
@@ -171,36 +210,80 @@ impl Model {
         }
     }
 
-    /// The single tier's idle reserve: `reserve_pots (1) × pot` when the tier
-    /// has no live pool, excluding the tier being opened when asked
-    /// (mirrors `idle_tier_reserve`'s exclude parameter).
+    /// The single tier's idle reserve: `reserve_pots (1) × (pot + cushion)`
+    /// when the tier has no live pool, excluding the tier being opened when
+    /// asked (mirrors `idle_tier_reserve`'s exclude parameter). A reserved
+    /// pot is an OPENABLE pot, and an open costs the pot plus the cushion
+    /// (treasury.rs, 2026-09-12).
     ///
-    /// PHASE-N-REVIEW (2026-09-12): the program now funds each vault with its
-    /// pot PLUS a rent cushion and counts that cushion in the reserve; this
-    /// model still moves the pot alone. The model's money identities and its
-    /// "vault ends at zero" assertions all assume a cushion-free vault, so a
-    /// faithful update touches a dozen of them and is deferred to its own
-    /// change rather than folded into a CI fix. The cushion is exercised by
-    /// the program's unit tests and tests/litesvm/tests/vault_dust.rs.
+    /// 2026-09-12: the model carries the cushion everywhere the program does
+    /// — the funding, this reserve, both ledger identities, the terminal
+    /// balances, and the rent-state rule on every lamport movement.
     fn idle_reserve(&self, exclude_self: bool) -> u128 {
         let live = self.opened && !matches!(self.state, St::Paid | St::Closed);
         if live || exclude_self {
             0
         } else {
-            self.pot as u128
+            self.pot as u128 + VAULT_RENT_CUSHION as u128
         }
     }
 
-    /// `fund_platform_wallet` — permissionless deposit.
+    /// `vault::vault_debit` — THE vault exit, with its rent-state guard
+    /// (`assert_rent_safe`): the post-balance must be zero or at least the
+    /// cushion, or the program refuses with `WouldStrandRentBalance`. The
+    /// cushion exists so that guard can never fire on a reachable path — a
+    /// vault that cannot land its last payment is the B-03 freeze — so the
+    /// model does not mirror a refusal here, it FAILS on one.
+    fn vault_debit(&mut self, amount: u128, what: &str) {
+        let post = self
+            .vault
+            .checked_sub(amount)
+            .unwrap_or_else(|| panic!("vault underflow at {what}"));
+        assert!(
+            rent_ok(post),
+            "WouldStrandRentBalance at {what}: the vault would end at {post}, rent-paying — the cushion failed"
+        );
+        self.vault = post;
+    }
+
+    /// `vault::platform_debit` — the treasury's exit, under the same guard.
+    /// Here a refusal IS reachable: with `min_platform` at zero the floor lets
+    /// the treasury run down to dust, and a debit that would leave
+    /// `0 < balance < cushion` is refused with nothing moved — the program's
+    /// designed answer, so the model mirrors it (`false`; the caller's
+    /// transaction reverts). An underflow is a floor failure and fails loudly.
+    fn platform_debit(&mut self, amount: u128, what: &str) -> bool {
+        let post = self
+            .platform
+            .checked_sub(amount)
+            .unwrap_or_else(|| panic!("treasury underflow at {what}"));
+        if !rent_ok(post) {
+            return false; // WouldStrandRentBalance
+        }
+        self.platform = post;
+        true
+    }
+
+    /// `fund_platform_wallet` — permissionless deposit. The program refuses
+    /// only zero; the RUNTIME refuses a credit that would leave the treasury
+    /// rent-paying (an empty account cannot take on less than the rent-exempt
+    /// minimum — `Uninitialized → RentPaying` is a forbidden transition), and
+    /// the model mirrors that so the rent-state invariant holds after every
+    /// op the way it holds on-chain. Nothing moves on a refusal.
     fn fund(&mut self, amount: u64) {
         if amount == 0 {
             return; // handler rejects ZeroAmount
         }
-        self.platform += amount as u128;
+        let post = self.platform + amount as u128;
+        if !rent_ok(post) {
+            return; // InsufficientFundsForRent — the runtime's refusal
+        }
+        self.platform = post;
         self.total_deposits += amount as u128;
     }
 
-    /// `withdraw_platform` — refused below the floor, nothing moved.
+    /// `withdraw_platform` — refused below the floor, nothing moved; refused
+    /// likewise when the debit would leave the treasury rent-paying.
     fn withdraw(&mut self, amount: u64) {
         if amount == 0 {
             return;
@@ -209,13 +292,15 @@ impl Model {
         if self.platform < amount as u128 + floor {
             return; // handler rejects WithdrawBelowFloor; model must not move
         }
-        self.platform -= amount as u128;
+        if !self.platform_debit(amount as u128, "withdraw_platform") {
+            return; // WouldStrandRentBalance — nothing moved
+        }
         self.total_withdrawn += amount as u128;
     }
 
-    /// `open_pool` — sequential rule + treasury policy gate + pot funding.
-    /// (The keeper gate and the cooldown are clock and
-    /// key checks with no money in them — LiteSVM's job.)
+    /// `open_pool` — sequential rule + treasury policy gate + funding of the
+    /// pot AND the vault's rent cushion. (The keeper gate and the cooldown
+    /// are clock and key checks with no money in them — LiteSVM's job.)
     fn open_pool(&mut self) {
         let live = self.opened && !matches!(self.state, St::Paid | St::Closed);
         if live {
@@ -228,18 +313,39 @@ impl Model {
         if self.entries.iter().any(|e| e.escrow > 0) {
             return;
         }
+        let cushion = VAULT_RENT_CUSHION as u128;
+        let funding = self.pot as u128 + cushion;
         let available = self.platform.saturating_sub(self.refundable);
-        let needed = self.pot as u128 + self.min_platform as u128 + self.idle_reserve(true);
+        let needed = funding + self.min_platform as u128 + self.idle_reserve(true);
         if available < needed {
             return; // TreasuryShortfall
         }
-        self.platform -= self.pot as u128;
+        // Treasury → the new vault: pot plus cushion, one debit. The gate
+        // above does not keep the treasury clear of the rent band (at
+        // `min_platform` 0 it may leave dust), so the debit itself can refuse.
+        if !self.platform_debit(funding, "open_pool") {
+            return; // WouldStrandRentBalance — nothing moved
+        }
+        // The slot moves on: the previous pool's vault keeps what it holds —
+        // exactly its cushion, escrow being settled (guard above) and the
+        // terminal balances pinned by `assert_terminal` — for ever. Carry it
+        // so the ledger identity still counts every vault the run opened.
+        if self.opened {
+            assert_eq!(
+                self.vault, cushion,
+                "a settled pool's vault holds exactly its cushion when the tier moves on"
+            );
+            self.retired_vaults += self.vault;
+        }
         self.total_pots_funded += self.pot as u128;
+        self.total_cushions_funded += cushion;
+        // `platform_reserved` tracks the pot alone: the pot is what must be
+        // payable; the cushion is the vault's, never a prize.
         self.reserved += self.pot as u128;
         self.opened = true;
         self.state = St::Open;
         self.entrants = 0;
-        self.vault = self.pot as u128;
+        self.vault = funding;
         self.paid_mask = 0;
         self.committed.clear();
         self.entries = [EntryModel::default(); CAP];
@@ -250,8 +356,12 @@ impl Model {
         if !self.opened || self.state != St::Open || self.entrants >= CAP {
             return; // handler would revert
         }
-        // Belt-and-braces mirror: the vault must already hold the pot.
-        assert!(self.vault >= self.pot as u128, "pot missing at register");
+        // Belt-and-braces mirror: the vault must already hold the pot and
+        // its cushion.
+        assert!(
+            self.vault >= self.pot as u128 + VAULT_RENT_CUSHION as u128,
+            "pot or cushion missing at register"
+        );
         self.platform += self.price as u128;
         self.total_entries_in += self.price as u128;
         self.refundable += self.price as u128;
@@ -438,16 +548,14 @@ impl Model {
 
     fn pay_one(&mut self, seat: usize, amount: u64) {
         let kyc_above = self.kyc_above;
-        let e = &mut self.entries[seat];
-        let escrowed = e.flagged || (kyc_above > 0 && amount > kyc_above);
+        let escrowed = self.entries[seat].flagged || (kyc_above > 0 && amount > kyc_above);
         if escrowed {
-            e.escrow += amount;
+            self.entries[seat].escrow += amount;
         } else {
-            assert!(self.vault >= amount as u128, "vault underflow at pay");
-            self.vault -= amount as u128;
+            self.vault_debit(amount as u128, "pay_prizes");
             self.total_paid += amount as u128;
         }
-        e.settled = true;
+        self.entries[seat].settled = true;
         self.paid_mask |= 1u64 << seat;
     }
 
@@ -468,15 +576,14 @@ impl Model {
     /// seven-day auto-release move the same lamports; both are this.
     /// Refused once forfeited (`EscrowForfeitedAlready`).
     fn release(&mut self, i: usize) {
-        let e = &mut self.entries[i];
+        let e = self.entries[i];
         if !e.exists || e.escrow == 0 || e.forfeited {
             return;
         }
         let amount = e.escrow as u128;
-        assert!(self.vault >= amount, "vault underflow at release");
-        self.vault -= amount;
+        self.vault_debit(amount, "release_escrow");
         self.total_released += amount;
-        e.escrow = 0;
+        self.entries[i].escrow = 0;
     }
 
     /// `forfeit_escrow` (admin) — records the upheld flag. NO LAMPORTS MOVE
@@ -553,11 +660,7 @@ impl Model {
         let rem = total % n as u64;
         let portion = per + if to == lowest { rem } else { 0 };
         assert!(portion > 0 && portion <= f.escrow, "split arithmetic");
-        assert!(
-            self.vault >= portion as u128,
-            "vault underflow at next-place payout"
-        );
-        self.vault -= portion as u128;
+        self.vault_debit(portion as u128, "pay_next_place");
         self.total_next_place += portion as u128;
         let fm = &mut self.entries[from];
         if fm.split_group == 0 {
@@ -576,9 +679,11 @@ impl Model {
         t.settled = true;
     }
 
-    /// `trigger_refund` — the untouched pot returns to the treasury. D-E4:
-    /// only BELOW the minimum field; at or above it the pool seals instead,
-    /// so nobody can refund a playable pool out from under its entrants.
+    /// `trigger_refund` — the untouched pot returns to the treasury; the
+    /// cushion stays behind, so the vault ends rent-exempt rather than reaped.
+    /// D-E4: only BELOW the minimum field; at or above it the pool seals
+    /// instead, so nobody can refund a playable pool out from under its
+    /// entrants.
     fn trigger_refund(&mut self) {
         if !self.opened || self.state != St::Open {
             return;
@@ -593,21 +698,29 @@ impl Model {
             self.state = St::Refunding;
         }
         assert_eq!(
-            self.vault, self.pot as u128,
-            "refund-fork vault must hold exactly the untouched pot"
+            self.vault,
+            self.pot as u128 + VAULT_RENT_CUSHION as u128,
+            "refund-fork vault must hold exactly the untouched pot and its cushion"
         );
+        if self.pot > 0 {
+            self.vault_debit(self.pot as u128, "trigger_refund");
+        }
         self.platform += self.pot as u128;
         self.total_pot_returns += self.pot as u128;
-        self.vault = 0;
         self.reserved -= self.pot as u128;
     }
 
-    /// `refund` — the full price back from the treasury.
+    /// `refund` — the full price back from the treasury. The debit carries
+    /// the rent-state rule: with `min_platform` at zero the treasury can stand
+    /// at exactly `refundable + dust`, and then the LAST refund would leave it
+    /// rent-paying — the program refuses it, nothing moved, until a deposit
+    /// lifts the balance past the band. The floor still covers the entry;
+    /// only the landing waits.
     fn refund(&mut self, i: usize) {
         if !self.opened || self.state != St::Refunding {
             return;
         }
-        let e = &mut self.entries[i];
+        let e = self.entries[i];
         if !e.exists || e.refunded {
             return;
         }
@@ -615,10 +728,12 @@ impl Model {
             self.platform >= self.price as u128,
             "treasury underflow at refund — the refundable floor failed"
         );
-        self.platform -= self.price as u128;
+        if !self.platform_debit(self.price as u128, "refund") {
+            return; // WouldStrandRentBalance — nothing moved
+        }
         self.total_refunded += self.price as u128;
         self.refundable -= self.price as u128;
-        e.refunded = true;
+        self.entries[i].refunded = true;
         if self.entries.iter().all(|e| !e.exists || e.refunded) {
             self.state = St::Closed;
             self.pools_settled += 1;
@@ -627,9 +742,11 @@ impl Model {
 
     /// The two-wallet ledger identities, checked after EVERY operation.
     fn assert_invariant(&mut self) {
+        // Every vault the run opened: the live one plus what the settled
+        // ones still hold (their cushions, carried in `retired_vaults`).
         assert_eq!(
-            self.vault,
-            self.total_pots_funded
+            self.vault + self.retired_vaults,
+            self.total_pots_funded + self.total_cushions_funded
                 - self.total_paid
                 - self.total_released
                 - self.total_next_place
@@ -640,6 +757,7 @@ impl Model {
             self.platform,
             self.total_deposits + self.total_entries_in + self.total_pot_returns
                 - self.total_pots_funded
+                - self.total_cushions_funded
                 - self.total_refunded
                 - self.total_withdrawn,
             "platform ledger identity broken"
@@ -709,21 +827,37 @@ impl Model {
         }
         // Every balance the program would hold in a u64 fits one.
         assert!(self.vault <= u64::MAX as u128 && self.platform <= u64::MAX as u128);
+        // The runtime's rent-state rule as a standing property: both PDAs end
+        // every transaction empty or rent-exempt. On-chain the runtime refuses
+        // the transaction that would break it; here the debit helpers fail or
+        // refuse first, `fund` mirrors the credit-side refusal, and this pins
+        // that nothing else sneaks a balance into the band.
+        assert!(rent_ok(self.vault), "the vault is rent-paying");
+        assert!(rent_ok(self.platform), "the treasury is rent-paying");
     }
 
     fn assert_terminal(&self) {
         if !self.opened {
             return;
         }
+        let cushion = VAULT_RENT_CUSHION as u128;
         match self.state {
             St::Paid => {
                 let escrow_total: u128 = self.entries.iter().map(|e| e.escrow as u128).sum();
-                // A settled pool's vault holds exactly the outstanding escrow —
-                // zero once escrow settles. Nothing stranded, nothing minted.
-                assert_eq!(self.vault, escrow_total, "Paid pool strands lamports");
+                // A settled pool's vault holds exactly the outstanding escrow
+                // on top of its cushion — the cushion alone once escrow
+                // settles. Nothing stranded but the cushion, nothing minted.
+                assert_eq!(
+                    self.vault,
+                    escrow_total + cushion,
+                    "Paid pool strands lamports beyond its cushion"
+                );
             }
             St::Closed => {
-                assert_eq!(self.vault, 0, "Closed pool strands vault lamports");
+                assert_eq!(
+                    self.vault, cushion,
+                    "Closed pool's vault holds other than exactly its cushion"
+                );
             }
             _ => {}
         }
@@ -775,6 +909,13 @@ impl Model {
         }
         stuck
     }
+}
+
+/// `vault::rent_safe` over the ledger's width — the runtime's rule for a
+/// zero-data account's post-balance: empty or rent-exempt, never between.
+fn rent_ok(balance: u128) -> bool {
+    let balance = u64::try_from(balance).expect("a balance the program holds fits a u64");
+    rent_safe(balance, VAULT_RENT_CUSHION)
 }
 
 /// Greatest common divisor — for choosing a stride coprime to the field.
@@ -866,28 +1007,30 @@ proptest! {
         }
     }
 
-    /// The happy path, exhaustively: bootstrap the treasury, open (pot funds
-    /// BEFORE any entry), fill, commit, pay all committed seats, settle all
-    /// escrow (release the even holds, forfeit the odd ones and pay each
-    /// forfeited share to the next eligible seat) — the vault must end at
-    /// EXACTLY zero for every tier and every flag pattern, and the treasury
-    /// must hold the bootstrap + all 64 entry payments − the pot. No forfeit
-    /// term: forfeited money never reaches the treasury (ruling 4).
+    /// The happy path, exhaustively: bootstrap the treasury, open (pot and
+    /// cushion fund BEFORE any entry), fill, commit, pay all committed seats,
+    /// settle all escrow (release the even holds, forfeit the odd ones and
+    /// pay each forfeited share to the next eligible seat) — the vault must
+    /// end at EXACTLY its cushion for every tier and every flag pattern, and
+    /// the treasury must hold the bootstrap + all 64 entry payments − the
+    /// pool's funding (pot and cushion). No forfeit term: forfeited money
+    /// never reaches the treasury (ruling 4).
     #[test]
-    fn full_lifecycle_drains_the_vault_to_zero(
+    fn full_lifecycle_drains_the_vault_to_the_cushion(
         tier in 0usize..TIER_ENTRY_LAMPORTS.len(),
         seed in any::<u64>(),
         flagged_bits in any::<u16>(),
     ) {
         let price = TIER_ENTRY_LAMPORTS[tier];
         let pot = TIER_POT_LAMPORTS[tier];
+        let cushion = VAULT_RENT_CUSHION as u128;
         let mut m = Model::new(price, pot, 0, 0);
         // Policy at open (single tier, excluded as the one being opened):
-        // needs pot + min(0) + 0 available.
-        m.fund(pot);
+        // needs pot + cushion + min(0) + 0 available.
+        m.fund(pot + VAULT_RENT_CUSHION);
         m.open_pool();
         prop_assert_eq!(m.state, St::Open);
-        prop_assert_eq!(m.vault, pot as u128); // funded before any entry
+        prop_assert_eq!(m.vault, pot as u128 + cushion); // funded before any entry
         for _ in 0..CAP { m.register(); }
         prop_assert_eq!(m.state, St::Sealed);
         prop_assert_eq!(m.refundable, 0u128); // revenue at seal
@@ -911,7 +1054,8 @@ proptest! {
         let vault_before = m.vault;
         let stuck = m.settle_all_escrow();
         m.assert_invariant();
-        prop_assert_eq!(m.vault, stuck, "vault must end at exactly the claims no eligible seat can take");
+        prop_assert_eq!(m.vault, stuck + cushion,
+            "vault must end at exactly its cushion plus the claims no eligible seat can take");
         // A forfeited share is stuck only when NO eligible seat exists —
         // every seat flagged, which needs an everyone-tied commit with every
         // bit set. Then the claims are still in the vault, on their entries.
@@ -919,20 +1063,26 @@ proptest! {
             prop_assert!(m.entries.iter().all(|e| !e.exists || e.flagged));
         }
         prop_assert!(m.vault <= vault_before);
-        // Treasury conservation across the pool: bootstrap + entries − pot
-        // paid out. Forfeits contribute NOTHING (ruling 4).
-        let expected = pot as u128 + CAP as u128 * price as u128 - m.total_pots_funded;
+        // Treasury conservation across the pool: bootstrap + entries − the
+        // pool's funding (pot and cushion, both out at open; only the pot is
+        // ever paid onward). Forfeits contribute NOTHING (ruling 4).
+        let expected = (pot + VAULT_RENT_CUSHION) as u128 + CAP as u128 * price as u128
+            - m.total_pots_funded
+            - m.total_cushions_funded;
         prop_assert_eq!(m.platform, expected, "treasury drifted over the lifecycle");
+        prop_assert_eq!(m.platform, CAP as u128 * price as u128,
+            "the treasury keeps exactly the field's entries");
         prop_assert_eq!(m.total_paid + m.total_released + m.total_next_place + stuck, pot as u128,
             "the pot reached players (or stayed as their claims), never the operator");
     }
 
     /// The refund fork, exhaustively: any fill BELOW the minimum field (D-E4
     /// moved the threshold from 64 to `MIN_SEATS`), trigger (pot returns
-    /// whole), refund all — the vault ends at zero, every entrant is repaid
-    /// exactly their price, and the treasury ends exactly where it started.
-    /// A seal attempt on such a pool is a no-op: the fork is decided by the
-    /// field, and the two instructions reject each other's case.
+    /// whole), refund all — the vault ends at exactly its cushion, every
+    /// entrant is repaid exactly their price, and the treasury ends where it
+    /// started less the one cushion that stays in the vault. A seal attempt
+    /// on such a pool is a no-op: the fork is decided by the field, and the
+    /// two instructions reject each other's case.
     #[test]
     fn refund_fork_returns_every_lamport(
         tier in 0usize..TIER_ENTRY_LAMPORTS.len(),
@@ -941,7 +1091,7 @@ proptest! {
         let price = TIER_ENTRY_LAMPORTS[tier];
         let pot = TIER_POT_LAMPORTS[tier];
         let mut m = Model::new(price, pot, 0, 0);
-        m.fund(pot);
+        m.fund(pot + VAULT_RENT_CUSHION);
         m.open_pool();
         for _ in 0..fill { m.register(); }
         m.seal_at_deadline(); // FieldBelowMinimum — must not seal
@@ -952,21 +1102,23 @@ proptest! {
             m.assert_invariant();
         }
         prop_assert_eq!(m.state, St::Closed);
-        prop_assert_eq!(m.vault, 0u128, "refunded pool strands vault lamports");
+        prop_assert_eq!(m.vault, VAULT_RENT_CUSHION as u128,
+            "refunded pool's vault must hold exactly its cushion");
         prop_assert_eq!(m.refundable, 0u128, "refundable not fully released");
         prop_assert_eq!(m.total_refunded, fill as u128 * price as u128,
             "R7: every entrant repaid exactly the price");
-        // Pot out, pot back: the treasury holds exactly the bootstrap again.
+        // Pot out, pot back; the cushion stays in the vault: the treasury
+        // holds the bootstrap less exactly one cushion.
         prop_assert_eq!(m.platform, pot as u128, "treasury drifted over the refund fork");
     }
 
     /// The minimum-field path, exhaustively (D-E4): any fill in
     /// `MIN_SEATS..CAPACITY`, the deadline passes, the pool SEALS (a refund
     /// attempt is refused), the winner (or the tie for first) is paid the
-    /// whole pot, the vault ends at zero, and the treasury keeps the field's
-    /// entries minus the pot — strictly positive at every fill, which is the
-    /// §11.1 break-even property the constants promise, exercised rather than
-    /// asserted.
+    /// whole pot, the vault ends at exactly its cushion, and the treasury
+    /// keeps the field's entries minus the pot — strictly positive at every
+    /// fill, which is the §11.1 break-even property the constants promise,
+    /// exercised rather than asserted.
     #[test]
     fn min_field_seals_and_pays_the_winner(
         tier in 0usize..TIER_ENTRY_LAMPORTS.len(),
@@ -976,7 +1128,7 @@ proptest! {
         let price = TIER_ENTRY_LAMPORTS[tier];
         let pot = TIER_POT_LAMPORTS[tier];
         let mut m = Model::new(price, pot, 0, 0);
-        m.fund(pot);
+        m.fund(pot + VAULT_RENT_CUSHION);
         m.open_pool();
         for _ in 0..fill { m.register(); }
         prop_assert_eq!(m.state, St::Open, "below 64 the pool is still Open");
@@ -994,11 +1146,13 @@ proptest! {
         m.pay(&paid_seats);
         m.assert_invariant();
         prop_assert_eq!(m.state, St::Paid);
-        prop_assert_eq!(m.vault, 0u128, "the whole pot left the vault");
+        prop_assert_eq!(m.vault, VAULT_RENT_CUSHION as u128,
+            "the whole pot left the vault; the cushion stays");
         prop_assert_eq!(m.total_paid, pot as u128, "the winner set received exactly the pot");
-        // The bootstrap pot left the treasury at open, so what remains is the
-        // field's entries; break-even (§11.1) means they exceed the pot the
-        // treasury funded — at the 52-seat floor too, not only at 64.
+        // The bootstrap (pot and cushion) left the treasury at open, so what
+        // remains is the field's entries; break-even (§11.1) means they
+        // exceed the pot the treasury funded — at the 52-seat floor too, not
+        // only at 64.
         prop_assert_eq!(m.platform, fill as u128 * price as u128, "treasury holds the field's entries");
         prop_assert!(m.platform > pot as u128, "the minimum field clears the pot with margin");
     }
@@ -1008,7 +1162,8 @@ proptest! {
     /// tier, batches of twelve, with one batch that FAILS (it repeats an
     /// already-paid seat) and reverts whole — nothing moves, the pool stays
     /// Scored — then resumes. The pot is conserved to the lamport, the
-    /// indivisible remainder sits on the lowest seat, and the vault reaps.
+    /// indivisible remainder sits on the lowest seat, and the vault ends at
+    /// exactly its cushion.
     #[test]
     fn a_52_way_tie_settles_across_batches_and_survives_a_failed_batch(
         tier in 0usize..TIER_ENTRY_LAMPORTS.len(),
@@ -1017,7 +1172,7 @@ proptest! {
         let price = TIER_ENTRY_LAMPORTS[tier];
         let pot = TIER_POT_LAMPORTS[tier];
         let mut m = Model::new(price, pot, 0, 0);
-        m.fund(pot);
+        m.fund(pot + VAULT_RENT_CUSHION);
         m.open_pool();
         for _ in 0..MIN { m.register(); }
         m.seal_at_deadline();
@@ -1058,13 +1213,16 @@ proptest! {
             m.assert_invariant();
         }
         prop_assert_eq!(m.state, St::Paid);
-        prop_assert_eq!(m.vault, 0u128, "the vault reaps after the last batch");
+        prop_assert_eq!(m.vault, VAULT_RENT_CUSHION as u128,
+            "the vault holds exactly its cushion after the last batch");
         prop_assert_eq!(m.total_paid, pot as u128, "52 shares sum to the pot exactly");
     }
 
     /// `withdraw_platform`'s floor: a withdrawal that would dip below
     /// min + idle-tier reserve + refundable is refused with NOTHING moved,
-    /// and one exactly at the floor succeeds.
+    /// and one exactly at the floor succeeds. The idle reserve counts a
+    /// pool's whole funding — pot plus the vault's rent cushion — because a
+    /// reserved pot is an openable pot (treasury.rs, 2026-09-12).
     #[test]
     fn withdraw_floor_is_exact(
         tier in 0usize..TIER_ENTRY_LAMPORTS.len(),
@@ -1074,9 +1232,9 @@ proptest! {
         let price = TIER_ENTRY_LAMPORTS[tier];
         let pot = TIER_POT_LAMPORTS[tier];
         let mut m = Model::new(price, pot, min_platform, 0);
-        // No live pool → idle reserve = one pot (reserve_pots = 1).
-        let floor = min_platform as u128 + pot as u128;
-        m.fund(pot + min_platform + surplus);
+        // No live pool → idle reserve = one pot + one cushion (reserve_pots = 1).
+        let floor = min_platform as u128 + pot as u128 + VAULT_RENT_CUSHION as u128;
+        m.fund(pot + VAULT_RENT_CUSHION + min_platform + surplus);
         prop_assert_eq!(m.platform, floor + surplus as u128);
         // One lamport over the withdrawable surplus must be refused.
         m.withdraw(surplus + 1);
@@ -1100,8 +1258,9 @@ proptest! {
     ) {
         let price = TIER_ENTRY_LAMPORTS[tier];
         let pot = TIER_POT_LAMPORTS[tier];
+        let cushion = VAULT_RENT_CUSHION as u128;
         let mut m = Model::new(price, pot, 0, 0);
-        m.fund(pot);
+        m.fund(pot + VAULT_RENT_CUSHION);
         m.open_pool();
         for _ in 0..CAP { m.register(); }
         m.commit(seed);
@@ -1112,7 +1271,7 @@ proptest! {
         for &s in &paid_seats { m.forfeit(s); }
         let treasury_before = m.platform;
         let vault_before = m.vault;
-        prop_assert_eq!(vault_before, pot as u128, "every share is held");
+        prop_assert_eq!(vault_before, pot as u128 + cushion, "every share is held, on top of the cushion");
         // A forfeit moved nothing.
         m.assert_invariant();
         prop_assert_eq!(m.platform, treasury_before);
@@ -1120,13 +1279,97 @@ proptest! {
         for &s in &paid_seats { m.release(s); }
         prop_assert_eq!(m.vault, vault_before, "a forfeited share cannot be released");
         // Next-place payout pays the next eligible seat(s); the treasury is untouched
-        // throughout, and the vault reaps unless the whole field is flagged
-        // (a 64-way tie — then the claims stay in the vault).
+        // throughout, and the vault ends at its cushion unless the whole field
+        // is flagged (a 64-way tie — then the claims stay in the vault too).
         let stuck = m.settle_all_escrow();
         m.assert_invariant();
         prop_assert_eq!(m.platform, treasury_before, "a forfeit reached the treasury");
-        prop_assert_eq!(m.vault, stuck);
+        prop_assert_eq!(m.vault, stuck + cushion);
         prop_assert_eq!(m.total_next_place + stuck, pot as u128);
         prop_assert!(m.entries.iter().all(|e| !e.forfeited || e.next_place == 0));
+    }
+
+    /// The treasury's own rent band (`vault::platform_debit`, 2026-09-12):
+    /// with `min_platform` at zero the floor can let the treasury run down to
+    /// dust, and a debit that would leave `0 < balance < cushion` is refused
+    /// with NOTHING moved — the open, the withdrawal and the last refund
+    /// alike — until a deposit lifts the balance past the band; a debit to
+    /// exactly zero, or to the cushion or more, lands. The vault never meets
+    /// this band (its cushion is the guarantee, asserted in `vault_debit`);
+    /// the treasury can, and the program's answer is to refuse, so the
+    /// model's is too. Note the last-refund case: R7's sum is program-held
+    /// by the floor, but the LANDING of the final refund can wait on a
+    /// permissionless top-up when the operator runs the treasury at zero
+    /// minimum — a liveness wrinkle, not a loss.
+    #[test]
+    fn treasury_debits_refuse_the_rent_paying_band(
+        tier in 0usize..TIER_ENTRY_LAMPORTS.len(),
+        dust in 1u64..VAULT_RENT_CUSHION,
+    ) {
+        let price = TIER_ENTRY_LAMPORTS[tier];
+        let pot = TIER_POT_LAMPORTS[tier];
+        let cushion = VAULT_RENT_CUSHION;
+
+        // (1) An open whose funding debit would leave dust: the policy gate
+        // passes (min 0, this tier excluded from the idle reserve), the
+        // debit refuses, nothing moves.
+        let mut m = Model::new(price, pot, 0, 0);
+        m.fund(pot + cushion + dust);
+        m.open_pool();
+        prop_assert!(!m.opened, "an open that would leave the treasury rent-paying is refused");
+        prop_assert_eq!(m.platform, (pot + cushion + dust) as u128, "nothing moved");
+        prop_assert_eq!(m.reserved, 0u128);
+        m.assert_invariant();
+        // A top-up past the band and the same open lands, leaving exactly
+        // one cushion behind in the treasury.
+        m.fund(cushion - dust);
+        m.open_pool();
+        prop_assert_eq!(m.state, St::Open);
+        prop_assert_eq!(m.vault, (pot + cushion) as u128);
+        prop_assert_eq!(m.platform, cushion as u128);
+        m.assert_invariant();
+
+        // (2) A withdrawal: a Sealed pool has no refundable entries and no
+        // idle reserve, so the floor is zero — to dust is refused, to exactly
+        // the cushion lands, and to exactly zero lands (the account reaps).
+        for _ in 0..CAP { m.register(); }
+        prop_assert_eq!(m.state, St::Sealed);
+        let balance = m.platform;
+        m.withdraw(balance as u64 - dust);
+        prop_assert_eq!(m.platform, balance, "a withdrawal leaving dust is refused, nothing moved");
+        m.withdraw(balance as u64 - cushion);
+        prop_assert_eq!(m.platform, cushion as u128, "a withdrawal to exactly the cushion lands");
+        m.withdraw(cushion);
+        prop_assert_eq!(m.platform, 0u128, "a withdrawal to exactly zero lands");
+        m.assert_invariant();
+
+        // (3) The last refund: a Refunding pool whose treasury holds the last
+        // entry's price plus dust — the refund is refused and the entrant
+        // waits on a deposit; the refundable sum itself is still covered.
+        let mut m = Model::new(price, pot, 0, 0);
+        m.fund(pot + cushion);
+        m.open_pool();
+        m.register();
+        m.trigger_refund();
+        prop_assert_eq!(m.state, St::Refunding);
+        prop_assert_eq!(m.platform, (price + pot) as u128);
+        m.withdraw(pot - dust); // floor = refundable = price; leaves price + dust
+        prop_assert_eq!(m.platform, (price + dust) as u128);
+        m.refund(0);
+        prop_assert!(!m.entries[0].refunded, "the last refund would leave dust: refused");
+        prop_assert_eq!(m.platform, (price + dust) as u128, "nothing moved");
+        prop_assert_eq!(m.refundable, price as u128, "the entry is still covered");
+        prop_assert_eq!(m.state, St::Refunding);
+        m.assert_invariant();
+        // Anyone's deposit past the band unblocks it (`fund_platform_wallet`
+        // is permissionless).
+        m.fund(cushion - dust);
+        m.refund(0);
+        prop_assert!(m.entries[0].refunded, "the refund lands once the band is cleared");
+        prop_assert_eq!(m.state, St::Closed);
+        prop_assert_eq!(m.platform, cushion as u128);
+        prop_assert_eq!(m.vault, cushion as u128, "the refunded pool's vault keeps its cushion");
+        m.assert_invariant();
+        m.assert_terminal();
     }
 }

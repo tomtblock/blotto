@@ -14,6 +14,9 @@ import {
   step,
   uploadWalletVerdict,
   UPLOAD_WALLET_FLOOR_LAMPORTS,
+  UNREADABLE_CEILING_ENV,
+  announceVerdict,
+  parseUnreadableCeiling,
 } from '../src/startup';
 
 const lines: string[] = [];
@@ -151,5 +154,89 @@ describe('the upload wallet floor', () => {
     expect(v.refuse).to.equal(false);
     expect(v.message).to.match(/free-tier/);
     expect(v.message).to.include(ADDRESS);
+  });
+});
+
+/*
+ * The unreadable-entry ceiling's wiring (plan 2026-09-12 §5). The crank's
+ * guard existed and the daemon never set it; the value is the founder's, so
+ * what is pinned here is only what an unset or malformed value MEANS.
+ */
+describe('the unreadable-entry ceiling', () => {
+  it('passes a whole number through and names the variable', () => {
+    const c = parseUnreadableCeiling('3', 'mainnet');
+    expect(c.ceiling).to.equal(3);
+    expect(c.message).to.include('3 entries');
+    expect(c.message).to.include(UNREADABLE_CEILING_ENV);
+  });
+
+  it('accepts zero — a founder may want any unreadable entry to stop the settlement', () => {
+    expect(parseUnreadableCeiling('0', 'devnet').ceiling).to.equal(0);
+  });
+
+  it('on devnet an unset value is the crank default, printed as such', () => {
+    const c = parseUnreadableCeiling(undefined, 'devnet');
+    expect(c.ceiling).to.equal(undefined);
+    expect(c.message).to.match(/default \(all but one\)/);
+    expect(c.message).to.match(/mainnet refuses/);
+  });
+
+  it('on mainnet an unset value REFUSES, saying what the number is for', () => {
+    expect(() => parseUnreadableCeiling('', 'mainnet')).to.throw(/required on mainnet/);
+    expect(() => parseUnreadableCeiling('  ', 'mainnet')).to.throw(/63 entries lost/);
+  });
+
+  it('refuses anything that is not a whole number, on any cluster', () => {
+    for (const bad of ['three', '-1', '2.5', '1e3', 'NaN']) {
+      expect(() => parseUnreadableCeiling(bad, 'devnet'), bad).to.throw(/whole number/);
+    }
+  });
+});
+
+/*
+ * The bundle announce (audit 2026-09-11, D-02): a daemon publishing bundles
+ * that nobody is told about is a warning on devnet and a refusal on mainnet,
+ * never a routine log line.
+ */
+describe('the bundle announce verdict', () => {
+  const on = {
+    BLOTTO_INDEXER_ANNOUNCE_URL: 'https://blotto-indexer.fly.dev:8080/bundles',
+    BLOTTO_HELIUS_WEBHOOK_SECRET: 's3cret',
+    IRYS_UPLOAD_KEY: 'k',
+  };
+
+  it('is ON with both variables, naming the URL and never the secret', () => {
+    const v = announceVerdict(on, 'mainnet');
+    expect(v.on).to.equal(true);
+    expect(v.warn).to.equal(false);
+    expect(v.refuse).to.equal(false);
+    expect(v.message).to.include('https://blotto-indexer.fly.dev:8080/bundles');
+    expect(v.message).not.to.include('s3cret');
+  });
+
+  it('OFF while publishing is a WARNING on devnet that names the missing variable and the fallback', () => {
+    const v = announceVerdict({ ...on, BLOTTO_HELIUS_WEBHOOK_SECRET: '' }, 'devnet');
+    expect(v.on).to.equal(false);
+    expect(v.warn).to.equal(true);
+    expect(v.refuse).to.equal(false);
+    expect(v.message).to.include('BLOTTO_HELIUS_WEBHOOK_SECRET');
+    expect(v.message).not.to.include('BLOTTO_INDEXER_ANNOUNCE_URL unset');
+    expect(v.message).to.match(/archive-backfill/);
+    expect(v.message).to.match(/D-02/);
+  });
+
+  it('OFF while publishing REFUSES on mainnet', () => {
+    const v = announceVerdict({ IRYS_UPLOAD_KEY: 'k' }, 'mainnet');
+    expect(v.refuse).to.equal(true);
+    expect(v.message).to.include('BLOTTO_INDEXER_ANNOUNCE_URL + BLOTTO_HELIUS_WEBHOOK_SECRET');
+    expect(v.message).to.match(/refusing to start/);
+  });
+
+  it('OFF with nothing being published is only a fact', () => {
+    const v = announceVerdict({}, 'mainnet');
+    expect(v.on).to.equal(false);
+    expect(v.warn).to.equal(false);
+    expect(v.refuse).to.equal(false);
+    expect(v.message).to.match(/nothing is published either/);
   });
 });

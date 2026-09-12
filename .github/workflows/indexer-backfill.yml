@@ -15,21 +15,39 @@
 # defect, not a slow RPC.
 #
 # Read-only against the chain; writes only to the indexer's own database.
+#
+# 2026-09-12 (audit 2026-09-11, D-02): `archive-backfill` joins the modes AND
+# runs on a daily schedule. It is the fallback that fills the verified-results
+# archive — discover each settled pool's published bundle, verify it against
+# the on-chain root, ingest — and it was invoked by nothing: not `sync`, not
+# this workflow, not a cron. With the daemon's announce also unstaged, no
+# player could ever be shown a bundle. Idempotent ("safe to re-run",
+# backend/indexer/src/index.ts), so a daily run costs nothing when the announce
+# path has already done the work.
 name: indexer-backfill
 
 on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "backfill = walk the chain into the ledger · re-derive = rebuild derived tables from the ledger · both"
+        description: "backfill = walk the chain into the ledger · re-derive = rebuild derived tables from the ledger · both = backfill then re-derive · archive-backfill = fill the verified-results archive from the published bundles"
         required: true
         default: both
         type: choice
-        options: [backfill, re-derive, both]
+        options: [backfill, re-derive, both, archive-backfill]
+  schedule:
+    # Daily archive-backfill. The announce path (deploy-backend.yml, D-02)
+    # fills the archive within a minute of settlement; this catches a pool
+    # whose announce was refused or lost, the way the chain backfill catches
+    # a dropped webhook.
+    - cron: '47 6 * * *'
 
 concurrency:
   group: indexer-backfill
   cancel-in-progress: false
+
+permissions:
+  contents: read
 
 env:
   FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
@@ -48,7 +66,7 @@ jobs:
           flyctl status --app "$INDEXER_APP"
 
       - name: Walk the chain into the ledger
-        if: inputs.mode == 'backfill' || inputs.mode == 'both'
+        if: github.event_name == 'workflow_dispatch' && (inputs.mode == 'backfill' || inputs.mode == 'both')
         run: |
           # Runs in the service's working directory (/app/backend/indexer) with
           # the machine's secrets (database, RPC, program id) already in env.
@@ -56,10 +74,20 @@ jobs:
             -C "npx ts-node --transpile-only src/index.ts backfill"
 
       - name: Rebuild the derived tables from the ledger
-        if: inputs.mode == 're-derive' || inputs.mode == 'both'
+        if: github.event_name == 'workflow_dispatch' && (inputs.mode == 're-derive' || inputs.mode == 'both')
         run: |
           flyctl ssh console --app "$INDEXER_APP" \
             -C "npx ts-node --transpile-only src/index.ts re-derive"
+
+      - name: Fill the verified-results archive from the published bundles
+        if: github.event_name == 'schedule' || inputs.mode == 'archive-backfill'
+        run: |
+          # Discover + verify + ingest every settled pool's bundle. Read the
+          # count it prints: "0 settled pool(s)" on a chain with paid pools
+          # means the read side cannot see them, not that there is nothing
+          # to do.
+          flyctl ssh console --app "$INDEXER_APP" \
+            -C "npx ts-node --transpile-only src/index.ts archive-backfill"
 
       - name: What the read API now serves
         run: |

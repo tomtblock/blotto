@@ -70,16 +70,19 @@ The audit's own instruction was to defer these, and each needs a decision before
 
 ## Found by the audit, not in its fix list, still open
 
-- **D-02 (HIGH) — the verification journey cannot complete in the deployed system.** The daemon's
+- **D-02 (HIGH) — the verification journey cannot complete in the deployed system.** ~~The daemon's
   bundle announce is never staged (`BLOTTO_INDEXER_ANNOUNCE_URL` and the webhook secret are not set
   for the daemon app) and `archive-backfill` is invoked by nothing, so no player is ever shown the
-  bundle address. This is a deployment change plus one scheduled job.
+  bundle address. This is a deployment change plus one scheduled job.~~ **Closed 2026-09-12 in the
+  Wave 0 PR** — see the addendum below. Shown closed on devnet only after the next backend deploy
+  settles a pool and `GET /pools/<id>/archive` returns its bundle (plan §7).
 - **D-03 (HIGH) — the twelve-hour auto-release ignores an upheld review.** The daemon never reads
   `review_decisions`, so between a reviewer's forfeit decision and the multisig landing it, the
   clock can release the share. The daemon needs a handle on the decision log before it releases.
 - **F-02 (HIGH) — no backup posture for the sealed entries.** The settlement-threshold half is now
   the `maxUnreadableEntries` seam; the backup and rehearsed restore half is operational work.
-- **A-34 (LOW)** — the standing-rules gate enumerates files, not instructions; the rewrite kept that.
+- **A-34 (LOW)** — ~~the standing-rules gate enumerates files, not instructions; the rewrite kept that.~~
+  **Closed 2026-09-12** — check 6(i) enumerates functions (addendum below).
 
 ## Numbers I chose that are the founder's to ratify
 
@@ -168,3 +171,33 @@ on `4bc8692`, 48 tests across twelve binaries. What has not changed: the program
 deployed, and the proptest model in `programs/blotto_cup/tests/vault_model.rs` still moves the pot
 alone (a drift since the cushion commit, marked `PHASE-N-REVIEW` rather than folded into a CI fix).
 The appraisal stands: not yet shippable; now testable — and now tested on a real build.
+
+## Addendum — Wave 0 of the plan (2026-09-12)
+
+The founder approved the plan in `AUDIT_2026-09-11_PLAN.md` on 2026-09-12. Its Wave 0 has six
+items; the three that need only the architect landed in the PR that added the plan, in one commit
+each. What each closes, and the test or command that shows it:
+
+| Audit id | What changed | Shown closed by |
+|---|---|---|
+| B-08's wiring (plan §5) | `BLOTTO_MAX_UNREADABLE_ENTRIES` reaches `CrankDeps.maxUnreadableEntries` through `parseUnreadableCeiling` (`backend/reveal/src/startup.ts`). Unset on devnet = the crank's default, printed at boot; unset on mainnet = the daemon refuses to start. The deploy stages it from a repository variable of the same name | `backend/reveal/test/startup.spec.ts` — five cases (whole number through, zero accepted, devnet default named, mainnet refusal named, malformed refused on any cluster) |
+| D-02 / A-08 / C-24 / D-24 / E-08 | `deploy-backend.yml` stages `BLOTTO_INDEXER_ANNOUNCE_URL` (the indexer's webhook service, port 8080) and the indexer's own webhook secret for the daemon, clearing a stale pair with a `::warning::` when the repository secret is absent; `indexer-backfill.yml` gains an `archive-backfill` mode and a daily schedule; the daemon's "announce OFF" is graded by `announceVerdict` — a warning on devnet while bundles are being published, a refusal on mainnet, and `bundleAnnounce` on `/health` | `startup.spec.ts` — four cases (ON names the URL and never the secret; OFF-while-publishing warns on devnet naming the missing variable and the fallback; refuses on mainnet; OFF-with-nothing-published is only a fact). Both workflows parse. Closed on the cluster only when a settled pool's archive fills — plan §7 |
+| E-07 (the documentation half) | `KEEPER_KEYPAIR` and `BLOTTO_INDEXER_ANNOUNCE_URL` in `backend/.env.example`, with the new ceiling. The gate's blindness to `env.X` reads stays in batch C1 | `scripts/check-env-examples.sh` green |
+| A-34 | `scripts/check-standing-rules.sh` check 6(i): every top-level fn body in `instructions/*.rs` that calls `vault_debit(` or `platform_debit(` must be one of seven named `file:fn` pairs, and a call site the extractor cannot place inside any body fails rather than slipping past | The probe tree gains a second handler in an allowed file, a private helper and an impl-block method; the self-test asserts 6(i) names each. Bite test on the real tree: a throwaway fn in `pay_prizes.rs` (an allowed file, where 6(b) stays silent) fails 6(i) by name |
+| D-43 | `app/src/app/robots.ts` refuses `/admin/` and `/dev/` to crawlers; both admin pages carry noindex metadata; `AdminGate` renders a page body only for a signed-in wallet on `config/reviewers.json` — the same list the review service checks. A door sign, not a lock | `admin-access.test.ts` (four outcomes) and `admin-gate.test.tsx` (the four rendered branches) |
+| The proptest money model (plan §5) | `programs/blotto_cup/tests/vault_model.rs` carries the cushion everywhere the program does: `open_pool` funds pot + cushion from the treasury, the idle reserve and the withdraw floor price an open at pot + cushion, both ledger identities count every vault the run opened, a Paid vault ends at outstanding escrow + cushion and a Closed one at exactly the cushion, and every lamport movement passes `vault::rent_safe` — asserted on the vault, mirrored as a refusal on the treasury. The `PHASE-N-REVIEW` note is gone | `cargo test --workspace` (the ci-fast rust lane) — the eight property tests, including the new `treasury_debits_refuse_the_rent_paying_band` |
+| The lint warning; the cost line | `rules.config.ts` no longer imports the unused terms file; `docs/INFRASTRUCTURE.md` prices a pool at 0.016 SOL with the 890,880-lamport cushion named | `next lint` at zero warnings |
+
+**Found by the model, for the register.** With `treasury_min_platform_lamports` at zero the
+treasury can stand at exactly `refundable + dust`, and the LAST refund of a Refunding pool would
+leave it rent-paying, which `platform_debit` refuses — nothing moves until a permissionless deposit
+lifts the balance past the band. R7's sum is still program-held by the floor; only the landing of
+the final refund can wait. The live devnet Config holds 0.5 SOL as the minimum, which keeps the
+treasury clear of the band; the LiteSVM launch policy runs it at zero. Two answers, both recorded
+in the plan: for the founder's numbers (§2e), never set the minimum below one cushion; for the
+program (batch P1), fold one cushion into the withdraw floor whenever `platform_refundable > 0`, so
+the floor itself keeps the last refund landable. The model also does not yet drive a donation to a
+vault (the B-03 vector itself); a `Donate` op with its term in the identity is a batch T1 row.
+
+**Not closed by this PR:** the two blockers (the devnet redeploy, the credentialed rehearsal) and
+the five decisions are the founder's; waves 1–5 follow the plan's order.

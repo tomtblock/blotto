@@ -32,6 +32,19 @@
  *   TURNKEY_API_BASE_URL/_PUBLIC_KEY/_PRIVATE_KEY, TURNKEY_ORGANIZATION_ID,
  *   TURNKEY_USER_ID              pool-key custody (R21)
  *   IRYS_UPLOAD_KEY, IRYS_NETWORK  bundle publishing
+ *   BLOTTO_INDEXER_ANNOUNCE_URL, BLOTTO_HELIUS_WEBHOOK_SECRET
+ *                                where to tell the indexer a settled pool's
+ *                                bundle is (POST /bundles on its webhook
+ *                                service, the indexer's own secret). Both
+ *                                set = announce ON; otherwise OFF, warned on
+ *                                devnet and REFUSED on mainnet (startup.ts,
+ *                                audit 2026-09-11 D-02)
+ *   BLOTTO_MAX_UNREADABLE_ENTRIES
+ *                                the founder-owned ceiling on entries that
+ *                                may fail to read back before the crank
+ *                                refuses to settle a pool (crank.ts). Unset
+ *                                on devnet = the crank's default, printed;
+ *                                REQUIRED on mainnet (startup.ts)
  *   SANCTIONS_*                  the winner check at resolving (Stage F) —
  *                                same variables and same selector as the
  *                                packet service (`sanctions/src/select.ts`).
@@ -54,7 +67,7 @@
 import { readFileSync } from 'fs';
 import { Connection, Keypair, PublicKey } from '@solana/web3.js';
 import { loadPostgresConfig } from '../../_shared/src/config';
-import { resolveRpcUrl } from '../../_shared/src/cluster';
+import { clusterName, resolveRpcUrl } from '../../_shared/src/cluster';
 import { createPool } from '../../_shared/src/db';
 import {
   PgCiphertextStore,
@@ -72,7 +85,14 @@ import { makeDaemon, StubVrfCoordinator, type VrfCoordinator } from './daemon';
 import { makeSwitchboardOps, SwitchboardVrfCoordinator } from './vrf-switchboard';
 import { IrysPublisher, irysUploaderFromEnv } from './publisher-irys';
 import { newDaemonHealth, serveDaemonHealth, type DaemonPhase } from './health';
-import { assertCanPayFees, formatSol, step, uploadWalletVerdict } from './startup';
+import {
+  announceVerdict,
+  assertCanPayFees,
+  formatSol,
+  parseUnreadableCeiling,
+  step,
+  uploadWalletVerdict,
+} from './startup';
 import { base58Decode } from '../../_shared/src/blotto-events';
 
 const SERVICE = 'daemon';
@@ -162,6 +182,14 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
     );
   };
   const log = (line: string): void => console.log(`${SERVICE}: ${line}`);
+
+  // Two settings that are pure and cheap are decided BEFORE any credential
+  // is loaded: a misconfigured daemon should refuse in its first second, not
+  // after four minutes of vendor loads. The cluster name is the one the RPC
+  // resolution below uses too (_shared/src/cluster.ts).
+  const cluster = clusterName(env);
+  const unreadable = parseUnreadableCeiling(env.BLOTTO_MAX_UNREADABLE_ENTRIES, cluster);
+  log(unreadable.message);
 
   enter('connecting');
   const db = createPool(loadPostgresConfig(env));
@@ -346,33 +374,35 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
 
   // E3 §4.4 (live path): after the crank publishes a bundle, tell the
   // indexer where it is — POST /bundles on the webhook server, same shared
-  // secret as the Helius deliveries (one secret, one receiver). Optional:
-  // without both env vars the archive fills by `archive-backfill` alone.
-  // Fire-safe by the daemon's contract — a throw here becomes a tick error,
-  // never a blocked sweep; a non-2xx (including the indexer's 503 "root not
-  // ingested yet") throws so the miss is visible in the tick report rather
-  // than silently waiting on the backfill.
-  const announceUrl = env.BLOTTO_INDEXER_ANNOUNCE_URL;
-  const announceSecret = env.BLOTTO_HELIUS_WEBHOOK_SECRET;
-  const announceBundle =
-    announceUrl && announceSecret
-      ? async (poolId: bigint, bundleUri: string): Promise<void> => {
-          const res = await fetch(announceUrl, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json', authorization: announceSecret },
-            body: JSON.stringify({ pool_id: poolId.toString(), uri: bundleUri }),
-          });
-          if (!res.ok) {
-            throw new Error(`bundle announce: HTTP ${res.status} ${await res.text()}`);
-          }
+  // secret as the Helius deliveries (one secret, one receiver). Fire-safe by
+  // the daemon's contract — a throw here becomes a tick error, never a
+  // blocked sweep; a non-2xx (including the indexer's 503 "root not ingested
+  // yet") throws so the miss is visible in the tick report rather than
+  // silently waiting on the backfill.
+  //
+  // OFF is no longer a routine line (audit 2026-09-11, D-02): with the
+  // upload key set the daemon is publishing bundles nobody is told about,
+  // which is a warning here and a refusal on mainnet — see startup.ts. The
+  // verdict is also on /health (`bundleAnnounce`) so backend-status shows it.
+  const announce = announceVerdict(env, cluster);
+  if (announce.refuse) throw new Error(announce.message);
+  if (announce.warn) console.warn(announce.message);
+  else log(announce.message);
+  health.announce = announce.on ? 'on' : 'off';
+  const announceUrl = (env.BLOTTO_INDEXER_ANNOUNCE_URL ?? '').trim();
+  const announceSecret = (env.BLOTTO_HELIUS_WEBHOOK_SECRET ?? '').trim();
+  const announceBundle = announce.on
+    ? async (poolId: bigint, bundleUri: string): Promise<void> => {
+        const res = await fetch(announceUrl, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', authorization: announceSecret },
+          body: JSON.stringify({ pool_id: poolId.toString(), uri: bundleUri }),
+        });
+        if (!res.ok) {
+          throw new Error(`bundle announce: HTTP ${res.status} ${await res.text()}`);
         }
-      : undefined;
-  if (!announceBundle) {
-    console.log(
-      `${SERVICE}: bundle announce OFF (set BLOTTO_INDEXER_ANNOUNCE_URL + ` +
-        `BLOTTO_HELIUS_WEBHOOK_SECRET) — archive relies on archive-backfill`
-    );
-  }
+      }
+    : undefined;
 
   const daemon = makeDaemon({
     chain,
@@ -380,7 +410,18 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
     ciphertexts,
     vrf,
     crank: (poolId) =>
-      crankPool({ chain, custody, ciphertexts, publisher, detect, screenWinners }, poolId),
+      crankPool(
+        {
+          chain,
+          custody,
+          ciphertexts,
+          publisher,
+          detect,
+          screenWinners,
+          maxUnreadableEntries: unreadable.ceiling,
+        },
+        poolId
+      ),
     now,
     announceBundle,
     log: (stage, detail) => console.log(`${SERVICE}: ${stage}`, JSON.stringify(detail ?? {})),
