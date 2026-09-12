@@ -85,6 +85,29 @@ describe('the preview scenarios', () => {
     }
   });
 
+  it('the archive is honest about what the chain committed (D-E8)', () => {
+    for (const s of SCENARIOS) {
+      if (!s.leaderboard) continue;
+      // The committed leaf, and only it: player, rank, amount.
+      expect(s.leaderboard.committed_fields, s.key).toEqual([
+        'player',
+        'rank',
+        'amount_lamports',
+      ]);
+      // Exactly one row has no indexed entry number, so the null path the
+      // archive table has to render is exercised by the preview data.
+      const seatless = s.leaderboard.rows.filter((r) => r.seat === null);
+      expect(seatless.length, `${s.key} exercises the absent entry number`).toBe(1);
+      expect(seatless[0].rank, `${s.key} keeps the paid row's entry number`).not.toBe(1);
+      for (const r of s.leaderboard.rows) {
+        // Half-points stay integers — a fixture is not allowed to be the
+        // place a float enters a score.
+        expect(Number.isInteger(r.recomputed.score_half), `${s.key} ${r.player}`).toBe(true);
+        expect(Number.isInteger(r.recomputed.zones), `${s.key} ${r.player}`).toBe(true);
+      }
+    }
+  });
+
   it('every summary carries the server clock the countdowns derive from', () => {
     const decimal = /^\d+$/;
     for (const s of SCENARIOS) {

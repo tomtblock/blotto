@@ -171,6 +171,9 @@ jobs:
       #     BLOTTO_MAX_UNREADABLE_ENTRIES   the daemon's unreadable-entry ceiling
       #                                     (plan 2026-09-12 §2e — a founder number;
       #                                     unset = the crank's devnet default)
+      #     BLOTTO_IRYS_UPLOAD_ADDRESS      our bundle-upload address; optional, and
+      #                                     only the archive's last-resort gateway
+      #                                     query uses it (C-25)
       #   … → Secrets:
       #     BLOTTO_DEVNET_RPC_URL          a DEVNET Helius URL (also read by deployed-drift)
       #     BLOTTO_HELIUS_WEBHOOK_SECRET   the Auth-header value typed into the Helius webhook
@@ -180,6 +183,7 @@ jobs:
       DEVNET_RPC: ${{ secrets.BLOTTO_DEVNET_RPC_URL || 'https://api.devnet.solana.com' }}
       HELIUS_WEBHOOK_SECRET: ${{ secrets.BLOTTO_HELIUS_WEBHOOK_SECRET }}
       UNREADABLE_CEILING: ${{ vars.BLOTTO_MAX_UNREADABLE_ENTRIES }}
+      IRYS_UPLOAD_ADDRESS: ${{ vars.BLOTTO_IRYS_UPLOAD_ADDRESS }}
       PROGRAM_ID: 5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17
 
       # Mapped once so the shell can test presence without repeating the
@@ -434,6 +438,20 @@ jobs:
             BLOTTO_API_CORS_ORIGINS="$APP_ORIGIN" \
             BLOTTO_API_RATE_LIMIT_ENABLED="1" \
             BLOTTO_API_SECURITY_HEADERS_ENABLED="1"
+
+          # Our Irys upload address (audit 2026-09-11, C-25). Optional: the
+          # archive's normal path reads the daemon's own published_bundles
+          # row, and this is only for the last-resort gateway query, which is
+          # skipped rather than widened when the address is unknown. Staged
+          # when the variable is set, cleared when it is not, so a stale value
+          # cannot outlive a wallet change.
+          if [ -n "${IRYS_UPLOAD_ADDRESS:-}" ]; then
+            flyctl secrets set --app "$INDEXER_APP" --stage \
+              BLOTTO_IRYS_UPLOAD_ADDRESS="$IRYS_UPLOAD_ADDRESS"
+          else
+            flyctl secrets unset --app "$INDEXER_APP" --stage BLOTTO_IRYS_UPLOAD_ADDRESS || true
+          fi
+
           # The webhook receiver refuses to start without a secret (E6
           # fail-closed). Two sources, in order of preference:
           #   1. the repository secret BLOTTO_HELIUS_WEBHOOK_SECRET — the same

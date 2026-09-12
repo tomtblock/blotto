@@ -264,3 +264,43 @@ pot plus 650,240. The tables in this file and in `AUDIT_2026-09-11_PLAN.md` now 
 thing being budgeted. `AUDIT_2026-09-11.md` is frozen as written and still states the fixed figure
 at `:297` and `:2110`; this paragraph is its correction. **No code changes**: the sysvar read was
 right all along — only the prose around it was wrong.
+
+## Addendum — Wave 1.2a, batch I1a: what the archive calls verified (2026-09-12)
+
+The first half of the indexer batch, and the first work founder ruling **D-E8** released. The batch
+was split: its eight rows are one review too large for one diff, and the archive half stands alone.
+I1b — the treasury report, the reconciliation timer and the migration chaining — is the next change.
+
+| Audit id | What changed | Shown closed by |
+|---|---|---|
+| B-07, D-28, F-06 | The response says what the on-chain root covers and puts everything else where it cannot be mistaken for covered. `committed_fields` names the three the root commits to — `player`, `rank`, `amount_lamports` — those three sit at the top of each row, and the battle score and zone count move under a `recomputed` object. Nothing is hidden: the same numbers are served, and the verify page still recomputes them from the sealed entries, which is the stronger property. What is gone is the single verified label over five fields the root had checked three of | `archive.spec.ts` asserts `committed_fields`, that `recomputed` carries the score and the zones, and that neither sits at row level any more |
+| B-07 (the seat half) | `seat` no longer comes from the uploaded file. It is read from `entries.idx` — our own projection of the on-chain `EntryRegistered` — and is **null** when our ledger has no entry for that player, which is a missed delivery rather than a reason to withhold a prize row that verified. `rankings` is re-keyed on `(pool, player)`, the identity the root actually commits to, and the career page's join follows it. The count of unresolved seats is returned and logged rather than swallowed | A test where our ledger says seat 5 and the bundle claims 2: the served seat is 5. A second where one entry never reached us: three rows still served, one with a null seat, `seatsUnresolved` 1 |
+| C-25 | Discovery asked the Irys gateway for anything wearing our two tags and took the newest answer, so any address could upload a same-tagged object and win the query. Now it reads the daemon's own `published_bundles` row first — our record of what we published, in our own database, which exists even when the announce never arrived — and only then asks the gateway, constrained to our upload address. With no address configured that query is **skipped rather than widened**: an unfiltered tag query is the hole, not a fallback | Three tests: the recorded URI wins with no network call at all; the gateway query carries `owners`; with no address configured nothing is queried and the log names the variable |
+| B-20, F-05 | The four writes were four independent autocommits with the vouching flag **first**. A crash after the wholesale delete left an empty leaderboard still flagged verified; a reader arriving between the flag and the last insert saw a truncated field presented as the whole result. They are now one unit, flag last | A test that fails the second row insert: the previous verified answer is untouched and the failure surfaces. A second asserts the ordering in the statement log — rows, then flag, then commit |
+| Hardening found while here | A bundle naming one player twice matches the root perfectly well: the tree commits to a list, not a set. Under the old seat key both rows were stored and served, so one wallet appeared twice in a leaderboard calling itself verified. Refused now, before anything is recorded | A doubled bundle whose root matches is rejected with nothing written |
+
+**Migration 0017 is non-destructive on purpose.** It re-keys `rankings` in place rather than
+dropping it, so no re-derive and no archive backfill is needed to serve again after it applies —
+which matters because chaining a rebuild onto a destructive migration is E-15, still open in I1b.
+
+**One new variable, optional.** `BLOTTO_IRYS_UPLOAD_ADDRESS` is our bundle-upload address. Only the
+last-resort gateway query uses it; the normal path needs nothing. The deploy stages it when the
+repository variable is set and clears it when it is not.
+
+**Settled the same evening: the ingest port is routable.** Wave 1.4 left one thing unproven — the
+announce URL uses port 8080 on a shared Fly IPv4, which routes 80 and 443 only, and nothing had ever
+asserted an external request to it succeeded. The container this work is written in could not test
+it (its proxy refuses non-443 ports), so the deploy was made to prove it. Run 27 on `a5593c5`, the
+first through the gate, printed:
+
+```
+GET https://blotto-indexer.fly.dev:8080/health
+{"ok":true,"service":"indexer-webhook"}
+POST https://blotto-indexer.fly.dev:8080/bundles  (empty object, staged secret — writes nothing)
+answer: 400
+ingest authenticated: the receiver rejected the CONTENT, not the credential.
+```
+
+So the port answers from a GitHub runner, the receiver is the webhook one and not the read API, and
+the staged secret is accepted. No dedicated IPv4 is needed and the contingency in the plan is moot.
+The gate and the post-deploy program comparison both passed on the same run.

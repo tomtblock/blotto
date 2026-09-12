@@ -36,6 +36,7 @@ import { TIER_POT_LAMPORTS } from '@blotto/scoring';
 import type {
   CareerRow,
   EntryRow,
+  LeaderboardRow,
   PayoutRow,
   PoolLeaderboard,
   PoolSummary,
@@ -161,33 +162,44 @@ function payouts(pool: string, escrowSeat: number | null = null): PayoutRow[] {
 }
 
 /**
- * The full verified-archive ranking (E3) for a settled scenario, over the
- * pool's real field size. The paid seat carries the same amount as
- * `results()`; everyone else ranks below it at zero (D-E2). `score_half`
- * is in HALF-POINT integer units across the seven battles (max 14) and
- * descends with rank so the table reads plausibly — a display fixture, not
- * a scored pool.
+ * The full archive ranking (E3) for a settled scenario, over the pool's real
+ * field size. The paid seat carries the same amount as `results()`; everyone
+ * else ranks below it at zero (D-E2).
+ *
+ * D-E8: the on-chain root commits to `player`, `rank` and `amount_lamports`
+ * only, and the response says so in `committed_fields`. `seat` therefore
+ * comes from indexed chain records and is nullable, and the scores live
+ * under `recomputed`. `score_half` is in HALF-POINT integer units across the
+ * seven battles (max 14) and descends with rank so the table reads plausibly
+ * — a display fixture, not a scored pool.
  */
 function leaderboard(pool: string, field = 64): PoolLeaderboard {
   const byIdx = entries(pool, field);
   const paidRank = new Map(PAID_SEATS.map((seat, i) => [seat, i + 1]));
   const unpaid = Array.from({ length: field }, (_, s) => s).filter((s) => !paidRank.has(s));
-  const rows = [
+  // D-E8: one row whose entry number our records do not hold — the shape the
+  // read API serves when an entry event was missed. Taken from the unpaid
+  // seats so the paid row still names the seat `payouts()` names, and from
+  // the top of them so the null path is on screen rather than buried at the
+  // foot of a 64-row table.
+  const seatless = unpaid[1];
+  const rows: LeaderboardRow[] = [
     ...PAID_SEATS.map((seat, i) => ({
-      seat,
       player: byIdx[seat].player,
       rank: i + 1,
-      score_half: 14 - Math.floor(i / 2),
-      zones: 20 - i,
       amount_lamports: PAID_AMOUNTS[i],
+      seat,
+      recomputed: { score_half: 14 - Math.floor(i / 2), zones: 20 - i },
     })),
     ...unpaid.map((seat, i) => ({
-      seat,
       player: byIdx[seat].player,
       rank: PAID_SEATS.length + 1 + i,
-      score_half: Math.max(1, 12 - Math.floor(i / 6)),
-      zones: Math.max(1, 18 - Math.floor(i / 4)),
       amount_lamports: '0',
+      seat: seat === seatless ? null : seat,
+      recomputed: {
+        score_half: Math.max(1, 12 - Math.floor(i / 6)),
+        zones: Math.max(1, 18 - Math.floor(i / 4)),
+      },
     })),
   ];
   return {
@@ -195,6 +207,7 @@ function leaderboard(pool: string, field = 64): PoolLeaderboard {
     uri: `https://gateway.irys.xyz/F1XTUREbund1e${pool.slice(7, 15)}`,
     results_root: 'ef'.repeat(32),
     verified_at: '2026-09-01T12:00:00Z',
+    committed_fields: ['player', 'rank', 'amount_lamports'],
     rows,
   };
 }

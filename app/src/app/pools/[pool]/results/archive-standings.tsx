@@ -6,17 +6,38 @@
  * simply is not on the page; "unverified" and "no archive" are deliberately
  * indistinguishable here, exactly as they are at the API.
  *
- * The battle-score column displays `score_half` (half-point integer units,
- * seven battles, max 14) as points — integer arithmetic only, display only:
- * nothing on this page feeds a score back into anything.
+ * D-E8 (founder ruling, 2026-09-12): the on-chain results root commits to
+ * `player ‖ rank ‖ amount` and to nothing else, so this table carries two
+ * kinds of number and has to say which is which. The player, the ranking and
+ * the prize are held by the chain. The entry number is ours — read from our
+ * indexed records of the chain, and absent (a dash) where those records have
+ * no entry row. The battle score is recomputed from the published entries.
+ * Nothing added here may let a reader take the second kind for the first.
+ *
+ * The battle-score column displays `recomputed.score_half` (half-point
+ * integer units, seven battles, max 14) as points — integer arithmetic only,
+ * display only: nothing on this page feeds a score back into anything.
  */
 import { COPY } from '@/copy';
 import { lamportsToSol } from '@/data/format';
 import type { PoolLeaderboard } from '@/data/types';
 import { Card } from '@/components/ui/card';
 
-/** 13 → "6½", 14 → "7" — half-points to a battles-won label, no floats. */
-function battleScoreLabel(scoreHalf: number): string {
+/** Stands in for a number this row does not carry. */
+const ABSENT = '—';
+
+/**
+ * 13 → "6½", 14 → "7" — half-points to a battles-won label, no floats.
+ *
+ * PHASE-N-REVIEW (D-E8): the argument is widened and guarded rather than
+ * trusted. `recomputed` is required by the type, but the type describes a
+ * network payload; an indexer serving the pre-D-E8 shape would otherwise
+ * print "NaN½" across a column of committed ranks and prizes. A row whose
+ * recomputed score is missing shows the same dash an unknown entry number
+ * does — the rank and prize beside it are still the chain's.
+ */
+function battleScoreLabel(scoreHalf: number | null | undefined): string {
+  if (typeof scoreHalf !== 'number' || !Number.isInteger(scoreHalf)) return ABSENT;
   const whole = Math.floor(scoreHalf / 2);
   return scoreHalf % 2 === 0 ? String(whole) : `${whole}½`;
 }
@@ -54,17 +75,30 @@ export function ArchiveStandings({ archive }: { archive: PoolLeaderboard }) {
             </tr>
           </thead>
           <tbody>
+            {/* Keyed by player, not by entry number: one wallet holds one
+                entry in a pool, and the entry number may be null. */}
             {archive.rows.map((r) => (
               <tr
-                key={r.seat}
+                key={r.player}
                 className={
                   'border-t border-line ' + (r.rank === 1 ? 'font-semibold text-ink' : 'text-ink-muted')
                 }
               >
                 <td className="tnum px-3 py-1.5">#{r.rank}</td>
-                <td className="tnum px-3 py-1.5">{r.seat}</td>
+                <td className="tnum px-3 py-1.5">
+                  {typeof r.seat === 'number' ? (
+                    r.seat
+                  ) : (
+                    <>
+                      <span aria-hidden="true">{ABSENT}</span>
+                      <span className="sr-only">{COPY.results.archive.seatUnknown}</span>
+                    </>
+                  )}
+                </td>
                 <td className="px-3 py-1.5 font-mono text-[12px]">{shortAddr(r.player)}</td>
-                <td className="tnum px-3 py-1.5 text-right">{battleScoreLabel(r.score_half)}</td>
+                <td className="tnum px-3 py-1.5 text-right">
+                  {battleScoreLabel(r.recomputed?.score_half)}
+                </td>
                 <td className="tnum px-3 py-1.5 text-right">
                   {r.amount_lamports === '0' ? '—' : `${lamportsToSol(r.amount_lamports)} SOL`}
                 </td>
@@ -75,6 +109,14 @@ export function ArchiveStandings({ archive }: { archive: PoolLeaderboard }) {
       </Card>
       <p className="mb-2 max-w-prose text-[13px] leading-5 text-ink-muted">
         {COPY.results.archive.note}
+      </p>
+      {/* D-E8: which numbers above the chain holds, and which are recomputed.
+          Stated in plain words rather than rendered from `committed_fields`,
+          because the field names are wire vocabulary and this line is read by
+          players — the copy and that list say the same thing and move
+          together. */}
+      <p className="mb-2 max-w-prose text-[13px] leading-5 text-ink-muted">
+        {COPY.results.archive.provenance}
       </p>
       <p className="flex flex-wrap gap-x-5 gap-y-1 text-[13px]">
         <a

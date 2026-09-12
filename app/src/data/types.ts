@@ -109,15 +109,41 @@ export interface CareerRow {
   rank?: number | null;
 }
 
-/** One row of a pool's verified archive ranking (E3). */
+/**
+ * One row of a pool's archive ranking (E3), in the shape the read API serves
+ * under D-E8 (founder ruling, 2026-09-12).
+ *
+ * The on-chain results root commits to a leaf of `player ‖ rank ‖ amount` and
+ * to NOTHING else. Those three fields are the only ones a player can hold the
+ * chain to, so they are the only ones this type may present as committed;
+ * every other field says where it actually came from. `committed_fields` on
+ * the response names the same set on the wire.
+ */
 export interface LeaderboardRow {
-  seat: number;
+  /** COMMITTED — in the results-root leaf. Base58 wallet. */
   player: string;
+  /** COMMITTED — in the results-root leaf. Rank 1 is the paid place. */
   rank: number;
-  /** Battle score in HALF-POINT integer units (a drawn battle is 1). */
-  score_half: number;
-  zones: number;
+  /** COMMITTED — in the results-root leaf. Decimal string, never a float. */
   amount_lamports: string;
+  /**
+   * NOT COMMITTED. The player's entry number, read from our OWN indexed
+   * records of the chain rather than from the uploaded file — null when
+   * those records hold no entry row for this player, which happens if an
+   * entry event was missed. Null and never 0: a reader has to be able to
+   * tell entry number zero from an entry number we do not have.
+   */
+  seat: number | null;
+  /**
+   * NOT COMMITTED. Recomputed from the published entries, never proven by
+   * the chain — the Verify page derives the identical numbers from the
+   * identical published data, and so can any player. Always present.
+   */
+  recomputed: {
+    /** Battle score in HALF-POINT integer units (a drawn battle is 1). */
+    score_half: number;
+    zones: number;
+  };
 }
 
 /**
@@ -132,6 +158,14 @@ export interface PoolLeaderboard {
   /** The locally recomputed root, hex — equals the on-chain commitment. */
   results_root: string;
   verified_at: string;
+  /**
+   * D-E8: the leaf fields that root actually commits to, named by the API
+   * instead of assumed by the client. This is the authoritative list —
+   * `COPY.results.archive.provenance` states the same split in words for the
+   * reader and has to be re-read against this if the leaf ever changes.
+   */
+  committed_fields: Array<'player' | 'rank' | 'amount_lamports'>;
+  /** Rank ascending. */
   rows: LeaderboardRow[];
 }
 

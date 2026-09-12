@@ -560,10 +560,21 @@ export const COPY = {
     // E3 (proposal E1 §4): the verified archive. Drafts pending founder
     // voice review — substance (provenance, recomputability) is the
     // architecture speaking; the wording is the founder's to shape.
+    // PHASE-N-REVIEW (D-E8, 2026-09-12): `note` used to say everything shown
+    // had been re-checked against the on-chain commitment. That commitment
+    // covers the player, the ranking and the prize and nothing else, so the
+    // note now claims only those, and `provenance` states the rest of the
+    // split — entry number from our own records, battles won recomputed
+    // from the published entries. Substance is the founder's ruling; the
+    // words await the founder's voice.
     archive: {
       title: 'Full standings',
       note:
-        'Served from the published results data and re-checked against the on-chain commitment before anything here is shown. Fetch the same data yourself and recompute it — nothing on this page asks for trust.',
+        'Served from the published results data, with the player, the ranking and the prize on every row re-checked against the on-chain commitment before any of it is shown. Fetch the same data yourself and recompute it — nothing on this page asks for trust.',
+      provenance:
+        'The chain commits to three things on each row: the player, their ranking and the prize they were paid. The entry number comes from our own records of the chain. Battles won is recomputed from the published entries — anyone holding that same data can recompute it themselves.',
+      /** The entry-number cell where our records have no entry row (D-E8). */
+      seatUnknown: 'Entry number not in our records',
       bundleLink: 'Published data',
       verifyLink: 'Recompute on the Verify page',
       winner: (playerShort: string, amountSol: string) =>

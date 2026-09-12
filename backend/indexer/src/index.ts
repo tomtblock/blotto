@@ -33,6 +33,7 @@ import { createWebhookServer } from './webhook';
 import { serveReadApi } from './read-api';
 import { backfillAndRederive, catchUpFloor, Web3BackfillRpc } from './backfill';
 import { backfillArchive } from './archive';
+import { atomicDb } from './atomic';
 
 // INCIDENT 2026-09-09: the decoder's layout table is filled by this call and by
 // nothing else. From 2026-08-27 until today no service made it — only the
@@ -76,7 +77,7 @@ async function cmdServe(monitor: Monitor): Promise<void> {
     program: config.programId,
     // E3: POST /bundles (the daemon's announce) verifies against the same
     // derived tables this process already writes.
-    archiveDb: pool,
+    archiveDb: atomicDb(pool),
   });
   server.listen(config.webhookPort, () => {
     console.log(
@@ -141,13 +142,19 @@ async function cmdArchiveBackfill(monitor: Monitor): Promise<void> {
   const config = loadIndexerConfig();
   const pool = createPool(config.postgres);
   try {
-    const result = await backfillArchive(pool);
+    const result = await backfillArchive(atomicDb(pool), fetch, console.log, {
+      uploaderAddress: config.irysUploadAddress,
+    });
     for (let i = 0; i < result.verified; i++) {
       monitor.recordEvent(METRIC.indexer.archiveVerified);
     }
     console.log(
       `archive-backfill: ${result.attempted} settled pool(s), ` +
-        `${result.verified} verified, ${result.failed} failed`
+        `${result.verified} verified, ${result.failed} failed` +
+        (result.seatsUnresolved
+          ? `, ${result.seatsUnresolved} verified row(s) with no entry in our ledger — ` +
+            'a missed EntryRegistered delivery; run a backfill'
+          : '')
     );
     // A failed pool is not fatal to the run (the next run retries it),
     // but the exit code says so for cron/CI callers.
