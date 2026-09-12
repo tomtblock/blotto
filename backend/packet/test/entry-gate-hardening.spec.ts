@@ -210,3 +210,61 @@ describe('an unhandled route fault is logged, not just answered (B-13)', () => {
     expect(logged, 'a refused request is not a fault').to.deep.equal([]);
   });
 });
+
+describe('/health says what the screener is standing on (audit C-18, second half)', () => {
+  let server: import('http').Server | null = null;
+  afterEach(() => {
+    server?.close();
+    server = null;
+  });
+
+  async function health(screening?: EntryServerDeps['screening']): Promise<unknown> {
+    server = serveEntryApi(
+      {
+        packet: undefined as unknown as EntryServerDeps['packet'],
+        ciphertexts: new MemoryCiphertextStore(),
+        poolIds: new MemoryPoolIdResolver(),
+        trustProxyHeader: false,
+        screening,
+      },
+      0
+    );
+    const base = await new Promise<string>((resolve) => {
+      server!.on('listening', () => {
+        const { port } = server!.address() as import('net').AddressInfo;
+        resolve(`http://127.0.0.1:${port}`);
+      });
+    });
+    return (await fetch(`${base}/health`)).json();
+  }
+
+  it('reports a fully loaded screener', async () => {
+    expect(
+      await health({ ofacLoaded: true, describe: ['ofac mirror', 'vendor'] })
+    ).to.deep.equal({
+      ok: true,
+      service: 'packet',
+      screening: { ofac_loaded: true, sources: ['ofac mirror', 'vendor'] },
+    });
+  });
+
+  it('reports a DEGRADED screener, and still answers 200', async () => {
+    // The service booted with the mirrored list absent because a vendor could
+    // answer — which is the whole point of not crash-looping on it. But it is
+    // running on one source with a retry in flight, and until this was on
+    // /health the only trace was a line in the boot log that a restart wipes.
+    // 200 rather than 503: this recovers on its own within ten minutes, and
+    // taking the entry gate out of rotation over it would be worse than the
+    // condition.
+    const body = (await health({ ofacLoaded: false, describe: ['vendor'] })) as {
+      ok: boolean;
+      screening: { ofac_loaded: boolean };
+    };
+    expect(body.ok).to.equal(true);
+    expect(body.screening.ofac_loaded).to.equal(false);
+  });
+
+  it('is unchanged for a deployment that passes no screener', async () => {
+    expect(await health(undefined)).to.deep.equal({ ok: true, service: 'packet' });
+  });
+});

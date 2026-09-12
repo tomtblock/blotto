@@ -74,6 +74,17 @@ export interface EntryServerDeps {
    */
   onServerError?: (line: string, err: unknown) => void;
   /**
+   * What the screener is standing on right now, for `/health`.
+   *
+   * A service that booted with its mirrored list absent still SCREENS — a
+   * vendor answered, which is why it was allowed to start at all (audit
+   * C-18) — but it is running on one source with a retry in flight, and
+   * nothing outside the boot log said so. An operator reading a green
+   * `/health` had no way to tell that apart from a fully loaded screener.
+   * Optional, so the offline route suites are unchanged.
+   */
+  screening?: { readonly ofacLoaded: boolean; readonly describe: readonly string[] };
+  /**
    * TEST/DEV ONLY (D-B3 stub): when true, `x-geo-country` / `x-geo-region` /
    * `x-geo-vpn: 1` request headers override the geo lookup for that request.
    * Never set behind anything a player can reach — a client-controlled
@@ -128,7 +139,23 @@ export async function handleEntryRoute(
   // E5: the deployment liveness probe.
   if (path === '/health') {
     if (method !== 'GET') return { status: 405, body: { error: 'method' } };
-    return { status: 200, body: { ok: true, service: 'packet' } };
+    // 200 either way: a screener on one source is degraded, not down, and
+    // returning 503 would take the entry gate out of the platform's rotation
+    // over a condition that recovers on its own within ten minutes. The
+    // reader is told which it is.
+    return {
+      status: 200,
+      body: deps.screening
+        ? {
+            ok: true,
+            service: 'packet',
+            screening: {
+              ofac_loaded: deps.screening.ofacLoaded,
+              sources: [...deps.screening.describe],
+            },
+          }
+        : { ok: true, service: 'packet' },
+    };
   }
 
   if (path === '/geo') {
