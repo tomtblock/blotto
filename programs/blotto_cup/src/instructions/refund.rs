@@ -81,8 +81,13 @@ pub fn handle_trigger_refund(ctx: Context<TriggerRefund>, _pool_id: u64) -> Resu
     };
 
     // Return the untouched pot to the treasury (D-A1 revised). Entries never
-    // touch a prize vault, so on this fork the vault holds exactly the pot;
-    // debiting it all reaps the vault.
+    // touch a prize vault, so the vault holds the pot and nothing else that
+    // is spendable — but it does NOT end empty. Since 2026-09-12 `open_pool`
+    // funds it with the pot PLUS one rent cushion (`vault::rent_floor()`,
+    // the runtime's rent-exempt minimum for an empty account), and only the
+    // pot is returned here. The cushion stays, which is what keeps the vault
+    // account alive rather than swept by the runtime mid-refund — the B-03
+    // defect. It is the documented never-recovered cost of opening a pool.
     let pot = pool.pot_lamports;
     if pot > 0 {
         crate::vault::vault_debit(

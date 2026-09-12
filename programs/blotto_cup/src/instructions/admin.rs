@@ -84,11 +84,14 @@ pub fn handle_init_config(
     // R6 as amended by D1: seven tiers configured; open at launch: 0.1
     // ONLY. Written out, not computed, so the launch policy is readable.
     config.open_tiers = [true, false, false, false, false, false, false];
-    // Every tier's liveness clock starts NOW, not at the epoch — see
-    // `handle_set_open_tiers`. At `0` the fallback window is decades past and
-    // any signer could open a tier's first pool, choosing its sealing key.
-    // `now` lets the keeper open immediately (`now >= now`) and holds a
-    // the keeper open at once, which is all it now governs.
+    // Every tier's liveness clock starts NOW, not at the epoch. The
+    // permissionless liveness fallback this field once governed is gone —
+    // `open_pool` is keeper-only — so all the clock now decides is the
+    // per-tier cooldown between opens, and starting it at `now` lets the
+    // keeper open a tier's first pool immediately (`now >= now`). At `0` it
+    // would mean the same thing today; `now` is written because the field's
+    // meaning is "the earliest this tier may open again" and the epoch is not
+    // that.
     let now = Clock::get()?.unix_timestamp;
     config.tier_next_open_at = [now; N_TIERS];
     config.vault_ceiling_lamports = vault_ceiling_lamports;
@@ -264,7 +267,14 @@ pub fn handle_set_kyc_threshold(ctx: Context<AdminOnly>, above_lamports: u64) ->
 }
 
 /// R11's full-escrow-tier switch, published on-chain so the operative
-/// detection policy is public. Read by the off-chain detection layer.
+/// detection policy is public.
+///
+/// NOTHING OFF-CHAIN READS IT YET (audit 2026-09-11, A-18 / D-36). Detection
+/// runs manual-only by founder ruling D-E9 (2026-09-12): the report reaches
+/// the reviewer and nothing acts on it automatically, so this flag records the
+/// published policy rather than driving a code path. The review service
+/// labels the hard-block list reported-and-not-acted-on for the same reason.
+/// Wiring a reader is a change to that ruling, not an implementation detail.
 pub fn handle_set_detection_hard_block(ctx: Context<AdminOnly>, on: bool) -> Result<()> {
     ctx.accounts.config.detection_hard_block = on;
     Ok(())

@@ -37,6 +37,11 @@ services:
       BLOTTO_PROGRAM_ID: ${BLOTTO_PROGRAM_ID:-}
       BLOTTO_HELIUS_WEBHOOK_SECRET: ${BLOTTO_HELIUS_WEBHOOK_SECRET:?set in .env}
       BLOTTO_INDEXER_PORT: '8080'
+      # D-37 (audit 2026-09-11): without this the containers emit no CORS
+      # headers at all, so a browser on localhost:3000 cannot read the read API
+      # and the local stack cannot be made to work from the front end.
+      # Set BLOTTO_API_CORS_ORIGINS=http://localhost:3000 in the root .env.
+      BLOTTO_API_CORS_ORIGINS: ${BLOTTO_API_CORS_ORIGINS:-}
       BLOTTO_READ_API_PORT: '8081'
     ports:
       - '8080:8080' # webhook (Helius posts here)
@@ -57,6 +62,11 @@ services:
     environment:
       BLOTTO_DATABASE_URL: postgres://blotto:blotto@postgres:5432/blotto
       BLOTTO_PACKET_PORT: '8082'
+      # D-37 (audit 2026-09-11): without this the containers emit no CORS
+      # headers at all, so a browser on localhost:3000 cannot read the entry API
+      # and the local stack cannot be made to work from the front end.
+      # Set BLOTTO_API_CORS_ORIGINS=http://localhost:3000 in the root .env.
+      BLOTTO_API_CORS_ORIGINS: ${BLOTTO_API_CORS_ORIGINS:-}
       BLOTTO_TRUST_PROXY: '0'
       # Signer: Turnkey set (production) or the dev seed — see .env.example.
       TURNKEY_API_BASE_URL: ${TURNKEY_API_BASE_URL:-}

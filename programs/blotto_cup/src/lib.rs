@@ -68,9 +68,15 @@ pub mod blotto_cup {
 
     // ---- Admin (Squads vault only) --------------------------------------
 
-    /// One-time global setup. Signer becomes admin; launch policy per the
-    /// decision register (only the 0.1 tier open, every switch off; tier
-    /// prices and pots seeded from the launch constants — D-A1 revised).
+    /// One-time global setup — write-once, so a second call reverts. The
+    /// signer becomes admin (the Squads vault) and the launch policy is
+    /// baked in per the decision register: only the 0.1 tier open (R6), not
+    /// paused, the detection full-escrow switch off (R11), the KYC switch at
+    /// 0 (R3), tier prices and pots seeded from the launch constants
+    /// (D-A1 revised), and a treasury reserve of one further pot per idle
+    /// enabled tier. The arguments are the values that legitimately differ
+    /// per deployment: the three service keys, the per-tier ceilings and the
+    /// treasury's minimum balance.
     pub fn init_config(
         ctx: Context<InitConfig>,
         entry_signer: Pubkey,
@@ -91,7 +97,9 @@ pub mod blotto_cup {
 
     /// One-shot growth of a pre-2026-09-07 Config account to the current
     /// layout (admin-signed; refused once migrated). Runs immediately after
-    /// the upgrade — every other instruction fails until it has.
+    /// that upgrade — until it has, every instruction that reads Config
+    /// fails on the short account. A deployment initialised by the current
+    /// `init_config` is already at the new layout and never calls this.
     pub fn migrate_config(ctx: Context<MigrateConfig>, keeper: Pubkey) -> Result<()> {
         instructions::handle_migrate_config(ctx, keeper)
     }
@@ -128,12 +136,16 @@ pub mod blotto_cup {
         instructions::handle_set_settlement_signer(ctx, new_signer)
     }
 
-    /// Which tiers may open pools (R6, D1).
+    /// Which tiers may open pools (R6, D1). A tier this call takes from
+    /// disabled to enabled has its cooldown clock restamped to now, so a
+    /// stale stamp cannot advertise a "next pool" instant months past.
     pub fn set_open_tiers(ctx: Context<AdminOnly>, open_tiers: [bool; N_TIERS]) -> Result<()> {
         instructions::handle_set_open_tiers(ctx, open_tiers)
     }
 
-    /// Per-tier gross-intake ceiling (D2), one tier per call.
+    /// Per-tier ceiling on a pool's gross pass sales (D2), one tier per
+    /// call. Checked at `open_pool` only: lowering it blocks that tier's
+    /// NEXT open and never touches a pool already open.
     pub fn set_vault_ceiling(
         ctx: Context<AdminOnly>,
         tier: u8,
@@ -153,7 +165,11 @@ pub mod blotto_cup {
     }
 
     /// One tier's price and pot (D-A1 revised; founder-owned numbers).
-    /// Never touches an open pool — every pool copies both at open.
+    /// Never touches an open pool — every pool copies both at open. Two
+    /// refusals guard the money: a pot must be a multiple of 1024 lamports
+    /// (the band table divides in 1024ths, so nothing is stranded) and must
+    /// be smaller than `MIN_SEATS × price`, or a pool playing at the
+    /// minimum field would pay out more than it took in (D-E4 §11.1).
     pub fn set_tier_economics(
         ctx: Context<AdminTreasury>,
         tier: u8,
@@ -177,23 +193,32 @@ pub mod blotto_cup {
     // ---- Platform treasury (D-A1 revised) -------------------------------
 
     /// Anyone: deposit lamports into the platform treasury (the founder's
-    /// bootstrap path, and where every pass sale lands).
+    /// bootstrap path — this is how the treasury is funded before any pool
+    /// opens; entry payments reach the same PDA through `register`).
     pub fn fund_platform_wallet(ctx: Context<FundPlatformWallet>, amount: u64) -> Result<()> {
         instructions::handle_fund_platform_wallet(ctx, amount)
     }
 
     /// Admin (Squads): the ONE treasury exit, blocked below the policy
-    /// floor (minimum balance + idle-tier pot reserve + refundable entries).
+    /// floor — the minimum balance, plus `reserve_pots` further pots (each
+    /// counted with the prize vault's rent cushion, because that is what an
+    /// open costs) for every enabled tier with no live pool, plus every
+    /// refundable entry payment still owed to players.
     pub fn withdraw_platform(ctx: Context<WithdrawPlatform>, amount: u64) -> Result<()> {
         instructions::handle_withdraw_platform(ctx, amount)
     }
 
     // ---- Pool lifecycle -------------------------------------------------
 
-    /// The keeper (or anyone, once a tier has sat idle past the liveness
-    /// fallback): open a pool in a tier. The gates are the tier's
+    /// The keeper (`Config.keeper`) opens a pool in a tier — and nobody
+    /// else, at any idle time. The liveness fallback that once let any
+    /// signer open a long-idle tier was removed by the founder ruling of
+    /// 2026-09-07 (audit O9b): the opener also chooses the pool's sealing
+    /// key, and a pool sealed to a key our custody does not hold can never
+    /// be revealed, therefore never settled. The gates are the tier's
     /// enablement, the SEQUENTIAL rule plus its cooldown, and the treasury
-    /// policy; the pot funds from the treasury before any entry.
+    /// policy; the pot — plus the prize vault's rent cushion — moves from
+    /// the treasury into the new vault before any entry.
     pub fn open_pool(
         ctx: Context<OpenPool>,
         pool_id: u64,
@@ -204,8 +229,10 @@ pub mod blotto_cup {
         instructions::handle_open_pool(ctx, pool_id, tier, sealing_pubkey, sealing_secret_hash)
     }
 
-    /// Commit the pool's Switchboard On-Demand VRF seed. Write-once,
-    /// permissionless, bundled with the Switchboard reveal (see `vrf.rs`).
+    /// Commit the pool's Switchboard On-Demand VRF seed. Write-once, Open
+    /// pools only, permissionless on the signer — Switchboard's reveal is
+    /// the trust anchor, and the transaction must be bundled with it (see
+    /// `vrf.rs`). `register` refuses an entry until the seed is committed.
     pub fn commit_vrf_seed(ctx: Context<CommitVrfSeed>, pool_id: u64) -> Result<()> {
         vrf::handle_commit_vrf_seed(ctx, pool_id)
     }
@@ -219,8 +246,11 @@ pub mod blotto_cup {
     }
 
     /// Enter a pool: pay, submit the sealed battles hash, receive the class
-    /// and the frozen pass. The 64th entry seals the pool. The four service
-    /// keys cannot enter.
+    /// and the frozen pass. The entry price goes 100% to the platform
+    /// treasury (an entry never touches a prize vault) and is tracked as
+    /// refundable until the pool seals. One entry per wallet per pool is
+    /// structural — the Entry PDA is keyed by player. The 64th entry seals
+    /// the pool. The four service keys cannot enter.
     pub fn register(ctx: Context<Register>, pool_id: u64, battles_hash: [u8; 32]) -> Result<()> {
         instructions::handle_register(ctx, pool_id, battles_hash)
     }
@@ -234,8 +264,11 @@ pub mod blotto_cup {
 
     // ---- Settlement -----------------------------------------------------
 
-    /// Publish the pool's sealing secret (hash-checked against the value
-    /// committed at open).
+    /// Publish the pool's sealing secret in the event log, write-once and
+    /// hash-checked against the value committed at open, so a wrong secret
+    /// cannot land. Allowed once the pool has left `Open`, or past its fill
+    /// deadline — a refunding pool's entrants can then verify that nobody,
+    /// operator included, could read an allocation before the refund.
     pub fn reveal_pool_secret(
         ctx: Context<SettlePool>,
         pool_id: u64,
@@ -256,7 +289,11 @@ pub mod blotto_cup {
         instructions::handle_commit_results(ctx, pool_id, root, payouts)
     }
 
-    /// Pay (or escrow) a batch of committed seats. Idempotent via
+    /// Pay a batch of committed seats, or ESCROW a seat's share in the
+    /// vault instead of sending it: when the entry is flagged (R11), when a
+    /// sanctions hold stands against it, or when the KYC switch is on and
+    /// the share exceeds it. The batch is never refused for those — one
+    /// held wallet must not leave a pool short of `Paid`. Idempotent via
     /// `Pool.paid_mask`; every committed seat settled → `Paid`.
     pub fn pay_prizes<'info>(
         ctx: Context<'info, PayPrizes<'info>>,
@@ -266,13 +303,15 @@ pub mod blotto_cup {
         instructions::handle_pay_prizes(ctx, pool_id, seats)
     }
 
-    // ---- Detection flags + escrow settlement ----------------------------
+    // ---- Sanctions holds (Phase 2 Stage F) ------------------------------
 
-    /// Flag an entry (detection layer, R11): its prize share escrows at
-    /// `pay_prizes` instead of paying.
-    /// Place a sanctions hold on an entry (Phase 2 Stage F, settlement-signed).
-    /// BOTH paths of `release_escrow` then refuse, and the entry can receive
-    /// no next-place portion. Nothing moves; see `instructions/sanctions.rs`.
+    /// Place a sanctions hold on an entry (settlement-signed): the crank
+    /// screens every wallet in the committed payout list during resolving.
+    /// Nothing moves — `pay_prizes` escrows that share instead of sending
+    /// it, BOTH paths of `release_escrow` then refuse, and the entry can
+    /// receive no next-place portion. Unlike `flag_entry` this is allowed
+    /// AFTER the entry settles, which is the point: a hold placed then must
+    /// still stop the seven-day release. See `instructions/sanctions.rs`.
     pub fn place_sanctions_hold(ctx: Context<PlaceSanctionsHold>, pool_id: u64) -> Result<()> {
         instructions::handle_place_sanctions_hold(ctx, pool_id)
     }
@@ -283,18 +322,28 @@ pub mod blotto_cup {
         instructions::handle_lift_sanctions_hold(ctx, pool_id)
     }
 
+    // ---- Detection flags + escrow settlement ----------------------------
+
+    /// Flag an entry (detection layer, R11; settlement-signed): its prize
+    /// share escrows at `pay_prizes` instead of paying, and review then
+    /// releases or forfeits it. Refused once the entry has settled — a flag
+    /// that arrives after the money moved is reported as a miss rather than
+    /// silently accepted.
     pub fn flag_entry(ctx: Context<FlagEntry>, pool_id: u64) -> Result<()> {
         instructions::handle_flag_entry(ctx, pool_id)
     }
 
-    /// Clear an entry's flag before payout.
+    /// Clear an entry's flag before payout (settlement-signed). Refused on a
+    /// settled entry, like `flag_entry`: after settlement the escrow itself
+    /// is the record, and it is `release_escrow` that ends the hold.
     pub fn clear_flag(ctx: Context<FlagEntry>, pool_id: u64) -> Result<()> {
         instructions::handle_clear_flag(ctx, pool_id)
     }
 
     /// Pay an escrowed share to its player: the settlement signer after
     /// review (KYC packet required above the switch's threshold), or anyone
-    /// once the 7-day auto-release window has passed.
+    /// once the 7-day auto-release window has passed. Both paths refuse a
+    /// forfeited share and a share under a sanctions hold.
     pub fn release_escrow(ctx: Context<ReleaseEscrow>, pool_id: u64) -> Result<()> {
         instructions::handle_release_escrow(ctx, pool_id)
     }
@@ -330,7 +379,9 @@ pub mod blotto_cup {
     // ---- Refund fork (R7) -----------------------------------------------
 
     /// Anyone: flip a pool past its deadline and below the minimum field
-    /// into `Refunding` (at or above it, `seal_at_deadline` applies).
+    /// into `Refunding` (at or above it, `seal_at_deadline` applies), and
+    /// return its untouched pot from the prize vault to the treasury. A
+    /// pool that never took an entry goes straight to `Closed`.
     pub fn trigger_refund(ctx: Context<TriggerRefund>, pool_id: u64) -> Result<()> {
         instructions::handle_trigger_refund(ctx, pool_id)
     }
@@ -339,5 +390,92 @@ pub mod blotto_cup {
     /// 100% of the entry price landed at `register` — D-A1 revised).
     pub fn refund(ctx: Context<Refund>, pool_id: u64) -> Result<()> {
         instructions::handle_refund(ctx, pool_id)
+    }
+}
+
+/// Every place outside a test that writes the program id down.
+///
+/// THE DEFECT THIS CLOSES (audit 2026-09-11, E-13). `declare_id!` above is the
+/// only authority on this program's address, and nine other files carry it as
+/// a literal — a default, a manifest entry, a published disclosure, a CI
+/// environment value. Nothing compared them. A redeploy under a new keypair
+/// therefore had nine independent chances to leave a service, a script or the
+/// published custody page pointing at the old program, each of which fails
+/// somewhere different and late: the indexer ingests nothing, the daemon's
+/// transactions are rejected, the custody page tells the public the wrong
+/// address.
+///
+/// The test below reads each file at COMPILE time (`include_str!`, inside
+/// `#[cfg(test)]`, so nothing here reaches the SBF artifact) and asserts it
+/// contains the declared id. It fails loudly on the one change that should be
+/// deliberate — a new program keypair — and the failure names the file that
+/// was missed. Paths are relative to this file; a moved file breaks the build
+/// of the test rather than silently dropping a check, which is the intended
+/// direction.
+#[cfg(test)]
+mod program_id_copies {
+    use super::ID;
+
+    /// (what the file is, its contents). Test files are deliberately absent:
+    /// they carry the id as a fixture value and a rotation there is caught by
+    /// the tests themselves.
+    const COPIES: [(&str, &str); 9] = [
+        // The Anchor manifest — twice, `[programs.localnet]` and
+        // `[programs.devnet]`; a single `contains` covers both only if they
+        // agree, which the equality below is what makes true.
+        ("Anchor.toml", include_str!("../../../Anchor.toml")),
+        // The published custody disclosure the app renders (founder-owned).
+        (
+            "config/custody.json",
+            include_str!("../../../config/custody.json"),
+        ),
+        // The three services' compiled-in defaults, used when
+        // BLOTTO_PROGRAM_ID is unset.
+        (
+            "backend/indexer/src/config.ts",
+            include_str!("../../../backend/indexer/src/config.ts"),
+        ),
+        (
+            "backend/detection/src/main.ts",
+            include_str!("../../../backend/detection/src/main.ts"),
+        ),
+        (
+            "backend/reveal/src/main.ts",
+            include_str!("../../../backend/reveal/src/main.ts"),
+        ),
+        // The two operator scripts' defaults.
+        (
+            "scripts/admin.ts",
+            include_str!("../../../scripts/admin.ts"),
+        ),
+        (
+            "scripts/check-deployed.ts",
+            include_str!("../../../scripts/check-deployed.ts"),
+        ),
+        // The deploy workflow's PROGRAM_ID.
+        (
+            ".github/workflows/deploy-backend.yml",
+            include_str!("../../../.github/workflows/deploy-backend.yml"),
+        ),
+        // The app's example env file names it in the comment beside
+        // NEXT_PUBLIC_PROGRAM_ID, which is where a deployer reads it from.
+        (
+            "app/.env.example",
+            include_str!("../../../app/.env.example"),
+        ),
+    ];
+
+    #[test]
+    fn every_hard_coded_program_id_matches_declare_id() {
+        let declared = ID.to_string();
+        for (what, contents) in COPIES {
+            assert!(
+                contents.contains(&declared),
+                "{what} does not contain the declared program id {declared}. \
+                 If the program was redeployed under a new keypair, update every \
+                 file in this list (and `docs/AS-BUILT.md` §3, which publishes \
+                 the same list) in the same change."
+            );
+        }
     }
 }

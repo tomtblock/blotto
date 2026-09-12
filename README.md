@@ -29,10 +29,28 @@ fixed prize pool, funded from the treasury before entries opened.
 
 ## Running it locally
 
+Two paths. The first puts the site on screen in two commands and needs no
+credentials, no database and no Docker. The second adds the backend.
+
+### 1. The app alone, on fixtures
+
 ```
 npm run setup
-cd app && npm run dev
+cd app && npm run dev          # http://localhost:3000
 ```
+
+That is the whole of it: no `.env` file is required. With
+`NEXT_PUBLIC_INDEXER_URL` unset, a **development** build serves every read from
+the deterministic fixture catalogue (`app/src/data/fixture.ts`, built from
+`scenarios.ts`), so every page
+renders without a live tournament; the fixture pool ids watermark the data. A
+**production** build with that variable unset serves nothing instead — every
+read fails on purpose, because "we cannot reach the indexer" must never render
+as "no tournament is open" (`app/src/data/api.ts`). That is the default and the
+only state a deploy can reach by forgetting something.
+
+What the fixture path cannot do: enter a pool. Entering needs the packet
+service, a wallet and a funded devnet account — path 2, then `app/.env.local`.
 
 **`setup` is not optional and not a convenience.** The app imports the backend
 packages' *sources* directly, and those files resolve their own vendor
@@ -47,8 +65,56 @@ uses **npm** (`package-lock.json`). Running `npm install` at the root rewrites
 `git checkout -- yarn.lock` and delete the stray file. `npm run setup` only
 *runs* a script and is safe at the root.
 
-A local Postgres for the indexer and review service comes from
-`docker-compose.yml`.
+### 2. The backend, on Docker
+
+`docker-compose.yml` builds the four service images plus a Postgres. It needs a
+running Docker daemon, and it reads **`.env` at the repository root**:
+
+```
+cp backend/.env.example .env    # then fill what you have
+docker compose up --build postgres indexer packet   # the read path
+docker compose up --build                           # everything
+```
+
+**The copied file will not start as-is.** `BLOTTO_HELIUS_WEBHOOK_SECRET` is
+declared `${...:?set in .env}` in the compose file, and `:?` rejects an empty
+value as well as a missing one — so the example's blank line stops the stack
+with `required variable BLOTTO_HELIUS_WEBHOOK_SECRET is missing a value` before
+a container starts. Any non-empty string does locally: the indexer only
+compares an incoming webhook's `Authorization` header against it byte for byte,
+so it needs a value, not a real Helius secret.
+
+The indexer container runs `src/index.ts sync`, which applies the migrations
+itself before it serves, so there is no separate migrate step for this stack.
+The daemon and review services need credentialed seams (Turnkey, Irys, the
+settlement keypair) and will exit at startup without them — that refusal is the
+fail-closed design, not a broken compose file.
+
+**Where environment variables actually live** — three files, three different
+readers, and only one of them is a service's own:
+
+| File | Read by | What it does |
+|---|---|---|
+| `.env` at the repository root | `docker compose` | Interpolated into the `environment:` blocks of `docker-compose.yml`. Only variables that file *names* reach a container. |
+| `app/.env.local` | `next dev` / `next build` | The app's own variables; copy `app/.env.example` and fill. |
+| `backend/.env` | **nothing** | No service loads a dotenv file — every one reads `process.env` only. To run a service outside Docker, export the variables into the shell first (`set -a; . ./.env; set +a`) and then, for example, `npm --prefix backend/indexer run sync`. |
+
+Two limits of the compose stack as it stands, so they are not discovered the
+hard way:
+
+- **Set a CORS allowlist or the browser cannot read the containers.** The read
+  API and the packet service take their allowlist from
+  `BLOTTO_API_CORS_ORIGINS`; unset means no CORS headers at all, which is the
+  right default for a deployment and means a browser on `http://localhost:3000`
+  cannot read `http://localhost:8081` directly. `docker-compose.yml` passes the
+  variable through as of 2026-09-12, so put
+  `BLOTTO_API_CORS_ORIGINS=http://localhost:3000` in the root `.env` before
+  `docker compose up`. Server-rendered reads never needed it.
+- **No cluster variable.** `BLOTTO_CLUSTER` is not in the compose file; every
+  service therefore defaults to devnet (`backend/_shared/src/cluster.ts`), which
+  is what a local stack wants. `BLOTTO_RPC_URL` defaults to the public devnet
+  endpoint and is worth overriding with a Helius URL in `.env`, which the
+  compose file does read.
 
 ## Layout
 
@@ -58,6 +124,8 @@ A local Postgres for the indexer and review service comes from
 | `crates/blotto-randomness/` | The class-randomness digest and the bag-without-replacement draw |
 | `backend/scoring/` | The scoring engine, prize maths and the results tree — one module, run by the crank and by the browser |
 | `backend/sealing/` | The sealed-box payload format and pool-key custody (Turnkey) |
+| `backend/sanctions/` | The published-list screening both the entry gate and the crank use |
+| `backend/class-digest/` | The class draw replayed in TypeScript — its own package so the scoring path can never mention "class" |
 | `backend/reveal/` | The daemon: keeper, crank, bundle publishing, treasury reporting |
 | `backend/indexer/` | Event ingest, the Postgres projections, and the public read API |
 | `backend/packet/` | The entry gate: age attestation, territory check, signed entry packets |
@@ -72,16 +140,20 @@ A local Postgres for the indexer and review service comes from
 
 ```
 cargo test --workspace                          # program units + the vault fuzz
-anchor build --ignore-keys                      # the SBF artifact
+anchor build --ignore-keys                      # the SBF artifact (Solana toolchain)
 cd tests/litesvm && cargo test                  # integration, against that artifact
 cd app && npm run lint && npm run typecheck && npm test && npm run build
 ./scripts/check-language.sh                     # the PID §8.7 lexicon
 ./scripts/check-standing-rules.sh               # the vault's exits; class out of scoring
 ./scripts/check-env-examples.sh                 # every env var a service reads is documented
+./scripts/check-container-user.sh               # no service image runs as root
+./scripts/check-fixtures.sh                     # the Python oracles reproduce their vectors
+python3 scripts/check-mirrors.py                # Rust and TypeScript constants agree
+./scripts/ci-gate.sh --self-test                # the deploy gate still judges correctly
 ```
 
 Every backend package has `npm run typecheck` and `npm test`. CI runs all of it;
-`docs/AS-BUILT.md` §7 has the full sequence.
+`docs/AS-BUILT.md` §7 has the full sequence and what each step depends on.
 
 ## Reports
 

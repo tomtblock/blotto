@@ -8,7 +8,7 @@ document is canonical on which subject. This file is canonical for **process** o
 ```bash
 git config core.hooksPath .githooks    # enables the keypair pre-commit hook — do this first
 cp app/.env.example app/.env.local     # then fill values from the shared vault, never from chat
-cp backend/.env.example backend/.env   # (one example per side since E1; the CI env gate keeps them honest)
+cp backend/.env.example .env           # the REPO ROOT: this is docker compose's file. No service reads a dotenv itself
 ```
 
 ## Keys and secrets

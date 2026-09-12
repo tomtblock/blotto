@@ -93,7 +93,7 @@ import { PgPublishedBundleStore } from './published-store';
 import { makePriorityFeeSampler } from './priority-fee';
 import { makeDaemon, StubVrfCoordinator, type VrfCoordinator } from './daemon';
 import { makeSwitchboardOps, SwitchboardVrfCoordinator } from './vrf-switchboard';
-import { IrysPublisher, irysUploaderFromEnv } from './publisher-irys';
+import { IrysPublisher, irysNetworkFor, irysUploaderFromEnv } from './publisher-irys';
 import { STALE_TICK_MS, newDaemonHealth, serveDaemonHealth, type DaemonPhase } from './health';
 import {
   announceVerdict,
@@ -347,6 +347,7 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
         irysUploaderFromEnv({
           IRYS_UPLOAD_KEY: env.IRYS_UPLOAD_KEY,
           IRYS_NETWORK: env.IRYS_NETWORK,
+          BLOTTO_CLUSTER: env.BLOTTO_CLUSTER,
           BLOTTO_RPC_URL: rpcUrl,
         }),
       log
@@ -364,7 +365,10 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
     const verdict = uploadWalletVerdict(
       uploadWallet.publicKey.toBase58(),
       uploadLamports,
-      env.IRYS_NETWORK === 'mainnet' ? 'mainnet' : 'devnet'
+      // E-12: the same resolver the uploader uses. The old test here read
+      // `IRYS_NETWORK === 'mainnet'`, so a mainnet deployment that left the
+      // variable unset judged its upload wallet against devnet's figures.
+      irysNetworkFor(env)
     );
     if (verdict.refuse) throw new Error(verdict.message);
     log(verdict.message);
@@ -551,13 +555,18 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
       `(startup took ${Date.now() - health.startedAtMs}ms)`
   );
 
-  // The loop: tick, record, sleep. A throwing tick is logged and retried.
-  for (;;) {
-    try {
+  // ONE loop, and it is the one the daemon suite drives (audit 2026-09-11,
+  // A-23). This entry used to ship a second `for (;;)` of its own, so
+  // `Daemon.run` — the loop with tests — was dead in production and the loop
+  // that actually ran had none. Everything this entry needs around a tick is
+  // a hook now. Never returns, like the loop it replaces.
+  await daemon.run(intervalMs, undefined, {
+    beforeTick: async () => {
       // One sysvar read a tick: every deadline comparison in the tick uses
       // the chain's clock as it stood when the tick began.
       chainNowCache = await chain.chainNow();
-      const report = await daemon.tick();
+    },
+    afterTick: async (report) => {
       health.lastTick = { at: new Date().toISOString(), report };
       // One cheap call per tick, so a drain toward the floor shows on /health
       // rather than only at the next restart. A failure here must never take
@@ -572,20 +581,21 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
       for (const e of report.errors) {
         console.error(`${SERVICE}: tick error`, JSON.stringify(e));
       }
-    } catch (err) {
+    },
+    onTickError: (err) => {
       console.error(`${SERVICE}: tick threw:`, err instanceof Error ? err.message : err);
+    },
+    afterIteration: () => {
       // A tick that throws (config unreadable, RPC down) still counts as
       // completed for liveness — the loop is alive and will retry. A tick
-      // that never returns is the case /health's staleness rule catches;
-      // say so here too once the budget is exceeded, in the log and as an
-      // alert, since a restart wipes the evidence.
-    }
-    const lastAt = health.lastTick ? Date.parse(health.lastTick.at) : (health.readyAtMs ?? 0);
-    if (Date.now() - lastAt > STALE_TICK_MS) {
-      monitor.alert(ALERT.reveal.tickStale, { sinceMs: Date.now() - lastAt });
-    }
-    await new Promise((r) => setTimeout(r, intervalMs));
-  }
+      // that never returns is the case /health's staleness rule catches; say
+      // so here too, since a restart wipes the evidence.
+      const lastAt = health.lastTick ? Date.parse(health.lastTick.at) : (health.readyAtMs ?? 0);
+      if (Date.now() - lastAt > STALE_TICK_MS) {
+        monitor.alert(ALERT.reveal.tickStale, { sinceMs: Date.now() - lastAt });
+      }
+    },
+  });
 }
 
 if (require.main === module) {

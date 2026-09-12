@@ -16,6 +16,7 @@ import {
   makeDaemon,
   type Daemon,
   type KeeperChain,
+  type TickReport,
   MemoryPublishedBundleStore,
 } from '../src';
 import {
@@ -872,6 +873,93 @@ describe('the daemon (C8): run loop', () => {
     ac.abort();
     await done;
     expect(ticks).to.be.greaterThan(2); // survived the first (failing) tick
+  });
+
+  // Audit 2026-09-11, A-23: `run` is the ONLY loop. It used to be dead in
+  // production because main.ts carried a second, hand-written one for the per-tick work
+  // below; these hooks are that work, so the tested loop is the live loop.
+  it('run() drives the per-iteration hooks the deployment entry needs', async () => {
+    const w = await makeWorld();
+    const order: string[] = [];
+    // Counted in `beforeTick`, so the failure lands on a whole ITERATION
+    // rather than on the nth call of a method a tick may make more than once.
+    let iteration = 0;
+    const chain = new Proxy(w.chain, {
+      get(target, prop, receiver) {
+        if (prop === 'getConfig') {
+          return async () => {
+            // The second iteration throws: the error path must reach
+            // onTickError, must NOT reach afterTick, and must still reach
+            // afterIteration.
+            if (iteration === 2) throw new Error('rpc down');
+            return target.getConfig();
+          };
+        }
+        const v = Reflect.get(target, prop, receiver);
+        return typeof v === 'function' ? v.bind(target) : v;
+      },
+    }) as KeeperChain;
+    const daemon = makeDaemon({
+      chain,
+      custody: w.custody,
+      ciphertexts: w.store,
+      vrf: new StubVrfCoordinator(w.chain, 'stub'),
+      crank: async (id) => ({ poolId: id, finalState: 'Paid', stepsTaken: [] }),
+      now: () => w.clock.t,
+    });
+    const reports: TickReport[] = [];
+    const errors: unknown[] = [];
+    const ac = new AbortController();
+    const done = daemon.run(5, ac.signal, {
+      beforeTick: () => {
+        iteration++;
+        order.push('before');
+      },
+      afterTick: (report) => {
+        order.push('after');
+        reports.push(report);
+      },
+      onTickError: (e) => {
+        order.push('error');
+        errors.push(e);
+      },
+      afterIteration: () => order.push('iteration'),
+    });
+    await new Promise((r) => setTimeout(r, 60));
+    ac.abort();
+    await done;
+
+    // A clean iteration is before → after → iteration, in that order.
+    expect(order.slice(0, 3)).to.deep.equal(['before', 'after', 'iteration']);
+    // The failing one is before → error → iteration: no report, and the
+    // liveness hook still runs.
+    expect(order.slice(3, 6)).to.deep.equal(['before', 'error', 'iteration']);
+    expect(errors.length).to.equal(1);
+    expect(String(errors[0])).to.contain('rpc down');
+    // The loop kept going after the failure, and every report it handed back
+    // is a real tick report.
+    expect(iteration).to.be.greaterThan(2);
+    expect(reports.length).to.be.greaterThan(1);
+    for (const r of reports) expect(r.errors).to.be.an('array');
+  });
+
+  it('run() survives a hook that throws — book-keeping never stops the sweep', async () => {
+    const w = await makeWorld();
+    let iterations = 0;
+    const ac = new AbortController();
+    const done = w.daemon.run(5, ac.signal, {
+      afterTick: () => {
+        throw new Error('health write failed');
+      },
+      afterIteration: () => {
+        iterations++;
+        throw new Error('alert sink down');
+      },
+    });
+    await new Promise((r) => setTimeout(r, 40));
+    ac.abort();
+    await done;
+    expect(iterations).to.be.greaterThan(2);
   });
 });
 
