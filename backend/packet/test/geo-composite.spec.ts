@@ -24,7 +24,13 @@ import type { Labels, Monitor } from '../../_shared/src/monitor';
 import { CompositeGeoLookup, GeoUnavailableError, classifyGeoFailure } from '../src/geo-composite';
 import { GeoBudget, GeoBudgetSpentError } from '../src/geo-budget';
 import { GeoAuthError, GeoQuotaError } from '../src/geo-iplocate';
-import { geoVerdict, issuePacket, type GeoLookup, type PacketServiceDeps } from '../src/service';
+import {
+  geoVerdict,
+  issuePacket,
+  type GeoLookup,
+  type GeoLookupResult,
+  type PacketServiceDeps,
+} from '../src/service';
 import { loadTerritorySchedule } from '../src/territories';
 import { resolve } from 'path';
 
@@ -56,25 +62,38 @@ class RecordingMonitor implements Monitor {
 const GB = { country: 'GB', vpnOrProxy: false };
 const DE = { country: 'DE', vpnOrProxy: false };
 
-/** A source that answers with a fixed result and counts its calls. */
-function answering(result: { country: string; vpnOrProxy: boolean }) {
-  const src = {
+/** A source under test: the lookup, and how often it was actually asked. */
+interface CountingSource {
+  calls: number;
+  lookup: GeoLookup;
+}
+
+/** A source that answers with a fixed result and counts its calls. The
+ * annotation is load-bearing: the closure reads `src`, and without a declared
+ * type the initializer would depend on its own inferred type (TS7022). */
+function answering(result: GeoLookupResult): CountingSource {
+  const src: CountingSource = {
     calls: 0,
-    lookup: { lookup: async (_ip: string) => (src.calls++, result) } as GeoLookup,
+    lookup: {
+      lookup: async () => {
+        src.calls++;
+        return result;
+      },
+    },
   };
   return src;
 }
 
 /** A source that throws the given error and counts its calls. */
-function failing(error: Error) {
-  const src = {
+function failing(error: Error): CountingSource {
+  const src: CountingSource = {
     calls: 0,
     lookup: {
-      lookup: async (_ip: string) => {
+      lookup: async () => {
         src.calls++;
         throw error;
       },
-    } as GeoLookup,
+    },
   };
   return src;
 }
