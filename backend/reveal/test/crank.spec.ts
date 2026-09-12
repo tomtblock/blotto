@@ -120,6 +120,68 @@ async function buildSealedPool(sabotage: {
 }
 
 describe('the settlement crank', () => {
+  it('does not turn a screening outage into an on-chain hold', async function () {
+    this.timeout(30000);
+    const t = await buildSealedPool({});
+    const deps = {
+      chain: t.chain,
+      custody: t.custody,
+      ciphertexts: t.store,
+      publisher: t.publisher,
+      // Every source down: the composite throws, which the screener
+      // converts into `screening_unavailable`.
+      screenWinners: async (_poolId: bigint, winners: readonly string[]) =>
+        winners.map((player) => ({
+          player,
+          reason: 'screening_unavailable' as const,
+          matches: [],
+          error: 'every source failed',
+        })),
+    };
+
+    let threw: Error | null = null;
+    try {
+      await crankPool(deps as never, 1n);
+    } catch (e) {
+      threw = e as Error;
+    }
+    expect(threw, 'an outage must not be recorded as a verdict').to.not.equal(null);
+    expect(threw!.message).to.match(/could not answer/);
+
+    // Nothing on chain: no hold to lift, no escrow to chase, nothing paid.
+    const pool = await t.chain.getPool(1n);
+    expect(pool.resultsCommitted).to.equal(false);
+    expect(pool.paidMask).to.equal(0n);
+    const entries = await t.chain.getEntries(1n);
+    expect(entries.some((e) => e.sanctionsHold)).to.equal(false);
+  });
+
+  it('still places a hold when a winner actually matches a list', async function () {
+    this.timeout(30000);
+    const t = await buildSealedPool({});
+    let holdsPlaced = 0;
+    const deps = {
+      chain: t.chain,
+      custody: t.custody,
+      ciphertexts: t.store,
+      publisher: t.publisher,
+      screenWinners: async (_poolId: bigint, winners: readonly string[]) => {
+        holdsPlaced = 1;
+        return [
+          {
+            player: winners[0],
+            reason: 'listed' as const,
+            matches: [{ source: 'ofac', listName: 'SDN' }],
+          },
+        ];
+      },
+    };
+
+    const outcome = await crankPool(deps as never, 1n);
+    expect(holdsPlaced).to.equal(1);
+    expect(outcome.stepsTaken).to.include('place_sanctions_hold');
+  });
+
   it('pays the pool even when publishing keeps failing', async function () {
     this.timeout(30000);
     const t = await buildSealedPool({});

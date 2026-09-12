@@ -296,6 +296,31 @@ export async function crankPool(deps: CrankDeps, poolId: bigint): Promise<CrankO
     const winners = payouts.map((p) => playerAt(p.entryIndex));
     const held = new Set(chainEntries.filter((e) => e.sanctionsHold).map((e) => e.player));
     const holds = await deps.screenWinners(poolId, winners);
+
+    // A screener that merely FAILED TO ANSWER is not a match, and the
+    // on-chain hold cannot tell the two apart — it is one boolean. Placing
+    // it on a vendor outage withheld a legitimate winner's entire share
+    // with no way back: `release_escrow` refuses on both paths while a hold
+    // is set, the daemon's review clock only revisits FLAGGED entries, and
+    // the pool counts as terminal so no later tick re-screens. The only
+    // exit was an admin-signed lift that nobody was told was needed.
+    //
+    // So an unavailable screener is a retryable condition, not a verdict.
+    // Leave the pool short of commit and let the sweep come back: nothing
+    // has been paid, nothing is stranded, and the next tick screens again.
+    const unavailable = holds.filter((h) => h.reason === 'screening_unavailable');
+    if (unavailable.length > 0) {
+      step('screening-unavailable', {
+        players: unavailable.map((h) => h.player),
+        errors: unavailable.map((h) => h.error ?? ''),
+      });
+      throw new Error(
+        `pool ${poolId}: sanctions screening could not answer for ` +
+          `${unavailable.length} winner(s) — refusing to commit, and refusing to ` +
+          `record a vendor outage as a hold. The next tick screens again.`
+      );
+    }
+
     for (const h of holds) {
       // Idempotent: the program refuses a second placement, and a resumed
       // crank must not turn its own earlier hold into a crash.
