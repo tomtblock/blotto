@@ -30,6 +30,7 @@ import {
   RateLimiter,
   applyHygiene,
   clientKeyFrom,
+  startBucketSweeper,
   type HygieneConfig,
 } from '../../_shared/src/http-hygiene';
 import type { CiphertextStore } from '../../sealing/src';
@@ -84,6 +85,12 @@ export interface EntryServerDeps {
    * Optional, so the offline route suites are unchanged.
    */
   screening?: { readonly ofacLoaded: boolean; readonly describe: readonly string[] };
+  /**
+   * Overrides for the limiter's bucket sweeper (audit B-19/B-38/B-39) — the
+   * same seam the review service exposes, so a spec can prove the sweep is
+   * armed without waiting a minute for a real timer.
+   */
+  sweep?: Parameters<typeof startBucketSweeper>[2];
   /**
    * TEST/DEV ONLY (D-B3 stub): when true, `x-geo-country` / `x-geo-region` /
    * `x-geo-vpn: 1` request headers override the geo lookup for that request.
@@ -291,6 +298,12 @@ export function serveEntryApi(deps: EntryServerDeps, port: number): Server {
     securityHeadersEnabled: false,
   };
   const limiter = new RateLimiter(hygiene.rateLimit);
+  // B-19 / B-38 / B-39 (audit 2026-09-11): the limiter's bucket map is keyed
+  // by caller address and nothing evicted from it, on a public service, so it
+  // only ever grew. The sweep the module documented had a caller on one of the
+  // three services using it. The timer is unref'ed and no timer starts at all
+  // when the limiter is off, so this costs a disabled deployment nothing.
+  const sweeper = startBucketSweeper(limiter, hygiene.rateLimit, deps.sweep ?? {});
   const onServerError = deps.onServerError ?? ((line: string, err: unknown) => console.error(line, err));
   const server = createServer(async (req, res) => {
     const outcome = applyHygiene(
@@ -373,6 +386,9 @@ export function serveEntryApi(deps: EntryServerDeps, port: number): Server {
       }
     });
   });
+  // Stop the sweep with the server, so a test that opens and closes several
+  // does not leave a timer per server behind it.
+  server.on('close', () => sweeper.stop());
   server.listen(port);
   return server;
 }
