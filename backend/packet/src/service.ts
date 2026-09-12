@@ -28,10 +28,67 @@ export interface GeoLookupResult {
 
 export interface GeoLookup {
   lookup(ip: string): Promise<GeoLookupResult>;
+  /**
+   * Whether this adapter resolves a sub-national REGION for the addresses it
+   * answers about — i.e. whether a `"US-NY"` line in the territory schedule
+   * can bite (audit 2026-09-11, C-30).
+   *
+   * Undefined means "not declared", and not-declared is treated as NO: a
+   * capability that has not been stated has not been proven, and the cost of
+   * being wrong is a schedule entry that admits everyone it names while
+   * reading as though it blocks them. `assertRegionCapability` below is the
+   * boot check TRANSITION-REPORT.md's accepted gap asked for.
+   */
+  readonly resolvesRegion?: boolean;
+}
+
+/**
+ * What a screening said, for the record a refusal must leave (audit
+ * 2026-09-11, B-36). The structural mirror of `SanctionsVerdict`'s public
+ * half — declared here rather than imported for the reason the seam below
+ * is: this module knows nothing about which package screens.
+ *
+ * `listed` remains the ONLY field any decision reads. The rest is evidence.
+ */
+export interface SanctionsScreening {
+  listed: boolean;
+  matches: readonly {
+    source: string;
+    listName: string;
+    entityName: string;
+    entityId?: string;
+  }[];
+  consulted: readonly string[];
+  failed: readonly string[];
+  /** ISO-8601, from the screener's own clock. */
+  checkedAt: string;
+}
+
+/** One refused entry, as `issuePacket` saw it. */
+export interface SanctionsRefusal {
+  wallet: string;
+  pool: string;
+  /** What the geo lookup returned, or null when it did not answer. */
+  country: string | null;
+  /** The client address, ALREADY TRUNCATED — see `ipPrefix`. */
+  ipPrefix: string;
+  screening: SanctionsScreening;
 }
 
 export interface SanctionsList {
   isSanctioned(wallet: string, country: string): Promise<boolean>;
+  /**
+   * The whole screening, when the wiring can supply it. Optional so every
+   * test double and the offline suites keep working with the boolean alone;
+   * `issuePacket` prefers it, because a refusal recorded without the matched
+   * list is not a record of anything.
+   */
+  screen?(wallet: string): Promise<SanctionsScreening>;
+  /**
+   * Persist a refusal. Optional for the same reason, and wired by
+   * `sanctions-wiring.ts` when a database is configured.
+   */
+  recordRefusal?(refusal: SanctionsRefusal): Promise<void>;
 }
 
 export interface PacketServiceConfig {
@@ -116,8 +173,10 @@ export interface PacketServiceDeps {
 
 /** First two octets of a v4 address, or the first hextet of a v6 — enough to
  * correlate an entrant across log lines during a run, without writing whole
- * addresses to a log that outlives the reason for holding them. */
-function ipPrefix(ip: string): string {
+ * addresses to a log that outlives the reason for holding them. The same
+ * truncation is what reaches the durable refusal record (B-36), so the store
+ * never holds more of an address than the log does. */
+export function ipPrefix(ip: string): string {
   if (ip.includes(':')) return `${ip.split(':')[0]}:…`;
   const parts = ip.split('.');
   return parts.length === 4 ? `${parts[0]}.${parts[1]}.x.x` : 'unparsed';
@@ -125,6 +184,109 @@ function ipPrefix(ip: string): string {
 
 function logGeo(verdict: 'ALLOW' | 'BLOCK', ip: string, detail: string): void {
   console.log(`packet: geo ${verdict} ${ipPrefix(ip)} — ${detail}`);
+}
+
+/**
+ * Screen, preferring the whole verdict over the bare boolean so a refusal
+ * can be recorded with the list that matched (B-36). A seam that offers only
+ * `isSanctioned` — every existing test double — still works, and its
+ * refusals are recorded with an empty match list rather than not at all.
+ */
+async function screen(
+  sanctions: SanctionsList,
+  wallet: string,
+  country: string
+): Promise<SanctionsScreening> {
+  if (sanctions.screen) return sanctions.screen(wallet);
+  const listed = await sanctions.isSanctioned(wallet, country);
+  return { listed, matches: [], consulted: [], failed: [], checkedAt: new Date().toISOString() };
+}
+
+/**
+ * Write the refusal down, and never let the writing change the answer.
+ *
+ * The entry is refused either way — the record is evidence, not a gate — so
+ * a store that is unreachable must not turn a sanctions refusal into a
+ * generic upstream failure or (worse, if the ordering were ever inverted) an
+ * issued packet. A failed write is shouted into the log WITH the record, so
+ * the evidence survives in the one place that is still working.
+ *
+ * PHASE-2-REVIEW (2026-09-12): the write is AWAITED before the rejection is
+ * returned, which makes a sanctions refusal measurably slower than the other
+ * refusals — a timing signal the uniform rejection otherwise hides. Taken
+ * deliberately: the thing disclosed is that a wallet is on a PUBLISHED list
+ * the caller can read for themselves, while the thing protected is a record
+ * we are obliged to be able to produce. Fire-and-forget would keep the
+ * timing flat and lose the row on a process that exits between the answer
+ * and the insert.
+ */
+async function recordSanctionsRefusal(
+  sanctions: SanctionsList,
+  refusal: SanctionsRefusal
+): Promise<void> {
+  const lists = refusal.screening.matches.map((m) => `${m.source}:${m.listName}`).join(', ');
+  console.warn(
+    `packet: SANCTIONS REFUSAL wallet=${refusal.wallet} pool=${refusal.pool} ` +
+      `lists=[${lists}] consulted=[${refusal.screening.consulted.join(', ')}] ` +
+      `failed=[${refusal.screening.failed.join(', ')}] country=${refusal.country ?? 'unknown'} ` +
+      `ip=${refusal.ipPrefix} at=${refusal.screening.checkedAt}`
+  );
+  if (!sanctions.recordRefusal) return;
+  try {
+    await sanctions.recordRefusal(refusal);
+  } catch (e) {
+    console.error(
+      `packet: FAILED to persist a sanctions refusal — ${e instanceof Error ? e.message : String(e)}. ` +
+        `The record follows so it is not lost: ${JSON.stringify(refusal)}`
+    );
+  }
+}
+
+/**
+ * True when the schedule carries a sub-national rule for the country this
+ * lookup returned and the lookup produced no region to test it against
+ * (audit 2026-09-11, C-30).
+ *
+ * The country-level rules beside it keep working, which is exactly what made
+ * the original gap hard to notice: the file reads as though every line is
+ * live.
+ */
+function regionRuleUnenforceable(
+  schedule: TerritorySchedule,
+  geo: { country: string; region?: string }
+): boolean {
+  if (geo.region !== undefined && geo.region !== '') return false;
+  return schedule.blocked.some((code) => code.startsWith(`${geo.country}-`));
+}
+
+/**
+ * The boot assertion TRANSITION-REPORT.md's accepted gap named as the
+ * prerequisite for the first sub-national rule, and which did not exist
+ * (audit 2026-09-11, C-30).
+ *
+ * Call it once at startup with the loaded schedule and the lookup issuance
+ * will use. It throws when the schedule carries a country-region entry and
+ * the adapter does not declare `resolvesRegion` — the state in which those
+ * entries admit every person they name, silently, with no error and no log
+ * line. A country-only schedule (today's: `BE`, `AU`) passes with any
+ * adapter, so this is inert until the day it is not.
+ */
+export function assertRegionCapability(
+  schedule: TerritorySchedule,
+  geo: GeoLookup,
+  describe = 'the configured geo lookup'
+): void {
+  const subNational = schedule.blocked.filter((code) => code.includes('-'));
+  if (subNational.length === 0) return;
+  if (geo.resolvesRegion === true) return;
+  throw new Error(
+    `packet: the territory schedule blocks ${subNational.join(', ')}, which is a sub-national ` +
+      `rule, and ${describe} does not resolve a region — so every one of those entries would ` +
+      `admit the people it names, silently. Either configure a lookup that returns ISO 3166-2 ` +
+      `region codes (and declares resolvesRegion), or remove the sub-national entries from ` +
+      `config/territories.json. Refusing to start: a rule that cannot be applied must not look ` +
+      `like one that is.`
+  );
 }
 
 export async function issuePacket(
@@ -135,8 +297,14 @@ export async function issuePacket(
     // Every check runs even after one fails: uniform timing, uniform answer.
     const geo = await deps.geo.lookup(req.ip);
     const territoryOk = territoryAllowed(deps.config.territories, geo.country, geo.region);
+    // C-30: a sub-national rule that the lookup cannot feed is not a rule, it
+    // is a line in a file. Refuse the entry rather than admit it under a rule
+    // nobody can apply. `assertRegionCapability` catches this at boot; this
+    // is the second line, for a deployment that never called it.
+    const regionOk = !regionRuleUnenforceable(deps.config.territories, geo);
     const vpnOk = !geo.vpnOrProxy;
-    const sanctioned = await deps.sanctions.isSanctioned(req.wallet, geo.country);
+    const screening = await screen(deps.sanctions, req.wallet, geo.country);
+    const sanctioned = screening.listed;
     // D-B4: the durable, signature-verified clickwrap record replaces the
     // old per-request boolean; it must exist AT the current version.
     const attestation = await deps.attestations.get(req.wallet);
@@ -145,17 +313,27 @@ export async function issuePacket(
       attestation.attested18 === true &&
       attestation.termsVersion === deps.config.termsVersion;
 
-    if (!territoryOk || !vpnOk || sanctioned || !ageOk) {
+    if (!territoryOk || !regionOk || !vpnOk || sanctioned || !ageOk) {
       // Every failing check, not just the first — the caller still learns
       // nothing, and an operator chasing a stalled fill needs to know
       // whether it is the territory schedule or a missing attestation.
       const failed = [
         territoryOk ? null : `territory(${geo.country}${geo.region ? `-${geo.region}` : ''})`,
+        regionOk ? null : `region-unresolved(${geo.country})`,
         vpnOk ? null : 'vpn-or-proxy',
         sanctioned ? 'sanctions' : null,
         ageOk ? null : 'attestation-missing-or-stale',
       ].filter(Boolean);
       logGeo('BLOCK', req.ip, `packet refused: ${failed.join(', ')}`);
+      if (sanctioned) {
+        await recordSanctionsRefusal(deps.sanctions, {
+          wallet: req.wallet,
+          pool: req.pool,
+          country: geo.country ?? null,
+          ipPrefix: ipPrefix(req.ip),
+          screening,
+        });
+      }
       return GENERIC_REJECTION;
     }
     logGeo('ALLOW', req.ip, `packet issued: country=${geo.country}`);
@@ -209,6 +387,13 @@ export async function geoVerdict(deps: PacketServiceDeps, ip: string): Promise<b
     const territoryOk = territoryAllowed(deps.config.territories, geo.country, geo.region);
     if (!territoryOk) {
       logGeo('BLOCK', ip, `territory schedule: ${geo.country}${geo.region ? `-${geo.region}` : ''}`);
+      return false;
+    }
+    // C-30, as in `issuePacket`: a sub-national rule with no region to test
+    // against blocks here too, or the pre-flight would tell a visitor they
+    // may enter and issuance would then refuse them.
+    if (regionRuleUnenforceable(deps.config.territories, geo)) {
+      logGeo('BLOCK', ip, `sub-national rule for ${geo.country} and no region resolved`);
       return false;
     }
     if (geo.vpnOrProxy) {

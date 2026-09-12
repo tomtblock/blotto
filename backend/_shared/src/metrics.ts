@@ -21,11 +21,15 @@
  * without dragging `pg` or an SDK into its typecheck.
  *
  * TODO(phase-2 / phase-4): add namespaces for the services that do not exist yet —
- * `sealing` (ciphertext store, key export, reveal) and `detection` (signals
- * raised, entries flagged, review outcomes). `reveal` landed 2026-09-12 with the
- * daemon's first Monitor wiring (audit 2026-09-11, E-04): the tick, the review
- * clock's holds, and bundle publication. The `packet` namespace below covers the
- * entry gate's UPSTREAM health only; its issuance counters are still to come.
+ * `sealing` (ciphertext store, key export, reveal). `reveal` landed 2026-09-12 with
+ * the daemon's first Monitor wiring (audit 2026-09-11, E-04): the tick, the review
+ * clock's holds, and bundle publication, joined the same day by the persisted
+ * detection report (A-18). `review` landed with it — the review desk's decisions,
+ * its refusals, and the three states no response body reaches (B-24 / B-25 /
+ * C-07). What is still missing from the detection layer is the per-signal counter:
+ * how often each of the five fires, which is a tuning number rather than an
+ * operational one. The `packet` namespace below covers the entry gate's UPSTREAM
+ * health only; its issuance counters are still to come.
  *
  * Two of those carry a rule worth deciding BEFORE the metric exists, not after,
  * and the first is already load-bearing for the `packet` names below:
@@ -89,6 +93,34 @@ export const METRIC = {
     bundlePublished: 'reveal_bundle_published',
     /** Counter: a publish attempt failed; the daemon retries on a later tick. */
     bundlePublishFailed: 'reveal_bundle_publish_failed',
+    /**
+     * Counter (label `outcome`: clean|findings): one detection run over a
+     * settled pool was PERSISTED (audit 2026-09-11, A-18; ruling D-E9). The
+     * label is bounded and carries no player.
+     */
+    detectionReport: 'reveal_detection_report',
+    /** Counter: a detection run was computed but could not be persisted. */
+    detectionReportUnstored: 'reveal_detection_report_unstored',
+  },
+  review: {
+    /**
+     * Counter (label `action`: flag|clear|release|forfeit|appeal_*): one
+     * signed review decision was accepted. Per-player detail is deliberately
+     * absent — the review page is where a decision is inspected (header rule).
+     */
+    decision: 'review_decision',
+    /**
+     * Counter (label `reason`: unauthorized|replay|precondition|budget|rule):
+     * a submission was refused.
+     *
+     * The reason IS labelled here, and the entry gate's rule that a rejection
+     * must never be (see this file's header) does not reach: that rule exists
+     * because an ENTRANT must not learn which compliance check refused them.
+     * A reviewer is an operator, the label describes our own review desk, and
+     * a refusal counter with no reason on the one internet-facing service
+     * that holds the settlement key is close to useless.
+     */
+    decisionRefused: 'review_decision_refused',
   },
   packet: {
     /**
@@ -116,6 +148,34 @@ export const METRIC = {
      * entry has stopped.
      */
     geoBudgetRefused: 'packet_geo_budget_refused',
+  },
+  /**
+   * Screening (`@blotto/sanctions`), emitted by BOTH services that screen —
+   * the packet service at entry and the settlement daemon at resolving — so
+   * every series here carries the `service` label that tells them apart.
+   *
+   * Nothing in this namespace is labelled with an address, a wallet or a
+   * list name. Which wallet was refused is a durable record
+   * (`sanctions_refusals`, migration 0019), not a metric dimension: the rule
+   * at the top of this file about per-player labels applies with more force
+   * to this table than to any other.
+   */
+  sanctions: {
+    /**
+     * Counter (label `outcome`: ok|failed): one OFAC mirror refresh attempt
+     * finished. A `failed` that never returns to `ok` is the shape of the
+     * staleness cliff approaching.
+     */
+    ofacRefresh: 'sanctions_ofac_refresh',
+    /**
+     * Gauge: how old the loaded mirror is, in hours. The alert thresholds
+     * below are derived from it; the gauge is what a dashboard plots against
+     * `SANCTIONS_OFAC_MAX_AGE_HOURS` so the approach is visible before an
+     * alert fires.
+     */
+    ofacAgeHours: 'sanctions_ofac_age_hours',
+    /** Counter: a boot-time mirror load attempt failed and will be retried. */
+    ofacBootRetry: 'sanctions_ofac_boot_retry',
   },
 } as const;
 
@@ -198,6 +258,77 @@ export const ALERT = {
      * C-22 / C-27).
      */
     tickStale: 'reveal daemon tick stale',
+    /**
+     * A detection run recommends that a human look at one or more entries
+     * before the review window closes (ruling D-E9, 2026-09-12). Detection is
+     * MANUAL: nothing acts on this by itself, which is exactly why a person
+     * reading the report is the whole control. The report is persisted either
+     * way; this is what makes someone read it.
+     */
+    detectionReviewRecommended: 'reveal detection recommends human review',
+    /**
+     * A detection run could not be persisted. The pool still settles — a
+     * store failure must never wedge settlement — but the report then exists
+     * nowhere, which is the state audit A-18 describes.
+     */
+    detectionReportUnstored: 'reveal detection report not stored',
+  },
+  review: {
+    /**
+     * THE CHAIN ACTION LANDED AND THE DECISION LOG WRITE FAILED (audit
+     * B-24). Irreversible work is done and the published record of it is
+     * missing, so "every decision is published in a signed log" is untrue
+     * for that entry until someone repairs it. The reviewer was told the
+     * truth in the response; this is what tells the operator.
+     */
+    decisionNotLogged: 'review decision applied but not logged',
+    /**
+     * A forfeit is on the record and its on-chain instruction did not land
+     * from here (audit C-07). Expected when the refusal is "this service
+     * holds no admin key" — the operator lands it with `scripts/admin.ts
+     * forfeit-escrow` — and NOT expected for any other reason, which is why
+     * the refusal text rides along. The daemon's review clock holds the
+     * release meanwhile and raises `forfeitUnlanded` if the window closes
+     * with the chain still not carrying it.
+     */
+    forfeitNotLanded: 'review forfeit recorded but not landed from the service',
+    /**
+     * One reviewer key spent its whole action budget inside one window
+     * (audit B-25). A person reviewing entries does not do this; a key being
+     * scripted does. The refusal is the hard stop, this is the warning.
+     */
+    reviewerBudgetSpent: 'review reviewer action budget spent',
+  },
+  /**
+   * Screening. The mirrored OFAC list REFUSES TO ANSWER past
+   * `SANCTIONS_OFAC_MAX_AGE_HOURS` rather than say "not listed" from a stale
+   * list (`ofac-sdn.ts`, property 1). In the staged production config it is
+   * the only assured source, so that refusal stops entry and holds every
+   * winner payment — and until 2026-09-12 the whole approach to it was
+   * announced by one `console.warn` per failed refresh (audit 2026-09-11,
+   * B-28).
+   */
+  sanctions: {
+    /**
+     * The mirror is approaching its staleness limit: refreshes have been
+     * failing long enough that a transient blip is ruled out. Actionable
+     * while there is still time to act — see `ofacStale` for what happens
+     * when the limit passes.
+     */
+    ofacStaleSoon: 'sanctions ofac mirror approaching its staleness limit',
+    /**
+     * The mirror is PAST its limit and is now refusing every screening. With
+     * no vendor beside it that is the entry gate closed and every settlement
+     * held. Re-raised on every check while it lasts, because it does not
+     * recover without either a reachable Treasury host or an operator.
+     */
+    ofacStale: 'sanctions ofac mirror past its staleness limit',
+    /**
+     * The boot-time load exhausted its retries. Either the service refused
+     * to start (the mirror was the only source) or it started screening on
+     * the vendors alone with the fallback absent — the message says which.
+     */
+    ofacBootFailed: 'sanctions ofac mirror could not load at boot',
   },
 } as const;
 

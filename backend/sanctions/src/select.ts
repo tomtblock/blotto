@@ -28,12 +28,21 @@ import { ChainalysisCheck } from './chainalysis';
 import { CompositeSanctionsCheck, type NamedSource } from './composite';
 import { OfacSdnMirror } from './ofac-sdn';
 import { OpenSanctionsCheck } from './opensanctions';
-import { StubSanctionsCheck, type SanctionsCheck } from './seam';
+import { StubSanctionsCheck, type SanctionsCheck, type SanctionsSource } from './seam';
 
 export interface BuiltSanctions {
   check: SanctionsCheck;
   /** Present when the OFAC mirror is configured — the caller schedules `refresh()`. */
   ofac: OfacSdnMirror | null;
+  /**
+   * Every configured source, by name, in the order they were selected.
+   *
+   * The boot loader needs the COUNT, not the prose: a mirror that will not
+   * load is fatal when it is the only screener and survivable when a vendor
+   * is answering beside it, and "how many sources are there" must not be
+   * inferred by parsing `describe` (audit 2026-09-11, C-18).
+   */
+  sources: SanctionsSource[];
   /** One line per source, for the startup log. Never contains a secret. */
   describe: string[];
 }
@@ -87,7 +96,7 @@ export function buildSanctions(env: NodeJS.ProcessEnv, service: string): BuiltSa
     const check = ttl > 0 ? new CachingSanctionsCheck(composite, { ttlMs: ttl }) : composite;
     describe.push(ttl > 0 ? `per-address cache ${ttl} ms` : 'cache DISABLED');
     console.log(`${service}: sanctions = ${describe.join('; ')}`);
-    return { check, ofac, describe };
+    return { check, ofac, sources: sources.map((s) => s.name), describe };
   }
 
   if (env.SANCTIONS_STUB_LISTED !== undefined) {
@@ -106,7 +115,7 @@ export function buildSanctions(env: NodeJS.ProcessEnv, service: string): BuiltSa
     const listed = env.SANCTIONS_STUB_LISTED.split(',')
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
-    return { check: new StubSanctionsCheck(listed), ofac: null, describe: ['stub'] };
+    return { check: new StubSanctionsCheck(listed), ofac: null, sources: ['stub'], describe: ['stub'] };
   }
 
   throw new Error(

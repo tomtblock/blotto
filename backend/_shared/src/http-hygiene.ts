@@ -154,22 +154,107 @@ export class RateLimiter {
   }
 
   /**
-   * Drop buckets untouched for `idleMs` and already refilled to capacity — they carry no state a
-   * fresh bucket would not reproduce. Called opportunistically by the socket layer.
+   * Drop buckets untouched for `idleMs` AND already refilled to capacity — they carry no state a
+   * fresh bucket would not reproduce, so evicting them changes no verdict. Called on a timer by
+   * the socket layer (see {@link startBucketSweeper}).
+   *
+   * The refill condition is checked rather than assumed (2026-09-12, audit B-46). The doc comment
+   * has always claimed it; the code checked only the clock, so with a short `idleMs` — or a
+   * generous `burst` against a small `requestsPerMinute` — a client that was being throttled could
+   * have its half-empty bucket deleted and come back with a full burst. That is a limiter bypass
+   * bought with nothing but patience, and it is exactly the failure an eviction rule must not
+   * introduce. {@link minimumSafeIdleMs} is the smallest `idleMs` for which the two conditions
+   * coincide under the configured rate.
    */
   sweep(idleMs: number): void {
-    const cutoff = this.now() - idleMs;
+    const nowMs = this.now();
+    const cutoff = nowMs - idleMs;
+    const refillPerMs = this.config.requestsPerMinute / 60_000;
     for (const [key, bucket] of this.buckets) {
-      if (bucket.updatedAtMs <= cutoff) {
-        this.buckets.delete(key);
-      }
+      if (bucket.updatedAtMs > cutoff) continue;
+      const elapsedMs = Math.max(0, nowMs - bucket.updatedAtMs);
+      if (bucket.tokens + elapsedMs * refillPerMs < this.config.burst) continue;
+      this.buckets.delete(key);
     }
+  }
+
+  /**
+   * The shortest idle time after which an empty bucket is certainly back at capacity, so a sweep
+   * at or beyond it evicts every genuinely idle client: `burst / (requestsPerMinute / 60_000)` ms.
+   * A caller that sweeps on a shorter idle simply retains a few buckets longer, which is the safe
+   * direction to be wrong in.
+   */
+  minimumSafeIdleMs(): number {
+    return Math.ceil(this.config.burst / (this.config.requestsPerMinute / 60_000));
   }
 
   /** Bucket count — for the sweep's own test, and for a gauge if one is ever wanted. */
   size(): number {
     return this.buckets.size;
   }
+}
+
+/**
+ * PROPOSED sweep period, ms — architect-owned hygiene, not a founder number: it changes no
+ * verdict the limiter reaches, only how long an idle client's (empty) bucket is retained. One
+ * minute keeps the map small on a service that sees a burst of clients and then none.
+ */
+export const BUCKET_SWEEP_INTERVAL_MS = 60_000;
+
+/**
+ * PROPOSED idle time before a refilled bucket is evicted, ms — architect-owned, same reasoning.
+ * Five minutes is comfortably longer than {@link RateLimiter.minimumSafeIdleMs} at any sane rate,
+ * so the eviction is always of a bucket a fresh one would reproduce exactly.
+ */
+export const BUCKET_IDLE_EVICT_MS = 5 * 60_000;
+
+/** A started sweeper. `stop()` is idempotent; tests and graceful shutdowns call it. */
+export interface BucketSweeper {
+  stop(): void;
+}
+
+/**
+ * Run {@link RateLimiter.sweep} on a timer for the life of the process.
+ *
+ * Every client address is a key, so without this the bucket map grows without bound for as long
+ * as the service runs and a DoS *defence* becomes a slow DoS *vector* (audit 2026-09-11, B-19 /
+ * B-38 / B-39 / B-46: the method existed in this module from the start and had no caller anywhere
+ * outside its own unit test). Each service's socket layer starts one next to its limiter.
+ *
+ * A disabled limiter records nothing, so no timer is started at all — the default posture keeps
+ * its "adds nothing to the process" property.
+ *
+ * The timer is `unref`ed: a sweep must never be the reason a process stays alive.
+ */
+export function startBucketSweeper(
+  limiter: RateLimiter,
+  config: RateLimitConfig,
+  options: {
+    intervalMs?: number;
+    idleMs?: number;
+    setIntervalImpl?: (handler: () => void, ms: number) => unknown;
+    clearIntervalImpl?: (handle: unknown) => void;
+  } = {}
+): BucketSweeper {
+  if (!config.enabled) {
+    return { stop: () => undefined };
+  }
+  const intervalMs = options.intervalMs ?? BUCKET_SWEEP_INTERVAL_MS;
+  const idleMs = Math.max(options.idleMs ?? BUCKET_IDLE_EVICT_MS, limiter.minimumSafeIdleMs());
+  const start = options.setIntervalImpl ?? ((h, ms) => setInterval(h, ms));
+  const stop = options.clearIntervalImpl ?? ((handle) => clearInterval(handle as NodeJS.Timeout));
+  const handle = start(() => limiter.sweep(idleMs), intervalMs);
+  if (handle && typeof (handle as { unref?: () => void }).unref === 'function') {
+    (handle as { unref: () => void }).unref();
+  }
+  let stopped = false;
+  return {
+    stop: () => {
+      if (stopped) return;
+      stopped = true;
+      stop(handle);
+    },
+  };
 }
 
 /**

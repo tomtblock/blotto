@@ -39,11 +39,45 @@
  * any row from the log alone.
  */
 
+/**
+ * The settlement seam, plus the two READS the preconditions need.
+ *
+ * The reads are part of this interface rather than a second injected seam on
+ * purpose (audit B-25): a service wired with the write half and not the read
+ * half would fall back to acting with no precondition at all, which is the
+ * finding. One seam means the compiler asks for both.
+ */
 export interface ReviewActions {
   flagEntry(pool: string, player: string): Promise<void>;
   clearFlag(pool: string, player: string): Promise<void>;
   releaseEscrow(pool: string, player: string): Promise<void>;
   forfeitEscrow(pool: string, player: string): Promise<void>;
+  /** The pool's state name, for the pool-level precondition. */
+  poolState(pool: string): Promise<ReviewPoolState>;
+  /** The entry's position, or null when this wallet has no entry in this pool. */
+  entryState(pool: string, player: string): Promise<ReviewEntryState | null>;
+}
+
+/** Pool states as the program names them (`reveal/src/chain.ts`). */
+export type ReviewPoolState =
+  | 'Open'
+  | 'Sealed'
+  | 'Scored'
+  | 'Paid'
+  | 'Refunding'
+  | 'Closed';
+
+/**
+ * The entry fields every review precondition reads — the subset of
+ * `ChainEntryView` (`reveal/src/chain.ts`) that the program's own `require!`
+ * lines in `flags.rs` and `escrow.rs` are written over.
+ */
+export interface ReviewEntryState {
+  flagged: boolean;
+  settled: boolean;
+  forfeited: boolean;
+  sanctionsHold: boolean;
+  escrowLamports: bigint;
 }
 
 /**
@@ -96,6 +130,13 @@ export interface DecisionLog {
   list(pool: string): Promise<Decision[]>;
   /** One entry's thread, oldest first — what the appeal rules read. */
   listFor(pool: string, player: string): Promise<Decision[]>;
+  /**
+   * How many rows this signing key has on the record at or after `sinceIso`
+   * — the per-reviewer action budget (audit B-25). Counts every kind of row
+   * the key signed; a player's own appeal lodge is signed by the player, so
+   * it never counts against a reviewer's budget.
+   */
+  countBy(decidedBy: string, sinceIso: string): Promise<number>;
 }
 
 export class MemoryDecisionLog implements DecisionLog {
@@ -111,22 +152,57 @@ export class MemoryDecisionLog implements DecisionLog {
       .filter((r) => r.pool === pool && r.player === player)
       .map((r) => ({ ...r }));
   }
+  async countBy(decidedBy: string, sinceIso: string): Promise<number> {
+    const since = Date.parse(sinceIso);
+    return this.rows.filter(
+      (r) => r.decidedBy === decidedBy && Date.parse(r.decidedAt) >= since
+    ).length;
+  }
 }
 
 /**
- * What `decide` did. `applied`: the chain action landed (or none was due)
- * and the row is logged. `recorded_pending_admin`: a FORFEIT whose row is
- * logged but whose instruction this service cannot sign — the operator
- * lands it with the admin key; the log already says review upheld the flag.
+ * What `decide` did.
+ *
+ *   `applied`              the chain action landed (or none was due) and the
+ *                          row is logged. The only wholly clean outcome.
+ *   `applied_not_logged`   THE CHAIN ACTION LANDED AND THE LOG WRITE FAILED
+ *                          (audit B-24). Irreversible work happened; the
+ *                          record of it did not. The caller must be told the
+ *                          action executed — telling a reviewer "502, it
+ *                          failed" about work that is already on chain
+ *                          invites a retry of something already done — and
+ *                          must alert, because a decision missing from the
+ *                          published log breaks the promise that every
+ *                          decision is in it.
+ *   `recorded_pending_admin`
+ *                          a FORFEIT whose row is logged but whose
+ *                          instruction this service cannot sign — the
+ *                          operator lands it with the admin key. `chainError`
+ *                          carries WHY the call did not land: this service
+ *                          holding no admin key is the expected reason, an
+ *                          RPC outage is not, and until 2026-09-12 the two
+ *                          were indistinguishable because the error was
+ *                          swallowed whole (audit C-07).
  */
-export type DecideOutcome = 'applied' | 'recorded_pending_admin';
+export type DecideOutcomeKind = 'applied' | 'applied_not_logged' | 'recorded_pending_admin';
+
+export interface DecideOutcome {
+  kind: DecideOutcomeKind;
+  /** Why the chain call did not land, when one was attempted and refused. */
+  chainError?: string;
+  /** Why the log write failed, on `applied_not_logged`. */
+  logError?: string;
+}
 
 /**
  * Apply one review decision.
  *
  * Order differs by kind, deliberately:
- *   - flag / clear / release: CHAIN THEN LOG. A refused action logs nothing,
- *     so the log never claims a release that did not happen.
+ *   - flag / clear / release: CHAIN THEN LOG. A refused action logs nothing
+ *     and THROWS, so the log never claims a release that did not happen and
+ *     the caller answers 502. A log write that fails AFTER the chain action
+ *     landed does not throw: the chain is the irreversible half, so the
+ *     outcome says `applied_not_logged` and the caller reports the truth.
  *   - forfeit: LOG THEN CHAIN. The decision is the reviewer's signed row;
  *     landing `forfeit_escrow` is admin-signed and usually happens later
  *     from `scripts/admin.ts`. Until 2026-09-07 the chain-first order meant
@@ -154,9 +230,13 @@ export async function decide(
       await log.append(d);
       try {
         await actions.forfeitEscrow(d.pool, d.player);
-        return 'applied';
-      } catch {
-        return 'recorded_pending_admin';
+        return { kind: 'applied' };
+      } catch (e) {
+        // NOT swallowed (audit C-07). "This service holds no admin key" and
+        // "the RPC is down" produce the same outcome here — the operator
+        // lands it either way — but only one of them is routine, and the
+        // caller and the alert both need to be able to tell them apart.
+        return { kind: 'recorded_pending_admin', chainError: errorText(e) };
       }
     }
     case 'appeal_lodged':
@@ -164,6 +244,21 @@ export async function decide(
     case 'appeal_dismissed':
       break;
   }
-  await log.append(d);
-  return 'applied';
+  try {
+    await log.append(d);
+  } catch (e) {
+    // The chain action (if any) has already landed. An appeal row reaches
+    // here too: nothing happened on chain, so a failed write is a plain
+    // failure and is re-thrown for the caller's 502.
+    if (d.action === 'flag' || d.action === 'clear' || d.action === 'release') {
+      return { kind: 'applied_not_logged', logError: errorText(e) };
+    }
+    throw e;
+  }
+  return { kind: 'applied' };
+}
+
+/** An error's message, never its stack — these strings reach a response body. */
+export function errorText(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
 }

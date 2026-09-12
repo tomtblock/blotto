@@ -74,6 +74,9 @@ const ALL_MIGRATIONS = [
   '0016_published_bundles.sql',
   '0017_rankings_by_player.sql',
   '0018_events_seq.sql',
+  '0019_sanctions.sql',
+  '0020_review_decision_signed_text.sql',
+  '0021_detection_reports.sql',
 ];
 
 describe('the re-derive marker, against the real migrations (audit E-15)', () => {
@@ -105,8 +108,12 @@ describe('the re-derive marker, against the real migrations (audit E-15)', () =>
 
   it('scans the whole directory without surprises', () => {
     const marked = ALL_MIGRATIONS.filter((f) => declaresRederive(migrationSql(f)));
-    expect(marked, 'exactly the destructive migration is marked today').to.deep.equal([
+    // 0004 dropped two derived tables; 0019 added a column to one that only
+    // a replay can fill (the sanctions holds already in the ledger). Both
+    // leave a derived table that does not yet say what the events say.
+    expect(marked, 'exactly the migrations that invalidate a derived table').to.deep.equal([
       '0004_seat_payouts.sql',
+      '0019_sanctions.sql',
     ]);
   });
 });
@@ -146,7 +153,10 @@ describe('migrate() reports the invalidation to its caller', () => {
     expect(run.applied, 'a clean database applies every migration, in order').to.deep.equal(
       ALL_MIGRATIONS
     );
-    expect(run.rederiveRequestedBy).to.deep.equal(['0004_seat_payouts.sql']);
+    expect(run.rederiveRequestedBy).to.deep.equal([
+      '0004_seat_payouts.sql',
+      '0019_sanctions.sql',
+    ]);
     expect(run.rederiveRequired).to.equal(true);
     // Each applied file is recorded under its own name.
     for (const file of ALL_MIGRATIONS) {
@@ -169,7 +179,10 @@ describe('migrate() reports the invalidation to its caller', () => {
     const run = await migrate(pool);
     expect(run.applied[0]).to.equal('0004_seat_payouts.sql');
     expect(run.applied).to.have.lengthOf(ALL_MIGRATIONS.length - 3);
-    expect(run.rederiveRequestedBy).to.deep.equal(['0004_seat_payouts.sql']);
+    expect(run.rederiveRequestedBy).to.deep.equal([
+      '0004_seat_payouts.sql',
+      '0019_sanctions.sql',
+    ]);
     expect(run.rederiveRequired).to.equal(true);
   });
 });

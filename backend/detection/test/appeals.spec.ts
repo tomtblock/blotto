@@ -22,6 +22,8 @@ import {
   verifyRow,
   type Decision,
   type ReviewActions,
+  type ReviewEntryState,
+  type ReviewPoolState,
   type ReviewerRegistry,
 } from '../src';
 
@@ -80,15 +82,46 @@ function appealBody(signer: Key, atMs: number, grounds = 'the device was shared 
   };
 }
 
-/** Actions that record calls; forfeit throws like the real service (no admin key). */
-function actions(calls: string[]): ReviewActions {
+/**
+ * Actions that record calls and carry a small mutable chain position, since
+ * the route now checks the state preconditions before it acts (audit B-25).
+ * `forfeit` throws like the real service (no admin key).
+ *
+ * The default position is one where an upheld flag is legal — a Scored pool
+ * whose flagged entry still holds its escrowed share — because that is the
+ * position every appeal story in this file starts from.
+ */
+function actions(calls: string[], initial: Partial<ReviewEntryState> = {}): ReviewActions {
   const rec = (name: string) => async (_p: string, w: string) => void calls.push(`${name}:${w}`);
+  const entry: ReviewEntryState = {
+    flagged: true,
+    settled: false,
+    forfeited: false,
+    sanctionsHold: false,
+    escrowLamports: 1_000_000n,
+    ...initial,
+  };
   return {
-    flagEntry: rec('flag'),
-    clearFlag: rec('clear'),
-    releaseEscrow: rec('release'),
+    flagEntry: async (p, w) => {
+      entry.flagged = true;
+      await rec('flag')(p, w);
+    },
+    clearFlag: async (p, w) => {
+      entry.flagged = false;
+      await rec('clear')(p, w);
+    },
+    releaseEscrow: async (p, w) => {
+      entry.escrowLamports = 0n;
+      await rec('release')(p, w);
+    },
     async forfeitEscrow() {
       throw new Error('forfeit_escrow is admin-signed; this service holds no admin key');
+    },
+    async poolState(): Promise<ReviewPoolState> {
+      return 'Scored';
+    },
+    async entryState(): Promise<ReviewEntryState> {
+      return { ...entry };
     },
   };
 }
@@ -136,11 +169,19 @@ describe('appeal state (pure, from one entry’s thread)', () => {
 });
 
 describe('POST /appeals and the appeal decisions', () => {
-  function world(members: Key[] = [alice, bob]) {
+  function world(members: Key[] = [alice, bob], entry: Partial<ReviewEntryState> = {}) {
     const calls: string[] = [];
     const log = new MemoryDecisionLog();
     const now = { t: T0 };
-    const deps = { registry: registryOf(...members), actions: actions(calls), log, now: () => now.t };
+    const deps = {
+      registry: registryOf(...members),
+      actions: actions(calls, entry),
+      log,
+      now: () => now.t,
+      // The suite asserts on responses, not on the request log (B-35 has its
+      // own spec); silence keeps the output readable.
+      logger: () => undefined,
+    };
     return { calls, log, now, deps };
   }
 
@@ -173,6 +214,41 @@ describe('POST /appeals and the appeal decisions', () => {
     expect(state.status).to.equal(200);
     expect((state.body as { lodged: Decision | null }).lodged?.action).to.equal('appeal_lodged');
     expect(w.calls).to.deep.equal([], 'an appeal takes no chain action');
+  });
+
+  it('a clock-skew refusal is NOT reported as a bad wallet signature (audit D-33)', async () => {
+    // The player's device clock is out, so their genuine signature falls
+    // outside the freshness window. Both refusals are 401 with the same
+    // `error`, so an old client keeps working; the `reason` is what lets the
+    // page stop telling a player their wallet is wrong when their clock is.
+    const w = world();
+    await handleReviewRoute(w.deps, 'POST', '/decisions', reviewerRow(alice, 'forfeit', T0));
+    w.now.t = T0 + 2 * DAY;
+
+    const skewed = await handleReviewRoute(
+      w.deps,
+      'POST',
+      '/appeals',
+      appealBody(player, w.now.t - 10 * 60 * 1000)
+    );
+    expect(skewed.status).to.equal(401);
+    expect(skewed.body).to.deep.equal({ error: 'unauthorized', reason: 'clock_skew' });
+
+    // A signature that is genuinely not this entry's wallet says so.
+    const forged = await handleReviewRoute(w.deps, 'POST', '/appeals', appealBody(stranger, w.now.t));
+    expect(forged.status).to.equal(401);
+    expect(forged.body).to.deep.equal({ error: 'unauthorized', reason: 'signature' });
+
+    // And the REVIEWER route stays uniform — it must not become a
+    // member-list oracle (server.ts header).
+    const staleReviewer = await handleReviewRoute(
+      w.deps,
+      'POST',
+      '/decisions',
+      reviewerRow(alice, 'clear', w.now.t - 10 * 60 * 1000)
+    );
+    expect(staleReviewer.status).to.equal(401);
+    expect(staleReviewer.body).to.deep.equal({ error: 'unauthorized' });
   });
 
   it('after seven days the lodge is refused with window_closed', async () => {
@@ -224,7 +300,9 @@ describe('POST /appeals and the appeal decisions', () => {
   });
 
   it('every accepted row re-verifies from the log alone; a tampered or misattributed row does not', async () => {
-    const w = world();
+    // This story starts BEFORE the flag, so the entry begins unflagged and
+    // `flagEntry` moves it — the preconditions read the position each step.
+    const w = world([alice, bob], { flagged: false });
     w.now.t = T0 - DAY;
     await handleReviewRoute(w.deps, 'POST', '/decisions', reviewerRow(alice, 'flag', T0 - DAY));
     w.now.t = T0;
@@ -267,6 +345,7 @@ describe('the review server’s hygiene (BR-005, wired at Stage E)', () => {
         registry: registryOf(alice),
         actions: actions([]),
         log: new MemoryDecisionLog(),
+        logger: () => undefined,
         hygiene: {
           rateLimit: { enabled: true, requestsPerMinute: 60, burst: 1, retryAfterSeconds: 1 },
           cors: { allowedOrigins: ['https://app.example'], allowMethods: 'GET, POST, OPTIONS', allowHeaders: 'content-type' },
@@ -303,7 +382,12 @@ describe('the review server’s hygiene (BR-005, wired at Stage E)', () => {
 
   it('sanity: a server with the default posture is unchanged on the wire (no CORS header at all)', async () => {
     const server = serveReviewApi(
-      { registry: registryOf(alice), actions: actions([]), log: new MemoryDecisionLog() },
+      {
+        registry: registryOf(alice),
+        actions: actions([]),
+        log: new MemoryDecisionLog(),
+        logger: () => undefined,
+      },
       0
     );
     await new Promise<void>((r) => server.once('listening', () => r()));
@@ -316,5 +400,41 @@ describe('the review server’s hygiene (BR-005, wired at Stage E)', () => {
       await new Promise<void>((r) => server.close(() => r()));
     }
     void createServer; // keep the import honest if the sanity test is trimmed
+  });
+
+  it('sweeps the rate limiter’s bucket map, and stops sweeping when the server closes (B-46)', async () => {
+    // The finding: the sweep existed from the start and had no caller
+    // anywhere outside its own unit test, so on a public service every client
+    // address accumulated a bucket for the life of the process — a DoS
+    // defence that is itself a slow leak.
+    const timers: Array<{ handler: () => void; ms: number; cleared: boolean }> = [];
+    const server = serveReviewApi(
+      {
+        registry: registryOf(alice),
+        actions: actions([]),
+        log: new MemoryDecisionLog(),
+        logger: () => undefined,
+        hygiene: {
+          rateLimit: { enabled: true, requestsPerMinute: 6_000, burst: 100, retryAfterSeconds: 1 },
+          cors: { allowedOrigins: [] },
+          securityHeadersEnabled: false,
+        },
+        sweep: {
+          intervalMs: 10,
+          setIntervalImpl: (handler: () => void, ms: number) => {
+            const t = { handler, ms, cleared: false };
+            timers.push(t);
+            return t;
+          },
+          clearIntervalImpl: (h: unknown) => void ((h as { cleared: boolean }).cleared = true),
+        },
+      },
+      0
+    );
+    await new Promise<void>((r) => server.once('listening', () => r()));
+    expect(timers.length, 'the socket layer starts a sweeper').to.equal(1);
+    expect(timers[0].cleared).to.equal(false);
+    await new Promise<void>((r) => server.close(() => r()));
+    expect(timers[0].cleared, 'and stops it with the server').to.equal(true);
   });
 });

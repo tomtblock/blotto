@@ -6,5 +6,6 @@ export * from './http';
 export * from './chainalysis';
 export * from './opensanctions';
 export * from './ofac-sdn';
+export * from './refusal-log';
 export * from './select';
 export * from './wire';

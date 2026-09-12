@@ -368,3 +368,144 @@ order. So if a delivery ever arrives out of chain order for one of the three pai
 derived state is no longer produced once at random — it is reproduced stably by every rebuild.
 Only a backfill into a fresh ledger recovers the true order. The fix makes the wrongness
 deterministic; it does not make it recoverable, and the migration's header and both stores say so.
+
+## Addendum — Wave 3.1, batch S1: sanctions and screening (2026-09-12)
+
+| Audit id | What changed | Shown closed by |
+|---|---|---|
+| B-27 / G-07 | The vendor deadline cleared its timer the moment the response HEAD arrived, so `res.json()` ran unbounded: a vendor that accepts the connection, answers 200 and then stops sending hung the entry gate and the daemon's tick with nothing failed and nothing logged. One `AbortSignal.timeout` per attempt now stays live until the body is parsed, in the shared `withRetry` and in the geo adapter it was lifted from, and a stalled body is classified transient like a stalled head | `sanctions/test/vendors.spec.ts` "the vendor deadline covers the whole exchange" (both vendors) and `packet/test/geo-iplocate.spec.ts` "the deadline covers the whole exchange" — modelled on the existing `ofac-sdn.spec.ts` stalled-body case. Without the fix the two body tests hang until mocha's timeout |
+| C-18 | The boot-time OFAC load was one attempt, no retry, fatal on failure — so a Treasury-host blip during a deploy crash-looped the packet service and the daemon, and the platform's answer to a crash loop is to restart faster. It now retries with full-jitter backoff inside a wall-clock budget each attempt draws down (so N attempts cannot become N 29 MB downloads), and on ultimate failure refuses to start ONLY when the mirror is the sole screener; with a vendor configured beside it the service starts on the vendors, alerts, and retries every ten minutes instead of every nine hours | `sanctions/test/wire.spec.ts` — the retry, the budget arithmetic, both ultimate-failure branches, and the recovery schedule reverting to the ordinary cadence on the first success |
+| B-28 | The staleness cliff — past `SANCTIONS_OFAC_MAX_AGE_HOURS` the mirror refuses every screening, which in the staged config is the entry gate shut and every payment held — was announced by one `console.warn` per failed refresh. A staleness watch now runs hourly beside the refresh, reports the age as a gauge, alerts once when the age crosses 75 % of the limit (the first age three consecutive failed refreshes are needed to reach, so a blip cannot raise it) and on every check past the limit | `sanctions/test/wire.spec.ts` "the staleness watch": silence while fresh, one alert on the approach, a repeat alert past the cliff, and re-arming after a recovery |
+| B-36 | A sanctions match at entry left one line on standard output — no wallet, no list name, no row anywhere. `asSanctionsList` had thrown the verdict away before the caller knew it had refused anyone. The seam now carries the whole screening beside the boolean, and a refusal is written to `sanctions_refusals` (migration 0019) with the wallet, the pool, every matched list and listed party, which sources answered and which failed, the country, and the screening's own timestamp. The IP is truncated exactly as the log truncates it | `packet/test/sanctions-wiring.spec.ts` "a sanctions refusal is written down": the record's content through `issuePacket` against the real SDN excerpt, the truncation, that a territory refusal writes nothing, and that a store which throws changes no answer and shouts the record instead |
+| D-20 / F-08 | `SanctionsHoldPlaced` / `SanctionsHoldLifted` had no decoder, so no ledger row and no derived column: `lift_sanctions_hold` could not be aimed from any operator tool. Both layouts are registered, both project to `entries.sanctions_hold` / `sanctions_hold_at` — their own columns, never `flagged`, because a hold is not a reviewable integrity flag — and `GET /pools/<id>/entries` serves them with no read-API change | `_shared/test/blotto-events.spec.ts` (byte-level, both events, both drift directions) and `indexer/test/projection.spec.ts` "sanctions holds reach the derived tables": the real lifecycle fixture with two hold events appended as Anchor `Program data:` lines, so a hold lands on an entry the compiled program registered |
+| C-30 | Sub-national rules were inert with the production adapter, and the boot assertion this repository's own note called a prerequisite did not exist. `GeoLookup` now declares `resolvesRegion`, `IpLocateGeoLookup` declares it FALSE (its `subdivision` is a name, never a code), and `assertRegionCapability` refuses to start a service whose schedule carries a `XX-YY` rule the lookup cannot feed. `issuePacket` and `geoVerdict` refuse the individual request on the same condition, so the rule cannot be silently inert even where the assertion is not called | `packet/test/geo-iplocate.spec.ts` "sub-national rules are enforceable or refused, never inert": today's country-only schedule passes with any adapter, a `US-NY` line plus the production adapter throws and names both remedies, an undeclared capability counts as absent, and the entry itself is refused |
+| B-43 | **Accepted limitation, not a defect.** Geo/VPN screening is IP-only and per-request: the address screened is the one that reached our edge, so a proxy the vendor has not catalogued defeats it, and nothing binds the screened address to the wallet that later enters. That is the limit of IP geolocation as a category. Recorded in the header of `backend/packet/src/geo-iplocate.ts`, where the next person to touch the geo path reads it, and here | Nothing to close. The remedies — a second signal, or an identity check — are founder-owned product decisions (D-B4 keeps identity to a clickwrap); a dated register line is the founder's to write |
+
+### The decision C-18 left open, and why it went this way
+
+**Bounded retry then refuse, not a cached copy on disk.** A disk cache is already available and
+already belongs to the operator: `SANCTIONS_OFAC_SDN_PATH` loads the list from a local file, with no
+second code path and no question about which copy is authoritative. A cache this code wrote and read
+would additionally have to carry the age of the DATA rather than the age of the file, or it would
+silently defeat the one property the mirror exists to hold — a stale list refuses to answer rather
+than saying "not listed" — and the published date is day-granular, so the reconstructed age would be
+coarser than the 36 h window it is compared against. And on Fly the filesystem a service restarts
+onto is not the one it wrote to, so the cache would be empty in the most common restart of all.
+
+**The narrowing of "cannot load → refuse" is the part worth a second look.** The posture is that
+nothing is ever issued unscreened, and it is unchanged: with a vendor configured, every entry is
+still screened, the composite already treats a source that throws as `failed` while the others
+decide, and every verdict says so out loud. What changed is that an outage at a FALLBACK no longer
+takes the entry gate down — which is the crash loop the finding describes. With the mirror as the
+only source, the refusal is exactly as before, and it now names the remedy. Carried as a
+`PHASE-2-REVIEW` comment at the branch.
+
+### Found while doing this, not in the finding list
+
+- **`wireScreening` reports `ofacLoaded`, and nothing serves it yet.** A service that started with
+  its fallback absent should say so on `/health`; the packet service's and the daemon's health
+  payloads are batch O1's and D1's files.
+- **The operator tool for a held share still has to be written.** The projection and the read API now
+  answer "who is held, and since when" (`GET /pools/<id>/entries`), which is what D-20 said was
+  missing; a `scripts/admin.ts lift-hold` and the results-page copy for a held player are the admin
+  and app batches.
+
+## Addendum — Wave 3.3, batch E1: the entry gate (2026-09-12)
+
+Merged as PR #113. Five rows, one of which was the most expensive defect found since the four
+CRITICALs.
+
+| Audit id | What was true | What is true now |
+|---|---|---|
+| **B-29** | `PgPublishedKeyStore.save` had `ON CONFLICT (pool_id) DO NOTHING`, so a second concurrent open of one pool was told its sealing key had been stored when it had not; the in-memory twin overwrote instead, discarding the first caller's record. `createPoolKey` is a check-then-act, so both callers reach `save` | First write wins; a conflicting write raises a typed error naming both secret hashes; an identical re-save stays a no-op. `save` is the barrier, not the `load` pre-check. Both twins are driven through one contract in `backend/sealing/test/published-key-store.spec.ts` |
+| **B-44** | The clickwrap statement names the edition's DATE (founder ruling 2026-09-09) while the consent record stores the VERSION, and nothing made a date name exactly one edition | `config/terms.json` carries the append-only ledger of every edition, seeded with the real history recovered from this repository, and `loadTerms` refuses to boot where a date repeats or moves backwards. The signed wording is untouched. The stored record takes its version from the server |
+| **E-03 / C-31** | The geo stub was selectable from one variable, guarded only by which variables the deploy workflow happened to set | `ALLOW_STUB_GEO=1` is required, matching `ALLOW_DEV_ENTRY_SIGNER` and `ALLOW_STUB_SANCTIONS`. A stub variable without the opt-in stops the service |
+| **E-20** | Three entrypoints parsed numeric settings with a bare `Number()`: empty became 0, garbage became NaN, both silently | `backend/_shared/src/env-number.ts` — whole numbers in range, or the boot fails naming the variable. Wired through the packet service and the daemon |
+| **B-13** | The socket catch-all answered 500 and logged nothing, on a service whose refusals are generic by design | Method, path and error are recorded. Never the body, which carries the sealed allocation, and never the caller's address |
+
+### Why B-29 is the serious one
+
+Two concurrent opens of one pool both mint a keypair, both import it to the enclave, and both call
+`save`. Whichever store answer you took, one caller walked away holding a secret hash the store did
+not have. That caller opens the pool on chain committing that hash, players seal their allocations
+to it, and custody can only ever export the other key. The pool cannot be revealed, cannot be
+scored, and cannot satisfy its own on-chain commitment — with entry money already in the vault and
+no instruction that can return it except a refund the crank will never reach.
+
+It has never fired, because no two opens have ever raced. That is luck, not design.
+
+### What B-44 chose not to do
+
+The obvious fix is to name the version in the signed statement. That is founder-owned language with
+a dated ruling behind it (2026-09-09: the date "reads the way a contract does"), and a wallet
+displays those exact bytes. So the invariant is enforced around the wording rather than by
+rewriting it: the ledger makes a repeated date impossible, which is what the date-only statement
+needs in order to be sufficient. If the founder later prefers the version in the text, the ledger
+stays useful and the change is a one-line edit plus a new edition.
+
+## Addendum — Wave 5.3, batch O1 part: containers (2026-09-12)
+
+Merged as PR #114. **E-22** — all four service images ran as root, including the two that decode the
+settlement signer into shared memory at boot. They now drop to the base image's unprivileged `node`
+user before the installs and before the service starts, and the decoded keypair in `/dev/shm` is
+mode 0600 owned by that user rather than by root.
+
+`scripts/check-container-user.sh` asserts it, with its own self-test over five deliberately wrong
+images and two correct ones, because one `USER` line is exactly what a later edit drops unnoticed —
+nothing about a root-running container looks wrong from outside.
+
+**Not proven here:** there is no container runtime in this environment, so the images were not
+built. The `node` user was verified against the upstream `nodejs/docker-node` Dockerfile for
+`22/bookworm-slim` rather than assumed. The next `deploy-backend` run is the first real build, and
+it fails loudly rather than silently if this is wrong.
+
+## Addendum — Wave 3.2, batch R1: the review service (2026-09-12)
+
+Nine rows plus founder ruling D-E9's report surface.
+
+| Audit id | What was true | What is true now |
+|---|---|---|
+| **A-04 / B-21** | The decision log stored the reviewer's signed timestamp, then rendered it back through a `Date` on read, so the string that came out was not the string that was signed. **Every published decision failed to verify against its own signature** | The signed text is stored and served as text; a non-canonical spelling is rejected at submission, so the two columns cannot disagree again |
+| **B-23** | A published decision carried everything needed to replay it for five minutes | The signature is the nonce: a submission whose signature is already on that entry's record is refused. Being published is what spends it |
+| **B-25** | One reviewer key could flag or release any entry with no precondition | State rules mirroring the program's own are checked before the chain is touched, and a per-reviewer action budget caps what a stolen key does in an hour. Half-fixed by design — the second signer is a founder decision |
+| **B-24** | A log write failing AFTER the chain action landed answered 502, so "the chain moved and the record does not say so" read as "nothing happened" | 200 with the two facts separated — applied, not logged — plus an alert |
+| **C-07** | A forfeit whose chain call was refused swallowed the error | It reports why, and a read route shows upheld forfeits the chain does not yet carry |
+| **B-35** | The service holding the settlement key logged no requests | It does, naming the failed check, while the caller still gets a bare refusal. No signature, criterion, whole address or whole caller address is written |
+| **B-46** | The rate limiter's documented sweep had no caller on any of the three services using it | On a timer, and it will not evict a bucket still in debt — which the old sweep would have done, handing a limited caller a clean slate |
+| **D-33** | An appeal refused for clock skew was reported as a bad wallet signature | The two are named apart. The reviewer route stays deliberately uniform |
+| **A-18 / D-36** | Detection findings reached no operator surface at all | The report is persisted and served to the reviewer behind an operator token. **Nothing acts on it automatically**, per D-E9, and the hard-block list is labelled reported-and-not-acted-on |
+
+### The one that matters most
+
+A-04 is a verifiability defect, which is item 3 in this project's tradeoff order. The published
+decision log exists so a player can check a reviewer's decision without trusting us. Every row in it
+failed that check, and would have gone on failing it silently. The repair is exact for every row our
+own two clients signed, because the truncation happened on read and never on write. A row signed by
+some other client with an equivalent-but-different spelling stays unverifiable, and there is no
+information left to recover it.
+
+### Numbers proposed, awaiting the founder
+
+`BLOTTO_REVIEW_ACTION_BUDGET` = 64 decisions per `BLOTTO_REVIEW_ACTION_WINDOW_MS` = 1 hour. A pool
+holds at most 64 seats, so 64 an hour is about one largest-possible honest burst and two orders of
+magnitude under a scripted key. A review decision is never urgent to the minute — the release clock
+runs in hours and appeals in days — so being too tight costs one refusal and a second window. Both
+are marked awaiting ratification in the code and printed at boot.
+
+## Addendum — Wave 5.3, batch O1 part: metrics (2026-09-12)
+
+**E-09 / A-19**, and the deployment half of E-10 / A-35. The Prometheus sink, `createMetricsServer`
+and `serveMetricsIfPrometheus` had all existed and been tested since Step 6, and not one was
+reachable in a deployment: no environment selected a sink and nothing started either server. Every
+alert in the system was a single line on standard output. All four deployments select the sink now,
+and each service starts a listener for the exposition.
+
+**A second defect, found while fixing the first.** The indexer's one `/metrics` route was mounted on
+its webhook port — the port the platform routes to the internet, where deliveries arrive and where
+the deploy probes health from a hosted runner. It was unreachable only because no deployment had
+selected the sink, so selecting it would have published the exposition, which names every counter
+and every alert reason this system keeps. The listener is its own now, on a port the platform does
+not route, and a test fails if the public route returns.
+
+**Still open, and operator-owned:** nothing scrapes the endpoint and no alert destination is
+configured. Both are named in the comment beside the setting in each deployment file.

@@ -69,6 +69,20 @@ describe('buildSanctions', () => {
     expect(b.describe.join(' ')).to.match(/chainalysis.*opensanctions.*ofac-sdn.*cache DISABLED/s);
   });
 
+  it('names its sources, so the boot loader need not parse prose (audit C-18)', () => {
+    // Whether a mirror that will not load is fatal turns on whether anything
+    // else could screen. That is a COUNT, and inferring it from `describe`
+    // would make a log line load-bearing.
+    expect(buildSanctions({ SANCTIONS_OFAC_SDN: '1', SANCTIONS_OFAC_SDN_PATH: FIXTURE }, 'test').sources).to.deep.equal(['ofac-sdn']);
+    expect(
+      buildSanctions(
+        { SANCTIONS_CHAINALYSIS_API_KEY: 'k', SANCTIONS_OFAC_SDN: '1', SANCTIONS_OFAC_SDN_PATH: FIXTURE },
+        'test'
+      ).sources
+    ).to.deep.equal(['chainalysis', 'ofac-sdn']);
+    expect(buildSanctions({ SANCTIONS_STUB_LISTED: '', ALLOW_STUB_SANCTIONS: '1' }, 'test').sources).to.deep.equal(['stub']);
+  });
+
   it('never prints a key — the description redacts', () => {
     const b = buildSanctions({ SANCTIONS_CHAINALYSIS_API_KEY: 'super-secret-key-value' }, 'test');
     expect(b.describe.join(' ')).to.not.contain('super-secret-key-value');

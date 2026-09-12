@@ -56,12 +56,15 @@
  * One seam stays open, on the record (docs/hosting.md):
  *   - the detection ipHash rides empty (the hashed-IP capture at ciphertext
  *     submission is not stored yet) — device correlation still runs on the
- *     sealed device hash, in SHADOW mode (below).
+ *     sealed device hash.
  *
- * Detection is MANUAL-ONLY (prompt v2 §E, recorded 2026-09-07): the pipeline
- * runs on every pool and its report is logged, but the crank's `detect`
- * hook returns no auto-flags — a flag is a signed human decision through
- * the review path (backend/detection, `flag_entry`), never the daemon's.
+ * Detection is MANUAL-ONLY (prompt v2 §E, recorded 2026-09-07; report path
+ * ratified as D-E9 on 2026-09-12): the pipeline runs on every pool and its
+ * report is PERSISTED for the reviewer's page (`detection_reports`, migration
+ * 0021), but the crank's `detect` hook returns no auto-flags — a flag is a
+ * signed human decision through the review path (backend/detection,
+ * `flag_entry`), never the daemon's. `Config.detection_hard_block` is read by
+ * nothing here or anywhere else off-chain (audit D-36); see the hook.
  */
 
 import { readFileSync } from 'fs';
@@ -78,10 +81,11 @@ import {
 } from '../../sealing/src';
 import { detectPool } from '../../detection/src/pipeline';
 import { PgDecisionLog } from '../../detection/src/log-pg';
+import { PgDetectionReportStore } from '../../detection/src/reports-pg';
 import { appealState } from '../../detection/src/appeals';
 import { wireScreening } from '../../sanctions/src';
 import { buildMonitor, loadMonitor } from '../../_shared/src/monitor';
-import { ALERT } from '../../_shared/src/metrics';
+import { ALERT, METRIC } from '../../_shared/src/metrics';
 import { makeWinnerScreen } from './winner-screening';
 import { Web3Chain } from './chain-web3';
 import { crankPool, publishBundle, type CrankDeps, type RevealedForDetection } from './crank';
@@ -101,6 +105,7 @@ import {
 } from './startup';
 import { base58Decode } from '../../_shared/src/blotto-events';
 import { intEnv, portEnv } from '../../_shared/src/env-number';
+import { startMetricsListener } from '../../_shared/src/metrics-listener';
 
 const SERVICE = 'daemon';
 const DEFAULT_PROGRAM_ID = '5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17';
@@ -188,6 +193,9 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
   // E-04). The sink follows BLOTTO_MONITOR_SINK like every other service; the
   // Prometheus sink also serves /metrics beside /health.
   const monitor = buildMonitor(loadMonitor(env), SERVICE);
+  // E-09: the exposition, on the private network only. Silent no-op on
+  // every sink but prometheus.
+  startMetricsListener(monitor, SERVICE, env);
   const health = newDaemonHealth();
   serveDaemonHealth(health, healthPort, Date.now, monitor);
   console.log(`${SERVICE}: tick every ${intervalMs}ms once ready`);
@@ -368,11 +376,32 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
     );
   }
 
-  // R11 in SHADOW mode (manual-only detection, 2026-09-07): the report is
-  // computed and logged for every pool with findings; NOTHING is flagged by
-  // the daemon. `report.hardBlocks` is deliberately not returned — a flag
-  // is a reviewer's signed decision (backend/detection), and the crank's
-  // hook is kept as the seam it always was.
+  // Where a detection run goes now that it goes somewhere (A-18). Same
+  // Postgres the indexer migrates at boot; the review service reads it back.
+  const detectionReports = new PgDetectionReportStore(db);
+
+  // R11, MANUAL-ONLY (founder ruling D-E9, 2026-09-12): the report is
+  // computed for every pool and PERSISTED; NOTHING is flagged by the daemon.
+  // `report.hardBlocks` is deliberately not returned — a flag is a reviewer's
+  // signed decision (backend/detection), and the crank's hook is kept as the
+  // seam it always was.
+  //
+  // WHAT CHANGED, AND WHY (audit 2026-09-11, A-18 / D-36). Until 2026-09-12
+  // the report went to standard output, and only when it had findings. A
+  // finding therefore reached a human if and only if someone was reading this
+  // process's log at the moment a pool settled, and nothing was left
+  // afterwards to read at all — the layer that exists to TELL a reviewer what
+  // to look at was connected to nothing. D-E9 ratified the report path:
+  // persist every run and surface it to the reviewer before the review window
+  // closes (`GET /detection` on the review service, migration 0021).
+  //
+  // The on-chain `Config.detection_hard_block` switch is READ BY NOTHING, here
+  // or anywhere off-chain: `fullEscrowTier` below is the constant `false`.
+  // Flipping that switch today changes no behaviour, and R11's automatic path
+  // stays a signed founder decision after ten settled pools of quiet data.
+  //
+  // A store failure must never wedge settlement, so it is caught, counted and
+  // alerted rather than thrown: the pool still pays.
   const detect = async (id: bigint, revealed: RevealedForDetection[]): Promise<string[]> => {
     const report = detectPool(
       id.toString(),
@@ -389,8 +418,39 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
         })),
       { fullEscrowTier: false }
     );
+    try {
+      await detectionReports.save({
+        // Keyed by the pool's PDA: that is what every review surface keys on,
+        // and it is what `GET /detection?pool=` is asked with.
+        pool: chain.poolAddress(id),
+        poolId: id.toString(),
+        producedAt: new Date().toISOString(),
+        report,
+      });
+      monitor.recordEvent(METRIC.reveal.detectionReport, {
+        outcome: report.findings.length > 0 ? 'findings' : 'clean',
+      });
+    } catch (e) {
+      monitor.recordEvent(METRIC.reveal.detectionReportUnstored);
+      monitor.alert(ALERT.reveal.detectionReportUnstored, {
+        poolId: id.toString(),
+        findings: report.findings.length,
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
     if (report.findings.length > 0) {
-      console.log(`${SERVICE}: detection (shadow) pool=${id}`, JSON.stringify(report));
+      console.log(`${SERVICE}: detection pool=${id}`, JSON.stringify(report));
+    }
+    if (report.reviewRecommended.length > 0) {
+      // The whole control, under a manual policy: a person has to look. The
+      // review window is hours, so this has to reach someone now, not at the
+      // next dashboard glance. No player is named in the alert's detail —
+      // the report itself is where the entries are inspected.
+      monitor.alert(ALERT.reveal.detectionReviewRecommended, {
+        poolId: id.toString(),
+        pool: chain.poolAddress(id),
+        entries: report.reviewRecommended.length,
+      });
     }
     return [];
   };

@@ -133,6 +133,11 @@ export function projectEvent(e: DecodedEvent): ProjectionOp[] {
             pass_asset: e.pass_asset,
             terms_version: e.terms_version,
             flagged: false,
+            // Written here as well as by its own events so a fresh entry row
+            // carries the same columns in both executors — the Postgres
+            // table's DEFAULT would otherwise be the only thing that said
+            // "not held", and the in-memory reference would say nothing.
+            sanctions_hold: false,
             refunded: false,
             escrow_settled: null,
           },
@@ -276,6 +281,32 @@ export function projectEvent(e: DecodedEvent): ProjectionOp[] {
           table: 'entries',
           key: { pool: e.pool as string, player: e.player as string },
           set: { flagged: e.flagged },
+        },
+      ];
+    // A sanctions hold (Stage F), projected to its OWN column and never to
+    // `flagged` (audit 2026-09-11, D-20 / F-08). The program treats the two
+    // as different things — a hold is not a reviewable integrity flag, and
+    // `lift_sanctions_hold` is the only instruction that clears it — and
+    // collapsing them here would tell an operator to send a release the
+    // program would refuse, and tell a held player they are under review
+    // when they are not. `placed_at` / `lifted_at` are kept so the operator
+    // tool can say since when.
+    case 'SanctionsHoldPlaced':
+      return [
+        {
+          kind: 'upsert',
+          table: 'entries',
+          key: { pool: e.pool as string, player: e.player as string },
+          set: { sanctions_hold: true, sanctions_hold_at: e.placed_at },
+        },
+      ];
+    case 'SanctionsHoldLifted':
+      return [
+        {
+          kind: 'upsert',
+          table: 'entries',
+          key: { pool: e.pool as string, player: e.player as string },
+          set: { sanctions_hold: false, sanctions_hold_at: e.lifted_at },
         },
       ];
     case 'EscrowReleased':

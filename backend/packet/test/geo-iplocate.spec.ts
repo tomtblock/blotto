@@ -9,7 +9,7 @@
 import { strict as assert } from 'assert';
 import { IpLocateGeoLookup, GeoQuotaError, GeoAuthError } from '../src/geo-iplocate';
 import { CachingGeoLookup } from '../src/geo-cache';
-import { geoVerdict } from '../src/service';
+import { assertRegionCapability, geoVerdict } from '../src/service';
 import type { GeoLookup } from '../src/service';
 import { loadTerritorySchedule } from '../src/territories';
 import { resolve } from 'path';
@@ -151,6 +151,68 @@ describe('IpLocateGeoLookup — spending the quota carefully', () => {
     }) as unknown as typeof fetch;
     await assert.rejects(() => make(f, { attempts: 3 }).lookup('1.1.1.1'), /unreachable after 3/);
     assert.equal(calls, 3, 'the attempt budget is a hard bound — no storm');
+  });
+});
+
+/**
+ * The deadline covers the BODY as well as the head (audit 2026-09-11, G-07 —
+ * the defect the sanctions vendors had in `withRetry`, in the adapter the
+ * taxonomy was lifted from). The shape is `sanctions/test/ofac-sdn.spec.ts`'s
+ * stalled-body case: a vendor that accepts the connection, answers 200, and
+ * then stops sending. Every status branch is satisfied, nothing has failed,
+ * and `res.json()` never settles — so the entry gate waits for ever.
+ */
+describe('IpLocateGeoLookup — the deadline covers the whole exchange', () => {
+  /** 200 with headers, then silence: the body settles only when aborted. */
+  const headThenStall = (calls?: { n: number }): typeof fetch =>
+    (async (_url: string, init?: RequestInit) => {
+      if (calls) calls.n++;
+      const signal = init?.signal ?? undefined;
+      return {
+        ok: true,
+        status: 200,
+        json: () =>
+          new Promise<unknown>((_resolve, reject) => {
+            signal?.addEventListener('abort', () => reject(signal.reason));
+          }),
+      } as unknown as Response;
+    }) as unknown as typeof fetch;
+
+  it('aborts a stalled BODY on its own deadline and names the phase', async () => {
+    const calls = { n: 0 };
+    const started = Date.now();
+    await assert.rejects(
+      () => make(headThenStall(calls), { attempts: 2, timeoutMs: 50 }).lookup('8.8.8.8'),
+      /no readable answer after 2 attempts — geo vendor: timed out after 50ms reading the response body/
+    );
+    assert.equal(calls.n, 2, 'a stalled body is transient, like a stalled head');
+    assert.ok(
+      Date.now() - started < 5_000,
+      'it returned on its own deadline, not on the test runner giving up'
+    );
+  });
+
+  it('aborts a stalled HEAD too, saying which phase stalled', async () => {
+    const neverAnswers = ((_url: string, init?: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        const signal = init?.signal ?? undefined;
+        signal?.addEventListener('abort', () => reject(signal.reason));
+      })) as unknown as typeof fetch;
+    await assert.rejects(
+      () => make(neverAnswers, { attempts: 1, timeoutMs: 50 }).lookup('8.8.8.8'),
+      /timed out after 50ms awaiting the response head/
+    );
+  });
+
+  it('a complete but malformed body is NOT retried as a stall', async () => {
+
+    let calls = 0;
+    const f = (async () => {
+      calls++;
+      return { ok: true, status: 200, json: async () => ({ country_code: 'USA' }) } as Response;
+    }) as unknown as typeof fetch;
+    await assert.rejects(() => make(f, { attempts: 3 }).lookup('8.8.8.8'), /country_code/);
+    assert.equal(calls, 1, 'a bad answer is an answer; retrying it spends the allowance');
   });
 });
 
@@ -299,5 +361,85 @@ describe('the geo decision is named in the log, never in the answer', () => {
     const line = lines.find((l) => l.includes('geo '))!;
     assert.ok(!line.includes('203.0.113.7'), 'the full address must not be logged');
     assert.match(line, /203\.0\.x\.x/);
+  });
+});
+
+/**
+ * Sub-national rules and the adapter that cannot feed them (audit
+ * 2026-09-11, C-30).
+ *
+ * `config/territories.json` accepts `"US-NY"`, `territoryAllowed` honours it,
+ * and the production adapter returns no region at all — so such a line would
+ * admit every person it names, silently, with the country-level lines beside
+ * it working normally. TRANSITION-REPORT.md's accepted gap named a boot
+ * assertion as the prerequisite for the first such rule; it did not exist.
+ */
+describe('sub-national rules are enforceable or refused, never inert (C-30)', () => {
+  const countryOnly = {
+    version: 2,
+    posture: 'block-list' as const,
+    allowed: [],
+    blocked: ['BE', 'AU'],
+    updated: '2026-08-28',
+  };
+  const subNational = { ...countryOnly, blocked: ['BE', 'AU', 'US-NY'] };
+
+  const noRegion: GeoLookup = { async lookup() { return { country: 'US', vpnOrProxy: false }; } };
+  const withRegion: GeoLookup = {
+    resolvesRegion: true,
+    async lookup() {
+      return { country: 'US', region: 'CA', vpnOrProxy: false };
+    },
+  };
+
+  it('the production adapter declares that it resolves no region', () => {
+    const vendor = new IpLocateGeoLookup({ baseUrl: 'https://x/y', apiKey: 'k' });
+    assert.equal(vendor.resolvesRegion, false, 'declared, not merely described in a comment');
+  });
+
+  it("today's country-only schedule passes the boot assertion with any adapter", () => {
+    assertRegionCapability(countryOnly, new IpLocateGeoLookup({ baseUrl: 'https://x/y', apiKey: 'k' }));
+    assertRegionCapability(countryOnly, noRegion);
+  });
+
+  it('a sub-national rule + the production adapter REFUSES to start, and says what to do', () => {
+    assert.throws(
+      () => assertRegionCapability(subNational, new IpLocateGeoLookup({ baseUrl: 'https://x/y', apiKey: 'k' })),
+      /US-NY.*does not resolve a region|does not resolve a region/s
+    );
+    try {
+      assertRegionCapability(subNational, noRegion);
+      assert.fail('should throw');
+    } catch (e) {
+      const m = (e as Error).message;
+      assert.match(m, /US-NY/, 'names the rule that would be inert');
+      assert.match(m, /remove the sub-national entries|resolvesRegion/, 'names both remedies');
+    }
+  });
+
+  it('an UNDECLARED capability is treated as absent — not proven is not allowed', () => {
+    assert.throws(() => assertRegionCapability(subNational, { lookup: noRegion.lookup }), /region/);
+  });
+
+  it('an adapter that DOES resolve regions passes', () => {
+    assertRegionCapability(subNational, withRegion);
+  });
+
+  it('second line: the entry itself is refused when the rule cannot be applied', async () => {
+    const depsWithSchedule = (territories: typeof countryOnly) =>
+      ({
+        geo: noRegion,
+        preflightGeo: noRegion,
+        config: { territories, kycTier: 0, termsVersion: 1, termsUpdated: '2026-09-06' },
+      }) as unknown as Parameters<typeof geoVerdict>[0];
+
+    assert.equal(
+      await geoVerdict(depsWithSchedule(subNational), '8.8.8.8'),
+      false,
+      'a US visitor is refused while a US-NY rule cannot be tested'
+    );
+    // The same schedule with no US rule admits them: it is the unenforceable
+    // rule that blocks, not the country.
+    assert.equal(await geoVerdict(depsWithSchedule(countryOnly), '8.8.8.8'), true);
   });
 });
