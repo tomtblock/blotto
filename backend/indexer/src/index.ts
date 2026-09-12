@@ -26,7 +26,12 @@ import {
   METRIC,
   type Monitor,
 } from './shared';
-import { loadIndexerConfig, requireWebhookSecret } from './config';
+import {
+  INDEXER_ENV,
+  loadIndexerConfig,
+  requireWebhookSecret,
+  type IndexerConfig,
+} from './config';
 import { migrate, type MigrationRun } from './migrate';
 import { PgEventStore } from './store-pg';
 import { createWebhookServer } from './webhook';
@@ -34,6 +39,7 @@ import { serveReadApi } from './read-api';
 import { backfillAndRederive, catchUpFloor, Web3BackfillRpc } from './backfill';
 import { backfillArchive } from './archive';
 import { atomicDb } from './atomic';
+import { startReconciler } from './reconcile';
 
 // INCIDENT 2026-09-09: the decoder's layout table is filled by this call and by
 // nothing else. From 2026-08-27 until today no service made it — only the
@@ -103,6 +109,36 @@ async function cmdServe(monitor: Monitor): Promise<void> {
     trustProxyHeader: process.env.BLOTTO_TRUST_PROXY === '1',
   });
   console.log(`${SERVICE}: read API listening on :${config.readApiPort}`);
+
+  startReconciliation(store, monitor, config);
+}
+
+/**
+ * Start the recurring reconciliation (audit C-11 / C-21). The walk itself, and
+ * the reasoning for it, live in `reconcile.ts` — split out so a test can drive
+ * the tick without a timer.
+ */
+function startReconciliation(store: PgEventStore, monitor: Monitor, config: IndexerConfig): void {
+  if (config.reconcileIntervalMs === 0) {
+    console.log(
+      `${SERVICE}: reconciliation walk DISABLED (${INDEXER_ENV.reconcileIntervalMs}=0) — ` +
+        'a dropped webhook delivery below the ingest watermark will stay missing until ' +
+        'someone runs `backfill`'
+    );
+    return;
+  }
+  console.log(
+    `${SERVICE}: reconciliation walk every ${Math.round(config.reconcileIntervalMs / 1000)}s`
+  );
+  startReconciler(
+    {
+      store,
+      monitor,
+      ctx: { commitment: config.commitment, program: config.programId },
+      rpc: () => new Web3BackfillRpc(config.rpcUrl, config.programId, config.commitment),
+    },
+    config.reconcileIntervalMs
+  );
 }
 
 /**

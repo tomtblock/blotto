@@ -29,6 +29,7 @@ export const INDEXER_ENV = {
   port: 'BLOTTO_INDEXER_PORT',
   readApiPort: 'BLOTTO_READ_API_PORT',
   irysUploadAddress: 'BLOTTO_IRYS_UPLOAD_ADDRESS',
+  reconcileIntervalMs: 'BLOTTO_RECONCILE_INTERVAL_MS',
 } as const;
 
 /** Commitment the indexer ingests at. Default `finalized` — see the README reorg note. */
@@ -51,6 +52,38 @@ export interface IndexerConfig {
    * needs nothing here.
    */
   irysUploadAddress: string | null;
+  /**
+   * How often the serving process walks the chain to find deliveries the
+   * webhook never brought (audit C-11 / C-21), in milliseconds. 0 disables it.
+   *
+   * Default fifteen minutes. The walk pages signatures and fetches only what
+   * the ledger is missing, so a healthy run is one RPC page and nothing else;
+   * the interval trades how long a dropped delivery stays invisible against
+   * that page. Helius is documented as lossy, and until now the only automatic
+   * reconciliation ran once at boot and could not reach below the watermark —
+   * so a delivery dropped while a later slot landed was permanent until a
+   * human dispatched a workflow.
+   */
+  reconcileIntervalMs: number;
+}
+
+/**
+ * The reconciliation interval. Zero is a legitimate value — it turns the walk
+ * off — so this cannot use `parsePositiveInt`, and a blank or unparseable
+ * value is a configuration error rather than a reason to silently disable the
+ * one job that repairs a lossy feed.
+ */
+function parseIntervalMs(env: NodeJS.ProcessEnv): number {
+  const raw = optional(env, INDEXER_ENV.reconcileIntervalMs, '').trim();
+  if (raw === '') return 15 * 60_000;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 0) {
+    throw new Error(
+      `${INDEXER_ENV.reconcileIntervalMs} must be a non-negative whole number of milliseconds ` +
+        `(0 disables the walk); got "${raw}"`
+    );
+  }
+  return n;
 }
 
 function parseCommitment(raw: string): Commitment {
@@ -73,6 +106,7 @@ export function loadIndexerConfig(
     webhookPort: parsePositiveInt(env, INDEXER_ENV.port, 8080),
     readApiPort: parsePositiveInt(env, INDEXER_ENV.readApiPort, 8081),
     irysUploadAddress: optional(env, INDEXER_ENV.irysUploadAddress, '').trim() || null,
+    reconcileIntervalMs: parseIntervalMs(env),
   };
 }
 
