@@ -227,6 +227,25 @@ function sanctionsHoldCheck(name: 'place_sanctions_hold' | 'lift_sanctions_hold'
   };
 }
 
+/**
+ * The three PERMISSIONLESS settlement instructions — `seal_at_deadline`,
+ * `trigger_refund` and `refund` — all of which take `pool_id: u64` and
+ * nothing else.
+ *
+ * They were missing here for the same reason the sanctions pair was: this
+ * script was written for one upgrade and extended only when someone
+ * remembered. They matter more now than they did, because as of 2026-09-12
+ * `scripts/admin.ts` can send all three by hand (audit D-06) — the documented
+ * recovery for a stuck pool when the daemon is down. A recovery tool whose
+ * wire contract nothing checks is a tool that fails on the day it is needed,
+ * which is the day nobody has time to debug it.
+ */
+function permissionlessCheck(
+  name: 'seal_at_deadline' | 'trigger_refund' | 'refund'
+): WireCheck {
+  return { name, signature: 'pool_id: u64', args: u64le(1n) };
+}
+
 /** `init_config`'s own account list — it creates the Config PDA, so it takes
  *  the platform PDA and the System Program too (InitConfig in admin.rs). */
 function initConfigCheck(entrySigner: PublicKey, settlementSigner: PublicKey): WireCheck {
@@ -514,6 +533,47 @@ async function main(): Promise<void> {
       settlement
     )
   );
+
+  // The three permissionless instructions (audit D-06). Their account lists
+  // are the daemon's own, and `scripts/admin.ts` now builds the same ones:
+  //   seal_at_deadline [signer, config, pool]
+  //   trigger_refund   [signer, config, pool, vault, platform, system]
+  //   refund           [signer, config, pool, platform, entry, player, system]
+  // The pool and entry PDAs do not exist, so account validation fails well
+  // after the arguments deserialize — which is a pass for a wire check.
+  const entryPlaceholder = PublicKey.findProgramAddressSync(
+    [Buffer.from('entry'), poolPda.toBuffer(), admin.toBuffer()],
+    programId
+  )[0];
+  const permissionlessKeys: Record<string, TransactionInstruction['keys']> = {
+    seal_at_deadline: [
+      { pubkey: admin, isSigner: true, isWritable: false },
+      { pubkey: config, isSigner: false, isWritable: true },
+      { pubkey: poolPda, isSigner: false, isWritable: true },
+    ],
+    trigger_refund: [
+      { pubkey: admin, isSigner: true, isWritable: false },
+      { pubkey: config, isSigner: false, isWritable: true },
+      { pubkey: poolPda, isSigner: false, isWritable: true },
+      { pubkey: vaultPda, isSigner: false, isWritable: true },
+      { pubkey: platform, isSigner: false, isWritable: true },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    ],
+    refund: [
+      { pubkey: admin, isSigner: true, isWritable: false },
+      { pubkey: config, isSigner: false, isWritable: true },
+      { pubkey: poolPda, isSigner: false, isWritable: true },
+      { pubkey: platform, isSigner: false, isWritable: true },
+      { pubkey: entryPlaceholder, isSigner: false, isWritable: true },
+      { pubkey: admin, isSigner: false, isWritable: true },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    ],
+  };
+  for (const name of ['seal_at_deadline', 'trigger_refund', 'refund'] as const) {
+    verdicts.push(
+      await checkOne(connection, programId, permissionlessCheck(name), permissionlessKeys[name], admin)
+    );
+  }
 
   // place / lift_sanctions_hold: [signer, config, pool, entry]. The Entry is a
   // placeholder — it does not exist, so account validation fails long after

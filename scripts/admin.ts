@@ -96,8 +96,30 @@ commands
       --tier <0-6> --price <lamports|SOL> --pot <lamports|SOL>
   set-treasury-policy       the withdraw floor + open_pool requirement
       --reserve-pots <u8> --min-platform <lamports|SOL>
-  register-signers          rotate the service signers (either or both)
+  register-signers          rotate the service signers. A settlement rotation
+                            carries Config.keeper with it — open_pool accepts
+                            no other key, so leaving it behind stops every new
+                            pool opening (audit D-08)
       [--entry-signer <pubkey>] [--settlement-signer <pubkey>]
+      [--keeper <pubkey>]     name a third key outright
+      [--keep-keeper]         this deployment runs keeper and settlement as
+                              different keys: leave Config.keeper alone
+  seal-at-deadline          PERMISSIONLESS. Seal a pool whose fill deadline
+                            has passed, by hand, when the daemon is down or
+                            refusing it. Moves no lamports. The program checks
+                            the state and the deadline, so a mistimed call is
+                            refused
+      --pool-id <u64>
+  trigger-refund            PERMISSIONLESS. Put an unfilled pool past its
+                            deadline into Refunding (or straight to Closed
+                            with no entrants), returning the untouched pot to
+                            the treasury. Each player's entry is then repaid
+                            one at a time with the refund command below
+      --pool-id <u64>
+  refund                    PERMISSIONLESS. Repay one player's FULL entry from
+                            the treasury, for a pool already in Refunding. Run
+                            it once per entrant
+      --pool-id <u64> --player <pubkey>
   fund-platform-wallet      permissionless treasury deposit
       --amount <lamports | e.g. 5sol>
   withdraw-platform         the ONE treasury exit (floor-gated on-chain)
@@ -303,6 +325,13 @@ async function cmdStatus(ctx: Ctx): Promise<void> {
   console.log(`min platform:      ${d.readBigUInt64LE(281)} lamports`);
   console.log(`reserved:          ${d.readBigUInt64LE(289)} lamports`);
   console.log(`refundable:        ${d.readBigUInt64LE(297)} lamports`);
+  // Audit 2026-09-11, D-21: both of these are published on chain precisely so
+  // the operative policy is public, both have a `set-` command here, and until
+  // 2026-09-12 nothing in this repository could read either one back — while
+  // the operating manual said this command showed them. An operator could set
+  // a switch and had no way to confirm it had taken.
+  console.log(`kyc threshold:     ${d.readBigUInt64LE(306)} lamports (0 = off)`);
+  console.log(`detection block:   ${d[314] !== 0} (R11's full-escrow-tier switch)`);
   console.log(`next pool id:      ${d.readBigUInt64LE(315)}`);
   if (d.length >= CONFIG_SPACE) {
     // The 2026-09-07 tail (keeper 380, fill_deadline_seconds 412,
@@ -436,6 +465,21 @@ async function cmdMigrateConfig(ctx: Ctx): Promise<void> {
 async function cmdSetKeeper(ctx: Ctx): Promise<void> {
   const keeper = new PublicKey(need(ctx.cli, 'keeper'));
   await deliver(ctx, [adminOnlyIx(ctx, 'set_keeper', keeper.toBuffer())], 'admin');
+}
+
+/**
+ * A `u64` pool id from the command line. Rejects anything that is not a plain
+ * decimal integer rather than letting `BigInt` throw its own message, because
+ * the operator reading the refusal is mid-recovery on a stuck pool.
+ */
+function parsePoolId(raw: string): bigint {
+  const text = raw.trim();
+  if (!/^[0-9]+$/.test(text)) {
+    throw new Error(`--pool-id must be a whole number, got ${JSON.stringify(raw)}`);
+  }
+  const id = BigInt(text);
+  if (id > 0xffffffffffffffffn) throw new Error(`--pool-id does not fit a u64: ${text}`);
+  return id;
 }
 
 /** Seconds as an integer string; the program refuses 0 (InvalidTiming). */
@@ -642,11 +686,32 @@ async function cmdSetTreasuryPolicy(ctx: Ctx): Promise<void> {
   );
 }
 
+/**
+ * Rotate the service signers.
+ *
+ * D-08 (audit 2026-09-11): `Config.keeper` is a THIRD key, and it is the only
+ * one `open_pool` accepts. The daemon holds one keypair and uses it as both
+ * the settlement signer and the keeper, so rotating the settlement signer
+ * alone left the keeper pointing at the retired key — and no new pool could
+ * open until somebody noticed and ran `set-keeper` separately. That is a
+ * quiet outage during a key rotation, which is exactly when nobody is looking
+ * for one.
+ *
+ * So a settlement rotation now carries the keeper with it by default, in the
+ * SAME transaction, and `--keep-keeper` is the explicit way to say the two
+ * keys are genuinely different on this deployment. Naming the keeper
+ * outright still wins over both.
+ */
 async function cmdRegisterSigners(ctx: Ctx): Promise<void> {
   const entry = ctx.cli.flags.get('entry-signer');
   const settlement = ctx.cli.flags.get('settlement-signer');
-  if (!entry && !settlement) {
-    throw new Error('pass --entry-signer and/or --settlement-signer');
+  const keeper = ctx.cli.flags.get('keeper');
+  const keepKeeper = ctx.cli.flags.get('keep-keeper') !== undefined;
+  if (!entry && !settlement && !keeper) {
+    throw new Error('pass --entry-signer and/or --settlement-signer and/or --keeper');
+  }
+  if (keeper && keepKeeper) {
+    throw new Error('--keeper and --keep-keeper contradict each other; pass one');
   }
   const ixs: TransactionInstruction[] = [];
   if (entry) {
@@ -655,7 +720,113 @@ async function cmdRegisterSigners(ctx: Ctx): Promise<void> {
   if (settlement) {
     ixs.push(adminOnlyIx(ctx, 'set_settlement_signer', new PublicKey(settlement).toBuffer()));
   }
+  // The keeper the caller named, or the settlement key it follows.
+  const keeperKey = keeper ?? (settlement && !keepKeeper ? settlement : undefined);
+  if (keeperKey) {
+    ixs.push(adminOnlyIx(ctx, 'set_keeper', new PublicKey(keeperKey).toBuffer()));
+    if (!keeper) {
+      console.log(
+        `note: the keeper follows the settlement signer to ${keeperKey}. ` +
+          'Pass --keep-keeper if this deployment runs them as different keys, ' +
+          'or --keeper <pubkey> to name a third.'
+      );
+    }
+  } else if (settlement) {
+    console.log(
+      'note: --keep-keeper given, so Config.keeper is UNCHANGED. Confirm with ' +
+        '`admin.ts status` that it still names a key the operator holds — ' +
+        'open_pool accepts no other.'
+    );
+  }
   await deliver(ctx, ixs, 'admin');
+}
+
+/**
+ * The three permissionless settlement instructions, by hand (audit
+ * 2026-09-11, D-06).
+ *
+ * The runbook's recovery notes say of a stuck pool "send it by hand — it is
+ * permissionless", and then give a READ-ONLY command. Nothing in this
+ * repository could send `seal_at_deadline`, `trigger_refund` or `refund`
+ * outside the settlement daemon. So the documented recovery for a daemon that
+ * is down, wedged, or refusing a particular pool was a procedure with no tool
+ * behind it.
+ *
+ * All three are permissionless on chain: the signer pays the fee and decides
+ * nothing. The program checks the pool's state and its deadlines, so a
+ * mistimed call is refused rather than acted on — which is what makes it safe
+ * to put these in an operator's hands.
+ *
+ * `--emit-proposal` works on them like every other command here, though none
+ * of them needs the multisig: they are not admin instructions.
+ */
+async function cmdSealAtDeadline(ctx: Ctx): Promise<void> {
+  const poolId = parsePoolId(need(ctx.cli, 'pool-id'));
+  await deliver(
+    ctx,
+    [
+      new TransactionInstruction({
+        programId: ctx.programId,
+        keys: [
+          { pubkey: signerPubkey(ctx.cli), isSigner: true, isWritable: false },
+          { pubkey: ctx.pdas.config(), isSigner: false, isWritable: true },
+          { pubkey: ctx.pdas.pool(poolId), isSigner: false, isWritable: true },
+        ],
+        data: Buffer.concat([disc('seal_at_deadline'), u64le(poolId)]),
+      }),
+    ],
+    'any signer (permissionless)'
+  );
+}
+
+async function cmdTriggerRefund(ctx: Ctx): Promise<void> {
+  const poolId = parsePoolId(need(ctx.cli, 'pool-id'));
+  await deliver(
+    ctx,
+    [
+      new TransactionInstruction({
+        programId: ctx.programId,
+        keys: [
+          { pubkey: signerPubkey(ctx.cli), isSigner: true, isWritable: false },
+          { pubkey: ctx.pdas.config(), isSigner: false, isWritable: true },
+          { pubkey: ctx.pdas.pool(poolId), isSigner: false, isWritable: true },
+          // The untouched pot returns vault → treasury at trigger. The rent
+          // cushion stays in the vault, which is what keeps the account alive.
+          { pubkey: ctx.pdas.vault(poolId), isSigner: false, isWritable: true },
+          { pubkey: ctx.pdas.platform(), isSigner: false, isWritable: true },
+          { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+        ],
+        data: Buffer.concat([disc('trigger_refund'), u64le(poolId)]),
+      }),
+    ],
+    'any signer (permissionless)'
+  );
+}
+
+async function cmdRefund(ctx: Ctx): Promise<void> {
+  const poolId = parsePoolId(need(ctx.cli, 'pool-id'));
+  const player = new PublicKey(need(ctx.cli, 'player'));
+  const pool = ctx.pdas.pool(poolId);
+  await deliver(
+    ctx,
+    [
+      new TransactionInstruction({
+        programId: ctx.programId,
+        keys: [
+          { pubkey: signerPubkey(ctx.cli), isSigner: true, isWritable: false },
+          { pubkey: ctx.pdas.config(), isSigner: false, isWritable: true },
+          { pubkey: pool, isSigner: false, isWritable: true },
+          // D-A1 revised: the FULL entry price back, from the treasury.
+          { pubkey: ctx.pdas.platform(), isSigner: false, isWritable: true },
+          { pubkey: ctx.pdas.entry(pool, player), isSigner: false, isWritable: true },
+          { pubkey: player, isSigner: false, isWritable: true },
+          { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+        ],
+        data: Buffer.concat([disc('refund'), u64le(poolId)]),
+      }),
+    ],
+    'any signer (permissionless)'
+  );
 }
 
 async function cmdFundPlatformWallet(ctx: Ctx): Promise<void> {
@@ -751,6 +922,12 @@ async function main(): Promise<void> {
       return cmdSetTierEconomics(ctx);
     case 'set-treasury-policy':
       return cmdSetTreasuryPolicy(ctx);
+    case 'seal-at-deadline':
+      return cmdSealAtDeadline(ctx);
+    case 'trigger-refund':
+      return cmdTriggerRefund(ctx);
+    case 'refund':
+      return cmdRefund(ctx);
     case 'register-signers':
       return cmdRegisterSigners(ctx);
     case 'fund-platform-wallet':
