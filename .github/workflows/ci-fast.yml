@@ -269,7 +269,36 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: app/package-lock.json
+          cache-dependency-path: |
+            app/package-lock.json
+            backend/_shared/package-lock.json
+            backend/scoring/package-lock.json
+            backend/class-digest/package-lock.json
+            backend/sealing/package-lock.json
+            backend/reveal/package-lock.json
+            backend/indexer/package-lock.json
+            backend/packet/package-lock.json
+            backend/detection/package-lock.json
+
+      # THE APP BUILD REACHES INTO backend/, so installing only `app` is not
+      # enough. The app imports backend sources directly by relative path (the
+      # repository's own convention) and those files resolve their vendor
+      # packages from each backend package's OWN node_modules, so `next build`
+      # cannot resolve them unless those packages are installed first. The
+      # `node` job and `app-test-signer.yml` both install in this order for the
+      # same reason; this lane did not, and failed with module-not-found from
+      # inside `backend/` rather than with anything about the journey.
+      #
+      # `class-digest` is on the list because the fair-play test imports it to
+      # replay the class draw — the F-18 fix. Adding an app-side import of a
+      # backend package that is NOT on this list turns a green local build into
+      # a failed lane here and a failed deploy on the hosting provider, whose
+      # own install list lives in `app/vercel.json`.
+      - name: install backend packages the app builds against
+        run: |
+          for pkg in _shared scoring class-digest sealing reveal indexer packet detection; do
+            (cd "backend/$pkg" && npm ci --no-audit --no-fund)
+          done
 
       - name: install
         run: cd app && npm ci --no-audit --no-fund
