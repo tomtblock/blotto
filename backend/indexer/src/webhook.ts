@@ -203,7 +203,26 @@ export async function handleBundleAnnounce(
   return { status: 502, body: { error: out.reason } };
 }
 
-/** Wire the pure handler onto a Node `http` server. POSTs only; everything else is 404. */
+/**
+ * The most a delivery may carry. A raw Helius delivery is a batch of
+ * transactions with their log lines — a full page runs to a few hundred
+ * kilobytes — and the daemon's bundle announce is a few hundred bytes. Eight
+ * mebibytes is an order of magnitude of headroom over the largest thing this
+ * server expects, and the point is only that there IS a ceiling: until
+ * 2026-09-12 the whole body was buffered before anything was checked, so an
+ * unauthenticated caller could hold as much of the process's memory as it
+ * cared to send (audit 2026-09-11, Tier 3 item 7).
+ */
+export const MAX_WEBHOOK_BODY_BYTES = 8 * 1024 * 1024;
+
+/**
+ * Wire the pure handler onto a Node `http` server. POSTs only; everything else is 404.
+ *
+ * The shared secret is checked at the HEADERS stage, before a byte of the
+ * body is read: an unauthenticated delivery is answered 401 and its socket
+ * closed with the body unread. The pure handlers check it again — they are
+ * called directly by the suites and must stand on their own.
+ */
 export function createWebhookServer(deps: WebhookDeps): Server {
   return createServer((req: IncomingMessage, res: ServerResponse) => {
     // `GET /metrics` for the Alloy scrape, served only under the Prometheus sink (Step 6).
@@ -221,9 +240,30 @@ export function createWebhookServer(deps: WebhookDeps): Server {
       res.writeHead(404).end();
       return;
     }
+    if (!authorize(req.headers.authorization, deps.secret)) {
+      deps.monitor.recordEvent(METRIC.indexer.webhookUnauthorized);
+      // Close rather than drain: nothing about this caller warrants the
+      // bandwidth of reading what it sent.
+      res.once('finish', () => req.destroy());
+      res.writeHead(401, { connection: 'close' }).end();
+      return;
+    }
     const chunks: Buffer[] = [];
-    req.on('data', (c: Buffer) => chunks.push(c));
+    let received = 0;
+    let overflowed = false;
+    req.on('data', (c: Buffer) => {
+      if (overflowed) return;
+      received += c.length;
+      if (received > MAX_WEBHOOK_BODY_BYTES) {
+        overflowed = true;
+        res.once('finish', () => req.destroy());
+        res.writeHead(413, { connection: 'close' }).end();
+        return;
+      }
+      chunks.push(c);
+    });
     req.on('end', () => {
+      if (overflowed) return;
       const rawBody = Buffer.concat(chunks).toString('utf8');
       // E3: the daemon's bundle announce rides the same server + secret.
       if ((req.url ?? '').split('?')[0] === '/bundles') {

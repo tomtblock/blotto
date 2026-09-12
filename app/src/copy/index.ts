@@ -56,6 +56,16 @@ export const COPY = {
     // difference between "not set up yet" and "set up wrongly".
     unavailableRejected:
       'Sign-in is temporarily unavailable. We have been notified — please try again shortly.',
+    // The THIRD way (audit 2026-09-11, C-03): the provider never answered.
+    // Distinct from the two above because the player can do something about
+    // this one — another network, or a reload — and because it clears by
+    // itself if the provider turns up. PHASE-N-REVIEW: wording pending the
+    // founder's voice, like every line in this file.
+    unavailableUnreachable:
+      'Sign-in could not be reached. It may be blocked on this network or briefly down — reload to try again. Nothing on-chain is affected.',
+    // Shown while the provider is still loading, in place of a row of
+    // disabled buttons with no explanation. Same review note as above.
+    initializing: 'Connecting to sign-in…',
     // What the page says when a sign-in attempt does not complete, by the
     // provider's error code (plus the few this app raises itself). Until
     // 2026-09-08 no failure reached the page at all: the provider hook was
@@ -519,6 +529,15 @@ export const COPY = {
       lodgedOn: (at: string) => `Your appeal was lodged at ${at}. A different reviewer will decide it within 7 days; the decision is published in the signed log.`,
       upheld: 'Your appeal was upheld. We pay you the full prize ourselves.',
       dismissed: 'Your appeal was dismissed. The decision and its reason are in the signed log.',
+      // The honest failure states (audit 2026-09-11, C-04). Until 2026-09-12
+      // a review service that was unset, unreachable or answering badly
+      // rendered NOTHING here — no heading, no note, no control — while the
+      // rules page promised a seven-day window. The viewer is known to be
+      // the forfeited wallet from on-chain data before this renders, so
+      // saying so is safe. PHASE-N-REVIEW: wording pending the founder's voice.
+      unreachable:
+        'The review service could not be reached, so your appeal position cannot be shown right now. Your appeal window is unaffected — try again in a moment.',
+      retry: 'Try again',
       outcome: {
         lodged: 'Lodged.',
         not_configured: 'The review service is not configured in this build.',

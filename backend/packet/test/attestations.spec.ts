@@ -25,6 +25,16 @@ const kp = nacl.sign.keyPair.fromSeed(new Uint8Array(32).fill(11));
 const WALLET = base58Encode(kp.publicKey);
 const POOL = base58Encode(new Uint8Array(32).fill(4));
 
+/** The pool's on-chain numeric id; the route resolves the PDA to it before
+ * writing a ciphertext (audit B-01). */
+const POOL_ID = 7n;
+const POOL_IDS = () => {
+  const { MemoryPoolIdResolver } = require('../src/pool-ids');
+  const r = new MemoryPoolIdResolver();
+  r.set(POOL, POOL_ID);
+  return r;
+};
+
 /** Two editions of the terms, as config/terms.json would declare them. */
 const TERMS = {
   1: { version: 1, updated: '2026-09-06' },
@@ -155,6 +165,7 @@ describe('the /attestation route', () => {
     const d = {
       packet: deps(store),
       ciphertexts: new MemoryCiphertextStore(),
+      poolIds: POOL_IDS(),
       trustProxyHeader: false,
     };
     const ok = await handleEntryRoute(

@@ -126,3 +126,62 @@ export function assertCanPayFees(
 }
 
 const SERVICE_LABEL = 'daemon';
+
+/**
+ * The floor for the UPLOAD wallet on mainnet, where every reveal bundle is a
+ * paid upload. A bundle is tens of kilobytes; this is orders of magnitude of
+ * headroom over one, and the point is only that an EMPTY upload wallet is
+ * discovered at startup rather than at the first settlement — where, since
+ * 2026-09-12, a failed publish no longer blocks payment but does leave a
+ * pool unpublished (audit 2026-09-11, C-01).
+ *
+ * PHASE-N-REVIEW: 0.01 SOL is a judgement with an override in the call, not
+ * a ratified number.
+ */
+export const UPLOAD_WALLET_FLOOR_LAMPORTS = 10_000_000n;
+
+export interface UploadWalletVerdict {
+  /** True only on mainnet below the floor: the daemon must not start. */
+  refuse: boolean;
+  message: string;
+}
+
+/**
+ * What to do about the upload wallet's balance, by network.
+ *
+ * Devnet uploads are free-tier (publisher-irys.ts), so an empty wallet there
+ * is recorded and never refused — refusing would stop a rehearsal for a
+ * balance nothing on devnet spends. Mainnet uploads are paid, so below the
+ * floor the daemon refuses to start, the same way it refuses an empty
+ * settlement signer.
+ */
+export function uploadWalletVerdict(
+  address: string,
+  lamports: bigint,
+  network: 'mainnet' | 'devnet',
+  floorLamports: bigint = UPLOAD_WALLET_FLOOR_LAMPORTS
+): UploadWalletVerdict {
+  if (network === 'devnet') {
+    return {
+      refuse: false,
+      message:
+        `${SERVICE_LABEL}: upload wallet ${address} holds ${formatSol(lamports)} SOL ` +
+        `(devnet uploads are free-tier; the balance is recorded, not required)`,
+    };
+  }
+  if (lamports >= floorLamports) {
+    return {
+      refuse: false,
+      message: `${SERVICE_LABEL}: upload wallet ${address} holds ${formatSol(lamports)} SOL`,
+    };
+  }
+  return {
+    refuse: true,
+    message:
+      `${SERVICE_LABEL}: the upload wallet ${address} holds ${formatSol(lamports)} SOL, ` +
+      `below the ${formatSol(floorLamports)} SOL floor. On mainnet it pays for every ` +
+      `reveal bundle's permanent upload; with an empty wallet every settlement ` +
+      `would pay the winner and then fail to publish, leaving the pool unverifiable ` +
+      `until someone noticed. Fund the address and restart.`,
+  };
+}

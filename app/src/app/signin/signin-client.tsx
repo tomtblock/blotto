@@ -103,10 +103,22 @@ export function SignInClient() {
       </p>
 
       {unavailable ? (
-        <p className="mb-1 rounded-lg border border-line px-4 py-3 text-[13px] leading-5 text-ink-muted">
+        <p
+          data-testid="signin-unavailable"
+          className="mb-1 rounded-lg border border-line px-4 py-3 text-[13px] leading-5 text-ink-muted"
+        >
           {unavailable === "absent"
             ? COPY.signin.unavailable
-            : COPY.signin.unavailableRejected}
+            : unavailable === "rejected"
+              ? COPY.signin.unavailableRejected
+              : COPY.signin.unavailableUnreachable}
+        </p>
+      ) : initializing ? (
+        // A row of disabled buttons with no explanation was the dead end the
+        // audit named (C-03); the shell now times this state out, and until
+        // it does the page says what it is waiting for.
+        <p role="status" className="mb-1 text-[13px] leading-5 text-ink-muted">
+          {COPY.signin.initializing}
         </p>
       ) : null}
 

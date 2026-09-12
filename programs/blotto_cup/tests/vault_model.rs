@@ -174,6 +174,14 @@ impl Model {
     /// The single tier's idle reserve: `reserve_pots (1) × pot` when the tier
     /// has no live pool, excluding the tier being opened when asked
     /// (mirrors `idle_tier_reserve`'s exclude parameter).
+    ///
+    /// PHASE-N-REVIEW (2026-09-12): the program now funds each vault with its
+    /// pot PLUS a rent cushion and counts that cushion in the reserve; this
+    /// model still moves the pot alone. The model's money identities and its
+    /// "vault ends at zero" assertions all assume a cushion-free vault, so a
+    /// faithful update touches a dozen of them and is deferred to its own
+    /// change rather than folded into a CI fix. The cushion is exercised by
+    /// the program's unit tests and tests/litesvm/tests/vault_dust.rs.
     fn idle_reserve(&self, exclude_self: bool) -> u128 {
         let live = self.opened && !matches!(self.state, St::Paid | St::Closed);
         if live || exclude_self {

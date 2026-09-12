@@ -120,6 +120,157 @@ async function buildSealedPool(sabotage: {
 }
 
 describe('the settlement crank', () => {
+  it('does not turn a screening outage into an on-chain hold', async function () {
+    this.timeout(30000);
+    const t = await buildSealedPool({});
+    const deps = {
+      chain: t.chain,
+      custody: t.custody,
+      ciphertexts: t.store,
+      publisher: t.publisher,
+      // Every source down: the composite throws, which the screener
+      // converts into `screening_unavailable`.
+      screenWinners: async (_poolId: bigint, winners: readonly string[]) =>
+        winners.map((player) => ({
+          player,
+          reason: 'screening_unavailable' as const,
+          matches: [],
+          error: 'every source failed',
+        })),
+    };
+
+    let threw: Error | null = null;
+    try {
+      await crankPool(deps as never, 1n);
+    } catch (e) {
+      threw = e as Error;
+    }
+    expect(threw, 'an outage must not be recorded as a verdict').to.not.equal(null);
+    expect(threw!.message).to.match(/could not answer/);
+
+    // Nothing on chain: no hold to lift, no escrow to chase, nothing paid.
+    const pool = await t.chain.getPool(1n);
+    expect(pool.resultsCommitted).to.equal(false);
+    expect(pool.paidMask).to.equal(0n);
+    const entries = await t.chain.getEntries(1n);
+    expect(entries.some((e) => e.sanctionsHold)).to.equal(false);
+  });
+
+  it('still places a hold when a winner actually matches a list', async function () {
+    this.timeout(30000);
+    const t = await buildSealedPool({});
+    let holdsPlaced = 0;
+    const deps = {
+      chain: t.chain,
+      custody: t.custody,
+      ciphertexts: t.store,
+      publisher: t.publisher,
+      screenWinners: async (_poolId: bigint, winners: readonly string[]) => {
+        holdsPlaced = 1;
+        return [
+          {
+            player: winners[0],
+            reason: 'listed' as const,
+            matches: [{ source: 'ofac', listName: 'SDN' }],
+          },
+        ];
+      },
+    };
+
+    const outcome = await crankPool(deps as never, 1n);
+    expect(holdsPlaced).to.equal(1);
+    expect(outcome.stepsTaken).to.include('place_sanctions_hold');
+  });
+
+  it('pays the pool even when publishing keeps failing', async function () {
+    this.timeout(30000);
+    const t = await buildSealedPool({});
+    // An unfunded upload wallet or a gateway outage: publishing never works.
+    const failing = {
+      publish: async () => {
+        throw new Error('irys unavailable');
+      },
+      published: new Map(),
+    };
+
+    const outcome = await crankPool(
+      {
+        chain: t.chain,
+        custody: t.custody,
+        ciphertexts: t.store,
+        publisher: failing as never,
+      },
+      1n
+    );
+
+    // The players are paid and the tier is free. That is the whole point:
+    // a storage vendor must not be able to strand a pot.
+    expect(outcome.finalState).to.equal('Paid');
+    expect(outcome.stepsTaken).to.include('publish-failed');
+    expect(outcome.bundleUri).to.equal(undefined);
+    const pool = await t.chain.getPool(1n);
+    expect(pool.paidMask).to.not.equal(0n);
+  });
+
+  it('refuses to settle when it read fewer Entry accounts than the pool reports', async function () {
+    this.timeout(30000);
+    const t = await buildSealedPool({});
+    // The Pool account and the Entry accounts are separate reads. Model a
+    // backend a slot behind on the second: the highest seat is missing, so
+    // the remaining entries are still gapless from zero and every
+    // downstream check would pass.
+    const short = t.chain.entries.get('1')!.slice(0, -1);
+    t.chain.entries.set('1', short);
+
+    const deps = {
+      chain: t.chain,
+      custody: t.custody,
+      ciphertexts: t.store,
+      publisher: t.publisher,
+    };
+    let threw: Error | null = null;
+    try {
+      await crankPool(deps, 1n);
+    } catch (e) {
+      threw = e as Error;
+    }
+    expect(threw, 'the crank must refuse an incomplete field').to.not.equal(null);
+    expect(threw!.message).to.match(/incomplete field/);
+    // Nothing was committed and nothing was paid: waiting is the fix.
+    const pool = await t.chain.getPool(1n);
+    expect(pool.resultsCommitted).to.equal(false);
+    expect(pool.paidMask).to.equal(0n);
+  });
+
+  it('refuses to settle a field in which nothing could be read back', async function () {
+    this.timeout(30000);
+    const t = await buildSealedPool({});
+    // Model the ciphertext table having been lost: every entry decrypts to
+    // nothing. The arithmetic is untroubled — every seat ties on zero and
+    // the pot divides evenly — which is exactly why this needs a guard.
+    for (const e of t.chain.entries.get('1')!) {
+      await t.store.put(1n, e.player, new Uint8Array(48 + 127));
+    }
+
+    const deps = {
+      chain: t.chain,
+      custody: t.custody,
+      ciphertexts: t.store,
+      publisher: t.publisher,
+    };
+    let threw: Error | null = null;
+    try {
+      await crankPool(deps, 1n);
+    } catch (e) {
+      threw = e as Error;
+    }
+    expect(threw, 'the crank must refuse a wholly unreadable field').to.not.equal(null);
+    expect(threw!.message).to.match(/could not be read back/);
+    const pool = await t.chain.getPool(1n);
+    expect(pool.resultsCommitted).to.equal(false);
+    expect(pool.paidMask).to.equal(0n);
+  });
+
   it('drives a sealed pool to Paid with every band exact', async function () {
     this.timeout(30000);
     const t = await buildSealedPool({});

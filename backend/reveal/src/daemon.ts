@@ -250,6 +250,7 @@ export function makeDaemon(deps: DaemonDeps): Daemon {
           poolId,
           secret,
           entries,
+          pool.entrants,
           pool.potLamports,
           pool.resultsRootHex ?? null
         );

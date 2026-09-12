@@ -42,10 +42,18 @@ import {
 } from './service';
 import { acceptAttestation } from './attestations';
 import { acceptNotifyPreference, type NotifyPreferenceStore } from './notify';
+import type { PoolIdResolver } from './pool-ids';
+import { acceptCiphertext } from './ciphertexts';
 
 export interface EntryServerDeps {
   packet: PacketServiceDeps;
   ciphertexts: CiphertextStore;
+  /**
+   * Pool address → on-chain numeric pool id, the key the ciphertext store is
+   * read by. Required: without it this service would have to guess a key,
+   * which is exactly the defect the 2026-09-11 audit found. See `pool-ids.ts`.
+   */
+  poolIds: PoolIdResolver;
   /** v3 D3: the email-notification opt-in store. Optional — a deployment
    * without it answers /notify with 503 rather than pretending to record. */
   notify?: NotifyPreferenceStore;
@@ -103,7 +111,12 @@ export async function handleEntryRoute(
   let packetDeps = deps.packet;
   if (deps.trustGeoStubHeaders === true) {
     const stub = geoFromHeaders(headers);
-    if (stub) packetDeps = { ...deps.packet, geo: { lookup: async () => stub } };
+    // Both faces, or the header would stop deciding `/geo` the moment a
+    // separate pre-flight lookup was configured (see PacketServiceDeps).
+    if (stub) {
+      const lookup = { lookup: async () => stub };
+      packetDeps = { ...deps.packet, geo: lookup, preflightGeo: lookup };
+    }
   }
 
   // E5: the deployment liveness probe.
@@ -184,7 +197,12 @@ export async function handleEntryRoute(
   }
 
   if (path === '/ciphertexts') {
-    const b = body as { pool?: string; player?: string; ciphertext?: string };
+    const b = body as {
+      pool?: string;
+      player?: string;
+      ciphertext?: string;
+      signature?: string;
+    };
     if (!b || !B58.test(b.pool ?? '') || !B58.test(b.player ?? '') || typeof b.ciphertext !== 'string') {
       return { status: 400, body: { error: 'bad request' } };
     }
@@ -197,23 +215,15 @@ export async function handleEntryRoute(
     if (bytes.length !== CIPHERTEXT_LEN) {
       return { status: 400, body: { error: 'bad request' } };
     }
-    // The pool id key: the store keys on the numeric pool id in Postgres;
-    // here the pool PDA string keys the row via a stable hash-free mapping —
-    // the service layer resolves PDA → id when the indexer is attached. For
-    // now the PDA string itself is the key (MemoryCiphertextStore accepts
-    // bigint; we map through a registry seam at deployment).
-    await deps.ciphertexts.put(poolKey(b.pool as string), b.player as string, new Uint8Array(bytes));
-    return { status: 204, body: null };
+    return acceptCiphertext(deps.poolIds, deps.ciphertexts, {
+      pool: b.pool as string,
+      player: b.player as string,
+      ciphertext: new Uint8Array(bytes),
+      signature: typeof b.signature === 'string' ? b.signature : '',
+    });
   }
 
   return { status: 404, body: { error: 'not found' } };
-}
-
-/** Deterministic bigint key for a pool PDA string (store-key adapter). */
-export function poolKey(pool: string): bigint {
-  let acc = 0n;
-  for (const ch of pool) acc = (acc * 131n + BigInt(ch.charCodeAt(0))) % 2n ** 62n;
-  return acc;
 }
 
 /** ONE resolver for the whole service, shared with the rate limiter, so the

@@ -494,7 +494,13 @@ export class Web3Chain implements KeeperChain {
     const data = Buffer.concat([disc('pay_prizes'), le, list]);
     const keys = [
       { pubkey: this.cfg.settlementSigner.publicKey, isSigner: true, isWritable: false },
-      { pubkey: this.configPda(), isSigner: false, isWritable: false },
+      // WRITABLE: `PayPrizes` declares Config `mut` and the final batch
+      // writes it (the pot leaves `platform_reserved` and the tier slot
+      // frees). Anchor checks that constraint while assembling accounts,
+      // before the handler runs, so a read-only Config reverted EVERY batch,
+      // not just the last — no pool could be paid at all. Pinned across the
+      // language boundary by test/account-metas.spec.ts (audit A-01).
+      { pubkey: this.configPda(), isSigner: false, isWritable: true },
       { pubkey: poolKey, isSigner: false, isWritable: true },
       { pubkey: this.vaultPda(poolId), isSigner: false, isWritable: true },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },

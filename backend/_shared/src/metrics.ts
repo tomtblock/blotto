@@ -21,15 +21,18 @@
  * without dragging `pg` or an SDK into its typecheck.
  *
  * TODO(phase-2 / phase-4): add namespaces for the services that do not exist yet —
- * `sealing` (ciphertext store, key export, reveal), `packet` (entry-packet
- * issuance and its rejection reasons), `detection` (signals raised, entries
- * flagged, review outcomes), and `reveal` (scoring runs, results committed).
+ * `sealing` (ciphertext store, key export, reveal), `detection` (signals raised,
+ * entries flagged, review outcomes), and `reveal` (scoring runs, results
+ * committed). The `packet` namespace below covers the entry gate's UPSTREAM
+ * health only; its issuance counters are still to come.
  *
- * Two of those carry a rule worth deciding BEFORE the metric exists, not after:
+ * Two of those carry a rule worth deciding BEFORE the metric exists, not after,
+ * and the first is already load-bearing for the `packet` names below:
  *  - A packet REJECTION must never be labelled with the reason a caller was
  *    refused. The endpoint returns a generic rejection precisely so a caller
  *    cannot learn which check failed, and a `reason` label would leak the same
- *    thing to anyone with dashboard access.
+ *    thing to anyone with dashboard access. A VENDOR failure is a different
+ *    thing and is labelled freely: it describes our upstream, not an entrant.
  *  - A detection FLAG rate is an operational signal, but per-player detail is not.
  *    The review page is where a decision is inspected; the metric is a count.
  */
@@ -63,6 +66,33 @@ export const METRIC = {
     /** Counter: an announced or backfilled bundle recomputed to the on-chain root (E3). */
     archiveVerified: 'indexer_archive_verified',
   },
+  packet: {
+    /**
+     * Counter (label `reason`: quota|credential|budget|fault): a geo source
+     * could not answer.
+     *
+     * The label describes the VENDOR, never the caller — see the rule in this
+     * file's header. A refused entrant produces no metric at all; a vendor out
+     * of credits produces this one, which is the distinction the entry gate
+     * deliberately hides from the response and must not hide from the
+     * operator (audit 2026-09-11, B-04).
+     */
+    geoSourceFailed: 'packet_geo_source_failed',
+    /**
+     * Counter: the composite fell through to a later source and got an answer.
+     *
+     * A gate running on its fallback looks perfectly healthy in the response.
+     * This is the only place it is visible before the fallback fails too.
+     */
+    geoFellThrough: 'packet_geo_fell_through',
+    /**
+     * Counter (label `purpose`: preflight|issuance): OUR OWN ceiling refused
+     * a lookup before the vendor saw it. `preflight` is the expected shape of
+     * a traffic flood; `issuance` means the reserve is gone as well, and
+     * entry has stopped.
+     */
+    geoBudgetRefused: 'packet_geo_budget_refused',
+  },
 } as const;
 
 /**
@@ -91,6 +121,24 @@ export const ALERT = {
      * and nothing else in the system will notice.
      */
     startupBackfillFailed: 'indexer startup backfill failed',
+  },
+  packet: {
+    /**
+     * A geo vendor's request allowance or rate limit is spent.
+     *
+     * Loud because it does not recover on its own — it needs a top-up — and
+     * because the symptom is indistinguishable from a correctly refused
+     * entrant from outside the service. Before 2026-09-12 the only trace was
+     * a line on standard output.
+     */
+    geoQuotaSpent: 'packet geo vendor allowance spent',
+    /** A geo vendor refused the credential. Never self-heals; needs a new key. */
+    geoCredentialRefused: 'packet geo vendor credential refused',
+    /**
+     * EVERY geo source failed, so the gate has no answer and every entry is
+     * being refused. The most serious operational state the entry path has.
+     */
+    geoAllSourcesFailed: 'packet geo all sources failed',
   },
 } as const;
 

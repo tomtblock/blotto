@@ -9,6 +9,7 @@ import { verifyPool, type OnChainRecord, type PublishedBundle } from './logic';
 import {
   assignPrizes,
   battlesHash,
+  decodeBattleSet,
   encodeBattleSet,
   potForTier,
   scorePool,
@@ -106,6 +107,7 @@ describe('verifyPool', () => {
     const { bundle, chain } = fixture();
     const report = verifyPool(bundle, chain);
     expect(report.checks.map((c) => `${c.name}:${c.ok}`)).toEqual([
+      'roster:true',
       'secret-commitment:true',
       'bundle-secret:true',
       'entry-commitments:true',
@@ -176,4 +178,114 @@ describe('verifyPool', () => {
     expect(report.checks.find((c) => c.name === 'results-root')!.ok).toBe(false);
     expect(report.checks.find((c) => c.name === 'rescore')!.ok).toBe(true);
   });
+
+  /*
+   * The roster (audit 2026-09-11, F-03). A bundle that drops the
+   * highest-seated entrant keeps contiguous indices and is consistent with
+   * itself on every other row — the field is simply one player short, and
+   * that player is scored out of existence. The chain's roster is the set
+   * that catches it.
+   */
+  describe('the roster', () => {
+    it('a bundle missing the last entrant is red on roster and — the point — green elsewhere', () => {
+      const { bundle, chain } = fixture();
+      const dropped = bundle.entries[bundle.entries.length - 1].player;
+      bundle.entries.pop();
+      // Recomputed over the short field, the way a dishonest operator would
+      // publish it: the results, payouts and root all agree with each other.
+      const rest = fixture63(bundle);
+      chain.resultsRootHex = rest.root;
+      chain.committedPayouts = rest.committed;
+      chain.payouts = rest.payouts;
+      const report = verifyPool(bundle, chain);
+      expect(report.ok).toBe(false);
+      const roster = report.checks.find((c) => c.name === 'roster')!;
+      expect(roster.ok).toBe(false);
+      expect(roster.detail).toContain('63 entrants');
+      expect(roster.detail).toContain('64');
+      expect(roster.detail).toContain(`${dropped.slice(0, 4)}…${dropped.slice(-4)}`);
+      // Every other row would have passed. That is the finding.
+      for (const c of report.checks) {
+        if (c.name !== 'roster') expect(c.ok, c.name).toBe(true);
+      }
+    });
+
+    it('a wallet in the bundle that never registered is red on roster', () => {
+      const { bundle, chain } = fixture();
+      bundle.entries[10].player = base58Encode(sha('an-impostor'));
+      const report = verifyPool(bundle, chain);
+      const roster = report.checks.find((c) => c.name === 'roster')!;
+      expect(roster.ok).toBe(false);
+      expect(roster.detail).toContain('never registered');
+      expect(roster.detail).toContain('missing from the bundle');
+    });
+
+    it('a wallet listed twice is red on roster', () => {
+      const { bundle, chain } = fixture();
+      bundle.entries[3].player = bundle.entries[4].player;
+      const report = verifyPool(bundle, chain);
+      const roster = report.checks.find((c) => c.name === 'roster')!;
+      expect(roster.ok).toBe(false);
+      expect(roster.detail).toContain('listed twice');
+    });
+
+    it('indices that are not a permutation stop the report at the roster row instead of throwing', () => {
+      const { bundle, chain } = fixture();
+      bundle.entries[7].index = 7_000;
+      const report = verifyPool(bundle, chain);
+      expect(report.ok).toBe(false);
+      expect(report.checks).toHaveLength(1);
+      expect(report.checks[0].name).toBe('roster');
+      expect(report.checks[0].detail).toContain('indices');
+    });
+  });
 });
+
+/** The dishonest operator's arithmetic: results, payouts and root recomputed
+ * over whatever field the bundle now carries, so that only the roster can
+ * tell. */
+function fixture63(bundle: PublishedBundle): {
+  root: string;
+  committed: OnChainRecord['committedPayouts'];
+  payouts: OnChainRecord['payouts'];
+} {
+  const byIndex = [...bundle.entries].sort((a, b) => a.index - b.index);
+  const battles = byIndex.map((e) => decodeBattleSet(Buffer.from(e.battles!, 'hex')));
+  const results = assignPrizes(scorePool(battles), potForTier(0));
+  const byRank = [...results].sort((a, b) => a.rank - b.rank || a.index - b.index);
+  const root = hex(
+    merkleRoot(
+      byRank.map((r) =>
+        leafBytes({
+          player: base58Decode(byIndex[r.index].player),
+          rank: r.rank,
+          amountLamports: r.amountLamports,
+        })
+      )
+    )
+  );
+  const paid = results.filter((r) => r.amountLamports > 0n).sort((a, b) => a.index - b.index);
+  bundle.results = byRank.map((r) => ({
+    index: r.index,
+    player: byIndex[r.index].player,
+    score_half: r.scoreHalf,
+    zones: r.zones,
+    rank: r.rank,
+    amount_lamports: r.amountLamports.toString(),
+  }));
+  bundle.payouts = paid.map((r) => ({
+    entry_index: r.index,
+    player: byIndex[r.index].player,
+    amount_lamports: r.amountLamports.toString(),
+  }));
+  bundle.results_root = root;
+  return {
+    root,
+    committed: paid.map((r) => ({ entryIndex: r.index, amount: r.amountLamports.toString() })),
+    payouts: paid.map((r) => ({
+      player: byIndex[r.index].player,
+      entryIndex: r.index,
+      amount: r.amountLamports.toString(),
+    })),
+  };
+}

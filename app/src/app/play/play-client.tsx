@@ -199,9 +199,13 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
 
   useEffect(() => {
     let cancelled = false;
-    checkGeoGate(process.env.NEXT_PUBLIC_ENTRY_API_URL).then((verdict) => {
-      if (!cancelled) setGeo(verdict);
-    });
+    // The first run may answer from the tab's memo (see geo-gate.ts); a
+    // "Check again" is a genuine re-ask and says so.
+    checkGeoGate(process.env.NEXT_PUBLIC_ENTRY_API_URL, fetch, { recheck: geoRun > 0 }).then(
+      (verdict) => {
+        if (!cancelled) setGeo(verdict);
+      }
+    );
     return () => {
       cancelled = true;
     };

@@ -29,6 +29,7 @@ import dynamic from "next/dynamic";
 import {
   Component,
   useCallback,
+  useEffect,
   useMemo,
   useState,
   type ErrorInfo,
@@ -36,27 +37,12 @@ import {
 } from "react";
 import { testSignerFromWindow } from "../tx/test-signer";
 import { AuthContext } from "./auth-context";
+import { AUTH_INIT_TIMEOUT_MS, selectAuth, unavailableMessage } from "./auth-select";
 import { sameAuthState } from "./auth-state";
 import { useDetectedSolanaWallets } from "./standard-wallets";
 import type { Auth } from "./types";
 
 const PrivyBridge = dynamic(() => import("./privy-bridge"), { ssr: false });
-
-const INITIALIZING: Auth = {
-  status: "initializing",
-  walletAddress: null,
-  signers: [],
-  detectedWallets: [],
-  lastError: null,
-  // Inert until the bridge loads — the header shows no sign-in affordance
-  // in the initializing state, so these cannot be reached from the UI.
-  clearError: () => {},
-  signInWithSocial: () => {},
-  signInWithWallet: async () => {},
-  connectWallet: () => {},
-  setActiveWallet: () => {},
-  signOut: async () => {},
-};
 
 /*
  * UPDATE-LOOP RULE (production incident, 2026-08-28): the bridge's adapter
@@ -72,41 +58,6 @@ const INITIALIZING: Auth = {
  * the cycle stops (comparator: ./auth-state.ts, unit-pinned). Never hand
  * `setLive` to the bridge unguarded.
  */
-
-/**
- * Renders when sign-in cannot work: the app works, sign-in is inert.
- *
- * `reason` distinguishes the two ways to get here, because they need
- * different fixes and an operator reading the console must be able to tell
- * them apart: no credential at all, versus a credential the provider
- * rejected.
- */
-function unconfiguredAuth(reason: "absent" | "rejected"): Auth {
-  const message =
-    reason === "absent"
-      ? "[auth] NEXT_PUBLIC_PRIVY_APP_ID is not set — sign-in is disabled. " +
-        "See app/.env.example."
-      : "[auth] the Privy provider rejected NEXT_PUBLIC_PRIVY_APP_ID — sign-in " +
-        "is disabled. The value is set but not valid: check it against the app " +
-        "ID in the Privy dashboard (Configuration -> App settings -> Basics), " +
-        "and remember NEXT_PUBLIC_ values are baked in at BUILD time, so a " +
-        "corrected value needs a redeploy.";
-  const warn = () => console.warn(message);
-  return {
-    status: "signed-out",
-    unavailable: reason,
-    walletAddress: null,
-    signers: [],
-    detectedWallets: [],
-    lastError: null,
-    clearError: () => {},
-    signInWithSocial: warn,
-    signInWithWallet: async () => warn(),
-    connectWallet: warn,
-    setActiveWallet: warn,
-    signOut: async () => warn(),
-  };
-}
 
 /*
  * C7 / B-e — the automation signer, behind three gates.
@@ -197,6 +148,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [live, setLive] = useState<Auth | null>(null);
   // Set once, by the boundary below, when the bridge cannot initialise.
   const [bridgeRejected, setBridgeRejected] = useState(false);
+  // Set once, by the deadline below, when the bridge has not reported in
+  // time. Never cleared: a late report wins on its own through `live`.
+  const [bridgeTimedOut, setBridgeTimedOut] = useState(false);
   // Resolved once, during render. `testSignerAuth` reads `window`, so this is
   // null on the server and stays null in every deployable build — the whole
   // branch is eliminated there (see next.config.ts), so no ordinary render
@@ -226,13 +180,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setBridgeRejected((prev) => (prev ? prev : true));
   }, []);
 
-  const value = useMemo<Auth>(() => {
-    if (injected) return injected;
-    if (live) return live;
-    if (!appId) return { ...unconfiguredAuth("absent"), detectedWallets: detected };
-    if (bridgeRejected) return { ...unconfiguredAuth("rejected"), detectedWallets: detected };
-    return { ...INITIALIZING, detectedWallets: detected };
-  }, [injected, live, appId, bridgeRejected, detected]);
+  /*
+   * THE DEADLINE (audit 2026-09-11, C-03 — the reasoning is in
+   * auth-select.ts). Armed only while there is something to wait for: a
+   * credential, no report yet, no rejection, no injected signer. The state
+   * write happens inside the timer callback, never in the effect body, so
+   * this cannot join the update loop the rule above guards against; and it
+   * only ever goes false -> true, once. The console line fires here, at the
+   * moment of the deadline, so an operator reading a support screenshot sees
+   * the cause without anyone having to click a disabled button first.
+   */
+  useEffect(() => {
+    if (injected || live !== null || !appId || bridgeRejected || bridgeTimedOut) return;
+    const timer = setTimeout(() => {
+      console.warn(unavailableMessage("unreachable"));
+      setBridgeTimedOut((prev) => (prev ? prev : true));
+    }, AUTH_INIT_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [injected, live, appId, bridgeRejected, bridgeTimedOut]);
+
+  const value = useMemo<Auth>(
+    () => selectAuth({ injected, live, appId, bridgeRejected, bridgeTimedOut, detected }),
+    [injected, live, appId, bridgeRejected, bridgeTimedOut, detected],
+  );
 
   return (
     <AuthContext.Provider value={value}>

@@ -25,6 +25,16 @@ import { base58Encode } from '../src/shared';
 const WALLET = base58Encode(new Uint8Array(32).fill(3));
 const POOL = base58Encode(new Uint8Array(32).fill(4));
 
+/** The pool's on-chain numeric id; the route resolves the PDA to it before
+ * writing a ciphertext (audit B-01). */
+const POOL_ID = 7n;
+const POOL_IDS = () => {
+  const { MemoryPoolIdResolver } = require('../src/pool-ids');
+  const r = new MemoryPoolIdResolver();
+  r.set(POOL, POOL_ID);
+  return r;
+};
+
 function schedule(overrides: Partial<TerritorySchedule> = {}): TerritorySchedule {
   return { ...DEFAULT_TERRITORY_SCHEDULE, ...overrides };
 }
@@ -245,6 +255,7 @@ describe('the /geo route and the header stub', () => {
     return {
       packet: deps(async () => ({ country: 'GB', vpnOrProxy: false })),
       ciphertexts: new MemoryCiphertextStore(),
+      poolIds: POOL_IDS(),
       trustProxyHeader: false,
       trustGeoStubHeaders,
     };

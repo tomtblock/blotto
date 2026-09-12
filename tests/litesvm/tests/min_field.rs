@@ -186,7 +186,7 @@ fn a_52_seat_pool_seals_at_the_deadline_and_pays_the_winner() {
     // margin at the floor is 1.2 SOL at exactly 52.
     let won = settle_winner(&mut env, 1, &players);
     assert_eq!(won, POT, "winner takes all, at 52 as at 64");
-    assert_eq!(env.balance(&vault_pda(1)), 0);
+    assert_eq!(env.balance(&vault_pda(1)), VAULT_RENT_CUSHION);
     assert_eq!(read_pool(&env.svm, &pool_pda(1)).state, 3, "Paid");
     assert_eq!(
         env.balance(&platform_pda()) - platform_at_open,
@@ -220,7 +220,7 @@ fn a_63_seat_pool_seals_the_same_way() {
         "63 × price released, not 64"
     );
     assert_eq!(settle_winner(&mut env, 1, &players), POT);
-    assert_eq!(env.balance(&vault_pda(1)), 0);
+    assert_eq!(env.balance(&vault_pda(1)), VAULT_RENT_CUSHION);
 }
 
 #[test]

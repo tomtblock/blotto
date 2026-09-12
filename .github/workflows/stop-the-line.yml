@@ -9,8 +9,11 @@
 # One open issue per lane (dedupe by exact title): repeat failures append comments
 # to the existing issue instead of stacking new ones.
 #
-# The watched-workflow list is ci-fast alone, because that is the only lane this
-# repository has. Add lanes here as they are added to .github/workflows/.
+# The watched-workflow list is every lane that runs on a push to main: ci-fast,
+# on-chain and deployed-drift. Until 2026-09-12 it named ci-fast alone, with a
+# comment saying that was the only lane — long after the other two existed —
+# so a red on-chain or drift run on main filed nothing (audit 2026-09-11,
+# Tier 3 item 4). One open issue per lane, so the three never collide.
 #
 # workflow_dispatch is the simulation path (a simulated red files an issue; a
 # simulated green closes it) — a courtesy hook, never part of the routine path.
@@ -23,7 +26,7 @@ name: stop-the-line
 
 on:
   workflow_run: # zizmor: ignore[dangerous-triggers] — required for red-main watch; no checkout, env-routed inputs, issues:write only
-    workflows: ["ci-fast"]
+    workflows: ["ci-fast", "on-chain", "deployed-drift"]
     types: [completed]
     branches: [main]
   workflow_dispatch:

@@ -144,19 +144,31 @@ pub fn handle_open_pool(
     let balance = ctx.accounts.platform.lamports() as u128;
     let refundable = ctx.accounts.config.platform_refundable as u128;
     let available = balance.saturating_sub(refundable);
-    let needed = (pot_lamports as u128)
+    // The vault is funded with the pot PLUS the rent-exempt minimum for a
+    // zero-data account. The cushion is what stops a stranger freezing the
+    // pool for one lamport: the pot can leave in full and the account still
+    // holds enough to stay rent-exempt, so the runtime never sees the
+    // rent-paying post-state it refuses. See `vault::rent_floor` for the
+    // whole story. The cushion is NOT part of the prize and is never
+    // reserved against the treasury policy — `platform_reserved` still
+    // tracks the pot alone, because the pot is what has to be payable.
+    let cushion = crate::vault::rent_floor()?;
+    let funding = (pot_lamports as u128)
+        .checked_add(cushion as u128)
+        .ok_or(ErrorCode::Overflow)?;
+    let needed = funding
         + (ctx.accounts.config.treasury_min_platform_lamports as u128)
-        + (idle_tier_reserve(&ctx.accounts.config, Some(tier_idx)) as u128);
+        + (idle_tier_reserve(&ctx.accounts.config, Some(tier_idx), cushion) as u128);
     require!(available >= needed, ErrorCode::TreasuryShortfall);
 
-    // Fund the pot: treasury → this pool's prize vault, exactly tier.pot,
-    // locked before any pass is sold.
+    // Fund the pot: treasury → this pool's prize vault, locked before any
+    // pass is sold.
     crate::vault::platform_debit(
         &ctx.accounts.system_program,
         &ctx.accounts.platform.to_account_info(),
         &ctx.accounts.vault.to_account_info(),
         ctx.accounts.config.platform_bump,
-        pot_lamports,
+        u64::try_from(funding).map_err(|_| ErrorCode::Overflow)?,
     )?;
 
     let config = &mut ctx.accounts.config;

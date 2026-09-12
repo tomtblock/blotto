@@ -20,6 +20,7 @@ import {
   type PacketServiceDeps,
 } from '../src';
 import { base58Encode } from '../src/shared';
+import { ciphertextMessage } from '../src/ciphertext-message';
 
 const vectors = JSON.parse(
   readFileSync(join(__dirname, '..', 'fixtures', 'vectors.json'), 'utf8')
@@ -157,13 +158,50 @@ describe('packet issuance', () => {
 });
 
 describe('the entry service routes', () => {
-  const { handleEntryRoute, poolKey } = require('../src/server');
+  const { handleEntryRoute } = require('../src/server');
+  const { MemoryPoolIdResolver } = require('../src/pool-ids');
   const { MemoryCiphertextStore } = require('../../sealing/src');
+
+  /** The pool's on-chain numeric id — the key every reader of the ciphertext
+   * store uses. The route must resolve the PDA to THIS, not to anything it
+   * derives locally (audit B-01). */
+  const POOL_ID = 7n;
+
+  /** A wallet that can actually sign, so the route's ownership check is
+   * exercised rather than stubbed. */
+  function sealer() {
+    const kp = nacl.sign.keyPair();
+    const wallet = base58Encode(kp.publicKey);
+    return {
+      wallet,
+      sign(pool: string, ciphertext: Uint8Array): string {
+        const msg = ciphertextMessage(pool, wallet, new Uint8Array(ciphertext));
+        return Buffer.from(nacl.sign.detached(msg, kp.secretKey)).toString('base64');
+      },
+    };
+  }
+  const SEALER = sealer();
+  const ATTACKER = (() => {
+    const kp = nacl.sign.keyPair();
+    return {
+      sign(pool: string, ciphertext: Uint8Array): string {
+        // Signs the VICTIM's canonical message with the attacker's key.
+        const msg = ciphertextMessage(pool, SEALER.wallet, new Uint8Array(ciphertext));
+        return Buffer.from(nacl.sign.detached(msg, kp.secretKey)).toString('base64');
+      },
+    };
+  })();
+  const POOL_IDS = () => {
+    const r = new MemoryPoolIdResolver();
+    r.set(POOL, POOL_ID);
+    return r;
+  };
 
   function serverDeps() {
     return {
       packet: deps(),
       ciphertexts: new MemoryCiphertextStore(),
+      poolIds: POOL_IDS(),
       trustProxyHeader: false,
     };
   }
@@ -195,24 +233,112 @@ describe('the entry service routes', () => {
 
   it('stores a well-formed ciphertext and rejects wrong sizes', async () => {
     const d = serverDeps();
-    const good = Buffer.alloc(48 + 127, 7).toString('base64');
+    const goodBytes = Buffer.alloc(48 + 127, 7);
+    const good = goodBytes.toString('base64');
     const res = await handleEntryRoute(
       d,
       'POST',
       '/ciphertexts',
-      { pool: POOL, player: WALLET, ciphertext: good },
+      { pool: POOL, player: SEALER.wallet, ciphertext: good, signature: SEALER.sign(POOL, goodBytes) },
       'ip'
     );
     expect(res.status).to.equal(204);
-    const stored = await d.ciphertexts.get(poolKey(POOL), WALLET);
+    // Read back by the NUMERIC pool id — the key the crank and the read API
+    // use. Reading back through any transform this route applied would pin
+    // the defect instead of catching it.
+    const stored = await d.ciphertexts.get(POOL_ID, SEALER.wallet);
     expect(stored).to.not.equal(null);
+    const short = Buffer.alloc(10);
     const bad = await handleEntryRoute(
       d,
       'POST',
       '/ciphertexts',
-      { pool: POOL, player: WALLET, ciphertext: Buffer.alloc(10).toString('base64') },
+      { pool: POOL, player: SEALER.wallet, ciphertext: short.toString('base64'), signature: SEALER.sign(POOL, short) },
       'ip'
     );
     expect(bad.status).to.equal(400);
+  });
+
+  it('refuses a ciphertext for a pool it cannot resolve, rather than guessing a key', async () => {
+    const d = serverDeps();
+    const unknown = base58Encode(new Uint8Array(32).fill(9));
+    const bytes = Buffer.alloc(48 + 127, 7);
+    const res = await handleEntryRoute(
+      d,
+      'POST',
+      '/ciphertexts',
+      { pool: unknown, player: SEALER.wallet, ciphertext: bytes.toString('base64'), signature: SEALER.sign(unknown, bytes) },
+      'ip'
+    );
+    expect(res.status).to.equal(400);
+    expect(await d.ciphertexts.listForPool(POOL_ID)).to.have.length(0);
+  });
+
+  it('refuses a sealed allocation signed by anyone other than the player (audit B-02)', async () => {
+    const d = serverDeps();
+    const bytes = Buffer.alloc(48 + 127, 7);
+    // The attacker signs with their OWN key and names the victim as player.
+    const res = await handleEntryRoute(
+      d,
+      'POST',
+      '/ciphertexts',
+      {
+        pool: POOL,
+        player: SEALER.wallet,
+        ciphertext: bytes.toString('base64'),
+        signature: ATTACKER.sign(POOL, bytes),
+      },
+      'ip'
+    );
+    expect(res.status).to.equal(403);
+    expect(await d.ciphertexts.get(POOL_ID, SEALER.wallet)).to.equal(null);
+  });
+
+  it('refuses an unsigned sealed allocation', async () => {
+    const d = serverDeps();
+    const bytes = Buffer.alloc(48 + 127, 7);
+    const res = await handleEntryRoute(
+      d,
+      'POST',
+      '/ciphertexts',
+      { pool: POOL, player: SEALER.wallet, ciphertext: bytes.toString('base64') },
+      'ip'
+    );
+    expect(res.status).to.equal(403);
+  });
+
+  it('will not silently replace an allocation a seat already holds, and stays idempotent', async () => {
+    const d = serverDeps();
+    const first = Buffer.alloc(48 + 127, 7);
+    const again = Buffer.alloc(48 + 127, 9);
+    const post = (b: Buffer) =>
+      handleEntryRoute(
+        d,
+        'POST',
+        '/ciphertexts',
+        { pool: POOL, player: SEALER.wallet, ciphertext: b.toString('base64'), signature: SEALER.sign(POOL, b) },
+        'ip'
+      );
+    expect((await post(first)).status).to.equal(204);
+    // The same bytes again is an ordinary retry.
+    expect((await post(first)).status).to.equal(204);
+    // Different bytes would destroy the entry the chain already committed to.
+    expect((await post(again)).status).to.equal(409);
+    const stored = await d.ciphertexts.get(POOL_ID, SEALER.wallet);
+    expect(Buffer.from(stored!.ciphertext).equals(first)).to.equal(true);
+  });
+
+  it('refuses a sealed allocation once the pool has stopped accepting entries', async () => {
+    const d = serverDeps();
+    d.poolIds.set(POOL, POOL_ID, 'Sealed');
+    const bytes = Buffer.alloc(48 + 127, 7);
+    const res = await handleEntryRoute(
+      d,
+      'POST',
+      '/ciphertexts',
+      { pool: POOL, player: SEALER.wallet, ciphertext: bytes.toString('base64'), signature: SEALER.sign(POOL, bytes) },
+      'ip'
+    );
+    expect(res.status).to.equal(409);
   });
 });

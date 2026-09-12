@@ -201,9 +201,25 @@ export async function recomputeRanking(
   poolId: bigint,
   secret: Uint8Array,
   entries: readonly ChainEntryView[],
+  /**
+   * The pool's own entrant count, from the Pool account. A program-account
+   * scan can come back short from a lagging RPC backend, and the gapless-
+   * index check further down passes whenever the missing seats are the
+   * highest ones — so a short read has to be refused HERE, by the number the
+   * chain itself carries, exactly as `crankPool` refuses it before commit
+   * (audit 2026-09-11, B-09). Required, not optional: every caller holds the
+   * Pool account already.
+   */
+  expectedEntrants: number,
   potLamports: bigint,
   committedRootHex: string | null
 ): Promise<PublishedRanking> {
+  if (entries.length !== expectedEntrants) {
+    throw new Error(
+      `pool ${poolId} reports ${expectedEntrants} entrants but only ${entries.length} ` +
+        `entry accounts were read — refusing to recompute a ranking against an incomplete field`
+    );
+  }
   const sorted = [...entries].sort((a, b) => a.index - b.index);
   const { scoringInput } = await revealEntries(ciphertexts, poolId, secret, sorted);
   const results = assignPrizes(scoreWithMissing(scoringInput), potLamports);

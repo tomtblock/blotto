@@ -500,26 +500,41 @@ async function verifyRecord(db: Queryable, pool: string): Promise<ReadApiResult>
  * is the one CORS mechanism, exact-match origins only. Unconfigured means
  * NO CORS headers: a browser on another origin (the verify page's
  * auto-fetch) cannot read this API until the deployment names its origin. */
+export interface ReadApiOptions {
+  /**
+   * Read the client address from the proxy's headers. Set ONLY behind our
+   * own proxy (Fly, compose): a proxy header from anywhere else is
+   * caller-supplied, and a rate limiter keyed on it is a rate limiter the
+   * caller controls. The packet and review services have always taken this
+   * switch; the read API trusted the headers unconditionally until
+   * 2026-09-12 (audit 2026-09-11, Tier 3 item 5).
+   */
+  trustProxyHeader?: boolean;
+}
+
 export function serveReadApi(
   db: Queryable,
   port: number,
-  hygieneConfig?: HygieneConfig
+  hygieneConfig?: HygieneConfig,
+  options: ReadApiOptions = {}
 ): Server {
   const hygiene: HygieneConfig = hygieneConfig ?? {
     rateLimit: { enabled: false, requestsPerMinute: 1, burst: 1, retryAfterSeconds: 1 },
     cors: { allowedOrigins: [] },
     securityHeadersEnabled: false,
   };
+  const trustProxy = options.trustProxyHeader === true;
   const limiter = new RateLimiter(hygiene.rateLimit);
   const server = createServer(async (req, res) => {
     const outcome = applyHygiene(
       {
         method: req.method,
-        forwardedFor: req.headers['x-forwarded-for'],
         // Same resolver as the packet service: the leftmost X-Forwarded-For
         // hop is caller-supplied, so rate limiting keyed on it was bypassable
-        // by rotating one header (found 2026-08-31).
-        flyClientIp: req.headers['fly-client-ip'],
+        // by rotating one header (found 2026-08-31) — and the headers are
+        // read at all only behind a proxy we own.
+        forwardedFor: trustProxy ? req.headers['x-forwarded-for'] : undefined,
+        flyClientIp: trustProxy ? req.headers['fly-client-ip'] : undefined,
         remoteAddress: req.socket.remoteAddress ?? undefined,
         origin: req.headers.origin,
       },

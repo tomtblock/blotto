@@ -22,6 +22,12 @@ import { SILENT_MONITOR, decodeEventsFromLogs } from '../src/shared';
 import { registerBlottoEventLayouts } from '../../_shared/src/blotto-events';
 import { InMemoryEventStore } from '../src/store';
 import { ingestTransaction, type IngestContext } from '../src/ingest';
+import {
+  backfillAndRederive,
+  runBackfill,
+  type BackfillRpc,
+  type SignatureInfo,
+} from '../src/backfill';
 
 const fixture = JSON.parse(
   readFileSync(join(__dirname, 'fixtures', 'lifecycle-logs.json'), 'utf8')
@@ -40,6 +46,34 @@ function sumFor(rows: Row[], pool: unknown): string {
     .filter((r) => r.pool === pool)
     .reduce((a, r) => a + BigInt(r.amount as string), 0n)
     .toString();
+}
+
+/** `SIG0000`-style name for the fixture's i-th transaction. */
+function sigFor(i: number): string {
+  return `SIG${String(i).padStart(4, '0')}`;
+}
+
+/**
+ * The fixture served the way an RPC serves it: NEWEST FIRST, one page.
+ *
+ * `getSignaturesForAddress` pages newest→oldest, so a backfill walk sees the
+ * whole history in reverse. That ordering is the entire point of the suite
+ * below — the fake does nothing else clever.
+ */
+function reverseOrderRpc(): BackfillRpc {
+  const page: SignatureInfo[] = fixture.transactions
+    .map((_, i) => ({ signature: sigFor(i), slot: i + 1, err: null }))
+    .reverse();
+  return {
+    async getSignatures({ before }) {
+      return before ? [] : page;
+    },
+    async getTransaction(signature) {
+      const i = Number(signature.slice(3));
+      const logs = fixture.transactions[i];
+      return logs ? { slot: BigInt(i + 1), logs } : null;
+    },
+  };
 }
 
 async function ingestAll(store: InMemoryEventStore): Promise<void> {
@@ -257,5 +291,75 @@ describe('blotto event decoding against real emitted bytes', () => {
     await ingestAll(store); // all duplicates — projection must not re-apply
     const after = JSON.parse(JSON.stringify(store.projection.snapshot()));
     expect(after).to.deep.equal(before);
+  });
+});
+
+/**
+ * The backfill walk against the real history, in the order an RPC serves it.
+ *
+ * The projection is order-dependent — `PoolOpened` is a full upsert that
+ * resets state, entrants, paid_mask and refunded_count — and the walk pages
+ * newest→oldest, applying each transaction as it arrives. So a backwards walk
+ * finishes by applying each pool's OPENING event on top of its settlement, and
+ * the derived row ends Open with zero entrants. On a first boot against an
+ * empty ledger there is no floor, so that is the whole history: every settled
+ * pool in the archive reads as live.
+ *
+ * `backfillAndRederive` is the repair. These two tests are a pair and are
+ * worth nothing apart: the first establishes that the raw walk really does
+ * corrupt the rows (without it the second could pass against a projection that
+ * was never order-dependent in the first place), the second that the repair
+ * puts them back.
+ */
+describe('backfill walks newest-first, so the projection must be replayed (audit B-05)', () => {
+  before(() => {
+    registerBlottoEventLayouts();
+  });
+
+  it('the raw walk alone leaves a settled pool marked Open and empty', async () => {
+    const store = new InMemoryEventStore();
+    const r = await runBackfill(store, SILENT_MONITOR, CTX, reverseOrderRpc());
+    expect(r.transactions).to.equal(fixture.transactions.length);
+    expect(r.inserted).to.be.greaterThan(0);
+
+    const pools = Object.values(store.projection.snapshot().pools);
+    expect(pools.length).to.equal(3);
+    // Every pool in this fixture reached a terminal state; after a backwards
+    // walk not one of them says so.
+    expect(pools.map((p) => p.state)).to.deep.equal(['Open', 'Open', 'Open']);
+    expect(pools.map((p) => p.entrants)).to.deep.equal([0, 0, 0]);
+    // The reset writes the number 0; a real payout writes a decimal string.
+    expect(pools.every((p) => String(p.paid_mask) === '0')).to.equal(true);
+  });
+
+  it('backfillAndRederive replays the ledger in chain order and the rows are right', async () => {
+    const reversed = new InMemoryEventStore();
+    const r = await backfillAndRederive(reversed, SILENT_MONITOR, CTX, reverseOrderRpc());
+    expect(r.rederived, 'the replay ran').to.be.greaterThan(140);
+
+    // The reference: the same events applied oldest-first, as the webhook
+    // delivers them live.
+    const forwards = new InMemoryEventStore();
+    await ingestAll(forwards);
+
+    expect(JSON.parse(JSON.stringify(reversed.projection.snapshot()))).to.deep.equal(
+      JSON.parse(JSON.stringify(forwards.projection.snapshot()))
+    );
+
+    // Stated outright, so a future reader does not have to trust the deep
+    // compare to know what this is about.
+    const pools = Object.values(reversed.projection.snapshot().pools);
+    expect(pools.filter((p) => p.state === 'Paid').length).to.equal(2);
+    expect(pools.filter((p) => p.state === 'Closed').length).to.equal(1);
+    expect(pools.find((p) => p.entrants === 64)!.state).to.equal('Paid');
+  });
+
+  it('a walk that inserted nothing new does not replay', async () => {
+    const store = new InMemoryEventStore();
+    await ingestAll(store);
+    const r = await backfillAndRederive(store, SILENT_MONITOR, CTX, reverseOrderRpc());
+    expect(r.inserted, 'every signature is already in the ledger').to.equal(0);
+    expect(r.duplicates).to.be.greaterThan(0);
+    expect(r.rederived, 'nothing inserted means nothing mis-ordered').to.equal(0);
   });
 });

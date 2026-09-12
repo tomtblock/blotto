@@ -19,7 +19,11 @@ fn full_lifecycle_pays_the_pot_to_the_lamport() {
     let pool = pool_pda(1);
 
     // ---- pot locked at open, BEFORE any entry (D-A1 revised) ----
-    assert_eq!(env.balance(&vault_pda(1)), POT, "pot pre-funded at open");
+    assert_eq!(
+        env.balance(&vault_pda(1)),
+        POT + VAULT_RENT_CUSHION,
+        "pot pre-funded at open, on top of the rent cushion"
+    );
     assert_eq!(read_pool(&env.svm, &pool).pot_lamports, POT);
     let cfg = read_config(&env.svm);
     assert_eq!(cfg.platform_reserved, POT, "pot recorded as locked");
@@ -52,8 +56,8 @@ fn full_lifecycle_pays_the_pot_to_the_lamport() {
     );
     assert_eq!(
         env.balance(&vault_pda(1)),
-        POT,
-        "vault still holds the pot exactly"
+        POT + VAULT_RENT_CUSHION,
+        "vault still holds the pot exactly, on top of its rent cushion"
     );
     assert_eq!(
         env.balance(&platform_pda()) - platform_at_open,
@@ -134,8 +138,8 @@ fn full_lifecycle_pays_the_pot_to_the_lamport() {
     assert_eq!(pv.paid_mask, 0b1, "one bit: the winner's seat");
     assert_eq!(
         env.balance(&vault_pda(1)),
-        0,
-        "vault drained to exactly zero"
+        VAULT_RENT_CUSHION,
+        "the pot has fully left; the rent cushion stays behind"
     );
     // Paid frees the tier slot and releases the pot from the book-keeping.
     let cfg = read_config(&env.svm);
@@ -206,7 +210,7 @@ fn flagged_winners_escrow_then_release_forfeit_and_next_place() {
     assert_eq!(e2.escrow_lamports, POT / 2);
     assert_eq!(e1.escrowed_at, paid_at, "escrowed_at stamped at pay");
     assert!(!e1.forfeited && !e2.forfeited);
-    assert_eq!(env.balance(&vault_pda(1)), POT);
+    assert_eq!(env.balance(&vault_pda(1)), POT + VAULT_RENT_CUSHION);
     assert_eq!(read_pool(&env.svm, &pool_pda(1)).state, 3, "Paid");
 
     // Forfeiting an unflagged (no-escrow) entry: rejected.
@@ -244,8 +248,8 @@ fn flagged_winners_escrow_then_release_forfeit_and_next_place() {
     );
     assert_eq!(
         env.balance(&vault_pda(1)),
-        POT / 2,
-        "the share stays in the vault"
+        POT / 2 + VAULT_RENT_CUSHION,
+        "the share stays in the vault, above the rent cushion"
     );
     let e2 = read_entry(&env.svm, &players[1].1);
     assert!(e2.forfeited);
@@ -302,7 +306,11 @@ fn flagged_winners_escrow_then_release_forfeit_and_next_place() {
         (POT / 2, 1, 1)
     );
     assert!(e2.split_remainder_paid);
-    assert_eq!(env.balance(&vault_pda(1)), 0, "vault ends at exactly zero");
+    assert_eq!(
+        env.balance(&vault_pda(1)),
+        VAULT_RENT_CUSHION,
+        "the pot has fully left; the rent cushion stays behind"
+    );
     assert_eq!(
         env.balance(&platform_pda()),
         platform_before,
@@ -360,7 +368,11 @@ fn refund_fork_returns_the_full_entry() {
     env.send(&[ix], &[&rando]).expect("trigger_refund");
     assert_eq!(read_pool(&env.svm, &pool_pda(1)).state, 4, "Refunding");
     // The untouched pot returned to the treasury; the vault reaped.
-    assert_eq!(env.balance(&vault_pda(1)), 0, "pot returned at trigger");
+    assert_eq!(
+        env.balance(&vault_pda(1)),
+        VAULT_RENT_CUSHION,
+        "pot returned at trigger; the rent cushion stays behind"
+    );
     assert_eq!(
         env.balance(&platform_pda()) - platform_before,
         POT,
@@ -388,7 +400,7 @@ fn refund_fork_returns_the_full_entry() {
 
     let pv = read_pool(&env.svm, &pool_pda(1));
     assert_eq!(pv.state, 5, "Closed");
-    assert_eq!(env.balance(&vault_pda(1)), 0);
+    assert_eq!(env.balance(&vault_pda(1)), VAULT_RENT_CUSHION);
     let cfg = read_config(&env.svm);
     assert_eq!(
         cfg.platform_refundable, 0,
@@ -569,7 +581,6 @@ fn a_sanctions_hold_blocks_both_release_paths_and_the_next_place_split() {
     assert_eq!(env.balance(&players[0].0.pubkey()) - before, POT / 2);
     assert_eq!(read_entry(&env.svm, &players[0].1).escrow_lamports, 0);
 }
-
 
 /// A hold placed BEFORE payment diverts the share into escrow on its own.
 ///

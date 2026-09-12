@@ -92,9 +92,12 @@ fn open_blocked_when_the_policy_floor_is_unmet() {
     let ix = set_treasury_policy_ix(&admin, 1, 1_000_000_000);
     env.send(&[ix], &[]).unwrap();
 
-    // Opening tier 0 needs: pot(4) + min(1) + tier 1's idle pot (20)
-    // = 25 SOL (D-E1). One lamport short → TreasuryShortfall, nothing moves.
-    let needed = TIER_POTS[0] + 1_000_000_000 + TIER_POTS[1];
+    // Opening tier 0 needs: pot(4) + its vault's rent cushion + min(1) +
+    // tier 1's idle pot (20) with ITS cushion — a reserved pot is an openable
+    // pot — ≈ 25.0018 SOL (D-E1). One lamport short → TreasuryShortfall,
+    // nothing moves.
+    let needed =
+        (TIER_POTS[0] + VAULT_RENT_CUSHION) + 1_000_000_000 + (TIER_POTS[1] + VAULT_RENT_CUSHION);
     env.fund_platform(needed - 1);
     let ix = open_pool_ix(&settlement.pubkey(), 1, 0, [9; 32], env.sealing_secret_hash);
     let err = env
@@ -104,14 +107,25 @@ fn open_blocked_when_the_policy_floor_is_unmet() {
         err.contains("6049") || err.contains("TreasuryShortfall"),
         "{err}"
     );
-    assert_eq!(env.balance(&vault_pda(1)), 0, "no partial pot");
+    assert_eq!(
+        env.balance(&vault_pda(1)),
+        0,
+        "no partial pot: the open reverted entirely"
+    );
 
     // The exact lamport clears it, and exactly the pot moves.
     env.fund_platform(1);
     let platform_before = env.balance(&platform_pda());
     env.send(&[ix], &[&settlement]).expect("open at the floor");
-    assert_eq!(env.balance(&vault_pda(1)), TIER_POTS[0]);
-    assert_eq!(platform_before - env.balance(&platform_pda()), TIER_POTS[0]);
+    assert_eq!(
+        env.balance(&vault_pda(1)),
+        TIER_POTS[0] + VAULT_RENT_CUSHION
+    );
+    assert_eq!(
+        platform_before - env.balance(&platform_pda()),
+        TIER_POTS[0] + VAULT_RENT_CUSHION,
+        "the treasury funded the pot and the rent cushion"
+    );
 }
 
 #[test]
@@ -121,10 +135,11 @@ fn withdraw_blocked_below_the_floor_including_refundable_entries() {
     let dest = Pubkey::new_unique();
 
     // Policy: min = 1 SOL. Only tier 0 enabled and idle → floor also holds
-    // one further tier-0 pot (reserve_pots = 1).
+    // one further tier-0 POOL (reserve_pots = 1): its pot and the rent
+    // cushion its vault is funded with.
     let ix = set_treasury_policy_ix(&admin, 1, 1_000_000_000);
     env.send(&[ix], &[]).unwrap();
-    let floor = 1_000_000_000 + TIER_POTS[0];
+    let floor = 1_000_000_000 + TIER_POTS[0] + VAULT_RENT_CUSHION;
     env.fund_platform(floor + 500_000_000);
 
     // One lamport past the surplus → refused, nothing moves.
@@ -182,16 +197,17 @@ fn seven_tier_ladder_unlocks_at_exact_thresholds_from_bootstrap() {
     )
     .unwrap();
 
-    // The bootstrap: exactly one tier-0 pot. With six other ENABLED idle
-    // tiers each demanding a reserve pot, tier 0 cannot open yet — the
-    // founder's launch posture is all-tiers-enabled only once the treasury
-    // can carry them; at 4 SOL only a tier-0-only config opens.
-    env.fund_platform(TIER_POTS[0]);
+    // The bootstrap: exactly one tier-0 pool's funding — its pot and its
+    // vault's rent cushion. With six other ENABLED idle tiers each demanding
+    // a reserve pool, tier 0 cannot open yet — the founder's launch posture
+    // is all-tiers-enabled only once the treasury can carry them; at one
+    // pool's funding only a tier-0-only config opens.
+    env.fund_platform(TIER_POTS[0] + VAULT_RENT_CUSHION);
     let ix = open_pool_ix(&settlement.pubkey(), 1, 0, [9; 32], env.sealing_secret_hash);
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
     assert!(err.contains("6049"), "{err}");
 
-    // Tier-0-only: 4 SOL is EXACTLY the tier-0 threshold.
+    // Tier-0-only: one pool's funding is EXACTLY the tier-0 threshold.
     env.send(
         &[admin_ix(&admin, "set_open_tiers", &[1, 0, 0, 0, 0, 0, 0])],
         &[],
@@ -203,8 +219,10 @@ fn seven_tier_ladder_unlocks_at_exact_thresholds_from_bootstrap() {
     let pool1 = 1u64;
 
     // Re-enable everything and climb: with tier 0 LIVE, tier t's threshold
-    // is pot(t) + Σ pot(u) for every other idle enabled tier u — funding
-    // one lamport under blocks, the exact threshold opens.
+    // is (pot(t) + cushion) + Σ (pot(u) + cushion) for every other idle
+    // enabled tier u — funding one lamport under blocks, the exact threshold
+    // opens. The cushion rides on every pot because a reserved pot is an
+    // openable pot (treasury.rs, 2026-09-12).
     env.send(
         &[admin_ix(&admin, "set_open_tiers", &[1, 1, 1, 1, 1, 1, 1])],
         &[],
@@ -215,9 +233,9 @@ fn seven_tier_ladder_unlocks_at_exact_thresholds_from_bootstrap() {
         // Idle enabled tiers right now: tiers > `tier` (lower ones are live).
         let idle_reserve: u64 = (1..7)
             .filter(|&t| t != tier as usize && read_config(&env.svm).active_pool_by_tier[t] == 0)
-            .map(|t| TIER_POTS[t])
+            .map(|t| TIER_POTS[t] + VAULT_RENT_CUSHION)
             .sum();
-        let threshold = TIER_POTS[tier as usize] + idle_reserve;
+        let threshold = TIER_POTS[tier as usize] + VAULT_RENT_CUSHION + idle_reserve;
         let balance = env.balance(&platform_pda());
         let ix = open_pool_ix(
             &settlement.pubkey(),
@@ -271,7 +289,7 @@ fn seven_tier_ladder_unlocks_at_exact_thresholds_from_bootstrap() {
 fn a_paid_pool_grows_the_treasury_by_its_net_margin() {
     let Some(mut env) = Env::new() else { return };
     let settlement = env.settlement.insecure_clone();
-    env.fund_platform(TIER_POTS[0]);
+    env.fund_platform(TIER_POTS[0] + VAULT_RENT_CUSHION);
     let ix = open_pool_ix(&settlement.pubkey(), 1, 0, [9; 32], env.sealing_secret_hash);
     env.send(&[ix], &[&settlement]).expect("open");
     patch_vrf_seed(&mut env.svm, &pool_pda(1), [5u8; 32]);
@@ -280,9 +298,10 @@ fn a_paid_pool_grows_the_treasury_by_its_net_margin() {
 
     fill_reveal_commit_pay(&mut env, 1);
 
-    // Treasury: 4 in − 4 pot + 6.4 entries = 6.4 SOL; the margin over the
-    // bootstrap is 64 × 0.0375 = 2.4 SOL (D-E1), and the tier can fund its
-    // next pot from the balance alone.
+    // Treasury: one pool's funding in, the same out to the vault (pot and
+    // cushion), + 6.4 SOL of entries = 6.4 SOL; the margin over the bootstrap
+    // is 64 × 0.0375 = 2.4 SOL (D-E1), and the tier can fund its next pool
+    // from the balance alone.
     assert_eq!(env.balance(&platform_pda()), 64 * TIER_PRICES[0]);
     env.advance_time(5 * 60); // the tier's cooldown
     let ix = open_pool_ix(&settlement.pubkey(), 2, 0, [9; 32], env.sealing_secret_hash);

@@ -3,9 +3,15 @@
  * no manual step:
  *
  *   export secret → reveal_pool_secret → decrypt every ciphertext → verify
- *   against Entry.battles_hash → publish the reveal bundle → score → build
- *   the results tree → screen the winning wallets → commit_results →
- *   pay_prizes in batches → done.
+ *   against Entry.battles_hash → score → build the results tree → screen the
+ *   winning wallets → commit_results → pay_prizes in batches → publish the
+ *   reveal bundle → done.
+ *
+ * PUBLICATION COMES LAST, and that ordering is load-bearing. It used to run
+ * before the commit, so an upload that kept failing aborted the crank — and
+ * a Sealed pool cannot be refunded, so the pot and the whole tier were stuck
+ * behind a storage vendor. Verifiability is not a payment step; a bundle
+ * still owed is recoverable, a frozen tier is not.
  *
  * IDEMPOTENT AND RESUMABLE: every step reads the pool's CURRENT on-chain
  * state and skips what already happened — a crashed crank rerun on the same
@@ -84,6 +90,14 @@ export interface CrankDeps {
   log?: (step: string, detail?: Record<string, unknown>) => void;
   /** Ranks per pay_prizes transaction. 4 fits comfortably in one packet. */
   payBatchSize?: number;
+  /**
+   * How many entries may be unreadable before the crank refuses to settle
+   * the pool at all. Absent means "all but one": a field in which every
+   * single entry failed is a systems failure, not a set of player mistakes,
+   * and committing against it is irreversible. A ratified figure between one
+   * and all belongs here — see the guard in `crankPool`.
+   */
+  maxUnreadableEntries?: number;
 }
 
 export interface CrankOutcome {
@@ -150,6 +164,23 @@ export async function crankPool(deps: CrankDeps, poolId: bigint): Promise<CrankO
   // never disagree.
   const chainEntries = await deps.chain.getEntries(poolId);
   chainEntries.sort((a, b) => a.index - b.index);
+
+  // The Pool account and the Entry accounts are two separate reads, and an
+  // RPC backend can answer the second from a slot behind the first. A short
+  // result is not an error to any of them: the entries are gapless from
+  // seat 0, so the downstream index check passes, the missing seats are
+  // simply the ones registered last, and the pot is committed against a
+  // field that is short a paying player. `commit_results` cannot be re-run,
+  // so there is no recovery. Wait instead — the sweep retries a throwing
+  // pool on the next tick, and a stale read is exactly what waiting fixes.
+  if (chainEntries.length !== pool.entrants) {
+    throw new Error(
+      `pool ${poolId} reports ${pool.entrants} entrants but only ` +
+        `${chainEntries.length} Entry accounts were read — refusing to settle ` +
+        `against an incomplete field`
+    );
+  }
+
   const { bundleEntries, scoringInput, allLosses } = await revealEntries(
     deps.ciphertexts,
     poolId,
@@ -157,6 +188,29 @@ export async function crankPool(deps: CrankDeps, poolId: bigint): Promise<CrankO
     chainEntries,
     step
   );
+
+  // An entry that cannot be decrypted or does not match its on-chain hash is
+  // scored all losses by a published rule, and one of those is a player
+  // problem. ALL of them is ours: a wiped or restored ciphertext table, a
+  // replica behind, a custody key that does not match the one entries were
+  // sealed to. The arithmetic does not notice — every seat ties on zero, the
+  // pot divides evenly, conservation holds — so without this the crank
+  // commits and pays a result it has every reason to distrust, and paying is
+  // final.
+  //
+  // PHASE-6-REVIEW: the ceiling is a founder-owned number and is NOT set
+  // here. The default refuses only a field that is entirely unreadable,
+  // which is a logical boundary rather than a tuning choice; anything
+  // between one bad entry and all of them needs a ratified figure.
+  const unreadable = allLosses.length;
+  const ceiling = deps.maxUnreadableEntries ?? Math.max(chainEntries.length - 1, 0);
+  if (chainEntries.length > 0 && unreadable > ceiling) {
+    throw new Error(
+      `pool ${poolId}: ${unreadable} of ${chainEntries.length} entries could not ` +
+        `be read back (ceiling ${ceiling}) — refusing to commit a result the ` +
+        `crank cannot stand behind`
+    );
+  }
 
   // ---- 3. Score + prizes + tree ------------------------------------------
   // D3-B: competition ranks (tied players share one), split-pot amounts.
@@ -176,7 +230,7 @@ export async function crankPool(deps: CrankDeps, poolId: bigint): Promise<CrankO
     .map((r) => ({ entryIndex: r.index, amountLamports: r.amountLamports }));
   step('scored', { root: hex(root), paidSeats: payouts.length });
 
-  // ---- 4. Publish the bundle --------------------------------------------
+  // ---- 4. Assemble the bundle (published at step 7, after the money) ----
   const bundle: RevealBundle = {
     version: 1,
     pool_id: poolId.toString(),
@@ -199,8 +253,6 @@ export async function crankPool(deps: CrankDeps, poolId: bigint): Promise<CrankO
     results_root: hex(root),
     scored_as_all_losses: allLosses,
   };
-  const bundleUri = await deps.publisher.publish(bundle);
-  step('published', { uri: bundleUri });
 
   // ---- 4b. Detection → flags BEFORE payment (R11) ------------------------
   if (deps.detect) {
@@ -244,6 +296,31 @@ export async function crankPool(deps: CrankDeps, poolId: bigint): Promise<CrankO
     const winners = payouts.map((p) => playerAt(p.entryIndex));
     const held = new Set(chainEntries.filter((e) => e.sanctionsHold).map((e) => e.player));
     const holds = await deps.screenWinners(poolId, winners);
+
+    // A screener that merely FAILED TO ANSWER is not a match, and the
+    // on-chain hold cannot tell the two apart — it is one boolean. Placing
+    // it on a vendor outage withheld a legitimate winner's entire share
+    // with no way back: `release_escrow` refuses on both paths while a hold
+    // is set, the daemon's review clock only revisits FLAGGED entries, and
+    // the pool counts as terminal so no later tick re-screens. The only
+    // exit was an admin-signed lift that nobody was told was needed.
+    //
+    // So an unavailable screener is a retryable condition, not a verdict.
+    // Leave the pool short of commit and let the sweep come back: nothing
+    // has been paid, nothing is stranded, and the next tick screens again.
+    const unavailable = holds.filter((h) => h.reason === 'screening_unavailable');
+    if (unavailable.length > 0) {
+      step('screening-unavailable', {
+        players: unavailable.map((h) => h.player),
+        errors: unavailable.map((h) => h.error ?? ''),
+      });
+      throw new Error(
+        `pool ${poolId}: sanctions screening could not answer for ` +
+          `${unavailable.length} winner(s) — refusing to commit, and refusing to ` +
+          `record a vendor outage as a hold. The next tick screens again.`
+      );
+    }
+
     for (const h of holds) {
       // Idempotent: the program refuses a second placement, and a resumed
       // crank must not turn its own earlier hold into a crash.
@@ -292,6 +369,24 @@ export async function crankPool(deps: CrankDeps, poolId: bigint): Promise<CrankO
     const batch = unpaid.slice(i, i + batchSize);
     await deps.chain.payPrizes(poolId, batch);
     step('pay_prizes', { seats: batch });
+  }
+
+  // ---- 7. Publish the bundle --------------------------------------------
+  // AFTER the money, deliberately. Publishing is a verifiability step, not a
+  // payment step, and it used to run before `commit_results`: an upload that
+  // kept failing — an unfunded upload wallet, a gateway outage — aborted the
+  // whole crank, and a Sealed pool cannot be refunded, so the pot and the
+  // tier were stuck until the upload succeeded. Ordering it last cannot
+  // strand anything; a failure here leaves a paid pool with its bundle still
+  // to come, which the next tick or the archive backfill picks up.
+  let bundleUri: string | undefined;
+  try {
+    bundleUri = await deps.publisher.publish(bundle);
+    step('published', { uri: bundleUri });
+  } catch (e) {
+    // Recorded, not thrown. The players have their money; the published
+    // record is owed and is not worth freezing a tier over.
+    step('publish-failed', { error: e instanceof Error ? e.message : String(e) });
   }
 
   pool = await deps.chain.getPool(poolId);

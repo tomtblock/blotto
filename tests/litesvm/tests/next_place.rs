@@ -244,7 +244,11 @@ fn a_forfeited_first_place_share_splits_equally_among_the_eligible_tied_players(
         read_entry(&env.svm, &scene.players[2].1).next_place_lamports,
         got2
     );
-    assert_eq!(env.balance(&vault_pda(1)), 0, "the vault reaps");
+    assert_eq!(
+        env.balance(&vault_pda(1)),
+        VAULT_RENT_CUSHION,
+        "every share has left; the rent cushion stays behind"
+    );
     assert_eq!(
         env.balance(&platform_pda()),
         platform_before,
@@ -337,7 +341,11 @@ fn when_no_first_place_player_is_eligible_the_share_splits_at_the_next_rank() {
     let whole = pay(&mut env, &scene, 2, 3, 4, 0, 1, true).expect("asserted group of one");
     assert_eq!(whole, share);
 
-    assert_eq!(env.balance(&vault_pda(1)), 0, "the vault reaps");
+    assert_eq!(
+        env.balance(&vault_pda(1)),
+        VAULT_RENT_CUSHION,
+        "every share has left; the rent cushion stays behind"
+    );
     assert_eq!(
         env.balance(&platform_pda()),
         platform_before,
@@ -470,7 +478,7 @@ fn the_payout_waits_for_paid() {
     release(&mut env, &scene, 1);
     let got = pay(&mut env, &scene, 0, 1, 1, POT / 2, 1, true).expect("cleared tied member");
     assert_eq!(got, POT / 2);
-    assert_eq!(env.balance(&vault_pda(1)), 0);
+    assert_eq!(env.balance(&vault_pda(1)), VAULT_RENT_CUSHION);
 }
 
 #[test]
@@ -532,11 +540,11 @@ fn a_held_share_auto_releases_to_its_player_after_seven_days_unless_forfeited() 
     assert!(err.contains("6057"), "not even the reviewed path: {err}");
     assert_eq!(
         env.balance(&vault_pda(1)),
-        POT / 2,
-        "the forfeited share awaits its next-place payout"
+        POT / 2 + VAULT_RENT_CUSHION,
+        "the forfeited share awaits its next-place payout, above the rent cushion"
     );
     // ...to seat 0, the cleared tied member — the whole share, a group of one.
     let got = pay(&mut env, &scene, 1, 0, 1, POT / 2, 1, true).expect("pay the next place");
     assert_eq!(got, POT / 2);
-    assert_eq!(env.balance(&vault_pda(1)), 0);
+    assert_eq!(env.balance(&vault_pda(1)), VAULT_RENT_CUSHION);
 }

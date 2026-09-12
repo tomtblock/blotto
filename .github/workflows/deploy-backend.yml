@@ -57,6 +57,15 @@
 
 name: deploy-backend
 
+# Least privilege (audit 2026-09-11, Tier 3 item 8). This job holds the
+# settlement keypair and the Turnkey private key in its environment; the
+# GitHub token it is issued should be able to do nothing beyond reading the
+# checkout. Without a block the token carries the repository's default
+# permissions, which on a repository created before 2023 can be read-write
+# across contents, packages and PRs. Nothing here uses `gh`.
+permissions:
+  contents: read
+
 on:
   workflow_dispatch:
     inputs:
@@ -128,7 +137,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # v1.6, 2026-09-12
 
       # Incident 2026-09-05: FLY_API_TOKEN was present, listed and unrevoked in
       # the Fly dashboard, and no longer accepted. An organization on the

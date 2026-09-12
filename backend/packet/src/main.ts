@@ -22,7 +22,13 @@
  *     GEO_VENDOR_URL + GEO_VENDOR_API_KEY      (production — IPLocate, R2)
  *       optional: GEO_VENDOR_ATTEMPTS (3), GEO_VENDOR_TIMEOUT_MS (4000),
  *       GEO_CACHE_TTL_MS (900000; 0 disables the per-IP cache)
+ *     GEO_VENDOR_2_URL + GEO_VENDOR_2_API_KEY  (optional fallback source —
+ *       same contract, asked only when the first source cannot answer)
  *     GEO_STUB_COUNTRY [+ GEO_STUB_REGION/GEO_STUB_VPN]  (dev stub)
+ *       optional, per paid source:
+ *         GEO_DAILY_CAP          our own ceiling per 24h (unset = none)
+ *         GEO_ISSUANCE_RESERVE   lookups only `/packet` may spend
+ *                                (default: a quarter of GEO_DAILY_CAP)
  *
  *   Sanctions (Phase 2, Stage B — `sanctions-wiring.ts`), any of:
  *     SANCTIONS_CHAINALYSIS_API_KEY            (Chainalysis, primary)
@@ -41,12 +47,17 @@ import { loadPostgresConfig } from '../../_shared/src/config';
 import { createPool } from '../../_shared/src/db';
 import { loadHygieneConfig } from '../../_shared/src/http-hygiene';
 import { PgCiphertextStore } from '../../sealing/src/store';
+import { PgPoolIdResolver } from './pool-ids';
 import { serveEntryApi } from './server';
 import { buildSigner } from './signer-select';
 import { wireSanctions } from './sanctions-wiring';
 import { StubGeoLookup, VendorHttpGeoLookup } from './geo-adapters';
 import { IpLocateGeoLookup } from './geo-iplocate';
 import { CachingGeoLookup } from './geo-cache';
+import { CompositeGeoLookup, type NamedGeoSource } from './geo-composite';
+import { GeoBudget } from './geo-budget';
+import { buildMonitor, loadMonitor } from '../../_shared/src/monitor';
+import type { Monitor } from '../../_shared/src/monitor';
 import { loadTerms } from './attestations';
 import { loadTerritorySchedule } from './territories';
 import { PgAttestationStore, PgNotifyPreferenceStore } from './stores-pg';
@@ -56,33 +67,98 @@ const SERVICE = 'packet';
 
 
 
-function buildGeo(env: NodeJS.ProcessEnv): GeoLookup {
+/** The two faces of the geo path — see `geo-budget.ts` for why they differ. */
+interface GeoFaces {
+  issuance: GeoLookup;
+  preflight: GeoLookup;
+  describe: string;
+}
+
+/** One paid vendor, wrapped in its per-address cache. */
+function buildVendor(
+  url: string,
+  apiKey: string,
+  env: NodeJS.ProcessEnv
+): { lookup: GeoLookup; cached: boolean } {
+  // IPLocate is the vendor of record (R2). `VendorHttpGeoLookup` remains
+  // the documented generic seam for a future vendor swap; it is not the
+  // production path and never matched IPLocate's actual contract.
+  const vendor = new IpLocateGeoLookup({
+    baseUrl: url,
+    apiKey,
+    attempts: Number(env.GEO_VENDOR_ATTEMPTS ?? 3),
+    timeoutMs: Number(env.GEO_VENDOR_TIMEOUT_MS ?? 4000),
+  });
+  // The request budget is real: two lookups per entrant (the /geo pre-flight
+  // on page load, then /packet) across 64 entrants is 128 per pool, against a
+  // DAILY cap over a finite, non-renewing credit balance. The cache changes
+  // no verdict — see geo-cache.ts for why — it only stops the same address
+  // being asked about twice.
+  const ttlMs = Number(env.GEO_CACHE_TTL_MS ?? 15 * 60 * 1000);
+  if (ttlMs > 0) return { lookup: new CachingGeoLookup(vendor, { ttlMs }), cached: true };
+  return { lookup: vendor, cached: false };
+}
+
+/**
+ * Build the geo path: an ordered composite of every configured source, with
+ * our own spending ceiling in front of it and issuance holding a reserve the
+ * unauthenticated pre-flight cannot reach.
+ *
+ * The ceiling and the reserve are OFF unless `GEO_DAILY_CAP` is set. That is
+ * deliberate: the vendor's own cap is a property of the operator's plan, and
+ * inventing a number here would either throttle a paid tier for no reason or
+ * give false comfort on a free one.
+ *
+ * PHASE-6-REVIEW: the reserve defaults to a quarter of the cap — enough for a
+ * full 64-seat field twice over at any cap worth setting, small enough not to
+ * squeeze ordinary traffic. The split is an operator-owned number, so it is a
+ * default with an override (`GEO_ISSUANCE_RESERVE`) rather than a constant.
+ */
+function buildGeo(env: NodeJS.ProcessEnv, monitor: Monitor): GeoFaces {
   if (env.GEO_VENDOR_URL && env.GEO_VENDOR_API_KEY) {
-    // IPLocate is the vendor of record (R2). `VendorHttpGeoLookup` remains
-    // the documented generic seam for a future vendor swap; it is not the
-    // production path and never matched IPLocate's actual contract.
-    const vendor = new IpLocateGeoLookup({
-      baseUrl: env.GEO_VENDOR_URL,
-      apiKey: env.GEO_VENDOR_API_KEY,
-      attempts: Number(env.GEO_VENDOR_ATTEMPTS ?? 3),
-      timeoutMs: Number(env.GEO_VENDOR_TIMEOUT_MS ?? 4000),
-    });
-    // The plan's request budget is real: two lookups per entrant (the /geo
-    // pre-flight on page load, then /packet) across 64 entrants is 128 per
-    // pool, against a DAILY cap over a finite, non-renewing credit balance.
-    // The cache changes no verdict — see geo-cache.ts for why — it only
-    // stops the same address being asked about twice.
-    const ttlMs = Number(env.GEO_CACHE_TTL_MS ?? 15 * 60 * 1000);
-    if (ttlMs > 0) {
-      console.log(`${SERVICE}: geo = IPLOCATE (${env.GEO_VENDOR_URL}), per-IP cache ${ttlMs}ms`);
-      return new CachingGeoLookup(vendor, { ttlMs });
+    const sources: NamedGeoSource[] = [];
+    const primary = buildVendor(env.GEO_VENDOR_URL, env.GEO_VENDOR_API_KEY, env);
+    sources.push({ name: 'primary', lookup: primary.lookup });
+    if (env.GEO_VENDOR_2_URL && env.GEO_VENDOR_2_API_KEY) {
+      const secondary = buildVendor(env.GEO_VENDOR_2_URL, env.GEO_VENDOR_2_API_KEY, env);
+      sources.push({ name: 'secondary', lookup: secondary.lookup });
     }
-    console.log(`${SERVICE}: geo = IPLOCATE (${env.GEO_VENDOR_URL}), cache DISABLED`);
-    return vendor;
+    const composite = new CompositeGeoLookup(sources, monitor);
+
+    const cap = Number(env.GEO_DAILY_CAP ?? 0);
+    if (!Number.isFinite(cap) || cap <= 0) {
+      // No ceiling. Exactly the behaviour before 2026-09-12, minus the
+      // silence: a source failure is now a metric and, for a spent allowance
+      // or a refused key, an alert.
+      const describe =
+        `geo = ${sources.length} source(s), per-address cache ` +
+        `${primary.cached ? 'ON' : 'OFF'}, NO spending ceiling (set GEO_DAILY_CAP)` +
+        (sources.length === 1
+          ? ' — SINGLE SOURCE: a vendor outage still stops every entry (R2: name a second vendor)'
+          : '');
+      return { issuance: composite, preflight: composite, describe };
+    }
+    const reserve =
+      env.GEO_ISSUANCE_RESERVE === undefined
+        ? undefined
+        : Number(env.GEO_ISSUANCE_RESERVE);
+    const budget = new GeoBudget(composite, { dailyCap: cap, reserve, monitor });
+    const describe =
+      `geo = ${sources.length} source(s), per-address cache ${primary.cached ? 'ON' : 'OFF'}, ` +
+      `ceiling ${budget.ceilingFor('issuance')}/24h ` +
+      `(pre-flight stops at ${budget.ceilingFor('preflight')})` +
+      (sources.length === 1
+        ? ' — SINGLE SOURCE: a vendor outage still stops every entry (R2: name a second vendor)'
+        : '');
+    return { issuance: budget.forIssuance(), preflight: budget.forPreflight(), describe };
   }
   if (env.GEO_STUB_COUNTRY) {
-    console.warn(`${SERVICE}: using the GEO STUB (dev only) — country=${env.GEO_STUB_COUNTRY}`);
-    return new StubGeoLookup();
+    const stub = new StubGeoLookup();
+    return {
+      issuance: stub,
+      preflight: stub,
+      describe: `geo = STUB (dev only) — country=${env.GEO_STUB_COUNTRY}`,
+    };
   }
   throw new Error(
     `${SERVICE}: no geo lookup configured — set GEO_VENDOR_URL + GEO_VENDOR_API_KEY (or the dev stub)`
@@ -124,6 +200,13 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
   // cause. Bracketing it with logs makes the next occurrence readable: a boot
   // that stops after the first line was still loading, and the elapsed time on
   // the second says how close to the platform's grace period the real load runs.
+  // The shared metrics/alert sink, as the indexer already does it. Without
+  // it the geo path's only failure signal was a line on standard output —
+  // see `geo-composite.ts` for what that cost.
+  const monitor = buildMonitor(loadMonitor(env), SERVICE);
+  const geo = buildGeo(env, monitor);
+  console.log(`${SERVICE}: ${geo.describe}`);
+
   console.log(`${SERVICE}: loading sanctions sources (the OFAC mirror is ~29 MB)...`);
   const sanctionsStartedAt = Date.now();
   const sanctions = await wireSanctions(env);
@@ -135,7 +218,8 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
   serveEntryApi(
     {
       packet: {
-        geo: buildGeo(env),
+        geo: geo.issuance,
+        preflightGeo: geo.preflight,
         sanctions: sanctions.list,
         signer: buildSigner(env),
         attestations: new PgAttestationStore(db),
@@ -144,6 +228,7 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
         nonce: () => BigInt('0x' + randomBytes(8).toString('hex')),
       },
       ciphertexts: new PgCiphertextStore(db),
+      poolIds: new PgPoolIdResolver(db),
       notify: new PgNotifyPreferenceStore(db),
       trustProxyHeader: env.BLOTTO_TRUST_PROXY === '1',
       // BR-005 posture from env (BLOTTO_API_CORS_ORIGINS etc.), widened in

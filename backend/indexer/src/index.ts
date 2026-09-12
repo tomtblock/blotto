@@ -31,7 +31,7 @@ import { migrate } from './migrate';
 import { PgEventStore } from './store-pg';
 import { createWebhookServer } from './webhook';
 import { serveReadApi } from './read-api';
-import { catchUpFloor, runBackfill, Web3BackfillRpc } from './backfill';
+import { backfillAndRederive, catchUpFloor, Web3BackfillRpc } from './backfill';
 import { backfillArchive } from './archive';
 
 // INCIDENT 2026-09-09: the decoder's layout table is filled by this call and by
@@ -87,7 +87,9 @@ async function cmdServe(monitor: Monitor): Promise<void> {
   // app's NEXT_PUBLIC_INDEXER_URL points here.
   // BR-005: CORS/limits from env (BLOTTO_API_CORS_ORIGINS etc.) — the read
   // surface keeps the module's GET-only default methods.
-  serveReadApi(pool, config.readApiPort, loadHygieneConfig(process.env));
+  serveReadApi(pool, config.readApiPort, loadHygieneConfig(process.env), {
+    trustProxyHeader: process.env.BLOTTO_TRUST_PROXY === '1',
+  });
   console.log(`${SERVICE}: read API listening on :${config.readApiPort}`);
 }
 
@@ -118,11 +120,18 @@ async function cmdBackfill(monitor: Monitor, opts: { bounded?: boolean } = {}): 
     console.log(
       `backfill: walking ${minSlot === undefined ? 'the full history' : `back to slot ${minSlot}`}`
     );
-    const result = await runBackfill(store, monitor,
+    const result = await backfillAndRederive(store, monitor,
       { commitment: config.commitment, program: config.programId }, rpc, { minSlot });
     console.log(
       `backfill: ${result.transactions} tx, ${result.inserted} inserted, ${result.duplicates} duplicates`
     );
+    // The walk projects newest-first, which is the wrong order for an
+    // order-dependent projection; `backfillAndRederive` replays the derived
+    // tables from the ledger whenever the walk inserted anything. See its
+    // doc comment for what a backwards projection actually produces.
+    if (result.rederived > 0) {
+      console.log(`backfill: re-derived ${result.rederived} events in ledger order`);
+    }
   } finally {
     await pool.end();
   }

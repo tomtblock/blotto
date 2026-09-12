@@ -85,7 +85,7 @@ fn switch_on_escrows_the_winner_and_a_kyc_packet_releases_it() {
     // Escrowed, not paid — the whole pot sits in the vault on the Entry.
     assert_eq!(env.balance(&players[0].0.pubkey()), before);
     assert_eq!(read_entry(&env.svm, &players[0].1).escrow_lamports, POT);
-    assert_eq!(env.balance(&vault_pda(1)), POT);
+    assert_eq!(env.balance(&vault_pda(1)), POT + VAULT_RENT_CUSHION);
     assert_eq!(
         read_pool(&env.svm, &pool_pda(1)).state,
         3,
@@ -121,7 +121,7 @@ fn switch_on_escrows_the_winner_and_a_kyc_packet_releases_it() {
         .expect("release with KYC");
     assert_eq!(env.balance(&players[0].0.pubkey()) - before, POT);
     assert_eq!(read_entry(&env.svm, &players[0].1).escrow_lamports, 0);
-    assert_eq!(env.balance(&vault_pda(1)), 0);
+    assert_eq!(env.balance(&vault_pda(1)), VAULT_RENT_CUSHION);
 }
 
 /// The gate is a threshold on the SHARE, not the pot: a tie for first whose
@@ -145,6 +145,10 @@ fn switch_on_pays_tied_shares_under_the_threshold_directly() {
         );
         assert_eq!(read_entry(&env.svm, e).escrow_lamports, 0);
     }
-    assert_eq!(env.balance(&vault_pda(1)), 0, "vault drained");
+    assert_eq!(
+        env.balance(&vault_pda(1)),
+        VAULT_RENT_CUSHION,
+        "vault drained to its rent cushion"
+    );
     assert_eq!(read_pool(&env.svm, &pool_pda(1)).state, 3, "Paid");
 }

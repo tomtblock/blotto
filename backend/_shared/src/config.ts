@@ -57,7 +57,17 @@ export function parsePositiveInt(
   return n;
 }
 
-/** Default local-dev connection string — matches backend/docker-compose.yml. */
+/**
+ * The local-dev connection string, for a developer to COPY — never a value
+ * this module falls back to.
+ *
+ * Until 2026-09-12 `loadPostgresConfig` used it whenever BLOTTO_DATABASE_URL
+ * was unset, so a service booted in a deployment that had lost its database
+ * variable connected (or tried to) to localhost, quietly, with the real store
+ * nowhere in the picture (audit 2026-09-11, Tier 3 item 6). Every other
+ * credentialed seam in this repository refuses to start unconfigured; the
+ * database now does too.
+ */
 export const DEFAULT_DATABASE_URL =
   'postgres://blotto:blotto@localhost:5432/blotto_dev';
 
@@ -79,8 +89,15 @@ export const POSTGRES_ENV = {
 export function loadPostgresConfig(
   env: NodeJS.ProcessEnv = process.env
 ): PostgresConfig {
+  const url = env[POSTGRES_ENV.url];
+  if (url === undefined || url.trim() === '') {
+    throw new Error(
+      `${POSTGRES_ENV.url} is not set — refusing to start rather than fall back to a ` +
+        `local database. For local development: ${POSTGRES_ENV.url}=${DEFAULT_DATABASE_URL}`
+    );
+  }
   return {
-    url: optional(env, POSTGRES_ENV.url, DEFAULT_DATABASE_URL),
+    url,
     poolMax: parsePositiveInt(env, POSTGRES_ENV.poolMax, 10),
   };
 }

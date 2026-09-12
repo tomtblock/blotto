@@ -71,8 +71,15 @@ export interface Auth {
    * buttons rendered ENABLED and did nothing when clicked, silently. Measured
    * in a real browser 2026-09-08. Only the provider knows whether the SDK
    * actually came up, so only the provider says.
+   *
+   * `unreachable` (2026-09-12): the provider never reported ready within the
+   * shell's deadline — an outage, a tracker blocklist, a corporate DNS filter.
+   * Until then this state had no name, no deadline and no control: the header
+   * held an inert placeholder for as long as the provider stayed silent
+   * (audit 2026-09-11, C-03). Unlike the other two it can clear on its own:
+   * a late provider still takes over the moment it reports.
    */
-  unavailable?: "absent" | "rejected";
+  unavailable?: "absent" | "rejected" | "unreachable";
   /**
    * Base58 pubkey of the ACTIVE Solana wallet — the one that enters, is
    * paid, and whose balance is shown — or null while initializing / signed

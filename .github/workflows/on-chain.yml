@@ -104,8 +104,11 @@ jobs:
           export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
           anchor build --ignore-keys
 
+      # --no-fail-fast: cargo otherwise stops at the first test BINARY that
+      # fails, so a red run showed one file's failures and hid every later
+      # file's. One cycle should show the whole board (PR #106, 2026-09-12).
       - name: LiteSVM suite against the built artifact
         run: |
           export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
           cd tests/litesvm
-          cargo test --locked
+          cargo test --locked --no-fail-fast

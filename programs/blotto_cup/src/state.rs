@@ -90,9 +90,10 @@ pub struct Config {
     /// `TIER_POT_LAMPORTS`; must stay a multiple of 1024.
     pub tier_pot_lamports: [u64; N_TIERS],
     /// Treasury policy (D-A1 v2): a tier may open only if, after funding
-    /// its pot, the treasury still holds `min` + `reserve_pots` further
-    /// pots of every OTHER enabled tier with no live pool. Founder-tunable;
-    /// changes never touch an open pool.
+    /// its pot (and its vault's rent cushion), the treasury still holds
+    /// `min` + `reserve_pots` further pots — each with its cushion — of
+    /// every OTHER enabled tier with no live pool. Founder-tunable; changes
+    /// never touch an open pool.
     pub treasury_reserve_pots: u8,
     pub treasury_min_platform_lamports: u64,
     /// Pots currently locked in open pools' prize vaults (informational,

@@ -91,9 +91,97 @@ const unhex = (s: string) => {
 };
 const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
 
+/** `Ab3k…9fQz` — enough of an address to find it, never the whole string
+ * in a one-line detail. */
+const short = (p: string) => (p.length <= 9 ? p : `${p.slice(0, 4)}…${p.slice(-4)}`);
+
+/**
+ * The roster: is the bundle's field the chain's field?
+ *
+ * Every other check derives its picture of the field from `bundle.entries`
+ * and asks the chain about each of them; none asked the reverse question —
+ * whether every wallet the chain registered appears in the bundle at all.
+ * So a bundle that dropped the highest-seated entrant kept contiguous
+ * indices, reproduced every commitment it did carry, rescored consistently
+ * with itself, rebuilt a Merkle root over the short field and matched a
+ * committed root computed the same way — green on every row, with an
+ * entrant silently scored out of existence. The complete on-chain roster is
+ * in hand the whole time (`battlesHashByPlayer` is built from every
+ * EntryRegistered); this is the check that uses it as a set (audit
+ * 2026-09-11, F-03).
+ *
+ * Two properties, reported as one named row so a mismatch is attributable:
+ * the players are the same set (size and members, no duplicates), and the
+ * indices are a permutation of 0..n-1. The second is what the later checks
+ * index by; when it fails they cannot run without throwing, so the caller
+ * stops there.
+ */
+function rosterCheck(
+  bundle: PublishedBundle,
+  chain: OnChainRecord
+): { ok: boolean; indexable: boolean; detail: string } {
+  const chainPlayers = new Set(Object.keys(chain.battlesHashByPlayer));
+  const bundlePlayers = new Set<string>();
+  const duplicates: string[] = [];
+  for (const e of bundle.entries) {
+    if (bundlePlayers.has(e.player)) duplicates.push(e.player);
+    bundlePlayers.add(e.player);
+  }
+  const missingFromBundle = [...chainPlayers].filter((p) => !bundlePlayers.has(p));
+  const unknownToChain = [...bundlePlayers].filter((p) => !chainPlayers.has(p));
+
+  const n = chain.battlesHashByPlayer ? chainPlayers.size : 0;
+  const indices = bundle.entries.map((e) => e.index).sort((a, b) => a - b);
+  const indexable =
+    bundle.entries.length === n && indices.every((idx, i) => idx === i);
+
+  const problems: string[] = [];
+  if (bundle.entries.length !== chainPlayers.size) {
+    problems.push(`bundle lists ${bundle.entries.length} entrants, the chain registered ${chainPlayers.size}`);
+  }
+  if (missingFromBundle.length > 0) {
+    problems.push(
+      `missing from the bundle: ${missingFromBundle.slice(0, 3).map(short).join(', ')}` +
+        (missingFromBundle.length > 3 ? ` and ${missingFromBundle.length - 3} more` : '')
+    );
+  }
+  if (unknownToChain.length > 0) {
+    problems.push(
+      `in the bundle but never registered: ${unknownToChain.slice(0, 3).map(short).join(', ')}` +
+        (unknownToChain.length > 3 ? ` and ${unknownToChain.length - 3} more` : '')
+    );
+  }
+  if (duplicates.length > 0) {
+    problems.push(`listed twice: ${duplicates.slice(0, 3).map(short).join(', ')}`);
+  }
+  if (!indexable && problems.length === 0) {
+    problems.push(`entry indices are not a permutation of 0..${n - 1}`);
+  } else if (!indexable) {
+    problems.push('entry indices are not 0..n-1');
+  }
+
+  const ok = problems.length === 0;
+  return {
+    ok,
+    indexable,
+    detail: ok
+      ? `the bundle's ${bundle.entries.length} entrants are exactly the wallets the chain registered, seats 0..${n - 1}`
+      : problems.join('; '),
+  };
+}
+
 export function verifyPool(bundle: PublishedBundle, chain: OnChainRecord): VerifyReport {
   const checks: VerifyCheck[] = [];
   const push = (name: string, ok: boolean, detail: string) => checks.push({ name, ok, detail });
+
+  // 0. The field itself, before anything is computed over it.
+  const roster = rosterCheck(bundle, chain);
+  push('roster', roster.ok, roster.detail);
+  if (!roster.indexable) {
+    // Every check below indexes the bundle by seat; without a permutation
+    // they would throw rather than report. The report is already red.
+    return { ok: false, checks };
+  }
 
   // 1. The revealed secret is the one committed at open, and the bundle
   //    carries that same secret.
