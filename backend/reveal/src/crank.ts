@@ -59,9 +59,13 @@ export interface RevealedForDetection {
   deviceHash: string | null;
   scoreHalf: number;
 }
-import type { SettlementChain } from './chain';
+import type { SettlementChain, ChainEntryView, ChainPoolView } from './chain';
 import type { BundlePublisher } from './publisher';
+import type { PublishedBundleStore } from './published-store';
 import type { RevealBundle, RevealBundleEntry } from './bundle';
+import { ALERT } from '../../_shared/src/metrics';
+import type { Monitor } from '../../_shared/src/monitor';
+import type { RevealedEntryForDetection } from './ranking';
 
 const hex = (b: Uint8Array) => Buffer.from(b).toString('hex');
 
@@ -98,6 +102,17 @@ export interface CrankDeps {
    * and all belongs here — see the guard in `crankPool`.
    */
   maxUnreadableEntries?: number;
+  /**
+   * The daemon's memory of published bundles (published-store.ts, audit
+   * 2026-09-11 C-09 / B-32 / D-27). With it, a bundle already on record is
+   * never uploaded again and every upload is recorded; without it (tests
+   * that are not about publication) the crank publishes as it always did.
+   */
+  published?: PublishedBundleStore;
+  /** Alerts (audit 2026-09-11, C-12 / E-04). Optional; silent without. */
+  monitor?: Monitor;
+  /** Unix seconds for the publish record (tests inject). */
+  nowUnix?: () => bigint;
 }
 
 export interface CrankOutcome {
@@ -138,140 +153,43 @@ export async function crankPool(deps: CrankDeps, poolId: bigint): Promise<CrankO
     return { poolId, finalState: pool.state, stepsTaken: steps };
   }
 
-  // ---- 1. Reveal ---------------------------------------------------------
-  let secret: Uint8Array;
-  try {
-    secret = await deps.custody.exportSecret(poolId);
-  } catch (e) {
-    if (e instanceof ExportRefusedError) {
-      // Custody disagrees with what we read from the chain — do nothing
-      // rather than fight it; the next run re-reads both.
-      step('export-refused');
-      return { poolId, finalState: pool.state, stepsTaken: steps };
-    }
-    throw e;
+  // ---- 1-4. Reveal, decrypt, score, assemble ----------------------------
+  // Shared with `publishBundle`, the publish-only path a Paid pool that still
+  // owes its bundle goes through (2026-09-12) — see `assembleBundle`.
+  const assembled = await assembleBundle(deps, poolId, pool, step);
+  if (assembled === 'export-refused') {
+    return { poolId, finalState: pool.state, stepsTaken: steps };
   }
-  if (!pool.secretRevealed) {
-    await deps.chain.revealPoolSecret(poolId, secret);
-    step('reveal_pool_secret');
-  } else {
-    step('reveal:already');
+  const { chainEntries, forDetection, allLosses, results, payouts, root, bundle, playerAt } =
+    assembled;
+
+  // The published lost-ciphertext rule leaves an obligation behind: the entry
+  // fee of every all-losses seat is OWED from the platform treasury, off
+  // chain. The bundle records who; until 2026-09-12 nothing else said so
+  // (audit 2026-09-11, C-12) — the alert is the operator's cue, and the
+  // manual's §7 says what to do with it.
+  if (allLosses.length > 0) {
+    deps.monitor?.alert(ALERT.reveal.entryRefundOwed, {
+      poolId: poolId.toString(),
+      players: allLosses,
+      entryLamports: pool.entryLamports.toString(),
+    });
   }
-
-  // ---- 2. Decrypt + verify ----------------------------------------------
-  // The loop itself lives in ranking.ts, because the next-place driver
-  // recomputes the same ranking long after settlement and the two must
-  // never disagree.
-  const chainEntries = await deps.chain.getEntries(poolId);
-  chainEntries.sort((a, b) => a.index - b.index);
-
-  // The Pool account and the Entry accounts are two separate reads, and an
-  // RPC backend can answer the second from a slot behind the first. A short
-  // result is not an error to any of them: the entries are gapless from
-  // seat 0, so the downstream index check passes, the missing seats are
-  // simply the ones registered last, and the pot is committed against a
-  // field that is short a paying player. `commit_results` cannot be re-run,
-  // so there is no recovery. Wait instead — the sweep retries a throwing
-  // pool on the next tick, and a stale read is exactly what waiting fixes.
-  if (chainEntries.length !== pool.entrants) {
-    throw new Error(
-      `pool ${poolId} reports ${pool.entrants} entrants but only ` +
-        `${chainEntries.length} Entry accounts were read — refusing to settle ` +
-        `against an incomplete field`
-    );
-  }
-
-  const { bundleEntries, scoringInput, allLosses } = await revealEntries(
-    deps.ciphertexts,
-    poolId,
-    secret,
-    chainEntries,
-    step
-  );
-
-  // An entry that cannot be decrypted or does not match its on-chain hash is
-  // scored all losses by a published rule, and one of those is a player
-  // problem. ALL of them is ours: a wiped or restored ciphertext table, a
-  // replica behind, a custody key that does not match the one entries were
-  // sealed to. The arithmetic does not notice — every seat ties on zero, the
-  // pot divides evenly, conservation holds — so without this the crank
-  // commits and pays a result it has every reason to distrust, and paying is
-  // final.
-  //
-  // PHASE-6-REVIEW: the ceiling is a founder-owned number and is NOT set
-  // here. The default refuses only a field that is entirely unreadable,
-  // which is a logical boundary rather than a tuning choice; anything
-  // between one bad entry and all of them needs a ratified figure.
-  const unreadable = allLosses.length;
-  const ceiling = deps.maxUnreadableEntries ?? Math.max(chainEntries.length - 1, 0);
-  if (chainEntries.length > 0 && unreadable > ceiling) {
-    throw new Error(
-      `pool ${poolId}: ${unreadable} of ${chainEntries.length} entries could not ` +
-        `be read back (ceiling ${ceiling}) — refusing to commit a result the ` +
-        `crank cannot stand behind`
-    );
-  }
-
-  // ---- 3. Score + prizes + tree ------------------------------------------
-  // D3-B: competition ranks (tied players share one), split-pot amounts.
-  // The pot is the POOL'S fixed pot (D-A1 revised) — read from chain state,
-  // never derived from the entry price.
-  const pot = pool.potLamports;
-  const results = assignPrizes(scoreWithMissing(scoringInput), pot);
-  const playerAt = (index: number) => chainEntries[index].player;
-  // Published leaf order (rank asc, entry index asc) is built in one place —
-  // see ranking.ts, which the next-place driver reuses to prove against the
-  // root committed here.
-  const { rows: byRank, root } = buildRanking(results, playerAt);
-  // The on-chain payout list: every seat with a nonzero share, seat-sorted.
-  const payouts = results
-    .filter((r) => r.amountLamports > 0n)
-    .sort((a, b) => a.index - b.index)
-    .map((r) => ({ entryIndex: r.index, amountLamports: r.amountLamports }));
-  step('scored', { root: hex(root), paidSeats: payouts.length });
-
-  // ---- 4. Assemble the bundle (published at step 7, after the money) ----
-  const bundle: RevealBundle = {
-    version: 1,
-    pool_id: poolId.toString(),
-    secret: hex(secret),
-    entry_lamports: pool.entryLamports.toString(),
-    entries: bundleEntries,
-    results: byRank.map((r) => ({
-      index: r.index,
-      player: r.player,
-      score_half: r.scoreHalf,
-      zones: r.zones,
-      rank: r.rank,
-      amount_lamports: r.amountLamports.toString(),
-    })),
-    payouts: payouts.map((p) => ({
-      entry_index: p.entryIndex,
-      player: playerAt(p.entryIndex),
-      amount_lamports: p.amountLamports.toString(),
-    })),
-    results_root: hex(root),
-    scored_as_all_losses: allLosses,
-  };
 
   // ---- 4b. Detection → flags BEFORE payment (R11) ------------------------
   if (deps.detect) {
-    const forDetection: RevealedForDetection[] = bundleEntries.map((e) => ({
+    // From the sealed payload's detection channel (ranking.ts), never from
+    // the bundle: the published bundle carries neither the timings nor the
+    // device hash (version 2, audit B-31), and the battles arrive decoded.
+    const detectionInput: RevealedForDetection[] = forDetection.map((e) => ({
       player: e.player,
       index: e.index,
-      battles:
-        e.battles === null
-          ? null
-          : Array.from({ length: 7 }, (_, k) =>
-              Array.from({ length: 5 }, (_, z) =>
-                parseInt((e.battles as string).slice((k * 5 + z) * 2, (k * 5 + z) * 2 + 2), 16)
-              )
-            ),
-      timingsMs: e.timings_ms,
-      deviceHash: e.device_hash,
+      battles: e.battles === null ? null : e.battles.map((b) => [...b]),
+      timingsMs: e.timingsMs,
+      deviceHash: e.deviceHash,
       scoreHalf: results[e.index].scoreHalf,
     }));
-    const toFlag = await deps.detect(poolId, forDetection);
+    const toFlag = await deps.detect(poolId, detectionInput);
     const already = new Set(chainEntries.filter((e) => e.flagged).map((e) => e.player));
     for (const player of toFlag) {
       if (!already.has(player)) {
@@ -379,10 +297,15 @@ export async function crankPool(deps: CrankDeps, poolId: bigint): Promise<CrankO
   // tier were stuck until the upload succeeded. Ordering it last cannot
   // strand anything; a failure here leaves a paid pool with its bundle still
   // to come, which the next tick or the archive backfill picks up.
+  //
+  // Since 2026-09-12 the upload is guarded by the daemon's record of
+  // published bundles (C-09 / B-32 / D-27): a bundle already on record is
+  // not uploaded again, and a successful upload is recorded so the daemon's
+  // "bundle owed" pass can tell a paid-and-published pool from a
+  // paid-and-unpublished one — the case that used to be forgotten.
   let bundleUri: string | undefined;
   try {
-    bundleUri = await deps.publisher.publish(bundle);
-    step('published', { uri: bundleUri });
+    bundleUri = await publishWithRecord(deps, poolId, bundle, step);
   } catch (e) {
     // Recorded, not thrown. The players have their money; the published
     // record is owed and is not worth freezing a tier over.
@@ -392,4 +315,194 @@ export async function crankPool(deps: CrankDeps, poolId: bigint): Promise<CrankO
   pool = await deps.chain.getPool(poolId);
   step('done', { state: pool.state, paidMask: pool.paidMask.toString() });
   return { poolId, finalState: pool.state, stepsTaken: steps, bundleUri };
+}
+
+/** What steps 1-4 of the crank produce, shared with the publish-only path. */
+interface AssembledBundle {
+  chainEntries: ChainEntryView[];
+  forDetection: RevealedEntryForDetection[];
+  allLosses: string[];
+  results: PlayerResult[];
+  payouts: { entryIndex: number; amountLamports: bigint }[];
+  root: Uint8Array;
+  bundle: RevealBundle;
+  playerAt: (index: number) => string;
+}
+
+/**
+ * Steps 1-4 of the crank — reveal the secret, decrypt and verify every
+ * entry, score, and assemble the bundle — as one function, because the
+ * publish-only path needs exactly these and nothing after them: no
+ * detection, no winner screening, no commit, no payment. Returns
+ * 'export-refused' when custody and the chain disagree about whether the
+ * pool may be revealed (the crank then does nothing and re-reads next run).
+ */
+async function assembleBundle(
+  deps: CrankDeps,
+  poolId: bigint,
+  pool: ChainPoolView,
+  step: (name: string, detail?: Record<string, unknown>) => void
+): Promise<AssembledBundle | 'export-refused'> {
+  // ---- 1. Reveal ---------------------------------------------------------
+  let secret: Uint8Array;
+  try {
+    secret = await deps.custody.exportSecret(poolId);
+  } catch (e) {
+    if (e instanceof ExportRefusedError) {
+      step('export-refused');
+      return 'export-refused';
+    }
+    throw e;
+  }
+  if (!pool.secretRevealed) {
+    await deps.chain.revealPoolSecret(poolId, secret);
+    step('reveal_pool_secret');
+  } else {
+    step('reveal:already');
+  }
+
+  // ---- 2. Decrypt + verify ----------------------------------------------
+  // The loop itself lives in ranking.ts, because the next-place driver
+  // recomputes the same ranking long after settlement and the two must
+  // never disagree.
+  const chainEntries = await deps.chain.getEntries(poolId);
+  chainEntries.sort((a, b) => a.index - b.index);
+
+  // The Pool account and the Entry accounts are two separate reads, and an
+  // RPC backend can answer the second from a slot behind the first. A short
+  // result is not an error to any of them: the entries are gapless from
+  // seat 0, so the downstream index check passes, the missing seats are
+  // simply the ones registered last, and the pot is committed against a
+  // field that is short a paying player. `commit_results` cannot be re-run,
+  // so there is no recovery. Wait instead — the sweep retries a throwing
+  // pool on the next tick, and a stale read is exactly what waiting fixes.
+  if (chainEntries.length !== pool.entrants) {
+    throw new Error(
+      `pool ${poolId} reports ${pool.entrants} entrants but only ` +
+        `${chainEntries.length} Entry accounts were read — refusing to settle ` +
+        `against an incomplete field`
+    );
+  }
+
+  const { bundleEntries, forDetection, scoringInput, allLosses } = await revealEntries(
+    deps.ciphertexts,
+    poolId,
+    secret,
+    chainEntries,
+    step
+  );
+
+  // An entry that cannot be decrypted or does not match its on-chain hash is
+  // scored all losses by a published rule, and one of those is a player
+  // problem. ALL of them is ours: a wiped or restored ciphertext table, a
+  // replica behind, a custody key that does not match the one entries were
+  // sealed to. The arithmetic does not notice — every seat ties on zero, the
+  // pot divides evenly, conservation holds — so without this the crank
+  // commits and pays a result it has every reason to distrust, and paying is
+  // final.
+  //
+  // PHASE-6-REVIEW: the ceiling is a founder-owned number and is NOT set
+  // here. The default refuses only a field that is entirely unreadable,
+  // which is a logical boundary rather than a tuning choice; anything
+  // between one bad entry and all of them needs a ratified figure.
+  const unreadable = allLosses.length;
+  const ceiling = deps.maxUnreadableEntries ?? Math.max(chainEntries.length - 1, 0);
+  if (chainEntries.length > 0 && unreadable > ceiling) {
+    throw new Error(
+      `pool ${poolId}: ${unreadable} of ${chainEntries.length} entries could not ` +
+        `be read back (ceiling ${ceiling}) — refusing to commit a result the ` +
+        `crank cannot stand behind`
+    );
+  }
+
+  // ---- 3. Score + prizes + tree ------------------------------------------
+  // D3-B: competition ranks (tied players share one), split-pot amounts.
+  // The pot is the POOL'S fixed pot (D-A1 revised) — read from chain state,
+  // never derived from the entry price.
+  const pot = pool.potLamports;
+  const results = assignPrizes(scoreWithMissing(scoringInput), pot);
+  const playerAt = (index: number) => chainEntries[index].player;
+  // Published leaf order (rank asc, entry index asc) is built in one place —
+  // see ranking.ts, which the next-place driver reuses to prove against the
+  // root committed here.
+  const { rows: byRank, root } = buildRanking(results, playerAt);
+  // The on-chain payout list: every seat with a nonzero share, seat-sorted.
+  const payouts = results
+    .filter((r) => r.amountLamports > 0n)
+    .sort((a, b) => a.index - b.index)
+    .map((r) => ({ entryIndex: r.index, amountLamports: r.amountLamports }));
+  step('scored', { root: hex(root), paidSeats: payouts.length });
+
+  // ---- 4. Assemble the bundle (published at step 7, after the money) ----
+  const bundle: RevealBundle = {
+    version: 2,
+    pool_id: poolId.toString(),
+    secret: hex(secret),
+    entry_lamports: pool.entryLamports.toString(),
+    entries: bundleEntries,
+    results: byRank.map((r) => ({
+      index: r.index,
+      player: r.player,
+      score_half: r.scoreHalf,
+      zones: r.zones,
+      rank: r.rank,
+      amount_lamports: r.amountLamports.toString(),
+    })),
+    payouts: payouts.map((p) => ({
+      entry_index: p.entryIndex,
+      player: playerAt(p.entryIndex),
+      amount_lamports: p.amountLamports.toString(),
+    })),
+    results_root: hex(root),
+    scored_as_all_losses: allLosses,
+  };
+
+  return { chainEntries, forDetection, allLosses, results, payouts, root, bundle, playerAt };
+}
+
+/**
+ * Upload the bundle unless the record already has one for this pool, and
+ * record a successful upload. Throws on an upload failure; the callers decide
+ * what a failure means (the crank: recorded, not fatal; the daemon's owed
+ * pass: a retry later, an alert after several).
+ */
+async function publishWithRecord(
+  deps: CrankDeps,
+  poolId: bigint,
+  bundle: RevealBundle,
+  step: (name: string, detail?: Record<string, unknown>) => void
+): Promise<string> {
+  const known = await deps.published?.find(poolId);
+  if (known) {
+    step('publish:already', { uri: known });
+    return known;
+  }
+  const uri = await deps.publisher.publish(bundle);
+  const nowUnix = deps.nowUnix ?? (() => BigInt(Math.floor(Date.now() / 1000)));
+  await deps.published?.record(poolId, uri, nowUnix());
+  step('published', { uri });
+  return uri;
+}
+
+/**
+ * The publish-only path (2026-09-12, audit C-09 / B-32 / D-27): a Paid pool
+ * whose bundle is not on record gets it published without re-running
+ * detection, winner screening, commit or payment — the daemon's "bundle
+ * owed" pass calls this on a backoff. Refuses any pool that is not Paid: an
+ * unsettled pool's bundle is the crank's to publish, after the money.
+ */
+export async function publishBundle(deps: CrankDeps, poolId: bigint): Promise<string> {
+  const log = deps.log ?? (() => {});
+  const step = (name: string, detail?: Record<string, unknown>) => {
+    log(name, { poolId: poolId.toString(), ...detail });
+  };
+  const pool = await deps.chain.getPool(poolId);
+  if (pool.state !== 'Paid') {
+    throw new Error(`pool ${poolId} is ${pool.state}, not Paid — nothing is owed yet`);
+  }
+  const assembled = await assembleBundle(deps, poolId, pool, step);
+  if (assembled === 'export-refused') {
+    throw new Error(`pool ${poolId}: custody refused the export of a Paid pool's secret`);
+  }
+  return publishWithRecord(deps, poolId, assembled.bundle, step);
 }
