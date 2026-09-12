@@ -79,9 +79,19 @@ anchor build
 NEW_SIZE="$(stat -c%s target/deploy/blotto_cup.so 2>/dev/null || stat -f%z target/deploy/blotto_cup.so)"
 CURRENT_SIZE="$(solana program show "$DECLARED_ID" --url "$CLUSTER" 2>/dev/null \
   | grep -oE 'Data Length: [0-9]+' | grep -oE '[0-9]+' || true)"
+# The loader refuses an extension smaller than 10,240 bytes ("ExtendProgram
+# requires a minimum of 10240 additional bytes or to extend to maximum size")
+# — found 2026-09-12 on the first upgrade whose build grew by less than that
+# (384 bytes). Round the shortfall up to the minimum; the extra rent is about
+# 0.07 SOL once and saves the next small growth from extending at all.
+MIN_EXTEND_BYTES=10240
 if [ -n "$CURRENT_SIZE" ] && [ "$NEW_SIZE" -gt "$CURRENT_SIZE" ]; then
   EXTEND_BY=$((NEW_SIZE - CURRENT_SIZE))
-  echo "deploy: extending programdata by $EXTEND_BY bytes ($CURRENT_SIZE -> $NEW_SIZE)..."
+  if [ "$EXTEND_BY" -lt "$MIN_EXTEND_BYTES" ]; then
+    echo "deploy: shortfall is $EXTEND_BY bytes; the loader's minimum extension is $MIN_EXTEND_BYTES"
+    EXTEND_BY=$MIN_EXTEND_BYTES
+  fi
+  echo "deploy: extending programdata by $EXTEND_BY bytes ($CURRENT_SIZE -> $((CURRENT_SIZE + EXTEND_BY)))..."
   solana program extend "$DECLARED_ID" "$EXTEND_BY" --url "$CLUSTER"
 elif [ -n "$CURRENT_SIZE" ]; then
   echo "deploy: programdata size $CURRENT_SIZE covers the new build ($NEW_SIZE) — no extend needed"
