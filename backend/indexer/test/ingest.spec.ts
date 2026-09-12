@@ -339,7 +339,10 @@ describe('runBackfill pagination across failed transactions (QA-C5-001)', () => 
     // from 'ok-1' would have re-fetched every failure that trailed it, forever.
     expect(sigRequests, 'cursor advances past the failures').to.deep.equal([undefined, 'fail-3']);
     // Failed transactions are skipped without a getTransaction round-trip.
-    expect(txRequests, 'no RPC spent on failed signatures').to.deep.equal(['ok-1', 'ok-2']);
+    // The order is OLDEST FIRST (audit F-19): the walk pages newest→oldest
+    // because that is the only direction the RPC offers, then ingests in
+    // reverse so the ledger rows land in the order the chain executed them.
+    expect(txRequests, 'no RPC spent on failed signatures').to.deep.equal(['ok-2', 'ok-1']);
   });
 
   it('still terminates on a genuinely short page (no infinite walk)', async () => {
@@ -380,7 +383,10 @@ describe('runBackfill pagination across failed transactions (QA-C5-001)', () => 
 });
 
 describe('re-derive replays the ledger alone', () => {
-  it('replays every row, in (slot, signature, event_index) order', async () => {
+  // (slot, insertion sequence) since audit F-19 — the signature tiebreak
+  // ordered nothing, because a base58 hash is not a position. What the
+  // sequence does and does not buy is pinned in test/replay-order.spec.ts.
+  it('replays every row, in (slot, insertion sequence) order', async () => {
     const store = new InMemoryEventStore();
     await ingestTransaction(store, SILENT_MONITOR, INGEST, txCtx('c', 3n));
     await ingestTransaction(store, SILENT_MONITOR, INGEST, txCtx('a', 1n));
@@ -453,7 +459,11 @@ describe('catch-up bound — the boot backfill walks back only to the watermark'
     // The bound is `slot < minSlot`, strictly — so slot 700 is re-walked and
     // slot 100 is never touched. That overlap is deliberate: a slot can hold
     // more of our transactions than were ingested before the process died.
-    expect(fetched).to.deep.equal(['newest', 'recent', 'watermark']);
+    //
+    // Fetched OLDEST FIRST (audit F-19): the boundary is still decided while
+    // paging newest→oldest — `ancient` is below the floor and never collected
+    // — but the collected signatures are then ingested in chain order.
+    expect(fetched).to.deep.equal(['watermark', 'recent', 'newest']);
     expect(fetched, 'the pre-watermark history is not re-fetched').to.not.include('ancient');
     expect(r.inserted, 'only the two genuinely new transactions').to.equal(2);
     expect(r.duplicates, 'the watermark slot re-walks to a duplicate, not a gap').to.equal(1);

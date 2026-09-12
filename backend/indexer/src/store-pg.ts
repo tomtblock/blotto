@@ -59,6 +59,33 @@ export class PgEventStore implements EventStore {
     return max === null || max === undefined ? null : BigInt(max);
   }
 
+  /**
+   * Rebuild every derived table from the ledger alone, replaying in
+   * `(slot, seq)` order.
+   *
+   * ORDERING IS LOAD-BEARING: an order-dependent projection must see the same
+   * order on a rebuild as it saw live, or a rebuild produces different derived
+   * rows from the same ledger. Decoding on replay also proves every ledger row
+   * is still readable.
+   *
+   * `seq` is the `events` insertion sequence (0018_events_seq.sql). It replaced
+   * `signature, event_index` here, which ordered nothing: `event_index` is the
+   * ordinal within ONE transaction's logs, and `signature` is a base58 hash, so
+   * two of our transactions in the same slot replayed in an order uncorrelated
+   * with how the chain executed them (audit F-19).
+   *
+   * What `(slot, seq)` buys, precisely:
+   *   - The order is deterministic and stable. Two rebuilds of one ledger agree,
+   *     and a rebuild reproduces what the previous rebuild produced.
+   *   - For rows the backfill wrote it IS chain order, because `runBackfill`
+   *     ingests oldest-first.
+   *   - For two LIVE webhook deliveries that share a slot it is DELIVERY order.
+   *     That is not the same as chain order and this does not pretend it is: the
+   *     webhook payload carries no intra-slot position, so the chain never tells
+   *     us which of the two ran first. Delivery order is what we observed, it is
+   *     recorded, and it replays identically — which is the property a rebuild
+   *     actually needs.
+   */
   async rederive(): Promise<number> {
     return withTransaction(this.pool, async (client) => {
       const projection = new PgProjection(client);
@@ -66,13 +93,9 @@ export class PgEventStore implements EventStore {
       const res = await client.query(
         `SELECT signature, event_index, slot, raw
            FROM events
-          ORDER BY slot, signature, event_index`
+          ORDER BY slot, seq`
       );
       for (const row of res.rows) {
-        // Ordering above is load-bearing: an order-dependent projection must see
-        // the same order on a rebuild as it saw live, or a rebuild produces
-        // different derived rows from the same ledger. Decoding on replay also
-        // proves every ledger row is still readable.
         await projection.apply(eventFromJson(row.raw as Record<string, unknown>));
       }
       return res.rowCount ?? 0;

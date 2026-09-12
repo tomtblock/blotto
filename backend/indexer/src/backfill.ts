@@ -1,8 +1,9 @@
 /**
  * Backfill / reconciler (§4) — the recovery path for dropped webhooks (Helius is at-least-once
- * AND lossy). Walks the program's signatures newest→oldest via read-only RPC and ingests each
- * transaction through the SAME `ingestTransaction` path as the webhook, so a signature seen by
- * both converges on one ledger row with zero double-count.
+ * AND lossy). PAGES the program's signatures newest→oldest via read-only RPC (the only direction
+ * `getSignaturesForAddress` offers), then INGESTS them oldest→newest through the SAME
+ * `ingestTransaction` path as the webhook, so a signature seen by both converges on one ledger row
+ * with zero double-count and the rows land in the order the chain executed them (audit F-19).
  *
  * The RPC is abstracted behind `BackfillRpc` so the walk logic is offline-testable with a fake
  * source; the production impl (`Web3BackfillRpc`) is a thin wrapper over a read-only web3.js
@@ -56,8 +57,28 @@ export interface BackfillResult {
 }
 
 /**
- * Run the backfill walk. Pages newest→oldest; for each signature, fetches logs and ingests.
- * Stops at `minSlot`, `untilSignature`, or signature exhaustion.
+ * Run the backfill walk. Stops at `minSlot`, `untilSignature`, or signature exhaustion.
+ *
+ * TWO PHASES, AND THE SPLIT IS THE POINT (audit F-19).
+ *
+ *   1. COLLECT. Page the signatures newest→oldest, because `getSignaturesForAddress` offers no
+ *      other direction: `before` walks backwards and there is no `after`. Termination is decided
+ *      here and is unchanged (see QA-C5-001 below).
+ *   2. INGEST, OLDEST FIRST. Walk the collected signatures in reverse, so every transaction is
+ *      appended — and projected — in the order the chain executed it, intra-slot order included
+ *      (a page is the RPC's own block ordering, so reversing it is chain order, not a guess).
+ *
+ * Ingesting in reverse used to be the walk's defining hazard: the projection is order-dependent,
+ * so a backwards walk finished by applying each pool's OPENING event on top of its settlement.
+ * `backfillAndRederive` repaired that afterwards and still does, for a narrower reason given in
+ * its own comment. The ledger rows are the second, quieter reason to ingest forwards: their
+ * insertion sequence (`events.seq`, 0018) is what every future replay orders by, so the order the
+ * backfill writes them in becomes the order every rebuild replays them in, permanently.
+ *
+ * Cost of the split: the collected signature list is held in memory for the whole walk. It is one
+ * small object per signature and the walk already had to reach the boundary before it could
+ * finish, so nothing is fetched that was not fetched before — but on a full-history walk of a
+ * very long-lived program this is the line that grows.
  */
 export async function runBackfill(
   store: EventStore,
@@ -75,6 +96,8 @@ export async function runBackfill(
   };
   let before: string | undefined;
 
+  // ── Phase 1: collect, newest→oldest ───────────────────────────────────────────────────────
+  const collected: SignatureInfo[] = [];
   for (;;) {
     const page = await rpc.getSignatures({ before, limit: pageSize });
     if (page.length === 0) {
@@ -97,20 +120,7 @@ export async function runBackfill(
       if (info.err !== null && info.err !== undefined) {
         continue;
       }
-      const tx = await rpc.getTransaction(info.signature);
-      if (!tx) {
-        continue; // failed/unavailable tx — its events did not commit
-      }
-      result.transactions++;
-      const txCtx: TxContext = {
-        signature: info.signature,
-        slot: tx.slot,
-        logs: tx.logs,
-      };
-      const s = await ingestTransaction(store, monitor, ctx, txCtx);
-      result.decoded += s.decoded;
-      result.inserted += s.inserted;
-      result.duplicates += s.duplicates;
+      collected.push(info);
     }
     // ── QA-C5-001: terminate on the RAW page length, never a filtered one ────────────────────
     // `getSignaturesForAddress` applies its server-side cap (1000 on most RPCs) BEFORE anything
@@ -124,10 +134,31 @@ export async function runBackfill(
     // The page is now unfiltered, so `page.length` is what the RPC actually returned and a short
     // page genuinely means signature exhaustion. `before` likewise advances to the raw last entry:
     // paging from the last SUCCESSFUL signature used to re-fetch every failure that trailed it.
+    // Note that the skip above still cannot affect either decision — it filters what we INGEST,
+    // never what the page said.
     if (reachedBoundary || page.length < pageSize) {
       break;
     }
     before = page[page.length - 1].signature;
+  }
+
+  // ── Phase 2: ingest, oldest→newest ────────────────────────────────────────────────────────
+  for (let i = collected.length - 1; i >= 0; i--) {
+    const info = collected[i];
+    const tx = await rpc.getTransaction(info.signature);
+    if (!tx) {
+      continue; // failed/unavailable tx — its events did not commit
+    }
+    result.transactions++;
+    const txCtx: TxContext = {
+      signature: info.signature,
+      slot: tx.slot,
+      logs: tx.logs,
+    };
+    const s = await ingestTransaction(store, monitor, ctx, txCtx);
+    result.decoded += s.decoded;
+    result.inserted += s.inserted;
+    result.duplicates += s.duplicates;
   }
 
   // Bare counter — the per-run transaction/insert counts are values, not metric dimensions, and
@@ -228,24 +259,34 @@ export class Web3BackfillRpc implements BackfillRpc {
 }
 
 /**
- * A backfill walk followed by the re-derive the walk's ORDER makes necessary.
+ * A backfill walk followed by the re-derive the walk's ORDER can still make
+ * necessary.
  *
- * The walk pages signatures newest→oldest and projects each transaction as it
- * goes, but the projection is order-dependent: `PoolOpened` is a full upsert
- * that resets state, entrants, paid_mask and refunded_count, so replaying a
- * pool's history backwards ends with the pool marked Open and empty — the
- * oldest event, applied last, overwriting the truth the later ones had already
+ * HISTORY (audit B-05). The walk used to ingest in the order it paged —
+ * newest→oldest — and the projection is order-dependent: `PoolOpened` is a full
+ * upsert that resets state, entrants, paid_mask and refunded_count, so replaying
+ * a pool's history backwards ended with the pool marked Open and empty, the
+ * oldest event applied last overwriting the truth the later ones had already
  * written. On a first boot against an empty ledger `catchUpFloor` returns
- * `undefined`, so that is the WHOLE history: a settled pool reads as Open with
- * zero entrants, drops out of the archive list, and drives a live countdown for
- * a pool that has already paid.
+ * `undefined`, so that was the WHOLE history: a settled pool read as Open with
+ * zero entrants, dropped out of the archive list, and drove a live countdown for
+ * a pool that had already paid. This function was the repair.
+ *
+ * `runBackfill` now ingests oldest-first (audit F-19), which removes that
+ * failure — and the repair stays, because it addresses a case the walk's own
+ * order cannot: the rows a walk inserts are in chain order RELATIVE TO EACH
+ * OTHER, not relative to rows already in the ledger. The unbounded `backfill`
+ * command exists precisely to fill a gap BELOW the ingest watermark, and those
+ * recovered events are older than rows the live webhook already projected, so
+ * they arrive after their own future. A concurrent webhook delivery during a
+ * walk lands the same way.
  *
  * The ledger itself is append-only and was always correct — only the derived
- * tables were wrong. `rederive` replays them from that ledger in
- * (slot, signature, event_index) order, which is the order they happened, so
- * running it after any insert is both the cheapest repair and the most obviously
- * correct one. Nothing was inserted means nothing was mis-ordered, so the replay
- * is skipped; a walk that only re-reads duplicates is free.
+ * tables were ever wrong. `rederive` replays them from that ledger in
+ * (slot, seq) order, so running it after any insert is both the cheapest repair
+ * and the most obviously correct one. Nothing was inserted means nothing was
+ * mis-ordered, so the replay is skipped; a walk that only re-reads duplicates is
+ * free.
  *
  * This lives here, beside the walk it repairs, rather than inline in the CLI
  * command, so that the pairing is testable without a database.

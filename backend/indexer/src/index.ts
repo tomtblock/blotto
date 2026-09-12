@@ -27,7 +27,7 @@ import {
   type Monitor,
 } from './shared';
 import { loadIndexerConfig, requireWebhookSecret } from './config';
-import { migrate } from './migrate';
+import { migrate, type MigrationRun } from './migrate';
 import { PgEventStore } from './store-pg';
 import { createWebhookServer } from './webhook';
 import { serveReadApi } from './read-api';
@@ -48,17 +48,28 @@ registerBlottoEventLayouts();
 
 const SERVICE = 'indexer';
 
-async function cmdMigrate(monitor: Monitor): Promise<void> {
+async function cmdMigrate(monitor: Monitor): Promise<MigrationRun> {
   const config = loadIndexerConfig();
   const pool = createPool(config.postgres);
   try {
-    const applied = await migrate(pool);
+    const run = await migrate(pool);
     monitor.recordEvent(METRIC.indexer.migrate);
     console.log(
-      applied.length
-        ? `migrate: applied ${applied.length} migration(s): ${applied.join(', ')}`
+      run.applied.length
+        ? `migrate: applied ${run.applied.length} migration(s): ${run.applied.join(', ')}`
         : 'migrate: up to date'
     );
+    // The standalone command only REPORTS the need: `migrate` is the one
+    // command an operator runs against a database whose services are
+    // stopped, and replaying the whole ledger under them is not what they
+    // asked for. `sync` (the container's entry) acts on it below.
+    if (run.rederiveRequired) {
+      console.log(
+        `migrate: ${run.rederiveRequestedBy.join(', ')} invalidated the derived tables — ` +
+          'run `re-derive` (the `sync` boot path does it for you)'
+      );
+    }
+    return run;
   } finally {
     await pool.end();
   }
@@ -198,7 +209,25 @@ async function cmdRederive(monitor: Monitor): Promise<void> {
  * from.
  */
 async function cmdSync(monitor: Monitor): Promise<void> {
-  await cmdMigrate(monitor);
+  const migrated = await cmdMigrate(monitor);
+  // E-15 (audit 2026-09-11): a migration that dropped or re-shaped a DERIVED
+  // table leaves it empty, and the derived tables are what the read API
+  // serves. `0004_seat_payouts.sql` asked for a rebuild in a comment
+  // addressed to a human, which nothing read; the boot backfill only chains
+  // one when it INSERTED something, which on a normal boot it does not.
+  //
+  // So: rebuild here, and BEFORE serving. Between the migration and the
+  // rebuild the tables are empty, and a read API answering out of them in
+  // that window would serve "no tournaments" as though it were the truth.
+  // The cost is a ledger replay on the boots that need one and nothing at
+  // all on every other boot.
+  if (migrated.rederiveRequired) {
+    console.log(
+      `${SERVICE}: ${migrated.rederiveRequestedBy.join(', ')} invalidated the derived tables — ` +
+        'rebuilding before serving'
+    );
+    await cmdRederive(monitor);
+  }
   await cmdServe(monitor);
   void cmdBackfill(monitor, { bounded: true }).catch((err: unknown) => {
     // Logged, never rethrown: an unhandled rejection here would kill a process
@@ -223,7 +252,9 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
   const command = argv[0];
   switch (command) {
     case 'migrate':
-      return cmdMigrate(monitor);
+      // The run's detail is printed by cmdMigrate; `main` returns nothing.
+      await cmdMigrate(monitor);
+      return;
     case 'serve':
       return cmdServe(monitor);
     case 'backfill':

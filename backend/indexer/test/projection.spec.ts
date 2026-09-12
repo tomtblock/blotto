@@ -76,15 +76,35 @@ function reverseOrderRpc(): BackfillRpc {
   };
 }
 
-async function ingestAll(store: InMemoryEventStore): Promise<void> {
-  for (let i = 0; i < fixture.transactions.length; i++) {
+/** Ingest fixture transactions `[from, toExclusive)` live, one per slot, in order. */
+async function ingestRange(
+  store: InMemoryEventStore,
+  from: number,
+  toExclusive: number
+): Promise<void> {
+  for (let i = from; i < toExclusive; i++) {
     await ingestTransaction(store, SILENT_MONITOR, CTX, {
-      signature: `SIG${String(i).padStart(4, '0')}`,
+      signature: sigFor(i),
       slot: BigInt(i + 1),
       logs: fixture.transactions[i],
     });
   }
 }
+
+async function ingestAll(store: InMemoryEventStore): Promise<void> {
+  await ingestRange(store, 0, fixture.transactions.length);
+}
+
+/**
+ * The fixture's last four transactions: the minimum-field pool's seal, secret
+ * reveal, results commit, and its tier-slot release + payout. Used by the
+ * gap-below-the-watermark test, which ingests only these live and then walks
+ * the whole history — the shape of an unbounded `backfill` run repairing a
+ * long dropped-delivery gap. The test asserts what this slice produced before
+ * it depends on it, so a regenerated fixture fails loudly rather than quietly
+ * testing nothing.
+ */
+const LAST_POOL_SETTLEMENT = fixture.transactions.length - 4;
 
 describe('blotto event decoding against real emitted bytes', () => {
   // NOTE: no clearEventLayouts() here — the registry is process-global and
@@ -295,46 +315,101 @@ describe('blotto event decoding against real emitted bytes', () => {
 });
 
 /**
- * The backfill walk against the real history, in the order an RPC serves it.
+ * The backfill walk against the real history, served the way an RPC serves it.
  *
- * The projection is order-dependent — `PoolOpened` is a full upsert that
- * resets state, entrants, paid_mask and refunded_count — and the walk pages
- * newest→oldest, applying each transaction as it arrives. So a backwards walk
- * finishes by applying each pool's OPENING event on top of its settlement, and
- * the derived row ends Open with zero entrants. On a first boot against an
- * empty ledger there is no floor, so that is the whole history: every settled
- * pool in the archive reads as live.
+ * HISTORY (audit B-05). The walk used to INGEST in the order it paged —
+ * newest→oldest — and the projection is order-dependent: `PoolOpened` is a
+ * full upsert that resets state, entrants, paid_mask and refunded_count. So a
+ * backwards walk finished by applying each pool's OPENING event on top of its
+ * settlement, and every derived pool row ended Open with zero entrants. On a
+ * first boot against an empty ledger there is no floor, so that was the whole
+ * history: every settled pool in the archive read as live.
  *
- * `backfillAndRederive` is the repair. These two tests are a pair and are
- * worth nothing apart: the first establishes that the raw walk really does
- * corrupt the rows (without it the second could pass against a projection that
- * was never order-dependent in the first place), the second that the repair
- * puts them back.
+ * The walk now pages newest→oldest but ingests oldest→newest (audit F-19), so
+ * the raw walk produces correct rows AND appends them in chain order — which
+ * matters twice over, because the ledger's insertion sequence is what every
+ * future replay orders by.
+ *
+ * `backfillAndRederive` stays, for the case the walk's own order cannot fix:
+ * rows inserted BELOW the watermark are older than rows the live webhook
+ * already projected, so they arrive after their own future. The four tests
+ * below are a set — the first pins the new ingest order, the second shows the
+ * residual hazard is real (without it the third could pass against a
+ * projection that was never order-dependent), the third shows the repair works
+ * and the fourth that it is skipped when it cannot be needed.
  */
-describe('backfill walks newest-first, so the projection must be replayed (audit B-05)', () => {
+describe('backfill pages newest-first and ingests oldest-first (audit B-05, F-19)', () => {
   before(() => {
     registerBlottoEventLayouts();
   });
 
-  it('the raw walk alone leaves a settled pool marked Open and empty', async () => {
+  it('the raw walk appends in chain order and needs no repair', async () => {
     const store = new InMemoryEventStore();
     const r = await runBackfill(store, SILENT_MONITOR, CTX, reverseOrderRpc());
     expect(r.transactions).to.equal(fixture.transactions.length);
     expect(r.inserted).to.be.greaterThan(0);
 
+    // The property everything else rests on: rows were APPENDED oldest-first,
+    // whatever order the pages arrived in. Their insertion sequence is what a
+    // replay orders by (0018_events_seq.sql), so a walk that appends backwards
+    // does not merely mis-project once — it writes the wrong replay order into
+    // the ledger permanently.
+    const slots = store.ledger().map((rec) => rec.slot);
+    expect(slots.length).to.be.greaterThan(140);
+    for (let i = 1; i < slots.length; i++) {
+      expect(slots[i] >= slots[i - 1], `ledger row ${i} went backwards in slot`).to.equal(true);
+    }
+
+    // And the derived rows are already right, with no replay: identical to the
+    // same events delivered live, oldest-first, by the webhook.
+    const forwards = new InMemoryEventStore();
+    await ingestAll(forwards);
+    expect(JSON.parse(JSON.stringify(store.projection.snapshot()))).to.deep.equal(
+      JSON.parse(JSON.stringify(forwards.projection.snapshot()))
+    );
     const pools = Object.values(store.projection.snapshot().pools);
-    expect(pools.length).to.equal(3);
-    // Every pool in this fixture reached a terminal state; after a backwards
-    // walk not one of them says so.
-    expect(pools.map((p) => p.state)).to.deep.equal(['Open', 'Open', 'Open']);
-    expect(pools.map((p) => p.entrants)).to.deep.equal([0, 0, 0]);
-    // The reset writes the number 0; a real payout writes a decimal string.
-    expect(pools.every((p) => String(p.paid_mask) === '0')).to.equal(true);
+    expect(pools.filter((p) => p.state === 'Paid').length).to.equal(2);
+    expect(pools.filter((p) => p.state === 'Closed').length).to.equal(1);
+    expect(pools.find((p) => p.entrants === 64)!.state).to.equal('Paid');
   });
 
-  it('backfillAndRederive replays the ledger in chain order and the rows are right', async () => {
-    const reversed = new InMemoryEventStore();
-    const r = await backfillAndRederive(reversed, SILENT_MONITOR, CTX, reverseOrderRpc());
+  it('a walk that fills a gap BELOW already-projected rows still corrupts them', async () => {
+    // The unbounded `backfill` command's reason to exist: the ledger holds the
+    // newest transactions and is missing older ones. Here the minimum-field
+    // pool's settlement was delivered and everything before it was dropped.
+    const store = new InMemoryEventStore();
+    await ingestRange(store, LAST_POOL_SETTLEMENT, fixture.transactions.length);
+    const settled = Object.values(store.projection.snapshot().pools);
+    expect(settled.length, 'the pre-ingested slice settles exactly one pool').to.equal(1);
+    expect(settled[0].state, 'and settles it').to.equal('Paid');
+
+    const r = await runBackfill(store, SILENT_MONITOR, CTX, reverseOrderRpc());
+    expect(r.inserted, 'the gap really was filled').to.be.greaterThan(0);
+    expect(r.duplicates, 'and the four it already had came back as duplicates').to.be.greaterThan(0);
+
+    // Chain order among the inserted rows does not help: the pool's own
+    // PoolOpened is older than the PrizesPaid this ledger already projected, so
+    // it lands on top of it and resets the row to Open.
+    const pools = Object.values(store.projection.snapshot().pools);
+    expect(pools.length).to.equal(3);
+    // `String(...)`: the pool's PoolSealed (which writes the count as a number)
+    // was applied live, and the walk's 52 replayed increments write a decimal
+    // string over it. The type of that column is itself a symptom of the
+    // re-application this test is about.
+    const minField = pools.find((p) => String(p.entrants) === '52')!;
+    expect(minField, 'the fixture still has a 52-seat pool').to.exist;
+    expect(minField.state, 'a pool that has paid reads as Open').to.equal('Open');
+    expect(
+      Object.values(store.projection.snapshot().payouts).some((p) => p.pool === minField.pool),
+      'while its payout row is right there'
+    ).to.equal(true);
+    expect(pools.filter((p) => p.state === 'Paid').length).to.equal(1);
+  });
+
+  it('backfillAndRederive replays the ledger in (slot, seq) order and the rows are right', async () => {
+    const repaired = new InMemoryEventStore();
+    await ingestRange(repaired, LAST_POOL_SETTLEMENT, fixture.transactions.length);
+    const r = await backfillAndRederive(repaired, SILENT_MONITOR, CTX, reverseOrderRpc());
     expect(r.rederived, 'the replay ran').to.be.greaterThan(140);
 
     // The reference: the same events applied oldest-first, as the webhook
@@ -342,13 +417,13 @@ describe('backfill walks newest-first, so the projection must be replayed (audit
     const forwards = new InMemoryEventStore();
     await ingestAll(forwards);
 
-    expect(JSON.parse(JSON.stringify(reversed.projection.snapshot()))).to.deep.equal(
+    expect(JSON.parse(JSON.stringify(repaired.projection.snapshot()))).to.deep.equal(
       JSON.parse(JSON.stringify(forwards.projection.snapshot()))
     );
 
     // Stated outright, so a future reader does not have to trust the deep
     // compare to know what this is about.
-    const pools = Object.values(reversed.projection.snapshot().pools);
+    const pools = Object.values(repaired.projection.snapshot().pools);
     expect(pools.filter((p) => p.state === 'Paid').length).to.equal(2);
     expect(pools.filter((p) => p.state === 'Closed').length).to.equal(1);
     expect(pools.find((p) => p.entrants === 64)!.state).to.equal('Paid');
