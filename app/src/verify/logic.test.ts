@@ -18,6 +18,7 @@ import {
   type BattleSet,
 } from '@blotto/scoring';
 import { base58Encode, base58Decode } from '@blotto/shared/blotto-events';
+import { scoreWithMissing } from '@blotto/reveal/missing';
 
 const sha = (s: string) => new Uint8Array(createHash('sha256').update(s).digest());
 const hex = (b: Uint8Array) => Buffer.from(b).toString('hex');
@@ -106,16 +107,17 @@ describe('verifyPool', () => {
   it('a consistent pool verifies green on every check', () => {
     const { bundle, chain } = fixture();
     const report = verifyPool(bundle, chain);
-    expect(report.checks.map((c) => `${c.name}:${c.ok}`)).toEqual([
-      'roster:true',
-      'secret-commitment:true',
-      'bundle-secret:true',
-      'entry-commitments:true',
-      'rescore:true',
-      'results-root:true',
-      'committed-payouts:true',
-      'payouts:true',
+    expect(report.checks.map((c) => `${c.name}:${c.status}`)).toEqual([
+      'roster:pass',
+      'secret-commitment:pass',
+      'bundle-secret:pass',
+      'entry-commitments:pass',
+      'rescore:pass',
+      'results-root:pass',
+      'committed-payouts:pass',
+      'payouts:pass',
     ]);
+    expect(report.verdict).toBe('match');
     expect(report.ok).toBe(true);
   });
 
@@ -180,6 +182,112 @@ describe('verifyPool', () => {
   });
 
   /*
+   * D-10 (audit 2026-09-11). An entry published WITHOUT its battles has no
+   * plaintext to hash, so it was skipped — and a bundle that published no
+   * plaintext at all verified green having checked nothing at all. The
+   * published lost-ciphertext rule (TECH-ARCH §5) makes a missing entry
+   * legitimate, so it is not a mismatch; it is not a verification either.
+   */
+  describe('entries that cannot be checked (D-10)', () => {
+    const unpublish = (bundle: PublishedBundle, index: number, status: string) => {
+      bundle.entries[index].battles = null;
+      bundle.entries[index].salt = null;
+      bundle.entries[index].status = status;
+    };
+
+    it('a pool where NOTHING was scored is not green', () => {
+      const { bundle, chain } = fixture();
+      for (let i = 0; i < bundle.entries.length; i++) unpublish(bundle, i, 'missing_ciphertext');
+      // Rescore the way an operator publishing this would: everyone all
+      // losses, everyone tied, so the rest of the bundle agrees with itself.
+      const rest = fixtureMissing(bundle);
+      chain.resultsRootHex = rest.root;
+      chain.committedPayouts = rest.committed;
+      chain.payouts = rest.payouts;
+      const report = verifyPool(bundle, chain);
+      // The finding, in one line: this used to be `true`.
+      expect(report.ok).toBe(false);
+      expect(report.verdict).toBe('incomplete');
+      const row = report.checks.find((c) => c.name === 'entry-commitments')!;
+      expect(row.status).toBe('incomplete');
+      expect(row.detail).toContain('0 of 64');
+      expect(row.detail).toContain('CANNOT be checked');
+    });
+
+    it('one lost entry is reported, named and counted — not silently passed', () => {
+      const { bundle, chain } = fixture();
+      const lost = bundle.entries[9].player;
+      unpublish(bundle, 9, 'decrypt_failed');
+      const rest = fixtureMissing(bundle);
+      chain.resultsRootHex = rest.root;
+      chain.committedPayouts = rest.committed;
+      chain.payouts = rest.payouts;
+      const report = verifyPool(bundle, chain);
+      expect(report.verdict).toBe('incomplete');
+      const row = report.checks.find((c) => c.name === 'entry-commitments')!;
+      expect(row.status).toBe('incomplete');
+      expect(row.detail).toContain('63 of 64');
+      expect(row.detail).toContain(`${lost.slice(0, 4)}…${lost.slice(-4)}`);
+      // Everything that COULD be checked still was, and still agrees.
+      for (const c of report.checks) {
+        if (c.name !== 'entry-commitments') expect(c.status, c.name).toBe('pass');
+      }
+    });
+
+    it('an entry that claims status ok while carrying no battles is a MISMATCH', () => {
+      const { bundle, chain } = fixture();
+      // Self-contradictory: the bundle says this entry was decrypted and
+      // verified, and then publishes nothing to check that against.
+      unpublish(bundle, 3, 'ok');
+      const report = verifyPool(bundle, chain);
+      expect(report.verdict).toBe('mismatch');
+      expect(report.checks.find((c) => c.name === 'entry-commitments')!.status).toBe('fail');
+    });
+  });
+
+  /*
+   * D-29 (audit 2026-09-11): a pool between `commit_results` and
+   * `pay_prizes` has committed everything and paid nothing, which is an
+   * ordinary stage of settlement. The page rendered the full red "the
+   * published data does not reproduce the on-chain result" for it.
+   */
+  describe('a committed-but-unpaid pool (D-29)', () => {
+    it('is incomplete, not a mismatch', () => {
+      const { bundle, chain } = fixture();
+      chain.payouts = [];
+      const report = verifyPool(bundle, chain);
+      expect(report.verdict).toBe('incomplete');
+      expect(report.ok).toBe(false);
+      const row = report.checks.find((c) => c.name === 'payouts')!;
+      expect(row.status).toBe('incomplete');
+      expect(row.ok).toBe(true); // not red — nothing disagreed
+      expect(row.detail).toContain('no prize has been paid yet');
+      // Every check that CAN be made at this stage still was.
+      for (const c of report.checks) {
+        if (c.name !== 'payouts') expect(c.status, c.name).toBe('pass');
+      }
+    });
+
+    it('a partly settled split is incomplete and says how far it got', () => {
+      const { bundle, chain } = fixture();
+      if (chain.payouts.length > 1) {
+        chain.payouts = chain.payouts.slice(0, 1);
+        const row = verifyPool(bundle, chain).checks.find((c) => c.name === 'payouts')!;
+        expect(row.status).toBe('incomplete');
+        expect(row.detail).toContain('are settled');
+      }
+    });
+
+    it('a WRONG payout is still red, however few have settled', () => {
+      const { bundle, chain } = fixture();
+      chain.payouts[0].amount = (BigInt(chain.payouts[0].amount) + 1n).toString();
+      const report = verifyPool(bundle, chain);
+      expect(report.verdict).toBe('mismatch');
+      expect(report.checks.find((c) => c.name === 'payouts')!.status).toBe('fail');
+    });
+  });
+
+  /*
    * The roster (audit 2026-09-11, F-03). A bundle that drops the
    * highest-seated entrant keeps contiguous indices and is consistent with
    * itself on every other row — the field is simply one player short, and
@@ -240,6 +348,65 @@ describe('verifyPool', () => {
     });
   });
 });
+
+/**
+ * The operator's arithmetic for a bundle with UNPUBLISHED entries: rescore
+ * with the published lost-ciphertext rule, rebuild the root and the payout
+ * list, and write them back — so the bundle is internally consistent and
+ * only the entry-commitments row can say that nothing was checked (D-10).
+ */
+function fixtureMissing(bundle: PublishedBundle): {
+  root: string;
+  committed: OnChainRecord['committedPayouts'];
+  payouts: OnChainRecord['payouts'];
+} {
+  const byIndex = [...bundle.entries].sort((a, b) => a.index - b.index);
+  const results = assignPrizes(
+    scoreWithMissing(
+      byIndex.map((e) => ({
+        index: e.index,
+        battles: e.battles !== null ? decodeBattleSet(Buffer.from(e.battles, 'hex')) : null,
+      }))
+    ),
+    potForTier(0)
+  );
+  const byRank = [...results].sort((a, b) => a.rank - b.rank || a.index - b.index);
+  const root = hex(
+    merkleRoot(
+      byRank.map((r) =>
+        leafBytes({
+          player: base58Decode(byIndex[r.index].player),
+          rank: r.rank,
+          amountLamports: r.amountLamports,
+        })
+      )
+    )
+  );
+  const paid = results.filter((r) => r.amountLamports > 0n).sort((a, b) => a.index - b.index);
+  bundle.results = byRank.map((r) => ({
+    index: r.index,
+    player: byIndex[r.index].player,
+    score_half: r.scoreHalf,
+    zones: r.zones,
+    rank: r.rank,
+    amount_lamports: r.amountLamports.toString(),
+  }));
+  bundle.payouts = paid.map((r) => ({
+    entry_index: r.index,
+    player: byIndex[r.index].player,
+    amount_lamports: r.amountLamports.toString(),
+  }));
+  bundle.results_root = root;
+  return {
+    root,
+    committed: paid.map((r) => ({ entryIndex: r.index, amount: r.amountLamports.toString() })),
+    payouts: paid.map((r) => ({
+      player: byIndex[r.index].player,
+      entryIndex: r.index,
+      amount: r.amountLamports.toString(),
+    })),
+  };
+}
 
 /** The dishonest operator's arithmetic: results, payouts and root recomputed
  * over whatever field the bundle now carries, so that only the roster can

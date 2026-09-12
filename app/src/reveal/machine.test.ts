@@ -21,6 +21,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { TxFailure } from "@/tx/types";
+import { FAILURE_COPY } from "@/tx/errors";
 import {
   INITIAL_REVEAL_STATE,
   replayReveal,
@@ -457,14 +458,73 @@ describe("revealVisual — the exit the settled beat reports (audit O25)", () =>
     expect(exitAfter([...taps(TAP_COUNT), stallTimeout, dismiss])).toBe("pending");
   });
 
-  it("every failure kind has a declared exit (a new kind cannot fall through silently)", () => {
-    const kinds: TxFailure["kind"][] = [
-      "user-rejected", "insufficient-sol", "blockhash-expired", "program-rejected",
-      "entries-paused", "pool-full", "deadline-passed", "already-entered",
-      "pool-closed", "packet-stale", "rpc-failure", "outcome-unreadable", "outcome-mismatch",
-    ];
-    for (const kind of kinds) {
-      expect(["entered", "not-entered"]).toContain(exitAfter([failedWith(kind), dismiss]));
+  /*
+   * Audit 2026-09-11 (C-14). `executeTrade` gives up waiting after its
+   * confirmation timeout and reports a BROADCAST failure it could not
+   * resolve — the transaction may still land. The exit used to ignore the
+   * flag and answer "not-entered", which restarts the flow and invites a
+   * second entry into a seat the player may already hold.
+   */
+  it("a dismissed broadcast-but-unresolved failure is 'pending', not 'not-entered'", () => {
+    const unresolved: RevealEvent = {
+      kind: "tx_failed",
+      failure: {
+        ...FAILURE,
+        kind: "rpc-failure",
+        broadcast: true,
+        // executeTrade's own words: status unknown, so a retry could enter twice.
+        retryable: false,
+      },
+    };
+    expect(exitAfter([unresolved, dismiss])).toBe("pending");
+    expect(exitAfter([...taps(TAP_COUNT), unresolved, dismiss])).toBe("pending");
+  });
+
+  it("a broadcast failure the CHAIN answered is still 'not-entered'", () => {
+    // The distinction the exit has to keep: broadcast is not the test —
+    // "did anything land, and can anything still land" is. A pool that
+    // filled between simulation and inclusion refused definitively.
+    for (const kind of ["pool-full", "entries-paused", "deadline-passed", "pool-closed"] as const) {
+      expect(
+        exitAfter([
+          { kind: "tx_failed", failure: { ...FAILURE, kind, broadcast: true, retryable: false } },
+          dismiss,
+        ]),
+        kind,
+      ).toBe("not-entered");
     }
+    // And a broadcast rpc-failure the chain DID report is a verdict too.
+    expect(
+      exitAfter([
+        {
+          kind: "tx_failed",
+          failure: { ...FAILURE, kind: "rpc-failure", broadcast: true, retryable: true },
+        },
+        dismiss,
+      ]),
+    ).toBe("not-entered");
+  });
+
+  it("every failure kind has a declared exit (a new kind cannot fall through silently)", () => {
+    /*
+     * Read from FAILURE_COPY, which the compiler requires to be exhaustive
+     * over TxFailureKind. The hand-written list this replaces could not
+     * keep the promise in its own name: a kind added to the union and to
+     * the copy record was simply absent here, and "entry-refused" (audit
+     * D-12) was added without this test noticing.
+     */
+    const kinds = Object.keys(FAILURE_COPY) as TxFailure["kind"][];
+    expect(kinds.length).toBeGreaterThan(12);
+    for (const kind of kinds) {
+      expect(["entered", "not-entered", "pending"], kind).toContain(
+        exitAfter([failedWith(kind), dismiss]),
+      );
+    }
+  });
+
+  it("a declined entry leaves as 'not-entered' — the service refused before signing", () => {
+    // D-12: nothing was signed and nothing was charged, so the honest exit
+    // is the start of the flow, not the sealed panel and not the pool page.
+    expect(exitAfter([failedWith("entry-refused"), dismiss])).toBe("not-entered");
   });
 });

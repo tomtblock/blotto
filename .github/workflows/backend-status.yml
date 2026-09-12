@@ -8,6 +8,18 @@
 
 name: backend-status
 
+# Least privilege (audit 2026-09-11, B-49). This job holds FLY_API_TOKEN,
+# which can read every secret NAME and every log line of all four services.
+# Without a block the GITHUB_TOKEN beside it carries the repository's
+# default permissions, which on a repository created before 2023 are
+# read-write on `contents`, `packages`, `issues` and the review surface — a
+# token that can push to main, sitting in a job whose whole purpose is to
+# print logs.
+#
+# `{}` and not `contents: read`: this workflow never checks the repository
+# out and runs nothing from it. It needs no scope at all.
+permissions: {}
+
 on:
   workflow_dispatch:
 

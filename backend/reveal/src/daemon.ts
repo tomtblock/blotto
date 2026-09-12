@@ -208,12 +208,43 @@ export interface TickReport {
 
 const TERMINAL = new Set(['Paid', 'Closed']);
 
+/**
+ * Per-iteration hooks for `run` — what the deployment entry needs to do
+ * around each tick, without owning a loop of its own.
+ *
+ * THE DEFECT THESE CLOSE (audit 2026-09-11, A-23). `run` is the loop the
+ * daemon suite drives; production ran a SECOND, hand-written `for (;;)` in
+ * `main.ts` because it had per-tick work `run` could not express — refresh
+ * the chain-clock cache, record the tick into `/health`, re-read the
+ * settlement balance, log each tick error, raise the stale-tick alert. So
+ * the tested loop was dead code and the live loop was untested, which is the
+ * wrong way round for the process that moves every prize.
+ *
+ * Every hook is optional and every one is failure-isolated in the sense that
+ * matters: a throw from `beforeTick` or `afterTick` is caught by the same
+ * handler a throwing tick is (it IS a failed tick — the daemon retries next
+ * interval), and a throw from `onTickError` or `afterIteration` is logged and
+ * swallowed, because a loop that dies on its own book-keeping strands pools.
+ */
+export interface LoopHooks {
+  /** Before the tick, inside the try: preparation the tick depends on. */
+  beforeTick?: () => Promise<void> | void;
+  /** After a tick that returned, with its report. */
+  afterTick?: (report: TickReport) => Promise<void> | void;
+  /** The tick, or either hook above, threw. The loop continues regardless. */
+  onTickError?: (err: unknown) => void;
+  /** After every iteration, succeeded or failed, before the sleep. */
+  afterIteration?: () => void;
+}
+
 export interface Daemon {
   /** One pass: settle everything settleable, then top up every open tier. */
   tick(): Promise<TickReport>;
   /** Poll loop: tick, sleep, repeat until the signal aborts. A throwing
-   * tick (e.g. RPC down) is logged and retried next interval. */
-  run(intervalMs: number, signal?: AbortSignal): Promise<void>;
+   * tick (e.g. RPC down) is logged and retried next interval. THE ONLY
+   * LOOP — the production entry drives this one through `hooks` rather than
+   * writing its own (audit 2026-09-11, A-23). */
+  run(intervalMs: number, signal?: AbortSignal, hooks?: LoopHooks): Promise<void>;
 }
 
 export function makeDaemon(deps: DaemonDeps): Daemon {
@@ -533,13 +564,36 @@ export function makeDaemon(deps: DaemonDeps): Daemon {
     return report;
   }
 
-  async function run(intervalMs: number, signal?: AbortSignal): Promise<void> {
+  async function run(
+    intervalMs: number,
+    signal?: AbortSignal,
+    hooks: LoopHooks = {}
+  ): Promise<void> {
     while (!signal?.aborted) {
       try {
-        await tick();
+        // Inside the try on purpose: preparation the tick depends on (the
+        // chain-clock read, in production) fails the tick rather than the
+        // process, and is retried at the next interval like any other
+        // transient RPC failure.
+        await hooks.beforeTick?.();
+        const report = await tick();
+        await hooks.afterTick?.(report);
       } catch (e) {
         // Config unreadable / RPC down — nothing to do but say so and retry.
         log('tick:failed', { error: String(e) });
+        try {
+          hooks.onTickError?.(e);
+        } catch (hookErr) {
+          log('tick:error_hook_failed', { error: String(hookErr) });
+        }
+      }
+      try {
+        // Runs on both paths: this is where liveness judgements belong (the
+        // stale-tick alert), and they must not be skipped by the failure
+        // they exist to report.
+        hooks.afterIteration?.();
+      } catch (e) {
+        log('after_iteration:failed', { error: String(e) });
       }
       await sleep(intervalMs, signal);
     }

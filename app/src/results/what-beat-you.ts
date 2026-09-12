@@ -15,7 +15,7 @@
 
 import { sealOpen, publicKeyOf, decodePayload } from '@blotto/sealing';
 import { compareBattle, type BattleComparison, type BattleSet } from '@blotto/scoring';
-import type { ResultRow, SealedEntryRow } from '@/data/types';
+import type { SealedEntryRow } from '@/data/types';
 
 const unhex = (s: string): Uint8Array => {
   const out = new Uint8Array(s.length / 2);
@@ -49,6 +49,8 @@ export function decryptSeatBattles(
 
 export interface AboveYouRow {
   seat: number;
+  /** Their competition rank (D3-B: tied players share one). */
+  rank: number;
   /** Committed amount for that seat, lamports as decimal string. */
   amountLamports: string;
   /** Their seven allocations. */
@@ -62,23 +64,53 @@ export interface AboveYouRow {
 }
 
 /**
- * The seats committed ABOVE yours (strictly larger amount), best first,
- * each with the head-to-head recomputation against your battles.
+ * One seat's standing, as the panel must be given it (audit 2026-09-11,
+ * F-07). `rank` is the committed field of the results-root leaf; `seat` is
+ * how the ciphertexts are keyed and is NOT committed (the read API says so
+ * itself — `LeaderboardRow`), which is fine for a display panel and would
+ * not be for anything a player is paid on.
+ */
+export interface StandingRow {
+  seat: number;
+  rank: number;
+  amountLamports: string;
+}
+
+/**
+ * The seats that finished ABOVE yours — by RANK, best first — each with the
+ * head-to-head recomputation against your battles.
+ *
+ * WHY RANK AND NOT MONEY (F-07). This used to take the committed payout
+ * list and call "above" any seat with a strictly larger amount. Two things
+ * were wrong with that, and they compound:
+ *
+ *  - the payout list contains ONLY THE PAID SEATS, so every unpaid player
+ *    who nonetheless finished ahead of you was invisible;
+ *  - under D-E2 one place is paid, so "a strictly larger amount" can only
+ *    ever be the winner. A player who came 4th of 64 was shown exactly one
+ *    opponent and told that was what finished above them.
+ *
+ * Rank is the ordering the competition is decided by; money is a
+ * consequence of it, and under a one-paid-place band it is a constant.
+ *
+ * Ties (D3-B) share a rank, and a player is not "above" someone they tied
+ * with: the test is strictly smaller rank.
  */
 export function whatFinishedAbove(
   mySeat: number,
-  results: readonly ResultRow[],
+  standings: readonly StandingRow[],
   battlesBySeat: ReadonlyMap<number, BattleSet>
 ): AboveYouRow[] {
   const mine = battlesBySeat.get(mySeat);
   if (!mine) return [];
-  const myAmount = BigInt(results.find((r) => r.seat === mySeat)?.amount ?? '0');
+  const myRank = standings.find((r) => r.seat === mySeat)?.rank;
+  // Not in the standings: nothing to be above. Said explicitly rather than
+  // defaulting to a rank, which would invent a position for this player.
+  if (myRank === undefined) return [];
 
-  return [...results]
-    .filter((r) => r.seat !== mySeat && BigInt(r.amount) > myAmount)
-    .sort((a, b) =>
-      BigInt(a.amount) > BigInt(b.amount) ? -1 : BigInt(a.amount) < BigInt(b.amount) ? 1 : a.seat - b.seat
-    )
+  return [...standings]
+    .filter((r) => r.seat !== mySeat && r.rank < myRank)
+    .sort((a, b) => a.rank - b.rank || a.seat - b.seat)
     .flatMap((r) => {
       const theirs = battlesBySeat.get(r.seat);
       if (!theirs) return [];
@@ -89,7 +121,8 @@ export function whatFinishedAbove(
       return [
         {
           seat: r.seat,
-          amountLamports: r.amount,
+          rank: r.rank,
+          amountLamports: r.amountLamports,
           battles: theirs,
           comparisons,
           wins,

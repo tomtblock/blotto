@@ -1,8 +1,42 @@
-//! Pure prize arithmetic — the ONE place split and band amounts are computed.
+//! Pure prize arithmetic: the band amount for a rank, and the split of a tie
+//! group's combined prize.
 //!
-//! Handlers call these; the vault-invariant fuzz suite (`tests/vault_model.rs`)
-//! drives the SAME functions through 10k random instruction sequences, so the
-//! model and the program cannot drift apart on arithmetic.
+//! # Who calls this, and who does not (corrected 2026-09-12, audit A-14/B-42)
+//!
+//! **No instruction handler calls either function, and nothing on chain
+//! checks a payout against the band table.** The previous header said
+//! "Handlers call these", which was never true of this program. What is
+//! true:
+//!
+//!   - **The amounts are computed OFF CHAIN**, by the settlement crank, in
+//!     `backend/scoring/src/prizes.ts` (`amountForRank`) and
+//!     `backend/scoring/src/engine.ts` (`assignPrizes`) — the same TypeScript
+//!     module the verify page runs in the browser (R20), so a player
+//!     recomputes every amount from the published bundle.
+//!   - **What the program enforces is the SHAPE and the TOTAL, not the
+//!     split.** `commit_results` refuses a payout list that is empty or
+//!     longer than `CAPACITY`, that names a seat outside the field, that is
+//!     not strictly seat-ascending (sorted and duplicate-free in one check),
+//!     or whose amounts do not sum to EXACTLY `Pool.pot_lamports`.
+//!     `pay_prizes` then pays the committed list and nothing else. So the
+//!     settlement signer cannot change the total, cannot pay a stranger and
+//!     cannot pay a seat twice — but the program does not know that rank 1
+//!     takes 1024/1024, and a list that gave the pot to the wrong seat would
+//!     land. What catches that is recomputation: the published bundle plus
+//!     the on-chain results root and payout list.
+//!   - **`pay_next_place` does its own division** (equal shares, the
+//!     indivisible remainder to the lowest seat) inline in
+//!     `instructions/escrow.rs`; it does not call `split_group` either.
+//!
+//! These functions and the tables they read (`PAID_RANKS`,
+//! `PRIZE_BANDS_1024`) are therefore reachable only from tests: the unit
+//! tests below, which pin the published figures, and the vault-invariant
+//! fuzz suite (`tests/vault_model.rs`), which drives `split_group` through
+//! 10k random instruction sequences so the model and the on-chain payout
+//! paths cannot drift apart on arithmetic. The module is kept — deliberately
+//! — because it is the Rust-side statement of the published rule and the
+//! oracle the fuzz model scores against; whether the band table should be
+//! enforced on chain is a program-upgrade question, not a documentation one.
 //!
 //! Integer-only, `u128` intermediates where a product can grow (threat-tm-403).
 

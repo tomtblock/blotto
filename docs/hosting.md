@@ -14,9 +14,14 @@ with no build step beyond `npm ci` — the services run ts-node directly.
 | review | `backend/detection` → `src/main.ts` | 8083 | `GET /health` | Postgres, `config/reviewers.json`, settlement keypair, RPC |
 | daemon | `backend/reveal` → `src/main.ts` | 8084 (health only) | `GET /health` (reports the last tick) | Postgres, settlement keypair, Turnkey custody, Irys wallet, Randomness account, RPC |
 
-Every service reads `BLOTTO_DATABASE_URL` and applies nothing itself — run
-migrations once per deploy (`npm --prefix backend/indexer run migrate`,
-also step 3 of `scripts/deploy-devnet.sh`).
+Every service reads `BLOTTO_DATABASE_URL`. **The indexer owns the schema**: its
+`sync` entry (the containers' command) runs the migrations itself and, when a
+migration invalidates a derived table, rebuilds it *before* the read API
+answers — so a deploy of the indexer needs no separate migrate step. The other
+three services apply nothing and assume the indexer has run;
+`npm --prefix backend/indexer run migrate` is the standalone command (also step
+3 of `scripts/deploy-devnet.sh`) for the case where you want the schema moved
+without starting the service.
 
 Every credentialed seam **fails closed**: a service missing its signer,
 geo vendor, custody or upload wallet refuses to start (or refuses the
@@ -30,9 +35,40 @@ docker compose up --build postgres indexer packet   # the read path
 docker compose up --build                           # everything
 ```
 
+**Give `BLOTTO_HELIUS_WEBHOOK_SECRET` a value before the first `up`.** The
+compose file declares it `${BLOTTO_HELIUS_WEBHOOK_SECRET:?set in .env}`, and
+`:?` refuses an empty value as well as an unset one — so the freshly copied
+example stops the stack with an interpolation error before any container
+starts. Locally any non-empty string works: the receiver compares the header
+against it byte for byte (E6 below), so a local stack that never receives a
+real Helius delivery only needs the two sides to match.
+
+**The `.env` goes at the repository root, and it is compose's file, not a
+service's.** Nothing in `backend/` loads a dotenv file — every service reads
+`process.env` and nothing else — so that root `.env` matters only because
+`docker compose` interpolates it into the `environment:` blocks of
+`docker-compose.yml`, and **only the variables that file names reach a
+container**. Running a service outside Docker means exporting the variables
+into the shell first (`set -a; . ./.env; set +a`). The app is the exception
+that does read a file: `app/.env.local`, loaded by Next.js.
+
 Compose builds the four images in `deploy/docker/Dockerfile.*` (build
 context is the repo root — the packages cross-import by relative path, so
 each image carries the whole backend tree plus `config/`).
+
+Two things the compose stack cannot be given today, both because the
+`environment:` blocks do not name the variable:
+
+- **`BLOTTO_API_CORS_ORIGINS`** — the read API's and the packet service's
+  origin allowlist. Unset means no CORS headers at all (the correct default,
+  `backend/_shared/src/http-hygiene.ts`), so a browser on
+  `http://localhost:3000` cannot read `http://localhost:8081` cross-origin.
+  Server-rendered reads are unaffected. The compose file passes the variable
+  through as of 2026-09-12: set `BLOTTO_API_CORS_ORIGINS=http://localhost:3000`
+  in the root `.env` for a browser-driven local run.
+- **`BLOTTO_CLUSTER`** — unset, so every container defaults to devnet
+  (`backend/_shared/src/cluster.ts`), which is what a local stack wants. Set
+  `BLOTTO_RPC_URL` in `.env` to use Helius instead of the public endpoint.
 
 ## Fly.io (production shape)
 

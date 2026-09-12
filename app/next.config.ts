@@ -1,5 +1,29 @@
 import path from "node:path";
 import type { NextConfig } from "next";
+import { clusterGate } from "./src/chain/cluster";
+
+/*
+ * THE CLUSTER GATE (audit 2026-09-11, A-06 / E-02).
+ *
+ * `src/chain/cluster.ts` has stated the cluster/RPC contract as data since
+ * 2026-09-08 and called itself a "build-time gate". It was not one: nothing
+ * outside its own vitest file ever ran it, so a mainnet build with no RPC,
+ * or with the devnet faucet or the automation signer still switched on,
+ * would have built and shipped. Next evaluates this config in Node before
+ * compiling anything, so this call is the gate — it fails `next build` and
+ * `next dev` with the reason, against the SAME environment Next is about to
+ * inline into the client bundle.
+ *
+ * Rejected alternatives: (a) `instrumentation.ts`, which runs at server
+ * START and so lets a broken bundle be built and deployed before anything
+ * complains — and says nothing at all about a statically exported page;
+ * (b) a CI step, which is a second place to remember and does not protect a
+ * build run by hand. This is the one path every build takes.
+ *
+ * `cluster.ts` imports nothing, so importing it here costs nothing and
+ * cannot draw app code into the config's module graph.
+ */
+clusterGate();
 
 const nextConfig: NextConfig = {
   /*
@@ -41,6 +65,108 @@ const nextConfig: NextConfig = {
    */
   env: {
     NEXT_PUBLIC_ALLOW_TEST_SIGNER: process.env.NEXT_PUBLIC_ALLOW_TEST_SIGNER ?? "0",
+    /*
+     * Same treatment, same reason (audit 2026-09-11, A-07): the in-repo
+     * fixture catalogue may only leave a production build when a build
+     * DELIBERATELY asks for it — the visual journey suite screenshots a
+     * real production build with no backend. Normalised so the unset case
+     * inlines as the literal "0" and the branch is dead rather than a
+     * runtime lookup, and refused outright on mainnet by the cluster gate
+     * above.
+     */
+    NEXT_PUBLIC_FIXTURE_DATA: process.env.NEXT_PUBLIC_FIXTURE_DATA ?? "0",
+  },
+
+  /*
+   * SECURITY RESPONSE HEADERS (audit 2026-09-11, B-54) — ONE PLACE.
+   *
+   * The app shipped none: no content-security policy, nothing about
+   * framing. A site whose whole purpose is prompting a wallet to sign could
+   * be loaded inside an attacker's iframe, over a page of their choosing,
+   * and the player would be reading the attacker's words while approving
+   * ours. `frame-ancestors 'none'` is the fix for that and is the least
+   * negotiable line below.
+   *
+   * The policy is written from what the app ACTUALLY contacts, not from a
+   * template:
+   *
+   *  - the auth provider — `auth.privy.io` for its API and the embedded
+   *    wallet's iframe, `explorer-api.walletconnect.com` for the wallet
+   *    list, `api.moonpay.com` for the funding flow (grepped out of the
+   *    installed @privy-io/react-auth, not assumed);
+   *  - a Solana RPC, an indexer, an entry service and a review service,
+   *    every one of them a DEPLOYMENT VARIABLE — their hosts are not
+   *    knowable when this file is written;
+   *  - the published reveal bundle, at a gateway address THE PLAYER TYPES
+   *    IN. The verify page must work against a hostile or absent operator
+   *    (R13), so a policy that only allowed our own gateway would defeat
+   *    the page's whole purpose the day it mattered.
+   *
+   * Those last two are why `connect-src` is `https:` rather than a list.
+   * That is a deliberate, narrow weakening, and it is worth stating plainly:
+   * it does not stop an injected script from calling out, and `script-src`
+   * is what does the work here — no foreign script origin can load at all.
+   *
+   * PHASE-N-REVIEW: `connect-src https:` and `script-src 'unsafe-inline'`
+   * are deliberate weakenings, taken because the alternative breaks the
+   * money path (an unknown RPC/indexer host, a player-supplied bundle URI)
+   * or changes how every page is rendered. Both are named below with the
+   * upgrade that would close them.
+   *
+   * `'unsafe-inline'` in `script-src` is Next's framework bootstrap: the
+   * nonce-based alternative requires a middleware that stamps every
+   * response, which makes every page dynamically rendered. That is a real
+   * change to how the app is served and is a separate decision, recorded
+   * here rather than taken silently. `'unsafe-eval'` is added in
+   * development only, where the dev overlay needs it.
+   *
+   * `img-src` allows `data:` (wallet-standard wallets register their icons
+   * as data URIs) and `blob:` (the lock-in stills and the montage are
+   * canvas blobs rendered on the device).
+   */
+  async headers() {
+    const dev = process.env.NODE_ENV !== "production";
+    const csp = [
+      "default-src 'self'",
+      `script-src 'self' 'unsafe-inline'${dev ? " 'unsafe-eval'" : ""}`,
+      // next/font/google self-hosts at build time, so no font origin is
+      // contacted at runtime; the inline styles are Tailwind's and Next's.
+      "style-src 'self' 'unsafe-inline'",
+      "font-src 'self' data:",
+      "img-src 'self' data: blob: https:",
+      "media-src 'self' blob:",
+      "connect-src 'self' https: wss:",
+      "worker-src 'self' blob:",
+      "frame-src 'self' https://auth.privy.io https://*.privy.io https://*.moonpay.com",
+      // The clickjacking fix. Nothing may frame this app, ever.
+      "frame-ancestors 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+      "object-src 'none'",
+    ].join("; ");
+
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "Content-Security-Policy", value: csp },
+          // The pre-CSP companion, for anything that honours only this.
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          // A pool address or a wallet address must not travel to another
+          // site in a Referer header.
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          {
+            key: "Permissions-Policy",
+            value: "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()",
+          },
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=31536000; includeSubDomains",
+          },
+        ],
+      },
+    ];
   },
 };
 

@@ -81,6 +81,8 @@ const RETRYABLE_BY_KIND: Readonly<Partial<Record<TxFailureKind, boolean>>> = {
   "already-entered": false,
   "outcome-unreadable": false,
   "outcome-mismatch": false,
+  // The service answered. Asking it again gets the same answer.
+  "entry-refused": false,
 };
 
 /**
@@ -99,6 +101,29 @@ const ENTRY_RECORDED_KINDS: ReadonlySet<TxFailureKind> = new Set<TxFailureKind>(
 /** True when the player holds a seat in spite of the failure shown. */
 export function entryRecorded(failure: Pick<TxFailure, "kind">): boolean {
   return ENTRY_RECORDED_KINDS.has(failure.kind);
+}
+
+/**
+ * True when the transaction was BROADCAST and the chain never gave a
+ * verdict on it — it may still land (audit 2026-09-11, C-14).
+ *
+ * Every other broadcast failure carries an answer from the chain: a status
+ * with an error, a preflight rejection, or a lapsed blockhash that can
+ * never be included. Those definitively landed nothing. The one case that
+ * does not is `executeTrade`'s confirmation timeout, which is the only site
+ * that constructs a broadcast `rpc-failure` the classifier did not produce
+ * — hence `retryable: false`, "it may still land, so a retry could enter
+ * twice". That combination is the signature read here.
+ *
+ * It is deliberately NOT "broadcast && !retryable": `pool-full`,
+ * `entries-paused`, `deadline-passed` and `pool-closed` are also
+ * non-retryable after broadcast, and they are verdicts — the program
+ * refused, nothing landed, and the honest exit for them is "not entered".
+ */
+export function landingUnresolved(
+  failure: Pick<TxFailure, "kind" | "broadcast" | "retryable">,
+): boolean {
+  return failure.kind === "rpc-failure" && failure.broadcast && !failure.retryable;
 }
 
 /**
@@ -134,6 +159,7 @@ export const FAILURE_COPY: Record<TxFailureKind, string> = {
   "already-entered": COPY.tx.alreadyEntered,
   "pool-closed": COPY.tx.poolClosed,
   "packet-stale": COPY.tx.packetStale,
+  "entry-refused": COPY.tx.entryRefused,
   "rpc-failure":
     "The network request did not go through. Check your connection and try again.",
   // The transaction LANDED; only the read-back failed. See property 2 above.

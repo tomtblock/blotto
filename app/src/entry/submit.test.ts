@@ -14,6 +14,7 @@ const battles: Allocation[] = Array.from({ length: 7 }, (_, k) => {
 function services(pool: ReturnType<typeof generateKeypair>) {
   const calls: string[] = [];
   const stored: Uint8Array[] = [];
+  const devicePools: string[] = [];
   const svc: EntryServices = {
     async putCiphertext(_p, _w, c) {
       calls.push('ciphertext');
@@ -36,11 +37,14 @@ function services(pool: ReturnType<typeof generateKeypair>) {
     randomBytes(n) {
       return new Uint8Array(createHash('sha256').update('salt').digest()).slice(0, n);
     },
-    async deviceHash() {
-      return new Uint8Array(32);
+    async deviceHash(forPool) {
+      // B-40: the marker is asked for BY POOL. Recorded so the test can
+      // prove the pool actually reaches the derivation.
+      devicePools.push(forPool);
+      return new Uint8Array(createHash('sha256').update(`device:${forPool}`).digest());
     },
   };
-  return { svc, calls, stored, pool };
+  return { svc, calls, stored, devicePools, pool };
 }
 
 describe('submitEntry', () => {
@@ -61,6 +65,34 @@ describe('submitEntry', () => {
     const payload = decodePayload(opened);
     expect(payload.battles).toEqual(battles);
     expect(payload.timingsMs).toEqual([1, 2, 3, 4, 5, 6, 7]);
+  });
+
+  /*
+   * Audit 2026-09-11, B-40. The sealed payload's device marker used to be
+   * one value per browser, the same in every pool, and it was published
+   * verbatim in every reveal bundle — a permanent public link between every
+   * wallet a browser had used. The marker is now derived per pool, and the
+   * pool has to reach the derivation for that to be true.
+   */
+  it('seals a marker derived for THIS pool, never one shared across pools', async () => {
+    const pool = generateKeypair();
+    const sealingPubkeyHex = Buffer.from(pool.publicKey).toString('hex');
+    const markerFor = async (poolAddress: string) => {
+      const { svc, stored, devicePools } = services(pool);
+      await submitEntry(svc, {
+        pool: poolAddress,
+        sealingPubkeyHex,
+        player: 'PLAYER',
+        battles,
+        timingsMs: [1, 2, 3, 4, 5, 6, 7],
+      });
+      expect(devicePools).toEqual([poolAddress]);
+      return decodePayload(sealOpen(stored[0], pool)!).deviceHash;
+    };
+    const a = await markerFor('POOL-A');
+    const b = await markerFor('POOL-B');
+    expect([...a]).not.toEqual([...b]);
+    expect([...(await markerFor('POOL-A'))]).toEqual([...a]);
   });
 
   it('refuses a malformed allocation before anything leaves the client', async () => {

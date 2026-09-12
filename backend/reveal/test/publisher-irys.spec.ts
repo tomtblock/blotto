@@ -2,9 +2,13 @@
  * C11: IrysPublisher over a fake uploader — the bundle goes up as JSON
  * with the addressing tags, and the returned URI is the permanent gateway
  * address of the transaction id.
+ *
+ * Plus the cluster cross-check (audit 2026-09-11, E-12): which Irys network
+ * the daemon publishes to is decided by `BLOTTO_CLUSTER`, and a contradicting
+ * `IRYS_NETWORK` refuses to start rather than quietly winning.
  */
 import { expect } from 'chai';
-import { IrysPublisher, type IrysUploader } from '../src';
+import { IrysPublisher, irysNetworkFor, type IrysUploader } from '../src';
 import type { RevealBundle } from '../src';
 
 const bundle: RevealBundle = {
@@ -64,5 +68,49 @@ describe('IrysPublisher (C11)', () => {
     } catch (e) {
       expect(String(e)).to.contain('no transaction id');
     }
+  });
+});
+
+describe('irysNetworkFor — one cluster selector, not two (E-12)', () => {
+  it('follows BLOTTO_CLUSTER when IRYS_NETWORK is unset, blank or whitespace', () => {
+    expect(irysNetworkFor({})).to.equal('devnet');
+    expect(irysNetworkFor({ BLOTTO_CLUSTER: 'devnet' })).to.equal('devnet');
+    // The case that was silently wrong before: mainnet with no IRYS_NETWORK
+    // published to devnet storage. It must now follow the cluster.
+    expect(irysNetworkFor({ BLOTTO_CLUSTER: 'mainnet' })).to.equal('mainnet');
+    expect(irysNetworkFor({ BLOTTO_CLUSTER: 'mainnet', IRYS_NETWORK: '' })).to.equal('mainnet');
+    expect(irysNetworkFor({ BLOTTO_CLUSTER: 'mainnet', IRYS_NETWORK: '  ' })).to.equal('mainnet');
+  });
+
+  it('accepts an IRYS_NETWORK that agrees with the cluster', () => {
+    expect(irysNetworkFor({ BLOTTO_CLUSTER: 'mainnet', IRYS_NETWORK: 'mainnet' })).to.equal(
+      'mainnet'
+    );
+    expect(irysNetworkFor({ BLOTTO_CLUSTER: 'devnet', IRYS_NETWORK: 'devnet' })).to.equal('devnet');
+    // Case and surrounding space are a typo, not a different network.
+    expect(irysNetworkFor({ BLOTTO_CLUSTER: 'mainnet', IRYS_NETWORK: ' Mainnet ' })).to.equal(
+      'mainnet'
+    );
+  });
+
+  it('refuses a mismatch in either direction, naming both variables', () => {
+    expect(() => irysNetworkFor({ BLOTTO_CLUSTER: 'mainnet', IRYS_NETWORK: 'devnet' }))
+      .to.throw(/IRYS_NETWORK is "devnet" but BLOTTO_CLUSTER is "mainnet"/);
+    expect(() => irysNetworkFor({ BLOTTO_CLUSTER: 'devnet', IRYS_NETWORK: 'mainnet' }))
+      .to.throw(/IRYS_NETWORK is "mainnet" but BLOTTO_CLUSTER is "devnet"/);
+  });
+
+  it('refuses a value that is neither network, instead of meaning devnet', () => {
+    // `mainnet-beta` is the Solana spelling and the likeliest mistake: under
+    // the old `=== 'mainnet'` test it selected devnet without a word.
+    for (const bad of ['mainnet-beta', 'main', 'testnet', 'yes', '1']) {
+      expect(() => irysNetworkFor({ BLOTTO_CLUSTER: 'mainnet', IRYS_NETWORK: bad }))
+        .to.throw(/IRYS_NETWORK must be "devnet" or "mainnet"/);
+    }
+  });
+
+  it('refuses an unreadable BLOTTO_CLUSTER rather than guessing', () => {
+    expect(() => irysNetworkFor({ BLOTTO_CLUSTER: 'mainnet-beta', IRYS_NETWORK: 'mainnet' }))
+      .to.throw(/BLOTTO_CLUSTER must be "devnet" or "mainnet"/);
   });
 });

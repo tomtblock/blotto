@@ -79,6 +79,16 @@ export type LodgeOutcome =
   | 'cannot_sign'
   | 'declined'
   | 'refused'
+  /*
+   * D-33 (audit 2026-09-11): the service's 401 now says WHICH of its two
+   * causes it was. A signature that did not verify is a refusal the player
+   * can do nothing about; a device clock too far out of step with the
+   * service is a fixable local condition, and telling a forfeited player
+   * "the signature did not verify as this entry's wallet" for it sends them
+   * to look for a problem that is not there — while their appeal window
+   * runs down.
+   */
+  | 'clock_skew'
   | 'window_closed'
   | 'already_lodged'
   | 'nothing_to_appeal'
@@ -118,7 +128,12 @@ export async function lodgeAppeal(
       }),
     });
     if (res.status === 204) return 'lodged';
-    if (res.status === 401) return 'refused';
+    if (res.status === 401) {
+      // The reason is optional by design: an older service, or one that
+      // could not tell, answers a bare 401 and keeps the existing wording.
+      const body = (await res.json().catch(() => ({}))) as { reason?: string };
+      return body.reason === 'clock_skew' ? 'clock_skew' : 'refused';
+    }
     if (res.status === 409) {
       const body = (await res.json().catch(() => ({}))) as { error?: string };
       if (body.error === 'window_closed') return 'window_closed';

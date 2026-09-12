@@ -28,8 +28,14 @@
  * not base58-shaped would render fine here and then fail the moment anything
  * tried to treat it as an address.
  *
- * Nothing here is reachable in production: the only page that links to these
- * is `/dev/preview`, which hard-404s outside development.
+ * NOT REACHABLE IN PRODUCTION, and since the audit of 2026-09-11 (A-07 /
+ * C-26 / D-15 / E-01) that is enforced rather than asserted. This file used
+ * to say the only page linking here is `/dev/preview`, which hard-404s
+ * outside development — true, and beside the point: the ORDINARY pages read
+ * through `indexerApi()`, which served this catalogue to anyone whenever
+ * NEXT_PUBLIC_INDEXER_URL was unset or empty, in a deployed build. It now
+ * returns a read API that throws in a production build, so these rows can
+ * only be served by a development or test build (`data/api.ts`).
  */
 
 import { TIER_POT_LAMPORTS } from '@blotto/scoring';

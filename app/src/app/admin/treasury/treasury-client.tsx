@@ -15,7 +15,14 @@ interface TierStatus {
   tier: number;
   price_lamports: string;
   pot_lamports: string;
-  status: 'open' | 'settling' | 'openable' | 'short';
+  /*
+   * D-35 (audit 2026-09-11): 'disabled' was missing from this union, so
+   * `STATUS_LABEL[t.status]` was `undefined` for every tier the founder has
+   * not enabled — six of seven rows rendered a blank status cell, with no
+   * error anywhere. The union must mirror the report's own
+   * (`backend/indexer/src/treasury-report.ts`).
+   */
+  status: 'open' | 'settling' | 'openable' | 'short' | 'disabled';
   live_pool_state: string | null;
   short_by_lamports: string;
 }
@@ -29,6 +36,21 @@ interface TreasuryReport {
   withdrawable_lamports: string;
   tiers: TierStatus[];
   tier0_pools_to_next_unlock: string | null;
+  /*
+   * D-41 (audit 2026-09-11). Optional because a deployed indexer older than
+   * this page does not send them, and a caption that asserts a provenance
+   * it did not read would be the same defect in a new place.
+   *
+   *  - `policy_source`: 'chain' = the live Config account and the platform
+   *    PDA; 'ledger' = the bounded event ledger and the launch tables.
+   *  - `enablement_source`: where the tier enablement came from. The old
+   *    caption claimed enablement was NOT on the event ledger and that a
+   *    disabled tier therefore still showed as openable — untrue since the
+   *    indexer began consuming TiersOpened (E1 PR3a), and the report now
+   *    answers 'disabled' for exactly those tiers.
+   */
+  policy_source?: 'chain' | 'ledger';
+  enablement_source?: 'chain' | 'ledger' | 'launch_default';
 }
 
 type State =
@@ -37,12 +59,55 @@ type State =
   | { kind: 'error'; message: string }
   | { kind: 'ready'; report: TreasuryReport };
 
-const STATUS_LABEL: Record<TierStatus['status'], string> = {
+export const STATUS_LABEL: Record<TierStatus['status'], string> = {
   open: 'Tournament open',
   settling: 'Settling',
   openable: 'Ready to open',
   short: 'Short',
+  // Not enabled: it contributes nothing to the withdrawal floor and is
+  // never "short" (treasury-report.ts says so in as many words).
+  disabled: 'Not enabled',
 };
+
+/** Anything the report says that this page has not been taught. Rendering
+ * the raw value is the honest answer — a blank cell is how D-35 hid. */
+export const statusLabel = (status: string): string =>
+  STATUS_LABEL[status as TierStatus['status']] ?? status;
+
+/**
+ * Where the numbers on this page came from (audit 2026-09-11, D-41).
+ *
+ * The caption this replaces said tier enablement was "not on the event
+ * ledger, so an idle tier the founder has disabled still shows here". That
+ * stopped being true when the indexer began consuming TiersOpened (E1
+ * PR3a): the report answers `disabled` for exactly those tiers and names
+ * where it learned it. The page was therefore contradicting the table
+ * directly above the sentence.
+ *
+ * It also states the policy source, because a reader has to be able to tell
+ * a chain-anchored number from a ledger-derived one — a ledger-derived
+ * withdrawal floor is a LOWER BOUND on what the program will enforce, and
+ * O26 is what happens when nobody can tell.
+ */
+export function provenanceCaption(
+  report: Pick<TreasuryReport, 'policy_source' | 'enablement_source'>
+): string {
+  const policy =
+    report.policy_source === 'chain'
+      ? 'Balances and policy are read from the live Config account and the platform PDA.'
+      : report.policy_source === 'ledger'
+        ? 'Balances and policy are derived from the bounded event ledger and the launch tier tables — the chain could not be read, so treat the withdrawal floor as a lower bound.'
+        : 'Balances and policy come from the treasury report; this indexer does not say whether they are chain-anchored or ledger-derived.';
+  const enablement =
+    report.enablement_source === 'chain'
+      ? 'Tier enablement is read from the live Config account.'
+      : report.enablement_source === 'ledger'
+        ? 'Tier enablement is replayed from the ledger’s latest TiersOpened event.'
+        : report.enablement_source === 'launch_default'
+          ? 'Tier enablement falls back to init_config’s launch posture: no TiersOpened event has been seen and the Config account could not be read.'
+          : 'Tier enablement is as the report supplied it.';
+  return `${policy} ${enablement} The program is the authority on which tiers may open.`;
+}
 
 export function TreasuryClient() {
   // NEXT_PUBLIC_* is inlined at build time, so "unconfigured" is knowable at
@@ -132,7 +197,7 @@ export function TreasuryClient() {
                 <td className="py-1 font-mono">{lamportsToSol(t.price_lamports)}</td>
                 <td className="py-1 font-mono">{lamportsToSol(t.pot_lamports)}</td>
                 <td className="py-1">
-                  {STATUS_LABEL[t.status]}
+                  {statusLabel(t.status)}
                   {t.live_pool_state ? ` (${t.live_pool_state})` : ''}
                 </td>
                 <td className="py-1 text-right font-mono">
@@ -150,11 +215,7 @@ export function TreasuryClient() {
           <span className="font-mono">{r.tier0_pools_to_next_unlock}</span>
         </p>
       ) : null}
-      <p className="mt-4 text-sm opacity-60">
-        Every number above replays from published on-chain events. Tier enablement is not on the
-        event ledger, so an idle tier the founder has disabled still shows here; the program is
-        the authority on which tiers may open.
-      </p>
+      <p className="mt-4 text-sm opacity-60">{provenanceCaption(r)}</p>
     </>
   );
 }

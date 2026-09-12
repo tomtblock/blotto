@@ -1,10 +1,17 @@
 /*
  * The run machine, pinned (v4 single-clock semantics + the rules that
- * survived from R9): the clock starts on the first dial touch and never
- * on payment; expiry locks deterministically — current screen as shown,
- * untouched screens at even split; timings are captured per screen; the
- * review confirms or nothing (§8.6).
+ * survived from R9): the clock starts on the first dial touch and never on
+ * payment; expiry locks deterministically — EVERY battle not locked in, the
+ * one on screen included, enters as the even split (the founder's R9-b
+ * addendum of 2026-09-07); timings are captured per screen; the review
+ * confirms or nothing (§8.6).
+ *
+ * This header said "current screen as shown" until 2026-09-11 (audit F-15),
+ * describing the pre-addendum rule — while the test below it asserted the
+ * addendum. The comments were the stale half everywhere; see machine.ts.
  */
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { EVEN_SPLIT } from './allocation';
 import { RUN_CLOCK_BUDGET_MS } from './run-clock';
@@ -78,6 +85,30 @@ describe('locking', () => {
 });
 
 describe('expiry (the one rule a player must be able to predict — R9-b)', () => {
+  /*
+   * F-15 (audit 2026-09-11): this module's own doc, and run-clock.ts's,
+   * described the PRE-ADDENDUM rule — "the current battle locks at exactly
+   * what it shows" — which the reducer has not implemented since the
+   * founder's R9-b addendum of 2026-09-07. A comment that contradicts the
+   * code is how the next person implements the wrong thing confidently, so
+   * the docs are pinned to the behaviour they describe.
+   */
+  it('both module docs state the expiry rule the reducer implements', () => {
+    // Asserted positively, and on the RULE rather than on the absence of
+    // the old sentence: machine.ts now quotes the superseded wording in
+    // order to say it was superseded, which is exactly the kind of prose a
+    // "must not contain" check punishes for no reason.
+    const read = (path: string) =>
+      readFileSync(fileURLToPath(new URL(path, import.meta.url)), 'utf8').slice(0, 5000);
+    for (const path of ['./machine.ts', './run-clock.ts']) {
+      const doc = read(path);
+      expect(doc, path).toMatch(/EVEN SPLIT/);
+      expect(doc, path).toMatch(/on screen included/);
+      // Cited to the ruling that fixed it, so the next reader can check.
+      expect(doc, path).toMatch(/2026-09-07/);
+    }
+  });
+
   it('keeps every locked battle; the on-screen battle and every untouched one enter as the even split', () => {
     let s = begin();
     s = reduce(s, { type: 'dial', stat: 2, target: 70 }); // battle 1 shaped, clock running

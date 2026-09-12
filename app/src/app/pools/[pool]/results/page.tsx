@@ -105,10 +105,13 @@ export default async function ResultsPage({ params }: { params: Promise<{ pool: 
             </p>
             {/* v3 D3: browser-side decrypt + re-score of the seats above
                 yours, and the share card for your own result. */}
+            {/* F-07: "above" is decided by RANK, which lives in the
+                verified archive — never by the payout amount, which under
+                D-E2 can only ever name the winner. */}
             <WhatBeatYouPanel
               pool={pool.pool}
               secretHex={pool.secret}
-              results={results}
+              archive={archive}
               seatByPlayer={Object.fromEntries(entries.map((e) => [e.player, e.idx]))}
             />
             <PaidConfetti
@@ -137,7 +140,7 @@ export default async function ResultsPage({ params }: { params: Promise<{ pool: 
             {archive && <AllBattles uri={archive.uri} />}
           </>
         )}
-        <VerifyAlways pool={pool.pool} />
+        <VerifyAlways pool={pool.pool} bundleUri={archive?.uri} />
       </main>
       <TabBar />
     </>

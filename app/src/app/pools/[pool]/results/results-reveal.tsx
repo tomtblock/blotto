@@ -87,11 +87,20 @@ export function ResultsReveal({ rows }: { rows: RevealRow[] }) {
   );
 }
 
-/** The verify affordance — always on screen with the results (R20/D3-B). */
-export function VerifyAlways({ pool }: { pool: string }) {
+/**
+ * The verify affordance — always on screen with the results (R20/D3-B).
+ *
+ * D-04 (audit 2026-09-11): the published bundle's address rides in the link
+ * whenever this page holds one, so the verify page opens with BOTH inputs
+ * filled in rather than asking a player to find a gateway address by hand.
+ */
+export function VerifyAlways({ pool, bundleUri }: { pool: string; bundleUri?: string }) {
+  const href = bundleUri
+    ? `/verify?pool=${pool}&bundle=${encodeURIComponent(bundleUri)}`
+    : `/verify?pool=${pool}`;
   return (
     <Link
-      href={`/verify?pool=${pool}`}
+      href={href}
       className="flex h-12 items-center justify-center rounded-xl border border-line text-[15px] font-medium text-ink transition-colors hover:border-brand hover:text-brand"
     >
       {COPY.verify.title}

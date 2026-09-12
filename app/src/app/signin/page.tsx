@@ -4,6 +4,7 @@
  * (every deployed "sign in" tap 404ed — production incident, 2026-08-28).
  * Static shell; all auth behaviour lives in the client component.
  */
+import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { AppHeader } from '@/components/shell/app-header';
 import { TabBar } from '@/components/shell/tab-bar';
@@ -20,7 +21,11 @@ export default function SignInPage() {
         <h1 className="mb-2 font-display text-[34px] leading-[38px] font-extrabold text-ink">
           {COPY.signin.title}
         </h1>
-        <SignInClient />
+        {/* The client reads `?next=` (D-17), so it needs a boundary like
+            every other search-param reader in the app. */}
+        <Suspense>
+          <SignInClient />
+        </Suspense>
       </main>
       <TabBar />
     </>

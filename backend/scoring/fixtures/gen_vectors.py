@@ -514,8 +514,78 @@ def main() -> None:
         with open(rust_path, "w") as f:
             f.write(rust_merkle_vectors(pools))
         print(f"wrote {rust_path}")
+    elif "--check" in sys.argv:
+        sys.exit(check(out + "\n", rust_merkle_vectors(pools)))
     else:
         print(out)
+
+
+def check(vectors_text: str, rust_text: str) -> int:
+    """Compare what this oracle computes NOW with what is committed.
+
+    Added 2026-09-12 (audit 2026-09-11, finding F-13). Until then nothing ran
+    this file in CI, so the committed vectors and the generator that is
+    supposed to be their independent source could drift apart in silence:
+    an edit here that nobody regenerated, or an edit to vectors.json that
+    this file would never produce, both passed every lane. The whole point
+    of a Python oracle (CLAUDE.md, output expectations) is that the numbers
+    a player is paid come from something other than the engine under test —
+    which only holds while the committed numbers are the oracle's.
+
+    Regenerates in memory, compares byte for byte, prints the differing
+    lines, and returns a non-zero exit status on any difference. Paths are
+    resolved from THIS FILE rather than the working directory so CI can run
+    it from anywhere.
+    """
+    import difflib
+    import os
+
+    here = os.path.dirname(os.path.abspath(__file__))
+    root = os.path.abspath(os.path.join(here, "..", "..", ".."))
+    targets = [
+        (os.path.join(here, "vectors.json"), vectors_text),
+        (
+            os.path.join(root, "programs", "blotto_cup", "src", "merkle_vectors.rs"),
+            rust_text,
+        ),
+    ]
+
+    bad = 0
+    for path, expected in targets:
+        shown = os.path.relpath(path, root)
+        try:
+            with open(path) as f:
+                committed = f.read()
+        except FileNotFoundError:
+            print(f"DRIFT: {shown} does not exist; the oracle produces it")
+            bad = 1
+            continue
+        if committed == expected:
+            print(f"ok: {shown} is exactly what the oracle computes")
+            continue
+        bad = 1
+        print(f"DRIFT: {shown} is not what the oracle computes")
+        diff = list(
+            difflib.unified_diff(
+                committed.splitlines(),
+                expected.splitlines(),
+                fromfile=f"{shown} (committed)",
+                tofile=f"{shown} (oracle)",
+                lineterm="",
+                n=1,
+            )
+        )
+        for line in diff[:40]:
+            print(f"  {line}")
+        if len(diff) > 40:
+            print(f"  … and {len(diff) - 40} more diff lines")
+    if bad:
+        print()
+        print("Regenerate with `python3 fixtures/gen_vectors.py --write` from")
+        print("backend/scoring/, and commit both files together. If the oracle")
+        print("is what changed, that is a scoring-rule change and needs its own")
+        print("review — the committed vectors are what players recompute against.")
+    return bad
 
 
 if __name__ == "__main__":

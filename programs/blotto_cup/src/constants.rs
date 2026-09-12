@@ -142,10 +142,95 @@ pub const PACKET_MAX_FUTURE_SKEW_SECS: i64 = 5;
 /// remaining bag), the published rarity statement describes the bag rather
 /// than the outcome (PID §3 reissue, founder-owned). Class is cosmetic and
 /// read by nothing in the scoring path (PID §8.4).
-/// Mirrors `blotto_randomness::LAUNCH_CLASS_COUNTERS`; asserted equal in tests.
+/// The bag exists in three copies, and each one is now checked (2026-09-12,
+/// audit A-17 — until then this line claimed an assertion that existed
+/// nowhere):
+///
+///   - `blotto_randomness::LAUNCH_CLASS_COUNTERS`, the draw crate's own
+///     copy — asserted equal by `class_counter_mirrors_hold` below;
+///   - `crates/blotto-randomness/fixtures/vectors.json`, the Python oracle
+///     the draw vectors are generated from — asserted equal by the same
+///     test, so this constant is pinned to the oracle and not only to our
+///     own Rust;
+///   - `backend/class-digest/src/digest.ts`, the verify page's replay —
+///     checked against THIS constant by `scripts/check-mirrors.py`, a CI
+///     lane, because no Rust test can read a TypeScript module.
 pub const LAUNCH_CLASS_COUNTERS: [u16; 5] = [38, 15, 7, 3, 1];
 
 /// The class digest reads the slot hash from at least this many slots back
 /// (TECH-ARCH §4: `slot_hash_{N-5}`). The delay is finalized before the
 /// executing slot runs, so the executing validator has no influence over it.
 pub const SLOT_HASH_DELAY: u64 = 5;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The Python oracle the class-draw vectors are generated from. Read as
+    /// text and matched with whitespace removed: the program crate carries no
+    /// JSON parser and cannot gain one (a dependency added for a test still
+    /// enters the on-chain crate's tree), and the generator writes plain
+    /// integers, so a textual match is exact. `#[cfg(test)]` keeps this out
+    /// of the SBF artifact entirely.
+    const DRAW_VECTORS_JSON: &str =
+        include_str!("../../../crates/blotto-randomness/fixtures/vectors.json");
+
+    /// The class bag is mirrored in three places (see `LAUNCH_CLASS_COUNTERS`).
+    /// Two of them are Rust and are asserted here; the third is TypeScript and
+    /// is checked by `scripts/check-mirrors.py` in CI.
+    ///
+    /// Why it matters that this holds: `open_pool` seeds every pool's bag from
+    /// THIS constant, while the draw itself — `weighted_class_draw` — lives in
+    /// `blotto-randomness` and is validated by that crate's property tests
+    /// against ITS constant. If the two drifted, the published rarity statement
+    /// and the tests proving the draw is unbiased would be describing a
+    /// different bag from the one every pool actually uses, and nothing would
+    /// have failed. The class is cosmetic (PID §8.4), so this is a published
+    /// -claim correctness matter, never a scoring or money one.
+    #[test]
+    fn class_counter_mirrors_hold() {
+        assert_eq!(
+            LAUNCH_CLASS_COUNTERS,
+            blotto_randomness::LAUNCH_CLASS_COUNTERS,
+            "the pool's class bag and the draw crate's must be the same bag"
+        );
+        assert_eq!(
+            CAPACITY,
+            blotto_randomness::CAPACITY,
+            "seats per pool must agree with the crate that draws one class per seat"
+        );
+
+        // A FULL pool empties the bag exactly (PID §3). Below capacity the bag
+        // is drawn down but not emptied, which is D-E4's accepted consequence.
+        let total: u32 = LAUNCH_CLASS_COUNTERS.iter().map(|&c| c as u32).sum();
+        assert_eq!(
+            total, CAPACITY as u32,
+            "the class counters must sum to the pool capacity"
+        );
+
+        // And pinned to the oracle, so a hand-edit on the Rust side that also
+        // "fixed" the crate's copy still fails.
+        let compact: String = DRAW_VECTORS_JSON
+            .chars()
+            .filter(|c| !c.is_whitespace())
+            .collect();
+        let expected = format!(
+            "\"class_counters\":[{}]",
+            LAUNCH_CLASS_COUNTERS
+                .iter()
+                .map(|c| c.to_string())
+                .collect::<Vec<_>>()
+                .join(",")
+        );
+        assert!(
+            compact.contains(&expected),
+            "the published vectors must be generated from this bag; expected {expected} in \
+             crates/blotto-randomness/fixtures/vectors.json — regenerate it with \
+             `python3 fixtures/gen_vectors.py --write` if the bag legitimately changed"
+        );
+        assert!(
+            compact.contains(&format!("\"capacity\":{}", CAPACITY)),
+            "the published vectors must carry this capacity"
+        );
+    }
+}

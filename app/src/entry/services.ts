@@ -27,6 +27,39 @@ import {
   type IssuedPacketBytes,
 } from './register-tx';
 
+/**
+ * The entry service answered, and the answer was no (audit 2026-09-11,
+ * D-12).
+ *
+ * Every non-2xx from the ciphertext store and the packet endpoint used to
+ * become a bare `Error`, which the outcome seam then classified as
+ * `rpc-failure` — "the network request did not go through, check your
+ * connection and try again". For a refusal that is false twice over: the
+ * request went through perfectly, and the retry it offers can only be
+ * refused again. A player meets that at the END of the ninety seconds.
+ *
+ * `status` is the HTTP status, or null when nothing answered at all. The
+ * REASON is deliberately not carried: the service gives a generic refusal
+ * on purpose (PID §8), and this type must not become a channel that leaks
+ * one.
+ */
+export class EntryServiceError extends Error {
+  constructor(
+    readonly stage: 'ciphertext' | 'packet',
+    readonly status: number | null,
+    message: string
+  ) {
+    super(message);
+    this.name = 'EntryServiceError';
+  }
+
+  /** True when the service DECIDED (4xx), as opposed to being unreachable
+   * or broken (5xx, or no answer at all). A decision is not retryable. */
+  get refused(): boolean {
+    return this.status !== null && this.status >= 400 && this.status < 500;
+  }
+}
+
 /** A register that reached a terminal FAILED state in the tx seam — carries
  * the classified failure so the reveal machine renders honest copy. */
 export class RegisterFailedError extends Error {
@@ -82,28 +115,43 @@ export function makeLiveEntryServices(cfg: LiveEntryServicesConfig): EntryServic
       const signature = await cfg.signer.signMessage(
         ciphertextMessage(pool, player, ciphertext)
       );
-      const res = await fetch(`${api()}/ciphertexts`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          pool,
-          player,
-          ciphertext: toB64(ciphertext),
-          signature: toB64(signature),
-        }),
-      });
-      if (!res.ok) throw new Error(`ciphertext store: ${res.status}`);
+      let res: Response;
+      try {
+        res = await fetch(`${api()}/ciphertexts`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            pool,
+            player,
+            ciphertext: toB64(ciphertext),
+            signature: toB64(signature),
+          }),
+        });
+      } catch (error) {
+        // Nothing answered: this one really IS a connection problem.
+        throw new EntryServiceError('ciphertext', null, `ciphertext store unreachable: ${String(error)}`);
+      }
+      if (!res.ok) {
+        throw new EntryServiceError('ciphertext', res.status, `ciphertext store: ${res.status}`);
+      }
     },
 
     async requestPacket(pool, player): Promise<IssuedPacketBytes> {
-      const res = await fetch(`${api()}/packet`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ wallet: player, pool }),
-      });
+      let res: Response;
+      try {
+        res = await fetch(`${api()}/packet`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ wallet: player, pool }),
+        });
+      } catch (error) {
+        throw new EntryServiceError('packet', null, `packet service unreachable: ${String(error)}`);
+      }
       if (!res.ok) {
-        // The service's ONE generic rejection — no reason to relay, none given.
-        throw new Error('entry unavailable');
+        // The service's ONE generic rejection — no reason to relay, none
+        // given. The STATUS still says whether it decided (403) or fell
+        // over (5xx), which is the difference between "no" and "not now".
+        throw new EntryServiceError('packet', res.status, 'entry unavailable');
       }
       const body = (await res.json()) as {
         ok: boolean;
@@ -112,7 +160,8 @@ export function makeLiveEntryServices(cfg: LiveEntryServicesConfig): EntryServic
         publicKey?: string;
       };
       if (!body.ok || !body.message || !body.signature || !body.publicKey) {
-        throw new Error('entry unavailable');
+        // A 200 that carries no packet is a refusal in the body.
+        throw new EntryServiceError('packet', res.status, 'entry unavailable');
       }
       return {
         message: fromB64(body.message),
@@ -177,10 +226,12 @@ export function makeLiveEntryServices(cfg: LiveEntryServicesConfig): EntryServic
       return out;
     },
 
-    async deviceHash() {
-      // C11: the persisted per-browser marker (device.ts documents why it
-      // is not the Privy fingerprint R19 assumed — the SDK has none).
-      return deviceMarker();
+    async deviceHash(pool) {
+      // C11: derived per pool from a per-browser secret that never leaves
+      // this device (device.ts documents both why it is not the Privy
+      // fingerprint R19 assumed — the SDK has none — and why the value sent
+      // is a derivation rather than the secret itself, audit B-40).
+      return deviceMarker(pool);
     },
   };
 }

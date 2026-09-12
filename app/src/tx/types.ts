@@ -86,6 +86,11 @@ export type TxFailureKind =
   // approval slower than that is refused on-chain as `PacketStale` (6019).
   // It used to fall through to the generic network sentence with no retry.
   | "packet-stale"
+  // 2026-09-11 (audit D-12): the ENTRY SERVICE declined, before anything was
+  // signed — an eligibility or availability check, answered with a generic
+  // refusal by design. Distinct from "rpc-failure", which is the honest
+  // "we could not reach it": a refusal is an answer, and a retry repeats it.
+  | "entry-refused"
   | "rpc-failure"
   | "outcome-unreadable"
   | "outcome-mismatch";

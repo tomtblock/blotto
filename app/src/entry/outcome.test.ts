@@ -10,7 +10,7 @@ import { createHash } from 'crypto';
 import { PublicKey } from '@solana/web3.js';
 import type { TxRpc } from '@/tx/tx-rpc';
 import { submitForReveal } from './outcome';
-import { RegisterFailedError } from './services';
+import { EntryServiceError, RegisterFailedError } from './services';
 import type { EntryServices } from './submit';
 
 const PLAYER = new PublicKey(createHash('sha256').update('player').digest()).toBase58();
@@ -60,6 +60,29 @@ const rpcWithLogs = (logs: readonly string[] | null): TxRpc =>
     },
   }) as unknown as TxRpc;
 
+/** A node that has confirmed the signature but cannot serve the
+ * transaction yet — the ordinary lag D-34 is about. Answers `null` (or
+ * throws) for the first `lagged` reads, then serves the logs. */
+const laggingRpc = (lagged: number, mode: 'null' | 'throw' = 'null') => {
+  let calls = 0;
+  return {
+    calls: () => calls,
+    rpc: {
+      async getTransaction() {
+        calls++;
+        if (calls <= lagged) {
+          if (mode === 'throw') throw new Error('node behind');
+          return null;
+        }
+        return { slot: 1n, err: null, logMessages: ['x', entryRegisteredLog()] };
+      },
+    } as unknown as TxRpc,
+  };
+};
+
+/** No waiting in the suite: the retry's timing is not what is under test. */
+const noSleep = { sleep: async () => {}, delayMs: 0 };
+
 // A valid five-stat allocation summing to 100, seven times over.
 const battles = Array.from({ length: 7 }, () => [20, 20, 20, 20, 20]) as never;
 const input = {
@@ -87,7 +110,12 @@ describe('submitForReveal', () => {
 
   it('confirmed but unreadable logs: outcome-unreadable, broadcast true', async () => {
     for (const logs of [null, [] as string[], ['Program log: nothing']]) {
-      const r = await submitForReveal(services(async () => 'SIG'), rpcWithLogs(logs), input);
+      const r = await submitForReveal(
+        services(async () => 'SIG'),
+        rpcWithLogs(logs),
+        input,
+        noSleep
+      );
       expect(r.kind).toBe('failed');
       if (r.kind === 'failed') {
         expect(r.failure.kind).toBe('outcome-unreadable');
@@ -114,6 +142,87 @@ describe('submitForReveal', () => {
       input
     );
     expect(r).toEqual({ kind: 'failed', failure });
+  });
+
+  /*
+   * D-34 (audit 2026-09-11): one getTransaction call, no retry. A node that
+   * has confirmed the signature but not yet caught up cost the player the
+   * class reveal they had just paid for.
+   */
+  describe('the post-confirmation outcome read (D-34)', () => {
+    it('chases a lagging node instead of giving up on the first empty read', async () => {
+      const { rpc, calls } = laggingRpc(3);
+      const r = await submitForReveal(services(async () => 'SIG'), rpc, input, noSleep);
+      expect(r.kind).toBe('confirmed');
+      expect(calls()).toBe(4);
+    });
+
+    it('treats a THROWING read the same as an empty one — both mean "not yet"', async () => {
+      const { rpc } = laggingRpc(2, 'throw');
+      const r = await submitForReveal(services(async () => 'SIG'), rpc, input, noSleep);
+      expect(r.kind).toBe('confirmed');
+    });
+
+    it('gives up after a bounded number of attempts, never loops for ever', async () => {
+      let calls = 0;
+      const never = {
+        async getTransaction() {
+          calls++;
+          return null;
+        },
+      } as unknown as TxRpc;
+      const r = await submitForReveal(services(async () => 'SIG'), never, input, {
+        ...noSleep,
+        attempts: 3,
+      });
+      expect(calls).toBe(3);
+      expect(r.kind).toBe('failed');
+      // The entry IS on-chain; the copy must still be the recovery one.
+      if (r.kind === 'failed') expect(r.failure.kind).toBe('outcome-unreadable');
+    });
+  });
+
+  /*
+   * D-12 (audit 2026-09-11): every unenumerated entry failure — a
+   * compliance refusal after the ninety-second run included — was reported
+   * as a connection problem, with a retry that cannot work.
+   */
+  describe('an entry the service declined (D-12)', () => {
+    const refusing = (status: number | null, stage: 'ciphertext' | 'packet' = 'packet') =>
+      services(async () => {
+        throw new EntryServiceError(stage, status, 'entry unavailable');
+      });
+
+    it('is entry-refused, with no retry offered', async () => {
+      for (const status of [400, 403, 409, 429]) {
+        const r = await submitForReveal(refusing(status), rpcWithLogs(null), input, noSleep);
+        expect(r.kind).toBe('failed');
+        if (r.kind === 'failed') {
+          expect(r.failure.kind, String(status)).toBe('entry-refused');
+          expect(r.failure.retryable).toBe(false);
+          expect(r.failure.broadcast).toBe(false);
+          // Not the connection sentence, which is what it used to say.
+          expect(r.failure.message).not.toMatch(/connection/i);
+        }
+      }
+    });
+
+    it('a service that is DOWN or unreachable is still an honest connection failure', async () => {
+      for (const status of [500, 502, 503, null]) {
+        const r = await submitForReveal(refusing(status), rpcWithLogs(null), input, noSleep);
+        expect(r.kind).toBe('failed');
+        if (r.kind === 'failed') {
+          expect(r.failure.kind, String(status)).toBe('rpc-failure');
+          expect(r.failure.retryable).toBe(true);
+        }
+      }
+    });
+
+    it('holds for the ciphertext store too, not only the packet endpoint', async () => {
+      const r = await submitForReveal(refusing(409, 'ciphertext'), rpcWithLogs(null), input, noSleep);
+      expect(r.kind).toBe('failed');
+      if (r.kind === 'failed') expect(r.failure.kind).toBe('entry-refused');
+    });
   });
 
   it('a service throw becomes a non-broadcast rpc-failure, never a rejection', async () => {

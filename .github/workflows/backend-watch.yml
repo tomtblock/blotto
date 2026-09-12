@@ -22,6 +22,17 @@
 
 name: backend-watch
 
+# Least privilege (audit 2026-09-11, B-49). This job holds FLY_API_TOKEN and
+# is allowed to START a stopped machine, so it is the scheduled workflow with
+# the widest blast radius of any that runs unattended — every fifteen
+# minutes, with nobody watching. Without a block its GITHUB_TOKEN carries the
+# repository's default permissions, which on a repository created before 2023
+# are read-write on `contents`, `packages`, `issues` and the review surface.
+#
+# `{}` and not `contents: read`: this workflow never checks the repository
+# out and runs nothing from it. It needs no scope at all.
+permissions: {}
+
 on:
   schedule:
     - cron: '*/15 * * * *'

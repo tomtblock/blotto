@@ -60,19 +60,77 @@ describe('submitAttestation (fail-closed)', () => {
   const answering = (status: number): typeof fetch =>
     (async () => ({ status, ok: status < 300, json: async () => ({}) })) as never;
 
-  it('true only on a 204 from the entry service', async () => {
-    expect(await submitAttestation('https://e', signer, WALLET, T1, answering(204))).toBe(true);
+  it('ok only on a 204 from the entry service', async () => {
+    expect(await submitAttestation('https://e', signer, WALLET, T1, answering(204))).toEqual({
+      ok: true,
+    });
     expect(hasLocalAttestation(WALLET, 1)).toBe(true);
   });
 
-  it('false without an API, without signMessage, on refusal, and on network failure', async () => {
-    expect(await submitAttestation(undefined, signer, WALLET, T1, answering(204))).toBe(false);
-    expect(await submitAttestation('https://e', {}, WALLET, T1, answering(204))).toBe(false);
-    expect(await submitAttestation('https://e', signer, WALLET, T1, answering(403))).toBe(false);
+  /*
+   * C-13 (audit 2026-09-11). Every one of these used to be the same bare
+   * `false`, and the gate rendered one sentence for all of them: "check
+   * your connection and try again". Two of them cannot be fixed by trying
+   * again at all, and one of them is the player saying no.
+   */
+  it('names WHY it failed, so the screen can say something true', async () => {
     const failing: typeof fetch = (async () => {
       throw new Error('offline');
     }) as never;
-    expect(await submitAttestation('https://e', signer, WALLET, T1, failing)).toBe(false);
+    const declining = {
+      signMessage: async () => {
+        throw new Error('User rejected the request');
+      },
+    };
+    const broken = {
+      signMessage: async () => {
+        throw new Error('the wallet returned a malformed response');
+      },
+    };
+    expect(await submitAttestation(undefined, signer, WALLET, T1, answering(204))).toEqual({
+      ok: false,
+      reason: 'not-configured',
+    });
+    expect(await submitAttestation('https://e', {}, WALLET, T1, answering(204))).toEqual({
+      ok: false,
+      reason: 'cannot-sign',
+    });
+    expect(await submitAttestation('https://e', signer, WALLET, T1, answering(403))).toEqual({
+      ok: false,
+      reason: 'refused',
+    });
+    expect(await submitAttestation('https://e', signer, WALLET, T1, failing)).toEqual({
+      ok: false,
+      reason: 'unreachable',
+    });
+    expect(await submitAttestation('https://e', declining, WALLET, T1, answering(204))).toEqual({
+      ok: false,
+      reason: 'declined',
+    });
+    expect(await submitAttestation('https://e', broken, WALLET, T1, answering(204))).toEqual({
+      ok: false,
+      reason: 'cannot-sign',
+    });
+  });
+
+  it('stops waiting on a prompt that never answers, instead of hanging for ever', async () => {
+    const silent = { signMessage: () => new Promise<Uint8Array>(() => {}) };
+    expect(
+      await submitAttestation('https://e', silent, WALLET, T1, answering(204), { timeoutMs: 5 })
+    ).toEqual({ ok: false, reason: 'timed-out' });
+    expect(hasLocalAttestation(WALLET, 1)).toBe(true); // unchanged by a timeout
+  });
+
+  it('can be cancelled, and says so — the gate offers a way out', async () => {
+    const silent = { signMessage: () => new Promise<Uint8Array>(() => {}) };
+    const controller = new AbortController();
+    const pending = submitAttestation('https://e', silent, 'Cance1', T1, answering(204), {
+      signal: controller.signal,
+    });
+    controller.abort();
+    expect(await pending).toEqual({ ok: false, reason: 'cancelled' });
+    // Cancelling records nothing: the wallet is still unattested.
+    expect(hasLocalAttestation('Cance1', 1)).toBe(false);
   });
 
   it('the device cache is keyed by version — a bump re-prompts', () => {

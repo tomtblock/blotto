@@ -6,10 +6,13 @@
 #   node           — every backend package (typecheck + test), the offline
 #                    twenty-pool rehearsal, and the app's lint / typecheck /
 #                    test / build
-#   gitleaks       — filesystem scan of the checkout, pinned binary,
+#   gitleaks       — the checkout AND the git history, pinned binary,
 #                    checksum-verified
-#   standing-rules — the PID §8.7 language gate, the two structural greps, and
-#                    the env-example coverage check
+#   standing-rules — the PID §8.7 language gate, the structural greps, the
+#                    env-example coverage check, the container-user check,
+#                    the Python oracles' fixtures, the Rust↔TypeScript mirror
+#                    check, and the self-tests of the deploy gate and the
+#                    program-deploy script
 #
 # No Solana CLI or Anchor install here — nothing in this lane builds SBF. The
 # compiled artifact and the LiteSVM suite that drives it are the separate
@@ -122,14 +125,17 @@ jobs:
   gitleaks:
     name: gitleaks
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # Full history: the `git` scan below needs commits, and a shallow
+          # clone has none to give it (audit 2026-09-11, B-51). 237 commits
+          # and 147 MB of objects — seconds, not minutes.
+          fetch-depth: 0
 
       # Binary, not the license-gated wrapper action. Pinned version + checksum.
-      # Filesystem scan of the checkout only.
       - name: Install gitleaks 8.30.1 (pinned, checksum-verified)
         run: |
           curl -sSL -o /tmp/gitleaks.tar.gz \
@@ -138,8 +144,40 @@ jobs:
           tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
           sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
 
+      # The checkout as it stands. This is what the lane has always done and
+      # it stays: it sees files a history scan does not reason about, and it
+      # is the fastest signal on the change in front of us.
       - name: Scan working tree
         run: gitleaks dir . --no-banner --redact --config .gitleaks.toml
+
+      # THE HISTORY (audit 2026-09-11, B-51). The working-tree scan sees only
+      # what the checkout currently contains, so a key committed by mistake
+      # and deleted in the next commit was invisible to this lane for ever —
+      # while remaining perfectly readable to anyone who clones the
+      # repository. Deleting a secret from the tip is not revoking it.
+      #
+      # WHICH RANGE, AND WHY. On a PR event, the branch's OWN commits: that
+      # is the new history this change proposes to add, it is the only part
+      # the author can still rewrite before it lands, and it keeps the cost
+      # of the always-on lane proportional to the change rather than to the
+      # repository. On a push to main, the WHOLE history — which is the
+      # belt-and-braces pass, and the reason a schedule is not needed here:
+      # every commit that reaches main is scanned in full on the way in, so
+      # there is no window a nightly sweep would close that this does not.
+      #
+      # If a scan of main's full history ever grows past a minute or two,
+      # move the `push` branch of this step to a scheduled workflow rather
+      # than dropping it — but do not put it back to tree-only.
+      - name: Scan the git history
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "scanning this branch's own commits"
+            gitleaks git . --no-banner --redact --config .gitleaks.toml \
+              --log-opts "${{ github.event.pull_request.base.sha }}..HEAD"
+          else
+            echo "scanning the full history ($(git rev-list --count HEAD) commits)"
+            gitleaks git . --no-banner --redact --config .gitleaks.toml
+          fi
 
   # Roadmap §3 standing rules 4–6: the PID §8.7 language gate and the two
   # structural greps (no `class` in the scoring path; the vault's exits are
@@ -161,8 +199,32 @@ jobs:
       - name: Structural rules (roadmap §3 rules 5–6)
         run: ./scripts/check-standing-rules.sh
 
+      # Widened 2026-09-12 to see `env.NAME` property reads, the backend's
+      # dominant shape, which it was blind to (audit 2026-09-11, A-09 / E-07 /
+      # D-38). It now self-tests before reporting, like its neighbours.
       - name: Env-example coverage (E1)
         run: ./scripts/check-env-examples.sh
+
+      # Every service image drops to a non-root user before its entrypoint
+      # (audit 2026-09-11, E-22). Two of the four decode the settlement
+      # signer into shared memory at boot.
+      - name: Container user (E-22)
+        run: ./scripts/check-container-user.sh
+
+      # The three Python oracles still produce the vectors that are committed
+      # (audit 2026-09-11, F-13). These are the numbers a player recomputes
+      # their own result against, and the whole point of computing them in a
+      # second language is lost the moment the two can drift unobserved.
+      - name: The Python oracles reproduce their fixtures (F-13)
+        run: ./scripts/check-fixtures.sh
+
+      # Rust and TypeScript still agree (audit 2026-09-11, F-11). Constants
+      # mirrored by hand across the two languages, and the `#[event]` structs
+      # against the decoders that read them field by field. A regression on
+      # 2026-09-12 moved a Rust figure and left three TypeScript mirrors
+      # behind, green in every lane; this is the check that catches that.
+      - name: Rust and TypeScript agree (F-11)
+        run: python3 scripts/check-mirrors.py
 
       # The deploy gate's decision logic (audit 2026-09-11, G-10 / E-16). Its
       # live inputs need a GitHub token, so the only way to know it still
@@ -172,3 +234,12 @@ jobs:
       # pass CI for ever, which is the same fault it exists to catch.
       - name: The deploy gate still judges correctly
         run: ./scripts/ci-gate.sh --self-test
+
+      # The program-deploy script's two decisions (audit 2026-09-11, A-11 /
+      # E-18): which URL a cluster name resolves to, and whether the node
+      # said "no program here" or failed to answer at all. Both need a
+      # cluster to exercise live, and both were wrong in a way that disabled
+      # the programdata-extend guard silently, so both are driven through
+      # fixtures here instead.
+      - name: The program deploy still tells an outage from a fresh cluster
+        run: ./scripts/deploy-devnet.sh --self-test

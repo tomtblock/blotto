@@ -16,7 +16,10 @@ what was intended. `01_PRODUCT_FACTS/PRODUCT-FACTS_BlottoCup_v1.md` states the
 same system for counsel and auditors, fact by fact with citations; this file is
 the engineer's version of it.
 
-Last verified against the branch: **2026-09-07**, full suite green.
+Last verified against the branch: **2026-09-12**. The program, the backend
+packages and the repository's gates were re-read and re-run for the
+2026-09-11 audit's X1 wave; the LiteSVM suite and `anchor build` were not
+re-run in that pass (they need the Solana toolchain — see §7).
 
 ---
 
@@ -71,16 +74,46 @@ Five deployable units. Four backend services on Fly, one frontend on Vercel:
 | `backend/detection` | Fly `blotto-review` | 8083 | The review desk: defines the five published integrity signals (the daemon runs them at settlement and persists the report), records named reviewers' signed decisions in an append-only log, and serves that log back. `POST /decisions` (reviewer-signed), `POST /appeals` (player-signed), `GET /decisions`, `GET /appeals` and `GET /pending` are public reads of a public log; `GET /detection` serves the persisted detection report and is the one operator-token route — it names players before a human has looked at them (ruling D-E9). |
 | `backend/reveal` | Fly `blotto-daemon` | 8084 health | The keeper and the crank. Opens pools, seals or refunds them at the deadline, reveals the secret, scores, commits results, pays, publishes the bundle. |
 
-Three of the packages are libraries rather than services: `backend/_shared`
+Five of the packages are libraries rather than services: `backend/_shared`
 (config, Postgres, monitoring, the event decoders), `backend/scoring` (the
 scoring engine, prize maths and the Merkle tree — one module, used by both the
-crank and the browser), and `backend/sealing` (the sealed-box payload format and
-pool-key custody).
+crank and the browser), `backend/sealing` (the sealed-box payload format and
+pool-key custody), `backend/sanctions` (list loading and screening, used by the
+entry gate and the crank alike), and `backend/class-digest` (the class draw
+replayed in TypeScript — its own package so the scoring path can never mention
+"class", and **imported by nothing today**: see §6).
 
 ## 3. The program
 
 Anchor 1.0.2 on Solana 3.1.10. Program id
 `5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17`, deployed to devnet only.
+
+**Where that id is written down.** `declare_id!` in
+`programs/blotto_cup/src/lib.rs` is the authority; nine other non-test files
+carry it as a literal, and a redeploy under a new keypair has to change all of
+them in one commit. The list is not advisory: the unit test
+`every_hard_coded_program_id_matches_declare_id` in `lib.rs` reads each of these
+files and fails if it disagrees with `declare_id!`.
+
+| File | What the copy is |
+|---|---|
+| `Anchor.toml` (×2) | `[programs.localnet]` and `[programs.devnet]` |
+| `config/custody.json` | The published custody disclosure the app renders |
+| `backend/indexer/src/config.ts` | `DEFAULT_PROGRAM_ID`, used when `BLOTTO_PROGRAM_ID` is unset |
+| `backend/detection/src/main.ts` | The same default, review service |
+| `backend/reveal/src/main.ts` | The same default, daemon |
+| `scripts/admin.ts` | `--program`'s default |
+| `scripts/check-deployed.ts` | The drift check's default |
+| `.github/workflows/deploy-backend.yml` | `PROGRAM_ID` for the deploy |
+| `app/.env.example` | Named in the comment beside `NEXT_PUBLIC_PROGRAM_ID` |
+
+Two more copies are outside the repository and beyond any test's reach:
+**Vercel's `NEXT_PUBLIC_PROGRAM_ID`**, set by hand in the project settings
+(`go-live-devnet.md` §3, the Vercel step), and **Fly's `BLOTTO_PROGRAM_ID`** on
+each service — that one is set by `deploy-backend.yml` from the `PROGRAM_ID` in
+the table above, so it follows automatically on the next backend deploy. The
+founder-facing checklists (`go-live-devnet.md`, `devnet-rehearsal-runbook.md`)
+also quote the id in worked examples.
 
 ### Accounts
 
@@ -101,12 +134,16 @@ once.
 
 ### Instructions
 
+Thirty-two instructions, by who may send them.
+
 *Admin (the Squads vault; devnet uses a fee-payer stand-in).* `init_config`,
 `migrate_config`, `set_keeper`, `set_pool_timing`, `set_paused`,
 `rotate_entry_signer`, `set_settlement_signer`, `set_open_tiers`,
 `set_vault_ceiling`, `set_kyc_threshold`, `set_detection_hard_block`,
 `set_tier_economics`, `set_treasury_policy`, `withdraw_platform`,
-`forfeit_escrow`.
+`forfeit_escrow`, `lift_sanctions_hold`. The last two are admin-signed for the
+same reason: a hot key may stop a payment, but only a deliberate multi-party
+act may uphold a forfeit or clear a list match.
 
 *Keeper only.* `open_pool`. **Nobody else, at any idle time**, since the
 founder ruling of 2026-09-07 (audit O9b/A5b). The 24-hour liveness fallback
@@ -127,8 +164,10 @@ seven-day safeguard window has passed.
 *Players.* `register`.
 
 *Settlement signer.* `reveal_pool_secret`, `commit_results`, `pay_prizes`,
-`pay_next_place`, `flag_entry`, `clear_flag`, `release_escrow` (the reviewed
-path).
+`pay_next_place`, `flag_entry`, `clear_flag`, `place_sanctions_hold`,
+`release_escrow` (the reviewed path). Placing a hold is settlement-signed
+because it moves nothing and has to be fast — a hold placed late is a payment
+made; lifting one is admin-signed, above.
 
 ### The money model
 
@@ -285,13 +324,28 @@ Stated plainly, because these were once published as though they were built.
    the founder listed (Australia, Belgium, India, the United States, the UAE and
    the GCC, China, Hong Kong, Singapore, Malaysia, Indonesia, and sanctioned
    jurisdictions) are not in `config/territories.json`.
-5. **Cost instrumentation and keeper thresholds.** The daemon does not measure
-   what a pool cycle costs and has no balance-driven halt. Only a test seam
-   exists.
+5. **Cost instrumentation.** The daemon does not measure what a pool cycle
+   costs; only a test seam for that measurement exists. It does have a
+   balance threshold, but a coarse one: `assertCanPayFees` refuses to start
+   when the settlement signer holds under 0.05 SOL (`backend/reveal/src/startup.ts`),
+   and `/health` re-reads the balance every tick. Nothing halts a *running*
+   daemon as the balance falls — it keeps ticking and the transactions begin
+   to fail.
 6. **The live twenty-pool devnet rehearsal.** The offline rehearsal runs in CI;
    the funding-and-sweep harness for a real devnet run has no runner wired.
 7. **Turnkey co-signing for settlement.** The settlement key is a keypair file
    decoded into tmpfs at boot.
+8. **The verify page does not replay the class draw.** `backend/class-digest`
+   implements the replay in TypeScript, pinned to the same Python vectors as
+   the Rust crate and mirror-checked against the program's class bag by
+   `scripts/check-mirrors.py` — but no application module imports it, so a
+   player who wants to recompute their own class does it themselves from the
+   published events (audit 2026-09-11, A-21/A-31/F-18). What is published is
+   still true: the rules copy says "every class draw is replayable from
+   published on-chain data", and the inputs are all on chain —
+   `PoolVrfSeeded.vrf_seed` plus each `EntryRegistered`'s `index`,
+   `slot_hash`, pool and player. What is missing is the convenience of a page
+   that does it for you.
 
 Items 1–3 are tracked by `app/src/copy/published-claims.test.ts`, which fails
 the build if a published promise is added without a decision about whether we
@@ -303,14 +357,30 @@ updated here.
 ```
 npm run setup                      # installs every backend package, then the app
 cargo test --workspace             # program unit tests + the 10k-case vault fuzz
-anchor build --ignore-keys         # the SBF artifact
+anchor build --ignore-keys         # the SBF artifact — needs the Solana toolchain
 cd tests/litesvm && cargo test     # the integration suite, against that artifact
 cd app && npm run lint && npm run typecheck && npm test && npm run build
+```
+
+Then every gate CI's `standing-rules` lane runs — each one self-tests, so a
+gate that has stopped working says so instead of reporting clean:
+
+```
 ./scripts/check-language.sh        # the PID §8.7 lexicon
 ./scripts/check-standing-rules.sh  # the vault's exit set, class out of scoring
 ./scripts/check-env-examples.sh    # every env var a service reads is documented
+./scripts/check-container-user.sh  # no service image runs as root
+./scripts/check-fixtures.sh        # the Python oracles reproduce their vectors
+python3 scripts/check-mirrors.py   # Rust and TypeScript constants agree
+./scripts/ci-gate.sh --self-test   # the deploy gate still judges correctly
 ```
 
-At the time of writing that is 786 tests, all green: 54 program unit tests
-(including a 10,000-case vault fuzz), 41 LiteSVM integration tests against the
-compiled artifact, 404 backend tests, 22 rehearsal tests and 265 app tests.
+Every backend package additionally has `npm run typecheck` and `npm test`
+(nine of them: `_shared`, `scoring`, `class-digest`, `sealing`, `sanctions`,
+`reveal`, `indexer`, `packet`, `detection`).
+
+The one step with a dependency outside this repository is `anchor build`: the
+LiteSVM suite runs against the compiled `.so`, and without the Solana toolchain
+installed it has no artifact to drive. The current pass counts, wave by wave,
+are in `../AUDIT_2026-09-11_RESPONSE.md` rather than repeated here — a number
+copied into this file is stale the next time a test is added.

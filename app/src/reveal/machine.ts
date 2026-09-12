@@ -46,7 +46,7 @@
  * beat's named duration (constants.ts) elapses.
  */
 
-import { entryRecorded } from "@/tx/errors";
+import { entryRecorded, landingUnresolved } from "@/tx/errors";
 import type { TxFailure } from "@/tx/types";
 import { EXTENDED_TELL_MIN_CLASS, TAP_COUNT } from "./constants";
 import type { RevealOutcome, RevealClass } from "./types";
@@ -243,7 +243,18 @@ export type RevealExit = "entered" | "not-entered" | "pending";
 export function settledExit(state: Extract<RevealState, { beat: "settled" }>): RevealExit {
   if (state.outcome !== null) return "entered";
   if (state.failure === null) return "pending";
-  return entryRecorded(state.failure) ? "entered" : "not-entered";
+  if (entryRecorded(state.failure)) return "entered";
+  /*
+   * Audit 2026-09-11 (C-14). A transaction that was broadcast and never
+   * resolved may STILL LAND, and this function used to answer "not-entered"
+   * for it — which sends the player back to the start of the flow and
+   * invites a second entry for a seat they may already hold. The failure
+   * carries the flag that says so; read it. Same answer as a dismissed
+   * stall, for the same reason: neither a second run nor "Sealed" is
+   * honest, and the pool page is.
+   */
+  if (landingUnresolved(state.failure)) return "pending";
+  return "not-entered";
 }
 
 export function revealVisual(state: RevealState): RevealVisual {

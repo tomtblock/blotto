@@ -37,6 +37,7 @@ import { Card } from "@/components/ui/card";
 import { Sheet } from "@/components/ui/sheet";
 import { Stat } from "@/components/ui/stat";
 import { CopyableAddressPill } from "@/components/copyable-address";
+import { openFunding } from "@/wallet/funding";
 
 /** Devnet only — see .env.example. Inlined at build; absent in real-money builds. */
 const FAUCET_ENABLED = process.env.NEXT_PUBLIC_DEVNET_FAUCET === "1";
@@ -56,6 +57,13 @@ export function WalletCard() {
   const [sendOpen, setSendOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [funding, setFunding] = useState(false);
+  /*
+   * D-14 (audit 2026-09-11): the provider's refusal — "Wallet funding is
+   * not enabled", which is its state today — used to go to the console and
+   * nowhere else, so the button was inert with no explanation. The player
+   * sees it now, with the route that does not depend on the provider.
+   */
+  const [fundingFailed, setFundingFailed] = useState(false);
 
   if (!wallet) {
     return (
@@ -143,16 +151,13 @@ export function WalletCard() {
             data-testid="wallet-add"
             onClick={async () => {
               setFunding(true);
-              try {
-                await auth.addFunds?.(wallet, { method: FUNDING_METHOD });
-              } catch (error) {
-                // The provider's refusal ("funding is not enabled") lands
-                // here; logged so an operator can see it. What the player
-                // reads is founder-owned copy — PHASE-N-REVIEW.
-                console.error("wallet: funding flow did not open:", error);
-              } finally {
-                setFunding(false);
-              }
+              setFundingFailed(false);
+              // D-14: an OUTCOME, not a swallowed throw (wallet/funding.ts).
+              const outcome = await openFunding(auth.addFunds, wallet, {
+                method: FUNDING_METHOD,
+              });
+              setFundingFailed(outcome !== "opened");
+              setFunding(false);
             }}
           >
             {COPY.wallet.addSol}
@@ -172,6 +177,12 @@ export function WalletCard() {
           </Button>
         ) : null}
       </div>
+
+      {fundingFailed ? (
+        <p role="status" data-testid="wallet-add-failed" className="text-[13px] leading-5 text-ink-muted">
+          {COPY.wallet.addSolUnavailable}
+        </p>
+      ) : null}
 
       {FAUCET_ENABLED ? (
         <p className="text-[13px] leading-5 text-ink-muted">

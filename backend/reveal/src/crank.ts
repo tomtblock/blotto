@@ -23,10 +23,48 @@
  * Failure modes (TECH-ARCH §5), implemented and published in the bundle:
  *   - lost ciphertext / decrypt failure / hash mismatch → the entry is
  *     scored as ALL LOSSES (the precise rule in `missing.ts`) and listed in
- *     `scored_as_all_losses`, which is the auditable record of the
- *     fee-refund-from-platform-share obligation (an off-chain payment);
+ *     `scored_as_all_losses`. The remedy is spelled out below;
  *   - custody export failure on a still-Open pool past its deadline → the
  *     full-refund path runs instead.
+ *
+ * # The lost-ciphertext remedy, in full (audit 2026-09-11, D-45)
+ *
+ * The published rule says that player's entry fee is refunded. NOTHING IN
+ * THIS CODEBASE PAYS IT. A human has to, and this is what they have and what
+ * they must do — previously the code recorded the debt and said nothing about
+ * discharging it, which is how a published promise quietly goes unkept.
+ *
+ * What the operator has, without asking anyone:
+ *   - the alert `reveal entry refund owed after lost ciphertext`
+ *     (`ALERT.reveal.entryRefundOwed`), raised once per affected pool below,
+ *     carrying `poolId`, `players` (base58) and `entryLamports`;
+ *   - the published bundle for that pool: `scored_as_all_losses` is the same
+ *     player list, `entry_lamports` the amount owed to EACH of them, and the
+ *     matching `entries[]` row carries the `status` that explains why
+ *     (`missing_ciphertext` | `decrypt_failed` | `hash_mismatch`);
+ *   - the chain: each player's `Entry` PDA for that pool, which proves the
+ *     entry was paid for.
+ *
+ * What they must do, and why no code does it for them: there is no
+ * instruction that refunds ONE entry of a sealed pool. `refund` only runs on
+ * a pool in `Refunding`, and a pool that reached settlement can never enter
+ * that state; the prize vault holds the pot for the winner and has no exit
+ * that could pay a non-winner. The money owed is the ENTRY, which lives in
+ * the platform treasury, and the treasury has exactly one exit —
+ * `withdraw_platform`, admin-signed (Squads) and floor-gated. So the payment
+ * is one admin transaction per owed player, destination = that player's
+ * wallet, amount = `entry_lamports`:
+ *
+ *   npx ts-node --transpile-only scripts/admin.ts withdraw-platform \
+ *     --amount <entry_lamports> --destination <player> --emit-proposal
+ *
+ * then approve it in Squads and record the signature against the pool in the
+ * runbook. Do NOT wait for a code path to appear: until the indexer carries
+ * the obligation as a table and the admin CLI grows a command for it (plan
+ * batch I1), the alert plus the bundle IS the ledger, and an unpaid entry is
+ * a broken published promise rather than a deferred feature.
+ * `docs/OPERATING-MANUAL.md` §7 ("An entry was scored as all losses") is the
+ * operator-facing copy of this.
  */
 
 import { sha256 } from '@noble/hashes/sha256';

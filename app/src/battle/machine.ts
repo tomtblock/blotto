@@ -7,11 +7,24 @@
  * value: ONE 90-second clock for the whole run. It starts on the player's
  * FIRST dial interaction — never on payment confirmation, so a slow
  * wallet cannot eat the clock — and runs through lock-ins and screen
- * advances. On expiry, the current battle locks at exactly what it shows
- * and every untouched battle locks at the even split. The per-battle
- * ~13 s guide is advisory display only and does not exist here.
- * `Pool.timer_seconds` (R9) is untouched on-chain; the rules-page copy
- * change is with counsel (master prompt, founder open item).
+ * advances. The per-battle ~13 s guide is advisory display only and does
+ * not exist here. `Pool.timer_seconds` (R9) is untouched on-chain; the
+ * rules-page copy change is with counsel (master prompt, founder open
+ * item).
+ *
+ * ON EXPIRY: every battle NOT LOCKED IN — the one on screen included,
+ * whatever shape its dials had — is entered as the EVEN SPLIT. Only
+ * `lock_in` records a shape.
+ *
+ * This paragraph said the opposite until 2026-09-11 (audit F-15): "the
+ * current battle locks at exactly what it shows". That was the v4 brief's
+ * original rule, and the founder's R9-b addendum of 2026-09-07 replaced it
+ * — `lockAllRemaining` below has implemented the addendum since, and cites
+ * it. The DOC was the stale half, so the doc is what changed here: the
+ * behaviour is founder-owned and ratified, and a reducer edited to match a
+ * superseded comment would have silently reverted a founder ruling.
+ * Pinned by machine.test.ts ("keeps every locked battle; the on-screen
+ * battle and every untouched one enter as the even split").
  *
  * R9's REJECTION OF RANDOMISE-ON-TIMEOUT still binds: lock-current is
  * deterministic, is the player's own inaction, and is disclosed. Do not
