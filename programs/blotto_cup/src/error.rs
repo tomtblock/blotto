@@ -71,6 +71,16 @@ pub enum ErrorCode {
     ResultsAlreadyCommitted,
     #[msg("Results not committed")]
     ResultsNotCommitted,
+    /// NEVER RETURNED — retained deliberately (audit 2026-09-11, A-16,
+    /// recorded KEEP). It belonged to the winners-array design; under D-E2
+    /// `commit_results` takes a seat-sorted payout list and proves
+    /// distinctness with a strictly-ascending seat check that returns
+    /// `PayoutListMalformed` instead. Kept because these codes are a WIRE
+    /// CONTRACT: Anchor numbers from 6000 in declaration order, so deleting
+    /// a variant renumbers every later one and silently changes the meaning
+    /// of every code already recorded in a client map, a test or an
+    /// operator's log. A dead variant costs nothing; a renumbered live one
+    /// misreports a failure to a player.
     #[msg("Winners are not pairwise distinct")]
     WinnersNotDistinct,
     #[msg("Invalid rank")]
@@ -91,6 +101,13 @@ pub enum ErrorCode {
     AlreadyRefunded,
     #[msg("No escrow held for this entry")]
     NoEscrow,
+    /// NEVER RETURNED — retained for the same reason as
+    /// `WinnersNotDistinct` above (audit 2026-09-11, A-16, recorded KEEP).
+    /// It validated a forfeit's destination pool back when a forfeit moved
+    /// money; since the founder rulings of 2026-09-07 `forfeit_escrow` moves
+    /// nothing at all — the share stays in its own pool's vault until
+    /// `pay_next_place` divides it — so there is no destination to refuse.
+    /// See the "Forfeit destination (history)" note in `escrow.rs`.
     #[msg("Destination pool is not an open pool of the same tier")]
     BadForfeitDestination,
     #[msg("Arithmetic overflow")]

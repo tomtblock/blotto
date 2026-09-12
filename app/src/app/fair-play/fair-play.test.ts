@@ -1,16 +1,24 @@
 /*
  * The Fair play page cannot show a number the study did not produce.
  *
- * Three bindings: the JSON the page imports is exactly the study's CSV
+ * Four bindings: the JSON the page imports is exactly the study's CSV
  * re-shaped (so the nightly reproduction of the CSV covers the page); the
- * table is built from the "mixed" rows at both ratified field sizes; and
- * every mechanism the page describes points at the file that implements it.
+ * table is built from the "mixed" rows at both ratified field sizes; the
+ * class-draw replay the page claims is RUN here against the committed
+ * cross-language vectors; and every other mechanism the page describes
+ * points at the file that implements it.
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import evidence from '@docs/skill-evidence/results.json';
 import { COPY } from '@/copy';
+import {
+  CLASS_NAMES,
+  LAUNCH_CLASS_COUNTERS,
+  deriveClassRandomness,
+  weightedClassDraw,
+} from '../../../../backend/class-digest/src';
 import { FULL_FIELD, MIN_FIELD, SKILL_CLASSES, skillTable } from './fair-play.config';
 
 const REPO = join(__dirname, '..', '..', '..', '..');
@@ -55,7 +63,94 @@ describe('the skill evidence the page shows', () => {
   });
 });
 
-describe('every mechanism the page describes exists', () => {
+/*
+ * THE CLASS-DRAW CLAIM, EXERCISED (audit 2026-09-11, F-18).
+ *
+ * The page renders COPY.rules.randomness, which ends "Every class draw is
+ * replayable from published on-chain data." Until now the only thing
+ * standing behind that sentence in this suite was `existsSync` on
+ * backend/class-digest/src/digest.ts — a check that passes for an empty
+ * file. These cases import the module the page's proof list cites and RUN
+ * the replay over `crates/blotto-randomness/fixtures/vectors.json`: digests
+ * and draw outcomes computed by Python, not by either implementation of
+ * ours, and the same file the Rust crate's own suite is pinned to.
+ *
+ * WHAT THIS PROVES: the replay exists, resolves from this app's build, and
+ * reproduces the committed vectors byte for byte — so the TypeScript the
+ * page points a player at agrees with the program that actually draws.
+ *
+ * WHAT IT DOES NOT PROVE, said plainly: that a player can perform the replay
+ * through this product. The verify page does not run this module (see its
+ * own header in backend/class-digest/src/index.ts), so "replayable" today
+ * means a player must feed the published events — `PoolVrfSeeded.vrf_seed`
+ * and each `EntryRegistered`'s index, slot hash, pool and player — into the
+ * replay themselves. Nothing here reads a published event, and no test in
+ * this suite does. Wiring the verify page is the outstanding work; when it
+ * lands, the case to add is one that replays a real bundle's draws.
+ */
+describe('the class-draw replay the page cites', () => {
+  const vectors = JSON.parse(
+    readFileSync(join(REPO, 'crates/blotto-randomness/fixtures/vectors.json'), 'utf8'),
+  ) as {
+    class_names: string[];
+    class_counters: number[];
+    capacity: number;
+    derive: Array<{
+      name: string;
+      vrf_seed: string;
+      slot_hash: string;
+      entry_index: number;
+      pool_pubkey: string;
+      player_pubkey: string;
+      expected: string;
+    }>;
+    draw: Array<{ name: string; rng_bytes: string; expected_index: number; expected_class: string }>;
+  };
+
+  const unhex = (h: string) => Uint8Array.from(Buffer.from(h, 'hex'));
+  const hex = (b: Uint8Array) => Buffer.from(b).toString('hex');
+
+  it('draws from the same bag the program does', () => {
+    expect([...LAUNCH_CLASS_COUNTERS]).toEqual(vectors.class_counters);
+    expect([...CLASS_NAMES]).toEqual(vectors.class_names);
+    expect(LAUNCH_CLASS_COUNTERS.reduce((a, b) => a + b, 0)).toBe(vectors.capacity);
+  });
+
+  it('reproduces every committed digest vector', () => {
+    expect(vectors.derive.length).toBeGreaterThan(0);
+    for (const v of vectors.derive) {
+      const got = deriveClassRandomness(
+        unhex(v.vrf_seed),
+        unhex(v.slot_hash),
+        v.entry_index,
+        unhex(v.pool_pubkey),
+        unhex(v.player_pubkey),
+      );
+      expect(hex(got), v.name).toBe(v.expected);
+    }
+  });
+
+  it('reproduces every committed draw vector, class name included', () => {
+    expect(vectors.draw.length).toBeGreaterThan(0);
+    for (const v of vectors.draw) {
+      const idx = weightedClassDraw(unhex(v.rng_bytes), vectors.class_counters);
+      expect(idx, v.name).toBe(v.expected_index);
+      expect(CLASS_NAMES[idx], v.name).toBe(v.expected_class);
+    }
+  });
+
+  it('refuses an empty bag rather than returning a class', () => {
+    expect(() => weightedClassDraw(new Uint8Array(32), [0, 0, 0, 0, 0])).toThrow('empty bag');
+  });
+});
+
+/*
+ * The remaining mechanisms are still file-existence checks, and that is all
+ * they claim to be: each one proves the page is not citing a path that has
+ * been renamed or deleted, and nothing more. They are not evidence that the
+ * mechanism works — the suites that own each file are.
+ */
+describe('every other mechanism the page describes has its file where the page says', () => {
   const proofs: Array<[string, string]> = [
     ['entry screening', 'backend/packet/src/sanctions-wiring.ts'],
     ['winner screening', 'backend/reveal/src/winner-screening.ts'],
@@ -63,7 +158,6 @@ describe('every mechanism the page describes exists', () => {
     ['the study output', 'docs/skill-evidence/results.csv'],
     ['the age attestation', 'app/src/entry/attestation.ts'],
     ['the territory gate', 'app/src/entry/geo-gate.ts'],
-    ['the class draw replay', 'backend/class-digest/src/digest.ts'],
   ];
   for (const [what, file] of proofs) {
     it(`${what}: ${file}`, () => {

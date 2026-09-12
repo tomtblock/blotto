@@ -18,7 +18,6 @@
     "sync": "ts-node src/index.ts sync"
   },
   "dependencies": {
-    "@noble/hashes": "^1.5.0",
     "@solana/web3.js": "^1.95.0",
     "pg": "^8.13.0"
   },

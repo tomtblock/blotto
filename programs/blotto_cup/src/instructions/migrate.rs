@@ -20,6 +20,25 @@
 //! (`ConfigAlreadyMigrated`), so a repeated transaction is a clean no-op
 //! failure, never a second write. A fresh deployment never calls this —
 //! `init_config` writes the whole new layout.
+//!
+//! # Why this is here at all, when nothing reaches it
+//!
+//! It is UNREACHABLE ON A FRESH DEPLOYMENT, by construction: `init_config`
+//! allocates `Config::SPACE`, and the length check above refuses anything
+//! that size. Every test fixture and every local validator therefore starts
+//! past it, and reachability analysis reads it as dead code (audit
+//! 2026-09-11, A-15 — recorded KEEP). It is not dead: the DEPLOYED devnet
+//! Config was allocated at `Config::SPACE_V1` and this is the only
+//! instruction that can grow it. Deleting it would strand that account —
+//! every instruction touching Config would keep failing to deserialise, with
+//! no path back, and `set_paused(false)` among them.
+//!
+//! RETIREMENT CONDITION, so this does not sit here forever: once every
+//! deployment's Config account is at `Config::SPACE` (the devnet one after
+//! the runbook's post-upgrade transaction; mainnet is initialised at the new
+//! layout and never needs it), this instruction and `ConfigNotMigratable` /
+//! `ConfigAlreadyMigrated` can go together. Removing the error variants
+//! renumbers every later code — see the header of `error.rs`.
 
 use anchor_lang::prelude::*;
 use anchor_lang::Discriminator;

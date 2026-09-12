@@ -4,8 +4,11 @@
  *
  * THE BLOT IS THE ALLOCATION MADE FLESH. Five corners map to the five stats
  * in the fixed stat order — top = Strength, then clockwise Speed, Heart,
- * Wit, Durability — the SAME convention as the radar's axes
- * (src/battle/geometry.ts) and the on-chain array.
+ * Wit, Durability — the same convention as the on-chain array
+ * (`STAT_NAMES`, src/battle/allocation.ts). It was inherited from the
+ * pentagon radar this shape system replaced; that module's geometry had no
+ * consumer left and was removed with the rest of the radar (audit
+ * 2026-09-11, A-27).
  *
  * ONE SHAPE, ALWAYS (brief §0). The outline is a single closed path of
  * cubic Béziers with rounded corners, and every parameter — corner radius,

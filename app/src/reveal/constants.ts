@@ -52,11 +52,29 @@ export const TELL_EXTENDED_DURATION_MS = 2_600;
  * full-screen white-out; streamability rule). */
 export const UNSEAL_DURATION_MS = 900;
 
-/** PROVISIONAL — card rise-and-settle (Beat 6). */
-export const CARD_RISE_DURATION_MS = 700;
-
-/** PROVISIONAL — POWER LEVEL count-up from zero (Beat 6; Step 4 consumes). */
-export const CARD_COUNT_UP_DURATION_MS = 1_600;
+/*
+ * BEAT 6 HAS NO ANIMATION CONSTANTS, AND THAT IS THE HONEST STATE (audit
+ * 2026-09-11, A-28). A card rise (CARD_RISE_DURATION_MS,
+ * CARD_RISE_FROM_Y_PX, CARD_RISE_SCALE_FROM) and a hero-numeral count-up
+ * (CARD_COUNT_UP_DURATION_MS, plus a count-up module) sat here with no
+ * consumer: `app/play/reveal-host.tsx` renders the card beat as a static
+ * panel. WHICH HALF WAS STALE — the spec's, on both counts:
+ *
+ *  - the spec they cite (`reveal-spec.md`) is the PREDECESSOR's document
+ *    and is not in this repository, so nothing here could be checked
+ *    against it;
+ *  - the numeral it specified was a POWER LEVEL on the pass. This product's
+ *    pass carries a cosmetic class and nothing else — the old card's
+ *    power/rarity metadata model was deliberately not carried
+ *    (docs/AUDIT-2026-09-07.md) — and a derived number on a pass is exactly
+ *    the class-linked attribute PID §8.4 exists to keep out. The card beat
+ *    renders the class, its rarity count, the seat and the asset, above the
+ *    line that says the class confers nothing. That is right; the constants
+ *    were not.
+ *
+ * A rise is an ordinary unbuilt animation and can come back with the work
+ * that builds it. The count-up must not.
+ */
 
 /** PROVISIONAL — reveals-seal + settle animation on the failure path (3f). */
 export const FAIL_SEAL_DURATION_MS = 600;
@@ -155,11 +173,8 @@ export const UNSEAL_FLASH_PEAK_TIME = 0.2;
  * class-colour glow at this opacity. */
 export const UNSEAL_FLASH_REDUCED_OPACITY = 0.5;
 
-/** PROVISIONAL — Beat 6: where the card's rise starts (px below settle,
- * scale at lift-off). Rise duration is CARD_RISE_DURATION_MS above;
- * count-up duration is CARD_COUNT_UP_DURATION_MS above. */
-export const CARD_RISE_FROM_Y_PX = 48;
-export const CARD_RISE_SCALE_FROM = 0.9;
+/* Beat 6 has no magnitudes here — see the Beat 6 note above
+ * FAIL_SEAL_DURATION_MS. */
 
 /* ---- Ratified STRUCTURE below this line (not feel knobs) --------------- */
 

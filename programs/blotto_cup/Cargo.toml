@@ -16,7 +16,9 @@ cpi = ["no-entrypoint"]
 no-entrypoint = []
 no-idl = []
 no-log-ix-name = []
-idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+# `anchor-spl/idl-build` was listed here too until 2026-09-12; the crate
+# itself was never used (audit 2026-09-11, A-32) and went with it.
+idl-build = ["anchor-lang/idl-build"]
 anchor-debug = []
 custom-heap = []
 custom-panic = []
@@ -26,7 +28,15 @@ custom-panic = []
 # `init-if-needed` for accounts this program does not have; the feature is not
 # carried. See CONTRIBUTING.md → Rust on why every version here is `=`.
 anchor-lang = "=1.0.2"
-anchor-spl = "=1.0.2"
+# `anchor-spl = "=1.0.2"` was declared here and imported nowhere: this program
+# holds no token account and moves only lamports, so nothing in `src/` ever
+# named `anchor_spl` (audit 2026-09-11, A-32). Removed 2026-09-12 with its
+# `idl-build` feature entry above. It was the only route into the graph for
+# forty crates — the whole SPL token interface set, `solana-zk-sdk`, the
+# confidential-transfer proof crates, `aes-gcm-siv`, `merlin` — which left
+# Cargo.lock with it. That is dependency surface an on-chain program was
+# carrying for nothing, not just a tidier manifest. Re-add it (with the
+# feature entry) the day an instruction actually touches a token account.
 
 # --- Carried verbatim from the predecessor repository's program Cargo.toml ---
 # The comments below are load-bearing: they record why these feature selections

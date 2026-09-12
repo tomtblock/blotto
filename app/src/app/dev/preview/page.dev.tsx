@@ -1,11 +1,15 @@
 /*
  * /dev/preview — every screen, in every state, without a tournament.
  *
- * DEV ONLY. Like /dev/components this route hard-404s in a production build,
- * so nothing here is a public surface and no copy on it needs founder
- * sign-off. It links only to real application routes: the preview does not
- * reimplement any screen, because a preview that drifts from the pages it
- * previews is worse than none.
+ * DEV ONLY, and like /dev/components the FILENAME is the gate: `page.dev.tsx`
+ * is a route only while `pageExtensions` includes `dev.tsx`, which
+ * next.config.ts does outside a production build and never inside one. So a
+ * production build compiles no route here at all; the `notFound()` below is
+ * the second layer, kept in case that exclusion is ever lost (audit
+ * 2026-09-11, A-30). Nothing here is a public surface and no copy on it
+ * needs founder sign-off. It links only to real application routes: the
+ * preview does not reimplement any screen, because a preview that drifts
+ * from the pages it previews is worse than none.
  *
  * WHAT IT SOLVES. Design work was blocked on state nobody controls — you
  * could not see the settled-results screen without a settled pool, or the
