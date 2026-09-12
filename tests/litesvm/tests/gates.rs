@@ -224,7 +224,9 @@ fn lowering_a_ceiling_blocks_the_next_open_not_the_open_pool() {
     let admin = env.admin.pubkey();
 
     // Pool 1 opens on tier 0 at the launch ceiling (6.4 SOL = its own gross).
-    env.fund_platform(TIER_POTS[0]);
+    // Two opens happen on this funding: the refund below returns the pot to
+    // the treasury but each open leaves a rent cushion behind in its vault.
+    env.fund_platform(TIER_POTS[0] + 2 * VAULT_RENT_CUSHION);
     let ix = open_pool_ix(&settlement.pubkey(), 1, 0, [9; 32], env.sealing_secret_hash);
     env.send(&[ix], &[&settlement]).unwrap();
 
@@ -271,7 +273,7 @@ fn register_requires_a_committed_vrf_seed() {
     // Open WITHOUT patching a VRF seed (and without a pass collection —
     // the VRF gate fires before the mint is reached).
     let settlement = env.settlement.insecure_clone();
-    env.fund_platform(TIER_POTS[0]);
+    env.fund_platform(TIER_POTS[0] + VAULT_RENT_CUSHION);
     let ix = open_pool_ix(&settlement.pubkey(), 1, 0, [9; 32], env.sealing_secret_hash);
     env.send(&[ix], &[&settlement]).unwrap();
     let err = env.register_player(1).unwrap_err();

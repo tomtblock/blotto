@@ -582,7 +582,6 @@ fn a_sanctions_hold_blocks_both_release_paths_and_the_next_place_split() {
     assert_eq!(read_entry(&env.svm, &players[0].1).escrow_lamports, 0);
 }
 
-
 /// A hold placed BEFORE payment diverts the share into escrow on its own.
 ///
 /// This is the clause that makes every other check in the previous test

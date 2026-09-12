@@ -158,7 +158,7 @@ pub fn handle_open_pool(
         .ok_or(ErrorCode::Overflow)?;
     let needed = funding
         + (ctx.accounts.config.treasury_min_platform_lamports as u128)
-        + (idle_tier_reserve(&ctx.accounts.config, Some(tier_idx)) as u128);
+        + (idle_tier_reserve(&ctx.accounts.config, Some(tier_idx), cushion) as u128);
     require!(available >= needed, ErrorCode::TreasuryShortfall);
 
     // Fund the pot: treasury → this pool's prize vault, locked before any

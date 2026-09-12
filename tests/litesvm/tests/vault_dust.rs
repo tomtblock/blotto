@@ -43,10 +43,7 @@ fn transfer(from: &Pubkey, to: &Pubkey, lamports: u64) -> Instruction {
     data.extend_from_slice(&lamports.to_le_bytes());
     Instruction {
         program_id: system_program_id(),
-        accounts: vec![
-            AccountMeta::new(*from, true),
-            AccountMeta::new(*to, false),
-        ],
+        accounts: vec![AccountMeta::new(*from, true), AccountMeta::new(*to, false)],
         data,
     }
 }

@@ -8,9 +8,14 @@
 //!
 //! ```text
 //!   min_platform_lamports
-//! + reserve_pots × Σ pot[t]   for every ENABLED tier t with no live pool
+//! + reserve_pots × Σ (pot[t] + vault cushion)   for every ENABLED tier t
+//!                                                with no live pool
 //! + platform_refundable       (entry payments of pools that can still refund)
 //! ```
+//!
+//! The vault cushion is the rent-exempt minimum `open_pool` funds every prize
+//! vault with on top of its pot (2026-09-12, `vault::rent_floor`). A reserved
+//! pot is an OPENABLE pot, so the reserve counts what an open actually costs.
 //!
 //! The first two terms are the founder's policy (v2). The third is a
 //! correctness addition recorded in the step report: entries are paid into
@@ -31,6 +36,15 @@ use crate::state::{Config, CONFIG_SEED, PLATFORM_SEED};
 /// pots of every enabled tier whose `active_pool_by_tier` slot is empty,
 /// optionally excluding one tier (the one being opened right now).
 ///
+/// Each reserved pot carries `vault_cushion` — the rent-exempt minimum
+/// `open_pool` funds the vault with alongside the pot — because the reserve
+/// exists so the treasury can OPEN those pools, and an open costs the pot
+/// plus the cushion. Counting the pot alone (as this did until 2026-09-12)
+/// left the reserve one cushion short per pot: after opening one tier at its
+/// exact threshold the treasury held exactly the next tier's pot, and could
+/// not open it. The ladder test in `tests/litesvm/tests/treasury_gates.rs`
+/// pins the corrected property to the lamport.
+///
 /// The sum is accumulated in `u128` because it is a product that can grow
 /// (`threat-tm-403`), and saturates rather than truncating on the way back to
 /// `u64`. That direction matters: this value is a FLOOR, so overstating it
@@ -40,16 +54,15 @@ use crate::state::{Config, CONFIG_SEED, PLATFORM_SEED};
 /// 300 SOL at the maximum reserve is a rounding error against `u64::MAX`); the
 /// saturation is here so the direction of failure is chosen rather than left to
 /// a cast.
-pub fn idle_tier_reserve(config: &Config, exclude_tier: Option<usize>) -> u64 {
+pub fn idle_tier_reserve(config: &Config, exclude_tier: Option<usize>, vault_cushion: u64) -> u64 {
     let mut reserve: u128 = 0;
     for t in 0..N_TIERS {
         if Some(t) == exclude_tier {
             continue;
         }
         if config.open_tiers[t] && config.active_pool_by_tier[t] == 0 {
-            reserve = reserve.saturating_add(
-                (config.tier_pot_lamports[t] as u128) * (config.treasury_reserve_pots as u128),
-            );
+            let per_pool = (config.tier_pot_lamports[t] as u128) + (vault_cushion as u128);
+            reserve = reserve.saturating_add(per_pool * (config.treasury_reserve_pots as u128));
         }
     }
     u64::try_from(reserve).unwrap_or(u64::MAX)
@@ -119,8 +132,9 @@ pub fn handle_withdraw_platform(ctx: Context<WithdrawPlatform>, amount: u64) -> 
     require!(amount > 0, ErrorCode::ZeroAmount);
     let config = &ctx.accounts.config;
     let balance = ctx.accounts.platform.lamports();
+    let cushion = crate::vault::rent_floor()?;
     let floor = (config.treasury_min_platform_lamports as u128)
-        + (idle_tier_reserve(config, None) as u128)
+        + (idle_tier_reserve(config, None, cushion) as u128)
         + (config.platform_refundable as u128);
     require!(
         (balance as u128) >= (amount as u128) + floor,
