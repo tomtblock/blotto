@@ -65,8 +65,12 @@ fly deploy --config deploy/fly/indexer.fly.toml
 
 All four services expose `GET /health` returning `{ ok: true, ... }`.
 The daemon's additionally carries the LAST TICK summary (`at`, counts of
-opened/cranked/refunds/errors) — a stale `at` is the "hung RPC" alarm;
-platform checks should alert on staleness, not just non-200.
+opened/cranked/refunds/held/published/errors) and, since 2026-09-12, judges
+that `at` itself: fifteen minutes without a completed tick turns the answer
+into a 503 (`STALE_TICK_MS`, backend/reveal/src/health.ts), so Fly's check
+restarts a wedged loop and `backend-watch` — which now probes all four
+services — reports it. `bundleAnnounce` says whether the daemon tells the
+indexer where each bundle is.
 
 ## Creating the Helius webhook (E6)
 

@@ -12,7 +12,8 @@
  *
  * The battles and salt are what `battles_hash` commits on-chain; timings and
  * the device hash ride along sealed for the detection layer (TECH-ARCH §9)
- * and are published with the reveal. The layout is fixed-width so a decode
+ * and reach only it: the published reveal bundle carries neither (bundle
+ * version 2, audit B-31, 2026-09-12). The layout is fixed-width so a decode
  * either yields exactly these fields or fails loudly — no optional tail.
  */
 

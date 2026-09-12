@@ -46,6 +46,7 @@ any file containing it. The original draft's standing rule 1 would not have merg
 | Name | Address / path | Role |
 |---|---|---|
 | Program | `5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17` | deployed devnet program |
+| **Last program deploy** | slot `497261524`, 2026-09-12 ~15:40Z, upgrade transaction `biV6gmTtGWPySs341ajQvVy99fNLFJbipvsoYAFsagwgcxz4APuVSempCDrLbvc6fkkHM1avvEgaayUFG99ofQ9`; ProgramData `52jz…fend` now 644,197 bytes (extended by 10,240 that day) | the rent-cushion program (PR #106, merged 2026-09-12; PR #107 changed no program source). Read from the chain and `npm run check-deployed` (16 of 32 wire contracts clean, Config 484 bytes), not from a terminal. The pause of manual §4 was not applied that sitting: the only pool (8) was Open with 0 entrants and the drain was CLEAR, so nothing could be caught mid-settlement. Pool 8 was opened by the OLD program and holds no cushion; the one-lamport proof runs on pool 9 |
 | Squads vault | `9EEWtzyu72a3DKJVUkCaeYX4HuBKD59xXCcENnDVe34Z` | **becomes `Config.admin`** |
 | Squads multisig | `9EL1m9wvqGSznHJ8zkS5YaXQnG4gq4aNYsbGnP1TmFyN` | **never `--admin`** |
 | Bank wallet | `4ydbVZuNupTPu1cKGCc2cePs95B8iMkrR4TvsCLiwcL1` | funds entrants; Squads member |
@@ -976,6 +977,24 @@ Pools opened under the new program between upgrade and revert must be
 drained first, exactly as in step 2.
 
 ## RECOVERY NOTES
+
+**Deploying from a Mac, 2026-09-12 — three failures in one sitting, all in the
+tooling, none in the program.** (1) `solana program extend` refused the 384-byte
+shortfall the script computed: the loader's minimum extension is 10,240 bytes;
+the script now rounds up. (2) `anchor deploy` and then `solana program deploy`
+reported "Blockhash expired" on every write, through the public endpoint and
+through Helius alike, with 0 % landed; the third attempt showed the real cause,
+a panic `Too many open files` from the parallel sender under macOS's default
+limit of 256 descriptors. `ulimit -n 65536` in the same terminal (the script now
+does it) took 587 of 627 pieces through on the next run. (3) The remaining 40
+pieces landed by RESUMING from the buffer the CLI names on failure:
+`solana-keygen recover -o <file>` with the printed seed phrase, then the same
+deploy command plus `--buffer <file> --use-rpc`. Each failed attempt leaves a
+buffer holding the binary's rent (about 4 SOL); `solana program close --buffers
+-k <fee payer> --url devnet` reclaims them — but only AFTER a partial buffer has
+been resumed or abandoned. Devnet itself was healthy and idle throughout
+(priority fees 0). `agave-install update` does not work on this machine (the
+CLI was not installed that way); the CLI version was not the problem.
 
 **A machine that hits max restart count stays stopped even after the fault is
 fixed.** `fly secrets set` bumps the version but does not start it. Symptom: 503 from

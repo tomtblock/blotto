@@ -77,14 +77,20 @@ import {
   type PoolKeyCustody,
 } from '../../sealing/src';
 import { detectPool } from '../../detection/src/pipeline';
+import { PgDecisionLog } from '../../detection/src/log-pg';
+import { appealState } from '../../detection/src/appeals';
 import { wireScreening } from '../../sanctions/src';
+import { buildMonitor, loadMonitor } from '../../_shared/src/monitor';
+import { ALERT } from '../../_shared/src/metrics';
 import { makeWinnerScreen } from './winner-screening';
 import { Web3Chain } from './chain-web3';
-import { crankPool, type RevealedForDetection } from './crank';
+import { crankPool, publishBundle, type CrankDeps, type RevealedForDetection } from './crank';
+import { PgPublishedBundleStore } from './published-store';
+import { makePriorityFeeSampler } from './priority-fee';
 import { makeDaemon, StubVrfCoordinator, type VrfCoordinator } from './daemon';
 import { makeSwitchboardOps, SwitchboardVrfCoordinator } from './vrf-switchboard';
 import { IrysPublisher, irysUploaderFromEnv } from './publisher-irys';
-import { newDaemonHealth, serveDaemonHealth, type DaemonPhase } from './health';
+import { STALE_TICK_MS, newDaemonHealth, serveDaemonHealth, type DaemonPhase } from './health';
 import {
   announceVerdict,
   assertCanPayFees,
@@ -120,6 +126,15 @@ const IRYS_BUDGET_MS = 45_000;
 // plus room to parse. A budget shorter than the operation it wraps cannot
 // report anything useful — it fires first and reports only itself.
 const SANCTIONS_BUDGET_MS = 150_000;
+// Per-call budgets inside a tick (audit 2026-09-11, C-22). Until 2026-09-12
+// no RPC call and no announce carried a timeout, so one hung socket wedged
+// the whole loop while /health kept answering 200. Every RPC request the
+// chain client makes now aborts after RPC_CALL_BUDGET_MS (web3.js retries
+// its own confirmation polling on top), and the announce after
+// ANNOUNCE_BUDGET_MS. A tick that still hangs — a vendor SDK with no signal
+// — is caught by /health's staleness rule (health.ts) and a restart.
+const RPC_CALL_BUDGET_MS = 30_000;
+const ANNOUNCE_BUDGET_MS = 10_000;
 
 function requireEnv(env: NodeJS.ProcessEnv, name: string): string {
   const v = env[name];
@@ -164,8 +179,12 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
   // listening — see health.ts for the 2026-09-06 deploy this comes from.
   // Past the startup budget the endpoint turns 503, so a wedged init is a
   // restart rather than a machine that looks fine forever.
+  // Metrics and alerts: the daemon's first Monitor wiring (audit 2026-09-11,
+  // E-04). The sink follows BLOTTO_MONITOR_SINK like every other service; the
+  // Prometheus sink also serves /metrics beside /health.
+  const monitor = buildMonitor(loadMonitor(env), SERVICE);
   const health = newDaemonHealth();
-  serveDaemonHealth(health, healthPort);
+  serveDaemonHealth(health, healthPort, Date.now, monitor);
   console.log(`${SERVICE}: tick every ${intervalMs}ms once ready`);
 
   // Every phase change is logged with elapsed time. The log is the only
@@ -197,6 +216,10 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
   const rpcUrl = resolveRpcUrl(env);
   const connection = new Connection(rpcUrl, {
     commitment: 'confirmed',
+    // Every request the client makes, bounded (C-22). The cast is because
+    // web3.js types its fetch against its own bundled declaration.
+    fetch: ((input: string | URL, init?: RequestInit) =>
+      fetch(input, { ...init, signal: AbortSignal.timeout(RPC_CALL_BUDGET_MS) })) as never,
   });
   const settlementSigner = Keypair.fromSecretKey(
     new Uint8Array(
@@ -250,14 +273,19 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
       : 'keeper = the settlement signer (KEEPER_KEYPAIR unset — the devnet posture)'
   );
 
+  const programId = new PublicKey(env.BLOTTO_PROGRAM_ID ?? DEFAULT_PROGRAM_ID);
   const chain: Web3Chain = new Web3Chain({
     connection,
-    programId: new PublicKey(env.BLOTTO_PROGRAM_ID ?? DEFAULT_PROGRAM_ID),
+    programId,
     settlementSigner,
     keeperSigner,
     makeVrfRevealIx: swCoordinator
       ? (account) => swCoordinator.makeVrfRevealIx(account)
       : undefined,
+    // The same fee choice the browser bids (C-34), sampled once per window.
+    priorityFeeMicroLamports: makePriorityFeeSampler(connection, {
+      lockedWritableAccounts: [programId],
+    }),
   });
 
   // Same reasoning as the packet service's signer line: both coordinators
@@ -279,12 +307,20 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
     );
   }
 
-  const now = (): bigint => BigInt(Math.floor(Date.now() / 1000));
+  // THE CLOCK IS THE CHAIN'S (audit 2026-09-11, C-35 / F-10). The program
+  // judges "past the fill deadline" on the Clock sysvar's unix_timestamp;
+  // until 2026-09-12 the daemon judged it on this host's wall clock — the
+  // same operator against a different clock, and the export policy decided
+  // whether a pool's secret may leave custody on that comparison. One sysvar
+  // read per tick feeds every comparison the tick makes; the policy reads it
+  // fresh because an export is worth its own round trip.
+  let chainNowCache = await chain.chainNow();
+  const now = (): bigint => chainNowCache;
   // The sealing property as an export policy: a pool's secret exports only
   // once the pool is out of Open, or past its fill deadline (custody.ts).
   const policy = async (poolId: bigint): Promise<boolean> => {
     const pool = await chain.getPool(poolId);
-    return pool.state !== 'Open' || now() > pool.fillDeadline;
+    return pool.state !== 'Open' || (await chain.chainNow()) > pool.fillDeadline;
   };
 
   const custody = buildCustody(env, new PgPublishedKeyStore(db), policy);
@@ -397,6 +433,7 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
           method: 'POST',
           headers: { 'content-type': 'application/json', authorization: announceSecret },
           body: JSON.stringify({ pool_id: poolId.toString(), uri: bundleUri }),
+          signal: AbortSignal.timeout(ANNOUNCE_BUDGET_MS),
         });
         if (!res.ok) {
           throw new Error(`bundle announce: HTTP ${res.status} ${await res.text()}`);
@@ -404,24 +441,37 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
       }
     : undefined;
 
+  // The daemon's memory of published bundles (C-09 / B-32 / D-27) and the
+  // review decision log the clock consults before it releases (D-03). Both
+  // read the shared Postgres the indexer migrates at boot; the decision log
+  // is keyed by the pool's PDA, which the chain client derives.
+  const published = new PgPublishedBundleStore(db);
+  const decisionLog = new PgDecisionLog(db);
+  const decisions = {
+    forfeitLogged: async (poolId: bigint, player: string): Promise<boolean> =>
+      appealState(await decisionLog.listFor(chain.poolAddress(poolId), player)).forfeit !== null,
+  };
+  const crankDeps: CrankDeps = {
+    chain,
+    custody,
+    ciphertexts,
+    publisher,
+    detect,
+    screenWinners,
+    maxUnreadableEntries: unreadable.ceiling,
+    published,
+    monitor,
+  };
   const daemon = makeDaemon({
     chain,
     custody,
     ciphertexts,
     vrf,
-    crank: (poolId) =>
-      crankPool(
-        {
-          chain,
-          custody,
-          ciphertexts,
-          publisher,
-          detect,
-          screenWinners,
-          maxUnreadableEntries: unreadable.ceiling,
-        },
-        poolId
-      ),
+    crank: (poolId) => crankPool(crankDeps, poolId),
+    publishOwed: (poolId) => publishBundle(crankDeps, poolId),
+    published,
+    decisions,
+    monitor,
     now,
     announceBundle,
     log: (stage, detail) => console.log(`${SERVICE}: ${stage}`, JSON.stringify(detail ?? {})),
@@ -430,6 +480,7 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
   // Initialisation is done: the endpoint now reports ready, and `lastTick`
   // becomes the liveness signal — a hung RPC shows up as a stale `at`.
   enter('ready');
+  health.readyAtMs = Date.now();
   console.log(
     `${SERVICE}: READY — health on :${healthPort}, ticking every ${intervalMs}ms ` +
       `(startup took ${Date.now() - health.startedAtMs}ms)`
@@ -438,6 +489,9 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
   // The loop: tick, record, sleep. A throwing tick is logged and retried.
   for (;;) {
     try {
+      // One sysvar read a tick: every deadline comparison in the tick uses
+      // the chain's clock as it stood when the tick began.
+      chainNowCache = await chain.chainNow();
       const report = await daemon.tick();
       health.lastTick = { at: new Date().toISOString(), report };
       // One cheap call per tick, so a drain toward the floor shows on /health
@@ -455,6 +509,15 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
       }
     } catch (err) {
       console.error(`${SERVICE}: tick threw:`, err instanceof Error ? err.message : err);
+      // A tick that throws (config unreadable, RPC down) still counts as
+      // completed for liveness — the loop is alive and will retry. A tick
+      // that never returns is the case /health's staleness rule catches;
+      // say so here too once the budget is exceeded, in the log and as an
+      // alert, since a restart wipes the evidence.
+    }
+    const lastAt = health.lastTick ? Date.parse(health.lastTick.at) : (health.readyAtMs ?? 0);
+    if (Date.now() - lastAt > STALE_TICK_MS) {
+      monitor.alert(ALERT.reveal.tickStale, { sinceMs: Date.now() - lastAt });
     }
     await new Promise((r) => setTimeout(r, intervalMs));
   }

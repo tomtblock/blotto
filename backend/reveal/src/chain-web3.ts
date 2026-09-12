@@ -18,6 +18,7 @@ import {
   Connection,
   Keypair,
   PublicKey,
+  SYSVAR_CLOCK_PUBKEY,
   SystemProgram,
   Transaction,
   TransactionInstruction,
@@ -60,6 +61,58 @@ const CONFIG_SPACE_V1 = 380;
  */
 export const ENTRY_SPACE = 228;
 
+/**
+ * Where `getEntries` reads each Entry field: BYTE OFFSETS from the start of
+ * the account (the 8-byte discriminator included), keyed by the field's
+ * name in `state.rs`. Borsh lays the struct out in declaration order with
+ * no padding, so every offset is the running sum of the sizes before it —
+ * which is exactly what `test/entry-layout.spec.ts` recomputes from the
+ * Rust source and compares against this table. A wrong offset here does
+ * not throw: it reads a neighbouring field as if it were the one asked for
+ * (the same silent failure mode as the size filter above), and the split
+ * frame in particular decides which `pay_next_place` arguments the driver
+ * sends. Add a field here when the program appends one; never renumber.
+ *
+ * disc 8 | pool 32 | player 32 | index 2 | battles_hash 32 | class 1 |
+ * pass_asset 32 | entered_at 8 | slot_hash 32 | flagged 1 | settled 1 |
+ * refunded 1 | escrow_lamports 8 | bump 1 | — the 2026-09-07 tail:
+ * escrowed_at 8 | forfeited 1 | next_place_lamports 8 | split_total 8 |
+ * split_paid_mask 8 | split_group_size 2 | split_remainder_paid 1 | —
+ * Stage F: sanctions_hold 1 — 228 in all (`Entry::SPACE`).
+ */
+export const ENTRY_LAYOUT = {
+  player: 40,
+  index: 72,
+  battles_hash: 74,
+  flagged: 179,
+  settled: 180,
+  refunded: 181,
+  escrow_lamports: 182,
+  escrowed_at: 191,
+  forfeited: 199,
+  next_place_lamports: 200,
+  split_total: 208,
+  split_paid_mask: 216,
+  split_group_size: 224,
+  split_remainder_paid: 226,
+  sanctions_hold: 227,
+} as const;
+
+/**
+ * The Clock sysvar's `unix_timestamp`, decoded from the account's data.
+ * The runtime serialises `Clock` with bincode, fixed-width little-endian,
+ * in field order: slot u64 @0 | epoch_start_timestamp i64 @8 | epoch u64
+ * @16 | leader_schedule_epoch u64 @24 | unix_timestamp i64 @32 — 40 bytes.
+ * Kept apart from the RPC read so the offset is pinned by an offline test
+ * (`test/entry-layout.spec.ts`) rather than trusted.
+ */
+export function clockUnixTimestamp(data: Buffer): bigint {
+  if (data.length < 40) {
+    throw new Error(`Clock sysvar data is ${data.length} bytes; the layout is 40`);
+  }
+  return data.readBigInt64LE(32);
+}
+
 const INSTRUCTIONS_SYSVAR = new PublicKey('Sysvar1nstructions1111111111111111111111111');
 
 function disc(name: string): Buffer {
@@ -89,6 +142,15 @@ export interface Web3ChainConfig {
    * The production adapter is C11 vendor work.
    */
   makeVrfRevealIx?: (randomnessAccount: PublicKey) => Promise<TransactionInstruction | null>;
+  /**
+   * The priority fee to bid on every send, in micro-lamports per compute
+   * unit (audit 2026-09-11, C-34). Until 2026-09-12 no settlement
+   * transaction carried one while the browser's entries did, so under
+   * congestion the payout was the transaction that did not land. The daemon
+   * supplies the shared percentile choice through a cached sampler
+   * (priority-fee.ts); absent = no price instruction, as before.
+   */
+  priorityFeeMicroLamports?: () => Promise<bigint>;
 }
 
 export class Web3Chain implements KeeperChain {
@@ -121,10 +183,12 @@ export class Web3Chain implements KeeperChain {
     ixs: TransactionInstruction[],
     signers: Keypair[] = [this.cfg.settlementSigner]
   ): Promise<void> {
-    const tx = new Transaction().add(
-      ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }),
-      ...ixs
-    );
+    const budget = [ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 })];
+    if (this.cfg.priorityFeeMicroLamports) {
+      const microLamports = await this.cfg.priorityFeeMicroLamports();
+      budget.push(ComputeBudgetProgram.setComputeUnitPrice({ microLamports }));
+    }
+    const tx = new Transaction().add(...budget, ...ixs);
     await sendAndConfirmTransaction(this.cfg.connection, tx, signers, {
       commitment: 'confirmed',
     });
@@ -241,6 +305,22 @@ export class Web3Chain implements KeeperChain {
   async getPlatformBalance(): Promise<bigint> {
     const info = await this.cfg.connection.getAccountInfo(this.platformPda(), 'confirmed');
     return BigInt(info?.lamports ?? 0);
+  }
+
+  /** `KeeperChain.poolAddress`: the pool PDA this client derives for every
+   * instruction, as base58. Pure — no RPC. */
+  poolAddress(poolId: bigint): string {
+    return this.poolPda(poolId).toBase58();
+  }
+
+  /** `KeeperChain.chainNow`: the Clock sysvar's `unix_timestamp` at
+   * `confirmed` — `SysvarC1ock11111111111111111111111111111111`, the
+   * account the program reads through `Clock::get()`. Decoded by
+   * `clockUnixTimestamp` (offset 32; layout there). */
+  async chainNow(): Promise<bigint> {
+    const info = await this.cfg.connection.getAccountInfo(SYSVAR_CLOCK_PUBKEY, 'confirmed');
+    if (!info) throw new Error('Clock sysvar account not found');
+    return clockUnixTimestamp(info.data);
   }
 
   async openPool(
@@ -419,20 +499,28 @@ export class Web3Chain implements KeeperChain {
       commitment: 'confirmed',
       filters: [{ dataSize: ENTRY_SPACE }, { memcmp: { offset: 8, bytes: pool.toBase58() } }],
     });
+    const L = ENTRY_LAYOUT;
     return accounts
       .map(({ account }) => {
         const d = account.data;
         return {
-          player: new PublicKey(d.subarray(40, 72)).toBase58(),
-          index: d.readUInt16LE(72),
-          battlesHash: d.subarray(74, 106).toString('hex'),
-          flagged: d[179] !== 0,
-          refunded: d[181] !== 0,
-          settled: d[180] !== 0,
-          forfeited: d[199] !== 0,
-          escrowLamports: d.readBigUInt64LE(182),
-          escrowedAt: d.readBigInt64LE(191),
-          sanctionsHold: d[227] !== 0,
+          player: new PublicKey(d.subarray(L.player, L.player + 32)).toBase58(),
+          index: d.readUInt16LE(L.index),
+          battlesHash: d.subarray(L.battles_hash, L.battles_hash + 32).toString('hex'),
+          flagged: d[L.flagged] !== 0,
+          refunded: d[L.refunded] !== 0,
+          settled: d[L.settled] !== 0,
+          forfeited: d[L.forfeited] !== 0,
+          escrowLamports: d.readBigUInt64LE(L.escrow_lamports),
+          escrowedAt: d.readBigInt64LE(L.escrowed_at),
+          sanctionsHold: d[L.sanctions_hold] !== 0,
+          nextPlaceLamports: d.readBigUInt64LE(L.next_place_lamports),
+          // The split frame (`Entry.split_*`): what the next-place driver
+          // resumes a part-paid split from. All zero until the first portion.
+          splitTotal: d.readBigUInt64LE(L.split_total),
+          splitPaidMask: d.readBigUInt64LE(L.split_paid_mask),
+          splitGroupSize: d.readUInt16LE(L.split_group_size),
+          splitRemainderPaid: d[L.split_remainder_paid] !== 0,
         };
       })
       .sort((a, b) => a.index - b.index);
@@ -602,7 +690,10 @@ export class Web3Chain implements KeeperChain {
         ],
         data: Buffer.concat([disc('lift_sanctions_hold'), le]),
       }),
-    ]);
+      // The admin signs (B-47, audit 2026-09-11): this used to go out with
+      // the settlement signer alone, so the instruction it built could never
+      // be sent — the admin key was named as a signer and never signed.
+    ], [admin]);
   }
 
   async forfeitEscrow(poolId: bigint, player: string): Promise<void> {

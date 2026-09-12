@@ -24,6 +24,8 @@
  */
 
 import { createServer, type Server } from 'http';
+import { serveMetricsIfPrometheus } from '../../_shared/src/prometheus';
+import type { Monitor } from '../../_shared/src/monitor';
 import type { TickReport } from './daemon';
 import { formatSol } from './startup';
 
@@ -46,6 +48,24 @@ const SERVICE = 'daemon';
 // genuinely failed to start and a restart is the right answer. The number is
 // the sum of the steps it must contain, plus slack, and it moves when they do.
 export const STARTUP_BUDGET_MS = 300_000;
+
+/**
+ * How long a READY daemon may go without completing a tick before /health
+ * says so with a 503 (audit 2026-09-11, C-05 / C-22 / C-27 / E-04). Until
+ * 2026-09-12 a ready daemon could never report unhealthy again: a tick wedged
+ * on a vendor socket that never answered left `lastTick.at` frozen while the
+ * endpoint kept answering 200, and both manuals' "alert on `at` going stale"
+ * was implemented by nothing.
+ *
+ * PHASE-N-REVIEW: fifteen minutes. A normal tick takes seconds; the longest
+ * legitimate one is a settlement whose winner screening runs once per tied
+ * winner (up to ~13 s each on the vendor's retry budget), so a 52-way tie
+ * could approach eleven minutes. The budget sits above that so a healthy
+ * worst case never restarts itself, and well below the twelve-hour review
+ * window so a wedged daemon is restarted long before any clock it drives
+ * matters. Not a founder number; tune from measured ticks.
+ */
+export const STALE_TICK_MS = 15 * 60_000;
 
 /** Where initialisation has got to. `ready` means the tick loop is running. */
 export type DaemonPhase = 'starting' | 'connecting' | 'switchboard' | 'irys' | 'ready';
@@ -74,6 +94,12 @@ export interface DaemonHealth {
    * that will never fill on its own, rather than the log alone.
    */
   announce?: 'on' | 'off';
+  /**
+   * `Date.now()` when `phase` became `ready` — the point the tick clock
+   * starts from, so a daemon that is ready but has never completed a tick is
+   * judged against the same staleness budget as one whose ticks stopped.
+   */
+  readyAtMs?: number;
 }
 
 export function newDaemonHealth(startedAtMs: number = Date.now()): DaemonHealth {
@@ -83,12 +109,14 @@ export function newDaemonHealth(startedAtMs: number = Date.now()): DaemonHealth 
 /**
  * The /health contract, as a pure function of state and the current time.
  *
- *   ready                        → 200 { ready: true }
- *   still starting, within budget → 200 { ready: false } — do not kill it
- *   still starting, past budget   → 503 — it is stuck; restart it
+ *   ready, a tick within the staleness budget → 200 { ready: true }
+ *   ready, no tick for STALE_TICK_MS         → 503 — the loop is wedged; restart it
+ *   still starting, within budget            → 200 { ready: false } — do not kill it
+ *   still starting, past budget              → 503 — it is stuck; restart it
  *
- * `lastTick` is the liveness signal once running: a hung RPC shows up as a
- * stale `at`, which is what the platform's checks alert on.
+ * `lastTick` is the liveness signal once running. Since 2026-09-12 the
+ * endpoint judges its age itself rather than leaving that to a platform
+ * check nobody had written (audit 2026-09-11, C-27).
  */
 export function healthPayload(
   state: DaemonHealth,
@@ -101,10 +129,17 @@ export function healthPayload(
   // the field.
   const uptimeMs = nowMs - state.startedAtMs;
   const stuck = !ready && uptimeMs > STARTUP_BUDGET_MS;
+  // Once ready, the last completed tick (or the moment of readiness, before
+  // the first one) must be younger than the staleness budget.
+  const lastTickAtMs =
+    state.lastTick === null ? (state.readyAtMs ?? state.startedAtMs) : Date.parse(state.lastTick.at);
+  const sinceTickMs = ready ? nowMs - lastTickAtMs : null;
+  const stale = ready && sinceTickMs !== null && sinceTickMs > STALE_TICK_MS;
+  const unhealthy = stuck || stale;
   return {
-    status: stuck ? 503 : 200,
+    status: unhealthy ? 503 : 200,
     body: {
-      ok: !stuck,
+      ok: !unhealthy,
       ready,
       service: SERVICE,
       phase: state.phase,
@@ -115,6 +150,14 @@ export function healthPayload(
       ...(stuck
         ? {
             error: `still ${state.phase} after ${STARTUP_BUDGET_MS}ms — initialisation is stuck`,
+          }
+        : {}),
+      ...(stale
+        ? {
+            error:
+              `no tick completed for ${sinceTickMs}ms (budget ${STALE_TICK_MS}ms) — ` +
+              `the loop is wedged on something that will not answer; restart`,
+            sinceTickMs,
           }
         : {}),
       lastTick:
@@ -128,6 +171,8 @@ export function healthPayload(
               sealedAtDeadline: state.lastTick.report.sealedAtDeadline.length,
               released: state.lastTick.report.released.length,
               nextPlacePaid: state.lastTick.report.nextPlacePaid.length,
+              held: state.lastTick.report.held.length,
+              published: state.lastTick.report.published.length,
               errors: state.lastTick.report.errors.length,
             },
     },
@@ -142,12 +187,17 @@ export function healthPayload(
 export function serveDaemonHealth(
   state: DaemonHealth,
   port: number,
-  now: () => number = Date.now
+  now: () => number = Date.now,
+  /** When the Prometheus sink is selected, `/metrics` is served beside `/health`. */
+  monitor?: Monitor
 ): Server {
   const server = createServer((req, res) => {
     if (req.method === 'GET' && req.url === '/health') {
       const { status, body } = healthPayload(state, now());
       res.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(body));
+      return;
+    }
+    if (monitor && serveMetricsIfPrometheus(monitor, req, res)) {
       return;
     }
     res.writeHead(404).end();

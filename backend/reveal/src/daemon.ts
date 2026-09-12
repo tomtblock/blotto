@@ -18,7 +18,17 @@
  *     escrow falling to zero is the record that review ended without an
  *     upheld flag. A share escrowed for KYC alone (not flagged) is left
  *     to its packet. A FORFEITED share is never released here — it is the
- *     next-place step's, below.
+ *     next-place step's, below. Two more holds the clock leaves in place
+ *     (2026-09-12, audit 2026-09-11): a share under a SANCTIONS hold, which
+ *     the program refuses to release on either path (B-30), and a share
+ *     whose reviewer has already logged a FORFEIT that has not yet landed
+ *     on chain (D-03) — with a decision reader wired, the clock asks the
+ *     log before it pays, and alerts once the window passes with the
+ *     forfeit still unlanded.
+ *   - THE BUNDLE OWED (2026-09-12, audit C-09 / B-32 / D-27): a Paid pool
+ *     with no published bundle on record is retried, on a backoff, through
+ *     the crank's publish-only path, and announced when it lands. Until
+ *     then a failed publish was never retried, because Paid was terminal.
  *   - THE NEXT-PLACE STEP (audit O23): a share whose flag review UPHELD is
  *     divided among the eligible players at the rank it passes to, with
  *     `pay_next_place`. Until this existed the program could do it and
@@ -58,7 +68,10 @@
  */
 
 import { MIN_SEATS, REVIEW_WINDOW_SECS } from '../../scoring/src';
+import { ALERT, METRIC } from '../../_shared/src/metrics';
+import type { Monitor } from '../../_shared/src/monitor';
 import type { KeeperChain, PoolStateName } from './chain';
+import type { PublishedBundleStore } from './published-store';
 import { planNextPlace, payNextPlacePortions, type NextPlacePaid } from './next-place';
 import { recomputeRanking } from './ranking';
 import { nextOpenable, type TierPoolStates } from './treasury';
@@ -109,6 +122,31 @@ export interface DaemonDeps {
    * here is logged as a tick error and never blocks the sweep.
    */
   announceBundle?: (poolId: bigint, bundleUri: string) => Promise<void>;
+  /**
+   * A read-only view of the review decision log (audit 2026-09-11, D-03).
+   * OPTIONAL: without it the review clock trusts the chain alone, exactly as
+   * before. With it, a share whose reviewer has logged a forfeit is never
+   * released by the clock, however late the on-chain forfeit is.
+   */
+  decisions?: DecisionReader;
+  /**
+   * The daemon's memory of published bundles (published-store.ts). OPTIONAL:
+   * without it the "bundle owed" pass is off and a Paid pool is terminal
+   * the moment it pays, as before 2026-09-12.
+   */
+  published?: PublishedBundleStore;
+  /**
+   * The crank's publish-only path for a Paid pool that owes its bundle —
+   * reveal, decrypt, score, assemble, upload — with no detection, no winner
+   * screening and no payment. Required whenever `published` is set.
+   */
+  publishOwed?: (poolId: bigint) => Promise<string>;
+  /** Wall-clock milliseconds for the publish backoff (tests inject). */
+  nowMs?: () => number;
+  /** Backoff between publish attempts for one pool (default ten minutes). */
+  publishRetryMs?: number;
+  /** Metrics and alerts (audit 2026-09-11, E-04). Optional; silent without. */
+  monitor?: Monitor;
   /** Unix seconds — compared against `Pool.fill_deadline` (R7). */
   now: () => bigint;
   log?: (step: string, detail?: Record<string, unknown>) => void;
@@ -116,6 +154,21 @@ export interface DaemonDeps {
    * from 1). A redeploy against a long history can start higher. */
   startPoolId?: bigint;
 }
+
+/** What the review clock asks the decision log (D-03). */
+export interface DecisionReader {
+  /** True when a reviewer's `forfeit` decision is on record for this entry. */
+  forfeitLogged(poolId: bigint, player: string): Promise<boolean>;
+}
+
+/**
+ * Backoff between publish attempts for a Paid pool that owes its bundle, and
+ * how many failures raise the alert. Ten minutes is the audit's own
+ * complaint turned into a number: the fault it names was an upload every
+ * fifteen seconds while a pool sat stuck.
+ */
+export const PUBLISH_RETRY_MS = 10 * 60_000;
+export const PUBLISH_ALERT_AFTER = 3;
 
 export interface DaemonError {
   action: string;
@@ -143,6 +196,12 @@ export interface TickReport {
   /** Portions of upheld-flag shares paid on to the next eligible place this
    * tick (audit O23). One entry per recipient, not per forfeiter. */
   nextPlacePaid: NextPlacePaid[];
+  /** Held shares the review clock deliberately left in place this tick and
+   * why: a sanctions hold the program would refuse to release, or a forfeit
+   * already in the decision log (2026-09-12). */
+  held: { poolId: bigint; player: string; reason: 'sanctions_hold' | 'forfeit_logged' }[];
+  /** Bundles the "bundle owed" pass published this tick (2026-09-12). */
+  published: { poolId: bigint; uri: string }[];
   /** Every caught failure — the tick continues past each. */
   errors: DaemonError[];
 }
@@ -163,6 +222,21 @@ export function makeDaemon(deps: DaemonDeps): Daemon {
   // In-memory only — a restart rescans from startPoolId, which is correct
   // (terminal is terminal) just slower for one tick.
   let floor = deps.startPoolId ?? 1n;
+  // The publish backoff, per pool. In-memory like the floor: a restart
+  // retries at once, which is the right thing after a fix.
+  const publishRetry = new Map<string, { failures: number; nextAttemptMs: number }>();
+
+  /** Tell the indexer where a bundle is. Fire-safe by contract (see DaemonDeps.announceBundle). */
+  async function announce(poolId: bigint, uri: string, report: TickReport): Promise<void> {
+    if (!deps.announceBundle) return;
+    try {
+      await deps.announceBundle(poolId, uri);
+      log('bundle_announced', { poolId: poolId.toString(), uri });
+    } catch (e) {
+      report.errors.push({ action: 'announce_bundle', poolId: poolId.toString(), message: String(e) });
+      log('announce_bundle:failed', { poolId: poolId.toString(), error: String(e) });
+    }
+  }
 
   async function settleOne(poolId: bigint, report: TickReport): Promise<boolean> {
     let pool = await deps.chain.getPool(poolId);
@@ -190,20 +264,7 @@ export function makeDaemon(deps: DaemonDeps): Daemon {
       const outcome = await deps.crank(poolId);
       report.cranked.push({ poolId, finalState: outcome.finalState });
       log('cranked', { poolId: poolId.toString(), finalState: outcome.finalState });
-      if (outcome.bundleUri && deps.announceBundle) {
-        try {
-          await deps.announceBundle(poolId, outcome.bundleUri);
-          log('bundle_announced', { poolId: poolId.toString(), uri: outcome.bundleUri });
-        } catch (e) {
-          // Fire-safe by contract (see DaemonDeps.announceBundle).
-          report.errors.push({
-            action: 'announce_bundle',
-            poolId: poolId.toString(),
-            message: String(e),
-          });
-          log('announce_bundle:failed', { poolId: poolId.toString(), error: String(e) });
-        }
-      }
+      if (outcome.bundleUri) await announce(poolId, outcome.bundleUri, report);
       pool = await deps.chain.getPool(poolId);
     }
 
@@ -213,13 +274,52 @@ export function makeDaemon(deps: DaemonDeps): Daemon {
     // escrow instant; otherwise it keeps the pool non-terminal so the
     // sweep returns next tick. A throw from `releaseEscrow` propagates to
     // the sweep's per-pool catch and is retried the same way.
+    //
+    // Two holds the clock must NOT release (2026-09-12, audit 2026-09-11):
+    //   - a SANCTIONS hold (B-30 / C-10 / C-23 / D-26): `release_escrow`
+    //     refuses on both of its paths while `sanctions_hold` is set, so
+    //     calling it threw on every tick for ever — and the throw skipped
+    //     this pool's next-place step below. The share waits for the
+    //     admin's `lift_sanctions_hold`; the pool stays non-terminal.
+    //   - a FORFEIT already in the decision log (D-03): a reviewer's upheld
+    //     flag is logged first and lands on chain later, by a transaction a
+    //     human signs. In that gap the clock used to pay the flagged
+    //     player. With `deps.decisions` wired it asks the log first, and
+    //     once the window has passed with the on-chain forfeit still
+    //     missing it raises an alert: the multisig is late.
     let holdOutstanding = false;
     if (pool.state === 'Scored' || pool.state === 'Paid') {
       const now = deps.now();
       for (const e of await deps.chain.getEntries(poolId)) {
         const underReview = e.settled && e.flagged && !e.forfeited && e.escrowLamports > 0n;
         if (!underReview) continue;
-        if (now >= e.escrowedAt + REVIEW_WINDOW_SECS) {
+        const windowPassed = now >= e.escrowedAt + REVIEW_WINDOW_SECS;
+        // The two holds are reported every tick they are seen; the metric
+        // counts only the ticks on which the clock WOULD have released.
+        if (e.sanctionsHold) {
+          holdOutstanding = true;
+          report.held.push({ poolId, player: e.player, reason: 'sanctions_hold' });
+          if (windowPassed) {
+            deps.monitor?.recordEvent(METRIC.reveal.releaseHeld, { reason: 'sanctions_hold' });
+            log('release:held-for-sanctions', { poolId: poolId.toString(), player: e.player });
+          }
+          continue;
+        }
+        if (deps.decisions && (await deps.decisions.forfeitLogged(poolId, e.player))) {
+          holdOutstanding = true;
+          report.held.push({ poolId, player: e.player, reason: 'forfeit_logged' });
+          if (windowPassed) {
+            deps.monitor?.recordEvent(METRIC.reveal.releaseHeld, { reason: 'forfeit_logged' });
+            log('release:held-for-forfeit', { poolId: poolId.toString(), player: e.player });
+            deps.monitor?.alert(ALERT.reveal.forfeitUnlanded, {
+              poolId: poolId.toString(),
+              player: e.player,
+              escrowedAt: e.escrowedAt.toString(),
+            });
+          }
+          continue;
+        }
+        if (windowPassed) {
           await deps.chain.releaseEscrow(poolId, e.player);
           report.released.push({ poolId, player: e.player });
           log('release_escrow', {
@@ -271,7 +371,51 @@ export function makeDaemon(deps: DaemonDeps): Daemon {
       }
     }
 
-    return TERMINAL.has(pool.state) && !holdOutstanding && !sharesOutstanding;
+    // ---- THE BUNDLE OWED (2026-09-12, audit C-09 / B-32 / D-27) -----------
+    // A Paid pool whose bundle is not on record still owes its
+    // verifiability. The crank records every upload (published-store.ts);
+    // a Paid pool with no record is retried here, on a backoff, through the
+    // crank's publish-only path — never the full settlement, whose winner
+    // screening would call the sanctions vendor again for a pool already
+    // paid. Until the bundle is on record the pool is not terminal, so the
+    // sweep keeps coming back to it.
+    let publishOutstanding = false;
+    if (pool.state === 'Paid' && deps.published && deps.publishOwed) {
+      const known = await deps.published.find(poolId);
+      if (known === null) {
+        publishOutstanding = true;
+        const key = poolId.toString();
+        const nowMs = (deps.nowMs ?? Date.now)();
+        const retry = publishRetry.get(key);
+        if (!retry || nowMs >= retry.nextAttemptMs) {
+          try {
+            const uri = await deps.publishOwed(poolId);
+            publishRetry.delete(key);
+            publishOutstanding = false;
+            report.published.push({ poolId, uri });
+            deps.monitor?.recordEvent(METRIC.reveal.bundlePublished);
+            log('publish_owed', { poolId: key, uri });
+            await announce(poolId, uri, report);
+          } catch (e) {
+            const failures = (retry?.failures ?? 0) + 1;
+            publishRetry.set(key, {
+              failures,
+              nextAttemptMs: nowMs + (deps.publishRetryMs ?? PUBLISH_RETRY_MS),
+            });
+            report.errors.push({ action: 'publish_owed', poolId: key, message: String(e) });
+            deps.monitor?.recordEvent(METRIC.reveal.bundlePublishFailed);
+            log('publish_owed:failed', { poolId: key, failures, error: String(e) });
+            if (failures >= PUBLISH_ALERT_AFTER) {
+              deps.monitor?.alert(ALERT.reveal.bundleUnpublished, { poolId: key, failures });
+            }
+          }
+        }
+      }
+    }
+
+    return (
+      TERMINAL.has(pool.state) && !holdOutstanding && !sharesOutstanding && !publishOutstanding
+    );
   }
 
   /** Land whatever launch steps the tier's Open pool still misses. */
@@ -299,6 +443,8 @@ export function makeDaemon(deps: DaemonDeps): Daemon {
       completed: [],
       released: [],
       nextPlacePaid: [],
+      held: [],
+      published: [],
       errors: [],
     };
 
@@ -376,6 +522,9 @@ export function makeDaemon(deps: DaemonDeps): Daemon {
       log('keeper:paused', {});
     }
 
+    deps.monitor?.recordEvent(METRIC.reveal.tick, {
+      outcome: report.errors.length === 0 ? 'ok' : 'failed',
+    });
     return report;
   }
 

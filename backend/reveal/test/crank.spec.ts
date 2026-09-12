@@ -5,12 +5,16 @@
  */
 import { expect } from 'chai';
 import { createHash } from 'crypto';
+import { ALERT } from '../../_shared/src/metrics';
 import {
   crankPool,
+  publishBundle,
   FakeChain,
   MemoryPublisher,
+  MemoryPublishedBundleStore,
   scoreWithMissing,
   type FakeEntry,
+  type RevealedForDetection,
 } from '../src';
 import {
   LocalCustody,
@@ -520,5 +524,145 @@ describe('detection wired into the crank (R11, roadmap 4.3)', () => {
     for (const v of t.chain.paid.values()) total += v;
     for (const v of t.chain.escrowed.values()) total += v;
     expect(total).to.equal(pot);
+  });
+
+  it('publishes neither the device hash nor the timings, and still hands both to detection (B-31)', async function () {
+    this.timeout(30000);
+    // One unreadable seat, so the channel's null case is exercised too.
+    const t = await buildSealedPool({ missing: 3 });
+    const seen: RevealedForDetection[][] = [];
+    const deps = {
+      chain: t.chain,
+      custody: t.custody,
+      ciphertexts: t.store,
+      publisher: t.publisher,
+      detect: async (_poolId: bigint, entries: RevealedForDetection[]) => {
+        seen.push(entries);
+        return [];
+      },
+    };
+    const outcome = await crankPool(deps, 1n);
+    expect(outcome.finalState).to.equal('Paid');
+
+    // The published object — after the JSON round trip MemoryPublisher
+    // performs — is version 2 and carries neither key on any entry. The
+    // bundle is permanent public storage; these two fields identify a
+    // browser across pools and time a player's screens, and no verification
+    // step reads either.
+    const bundle = t.publisher.published.get(outcome.bundleUri!)!;
+    expect(bundle.version).to.equal(2);
+    expect(bundle.entries.length).to.equal(64);
+    for (const e of bundle.entries) {
+      expect(e).to.not.have.property('device_hash');
+      expect(e).to.not.have.property('timings_ms');
+    }
+    expect(JSON.stringify(bundle)).to.not.match(/device_hash|timings_ms/);
+
+    // Detection received the sealed timings and device hash for every
+    // readable seat, the battles decoded, and null for the unreadable one.
+    expect(seen.length, 'the detection hook must have run exactly once').to.equal(1);
+    const byIndex = new Map(seen[0].map((d) => [d.index, d]));
+    expect(byIndex.size).to.equal(64);
+    for (let i = 0; i < 64; i++) {
+      const d = byIndex.get(i)!;
+      expect(d.player).to.equal(t.players[i]);
+      if (i === 3) {
+        expect(d.battles).to.equal(null);
+        expect(d.timingsMs).to.equal(null);
+        expect(d.deviceHash).to.equal(null);
+        continue;
+      }
+      expect(d.deviceHash).to.equal(hex(sha(`device:${i}`)));
+      expect(d.timingsMs).to.deep.equal([1000, 2000, 3000, 4000, 5000, 6000, 7000]);
+      expect(d.battles).to.deep.equal(t.battles[i].map((b) => [...b]));
+      expect(d.scoreHalf).to.be.a('number');
+    }
+  });
+});
+
+/*
+ * The publish record (2026-09-12, audit 2026-09-11: C-09 / B-32 / D-27) and
+ * the entry-refund alert (C-12).
+ */
+class CountingPublisher {
+  calls = 0;
+  readonly failFirst: number;
+  constructor(failFirst = 0) {
+    this.failFirst = failFirst;
+  }
+  async publish(bundle: { pool_id: string }): Promise<string> {
+    this.calls++;
+    if (this.calls <= this.failFirst) throw new Error('irys down');
+    return `counting://${bundle.pool_id}/${this.calls}`;
+  }
+}
+
+describe('the settlement crank: the publish record (2026-09-12)', () => {
+  it('records the upload, and a resumed crank never uploads a bundle already on record', async function () {
+    this.timeout(30000);
+    const t = await buildSealedPool({});
+    const publisher = new CountingPublisher();
+    const published = new MemoryPublishedBundleStore();
+    const deps = { chain: t.chain, custody: t.custody, ciphertexts: t.store, publisher, published };
+    const first = await crankPool(deps, 1n);
+    expect(first.finalState).to.equal('Paid');
+    expect(first.bundleUri).to.equal('counting://1/1');
+    expect(await published.find(1n)).to.equal('counting://1/1');
+    // Resume: the pool is Paid, the record says published — no second object.
+    const again = await crankPool(deps, 1n);
+    expect(again.bundleUri).to.equal('counting://1/1');
+    expect(again.stepsTaken).to.include('publish:already');
+    expect(publisher.calls).to.equal(1, 'the permanent record is written once');
+  });
+
+  it('publishBundle publishes a Paid pool whose upload failed at settlement, records it, and refuses to do it twice', async function () {
+    this.timeout(30000);
+    const t = await buildSealedPool({});
+    const published = new MemoryPublishedBundleStore();
+    const publisher = new CountingPublisher(1); // the settlement's upload fails
+    const deps = { chain: t.chain, custody: t.custody, ciphertexts: t.store, publisher, published };
+    const settled = await crankPool(deps, 1n);
+    expect(settled.finalState).to.equal('Paid');
+    expect(settled.stepsTaken).to.include('publish-failed');
+    expect(await published.find(1n)).to.equal(null, 'nothing on record after a failed upload');
+
+    const uri = await publishBundle(deps, 1n);
+    expect(uri).to.equal('counting://1/2');
+    expect(await published.find(1n)).to.equal('counting://1/2');
+    const same = await publishBundle(deps, 1n);
+    expect(same).to.equal('counting://1/2');
+    expect(publisher.calls).to.equal(2, 'the owed bundle is uploaded exactly once');
+  });
+
+  it('publishBundle refuses a pool that is not Paid', async function () {
+    this.timeout(30000);
+    const t = await buildSealedPool({});
+    const deps = { chain: t.chain, custody: t.custody, ciphertexts: t.store, publisher: t.publisher };
+    let refused = '';
+    try {
+      await publishBundle(deps, 1n);
+    } catch (e) {
+      refused = String(e);
+    }
+    expect(refused).to.include('not Paid');
+  });
+
+  it('raises the entry-refund alert naming every all-losses player (C-12)', async function () {
+    this.timeout(30000);
+    const t = await buildSealedPool({ missing: 3, garbage: 7 });
+    const alerts: { reason: string; detail: Record<string, unknown> }[] = [];
+    const monitor = {
+      recordEvent: () => {},
+      reportGauge: () => {},
+      alert: (reason: string, detail: Record<string, unknown>) => {
+        alerts.push({ reason, detail });
+      },
+    };
+    const deps = { chain: t.chain, custody: t.custody, ciphertexts: t.store, publisher: t.publisher, monitor };
+    await crankPool(deps, 1n);
+    expect(alerts.map((a) => a.reason)).to.deep.equal([ALERT.reveal.entryRefundOwed]);
+    expect(alerts[0].detail.poolId).to.equal('1');
+    expect((alerts[0].detail.players as string[]).sort()).to.deep.equal([t.players[3], t.players[7]].sort());
+    expect(alerts[0].detail.entryLamports).to.equal('100000000');
   });
 });

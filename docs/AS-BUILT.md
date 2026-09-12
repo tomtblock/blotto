@@ -220,6 +220,7 @@ reissue it**; the divergences are listed so the reissue is a single pass.
 | TECH-ARCH §3.2, §13 | A `claim` instruction and a claim step | Prizes are pushed. There is no claim step |
 | TECH-ARCH table of instructions | `register` splits 80/20 into vault and platform | `register` credits 100% to the treasury; the vault is read-only to it |
 | CLAUDE.md hard rules (corrected 2026-09-07) | "The program rejects" a bad allocation | The program never sees an allocation. The client and the scoring engine enforce it; see §4 |
+| BUILD-ROADMAP §2.4 | "Publish plaintext set + salts + timings to Irys" | Since 2026-09-12 (bundle version 2, audit B-31) the published bundle carries battles, salts, commitments and statuses only. The timings and the device hash reach the detection pipeline through `revealEntries(...).forDetection` and are never published: the bundle is permanent, verification needs neither, and the device hash is stable across pools |
 
 ## 6. What is not built
 

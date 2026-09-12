@@ -27,10 +27,20 @@
  * disagree, so this module's job is to compute the same answer the program
  * will, not to be trusted for it.
  *
- * IDEMPOTENT, like everything else in the daemon: it reads the chain's
- * current escrow for the forfeiter each pass and stops when it reaches zero.
- * A portion that already landed is refused by the program (`RankAlreadySettled`)
- * and the next tick simply sees a smaller remaining share.
+ * IDEMPOTENT AND RESUMABLE, like everything else in the daemon. The program
+ * fixes the split's FRAME on the forfeiter's Entry at the first portion it
+ * pays — the dividend, the group size, the seats paid so far, whether the
+ * remainder has gone out (`Entry.split_*`) — and every later portion must
+ * agree with that frame or it is refused (`NextPlaceSplitMismatch`,
+ * `RankAlreadySettled`). This module reads the frame back
+ * (`ChainEntryView.split*`) and plans ONLY the seats not yet paid, with the
+ * group size and dividend the frame fixed, so a split that stopped part-way
+ * — a dropped transaction, a restart between two portions — resumes on the
+ * next tick and its last portion empties the share exactly. Audit D-11 is
+ * why this is spelled out: before it, a replan re-issued the portion that
+ * had already landed (the lowest seat, which takes the remainder and so is
+ * paid first), the program refused it, the driver stopped at the refusal,
+ * and every remaining portion sat behind it for good.
  *
  * WHAT IT WILL NOT DO: there is no path here that sends a lamport anywhere
  * but to a player. The forfeiter is never a recipient, the operator is never
@@ -57,6 +67,15 @@ export interface NextPlacePortion {
   groupSize: number;
   /** True for the one recipient who takes the indivisible remainder. */
   takesRemainder: boolean;
+  /**
+   * The lamports this call pays, as the program computes them from the
+   * frame: `total / groupSize`, plus `total % groupSize` when
+   * `takesRemainder`. INFORMATIONAL — the program derives and enforces its
+   * own portion from the arguments above and never reads this; it is here
+   * so the tick log states what a player was paid, a number every player
+   * must be able to recompute from the published share and group.
+   */
+  portionLamports: bigint;
   /** Every OTHER committed seat's wallet, ascending by seat. */
   peers: string[];
 }
@@ -74,8 +93,22 @@ export interface NextPlacePlan {
 }
 
 /**
- * Work out every `pay_next_place` call for ONE forfeiter. Pure: chain state
- * and the published ranking in, arguments out. The caller executes them.
+ * Work out every `pay_next_place` call still owed for ONE forfeiter. Pure:
+ * chain state and the published ranking in, arguments out. The caller
+ * executes them.
+ *
+ * The forfeiter's split frame (`forfeiter.split*`) decides between two
+ * shapes of plan:
+ *
+ *   - FRAME NOT FIXED (`splitGroupSize === 0`, nothing paid yet): the group
+ *     is computed from the live chain state, the dividend is the whole
+ *     escrow, every member is planned.
+ *   - FRAME FIXED (a portion has landed): the group size and dividend are the
+ *     frame's — the program checks every later portion against them — and
+ *     only the members whose bit is clear in `splitPaidMask` are planned.
+ *     `takesRemainder` stays with the lowest seat of the FULL group (the
+ *     program's `lowest_eligible` counts paid members too) and is withheld
+ *     once `splitRemainderPaid` says it went out.
  */
 export function planNextPlace(
   ranking: PublishedRanking,
@@ -143,9 +176,29 @@ export function planNextPlace(
   }
   if (recipients.length === 0) return none('no_eligible_recipient');
 
-  // Equal split; the indivisible remainder to the LOWEST entry number.
-  const groupSize = recipients.length;
+  // THE SPLIT FRAME (audit D-11). Once a portion has landed, the program
+  // holds the group size and the dividend on the forfeiter's Entry and
+  // checks every later call against them; before that, the live group and
+  // the whole escrow are what the first call will fix. Either way the seats
+  // already in the paid mask are done — re-issuing one is refused
+  // (`RankAlreadySettled`), and it was the refusal, not the arithmetic,
+  // that left a part-paid split stuck.
+  const frameFixed = forfeiter.splitGroupSize > 0;
+  const groupSize = frameFixed ? forfeiter.splitGroupSize : recipients.length;
+  const total = frameFixed ? forfeiter.splitTotal : forfeiter.escrowLamports;
+  const paidMask = frameFixed ? forfeiter.splitPaidMask : 0n;
+  const remainderPaid = frameFixed ? forfeiter.splitRemainderPaid : false;
+
+  // Equal split; the indivisible remainder to the LOWEST entry number of the
+  // whole group — paid members included, exactly as the program's
+  // `lowest_eligible` is computed at first place — unless it already went out.
   const lowestSeat = Math.min(...recipients.map((r) => r.seat));
+  const unpaid = recipients.filter((r) => (paidMask & (1n << BigInt(r.seat))) === 0n);
+  if (unpaid.length === 0) return none('no_eligible_recipient');
+
+  const n = BigInt(groupSize);
+  const per = total / n;
+  const rem = total % n;
   const rowPosition = (player: string): number => {
     const i = ranking.rows.findIndex((r) => r.player === player);
     if (i < 0) throw new Error(`${player} is not in the published ranking`);
@@ -153,18 +206,22 @@ export function planNextPlace(
   };
 
   return {
-    portions: recipients
+    portions: unpaid
       .sort((a, b) => a.seat - b.seat)
-      .map((r) => ({
-        from: forfeiter.player,
-        to: r.player,
-        rank: r.rank,
-        amountLamports: r.amountLamports,
-        proof: proofForRow(ranking, rowPosition(r.player)),
-        groupSize,
-        takesRemainder: r.seat === lowestSeat,
-        peers: peersExcluding(r.seat),
-      })),
+      .map((r) => {
+        const takesRemainder = r.seat === lowestSeat && !remainderPaid;
+        return {
+          from: forfeiter.player,
+          to: r.player,
+          rank: r.rank,
+          amountLamports: r.amountLamports,
+          proof: proofForRow(ranking, rowPosition(r.player)),
+          groupSize,
+          takesRemainder,
+          portionLamports: takesRemainder ? per + rem : per,
+          peers: peersExcluding(r.seat),
+        };
+      }),
     blocker: null,
   };
 }
@@ -177,9 +234,11 @@ export interface NextPlacePaid {
 }
 
 /**
- * Land every portion of one forfeiter's share. Stops at the first refusal
- * and lets the caller report it — the sweep retries next tick, and a portion
- * the program has already settled is refused rather than double-paid.
+ * Land every portion of one forfeiter's plan. Stops at the first refusal
+ * and lets the caller report it: a refusal means the plan no longer matches
+ * the chain, and the next tick re-plans from the chain's own frame
+ * (`planNextPlace`) rather than retrying stale arguments. A portion the
+ * program has already settled is refused rather than double-paid.
  */
 export async function payNextPlacePortions(
   chain: Pick<SettlementChain, 'payNextPlace'>,
@@ -208,6 +267,7 @@ export async function payNextPlacePortions(
       rank: p.rank,
       groupSize: p.groupSize,
       takesRemainder: p.takesRemainder,
+      portionLamports: p.portionLamports.toString(),
     });
   }
   return paid;

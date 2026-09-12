@@ -49,10 +49,29 @@ export function encode35(battles: BattleSet): Uint8Array {
   return out;
 }
 
-/** What `revealEntries` produces: the bundle's entry rows, the scoring
- * input, and the players whose entries were scored as all losses. */
+/**
+ * One entry as the DETECTION layer sees it (R11, TECH-ARCH §9): the sealed
+ * payload's timings and device hash, with the battles as the real decoded
+ * set. This is the channel those two fields travel on — and the only one.
+ * They are NOT in `RevealBundleEntry` (bundle version 2, audit 2026-09-11
+ * B-31): the bundle is permanent public storage, verification never reads
+ * them, and the device hash is stable across pools. `null` when the entry
+ * could not be read back (same cases as `RevealBundleEntry.status`).
+ */
+export interface RevealedEntryForDetection {
+  player: string; // base58
+  index: number;
+  battles: BattleSet | null;
+  timingsMs: number[] | null;
+  deviceHash: string | null; // hex 32
+}
+
+/** What `revealEntries` produces: the bundle's entry rows, the detection
+ * channel (never published), the scoring input, and the players whose
+ * entries were scored as all losses. */
 export interface RevealedEntries {
   bundleEntries: RevealBundleEntry[];
+  forDetection: RevealedEntryForDetection[];
   scoringInput: PoolEntryInput[];
   allLosses: string[];
 }
@@ -76,6 +95,7 @@ export async function revealEntries(
 ): Promise<RevealedEntries> {
   const keypair = { secretKey: secret, publicKey: publicKeyOf(secret) };
   const bundleEntries: RevealBundleEntry[] = [];
+  const forDetection: RevealedEntryForDetection[] = [];
   const scoringInput: PoolEntryInput[] = [];
   const allLosses: string[] = [];
 
@@ -121,14 +141,21 @@ export async function revealEntries(
       index: e.index,
       battles: battles ? hex(encode35(battles)) : null,
       salt: payloadFields ? hex(payloadFields.salt) : null,
-      timings_ms: payloadFields ? [...payloadFields.timingsMs] : null,
-      device_hash: payloadFields ? hex(payloadFields.deviceHash) : null,
       battles_hash: e.battlesHash,
       status,
     });
+    // The detection channel: what the payload carried FOR detection, kept
+    // off the published record (B-31). Same decoded battles, no re-parse.
+    forDetection.push({
+      player: e.player,
+      index: e.index,
+      battles,
+      timingsMs: payloadFields ? [...payloadFields.timingsMs] : null,
+      deviceHash: payloadFields ? hex(payloadFields.deviceHash) : null,
+    });
   }
 
-  return { bundleEntries, scoringInput, allLosses };
+  return { bundleEntries, forDetection, scoringInput, allLosses };
 }
 
 /** One row of the published ranking, in published (leaf) order. */

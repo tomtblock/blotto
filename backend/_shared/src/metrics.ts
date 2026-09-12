@@ -21,10 +21,11 @@
  * without dragging `pg` or an SDK into its typecheck.
  *
  * TODO(phase-2 / phase-4): add namespaces for the services that do not exist yet —
- * `sealing` (ciphertext store, key export, reveal), `detection` (signals raised,
- * entries flagged, review outcomes), and `reveal` (scoring runs, results
- * committed). The `packet` namespace below covers the entry gate's UPSTREAM
- * health only; its issuance counters are still to come.
+ * `sealing` (ciphertext store, key export, reveal) and `detection` (signals
+ * raised, entries flagged, review outcomes). `reveal` landed 2026-09-12 with the
+ * daemon's first Monitor wiring (audit 2026-09-11, E-04): the tick, the review
+ * clock's holds, and bundle publication. The `packet` namespace below covers the
+ * entry gate's UPSTREAM health only; its issuance counters are still to come.
  *
  * Two of those carry a rule worth deciding BEFORE the metric exists, not after,
  * and the first is already load-bearing for the `packet` names below:
@@ -65,6 +66,21 @@ export const METRIC = {
     webhookUnauthorized: 'indexer_webhook_unauthorized',
     /** Counter: an announced or backfilled bundle recomputed to the on-chain root (E3). */
     archiveVerified: 'indexer_archive_verified',
+  },
+  reveal: {
+    /** Counter (label `outcome`: ok|failed): the settlement daemon completed a tick. */
+    tick: 'reveal_tick',
+    /**
+     * Counter (label `reason`: sanctions_hold|forfeit_logged): the review clock
+     * left a held share where it was instead of releasing it — a sanctions hold
+     * the program would refuse anyway, or a reviewer's forfeit already logged
+     * and waiting for its on-chain transaction (audit 2026-09-11, B-30 / D-03).
+     */
+    releaseHeld: 'reveal_release_held',
+    /** Counter: a settled pool's reveal bundle was published for the first time. */
+    bundlePublished: 'reveal_bundle_published',
+    /** Counter: a publish attempt failed; the daemon retries on a later tick. */
+    bundlePublishFailed: 'reveal_bundle_publish_failed',
   },
   packet: {
     /**
@@ -139,6 +155,35 @@ export const ALERT = {
      * being refused. The most serious operational state the entry path has.
      */
     geoAllSourcesFailed: 'packet geo all sources failed',
+  },
+  reveal: {
+    /**
+     * A reviewer's upheld forfeit is in the decision log but the on-chain
+     * `forfeit_escrow` has not landed within the review window: the multisig
+     * is late, the share sits in the vault, and the review clock is holding
+     * its release on the log's word alone (audit 2026-09-11, D-03).
+     */
+    forfeitUnlanded: 'reveal forfeit logged but not landed on chain',
+    /**
+     * A Paid pool still has no published bundle after repeated attempts, so
+     * nobody can verify it. Until 2026-09-12 a failed publish was never
+     * retried at all (audit 2026-09-11, C-09 / B-32 / D-27).
+     */
+    bundleUnpublished: 'reveal settled pool still unpublished',
+    /**
+     * The crank scored an entry as all losses under the published
+     * lost-ciphertext rule, so an entry-fee refund from the platform treasury
+     * is OWED off-chain. The bundle records it; this is the only other place
+     * it is said out loud (audit 2026-09-11, C-12).
+     */
+    entryRefundOwed: 'reveal entry refund owed after lost ciphertext',
+    /**
+     * No tick has completed within the staleness budget: the loop is wedged
+     * on something that will not answer. /health turns 503 on the same
+     * condition so the platform restarts the process (audit 2026-09-11,
+     * C-22 / C-27).
+     */
+    tickStale: 'reveal daemon tick stale',
   },
 } as const;
 

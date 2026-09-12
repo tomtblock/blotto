@@ -232,3 +232,24 @@ describe('account metadata, across the language boundary', () => {
     ).to.deep.equal([]);
   });
 });
+
+/*
+ * B-47 (audit 2026-09-11): an instruction that names the admin as a signer
+ * must be SENT with the admin's keypair. `liftSanctionsHold` built one and
+ * sent it with the settlement signer alone, so it could never land. Pinned
+ * by text, like the metas above: every builder whose keys list
+ * `admin.publicKey` as a signer passes `[admin]` to `send`.
+ */
+describe('admin-signed builders sign as the admin (B-47)', () => {
+  it('every builder naming admin.publicKey as a signer sends with [admin]', () => {
+    const src = readFileSync(CLIENT, 'utf8');
+    const methods = src.split(/\n  async /).slice(1);
+    const adminSigned = methods.filter((m) => /admin\.publicKey, isSigner: true/.test(m));
+    expect(adminSigned.length, 'at least lift_sanctions_hold and forfeit_escrow').to.be.greaterThan(1);
+    for (const m of adminSigned) {
+      const name = m.slice(0, m.indexOf('('));
+      const sendsAsAdmin = /\[admin\]\s*[,)]/.test(m);
+      expect(sendsAsAdmin, `${name} names the admin as a signer but does not send with [admin]`).to.equal(true);
+    }
+  });
+});

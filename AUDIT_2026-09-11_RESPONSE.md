@@ -201,3 +201,32 @@ vault (the B-03 vector itself); a `Donate` op with its term in the identity is a
 
 **Not closed by this PR:** the two blockers (the devnet redeploy, the credentialed rehearsal) and
 the five decisions are the founder's; waves 1–5 follow the plan's order.
+
+**Later the same day (2026-09-12, ~15:40Z):** the founder deployed the program — slot 497261524,
+`check-deployed` clean, Config 484 bytes — after three tooling failures the runbook's recovery
+notes now record (the loader's 10,240-byte minimum extension, macOS's 256 open-file limit, the
+buffer resume). The backend redeploy and the one-lamport proof on pool 9 remain before the Wave 0
+gate is met in full.
+
+## Addendum — Wave 1, batch D1: daemon correctness (2026-09-12)
+
+The plan's first Wave 1 batch, landed in one PR with a test per row. The daemon liveness rows the
+plan listed under O1 (1.3) are folded in because they live in the same file as the tick loop.
+
+| Audit id | What changed | Shown closed by |
+|---|---|---|
+| B-31 (and B-40's publication half) | Bundle version 2 carries neither `device_hash` nor `timings_ms`; detection reads them from an unpublished channel `revealEntries` returns beside the bundle rows | `crank.spec`: the stored bundle has neither key and detection still receives both; `publisher-irys.spec` pins the v2 tag |
+| B-30 / C-10 / C-23 / D-26 | The review clock leaves a sanctions-held share in place instead of calling a release the program refuses; the pool stays non-terminal, nothing throws, the next-place step still runs | `daemon.spec`: held share left alone across ticks, released after the admin lifts the hold; `review-clock.spec` pins `releasableByClock` over every combination |
+| D-03 (daemon half) | With `PgDecisionLog` + `appealState` wired, a share whose reviewer logged a forfeit is never released by the clock; `reveal forfeit logged but not landed on chain` fires once the window passes unlanded | `daemon.spec`: held inside and past the window, alert on the second, next-place pays once the forfeit lands |
+| C-09 / B-32 / D-27 | Every upload is recorded in `published_bundles` (migration 0016); a recorded bundle is never re-uploaded; a Paid pool with no record is retried on a ten-minute backoff through `publishBundle` (no detection, screening, commit or payment) and alerted after three failures | `crank.spec`: one upload across a resume, `publishBundle` after a failed settlement upload, refused on a non-Paid pool; `daemon.spec`: backoff, alert, announce on landing |
+| D-11 | `planNextPlace` reads the program's split frame (five new `ChainEntryView` fields through an `ENTRY_LAYOUT` table pinned against `state.rs`) and resumes a partial split with only the unpaid recipients | `next-place.spec`: nine FakeChain-judged cases including the regression (first portion lands, second fails, resume pays exactly the rest); `entry-layout.spec` derives every offset from the Rust struct |
+| B-47 | `liftSanctionsHold` signs as the admin | `account-metas.spec`: every builder naming `admin.publicKey` as a signer sends with `[admin]` |
+| C-34 | Every send carries `setComputeUnitPrice` from the shared percentile choice (moved to `_shared/src/priority-fee.ts`; the app re-exports it) via a cached sampler with the floor as fallback | `priority-fee.spec` (reveal), the app's existing `priority-fee.test` unchanged |
+| C-35 / F-10 | `KeeperChain.chainNow()` reads the Clock sysvar's `unix_timestamp`; the daemon's deadline comparisons and the export policy use it, one read per tick | `entry-layout.spec` pins `clockUnixTimestamp`; the daemon's `now` is the chain's in `main.ts` |
+| C-22 | Every RPC request aborts after 30 s, the announce after 10 s; a tick that still hangs is caught by the staleness rule below | `main.ts` (a wiring change; the rule it relies on is tested in `health.spec`) |
+| C-05 / C-27 / E-04 / D-07 | `/health` answers 503 once no tick has completed for `STALE_TICK_MS` (fifteen minutes, PHASE-N-REVIEW); the daemon builds a Monitor from `BLOTTO_MONITOR_SINK`, serves `/metrics`, and a `reveal` metrics namespace exists; `backend-watch` probes all four services | `health.spec`: four staleness cases, the old "never fails for age" contract inverted on purpose |
+| C-12 | `reveal entry refund owed after lost ciphertext` names the pool and the all-losses players; the manual's §7 says what to do with it | `crank.spec`: the alert names exactly the sabotaged seats |
+
+**Reported, not changed (routed):** B-37 (a sanctions hold on any committed peer makes `pay_next_place`
+refuse `NextPlaceIneligible` — program, batch P1); the indexer table and admin command for the
+entry-refund obligation (batch I1); a `Donate` op in the proptest model (batch T1).

@@ -61,7 +61,9 @@ rule in `docs/OPERATING-MANUAL.md:31-33`).**
    it to settle or refund before upgrading.
 5. Run the deploy script with the program keypair and the database URL so the indexer
    migrate/re-derive step runs too:
-   `BLOTTO_PROGRAM_KEYPAIR=~/.config/solana/blotto/blotto_cup-program-devnet.json BLOTTO_DATABASE_URL=<neon url> ./scripts/deploy-devnet.sh`
+   `BLOTTO_PROGRAM_KEYPAIR=~/.config/solana/blotto/blotto_cup-program-devnet.json BLOTTO_DEPLOY_KEYPAIR=~/.config/solana/blotto/fee-payer-devnet.json ./scripts/deploy-devnet.sh`
+   (since 2026-09-12 the script names its signing key, raises the open-file limit and sends the
+   upload itself with retries — the runbook's recovery note of that date says why)
    The script (`scripts/deploy-devnet.sh:36-106`) refuses a keypair whose pubkey is not `declare_id`,
    runs `anchor build` (strict, not `--ignore-keys`), extends the program account if the binary
    grew, runs `anchor deploy`, prints `solana program show`, then runs the indexer's `migrate` and
@@ -356,13 +358,13 @@ except where marked.
 
 | Wave | What | Who | Gate to the next wave |
 |---|---|---|---|
-| **0 — this week** | 0.1 §1a: redeploy the program to devnet (steps 1–9, incl. the backend redeploy in step 7 and the one-lamport pool in step 8) | You | `check-deployed` clean on the new slot; the one-lamport pool reaches Paid/Closed |
+| **0 — this week** | 0.1 §1a: redeploy the program to devnet (steps 1–9, incl. the backend redeploy in step 7 and the one-lamport pool in step 8). **Program deployed 2026-09-12, slot 497261524, `check-deployed` clean; backend redeploy and the pool-9 proof pending** | You | `check-deployed` clean on the new slot; the one-lamport pool reaches Paid/Closed |
 | | 0.2 PR "post-audit follow-ups": all six §5 rows (the ceiling wiring, the faithful proptest model, A-34, E-07, the lint warning, the cost line) | Me | ci-fast + on-chain green; merged |
 | | 0.3 PR "D-02 announce + archive-backfill": §3a steps 1–4 | Me | merged; next backend deploy shows announce ON |
 | | 0.4 Four decisions, in this order: **2a** name the second reviewer → **2e** ratify the numbers table → **2c** confirm option (2) for B-07 → **2b** confirm (a) report for detection. 2c gates I1 and 2b gates R1; the first two gate the rehearsal | You | Decisions written into `docs/BUILD-ROADMAP_v1.0.md`'s register (one line each, dated) |
 | | 0.5 §3c step 1: Neon point-in-time restore on, retention ≥ 14 days | You | A screenshot of the Neon setting pasted into the runbook |
 | | 0.6 Tiny PR: D-43 — guard `/admin/review` and `/admin/treasury` (moved forward from A1 because the app is already public) | Me | merged |
-| **1 — before the rehearsal** (one to two weeks) | 1.1 **D1** daemon batch, B-31 first (the bundle goes to permanent storage, so the privacy leak is fixed before any bundle with it is published), then §3b D-03's daemon half, the B-30 held-entry loop, B-47, C-09, C-22, C-35/F-10, D-11, C-12, C-34 | Me | reveal package typecheck + tests green; merged |
+| **1 — before the rehearsal** (one to two weeks) | 1.1 **D1** daemon batch, B-31 first (the bundle goes to permanent storage, so the privacy leak is fixed before any bundle with it is published), then §3b D-03's daemon half, the B-30 held-entry loop, B-47, C-09, C-22, C-35/F-10, D-11, C-12, C-34. **Landed 2026-09-12 with the daemon liveness rows of 1.3 folded in (response record, Wave 1 D1 addendum)** | Me | reveal package typecheck + tests green; merged |
 | | 1.2 **I1** indexer batch: B-07 option (2) with C-25, B-20/F-05, B-18, C-11/C-21, D-18, F-19, E-15, and the report half of prior-audit **O26** (anchor `GET /treasury`'s policy and tier tables on the live Config; its event half is a program change and goes to P1) | Me | indexer typecheck + tests green; merged |
 | | 1.3 **O1-part**: daemon liveness (C-05/C-27/E-04/D-07) and §3c step 2, the nightly dump of `sealed_entries` + `published_pool_keys`. The rest of O1 waits for wave 5 | Me | first scheduled dump run green |
 | | 1.4 **C1-quick**: G-10/E-16 (deploy-backend gated on CI green and restricted to `main`), E-19 (a 401'd webhook fails the deploy, not warns), B-34 (lockfile in the drift lane). These protect the deploys wave 1 relies on; the rest of C1 waits for wave 5 | Me | one deploy-backend run refused on a red ref, one accepted |

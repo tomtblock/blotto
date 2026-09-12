@@ -15,7 +15,13 @@
 
 import { expect } from 'chai';
 import { createHash } from 'crypto';
-import { FakeChain, planNextPlace, payNextPlacePortions, type ChainEntryView } from '../src';
+import {
+  FakeChain,
+  planNextPlace,
+  payNextPlacePortions,
+  type ChainEntryView,
+  type SettlementChain,
+} from '../src';
 import { buildRanking, proofForRow } from '../src/ranking';
 import { TIER_ENTRY_LAMPORTS, TIER_POT_LAMPORTS, type PlayerResult } from '../../scoring/src';
 import { base58Encode } from '../../_shared/src/blotto-events';
@@ -37,6 +43,13 @@ function entry(index: number, over: Partial<ChainEntryView> = {}): ChainEntryVie
     escrowLamports: 0n,
     escrowedAt: 0n,
     sanctionsHold: false,
+    nextPlaceLamports: 0n,
+    // The split frame: zero until the first portion of this entry's
+    // forfeited share is paid (`Entry.split_*`).
+    splitTotal: 0n,
+    splitPaidMask: 0n,
+    splitGroupSize: 0,
+    splitRemainderPaid: false,
     ...over,
   };
 }
@@ -153,6 +166,78 @@ describe('planNextPlace — who receives an upheld share', () => {
   });
 });
 
+describe('planNextPlace — resuming from the split frame (audit D-11)', () => {
+  // A three-way tie for first; seat 1's third is the forfeited share, divided
+  // between seats 0 and 2. The pot's third is odd, so there IS an indivisible
+  // lamport and the remainder rule is exercised, not skipped.
+  const SEATS = [0, 1, 2, 3, 4];
+  const share = POT / 3n;
+  const per = share / 2n;
+  const rem = share % 2n;
+  const shape = (plan: ReturnType<typeof planNextPlace>) =>
+    plan.portions.map((p) => [p.to, p.groupSize, p.takesRemainder, p.portionLamports]);
+
+  it('the fixture carries an indivisible lamport', () => {
+    expect(rem).to.equal(1n);
+  });
+
+  it('plans only the seats not yet in the paid mask, with the frame`s group size', () => {
+    const ranking = rankingOf(SEATS, [0, 1, 2]);
+    const entries = SEATS.map((s) => entry(s, s <= 2 ? { settled: true } : {}));
+    // Seat 0's portion landed (the remainder with it): the frame is fixed at
+    // two members and the escrow has counted down by that portion.
+    entries[0].nextPlaceLamports = per + rem;
+    entries[1] = entry(1, {
+      settled: true,
+      flagged: true,
+      forfeited: true,
+      escrowLamports: per,
+      splitTotal: share,
+      splitGroupSize: 2,
+      splitPaidMask: 1n << 0n,
+      splitRemainderPaid: true,
+    });
+    const plan = planNextPlace(ranking, entries, [0, 1, 2], entries[1]);
+    expect(plan.blocker).to.equal(null);
+    expect(shape(plan)).to.deep.equal([[player(2), 2, false, per]]);
+    // Peers still exclude the forfeiter and the recipient — the paid member
+    // is a peer like any other; the program classifies it as eligible.
+    expect(plan.portions[0].peers).to.deep.equal([player(0)]);
+  });
+
+  it('the remainder stays with the lowest seat of the WHOLE group until the frame says it went out', () => {
+    const ranking = rankingOf(SEATS, [0, 1, 2]);
+    const entries = SEATS.map((s) => entry(s, s <= 2 ? { settled: true } : {}));
+    // Seat 2's portion landed first: the remainder is still owed and only
+    // seat 0 may take it (`takes_remainder == (to.index == lowest_eligible)`).
+    entries[1] = entry(1, {
+      settled: true,
+      flagged: true,
+      forfeited: true,
+      escrowLamports: per + rem,
+      splitTotal: share,
+      splitGroupSize: 2,
+      splitPaidMask: 1n << 2n,
+      splitRemainderPaid: false,
+    });
+    const plan = planNextPlace(ranking, entries, [0, 1, 2], entries[1]);
+    expect(shape(plan)).to.deep.equal([[player(0), 2, true, per + rem]]);
+  });
+
+  it('without a frame, the plan is the live group over the whole escrow — as before', () => {
+    const ranking = rankingOf(SEATS, [0, 1, 2]);
+    const entries = SEATS.map((s) =>
+      entry(s, s <= 2 ? { settled: true, flagged: s === 1, escrowLamports: s === 1 ? share : 0n } : {})
+    );
+    entries[1].forfeited = true;
+    const plan = planNextPlace(ranking, entries, [0, 1, 2], entries[1]);
+    expect(shape(plan)).to.deep.equal([
+      [player(0), 2, true, per + rem],
+      [player(2), 2, false, per],
+    ]);
+  });
+});
+
 describe('payNextPlacePortions — the program judges the arguments', () => {
   /** A settled pool on the fake chain, with a real committed root. */
   async function settledPool(winners: number[], seatCount = 5) {
@@ -254,6 +339,223 @@ describe('payNextPlacePortions — the program judges the arguments', () => {
     }
     expect(refused).to.match(/NoEscrow|RankAlreadySettled/);
     expect(chain.paid.get(player(0))).to.equal(POT);
+  });
+
+  /**
+   * A seam whose `payNextPlace` throws on call number `failOn` — a dropped
+   * transaction between two portions — and forwards every other call to the
+   * fake, counting them. `failOn: 0` never fails and only counts.
+   */
+  function flaky(chain: FakeChain, failOn: number) {
+    const calls = { n: 0 };
+    const seam: Pick<SettlementChain, 'payNextPlace'> = {
+      payNextPlace: async (...args: Parameters<SettlementChain['payNextPlace']>) => {
+        calls.n += 1;
+        if (calls.n === failOn) throw new Error('simulated: transaction was not confirmed');
+        return chain.payNextPlace(...args);
+      },
+    };
+    return { seam, calls };
+  }
+
+  /** The total every exit has paid to every player. */
+  function movedTotal(chain: FakeChain): bigint {
+    let moved = 0n;
+    for (const v of chain.paid.values()) moved += v;
+    return moved;
+  }
+
+  /** A three-way tie for first with seat 1's flag upheld: the forfeited
+   * third divides between seats 0 and 2, with an indivisible lamport. */
+  async function threeWayForfeit() {
+    const { chain, ranking, entries } = await settledPool([0, 1, 2]);
+    entries[1].flagged = true;
+    await chain.payPrizes(1n, [0, 1, 2]);
+    await chain.forfeitEscrow(1n, player(1));
+    const share = chain.escrowed.get(player(1))!;
+    const per = share / 2n;
+    const rem = share % 2n;
+    expect(rem, 'the fixture must exercise the remainder rule').to.equal(1n);
+    return { chain, ranking, share, per, rem };
+  }
+
+  it('D-11 REGRESSION: a split that stopped part-way resumes with the unpaid portions only', async () => {
+    const { chain, ranking, share, per, rem } = await threeWayForfeit();
+    const live = await chain.getEntries(1n);
+    const first = planNextPlace(ranking, live, [0, 1, 2], live[1]);
+    expect(first.portions.map((p) => p.to)).to.deep.equal([player(0), player(2)]);
+
+    // The first portion lands; the second transaction is dropped.
+    const dropped = flaky(chain, 2);
+    let failed = '';
+    try {
+      await payNextPlacePortions(dropped.seam, 1n, first.portions);
+    } catch (e) {
+      failed = String(e);
+    }
+    expect(failed).to.contain('simulated');
+    expect(dropped.calls.n).to.equal(2);
+    // The chain now carries the frame the first portion fixed.
+    const mid = (await chain.getEntries(1n))[1];
+    expect(mid.splitGroupSize).to.equal(2);
+    expect(mid.splitTotal).to.equal(share);
+    expect(mid.splitPaidMask).to.equal(1n << 0n);
+    expect(mid.splitRemainderPaid).to.equal(true);
+    expect(mid.escrowLamports).to.equal(per);
+
+    // THE OLD BEHAVIOUR: replaying the original plan re-issues seat 0 first,
+    // the program refuses it, and nothing behind it moves — the stuck state
+    // the audit describes.
+    let refused = '';
+    try {
+      await payNextPlacePortions(chain, 1n, first.portions);
+    } catch (e) {
+      refused = String(e);
+    }
+    expect(refused).to.contain('RankAlreadySettled');
+    expect(chain.escrowed.get(player(1))).to.equal(per, 'nothing moved');
+
+    // THE FIX: the next tick re-plans from the frame — the unpaid seat only,
+    // the frame's group size — and the program accepts it.
+    const again = await chain.getEntries(1n);
+    const resume = planNextPlace(ranking, again, [0, 1, 2], again[1]);
+    expect(resume.blocker).to.equal(null);
+    expect(resume.portions.map((p) => [p.to, p.groupSize, p.takesRemainder])).to.deep.equal([
+      [player(2), 2, false],
+    ]);
+    const counted = flaky(chain, 0);
+    const paid = await payNextPlacePortions(counted.seam, 1n, resume.portions);
+    expect(counted.calls.n).to.equal(1, 'exactly one call: the unpaid portion');
+    expect(paid).to.deep.equal([{ poolId: 1n, from: player(1), to: player(2) }]);
+    // The program's verdict: the share is empty, each member holds its
+    // portion once, and the pot is conserved to the lamport.
+    expect(chain.escrowed.get(player(1)) ?? 0n).to.equal(0n);
+    expect(chain.nextPlacePaid.get(player(0))).to.equal(per + rem);
+    expect(chain.nextPlacePaid.get(player(2))).to.equal(per);
+    expect(movedTotal(chain)).to.equal(POT);
+    expect(chain.paid.get(player(1)) ?? 0n).to.equal(0n, 'nothing to the forfeiter');
+  });
+
+  it('the remainder is paid exactly once across a resume, whichever portion landed first', async () => {
+    const { chain, ranking, per, rem } = await threeWayForfeit();
+    const live = await chain.getEntries(1n);
+    const plan = planNextPlace(ranking, live, [0, 1, 2], live[1]);
+    // Land the NON-remainder portion first, by hand: the frame is then fixed
+    // with the remainder still owed.
+    const second = plan.portions.find((p) => p.to === player(2))!;
+    expect(second.takesRemainder).to.equal(false);
+    await chain.payNextPlace(
+      1n,
+      second.from,
+      second.to,
+      second.rank,
+      second.amountLamports,
+      second.proof,
+      second.groupSize,
+      second.takesRemainder,
+      second.peers
+    );
+    const mid = (await chain.getEntries(1n))[1];
+    expect(mid.splitGroupSize).to.equal(2);
+    expect(mid.splitPaidMask).to.equal(1n << 2n);
+    expect(mid.splitRemainderPaid).to.equal(false);
+    expect(mid.escrowLamports).to.equal(per + rem);
+
+    // The resume: one portion, to the lowest seat, carrying the remainder —
+    // the program's last-payment rule accepts exactly that and nothing else.
+    const resume = planNextPlace(ranking, await chain.getEntries(1n), [0, 1, 2], mid);
+    expect(resume.portions.map((p) => [p.to, p.takesRemainder, p.portionLamports])).to.deep.equal([
+      [player(0), true, per + rem],
+    ]);
+    await payNextPlacePortions(chain, 1n, resume.portions);
+    expect(chain.splits.get(player(1))!.remainderPaid).to.equal(true);
+    expect(chain.escrowed.get(player(1)) ?? 0n).to.equal(0n);
+    expect(chain.nextPlacePaid.get(player(0))).to.equal(per + rem);
+    expect(chain.nextPlacePaid.get(player(2))).to.equal(per);
+    expect(movedTotal(chain)).to.equal(POT);
+  });
+
+  it('a portion that never landed leaves the frame unfixed: the re-plan is the original plan', async () => {
+    const { chain, ranking } = await threeWayForfeit();
+    const live = await chain.getEntries(1n);
+    const plan = planNextPlace(ranking, live, [0, 1, 2], live[1]);
+    const dropped = flaky(chain, 1); // the very first call is dropped
+    let failed = '';
+    try {
+      await payNextPlacePortions(dropped.seam, 1n, plan.portions);
+    } catch (e) {
+      failed = String(e);
+    }
+    expect(failed).to.contain('simulated');
+    const after = await chain.getEntries(1n);
+    expect(after[1].splitGroupSize).to.equal(0, 'no frame yet');
+    expect(planNextPlace(ranking, after, [0, 1, 2], after[1])).to.deep.equal(plan);
+    await payNextPlacePortions(chain, 1n, plan.portions);
+    expect(chain.escrowed.get(player(1)) ?? 0n).to.equal(0n);
+    expect(movedTotal(chain)).to.equal(POT);
+  });
+
+  it('a fully settled split re-plans to zero portions — no call, no refusal', async () => {
+    const { chain, ranking } = await threeWayForfeit();
+    const live = await chain.getEntries(1n);
+    await payNextPlacePortions(chain, 1n, planNextPlace(ranking, live, [0, 1, 2], live[1]).portions);
+    const done = await chain.getEntries(1n);
+    expect(done[1].escrowLamports).to.equal(0n);
+    expect(done[1].splitPaidMask).to.equal((1n << 0n) | (1n << 2n));
+    const plan = planNextPlace(ranking, done, [0, 1, 2], done[1]);
+    expect(plan).to.deep.equal({ portions: [], blocker: 'no_forfeited_share' });
+    const counted = flaky(chain, 0);
+    expect(await payNextPlacePortions(counted.seam, 1n, plan.portions)).to.deep.equal([]);
+    expect(counted.calls.n).to.equal(0);
+  });
+
+  it('resumes at the NEXT RANK too, where the program cannot recompute the group', async () => {
+    const { chain, ranking, entries } = await settledPool([0, 1]);
+    entries[0].flagged = true;
+    entries[1].flagged = true;
+    await chain.payPrizes(1n, [0, 1]);
+    await chain.forfeitEscrow(1n, player(0));
+    await chain.forfeitEscrow(1n, player(1));
+    const half = POT / 2n;
+    const share = half / 3n;
+    const rem = half - share * 3n;
+
+    // Forfeiter 0's half, three ways among seats 2, 3 and 4: the second
+    // portion's transaction is dropped.
+    const live = await chain.getEntries(1n);
+    const plan = planNextPlace(ranking, live, [0, 1], live[0]);
+    expect(plan.portions.map((p) => p.to)).to.deep.equal([player(2), player(3), player(4)]);
+    const dropped = flaky(chain, 2);
+    let failed = '';
+    try {
+      await payNextPlacePortions(dropped.seam, 1n, plan.portions);
+    } catch (e) {
+      failed = String(e);
+    }
+    expect(failed).to.contain('simulated');
+    const mid = (await chain.getEntries(1n))[0];
+    expect(mid.splitGroupSize).to.equal(3);
+    expect(mid.splitPaidMask).to.equal(1n << 2n);
+    expect(mid.splitRemainderPaid).to.equal(true);
+
+    // The resume presents the frame's group size — the assertion the first
+    // portion fixed on-chain — for the two unpaid members only.
+    const resume = planNextPlace(ranking, await chain.getEntries(1n), [0, 1], mid);
+    expect(resume.portions.map((p) => [p.to, p.groupSize, p.takesRemainder])).to.deep.equal([
+      [player(3), 3, false],
+      [player(4), 3, false],
+    ]);
+    await payNextPlacePortions(chain, 1n, resume.portions);
+    expect(chain.escrowed.get(player(0)) ?? 0n).to.equal(0n, 'the last portion emptied the share exactly');
+
+    // Then forfeiter 1's half in full, and the pot is conserved.
+    const rest = await chain.getEntries(1n);
+    await payNextPlacePortions(chain, 1n, planNextPlace(ranking, rest, [0, 1], rest[1]).portions);
+    expect(movedTotal(chain)).to.equal(POT, 'the pot is conserved to the lamport');
+    for (const s of [0, 1]) expect(chain.paid.get(player(s)) ?? 0n).to.equal(0n);
+    expect(chain.paid.get(player(2))).to.equal((share + rem) * 2n);
+    expect(chain.paid.get(player(3))).to.equal(share * 2n);
+    expect(chain.paid.get(player(4))).to.equal(share * 2n);
   });
 
   it('REGRESSION: the program refuses a held wallet AS THE RECIPIENT, not just as a peer', async () => {

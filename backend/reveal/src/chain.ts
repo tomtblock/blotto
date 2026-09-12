@@ -117,18 +117,51 @@ export interface ChainEntryView {
    * the daemon's twelve-hour release (Phase 2 Stage D) run from. 0 when
    * never escrowed. */
   escrowedAt: bigint;
+  /** `Entry.next_place_lamports`: what this seat has RECEIVED by
+   * `pay_next_place` from forfeited shares, on top of any committed payout.
+   * 0 until a portion lands. */
+  nextPlaceLamports: bigint;
+  // ---- THE SPLIT FRAME (`Entry.split_*`, state.rs; escrow.rs
+  // `handle_pay_next_place`). Kept on the FORFEITER's entry and FIXED by the
+  // first portion paid from its share: every later portion must agree with
+  // it or the program refuses (`NextPlaceSplitMismatch`), and a seat whose
+  // bit is already set is refused (`RankAlreadySettled`). The next-place
+  // driver reads these to RESUME a split that stopped part-way (audit
+  // D-11): it plans only the seats not yet in the mask, with the group size
+  // and dividend the frame fixed, so the program accepts each remaining
+  // portion and the last one empties the share exactly.
+  /** `Entry.split_total`: the share as it stood when the first portion went
+   * out — the dividend every portion is computed from. 0 until then. */
+  splitTotal: bigint;
+  /** `Entry.split_paid_mask`: one bit per SEAT already paid from this
+   * forfeited share (u64 on-chain; seats run 0..63). */
+  splitPaidMask: bigint;
+  /** `Entry.split_group_size`: how many eligible members the share is
+   * divided among, fixed by the first portion. 0 = no portion paid yet —
+   * the frame is not fixed and the driver plans from the live group. */
+  splitGroupSize: number;
+  /** `Entry.split_remainder_paid`: the indivisible remainder has been paid
+   * (to the lowest entry number of the group). */
+  splitRemainderPaid: boolean;
 }
 
 /**
  * What the in-memory chain STORES per entry: the on-chain fields the fake
- * keeps on the entry itself. Escrow lamports, the escrow timestamp and the
- * sanctions hold live in the fake's own maps (as escrow always has) and are
- * joined in at `getEntries`, so a test that pushes entries directly writes
- * only these.
+ * keeps on the entry itself. Escrow lamports, the escrow timestamp, the
+ * sanctions hold, the next-place receipts and the split frame live in the
+ * fake's own maps (as escrow always has) and are joined in at `getEntries`,
+ * so a test that pushes entries directly writes only these.
  */
 export type FakeEntry = Omit<
   ChainEntryView,
-  'escrowLamports' | 'escrowedAt' | 'sanctionsHold'
+  | 'escrowLamports'
+  | 'escrowedAt'
+  | 'sanctionsHold'
+  | 'nextPlaceLamports'
+  | 'splitTotal'
+  | 'splitPaidMask'
+  | 'splitGroupSize'
+  | 'splitRemainderPaid'
 >;
 
 /** One Merkle proof step in the program's argument shape (mirrors
@@ -232,6 +265,19 @@ export interface KeeperChain extends SettlementChain {
   }): Promise<void>;
   /** The platform treasury PDA's lamport balance (the keeper's policy input). */
   getPlatformBalance(): Promise<bigint>;
+  /** The pool's PDA as base58 — `[b"pool", pool_id.to_le_bytes()]` on the
+   * program (state.rs `POOL_SEED`). Pure: no RPC. The address is what the
+   * browser, the indexer and the published bundle name a pool by; the
+   * daemon addresses it by numeric id everywhere else. The fake returns
+   * `pool:${poolId}` — a distinct string per pool, never a real key. */
+  poolAddress(poolId: bigint): string;
+  /** The CLUSTER's clock: the Clock sysvar's `unix_timestamp`, the same
+   * value the program reads through `Clock::get()` for every deadline and
+   * escrow guard. A wall clock on the daemon's host can run ahead of or
+   * behind it; anything the daemon compares against an on-chain timestamp
+   * (the fill deadline, `escrowedAt`) should use this. The fake returns its
+   * injected `now()`. */
+  chainNow(): Promise<bigint>;
 }
 
 /**
@@ -262,6 +308,28 @@ export function eligibleFor(
   return (
     !e.refunded && !e.forfeited && e.sanctionsHold !== true && !reviewPending(e, escrow)
   );
+}
+
+/**
+ * The review clock's predicate: a share the clock may release once the
+ * published window has passed. Mirrors what `release_escrow` will accept
+ * (escrow.rs `handle_release_escrow`): escrow held (`NoEscrow` otherwise),
+ * not forfeited (`EscrowForfeitedAlready`), and NO sanctions hold — that
+ * check sits ABOVE the path split in the program, so the reviewed path and
+ * the seven-day permissionless path both refuse while it is set
+ * (`SanctionsHoldActive`). `settled && flagged` narrows it to the shares
+ * `pay_prizes` escrowed under a flag: an unflagged escrow is a KYC hold
+ * (R3), which no clock releases.
+ *
+ * EXPORTED for the daemon's review clock, for the same reason as
+ * `reviewPending`: one predicate, shared, or two chances to send the program
+ * a release it refuses — or, worse, to skip one it would accept.
+ */
+export function releasableByClock(
+  e: Pick<ChainEntryView, 'settled' | 'flagged' | 'forfeited' | 'sanctionsHold'>,
+  escrow: bigint
+): boolean {
+  return e.settled && e.flagged && !e.forfeited && escrow > 0n && !e.sanctionsHold;
 }
 
 /** The forfeiter-side split book-keeping (`Entry.split_*`). */
@@ -374,12 +442,34 @@ export class FakeChain implements KeeperChain {
   }
 
   async getEntries(poolId: bigint): Promise<ChainEntryView[]> {
-    return (this.entries.get(poolId.toString()) ?? []).map((e) => ({
-      ...e,
-      escrowLamports: this.escrowed.get(e.player) ?? 0n,
-      escrowedAt: this.escrowedAt.get(e.player) ?? 0n,
-      sanctionsHold: this.sanctionsHeld.has(e.player),
-    }));
+    return (this.entries.get(poolId.toString()) ?? []).map((e) => {
+      // The split frame as the program stores it on the forfeiter's Entry:
+      // zero / false until the first portion of its share is paid.
+      const split = this.splits.get(e.player);
+      return {
+        ...e,
+        escrowLamports: this.escrowed.get(e.player) ?? 0n,
+        escrowedAt: this.escrowedAt.get(e.player) ?? 0n,
+        sanctionsHold: this.sanctionsHeld.has(e.player),
+        nextPlaceLamports: this.nextPlacePaid.get(e.player) ?? 0n,
+        splitTotal: split?.total ?? 0n,
+        splitPaidMask: split?.paidMask ?? 0n,
+        splitGroupSize: split?.groupSize ?? 0,
+        splitRemainderPaid: split?.remainderPaid ?? false,
+      };
+    });
+  }
+
+  /** The pool PDA stands in as a distinct string per pool — the fake never
+   * derives a real key (`KeeperChain.poolAddress`). */
+  poolAddress(poolId: bigint): string {
+    return `pool:${poolId}`;
+  }
+
+  /** The injected clock — the same reading every guard in this fake uses
+   * (`KeeperChain.chainNow`). */
+  async chainNow(): Promise<bigint> {
+    return this.now();
   }
 
   async revealPoolSecret(poolId: bigint, secret: Uint8Array): Promise<void> {
@@ -487,6 +577,11 @@ export class FakeChain implements KeeperChain {
   forfeited = new Map<string, bigint>();
   /** Per forfeiter: the split's book-keeping (`Entry.split_*`). */
   splits = new Map<string, SplitState>();
+  /** Per recipient: lamports received by next-place payout
+   * (`Entry.next_place_lamports`). `paid` carries the same lamports too —
+   * it is the per-player total across every exit — so this is the record a
+   * test reads when it needs the next-place portions apart. */
+  nextPlacePaid = new Map<string, bigint>();
 
   async placeSanctionsHold(poolId: bigint, player: string): Promise<void> {
     const e = (this.entries.get(poolId.toString()) ?? []).find((x) => x.player === player);
@@ -624,6 +719,7 @@ export class FakeChain implements KeeperChain {
       this.forfeited.set(from, left);
     }
     this.paid.set(to, (this.paid.get(to) ?? 0n) + portion);
+    this.nextPlacePaid.set(to, (this.nextPlacePaid.get(to) ?? 0n) + portion);
     toEntry.settled = true;
   }
 

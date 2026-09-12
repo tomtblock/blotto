@@ -28,24 +28,25 @@
 
 import type { Address } from "@solana/kit";
 import type { TxRpc } from "./tx-rpc";
+import {
+  PROVISIONAL_PRIORITY_FEE_CAP_MICROLAMPORTS,
+  PROVISIONAL_PRIORITY_FEE_FLOOR_MICROLAMPORTS,
+  PROVISIONAL_PRIORITY_FEE_PERCENTILE,
+  pickPriorityFee,
+} from "@blotto/shared/priority-fee";
 
-/** PROVISIONAL (founder-tunable): percentile over non-zero recent fees. */
-export const PROVISIONAL_PRIORITY_FEE_PERCENTILE = 75;
-
-/**
- * PROVISIONAL (founder-tunable): never bid below this (micro-lamports per
- * CU). Keeps a non-zero bid on quiet clusters where every sample is 0 —
- * 1,000 µlam/CU ≈ 200 lamports on a 200k-CU trade, i.e. ~4% of the base
- * signature fee. Negligible cost for a real inclusion nudge.
+/*
+ * The percentile, the floor, the cap and `pickPriorityFee` itself moved to
+ * `backend/_shared/src/priority-fee.ts` on 2026-09-12 (audit 2026-09-11,
+ * C-34) so the settlement daemon bids the same way the browser does. They
+ * are re-exported here unchanged; everything below is the browser-only half.
  */
-export const PROVISIONAL_PRIORITY_FEE_FLOOR_MICROLAMPORTS = 1_000n;
-
-/**
- * PROVISIONAL (founder-tunable): never bid above this (micro-lamports per
- * CU). 2,000,000 µlam/CU caps the priority fee at 0.0004 SOL on a 200k-CU
- * trade — a spend ceiling against fee spikes, not an inclusion strategy.
- */
-export const PROVISIONAL_PRIORITY_FEE_CAP_MICROLAMPORTS = 2_000_000n;
+export {
+  PROVISIONAL_PRIORITY_FEE_CAP_MICROLAMPORTS,
+  PROVISIONAL_PRIORITY_FEE_FLOOR_MICROLAMPORTS,
+  PROVISIONAL_PRIORITY_FEE_PERCENTILE,
+  pickPriorityFee,
+};
 
 /** PROVISIONAL: CU limit fallback when simulation yields no estimate. */
 export const PROVISIONAL_CU_LIMIT_FALLBACK = 400_000;
@@ -55,29 +56,6 @@ export const PROVISIONAL_CU_MARGIN_BPS = 2_000n; // +20%
 
 /** Solana's per-transaction compute ceiling — a protocol fact, not a knob. */
 export const MAX_CU_LIMIT = 1_400_000;
-
-/**
- * Pure percentile-with-clamps over a fee sample (unit-tested offline).
- * Empty or all-zero samples fall to the floor.
- */
-export function pickPriorityFee(
-  recentFeesMicroLamports: readonly bigint[],
-  percentile: number = PROVISIONAL_PRIORITY_FEE_PERCENTILE,
-  floor: bigint = PROVISIONAL_PRIORITY_FEE_FLOOR_MICROLAMPORTS,
-  cap: bigint = PROVISIONAL_PRIORITY_FEE_CAP_MICROLAMPORTS,
-): bigint {
-  const nonZero = recentFeesMicroLamports.filter((f) => f > 0n);
-  if (nonZero.length === 0) return floor;
-  const sorted = [...nonZero].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
-  const index = Math.min(
-    sorted.length - 1,
-    Math.floor((sorted.length * percentile) / 100),
-  );
-  const picked = sorted[index];
-  if (picked < floor) return floor;
-  if (picked > cap) return cap;
-  return picked;
-}
 
 /**
  * Live estimate for a transaction touching `writableAccounts` (the accounts

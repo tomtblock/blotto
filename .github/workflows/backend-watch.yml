@@ -12,6 +12,13 @@
 # A probe failure that self-heals is a ::warning:: on a green run; a service
 # that stays unhealthy is a red run with the machine state in the output.
 # Enable Actions failure notifications (GitHub mobile/email) to get paged.
+#
+# 2026-09-12 (audit 2026-09-11, C-05 / D-07): all four services are probed.
+# Until then only the indexer and the packet service were, and the daemon —
+# the one process that moves money — had no scheduled probe at all. Probing
+# it is meaningful now because its /health answers 503 once no tick has
+# completed within its staleness budget (backend/reveal/src/health.ts), so
+# a wedged settlement loop shows up here as a red run within a cycle.
 
 name: backend-watch
 
@@ -36,7 +43,7 @@ jobs:
             curl --fail --silent --show-error --max-time 20 "$1" >/dev/null 2>&1
           }
           fail=0
-          for app in blotto-indexer blotto-packet; do
+          for app in blotto-indexer blotto-packet blotto-daemon blotto-review; do
             url="https://$app.fly.dev/health"
             if probe "$url"; then
               echo "$app: healthy"
