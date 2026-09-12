@@ -599,6 +599,7 @@ export function serveReadApi(
         // read at all only behind a proxy we own.
         forwardedFor: trustProxy ? req.headers['x-forwarded-for'] : undefined,
         flyClientIp: trustProxy ? req.headers['fly-client-ip'] : undefined,
+        trustProxy,
         remoteAddress: req.socket.remoteAddress ?? undefined,
         origin: req.headers.origin,
       },

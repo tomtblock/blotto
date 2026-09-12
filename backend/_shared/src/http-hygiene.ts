@@ -292,16 +292,34 @@ export function startBucketSweeper(
  *      observed and appended. Anything to its left came from the caller.
  *   3. The socket peer, when we are not behind a proxy at all.
  *
- * `trustProxy` still gates 1 and 2: exposed directly, every header is the
- * caller's and only the socket may be believed.
+ * `trustProxy` gates 1 and 2: exposed directly, every header is the caller's
+ * and only the socket may be believed.
+ *
+ * IT IS A PARAMETER OF THIS FUNCTION (audit 2026-09-11, E-21). The paragraph
+ * above has described that gate since the day the bypass was found, and until
+ * 2026-09-12 the function had no such parameter — every caller was gating the
+ * headers itself, correctly, by convention. A convention every caller must
+ * remember is one a future caller forgets, and the thing they would be
+ * forgetting is a territory-gate bypass: the caller choosing the verdict of a
+ * gate whose whole purpose is that they cannot. Passing the gate in makes
+ * forgetting it a type error instead.
+ *
+ * Callers may still pass `undefined` for the headers, and several do — that
+ * is belt and braces, not redundancy to remove: the flag here is what makes
+ * the rule true of every call site, including one written next year.
  */
 export function clientKeyFrom(
   forwardedFor: string | string[] | undefined,
   remoteAddress: string | undefined,
-  flyClientIp?: string | string[] | undefined
+  flyClientIp: string | string[] | undefined,
+  trustProxy: boolean
 ): string {
   const one = (v: string | string[] | undefined): string | undefined =>
     (Array.isArray(v) ? v[0] : v)?.trim() || undefined;
+
+  // Exposed directly: every header on the request is the caller's own, so the
+  // socket peer is the only address that is not their choice.
+  if (!trustProxy) return remoteAddress ?? 'unknown';
 
   const fly = one(flyClientIp);
   if (fly) return fly;
@@ -435,6 +453,14 @@ export interface HygieneRequest {
    * overwrites it. Preferred over X-Forwarded-For — see `clientKeyFrom`. */
   flyClientIp?: string | string[] | undefined;
   origin: string | string[] | undefined;
+  /**
+   * Whether this service sits behind a proxy we control, so the two headers
+   * above may be believed (audit 2026-09-11, E-21). REQUIRED, and required to
+   * be explicit: a caller that has already resolved the headers itself still
+   * has to say so, which is what stops this seam keying the rate limiter on a
+   * caller-chosen address because someone forgot.
+   */
+  trustProxy: boolean;
 }
 
 /**
@@ -475,7 +501,10 @@ export function applyHygiene(
   }
 
   const decision = limiter.check(
-    clientKeyFrom(req.forwardedFor, req.remoteAddress, req.flyClientIp)
+    // `trustProxy` is carried on the request shape: a caller that resolved the
+    // headers already still has to say whether they were trustworthy, so this
+    // seam cannot key the limiter on a caller-chosen address by omission.
+    clientKeyFrom(req.forwardedFor, req.remoteAddress, req.flyClientIp, req.trustProxy === true)
   );
   if (!decision.allowed) {
     return {

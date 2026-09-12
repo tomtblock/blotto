@@ -236,11 +236,16 @@ export async function handleEntryRoute(
  * territory gate and the limiter can never disagree about who is calling.
  * See `clientKeyFrom` for why the leftmost X-Forwarded-For entry is not it. */
 function clientIp(req: IncomingMessage, trustProxy: boolean): string {
+  // The early return stays: this surface wants '' rather than the resolver's
+  // 'unknown' sentinel when there is no address. `trustProxy` is passed on
+  // regardless, because the gate belongs to the resolver now (audit E-21) and
+  // a caller that keeps its own copy of the rule is how the two drift apart.
   if (!trustProxy) return req.socket.remoteAddress ?? '';
   const resolved = clientKeyFrom(
     req.headers['x-forwarded-for'],
     req.socket.remoteAddress ?? undefined,
-    req.headers['fly-client-ip']
+    req.headers['fly-client-ip'],
+    trustProxy
   );
   return resolved === 'unknown' ? '' : resolved;
 }
@@ -268,6 +273,7 @@ export function serveEntryApi(deps: EntryServerDeps, port: number): Server {
         remoteAddress: req.socket.remoteAddress ?? undefined,
         flyClientIp: deps.trustProxyHeader ? req.headers['fly-client-ip'] : undefined,
         origin: req.headers.origin,
+        trustProxy: deps.trustProxyHeader,
       },
       hygiene,
       limiter

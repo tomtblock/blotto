@@ -638,7 +638,7 @@ export function serveReviewApi(deps: ReviewServerDeps, port: number): Server {
     const forwardedFor = deps.trustProxyHeader ? req.headers['x-forwarded-for'] : undefined;
     const flyClientIp = deps.trustProxyHeader ? req.headers['fly-client-ip'] : undefined;
     const remoteAddress = req.socket.remoteAddress ?? undefined;
-    const clientKey = clientKeyFrom(forwardedFor, remoteAddress, flyClientIp);
+    const clientKey = clientKeyFrom(forwardedFor, remoteAddress, flyClientIp, deps.trustProxyHeader === true);
     const outcome = applyHygiene(
       {
         method: req.method,
@@ -646,6 +646,7 @@ export function serveReviewApi(deps: ReviewServerDeps, port: number): Server {
         remoteAddress,
         flyClientIp,
         origin: req.headers.origin,
+        trustProxy: deps.trustProxyHeader === true,
       },
       hygiene,
       limiter

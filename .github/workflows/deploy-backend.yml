@@ -190,12 +190,16 @@ jobs:
       #   … → Secrets:
       #     BLOTTO_DEVNET_RPC_URL          a DEVNET Helius URL (also read by deployed-drift)
       #     BLOTTO_HELIUS_WEBHOOK_SECRET   the Auth-header value typed into the Helius webhook
+      #     BLOTTO_REVIEW_OPERATOR_TOKEN   optional: switches on the reviewer's detection
+      #       report surface. An OPERATOR secret — it gates per-player findings and must
+      #       never reach the browser bundle. Unset means GET /detection answers 503.
       #                                    (staged for the indexer AND, since 2026-09-12, the
       #                                    daemon, which announces bundles with it — D-02)
       APP_ORIGIN: ${{ vars.BLOTTO_APP_ORIGINS || 'https://blotto-jade.vercel.app' }}
       DEVNET_RPC: ${{ secrets.BLOTTO_DEVNET_RPC_URL || 'https://api.devnet.solana.com' }}
       HELIUS_WEBHOOK_SECRET: ${{ secrets.BLOTTO_HELIUS_WEBHOOK_SECRET }}
       UNREADABLE_CEILING: ${{ vars.BLOTTO_MAX_UNREADABLE_ENTRIES }}
+      REVIEW_OPERATOR_TOKEN: ${{ secrets.BLOTTO_REVIEW_OPERATOR_TOKEN }}
       IRYS_UPLOAD_ADDRESS: ${{ vars.BLOTTO_IRYS_UPLOAD_ADDRESS }}
       PROGRAM_ID: 5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17
 
@@ -712,6 +716,22 @@ jobs:
             BLOTTO_API_RATE_LIMIT_ENABLED="1" \
             BLOTTO_API_SECURITY_HEADERS_ENABLED="1" \
             SETTLEMENT_SIGNER_KEYPAIR_B64="$SETTLEMENT_SIGNER_KEYPAIR_B64"
+
+          # The detection report surface (audit A-18 / D-36, founder ruling
+          # D-E9). Without this token GET /detection answers 503 and the
+          # reviewer's page shows nothing — which is a working service with a
+          # feature switched off, not a broken one, so the token is optional
+          # here rather than a preflight requirement. It is an OPERATOR
+          # secret: it gates per-player findings, so it must never reach the
+          # browser bundle. The app holds its own copy server-side and checks
+          # a reviewer's wallet signature before using it.
+          if [ -n "$REVIEW_OPERATOR_TOKEN" ]; then
+            flyctl secrets set --app "$REVIEW_APP" --stage \
+              BLOTTO_REVIEW_OPERATOR_TOKEN="$REVIEW_OPERATOR_TOKEN"
+          else
+            echo "::warning::BLOTTO_REVIEW_OPERATOR_TOKEN is not set, so the review service will answer GET /detection with 503 and the reviewer will see no detection report. Set the repository secret to switch the surface on."
+            flyctl secrets unset --app "$REVIEW_APP" --stage BLOTTO_REVIEW_OPERATOR_TOKEN || true
+          fi
 
       - name: Deploy review service
         if: steps.pre.outputs.deploy_review == 'true'
