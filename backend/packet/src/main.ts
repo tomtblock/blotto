@@ -41,6 +41,7 @@ import { loadPostgresConfig } from '../../_shared/src/config';
 import { createPool } from '../../_shared/src/db';
 import { loadHygieneConfig } from '../../_shared/src/http-hygiene';
 import { PgCiphertextStore } from '../../sealing/src/store';
+import { PgPoolIdResolver } from './pool-ids';
 import { serveEntryApi } from './server';
 import { buildSigner } from './signer-select';
 import { wireSanctions } from './sanctions-wiring';
@@ -144,6 +145,7 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
         nonce: () => BigInt('0x' + randomBytes(8).toString('hex')),
       },
       ciphertexts: new PgCiphertextStore(db),
+      poolIds: new PgPoolIdResolver(db),
       notify: new PgNotifyPreferenceStore(db),
       trustProxyHeader: env.BLOTTO_TRUST_PROXY === '1',
       // BR-005 posture from env (BLOTTO_API_CORS_ORIGINS etc.), widened in

@@ -157,13 +157,25 @@ describe('packet issuance', () => {
 });
 
 describe('the entry service routes', () => {
-  const { handleEntryRoute, poolKey } = require('../src/server');
+  const { handleEntryRoute } = require('../src/server');
+  const { MemoryPoolIdResolver } = require('../src/pool-ids');
   const { MemoryCiphertextStore } = require('../../sealing/src');
+
+  /** The pool's on-chain numeric id — the key every reader of the ciphertext
+   * store uses. The route must resolve the PDA to THIS, not to anything it
+   * derives locally (audit B-01). */
+  const POOL_ID = 7n;
+  const POOL_IDS = () => {
+    const r = new MemoryPoolIdResolver();
+    r.set(POOL, POOL_ID);
+    return r;
+  };
 
   function serverDeps() {
     return {
       packet: deps(),
       ciphertexts: new MemoryCiphertextStore(),
+      poolIds: POOL_IDS(),
       trustProxyHeader: false,
     };
   }
@@ -204,7 +216,10 @@ describe('the entry service routes', () => {
       'ip'
     );
     expect(res.status).to.equal(204);
-    const stored = await d.ciphertexts.get(poolKey(POOL), WALLET);
+    // Read back by the NUMERIC pool id — the key the crank and the read API
+    // use. Reading back through any transform this route applied would pin
+    // the defect instead of catching it.
+    const stored = await d.ciphertexts.get(POOL_ID, WALLET);
     expect(stored).to.not.equal(null);
     const bad = await handleEntryRoute(
       d,
@@ -214,5 +229,19 @@ describe('the entry service routes', () => {
       'ip'
     );
     expect(bad.status).to.equal(400);
+  });
+
+  it('refuses a ciphertext for a pool it cannot resolve, rather than guessing a key', async () => {
+    const d = serverDeps();
+    const unknown = base58Encode(new Uint8Array(32).fill(9));
+    const res = await handleEntryRoute(
+      d,
+      'POST',
+      '/ciphertexts',
+      { pool: unknown, player: WALLET, ciphertext: Buffer.alloc(48 + 127, 7).toString('base64') },
+      'ip'
+    );
+    expect(res.status).to.equal(400);
+    expect(await d.ciphertexts.listForPool(POOL_ID)).to.have.length(0);
   });
 });

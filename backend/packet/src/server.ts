@@ -42,10 +42,17 @@ import {
 } from './service';
 import { acceptAttestation } from './attestations';
 import { acceptNotifyPreference, type NotifyPreferenceStore } from './notify';
+import type { PoolIdResolver } from './pool-ids';
 
 export interface EntryServerDeps {
   packet: PacketServiceDeps;
   ciphertexts: CiphertextStore;
+  /**
+   * Pool address → on-chain numeric pool id, the key the ciphertext store is
+   * read by. Required: without it this service would have to guess a key,
+   * which is exactly the defect the 2026-09-11 audit found. See `pool-ids.ts`.
+   */
+  poolIds: PoolIdResolver;
   /** v3 D3: the email-notification opt-in store. Optional — a deployment
    * without it answers /notify with 503 rather than pretending to record. */
   notify?: NotifyPreferenceStore;
@@ -197,23 +204,20 @@ export async function handleEntryRoute(
     if (bytes.length !== CIPHERTEXT_LEN) {
       return { status: 400, body: { error: 'bad request' } };
     }
-    // The pool id key: the store keys on the numeric pool id in Postgres;
-    // here the pool PDA string keys the row via a stable hash-free mapping —
-    // the service layer resolves PDA → id when the indexer is attached. For
-    // now the PDA string itself is the key (MemoryCiphertextStore accepts
-    // bigint; we map through a registry seam at deployment).
-    await deps.ciphertexts.put(poolKey(b.pool as string), b.player as string, new Uint8Array(bytes));
+    // The store is keyed on the pool's on-chain NUMERIC id — the key every
+    // reader uses. Resolve it here rather than deriving one locally, and
+    // refuse an address we cannot resolve: a refused write costs a retry, a
+    // write under an unreadable key costs the player their entry (audit
+    // B-01, 2026-09-11).
+    const poolId = await deps.poolIds.idFor(b.pool as string);
+    if (poolId === null) {
+      return { status: 400, body: { error: 'unknown pool' } };
+    }
+    await deps.ciphertexts.put(poolId, b.player as string, new Uint8Array(bytes));
     return { status: 204, body: null };
   }
 
   return { status: 404, body: { error: 'not found' } };
-}
-
-/** Deterministic bigint key for a pool PDA string (store-key adapter). */
-export function poolKey(pool: string): bigint {
-  let acc = 0n;
-  for (const ch of pool) acc = (acc * 131n + BigInt(ch.charCodeAt(0))) % 2n ** 62n;
-  return acc;
 }
 
 /** ONE resolver for the whole service, shared with the rate limiter, so the
