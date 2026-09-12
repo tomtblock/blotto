@@ -7,7 +7,8 @@
  *   BLOTTO_API_CORS_ORIGINS etc. BR-005 hygiene (_shared/http-hygiene.ts);
  *                                the app's origin MUST be allowlisted or the
  *                                browser's POSTs are refused at preflight
- *   BLOTTO_DATABASE_URL          Postgres (the append-only decision log)
+ *   BLOTTO_DATABASE_URL          Postgres (the append-only decision log AND
+ *                                the detection report store, migration 0021)
  *   BLOTTO_REVIEWERS_PATH        default config/reviewers.json (founder-owned)
  *   BLOTTO_RPC_URL               default devnet
  *   BLOTTO_PROGRAM_ID            default the declared id
@@ -16,11 +17,25 @@
  *                                (Turnkey-held in the target custody story;
  *                                a mounted keypair is the interim wiring the
  *                                custody page discloses)
+ *   BLOTTO_MONITOR_SINK          metrics/alert sink (_shared/src/monitor.ts);
+ *                                default `logging`, which is where the B-24 /
+ *                                B-25 / C-07 alerts go until the Prometheus
+ *                                sink is selected
+ *   BLOTTO_REVIEW_OPERATOR_TOKEN shared operator secret for `GET /detection`
+ *                                (ruling D-E9). UNSET ⇒ that route answers
+ *                                503: the detection report names players no
+ *                                human has looked at yet, so it fails closed
+ *   BLOTTO_REVIEW_ACTION_BUDGET  decisions one reviewer key may sign per
+ *   BLOTTO_REVIEW_ACTION_WINDOW_MS
+ *                                window (audit B-25). Both default to the
+ *                                PROPOSALS in budget.ts — founder-owned
+ *                                numbers AWAITING_RATIFICATION
  *
  * The chain client is @blotto/reveal's Web3Chain — the same
  * settlement-signed client the daemon drives; pool ADDRESSES from the
  * review page resolve to pool IDS by reading the Pool account's first
- * field after the discriminator (actions-chain.ts module doc).
+ * field after the discriminator (actions-chain.ts module doc). It also
+ * serves the two READS the state preconditions run on (B-25).
  */
 
 import { readFileSync } from 'fs';
@@ -33,14 +48,18 @@ import {
   Keypair,
   PublicKey,
 } from '../../reveal/node_modules/@solana/web3.js';
-import { loadPostgresConfig } from '../../_shared/src/config';
+import { loadPostgresConfig, parsePositiveInt } from '../../_shared/src/config';
 import { resolveRpcUrl } from '../../_shared/src/cluster';
 import { createPool } from '../../_shared/src/db';
 import { loadHygieneConfig } from '../../_shared/src/http-hygiene';
+import { buildMonitor, loadMonitor } from '../../_shared/src/monitor';
+import { startMetricsListener } from '../../_shared/src/metrics-listener';
 import { Web3Chain } from '../../reveal/src/chain-web3';
 import { serveReviewApi } from './server';
 import { parseReviewerRegistry } from './auth';
+import { BUDGET_ENV, DEFAULT_REVIEWER_BUDGET, type ReviewerBudget } from './budget';
 import { PgDecisionLog } from './log-pg';
+import { PgDetectionReportStore } from './reports-pg';
 import { reviewActionsFromChain } from './actions-chain';
 
 const SERVICE = 'review';
@@ -90,11 +109,36 @@ export function main(env: NodeJS.ProcessEnv = process.env): void {
     return info.data.readBigUInt64LE(8);
   };
 
+  // Alerts, not just counters: B-24 (a decision applied but not logged),
+  // C-07 (a forfeit recorded and not landed) and B-25 (a reviewer key
+  // spending its whole budget) are all states no response body reaches.
+  // Default sink is `logging`, so an unconfigured deployment still says them
+  // out loud on stdout rather than dropping them.
+  const monitor = buildMonitor(loadMonitor(env), SERVICE);
+  // E-09: the exposition, on the private network only — never on this
+  // service's own listener, which the platform routes to the internet.
+  // Silent no-op on every sink but prometheus.
+  startMetricsListener(monitor, SERVICE, env);
+
+  // Founder-owned numbers (budget.ts): read from env, defaulted to the
+  // architect proposals, and PRINTED at boot so a deployment cannot be
+  // running a bound nobody remembers choosing.
+  const budget: ReviewerBudget = {
+    actions: parsePositiveInt(env, BUDGET_ENV.actions, DEFAULT_REVIEWER_BUDGET.actions),
+    windowMs: parsePositiveInt(env, BUDGET_ENV.windowMs, DEFAULT_REVIEWER_BUDGET.windowMs),
+  };
+
+  const operatorToken = (env.BLOTTO_REVIEW_OPERATOR_TOKEN ?? '').trim();
+
   serveReviewApi(
     {
       registry,
       actions: reviewActionsFromChain(chain, resolvePoolId),
       log: new PgDecisionLog(db),
+      reports: new PgDetectionReportStore(db),
+      operatorToken: operatorToken === '' ? undefined : operatorToken,
+      monitor,
+      budget,
       trustProxyHeader: env.BLOTTO_TRUST_PROXY === '1',
       // Posture from env, widened in CODE to this service's browser-facing
       // POST surface (the entry server's rule: methods are a property of
@@ -128,8 +172,22 @@ export function main(env: NodeJS.ProcessEnv = process.env): void {
         `decided (the published rule requires a different reviewer). Add a second member.`
     );
   }
+  // The detection report surface is the only route that needs a secret, and
+  // an unset secret closes it rather than opening it — said here because a
+  // closed route and an empty report look the same from the reviewer's page.
+  if (operatorToken === '') {
+    console.warn(
+      `${SERVICE}: BLOTTO_REVIEW_OPERATOR_TOKEN is unset — GET /detection answers 503 and the ` +
+        `reviewer page will show NO detection report (ruling D-E9 expects one before the ` +
+        `review window closes).`
+    );
+  }
   console.log(
     `${SERVICE}: chain = ${rpcUrl} program ${env.BLOTTO_PROGRAM_ID ?? DEFAULT_PROGRAM_ID}`
+  );
+  console.log(
+    `${SERVICE}: reviewer budget = ${budget.actions} decisions per ${budget.windowMs}ms ` +
+      `(architect proposal, AWAITING_RATIFICATION — ${BUDGET_ENV.actions} / ${BUDGET_ENV.windowMs})`
   );
   console.log(`${SERVICE}: listening on :${port} (${registry.members.length} reviewer(s))`);
 }

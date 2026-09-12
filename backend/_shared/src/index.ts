@@ -68,6 +68,9 @@ export { createPool, withTransaction, type Queryable } from './db';
 
 export {
   RateLimiter,
+  startBucketSweeper,
+  BUCKET_SWEEP_INTERVAL_MS,
+  BUCKET_IDLE_EVICT_MS,
   applyHygiene,
   clientKeyFrom,
   corsHeadersFor,
@@ -81,6 +84,7 @@ export {
   PROPOSED_RATE_LIMIT_RETRY_AFTER_SECONDS,
   type RateLimitConfig,
   type RateLimitDecision,
+  type BucketSweeper,
   type CorsConfig,
   type HygieneConfig,
   type HygieneRequest,

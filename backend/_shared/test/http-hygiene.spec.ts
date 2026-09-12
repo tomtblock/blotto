@@ -11,6 +11,7 @@
  */
 import { expect } from 'chai';
 import {
+  BUCKET_IDLE_EVICT_MS,
   PROPOSED_RATE_LIMIT_BURST,
   PROPOSED_RATE_LIMIT_RETRY_AFTER_SECONDS,
   PROPOSED_RATE_LIMIT_RPM,
@@ -22,6 +23,7 @@ import {
   isPreflight,
   loadHygieneConfig,
   securityHeaders,
+  startBucketSweeper,
   type HygieneConfig,
 } from '../src';
 
@@ -115,6 +117,60 @@ describe('RateLimiter', () => {
     limiter.sweep(5_000);
     // The 100 idle buckets are gone; the just-touched one survives.
     expect(limiter.size()).to.equal(1);
+  });
+
+  it('never evicts a bucket that is still in debt — eviction must not hand back a burst', () => {
+    // 60 rpm, burst 3 ⇒ a spent bucket needs 3 s to be back at capacity.
+    const clock = fakeClock();
+    const limiter = new RateLimiter(limitConfig(), clock.now);
+    expect(limiter.minimumSafeIdleMs()).to.equal(3_000);
+    for (let i = 0; i < 3; i++) limiter.check('abuser');
+    clock.advance(500);
+    // Idle for half a second — but only half a token back, so it must survive
+    // the sweep; evicting it here would hand the abuser a fresh burst of 3.
+    limiter.sweep(400);
+    expect(limiter.size()).to.equal(1);
+    expect(limiter.check('abuser').allowed, 'still throttled after the sweep').to.equal(false);
+    clock.advance(4_000);
+    limiter.sweep(400);
+    expect(limiter.size()).to.equal(0, 'refilled and idle — nothing a fresh bucket would not do');
+  });
+
+  it('startBucketSweeper puts the sweep on a timer, and starts none when the limiter is off', () => {
+    // B-46: the sweep existed from the start with no caller outside this file.
+    // The service wiring is what this asserts — a handler on a timer, stoppable.
+    const clock = fakeClock();
+    const config = limitConfig();
+    const limiter = new RateLimiter(config, clock.now);
+    const timers: { handler: () => void; ms: number; cleared: boolean }[] = [];
+    const fakeTimer = {
+      setIntervalImpl: (handler: () => void, ms: number) => {
+        const t = { handler, ms, cleared: false };
+        timers.push(t);
+        return t;
+      },
+      clearIntervalImpl: (h: unknown) => void ((h as { cleared: boolean }).cleared = true),
+    };
+
+    for (let i = 0; i < 50; i++) limiter.check(`ip-${i}`);
+    expect(limiter.size()).to.equal(50);
+
+    const sweeper = startBucketSweeper(limiter, config, { intervalMs: 1_000, ...fakeTimer });
+    expect(timers.length).to.equal(1);
+    expect(timers[0].ms).to.equal(1_000);
+
+    clock.advance(BUCKET_IDLE_EVICT_MS + 1);
+    timers[0].handler();
+    expect(limiter.size()).to.equal(0, 'the timer actually sweeps');
+
+    sweeper.stop();
+    expect(timers[0].cleared).to.equal(true);
+    sweeper.stop(); // idempotent
+
+    // A disabled limiter keeps no state, so it needs no timer at all.
+    const off = { ...config, enabled: false };
+    startBucketSweeper(new RateLimiter(off, clock.now), off, fakeTimer);
+    expect(timers.length).to.equal(1, 'no timer started for a disabled limiter');
   });
 });
 

@@ -38,7 +38,12 @@
 import nacl from 'tweetnacl';
 import { base58Decode } from '../../_shared/src/blotto-events';
 import { canonicalAppealMessage } from './appeal-message';
-import { REVIEW_SIGNATURE_WINDOW_MS, type ReviewerRegistry } from './auth';
+import {
+  REVIEW_SIGNATURE_WINDOW_MS,
+  isCanonicalIsoInstant,
+  type ReviewerRegistry,
+  type SubmissionRefusal,
+} from './auth';
 import { canonicalReviewMessage } from './review-message';
 import { REVIEWER_ACTIONS, type Decision } from './review';
 
@@ -133,18 +138,32 @@ export function appealDecisionRefusal(
 /**
  * The appellant's signature and freshness: signed by the row's own player
  * over the appeal message, within the same clock window every signed
- * submission gets. A bare boolean — the route answers one uniform 401.
+ * submission gets.
+ *
+ * THE TWO CAUSES ARE NAMED, not collapsed (audit 2026-09-11, D-33). A
+ * player whose device clock is a few minutes out gets a genuine signature
+ * refused for freshness, and the service used to answer the same bare "no"
+ * it gives a forged one — which the results page then renders as "the
+ * signature did not verify as this entry's wallet". That is a wrong
+ * accusation and an unactionable instruction: the player checks their wallet,
+ * finds nothing amiss, and has no way to learn that the fix is their clock.
+ *
+ * Distinguishing them leaks nothing HERE, unlike on the reviewer route: the
+ * appellant signs with their own key over a message naming their own wallet
+ * and pool, both of which they already hold, and the appeal position itself
+ * is served to them on an open GET. There is no oracle to build.
  */
-export function verifyAppealSubmission(
+export function appealSubmissionRefusal(
   a: AppealSubmission,
   nowMs: number,
   windowMs: number = REVIEW_SIGNATURE_WINDOW_MS
-): boolean {
+): SubmissionRefusal | null {
   try {
+    if (!isCanonicalIsoInstant(a.signedAt)) return 'bad_timestamp';
     const t = Date.parse(a.signedAt);
-    if (!Number.isFinite(t) || Math.abs(nowMs - t) > windowMs) return false;
+    if (Math.abs(nowMs - t) > windowMs) return 'clock_skew';
     const signature = Uint8Array.from(Buffer.from(a.signature, 'base64'));
-    if (signature.length !== 64) return false;
+    if (signature.length !== 64) return 'bad_signature';
     return nacl.sign.detached.verify(
       canonicalAppealMessage({
         pool: a.pool,
@@ -154,10 +173,21 @@ export function verifyAppealSubmission(
       }),
       signature,
       base58Decode(a.player)
-    );
+    )
+      ? null
+      : 'bad_signature';
   } catch {
-    return false;
+    return 'bad_signature';
   }
+}
+
+/** The bare-boolean form: did this submission verify at all? */
+export function verifyAppealSubmission(
+  a: AppealSubmission,
+  nowMs: number,
+  windowMs: number = REVIEW_SIGNATURE_WINDOW_MS
+): boolean {
+  return appealSubmissionRefusal(a, nowMs, windowMs) === null;
 }
 
 /** The lodge as a log row: the player is the signer, the grounds ride in `criterion`. */

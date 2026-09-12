@@ -68,7 +68,7 @@ Five deployable units. Four backend services on Fly, one frontend on Vercel:
 | `app` | Vercel | — | The Next.js frontend. Reads the indexer, posts to the packet service, signs transactions in the browser. |
 | `backend/indexer` | Fly `blotto-indexer` | 8080 webhook, 8081 read API | Ingests program events (Helius webhook + backfill), projects them into Postgres, serves the public read API and the treasury report. |
 | `backend/packet` | Fly `blotto-packet` | 8082 | The entry gate. Checks the age attestation and the territory, then issues an Ed25519-signed packet the program verifies at `register`. |
-| `backend/detection` | Fly `blotto-review` | 8083 | The review desk: computes the five published integrity signals, and records named reviewers' signed decisions in an append-only log. |
+| `backend/detection` | Fly `blotto-review` | 8083 | The review desk: defines the five published integrity signals (the daemon runs them at settlement and persists the report), records named reviewers' signed decisions in an append-only log, and serves that log back. `POST /decisions` (reviewer-signed), `POST /appeals` (player-signed), `GET /decisions`, `GET /appeals` and `GET /pending` are public reads of a public log; `GET /detection` serves the persisted detection report and is the one operator-token route — it names players before a human has looked at them (ruling D-E9). |
 | `backend/reveal` | Fly `blotto-daemon` | 8084 health | The keeper and the crank. Opens pools, seals or refunds them at the deadline, reveals the secret, scores, commits results, pays, publishes the bundle. |
 
 Three of the packages are libraries rather than services: `backend/_shared`

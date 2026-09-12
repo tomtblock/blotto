@@ -5,57 +5,130 @@
  *
  *   POST /decisions  { pool, player, action, criterion, decidedBy,
  *                      decidedAt, signature }
- *                    → 204 applied | 202 forfeit recorded, admin lands it
- *                    | 400 / 401 / 409 / 502
+ *                    → 204 applied | 200 applied, log write failed
+ *                    | 202 forfeit recorded, admin lands it
+ *                    | 400 / 401 / 409 / 429 / 502
  *   POST /appeals    { pool, player, grounds, signedAt, signature }
  *                    → 204 | 400 / 401 / 409       (player-signed)
  *   GET  /decisions?pool=<pda>[&player=<wallet>]  → { decisions }
  *   GET  /appeals?pool=<pda>&player=<wallet>      → the entry's appeal state
+ *   GET  /pending?pool=<pda>   → upheld forfeits whose chain instruction has
+ *                                not landed (audit C-07)
+ *   GET  /detection?pool=<pda> → the latest detection report for the pool.
+ *                                OPERATOR-TOKEN ONLY (ruling D-E9)
  *
  * Every decision POST is wallet-signed by a configured reviewer (auth.ts);
  * the one uniform 401 covers unknown signer, bad signature and stale
- * timestamp alike. An appeal POST is signed by the entry's own player. The
+ * timestamp alike. An appeal POST is signed by the entry's own player, and
+ * its 401 DOES say which of the two causes it was (D-33 — see below). The
  * 409s are RULE refusals for a verified signer (nothing to appeal, already
- * lodged, window closed, no open appeal, same reviewer) and say which —
- * they leak nothing an outsider could not read from the public log.
+ * lodged, window closed, no open appeal, same reviewer, a replayed
+ * signature, and every state precondition in `preconditions.ts`) and say
+ * which — they leak nothing an outsider could not read from the public log
+ * or from the chain.
  *
- * Apply-then-log for flag/clear/release (a failed chain action logs nothing
- * and answers 502); log-then-chain for forfeit (202 when this service has
- * no admin key to land it); log-only for appeals — `review.ts::decide`.
+ * ── WHAT THE 2026-09-11 AUDIT CHANGED HERE ────────────────────────────────
  *
- * The GETs are deliberately open: the log holds no secrets — pool, player,
- * action, criterion, signer key, timestamp, signature — and its whole point
- * is that decisions are re-checkable (`appeals.ts::verifyRow`). Routing is
- * a pure function over parsed bodies, same pattern as the entry server, so
- * the suite runs without sockets; the socket layer applies BR-005 hygiene
- * (CORS allowlist, rate limit, security headers) exactly as the entry
- * server does — the hand-written `access-control-allow-origin: *` this file
- * carried until Stage E is gone.
+ * B-23 — REPLAY. `GET /decisions` publishes every field of an accepted
+ * decision, signature included, on an open route, and the signature was
+ * valid for five minutes either side of its instant. The service was
+ * therefore publishing complete, ready-to-send replay material for its own
+ * authorization: capture a `clear`, re-send it after the reviewer flags the
+ * entry again, and the flag comes off. Closed by refusing any submission
+ * whose signature is ALREADY ON THE RECORD for that entry. Ed25519 is
+ * deterministic, so the signature is a nonce that needs no column: the same
+ * signer, entry, action, criterion and instant always produce the same 64
+ * bytes, and their second arrival is a replay by construction.
+ *   Rejected: (a) a nonce field inside the canonical message plus a nonce
+ * table — strictly stronger, since it would also cover a decision whose log
+ * write failed, but it changes the signed message, so every client must ship
+ * the new bytes in the same release or no decision verifies at all, and it
+ * adds a table that needs its own sweeper; (b) shortening the freshness
+ * window — narrows the hole, never closes it, and makes an honest reviewer
+ * on a slightly wrong clock fail. What the log-based check buys is exactly
+ * what the finding names: the published material stops being sufficient to
+ * replay, because being published is what spends it.
+ *
+ * B-25 — AUTHENTICATION USED AS AUTHORIZATION. One member key could flag or
+ * release any entry in any pool with no state check, no second party and no
+ * budget. Now: the action must be legal for the entry and for the pool
+ * (`preconditions.ts`, mirroring the program's own `require!` lines), and a
+ * reviewer's decisions per window are bounded and alerted on (`budget.ts`;
+ * the NUMBER is the founder's to ratify). The second-signer half needs a
+ * second person and is not this batch's.
+ *
+ * B-24 / C-07 — HONEST OUTCOMES. A log write that failed AFTER the chain
+ * action landed used to answer 502 `action_failed` for work that had
+ * executed, inviting the reviewer to retry something already done; it now
+ * answers 200 saying applied-but-not-logged, and alerts. A forfeit whose
+ * chain call is refused used to swallow the error whole; the reason now
+ * reaches the response and an alert, so "this service holds no admin key"
+ * (routine) is distinguishable from "the RPC is down" (not).
+ *
+ * B-35 — every request leaves one structured line, including failed reviewer
+ * authentication, which left no trace at all on the one internet-facing
+ * service that holds the settlement signing key. No signature, no criterion
+ * and no whole address is ever written (the repo's truncation convention,
+ * `backend/packet/src/signer-select.ts` and `service.ts`).
+ *
+ * B-46 — the rate limiter's bucket map is swept on a timer.
+ *
+ * Apply-then-log for flag/clear/release; log-then-chain for forfeit (202
+ * when this service has no admin key to land it); log-only for appeals —
+ * `review.ts::decide`.
+ *
+ * The GETs are deliberately open — the log holds no secrets and its whole
+ * point is that decisions are re-checkable (`appeals.ts::verifyRow`) — with
+ * ONE exception: `/detection` names players a signal fired on before any
+ * human has looked at them, and is operator-token only. Routing is a pure
+ * function over parsed bodies, same pattern as the entry server, so the
+ * suite runs without sockets; the socket layer applies BR-005 hygiene (CORS
+ * allowlist, rate limit, security headers) exactly as the entry server does.
  */
 
 import { createServer, type Server } from 'http';
+import { timingSafeEqual } from 'crypto';
 import {
   RateLimiter,
   applyHygiene,
+  clientKeyFrom,
+  startBucketSweeper,
   type HygieneConfig,
 } from '../../_shared/src/http-hygiene';
+import { ALERT, METRIC } from '../../_shared/src/metrics';
+import type { Monitor } from '../../_shared/src/monitor';
 import {
   APPEAL_GROUNDS_MAX,
   appealDecisionRefusal,
   appealState,
+  appealSubmissionRefusal,
   lodgeRefusal,
   lodgeRow,
-  verifyAppealSubmission,
   type AppealSubmission,
 } from './appeals';
-import { verifyReviewSubmission, type ReviewerRegistry } from './auth';
+import { reviewSubmissionRefusal, type ReviewerRegistry } from './auth';
+import {
+  DEFAULT_REVIEWER_BUDGET,
+  budgetRetryAfterSeconds,
+  budgetWindowStart,
+  type ReviewerBudget,
+} from './budget';
+import { preconditionRefusal } from './preconditions';
+import type { DetectionReportStore } from './reports';
 import {
   decide,
+  errorText,
   type Decision,
   type DecisionAction,
   type DecisionLog,
   type ReviewActions,
 } from './review';
+
+/**
+ * One structured line per request. Same shape as the daemon's logger —
+ * `(stage, detail)` — so a deployment can route both the same way.
+ */
+export type RequestLogger = (stage: string, detail: Record<string, unknown>) => void;
 
 export interface ReviewServerDeps {
   registry: ReviewerRegistry;
@@ -68,6 +141,35 @@ export interface ReviewServerDeps {
   trustProxyHeader?: boolean;
   /** BR-005 hygiene; default = the OFF/empty posture (unchanged wire). */
   hygiene?: HygieneConfig;
+  /** Where the audit line goes. Default: this service's stdout. */
+  logger?: RequestLogger;
+  /** Metrics and alerts. Absent = no monitoring (offline suites). */
+  monitor?: Monitor;
+  /** Per-reviewer action budget (B-25). Default {@link DEFAULT_REVIEWER_BUDGET}. */
+  budget?: ReviewerBudget;
+  /** The detection report surface (A-18). Absent ⇒ `/detection` is 503. */
+  reports?: DetectionReportStore;
+  /** Shared operator secret for `/detection`. Absent/empty ⇒ 503, fail-closed. */
+  operatorToken?: string;
+  /**
+   * Overrides for the limiter's bucket sweeper (B-46) — a seam for the spec
+   * that proves the socket layer actually starts one. Production passes
+   * nothing and takes the documented defaults.
+   */
+  sweep?: {
+    intervalMs?: number;
+    idleMs?: number;
+    setIntervalImpl?: (handler: () => void, ms: number) => unknown;
+    clearIntervalImpl?: (handle: unknown) => void;
+  };
+}
+
+/** What the socket layer knows about a request that the router cannot see. */
+export interface RequestContext {
+  /** The `authorization` header, verbatim. */
+  authorization?: string;
+  /** The limiter's resolved client key — logged truncated, never whole. */
+  clientKey?: string;
 }
 
 export interface ReviewRouteResult {
@@ -85,6 +187,32 @@ const ACTIONS: ReadonlySet<string> = new Set<DecisionAction>([
   'appeal_dismissed',
 ]);
 const APPEAL_DECISIONS: ReadonlySet<string> = new Set(['appeal_upheld', 'appeal_dismissed']);
+/** The kinds that take a chain action and therefore have chain preconditions. */
+const CHAIN_ACTIONS: ReadonlySet<string> = new Set(['flag', 'clear', 'release', 'forfeit']);
+
+/**
+ * First 6 and last 4 of an identifier — the repo's convention for writing a
+ * public key to a log (`backend/packet/src/signer-select.ts`). These keys are
+ * public by definition and the decision log publishes them in full; they are
+ * truncated here anyway, so a pasted request log stays boring.
+ */
+function short(v: string | undefined): string {
+  if (!v) return '<none>';
+  return v.length <= 12 ? v : `${v.slice(0, 6)}…${v.slice(-4)}`;
+}
+
+/**
+ * First two octets of a v4 address, or the first hextet of a v6 — enough to
+ * correlate one caller across lines during an incident, without writing whole
+ * addresses into a log that outlives the reason for holding them. Same rule
+ * as the entry gate's (`backend/packet/src/service.ts`).
+ */
+function ipPrefix(ip: string | undefined): string {
+  if (!ip) return 'unknown';
+  if (ip.includes(':')) return `${ip.split(':')[0]}:…`;
+  const parts = ip.split('.');
+  return parts.length === 4 ? `${parts[0]}.${parts[1]}.x.x` : 'unparsed';
+}
 
 function parseAppeal(body: unknown): AppealSubmission | null {
   const b = body as Record<string, unknown>;
@@ -142,15 +270,43 @@ function parseDecision(body: unknown): Decision | null {
   };
 }
 
+/** Constant-time compare of the operator token, as the indexer's ingress does. */
+function operatorAuthorized(header: string | undefined, token: string | undefined): boolean {
+  if (!token || !header) return false;
+  const a = Buffer.from(header);
+  const b = Buffer.from(token);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/**
+ * Is this exact signature already on this entry's record? (B-23.) A
+ * deterministic signature over an unchanged message is the same bytes, so a
+ * second arrival of a signature the log already holds is a replay — and the
+ * published row is the proof that it is spent.
+ */
+function isReplay(thread: readonly Decision[], signature: string): boolean {
+  return thread.some((r) => r.signature === signature);
+}
+
 export async function handleReviewRoute(
   deps: ReviewServerDeps,
   method: string,
   path: string,
-  body: unknown
+  body: unknown,
+  ctx: RequestContext = {}
 ): Promise<ReviewRouteResult> {
   const [route, queryString] = path.split('?', 2);
+  const logger = deps.logger ?? defaultLogger;
+  const client = ipPrefix(ctx.clientKey);
+  const line = (result: ReviewRouteResult, detail: Record<string, unknown> = {}): ReviewRouteResult => {
+    // ONE line per request (B-35). Never a signature, never a criterion,
+    // never a whole address.
+    logger('request', { method, route, status: result.status, client, ...detail });
+    return result;
+  };
 
-  // E5: the deployment liveness probe.
+  // E5: the deployment liveness probe. Not logged — a platform health check
+  // every few seconds would drown the lines that matter.
   if (route === '/health' && method === 'GET') {
     return { status: 200, body: { ok: true, service: 'review' } };
   }
@@ -158,13 +314,19 @@ export async function handleReviewRoute(
   if (route === '/decisions' && method === 'GET') {
     const q = new URLSearchParams(queryString ?? '');
     const pool = q.get('pool');
-    if (!pool || !B58.test(pool)) return { status: 400, body: { error: 'pool' } };
+    if (!pool || !B58.test(pool)) return line({ status: 400, body: { error: 'pool' } });
     const player = q.get('player');
     if (player !== null) {
-      if (!B58.test(player)) return { status: 400, body: { error: 'player' } };
-      return { status: 200, body: { decisions: await deps.log.listFor(pool, player) } };
+      if (!B58.test(player)) return line({ status: 400, body: { error: 'player' } });
+      return line(
+        { status: 200, body: { decisions: await deps.log.listFor(pool, player) } },
+        { pool: short(pool), player: short(player) }
+      );
     }
-    return { status: 200, body: { decisions: await deps.log.list(pool) } };
+    return line(
+      { status: 200, body: { decisions: await deps.log.list(pool) } },
+      { pool: short(pool) }
+    );
   }
 
   if (route === '/appeals' && method === 'GET') {
@@ -173,64 +335,288 @@ export async function handleReviewRoute(
     const q = new URLSearchParams(queryString ?? '');
     const pool = q.get('pool');
     const player = q.get('player');
-    if (!pool || !B58.test(pool)) return { status: 400, body: { error: 'pool' } };
-    if (!player || !B58.test(player)) return { status: 400, body: { error: 'player' } };
-    return { status: 200, body: appealState(await deps.log.listFor(pool, player)) };
+    if (!pool || !B58.test(pool)) return line({ status: 400, body: { error: 'pool' } });
+    if (!player || !B58.test(player)) return line({ status: 400, body: { error: 'player' } });
+    return line(
+      { status: 200, body: appealState(await deps.log.listFor(pool, player)) },
+      { pool: short(pool), player: short(player) }
+    );
+  }
+
+  if (route === '/pending' && method === 'GET') {
+    // C-07's visibility half. An upheld forfeit is LOGGED here and LANDED by
+    // an admin transaction later; in between, the share sits in the vault
+    // under a decision the chain does not yet carry. That gap used to exist
+    // nowhere an operator could see it: the 202 was a response to one POST
+    // and nothing kept the list. The daemon's review clock already refuses
+    // to release such a share and alerts when the window closes (D-03); this
+    // is the same state as a read, so the desk can see it before then.
+    const q = new URLSearchParams(queryString ?? '');
+    const pool = q.get('pool');
+    if (!pool || !B58.test(pool)) return line({ status: 400, body: { error: 'pool' } });
+    const rows = await deps.log.list(pool);
+    const players = [...new Set(rows.map((r) => r.player))];
+    const pending: Array<Record<string, unknown>> = [];
+    for (const player of players) {
+      const forfeit = appealState(rows.filter((r) => r.player === player)).forfeit;
+      if (!forfeit) continue;
+      const entry = await deps.actions.entryState(pool, player);
+      if (entry !== null && entry.forfeited) continue;
+      pending.push({
+        player,
+        decidedBy: forfeit.decidedBy,
+        decidedAt: forfeit.decidedAt,
+        criterion: forfeit.criterion,
+        entryFound: entry !== null,
+      });
+    }
+    return line(
+      { status: 200, body: { pool, pending } },
+      { pool: short(pool), pending: pending.length }
+    );
+  }
+
+  if (route === '/detection' && method === 'GET') {
+    // A-18 / ruling D-E9: the reviewer's page reads this before the review
+    // window closes. Operator-token only, and fail-closed — an unset token
+    // is a 503, never an open route.
+    if (!deps.reports || !deps.operatorToken) {
+      return line({ status: 503, body: { error: 'not_configured' } });
+    }
+    if (!operatorAuthorized(ctx.authorization, deps.operatorToken)) {
+      return line({ status: 401, body: { error: 'unauthorized' } }, { refusal: 'operator_token' });
+    }
+    const q = new URLSearchParams(queryString ?? '');
+    const pool = q.get('pool');
+    if (!pool || !B58.test(pool)) return line({ status: 400, body: { error: 'pool' } });
+    const stored = await deps.reports.latest(pool);
+    if (!stored) {
+      return line({ status: 404, body: { error: 'no_report', pool } }, { pool: short(pool) });
+    }
+    return line(
+      {
+        status: 200,
+        body: {
+          pool: stored.pool,
+          poolId: stored.poolId,
+          producedAt: stored.producedAt,
+          findings: stored.report.findings,
+          reviewRecommended: stored.report.reviewRecommended,
+          // Reported, never acted on: detection is manual (D-E9). The list is
+          // what R11 WOULD hard-block if the founder ever turned that on.
+          hardBlocks: stored.report.hardBlocks,
+        },
+      },
+      { pool: short(pool), findings: stored.report.findings.length }
+    );
   }
 
   if (route === '/appeals' && method === 'POST') {
     const appeal = parseAppeal(body);
-    if (!appeal) return { status: 400, body: { error: 'malformed' } };
+    if (!appeal) return line({ status: 400, body: { error: 'malformed' } });
     const now = deps.now ?? Date.now;
-    if (!verifyAppealSubmission(appeal, now())) {
-      // Uniform: not the player's key, bad signature and stale look identical.
-      return { status: 401, body: { error: 'unauthorized' } };
+    const refusal = appealSubmissionRefusal(appeal, now());
+    if (refusal !== null) {
+      // D-33: the player is told WHICH of the two it was. A clock a few
+      // minutes out is the appellant's to fix and they cannot fix it if we
+      // call it a bad signature; and this route leaks nothing by saying so —
+      // the submitter signs with their own key over their own wallet and
+      // pool. (The reviewer route above stays uniform, deliberately.)
+      const cause = refusal === 'clock_skew' || refusal === 'bad_timestamp' ? 'clock_skew' : 'signature';
+      return line(
+        { status: 401, body: { error: 'unauthorized', reason: cause } },
+        { pool: short(appeal.pool), player: short(appeal.player), refusal }
+      );
     }
     const thread = await deps.log.listFor(appeal.pool, appeal.player);
-    const refusal = lodgeRefusal(thread, appeal.signedAt);
-    if (refusal) return { status: 409, body: { error: refusal } };
+    if (isReplay(thread, appeal.signature)) {
+      return line(
+        { status: 409, body: { error: 'already_recorded' } },
+        { pool: short(appeal.pool), player: short(appeal.player), refusal: 'replay' }
+      );
+    }
+    const ruleRefusal = lodgeRefusal(thread, appeal.signedAt);
+    if (ruleRefusal) {
+      return line(
+        { status: 409, body: { error: ruleRefusal } },
+        { pool: short(appeal.pool), player: short(appeal.player), refusal: ruleRefusal }
+      );
+    }
     await decide(deps.actions, deps.log, lodgeRow(appeal));
-    return { status: 204, body: null };
+    return line(
+      { status: 204, body: null },
+      { pool: short(appeal.pool), player: short(appeal.player), action: 'appeal_lodged' }
+    );
   }
 
   if (route === '/decisions' && method === 'POST') {
     const decision = parseDecision(body);
-    if (!decision) return { status: 400, body: { error: 'malformed' } };
+    if (!decision) return line({ status: 400, body: { error: 'malformed' } });
     const now = deps.now ?? Date.now;
-    if (!verifyReviewSubmission(deps.registry, decision, now())) {
-      // Uniform: unknown signer, bad signature and stale look identical.
-      return { status: 401, body: { error: 'unauthorized' } };
+    const where = {
+      action: decision.action,
+      reviewer: short(decision.decidedBy),
+      pool: short(decision.pool),
+      player: short(decision.player),
+    };
+    const authRefusal = reviewSubmissionRefusal(deps.registry, decision, now());
+    if (authRefusal !== null) {
+      // Uniform to the CALLER — unknown signer, bad signature and stale look
+      // identical, so the endpoint is not a member-list oracle. Named in the
+      // LOG, which the caller cannot reach (B-35).
+      deps.monitor?.recordEvent(METRIC.review.decisionRefused, { reason: 'unauthorized' });
+      return line({ status: 401, body: { error: 'unauthorized' } }, { ...where, refusal: authRefusal });
     }
+
+    const thread = await deps.log.listFor(decision.pool, decision.player);
+    if (isReplay(thread, decision.signature)) {
+      // B-23. Honest for the accidental case too: an honest retry of a
+      // request whose response was lost is told the decision is on the
+      // record, which is the truth and is what it needed to know.
+      deps.monitor?.recordEvent(METRIC.review.decisionRefused, { reason: 'replay' });
+      return line({ status: 409, body: { error: 'already_recorded' } }, { ...where, refusal: 'replay' });
+    }
+
     if (APPEAL_DECISIONS.has(decision.action)) {
       // The published rule: an open appeal, decided by a DIFFERENT reviewer
       // from the one whose upheld flag is under appeal.
-      const thread = await deps.log.listFor(decision.pool, decision.player);
       const refusal = appealDecisionRefusal(thread, decision.decidedBy);
-      if (refusal) return { status: 409, body: { error: refusal } };
+      if (refusal) {
+        deps.monitor?.recordEvent(METRIC.review.decisionRefused, { reason: 'rule' });
+        return line({ status: 409, body: { error: refusal } }, { ...where, refusal });
+      }
     }
+
+    // B-25, the budget. Before the chain reads: a key being scripted should
+    // not get free RPC round trips out of us either.
+    const budget = deps.budget ?? DEFAULT_REVIEWER_BUDGET;
+    const spent = await deps.log.countBy(decision.decidedBy, budgetWindowStart(now(), budget));
+    if (spent >= budget.actions) {
+      deps.monitor?.recordEvent(METRIC.review.decisionRefused, { reason: 'budget' });
+      deps.monitor?.alert(ALERT.review.reviewerBudgetSpent, {
+        reviewer: short(decision.decidedBy),
+        spent,
+        budget: budget.actions,
+        windowMs: budget.windowMs,
+      });
+      return line(
+        {
+          status: 429,
+          body: {
+            error: 'budget_exceeded',
+            retryAfterSeconds: budgetRetryAfterSeconds(budget),
+          },
+        },
+        { ...where, refusal: 'budget', spent }
+      );
+    }
+
+    // B-25, the state preconditions. Mirrors the program's own `require!`
+    // lines, so this can only refuse earlier than the chain would, never
+    // permit something it would not.
+    if (CHAIN_ACTIONS.has(decision.action)) {
+      let poolState;
+      let entryState;
+      try {
+        poolState = await deps.actions.poolState(decision.pool);
+        entryState = await deps.actions.entryState(decision.pool, decision.player);
+      } catch (e) {
+        // The chain could not be read, so legality is unknown. Refusing is
+        // the only safe answer: acting anyway is the finding.
+        return line(
+          { status: 502, body: { error: 'state_unreadable', detail: errorText(e) } },
+          { ...where, refusal: 'state_unreadable' }
+        );
+      }
+      const refusal = preconditionRefusal(decision.action, poolState, entryState);
+      if (refusal) {
+        deps.monitor?.recordEvent(METRIC.review.decisionRefused, { reason: 'precondition' });
+        return line(
+          { status: 409, body: { error: refusal, poolState } },
+          { ...where, refusal, poolState }
+        );
+      }
+    }
+
     let outcome;
     try {
       outcome = await decide(deps.actions, deps.log, decision);
     } catch (e) {
       // The chain refused (or the RPC died): nothing was logged.
-      return { status: 502, body: { error: 'action_failed', detail: String(e) } };
+      return line(
+        { status: 502, body: { error: 'action_failed', detail: errorText(e) } },
+        { ...where, refusal: 'action_failed' }
+      );
     }
-    if (outcome === 'recorded_pending_admin') {
+
+    deps.monitor?.recordEvent(METRIC.review.decision, { action: decision.action });
+
+    if (outcome.kind === 'applied_not_logged') {
+      // B-24. The chain action LANDED. Saying 502 here would tell the
+      // reviewer their decision failed and invite them to repeat work that
+      // is already irreversible; the log write is what failed, and that is
+      // an operator problem, loudly.
+      deps.monitor?.alert(ALERT.review.decisionNotLogged, {
+        action: decision.action,
+        reviewer: short(decision.decidedBy),
+        pool: decision.pool,
+        player: decision.player,
+        decidedAt: decision.decidedAt,
+        error: outcome.logError,
+      });
+      return line(
+        {
+          status: 200,
+          body: {
+            applied: true,
+            logged: false,
+            error: 'log_write_failed',
+            detail: outcome.logError,
+            next: 'the chain action landed; the decision is NOT in the published log',
+          },
+        },
+        { ...where, outcome: 'applied_not_logged' }
+      );
+    }
+
+    if (outcome.kind === 'recorded_pending_admin') {
       // The reviewer's decision is on the record; the instruction is the
-      // admin's to land (scripts/admin.ts forfeit-escrow).
-      return {
-        status: 202,
-        body: { recorded: true, landed: false, next: 'admin lands forfeit_escrow' },
-      };
+      // admin's to land (scripts/admin.ts forfeit-escrow). C-07: the chain
+      // refusal is reported rather than swallowed, and it alerts — "no admin
+      // key here" is routine, anything else is not, and the operator is the
+      // only one who can tell which from the text.
+      deps.monitor?.alert(ALERT.review.forfeitNotLanded, {
+        reviewer: short(decision.decidedBy),
+        pool: decision.pool,
+        player: decision.player,
+        decidedAt: decision.decidedAt,
+        chainError: outcome.chainError,
+      });
+      return line(
+        {
+          status: 202,
+          body: {
+            recorded: true,
+            landed: false,
+            next: 'admin lands forfeit_escrow',
+            detail: outcome.chainError,
+          },
+        },
+        { ...where, outcome: 'recorded_pending_admin' }
+      );
     }
-    return { status: 204, body: null };
+
+    return line({ status: 204, body: null }, { ...where, outcome: 'applied' });
   }
 
-  if (route === '/decisions' || route === '/appeals') {
-    return { status: 405, body: { error: 'method' } };
+  if (route === '/decisions' || route === '/appeals' || route === '/pending' || route === '/detection') {
+    return line({ status: 405, body: { error: 'method' } });
   }
-  return { status: 404, body: { error: 'not found' } };
+  return line({ status: 404, body: { error: 'not found' } });
 }
+
+const defaultLogger: RequestLogger = (stage, detail) =>
+  console.log(`review: ${stage}`, JSON.stringify(detail));
 
 export function serveReviewApi(deps: ReviewServerDeps, port: number): Server {
   // BR-005 wiring, mirrored from the entry server: one hygiene decision per
@@ -242,13 +628,23 @@ export function serveReviewApi(deps: ReviewServerDeps, port: number): Server {
     securityHeadersEnabled: false,
   };
   const limiter = new RateLimiter(hygiene.rateLimit);
+  // B-46: every client address is a bucket key, so an unswept map is an
+  // unbounded leak on a public service — the defence becomes the vector.
+  // The sweeper's timer is unref'ed and no timer is started at all when the
+  // limiter is off, so the default posture is unchanged.
+  const sweeper = startBucketSweeper(limiter, hygiene.rateLimit, deps.sweep ?? {});
+  const logger = deps.logger ?? defaultLogger;
   const server = createServer(async (req, res) => {
+    const forwardedFor = deps.trustProxyHeader ? req.headers['x-forwarded-for'] : undefined;
+    const flyClientIp = deps.trustProxyHeader ? req.headers['fly-client-ip'] : undefined;
+    const remoteAddress = req.socket.remoteAddress ?? undefined;
+    const clientKey = clientKeyFrom(forwardedFor, remoteAddress, flyClientIp);
     const outcome = applyHygiene(
       {
         method: req.method,
-        forwardedFor: deps.trustProxyHeader ? req.headers['x-forwarded-for'] : undefined,
-        remoteAddress: req.socket.remoteAddress ?? undefined,
-        flyClientIp: deps.trustProxyHeader ? req.headers['fly-client-ip'] : undefined,
+        forwardedFor,
+        remoteAddress,
+        flyClientIp,
         origin: req.headers.origin,
       },
       hygiene,
@@ -259,6 +655,14 @@ export function serveReviewApi(deps: ReviewServerDeps, port: number): Server {
       return;
     }
     if (outcome.kind === 'rate_limited') {
+      // Logged here because it never reaches the router: a burst of these
+      // from one prefix is the shape of an attack on this service.
+      logger('rate_limited', {
+        method: req.method ?? '',
+        route: (req.url ?? '/').split('?')[0],
+        status: outcome.status,
+        client: ipPrefix(clientKey),
+      });
       res
         .writeHead(outcome.status, { 'content-type': 'application/json', ...outcome.headers })
         .end(JSON.stringify(outcome.body));
@@ -283,20 +687,32 @@ export function serveReviewApi(deps: ReviewServerDeps, port: number): Server {
           deps,
           req.method ?? '',
           req.url ?? '/',
-          body
+          body,
+          { authorization: req.headers.authorization, clientKey }
         );
         if (out === null) res.writeHead(status, baseHeaders).end();
         else
           res
             .writeHead(status, { 'content-type': 'application/json', ...baseHeaders })
             .end(JSON.stringify(out));
-      } catch {
+      } catch (e) {
+        // The router threw: a store or the chain client failed in a way no
+        // route handled. Logged (B-35) — it used to be the one outcome this
+        // service produced in complete silence.
+        logger('handler_threw', {
+          method: req.method ?? '',
+          route: (req.url ?? '/').split('?')[0],
+          status: 500,
+          client: ipPrefix(clientKey),
+          error: errorText(e),
+        });
         res
           .writeHead(500, { 'content-type': 'application/json', ...baseHeaders })
           .end(JSON.stringify({ error: 'internal' }));
       }
     });
   });
+  server.on('close', () => sweeper.stop());
   server.listen(port);
   return server;
 }

@@ -129,6 +129,16 @@ describe('the review decision log (4.4)', () => {
       async forfeitEscrow(_p, w) {
         calls.push(`forfeit:${w}`);
       },
+      // The two reads the state preconditions run on (audit B-25). `decide`
+      // itself never calls them — the route does, before it calls `decide` —
+      // but they are part of the one seam so that no wiring can exist with
+      // the write half and not the read half.
+      async poolState() {
+        return 'Scored';
+      },
+      async entryState() {
+        return { flagged: true, settled: false, forfeited: false, sanctionsHold: false, escrowLamports: 0n };
+      },
     };
     const log = new MemoryDecisionLog();
     await decide(actions, log, {
