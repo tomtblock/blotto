@@ -5,7 +5,7 @@
  * MIN_SEATS / DEFAULT_FILL_DEADLINE_SECS / DEFAULT_COOLDOWN_SECS from
  * @blotto/scoring (pinned to the Python
  * oracle and, via LiteSVM, to the on-chain program) — and from the
- * founder-owned config files (territories, terms). No hand-typed figures,
+ * founder-owned config file (territories). No hand-typed figures,
  * so the page cannot drift from what the program pays or enforces.
  *
  * All lamport arithmetic is bigint; formatting to SOL happens at the edge
@@ -20,7 +20,6 @@ import {
   TIER_POT_LAMPORTS,
 } from '@blotto/scoring';
 import territories from '@config/territories.json';
-import terms from '@config/terms.json';
 import { COPY } from '@/copy';
 import { lamportsToSol } from '@/data/format';
 

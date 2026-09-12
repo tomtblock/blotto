@@ -171,11 +171,11 @@ close them today.
 | Turnkey — one signature per entry | entries (pay-as-you-go, then Pro) | 38 | 78 | 198 | 299 | 2,099 |
 | Sanctions — OFAC mirror and Chainalysis | free | 0 | 0 | 0 | 0 | 0 |
 | Irys — one bundle per pool | pools | 0.07 | 0.13 | 0.33 | 0.67 | 6.67 |
-| Solana — rent and fees the keeper pays, 0.015 SOL per pool | pools | 10 | 20 | 50 | 100 | 1,000 |
+| Solana — 0.016 SOL per pool: 0.015 SOL of rent and fees the keeper pays, plus the 0.0009 SOL rent cushion the treasury leaves in every vault (890,880 lamports, never recovered — since 2026-09-12) | pools | 11 | 21 | 53 | 107 | 1,067 |
 | GitHub Actions — private-repository overage | fixed | 16 | 16 | 16 | 16 | 16 |
 | Domain | fixed | 1.25 | 1.25 | 1.25 | 1.25 | 1.25 |
-| **Total** | | **173** | **223** | **672** | **824** | **5,760** |
-| Per user | | 1.73 | 1.11 | 1.34 | 0.82 | 0.58 |
+| **Total** | | **174** | **224** | **675** | **831** | **5,827** |
+| Per user | | 1.74 | 1.12 | 1.35 | 0.83 | 0.58 |
 | Entries / pools the row assumes | | 400 / 7 | 800 / 13 | 2,000 / 33 | 4,000 / 67 | 40,000 / 667 |
 
 Against the margin: at tier 0 a full pool's margin is 2.4 SOL, $240 at
