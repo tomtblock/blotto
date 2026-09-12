@@ -137,10 +137,12 @@ async function cmdBackfill(monitor: Monitor, opts: { bounded?: boolean } = {}): 
     console.log(
       `backfill: ${result.transactions} tx, ${result.inserted} inserted, ${result.duplicates} duplicates`
     );
-    // The walk projects newest-first, which is the wrong order for an
-    // order-dependent projection; `backfillAndRederive` replays the derived
-    // tables from the ledger whenever the walk inserted anything. See its
-    // doc comment for what a backwards projection actually produces.
+    // The walk ingests oldest-first since 2026-09-12 (F-19), so its own rows
+    // project correctly as they land. The chained rebuild remains for the case
+    // its order cannot fix: rows inserted BELOW the ingest watermark are older
+    // than rows the live webhook already projected, so applying them in place
+    // would put a pool's opening on top of its settlement. See
+    // `backfillAndRederive`'s doc comment.
     if (result.rederived > 0) {
       console.log(`backfill: re-derived ${result.rederived} events in ledger order`);
     }

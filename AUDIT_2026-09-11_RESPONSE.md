@@ -338,3 +338,33 @@ The program is pinned by LiteSVM, the mirrors by their own fakes, and the two su
 which is how a same-day change passed every lane with three copies disagreeing. That is audit F-11's
 shape (`#[event]` structs and their decoders hand-mirrored with no drift detection) widened to the
 policy arithmetic, and it belongs in batch T1's cross-boundary tests.
+
+## Addendum — Wave 1.2b, batch I1b part one: replay order and migration rebuilds (2026-09-12)
+
+| Audit id | What changed | Shown closed by |
+|---|---|---|
+| F-19 | The ledger replayed with `ORDER BY slot, signature, event_index`. `event_index` is the ordinal within ONE transaction's logs, so it orders nothing across transactions, and `signature` is a hash: two of our transactions in one slot replayed in an order decided by base58 collation. Migration 0018 records a monotonic insertion sequence — backfilled for existing rows in the old order, so the first rebuild after it reproduces exactly what was already being served — and the replay orders become `slot, seq`. The backfill now ingests OLDEST FIRST (it must still page newest-first, the only direction the RPC offers, so it collects then walks in reverse), which makes the sequence true chain order for every row it writes | `replay-order.spec.ts`; a live Postgres 16 run of all eighteen migrations, clean and populated, numbering four pre-existing rows in the old order and two same-slot appends in delivery order where base58 would have inverted them |
+| E-15 | `0004` drops two derived tables and asks for a rebuild in a comment addressed to a human, which nothing read; the boot backfill chains one only when it inserted something, which on a normal boot it does not. A migration now declares it with `-- BLOTTO-MIGRATION: rederive-required`, `migrate()` returns that fact with the applied filenames, and `sync` rebuilds BEFORE serving — an empty derived table answered out of is a site saying "no tournaments" as though it were true. The standalone `migrate` command only reports the need, because it is what an operator runs against stopped services | `migrate-marker.spec.ts`: the matcher against the real files, twelve near-misses a migration author will plausibly write, and the return shape on clean, up-to-date and partially-applied databases. The convention is documented where 0019's author will look, in the migrations README |
+
+### Two things this batch found, reported and routed
+
+**Three projection pairs are order-dependent, and only one of them was known.** Two
+`EntryRegistered` in one slot commute — that is the realistic case and it is now tested at two events
+and at thirty-two applied in reverse. These do not:
+
+| Pair | What the wrong order decides |
+|---|---|
+| `ResultsCommitted` + `PrizesPaid` | Whether a settled pool reads as settled. `PrizesPaid` first leaves `results` empty, so the pool is not marked Paid and the later `ResultsCommitted` writes `Scored` instead |
+| `EscrowForfeited` + `NextPlacePaid` | One `player_history` row's `paid` and `amount` — last applied wins |
+| `RefundTriggered` + `Refunded` | A fully refunded pool's `Closed` state, which the `RefundTriggered` upsert can overwrite |
+
+All three are separate crank instructions our own backend issues in sequence, so in practice they
+land in different slots. That is a property of the crank's pacing, not of the schema, and nothing
+enforces it. **Routed to batch T1** with the cross-boundary tests.
+
+**The honest limit of the F-19 fix, stated in the code rather than implied away.** For two LIVE
+deliveries in one slot, `seq` is delivery order, and a rebuild faithfully reproduces that delivery
+order. So if a delivery ever arrives out of chain order for one of the three pairs above, the wrong
+derived state is no longer produced once at random — it is reproduced stably by every rebuild.
+Only a backfill into a fresh ledger recovers the true order. The fix makes the wrongness
+deterministic; it does not make it recoverable, and the migration's header and both stores say so.
