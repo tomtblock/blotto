@@ -100,6 +100,7 @@ import {
   uploadWalletVerdict,
 } from './startup';
 import { base58Decode } from '../../_shared/src/blotto-events';
+import { intEnv, portEnv } from '../../_shared/src/env-number';
 
 const SERVICE = 'daemon';
 const DEFAULT_PROGRAM_ID = '5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17';
@@ -170,8 +171,12 @@ function buildCustody(
 
 export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> {
   console.log(`${SERVICE}: build ${env.BLOTTO_BUILD_COMMIT ?? 'unknown'}`);
-  const intervalMs = Number(env.BLOTTO_DAEMON_INTERVAL_MS ?? 15_000);
-  const healthPort = Number(env.BLOTTO_DAEMON_HEALTH_PORT ?? 8084);
+  // Whole numbers or nothing (audit 2026-09-11, E-20). A blank
+  // BLOTTO_DAEMON_INTERVAL_MS used to become 0, which is a tick loop with no
+  // pause between settlement passes; a blank health port used to become 0,
+  // which binds a random port the platform's health check cannot reach.
+  const intervalMs = intEnv(env, 'BLOTTO_DAEMON_INTERVAL_MS', 15_000, { min: 1 });
+  const healthPort = portEnv(env, 'BLOTTO_DAEMON_HEALTH_PORT', 8084);
 
   // FIRST, before any credential, database handle or network fetch. The
   // Switchboard and Irys steps below take ~25s between them, and a platform

@@ -17,10 +17,15 @@
 
 import nacl from 'tweetnacl';
 import { readFileSync } from 'fs';
-import { attestationMessage, type TermsEdition } from '../../_shared/src/attestation-message';
+import {
+  assertEditionLedger,
+  attestationMessage,
+  type TermsEdition,
+  type TermsLedger,
+} from '../../_shared/src/attestation-message';
 import { base58Decode } from './shared';
 
-export { attestationMessage, type TermsEdition };
+export { assertEditionLedger, attestationMessage, type TermsEdition, type TermsLedger };
 
 export interface AttestationRecord {
   /** Base58 wallet. */
@@ -54,16 +59,37 @@ export class MemoryAttestationStore implements AttestationStore {
 /**
  * The current terms edition, from the founder-owned config/terms.json: the
  * version the packet carries and the date the signed statement names.
+ *
+ * The file also carries the append-only ledger of every edition, and this
+ * loader checks it (audit 2026-09-11, B-44). The signed statement names the
+ * DATE, not the version, so two editions sharing a date would let a
+ * signature captured for one verify for the other — and the record would
+ * store consent to terms that signer never saw. `assertEditionLedger` makes
+ * that state unreachable, and this throws rather than degrading: a service
+ * that cannot tell which edition a signature refers to must not accept
+ * signatures.
  */
 export function loadTerms(path: string): TermsEdition {
-  const doc = JSON.parse(readFileSync(path, 'utf8')) as { version?: unknown; updated?: unknown };
+  const doc = JSON.parse(readFileSync(path, 'utf8')) as {
+    version?: unknown;
+    updated?: unknown;
+    editions?: unknown;
+  };
   if (!Number.isInteger(doc.version) || (doc.version as number) < 1) {
     throw new Error('terms config: version must be a positive integer');
   }
   if (typeof doc.updated !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(doc.updated)) {
     throw new Error('terms config: updated must be a YYYY-MM-DD date');
   }
-  return { version: doc.version as number, updated: doc.updated };
+  const current: TermsEdition = { version: doc.version as number, updated: doc.updated };
+  if (!Array.isArray(doc.editions)) {
+    throw new Error(
+      'terms config: editions must list every published edition, oldest first — without it the ' +
+        'date in the signed statement cannot be shown to name exactly one edition'
+    );
+  }
+  assertEditionLedger(doc.editions as TermsLedger, current);
+  return current;
 }
 
 /** Current terms version only — kept for callers that need just the number. */
@@ -103,7 +129,13 @@ export async function acceptAttestation(
   if (!nacl.sign.detached.verify(message, signature, pubkey)) return false;
   await store.put({
     wallet: submission.wallet,
-    termsVersion: submission.termsVersion,
+    // The SERVER's version, never the client's (audit 2026-09-11, B-44). The
+    // guard above proves the two are equal, so this changes no behaviour —
+    // it removes the need for a reader of the consent record to trace back
+    // through that guard to know the number is ours. The bytes the wallet
+    // signed name the edition's date; `loadTerms` proves that date names
+    // exactly this version.
+    termsVersion: currentTerms.version,
     attested18: true,
     timestamp: now(),
     walletSignature: submission.signature,
