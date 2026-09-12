@@ -16,6 +16,10 @@ import {
   type ProofStep,
 } from '../../scoring/src';
 import { base58Decode } from '../../_shared/src/blotto-events';
+// Imported, not re-implemented: the fake's open gate and the keeper's
+// decision must be the same arithmetic or the parity suite proves nothing.
+// Type-only in the other direction, so this is not a runtime cycle.
+import { idleTierReserve } from './treasury';
 
 export type PoolStateName = 'Open' | 'Sealed' | 'Scored' | 'Paid' | 'Refunding' | 'Closed';
 
@@ -278,6 +282,19 @@ export interface KeeperChain extends SettlementChain {
    * (the fill deadline, `escrowedAt`) should use this. The fake returns its
    * injected `now()`. */
   chainNow(): Promise<bigint>;
+  /**
+   * The per-vault rent cushion the program applies, in lamports:
+   * `Rent::minimum_balance(0)` for a zero-data account, exactly what
+   * `vault::rent_floor()` reads from the sysvar (`vault.rs`). It is NOT a
+   * constant — it follows the cluster's rent parameters, so it is 890,880
+   * under the standard ones and 650,240 on devnet as of 2026-09-12.
+   *
+   * The keeper needs it because `open_pool` funds pot PLUS this and counts
+   * it in `needed`, and `withdraw_platform`'s floor counts it once per
+   * reserved pot. A mirror without it understates what the program will
+   * demand and sends an open the program refuses (see `nextOpenable`).
+   */
+  vaultCushion(): Promise<bigint>;
 }
 
 /**
@@ -783,6 +800,17 @@ export class FakeChain implements KeeperChain {
     };
   }
 
+  /**
+   * The cushion the fake reports. Defaults to the STANDARD rent parameters
+   * (890,880) rather than devnet's, because a mirror that only works on one
+   * cluster's numbers is the defect this exists to catch.
+   */
+  vaultCushionLamports = 890_880n;
+
+  async vaultCushion(): Promise<bigint> {
+    return this.vaultCushionLamports;
+  }
+
   async getPlatformBalance(): Promise<bigint> {
     return this.platform;
   }
@@ -848,19 +876,27 @@ export class FakeChain implements KeeperChain {
     // The treasury policy gate (open_pool.rs): available = balance minus
     // refundable entries; after funding this pot the remainder must cover
     // the minimum plus one further pot of every OTHER enabled idle tier.
+    //
+    // The RENT CUSHION (2026-09-12): `open_pool` funds pot PLUS
+    // `vault::rent_floor()` and counts both in `needed`, and every reserved
+    // pot in the idle-tier term carries one too. This fake is what the
+    // rehearsal and every daemon spec run against, so a gate here that
+    // forgets the cushion makes an open look legal that the program
+    // refuses — and the fake's own treasury would drift a cushion richer
+    // than the real one with every pool. `idleTierReserve` is imported
+    // rather than re-implemented for exactly that reason: three copies of
+    // this arithmetic is how the cushion came to be missing from two of
+    // them.
     const pot = cfg.tierPotLamports[tier];
+    const cushion = this.vaultCushionLamports;
     const available = this.platform - this.refundable;
-    let idleReserve = 0n;
-    for (let t = 0; t < cfg.openTiers.length; t++) {
-      if (t === tier) continue;
-      if (cfg.openTiers[t] && cfg.activePoolByTier[t] === 0n) {
-        idleReserve += cfg.tierPotLamports[t] * BigInt(cfg.treasuryReservePots);
-      }
-    }
-    const needed = pot + cfg.treasuryMinPlatformLamports + idleReserve;
+    const needed =
+      pot + cushion + cfg.treasuryMinPlatformLamports + idleTierReserve(await this.getConfig(), tier, cushion);
     if (available < needed) throw new Error('TreasuryShortfall');
-    // Fund the pot: treasury → the pool's prize vault, before any entry.
-    this.platform -= pot;
+    // Fund the pot AND the cushion: treasury → the pool's prize vault,
+    // before any entry. Only the pot is `reserved` — the cushion is not
+    // part of the prize and never returns to the treasury.
+    this.platform -= pot + cushion;
     this.reserved += pot;
     this.pools.set(poolId.toString(), {
       poolId,

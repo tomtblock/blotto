@@ -27,6 +27,29 @@ learned rather than written.
   indexer image's `sync` entry applies every migration at boot, so a fresh Fly
   machine is the de-facto check; a clean-database migration run in CI is on the
   audit's open items.
+- **A migration that invalidates a DERIVED table must say so, in one line:**
+
+  ```sql
+  -- BLOTTO-MIGRATION: rederive-required
+  ```
+
+  The derived tables — `pools`, `entries`, `results`, `payouts`, `profiles`,
+  `player_history`, `tier_status` — are a pure function of the `events` ledger,
+  so dropping or re-shaping one loses nothing that cannot be rebuilt. But
+  nothing rebuilds it on its own: the boot backfill chains a replay only when it
+  INSERTED something, which on a normal boot it does not, and until 2026-09-12
+  the only instruction was a sentence addressed to a human in `0004`'s header,
+  which nothing read (audit E-15). A migration carrying this line makes
+  `migrate()` report `rederiveRequired`, and the `sync` boot path rebuilds
+  before it serves — an empty derived table answered out of is a site saying
+  "no tournaments" as though it were the truth.
+
+  Put it in any comment; the checker is case-insensitive and deliberately
+  eager, because a false positive costs one needless replay and a false
+  negative serves empty tables. `declaresRederive()` in
+  `backend/indexer/src/migrate.ts` is the matcher, and its spec pins both the
+  real files that carry the marker and the near-misses that must not.
+
 - **On-chain quantities are `NUMERIC`, never `BIGINT` or `DOUBLE PRECISION`.**
   Lamport amounts are `u64` and exceed both a signed 64-bit integer's range and a
   double's exact-integer range. A prize amount rounded by a float is a payment bug.

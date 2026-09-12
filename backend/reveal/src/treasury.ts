@@ -33,13 +33,30 @@ export interface NextOpenable {
  * The on-chain idle-tier reserve (`idle_tier_reserve`): `reserve_pots`
  * further pots of every ENABLED tier with no live pool, optionally
  * excluding the tier being opened.
+ *
+ * `vaultCushion` is the per-pool rent cushion — `vault::rent_floor()`, the
+ * rent-exempt minimum for a zero-data account, read from the cluster rather
+ * than pinned. Every reserved pot needs one, because opening that pool will
+ * fund pot PLUS the cushion, so the program counts
+ * `(pot + cushion) * reserve_pots` per idle enabled tier.
+ *
+ * IT IS A REQUIRED ARGUMENT, not a defaulted one. This mirror is checked
+ * against the program by the parity suite, and a default of zero would let
+ * a caller that forgot it reproduce exactly the understatement this
+ * parameter was added to fix (2026-09-12 — the cushion landed on chain that
+ * morning and this mirror was not updated with it, so the keeper believed a
+ * tier was openable that the program then refused).
  */
-export function idleTierReserve(config: ChainConfigView, excludeTier: number | null): bigint {
+export function idleTierReserve(
+  config: ChainConfigView,
+  excludeTier: number | null,
+  vaultCushion: bigint
+): bigint {
   let reserve = 0n;
   for (let t = 0; t < config.openTiers.length; t++) {
     if (t === excludeTier) continue;
     if (config.openTiers[t] && config.activePoolByTier[t] === 0n) {
-      reserve += config.tierPotLamports[t] * BigInt(config.treasuryReservePots);
+      reserve += (config.tierPotLamports[t] + vaultCushion) * BigInt(config.treasuryReservePots);
     }
   }
   return reserve;
@@ -56,7 +73,8 @@ export function idleTierReserve(config: ChainConfigView, excludeTier: number | n
  *      §B.6) — when `now` is given; a tier still cooling down is treated
  *      like a busy one (the slot is free, the clock is not);
  *   4. available = platform balance − refundable entries;
- *      needed = pot + min + idle-tier reserve (this tier excluded);
+ *      needed = pot + cushion + min + idle-tier reserve (this tier
+ *      excluded, and every reserved pot cushioned too);
  *      available ≥ needed.
  *
  * The keeper gate itself is not mirrored: the daemon signs as the keeper,
@@ -70,7 +88,8 @@ export function nextOpenable(
   config: ChainConfigView,
   platformBalance: bigint,
   poolStates: TierPoolStates,
-  now?: bigint
+  now: bigint | undefined,
+  vaultCushion: bigint
 ): NextOpenable {
   const available = platformBalance - config.platformRefundable;
   let firstShort: { tier: number; shortfall: bigint } | null = null;
@@ -86,8 +105,15 @@ export function nextOpenable(
       cooling.push(`tier ${t}: cooling down until ${config.tierNextOpenAt[t]}`);
       continue; // the slot is free; the cooldown is not over
     }
+    // `open_pool`: pot + cushion + min_platform + idle reserve (this tier
+    // excluded). The pool being opened needs its OWN cushion too — the
+    // vault is funded with pot + cushion so that draining the pot cannot
+    // leave it rent-paying.
     const needed =
-      config.tierPotLamports[t] + config.treasuryMinPlatformLamports + idleTierReserve(config, t);
+      config.tierPotLamports[t] +
+      vaultCushion +
+      config.treasuryMinPlatformLamports +
+      idleTierReserve(config, t, vaultCushion);
     if (available >= needed) {
       return {
         tier: t,

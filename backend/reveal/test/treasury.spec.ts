@@ -35,38 +35,60 @@ async function chainWith(min: bigint, now: () => bigint = () => 1_000n): Promise
 
 const NONE: TierPoolStates = ['none', 'none', 'none', 'none', 'none', 'none', 'none'];
 
+/**
+ * The per-pool rent cushion the program applies (`vault::rent_floor()` —
+ * the rent-exempt minimum for a zero-data account). `FakeChain` reports the
+ * standard-parameter figure; every expectation below carries it explicitly,
+ * because the whole point of the 2026-09-12 fix is that a mirror which
+ * forgets it understates what the program demands.
+ */
+const CUSHION = 890_880n;
+
 describe('nextOpenable (the treasury policy, off-chain)', () => {
   it('an empty treasury opens nothing and reports the shortfall', async () => {
     const chain = await chainWith(0n);
-    const v = nextOpenable(await chain.getConfig(), 0n, NONE);
+    const v = nextOpenable(await chain.getConfig(), 0n, NONE, undefined, CUSHION);
     expect(v.tier).to.equal(null);
-    expect(v.shortfallLamports).to.equal(TIER_POT_LAMPORTS[0]);
+    expect(v.shortfallLamports).to.equal(TIER_POT_LAMPORTS[0] + CUSHION);
     expect(v.reason).to.contain('short by');
   });
 
-  it('exactly the pot opens tier 0 (the 4 SOL bootstrap, D-E1)', async () => {
+  it('the pot alone is a lamport short: the vault needs its rent cushion too', async () => {
+    // Until 2026-09-12 exactly the pot opened tier 0. `open_pool` now funds
+    // pot PLUS the cushion, so the bootstrap figure is pot + cushion and a
+    // treasury holding exactly the pot is refused — by the program, and now
+    // by this mirror. This test read `.to.equal(0)` on the pot alone before
+    // the fix, which is the defect in one line.
     const chain = await chainWith(0n);
-    const v = nextOpenable(await chain.getConfig(), TIER_POT_LAMPORTS[0], NONE);
-    expect(v.tier).to.equal(0);
+    const cfg = await chain.getConfig();
+    expect(nextOpenable(cfg, TIER_POT_LAMPORTS[0], NONE, undefined, CUSHION).tier).to.equal(null);
+    expect(nextOpenable(cfg, TIER_POT_LAMPORTS[0] + CUSHION, NONE, undefined, CUSHION).tier).to.equal(0);
   });
 
   it('the minimum and the idle-tier reserve both raise the bar', async () => {
     const chain = await chainWith(1_000_000_000n);
     chain.config!.openTiers = [true, true, false, false, false, false, false];
     const cfg = await chain.getConfig();
-    // Tier 0 needs pot0 + min + tier 1's idle pot.
-    const needed = TIER_POT_LAMPORTS[0] + 1_000_000_000n + TIER_POT_LAMPORTS[1];
-    expect(idleTierReserve(cfg, 0)).to.equal(TIER_POT_LAMPORTS[1]);
-    expect(nextOpenable(cfg, needed - 1n, NONE).tier).to.equal(null);
-    expect(nextOpenable(cfg, needed, NONE).tier).to.equal(0);
+    // Tier 0 needs pot0 + its own cushion + min + tier 1's idle pot, which
+    // carries a cushion of its own because opening it would fund one.
+    const needed =
+      TIER_POT_LAMPORTS[0] + CUSHION + 1_000_000_000n + (TIER_POT_LAMPORTS[1] + CUSHION);
+    expect(idleTierReserve(cfg, 0, CUSHION)).to.equal(TIER_POT_LAMPORTS[1] + CUSHION);
+    expect(nextOpenable(cfg, needed - 1n, NONE, undefined, CUSHION).tier).to.equal(null);
+    expect(nextOpenable(cfg, needed, NONE, undefined, CUSHION).tier).to.equal(0);
   });
 
   it('refundable entries are unavailable for pot funding', async () => {
     const chain = await chainWith(0n);
     const cfg = await chain.getConfig();
     cfg.platformRefundable = 100_000_000n;
-    expect(nextOpenable(cfg, TIER_POT_LAMPORTS[0], NONE).tier).to.equal(null);
-    expect(nextOpenable(cfg, TIER_POT_LAMPORTS[0] + 100_000_000n, NONE).tier).to.equal(0);
+    expect(
+      nextOpenable(cfg, TIER_POT_LAMPORTS[0] + CUSHION, NONE, undefined, CUSHION).tier
+    ).to.equal(null);
+    expect(
+      nextOpenable(cfg, TIER_POT_LAMPORTS[0] + CUSHION + 100_000_000n, NONE, undefined, CUSHION)
+        .tier
+    ).to.equal(0);
   });
 
   it('the lowest openable tier wins (the revenue engine never queue-jumped)', async () => {
@@ -74,7 +96,7 @@ describe('nextOpenable (the treasury policy, off-chain)', () => {
     chain.config!.openTiers = [true, true, true, true, true, true, true];
     const cfg = await chain.getConfig();
     // Fund everything: every tier is openable — tier 0 must be the pick.
-    const v = nextOpenable(cfg, 2_000_000_000_000n, NONE);
+    const v = nextOpenable(cfg, 2_000_000_000_000n, NONE, undefined, CUSHION);
     expect(v.tier).to.equal(0);
   });
 
@@ -83,7 +105,7 @@ describe('nextOpenable (the treasury policy, off-chain)', () => {
     const cfg = await chain.getConfig();
     cfg.activePoolByTier[0] = 7n;
     const states: TierPoolStates = ['Sealed', 'none', 'none', 'none', 'none', 'none', 'none'];
-    const v = nextOpenable(cfg, 2_000_000_000_000n, states);
+    const v = nextOpenable(cfg, 2_000_000_000_000n, states, undefined, CUSHION);
     expect(v.tier).to.equal(null);
     expect(v.reason).to.contain('Sealed');
   });
@@ -117,7 +139,7 @@ describe('nextOpenable ↔ FakeChain parity (the on-chain mirror)', () => {
         chain.fundPlatform(balance + 1n); // +1n: fundPlatform rejects zero
         chain.platform = balance; // exact balance under test
         const cfg = await chain.getConfig();
-        const verdict = nextOpenable(cfg, balance, NONE);
+        const verdict = nextOpenable(cfg, balance, NONE, undefined, CUSHION);
         if (verdict.tier !== null) {
           await chain.openPool(1n, verdict.tier, sha('pk'), sha('h'));
           const after = await chain.getConfig();
@@ -154,7 +176,14 @@ describe('the zero-slack cascade (proposal E1 §6.3)', () => {
     const MIN = 2_000_000_000n;
     for (let mask = 1; mask < 128; mask++) {
       const enabled = Array.from({ length: 7 }, (_, t) => (mask >> t) % 2 === 1);
-      const sumPots = TIER_POT_LAMPORTS.reduce((a, p, t) => (enabled[t] ? a + p : a), 0n);
+      // Every enabled tier's pool costs pot PLUS its rent cushion, so the
+      // zero-slack boundary is the sum of both (2026-09-12). Summing pots
+      // alone leaves the cascade one cushion per tier short, which is what
+      // this test caught when the cushion reached the mirrors.
+      const sumPots = TIER_POT_LAMPORTS.reduce(
+        (a, p, t) => (enabled[t] ? a + p + CUSHION : a),
+        0n
+      );
       const chain = await chainWith(MIN);
       chain.config!.openTiers = enabled;
       chain.fundPlatform(1n); // fundPlatform rejects zero
@@ -164,7 +193,7 @@ describe('the zero-slack cascade (proposal E1 §6.3)', () => {
       // re-reading config and balance every pass (daemon.ts guard loop).
       for (let guard = 0; guard < 7; guard++) {
         const cfg = await chain.getConfig();
-        const v = nextOpenable(cfg, chain.platform, NONE);
+        const v = nextOpenable(cfg, chain.platform, NONE, undefined, CUSHION);
         if (v.tier === null) {
           // The loop must end because every enabled tier is busy — a
           // shortfall here IS the silent cascade failure this test exists
@@ -189,7 +218,7 @@ describe('the zero-slack cascade (proposal E1 §6.3)', () => {
       chain2.config!.openTiers = [...enabled];
       chain2.fundPlatform(1n);
       chain2.platform = MIN + sumPots - 1n;
-      const v2 = nextOpenable(await chain2.getConfig(), chain2.platform, NONE);
+      const v2 = nextOpenable(await chain2.getConfig(), chain2.platform, NONE, undefined, CUSHION);
       expect(v2.tier, `mask ${mask}: boundary - 1 must open nothing`).to.equal(null);
       expect(v2.shortfallLamports).to.equal(1n);
     }

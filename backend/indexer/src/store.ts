@@ -78,7 +78,16 @@ function ledgerKey(signature: string, eventIndex: number): string {
  * The reference semantics the Postgres store must match.
  */
 export class InMemoryEventStore implements EventStore {
-  private readonly events = new Map<string, LedgerRecord>();
+  /**
+   * The ledger, keyed `(signature, event_index)`. Each row carries the
+   * insertion sequence the Postgres store gets from its `seq` identity column
+   * (0018_events_seq.sql) — the in-memory reference has to model it, because
+   * the replay order below is defined in terms of it.
+   */
+  private readonly events = new Map<string, { record: LedgerRecord; seq: number }>();
+
+  /** Next insertion sequence. Monotonic, never reused, 1-based like `seq`. */
+  private nextSeq = 1;
 
   /** The derived tables, applied atomically with the append (Phase 2). */
   readonly projection: MemoryProjection;
@@ -92,36 +101,44 @@ export class InMemoryEventStore implements EventStore {
     if (this.events.has(key)) {
       return 'duplicate';
     }
-    this.events.set(key, record);
+    this.events.set(key, { record, seq: this.nextSeq++ });
     await this.projection.apply(event);
     return 'inserted';
   }
 
   async lastIngestedSlot(): Promise<bigint | null> {
     let max: bigint | null = null;
-    for (const record of this.events.values()) {
+    for (const { record } of this.events.values()) {
       if (max === null || record.slot > max) max = record.slot;
     }
     return max;
   }
 
   /**
-   * Replay the whole ledger in `(slot, signature, event_index)` order.
+   * Replay the whole ledger in `(slot, insertion sequence)` order — the
+   * in-memory twin of the Postgres store's `ORDER BY slot, seq`.
    *
    * Ordering is load-bearing and not incidental: a projection that depends on
    * event order — which every stateful one does — must see the same order on a
    * rebuild as it saw live, or a rebuild produces different derived rows from the
    * same ledger.
+   *
+   * The sequence replaced `signature, event_index` as the tiebreak (audit F-19).
+   * Those two ordered nothing across transactions: `event_index` is the ordinal
+   * within one transaction's logs, and `signature` is a base58 hash, so two
+   * transactions sharing a slot replayed in an order uncorrelated with the
+   * chain's. What `(slot, seq)` buys is stated in full on
+   * `PgEventStore.rederive` — in short: determinism always, chain order for
+   * rows the backfill wrote, delivery order for two live deliveries in one slot
+   * (the chain does not tell us which of those ran first, and this does not
+   * pretend otherwise).
    */
   async rederive(): Promise<number> {
     const ordered = [...this.events.values()].sort(
-      (a, b) =>
-        Number(a.slot - b.slot) ||
-        a.signature.localeCompare(b.signature) ||
-        a.eventIndex - b.eventIndex
+      (a, b) => Number(a.record.slot - b.record.slot) || a.seq - b.seq
     );
     await this.projection.reset();
-    for (const record of ordered) {
+    for (const { record } of ordered) {
       // Parsing on replay is deliberate: it exercises the same decode path a live
       // ingest uses, so a ledger row that can no longer be read is found by a
       // re-derive rather than by a silent gap in a derived table.
@@ -132,7 +149,7 @@ export class InMemoryEventStore implements EventStore {
 
   /** Every ledger row, in insertion order. Test/inspection helper. */
   ledger(): readonly LedgerRecord[] {
-    return [...this.events.values()];
+    return [...this.events.values()].map((e) => e.record);
   }
 
   async close(): Promise<void> {
