@@ -47,6 +47,9 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["src/**/*.test.ts"],
+    // `.tsx` too: a component can be rendered to a string with
+    // react-dom/server and asserted on with no DOM at all, which is how the
+    // shell's failure states are pinned (wallet/auth-shell.test.tsx).
+    include: ["src/**/*.test.{ts,tsx}"],
   },
 });

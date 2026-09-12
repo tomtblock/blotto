@@ -49,10 +49,41 @@ describe('lodgeAppeal (every ending named)', () => {
     const declining = { signMessage: async () => { throw new Error('user declined'); } };
     expect(await lodgeAppeal('https://r', declining, POOL, PLAYER, 'g', answering(204))).toBe('declined');
   });
-  it('the position read is null when the service is absent or errors', async () => {
-    expect(await fetchAppealPosition(undefined, POOL, PLAYER)).toBe(null);
-    expect(await fetchAppealPosition('https://r', POOL, PLAYER, answering(500))).toBe(null);
+  it('the position read names every way it can fail, and never collapses one into another', async () => {
+    // Absent service and unreachable service are DIFFERENT facts — the
+    // panel says different things (audit 2026-09-11, C-04).
+    expect(await fetchAppealPosition(undefined, POOL, PLAYER)).toEqual({ kind: 'not_configured' });
+    expect(await fetchAppealPosition('https://r', POOL, PLAYER, answering(500))).toEqual({
+      kind: 'unreachable',
+      reason: 'status',
+    });
+    const offline: typeof fetch = (async () => {
+      throw new Error('offline');
+    }) as never;
+    expect(await fetchAppealPosition('https://r', POOL, PLAYER, offline)).toEqual({
+      kind: 'unreachable',
+      reason: 'network',
+    });
+    const garbage: typeof fetch = (async () => ({
+      status: 200,
+      ok: true,
+      json: async () => {
+        throw new Error('not json');
+      },
+    })) as never;
+    expect(await fetchAppealPosition('https://r', POOL, PLAYER, garbage)).toEqual({
+      kind: 'unreachable',
+      reason: 'malformed',
+    });
+    // A 200 with the wrong shape is not a position either.
+    expect(await fetchAppealPosition('https://r', POOL, PLAYER, answering(200, { hello: 1 }))).toEqual({
+      kind: 'unreachable',
+      reason: 'malformed',
+    });
     const pos = { forfeit: null, lodged: null, decided: null, lodgeUntil: null, decideBy: null };
-    expect(await fetchAppealPosition('https://r', POOL, PLAYER, answering(200, pos))).toEqual(pos);
+    expect(await fetchAppealPosition('https://r', POOL, PLAYER, answering(200, pos))).toEqual({
+      kind: 'position',
+      position: pos,
+    });
   });
 });
