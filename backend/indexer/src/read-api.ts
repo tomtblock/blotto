@@ -58,6 +58,7 @@ import { createServer, type Server } from 'http';
 import {
   RateLimiter,
   applyHygiene,
+  startBucketSweeper,
   type HygieneConfig,
 } from '../../_shared/src/http-hygiene';
 import { REVIEW_WINDOW_SECS } from '../../scoring/src/prizes';
@@ -579,6 +580,12 @@ export function serveReadApi(
   };
   const trustProxy = options.trustProxyHeader === true;
   const limiter = new RateLimiter(hygiene.rateLimit);
+  // B-19 / B-38 / B-39 (audit 2026-09-11): the bucket map is keyed by caller
+  // address and nothing evicted from it, on the most public surface this
+  // system has. The sweep the module documented had a caller on one of the
+  // three services using it. Unref'ed, and no timer at all when the limiter
+  // is off.
+  const sweeper = startBucketSweeper(limiter, hygiene.rateLimit);
   // The served process anchors the treasury policy on the live `Config`
   // (D-18 / O26); `handleRead` defaults to no chain read, which is what
   // keeps the routing suite socket-free. The reader itself is lazy, cached
@@ -635,6 +642,9 @@ export function serveReadApi(
       void e;
     }
   });
+  // Stop the sweep with the server, so a test that opens and closes several
+  // does not leave a timer per server behind it.
+  server.on('close', () => sweeper.stop());
   server.listen(port);
   return server;
 }

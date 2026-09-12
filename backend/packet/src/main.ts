@@ -259,6 +259,9 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
         now: () => BigInt(Math.floor(Date.now() / 1000)),
         nonce: () => BigInt('0x' + randomBytes(8).toString('hex')),
       },
+      // What the screener is standing on, so a degraded start is visible from
+      // outside rather than only in the boot log (audit C-18's other half).
+      screening: sanctions,
       ciphertexts: new PgCiphertextStore(db),
       poolIds: new PgPoolIdResolver(db),
       notify: new PgNotifyPreferenceStore(db),

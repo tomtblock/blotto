@@ -30,6 +30,7 @@ import {
   RateLimiter,
   applyHygiene,
   clientKeyFrom,
+  startBucketSweeper,
   type HygieneConfig,
 } from '../../_shared/src/http-hygiene';
 import type { CiphertextStore } from '../../sealing/src';
@@ -73,6 +74,23 @@ export interface EntryServerDeps {
    * reads; injected in tests so a suite can assert the operator was told.
    */
   onServerError?: (line: string, err: unknown) => void;
+  /**
+   * What the screener is standing on right now, for `/health`.
+   *
+   * A service that booted with its mirrored list absent still SCREENS — a
+   * vendor answered, which is why it was allowed to start at all (audit
+   * C-18) — but it is running on one source with a retry in flight, and
+   * nothing outside the boot log said so. An operator reading a green
+   * `/health` had no way to tell that apart from a fully loaded screener.
+   * Optional, so the offline route suites are unchanged.
+   */
+  screening?: { readonly ofacLoaded: boolean; readonly describe: readonly string[] };
+  /**
+   * Overrides for the limiter's bucket sweeper (audit B-19/B-38/B-39) — the
+   * same seam the review service exposes, so a spec can prove the sweep is
+   * armed without waiting a minute for a real timer.
+   */
+  sweep?: Parameters<typeof startBucketSweeper>[2];
   /**
    * TEST/DEV ONLY (D-B3 stub): when true, `x-geo-country` / `x-geo-region` /
    * `x-geo-vpn: 1` request headers override the geo lookup for that request.
@@ -128,7 +146,23 @@ export async function handleEntryRoute(
   // E5: the deployment liveness probe.
   if (path === '/health') {
     if (method !== 'GET') return { status: 405, body: { error: 'method' } };
-    return { status: 200, body: { ok: true, service: 'packet' } };
+    // 200 either way: a screener on one source is degraded, not down, and
+    // returning 503 would take the entry gate out of the platform's rotation
+    // over a condition that recovers on its own within ten minutes. The
+    // reader is told which it is.
+    return {
+      status: 200,
+      body: deps.screening
+        ? {
+            ok: true,
+            service: 'packet',
+            screening: {
+              ofac_loaded: deps.screening.ofacLoaded,
+              sources: [...deps.screening.describe],
+            },
+          }
+        : { ok: true, service: 'packet' },
+    };
   }
 
   if (path === '/geo') {
@@ -264,6 +298,12 @@ export function serveEntryApi(deps: EntryServerDeps, port: number): Server {
     securityHeadersEnabled: false,
   };
   const limiter = new RateLimiter(hygiene.rateLimit);
+  // B-19 / B-38 / B-39 (audit 2026-09-11): the limiter's bucket map is keyed
+  // by caller address and nothing evicted from it, on a public service, so it
+  // only ever grew. The sweep the module documented had a caller on one of the
+  // three services using it. The timer is unref'ed and no timer starts at all
+  // when the limiter is off, so this costs a disabled deployment nothing.
+  const sweeper = startBucketSweeper(limiter, hygiene.rateLimit, deps.sweep ?? {});
   const onServerError = deps.onServerError ?? ((line: string, err: unknown) => console.error(line, err));
   const server = createServer(async (req, res) => {
     const outcome = applyHygiene(
@@ -346,6 +386,9 @@ export function serveEntryApi(deps: EntryServerDeps, port: number): Server {
       }
     });
   });
+  // Stop the sweep with the server, so a test that opens and closes several
+  // does not leave a timer per server behind it.
+  server.on('close', () => sweeper.stop());
   server.listen(port);
   return server;
 }
