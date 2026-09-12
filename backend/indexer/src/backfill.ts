@@ -226,3 +226,42 @@ export class Web3BackfillRpc implements BackfillRpc {
     };
   }
 }
+
+/**
+ * A backfill walk followed by the re-derive the walk's ORDER makes necessary.
+ *
+ * The walk pages signatures newest→oldest and projects each transaction as it
+ * goes, but the projection is order-dependent: `PoolOpened` is a full upsert
+ * that resets state, entrants, paid_mask and refunded_count, so replaying a
+ * pool's history backwards ends with the pool marked Open and empty — the
+ * oldest event, applied last, overwriting the truth the later ones had already
+ * written. On a first boot against an empty ledger `catchUpFloor` returns
+ * `undefined`, so that is the WHOLE history: a settled pool reads as Open with
+ * zero entrants, drops out of the archive list, and drives a live countdown for
+ * a pool that has already paid.
+ *
+ * The ledger itself is append-only and was always correct — only the derived
+ * tables were wrong. `rederive` replays them from that ledger in
+ * (slot, signature, event_index) order, which is the order they happened, so
+ * running it after any insert is both the cheapest repair and the most obviously
+ * correct one. Nothing was inserted means nothing was mis-ordered, so the replay
+ * is skipped; a walk that only re-reads duplicates is free.
+ *
+ * This lives here, beside the walk it repairs, rather than inline in the CLI
+ * command, so that the pairing is testable without a database.
+ */
+export async function backfillAndRederive(
+  store: EventStore,
+  monitor: Monitor,
+  ctx: IngestContext,
+  rpc: BackfillRpc,
+  opts: BackfillOptions = {}
+): Promise<BackfillResult & { rederived: number }> {
+  const result = await runBackfill(store, monitor, ctx, rpc, opts);
+  if (result.inserted === 0) {
+    return { ...result, rederived: 0 };
+  }
+  const rederived = await store.rederive();
+  monitor.recordEvent(METRIC.indexer.rederive);
+  return { ...result, rederived };
+}

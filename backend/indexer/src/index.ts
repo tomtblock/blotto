@@ -31,7 +31,7 @@ import { migrate } from './migrate';
 import { PgEventStore } from './store-pg';
 import { createWebhookServer } from './webhook';
 import { serveReadApi } from './read-api';
-import { catchUpFloor, runBackfill, Web3BackfillRpc } from './backfill';
+import { backfillAndRederive, catchUpFloor, Web3BackfillRpc } from './backfill';
 import { backfillArchive } from './archive';
 
 // INCIDENT 2026-09-09: the decoder's layout table is filled by this call and by
@@ -118,11 +118,18 @@ async function cmdBackfill(monitor: Monitor, opts: { bounded?: boolean } = {}): 
     console.log(
       `backfill: walking ${minSlot === undefined ? 'the full history' : `back to slot ${minSlot}`}`
     );
-    const result = await runBackfill(store, monitor,
+    const result = await backfillAndRederive(store, monitor,
       { commitment: config.commitment, program: config.programId }, rpc, { minSlot });
     console.log(
       `backfill: ${result.transactions} tx, ${result.inserted} inserted, ${result.duplicates} duplicates`
     );
+    // The walk projects newest-first, which is the wrong order for an
+    // order-dependent projection; `backfillAndRederive` replays the derived
+    // tables from the ledger whenever the walk inserted anything. See its
+    // doc comment for what a backwards projection actually produces.
+    if (result.rederived > 0) {
+      console.log(`backfill: re-derived ${result.rederived} events in ledger order`);
+    }
   } finally {
     await pool.end();
   }
