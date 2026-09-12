@@ -163,3 +163,12 @@ jobs:
 
       - name: Env-example coverage (E1)
         run: ./scripts/check-env-examples.sh
+
+      # The deploy gate's decision logic (audit 2026-09-11, G-10 / E-16). Its
+      # live inputs need a GitHub token, so the only way to know it still
+      # judges correctly is to drive its pure halves through fixtures: twelve
+      # lane verdicts and eleven decisions, six of which must REFUSE. A gate
+      # that had quietly started answering "go" to everything would otherwise
+      # pass CI for ever, which is the same fault it exists to catch.
+      - name: The deploy gate still judges correctly
+        run: ./scripts/ci-gate.sh --self-test

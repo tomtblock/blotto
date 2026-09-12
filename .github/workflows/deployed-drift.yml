@@ -51,14 +51,27 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v4.4.0
         with:
           node-version: '22'
+          cache: yarn
+          cache-dependency-path: yarn.lock
 
+      # The ROOT uses yarn; every package under backend/ and app/ uses npm
+      # (README.md). This lane ran `npm install` here until 2026-09-12 (audit
+      # 2026-09-11, B-34) — the exact operation the README tells operators to
+      # undo. It rewrote every `resolved` URL in yarn.lock and left a
+      # competing package-lock.json beside it; commit 0c90cf6 is the cleanup.
+      # It also resolved caret ranges afresh on every run, so the lane that
+      # exists to detect drift was itself installing something different each
+      # time. --frozen-lockfile pins the versions AND fails rather than
+      # silently updating the lockfile.
       - name: Install root tooling
-        run: npm install --no-audit --no-fund
+        run: yarn install --frozen-lockfile
 
       # The script proves its own detector fires before reporting any verdict —
       # a check that can only pass is the same fault it exists to catch.
