@@ -111,7 +111,12 @@ export async function handleEntryRoute(
   let packetDeps = deps.packet;
   if (deps.trustGeoStubHeaders === true) {
     const stub = geoFromHeaders(headers);
-    if (stub) packetDeps = { ...deps.packet, geo: { lookup: async () => stub } };
+    // Both faces, or the header would stop deciding `/geo` the moment a
+    // separate pre-flight lookup was configured (see PacketServiceDeps).
+    if (stub) {
+      const lookup = { lookup: async () => stub };
+      packetDeps = { ...deps.packet, geo: lookup, preflightGeo: lookup };
+    }
   }
 
   // E5: the deployment liveness probe.

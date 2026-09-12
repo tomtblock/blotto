@@ -71,7 +71,23 @@ export interface GenericRejection {
 export const GENERIC_REJECTION: GenericRejection = { ok: false, error: 'entry_unavailable' };
 
 export interface PacketServiceDeps {
+  /** The lookup ISSUANCE uses — the call that decides whether money moves. */
   geo: GeoLookup;
+  /**
+   * The lookup the unauthenticated `GET /geo` pre-flight uses, when it is not
+   * the same one.
+   *
+   * They were the same until 2026-09-12, and that was the defect: a courtesy
+   * check for a visitor who has not signed in, not attested and not paid
+   * competed for the same finite paid-vendor credits as issuance, so the
+   * cheapest traffic in the system could starve the most valuable call in it
+   * (audit 2026-09-11, B-04). `geo-budget.ts` gives issuance a reserve the
+   * pre-flight cannot reach; this field is how the two faces arrive here.
+   *
+   * Optional, defaulting to `geo`, so every offline route suite and the
+   * rehearsal are unchanged.
+   */
+  preflightGeo?: GeoLookup;
   sanctions: SanctionsList;
   signer: PacketSigner;
   /** D-B4: the durable clickwrap records; issuance requires one at the
@@ -188,7 +204,8 @@ export async function issuePacket(
  */
 export async function geoVerdict(deps: PacketServiceDeps, ip: string): Promise<boolean> {
   try {
-    const geo = await deps.geo.lookup(ip);
+    // The pre-flight face when one is configured — see `preflightGeo`.
+    const geo = await (deps.preflightGeo ?? deps.geo).lookup(ip);
     const territoryOk = territoryAllowed(deps.config.territories, geo.country, geo.region);
     if (!territoryOk) {
       logGeo('BLOCK', ip, `territory schedule: ${geo.country}${geo.region ? `-${geo.region}` : ''}`);
