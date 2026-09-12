@@ -217,22 +217,38 @@ describe('the winner check (Stage F)', () => {
       expect([...t.chain.paid.entries()]).to.deep.equal([...probe.chain.paid.entries()]);
     });
 
-    it('a screener that cannot answer holds the winner rather than paying unscreened', async function () {
+    it('a screener that cannot answer stops the settlement rather than paying unscreened', async function () {
       this.timeout(30000);
+      // 2026-09-12: this used to assert that an unanswerable screener placed
+      // an on-chain HOLD. Failing closed was right; making the closure
+      // permanent was not. A hold is one boolean, so the chain could not
+      // tell a vendor outage from a list match, and every release path
+      // refuses while it is set — a legitimate winner's whole share sat
+      // behind an admin lift nobody was told to raise (audit C-02).
+      //
+      // The promise this test exists to protect is unchanged and still
+      // asserted below: NOBODY IS PAID UNSCREENED. What changed is that the
+      // refusal is now retryable, and leaves nothing on chain to unwind.
       const t = await sealedPool();
-      const outcome = await crankPool(
-        {
-          chain: t.chain,
-          custody: t.custody,
-          ciphertexts: t.store,
-          publisher: t.publisher,
-          screenWinners: makeWinnerScreen(brokenCheck),
-        },
-        1n
-      );
-      expect(outcome.finalState).to.equal('Paid');
-      expect(t.chain.sanctionsHeld.size).to.be.greaterThan(0);
+      let threw: Error | null = null;
+      try {
+        await crankPool(
+          {
+            chain: t.chain,
+            custody: t.custody,
+            ciphertexts: t.store,
+            publisher: t.publisher,
+            screenWinners: makeWinnerScreen(brokenCheck),
+          },
+          1n
+        );
+      } catch (e) {
+        threw = e as Error;
+      }
+      expect(threw, 'the crank refuses to settle on an outage').to.not.equal(null);
+      expect(threw!.message).to.match(/could not answer/);
       expect(t.chain.paid.size, 'nobody is paid unscreened').to.equal(0);
+      expect(t.chain.sanctionsHeld.size, 'and no hold was recorded for an outage').to.equal(0);
     });
 
     it('a resumed crank does not place a hold twice', async function () {
