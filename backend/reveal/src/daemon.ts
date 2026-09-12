@@ -494,7 +494,12 @@ export function makeDaemon(deps: DaemonDeps): Daemon {
               return (await deps.chain.getPool(id)).state;
             })
           );
-          const verdict = nextOpenable(cur, balance, states, deps.now());
+          // The cushion is the program's own rent figure, read from the
+          // cluster: `open_pool` funds pot + cushion and counts both in
+          // `needed`, so a mirror without it sends an open the program
+          // refuses (2026-09-12).
+          const cushion = await deps.chain.vaultCushion();
+          const verdict = nextOpenable(cur, balance, states, deps.now(), cushion);
           if (verdict.tier === null) {
             log('keeper:hold', { reason: verdict.reason });
             break;

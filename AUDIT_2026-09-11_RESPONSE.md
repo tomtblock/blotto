@@ -304,3 +304,37 @@ ingest authenticated: the receiver rejected the CONTENT, not the credential.
 So the port answers from a GitHub runner, the receiver is the webhook one and not the read API, and
 the staged secret is accepted. No dedicated IPv4 is needed and the contingency in the plan is moot.
 The gate and the post-deploy program comparison both passed on the same run.
+
+## Addendum — a regression this record has to own (2026-09-12, evening)
+
+**The rent cushion reached the program this morning and three TypeScript mirrors were left behind.**
+PR #106 made `open_pool` fund a vault with pot PLUS `vault::rent_floor()`, count both in its treasury
+gate, and add one cushion per reserved pot to `withdraw_platform`'s floor. The LiteSVM suite pins
+that arithmetic exactly (`tests/litesvm/tests/treasury_gates.rs:97-107` asserts
+`(pot0 + cushion) + min + (pot1 + cushion)`). The Rust proptest model was updated in Wave 0. Nothing
+updated the three places the same sum is written in TypeScript, and nothing compares them:
+
+| Mirror | What it decided with the wrong figure |
+|---|---|
+| `backend/reveal/src/treasury.ts` — `idleTierReserve` / `nextOpenable` | The keeper's own answer to "may I open a tier now". It understated `needed` by one cushion for the pool being opened, plus one per idle enabled tier. Inside that window the daemon believes a tier is openable, sends `open_pool`, and the program refuses with `TreasuryShortfall` — every tick, paying a fee each time |
+| `backend/reveal/src/chain.ts` — `FakeChain.openPool` | The gate every daemon spec and the twenty-pool rehearsal run against, and the fake's treasury debit. It let opens through that the program refuses and left its own treasury one cushion richer per pool, so the whole offline suite agreed with itself and with nothing else |
+| `backend/indexer/src/treasury-report.ts` | The floor and every tier's shortfall on `GET /treasury`. This one is audit finding **D-18** and is fixed in batch I1b, not here |
+
+**What changed.** The cushion is now a REQUIRED argument on `idleTierReserve` and `nextOpenable`,
+matching the program's own signature, so a caller cannot forget it the way this change forgot it — a
+default of zero would have reproduced the bug silently. `KeeperChain` gains `vaultCushion()`, which
+reads the rent-exempt minimum from the cluster rather than pinning a number, because it is 890,880
+under the standard parameters and 650,240 on devnet. `FakeChain.openPool` now imports
+`idleTierReserve` instead of carrying a fourth copy of the sum, and debits pot + cushion while
+reserving only the pot — the cushion is not part of the prize and never returns.
+
+**How the tests show it.** "The pot alone is a lamport short" asserts that a treasury holding exactly
+the pot is refused and that pot + cushion opens; before the fix it read `.to.equal(0)` on the pot
+alone. The zero-slack cascade's boundary is now the sum of pot AND cushion per enabled tier. Both
+fail without the change.
+
+**The deeper gap, reported not closed.** Nothing compares a Rust figure with its TypeScript mirror.
+The program is pinned by LiteSVM, the mirrors by their own fakes, and the two suites never meet —
+which is how a same-day change passed every lane with three copies disagreeing. That is audit F-11's
+shape (`#[event]` structs and their decoders hand-mirrored with no drift detection) widened to the
+policy arithmetic, and it belongs in batch T1's cross-boundary tests.

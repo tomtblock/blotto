@@ -307,6 +307,22 @@ export class Web3Chain implements KeeperChain {
     return BigInt(info?.lamports ?? 0);
   }
 
+  /**
+   * `vault::rent_floor()` from the cluster, not from a constant: the
+   * rent-exempt minimum for a zero-data account. Cached for the process —
+   * a cluster's rent parameters are a genesis-level setting, and a keeper
+   * that re-asked every tick would spend a round trip on an answer that
+   * never moves.
+   */
+  private cushion: bigint | null = null;
+
+  async vaultCushion(): Promise<bigint> {
+    if (this.cushion === null) {
+      this.cushion = BigInt(await this.cfg.connection.getMinimumBalanceForRentExemption(0));
+    }
+    return this.cushion;
+  }
+
   /** `KeeperChain.poolAddress`: the pool PDA this client derives for every
    * instruction, as base58. Pure — no RPC. */
   poolAddress(poolId: bigint): string {
