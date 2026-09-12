@@ -3,9 +3,15 @@
  * no manual step:
  *
  *   export secret → reveal_pool_secret → decrypt every ciphertext → verify
- *   against Entry.battles_hash → publish the reveal bundle → score → build
- *   the results tree → screen the winning wallets → commit_results →
- *   pay_prizes in batches → done.
+ *   against Entry.battles_hash → score → build the results tree → screen the
+ *   winning wallets → commit_results → pay_prizes in batches → publish the
+ *   reveal bundle → done.
+ *
+ * PUBLICATION COMES LAST, and that ordering is load-bearing. It used to run
+ * before the commit, so an upload that kept failing aborted the crank — and
+ * a Sealed pool cannot be refunded, so the pot and the whole tier were stuck
+ * behind a storage vendor. Verifiability is not a payment step; a bundle
+ * still owed is recoverable, a frozen tier is not.
  *
  * IDEMPOTENT AND RESUMABLE: every step reads the pool's CURRENT on-chain
  * state and skips what already happened — a crashed crank rerun on the same
@@ -224,7 +230,7 @@ export async function crankPool(deps: CrankDeps, poolId: bigint): Promise<CrankO
     .map((r) => ({ entryIndex: r.index, amountLamports: r.amountLamports }));
   step('scored', { root: hex(root), paidSeats: payouts.length });
 
-  // ---- 4. Publish the bundle --------------------------------------------
+  // ---- 4. Assemble the bundle (published at step 7, after the money) ----
   const bundle: RevealBundle = {
     version: 1,
     pool_id: poolId.toString(),
@@ -247,8 +253,6 @@ export async function crankPool(deps: CrankDeps, poolId: bigint): Promise<CrankO
     results_root: hex(root),
     scored_as_all_losses: allLosses,
   };
-  const bundleUri = await deps.publisher.publish(bundle);
-  step('published', { uri: bundleUri });
 
   // ---- 4b. Detection → flags BEFORE payment (R11) ------------------------
   if (deps.detect) {
@@ -340,6 +344,24 @@ export async function crankPool(deps: CrankDeps, poolId: bigint): Promise<CrankO
     const batch = unpaid.slice(i, i + batchSize);
     await deps.chain.payPrizes(poolId, batch);
     step('pay_prizes', { seats: batch });
+  }
+
+  // ---- 7. Publish the bundle --------------------------------------------
+  // AFTER the money, deliberately. Publishing is a verifiability step, not a
+  // payment step, and it used to run before `commit_results`: an upload that
+  // kept failing — an unfunded upload wallet, a gateway outage — aborted the
+  // whole crank, and a Sealed pool cannot be refunded, so the pot and the
+  // tier were stuck until the upload succeeded. Ordering it last cannot
+  // strand anything; a failure here leaves a paid pool with its bundle still
+  // to come, which the next tick or the archive backfill picks up.
+  let bundleUri: string | undefined;
+  try {
+    bundleUri = await deps.publisher.publish(bundle);
+    step('published', { uri: bundleUri });
+  } catch (e) {
+    // Recorded, not thrown. The players have their money; the published
+    // record is owed and is not worth freezing a tier over.
+    step('publish-failed', { error: e instanceof Error ? e.message : String(e) });
   }
 
   pool = await deps.chain.getPool(poolId);

@@ -120,6 +120,36 @@ async function buildSealedPool(sabotage: {
 }
 
 describe('the settlement crank', () => {
+  it('pays the pool even when publishing keeps failing', async function () {
+    this.timeout(30000);
+    const t = await buildSealedPool({});
+    // An unfunded upload wallet or a gateway outage: publishing never works.
+    const failing = {
+      publish: async () => {
+        throw new Error('irys unavailable');
+      },
+      published: new Map(),
+    };
+
+    const outcome = await crankPool(
+      {
+        chain: t.chain,
+        custody: t.custody,
+        ciphertexts: t.store,
+        publisher: failing as never,
+      },
+      1n
+    );
+
+    // The players are paid and the tier is free. That is the whole point:
+    // a storage vendor must not be able to strand a pot.
+    expect(outcome.finalState).to.equal('Paid');
+    expect(outcome.stepsTaken).to.include('publish-failed');
+    expect(outcome.bundleUri).to.equal(undefined);
+    const pool = await t.chain.getPool(1n);
+    expect(pool.paidMask).to.not.equal(0n);
+  });
+
   it('refuses to settle when it read fewer Entry accounts than the pool reports', async function () {
     this.timeout(30000);
     const t = await buildSealedPool({});
