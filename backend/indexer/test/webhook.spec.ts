@@ -117,6 +117,7 @@ describe('handleWebhookPayload', () => {
     const throwing: EventStore = {
       ingest: () => Promise.reject(new Error('injected store failure')),
       lastIngestedSlot: () => inner.lastIngestedSlot(),
+      knownSignatures: (sigs) => inner.knownSignatures(sigs),
       rederive: () => inner.rederive(),
       close: () => inner.close(),
     };

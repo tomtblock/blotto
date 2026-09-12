@@ -47,6 +47,25 @@ export interface BackfillOptions {
   untilSignature?: string;
   /** Page size for getSignaturesForAddress (max 1000 on most RPCs). */
   pageSize?: number;
+  /**
+   * Ask the ledger which collected signatures it already holds, and fetch only
+   * the rest (audit C-11 / C-21).
+   *
+   * OFF by default, which is the manual `backfill` command's behaviour and must
+   * stay so: re-ingesting a transaction the ledger already has is how a
+   * PARTIALLY ingested one — some of its events written, the process then
+   * dead — gets repaired, and `ingest` is idempotent per row, so the cost of
+   * re-ingesting is duplicates rather than damage.
+   *
+   * ON for the recurring reconciliation, where that cost is the whole problem:
+   * phase 2 issues one `getTransaction` per collected signature, so a
+   * full-history walk every fifteen minutes would re-fetch every transaction
+   * the program has ever sent, for ever. With the skip it fetches only what is
+   * genuinely missing, which on a healthy service is nothing at all, and the
+   * run costs one signature page. The narrower repair stays with the manual
+   * command, and the recurring job's job is the delivery that never arrived.
+   */
+  skipKnown?: boolean;
 }
 
 export interface BackfillResult {
@@ -54,6 +73,8 @@ export interface BackfillResult {
   decoded: number;
   inserted: number;
   duplicates: number;
+  /** Signatures the ledger already held, never fetched (`skipKnown` only). */
+  skipped?: number;
 }
 
 /**
@@ -142,9 +163,22 @@ export async function runBackfill(
     before = page[page.length - 1].signature;
   }
 
+  // ── Phase 1b: what does the ledger already have? ──────────────────────────────────────────
+  // Only when asked. The lookup is one statement over the collected page, and
+  // it decides fetches, never ingests: a signature that slips through is
+  // re-ingested idempotently, so the skip can be wrong in the safe direction.
+  let known: Set<string> = new Set();
+  if (opts.skipKnown && collected.length > 0) {
+    known = await store.knownSignatures(collected.map((c) => c.signature));
+  }
+
   // ── Phase 2: ingest, oldest→newest ────────────────────────────────────────────────────────
   for (let i = collected.length - 1; i >= 0; i--) {
     const info = collected[i];
+    if (known.has(info.signature)) {
+      result.skipped = (result.skipped ?? 0) + 1;
+      continue;
+    }
     const tx = await rpc.getTransaction(info.signature);
     if (!tx) {
       continue; // failed/unavailable tx — its events did not commit

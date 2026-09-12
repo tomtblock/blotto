@@ -64,6 +64,19 @@ export interface EventStore {
   ingest(record: LedgerRecord, event: DecodedEvent): Promise<IngestOutcome>;
   /** Highest slot in the ledger, or null if empty — the ingest watermark. */
   lastIngestedSlot(): Promise<bigint | null>;
+  /**
+   * Which of these signatures the ledger already holds at least one row for.
+   *
+   * The reconciliation walk asks before it fetches: a full-history walk that
+   * re-fetched every transaction it already had would cost one `getTransaction`
+   * per historical transaction on EVERY run, which is what kept the unbounded
+   * walk a manual command (audit C-11 / C-21). "At least one row" is the honest
+   * predicate — a transaction whose events were partly ingested answers yes —
+   * so the skip belongs only to the recurring job, whose purpose is finding
+   * WHOLLY missed deliveries. The manual `backfill` command still re-ingests
+   * everything and repairs a partial one.
+   */
+  knownSignatures(signatures: readonly string[]): Promise<Set<string>>;
   /** Rebuild every derived table from the ledger alone. Returns events replayed. */
   rederive(): Promise<number>;
   close(): Promise<void>;
@@ -112,6 +125,12 @@ export class InMemoryEventStore implements EventStore {
       if (max === null || record.slot > max) max = record.slot;
     }
     return max;
+  }
+
+  async knownSignatures(signatures: readonly string[]): Promise<Set<string>> {
+    const have = new Set<string>();
+    for (const { record } of this.events.values()) have.add(record.signature);
+    return new Set(signatures.filter((s) => have.has(s)));
   }
 
   /**

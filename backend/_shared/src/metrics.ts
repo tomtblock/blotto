@@ -45,6 +45,14 @@ export const METRIC = {
     ingested: 'indexer_ingested',
     /** Counter: a redelivery or replay was suppressed by the ledger key (label `event`). */
     duplicate: 'indexer_duplicate',
+    /** Counter: one recurring reconciliation walk completed (audit C-11 / C-21). */
+    reconciled: 'indexer_reconciled',
+    /**
+     * Counter: a recurring reconciliation walk FOUND something — a delivery
+     * the webhook never brought us. Healthy is zero for ever; any value at all
+     * means the live feed is lossy and the gap was repaired after the fact.
+     */
+    reconciledGap: 'indexer_reconciled_gap',
     /**
      * Counter (label `event`): a known event discriminator was matched but its
      * Borsh body could not be decoded.
@@ -120,6 +128,12 @@ export const METRIC = {
 export const ALERT = {
   indexer: {
     ingestFailed: 'indexer webhook ingest failed',
+    /**
+     * A recurring reconciliation walk threw. The service keeps serving — it is
+     * a repair job, not the ingest path — but a reconciler that has been
+     * failing silently is the state audit C-11 describes with extra steps.
+     */
+    reconcileFailed: 'indexer reconciliation walk failed',
     handlerThrew: 'indexer webhook handler threw',
     /**
      * E3: a published bundle FAILED the Merkle-root check against the

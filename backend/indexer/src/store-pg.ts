@@ -59,6 +59,18 @@ export class PgEventStore implements EventStore {
     return max === null || max === undefined ? null : BigInt(max);
   }
 
+  async knownSignatures(signatures: readonly string[]): Promise<Set<string>> {
+    if (signatures.length === 0) return new Set();
+    // One statement, one bind parameter, however long the list: `= ANY($1)`
+    // takes the whole array, where a generated `IN (...)` would build a
+    // different query plan per page size and a different statement per run.
+    const res = await this.pool.query(
+      'SELECT DISTINCT signature FROM events WHERE signature = ANY($1)',
+      [signatures as string[]]
+    );
+    return new Set(res.rows.map((r: { signature: string }) => r.signature));
+  }
+
   /**
    * Rebuild every derived table from the ledger alone, replaying in
    * `(slot, seq)` order.

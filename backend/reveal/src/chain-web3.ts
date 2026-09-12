@@ -33,20 +33,21 @@ import type {
   KeeperChain,
   PoolStateName,
 } from './chain';
+// The `Config` layout is shared source, not a copy: the indexer's treasury
+// report has to read the same account, and a second set of byte offsets for
+// it is how the rent cushion came to be missing from two mirrors of one sum
+// (2026-09-12). `_shared` has no web3.js dependency, so it decodes bytes and
+// this file keeps the RPC.
+import {
+  N_TIERS,
+  decodeConfigAccount,
+} from '../../_shared/src/config-account';
 
 const STATE_NAMES: PoolStateName[] = ['Open', 'Sealed', 'Scored', 'Paid', 'Refunding', 'Closed'];
 
 /** Metaplex Core, pinned by address in the program (`pass.rs::MPL_CORE_ID`). */
 const MPL_CORE_ID = new PublicKey('CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d');
 
-const N_TIERS = 7;
-
-/** `Config::SPACE` since the 2026-09-07 upgrade (state.rs). An account
- * still at the OLD size (380) is the pre-migration layout — every read
- * refuses it by name so the operator runs `admin.ts migrate-config`. */
-const CONFIG_SPACE = 484;
-const CONFIG_SPACE_V1 = 380;
-/** `Entry::SPACE` since the same upgrade (state.rs). */
 /**
  * `Entry::SPACE` — the byte length of an Entry account, used as the
  * `getProgramAccounts` size filter.
@@ -250,56 +251,18 @@ export class Web3Chain implements KeeperChain {
     };
   }
 
+  /**
+   * `Config`, decoded by the SHARED layout module — the byte offsets and the
+   * two size guards live in `_shared/src/config-account.ts` so the indexer's
+   * treasury report reads the same account through the same code. This
+   * method is now the RPC half only: fetch, decode, widen to the daemon's
+   * view. `ChainConfigView` stays the crank's own type (`FakeChain`
+   * implements it without ever touching a byte).
+   */
   async getConfig(): Promise<ChainConfigView> {
     const info = await this.cfg.connection.getAccountInfo(this.configPda(), 'confirmed');
     if (!info) throw new Error('config account not found');
-    const d = info.data;
-    // Config layout since D-A1 v2 (state.rs, LEN-asserted): disc 8 |
-    // admin 32 | entry_signer 32 | settlement_signer 32 | paused 1 (104) |
-    // open_tiers 7 (105) | ceilings 7×8 (112) | prices 7×8 (168) |
-    // pots 7×8 (224) | reserve_pots 1 (280) | min_platform 8 (281) |
-    // reserved 8 (289) | refundable 8 (297) | platform_bump 1 (305) |
-    // kyc 8 (306) | detection 1 (314) | next_pool_id 8 (315) |
-    // active_by_tier 7×8 (323) | bump 1 (379) | — the 2026-09-07 tail,
-    // appended AFTER bump: keeper 32 (380) | fill_deadline_seconds 8 (412) |
-    // cooldown_seconds 8 (420) | tier_next_open_at 7×8 (428) — 484 in all.
-    if (d.length === CONFIG_SPACE_V1) {
-      throw new Error(
-        'Config is the pre-migration layout (380 bytes): run `admin.ts migrate-config` ' +
-          'before anything else (runbook step 3b)'
-      );
-    }
-    if (d.length !== CONFIG_SPACE) {
-      throw new Error(`Config account is ${d.length} bytes; source says ${CONFIG_SPACE}`);
-    }
-    const openTiers: boolean[] = [];
-    const activePoolByTier: bigint[] = [];
-    const tierPriceLamports: bigint[] = [];
-    const tierPotLamports: bigint[] = [];
-    const tierNextOpenAt: bigint[] = [];
-    for (let t = 0; t < N_TIERS; t++) {
-      openTiers.push(d[105 + t] !== 0);
-      activePoolByTier.push(d.readBigUInt64LE(323 + 8 * t));
-      tierPriceLamports.push(d.readBigUInt64LE(168 + 8 * t));
-      tierPotLamports.push(d.readBigUInt64LE(224 + 8 * t));
-      tierNextOpenAt.push(d.readBigInt64LE(428 + 8 * t));
-    }
-    return {
-      paused: d[104] !== 0,
-      openTiers,
-      activePoolByTier,
-      nextPoolId: d.readBigUInt64LE(315),
-      tierPriceLamports,
-      tierPotLamports,
-      treasuryReservePots: d[280],
-      treasuryMinPlatformLamports: d.readBigUInt64LE(281),
-      platformReserved: d.readBigUInt64LE(289),
-      platformRefundable: d.readBigUInt64LE(297),
-      keeper: new PublicKey(d.subarray(380, 412)).toBase58(),
-      fillDeadlineSeconds: d.readBigInt64LE(412),
-      cooldownSeconds: d.readBigInt64LE(420),
-      tierNextOpenAt,
-    };
+    return decodeConfigAccount(info.data);
   }
 
   async getPlatformBalance(): Promise<bigint> {
