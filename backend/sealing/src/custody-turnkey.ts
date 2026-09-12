@@ -76,7 +76,64 @@ export interface StoredPublishedKey {
   secretHashHex: string;
   privateKeyId: string;
 }
+
+/**
+ * Raised when a second, DIFFERENT sealing key is offered for a pool that
+ * already has one (audit 2026-09-11, B-29). See `PublishedKeyStore.save`
+ * for why this must be loud rather than either silently dropped or silently
+ * overwritten. Its own type so a caller can tell "someone else got there
+ * first" apart from a database being unreachable.
+ */
+export class PublishedKeyConflictError extends Error {
+  constructor(
+    readonly poolId: bigint,
+    readonly stored: StoredPublishedKey,
+    readonly offered: StoredPublishedKey
+  ) {
+    super(
+      `pool ${poolId} already has a different sealing key: stored hash ` +
+        `${stored.secretHashHex} (key ${stored.privateKeyId}), offered ` +
+        `${offered.secretHashHex} (key ${offered.privateKeyId}). This pool's key was ` +
+        `published by another writer; do not open the pool with the offered key.`
+    );
+    this.name = 'PublishedKeyConflictError';
+  }
+}
+
+/** Field-by-field equality — the whole record, because every field is load-bearing. */
+export function samePublishedKey(a: StoredPublishedKey, b: StoredPublishedKey): boolean {
+  return (
+    a.publicKeyHex === b.publicKeyHex &&
+    a.secretHashHex === b.secretHashHex &&
+    a.privateKeyId === b.privateKeyId
+  );
+}
+
 export interface PublishedKeyStore {
+  /**
+   * First write wins, and a conflicting second write THROWS
+   * `PublishedKeyConflictError` (audit 2026-09-11, B-29).
+   *
+   * THE DEFECT this contract exists to close. `createPoolKey` checks
+   * `load()` and then acts, so two concurrent opens of the same pool both
+   * pass the check, both mint a keypair, both import it to the enclave, and
+   * both call `save`. The two implementations then disagreed and BOTH were
+   * unsafe: the Postgres one had `ON CONFLICT DO NOTHING`, so the second
+   * write vanished while its caller was told it succeeded; the memory one
+   * overwrote, so the FIRST caller's record vanished instead. Either way one
+   * caller walks away holding a secret hash the store does not have, opens
+   * the pool on chain committing that hash, and custody can only ever export
+   * the other key. Every entry sealed to that pool is then permanently
+   * unreadable: the pool cannot be revealed, cannot be scored, and cannot
+   * satisfy the commitment it made on chain.
+   *
+   * So `save` — not the `load` pre-check — is the concurrency barrier. The
+   * loser must learn it lost BEFORE it commits its hash anywhere.
+   *
+   * Re-saving the SAME record is not a conflict. A retry after a transient
+   * failure must be able to complete, and the record is fully determined by
+   * the key it describes, so an identical write is a no-op by definition.
+   */
   save(poolId: bigint, record: StoredPublishedKey): Promise<void>;
   load(poolId: bigint): Promise<StoredPublishedKey | null>;
 }
@@ -84,6 +141,14 @@ export interface PublishedKeyStore {
 export class MemoryPublishedKeyStore implements PublishedKeyStore {
   private rows = new Map<string, StoredPublishedKey>();
   async save(poolId: bigint, record: StoredPublishedKey): Promise<void> {
+    const existing = this.rows.get(poolId.toString());
+    if (existing) {
+      // Same contract as the Postgres twin: identical is a no-op, different
+      // is refused. A test double that overwrites here would prove the
+      // opposite of what the deployed store does.
+      if (samePublishedKey(existing, record)) return;
+      throw new PublishedKeyConflictError(poolId, { ...existing }, { ...record });
+    }
     this.rows.set(poolId.toString(), { ...record });
   }
   async load(poolId: bigint): Promise<StoredPublishedKey | null> {
@@ -163,6 +228,16 @@ export class TurnkeyCustody implements PoolKeyCustody {
     this.store = cfg.store ?? new MemoryPublishedKeyStore();
   }
 
+  /**
+   * Mint, import and publish one pool's sealing key.
+   *
+   * The `load` check below is a courtesy, not the guard: it is a
+   * check-then-act, so two concurrent calls for one pool both pass it. The
+   * guard is `store.save`, which refuses a second, different key and throws
+   * (audit 2026-09-11, B-29). That throw is why nothing here returns a
+   * `PublishedPoolKey` whose hash the store does not hold — the caller must
+   * never commit a hash on chain that custody cannot later reproduce.
+   */
   async createPoolKey(poolId: bigint): Promise<PublishedPoolKey> {
     if (await this.store.load(poolId)) {
       throw new Error(`pool ${poolId} already has a sealing key`);
