@@ -159,11 +159,28 @@ export class OfacSdnMirror implements SanctionsCheck {
   }
 
   /**
+   * How stale the loaded list is, in ms, or `null` when nothing is loaded.
+   * The staleness watch (`wire.ts`) reads it; `screen` applies it.
+   */
+  ageMs(): number | null {
+    if (!this.snapshot) return null;
+    return this.now().getTime() - this.snapshot.loadedAt.getTime();
+  }
+
+  /**
    * Load or refresh. Throws on failure and KEEPS the previous set (property
    * 2). Call once at startup, then on a schedule; `screen` never fetches.
+   *
+   * `timeoutMs` overrides this instance's download deadline for THIS call
+   * only. The boot loader uses it to spend a retry budget across several
+   * attempts instead of letting the first one consume all of it — the
+   * default (two minutes) is sized for one unhurried 29 MB transfer, not for
+   * three of them (audit 2026-09-11, C-18).
    */
-  async refresh(): Promise<OfacMirrorSnapshot> {
-    const xml = this.o.path ? await readFile(this.o.path, 'utf8') : await this.download();
+  async refresh(opts: { timeoutMs?: number } = {}): Promise<OfacMirrorSnapshot> {
+    const xml = this.o.path
+      ? await readFile(this.o.path, 'utf8')
+      : await this.download(opts.timeoutMs ?? this.timeoutMs);
     const parsed = parseSdnXml(xml);
     if (parsed.entries === 0) throw new Error('ofac-sdn: the document holds no <sdnEntry> — not the SDN list');
     this.byAddress = parsed.byAddress;
@@ -207,14 +224,14 @@ export class OfacSdnMirror implements SanctionsCheck {
     };
   }
 
-  private async download(): Promise<string> {
+  private async download(timeoutMs: number): Promise<string> {
     // fetch follows the 302 to the presigned S3 URL by default.
     //
     // The signal covers the WHOLE exchange, redirect and body included, because
     // `res.text()` is where a ~29 MB transfer actually spends its time — a
     // timeout that stopped at the response head would bound the part that never
     // hangs and leave the part that does.
-    const signal = AbortSignal.timeout(this.timeoutMs);
+    const signal = AbortSignal.timeout(timeoutMs);
     let res: Response;
     try {
       res = await this.fetchImpl(this.url, {
@@ -223,7 +240,7 @@ export class OfacSdnMirror implements SanctionsCheck {
       });
     } catch (err) {
       throw signal.aborted
-        ? new Error(`ofac-sdn: timed out after ${this.timeoutMs}ms fetching ${this.url}`)
+        ? new Error(`ofac-sdn: timed out after ${timeoutMs}ms fetching ${this.url}`)
         : err;
     }
     if (!res.ok) throw new Error(`ofac-sdn: HTTP ${res.status} fetching ${this.url}`);
@@ -231,7 +248,7 @@ export class OfacSdnMirror implements SanctionsCheck {
       return await res.text();
     } catch (err) {
       throw signal.aborted
-        ? new Error(`ofac-sdn: timed out after ${this.timeoutMs}ms reading ${this.url}`)
+        ? new Error(`ofac-sdn: timed out after ${timeoutMs}ms reading ${this.url}`)
         : err;
     }
   }

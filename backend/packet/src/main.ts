@@ -62,10 +62,11 @@ import { GeoBudget } from './geo-budget';
 import { buildMonitor, loadMonitor } from '../../_shared/src/monitor';
 import type { Monitor } from '../../_shared/src/monitor';
 import { intEnv, optionalIntEnv, portEnv } from '../../_shared/src/env-number';
+import { startMetricsListener } from '../../_shared/src/metrics-listener';
 import { loadTerms } from './attestations';
 import { loadTerritorySchedule } from './territories';
 import { PgAttestationStore, PgNotifyPreferenceStore } from './stores-pg';
-import type { GeoLookup } from './service';
+import { assertRegionCapability, type GeoLookup } from './service';
 
 const SERVICE = 'packet';
 
@@ -225,8 +226,18 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
   // it the geo path's only failure signal was a line on standard output —
   // see `geo-composite.ts` for what that cost.
   const monitor = buildMonitor(loadMonitor(env), SERVICE);
+  // E-09: the exposition, on the private network only. Silent no-op on
+  // every sink but prometheus.
+  startMetricsListener(monitor, SERVICE, env);
   const geo = buildGeo(env, monitor);
   console.log(`${SERVICE}: ${geo.describe}`);
+  // C-30 (audit 2026-09-11): a sub-national line in the territory schedule
+  // that the configured lookup cannot feed is not a rule — it admits every
+  // person it names, silently, with no error and no log line. Refuse to start
+  // rather than look like a gate that is applying it. Inert against today's
+  // country-only schedule, which is the point: it fires the day someone adds
+  // a region and the lookup cannot resolve one.
+  assertRegionCapability(territories, geo.issuance, geo.describe);
 
   console.log(`${SERVICE}: loading sanctions sources (the OFAC mirror is ~29 MB)...`);
   const sanctionsStartedAt = Date.now();

@@ -152,3 +152,70 @@ describe('TiersOpened (set_open_tiers enablement)', () => {
     expect(undecodable).to.equal('TiersOpened');
   });
 });
+
+/**
+ * The sanctions-hold events (audit 2026-09-11, D-20 / F-08).
+ *
+ * The program has emitted both since Stage F and no off-chain reader could
+ * decode either, so the hold existed on chain and nowhere else: no ledger
+ * row, no derived column, nothing for an operator tool to aim
+ * `lift_sanctions_hold` at, and nothing a held player's results page could
+ * say. Pinned here the way every other post-E1 layout is — by hand from the
+ * Rust struct's Borsh layout (pubkey 32 raw, i64 8 LE), through the same
+ * registry the indexer uses.
+ *
+ * `programs/blotto_cup/src/events.rs:246-260` is the contract:
+ *   SanctionsHoldPlaced { pool: Pubkey, player: Pubkey, placed_at: i64 }
+ *   SanctionsHoldLifted { pool: Pubkey, player: Pubkey, lifted_at: i64 }
+ */
+describe('SanctionsHoldPlaced / SanctionsHoldLifted (Stage F)', () => {
+  it('decodes pool, player and the placement time as a decimal string', () => {
+    const ev = decodeAnchorEvent(
+      payload('SanctionsHoldPlaced', Buffer.concat([key(11), key(12), i64(1_789_000_000n)]))
+    );
+    expect(ev).to.not.equal(null);
+    expect(ev!.event).to.equal('SanctionsHoldPlaced');
+    expect(ev!.pool).to.equal(b58(key(11)));
+    expect(ev!.player).to.equal(b58(key(12)));
+    expect(ev!.placed_at).to.equal('1789000000');
+    expect(typeof ev!.placed_at).to.equal('string', 'i64 never becomes a JS number');
+  });
+
+  it('decodes the lift, and names its own timestamp field', () => {
+    const ev = decodeAnchorEvent(
+      payload('SanctionsHoldLifted', Buffer.concat([key(11), key(12), i64(1_789_600_000n)]))
+    );
+    expect(ev!.event).to.equal('SanctionsHoldLifted');
+    expect(ev!.player).to.equal(b58(key(12)));
+    expect(ev!.lifted_at).to.equal('1789600000');
+    expect(ev!.placed_at, 'the two events are not interchangeable').to.equal(undefined);
+  });
+
+  it('the two carry DIFFERENT discriminators — a hold is not a flag', () => {
+    const placed = anchorEventDiscriminator('SanctionsHoldPlaced');
+    const lifted = anchorEventDiscriminator('SanctionsHoldLifted');
+    const flagged = anchorEventDiscriminator('EntryFlagged');
+    expect(placed.equals(lifted)).to.equal(false);
+    expect(placed.equals(flagged)).to.equal(false);
+  });
+
+  it('a body missing the timestamp is layout drift, not a decode', () => {
+    let undecodable = '';
+    const ev = decodeAnchorEvent(
+      payload('SanctionsHoldPlaced', Buffer.concat([key(1), key(2)])),
+      (name) => (undecodable = name)
+    );
+    expect(ev).to.equal(null);
+    expect(undecodable).to.equal('SanctionsHoldPlaced');
+  });
+
+  it('a trailing byte is drift too — a hold must never decode half-read', () => {
+    let undecodable = '';
+    const ev = decodeAnchorEvent(
+      payload('SanctionsHoldLifted', Buffer.concat([key(1), key(2), i64(1n), Buffer.from([0])])),
+      (name) => (undecodable = name)
+    );
+    expect(ev).to.equal(null);
+    expect(undecodable).to.equal('SanctionsHoldLifted');
+  });
+});

@@ -98,13 +98,23 @@ export class SanctionsUnavailableError extends Error {
  * dependency runs one way: packet → sanctions, never back. `country` is
  * accepted for signature compatibility and deliberately unused — list
  * membership does not depend on where the request came from.
+ *
+ * `screen` is carried alongside the boolean since 2026-09-12 (audit B-36):
+ * the boolean is all a DECISION may read, and it is not enough for the
+ * RECORD a refusal has to leave — "which list matched" is the first question
+ * asked about a refused entry, and `isSanctioned` had already thrown that
+ * away by the time the caller knew it had refused anyone.
  */
 export function asSanctionsList(check: SanctionsCheck): {
   isSanctioned(wallet: string, country: string): Promise<boolean>;
+  screen(wallet: string): Promise<SanctionsVerdict>;
 } {
   return {
     async isSanctioned(wallet: string, _country: string): Promise<boolean> {
       return isListed(await check.screen(wallet));
+    },
+    screen(wallet: string): Promise<SanctionsVerdict> {
+      return check.screen(wallet);
     },
   };
 }

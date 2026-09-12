@@ -302,6 +302,32 @@ export function registerBlottoEventLayouts(): void {
     amount: r.u64(),
   }));
 
+  // ---- Sanctions holds (Phase 2 Stage F) -------------------------------
+  //
+  // The program has emitted both since Stage F and nothing off chain could
+  // read either (audit 2026-09-11, D-20 / F-08): no decoder, so no ledger
+  // row, so no projection, so `lift_sanctions_hold` — the ONE instruction
+  // that can free a held share — could not be aimed from any operator tool,
+  // and a held player's own results page could say nothing about why their
+  // prize had not moved.
+  //
+  // Deliberately kept distinct from `EntryFlagged` at every layer, as the
+  // program keeps them distinct: a sanctions hold is not an integrity flag,
+  // it does not go to the reviewer's desk, and it is not appealable through
+  // the review service. They project to different columns for the same
+  // reason.
+  layout('SanctionsHoldPlaced', (r) => ({
+    pool: r.pubkey(),
+    player: r.pubkey(),
+    placed_at: r.i64(),
+  }));
+
+  layout('SanctionsHoldLifted', (r) => ({
+    pool: r.pubkey(),
+    player: r.pubkey(),
+    lifted_at: r.i64(),
+  }));
+
   // ---- Platform treasury (D-A1 revised, master prompt v2 2026-08-27) ----
 
   layout('PlatformFunded', (r) => ({

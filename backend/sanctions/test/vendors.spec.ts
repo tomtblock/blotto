@@ -227,3 +227,136 @@ describe('the HTTP failure taxonomy (shared by both vendors)', () => {
     expect(calls.n).to.equal(1);
   });
 });
+
+// ---- The deadline covers the body too (audit B-27 / G-07) ------------------
+
+/**
+ * The shape is `ofac-sdn.spec.ts`'s "a stalled BODY is bounded too": a vendor
+ * that accepts the connection, answers 200, and then stops sending. The head
+ * arrives, so every status branch above is satisfied and nothing has failed —
+ * the promise simply never settles. At entry that hangs `issuePacket` and the
+ * entrant's request with it; at settlement it hangs the daemon's tick.
+ *
+ * Both vendors are covered because both reach the network through the same
+ * `withRetry`, and a bound proven on one of them is not a bound on the other.
+ */
+describe('the vendor deadline covers the whole exchange, body included', () => {
+  /** 200 with headers, then silence — the body promise settles only on abort. */
+  const headThenStall = (calls?: { n: number }): typeof fetch =>
+    (async (_url: string, init?: RequestInit) => {
+      if (calls) calls.n++;
+      const signal = init?.signal ?? undefined;
+      return {
+        ok: true,
+        status: 200,
+        json: () =>
+          new Promise<unknown>((_resolve, reject) => {
+            signal?.addEventListener('abort', () => reject(signal.reason));
+          }),
+      } as unknown as Response;
+    }) as unknown as typeof fetch;
+
+  /** Accepts the request and never answers at all — the head stalls. */
+  const neverAnswers: typeof fetch = ((_url: string, init?: RequestInit) =>
+    new Promise((_resolve, reject) => {
+      const signal = init?.signal ?? undefined;
+      signal?.addEventListener('abort', () => reject(signal.reason));
+    })) as unknown as typeof fetch;
+
+  it('chainalysis: a stalled BODY aborts on our deadline and names the phase', async () => {
+    const calls = { n: 0 };
+    const started = Date.now();
+    const check = new ChainalysisCheck({
+      apiKey: 'k',
+      fetchImpl: headThenStall(calls),
+      now: at,
+      ...instant,
+      attempts: 2,
+      timeoutMs: 50,
+    });
+    let message = '';
+    try {
+      await check.screen('ADDR');
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message, 'the error says it timed out reading the body').to.match(
+      /chainalysis: no readable answer after 2 attempts — chainalysis: timed out after 50ms reading the response body/
+    );
+    expect(calls.n, 'a stalled body is transient: retried like a stalled head').to.equal(2);
+    expect(
+      Date.now() - started,
+      'it returned on its own deadline, not on the test runner giving up'
+    ).to.be.lessThan(5_000);
+  });
+
+  it('opensanctions: a stalled BODY aborts on our deadline', async () => {
+    const check = new OpenSanctionsCheck({
+      apiKey: 'k',
+      fetchImpl: headThenStall(),
+      now: at,
+      ...instant,
+      attempts: 1,
+      timeoutMs: 50,
+    });
+    let message = '';
+    try {
+      await check.screen('ADDR');
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message).to.match(/opensanctions: timed out after 50ms reading the response body/);
+  });
+
+  it('a stalled HEAD is still bounded, and says which phase stalled', async () => {
+    const check = new ChainalysisCheck({
+      apiKey: 'k',
+      fetchImpl: neverAnswers,
+      now: at,
+      ...instant,
+      attempts: 1,
+      timeoutMs: 50,
+    });
+    let message = '';
+    try {
+      await check.screen('ADDR');
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message).to.match(/timed out after 50ms awaiting the response head/);
+  });
+
+  it('a complete but unparseable body is NOT retried as a stall', async () => {
+    let calls = 0;
+    const notJson = (async () => {
+      calls++;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => {
+          throw new SyntaxError('Unexpected token < in JSON at position 0');
+        },
+      } as unknown as Response;
+    }) as unknown as typeof fetch;
+    const check = new ChainalysisCheck({ apiKey: 'k', fetchImpl: notJson, now: at, ...instant });
+    let message = '';
+    try {
+      await check.screen('ADDR');
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message).to.match(/Unexpected token/);
+    expect(calls, 'a bad answer is an answer; asking again spends the quota').to.equal(1);
+  });
+
+  it('the signal handed to fetch is live, and is the one that bounds the body', async () => {
+    let seen: AbortSignal | undefined;
+    const capture = (async (_url: string, init?: RequestInit) => {
+      seen = init?.signal ?? undefined;
+      return { ok: true, status: 200, json: async () => CA_CLEAN } as unknown as Response;
+    }) as unknown as typeof fetch;
+    await new ChainalysisCheck({ apiKey: 'k', fetchImpl: capture, now: at, ...instant }).screen('A');
+    expect(seen, 'fetch was given a signal').to.be.instanceOf(AbortSignal);
+    expect(seen?.aborted, 'and it is live when the body is read, not already spent').to.equal(false);
+  });
+});
