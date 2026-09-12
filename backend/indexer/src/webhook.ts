@@ -15,7 +15,7 @@
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http';
 import { timingSafeEqual } from 'crypto';
-import { ALERT, METRIC, serveMetricsIfPrometheus, type Monitor } from './shared';
+import { ALERT, METRIC, type Monitor } from './shared';
 import type { Queryable } from './shared';
 import type { EventStore } from './store';
 import { ingestTransaction, type IngestStats, type TxContext } from './ingest';
@@ -226,10 +226,15 @@ export const MAX_WEBHOOK_BODY_BYTES = 8 * 1024 * 1024;
  */
 export function createWebhookServer(deps: WebhookDeps): Server {
   return createServer((req: IncomingMessage, res: ServerResponse) => {
-    // `GET /metrics` for the Alloy scrape, served only under the Prometheus sink (Step 6).
-    if (serveMetricsIfPrometheus(deps.monitor, req, res)) {
-      return;
-    }
+    // NO `/metrics` here (audit 2026-09-11, E-09). This port is the one the
+    // platform routes to the internet — it is where the webhook delivers and
+    // where the deploy probes `/health` from a hosted runner — and the
+    // exposition names every counter and every alert reason this system
+    // keeps. That is an operational map with no reason to be public. The
+    // scrape target is a listener of its own on the private network; see
+    // `startMetricsListener` in backend/_shared. Until 2026-09-12 the route
+    // was here and unreachable only because no deployment had selected the
+    // Prometheus sink, so selecting it would have published the map.
     // E5: the deployment liveness probe.
     if (req.method === 'GET' && req.url === '/health') {
       res

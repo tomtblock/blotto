@@ -40,6 +40,7 @@ import { backfillAndRederive, catchUpFloor, Web3BackfillRpc } from './backfill';
 import { backfillArchive } from './archive';
 import { atomicDb } from './atomic';
 import { startReconciler } from './reconcile';
+import { startMetricsListener } from '../../_shared/src/metrics-listener';
 
 // INCIDENT 2026-09-09: the decoder's layout table is filled by this call and by
 // nothing else. From 2026-08-27 until today no service made it — only the
@@ -109,6 +110,11 @@ async function cmdServe(monitor: Monitor): Promise<void> {
     trustProxyHeader: process.env.BLOTTO_TRUST_PROXY === '1',
   });
   console.log(`${SERVICE}: read API listening on :${config.readApiPort}`);
+
+  // E-09: the exposition, on the private network only — never on either of
+  // the two ports above, both of which the platform routes publicly. A silent
+  // no-op on every sink but prometheus.
+  startMetricsListener(monitor, SERVICE);
 
   startReconciliation(store, monitor, config);
 }

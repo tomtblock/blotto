@@ -9,6 +9,22 @@ primary_region = "fra"
   dockerfile = "../docker/Dockerfile.packet"
 
 [env]
+  # Metrics and alerts (audit 2026-09-11, E-09 / A-19). Until 2026-09-12 no
+  # environment selected a sink, so `createMetricsServer` was dead code and
+  # every alert in the system was one line on standard output. The Prometheus
+  # sink REMOVES no logging — `alert()` still writes its loud line — it adds
+  # the `blotto_alerts_total{reason}` counter and an exposition to scrape.
+  #
+  # 9090 is NOT the routed port below: Fly routes only `internal_port`, so this
+  # listener is reachable over the private network and nowhere else. That is
+  # deliberate — the exposition names every counter and alert reason this
+  # system keeps, which is an operational map with no reason to be public.
+  #
+  # Nothing scrapes it yet, and no alert destination is configured. Both are
+  # operator decisions: point an agent at :9090 over the private network, and
+  # set a webhook secret for the direct push if one is wanted.
+  BLOTTO_MONITOR_SINK = "prometheus"
+  BLOTTO_METRICS_PORT = "9090"
   BLOTTO_PACKET_PORT = "8082"
   BLOTTO_TRUST_PROXY = "1"
   # The hygiene posture, in the config that ships with the code rather than
