@@ -61,7 +61,9 @@ rule in `docs/OPERATING-MANUAL.md:31-33`).**
    it to settle or refund before upgrading.
 5. Run the deploy script with the program keypair and the database URL so the indexer
    migrate/re-derive step runs too:
-   `BLOTTO_PROGRAM_KEYPAIR=~/.config/solana/blotto/blotto_cup-program-devnet.json BLOTTO_DATABASE_URL=<neon url> ./scripts/deploy-devnet.sh`
+   `BLOTTO_PROGRAM_KEYPAIR=~/.config/solana/blotto/blotto_cup-program-devnet.json BLOTTO_DEPLOY_KEYPAIR=~/.config/solana/blotto/fee-payer-devnet.json ./scripts/deploy-devnet.sh`
+   (since 2026-09-12 the script names its signing key, raises the open-file limit and sends the
+   upload itself with retries — the runbook's recovery note of that date says why)
    The script (`scripts/deploy-devnet.sh:36-106`) refuses a keypair whose pubkey is not `declare_id`,
    runs `anchor build` (strict, not `--ignore-keys`), extends the program account if the binary
    grew, runs `anchor deploy`, prints `solana program show`, then runs the indexer's `migrate` and
@@ -356,7 +358,7 @@ except where marked.
 
 | Wave | What | Who | Gate to the next wave |
 |---|---|---|---|
-| **0 — this week** | 0.1 §1a: redeploy the program to devnet (steps 1–9, incl. the backend redeploy in step 7 and the one-lamport pool in step 8) | You | `check-deployed` clean on the new slot; the one-lamport pool reaches Paid/Closed |
+| **0 — this week** | 0.1 §1a: redeploy the program to devnet (steps 1–9, incl. the backend redeploy in step 7 and the one-lamport pool in step 8). **Program deployed 2026-09-12, slot 497261524, `check-deployed` clean; backend redeploy and the pool-9 proof pending** | You | `check-deployed` clean on the new slot; the one-lamport pool reaches Paid/Closed |
 | | 0.2 PR "post-audit follow-ups": all six §5 rows (the ceiling wiring, the faithful proptest model, A-34, E-07, the lint warning, the cost line) | Me | ci-fast + on-chain green; merged |
 | | 0.3 PR "D-02 announce + archive-backfill": §3a steps 1–4 | Me | merged; next backend deploy shows announce ON |
 | | 0.4 Four decisions, in this order: **2a** name the second reviewer → **2e** ratify the numbers table → **2c** confirm option (2) for B-07 → **2b** confirm (a) report for detection. 2c gates I1 and 2b gates R1; the first two gate the rehearsal | You | Decisions written into `docs/BUILD-ROADMAP_v1.0.md`'s register (one line each, dated) |

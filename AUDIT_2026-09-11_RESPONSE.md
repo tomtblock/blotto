@@ -201,3 +201,9 @@ vault (the B-03 vector itself); a `Donate` op with its term in the identity is a
 
 **Not closed by this PR:** the two blockers (the devnet redeploy, the credentialed rehearsal) and
 the five decisions are the founder's; waves 1–5 follow the plan's order.
+
+**Later the same day (2026-09-12, ~15:40Z):** the founder deployed the program — slot 497261524,
+`check-deployed` clean, Config 484 bytes — after three tooling failures the runbook's recovery
+notes now record (the loader's 10,240-byte minimum extension, macOS's 256 open-file limit, the
+buffer resume). The backend redeploy and the one-lamport proof on pool 9 remain before the Wave 0
+gate is met in full.
