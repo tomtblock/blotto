@@ -27,7 +27,7 @@
 # docs/deploy-backend.md. Missing ones are reported by name in preflight.
 #
 #   Always required
-#     FLY_API_TOKEN, BLOTTO_DATABASE_URL
+#     FLY_API_TOKEN, BLOTTO_DATABASE_URL, BLOTTO_HELIUS_WEBHOOK_SECRET
 #   Packet service — the entry signer (C1) and geo vendor (C2), decided
 #   INDEPENDENTLY: between those two steps the real state is a live Turnkey
 #   signer beside a stubbed geo lookup, and the switch must express that
@@ -47,9 +47,14 @@
 #   Review service (C6) — deployed only once this exists
 #     SETTLEMENT_SIGNER_KEYPAIR_B64
 #
-# BLOTTO_HELIUS_WEBHOOK_SECRET is still generated once and kept: it is a
-# shared secret between us and Helius with no external authority to issue
-# it, not a stand-in for a credential someone else holds.
+# BLOTTO_HELIUS_WEBHOOK_SECRET is a shared secret between us and Helius with
+# no external authority to issue it, so this workflow can and does generate
+# one — but ONLY under allow_dev_credentials, and since 2026-09-12 never
+# silently (audit 2026-09-11, E-19). A generated value cannot be read back
+# out of Fly, so no webhook can be told it and the daemon cannot be given it:
+# live ingest and the bundle announce are both dead, and the old behaviour
+# said so as a ::warning:: on a green run. The last step of this workflow now
+# proves the staged secret is accepted, and preflight refuses without one.
 #
 # The indexer image's `sync` entry runs migrations itself at boot, so there
 # is no separate migration job; deploy order (indexer first) guarantees the
@@ -57,12 +62,17 @@
 
 name: deploy-backend
 
-# Least privilege (audit 2026-09-11, Tier 3 item 8). This job holds the
+# Least privilege (audit 2026-09-11, Tier 3 item 8). The deploy job holds the
 # settlement keypair and the Turnkey private key in its environment; the
 # GitHub token it is issued should be able to do nothing beyond reading the
 # checkout. Without a block the token carries the repository's default
 # permissions, which on a repository created before 2023 can be read-write
 # across contents, packages and PRs. Nothing here uses `gh`.
+#
+# This is the floor for every job. `gate` widens its OWN token by one read
+# scope (`actions: read`) because it must look up this commit's CI runs, and
+# it is a separate job precisely so that scope never sits beside the
+# credentials. `deploy` and `drift` inherit exactly what is written here.
 permissions:
   contents: read
 
@@ -71,6 +81,10 @@ on:
     inputs:
       allow_dev_credentials:
         description: "DEV ONLY: where a production credential is absent, fall back (entry-signer seed / geo stub, which admits every address as GB). Applied per credential — a live Turnkey signer is never replaced. Leave unchecked for the credentialed path."
+        type: boolean
+        default: false
+      deploy_despite_red_ci:
+        description: "Deploy even though ci-fast is red, still running or missing on this commit. The ci-fast lane also lints and builds the web app, so an app-side failure can otherwise block a backend-only fix. This NEVER bypasses the main-only rule."
         type: boolean
         default: false
 
@@ -87,35 +101,50 @@ concurrency:
   group: deploy-backend
   cancel-in-progress: true
 
-env:
-  FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-  INDEXER_APP: blotto-indexer
-  PACKET_APP: blotto-packet
-  DAEMON_APP: blotto-daemon
-  REVIEW_APP: blotto-review
-  # The three values the FOUNDER owns and changes without a code change
-  # (2026-09-09, the go-live night): the browser origins the services answer,
-  # the RPC every service talks to, and the webhook secret shared with Helius.
-  # Each falls back to the value that was hard-coded here until then, so a
-  # repository with none of them set deploys exactly as before.
-  #   Settings → Secrets and variables → Actions → Variables:
-  #     BLOTTO_APP_ORIGINS   comma-separated https origins, no trailing slash
-  #     BLOTTO_MAX_UNREADABLE_ENTRIES   the daemon's unreadable-entry ceiling
-  #                                     (plan 2026-09-12 §2e — a founder number;
-  #                                     unset = the crank's devnet default)
-  #   … → Secrets:
-  #     BLOTTO_DEVNET_RPC_URL          a DEVNET Helius URL (also read by deployed-drift)
-  #     BLOTTO_HELIUS_WEBHOOK_SECRET   the Auth-header value typed into the Helius webhook
-  #                                    (staged for the indexer AND, since 2026-09-12, the
-  #                                    daemon, which announces bundles with it — D-02)
-  APP_ORIGIN: ${{ vars.BLOTTO_APP_ORIGINS || 'https://blotto-jade.vercel.app' }}
-  DEVNET_RPC: ${{ secrets.BLOTTO_DEVNET_RPC_URL || 'https://api.devnet.solana.com' }}
-  HELIUS_WEBHOOK_SECRET: ${{ secrets.BLOTTO_HELIUS_WEBHOOK_SECRET }}
-  UNREADABLE_CEILING: ${{ vars.BLOTTO_MAX_UNREADABLE_ENTRIES }}
-  PROGRAM_ID: 5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17
-
 jobs:
+  # May this commit be deployed at all? (audit 2026-09-11, G-10 / E-16.)
+  #
+  # Until 2026-09-12 this workflow shipped four services from whatever ref the
+  # dispatcher picked, with no test, typecheck or lint having run against that
+  # commit. The main-only convention existed as one sentence of prose in
+  # docs/go-live-devnet.md and nowhere else, which made the dispatch ref
+  # selector an undocumented rollback path: an older branch or tag redeploys
+  # older code with today's credentials.
+  #
+  # A SEPARATE JOB ON PURPOSE. Reading run conclusions needs `actions: read`,
+  # a scope no workflow here has ever held. The deploy job below holds the
+  # settlement keypair and the Turnkey private key, and the comment above its
+  # permissions block is explicit that its token should be able to do nothing
+  # beyond reading the checkout. So the API scope lives here, in a job that
+  # holds no credential at all, and the deploy job's permissions are unchanged.
+  #
+  # The decision itself is scripts/ci-gate.sh, not inline YAML, because a gate
+  # whose live inputs need a token can only be tested if the decision is
+  # separable from the fetch. That script's --self-test drives twelve lane
+  # verdicts and eleven decisions through it, and ci-fast runs it on every PR.
+  gate:
+    name: may this commit be deployed
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read   # the gate runs a script from the checkout
+      actions: read    # …and reads this commit's workflow runs
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Ref and CI preconditions
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          GATE_SHA: ${{ github.sha }}
+          GATE_REF: ${{ github.ref }}
+          GATE_ALLOW_RED: ${{ inputs.deploy_despite_red_ci }}
+        run: ./scripts/ci-gate.sh
+
   deploy:
+    needs: gate
     runs-on: ubuntu-latest
     # A healthy full deploy is ~15-20 minutes now that the packet service and
     # the daemon wait out a ~29 MB sanctions download each. 45 is headroom on
@@ -123,6 +152,36 @@ jobs:
     # this GitHub's default is six hours (incident 2026-09-08, above).
     timeout-minutes: 45
     env:
+      # These were workflow-level until 2026-09-12. They moved into this job
+      # when `gate` and `drift` were added: neither needs the Fly token, the
+      # ingest secret or the RPC URL, and a job that runs `yarn install` has
+      # no business holding a deploy credential.
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      INDEXER_APP: blotto-indexer
+      PACKET_APP: blotto-packet
+      DAEMON_APP: blotto-daemon
+      REVIEW_APP: blotto-review
+      # The three values the FOUNDER owns and changes without a code change
+      # (2026-09-09, the go-live night): the browser origins the services answer,
+      # the RPC every service talks to, and the webhook secret shared with Helius.
+      # Each falls back to the value that was hard-coded here until then, so a
+      # repository with none of them set deploys exactly as before.
+      #   Settings → Secrets and variables → Actions → Variables:
+      #     BLOTTO_APP_ORIGINS   comma-separated https origins, no trailing slash
+      #     BLOTTO_MAX_UNREADABLE_ENTRIES   the daemon's unreadable-entry ceiling
+      #                                     (plan 2026-09-12 §2e — a founder number;
+      #                                     unset = the crank's devnet default)
+      #   … → Secrets:
+      #     BLOTTO_DEVNET_RPC_URL          a DEVNET Helius URL (also read by deployed-drift)
+      #     BLOTTO_HELIUS_WEBHOOK_SECRET   the Auth-header value typed into the Helius webhook
+      #                                    (staged for the indexer AND, since 2026-09-12, the
+      #                                    daemon, which announces bundles with it — D-02)
+      APP_ORIGIN: ${{ vars.BLOTTO_APP_ORIGINS || 'https://blotto-jade.vercel.app' }}
+      DEVNET_RPC: ${{ secrets.BLOTTO_DEVNET_RPC_URL || 'https://api.devnet.solana.com' }}
+      HELIUS_WEBHOOK_SECRET: ${{ secrets.BLOTTO_HELIUS_WEBHOOK_SECRET }}
+      UNREADABLE_CEILING: ${{ vars.BLOTTO_MAX_UNREADABLE_ENTRIES }}
+      PROGRAM_ID: 5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17
+
       # Mapped once so the shell can test presence without repeating the
       # secrets context; an unset secret arrives as the empty string.
       TURNKEY_API_BASE_URL: ${{ secrets.TURNKEY_API_BASE_URL }}
@@ -189,6 +248,23 @@ jobs:
 
           if [ -z "${{ secrets.FLY_API_TOKEN }}" ]; then missing="$missing FLY_API_TOKEN"; fi
           if [ -z "${{ secrets.BLOTTO_DATABASE_URL }}" ]; then missing="$missing BLOTTO_DATABASE_URL"; fi
+
+          # The ingest secret is REQUIRED (audit 2026-09-11, E-19). It used to
+          # be optional: absent, the indexer generated one that can never be
+          # read back out of Fly, so the Helius webhook could not be told it
+          # and the daemon could not be given it. Ingest answered 401 for
+          # ever, the archive never filled, and the only signal was a
+          # ::warning:: on a green run. A deploy that cannot ingest is not a
+          # deploy. The generate-once path survives for a genuinely fresh
+          # environment, behind the same audited switch as the other
+          # fallbacks.
+          if [ -z "${HELIUS_WEBHOOK_SECRET:-}" ]; then
+            if [ "$DEV_CREDS" = "true" ]; then
+              echo "::warning::ingest secret = GENERATED (BLOTTO_HELIUS_WEBHOOK_SECRET unset) — no webhook can be told this value, so live ingest and the bundle announce stay off"
+            else
+              missing="$missing BLOTTO_HELIUS_WEBHOOK_SECRET"
+            fi
+          fi
 
           # The two packet credentials are decided INDEPENDENTLY. They are
           # provisioned at different steps (Turnkey at C1, the geo vendor at
@@ -344,6 +420,12 @@ jobs:
 
       - name: Stage indexer secrets
         run: |
+          # One definition of the ingest endpoint, used by the probe below and
+          # by the daemon's announce staging, so the two cannot drift apart.
+          # Port 8080 is the webhook receiver's own Fly service
+          # (deploy/fly/indexer.fly.toml); 443 is the read API.
+          echo "INGEST_BASE=https://$INDEXER_APP.fly.dev:8080" >> "$GITHUB_ENV"
+
           flyctl secrets set --app "$INDEXER_APP" --stage \
             BLOTTO_DATABASE_URL="${{ secrets.BLOTTO_DATABASE_URL }}" \
             BLOTTO_CLUSTER="devnet" \
@@ -477,7 +559,7 @@ jobs:
           # indexer step stages above — one secret, one receiver.
           if [ -n "$HELIUS_WEBHOOK_SECRET" ]; then
             flyctl secrets set --app "$DAEMON_APP" --stage \
-              BLOTTO_INDEXER_ANNOUNCE_URL="https://$INDEXER_APP.fly.dev:8080/bundles" \
+              BLOTTO_INDEXER_ANNOUNCE_URL="$INGEST_BASE/bundles" \
               BLOTTO_HELIUS_WEBHOOK_SECRET="$HELIUS_WEBHOOK_SECRET"
           else
             # A generate-once indexer secret cannot be read back out of Fly,
@@ -635,6 +717,70 @@ jobs:
           done
           exit $fail
 
+      # Does ingest actually work? (audit 2026-09-11, E-19.)
+      #
+      # Everything above proves the services are RUNNING. None of it proves
+      # the one thing the archive depends on: that a caller holding the
+      # staged secret is accepted by the indexer's webhook receiver. That
+      # path has two independent ways to be dead, and until now both were
+      # silent — a ::warning:: on a green run.
+      #
+      #   1. The port may not be routable. The receiver rides its own Fly
+      #      service on public 8080 (deploy/fly/indexer.fly.toml), and this
+      #      workflow allocates a SHARED IPv4 plus a dedicated IPv6. Shared
+      #      Fly v4 addresses route 80 and 443 only, and GitHub runners are
+      #      IPv4 in practice. Nothing in this repository has ever asserted
+      #      an external request to 8080 succeeded.
+      #   2. The secret may not match. Helius and the daemon both send the
+      #      staged value as a bare Authorization header; a mismatch is a
+      #      401 with an empty body, and neither caller has a human watching.
+      #
+      # The probe separates the two so the failure says which. It writes
+      # NOTHING: authentication is decided at the headers stage before a body
+      # byte is read, and an empty object is refused by validation before the
+      # first SQL statement (backend/indexer/src/webhook.ts) — so `{}` with a
+      # good secret must answer 400 "bad pool id", and that 400 is the proof.
+      # A 401 means the credential is wrong.
+      #
+      # DELIBERATELY LAST. It runs after all four services are deployed, so a
+      # failure here never leaves a half-deployed backend — the services are
+      # updated and the run is red, which is the truth of the situation.
+      - name: Prove the ingest route answers and the secret authenticates
+        run: |
+          # The skip is decided in the shell, not in an `if:` expression, so
+          # that it prints its reason. The only way to reach it is a run with
+          # allow_dev_credentials ticked and no repository secret: preflight
+          # refuses that combination otherwise, and the generated value is one
+          # this workflow cannot read back to probe with.
+          if [ -z "${HELIUS_WEBHOOK_SECRET:-}" ]; then
+            echo "::warning::skipping the ingest proof — no BLOTTO_HELIUS_WEBHOOK_SECRET to probe with, so live ingest and the bundle announce are both off by construction"
+            exit 0
+          fi
+
+          echo "GET $INGEST_BASE/health"
+          if ! health=$(curl --fail --silent --show-error --max-time 20 "$INGEST_BASE/health" 2>&1); then
+            echo "::error::the indexer's ingest port did not answer: $health"
+            echo "::error::All four services deployed and are healthy — this is the webhook receiver's own port (8080), not the read API. If it is unroutable then Helius cannot deliver transactions AND the daemon cannot announce a settled pool's bundle, so the results archive fills only from the daily archive-backfill. Three remedies, best first: (1) give the indexer a dedicated IPv4 ('flyctl ips allocate-v4 --app blotto-indexer', about \$2/month) — shared Fly v4 addresses route 80/443 only; (2) move the announce route onto the 443 service, which does not help Helius; (3) accept a day-late archive, which is not acceptable before the rehearsal."
+            exit 1
+          fi
+          echo "$health"
+          case "$health" in
+            *'"service":"indexer-webhook"'*) ;;
+            *) echo "::error::port 8080 answered, but not with the webhook receiver: $health"; exit 1;;
+          esac
+
+          echo "POST $INGEST_BASE/bundles  (empty object, staged secret — writes nothing)"
+          code=$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 20 \
+            -X POST -H 'content-type: application/json' \
+            -H "authorization: $HELIUS_WEBHOOK_SECRET" \
+            --data '{}' "$INGEST_BASE/bundles" || echo 000)
+          echo "answer: $code"
+          case "$code" in
+            400) echo "ingest authenticated: the receiver rejected the CONTENT, not the credential.";;
+            401) echo "::error::the indexer refused the staged ingest secret (401). Live ingest and the bundle announce are both dead until this matches. The value in the BLOTTO_HELIUS_WEBHOOK_SECRET repository secret must be the same string typed into the Helius webhook's Auth header; re-run this deploy after correcting it."; exit 1;;
+            000) echo "::error::the announce route did not answer at all, though /health did. Re-run; if it persists, read the indexer's log (Actions → backend-status)."; exit 1;;
+            *)   echo "::error::unexpected answer $code from the announce route — expected 400 (content refused) or 401 (credential refused). Read backend/indexer/src/webhook.ts before assuming this is benign."; exit 1;;
+          esac
 
       # Incident 2026-09-08, twice. A deploy step failed with "timeout reached
       # waiting for health checks to pass" — which names the symptom and nothing
@@ -678,3 +824,44 @@ jobs:
           echo
           echo "Expected on a credentialed run: 'entry signer = TURNKEY', NO 'GEO STUB' line,"
           echo "and 'VRF = SWITCHBOARD On-Demand'. Anything else means a dev path is live."
+
+  # Did the backend just ship against a program it no longer matches?
+  # (audit 2026-09-11, E-16, second half.)
+  #
+  # The backend encodes every money-moving instruction by hand
+  # (backend/reveal/src/chain-web3.ts). `deployed-drift` compares those
+  # encodings with the deployed program, but only on a push that touches
+  # programs/ and once a day on a schedule — neither of which fires when a
+  # BACKEND change ships. So a backend deployed against a program it disagrees
+  # with went unnoticed until the next morning's cron, or until a settlement
+  # failed. The same check, in the same run, closes that window.
+  #
+  # It holds no Fly token and no signing key (see the deploy job's env note),
+  # and the check itself is simulation-only: sigVerify false, nothing signed,
+  # no state written, safe against any cluster at any time.
+  drift:
+    name: the deployed program still matches this commit
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v4.4.0
+        with:
+          node-version: 22
+          # The ROOT uses yarn (README.md). `npm install` here would rewrite
+          # yarn.lock and leave a competing package-lock.json — the exact
+          # operation the README tells operators to undo (B-34).
+          cache: yarn
+          cache-dependency-path: yarn.lock
+
+      - name: Install root tooling
+        run: yarn install --frozen-lockfile
+
+      - name: Compare the deployed wire contract against this commit
+        env:
+          BLOTTO_RPC_URL: ${{ secrets.BLOTTO_DEVNET_RPC_URL || 'https://api.devnet.solana.com' }}
+        run: npm run --silent check-deployed

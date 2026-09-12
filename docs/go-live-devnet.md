@@ -85,10 +85,14 @@ origin is on this list, and a missing domain shows every visitor "Blotto Cup
 is not available in your region" because the location check fails closed.
 The deploy refuses a trailing slash or a non-https origin at preflight.
 
-Then **Actions → deploy-backend → Run workflow** on `main`, "allow dev
-credentials" unticked. The indexer deploys first; with an empty ledger its
-boot-time walk fills the ledger from the program's history (sixteen
-transactions today — seconds, on any RPC).
+Then **Actions → deploy-backend → Run workflow**, with the branch box on
+`main` and both tick-boxes ("allow dev credentials" and the red-CI override)
+unticked. `main` is not advice: from any other branch the run refuses in its
+first step and deploys nothing, and it also refuses a commit whose tests are
+red or missing (`deploy-backend.md` Step 5 says what each refusal looks
+like). The indexer deploys first; with an empty ledger its boot-time walk
+fills the ledger from the program's history (sixteen transactions today —
+seconds, on any RPC).
 
 Check: `https://blotto-indexer.fly.dev/pools` shows pool 1 within a few
 minutes of the indexer step; `https://blotto-daemon.fly.dev/health` says
@@ -198,7 +202,7 @@ wallets, entry, sealing and refunds.
 | Resume | Squads, data `2AMgDu5cpQDDq` | entries accepted; the daemon resumes opening pools |
 | Take the site down | Vercel → Settings → Domains → remove the domain | nothing on chain changes; prefer pausing |
 | Ship a front-end change | nothing; a merge to `main` deploys to Vercel in ~3 min | variable changes need a manual Redeploy |
-| Ship a backend change | Actions → deploy-backend → Run workflow | deliberately manual; a pool mid-settlement resumes |
+| Ship a backend change | Actions → deploy-backend → Run workflow, on `main` | deliberately manual; refused on any other branch, and on a commit whose tests are not green; a pool mid-settlement resumes |
 | See what is running | Actions → backend-status → Run workflow | read-only forensics for all four apps |
 | Rebuild the indexer | Actions → indexer-backfill → Run workflow | idempotent; walks the chain into the ledger and rebuilds derived tables |
 | Stop the keeper | ask the architect, or `fly scale count 0 -a blotto-daemon` | also stops settlement and refunds; emergency only |
@@ -207,7 +211,7 @@ wallets, entry, sealing and refunds.
 
 | What a player sees | Almost always | Fix |
 |---|---|---|
-| "not available in your region" for everyone | domain missing from `BLOTTO_APP_ORIGINS`, or packet down | check `blotto-packet.fly.dev/health`; fix the variable; re-run deploy-backend |
+| "not available in your region" for everyone | domain missing from `BLOTTO_APP_ORIGINS`, or packet down | check `blotto-packet.fly.dev/health`; fix the variable; re-run deploy-backend from `main` (it refuses any other branch) |
 | "Sign-in is not switched on for this web address yet" | domain not in Privy allowed domains | step 4.1; immediate |
 | sign-in buttons disabled, "temporarily unavailable" | Privy app id missing or rejected in the build | Vercel variable, then Redeploy |
 | "No tournament is open" while a pool is open | indexer has no data | `blotto-indexer.fly.dev/pools`; if `[]`, run indexer-backfill and read its `inserted` count (zero = code defect, see the incident note in `backend/indexer/src/index.ts`) |

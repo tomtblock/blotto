@@ -155,6 +155,15 @@ close them today.
 - **Mainnet operation.** Today, on devnet, every vendor sits on its free
   tier and the chain costs nothing; the running bill is about $100 a month
   (Fly, Neon, Helius Developer, Actions).
+- **The rent cushion priced at mainnet's rent parameters.** Every pool
+  leaves a rent cushion in its vault that is never recovered, and it is not a
+  fixed number: the program reads the network's rent-exempt minimum for an
+  empty account at the moment the pool opens
+  (`programs/blotto_cup/src/vault.rs:62`), so it follows that cluster's rent
+  parameters — **890,880 lamports (0.00089088 SOL) under the standard
+  parameters**, and 650,240 on devnet as of 2026-09-12, where the parameters
+  differ. The Solana row below prices the standard figure, because this bill
+  forecasts mainnet.
 - **One tier open.** A pool that refunds costs the same to run as a pool
   that pays.
 
@@ -171,7 +180,7 @@ close them today.
 | Turnkey — one signature per entry | entries (pay-as-you-go, then Pro) | 38 | 78 | 198 | 299 | 2,099 |
 | Sanctions — OFAC mirror and Chainalysis | free | 0 | 0 | 0 | 0 | 0 |
 | Irys — one bundle per pool | pools | 0.07 | 0.13 | 0.33 | 0.67 | 6.67 |
-| Solana — 0.016 SOL per pool: 0.015 SOL of rent and fees the keeper pays, plus the 0.0009 SOL rent cushion the treasury leaves in every vault (890,880 lamports, never recovered — since 2026-09-12) | pools | 11 | 21 | 53 | 107 | 1,067 |
+| Solana — 0.016 SOL per pool: 0.015 SOL of rent and fees the keeper pays, plus the 0.0009 SOL rent cushion the treasury leaves in every vault (never recovered — since 2026-09-12; the assumption above says which rent figure this uses and why) | pools | 11 | 21 | 53 | 107 | 1,067 |
 | GitHub Actions — private-repository overage | fixed | 16 | 16 | 16 | 16 | 16 |
 | Domain | fixed | 1.25 | 1.25 | 1.25 | 1.25 | 1.25 |
 | **Total** | | **174** | **224** | **675** | **831** | **5,827** |
