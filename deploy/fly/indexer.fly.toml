@@ -11,6 +11,16 @@ primary_region = "fra"
 [env]
   BLOTTO_INDEXER_PORT = "8080"
   BLOTTO_READ_API_PORT = "8081"
+  # Behind Fly's proxy: the read API's rate limiter keys on Fly-Client-IP
+  # only when told the proxy is ours (2026-09-12, as the packet and review
+  # services already did).
+  BLOTTO_TRUST_PROXY = "1"
+  # The hygiene posture, in the config that ships with the code rather than
+  # only in the deploy workflow's secret staging (which also sets them):
+  # rate limiting and the JSON hardening headers ON. The CORS allowlist is a
+  # per-deployment origin and stays staged by the workflow.
+  BLOTTO_API_RATE_LIMIT_ENABLED = "1"
+  BLOTTO_API_SECURITY_HEADERS_ENABLED = "1"
 
 [http_service]
   internal_port = 8081

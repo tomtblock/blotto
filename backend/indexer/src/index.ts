@@ -87,7 +87,9 @@ async function cmdServe(monitor: Monitor): Promise<void> {
   // app's NEXT_PUBLIC_INDEXER_URL points here.
   // BR-005: CORS/limits from env (BLOTTO_API_CORS_ORIGINS etc.) — the read
   // surface keeps the module's GET-only default methods.
-  serveReadApi(pool, config.readApiPort, loadHygieneConfig(process.env));
+  serveReadApi(pool, config.readApiPort, loadHygieneConfig(process.env), {
+    trustProxyHeader: process.env.BLOTTO_TRUST_PROXY === '1',
+  });
   console.log(`${SERVICE}: read API listening on :${config.readApiPort}`);
 }
 

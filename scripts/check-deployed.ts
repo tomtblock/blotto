@@ -36,6 +36,8 @@
  */
 
 import { createHash } from 'crypto';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
 import {
   Connection,
   PublicKey,
@@ -547,8 +549,25 @@ async function main(): Promise<void> {
   const failed = verdicts.filter((v) => !v.ok);
   console.log();
   if (failed.length === 0) {
+    // Say exactly what was and was not covered. Until 2026-09-12 this line
+    // read "every instruction's wire contract matches this branch" after
+    // simulating the admin surface and the sanctions pair — none of the
+    // instructions that move money — which is a stronger claim than the
+    // check makes (audit 2026-09-11, Tier 3 item 3). The uncovered set is
+    // computed from the program's own source, so it cannot go stale.
+    const covered = new Set(
+      verdicts.map((v) => v.name).filter((n) => /^[a-z_]+$/.test(n))
+    );
+    const all = instructionsInSource();
+    const uncovered = all.filter((n) => !covered.has(n));
     console.log(
-      `every instruction's wire contract matches this branch (${verdicts.length} checked).`
+      `wire contracts match this branch for ${covered.size} of ${all.length} instructions ` +
+        `(${verdicts.length} checks).`
+    );
+    console.log(
+      `NOT simulated here (${uncovered.length}): ${uncovered.join(', ')}.\n` +
+        `Those are exercised by the LiteSVM suite and the rehearsal against the BUILT program, ` +
+        `not against the deployed one — a deploy that drifts only there is not caught by this check.`
     );
     return;
   }
@@ -560,6 +579,24 @@ async function main(): Promise<void> {
       `See docs/devnet-rehearsal-runbook.md (recovery notes) for the 2026-09-05 incident.`
   );
   process.exitCode = 1;
+}
+
+/**
+ * Every instruction the program declares, read from `#[program]` in lib.rs —
+ * the same "read the Rust, compare" discipline the reveal client's account
+ * metadata test uses. If the source is not beside this script (a checkout
+ * without the program), the list is empty and the summary says so.
+ */
+function instructionsInSource(): string[] {
+  try {
+    const src = readFileSync(resolve(__dirname, '../programs/blotto_cup/src/lib.rs'), 'utf8');
+    const names: string[] = [];
+    for (const m of src.matchAll(/^\s*pub fn ([a-z_]+)\s*(?:<[^>]*>)?\s*\(/gm)) names.push(m[1]);
+    return names;
+  } catch {
+    console.warn('could not read programs/blotto_cup/src/lib.rs — the uncovered list is unknown');
+    return [];
+  }
 }
 
 main().catch((e) => {
