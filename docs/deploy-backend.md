@@ -92,7 +92,11 @@ the deploy automation can only *use* them.
    - Secret `BLOTTO_DEVNET_RPC_URL` — a **devnet** Helius RPC URL. Every
      service and the drift check use it; the deploy refuses a mainnet-looking one.
    - Secret `BLOTTO_HELIUS_WEBHOOK_SECRET` — the exact Auth-header string you
-     typed into the Helius webhook (`hosting.md`, E6).
+     typed into the Helius webhook (`hosting.md`, E6). **This one is now
+     required**: without it the run stops in its checks and names it, because
+     a deploy that cannot take in live data is not a deploy. The only way
+     past it is the "DEV ONLY" box, for an environment that has no webhook
+     yet.
    - **Variable** (the *Variables* tab, not *Secrets*) `BLOTTO_APP_ORIGINS` —
      every browser origin the services may answer, comma-separated, each
      `https://…` with no trailing slash: your domain, its www form, the
@@ -127,21 +131,55 @@ them, rather than deploying something that cannot start.
 
 ## Step 5 — Run the deploy (~10 min, mostly waiting)
 
+**Two things have to be true before anything is deployed**, and the run now
+checks both itself, in a first step that runs before it touches Fly:
+
+- **It has to be run on `main`.** Started from any other branch, the run
+  stops straight away and prints the branch you gave it. There is no
+  override for this one: the way to deploy a branch is to merge it first.
+- **The tests for that exact commit have to have passed.** The run finds the
+  `ci-fast` result for the commit it is about to deploy. If those tests are
+  still queued or still going it waits for them — up to about ten minutes,
+  printing which lane it is waiting on. If they failed, or if they never ran
+  at all, it stops. If the on-chain tests also ran for that commit and
+  failed, it stops as well.
+
+A refusal is a red first step within a minute or so of clicking, naming
+either the branch or the test lane. **Nothing is deployed and nothing on any
+app is changed**, so once the branch or the tests are sorted you simply run
+it again.
+
 1. In the repository, open the **Actions** tab.
 2. In the left sidebar, click **deploy-backend**.
-3. Click **Run workflow** (right side) → green **Run workflow** button.
+3. Click **Run workflow** (right side). Leave the branch box on **main** →
+   green **Run workflow** button.
 4. Leave the **"DEV ONLY"** box UNCHECKED once every credential is in hand.
    Before then it lets the deploy fall back **only where a production
    credential is missing** — so between C1 and C2, with Turnkey set but no
    geo vendor yet, checking it keeps the real Turnkey signer and stubs only
    the geo lookup. It never downgrades something already real, and the run
    warns by name for each fallback it takes.
-5. Watch it run (click the job to see live logs). Green check = deployed.
+5. Leave the second box, **`deploy_despite_red_ci`**, UNCHECKED as well. It
+   is the only override the first step has, and it covers **only the test
+   half**: ticked, it lets a red or missing test result through, prints a red
+   line naming the lane that was red, and records that you chose it, so the
+   run says plainly what it went ahead without. It exists because `ci-fast`
+   also checks the website, so a fault on the website side would otherwise
+   block a backend-only fix. It does **not** let you deploy from a branch,
+   and it has nothing to do with credentials — the "DEV ONLY" box above is
+   the one about those.
+6. Watch it run (click the job to see live logs). Green check = deployed.
    The final step prints **which signer and which randomness source each
    service actually chose** — that is the real acceptance check. A
    credentialed run reads `entry signer = TURNKEY`, shows no `GEO STUB`
    line, and reads `VRF = SWITCHBOARD On-Demand`. Anything else means a
    development path is live even though the deploy went green.
+7. After the services are up the run proves two more things rather than
+   assuming them: that the indexer really accepts the shared webhook secret
+   it was given (see the small print below — a wrong secret used to go green
+   and leave the site's data feed shut), and that the deployed on-chain
+   program still matches this backend. Either one failing turns the run red
+   after a successful deploy; both are in the small print.
 
 If it fails, copy the red step's message to me and I'll fix it.
 
@@ -187,10 +225,14 @@ site shows the real (empty) devnet state.
   vendor keys are optional and add sources when present. A listed wallet
   gets the same generic refusal as a blocked territory. The development
   stub is never staged by this workflow.
-- **One secret is generated automatically** — the Helius webhook shared
-  secret, on first deploy, kept stable across redeploys. It is ours to
-  issue: no external party holds an authoritative copy. Nothing else is
-  ever generated. The deploy used to create a development entry-signer seed
+- **One secret can be generated automatically** — the Helius webhook shared
+  secret. It is ours to issue: no external party holds an authoritative copy.
+  Since 2026-09-12 it is generated **only** on a "DEV ONLY" run, because a
+  value generated here can never be read back out of Fly, so no webhook can
+  be told it: ingest stayed shut for ever and the run said so only as a
+  warning. Set it yourself (Step 4) and the run **proves** it is accepted
+  before finishing (the ingest-check note below).
+  Nothing else is ever generated. The deploy used to create a development entry-signer seed
   and set the geo stub on every run, which silently undid a credential swap
   at the next deploy click; both are now removed, and the workflow actively
   clears them from the app once the real credentials are staged.
@@ -215,6 +257,27 @@ site shows the real (empty) devnet state.
   service is crashing or stalling at boot. Open the app's Monitoring page
   on Fly.io (the deploy log prints the link) — the last lines there name
   the actual error. Send me that message and I'll fix it.
+- **Troubleshooting — the run goes red on the ingest check, saying the
+  indexer refused our webhook credential:** the two ends are holding
+  different secrets. The run sends the indexer one deliberately incomplete
+  test message and insists the answer is "I don't like that message", not
+  "I don't know you"; the second answer is this failure. It means the
+  services are deployed but the site's live data feed would have stayed shut,
+  which is exactly what used to pass as a green run with a warning. Nothing
+  is written to the database by the test. Fix it by making
+  `BLOTTO_HELIUS_WEBHOOK_SECRET` (Step 4) exactly the string in the Helius
+  webhook — or, if the deploy issued the secret itself, tell me and I'll
+  re-issue it — then run the deploy again. If instead the step says the
+  ingest port did not answer at all, that is the indexer's second port not
+  being reachable from outside rather than a wrong secret; the step prints
+  the remedies in order — send me that message.
+- **Troubleshooting — the run goes red at the very end, on the deployed
+  program comparison:** the services deployed fine, but the on-chain program
+  running on devnet is not the one this backend expects. It is the same check
+  as **Actions → deployed-drift**, run again here so a mismatch surfaces in
+  the same click rather than the next day. Almost always it means the program
+  was upgraded and the backend was not, or the reverse. Send me the step's
+  output; nothing needs undoing in the meantime.
 
 ## What comes after (the next milestone)
 

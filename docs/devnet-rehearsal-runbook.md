@@ -570,7 +570,10 @@ solana transfer EaDfwMWwW712L4YgdhBgEqbzzpdVP17e5mvY9LPwjrSD 2 -k /Users/tomhumb
 ```
 
 **2 SOL, sized not guessed.** Per pool: `Pool` PDA rent 0.00679 (847 bytes),
-its vault 0.00089, the Switchboard randomness and MPL Core collection accounts
+its vault 0.00065 on devnet (650,240 lamports — the rent-exempt minimum for an
+empty account, which the program reads from the network when the pool opens;
+0.00089 under the standard rent parameters), the Switchboard randomness and
+MPL Core collection accounts
 ~0.008 between them, fees ~0.00005 — about **0.016 SOL**, so twenty pools is
 ~0.35. Two is roughly 5x, covering the two vendor figures that are estimates
 rather than quotes. Pool 1 measures the real number; replace this line with it.

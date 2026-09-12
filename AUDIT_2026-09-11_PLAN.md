@@ -86,11 +86,13 @@ rule in `docs/OPERATING-MANUAL.md:31-33`).**
 9. Record the deploy slot and date in `docs/devnet-rehearsal-runbook.md` (its Key Register and
    recovery notes are the operating memory) and tick O15 in `docs/AUDIT-2026-09-07.md`.
 
-**What changes for the operator after this deploy.** Each pool open now costs pot + 890,880
-lamports, and the treasury floor per idle enabled tier rises by the same. The runbook's Stage D SOL
-figures were already marked SUPERSEDED (`docs/devnet-rehearsal-runbook.md:632-658`); recompute the
-treasury bootstrap from a measured pool 1 (prior-audit O16's own note) and add one cushion per
-pool.
+**What changes for the operator after this deploy.** Each pool open now costs the pot plus one
+rent cushion — the runtime's rent-exempt minimum for an empty account, read from the network at
+open (`programs/blotto_cup/src/vault.rs:62`): 890,880 lamports under the standard parameters,
+650,240 on devnet as of 2026-09-12 — and the treasury floor per idle enabled tier rises by the
+same. The runbook's Stage D SOL figures were already marked SUPERSEDED
+(`docs/devnet-rehearsal-runbook.md:632-658`); recompute the treasury bootstrap from a measured
+pool 1 (prior-audit O16's own note) and add one cushion per pool.
 
 ### 1b. The credentialed devnet rehearsal through the real front end — BLOCKER, founder-attended
 
@@ -159,7 +161,12 @@ done, the appeal panel now renders honestly (C-04 fix) but every lodged appeal w
 the *public* key. (2) Me: PR adding it to `config/reviewers.json`, bump `version`/`updated`; the
 review service's boot warning disappears. (3) Rehearsal 5.2: lodge and decide one appeal end to end.
 
-### 2b. Detection — report, or act? — PRODUCT DECISION (R11 vs the 2026-09-07 shadow ruling)
+### 2b. Detection — report, or act? — ~~PRODUCT DECISION~~ RATIFIED 2026-09-12, register D-E9
+
+**RATIFIED 2026-09-12 as option (a), register row D-E9** in `docs/BUILD-ROADMAP_v1.0.md`: reports
+are persisted and the concerning findings are surfaced in the reviewer's page before the review
+window closes; no signal acts automatically. R11's automatic path waits for ten settled pools of
+quiet data and stays a signed decision. The report surface ships with batch R1 (A-18, D-36).
 
 **What it is.** The five detection signals run on every settled pool, but the daemon hard-codes
 shadow mode (`backend/reveal/src/main.ts:302-327`: `fullEscrowTier: false`, the report is
@@ -185,7 +192,13 @@ that makes the "detection + review before first settlement" commitment (C9) untr
 (a) touches only the backend and the admin page; (b) additionally needs the founder to confirm the
 switch on chain via a Squads proposal, which is the point — acting is a signed decision.
 
-### 2c. B-07 — the archive serves three fields the Merkle root does not cover — DECISION on scope
+### 2c. B-07 — the archive serves three fields the Merkle root does not cover — ~~DECISION on scope~~ RATIFIED 2026-09-12, register D-E8
+
+**RATIFIED 2026-09-12 as option (2), register row D-E8** in `docs/BUILD-ROADMAP_v1.0.md`: only
+`player ‖ rank ‖ amount` stays under the verified label, `seat` comes from the indexer's own chain
+records, score and zones are labelled recomputed, and bundle discovery is constrained to our own
+storage address. Option (1) is explicitly not chosen. **Batch I1 is unblocked** (B-07, C-25, D-28,
+F-06).
 
 **What it is.** The committed leaf is `player ‖ rank ‖ amount` (`backend/scoring/src/merkle.ts:34-54`).
 The archive also serves `seat`, `score_half` and `zones` under the same "verified" flag
@@ -214,18 +227,18 @@ D-E5 (2026-09-06) keeps the switch built and OFF (`kyc_required_above_lamports =
 on must first revisit the two payment paths that present no packet (auto-release, next-place). No
 action in this plan; recorded so it is not mistaken for a gap.
 
-### 2e. The numbers I defaulted in PR #106 — RATIFY OR CHANGE
+### 2e. The numbers I defaulted in PR #106 — RATIFY OR CHANGE (the ceiling ratified 2026-09-12, register D-E10)
 
 | Where | Default today | My recommendation | How it changes |
 |---|---|---|---|
-| Unreadable-entry ceiling before commit | all but one (`backend/reveal/src/crank.ts:201-206`) — wired from `BLOTTO_MAX_UNREADABLE_ENTRIES` since Wave 0; unset on devnet keeps this default, unset on mainnet refuses to start | Ratify **a small absolute number, e.g. 3** — one lost ciphertext is a player's own loss; a handful is a store incident that must stop the settlement | You: set the repository variable `BLOTTO_MAX_UNREADABLE_ENTRIES`; the deploy stages it. Never set `treasury_min_platform_lamports` below one cushion (the model's finding, §4 P1) |
-| Geo spending ceiling | off until `GEO_DAILY_CAP` is set | Set it to the vendor plan's daily cap minus a margin (free tier: **800**) | Fly secret on the packet app |
+| Unreadable-entry ceiling before commit | all but one (`backend/reveal/src/crank.ts:201-206`) — wired from `BLOTTO_MAX_UNREADABLE_ENTRIES` since Wave 0; unset on devnet keeps this default, unset on mainnet refuses to start | **RATIFIED at 3 on 2026-09-12 — register row D-E10.** One lost ciphertext is a single player's loss; more than three is a storage or key-handling failure, and the settlement stops rather than scoring them as losses and paying out | You: set the repository variable `BLOTTO_MAX_UNREADABLE_ENTRIES` to `3`; the deploy stages it onto the daemon. Never set `treasury_min_platform_lamports` below one cushion (the model's finding, §4 P1) |
+| Geo spending ceiling | off until `GEO_DAILY_CAP` is set | **DEFERRED 2026-09-12 until a geo vendor is contracted** (R2's vendor of record) — until there is a plan to cap, the ceiling governs nothing. Then: that plan's daily cap minus a margin (free tier: **800**) | Fly secret on the packet app, at contract time |
 | Geo issuance reserve | a quarter of the cap | Keep a quarter | `GEO_ISSUANCE_RESERVE` if you want a different split |
 | Second geo vendor (R2 vendor of record) | seam only (`GEO_VENDOR_2_*`) | Contract one before launch traffic; with one source a vendor outage still stops entry | Two Fly secrets; no code |
 | Sign-in deadline | 10 s (`app/src/wallet/auth-select.ts:38`) | Keep | Code constant |
 | Upload-wallet floor (mainnet) | 0.01 SOL (`backend/reveal/src/startup.ts:141`) | Keep | Code constant |
 | Five copy lines | drafts in `app/src/copy/index.ts:64-68, 538-540` | Your voice pass | Copy edit |
-| Rent cushion | 890,880 lamports per pool, never recovered | Not discretionary (it is the runtime's rent figure) — but budget ≈0.9 SOL per thousand pools in `docs/INFRASTRUCTURE.md`'s bill (`:174` says 0.015 SOL/pool today) | Docs |
+| Rent cushion | **not a fixed figure**: the program reads the runtime's rent-exempt minimum for an empty account when the pool opens (`programs/blotto_cup/src/vault.rs:62`) — 890,880 lamports under the standard parameters, **650,240 on devnet** as of 2026-09-12, confirmed by pool 9's vault at 4,000,650,240 lamports (the 4 SOL pot plus 650,240). Never recovered either way | Not discretionary (it is the network's own rent figure, and it can differ per cluster) — but budget the bill at the standard-parameter 890,880, ≈0.9 SOL per thousand pools, because `docs/INFRASTRUCTURE.md` prices mainnet (`:174` carries the cushion since Wave 0) | Docs |
 
 ## 3. Open HIGH findings not in the audit's fix list
 
@@ -367,8 +380,8 @@ except where marked.
 | **1 — before the rehearsal** (one to two weeks) | 1.1 **D1** daemon batch, B-31 first (the bundle goes to permanent storage, so the privacy leak is fixed before any bundle with it is published), then §3b D-03's daemon half, the B-30 held-entry loop, B-47, C-09, C-22, C-35/F-10, D-11, C-12, C-34. **Landed 2026-09-12 with the daemon liveness rows of 1.3 folded in (response record, Wave 1 D1 addendum)** | Me | reveal package typecheck + tests green; merged |
 | | 1.2 **I1** indexer batch: B-07 option (2) with C-25, B-20/F-05, B-18, C-11/C-21, D-18, F-19, E-15, and the report half of prior-audit **O26** (anchor `GET /treasury`'s policy and tier tables on the live Config; its event half is a program change and goes to P1) | Me | indexer typecheck + tests green; merged |
 | | 1.3 **O1-part**: daemon liveness (C-05/C-27/E-04/D-07) and §3c step 2, the nightly dump of `sealed_entries` + `published_pool_keys`. The rest of O1 waits for wave 5 | Me | first scheduled dump run green |
-| | 1.4 **C1-quick**: G-10/E-16 (deploy-backend gated on CI green and restricted to `main`), E-19 (a 401'd webhook fails the deploy, not warns), B-34 (lockfile in the drift lane). These protect the deploys wave 1 relies on; the rest of C1 waits for wave 5 | Me | one deploy-backend run refused on a red ref, one accepted |
-| | 1.5 The 2a one-line PR once you have the public key; the 2e Fly secrets (`BLOTTO_MAX_UNREADABLE_ENTRIES`, `GEO_DAILY_CAP`, and the second geo vendor if contracted) | You (key, secrets), me (PR) | review service boots without the single-reviewer warning |
+| | 1.4 **C1-quick**: G-10/E-16 (deploy-backend gated on CI green and restricted to `main`), E-19 (a 401'd webhook fails the deploy, not warns), B-34 (lockfile in the drift lane). These protect the deploys wave 1 relies on; the rest of C1 waits for wave 5. **Landed 2026-09-12, with the post-deploy `check-deployed` comparison of E-16's third half (response record, Wave 1.4 addendum)** | Me | one deploy-backend run refused on a red ref, one accepted |
+| | 1.5 The 2a one-line PR once you have the public key; the 2e repository variable and Fly secrets (`BLOTTO_MAX_UNREADABLE_ENTRIES` at 3 per D-E10; `GEO_DAILY_CAP` and the second geo vendor once one is contracted) | You (key, secrets), me (PR) | review service boots without the single-reviewer warning |
 | | 1.6 Backend deploy, then **one pool end to end on devnet**: open, fill via the orchestrator, settle, archive fills within a minute, `/verify` auto-fetches. This is the dress rehearsal for the rehearsal | Me runs the orchestrator; you watch the Squads queue | the pool is Paid and verifiable from a wallet-disconnected browser |
 | **2 — the rehearsal** (one or two attended days) | 2.1 §1b steps 1–9, with §3c step 3 (the restore drill) in step 5.2's slot and the 2a appeal decided end to end in 5.2 | You + me | all four runbook exit criteria met (§7); O16 ticked |
 | | 2.2 Runbook **C4**: upgrade authority → Squads vault; `config/custody.json` updated; O5 ticked | You | `solana program show` prints `9EEW…` as authority |
