@@ -35,9 +35,15 @@
  *   GET /time                          → { server_time } — the clock every
  *                                        countdown in the app derives from
  *                                        (never the device's Date.now())
- *   GET /treasury                      → TreasuryReport (D-A1 revised) —
- *                                        assembled from the raw event
- *                                        ledger (treasury-report.ts)
+ *   GET /treasury                      → TreasuryReport (D-A1 revised) — the
+ *                                        policy from the live Config account,
+ *                                        the live-pool aggregate from the
+ *                                        derived `pools` table, the balance
+ *                                        from the chain or from the ledger
+ *                                        since its latest anchor. Every
+ *                                        statement bounded; `policy_source`
+ *                                        says which half was chain-anchored
+ *                                        (treasury-report.ts)
  *   GET /history/summary               → first-time vs repeat paid-seat
  *   GET /history/persistence             rates, paid persistence across
  *   GET /history/entries                 consecutive entries, and the
@@ -57,6 +63,10 @@ import {
 import { REVIEW_WINDOW_SECS } from '../../scoring/src/prizes';
 import type { Queryable } from './shared';
 import { treasuryReport } from './treasury-report';
+import {
+  defaultTreasuryChainReader,
+  type TreasuryChainReader,
+} from './treasury-chain';
 import {
   historyEntriesDistribution,
   historyPersistence,
@@ -145,7 +155,8 @@ function poolRow(r: Record<string, unknown>, now: Now): Json {
 export async function handleRead(
   db: Queryable,
   path: string,
-  now: Now = wallClock
+  now: Now = wallClock,
+  chain: TreasuryChainReader | null = null
 ): Promise<ReadApiResult> {
   // E3: the path may carry a query string (the /pools filters). Before
   // this, query strings 404ed by falling into the path split.
@@ -230,7 +241,13 @@ export async function handleRead(
   }
 
   if (parts[0] === 'treasury' && parts.length === 1) {
-    return { status: 200, body: await treasuryReport(db) };
+    // The policy half is read from the live `Config` account, because
+    // `init_config` writes it and emits no event (D-18 / O26 —
+    // treasury-report.ts). The reader is OPTIONAL and cached: a failed read
+    // degrades the response to ledger-derived numbers with
+    // `policy_source: "ledger"` rather than failing a public request, and
+    // `chain === null` (the test path) skips it entirely.
+    return { status: 200, body: await treasuryReport(db, chain) };
   }
 
   if (parts[0] === 'history' && parts.length === 2) {
@@ -541,6 +558,12 @@ export interface ReadApiOptions {
    * 2026-09-12 (audit 2026-09-11, Tier 3 item 5).
    */
   trustProxyHeader?: boolean;
+  /**
+   * The `GET /treasury` chain read (D-18 / O26). Defaults to the process's
+   * shared reader; pass `null` to serve a ledger-derived report only, which
+   * is what the response's `policy_source` field then says.
+   */
+  treasuryChainReader?: TreasuryChainReader | null;
 }
 
 export function serveReadApi(
@@ -556,6 +579,16 @@ export function serveReadApi(
   };
   const trustProxy = options.trustProxyHeader === true;
   const limiter = new RateLimiter(hygiene.rateLimit);
+  // The served process anchors the treasury policy on the live `Config`
+  // (D-18 / O26); `handleRead` defaults to no chain read, which is what
+  // keeps the routing suite socket-free. The reader itself is lazy, cached
+  // and fail-soft — see treasury-chain.ts. `in`, not `??`: an explicit
+  // `null` means "serve ledger-derived only" and must not fall through to
+  // the default reader.
+  const chain: TreasuryChainReader | null =
+    'treasuryChainReader' in options
+      ? options.treasuryChainReader ?? null
+      : defaultTreasuryChainReader();
   const server = createServer(async (req, res) => {
     const outcome = applyHygiene(
       {
@@ -587,7 +620,7 @@ export function serveReadApi(
       return;
     }
     try {
-      const { status, body } = await handleRead(db, req.url ?? '/');
+      const { status, body } = await handleRead(db, req.url ?? '/', wallClock, chain);
       res
         .writeHead(status, {
           'content-type': 'application/json',
