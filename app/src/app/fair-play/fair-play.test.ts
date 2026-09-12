@@ -1,4 +1,19 @@
 /*
+ * NOTE FOR WHOEVER TOUCHES THE IMPORTS BELOW (2026-09-12).
+ *
+ * This file imports `backend/class-digest` directly, on purpose: the page it
+ * covers cites that module as the published proof of the class draw, and a
+ * test that only checks the file exists proves nothing about the claim.
+ *
+ * The consequence is a build-time coupling that is easy to miss. `next build`
+ * type-checks this file, so the hosting provider's install step has to install
+ * that package too — its own `installCommand` in `app/vercel.json` lists every
+ * backend package the app reaches, and adding an import to a package that is
+ * NOT on that list turns a green local build into a failed deploy with a
+ * `Cannot find module` from inside `backend/`. That is exactly how it failed
+ * the first time this test was wired up.
+ */
+/*
  * The Fair play page cannot show a number the study did not produce.
  *
  * Four bindings: the JSON the page imports is exactly the study's CSV
