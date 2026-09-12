@@ -175,6 +175,10 @@ pub enum ErrorCode {
     SanctionsHoldActive,
     #[msg("No sanctions hold is in force on this entry")]
     NoSanctionsHold,
+
+    // 6071 — the rent-exemption guard on every lamport exit (2026-09-12).
+    #[msg("That transfer would leave the account below the rent-exempt minimum")]
+    WouldStrandRentBalance,
 }
 
 #[cfg(test)]
@@ -202,6 +206,7 @@ mod error_numbers {
             (ErrorCode::KeeperMustNotBeZero, 6068),
             (ErrorCode::SanctionsHoldActive, 6069),
             (ErrorCode::NoSanctionsHold, 6070),
+            (ErrorCode::WouldStrandRentBalance, 6071),
         ] {
             assert_eq!(u32::from(code), expected, "{code:?}");
         }

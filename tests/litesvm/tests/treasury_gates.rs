@@ -104,14 +104,18 @@ fn open_blocked_when_the_policy_floor_is_unmet() {
         err.contains("6049") || err.contains("TreasuryShortfall"),
         "{err}"
     );
-    assert_eq!(env.balance(&vault_pda(1)), 0, "no partial pot");
+    assert_eq!(env.balance(&vault_pda(1)), 0, "no partial pot: the open reverted entirely");
 
     // The exact lamport clears it, and exactly the pot moves.
     env.fund_platform(1);
     let platform_before = env.balance(&platform_pda());
     env.send(&[ix], &[&settlement]).expect("open at the floor");
-    assert_eq!(env.balance(&vault_pda(1)), TIER_POTS[0]);
-    assert_eq!(platform_before - env.balance(&platform_pda()), TIER_POTS[0]);
+    assert_eq!(env.balance(&vault_pda(1)), TIER_POTS[0] + VAULT_RENT_CUSHION);
+    assert_eq!(
+        platform_before - env.balance(&platform_pda()),
+        TIER_POTS[0] + VAULT_RENT_CUSHION,
+        "the treasury funded the pot and the rent cushion"
+    );
 }
 
 #[test]

@@ -86,6 +86,16 @@ pub fn config_pda() -> Pubkey {
 pub fn pool_pda(id: u64) -> Pubkey {
     Pubkey::find_program_address(&[b"pool", &id.to_le_bytes()], &program_id()).0
 }
+/// The rent-exempt minimum for a zero-data account — the cushion
+/// `open_pool` funds every prize vault with on top of the pot (2026-09-12).
+///
+/// A vault therefore ends its life holding exactly this, not zero. The
+/// cushion is why a stranger can no longer freeze a pool by sending its
+/// vault a lamport: the pot can leave in full and the account still clears
+/// the rent-exempt line, so the runtime never sees the rent-paying
+/// post-state it refuses. See `programs/blotto_cup/src/vault.rs`.
+pub const VAULT_RENT_CUSHION: u64 = 890_880;
+
 pub fn vault_pda(id: u64) -> Pubkey {
     Pubkey::find_program_address(&[b"vault", &id.to_le_bytes()], &program_id()).0
 }

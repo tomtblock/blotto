@@ -37,7 +37,11 @@ fn pay_all_and_measure(
     }
     let pv = read_pool(&env.svm, &pool_pda(pool_id));
     assert_eq!(pv.state, 3, "Paid");
-    assert_eq!(env.balance(&vault_pda(pool_id)), 0, "vault exactly zero");
+    assert_eq!(
+        env.balance(&vault_pda(pool_id)),
+        VAULT_RENT_CUSHION,
+        "the pot has fully left; the rent cushion stays behind"
+    );
     payouts
         .iter()
         .enumerate()
