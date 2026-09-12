@@ -13,6 +13,7 @@
  * id throws a plain "not configured" error before anything is signed.
  */
 
+import { ciphertextMessage } from '@blotto/packet/ciphertext-message';
 import { generateKeyPair, getAddressFromPublicKey } from '@solana/kit';
 import { executeTrade } from '@/tx/execute';
 import type { TxRpc } from '@/tx/tx-rpc';
@@ -70,10 +71,26 @@ export function makeLiveEntryServices(cfg: LiveEntryServicesConfig): EntryServic
 
   return {
     async putCiphertext(pool, player, ciphertext) {
+      // The service will not store an allocation it cannot attribute: the
+      // wallet signs a message binding the pool, itself and a digest of
+      // these exact bytes, so nobody else can write or replace this seat's
+      // allocation (audit B-02). A wallet that cannot sign a message cannot
+      // seal — the flow fails closed rather than around.
+      if (!cfg.signer.signMessage) {
+        throw new Error('this wallet cannot sign a sealed allocation');
+      }
+      const signature = await cfg.signer.signMessage(
+        ciphertextMessage(pool, player, ciphertext)
+      );
       const res = await fetch(`${api()}/ciphertexts`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ pool, player, ciphertext: toB64(ciphertext) }),
+        body: JSON.stringify({
+          pool,
+          player,
+          ciphertext: toB64(ciphertext),
+          signature: toB64(signature),
+        }),
       });
       if (!res.ok) throw new Error(`ciphertext store: ${res.status}`);
     },

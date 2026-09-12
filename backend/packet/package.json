@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "license": "Apache-2.0",
   "private": true,
-  "description": "The entry-packet service (roadmap 4.1/4.2; TECH-ARCH §8): runs the geo / VPN / sanctions / age checks at issuance and returns either an Ed25519-signed EntryPacket or a GENERIC rejection that never reveals which check failed. The on-chain verifier is programs/blotto_cup/src/entry_packet.rs.",
+  "description": "The entry-packet service (roadmap 4.1/4.2; TECH-ARCH \u00a78): runs the geo / VPN / sanctions / age checks at issuance and returns either an Ed25519-signed EntryPacket or a GENERIC rejection that never reveals which check failed. The on-chain verifier is programs/blotto_cup/src/entry_packet.rs.",
   "engines": {
     "node": ">=20"
   },
@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@noble/hashes": "^1.5.0",
     "@turnkey/sdk-server": "^8.2.1",
     "tweetnacl": "^1.0.3"
   },

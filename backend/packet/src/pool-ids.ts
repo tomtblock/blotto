@@ -24,49 +24,47 @@
 
 import type { Queryable } from '../../_shared/src/db';
 
+/** What the projection knows about a pool, as the ciphertext route needs it. */
+export interface PoolFacts {
+  /** The on-chain numeric id — the key the ciphertext store is read by. */
+  id: bigint;
+  /** The pool's lifecycle state as the indexer last projected it. */
+  state: string;
+}
+
 export interface PoolIdResolver {
-  /** The pool's on-chain numeric id, or null when the address is unknown. */
-  idFor(pool: string): Promise<bigint | null>;
+  /** The pool's id and state, or null when the address is unknown. */
+  lookup(pool: string): Promise<PoolFacts | null>;
 }
 
 /**
  * Postgres-backed resolver over the indexer's `pools` projection.
  *
- * A short positive cache keeps a full pool's 64 entries to one query without
- * holding a stale answer for long; negative answers are never cached, so a
- * pool that has only just opened resolves on the player's next attempt
- * rather than staying unknown for the cache lifetime.
+ * Deliberately uncached. The id alone would cache safely, but the route also
+ * refuses a write to a pool that has stopped accepting entries, and a stale
+ * "Open" would reopen exactly the window this lookup exists to close. One
+ * indexed primary-key read per sealed entry is a price worth paying.
  */
 export class PgPoolIdResolver implements PoolIdResolver {
-  private readonly cache = new Map<string, { id: bigint; at: number }>();
+  constructor(private readonly db: Queryable) {}
 
-  constructor(
-    private readonly db: Queryable,
-    private readonly ttlMs = 60_000,
-    private readonly now: () => number = () => Date.now()
-  ) {}
-
-  async idFor(pool: string): Promise<bigint | null> {
-    const hit = this.cache.get(pool);
-    if (hit && this.now() - hit.at < this.ttlMs) return hit.id;
-    const res = await this.db.query('SELECT id FROM pools WHERE pool = $1', [pool]);
-    const row = res.rows[0] as { id: unknown } | undefined;
+  async lookup(pool: string): Promise<PoolFacts | null> {
+    const res = await this.db.query('SELECT id, state FROM pools WHERE pool = $1', [pool]);
+    const row = res.rows[0] as { id: unknown; state: unknown } | undefined;
     if (!row || row.id === null || row.id === undefined) return null;
-    const id = BigInt(String(row.id));
-    this.cache.set(pool, { id, at: this.now() });
-    return id;
+    return { id: BigInt(String(row.id)), state: String(row.state ?? '') };
   }
 }
 
 /** In-memory resolver for the route suites and the offline harness. */
 export class MemoryPoolIdResolver implements PoolIdResolver {
-  constructor(private readonly ids = new Map<string, bigint>()) {}
+  private readonly pools = new Map<string, PoolFacts>();
 
-  set(pool: string, id: bigint): void {
-    this.ids.set(pool, id);
+  set(pool: string, id: bigint, state = 'Open'): void {
+    this.pools.set(pool, { id, state });
   }
 
-  async idFor(pool: string): Promise<bigint | null> {
-    return this.ids.get(pool) ?? null;
+  async lookup(pool: string): Promise<PoolFacts | null> {
+    return this.pools.get(pool) ?? null;
   }
 }

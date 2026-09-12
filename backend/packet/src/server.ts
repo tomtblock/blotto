@@ -43,6 +43,7 @@ import {
 import { acceptAttestation } from './attestations';
 import { acceptNotifyPreference, type NotifyPreferenceStore } from './notify';
 import type { PoolIdResolver } from './pool-ids';
+import { acceptCiphertext } from './ciphertexts';
 
 export interface EntryServerDeps {
   packet: PacketServiceDeps;
@@ -191,7 +192,12 @@ export async function handleEntryRoute(
   }
 
   if (path === '/ciphertexts') {
-    const b = body as { pool?: string; player?: string; ciphertext?: string };
+    const b = body as {
+      pool?: string;
+      player?: string;
+      ciphertext?: string;
+      signature?: string;
+    };
     if (!b || !B58.test(b.pool ?? '') || !B58.test(b.player ?? '') || typeof b.ciphertext !== 'string') {
       return { status: 400, body: { error: 'bad request' } };
     }
@@ -204,17 +210,12 @@ export async function handleEntryRoute(
     if (bytes.length !== CIPHERTEXT_LEN) {
       return { status: 400, body: { error: 'bad request' } };
     }
-    // The store is keyed on the pool's on-chain NUMERIC id — the key every
-    // reader uses. Resolve it here rather than deriving one locally, and
-    // refuse an address we cannot resolve: a refused write costs a retry, a
-    // write under an unreadable key costs the player their entry (audit
-    // B-01, 2026-09-11).
-    const poolId = await deps.poolIds.idFor(b.pool as string);
-    if (poolId === null) {
-      return { status: 400, body: { error: 'unknown pool' } };
-    }
-    await deps.ciphertexts.put(poolId, b.player as string, new Uint8Array(bytes));
-    return { status: 204, body: null };
+    return acceptCiphertext(deps.poolIds, deps.ciphertexts, {
+      pool: b.pool as string,
+      player: b.player as string,
+      ciphertext: new Uint8Array(bytes),
+      signature: typeof b.signature === 'string' ? b.signature : '',
+    });
   }
 
   return { status: 404, body: { error: 'not found' } };

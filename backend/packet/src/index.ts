@@ -7,4 +7,6 @@ export * from './geo-adapters';
 export * from './attestations';
 export * from './notify';
 export * from './pool-ids';
+export * from './ciphertexts';
+export * from './ciphertext-message';
 export * from './signer-turnkey';

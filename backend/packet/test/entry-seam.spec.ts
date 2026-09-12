@@ -21,6 +21,7 @@
  */
 
 import { expect } from 'chai';
+import nacl from 'tweetnacl';
 import { handleEntryRoute, type EntryServerDeps } from '../src/server';
 import { MemoryPoolIdResolver } from '../src/pool-ids';
 import {
@@ -32,6 +33,7 @@ import {
 } from '../../sealing/src';
 import { battlesHash, type BattleSet } from '../../scoring/src';
 import { base58Encode } from '../src/shared';
+import { ciphertextMessage } from '../src/ciphertext-message';
 import { revealEntries } from '../../reveal/src/ranking';
 import type { ChainEntryView } from '../../reveal/src/chain';
 
@@ -41,6 +43,20 @@ const POOL_ID = 12n;
 const POOL_PDA = base58Encode(new Uint8Array(32).fill(4));
 
 const hex = (b: Uint8Array): string => Buffer.from(b).toString('hex');
+
+/** A wallet that can sign: the route proves ownership of the seat before it
+ * accepts an allocation, so the seam test signs the way a browser does. */
+function wallet() {
+  const kp = nacl.sign.keyPair();
+  const address = base58Encode(kp.publicKey);
+  return {
+    address,
+    sign(pool: string, ciphertext: Uint8Array): string {
+      const msg = ciphertextMessage(pool, address, ciphertext);
+      return Buffer.from(nacl.sign.detached(msg, kp.secretKey)).toString('base64');
+    },
+  };
+}
 
 /** A legal allocation: five stats summing to exactly 100, seven battles. */
 function battlesFor(seed: number): BattleSet {
@@ -74,11 +90,7 @@ describe('the entry seam: browser write → HTTP route → crank read', () => {
   it('a ciphertext posted with the pool ADDRESS is found by the crank, which reads by pool ID', async () => {
     const deps = serverDeps();
     const pool = generateKeypair();
-    const players = [
-      base58Encode(new Uint8Array(32).fill(11)),
-      base58Encode(new Uint8Array(32).fill(12)),
-      base58Encode(new Uint8Array(32).fill(13)),
-    ];
+    const players = [wallet(), wallet(), wallet()];
 
     // --- the browser half: seal, then POST exactly what the app POSTs ------
     const chainEntries: ChainEntryView[] = [];
@@ -91,15 +103,16 @@ describe('the entry seam: browser write → HTTP route → crank read', () => {
         '/ciphertexts',
         {
           pool: POOL_PDA, // the address — the only pool identifier a browser has
-          player,
+          player: player.address,
           ciphertext: Buffer.from(sealed).toString('base64'),
+          signature: player.sign(POOL_PDA, sealed),
         },
         'ip'
       );
       expect(res.status, 'the route accepted the sealed allocation').to.equal(204);
 
       chainEntries.push({
-        player,
+        player: player.address,
         index: i,
         battlesHash: hex(battlesHash(payload.battles, payload.salt)),
         flagged: false,
@@ -137,17 +150,19 @@ describe('the entry seam: browser write → HTTP route → crank read', () => {
   it('a pool the service cannot resolve is refused, not written under a guessed key', async () => {
     const deps = serverDeps();
     const pool = generateKeypair();
-    const player = base58Encode(new Uint8Array(32).fill(11));
+    const player = wallet();
     const sealed = seal(encodePayload(payloadFor(0)), pool.publicKey);
+    const unknownPool = base58Encode(new Uint8Array(32).fill(99)); // never registered
 
     const res = await handleEntryRoute(
       deps,
       'POST',
       '/ciphertexts',
       {
-        pool: base58Encode(new Uint8Array(32).fill(99)), // never registered
-        player,
+        pool: unknownPool,
+        player: player.address,
         ciphertext: Buffer.from(sealed).toString('base64'),
+        signature: player.sign(unknownPool, sealed),
       },
       'ip'
     );
