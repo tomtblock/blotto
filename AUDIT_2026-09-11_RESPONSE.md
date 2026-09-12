@@ -141,3 +141,30 @@ real front end, and watch a pool go from open to paid with a verify page that ag
 the first time this system has executed end to end with entry, settlement and payout all working at
 once — and it will either confirm this branch or find the next thing. Then B-07, D-02, D-03 and
 F-02 need their decisions before a mainnet conversation starts.
+
+## Addendum — what CI showed (2026-09-12, 02:52Z)
+
+The PR for this branch (#106) ran the one suite this session could not: `anchor build + litesvm`,
+against a program built from this source. It took three rounds, and each found something.
+
+1. `9689206` — the `node` lane's typecheck rejected a test helper (TS7022) in a spec that had only
+   been run, never typechecked.
+2. `cbb0bec` — the on-chain lane's first run: two fixtures funded the treasury with exactly one pot,
+   and an open now costs the pot plus the cushion. Reading the rest exposed a flaw in the cushion
+   change itself, not just in the fixtures: the treasury policy reserves one pot per idle tier so the
+   next pool can always open, but the reserve counted the pot alone and so fell short by exactly one
+   cushion per pot — the ladder test's exact-threshold property would have failed. `idle_tier_reserve`
+   now counts the cushion: a reserved pot is an openable pot. The withdraw floor shares the function
+   and rises by the same amount, which is the safe direction. Every exact-pot fixture was fixed and
+   the lane runs `--no-fail-fast`, so one cycle shows the whole board.
+3. `4bc8692` — the second run passed every binary, **both dust-attack tests included** (a poisoned
+   vault still pays the winner; still refunds), and failed only the harness-capability probe, which
+   had made the probed account its own fee payer, so the runtime's fee-payer rent check fired before
+   the transfer was judged. A funded bystander pays the fee now, the refusal must be the rent error
+   by name, and both balances are checked afterwards. Green.
+
+So the verification table above changes in one row: the compiled-program suite **ran green in CI**
+on `4bc8692`, 48 tests across twelve binaries. What has not changed: the program is still not
+deployed, and the proptest model in `programs/blotto_cup/tests/vault_model.rs` still moves the pot
+alone (a drift since the cushion commit, marked `PHASE-N-REVIEW` rather than folded into a CI fix).
+The appraisal stands: not yet shippable; now testable — and now tested on a real build.
