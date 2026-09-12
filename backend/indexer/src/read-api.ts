@@ -260,7 +260,7 @@ export async function handleRead(
                 p.state, r.rank
            FROM player_history h
            LEFT JOIN pools p ON p.pool = h.pool
-           LEFT JOIN rankings r ON r.pool = h.pool AND r.seat = h.seat
+           LEFT JOIN rankings r ON r.pool = h.pool AND r.player = h.player
           WHERE h.player = $1
           ORDER BY h.entries_to_date ASC, h.pool ASC`,
         [player]
@@ -366,6 +366,21 @@ async function poolsList(db: Queryable, query: URLSearchParams, now: Now): Promi
  * This is the one place rank labels are served, and the provenance rides
  * along: the bundle URI and the root the rows verified against, so the
  * page can link straight to the published data and the verify story.
+ *
+ * WHAT "VERIFIED" COVERS (2026-09-12, founder ruling D-E8; audit findings
+ * B-07 / D-28 / F-06). The on-chain root commits to `player ‖ rank ‖
+ * amount` and to nothing else. This response used to put the seat, the
+ * battle score and the zone count beside those three under one flat `rows`
+ * array with a single verified label over all of it, which told a reader
+ * the root had checked five things when it had checked three.
+ *
+ * So the shape says which is which, structurally rather than in a comment:
+ * `committed_fields` names what the root covers, the committed values sit
+ * at the top of each row, and everything recomputable-but-uncommitted sits
+ * under `recomputed`. A consumer cannot now read the battle score while
+ * believing the chain vouched for it. `seat` is neither — it comes from
+ * our own projection of `EntryRegistered`, and is null when our ledger has
+ * no entry row for that player.
  */
 async function leaderboard(db: Queryable, pool: string): Promise<ReadApiResult> {
   const bundle = await db.query(
@@ -379,9 +394,9 @@ async function leaderboard(db: Queryable, pool: string): Promise<ReadApiResult> 
     return { status: 404, body: { error: 'no verified archive for this pool' } };
   }
   const rows = await db.query(
-    `SELECT seat, player, rank, score_half, zones, amount_lamports::text AS amount_lamports
+    `SELECT player, rank, amount_lamports::text AS amount_lamports, seat, score_half, zones
        FROM rankings WHERE pool = $1
-      ORDER BY rank ASC, seat ASC`,
+      ORDER BY rank ASC, seat ASC NULLS LAST, player ASC`,
     [pool]
   );
   return {
@@ -391,10 +406,26 @@ async function leaderboard(db: Queryable, pool: string): Promise<ReadApiResult> 
       uri: b.uri,
       results_root: b.results_root,
       verified_at: String(b.verified_at),
-      rows: rows.rows,
+      committed_fields: COMMITTED_FIELDS,
+      rows: rows.rows.map((r: Record<string, unknown>) => ({
+        player: r.player,
+        rank: r.rank,
+        amount_lamports: r.amount_lamports,
+        seat: r.seat === null || r.seat === undefined ? null : Number(r.seat),
+        recomputed: { score_half: r.score_half, zones: r.zones },
+      })),
     },
   };
 }
+
+/**
+ * The field names the on-chain results root actually commits to, served
+ * with every archive response so the claim is machine-readable and not
+ * only prose on a page. Mirrors `ResultsLeaf` in
+ * `backend/scoring/src/merkle.ts`; if that leaf ever grows a field, this
+ * list and the row shape above grow with it.
+ */
+const COMMITTED_FIELDS = ['player', 'rank', 'amount_lamports'] as const;
 
 /**
  * D3: the sealed ciphertexts, seat-keyed and ANONYMISED (no player column),

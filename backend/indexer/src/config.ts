@@ -28,6 +28,7 @@ export const INDEXER_ENV = {
   commitment: 'BLOTTO_INDEXER_COMMITMENT',
   port: 'BLOTTO_INDEXER_PORT',
   readApiPort: 'BLOTTO_READ_API_PORT',
+  irysUploadAddress: 'BLOTTO_IRYS_UPLOAD_ADDRESS',
 } as const;
 
 /** Commitment the indexer ingests at. Default `finalized` — see the README reorg note. */
@@ -41,6 +42,15 @@ export interface IndexerConfig {
   webhookPort: number;
   /** E5: the public read API's port (`serve` runs both servers). */
   readApiPort: number;
+  /**
+   * The address the daemon uploads published bundles from (audit
+   * 2026-09-11, C-25). Only the archive backfill's LAST-RESORT gateway
+   * query uses it, to ask for our own uploads rather than for anything
+   * carrying our tags; unset, that query is skipped rather than widened.
+   * The normal path reads the daemon's own `published_bundles` row and
+   * needs nothing here.
+   */
+  irysUploadAddress: string | null;
 }
 
 function parseCommitment(raw: string): Commitment {
@@ -62,6 +72,7 @@ export function loadIndexerConfig(
     commitment: parseCommitment(optional(env, INDEXER_ENV.commitment, 'finalized')),
     webhookPort: parsePositiveInt(env, INDEXER_ENV.port, 8080),
     readApiPort: parsePositiveInt(env, INDEXER_ENV.readApiPort, 8081),
+    irysUploadAddress: optional(env, INDEXER_ENV.irysUploadAddress, '').trim() || null,
   };
 }
 

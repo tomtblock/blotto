@@ -68,6 +68,9 @@ export const FIXTURE_API: IndexerApi = {
   async getLeaderboard(pool) {
     // E3: only scenarios whose bundle "verified" carry one — the read API's
     // fail-closed 404 renders as the archive section simply not appearing.
+    // D-E8: "verified" covers the committed leaf (player, rank, amount) and
+    // nothing more; the scenario rows carry `committed_fields` and their
+    // recomputed scores exactly as the read API serves them.
     return SCENARIO_BY_POOL.get(pool)?.leaderboard ?? null;
   },
 };

@@ -19,6 +19,7 @@ import { ALERT, METRIC, serveMetricsIfPrometheus, type Monitor } from './shared'
 import type { Queryable } from './shared';
 import type { EventStore } from './store';
 import { ingestTransaction, type IngestStats, type TxContext } from './ingest';
+import type { AtomicDb } from './atomic';
 import { ingestBundle } from './archive';
 
 export interface WebhookDeps {
@@ -35,7 +36,7 @@ export interface WebhookDeps {
    * bundle-URI announce). Optional — a deployment without it 404s the
    * path and the archive fills by backfill alone.
    */
-  archiveDb?: Queryable;
+  archiveDb?: AtomicDb;
   /** Injectable fetch for the announce path's bundle download (tests). */
   fetchImpl?: typeof fetch;
 }

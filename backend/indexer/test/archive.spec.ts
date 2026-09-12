@@ -12,6 +12,20 @@
  *     the shared secret, resolves pool id → address from the projection,
  *     and alerts loudly on a root mismatch.
  *
+ * Since 2026-09-12 (founder ruling D-E8; audit B-07 / D-28 / F-06 / B-20 /
+ * F-05 / C-25) four more:
+ *
+ *   - a row's SEAT comes from our own entry projection, never from the
+ *     uploaded file, and is null when our ledger has no entry for that
+ *     player — the prize still verifies;
+ *   - the write is ONE unit with the vouching flag last, so a failure
+ *     part-way leaves the previous verified answer whole rather than an
+ *     empty leaderboard still flagged verified;
+ *   - a bundle naming one player twice is refused;
+ *   - discovery reads the daemon's own record of what it published, and
+ *     asks the gateway only for OUR uploads — never for anything wearing
+ *     our tags.
+ *
  * The bundles here are REAL in the only sense that matters: their roots
  * are computed by the same leafBytes/merkleRoot the crank commits with,
  * so a passing spec exercises the identical byte layout end to end.
@@ -20,7 +34,14 @@ import { expect } from 'chai';
 import { leafBytes, merkleRoot } from '../../scoring/src/merkle';
 import { base58Encode, base58Decode } from '../src/shared';
 import type { Queryable } from '../src/shared';
-import { backfillArchive, ingestBundle, recomputeRoot, type BundleResultRow } from '../src/archive';
+import {
+  backfillArchive,
+  discoverBundleUri,
+  ingestBundle,
+  recomputeRoot,
+  type BundleResultRow,
+} from '../src/archive';
+import type { AtomicDb } from '../src/atomic';
 import { handleBundleAnnounce, type WebhookDeps } from '../src/webhook';
 import { handleRead } from '../src/read-api';
 import { ALERT, SILENT_MONITOR, type Monitor } from '../src/shared';
@@ -64,10 +85,42 @@ function rootOf(results: readonly BundleResultRow[]): string {
  * The in-memory database: just enough SQL understanding for archive.ts and
  * the leaderboard/pools reads — dispatch on statement shape, state in Maps.
  */
-class MemDb implements Queryable {
+class MemDb implements AtomicDb {
   pools = new Map<string, { pool: string; id: string; state: string; results_root: string | null }>();
   bundles = new Map<string, { pool: string; uri: string; results_root: string; root_matches: boolean }>();
-  rankings = new Map<string, Record<string, unknown>>(); // key `${pool}:${seat}`
+  rankings = new Map<string, Record<string, unknown>>(); // key `${pool}:${player}`
+  /** Our own projection of EntryRegistered: `${pool}:${player}` → seat. */
+  entries = new Map<string, number>();
+  /** The daemon's record of what it published: pool id → uri. */
+  publishedBundles = new Map<string, string>();
+  /** Every statement this double has seen, in order — BEGIN/COMMIT too. */
+  log: string[] = [];
+  /** Set to make the Nth statement inside a group throw (rollback test). */
+  failOnStatement: { sql: RegExp; times: number } | null = null;
+
+  /**
+   * Group writes the way `withTransaction` does: everything inside lands or
+   * nothing does. The double keeps a snapshot and restores it on a throw,
+   * which is exactly the property the real BEGIN/ROLLBACK buys and the only
+   * one these specs can observe offline.
+   */
+  async atomically<T>(fn: (q: Queryable) => Promise<T>): Promise<T> {
+    const snapshot = {
+      bundles: new Map(this.bundles),
+      rankings: new Map(this.rankings),
+    };
+    this.log.push('BEGIN');
+    try {
+      const out = await fn(this);
+      this.log.push('COMMIT');
+      return out;
+    } catch (e) {
+      this.bundles = snapshot.bundles;
+      this.rankings = snapshot.rankings;
+      this.log.push('ROLLBACK');
+      throw e;
+    }
+  }
 
   // Queryable's return is pg's full QueryResult; the archive only ever
   // reads `rows`, so the double is narrowed with the same `as never`
@@ -78,6 +131,22 @@ class MemDb implements Queryable {
 
   private async run(sql: string, params: readonly unknown[]): Promise<{ rows: any[] }> {
     const s = sql.replace(/\s+/g, ' ').trim();
+    this.log.push(s);
+    if (this.failOnStatement && this.failOnStatement.sql.test(s)) {
+      if (this.failOnStatement.times-- > 0) {
+        throw new Error('MemDb: injected failure');
+      }
+    }
+    if (s.startsWith('SELECT player, idx FROM entries')) {
+      const rows = [...this.entries.entries()]
+        .filter(([k]) => k.startsWith(`${params[0]}:`))
+        .map(([k, idx]) => ({ player: k.slice(String(params[0]).length + 1), idx }));
+      return { rows };
+    }
+    if (s.startsWith('SELECT uri FROM published_bundles')) {
+      const uri = this.publishedBundles.get(String(params[0]));
+      return { rows: uri ? [{ uri }] : [] };
+    }
     if (s.startsWith('SELECT results_root FROM pools')) {
       const p = this.pools.get(params[0] as string);
       return { rows: p ? [{ results_root: p.results_root }] : [] };
@@ -109,8 +178,8 @@ class MemDb implements Queryable {
       return { rows: [] };
     }
     if (s.startsWith('INSERT INTO rankings')) {
-      const [pool, seat, player, rank, score_half, zones, amount_lamports] = params;
-      this.rankings.set(`${pool}:${seat}`, {
+      const [pool, player, seat, rank, score_half, zones, amount_lamports] = params;
+      this.rankings.set(`${pool}:${player}`, {
         seat, player, rank, score_half, zones, amount_lamports,
       });
       return { rows: [] };
@@ -119,11 +188,16 @@ class MemDb implements Queryable {
       const b = this.bundles.get(params[0] as string);
       return { rows: b ? [{ ...b, verified_at: '2026-09-06T00:00:00Z' }] : [] };
     }
-    if (s.startsWith('SELECT seat, player, rank, score_half, zones, amount_lamports')) {
+    if (s.startsWith('SELECT player, rank, amount_lamports::text AS amount_lamports, seat')) {
       const rows: any[] = [...this.rankings.entries()]
         .filter(([k]) => k.startsWith(`${params[0]}:`))
         .map(([, v]) => ({ ...v, amount_lamports: String(v.amount_lamports) }));
-      rows.sort((a, b) => a.rank - b.rank || a.seat - b.seat);
+      rows.sort(
+        (a, b) =>
+          a.rank - b.rank ||
+          (a.seat ?? Number.MAX_SAFE_INTEGER) - (b.seat ?? Number.MAX_SAFE_INTEGER) ||
+          String(a.player).localeCompare(String(b.player))
+      );
       return { rows };
     }
     throw new Error(`MemDb: unhandled SQL: ${s}`);
@@ -141,11 +215,17 @@ function fakeFetch(byUri: Record<string, unknown>): typeof fetch {
   }) as typeof fetch;
 }
 
+/** Our own projection of EntryRegistered for the fixture field. */
+function seatFixtures(db: MemDb, pool = POOL): void {
+  for (const seat of [0, 1, 2]) db.entries.set(`${pool}:${playerB58(seat)}`, seat);
+}
+
 describe('the archive ingest (E3)', () => {
   it('persists a bundle that recomputes to the on-chain root, idempotently', async () => {
     const results = makeResults();
     const db = new MemDb();
     db.pools.set(POOL, { pool: POOL, id: '1', state: 'Paid', results_root: rootOf(results) });
+    seatFixtures(db);
     const f = fakeFetch({ 'https://gw/bundle1': { pool_id: '1', results } });
 
     const out = await ingestBundle(db, POOL, 'https://gw/bundle1', f);
@@ -164,6 +244,7 @@ describe('the archive ingest (E3)', () => {
     const results = makeResults();
     const db = new MemDb();
     db.pools.set(POOL, { pool: POOL, id: '1', state: 'Paid', results_root: rootOf(results) });
+    seatFixtures(db);
 
     // First a good ingest, so there is something served to lose.
     await ingestBundle(db, POOL, 'https://gw/good', fakeFetch({ 'https://gw/good': { results } }));
@@ -215,11 +296,126 @@ describe('the archive ingest (E3)', () => {
   });
 });
 
+/*
+ * The properties founder ruling D-E8 turns on (audit B-07 / D-28 / F-06),
+ * plus the two write-ordering defects it sits beside (B-20 / F-05).
+ */
+describe('what the archive presents as verified (D-E8)', () => {
+  it('takes the seat from our own entry projection, never from the uploaded file', async () => {
+    const results = makeResults();
+    const db = new MemDb();
+    db.pools.set(POOL, { pool: POOL, id: '1', state: 'Paid', results_root: rootOf(results) });
+    // Our ledger says the rank-1 player sat in seat 5. The bundle claims 2.
+    // The root commits to neither, so the file's claim carries no weight.
+    db.entries.set(`${POOL}:${playerB58(2)}`, 5);
+    db.entries.set(`${POOL}:${playerB58(0)}`, 0);
+    db.entries.set(`${POOL}:${playerB58(1)}`, 1);
+
+    const out = await ingestBundle(db, POOL, 'https://gw/b', fakeFetch({ 'https://gw/b': { results } }));
+    expect(out.ok).to.equal(true);
+    expect(out.seatsUnresolved).to.equal(0);
+
+    const body = (await handleRead(db, `/pools/${POOL}/leaderboard`)).body as {
+      rows: Array<{ seat: number | null; rank: number }>;
+    };
+    expect(body.rows[0].rank).to.equal(1);
+    expect(body.rows[0].seat).to.equal(5, "our record of the chain, not the bundle's index");
+  });
+
+  it('still serves a verified prize when our ledger has no entry for that player', async () => {
+    const results = makeResults();
+    const db = new MemDb();
+    db.pools.set(POOL, { pool: POOL, id: '1', state: 'Paid', results_root: rootOf(results) });
+    // Only two of the three entries reached us — a dropped delivery.
+    db.entries.set(`${POOL}:${playerB58(0)}`, 0);
+    db.entries.set(`${POOL}:${playerB58(1)}`, 1);
+
+    const out = await ingestBundle(db, POOL, 'https://gw/b', fakeFetch({ 'https://gw/b': { results } }));
+    expect(out.ok).to.equal(true);
+    expect(out.rows).to.equal(3, 'the prize verified; only our seat record is short');
+    expect(out.seatsUnresolved).to.equal(1, 'counted, so a missed delivery is visible');
+
+    const body = (await handleRead(db, `/pools/${POOL}/leaderboard`)).body as {
+      rows: Array<{ seat: number | null; player: string; rank: number }>;
+    };
+    expect(body.rows).to.have.length(3);
+    const winner = body.rows.find((r) => r.rank === 1);
+    expect(winner?.player).to.equal(playerB58(2));
+    expect(winner?.seat).to.equal(null, 'unknown is null, never a guess');
+  });
+
+  it('refuses a bundle that names one player twice, even if the root matches it', async () => {
+    // A list the tree is perfectly happy to commit to: the same wallet at
+    // two ranks. Under a seat key both rows were stored and both served.
+    const doubled: BundleResultRow[] = [
+      { index: 0, player: playerB58(0), score_half: 20, zones: 5, rank: 1, amount_lamports: '4000000000' },
+      { index: 1, player: playerB58(0), score_half: 4, zones: 1, rank: 2, amount_lamports: '0' },
+    ];
+    const db = new MemDb();
+    db.pools.set(POOL, { pool: POOL, id: '1', state: 'Paid', results_root: rootOf(doubled) });
+    db.entries.set(`${POOL}:${playerB58(0)}`, 0);
+
+    const out = await ingestBundle(db, POOL, 'https://gw/b', fakeFetch({ 'https://gw/b': { results: doubled } }));
+    expect(out.ok).to.equal(false);
+    expect(out.reason).to.match(/names a player twice/);
+    expect(db.bundles.size).to.equal(0, 'refused before anything is recorded');
+    expect(db.rankings.size).to.equal(0);
+  });
+});
+
+/*
+ * B-20 / F-05: the write used to be four independent autocommits with the
+ * vouching flag FIRST. A crash after the wholesale delete left an empty
+ * leaderboard still flagged verified, and any reader between the flag and
+ * the last insert saw a truncated field presented as the whole result.
+ */
+describe('the archive write lands as one unit (B-20 / F-05)', () => {
+  it('keeps the previous verified answer whole when a write fails part-way', async () => {
+    const results = makeResults();
+    const db = new MemDb();
+    db.pools.set(POOL, { pool: POOL, id: '1', state: 'Paid', results_root: rootOf(results) });
+    seatFixtures(db);
+    await ingestBundle(db, POOL, 'https://gw/good', fakeFetch({ 'https://gw/good': { results } }));
+    expect(db.rankings.size).to.equal(3);
+    const before = db.bundles.get(POOL)?.uri;
+
+    // The same bundle again, with the second ranking insert failing.
+    db.failOnStatement = { sql: /^INSERT INTO rankings/, times: 2 };
+    let threw = false;
+    try {
+      await ingestBundle(db, POOL, 'https://gw/good2', fakeFetch({ 'https://gw/good2': { results } }));
+    } catch {
+      threw = true;
+    }
+    expect(threw).to.equal(true, 'the failure surfaces rather than being swallowed');
+    expect(db.log).to.contain('ROLLBACK');
+    expect(db.rankings.size).to.equal(3, 'not an empty leaderboard still flagged verified');
+    expect(db.bundles.get(POOL)?.uri).to.equal(before, 'yesterday\'s answer, untouched');
+  });
+
+  it('writes the vouching flag after the rows it vouches for, inside one group', async () => {
+    const results = makeResults();
+    const db = new MemDb();
+    db.pools.set(POOL, { pool: POOL, id: '1', state: 'Paid', results_root: rootOf(results) });
+    seatFixtures(db);
+    await ingestBundle(db, POOL, 'https://gw/b', fakeFetch({ 'https://gw/b': { results } }));
+
+    const begin = db.log.lastIndexOf('BEGIN');
+    const commit = db.log.lastIndexOf('COMMIT');
+    const lastRow = db.log.map((l) => l.startsWith('INSERT INTO rankings')).lastIndexOf(true);
+    const flag = db.log.map((l) => l.startsWith('INSERT INTO bundles')).lastIndexOf(true);
+    expect(begin).to.be.lessThan(lastRow);
+    expect(lastRow).to.be.lessThan(flag, 'root_matches is never visible before its rows');
+    expect(flag).to.be.lessThan(commit, 'and all of it lands together');
+  });
+});
+
 describe('the archive read path (E3)', () => {
   it('serves the leaderboard only for a verified pool, 404 otherwise', async () => {
     const results = makeResults();
     const db = new MemDb();
     db.pools.set(POOL, { pool: POOL, id: '1', state: 'Paid', results_root: rootOf(results) });
+    seatFixtures(db);
 
     // Nothing ingested yet → 404, indistinguishable from "no archive".
     expect((await handleRead(db, `/pools/${POOL}/leaderboard`)).status).to.equal(404);
@@ -227,11 +423,25 @@ describe('the archive read path (E3)', () => {
     await ingestBundle(db, POOL, 'https://gw/b', fakeFetch({ 'https://gw/b': { results } }));
     const ok = await handleRead(db, `/pools/${POOL}/leaderboard`);
     expect(ok.status).to.equal(200);
-    const body = ok.body as { uri: string; results_root: string; rows: Array<Record<string, unknown>> };
+    const body = ok.body as {
+      uri: string;
+      results_root: string;
+      committed_fields: string[];
+      rows: Array<Record<string, any>>;
+    };
     expect(body.uri).to.equal('https://gw/b');
     expect(body.results_root).to.equal(rootOf(results));
     expect(body.rows.map((r) => r.rank)).to.deep.equal([1, 2, 3], 'rank order');
     expect(body.rows[0].amount_lamports).to.equal('4000000000');
+
+    // D-E8: the response says what the root covers, and puts everything it
+    // does not cover somewhere a reader cannot mistake for covered.
+    expect(body.committed_fields).to.deep.equal(['player', 'rank', 'amount_lamports']);
+    expect(body.rows[0]).to.have.property('recomputed');
+    expect(body.rows[0].recomputed).to.deep.equal({ score_half: 20, zones: 5 });
+    expect(body.rows[0]).to.not.have.property('score_half', 'uncommitted fields never sit at row level');
+    expect(body.rows[0]).to.not.have.property('zones');
+    expect(body.rows[0].seat).to.equal(2, 'from our own entry projection');
 
     // A later mismatch takes it straight back to 404 (fail-closed).
     const tampered = makeResults();
@@ -244,12 +454,20 @@ describe('the archive read path (E3)', () => {
 describe('the archive backfill (E3 §4.4)', () => {
   const POOL2 = 'F1XTUREPoo2222222222222222222222222222222222';
 
+  const UPLOADER = 'B1ottoUp1oadWa11et11111111111111111111111111';
+
   /** Fetch that answers BOTH the Irys GraphQL discovery and the gateway GETs. */
-  function backfillFetch(txByPool: Record<string, string>, bodyByUri: Record<string, unknown>): typeof fetch {
+  function backfillFetch(
+    txByPool: Record<string, string>,
+    bodyByUri: Record<string, unknown>,
+    seen: { owners: string[] } = { owners: [] }
+  ): typeof fetch {
     return (async (input: any, init?: any) => {
       const uri = String(input);
       if (uri.endsWith('/graphql')) {
         const q = String(JSON.parse(String(init.body)).query);
+        const owner = /owners: \["([^"]+)"\]/.exec(q)?.[1];
+        if (owner) seen.owners.push(owner);
         const poolId = /Blotto-Pool", values: \["(\d+)"\]/.exec(q)?.[1] ?? '';
         const id = txByPool[poolId];
         return {
@@ -283,21 +501,98 @@ describe('the archive backfill (E3 §4.4)', () => {
       }
     );
     const quiet = () => undefined;
-    const first = await backfillArchive(db, f, quiet);
-    expect(first).to.deep.equal({ attempted: 2, verified: 2, failed: 0 });
+    const opts = { uploaderAddress: UPLOADER };
+    const first = await backfillArchive(db, f, quiet, opts);
+    expect(first).to.deep.equal({ attempted: 2, verified: 2, failed: 0, seatsUnresolved: 6 });
     expect(db.rankings.size).to.equal(6);
 
-    const second = await backfillArchive(db, f, quiet);
-    expect(second).to.deep.equal({ attempted: 2, verified: 2, failed: 0 });
+    const second = await backfillArchive(db, f, quiet, opts);
+    expect(second).to.deep.equal({ attempted: 2, verified: 2, failed: 0, seatsUnresolved: 6 });
     expect(db.rankings.size).to.equal(6, 'run twice, same rows');
 
     // Drop pool 2's transaction from discovery: counted, not fatal.
     const partial = await backfillArchive(
       db,
       backfillFetch({ '1': 'tx1' }, { 'https://gateway.irys.xyz/tx1': { results: r1 } }),
-      quiet
+      quiet,
+      opts
     );
-    expect(partial).to.deep.equal({ attempted: 2, verified: 1, failed: 1 });
+    expect(partial.attempted).to.equal(2);
+    expect(partial.verified).to.equal(1);
+    expect(partial.failed).to.equal(1);
+  });
+
+  it('prefers the daemon\'s own record of what it published over any gateway query', async () => {
+    const r1 = makeResults();
+    const db = new MemDb();
+    db.pools.set(POOL, { pool: POOL, id: '1', state: 'Paid', results_root: rootOf(r1) });
+    seatFixtures(db);
+    db.publishedBundles.set('1', 'https://gateway.irys.xyz/ourOwnUpload');
+
+    // The gateway would answer with a DIFFERENT transaction. It must not be
+    // asked at all: our own record of the upload is the better authority and
+    // involves no third party.
+    const seen = { owners: [] as string[] };
+    const f = backfillFetch(
+      { '1': 'someStrangersTx' },
+      { 'https://gateway.irys.xyz/ourOwnUpload': { results: r1 } },
+      seen
+    );
+    const out = await backfillArchive(db, f, () => undefined, { uploaderAddress: UPLOADER });
+    expect(out.verified).to.equal(1);
+    expect(seen.owners).to.deep.equal([], 'the gateway was never queried');
+    expect(db.bundles.get(POOL)?.uri).to.equal('https://gateway.irys.xyz/ourOwnUpload');
+  });
+});
+
+/*
+ * C-25: discovery used to ask the gateway for anything wearing our two tags
+ * and take the newest answer, so any address could upload a same-tagged
+ * object and win the query. The root check behind it would still have
+ * refused the contents — this is the layer that stops us fetching a
+ * stranger's object at all.
+ */
+describe('bundle discovery (C-25)', () => {
+  const UPLOADER = 'B1ottoUp1oadWa11et11111111111111111111111111';
+
+  function graphqlFetch(seen: { queries: string[] }): typeof fetch {
+    return (async (_input: any, init?: any) => {
+      seen.queries.push(String(JSON.parse(String(init.body)).query));
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ data: { transactions: { edges: [{ node: { id: 'txFound' } }] } } }),
+      } as Response;
+    }) as typeof fetch;
+  }
+
+  it('asks the gateway only for OUR uploads', async () => {
+    const db = new MemDb();
+    const seen = { queries: [] as string[] };
+    const uri = await discoverBundleUri(db, '7', graphqlFetch(seen), { uploaderAddress: UPLOADER });
+    expect(uri).to.equal('https://gateway.irys.xyz/txFound');
+    expect(seen.queries).to.have.length(1);
+    expect(seen.queries[0]).to.contain(`owners: ["${UPLOADER}"]`);
+    expect(seen.queries[0]).to.contain('"Blotto-Pool", values: ["7"]');
+  });
+
+  it('does not query the gateway at all when our upload address is unknown', async () => {
+    const db = new MemDb();
+    const seen = { queries: [] as string[] };
+    const lines: string[] = [];
+    const uri = await discoverBundleUri(db, '7', graphqlFetch(seen), { log: (l) => lines.push(l) });
+    expect(uri).to.equal(null, 'unfiltered is not a fallback — it is the hole');
+    expect(seen.queries).to.deep.equal([]);
+    expect(lines.join(' ')).to.contain('BLOTTO_IRYS_UPLOAD_ADDRESS');
+  });
+
+  it('returns the recorded URI without a network call when we have one', async () => {
+    const db = new MemDb();
+    db.publishedBundles.set('7', 'https://gateway.irys.xyz/recorded');
+    const seen = { queries: [] as string[] };
+    const uri = await discoverBundleUri(db, '7', graphqlFetch(seen), { uploaderAddress: UPLOADER });
+    expect(uri).to.equal('https://gateway.irys.xyz/recorded');
+    expect(seen.queries).to.deep.equal([]);
   });
 });
 
