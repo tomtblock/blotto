@@ -257,8 +257,8 @@ pub struct Pool {
     /// §2.3): shrinking it would move every offset the LiteSVM and web3
     /// readers hard-code, force an account migration, and foreclose a
     /// return to a multi-place table — 630 bytes of rent is the price of
-    /// reversibility. On the wire: 2 + 64×10 = 642 bytes of an 839-byte
-    /// `Pool::LEN` (847 with the discriminator) — far under the 10 KiB
+    /// reversibility. On the wire: 2 + 64×10 = 642 bytes of an 841-byte
+    /// `Pool::LEN` (849 with the discriminator) — far under the 10 KiB
     /// companion-PDA threshold.
     pub payouts_len: u16,
     pub payouts: [Payout; CAPACITY as usize],
@@ -273,6 +273,24 @@ pub struct Pool {
     pub timer_seconds: u8,
     pub bump: u8,
     pub vault_bump: u8,
+    /// The minimum field this pool plays at, copied from `Config` at open
+    /// (R7-b, founder instruction 2026-09-12). Below it the pool refunds in
+    /// full; at or above it, past the deadline, it seals and plays.
+    ///
+    /// APPENDED, and per-pool, for the same reason `fill_deadline` and
+    /// `timer_seconds` are: a published value must not change under a player
+    /// who already entered. Until 2026-09-13 this was the compile-time
+    /// `MIN_SEATS` alone, which looked safe — a constant cannot change
+    /// without a program upgrade — but the upgrade drain gate is
+    /// `{Sealed, Scored, Refunding}` (`scripts/admin.ts`) and does NOT
+    /// include `Open`. So an upgrade could land while a pool was taking
+    /// entries and move its floor underneath the people already seated. It
+    /// now cannot: `seal_at_deadline` and `trigger_refund` read this field,
+    /// and nothing rewrites it after open.
+    ///
+    /// Pools opened before the field existed are given 52 by `migrate_pool`
+    /// — the number their players actually entered under.
+    pub min_seats: u16,
 }
 
 impl Pool {
@@ -296,8 +314,15 @@ impl Pool {
         + 8 // paid_mask
         + 2 // refunded_count
         + 1 // timer_seconds
-        + 1 + 1; // bumps
+        + 1 + 1 // bumps
+        + 2; // min_seats (R7-b, appended 2026-09-12)
     pub const SPACE: usize = 8 + Self::LEN;
+
+    /// The layout before R7-b appended `min_seats` (2026-09-13). Pools
+    /// allocated at this size exist on devnet and `migrate_pool` grows them;
+    /// like `Config::LEN_V1` this is history and must never change.
+    pub const LEN_V1: usize = Self::LEN - 2;
+    pub const SPACE_V1: usize = 8 + Self::LEN_V1;
 }
 
 // ---------------------------------------------------------------------------
@@ -514,6 +539,7 @@ mod tests {
             timer_seconds: 15,
             bump: 255,
             vault_bump: 254,
+            min_seats: 40,
         };
         let mut buf = Vec::new();
         p.serialize(&mut buf).unwrap();
@@ -529,14 +555,22 @@ mod tests {
     /// exit). The rule since the 2026-09-07 upgrade: new fields are APPENDED
     /// after `bump`, the readers learn the tail, and an account that must
     /// grow gets a migration instruction in the same upgrade
-    /// (`migrate_config`). `Pool::LEN` is 839 — not the 834 the proposal and
-    /// prompt v2 repeat (that number is `paid_mask`'s byte offset, D1/D14;
-    /// the founder's note against it is in the decision register). These
-    /// pins turn a layout change into a deliberate, reviewed act.
+    /// (`migrate_config`). `Pool::LEN` was 839 until 2026-09-13 and is now
+    /// 841: R7-b appended `min_seats: u16` after `vault_bump`, and
+    /// `migrate_pool` grows the nine pools that predate it. 839 is also not
+    /// the 834 the proposal and prompt v2 repeat (that number is
+    /// `paid_mask`'s byte offset, D1/D14; the founder's note against it is in
+    /// the decision register). These pins turn a layout change into a
+    /// deliberate, reviewed act.
+    ///
+    /// Note what did NOT move: every offset the three external readers
+    /// hard-code — `entrants` at 33, `fill_deadline` at 43, `state` at 51 —
+    /// sits ahead of the appended field and is unchanged. That is the whole
+    /// point of appending.
     #[test]
     fn account_layouts_are_pinned() {
-        assert_eq!(Pool::LEN, 839, "Pool layout changed — read the note above");
-        assert_eq!(Pool::SPACE, 847);
+        assert_eq!(Pool::LEN, 841, "Pool layout changed — read the note above");
+        assert_eq!(Pool::SPACE, 849);
         assert_eq!(
             Config::LEN_V1,
             372,

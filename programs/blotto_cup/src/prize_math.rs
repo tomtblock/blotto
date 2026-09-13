@@ -123,33 +123,49 @@ mod tests {
     /// For every configured tier: the pot constant divides by 1024 with zero
     /// remainder (invariant kept under D-E2 — constants.rs) and the paid
     /// places sum to the pot exactly — no residue, nothing stranded in the
-    /// vault. Pins the founder's stated derivation (pot = 62.5% of price ×
-    /// 64, D-E1) WITHOUT the program ever computing it, and D-E4 §11.1's
-    /// break-even: the minimum field must more than cover the pot at every
-    /// tier, or a pool that plays at the floor loses money. At `price × 40`
-    /// break-even is 40 seats; `MIN_SEATS = 52` carries a 12-seat buffer.
+    /// vault.
+    ///
+    /// It also pins the pot's published relationship WITHOUT the program
+    /// ever computing one: since R7-b (founder instruction 2026-09-12) that
+    /// relationship is `pot == MIN_SEATS × price`, which at `MIN_SEATS = 40`
+    /// is the same figure the D-E1 derivation gave (62.5% of price × 64).
+    /// The pots did not move; what moved is the minimum field, from 52 down
+    /// onto the break-even point itself.
     #[test]
     fn every_tier_pot_divides_exactly_with_zero_residual() {
         for (t, &pot) in TIER_POT_LAMPORTS.iter().enumerate() {
             assert_eq!(pot % 1024, 0, "tier {t} pot not a multiple of 1024");
             let paid: u64 = (1..=PAID_RANKS as u8).map(|r| band_amount(pot, r)).sum();
             assert_eq!(paid, pot, "prizes must sum to the pot exactly");
-            // The initial constants' published relationship (D-E1).
+            // THE PUBLISHED RELATIONSHIP, since R7-b (founder instruction
+            // 2026-09-12): the pot is exactly the minimum field's intake.
+            //
+            // This replaces the D-E1 derivation assert (`pot == price / 8 * 5
+            // * 64`, 62.5% of a full field), which the instruction asked to
+            // delete. The two agree at these constants — 62.5% of 64 IS 40 —
+            // so nothing about the pots changed; what changed is which
+            // relationship the program pins, and this is the one the fill
+            // rule depends on. The pot stays a table entry; nothing here
+            // computes it at runtime.
             assert_eq!(
                 pot,
-                TIER_ENTRY_LAMPORTS[t] / 8 * 5 * 64,
-                "tier {t}: initial pot must be 62.5% of price × 64 (D-E1)"
+                MIN_SEATS as u64 * TIER_ENTRY_LAMPORTS[t],
+                "tier {t}: pot must equal MIN_SEATS × price (R7-b)"
             );
-            // D-E4 §11.1: the minimum field clears break-even — the same
-            // comparison `set_tier_economics` enforces on the live values.
+            // The same comparison `set_tier_economics` enforces on the live
+            // values. `<=` since R7-b: the minimum field must COVER the pot,
+            // and at exactly 40 seats it covers it exactly — break-even,
+            // accepted by the founder's ruling of 2026-09-13 on the ground
+            // that the pot is pre-funded from the treasury. A pot LARGER
+            // than the floor's intake is still refused.
             assert!(
-                pot < MIN_SEATS as u64 * TIER_ENTRY_LAMPORTS[t],
-                "tier {t}: MIN_SEATS × price must exceed the pot"
+                pot <= MIN_SEATS as u64 * TIER_ENTRY_LAMPORTS[t],
+                "tier {t}: MIN_SEATS × price must cover the pot"
             );
             assert_eq!(
                 pot / TIER_ENTRY_LAMPORTS[t],
-                40,
-                "tier {t}: break-even is 40 seats at the D-E1 pots"
+                MIN_SEATS as u64,
+                "tier {t}: the pot is exactly the minimum field's intake"
             );
         }
     }

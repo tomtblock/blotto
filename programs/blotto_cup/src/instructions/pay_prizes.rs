@@ -41,6 +41,7 @@
 
 use anchor_lang::prelude::*;
 
+use crate::constants::CAPACITY;
 use crate::error::ErrorCode;
 use crate::events::{PayoutRecord, PrizesPaid};
 use crate::state::{Config, Entry, Pool, PoolState, CONFIG_SEED, POOL_SEED, VAULT_SEED};
@@ -107,7 +108,12 @@ pub fn handle_pay_prizes<'info>(
             .map_err(|_| ErrorCode::SeatNotInPayouts)?;
         let amount = ctx.accounts.pool.payouts[committed].amount;
 
-        require!(seat < 64, ErrorCode::InvalidRank);
+        // `CAPACITY`, not a literal 64 (§4.2's audit of the partial-fill
+        // paths). The two are equal and this guard is really about
+        // `paid_mask` being a u64 — shifting by 64 or more is undefined —
+        // but a bare 64 beside a capacity that lives in a constant is how
+        // the two drift apart unnoticed.
+        require!(seat < CAPACITY, ErrorCode::InvalidRank);
         let bit: u64 = 1u64 << seat;
         require!(
             ctx.accounts.pool.paid_mask & bit == 0,

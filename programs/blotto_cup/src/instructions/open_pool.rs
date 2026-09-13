@@ -40,7 +40,7 @@
 
 use anchor_lang::prelude::*;
 
-use crate::constants::{CAPACITY, LAUNCH_CLASS_COUNTERS, TIMER_SECONDS};
+use crate::constants::{CAPACITY, LAUNCH_CLASS_COUNTERS, MIN_SEATS, TIMER_SECONDS};
 use crate::error::ErrorCode;
 use crate::events::PoolOpened;
 use crate::instructions::treasury::idle_tier_reserve;
@@ -205,6 +205,13 @@ pub fn handle_open_pool(
     pool.refunded_count = 0;
     // R9: recorded per pool so the value players entered under is on-chain.
     pool.timer_seconds = TIMER_SECONDS;
+    // R7-b (founder instruction 2026-09-12): the same rule for the minimum
+    // field. `seal_at_deadline` and `trigger_refund` read THIS, never the
+    // constant, so a program upgrade that moves `MIN_SEATS` cannot change
+    // the floor under a pool that is already taking entries — and the
+    // upgrade drain gate does not hold for `Open` pools, so that is a real
+    // sequence rather than a theoretical one (see `state.rs`).
+    pool.min_seats = MIN_SEATS;
     pool.bump = ctx.bumps.pool;
     pool.vault_bump = ctx.bumps.vault;
 

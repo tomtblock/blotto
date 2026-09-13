@@ -22,8 +22,9 @@
 
 use anchor_lang::prelude::*;
 
-use crate::constants::{CAPACITY, MIN_SEATS};
+use crate::constants::CAPACITY;
 use crate::error::ErrorCode;
+use crate::events::SealReason;
 use crate::instructions::register::seal_pool;
 use crate::state::{Config, Pool, PoolState, CONFIG_SEED, POOL_SEED};
 
@@ -57,11 +58,22 @@ pub fn handle_seal_at_deadline(ctx: Context<SealAtDeadline>, _pool_id: u64) -> R
     // complement of `register`'s `now <= fill_deadline`: no instant where a
     // pool can both take an entry and be sealed.
     require!(now > pool.fill_deadline, ErrorCode::DeadlineNotPassed);
-    require!(pool.entrants >= MIN_SEATS, ErrorCode::FieldBelowMinimum);
+    // The pool's OWN floor, copied at open (R7-b) — never the constant, so
+    // an upgrade that moves `MIN_SEATS` cannot reach a pool already taking
+    // entries.
+    require!(
+        pool.entrants >= pool.min_seats,
+        ErrorCode::FieldBelowMinimum
+    );
     // A full pool sealed itself at the 64th `register`; it is never Open.
     // Defense in depth, like `trigger_refund`'s mirror-image check was.
     require!(pool.entrants < CAPACITY, ErrorCode::PoolFull);
 
     let pool_key = pool.key();
-    seal_pool(pool, &mut ctx.accounts.config, pool_key)
+    seal_pool(
+        pool,
+        &mut ctx.accounts.config,
+        pool_key,
+        SealReason::DeadlineMinFill,
+    )
 }

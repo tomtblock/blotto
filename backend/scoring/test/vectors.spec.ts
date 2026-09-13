@@ -166,8 +166,12 @@ describe('split-pot cases (D3-B, through the same assignPrizes)', () => {
   });
 });
 
-describe('minimum-field pool vectors (D-E4)', () => {
-  for (const n of [52, 58]) {
+describe('minimum-field pool vectors', () => {
+  // The generator builds one at MIN_SEATS and one at 58. The first moved
+  // from 52 to 40 with R7-b (founder instruction 2026-09-12), so it is read
+  // from the mirror rather than repeated here — repeating it is how the
+  // LiteSVM harness ended up asserting the old rule against the new program.
+  for (const n of [Number(require('../src').MIN_SEATS), 58]) {
     it(`field_${n}: ${n} leaves, one winner, the whole pot`, () => {
       const pool = vectors.pools.find((x: any) => x.name === `field_${n}`);
       expect(pool, `field_${n} present`).to.exist;

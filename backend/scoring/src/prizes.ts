@@ -17,13 +17,22 @@
 export const CAPACITY = 64n;
 
 /**
- * The smallest field that runs (D-E4, ratified 2026-09-06) — a TS mirror of
- * `constants.rs::MIN_SEATS`. A pool with at least this many entrants when
- * its deadline passes seals and plays; below it, the pool refunds. Break-
- * even is 40 seats at every tier (pot = price × 40), so 52 leaves twelve
- * seats of margin on the worst run. A seat count, never a percentage.
+ * The smallest field that runs (R7-b, founder instruction 2026-09-12; was 52
+ * under D-E4) — a TS mirror of `constants.rs::MIN_SEATS`. A pool with at
+ * least this many entrants when its deadline passes seals and plays; below
+ * it, the pool refunds in full. A seat count, never a percentage.
+ *
+ * This is EXACTLY break-even: the pot is forty entries' worth at every tier,
+ * so a pool sealing at this floor takes in precisely what it pays out. The
+ * founder's ruling of 2026-09-13 accepts that, on the ground that the pot is
+ * pre-funded from the treasury (D-A1) and a pool's ability to pay therefore
+ * never depended on its own entries. Margin is `1 − 40/seats` of intake:
+ * nil at 40, 37.5% at a full 64.
+ *
+ * The value a given pool actually plays at is `Pool.min_seats`, copied at
+ * open — this constant is what NEW pools are opened with.
  */
-export const MIN_SEATS = 52n;
+export const MIN_SEATS = 40n;
 
 /**
  * The fill deadline `open_pool` seeds into every new pool, in seconds — a

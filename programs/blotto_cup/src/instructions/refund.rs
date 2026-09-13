@@ -21,7 +21,6 @@
 
 use anchor_lang::prelude::*;
 
-use crate::constants::MIN_SEATS;
 use crate::error::ErrorCode;
 use crate::events::{RefundTriggered, Refunded};
 use crate::state::{
@@ -70,7 +69,10 @@ pub fn handle_trigger_refund(ctx: Context<TriggerRefund>, _pool_id: u64) -> Resu
     // from under its entrants by anyone racing the seal.
     require!(pool.state == PoolState::Open, ErrorCode::PoolNotOpen);
     require!(now > pool.fill_deadline, ErrorCode::DeadlineNotPassed);
-    require!(pool.entrants < MIN_SEATS, ErrorCode::FieldReached);
+    // The pool's OWN floor, copied at open (R7-b) — the mirror image of
+    // `seal_at_deadline`'s guard, read from the same field so the two can
+    // never disagree about where the fork is.
+    require!(pool.entrants < pool.min_seats, ErrorCode::FieldReached);
 
     // A pool that never got an entry has nothing to refund — close it now so
     // it does not sit in `Refunding` forever.

@@ -114,6 +114,18 @@ pub const TIER_PRICES: [u64; 7] = [
     7_500_000_000,
 ];
 
+/// The smallest field that runs (constants.rs::MIN_SEATS; 40 since R7-b,
+/// founder instruction 2026-09-12).
+///
+/// Lives HERE, beside the tier tables, rather than in the test file that
+/// happens to need it. It was a `const MIN_SEATS: u16 = 52;` inside
+/// `min_field.rs` with a comment claiming to mirror the program, and nothing
+/// checked that claim — so when the program moved to 40 the test kept
+/// asserting the old rule and failed in a way that read like a program bug.
+/// `scripts/check-mirrors.py` now pins it, like every other constant this
+/// harness repeats.
+pub const MIN_SEATS: u16 = 40;
+
 /// The launch FIXED pots (constants.rs::TIER_POT_LAMPORTS, D-A1 revised).
 pub const TIER_POTS: [u64; 7] = [
     4_000_000_000,
@@ -469,6 +481,40 @@ pub fn seal_at_deadline_ix(signer: &Pubkey, pool_id: u64) -> Instruction {
     }
 }
 
+/// `migrate_pool(pool_id)` — permissionless; grows a pre-R7-b pool account
+/// and writes the floor its players entered under.
+pub fn migrate_pool_ix(payer: &Pubkey, pool_id: u64) -> Instruction {
+    let mut data = disc("migrate_pool").to_vec();
+    data.extend_from_slice(&pool_id.to_le_bytes());
+    Instruction {
+        program_id: program_id(),
+        accounts: vec![
+            AccountMeta::new(*payer, true),
+            AccountMeta::new(pool_pda(pool_id), false),
+            AccountMeta::new_readonly(system_program_id(), false),
+        ],
+        data,
+    }
+}
+
+/// Shrink a pool account back to its PRE-R7-B size, as the nine pools on
+/// devnet actually are.
+///
+/// There is no way to allocate one at the old size with the current program
+/// — `open_pool` allocates `Pool::SPACE` — so the only way to exercise
+/// `migrate_pool` against a real account is to open one and take the two
+/// appended bytes off again. The lamports are left alone deliberately: a
+/// pool allocated at 847 bytes is rent-exempt for 847 and NOT for 849, which
+/// is the top-up the migration has to pay, and a test that funded it first
+/// would skip the part most likely to be wrong.
+pub fn shrink_pool_to_v1(svm: &mut LiteSVM, pool: &Pubkey) {
+    let mut acct = svm.get_account(pool).expect("pool account");
+    assert_eq!(acct.data.len(), 849, "expected a current-layout pool");
+    acct.data.truncate(847);
+    acct.lamports = svm.minimum_balance_for_rent_exemption(847);
+    svm.set_account(*pool, acct).unwrap();
+}
+
 pub fn pay_prizes_ix(
     settlement: &Pubkey,
     pool_id: u64,
@@ -775,12 +821,14 @@ pub fn read_pool(svm: &LiteSVM, pool: &Pubkey) -> PoolView {
     // Layout since D-A1 v2 (`pot_lamports` u64 inserted after
     // entry_lamports@17): pot@25, entrants@33, fill_deadline@43, state@51,
     // vrf_seed@116, class_counters@148, payouts_len@192, payouts@194,
-    // paid_mask@834, refunded_count@842. Unchanged by D-E4 and by the
-    // 2026-09-07 upgrade (Config and Entry grew; Pool did not) —
-    // `Pool::LEN` is pinned at 839 in state.rs, not the proposal's 834.
+    // paid_mask@834, refunded_count@842, min_seats@847. Every offset above
+    // is unchanged by D-E4, by the 2026-09-07 upgrade (Config and Entry
+    // grew; Pool did not) and by R7-b, which APPENDED `min_seats` after
+    // `vault_bump` — `Pool::LEN` is pinned at 841 in state.rs (839 before
+    // R7-b, and never the proposal's 834).
     assert_eq!(
         data.len(),
-        847,
+        849,
         "Pool account size drifted from the pinned layout"
     );
     let counters: [u16; 5] =
@@ -925,6 +973,28 @@ pub fn downgrade_config_to_v1(svm: &mut LiteSVM) {
 /// (offset 116, mirroring state.rs since D-A1 v2). Stands in for
 /// `commit_vrf_seed`, whose Switchboard reveal cannot run inside LiteSVM; the
 /// write-once and oracle checks are covered by `tests/vrf_and_freeze.rs`.
+/// Overwrite a pool's stored `min_seats` (offset 847 — the field R7-b
+/// appended after `vault_bump`).
+///
+/// There is no instruction that can do this, on purpose: the floor is copied
+/// at open and never rewritten, which is the whole property. So a test that
+/// wants to prove the guards read the FIELD rather than the CONSTANT has to
+/// reach past the program, exactly as `patch_vrf_seed` does for the VRF
+/// commitment. Setting it to something other than `MIN_SEATS` and watching
+/// the seal and refund forks move with it is the only way to tell the two
+/// apart from outside.
+pub fn patch_min_seats(svm: &mut LiteSVM, pool: &Pubkey, min_seats: u16) {
+    let mut acct = svm.get_account(pool).expect("pool account");
+    acct.data[847..849].copy_from_slice(&min_seats.to_le_bytes());
+    svm.set_account(*pool, acct).unwrap();
+}
+
+/// A pool's stored `min_seats`, read at the same offset.
+pub fn read_min_seats(svm: &LiteSVM, pool: &Pubkey) -> u16 {
+    let data = svm.get_account(pool).expect("pool account").data;
+    u16::from_le_bytes([data[847], data[848]])
+}
+
 pub fn patch_vrf_seed(svm: &mut LiteSVM, pool: &Pubkey, seed: [u8; 32]) {
     let mut acct = svm.get_account(pool).expect("pool account");
     acct.data[116..148].copy_from_slice(&seed);
