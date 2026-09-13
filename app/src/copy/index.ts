@@ -287,8 +287,14 @@ export const COPY = {
     checkBackTitle: 'Now the pool fills',
     checkBack:
       'Your seven battles are sealed. Nothing more to do here. The pool plays when it reaches 64 players, or at its deadline with at least 52 — every battle is then revealed and scored, and the ranking appears on the pool page. Check back then.',
-    notifyOptIn: 'Email me when this pool has concluded',
-    notifyOptInDone: 'We will email you when a pool you are in has concluded.',
+    // D-E11 (founder ruling 2026-09-13): the two email lines that stood here
+    // — "Email me when this pool has concluded" and "We will email you when a
+    // pool you are in has concluded." — are gone. Nothing in this repository
+    // can send an email and there is no provider account, so both were
+    // promises a player could check and find false. The opt-in they drove was
+    // wallet-signed and stored, which made it worse: the player could show
+    // what they agreed to and we could not show we had done it. Cut now,
+    // dispatcher later; these lines come back with it.
     viewPool: 'Follow this pool',
     viewResults: 'Results and every battle',
     // D-E1 §1.4 (option A): shown on any pool whose on-chain pot differs
@@ -525,11 +531,10 @@ export const COPY = {
     emptyTitle: 'Nothing yet',
     empty:
       'Updates about pools you have entered appear here: sealed, results committed, prizes paid, refunds open.',
-    emailLabel: 'Also email me these updates',
-    emailNote:
-      'Optional. Uses the email on your sign-in; your choice is recorded with your wallet signature and applies until you change it.',
-    emailSaved: 'Notification choice recorded',
-    emailFailed: 'Your choice could not be recorded. Check your connection and try again.',
+    // D-E11 (founder ruling 2026-09-13): the email opt-in and its three
+    // supporting lines are removed from this surface too, for the same reason
+    // as the sealed screen's — we cannot send the mail we were offering. What
+    // is left below is in-app delivery to an open tab, which we do perform.
     sealed: (id: string) => `Pool #${id} sealed — battles are being revealed`,
     scored: (id: string) => `Pool #${id}: results are committed`,
     paid: (id: string) => `Pool #${id}: prizes are paid`,

@@ -617,3 +617,42 @@ The standing instruction in `.gitleaks.toml` is unchanged and now has a sibling:
 `.gitleaksignore` only once a finding is proven dead or a false positive, and a **live** credential is
 rotated at the provider first. A value that reached git history is already exposed to anyone who has
 cloned the repository; deleting it from the tip revokes nothing.
+
+## Addendum — five founder rulings, and the promise that came out of the app (2026-09-13)
+
+The backend is deployed to devnet and accepted — run #30 shipped four of four services with no
+development credential, `entry signer = TURNKEY`, no geo stub, `VRF = SWITCHBOARD On-Demand`, and an
+ingest probe that authenticated. With the code side of the audit closed, the founder cleared the
+decisions that were waiting on them. Five were ratified; three more need a name and are listed at the
+end.
+
+Registered as **D-E11 … D-E15** in `docs/BUILD-ROADMAP_v1.0.md`.
+
+| Ruling | What changed here |
+|---|---|
+| **D-E11** — cut the email promise, dispatcher later | Closes **A-05** and **D-31**. Both surfaces are done: the sealed screen's opt-in and its "We will email you…" answer, and the notifications sheet's toggle. The client helper that called `POST /notify` had no other caller and is removed, which stops collection by itself. The route and its store stay in place and dormant, and consents already given stay recorded — they were validly given, and deleting a signed record is the worse mistake. The in-app bell is untouched |
+| **D-E12** — the 90 threshold stands | No code. The speed and accessibility findings (contrast and touch targets on the play screen, back-forward cache on the pool page) become real work rather than a lowered number |
+| **D-E13** — reviewer action budget ratified at 64 per hour | `backend/detection/src/budget.ts` — the constants lose `PROPOSED_`, `AWAITING_RATIFICATION` goes, and the service stops printing it at boot |
+| **D-E14** — second geography and screening vendor before the first public pool | No code. Recorded as an **availability** decision, which is what it is: the entry gate is fail-closed, so one vendor's outage refuses every entry |
+| **D-E15** — prize-table check in the next program window | Added to the **P1** batch row so it cannot be lost. This is the "raised, not buried" item from the D1 addendum, now scheduled rather than noted |
+
+**Two things worth recording about how these were decided**, because both are corrections to me.
+
+The founder asked whether the reviewer budget would impede a process meant to run autonomously. It
+cannot, and the answer was in the code rather than in my recollection: detection acts on nothing
+(`pipeline.ts`, D-E9), a prize is held only by a reviewer's signed decision, and
+`backend/reveal/src/daemon.ts` — *"if no decision is made within 12 hours, the flag is cleared and the
+prize is paid"*. The system's default is to pay. That reasoning is now written into `budget.ts` so the
+next reader does not have to re-derive it.
+
+The founder also said geography and sanctions should run autonomously off allow/deny lists with no
+review involvement. **They were right and the question was mis-framed** — I had put a vendor-redundancy
+decision in a list of reviewer decisions, which made it read as though a human sat in the entry path.
+Both checks run in the entry gate, automatically, fail-closed, with no human at any stage. D-E14's row
+states the distinction so the filing error is not repeated.
+
+**Still open, and only the founder can supply them:** the second reviewer (a person and the public half
+of a key — `config/reviewers.json` holds one member today, which is the founder's own wallet, and
+`appeals.ts` requires a different decider from whoever upheld the flag); the `SECURITY.md` disclosure
+contact (B-55); and the holder of `keys.keeper`, whose absence from `config/custody.json` is why the
+custody page omits the only signer `open_pool` accepts.

@@ -9,16 +9,23 @@
  * worth, and it makes the attempt LOUD rather than silent, which is the part
  * that matters: the alert is the control, the refusal only buys time.
  *
- * ── THE NUMBER IS THE FOUNDER'S ────────────────────────────────────────────
- * {@link PROPOSED_REVIEWER_ACTION_BUDGET} and
- * {@link PROPOSED_REVIEWER_ACTION_WINDOW_MS} are ARCHITECT PROPOSALS carrying
- * AWAITING_RATIFICATION, in the same posture as the rate-limiter proposals in
- * `_shared/src/http-hygiene.ts`. They are how many signed decisions one
+ * ── RATIFIED: 64 DECISIONS PER HOUR (D-E13, founder ruling 2026-09-13) ─────
+ * {@link REVIEWER_ACTION_BUDGET} and {@link REVIEWER_ACTION_WINDOW_MS} were
+ * architect proposals carrying AWAITING_RATIFICATION until 2026-09-13, when
+ * the founder ratified both unchanged. They are how many signed decisions one
  * reviewer may make in a window, which is a policy about how the operator
- * reviews — the founder's column, not the architect's. Both are env-
+ * reviews — the founder's column, not the architect's. Both stay env-
  * overridable and are reached ONLY as defaults, never inlined at a use site.
  *
- * Derivation, so ratification has something to argue with:
+ * The founder's question at ratification was whether this could impede a
+ * process meant to run autonomously. It cannot, and the reasoning is worth
+ * keeping here: in an autonomous run NOBODY SIGNS ANYTHING. Detection acts on
+ * nothing (`pipeline.ts`, D-E9), a prize is held only by a reviewer's signed
+ * decision, and an unanswered flag clears itself after the 12-hour window and
+ * pays. The budget is reached only by a key that is signing decisions faster
+ * than a person reviews, which is the case it exists to catch.
+ *
+ * The derivation, kept because a ratified number still has to be defensible:
  *
  *   A pool holds at most 64 entries (PID §4: 52..64 players). The largest
  *   HONEST burst of review work that can exist at one moment is therefore one
@@ -44,18 +51,15 @@
  */
 
 /**
- * PROPOSED decisions per reviewer per window — **AWAITING_RATIFICATION**
- * (founder-owned; architect proposal 64, one pool's worth of seats).
+ * Decisions one reviewer key may sign per window — RATIFIED at 64, one
+ * pool's worth of seats (D-E13, founder ruling 2026-09-13).
  */
-export const PROPOSED_REVIEWER_ACTION_BUDGET = 64;
+export const REVIEWER_ACTION_BUDGET = 64;
 
-/**
- * PROPOSED budget window, ms — **AWAITING_RATIFICATION** (architect proposal
- * one hour).
- */
-export const PROPOSED_REVIEWER_ACTION_WINDOW_MS = 60 * 60 * 1000;
+/** The budget window, ms — RATIFIED at one hour (D-E13, 2026-09-13). */
+export const REVIEWER_ACTION_WINDOW_MS = 60 * 60 * 1000;
 
-/** Env names for the two proposals above. */
+/** Env names for the two ratified numbers above. */
 export const BUDGET_ENV = {
   actions: 'BLOTTO_REVIEW_ACTION_BUDGET',
   windowMs: 'BLOTTO_REVIEW_ACTION_WINDOW_MS',
@@ -68,8 +72,8 @@ export interface ReviewerBudget {
 }
 
 export const DEFAULT_REVIEWER_BUDGET: ReviewerBudget = {
-  actions: PROPOSED_REVIEWER_ACTION_BUDGET,
-  windowMs: PROPOSED_REVIEWER_ACTION_WINDOW_MS,
+  actions: REVIEWER_ACTION_BUDGET,
+  windowMs: REVIEWER_ACTION_WINDOW_MS,
 };
 
 /**
