@@ -998,6 +998,48 @@ drained first, exactly as in step 2.
 
 ## RECOVERY NOTES
 
+**B-03 proved on the real cluster, 2026-09-13 — pool 9.** The one-lamport freeze
+was the audit's only CRITICAL, and it is now shown dead against devnet rather
+than only against the harness. The whole sequence, from the vault's own
+transaction history (`5rPsftgo4DwLQfgGe9SD5mFCVXu5ynGD75pRp4fQgHWF`, seeds
+`["vault", u64le(9)]`):
+
+| When (UTC) | Instruction | Vault | Balance after |
+|---|---|---|---|
+| 2026-09-12 17:29:49 | `OpenPool` | +4,000,650,240 | 4,000,650,240 |
+| 2026-09-12 19:13:34 | a bare system transfer | **+1** | 4,000,650,241 |
+| 2026-09-13 04:48:41 | `Register` (one entry) | **0** | 4,000,650,241 |
+| 2026-09-13 05:29:52 | `TriggerRefund` at the deadline | **−4,000,000,000** | **650,241** |
+
+Four things are established, and the middle two only because the stray lamport
+was sent BEFORE the close rather than after:
+
+1. **The cushion is the runtime's figure, not ours.** 650,240 lamports is
+   exactly `Rent::minimum_balance(0)` on devnet today, read back over RPC the
+   same morning (the sysvar carries `lamports_per_byte_year` 5080 and an
+   exemption threshold of 1.0). Under the standard parameters it is 890,880.
+   Anywhere a document gives one of those two figures as a fixed cushion it is
+   wrong: the program reads it at open (`vault.rs` `rent_floor()`).
+2. **`trigger_refund` returns the pot as a constant.** It moved exactly
+   4,000,000,000 — not the balance, and not the balance minus rent exemption.
+   Either of those would have been visible here: sweeping the balance would
+   have de-funded a rent-exempt account, and sweeping to the rent floor would
+   have carried the donated lamport out with the pot. It took the pot and left
+   everything else.
+3. **A donated lamport does not strand a pool.** This is the failure the audit
+   found: a vault holding exactly the pot, drained by a computed amount,
+   finishing at 1 lamport — which the runtime refuses, since a zero-data
+   account may end at zero or at rent exemption and nowhere between. The pool
+   closed normally with the lamport in place.
+4. **`register` does not touch a vault.** The entry's payment went to the
+   treasury, as designed; the vault's balance is unchanged across it.
+
+The entry was refunded in full: `Closed` is only reachable when
+`refunded_count == entrants` (`refund.rs`), and `Config.platform_refundable`
+read back 0 afterwards. The stray lamport stays in the vault forever, which is
+the intended outcome — there is no sweep, and adding one would be a new exit.
+
+
 **Deploying from a Mac, 2026-09-12 — three failures in one sitting, all in the
 tooling, none in the program.** (1) `solana program extend` refused the 384-byte
 shortfall the script computed: the loader's minimum extension is 10,240 bytes;
