@@ -48,11 +48,38 @@ Both must read CLEAR. If either refuses, it names the pool ids; clear those firs
 
 Write down the pool ids it lists. You need every one of them in step 3.
 
+**Have both keys to hand.** They live outside this repository and nothing here can
+supply them:
+
+- `BLOTTO_PROGRAM_KEYPAIR` — the program's own keypair. Step 1 refuses to run if its
+  public key is not the program id, so a wrong file stops the deploy rather than
+  stranding every client under a new id.
+- `BLOTTO_DEPLOY_KEYPAIR` — the key that pays for the deploy and holds the upgrade
+  authority. Step 3 needs the same key under the name `FEE_PAYER_KEYPAIR`.
+
+**Why there is no "pause" step.** `docs/OPERATING-MANUAL.md` §4 says to pause before a
+program deploy. That rule is for an upgrade landing while a pool is taking entries —
+which this sequence forbids outright. With nothing open there are no entries to block,
+and pausing would not help anyway: it does not stop the next pool opening. Stopping the
+daemon does.
+
 ---
 
 ## Step 1 — Upgrade the program
 
-The usual deploy. Nothing about it is special to this change.
+The usual deploy — nothing about it is special to this change:
+
+```
+BLOTTO_PROGRAM_KEYPAIR=/path/to/program-keypair.json \
+BLOTTO_DEPLOY_KEYPAIR=/path/to/deploy-keypair.json \
+  ./scripts/deploy-devnet.sh
+```
+
+It builds, upgrades, applies any pending database migrations and re-derives the
+projections. Before it touches anything it reads the program's on-chain upgrade
+authority and stops if that is not the key you gave it — so the day the authority moves
+to the Squads vault, this step says so in one line instead of failing deep inside the
+Solana CLI. (`docs/OPERATING-MANUAL.md` §4 has the procedure that replaces it then.)
 
 ## Step 2 — Confirm the new program is live
 
@@ -70,7 +97,15 @@ npm run admin -- migrate-pool --pool-id 2
 …
 ```
 
-It is **permissionless** — no Squads proposal, no admin key — so you can run it straight through.
+Set `FEE_PAYER_KEYPAIR` to the same key as step 1 — the command stops with
+`FEE_PAYER_KEYPAIR is not set` otherwise:
+
+```
+export FEE_PAYER_KEYPAIR=/path/to/deploy-keypair.json
+```
+
+It is **permissionless** — no Squads proposal, no admin key — so you can run it straight
+through.
 It prints the account's current size first, and a pool already at the new layout is reported and
 skipped, so re-running it is safe and running it on the wrong id does nothing.
 
