@@ -109,10 +109,17 @@ hits="$(
     `# content authored in it, and its brief and design notes necessarily` \
     `# QUOTE the banned vocabulary in order to ban it.` \
     --exclude-dir=handoff \
-    `# The five source documents, copied verbatim. They are inputs to this` \
-    `# repository rather than content authored in it, and PID §8.7 necessarily` \
+    `# The six source documents, copied verbatim. They are inputs to this` \
+    `# repository rather than content authored in it, and PID 8.7 necessarily` \
     `# LISTS the words it forbids.` \
+    `#` \
+    `# The v0.6 DRAFT is here for the same reason: it reproduces v0.5's` \
+    `# section 8 word for word, which is the point of it -- the founder and` \
+    `# counsel diff a proposal against the document it would replace.` \
+    `# Everything the architect wrote in that file is clean; the two CARRIED` \
+    `# phrases that are not are flagged inside it.` \
     --exclude=PID_Blotto-Cup_v0.5.md \
+    --exclude=PID_Blotto-Cup_v0.6-DRAFT.md \
     --exclude=TECH-ARCHITECTURE_Blotto-Cup_v0.2.md \
     --exclude=REPO-EXTRACTION-BRIEF_v1.1.md \
     --exclude=REPO-TRANSITION-PLAYBOOK.md \
@@ -160,6 +167,7 @@ camel_hits="$(
     --exclude-dir=.next --exclude-dir=reference --exclude-dir=archive \
     --exclude-dir=handoff \
     --exclude=PID_Blotto-Cup_v0.5.md \
+    --exclude=PID_Blotto-Cup_v0.6-DRAFT.md \
     --exclude=TECH-ARCHITECTURE_Blotto-Cup_v0.2.md \
     --exclude=REPO-EXTRACTION-BRIEF_v1.1.md \
     --exclude=REPO-TRANSITION-PLAYBOOK.md \
