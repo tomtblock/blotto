@@ -451,17 +451,31 @@ jobs:
       - name: Structural rules (roadmap §3 rules 5–6)
         run: ./scripts/check-standing-rules.sh
 
+      # The founder-owned territory schedule (founder instruction
+      # 2026-09-12 §3.1). Four things can go wrong with config/territories.json
+      # quietly; the one that matters is a SUB-NATIONAL code the geo vendor
+      # cannot resolve, which makes the entry service refuse to start — a
+      # deploy-time failure on a service that then will not come up. This
+      # moves it onto the change that added the code, while it is still a
+      # review comment rather than an outage.
+      #
+      # The first two TypeScript checks in this job, hence the Node setup
+      # below. Both run off the repo-root toolchain rather than a workspace:
+      # the territory check reads the packet service's real parser and the
+      # app's name map and must not depend on either being installed.
+      #
       # The fill-rule simulation (founder instruction 2026-09-12 §5.2)
       # RE-IMPLEMENTS the seal/refund boundary to measure it, so it is the one
       # place that can drift from the program while every other lane stays
       # green — and its output is a report the founder reads to decide whether
       # the numbers stay. Its self-test pins the same boundaries
       # tests/litesvm/tests/fill_rule.rs pins on chain.
-      #
-      # First TypeScript check in this job, hence the Node setup.
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v4.4.0
         with:
           node-version: 20
+
+      - name: Territory schedule (founder instruction 2026-09-12)
+        run: npx --yes tsx@4.20.3 scripts/check-territories.ts
 
       - name: The fill simulation still models the rule (§5.2)
         run: npx --yes tsx@4.20.3 scripts/sim/fill-replay.ts --self-test

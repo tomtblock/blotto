@@ -290,6 +290,47 @@ export async function treasuryReport(
   };
 }
 
+/** Enablement as the EVENT LEDGER alone can state it: the newest
+ * `TiersOpened`, or — when the founder has never sent one —
+ * `init_config`'s seeded posture, which is what the account then holds.
+ * Separated from the rest of the ledger policy so `GET /tiers` can reach it
+ * without the two economics queries it does not need. */
+async function enablementFromLedger(
+  db: Queryable
+): Promise<{ enabled: readonly boolean[]; source: 'ledger' | 'launch_default' }> {
+  const tiersOpened = await latestEvent(db, 'TiersOpened');
+  const enabled = tiersOpened
+    ? (tiersOpened.open_tiers as boolean[]).map((v) => v === true)
+    : null;
+  return enabled ? { enabled, source: 'ledger' } : { enabled: LAUNCH_OPEN_TIERS, source: 'launch_default' };
+}
+
+/**
+ * Which tiers may open a pool, and how we know — the answer `GET /tiers`
+ * publishes and the one `GET /treasury` already embeds.
+ *
+ * ONE function for both, on purpose (founder instruction 2026-09-12 §2.3).
+ * Two endpoints of the same API that each computed this for themselves could
+ * disagree about which tier is open, and the pre-flight of 2026-09-13 found
+ * a third answer hard-coded in the app on top of those. Resolution order is
+ * the live `Config` account, then the `TiersOpened` ledger, then the seeded
+ * posture; `source` publishes which one answered, so a stale reply is
+ * visible rather than silent.
+ *
+ * This is a DISPLAY signal. The gate itself is `open_pool`'s
+ * `require!(config.open_tiers[tier], TierNotOpen)` — a tier shown open here
+ * that is closed on chain costs a refused transaction, not an entry, and no
+ * player can enter a pool that was never opened.
+ */
+export async function tierEnablement(
+  db: Queryable,
+  chain?: TreasuryChainReader | null
+): Promise<{ enabled: readonly boolean[]; source: 'chain' | 'ledger' | 'launch_default' }> {
+  const view = await tryChainRead(chain);
+  if (view) return { enabled: [...view.openTiers], source: 'chain' };
+  return enablementFromLedger(db);
+}
+
 /** One chain read, or null. Never throws: the route is public. */
 async function tryChainRead(
   chain: TreasuryChainReader | null | undefined
@@ -348,20 +389,17 @@ async function policyFromLedger(db: Queryable): Promise<Policy> {
   }
 
   const policySet = await latestEvent(db, 'TreasuryPolicySet');
-  const tiersOpened = await latestEvent(db, 'TiersOpened');
-  const enabledFromLedger = tiersOpened
-    ? (tiersOpened.open_tiers as boolean[]).map((v) => v === true)
-    : null;
+  const fromLedger = await enablementFromLedger(db);
 
   return {
     minPlatform: policySet ? BigInt(policySet.min_platform_lamports as string) : 0n,
     reservePots: policySet ? BigInt(policySet.reserve_pots as number) : 1n,
     tierPrice,
     tierPot,
-    enabled: enabledFromLedger ?? LAUNCH_OPEN_TIERS,
+    enabled: fromLedger.enabled,
     cushion: 0n,
     source: 'ledger',
-    enablementSource: enabledFromLedger ? 'ledger' : 'launch_default',
+    enablementSource: fromLedger.source,
     balance: null,
     refundable: null,
   };

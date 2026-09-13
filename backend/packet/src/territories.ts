@@ -119,12 +119,33 @@ export function territoryAllowed(
   return schedule.posture === 'block-list' || schedule.allowed.includes(country);
 }
 
-/** The launch policy as a schedule — the committed config file's contents
- * (founder instruction 2026-08-28: block Belgium and Australia only). */
+/**
+ * The launch policy as a schedule — the committed config file's contents.
+ *
+ * Version 3 (founder instruction 2026-09-12): the PID §9 legal-review block,
+ * confirmed rows only. India, Belgium and Australia; the six GCC states; and
+ * China, Hong Kong, Singapore, Malaysia, Indonesia.
+ *
+ * Two sets of §9 rows are deliberately ABSENT, both recorded with their
+ * reasons in `config/territories.README.md`:
+ *
+ *   - THE US STATES, including Washington, are sub-national rules. No geo
+ *     source wired here resolves an ISO 3166-2 region, so
+ *     `assertRegionCapability` would refuse to start rather than admit every
+ *     person those rows name. Held on a region-capable source.
+ *   - THE SANCTIONS SET is held pending counsel's exact list. It opens
+ *     nothing: those countries are already refused on every entry by the
+ *     wallet screening in `backend/sanctions/`, which checks live lists and
+ *     named individuals rather than a country code.
+ *
+ * This mirror exists for tests and for a deployment with no config file. The
+ * committed file is the authority and `territories.spec.ts` pins the two
+ * together.
+ */
 export const DEFAULT_TERRITORY_SCHEDULE: TerritorySchedule = {
-  version: 2,
+  version: 3,
   posture: 'block-list',
   allowed: [],
-  blocked: ['BE', 'AU'],
-  updated: '2026-08-28',
+  blocked: ['AE', 'AU', 'BE', 'BH', 'CN', 'HK', 'ID', 'IN', 'KW', 'MY', 'OM', 'QA', 'SA', 'SG'],
+  updated: '2026-09-12',
 };
