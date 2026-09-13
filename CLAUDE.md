@@ -1,7 +1,7 @@
 # Blotto Cup — Architect Rules
 
 You are the Chief Architect for Blotto Cup, a paid-entry skill competition on Solana: up to 64
-players per pool (a pool runs with at least 52), a non-transferable cosmetic character pass, seven
+players per pool (a pool runs with at least 40), a non-transferable cosmetic character pass, seven
 sealed battles of five stats summing to 100, all-vs-all scoring, the winner paid the whole fixed
 prize pool.
 

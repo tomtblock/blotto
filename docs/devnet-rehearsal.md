@@ -123,11 +123,13 @@ scripted bot in shadow mode, and drains the 51-entry refund fork in full.
    automated and runs on every change: `app/e2e/journey.spec.ts`, the
    `journey` job of `ci-fast`.
 5. **5.2 — failure paths, once each:**
-   - 51 entries, shortened deadline → `trigger_refund` → all 51 entry
-     payments refunded in full from the platform treasury, and the pool's
-     untouched pot returns to the treasury; a pool at 52 or more seals and
-     plays instead (`seal_at_deadline`; `FieldReached` refuses the refund at
-     or above `MIN_SEATS` = 52);
+   - one under the floor, shortened deadline → `trigger_refund` → every
+     entry payment refunded in full from the platform treasury, and the
+     pool's untouched pot returns to the treasury; a pool at the floor or
+     above seals and plays instead (`seal_at_deadline`; `FieldReached`
+     refuses the refund there). The floor is the pool's own `min_seats` —
+     `MIN_SEATS` = 40 since R7-b, and 52 on the nine pools that predate the
+     field — so run the case against the number the pool actually carries;
    - `set_paused` mid-fill → `register` rejects → unpause → fill resumes;
    - Turnkey export refusal on an open pool past deadline → the refund path
      runs (the crank's `export-refused` step, then `trigger_refund`).

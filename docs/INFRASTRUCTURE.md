@@ -187,11 +187,26 @@ close them today.
 | Per user | | 1.74 | 1.12 | 1.35 | 0.83 | 0.58 |
 | Entries / pools the row assumes | | 400 / 7 | 800 / 13 | 2,000 / 33 | 4,000 / 67 | 40,000 / 667 |
 
-Against the margin: at tier 0 a full pool's margin is 2.4 SOL, $240 at
-$100. Pools per month × $240 gives $1,680 / $3,120 / $7,920 / $16,080 /
-$160,080, so the bill is 10 %, 7 %, 8 %, 5 % and 4 % of it. The two lines
-that scale with players — Privy and Turnkey — are none of the bill at 100
-users and 71 % of it at 10,000.
+Against the margin — and read this row before the reassuring one below it.
+**A pool's margin depends entirely on how full it gets, and since R7-b the
+floor is exactly break-even.** The pot is forty entries' worth at every tier,
+so a pool sealing at 40 seats returns nothing at all; margin is `1 − 40/seats`
+of intake and reaches 2.4 SOL at tier 0 only in a *full* pool.
+
+`CHANGE-2026-09-12_sim-report.md` measures what that means on realistic
+arrival curves. Mean margin per pool at tier 0, by sustained attempts per
+12 hours: **0.38 SOL at 40 · 1.24 at 55 · 1.85 at 64 · 2.40 at 100**. The
+full-pool figure is the ceiling, not the expectation.
+
+At $100/SOL and the full-pool ceiling, pools per month × $240 gives $1,680 /
+$3,120 / $7,920 / $16,080 / $160,080, so the bill is 10 %, 7 %, 8 %, 5 % and
+4 % of it. **At the 55-attempt rate the simulation treats as the point where
+refunds fall below one in ten, that same margin is roughly half** — so halve
+the coverage and read the bill as 20 %, 14 %, 16 %, 10 % and 8 %. Below that
+arrival rate the infrastructure bill is not covered by pool margin at all,
+and the shortfall is funded from the treasury like the pots are. The two
+lines that scale with players — Privy and Turnkey — are none of the bill at
+100 users and 71 % of it at 10,000.
 
 Optional lines, not in the total:
 

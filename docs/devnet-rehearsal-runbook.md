@@ -572,7 +572,7 @@ keeper retries once per tick with Solana's message for an unfunded fee payer,
 solana transfer EaDfwMWwW712L4YgdhBgEqbzzpdVP17e5mvY9LPwjrSD 2 -k /Users/tomhumber/.config/solana/blotto/fee-payer-devnet.json -u https://api.devnet.solana.com --allow-unfunded-recipient
 ```
 
-**2 SOL, sized not guessed.** Per pool: `Pool` PDA rent 0.00679 (847 bytes),
+**2 SOL, sized not guessed.** Per pool: `Pool` PDA rent 0.0068 (849 bytes since R7-b; 0.00679 at the 847 this was first sized against),
 its vault 0.00065 on devnet (650,240 lamports — the rent-exempt minimum for an
 empty account, which the program reads from the network when the pool opens;
 0.00089 under the standard rent parameters), the Switchboard randomness and
@@ -582,7 +582,9 @@ MPL Core collection accounts
 rather than quotes. Pool 1 measures the real number; replace this line with it.
 
 Do NOT confuse this with the **platform treasury** (6.0 SOL), a different
-account that funds each pool's 5.12 SOL pot at `open_pool`. The entry signer
+account that funds each pool's fixed pot at `open_pool` — the tier's
+constant, `programs/blotto_cup/src/constants.rs`, not a figure to keep here.
+The entry signer
 holds nothing and should stay that way — it signs packets off-chain and never
 pays a fee.
 
@@ -670,10 +672,12 @@ matching the published bundle.
 
 **5.2 Failure paths**, ledger reconciled after each:
 
-- Sub-52-entry pool past a shortened deadline → `trigger_refund` returns the untouched
+- Under-floor pool past a shortened deadline → `trigger_refund` returns the untouched
   pot to the treasury and every entry is refunded in full from the treasury; separately
   confirm a 63-entry pool at the same deadline SEALS instead (`trigger_refund` reverts
-  `FieldReached`, `refund.rs:73`, since 63 ≥ `MIN_SEATS` 52)
+  `FieldReached`, `refund.rs:73`, since 63 ≥ the pool's own `min_seats`). Test both
+  sides of the boundary the pool actually carries — 40 for a pool opened since R7-b,
+  52 for the nine that predate it and were migrated
 - **Pause mid-fill, then resume** — two Squads proposals, **scheduled in advance with
   you at a keyboard**. **Blocked on B-c**: `admin.ts` cannot emit a `set_paused`
   proposal today.
@@ -814,6 +818,12 @@ included — until `migrate_config` grows it. Pool accounts are untouched
 (pool 1 has 0 entrants); a pool opened before the upgrade with entries
 would have to settle or refund before it.
 
+> **This paragraph describes the 2026-09-07 upgrade only.** `Pool` grew on
+> 2026-09-13 (R7-b appended `min_seats`, 839 → 841), so a second migration
+> exists: `migrate_pool`, once per existing pool. Its order of operations —
+> and why the drain gate that covers `Sealed`, `Scored` and `Refunding` does
+> not cover an `Open` pool — is [`RUNBOOK_r7b-upgrade.md`](RUNBOOK_r7b-upgrade.md).
+
 1. **Pause new entries.** `set_paused(true)` from the admin key (the
    founder sends it; `admin.ts set-paused --paused true`). Settlement,
    refunds and `seal_at_deadline` keep working — pause blocks `register`
@@ -911,9 +921,12 @@ would have to settle or refund before it.
    npx ts-node --transpile-only scripts/admin.ts set-tier-economics --tier 0 --price 0.1sol --pot 4sol
    ```
 
-   The program now refuses a pot at or above the minimum field's entries
-   (`PotExceedsMinimumField`); every ratified pot clears that guard with
-   room. Pool 1 is unaffected — it copied its pot at open, and its refund
+   The program refuses a pot **larger than** the minimum field's entries
+   (`PotExceedsMinimumField`). Since R7-b that field is 40 and every
+   ratified pot is exactly 40 × price, so every tier sits precisely on the
+   guard rather than clear of it — equality is admitted by design, because
+   the pot is pre-funded from the treasury and never depended on a pool's own
+   entries. Pool 1 is unaffected — it copied its pot at open, and its refund
    returns that same 5.12 SOL to the treasury, which is what
    `platform_reserved` is holding.
 
@@ -921,7 +934,8 @@ would have to settle or refund before it.
    the PR4 merge commit; then `npm run migrate` in `backend/indexer` (0012
    is already applied; 0013 adds `tier_status` and
    `entries.next_place_lamports`). The daemon now opens pools as the
-   keeper, seals 52–63-seat pools at their 12-hour deadline, pays one
+   keeper, seals pools at or above their own published floor at the
+   12-hour deadline — 40 seats for pools opened since R7-b — pays one
    winner, waits out the five-minute cooldown, and flags nothing on its own
    (detection runs in shadow mode; a flag is a reviewer's signed decision).
 5. **Frontend.** Vercel deploys `main` on the PR4 merge. `config/terms.json`
@@ -1253,8 +1267,13 @@ here:
 
 - `pot > 0 && pot % 1024 == 0` — the band table divides in 1024ths, and a pot
   off that grid would strand a residue in the vault.
-- `pot < MIN_SEATS × price` (52 × price) — the break-even rule. Tier 3 is the
-  tightest at 40 < 52; tier 1 the next at 20 < 26.
+- `pot <= MIN_SEATS × price` — the break-even rule. **Both sides of this
+  changed on 2026-09-13 (R7-b):** the comparison was `<` and `MIN_SEATS` was
+  52, which is what the figures below were generated against. It is now `<=`
+  against 40, and since every ratified pot is exactly 40 × price, every tier
+  sits on the boundary rather than under it. The transactions below were
+  checked against the older, stricter guard and therefore still clear the
+  current one.
 
 Regenerate any of them with:
 

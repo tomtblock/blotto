@@ -1,10 +1,11 @@
 /**
  * Public surface of `@blotto/backend-shared`.
  *
- * Carried from the predecessor repository. The exports are the plumbing the
- * sealing store and the detection pipeline will need — environment and config
- * loading, the Postgres block, HTTP hygiene for any public endpoint, and the
- * metrics/alert seam — plus the generic half of the Anchor event decoder.
+ * Carried from the predecessor repository. The exports are the plumbing every
+ * service here runs on — environment and config loading, the Postgres block,
+ * HTTP hygiene for any public endpoint, the metrics/alert seam, the cluster
+ * choice and the shared priority-fee bid — plus the generic half of the Anchor
+ * event decoder and, beside it, this program's own event layouts.
  *
  * NOT carried, and deliberately absent: that product's progression maths, its wallet
  * account decoding, and its per-event decoders. See EXTRACTION-REPORT.md.
