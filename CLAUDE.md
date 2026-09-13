@@ -68,9 +68,15 @@ acknowledge what is sacrificed.
   `scripts/check-standing-rules.sh` asserts the exact exit set in CI and that `escrow.rs` cannot
   address the treasury; an auditor confirms there is no other route.
 - **Allocation invariant: five `u8` summing to exactly 100, in the fixed stat order**
-  Strength, Speed, Heart, Wit, Durability (PID §4.6, TECH-ARCH §2). The program rejects anything
-  else. The client must be unable to submit anything else. This invariant is what makes the 7% draw
-  rate real rather than aspirational.
+  Strength, Speed, Heart, Wit, Durability (PID §4.6, TECH-ARCH §2). **The program does not and
+  cannot enforce this** — it receives only `sha256(battles ‖ salt)`, and a program that could check
+  an allocation would be a program that could read one, which is the sealing property gone. The two
+  enforcement points are the client at submission, whose interaction cannot express a violating
+  shape, and the scoring engine at reveal, which scores a malformed set all-losses and publishes
+  that status rather than halting the pool. This invariant is what makes the 7% draw rate real
+  rather than aspirational, and where it is enforced is the thing to get right. (PID §4.6 and
+  earlier copies of this file said "the program rejects anything else"; corrected 2026-09-07 and
+  again here — `AS-BUILT.md` §5 carries the row.)
 - **The pass is permanently non-transferable.** There is no instruction in this program that can set
   `frozen: false`. Adding one is a legal-position change (PID §8.4) and requires counsel sign-off.
 - **The §8.7 forbidden-word list is enforced, not advisory.** Never use: lottery · gamble · bet ·
@@ -88,8 +94,15 @@ acknowledge what is sacrificed.
   `TECH-ARCHITECTURE_Blotto-Cup_v0.2.md`, the ratified decision register in
   `docs/BUILD-ROADMAP_v1.0.md` (R1–R21), or an explicit founder direction, **ask**. Class counters,
   prize bands, the fill deadline, the per-screen timer (15s, R9), the tier table (R6) and the
-  territory allowlist (R2) are all founder-owned numbers with published consequences. Where the
-  roadmap and TECH-ARCH v0.2 disagree, the roadmap wins (its §1.3/§1.4 lists the deltas).
+  territory schedule (R2/D-B3, a **block-list** since 2026-08-28 — `config/territories.json`, with
+  `config/territories.README.md` as its legend) are all founder-owned numbers with published
+  consequences. Where the roadmap and TECH-ARCH v0.2 disagree, the roadmap wins (its §1.3/§1.4
+  lists the deltas); read TECH-ARCH v0.2 with its 2026-09-13 appendix, which fences what it now
+  gets wrong.
+
+  **`PID_Blotto-Cup_v0.6-DRAFT.md` is NOT a source of values.** It is an architect-prepared
+  proposal awaiting the founder's decision; v0.5 plus its appendix remains the PID. Take a number
+  from the draft only after the founder adopts it.
 
 ## Knowledge currency
 
