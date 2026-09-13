@@ -1,0 +1,52 @@
+# gitleaks fingerprint ignores for Blotto Cup.
+#
+# ONE entry per finding, keyed by the finding's fingerprint —
+# `<commit>:<path>:<rule>:<line>`. A fingerprint names an immutable point in
+# history, so an entry here can never excuse anything but the exact finding it
+# was written for. A new leak, in any file, of any shape, still fails the lane.
+#
+# Nothing is added here without the scrutiny `.gitleaks.toml` demands. That file
+# records why the predecessor repository's allowlist was deliberately not
+# carried, and the same bar applies: an entry states what the value is, why it
+# is not a secret, and how that was established.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# The seven below: `leaf_order` in the scoring known-vectors, commit 363fd042,
+# 2026-08-27.
+#
+# WHAT THEY ARE. Not credentials. `backend/scoring/fixtures/vectors.json` is the
+# Python-generated known-vector file every payout is checked against, and
+# `leaf_order` is the results-tree leaf ordering for a pool — a list of PLAYER
+# INDICES. A full pool is 64 players, so it is a 64-element array of small
+# integers. That is published data by design: a player must be able to recompute
+# what they were paid from it (CLAUDE.md, tradeoff #3).
+#
+# WHY THE RULE FIRES. `solana-keypair-json` matches a JSON array of exactly 64
+# numbers, because that is the shape of a Solana secret key. A 64-player pool's
+# leaf ordering has the identical shape. The rule cannot tell them apart, and it
+# should not be loosened to try: it was written in the predecessor repository
+# after a real committed keypair that the default ruleset missed entirely.
+#
+# WHY ONLY THIS COMMIT. At 363fd042 the fixtures were pretty-printed, one number
+# per line; the rule's `\s*` spans newlines, so the array matched across 64 of
+# them. The generator now emits `"leaf_order": "3,7,11,..."` as a compact STRING,
+# so no array exists at HEAD and the working-tree scan is clean. These seven are
+# a closed historical set that can never grow.
+#
+# HEADS UP. If the fixture generator is ever changed back to emitting
+# `leaf_order` as an array, this rule will fire again on the new commits with
+# new fingerprints, and the lane will go red. That is the gate working. Re-read
+# this block before concluding it is the same false positive — check the file and
+# the rule, do not just append fingerprints.
+#
+# Established 2026-09-13 by reading the flagged lines at that commit: the
+# enclosing JSON keys are index / score_half / zones / rank / amount_lamports /
+# leaf_order. No key material of any kind is present.
+
+363fd04213489ddad6d37b190d2afa1938669529:backend/scoring/fixtures/vectors.json:solana-keypair-json:30873
+363fd04213489ddad6d37b190d2afa1938669529:backend/scoring/fixtures/vectors.json:solana-keypair-json:35116
+363fd04213489ddad6d37b190d2afa1938669529:backend/scoring/fixtures/vectors.json:solana-keypair-json:39359
+363fd04213489ddad6d37b190d2afa1938669529:backend/scoring/fixtures/vectors.json:solana-keypair-json:43602
+363fd04213489ddad6d37b190d2afa1938669529:backend/scoring/fixtures/vectors.json:solana-keypair-json:47845
+363fd04213489ddad6d37b190d2afa1938669529:backend/scoring/fixtures/vectors.json:solana-keypair-json:52088
+363fd04213489ddad6d37b190d2afa1938669529:backend/scoring/fixtures/vectors.json:solana-keypair-json:56607
