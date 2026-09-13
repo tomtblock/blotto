@@ -11,6 +11,7 @@ import {
 } from '@blotto/scoring';
 import territories from '@config/territories.json';
 import { FIELD_RULES, availability, rulesSections, tierRows } from './rules.config';
+import { blockedTerritoryPhrase } from '@/rules/territories';
 
 describe('tierRows', () => {
   it('one row per configured tier, numbers from the shared table', () => {
@@ -144,12 +145,60 @@ describe('rulesSections', () => {
 });
 
 describe('availability', () => {
-  it('renders from config/territories.json, names mapped (block-list posture, 2026-08-28)', () => {
+  // Rewritten for schedule version 3 (founder instruction 2026-09-12 §3.1);
+  // the assertion it replaces pinned the two-territory list of 2026-08-28.
+  it('renders from config/territories.json, every code named', () => {
     const a = availability();
     expect(a.posture).to.equal('block-list');
     expect(a.allowed).to.deep.equal([]);
-    expect(a.blocked).to.deep.equal(['Belgium', 'Australia']);
     expect(a.blocked.length).to.equal(territories.blocked.length);
     expect(a.scheduleVersion).to.equal(territories.version);
+    expect(a.updated).to.equal(territories.updated);
+  });
+
+  // The defect this guards is a player in a blocked territory being told so
+  // by a page reading "SG". `territoryName` falls back to the raw code, on
+  // purpose — a missing name must never become a missing block — so the
+  // fallback has to be unreachable for anything actually in the schedule.
+  // `scripts/check-territories.ts` asserts the same thing in CI; this keeps
+  // it inside the suite that runs on an app change.
+  it('never renders a bare code — every schedule entry has a display name', () => {
+    for (const name of availability().blocked) {
+      expect(name, `${name} looks like an unmapped code`).to.not.match(
+        /^[A-Z]{2}(-[A-Z0-9]{1,3})?$/
+      );
+    }
+  });
+
+  it('names the confirmed PID §9 countries in full', () => {
+    const blocked = availability().blocked;
+    for (const name of ['India', 'Belgium', 'Australia', 'Singapore', 'Saudi Arabia', 'Hong Kong']) {
+      expect(blocked, name).to.include(name);
+    }
+  });
+});
+
+describe('blockedTerritoryPhrase', () => {
+  // The block screen names the whole list; an entry surface has no room for
+  // fourteen, so the same source produces a capped form rather than a second
+  // hand-typed one.
+  it('names every territory when uncapped, and ends with "and"', () => {
+    const phrase = blockedTerritoryPhrase();
+    expect(phrase).to.include('India');
+    expect(phrase).to.include('and Singapore');
+    for (const name of availability().blocked) expect(phrase, name).to.include(name);
+  });
+
+  it('caps at n and counts the rest', () => {
+    const phrase = blockedTerritoryPhrase(3);
+    const rest = availability().blocked.length - 3;
+    expect(phrase).to.equal(
+      `${availability().blocked.slice(0, 3).join(', ')} and ${rest} other territories`
+    );
+  });
+
+  it('says "territory", singular, when exactly one is left over', () => {
+    const all = availability().blocked.length;
+    expect(blockedTerritoryPhrase(all - 1)).to.match(/ and 1 other territory$/);
   });
 });

@@ -1,7 +1,22 @@
 {
-  "version": 2,
+  "version": 3,
   "posture": "block-list",
   "allowed": [],
-  "blocked": ["BE", "AU"],
-  "updated": "2026-08-28"
+  "blocked": [
+    "AE",
+    "AU",
+    "BE",
+    "BH",
+    "CN",
+    "HK",
+    "ID",
+    "IN",
+    "KW",
+    "MY",
+    "OM",
+    "QA",
+    "SA",
+    "SG"
+  ],
+  "updated": "2026-09-12"
 }

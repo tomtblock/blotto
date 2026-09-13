@@ -83,14 +83,14 @@ export default function RulesPage() {
                 {s.data.posture === 'block-list' ? (
                   // Block-list posture: the blocked territories ARE the list.
                   <ul className="list-disc pl-5">
-                    {s.data.blocked.map((name) => (
+                    {s.data.blocked.map((name: string) => (
                       <li key={name}>{name}</li>
                     ))}
                   </ul>
                 ) : (
                   <>
                     <ul className="list-disc pl-5">
-                      {s.data.allowed.map((name) => (
+                      {s.data.allowed.map((name: string) => (
                         <li key={name}>{name}</li>
                       ))}
                     </ul>
@@ -101,6 +101,14 @@ export default function RulesPage() {
                     )}
                   </>
                 )}
+                {/* The schedule's own date and version (§3.3.2). Both come
+                    from config/territories.json, so a reader can see how
+                    current the list is and quote a version if they dispute
+                    it. The version is visible on purpose: bumping it is how
+                    a change is announced. */}
+                <p className="mt-3 text-[13px]">
+                  {COPY.rules.availabilityUpdated(s.data.updated, s.data.scheduleVersion)}
+                </p>
               </div>
             )}
           </section>

@@ -16,6 +16,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { address } from '@solana/kit';
 import { COPY } from '@/copy';
+import { blockedTerritoryPhrase } from '@/rules/territories';
 import { Button } from '@/components/ui/button';
 import { BattleFlow } from '@/battle/components/battle-flow';
 import type { Allocation } from '@/battle/allocation';
@@ -397,7 +398,18 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
     // panel offers one more look before the player concludes anything.
     return (
       <StatePanel title="Not available here">
-        <p>{COPY.gate.territoryBlocked}</p>
+        {/* The list is GENERATED from config/territories.json (§3.3) — never
+            typed here, so a founder instruction that changes the schedule
+            changes this panel in the same commit. Named in full rather than
+            summarised: this is the one screen whose whole job is to explain
+            the refusal, and a visitor should be able to see whether their
+            territory is on the list. */}
+        <p>{COPY.gate.territoryBlocked(blockedTerritoryPhrase())}</p>
+        <p className="text-[13px]">
+          <Link href="/rules#availability" className="underline underline-offset-2">
+            {COPY.gate.territoryBlockedSeeRules}
+          </Link>
+        </p>
         <p className="text-[13px]">{COPY.gate.territoryRecheckNote}</p>
         <Button
           intent="quiet"
