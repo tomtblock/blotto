@@ -34,6 +34,7 @@ import { STAT_NAMES, type Allocation } from '@/battle/allocation';
 import { COPY } from '@/copy';
 import { usePrefersReducedMotion } from './springs';
 import { useDialThermals } from './dial-thermals';
+import { NO_LOCKS, maxTarget, type Locks } from './rebalance';
 import './blot.css';
 
 export interface StatDialsProps {
@@ -50,6 +51,16 @@ export interface StatDialsProps {
   /** The one permitted quick action — rebalance back to 20×5. */
   onEvenSplit?: () => void;
   disabled?: boolean;
+  /**
+   * DIAL LOCKS (founder 2026-09-13). A locked stat keeps its value while
+   * the other dials move; the others share what remains, and each unlocked
+   * dial's RANGE shrinks to what it can actually reach (rebalance.ts
+   * `maxTarget`). That is the whole of how the budget is shown — as range,
+   * never as a number (PID §4.2: no points-remaining counter). Both props
+   * are optional: the landing demo and the gallery render plain dials.
+   */
+  locks?: Locks;
+  onToggleLock?: (k: number) => void;
 }
 
 const KEY_STEP: Record<string, number> = {
@@ -71,6 +82,8 @@ function DialRow({
   onDragStart,
   onDragEnd,
   disabled,
+  locks,
+  onToggleLock,
 }: {
   k: number;
   target: Allocation;
@@ -81,14 +94,22 @@ function DialRow({
   onDragStart?: (k: number) => void;
   onDragEnd?: () => void;
   disabled: boolean;
+  locks: Locks;
+  onToggleLock?: (k: number) => void;
 }) {
   const name = STAT_NAMES[k];
   const value = target[k];
   const lastHaptic = useRef(value);
+  const locked = locks[k] === true;
+  // With the other four locked this stat is determined: it cannot move
+  // either way, so the dial is held rather than left to snap back.
+  const pinned = !locked && locks.filter(Boolean).length === 4;
+  // The most this dial can reach given the locks — its range. 100 with none.
+  const max = maxTarget(target, k, locks);
 
   const commit = useCallback(
     (t: number) => {
-      const clamped = Math.max(0, Math.min(100, Math.round(t)));
+      const clamped = Math.max(0, Math.min(max, Math.round(t)));
       // Haptic tick on every multiple of 5 crossed, where supported —
       // a texture, not a signal; nothing reads it back (brief §4).
       if (Math.floor(clamped / 5) !== Math.floor(lastHaptic.current / 5)) {
@@ -99,7 +120,7 @@ function DialRow({
       lastHaptic.current = clamped;
       onDrag(k, clamped);
     },
-    [k, onDrag]
+    [k, max, onDrag]
   );
 
   // The dragged row pins to the target (dial and number never disagree);
@@ -109,11 +130,17 @@ function DialRow({
   const cold = Math.max(0, -temperature);
   const active = dragStat === k;
 
+  // The knob's position and the track's fill are drawn against the FULL
+  // track, so a shrunken range reads as a shaded, unreachable stretch at
+  // the right — the budget the locked stats hold, shown, never counted.
+  const canLock = onToggleLock !== undefined;
+
   return (
     <div
-      className={`blot-dial-row flex items-center gap-3${active ? ' is-active' : ''}`}
+      className={`blot-dial-row flex items-center gap-3${active ? ' is-active' : ''}${locked ? ' is-locked' : ''}`}
       style={{
         ['--dial-fill' as string]: `${knob}%`,
+        ['--dial-max' as string]: `${max}%`,
         ['--dial-heat' as string]: heat.toFixed(3),
         ['--dial-cold' as string]: cold.toFixed(3),
       }}
@@ -124,14 +151,14 @@ function DialRow({
       <input
         type="range"
         min={0}
-        max={100}
+        max={max}
         step="any"
-        value={knob}
-        disabled={disabled}
+        value={Math.min(knob, max)}
+        disabled={disabled || locked || pinned}
         aria-valuemin={0}
-        aria-valuemax={100}
+        aria-valuemax={max}
         aria-valuenow={value}
-        aria-valuetext={`${name} ${value} of 100`}
+        aria-valuetext={locked ? COPY.battle.lockedStat(name) : `${name} ${value} of ${max}`}
         aria-label={name}
         onChange={(e) => commit(Number(e.target.value))}
         onPointerDown={() => onDragStart?.(k)}
@@ -141,7 +168,7 @@ function DialRow({
           let next: number | null = null;
           if (e.key in KEY_STEP) next = value + KEY_STEP[e.key] * (e.shiftKey ? 5 : 1);
           else if (e.key === 'Home') next = 0;
-          else if (e.key === 'End') next = 100;
+          else if (e.key === 'End') next = max;
           if (next !== null) {
             e.preventDefault();
             onDragStart?.(k);
@@ -154,7 +181,32 @@ function DialRow({
       <span className="blot-dial-readout tnum w-14 shrink-0 text-right font-display text-[32px] font-extrabold leading-none">
         {value}
       </span>
+      {canLock ? (
+        <button
+          type="button"
+          aria-pressed={locked}
+          aria-label={locked ? COPY.battle.unlockStat(name) : COPY.battle.lockStat(name, value)}
+          title={locked ? COPY.battle.unlockStat(name) : COPY.battle.lockStat(name, value)}
+          disabled={disabled}
+          onClick={() => onToggleLock?.(k)}
+          data-testid={`lock-${k}`}
+          className="blot-dial-lock grid h-11 w-11 shrink-0 place-items-center rounded-full"
+        >
+          <LockGlyph locked={locked} />
+        </button>
+      ) : null}
     </div>
+  );
+}
+
+/** A padlock, open or shut — 1.8 stroke on the 24-grid like the tab icons. */
+function LockGlyph({ locked }: { locked: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" width={20} height={20} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="5" y="10.5" width="14" height="10" rx="2.5" />
+      {locked ? <path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" /> : <path d="M8 10.5V7.5a4 4 0 0 1 7.6-1.7" />}
+      <circle cx="12" cy="15.5" r="1.3" fill="currentColor" stroke="none" />
+    </svg>
   );
 }
 
@@ -167,9 +219,12 @@ export function StatDials({
   onDragEnd,
   onEvenSplit,
   disabled = false,
+  locks = NO_LOCKS,
+  onToggleLock,
 }: StatDialsProps) {
   const reduced = usePrefersReducedMotion();
   const temps = useDialThermals(target, reduced);
+  const anyLocked = locks.some(Boolean);
   return (
     <div className="flex flex-col gap-3.5">
       {STAT_NAMES.map((_, k) => (
@@ -184,8 +239,15 @@ export function StatDials({
           onDragStart={onDragStart}
           onDragEnd={onDragEnd}
           disabled={disabled}
+          locks={locks}
+          onToggleLock={onToggleLock}
         />
       ))}
+      {anyLocked ? (
+        <p className="font-mono text-[11px] tracking-wide text-game-ink-muted" aria-live="polite">
+          {COPY.battle.locksHint}
+        </p>
+      ) : null}
       {onEvenSplit && (
         <button
           type="button"

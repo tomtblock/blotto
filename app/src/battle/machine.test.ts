@@ -151,3 +151,76 @@ describe('review and confirm', () => {
     }
   });
 });
+
+/*
+ * DIAL LOCKS (founder 2026-09-13): a locked stat keeps its value while the
+ * other dials move; the others share what remains. Added beside the suites
+ * above, which are untouched — a run with no locks behaves exactly as
+ * before.
+ */
+describe('dial locks (founder 2026-09-13)', () => {
+  it('a locked stat keeps its value whatever the other dials do, and the sum stays 100', () => {
+    let s = begin();
+    s = reduce(s, { type: 'dial', stat: 0, target: 35 });
+    s = reduce(s, { type: 'toggle_lock', stat: 0 });
+    s = reduce(s, { type: 'dial', stat: 1, target: 60 });
+    s = reduce(s, { type: 'dial', stat: 3, target: 0 });
+    expect(s.phase).toBe('battle');
+    if (s.phase === 'battle') {
+      expect(s.locks[0]).toBe(true);
+      expect(s.alloc[0]).toBe(35);
+      expect(s.alloc.reduce((a, b) => a + b, 0)).toBe(100);
+    }
+  });
+
+  it('a dial event on a locked stat changes nothing', () => {
+    let s = begin();
+    s = reduce(s, { type: 'toggle_lock', stat: 2 });
+    const before = s;
+    s = reduce(s, { type: 'dial', stat: 2, target: 90 });
+    expect(s).toBe(before);
+  });
+
+  it('the others can only reach what the locked stats leave', () => {
+    let s = begin();
+    s = reduce(s, { type: 'toggle_lock', stat: 0 }); // Strength locked at 20
+    s = reduce(s, { type: 'dial', stat: 1, target: 100 });
+    if (s.phase === 'battle') expect(s.alloc).toEqual([20, 80, 0, 0, 0]);
+  });
+
+  it('locks clear with the even split, and never carry to the next battle', () => {
+    let s = begin();
+    s = reduce(s, { type: 'toggle_lock', stat: 4 });
+    s = reduce(s, { type: 'even_split' });
+    if (s.phase === 'battle') expect(s.locks.some(Boolean)).toBe(false);
+    s = reduce(s, { type: 'toggle_lock', stat: 4 });
+    s = reduce(s, { type: 'lock_in' });
+    if (s.phase === 'battle') {
+      expect(s.screen).toBe(1);
+      expect(s.locks.some(Boolean)).toBe(false);
+      expect(s.alloc).toEqual(EVEN_SPLIT);
+    }
+  });
+
+  it('a lock starts the run clock (PHASE-N-REVIEW: a decision about the allocation)', () => {
+    let s = begin();
+    s = reduce(s, { type: 'toggle_lock', stat: 1 });
+    s = reduce(s, { type: 'tick', ms: 1_000 });
+    if (s.phase === 'battle') {
+      expect(s.clockStarted).toBe(true);
+      expect(s.remainingMs).toBe(RUN_CLOCK_BUDGET_MS - 1_000);
+    }
+  });
+
+  it('expiry still enters every unlocked battle as the even split — locks change nothing there', () => {
+    let s = begin();
+    s = reduce(s, { type: 'dial', stat: 0, target: 50 });
+    s = reduce(s, { type: 'toggle_lock', stat: 0 });
+    s = reduce(s, { type: 'tick', ms: RUN_CLOCK_BUDGET_MS + 1 });
+    expect(s.phase).toBe('review');
+    if (s.phase === 'review') {
+      expect(s.expired).toBe(true);
+      for (const b of s.battles) expect(b).toEqual(EVEN_SPLIT);
+    }
+  });
+});

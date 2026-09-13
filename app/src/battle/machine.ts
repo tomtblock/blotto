@@ -44,7 +44,7 @@
  */
 
 import { EVEN_SPLIT, type Allocation } from './allocation';
-import { rebalance } from '@/components/blot/rebalance';
+import { NO_LOCKS, rebalanceLocked, type Locks } from '@/components/blot/rebalance';
 import { RUN_CLOCK_BUDGET_MS } from './run-clock';
 
 export const BATTLES = 7;
@@ -60,6 +60,11 @@ export interface BattleScreenState {
   screen: number;
   /** The live allocation for THIS screen — integers summing to 100. */
   alloc: Allocation;
+  /** Which stats are locked on THIS screen (founder 2026-09-13): a locked
+   * stat keeps its value whatever the other dials do. Locks do not carry
+   * to the next battle — every screen opens unlocked, like it opens at
+   * the even split. */
+  locks: Locks;
   /** Milliseconds of visible time on this screen. */
   screenElapsedMs: number;
   /** False until the first dial interaction of the RUN. */
@@ -96,6 +101,10 @@ export type BattleFlowEvent =
   | { type: 'begin' }
   /** A dial moved stat `stat` to `target` (0..100). Starts the run clock. */
   | { type: 'dial'; stat: number; target: number }
+  /** Lock or unlock stat `stat` at its current value (founder 2026-09-13).
+   * Starts the run clock like a dial move: it is a decision about the
+   * allocation. */
+  | { type: 'toggle_lock'; stat: number }
   | { type: 'even_split' }
   | { type: 'tick'; ms: number }
   | { type: 'lock_in' }
@@ -115,6 +124,7 @@ function freshScreen(
     phase: 'battle',
     screen,
     alloc: EVEN_SPLIT,
+    locks: NO_LOCKS,
     screenElapsedMs: 0,
     clockStarted: prev.clockStarted,
     remainingMs: prev.remainingMs,
@@ -167,15 +177,30 @@ export function reduce(state: BattleFlowState, event: BattleFlowEvent): BattleFl
     case 'battle':
       switch (event.type) {
         case 'dial': {
-          const alloc = rebalance(state.alloc, event.stat, event.target);
+          // A locked stat does not move (the dial is disabled; this is the
+          // guard behind it). Not even the clock starts for a no-op.
+          if (state.locks[event.stat]) return state;
+          const alloc = rebalanceLocked(state.alloc, event.stat, event.target, state.locks);
           // The FIRST dial interaction of the run starts the clock —
           // idempotent thereafter (run-clock discipline).
           return { ...state, alloc, clockStarted: true };
         }
+        case 'toggle_lock': {
+          const k = event.stat;
+          if (!Number.isInteger(k) || k < 0 || k >= state.locks.length) return state;
+          const locks = state.locks.map((v, i) => (i === k ? !v : v));
+          // PHASE-N-REVIEW: a lock starts the run clock. A lock is a
+          // decision about the allocation as much as a drag is, and the
+          // alternative — free planning time by locking before the first
+          // drag — is a loophole in the ninety seconds. One line of
+          // reasoning; the founder may rule otherwise.
+          return { ...state, locks, clockStarted: true };
+        }
         case 'even_split':
           // The one quick action (PID §4.3). It does not start the clock:
-          // it is the state the screen already opened in.
-          return { ...state, alloc: EVEN_SPLIT };
+          // it is the state the screen already opened in — which has no
+          // locks either, so the locks clear with the shape.
+          return { ...state, alloc: EVEN_SPLIT, locks: NO_LOCKS };
         case 'tick': {
           if (!(event.ms > 0)) return state;
           const screenElapsedMs = state.screenElapsedMs + event.ms;
