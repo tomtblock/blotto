@@ -109,7 +109,7 @@ hits="$(
     `# content authored in it, and its brief and design notes necessarily` \
     `# QUOTE the banned vocabulary in order to ban it.` \
     --exclude-dir=handoff \
-    `# The four source documents, copied verbatim. They are inputs to this` \
+    `# The five source documents, copied verbatim. They are inputs to this` \
     `# repository rather than content authored in it, and PID §8.7 necessarily` \
     `# LISTS the words it forbids.` \
     --exclude=PID_Blotto-Cup_v0.5.md \

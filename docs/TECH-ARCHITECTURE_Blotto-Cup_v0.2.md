@@ -222,3 +222,122 @@ Hosting outside every blocked market (Frankfurt/Dublin; no US regions) · RPC pr
 ---
 
 *Filed: 10_BLOTTO_CUP.*
+
+---
+
+## Appendix A — What this document now gets wrong (added 2026-09-13)
+
+**Everything above this line is the document as filed on 2026-08-26 and has not
+been edited.** This appendix is architect-authored and dated; it does not
+reissue the document, it fences it. Read the body for intent — the reasoning,
+the threat model and the design tradeoffs are still the reasoning behind what
+was built. Read `AS-BUILT.md` for what exists, and
+`01_PRODUCT_FACTS/PRODUCT-FACTS_BlottoCup_v1.md` for a fact with its source.
+
+Three months of ratified decisions sit between the body and the branch. The
+list below is not everything that changed; it is everything a reader who
+trusted the body would get **wrong**, which is a different and shorter list. It
+supersedes the short version in `INDEX.md`.
+
+### The line to fix first
+
+**§3.2: "The vault has no withdraw instruction. Exits are `claim`, `refund`,
+`sweep_unclaimed` only."** Two of those three instructions do not exist, and all
+four real exits are missing. The exit set is `pay_prizes`, `release_escrow`,
+`pay_next_place`, `refund` — with `trigger_refund`'s pot return living in the
+same file — and `forfeit_escrow` moves nothing at all. The headline claim, that
+there is no withdraw instruction, is still true and is asserted by
+`scripts/check-standing-rules.sh` on every change. The enumeration under it is
+not.
+
+### Constants (§2)
+
+| Says | Is |
+|---|---|
+| `MIN_FILL = 32` | `MIN_SEATS = 40`, and carried per pool in `Pool.min_seats` so a change cannot move the floor under seated players (R7-b) |
+| `POT_BPS = 8000` | **No such constant.** A pot is a fixed per-tier amount moved from the treasury before entries open, never a proportion of anything. CI greps for pot-from-entries arithmetic and fails on it |
+| `BATTLES`, `ZONES`, `POINTS` as program constants | Deliberately removed from the program on 2026-09-07: unused mirrors implied an on-chain check that does not exist. They live in `backend/scoring/src/allocation.ts` |
+
+### Accounts and instructions (§3)
+
+- **`Config` has five fields.** It has the four service keys, the tier price and
+  pot tables, `open_tiers`, the switches, the treasury book-keeping, the
+  timings and the per-tier cooldown stamps — 476 bytes.
+- **`Pool` as listed** is missing `pot_lamports`, `min_seats` and `payouts[64]`,
+  and `PoolState` has six variants, not five: the listed set omits `Paid`.
+- **`Entry.claimed: bool`.** No such field. The tail is `escrowed_at`,
+  `forfeited`, `next_place_lamports`, the split book-keeping, and
+  `sanctions_hold`.
+- **`open_pool` may be sent by settlement.** Keeper only, and by nobody else
+  however long a tier sits idle (founder ruling 2026-09-07). The opener chooses
+  the pool's sealing key, which is why.
+- **`register` splits 80/20 into vault and platform.** It credits 100% to the
+  treasury and cannot address a vault at all.
+- **`claim` and `sweep_unclaimed`.** Neither exists. Prizes are pushed on
+  settlement; there is no claim step and no claim window (R10).
+- **`pause`.** The instruction is `set_paused`.
+- **`trigger_refund` below `MIN_FILL`.** Below the pool's own floor, and it
+  refuses at the floor and above with `FieldReached`.
+- **Missing from the instruction list entirely:** `migrate_config`,
+  `migrate_pool`, `seal_at_deadline`, `place_sanctions_hold`,
+  `lift_sanctions_hold`, `pay_next_place`, `set_open_tiers`,
+  `set_tier_economics`, `set_treasury_policy`. Thirty-three exist;
+  `AS-BUILT.md` lists them by who may send them.
+- **Events.** `Claimed` does not exist. Missing: `PrizesPaid`, `TierSlotFreed`,
+  `PoolMigrated`, and `PoolSealed`'s `pot_lamports` and `reason` fields
+  (`SealReason::Capacity` or `DeadlineMinFill`).
+
+### Prizes (§7)
+
+**"Band table as bps of the vault; residual rolls forward; partial-fill pools
+take the top quarter."** One paid place: the player ranked first takes the pot
+whole (`PRIZE_BANDS_1024 = [1024]`, `PAID_RANKS = 1`). There is no residual
+roll-forward and no partial-fill compression. A tie for first splits the pot
+evenly, and the indivisible remainder goes to the eligible player with the
+lowest entry number.
+
+### The engine (§6)
+
+- **"Shared Rust crate, WASM build for the verify page"**, repeated at §11 and
+  §13. The scoring engine and the results tree are **TypeScript**
+  (`backend/scoring/`), one module run unchanged by the crank and by the
+  browser. No WASM exists anywhere in the repository. The Rust crates
+  `blotto-scoring` and `blotto-merkle` were dropped by register row R20; the
+  workspace holds `crates/blotto-randomness` and the program alone.
+- **"Rank by score desc, zones desc, entered\_at asc".** Entry order is not a
+  tiebreak. Players equal on both criteria share a competition rank and split
+  the combined prize of the positions they occupy; entry order decides only the
+  indivisible remainder and the published leaf order.
+
+### The pool's life (§5) and review (§9, §11)
+
+- **"Publish plaintext set with salts"** and **"a lost ciphertext has its fee
+  refunded from the platform share".** The published bundle (version 2, since
+  2026-09-12) carries battles, salts, commitments and statuses — no timings and
+  no device hash. A failed or malformed entry is scored all losses, and no fee
+  is refunded.
+- **"Flag → escrow → 24h human review"**, and §11's staffed-24h acceptance row.
+  The **published** window is 12 hours. The program's permissionless
+  `release_escrow` after **7 days** is a safeguard against our own failure, not
+  the published deadline — two different windows, and conflating them
+  understates the promise to the player by a factor of fourteen.
+- **"Require two independent signals before a flag".** Detection is advisory
+  and flags nothing automatically: the five signals are computed and logged in
+  shadow mode, and a flag is only ever a named reviewer's signed decision.
+
+### Dangling references
+
+`PID_Blotto-Cup_v0.4.md` (current is v0.5), `REPO-EXTRACTION-BRIEF.md` (the
+file is `REPO-EXTRACTION-BRIEF_v1.1.md`), `01_PRODUCT_FACTS/SPEC_Entry-Packet_v1.md`
+(never existed; that directory holds `PRODUCT-FACTS_BlottoCup_v1.md` alone),
+and the §1 diagram's return arrow, which is still a proof-carrying claim. The
+stack line's "Rust or Node backend" was settled as Node and TypeScript
+throughout. §12's "KYC provider" is a switch that is off at launch.
+
+### What the body is still right about
+
+The trust boundaries, the sealing construction and its failure modes, the
+threat model and its mitigation ids (`threat-tm-401`, `-402`, `-403`), the
+integer-only rule, the pentagon's granularity argument, and the reasoning for
+distinct PDA seed prefixes. Those are why the build looks as it does, and none
+of them has been superseded.

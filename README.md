@@ -2,7 +2,7 @@
 
 A paid-entry skill competition on Solana.
 
-A pool has 64 seats and runs with at least 52. Each player pays a fixed entry,
+A pool has 64 seats and runs with at least 40. Each player pays a fixed entry,
 receives a non-transferable character pass whose class is drawn by verifiable
 on-chain randomness — **cosmetic, read by nothing in scoring** — and immediately
 plays seven sealed battles. A battle is a pentagon of five stats (Strength,
@@ -16,6 +16,39 @@ every player faces the identical field, and the only variable between them is
 the quality of their seven decisions. The player ranked first is paid the whole
 fixed prize pool, funded from the treasury before entries opened.
 
+## How the money moves
+
+Four facts, in the order they happen. Every figure below lives in exactly one
+place — `programs/blotto_cup/src/constants.rs` — and is quoted here only as
+shape, never as a table to keep in step.
+
+1. **The prize is funded before anyone can enter.** Opening a pool moves that
+   tier's fixed pot from the platform treasury into the pool's own vault. The
+   prize is a founder-set constant per tier, not a share of what comes in, so
+   it is the same whether 40 players enter or 64.
+2. **Entries go to the treasury, not to the prize.** The pot is already in the
+   vault, so an entry adds nothing to it. The operator's margin is what the
+   entries came to minus that fixed pot — `1 − 40/seats` of intake, which is
+   **nothing at all at the 40-seat floor** and 37.5% in a full pool. Breaking
+   even on a thin pool is the deliberate shape, not an accident of the
+   numbers.
+3. **The pool either plays or refunds, and a clock decides which.** Entries
+   close 12 hours after opening. At 40 seats or more the pool seals and plays;
+   below 40 every entry refunds in full. The floor is written onto the pool
+   when it opens, so a later change to the constant cannot move it under
+   players who already entered.
+4. **Money leaves a vault four ways, and none of them reaches the operator.**
+   `pay_prizes`, `release_escrow`, `pay_next_place` and `refund`. There is no
+   withdraw instruction, no admin escape hatch and no "recover stuck funds"
+   path, and a share forfeited after a review passes to other players rather
+   than back to us. `scripts/check-standing-rules.sh` asserts that exit set on
+   every change.
+
+Seven entry tiers exist; **one is open at launch**. The prices, the pots and
+which tiers are open are in `constants.rs` and `Config.open_tiers` — see
+[`01_PRODUCT_FACTS/PRODUCT-FACTS_BlottoCup_v1.md`](01_PRODUCT_FACTS/PRODUCT-FACTS_BlottoCup_v1.md)
+for the values with their sources.
+
 ## Start here
 
 | Read this | For |
@@ -25,6 +58,9 @@ fixed prize pool, funded from the treasury before entries opened.
 | [`docs/INDEX.md`](docs/INDEX.md) | Which document is canonical for which subject. |
 | [`docs/OPERATING-MANUAL.md`](docs/OPERATING-MANUAL.md) | Running it: deploys, admin transactions, the daemon, what to do when something breaks. |
 | [`docs/PID_Blotto-Cup_v0.5.md`](docs/PID_Blotto-Cup_v0.5.md) | What the product is and why. Founder-owned, and materially **behind** the build since 2026-09-06 — `AS-BUILT.md` §5 lists every divergence. |
+| [`docs/HOW-IT-WORKS.md`](docs/HOW-IT-WORKS.md) | The same mechanism without the code, one page. For counsel, an investor, or a candidate. |
+| [`01_PRODUCT_FACTS/PRODUCT-FACTS_BlottoCup_v1.md`](01_PRODUCT_FACTS/PRODUCT-FACTS_BlottoCup_v1.md) | Every fact about the product with the line of code or the ratified decision it comes from. Written for counsel and auditors; the fastest way to check a claim. |
+| [`docs/BUILD-ROADMAP_v1.0.md`](docs/BUILD-ROADMAP_v1.0.md) | The ratified decision register (R1–R21, D-A…D-E). **Every constant in the program cites a row here**; nothing is chosen without one. |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Process, the pre-commit hook, and the language gate. |
 
 ## Running it locally
@@ -135,7 +171,9 @@ hard way:
 | `tests/litesvm/` | The integration suite that drives the compiled program |
 | `tests/rehearsal/` | The offline settlement rehearsal and the skill-evidence study |
 | `tests/postgres/` | The only suite that executes SQL: the migrations from an empty database, then every Postgres-backed store against the schema they build |
-| `scripts/` | Deploy, the admin CLI, and the three CI gates |
+| `config/` | **Founder-owned JSON**: the territory schedule, the terms version, the reviewer registry, the custody policy. Changed only on a founder instruction, each in its own commit |
+| `scripts/` | Deploy, the admin CLI, and the ten checks CI's `standing-rules` lane runs |
+| `scripts/sim/` | The arrival simulation behind the fill rule — it re-implements the seal/refund boundary to measure how often a pool runs, and self-tests against the program's numbers in CI |
 
 ## Verifying a change
 
@@ -147,12 +185,19 @@ cd app && npm run lint && npm run typecheck && npm test && npm run build
 cd app && NEXT_PUBLIC_FIXTURE_DATA=1 npm run build && npm run journey   # the browser journey
 ./scripts/check-language.sh                     # the PID §8.7 lexicon
 ./scripts/check-standing-rules.sh               # the vault's exits; class out of scoring
+npx tsx scripts/check-territories.ts            # the founder's schedule is enforceable
+npx tsx scripts/sim/fill-replay.ts --self-test  # the simulation still models the fill rule
 ./scripts/check-env-examples.sh                 # every env var a service reads is documented
 ./scripts/check-container-user.sh               # no service image runs as root
 ./scripts/check-fixtures.sh                     # the Python oracles reproduce their vectors
 python3 scripts/check-mirrors.py                # Rust and TypeScript constants agree
 ./scripts/ci-gate.sh --self-test                # the deploy gate still judges correctly
+./scripts/deploy-devnet.sh --self-test          # the program deploy still reads a cluster
 ```
+
+Those ten are the whole of CI's `standing-rules` lane, in its order — run them
+and that lane cannot surprise you. `ci-fast` has five more jobs: `rust`, `node`,
+`postgres`, `journey` and `gitleaks`.
 
 Every backend package has `npm run typecheck` and `npm test`. CI runs all of it;
 `docs/AS-BUILT.md` §7 has the full sequence and what each step depends on.
@@ -171,8 +216,14 @@ any case came back pending.
 
 ## Reports
 
-- [`docs/AUDIT-2026-09-07.md`](docs/AUDIT-2026-09-07.md) — the repository audit:
-  what was found and fixed, the open items, and the road to mainnet.
+- [`AUDIT_2026-09-11.md`](AUDIT_2026-09-11.md) — the cold-read audit, frozen as
+  written. [`AUDIT_2026-09-11_RESPONSE.md`](AUDIT_2026-09-11_RESPONSE.md) is the
+  running ledger of what was changed in answer to it, and
+  [`AUDIT_2026-09-11_PLAN.md`](AUDIT_2026-09-11_PLAN.md) the founder-approved
+  plan it runs on. **These three are the live list**; the one below is the
+  earlier pass.
+- [`docs/AUDIT-2026-09-07.md`](docs/AUDIT-2026-09-07.md) — the first repository
+  audit: what was found and fixed, the open items, and the road to mainnet.
 - [`EXTRACTION-REPORT.md`](EXTRACTION-REPORT.md) — what was carried from the
   predecessor repository and what turned out not to exist. **Historical**: it
   describes the state at the end of Phase 0.

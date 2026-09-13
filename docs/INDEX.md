@@ -9,6 +9,8 @@ owns; everywhere else a fact appears, it appears as a pointer.
 | Subject | Canonical document | Update rule |
 |---|---|---|
 | **What the system actually is — services, program, money model, and what is not built** | `AS-BUILT.md` | Architect-owned. Written from the code; re-verified against a green suite whenever it changes. **Where it and TECH-ARCH v0.2 disagree, this file is right about what exists** and TECH-ARCH is right about what was intended |
+| **Every fact about the product, with the line of code or the ratified row it comes from** | `../01_PRODUCT_FACTS/PRODUCT-FACTS_BlottoCup_v1.md` | Architect-owned, written for counsel and auditors. Restates only facts whose numbers live in code or a ratified register, each citing its source. **Its maintenance rule binds: when a source changes, this file changes in the same change set or the claim comes out** |
+| The mechanism explained without code, one page | `HOW-IT-WORKS.md` | Architect-owned, written to the §8.7 language rules so it is safe to hand to counsel, an investor or a candidate. States what happens; it makes no claim about what the product legally is, and must not start |
 | Running it — deploys, admin transactions, incidents, keys | `OPERATING-MANUAL.md` | Architect-owned; the founder owns the standing rules inside it |
 | Opening an entry tier — the preconditions, the order, and the two refusals that stand in the way | `RUNBOOK_open-tier.md` | Founder-facing. `set-open-tiers` is the only thing that changes `Config.open_tiers`; the runbook owns the sequence around it, not the tier table (`../programs/blotto_cup/src/constants.rs`) or the R6 preconditions (the roadmap) |
 | Deploying the fill-rule change — the upgrade, the per-pool migration, and the order they go in | `RUNBOOK_r7b-upgrade.md` | Founder-facing. One-off, retired once every deployment's pools are at the current layout; the rule itself is register row R7-b |
@@ -30,7 +32,7 @@ owns; everywhere else a fact appears, it appears as a pointer.
 | **Architecture diagrams: trust boundaries, the entry path, the pool's life, settlement, the money model, keys, where the data lives, deploying** | `ARCHITECTURE-DIAGRAMS.md` | Architect-owned. Annotated Mermaid views drawn from the code; canonical for nothing, and `AS-BUILT.md` wins wherever a figure and it disagree |
 | **Infrastructure map: every vendor, what each does, what talks to what, and the monthly cost forecast** | `INFRASTRUCTURE.md` | Architect-owned. Prices dated (read from the vendors 2026-09-11) and on-chain costs measured on devnet the same day; `hosting.md` keeps the ports, health checks and webhook settings, `go-live-devnet.md` the founder's dashboard settings |
 | Keys, custody, infrastructure provisioning | `OPERATING-MANUAL.md` §8 (who holds what today) · `hosting.md` (the topology) · `REPO-TRANSITION-PLAYBOOK.md` (intent) · `../TRANSITION-REPORT.md` (**the Phase 0 record only — it predates every deployment**) | The manual wins on current state; the report wins on what was carried and decommissioned |
-| Territory availability schedule (allowed + blocked lists) | `../config/territories.json` | FOUNDER-OWNED contents (R2/D-B3); schema + fail-closed semantics in `backend/packet/src/territories.ts`. Never edit the lists without a founder instruction |
+| Territory availability schedule (allowed + blocked lists) | `../config/territories.json` (the schedule) · `../config/territories.README.md` (one row per code: the PID §9 line it implements, and what is still held and why) | FOUNDER-OWNED contents (R2/D-B3); schema + fail-closed semantics in `backend/packet/src/territories.ts`, and `scripts/check-territories.ts` fails CI when the two files disagree or the schedule is not enforceable. Never edit the lists without a founder instruction |
 | Terms / attestation version (the D-B4 clickwrap) | `../config/terms.json` | FOUNDER-OWNED. Bumping `version` re-prompts every wallet and invalidates old attestation records at packet issuance; any wording change to the clickwrap is a new version by definition |
 | Reviewer wallets (the C10 review service's member list) | `../config/reviewers.json` | FOUNDER-OWNED. The operating multisig's member keys. Shipped empty; the devnet reviewer was ratified 2026-09-06 (the founder's wallet). No decision verifies while the list is empty, and the review service says so at startup. Log row format: `backend/detection/src/review.ts` |
 | Custody disclosure (the C13 page's values) | `../config/custody.json` | FOUNDER-OWNED. Upgrade authority, n-of-m, timelock, key holders; null renders "not yet set" — the page never invents a number |
@@ -65,14 +67,24 @@ different competition from the one that is built. **Nobody may edit the PID but
 the founder**, so every divergence is listed here instead, for a single v0.6
 pass. `AS-BUILT.md` §5 carries the same table with the code-side detail.
 
-| PID location | Says | The build, since |
-|---|---|---|
-| §1 summary, §6 heading and table, §2 table, §7 flow diagram | Top 16 paid; the prize pool is 80% of entries; the platform retains 20% | **One paid place** (D-E2, 2026-09-06). Pots are fixed constants funded from the treasury before entries open; the operator's margin is entries minus the pot |
-| §2 table | Prize pools 5.12 / 25.60 SOL | **4 / 20 / 30 / 40 / 100 / 200 / 300 SOL** across seven tiers (D-E1, 2026-09-06) |
-| §2 pool-cadence paragraph | Fill deadline 72 hours; 32–63 entrants run at reduced size; fewer than 32 refunds | **12 hours** (D-E6); **40–63 run**, fewer than 40 refunds (D-E4 as amended by R7-b, 2026-09-12) |
-| §5 | Prose implies entry order can affect ranking | Entry order decides only the indivisible remainder and the published leaf order. Rank comes from battles won then stats won (D3-B) |
-| §8.3 evidence table | "Paid 16 who are genuinely top-16" | One paid place. The skill evidence needs restating as a rank-1 rate |
-| §1 summary | "Unflagged winners claim immediately" | There is no claim step; prizes are pushed (R10) |
+**A founder-authorised appendix was added to the PID on 2026-09-13** and already
+annotates the first three rows below. It does not touch §1, §5, §7, §8 or §9, so
+the body a reader meets first is still the old product — the appendix narrows
+this table, it does not close it. The ✓ column says which rows it covers.
+
+| ✓ | PID location | Says | The build, since |
+|---|---|---|---|
+| ✓ | §2 table, §6 heading and table | Top 16 paid; the prize pool is 80% of entries; the platform retains 20% | **One paid place** (D-E2, 2026-09-06). Pots are fixed constants funded from the treasury before entries open; the operator's margin is entries minus the pot |
+| ✓ | §2 table | Prize pools 5.12 / 25.60 SOL | **4 / 20 / 30 / 40 / 100 / 200 / 300 SOL** across seven tiers (D-E1, 2026-09-06) |
+| ✓ | §2 pool-cadence paragraph | Fill deadline 72 hours; 32–63 entrants run at reduced size; fewer than 32 refunds | **12 hours** (D-E6); **40–63 run**, fewer than 40 refunds (D-E4 as amended by R7-b, 2026-09-12) |
+| | §1 summary, §7 flow diagram | Top 16, the 80/20 split, "unflagged winners claim immediately", and a `<32 → refund` branch — four errors in the opening paragraph and the money diagram | As above, and there is **no claim step**: prizes are pushed (R10) |
+| | §4.6 | "The program rejects anything else" of a bad allocation | The program never sees an allocation. The client and the scoring engine are the two enforcement points |
+| | §5 | Prose implies entry order can affect ranking | Entry order decides only the indivisible remainder and the published leaf order. Rank comes from battles won then stats won (D3-B) |
+| | §4.5 evidence table (cited by §8.3) | "Paid 16 who are genuinely top-16" | One paid place. The skill evidence needs restating as a rank-1 rate |
+| | §8.1, §8.5 | "the operator retains 20%" — §8.5 is headed "The 20%" | Margin is entries minus the fixed pot: `1 − 40/seats` of intake, nil at the 40-seat floor and 37.5% at a full 64. **This is the section counsel reads** |
+| | §9 | A blocked list including the US states and sanctioned jurisdictions | `config/territories.json` carries fourteen country codes; the US states and the sanctions row are not enforceable yet, for the two different reasons in `config/territories.README.md` |
+| | §10 C5, C8; §11 D4 | "Merkle claim", "KYC at claim", "claim window (30d)" | No claim step exists, so none of the three has a referent. The KYC switch is off at launch |
+| | §10 C9 | "staffed 24h review" | The published window is **12 hours**; the program's permissionless safeguard is **7 days** and is never published as the deadline |
 
 ### TECH-ARCH v0.2 is behind the build
 
@@ -89,6 +101,26 @@ for what exists. The divergences that would mislead a reader:
   `open_pool`, before any entry, and `register` cannot touch a vault at all.
 - **§3.2 and §13 describe a `claim` instruction and a claim step.** Neither
   exists; prizes are pushed.
+- **§3.2 names the vault's exits as `claim`, `refund`, `sweep_unclaimed`.** Two
+  of those three do not exist and all four real ones are missing. The exit set
+  is `pay_prizes`, `release_escrow`, `pay_next_place`, `refund`, and
+  `scripts/check-standing-rules.sh` asserts exactly that on every change. This
+  is the most dangerous line in the document.
+- **§2 declares `MIN_FILL = 32` and `POT_BPS = 8000`.** The minimum field is
+  **40** and is carried per pool; there is no bps constant at all, because a pot
+  is never a proportion of anything — CI greps for that arithmetic and fails on
+  it.
+- **§6 specifies a shared Rust crate with a WASM build.** The scoring engine and
+  the results tree are TypeScript (`backend/scoring/`), run unchanged by the
+  crank and the browser. No WASM exists anywhere in the repository (R20).
+- **§11 says a flag goes to 24-hour human review.** The published window is 12
+  hours; the on-chain permissionless safeguard is 7 days.
+- **§9 requires two independent signals before a flag.** Detection is advisory:
+  the daemon flags nothing, and a flag is only ever a named reviewer's signed
+  decision.
+
+`INDEX.md` cannot carry the whole list — the document's own dated appendix does,
+at the end of `TECH-ARCHITECTURE_Blotto-Cup_v0.2.md`.
 
 ## Where history lives
 
