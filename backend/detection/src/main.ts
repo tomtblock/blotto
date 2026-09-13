@@ -28,8 +28,8 @@
  *   BLOTTO_REVIEW_ACTION_BUDGET  decisions one reviewer key may sign per
  *   BLOTTO_REVIEW_ACTION_WINDOW_MS
  *                                window (audit B-25). Both default to the
- *                                PROPOSALS in budget.ts — founder-owned
- *                                numbers AWAITING_RATIFICATION
+ *                                RATIFIED numbers in budget.ts (D-E13,
+ *                                founder ruling 2026-09-13: 64 per hour)
  *
  * The chain client is @blotto/reveal's Web3Chain — the same
  * settlement-signed client the daemon drives; pool ADDRESSES from the
@@ -187,7 +187,7 @@ export function main(env: NodeJS.ProcessEnv = process.env): void {
   );
   console.log(
     `${SERVICE}: reviewer budget = ${budget.actions} decisions per ${budget.windowMs}ms ` +
-      `(architect proposal, AWAITING_RATIFICATION — ${BUDGET_ENV.actions} / ${BUDGET_ENV.windowMs})`
+      `(ratified D-E13 2026-09-13 — ${BUDGET_ENV.actions} / ${BUDGET_ENV.windowMs})`
   );
   console.log(`${SERVICE}: listening on :${port} (${registry.members.length} reviewer(s))`);
 }

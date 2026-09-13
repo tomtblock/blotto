@@ -7,10 +7,17 @@
  * API (career rows × pool state); "unseen" is a per-device localStorage
  * set, so the badge is a convenience, never a server-side signal.
  *
- * The email toggle records the wallet-signed opt-in with the entry service
- * (see src/entry/notify.ts). Opt-in only; nothing here asks twice, counts
- * anything down, or prompts re-entry — retention is mastery and standing
- * (D-UI-2), and the do-not-build vocabulary is CI-enforced.
+ * THE EMAIL TOGGLE WAS REMOVED (D-E11, founder ruling 2026-09-13). It
+ * recorded a wallet-signed opt-in with the entry service for a delivery
+ * nothing in this repository can perform: there is no mail code and no
+ * provider account. The ruling is to cut the promise now and build the
+ * dispatcher later; `POST /notify` and its store stay in place and dormant,
+ * and consents already given stay recorded. What remains here — the bell and
+ * the sheet — is delivery we actually perform, to an open tab.
+ *
+ * Nothing here asks twice, counts anything down, or prompts re-entry —
+ * retention is mastery and standing (D-UI-2), and the do-not-build
+ * vocabulary is CI-enforced.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -20,7 +27,6 @@ import { indexerApi } from '@/data/api';
 import { useAuth } from '@/wallet/auth-context';
 import { Sheet } from '@/components/ui/sheet';
 import { useToast } from '@/components/ui/toast';
-import { submitNotifyPreference } from '@/entry/notify';
 
 interface Item {
   key: string;
@@ -35,7 +41,6 @@ interface Item {
 const POLL_MS = 60_000;
 
 const seenKey = (wallet: string) => `blotto:notify-seen:${wallet}`;
-const emailKey = (wallet: string) => `blotto:notify-email:${wallet}`;
 
 function readSeen(wallet: string): Set<string> {
   try {
@@ -68,24 +73,6 @@ export function NotificationsBell() {
   const [items, setItems] = useState<Item[]>([]);
   const [unseen, setUnseen] = useState(0);
   const [open, setOpen] = useState(false);
-  // Keyed by wallet; until the wallet toggles in this session, the display
-  // state comes straight from the device cache (read in render — client
-  // component, guarded for SSR and blocked storage).
-  const [emailPref, setEmailPref] = useState<{ wallet: string; on: boolean } | null>(null);
-  const emailOn =
-    emailPref && emailPref.wallet === wallet
-      ? emailPref.on
-      : (() => {
-          try {
-            return typeof window !== 'undefined' && wallet !== null
-              ? localStorage.getItem(emailKey(wallet)) === '1'
-              : false;
-          } catch {
-            return false;
-          }
-        })();
-  const [emailBusy, setEmailBusy] = useState(false);
-  const [emailError, setEmailError] = useState(false);
 
   // Founder 2026-09-09: "users can be alerted when a pool fills so they can
   // go and check the result." While the site is open the bell re-reads the
@@ -146,36 +133,6 @@ export function NotificationsBell() {
     setUnseen(0);
   }, [wallet, items]);
 
-  const onEmailToggle = useCallback(
-    async (next: boolean) => {
-      if (!wallet || emailBusy) return;
-      setEmailBusy(true);
-      setEmailError(false);
-      const signer = auth.status === 'signed-in'
-        ? auth.signers.find((s) => s.address === wallet)
-        : undefined;
-      const ok = await submitNotifyPreference(
-        process.env.NEXT_PUBLIC_ENTRY_API_URL,
-        signer,
-        wallet,
-        next
-      );
-      setEmailBusy(false);
-      if (ok) {
-        setEmailPref({ wallet, on: next });
-        try {
-          localStorage.setItem(emailKey(wallet), next ? '1' : '0');
-        } catch {
-          // Preference is recorded server-side either way.
-        }
-        toast.show(COPY.notify.emailSaved);
-      } else {
-        setEmailError(true);
-      }
-    },
-    [wallet, emailBusy, auth, toast]
-  );
-
   if (!wallet) return null;
 
   return (
@@ -226,26 +183,6 @@ export function NotificationsBell() {
             ))}
           </ul>
         )}
-        <div className="border-t border-line pt-4">
-          <label className="flex cursor-pointer items-start gap-3">
-            <input
-              type="checkbox"
-              checked={emailOn}
-              disabled={emailBusy}
-              onChange={(e) => void onEmailToggle(e.target.checked)}
-              className="mt-0.5 h-5 w-5 shrink-0 accent-(--color-brand)"
-            />
-            <span className="flex flex-col gap-0.5">
-              <span className="text-[14px] font-medium text-ink">{COPY.notify.emailLabel}</span>
-              <span className="text-[12px] leading-4 text-ink-muted">{COPY.notify.emailNote}</span>
-            </span>
-          </label>
-          {emailError && (
-            <p className="mt-2 text-[13px] leading-5 text-price-down" role="alert">
-              {COPY.notify.emailFailed}
-            </p>
-          )}
-        </div>
       </Sheet>
     </>
   );

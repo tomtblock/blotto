@@ -3,52 +3,36 @@
 /*
  * The sealed confirmation (v3 D2: a designed moment, not a sentence),
  * extended by the founder's brief of 2026-09-09: it must be "super clear"
- * that the player should check back when the pool has reached its field
- * and concluded; they can opt in to an email when a pool they are in has
- * finished; and the pool page and the public results/every-battle view are
+ * that the player should check back when the pool has reached its field and
+ * concluded, and the pool page and the public results/every-battle view are
  * one tap away.
  *
- * The opt-in reuses the notifications bell's exact mechanism
- * (submitNotifyPreference: the wallet signs the canonical message, the
- * entry service records it) — one preference, whichever surface set it.
+ * THE EMAIL OPT-IN WAS REMOVED HERE (D-E11, founder ruling 2026-09-13).
+ *
+ * This screen used to offer "Email me when this pool has concluded" and then
+ * answer "We will email you when a pool you are in has concluded." Both were
+ * promises nothing could keep: no code in this repository can send an email
+ * and there is no account with a provider. The opt-in was real — the wallet
+ * signed a canonical message and the entry service stored it — which made it
+ * worse rather than better, because a player could show what they had agreed
+ * to and we could not show we had done it.
+ *
+ * The ruling is to cut the promise now and build the dispatcher later. The
+ * entry service's `POST /notify` route and its store are left in place and
+ * dormant; consents already given stay recorded, because they were validly
+ * given and deleting a signed record is the worse of the two mistakes. When a
+ * dispatcher exists, the opt-in comes back here and this comment goes.
+ *
+ * The in-app notifications bell is unaffected and still works: it is derived
+ * from the read API and delivers to an open tab, which is a thing we actually
+ * do rather than a thing we say we will do.
  */
 
-import { useCallback, useState } from 'react';
 import Link from 'next/link';
 import { COPY } from '@/copy';
-import { Button } from '@/components/ui/button';
-import { useAuth } from '@/wallet/auth-context';
-import { submitNotifyPreference } from '@/entry/notify';
 import { BlottSprite } from '@/components/blott/BlottSprite';
 
-const EMAIL_KEY = (wallet: string) => `blotto:notify-email:${wallet}`;
-
 export function SealedPanel({ poolAddress }: { poolAddress: string }) {
-  const auth = useAuth();
-  const wallet = auth.status === 'signed-in' ? auth.walletAddress : null;
-  const [optIn, setOptIn] = useState<'idle' | 'busy' | 'done' | 'failed'>(() => {
-    try {
-      return wallet && localStorage.getItem(EMAIL_KEY(wallet)) === '1' ? 'done' : 'idle';
-    } catch {
-      return 'idle';
-    }
-  });
-
-  const onOptIn = useCallback(async () => {
-    if (!wallet || optIn === 'busy') return;
-    setOptIn('busy');
-    const signer = auth.status === 'signed-in' ? auth.signers.find((s) => s.address === wallet) : undefined;
-    const ok = await submitNotifyPreference(process.env.NEXT_PUBLIC_ENTRY_API_URL, signer, wallet, true);
-    if (ok) {
-      try {
-        localStorage.setItem(EMAIL_KEY(wallet), '1');
-      } catch {
-        /* recorded server-side either way */
-      }
-    }
-    setOptIn(ok ? 'done' : 'failed');
-  }, [wallet, optIn, auth]);
-
   return (
     <section aria-live="polite" className="animate-settle flex flex-col items-center gap-5 py-10 text-center">
       <div className="relative h-16 w-16" aria-hidden>
@@ -72,25 +56,6 @@ export function SealedPanel({ poolAddress }: { poolAddress: string }) {
       <div className="flex w-full max-w-md flex-col gap-3 rounded-2xl border border-line bg-raised p-5 text-left">
         <h3 className="font-display text-[24px] leading-7 font-bold text-ink">{COPY.pool.checkBackTitle}</h3>
         <p className="text-[15px] leading-6 text-ink">{COPY.pool.checkBack}</p>
-        {wallet && (
-          <div className="flex flex-col gap-2 pt-1">
-            {optIn === 'done' ? (
-              <p className="text-[13px] leading-5 text-ink-muted">{COPY.pool.notifyOptInDone}</p>
-            ) : (
-              <>
-                <Button intent="quiet" disabled={optIn === 'busy'} onClick={onOptIn}>
-                  {COPY.pool.notifyOptIn}
-                </Button>
-                <p className="text-[12px] leading-5 text-ink-muted">{COPY.notify.emailNote}</p>
-                {optIn === 'failed' && (
-                  <p role="alert" className="text-[12px] leading-5 text-ink-muted">
-                    {COPY.notify.emailFailed}
-                  </p>
-                )}
-              </>
-            )}
-          </div>
-        )}
       </div>
 
       <div className="flex w-full max-w-md flex-col gap-2 sm:flex-row">
