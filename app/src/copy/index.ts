@@ -518,8 +518,12 @@ export const COPY = {
     // PHASE-N-REVIEW: the founder asked for a word other than "Fixtures"
     // (2026-09-09); "Prize pools" is the proposal, from the approved lexicon.
     title: 'Prize pools',
-    /** Tiers not yet switched on (everything but the launch tier). */
-    statusComingSoon: 'Coming soon',
+    // `statusComingSoon: 'Coming soon'` was removed on 2026-09-13 (founder
+    // instruction 2026-09-12 §2.4). A tier the founder has not opened is no
+    // longer listed at all, so there is nothing for the phrase to label —
+    // and the approved lexicon carries no wording for it, because an
+    // unopenable tier advertising a prize pool is a statement about future
+    // availability this product is not in a position to make.
     statusOpen: 'Taking entries',
     statusSettling: 'Settling',
     statusOpenable: 'Covered — opens next',
