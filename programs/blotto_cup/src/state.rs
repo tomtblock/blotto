@@ -557,7 +557,7 @@ mod tests {
     /// grow gets a migration instruction in the same upgrade
     /// (`migrate_config`). `Pool::LEN` was 839 until 2026-09-13 and is now
     /// 841: R7-b appended `min_seats: u16` after `vault_bump`, and
-    /// `migrate_pool` grows the nine pools that predate it. 839 is also not
+    /// `migrate_pool` grows every pool that predates it. 839 is also not
     /// the 834 the proposal and prompt v2 repeat (that number is
     /// `paid_mask`'s byte offset, D1/D14; the founder's note against it is in
     /// the decision register). These pins turn a layout change into a

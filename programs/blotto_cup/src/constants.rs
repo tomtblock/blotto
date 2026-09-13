@@ -75,7 +75,7 @@ pub const ESCROW_AUTO_RELEASE_SECS: i64 = 7 * 24 * 60 * 60;
 pub const MIN_SEATS: u16 = 40;
 
 /// The minimum field pools opened BEFORE R7-b played at (D-E4, 2026-09-06 —
-/// 52 seats). `migrate_pool` writes this into the nine pools that predate
+/// 52 seats). `migrate_pool` writes this into every pool that predates
 /// the per-pool `Pool.min_seats` field, because 52 is the number the players
 /// in those pools actually entered under and the whole point of the field is
 /// that a published value does not move beneath them.

@@ -5,21 +5,46 @@ every pool, and the one-off migration each existing pool needs afterwards.
 
 **Why it needs a runbook at all:** the upgrade makes every pool account two bytes short of what the
 new program expects, and Solana programs refuse a short account rather than guessing. Between the
-upgrade and the migration, **every instruction touching an existing pool fails** — including the two
-that pay people (`pay_next_place` and `release_escrow`, which run on pools that have already paid).
-The order below is what keeps that window to minutes.
+upgrade and the migration, **every instruction touching an existing pool fails** — `register`, which
+is the one players use, and the two that pay people (`pay_next_place` and `release_escrow`, which run
+on pools that have already paid). The order below is what keeps that window to minutes.
 
 ---
+
+## Do this when no pool is taking entries
+
+**This is the one part of the order that is not obvious, so it comes first.**
+
+A pool that is open when the upgrade lands keeps the floor it opened under — 52, written by the
+migration, because 52 is the number its players actually entered under. The site does not read that
+number; it reads the shared one, 40. So for as long as such a pool stays open, **the site can say
+"this pool will play" about a pool the chain is going to refund** — any pool sitting between 40 and
+51 seats at its deadline.
+
+Upgrading only when nothing is open removes the disagreement entirely: every live pool then has the
+same floor the site shows. (The durable fix is to publish each pool's own floor so the site never has
+to assume. That is on the list for before mainnet; until then, this order is the guarantee.)
+
+Pools close on their own at their deadline, every twelve hours. So:
+
+1. **Wait for the open pool to close.** `npm run admin -- pools` shows you when.
+2. **Stop the daemon as soon as it does.** It opens the next pool within five minutes, and it holds
+   the keeper key — so stopping it is what actually prevents a new pool. Pausing does *not*: pause
+   blocks entries, not opens.
+3. Now you have as long as you need.
 
 ## Before you start
 
 ```
-npm run admin -- pools
+npm run admin -- pools --upgrade-preflight
 ```
 
-This lists every pool and its state, and **exits with an error if any pool is mid-settlement**
-(Sealed, Scored or Refunding). If it does, stop: finish those pools first. A pool caught mid-settlement
-by an upgrade is the one case where the migration is not simply a formality.
+The flag matters. Without it this is the ordinary status command and it only checks for pools
+**mid-settlement** (Sealed, Scored or Refunding) — a pool caught mid-settlement by an upgrade is the
+one case where the migration is not simply a formality. With the flag it *also* refuses while any
+pool is taking entries, which is the rule above.
+
+Both must read CLEAR. If either refuses, it names the pool ids; clear those first.
 
 Write down the pool ids it lists. You need every one of them in step 3.
 
@@ -61,6 +86,12 @@ npm run admin -- pools
 
 Every pool should read normally. If one errors, it has not been migrated — go back to step 3 for
 that id.
+
+## Step 5 — Start the daemon again
+
+It opens the next pool on its usual cooldown. That pool, and every pool after it, gets a floor of
+**40** — and because nothing was open across the upgrade, the floor the site shows is now the floor
+every live pool actually has.
 
 ---
 

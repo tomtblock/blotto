@@ -128,7 +128,7 @@ scripted bot in shadow mode, and drains the 51-entry refund fork in full.
      pool's untouched pot returns to the treasury; a pool at the floor or
      above seals and plays instead (`seal_at_deadline`; `FieldReached`
      refuses the refund there). The floor is the pool's own `min_seats` —
-     `MIN_SEATS` = 40 since R7-b, and 52 on the nine pools that predate the
+     `MIN_SEATS` = 40 since R7-b, and 52 on every pool that predates the
      field — so run the case against the number the pool actually carries;
    - `set_paused` mid-fill → `register` rejects → unpause → fill resumes;
    - Turnkey export refusal on an open pool past deadline → the refund path

@@ -199,6 +199,17 @@ Those ten are the whole of CI's `standing-rules` lane, in its order — run them
 and that lane cannot surprise you. `ci-fast` has five more jobs: `rust`, `node`,
 `postgres`, `journey` and `gitleaks`.
 
+One more gate lives in `node` rather than `standing-rules`, because it needs the
+workspace installed — run it if you touch the admin CLI:
+
+```
+npx ts-node --transpile-only scripts/admin.ts pools --self-test
+```
+
+It proves the upgrade pre-flight still refuses. That pre-flight is what stops a
+program upgrade landing while a pool is taking entries; a version of it that
+quietly stopped refusing would report CLEAR for ever.
+
 Every backend package has `npm run typecheck` and `npm test`. CI runs all of it;
 `docs/AS-BUILT.md` §7 has the full sequence and what each step depends on.
 

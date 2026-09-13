@@ -220,7 +220,8 @@ export function registerBlottoEventLayouts(): void {
   // TWO SHAPES, ON PURPOSE. `pot_lamports` and `reason` were appended by
   // R7-b (founder instruction 2026-09-12), and appending to an event is a
   // WIRE-FORMAT CHANGE that reaches backwards: every `PoolSealed` already in
-  // a ledger — nine pools on devnet — was emitted at the old 34-byte shape,
+  // a ledger — every pool devnet had opened by then — was emitted at the old
+  // 34-byte shape,
   // and the indexer replays from the ledger. A decoder that insisted on the
   // new shape would make those events undecodable for ever, which is how a
   // backfill loses the record that a pool ever sealed.

@@ -55,6 +55,16 @@ commands
                             D-E2/D-E4 runbook section records before an
                             upgrade (read-only; exits 1 while any pool is
                             Sealed, Scored or Refunding)
+      [--upgrade-preflight] ALSO refuse while any pool is Open. Off by
+                            default because a pool is Open almost always and
+                            this is the ordinary status command. Required
+                            before the R7-b program upgrade: a pool open
+                            across that upgrade keeps the floor it opened
+                            with while the site reads the shared constant,
+                            so the two can disagree. See
+                            docs/RUNBOOK_r7b-upgrade.md
+      [--self-test]         drive the verdict through its fixtures and exit.
+                            Touches no network
   init-config               one-time setup (admin = the signing key)
       --entry-signer <pubkey> --settlement-signer <pubkey> --keeper <pubkey>
       --ceilings <7 comma-separated lamport values>
@@ -207,7 +217,7 @@ interface Cli {
  * usage block, but the parser had no way to accept a bare flag — so the
  * documented form threw and it could only be passed with a dummy value.
  */
-const SWITCHES = new Set(['dry-run', 'keep-keeper']);
+const SWITCHES = new Set(['dry-run', 'keep-keeper', 'upgrade-preflight', 'self-test']);
 
 function parseArgs(argv: string[]): Cli {
   const [command, ...rest] = argv;
@@ -403,8 +413,117 @@ const POOL_STATES = ['Open', 'Sealed', 'Scored', 'Paid', 'Refunding', 'Closed'] 
 /** States in which a pool is mid-settlement — the drain gate of the
  * D-E2/D-E4 runbook section (proposal E1 §8): no upgrade or backend deploy
  * while any pool sits here, because the prize rule is enforced by the
- * engine that settles it. */
+ * engine that settles it.
+ *
+ * `Open` is deliberately NOT in this set, and must not be added to it: the
+ * whole justification for `Pool.min_seats` is that an upgrade CAN land while
+ * a pool is taking entries, so the floor is carried per pool rather than read
+ * from a constant. Widening this set would quietly retire that reasoning.
+ * The open-pool refusal is a separate, opt-in verdict — see `drainVerdict`. */
 const MID_SETTLEMENT = new Set(['Sealed', 'Scored', 'Refunding']);
+
+interface PoolRow {
+  id: bigint;
+  state: string;
+}
+
+interface Verdict {
+  lines: string[];
+  blocked: boolean;
+}
+
+/**
+ * The drain verdict, separated from the fetch so it can be tested.
+ *
+ * Same reasoning as `scripts/ci-gate.sh`: the live inputs need a cluster, so
+ * the only way to prove the decision still refuses is to drive the pure half
+ * through fixtures. A gate that cannot fail is not a gate.
+ *
+ * TWO VERDICTS, not one widened verdict:
+ *
+ *   drain    — mid-settlement pools. Always checked. Blocks an upgrade OR a
+ *              backend deploy, because the prize rule is enforced by the
+ *              engine that settles them.
+ *   upgrade  — open pools. Checked only with `--upgrade-preflight`, because a
+ *              pool is Open almost always and this is the ordinary status
+ *              command; a permanent non-zero exit would make it useless.
+ *
+ * WHY THE SECOND ONE EXISTS (R7-b, 2026-09-13). A pool open across the
+ * program upgrade keeps the floor it opened under — 52, written by
+ * `migrate_pool` — while `backend/indexer/src/read-api.ts` serves the shared
+ * constant, 40. Such a pool sitting between the two numbers at its deadline
+ * would be shown "this pool will play" and would refund instead. Upgrading
+ * only when no pool is Open makes every live pool's floor equal the constant,
+ * which is what makes that read honest. The durable fix is to carry each
+ * pool's floor through `PoolOpened` so the site never has to assume; until
+ * then this refusal is the guarantee, and the read API's comment names it.
+ */
+function drainVerdict(rows: readonly PoolRow[], upgradePreflight: boolean): Verdict {
+  const settling = rows.filter((r) => MID_SETTLEMENT.has(r.state)).map((r) => r.id);
+  const open = rows.filter((r) => r.state === 'Open').map((r) => r.id);
+  const lines: string[] = [];
+
+  lines.push(
+    settling.length === 0
+      ? 'drain: CLEAR — no pool is Sealed, Scored or Refunding'
+      : `drain: BLOCKED — mid-settlement pool ids: ${settling.join(', ')}`
+  );
+
+  if (upgradePreflight) {
+    lines.push(
+      open.length === 0
+        ? 'upgrade: CLEAR — no pool is taking entries'
+        : `upgrade: BLOCKED — taking entries, pool ids: ${open.join(', ')}. ` +
+            'A pool open across the upgrade keeps the floor it opened with, ' +
+            'which the site does not read. Wait for it to close, stop the ' +
+            'daemon so the next one cannot open, then re-run. ' +
+            'docs/RUNBOOK_r7b-upgrade.md'
+    );
+  }
+
+  return { lines, blocked: settling.length > 0 || (upgradePreflight && open.length > 0) };
+}
+
+/** Fixtures for `pools --self-test`. Both verdicts, both ways, and the two
+ * cases that matter most: an Open pool must NOT block the default command,
+ * and MUST block the pre-flight. */
+function selfTestDrainVerdict(): number {
+  const row = (id: number, state: string): PoolRow => ({ id: BigInt(id), state });
+  const cases: Array<[string, readonly PoolRow[], boolean, boolean]> = [
+    ['empty, default', [], false, false],
+    ['empty, preflight', [], true, false],
+    ['all terminal, default', [row(1, 'Closed'), row(2, 'Paid')], false, false],
+    ['all terminal, preflight', [row(1, 'Closed'), row(2, 'Paid')], true, false],
+    // The live shape today: nine terminal pools and one taking entries.
+    ['one Open, default — must NOT block', [row(1, 'Closed'), row(10, 'Open')], false, false],
+    ['one Open, preflight — MUST block', [row(1, 'Closed'), row(10, 'Open')], true, true],
+    ['Sealed blocks both', [row(3, 'Sealed')], false, true],
+    ['Scored blocks both', [row(4, 'Scored')], false, true],
+    ['Refunding blocks both', [row(5, 'Refunding')], false, true],
+    ['Sealed blocks the pre-flight too', [row(3, 'Sealed')], true, true],
+    ['both kinds at once', [row(3, 'Sealed'), row(10, 'Open')], true, true],
+  ];
+  const failures: string[] = [];
+  for (const [name, rows, preflight, want] of cases) {
+    const got = drainVerdict(rows, preflight).blocked;
+    if (got !== want) failures.push(`  ${name}: expected blocked=${want}, got ${got}`);
+  }
+  // The default verdict must never mention an upgrade, or an operator reading
+  // the status command would think it had checked one.
+  const quiet = drainVerdict([row(10, 'Open')], false);
+  if (quiet.lines.some((l) => l.startsWith('upgrade:'))) {
+    failures.push('  default mode printed an upgrade verdict it did not check');
+  }
+  if (failures.length > 0) {
+    console.error(`pools self-test FAILED:\n${failures.join('\n')}`);
+    return 2;
+  }
+  console.log(
+    `pools self-test passed: ${cases.length} verdicts correct ` +
+      `(${cases.filter((c) => c[3]).length} of them refusals)`
+  );
+  return 0;
+}
 
 /** Read-only: every pool 1..next_pool_id−1 by fixed offsets (state.rs since
  * D-A1 v2 — the same offsets chain-web3.ts::getPool and the LiteSVM readers
@@ -412,6 +531,11 @@ const MID_SETTLEMENT = new Set(['Sealed', 'Scored', 'Refunding']);
  * fill_deadline 43 | state 51), then the drain verdict, timestamped so the
  * output can be kept as the record the runbook asks for. */
 async function cmdPools(ctx: Ctx): Promise<void> {
+  if (ctx.cli.flags.get('self-test') !== undefined) {
+    process.exitCode = selfTestDrainVerdict();
+    return;
+  }
+  const upgradePreflight = ctx.cli.flags.get('upgrade-preflight') !== undefined;
   const cfg = await ctx.connection.getAccountInfo(ctx.pdas.config(), 'confirmed');
   if (!cfg) {
     console.log('config: NOT INITIALISED (run init-config)');
@@ -420,7 +544,7 @@ async function cmdPools(ctx: Ctx): Promise<void> {
   const next = cfg.data.readBigUInt64LE(315);
   console.log(`drain query at ${new Date().toISOString()} — program ${ctx.programId.toBase58()}`);
   console.log('id    tier  state      entrants  pot_lamports     fill_deadline (unix)');
-  const blocking: bigint[] = [];
+  const rows: PoolRow[] = [];
   const tally = new Map<string, number>();
   for (let id = 1n; id < next; id++) {
     const info = await ctx.connection.getAccountInfo(ctx.pdas.pool(id), 'confirmed');
@@ -431,7 +555,7 @@ async function cmdPools(ctx: Ctx): Promise<void> {
     const d = info.data;
     const state = POOL_STATES[d[51]] ?? `unknown(${d[51]})`;
     tally.set(state, (tally.get(state) ?? 0) + 1);
-    if (MID_SETTLEMENT.has(state)) blocking.push(id);
+    rows.push({ id, state });
     console.log(
       `${id.toString().padEnd(5)} ${String(d[16]).padEnd(5)} ${state.padEnd(10)} ` +
         `${String(d.readUInt16LE(33)).padEnd(9)} ${d.readBigUInt64LE(25).toString().padEnd(16)} ` +
@@ -442,12 +566,9 @@ async function cmdPools(ctx: Ctx): Promise<void> {
     `pools: ${next - 1n} — ` +
       [...tally.entries()].map(([s, n]) => `${s} ${n}`).join(', ')
   );
-  if (blocking.length === 0) {
-    console.log('drain: CLEAR — no pool is Sealed, Scored or Refunding');
-  } else {
-    console.log(`drain: BLOCKED — mid-settlement pool ids: ${blocking.join(', ')}`);
-    process.exitCode = 1;
-  }
+  const verdict = drainVerdict(rows, upgradePreflight);
+  for (const line of verdict.lines) console.log(line);
+  if (verdict.blocked) process.exitCode = 1;
 }
 
 async function cmdInitConfig(ctx: Ctx): Promise<void> {
@@ -921,7 +1042,7 @@ async function cmdMigratePool(ctx: Ctx): Promise<void> {
   const info = await ctx.connection.getAccountInfo(ctx.pdas.pool(poolId), 'confirmed');
   if (!info) throw new Error(`pool ${poolId}: no account at ${ctx.pdas.pool(poolId).toBase58()}`);
   // Said before sending, because the on-chain refusal is a bare error code
-  // and an operator working through nine pools needs to tell "already done"
+  // and an operator working through a list of pools needs to tell "already done"
   // from "wrong pool".
   console.log(`pool ${poolId}: ${info.data.length} bytes on chain`);
   if (info.data.length >= POOL_SPACE) {
