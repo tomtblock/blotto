@@ -33,6 +33,38 @@ Pools close on their own at their deadline, every twelve hours. So:
    blocks entries, not opens.
 3. Now you have as long as you need.
 
+### The calmer version, when the open pool has no entrants
+
+Steps 1 and 2 put you in a five-minute race: the pool closes on its own, and the daemon
+opens the next one **300 seconds** later (`DEFAULT_COOLDOWN_SECS`). Miss it and you wait
+another twelve hours. You do not have to run that race.
+
+`trigger-refund` is **permissionless** — any funded key may call it, and the program
+checks the state and the deadline itself, so a mistimed call is refused rather than
+harmful. A pool with **no entrants** goes **straight to `Closed`** in that one
+transaction, with no per-player refunds to follow
+(`programs/blotto_cup/src/instructions/refund.rs`). So:
+
+1. **Stop the daemon first**, any time before the deadline. Nothing can open a new pool
+   while it is down, and the pool already open simply sits there.
+2. Wait for the deadline to pass. `npm run admin -- pools` shows you when.
+3. Close it yourself:
+
+   ```
+   export FEE_PAYER_KEYPAIR=/path/to/deploy-keypair.json
+   npm run admin -- trigger-refund --pool-id <the open pool's id>
+   ```
+
+   It returns the pool's untouched prize amount to the treasury and sets the pool to
+   `Closed` in the same transaction.
+4. Carry on from "Before you start". Nothing is open, nothing can open, and the timing
+   is entirely yours.
+
+**Check `entrants` first — this is only for a pool with none.** A pool holding entries
+below its floor goes to `Refunding` instead and needs one `refund --player` per entrant
+before it reaches `Closed`; `Refunding` is exactly what the drain check refuses. With
+entrants, use steps 1–2 above and let the daemon do its own work.
+
 ## Before you start
 
 ```
@@ -89,7 +121,14 @@ npm run check-deployed
 
 ## Step 3 — Migrate every pool
 
-Once per pool id from the list you wrote down:
+First set `FEE_PAYER_KEYPAIR` to the same key as step 1 — the command stops with
+`FEE_PAYER_KEYPAIR is not set` otherwise:
+
+```
+export FEE_PAYER_KEYPAIR=/path/to/deploy-keypair.json
+```
+
+Then once per pool id from the list you wrote down:
 
 ```
 npm run admin -- migrate-pool --pool-id 1
@@ -97,16 +136,8 @@ npm run admin -- migrate-pool --pool-id 2
 …
 ```
 
-Set `FEE_PAYER_KEYPAIR` to the same key as step 1 — the command stops with
-`FEE_PAYER_KEYPAIR is not set` otherwise:
-
-```
-export FEE_PAYER_KEYPAIR=/path/to/deploy-keypair.json
-```
-
 It is **permissionless** — no Squads proposal, no admin key — so you can run it straight
-through.
-It prints the account's current size first, and a pool already at the new layout is reported and
+through. It prints the account's current size first, and a pool already at the new layout is reported and
 skipped, so re-running it is safe and running it on the wrong id does nothing.
 
 Each pool is given a floor of **52** — the number its players entered under. New pools opened after
