@@ -406,19 +406,21 @@ python3 scripts/check-mirrors.py                # Rust and TypeScript constants 
 ./scripts/deploy-devnet.sh --self-test          # the program deploy still reads a cluster
 ```
 
-All ten, in the lane's own order. `ci-fast` runs five further jobs — `rust`,
-`node`, `postgres`, `journey` and `gitleaks`. One gate sits in `node` rather
-than here, because `scripts/admin.ts` imports `@solana/web3.js` and that is the
-lane which installs:
+All eleven, in the lane's own order. `ci-fast` runs five further jobs —
+`rust`, `node`, `postgres`, `journey` and `gitleaks`.
+
+The last of the eleven drives the upgrade pre-flight's verdict through its
+fixtures. The pre-flight (`pools --upgrade-preflight`) refuses a program
+upgrade while any pool is Open — see §5's note on the floor the read API
+serves, and `RUNBOOK_r7b-upgrade.md`. **The verdict lives in
+`scripts/drain-verdict.ts`, importing nothing**, precisely so this lane can run
+it: the lane installs no workspace, and `scripts/admin.ts` imports
+`@solana/web3.js`. Operators reach the same fixtures through the familiar
+command:
 
 ```
 npx ts-node --transpile-only scripts/admin.ts pools --self-test
 ```
-
-It drives the upgrade pre-flight's verdict through its fixtures. The pre-flight
-(`pools --upgrade-preflight`) refuses a program upgrade while any pool is Open —
-see §5's note on the floor the read API serves, and
-`RUNBOOK_r7b-upgrade.md`.
 
 Every backend package additionally has `npm run typecheck` and `npm test`
 (nine of them: `_shared`, `scoring`, `class-digest`, `sealing`, `sanctions`,

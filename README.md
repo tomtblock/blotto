@@ -193,22 +193,23 @@ npx tsx scripts/sim/fill-replay.ts --self-test  # the simulation still models th
 python3 scripts/check-mirrors.py                # Rust and TypeScript constants agree
 ./scripts/ci-gate.sh --self-test                # the deploy gate still judges correctly
 ./scripts/deploy-devnet.sh --self-test          # the program deploy still reads a cluster
+npx tsx scripts/drain-verdict.ts --self-test    # the upgrade pre-flight still refuses
 ```
 
-Those ten are the whole of CI's `standing-rules` lane, in its order — run them
-and that lane cannot surprise you. `ci-fast` has five more jobs: `rust`, `node`,
-`postgres`, `journey` and `gitleaks`.
+Those eleven are the whole of CI's `standing-rules` lane, in its order — run
+them and that lane cannot surprise you. `ci-fast` has five more jobs: `rust`,
+`node`, `postgres`, `journey` and `gitleaks`.
 
-One more gate lives in `node` rather than `standing-rules`, because it needs the
-workspace installed — run it if you touch the admin CLI:
+The last one proves the pre-flight that stops a program upgrade landing while a
+pool is taking entries; a version of it that quietly stopped refusing would
+report CLEAR for ever. Its verdict lives in its own module, with no imports, so
+this lane can run it without installing anything — `scripts/admin.ts` imports
+`@solana/web3.js` and cannot run here. Operators use the familiar command
+instead, which calls the same fixtures:
 
 ```
 npx ts-node --transpile-only scripts/admin.ts pools --self-test
 ```
-
-It proves the upgrade pre-flight still refuses. That pre-flight is what stops a
-program upgrade landing while a pool is taking entries; a version of it that
-quietly stopped refusing would report CLEAR for ever.
 
 Every backend package has `npm run typecheck` and `npm test`. CI runs all of it;
 `docs/AS-BUILT.md` §7 has the full sequence and what each step depends on.

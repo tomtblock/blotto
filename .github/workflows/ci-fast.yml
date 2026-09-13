@@ -109,17 +109,6 @@ jobs:
             (cd "backend/$pkg" && npm run typecheck && npm test)
           done
 
-      # The upgrade pre-flight's verdict (R7-b, 2026-09-13). Its failure mode
-      # is silent permissiveness: a `drainVerdict` that quietly stopped
-      # refusing would report CLEAR for ever and the next program upgrade
-      # would land while a pool was taking entries. Same reasoning as
-      # ci-gate.sh, and like it the decision is pure so the fixtures need no
-      # cluster. It runs HERE rather than in standing-rules because
-      # scripts/admin.ts imports @solana/web3.js and this is the lane that
-      # installs.
-      - name: The upgrade pre-flight still refuses (R7-b)
-        run: npx ts-node --transpile-only scripts/admin.ts pools --self-test
-
       - name: rehearsal (offline twenty-pool settlement)
         run: |
           cd tests/rehearsal
@@ -490,6 +479,16 @@ jobs:
 
       - name: The fill simulation still models the rule (§5.2)
         run: npx --yes tsx@4.20.3 scripts/sim/fill-replay.ts --self-test
+
+      # The upgrade pre-flight's verdict (R7-b, 2026-09-13). Its failure mode
+      # is silent permissiveness: a verdict that quietly stopped refusing would
+      # report CLEAR for ever and the next program upgrade would land while a
+      # pool was taking entries. Same reasoning as ci-gate.sh — the decision is
+      # pure, so the fixtures need no cluster. It lives in its own module
+      # precisely so it can run here with nothing installed; scripts/admin.ts
+      # imports @solana/web3.js and could not.
+      - name: The upgrade pre-flight still refuses (R7-b)
+        run: npx --yes tsx@4.20.3 scripts/drain-verdict.ts --self-test
 
       # Widened 2026-09-12 to see `env.NAME` property reads, the backend's
       # dominant shape, which it was blind to (audit 2026-09-11, A-09 / E-07 /

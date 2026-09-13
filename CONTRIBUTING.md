@@ -78,7 +78,7 @@ first step of the **`standing-rules` CI lane on every PR** (roadmap §3 rule 4).
 forbidden words come from roadmap R11/§6.4: **promotional** and **sweepstake** — they denote
 free-entry sweepstakes and put the product in the wrong regulatory box.
 
-That lane runs **ten** checks, not one, and any of them can fail your change. In its order:
+That lane runs **eleven** checks, not one, and any of them can fail your change. In its order:
 
 | Check | What it refuses to let through |
 |---|---|
@@ -92,6 +92,7 @@ That lane runs **ten** checks, not one, and any of them can fail your change. In
 | `check-mirrors.py` | A constant or event layout where Rust and TypeScript disagree |
 | `ci-gate.sh --self-test` | A deploy gate that has stopped judging correctly |
 | `deploy-devnet.sh --self-test` | A program deploy that can no longer tell an outage from a fresh cluster |
+| `drain-verdict.ts --self-test` | An upgrade pre-flight that has quietly stopped refusing while a pool is taking entries. It imports nothing, so this lane can run it without installing a workspace; operators reach the same fixtures via `admin.ts pools --self-test` |
 
 Each one self-tests before it reports, so a gate that has stopped working says so rather than
 reporting clean.
@@ -160,7 +161,7 @@ program as a genesis fixture (`tests/fixtures/mpl_core.so`) so the suite runs of
 ## CI
 
 `ci-fast` runs on every pull request and every push to the default branch. Six jobs: `rust`,
-`node`, `postgres`, `journey`, `gitleaks`, and `standing-rules` (the ten checks tabled above).
+`node`, `postgres`, `journey`, `gitleaks`, and `standing-rules` (the eleven checks tabled above).
 `postgres` needs a scratch database and **fails the lane if any case came back pending** rather
 than passing them by; `journey` drives the browser against a fixture build.
 
