@@ -451,6 +451,25 @@ jobs:
       - name: Structural rules (roadmap §3 rules 5–6)
         run: ./scripts/check-standing-rules.sh
 
+      # The founder-owned territory schedule (founder instruction
+      # 2026-09-12 §3.1). Four things can go wrong with config/territories.json
+      # quietly; the one that matters is a SUB-NATIONAL code the geo vendor
+      # cannot resolve, which makes the entry service refuse to start — a
+      # deploy-time failure on a service that then will not come up. This
+      # moves it onto the change that added the code, while it is still a
+      # review comment rather than an outage.
+      #
+      # The first TypeScript check in this job, hence the Node setup above
+      # it. It runs off the repo-root toolchain rather than a workspace,
+      # because it reads the packet service's real parser and the app's name
+      # map and must not depend on either being installed.
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v4.4.0
+        with:
+          node-version: 20
+
+      - name: Territory schedule (founder instruction 2026-09-12)
+        run: npx --yes tsx@4.20.3 scripts/check-territories.ts
+
       # Widened 2026-09-12 to see `env.NAME` property reads, the backend's
       # dominant shape, which it was blind to (audit 2026-09-11, A-09 / E-07 /
       # D-38). It now self-tests before reporting, like its neighbours.

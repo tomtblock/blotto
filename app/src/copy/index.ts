@@ -206,8 +206,20 @@ export const COPY = {
     entriesChecking: 'Checking your entries',
     ageConfirm: 'Confirm and continue',
     gateTitle: 'Before you enter',
-    territoryBlocked:
-      'Blotto Cup is not available in your region. Entries cannot be accepted from your location.',
+    // The Territory line (founder instruction 2026-09-12 §3.3.1). It NAMES
+    // the schedule, generated from config/territories.json — a visitor who
+    // is refused should be able to see whether their territory is on the
+    // list rather than take our word for it.
+    //
+    // One wording covers both refusals a visitor can hit: a blocked
+    // territory, and a location the service could not resolve. That is
+    // deliberate on both sides of the seam — the entry service answers every
+    // refusal with one shape (`entry_unavailable`), and §3.3.1 says not to
+    // tell a visitor their location could not be determined, because that
+    // narrates the mechanism rather than stating the rule.
+    territoryBlocked: (list: string) =>
+      `Not available to residents of ${list}. Access is blocked by location.`,
+    territoryBlockedSeeRules: 'The full list is on the rules page.',
     // C9: the balance pre-flight — shown BEFORE the timed session starts,
     // never after battles are allocated.
     balanceInsufficient: (needSol: string, haveSol: string) =>
@@ -881,6 +893,11 @@ export const COPY = {
     availabilityIntroBlockList:
       'Blotto Cup is available everywhere except the territories listed below. Where the service cannot determine your location, entry is not available.',
     availabilityBlocked: 'Explicitly unavailable:',
+    // §3.3.2 + the HUB-06 §6 pattern: the schedule can change with notice,
+    // so the page says when it last did and which version a reader is
+    // looking at, rather than presenting the list as permanent.
+    availabilityUpdated: (updated: string, version: number) =>
+      `This list was last updated on ${updated} (schedule version ${version}). It can change with notice.`,
     age:
       'Blotto Cup is for adults 18 and older. Entering requires a signed confirmation of age and acceptance of the terms, recorded per wallet and per terms version.',
     responsiblePlay:
