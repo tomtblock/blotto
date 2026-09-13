@@ -81,7 +81,7 @@ export function WalletCard() {
     : null;
 
   return (
-    <Card className="flex flex-col gap-5 p-5" data-testid="wallet-card">
+    <Card className="flex flex-col gap-5 p-5 sm:p-6" data-testid="wallet-card">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <Stat
           label={COPY.wallet.balanceLabel}
@@ -144,7 +144,10 @@ export function WalletCard() {
         </fieldset>
       ) : null}
 
-      <div className="flex flex-wrap gap-3">
+      {/* Actions (candy revision 2026-09-13): ONE key — adding funds — and
+          quiet pills for the rest. The order is the order a new player
+          needs them: put SOL in, send SOL out, then the wallet choices. */}
+      <div className="flex flex-wrap gap-2.5">
         {auth.addFunds ? (
           <Button
             disabled={funding}
@@ -179,18 +182,22 @@ export function WalletCard() {
       </div>
 
       {fundingFailed ? (
-        <p role="status" data-testid="wallet-add-failed" className="text-[13px] leading-5 text-ink-muted">
+        <p
+          role="status"
+          data-testid="wallet-add-failed"
+          className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-[13px] leading-5 text-ink-muted"
+        >
           {COPY.wallet.addSolUnavailable}
         </p>
       ) : null}
 
       {FAUCET_ENABLED ? (
-        <p className="text-[13px] leading-5 text-ink-muted">
+        <p className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-[13px] leading-5 text-ink-muted">
           <a
             href={FAUCET_URL}
             target="_blank"
             rel="noreferrer"
-            className="text-brand underline underline-offset-2"
+            className="rounded-full text-brand underline underline-offset-2"
           >
             {COPY.wallet.faucet}
           </a>{" "}
