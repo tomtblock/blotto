@@ -185,15 +185,23 @@ pub fn handle_set_tier_economics(
         pot_lamports > 0 && pot_lamports.is_multiple_of(1024),
         ErrorCode::PotNotDivisible
     );
-    // D-E4 §11.1: the minimum field must clear break-even, or every pool
-    // that plays at the floor pays out more than it took in. A comparison
-    // against the live values — the pot itself is never derived from them
+    // The minimum field must COVER the pot: a pot larger than the floor's
+    // intake means every pool that plays at the floor pays out more than it
+    // took in, at the operator's expense, for ever. A comparison against the
+    // live values — the pot itself is never derived from them
     // (standing-rules check (g)).
+    //
+    // `<=`, not `<`, since R7-b (founder ruling 2026-09-13). D-E4 required
+    // the floor to EXCEED the pot, which at the D-E1 pots put the minimum
+    // field at 41 or above; the founder set it at exactly 40, which is
+    // exactly break-even, on the ground that the pot is pre-funded from the
+    // treasury (D-A1) and so a pool's ability to pay never depended on its
+    // own entries. This admits that case and nothing worse.
     let min_field_entries = (MIN_SEATS as u64)
         .checked_mul(price_lamports)
         .ok_or(ErrorCode::Overflow)?;
     require!(
-        pot_lamports < min_field_entries,
+        pot_lamports <= min_field_entries,
         ErrorCode::PotExceedsMinimumField
     );
     let config = &mut ctx.accounts.config;

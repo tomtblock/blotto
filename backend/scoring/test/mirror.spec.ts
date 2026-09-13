@@ -116,17 +116,25 @@ describe('the TS mirror of programs/blotto_cup/src/constants.rs', () => {
   it('PRIZE_BANDS_1024', () =>
     expect(rustArray('PRIZE_BANDS_1024')).to.deep.equal([...PRIZE_BANDS_1024]));
 
-  it('the pot table still clears the minimum field at every tier', () => {
-    // `MIN_SEATS × price > pot` is what makes a 52-seat pool profitable
-    // rather than a loss the operator absorbs. `set_tier_economics` enforces
-    // it on the LIVE values; this pins the LAUNCH table the rules page shows.
+  it('the pot table is exactly the minimum field’s intake at every tier', () => {
+    // R7-b (founder instruction 2026-09-12): the floor IS break-even, so
+    // `pot == MIN_SEATS × price` at every tier. This read `minimumIntake >
+    // pot` under D-E4's 52-seat floor, which carried a twelve-seat buffer;
+    // the founder's ruling of 2026-09-13 spends it, on the ground that the
+    // pot is pre-funded from the treasury and a pool's ability to pay never
+    // depended on its own entries.
+    //
+    // `set_tier_economics` enforces `pot <= MIN_SEATS × price` on the LIVE
+    // values; this pins the LAUNCH table the rules page shows, and pins it
+    // as an EQUALITY — a drift in either direction is a change to the
+    // published economics and should fail here.
     TIER_ENTRY_LAMPORTS.forEach((price, tier) => {
       const minimumIntake = MIN_SEATS * price;
       const pot = TIER_POT_LAMPORTS[tier];
       expect(
-        minimumIntake > pot,
-        `tier ${tier}: ${minimumIntake} lamports at the minimum field must exceed the ${pot} pot`
-      ).to.equal(true);
+        minimumIntake,
+        `tier ${tier}: the minimum field's intake must equal the pot`
+      ).to.equal(pot);
     });
   });
 });

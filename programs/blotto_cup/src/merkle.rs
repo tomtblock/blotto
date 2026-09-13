@@ -131,8 +131,8 @@ mod tests {
     /// 26 → 13 → 7 → 4 → 2 → 1).
     #[test]
     fn python_oracle_proofs_verify() {
-        use super::super::merkle_vectors::{FIELD_52, FULL_0};
-        for v in [&FULL_0, &FIELD_52] {
+        use super::super::merkle_vectors::{FIELD_MIN, FULL_0};
+        for v in [&FULL_0, &FIELD_MIN] {
             let root: [u8; 32] = unhex(v.root);
             assert!(!v.cases.is_empty());
             for case in v.cases {

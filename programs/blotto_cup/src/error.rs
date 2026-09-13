@@ -196,6 +196,14 @@ pub enum ErrorCode {
     // 6071 — the rent-exemption guard on every lamport exit (2026-09-12).
     #[msg("That transfer would leave the account below the rent-exempt minimum")]
     WouldStrandRentBalance,
+
+    // 6072-6073 — `migrate_pool`'s two refusals (R7-b, founder instruction
+    // 2026-09-12). APPENDED: the numbers below are a wire contract clients
+    // check by value.
+    #[msg("Pool is already at the current layout")]
+    PoolAlreadyMigrated,
+    #[msg("Account is not an un-migrated pool of this program")]
+    PoolNotMigratable,
 }
 
 #[cfg(test)]
@@ -224,6 +232,8 @@ mod error_numbers {
             (ErrorCode::SanctionsHoldActive, 6069),
             (ErrorCode::NoSanctionsHold, 6070),
             (ErrorCode::WouldStrandRentBalance, 6071),
+            (ErrorCode::PoolAlreadyMigrated, 6072),
+            (ErrorCode::PoolNotMigratable, 6073),
         ] {
             assert_eq!(u32::from(code), expected, "{code:?}");
         }

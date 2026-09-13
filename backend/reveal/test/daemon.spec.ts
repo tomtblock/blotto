@@ -28,6 +28,7 @@ import {
 } from '../../sealing/src';
 import {
   battlesHash,
+  MIN_SEATS,
   potForTier,
   REVIEW_WINDOW_SECS,
   TIER_ENTRY_LAMPORTS,
@@ -364,7 +365,10 @@ describe('the daemon (C8): the minimum field (D-E4)', () => {
     expect((await w.chain.getConfig()).platformRefundable).to.equal(0n);
   });
 
-  it('a 63-seat pool seals the same way; a 51-seat pool refunds instead', async function () {
+  // Seat counts derived from MIN_SEATS, not repeated: R7-b moved the floor
+  // from 52 to 40, and this test's hard-coded 51 went from "one below the
+  // floor" to "eleven above it" without a word changing.
+  it('a 63-seat pool seals the same way; one seat below the floor refunds instead', async function () {
     this.timeout(30000);
     const w = await makeWorld();
     await w.daemon.tick(); // pool 1
@@ -376,7 +380,7 @@ describe('the daemon (C8): the minimum field (D-E4)', () => {
     expect(r1.cranked).to.deep.equal([{ poolId: 1n, finalState: 'Paid' }]);
     expect((await tickAfterCooldown(w)).opened).to.deep.equal([{ poolId: 2n, tier: 0 }]);
 
-    const players = await enterPlayers(w, 2n, 51);
+    const players = await enterPlayers(w, 2n, Number(MIN_SEATS) - 1);
     w.clock.t = (await w.chain.getPool(2n)).fillDeadline + 1n;
     const r2 = await w.daemon.tick();
     expect(r2.errors).to.deep.equal([]);
@@ -384,17 +388,17 @@ describe('the daemon (C8): the minimum field (D-E4)', () => {
     expect(r2.refundsTriggered).to.deep.equal([2n]);
     expect(r2.cranked).to.deep.equal([{ poolId: 2n, finalState: 'Closed' }]);
     for (const p of players) {
-      expect(w.chain.paid.get(p)).to.equal(TIER_ENTRY_LAMPORTS[0]); // 100% back (R7)
+      expect(w.chain.paid.get(p)).to.equal(TIER_ENTRY_LAMPORTS[0]); // 100% back
     }
   });
 
-  it('the seal is refused below 52 and the refund is refused at 52 (the guards mirror the program)', async () => {
+  it('the seal is refused one below the floor and the refund is refused at it (the guards mirror the program)', async () => {
     const w = await makeWorld();
     await w.daemon.tick();
-    await enterPlayers(w, 1n, 51);
+    await enterPlayers(w, 1n, Number(MIN_SEATS) - 1);
     w.clock.t = (await w.chain.getPool(1n)).fillDeadline + 1n;
     await expectRejects(() => w.chain.sealAtDeadline(1n), 'FieldBelowMinimum');
-    // (`enterPlayers` pushes entries directly, so a 52nd seat past the
+    // (`enterPlayers` pushes entries directly, so a seat added past the
     // deadline is a test convenience `register` itself would refuse.)
     await enterPlayers(w, 1n, 1);
     await expectRejects(() => w.chain.triggerRefund(1n), 'FieldReached');

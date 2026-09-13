@@ -63,8 +63,8 @@ const MPL_CORE_ID = new PublicKey('CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d'
 export const ENTRY_SPACE = 228;
 
 /**
- * `Pool::SPACE` — 8 discriminator + `Pool::LEN` 839 (`state.rs`, pinned by
- * its own layout test).
+ * `Pool::SPACE` — 8 discriminator + `Pool::LEN` 841 (`state.rs`, pinned by
+ * its own layout test). 839 until R7-b appended `min_seats` (2026-09-13).
  *
  * Used as a LENGTH GUARD, which `getPool` had none of (audit 2026-09-11,
  * G-06). Every field below is read at a hard-coded offset, so an account
@@ -72,10 +72,10 @@ export const ENTRY_SPACE = 228;
  * address reads its `flagged` byte as `results_committed`, walks a payout
  * list out of a battles hash, and then fails on a range error 600 bytes
  * later — if it fails at all. Refusing by length, by name, up front, is the
- * difference between "this account is 228 bytes and a Pool is 847" and an
+ * difference between "this account is 228 bytes and a Pool is 849" and an
  * opaque buffer-bounds message from the middle of a settlement run.
  */
-export const POOL_SPACE = 847;
+export const POOL_SPACE = 849;
 
 /**
  * Where `getEntries` reads each Entry field: BYTE OFFSETS from the start of

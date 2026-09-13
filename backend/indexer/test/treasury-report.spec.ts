@@ -261,13 +261,26 @@ describe('the treasury report: the floor the program enforces (D-18)', () => {
     expect(BigInt(tier1.short_by_lamports) - shortWithoutCushion).to.equal(CUSHION);
 
     // And the unlock counts are computed from the cushion-carrying shortfall:
-    // a full tier-0 pool nets 6.4 − 4 = 2.4 SOL, a 52-seat one 1.2 SOL.
+    // a full tier-0 pool returns 6.4 − 4 = 2.4 SOL.
+    //
+    // AT THE FLOOR IT RETURNS NOTHING. R7-b put the minimum field on the
+    // break-even point (40 × 0.1 = the 4 SOL pot), so a pool that seals
+    // there leaves the treasury exactly where it found it. This read
+    // `minimum_field: '1200000000'` and `…at_minimum_field: '17'` under
+    // D-E4's 52-seat floor.
+    //
+    // The consequence is worth stating rather than leaving as a null: pools
+    // running at the floor never accumulate towards opening the next tier,
+    // however many of them run. Only seats above 40 do that.
     expect(r.tier0_margin_lamports).to.deep.equal({
-      minimum_field: '1200000000',
+      minimum_field: '0',
       full: '2400000000',
     });
     expect(r.tier0_pools_to_next_unlock).to.equal('9');
-    expect(r.tier0_pools_to_next_unlock_at_minimum_field).to.equal('17');
+    expect(
+      r.tier0_pools_to_next_unlock_at_minimum_field,
+      'no number of break-even pools covers a shortfall'
+    ).to.equal(null);
   });
 
   it('counts one cushion per RESERVED pot when reserve_pots is more than one', async () => {

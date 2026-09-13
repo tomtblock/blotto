@@ -125,6 +125,12 @@ class Reader {
     this.o += len;
     return v.toString('utf8');
   }
+  /** Bytes not yet consumed. Used only by layouts that must decode MORE
+   * THAN ONE SHAPE of the same event — see `PoolSealed`. Everywhere else a
+   * remainder is drift and `end()` refuses it. */
+  remaining(): number {
+    return this.b.length - this.o;
+  }
   /** Every byte must be consumed — a trailing remainder is a layout drift. */
   end(): void {
     if (this.o !== this.b.length) {
@@ -136,6 +142,17 @@ class Reader {
 // ---------------------------------------------------------------------------
 // Layouts — declaration order mirrors the Rust structs
 // ---------------------------------------------------------------------------
+
+/**
+ * `events.rs::SealReason`, by discriminant. Borsh writes a payload-free enum
+ * as one byte in DECLARATION ORDER, so this array is the wire contract: a
+ * variant inserted rather than appended on the Rust side renumbers every
+ * one after it, exactly like the error enum. Appended variants land here in
+ * the same order; an unknown byte decodes to 'Unknown' rather than throwing,
+ * because an indexer that cannot read one field of one event must not stop
+ * ingesting the ledger.
+ */
+const SEAL_REASONS = ['Capacity', 'DeadlineMinFill'] as const;
 
 function layout(name: string, decode: (r: Reader) => Record<string, unknown>) {
   registerEventLayout({
@@ -200,9 +217,50 @@ export function registerBlottoEventLayouts(): void {
 
   // D-E4: `entrants` is the field the pool plays with — 64 at the 64th
   // register, MIN_SEATS..63 when `seal_at_deadline` closed it.
-  layout('PoolSealed', (r) => ({
+  // TWO SHAPES, ON PURPOSE. `pot_lamports` and `reason` were appended by
+  // R7-b (founder instruction 2026-09-12), and appending to an event is a
+  // WIRE-FORMAT CHANGE that reaches backwards: every `PoolSealed` already in
+  // a ledger — nine pools on devnet — was emitted at the old 34-byte shape,
+  // and the indexer replays from the ledger. A decoder that insisted on the
+  // new shape would make those events undecodable for ever, which is how a
+  // backfill loses the record that a pool ever sealed.
+  //
+  // So the tail is read only when the bytes are there. An old event reports
+  // `reason: null`, which is the honest answer — that pool's seal path was
+  // not recorded — rather than a guess dressed as data. `pot_lamports` is
+  // null for the same reason and is on the pool account anyway.
+  //
+  // `reason` is a Borsh enum with no payload, so it is one byte on the wire:
+  // 0 = Capacity (the 64th register), 1 = DeadlineMinFill (the deadline
+  // passed at or above the pool's floor). Decoded to the NAME — every
+  // consumer reads a string, and a raw discriminant would put the enum's
+  // declaration order into the indexer and the results page.
+  layout('PoolSealed', (r) => {
+    const pool = r.pubkey();
+    const entrants = r.u16();
+    // The tail is a u64 plus a one-byte enum. Fewer bytes than that means a
+    // pre-R7-b event; anything in between is drift, and `end()` says so.
+    //
+    // Written out field by field rather than spread over a shared head:
+    // `check-mirrors.py` reads THIS literal to compare the layout against
+    // `events.rs`, so a field that only exists inside a spread is a field
+    // the drift check cannot see. Property order is source order in JS, so
+    // the two reads below still happen in wire order.
+    const preR7b = r.remaining() < 9;
+    return {
+      pool,
+      entrants,
+      pot_lamports: preR7b ? null : r.u64(),
+      reason: preR7b ? null : SEAL_REASONS[r.u8()] ?? 'Unknown',
+    };
+  });
+
+  // One pool grown to carry `min_seats` (R7-b). Emitted once per pre-R7-b
+  // pool by `migrate_pool`; the value is always the floor that pool's
+  // players entered under.
+  layout('PoolMigrated', (r) => ({
     pool: r.pubkey(),
-    entrants: r.u16(),
+    min_seats: r.u16(),
   }));
 
   // (`GoTimerStarted` — the first cut's option-B go-timer — was removed by

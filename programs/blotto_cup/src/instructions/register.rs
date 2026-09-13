@@ -50,7 +50,7 @@ use blotto_randomness::{derive_class_randomness, weighted_class_draw};
 use crate::constants::CAPACITY;
 use crate::entry_packet::verify_entry_packet;
 use crate::error::ErrorCode;
-use crate::events::{EntryRegistered, PoolSealed};
+use crate::events::{EntryRegistered, PoolSealed, SealReason};
 use crate::pass::{mint_pass_cpi, MPL_CORE_ID};
 use crate::slot_hashes::{delayed_slot_hash, SLOT_HASHES_SYSVAR_ID};
 use crate::state::{
@@ -280,7 +280,12 @@ pub fn handle_register(
             0,
             "a full pool must have an empty bag"
         );
-        seal_pool(pool, &mut ctx.accounts.config, pool_key)?;
+        seal_pool(
+            pool,
+            &mut ctx.accounts.config,
+            pool_key,
+            SealReason::Capacity,
+        )?;
     }
 
     Ok(())
@@ -298,7 +303,12 @@ pub fn handle_register(
 /// slot does NOT free here: pools per tier are SEQUENTIAL (D-A1 revised
 /// supersedes R14's seal-time handover) — the slot clears only when this
 /// pool reaches `Paid` or `Closed`.
-pub(crate) fn seal_pool(pool: &mut Pool, config: &mut Config, pool_key: Pubkey) -> Result<()> {
+pub(crate) fn seal_pool(
+    pool: &mut Pool,
+    config: &mut Config,
+    pool_key: Pubkey,
+    reason: SealReason,
+) -> Result<()> {
     pool.state = PoolState::Sealed;
     let pool_entries_total = pool
         .entry_lamports
@@ -311,6 +321,10 @@ pub(crate) fn seal_pool(pool: &mut Pool, config: &mut Config, pool_key: Pubkey) 
     emit!(PoolSealed {
         pool: pool_key,
         entrants: pool.entrants,
+        // The pool's own copied constant — never arithmetic over entries or
+        // balances (standing-rules check (g)).
+        pot_lamports: pool.pot_lamports,
+        reason,
     });
     Ok(())
 }

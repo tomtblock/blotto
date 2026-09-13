@@ -63,6 +63,11 @@ CONSTANT_MIRRORS = [
     ]),
     ("programs/blotto_cup/src/constants.rs", "MIN_SEATS", [
         ("backend/scoring/src/prizes.ts", "MIN_SEATS"),
+        # The LiteSVM harness repeats it too, and until 2026-09-13 that copy
+        # lived inside one test file, unchecked, claiming in a comment to
+        # mirror the program. R7-b moved the program to 40 and the copy stayed
+        # at 52, so two tests asserted the OLD rule against the new artifact.
+        ("tests/litesvm/src/lib.rs", "MIN_SEATS"),
     ]),
     ("programs/blotto_cup/src/constants.rs", "DEFAULT_FILL_DEADLINE_SECS", [
         ("backend/scoring/src/prizes.ts", "DEFAULT_FILL_DEADLINE_SECS"),

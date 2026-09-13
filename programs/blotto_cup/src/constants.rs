@@ -45,20 +45,44 @@ pub const DEFAULT_COOLDOWN_SECS: i64 = 5 * 60;
 /// Inaction pays the player, never the operator.
 pub const ESCROW_AUTO_RELEASE_SECS: i64 = 7 * 24 * 60 * 60;
 
-/// Minimum field for a pool to play (D-E4, founder decision 2026-09-06;
-/// option A per the founder's ruling of 2026-09-07 — the go-timer was
-/// removed). A pool seals at the 64th entry, or at its deadline when it
-/// holds at least this many seats (`seal_at_deadline`); below it, every
-/// entry refunds in full (R7 unchanged, threshold moved from 64). Nothing in
-/// between. 52/64 is the first integer at or above the founder's 80% —
-/// expressed ONLY as a seat count, never as a percentage, anywhere in the
+/// Minimum field for a pool to play (R7-b, founder instruction 2026-09-12;
+/// was 52 under D-E4, 2026-09-06). A pool seals at the 64th entry, or at its
+/// deadline when it holds at least this many seats (`seal_at_deadline`);
+/// below it, every entry refunds in full. Nothing in between.
+///
+/// Expressed ONLY as a seat count, never as a percentage, anywhere in the
 /// program, the engine or the copy.
 ///
-/// Must clear break-even at every tier: `MIN_SEATS × price > pot`. At the
-/// D-E1 pots break-even is 40 seats (pot = price × 40 by derivation), so 52
-/// carries a 12-seat buffer — asserted in `prize_math` tests against the
-/// constants and enforced at `set_tier_economics` against the live values.
-pub const MIN_SEATS: u16 = 52;
+/// THIS IS EXACTLY BREAK-EVEN, BY DECISION. At the D-E1 pots the pot is
+/// forty entries' worth at every tier (`pot = price / 8 * 5 * 64 = price ×
+/// 40`), so a pool sealing at this floor takes in precisely what it pays
+/// out. D-E4's rule was that the minimum field must EXCEED the pot, which
+/// bought a 12-seat buffer; the founder's ruling of 2026-09-13 spends that
+/// buffer deliberately:
+///
+///   "We are keeping the size at 4 SOL. We accept that some pools will
+///    break even. We are pre-funding the prize pool from the treasury
+///    beforehand so the amount of money we take in is not relevant to the
+///    number of players."
+///
+/// That is right about the mechanism: under D-A1 the pot is moved from the
+/// treasury into the vault at `open_pool`, before any pass sells, so a
+/// pool's ability to pay never depended on its own entries. The comparison
+/// in `prize_math` and in `set_tier_economics` is therefore `pot <= MIN_SEATS
+/// × price`, which admits exactly break-even and still refuses any pot
+/// LARGER than the minimum field's intake. Margin is `1 − 40/seats` of
+/// intake: nil at 40, 37.5% at a full 64.
+pub const MIN_SEATS: u16 = 40;
+
+/// The minimum field pools opened BEFORE R7-b played at (D-E4, 2026-09-06 —
+/// 52 seats). `migrate_pool` writes this into the nine pools that predate
+/// the per-pool `Pool.min_seats` field, because 52 is the number the players
+/// in those pools actually entered under and the whole point of the field is
+/// that a published value does not move beneath them.
+///
+/// RETIREMENT: goes with `migrate_pool`, once every deployment's pools are
+/// at `Pool::SPACE`.
+pub const MIN_SEATS_V1: u16 = 52;
 
 /// Per-screen timer, seconds (roadmap R9: 15s visible, lock-current on timeout).
 /// Stored on each `Pool` so a later founder change to Config does not silently

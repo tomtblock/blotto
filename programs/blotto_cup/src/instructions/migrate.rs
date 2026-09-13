@@ -150,3 +150,120 @@ pub fn handle_migrate_config(ctx: Context<MigrateConfig>, keeper: Pubkey) -> Res
     });
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// `migrate_pool` — the R7-b account migration (founder instruction
+// 2026-09-12).
+// ---------------------------------------------------------------------------
+//
+// `Pool` gains `min_seats: u16`, two bytes appended AFTER `vault_bump`
+// (`state.rs`). Nine pools on devnet were allocated at the old 847 bytes, and
+// Anchor's `Account<Pool>` refuses a short account, so between the program
+// upgrade and this transaction every instruction touching one of them fails —
+// including `pay_next_place` and `release_escrow`, which run on pools that
+// are already `Paid`.
+//
+// Same shape as `migrate_config` above, and the same reasons for each part:
+// the account arrives as an `UncheckedAccount` whose address is PDA-checked
+// by Anchor, because it cannot be deserialised as `Pool` until it has grown;
+// its owner, discriminator and size are checked by hand; the old bytes are
+// never touched; and an account already at the new size is refused, so a
+// repeated transaction is a clean no-op failure rather than a second write.
+//
+// WHAT IT WRITES, and why it is not `MIN_SEATS`: every migrated pool gets
+// `MIN_SEATS_V1` (52), the floor its players actually entered under. Writing
+// the new 40 would move the rule beneath people already seated, which is the
+// exact thing the field was added to prevent — a migration that defeated its
+// own field would be worse than no field at all.
+//
+// PERMISSIONLESS, unlike `migrate_config`. It writes one known constant into
+// one PDA-checked account and refuses every account that is not an
+// un-migrated pool, so there is nothing for an admin signature to protect;
+// and there are nine of these to run against live pools some of which hold
+// money, so a path that does not depend on the multisig being available is
+// the safer one. The admin pays nothing either — rent comes from whoever
+// sends it.
+//
+// RETIREMENT CONDITION: once every deployment's pools are at `Pool::SPACE`,
+// this instruction, `MIN_SEATS_V1`, `Pool::LEN_V1` and the two error variants
+// can go together. Removing the error variants renumbers every later code —
+// see the header of `error.rs`.
+
+use crate::constants::MIN_SEATS_V1;
+use crate::events::PoolMigrated;
+use crate::state::{Pool, POOL_SEED};
+
+#[derive(Accounts)]
+#[instruction(pool_id: u64)]
+pub struct MigratePool<'info> {
+    /// Permissionless — pays the rent top-up for the two extra bytes.
+    #[account(mut)]
+    pub payer: Signer<'info>,
+
+    /// CHECK: The Pool PDA at its pre-migration size. Address enforced by the
+    /// seeds; owner, discriminator and size enforced by hand in the handler
+    /// because the account cannot be deserialised as `Pool` until it has
+    /// grown.
+    #[account(mut, seeds = [POOL_SEED, &pool_id.to_le_bytes()], bump)]
+    pub pool: UncheckedAccount<'info>,
+
+    pub system_program: Program<'info, System>,
+}
+
+pub fn handle_migrate_pool(ctx: Context<MigratePool>, pool_id: u64) -> Result<()> {
+    let pool_info = ctx.accounts.pool.to_account_info();
+
+    // ---- 1. Prove this is an un-migrated pool of ours ---------------------
+    require_keys_eq!(*pool_info.owner, crate::ID, ErrorCode::PoolNotMigratable);
+    {
+        let data = pool_info.try_borrow_data()?;
+        if data.len() >= Pool::SPACE {
+            return Err(ErrorCode::PoolAlreadyMigrated.into());
+        }
+        require!(data.len() == Pool::SPACE_V1, ErrorCode::PoolNotMigratable);
+        require!(
+            data[..8] == *Pool::DISCRIMINATOR,
+            ErrorCode::PoolNotMigratable
+        );
+        // `id` is the first field after the discriminator (state.rs). The
+        // seeds already bind the address to `pool_id`; this catches a PDA
+        // that somehow holds a different pool's bytes.
+        let stored_id = u64::from_le_bytes(
+            data[8..16]
+                .try_into()
+                .map_err(|_| ErrorCode::PoolNotMigratable)?,
+        );
+        require!(stored_id == pool_id, ErrorCode::PoolNotMigratable);
+    }
+
+    // ---- 2. Rent for the larger account ----------------------------------
+    // Through the vault chokepoint like every other credit (standing rule 6).
+    let required = Rent::get()?.minimum_balance(Pool::SPACE);
+    let held = pool_info.lamports();
+    if held < required {
+        crate::vault::credit_from_signer(
+            &ctx.accounts.system_program,
+            &ctx.accounts.payer,
+            &pool_info,
+            required - held,
+        )?;
+    }
+
+    // ---- 3. Grow, then write the tail at the pinned offset ----------------
+    // The new bytes are zeroed by `resize`, and a zero `min_seats` would let
+    // ANY field seal — so this write is not optional and the debug assertion
+    // below pins that the offset is the end of the account.
+    pool_info.resize(Pool::SPACE)?;
+    {
+        let mut data = pool_info.try_borrow_mut_data()?;
+        let off = Pool::SPACE_V1;
+        data[off..off + 2].copy_from_slice(&MIN_SEATS_V1.to_le_bytes());
+        debug_assert_eq!(off + 2, Pool::SPACE);
+    }
+
+    emit!(PoolMigrated {
+        pool: pool_info.key(),
+        min_seats: MIN_SEATS_V1,
+    });
+    Ok(())
+}

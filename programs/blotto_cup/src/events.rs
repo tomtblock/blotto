@@ -49,14 +49,34 @@ pub struct EntryRegistered {
     pub terms_version: u16,
 }
 
+/// Which of the two seal paths closed a pool (R7-b, founder instruction
+/// 2026-09-12). Both are the same transition and the same accounting; they
+/// differ only in what triggered them, and a reader of the ledger should not
+/// have to infer that from the seat count.
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum SealReason {
+    /// The 64th `register`. The field is full.
+    Capacity,
+    /// The deadline passed at or above the pool's `min_seats`.
+    DeadlineMinFill,
+}
+
 /// The pool closed to entries — at the 64th seat (`register`) or at its
-/// deadline with at least `MIN_SEATS` seats (`seal_at_deadline`, D-E4).
+/// deadline with at least the pool's `min_seats` (`seal_at_deadline`).
 /// `entrants` is the field the pool plays with; below 64 it is the record a
 /// holder reads their class draw and the winner's competition against.
+///
+/// `pot_lamports` and `reason` were appended by R7-b: with a minimum field
+/// of 40 the gap between a sealed pool and a full one is wide enough that
+/// "how did this one close, and for how much" is a question the indexer and
+/// the results page both ask. The pot is the pool's own copied constant, not
+/// arithmetic over entries.
 #[event]
 pub struct PoolSealed {
     pub pool: Pubkey,
     pub entrants: u16,
+    pub pot_lamports: u64,
+    pub reason: SealReason,
 }
 
 /// A tier's slot freed (its pool reached `Paid` or `Closed`) and its
@@ -181,6 +201,15 @@ pub struct ConfigMigrated {
     pub keeper: Pubkey,
     pub fill_deadline_seconds: i64,
     pub cooldown_seconds: i64,
+}
+
+/// One pool grown to carry `min_seats` (R7-b, founder instruction
+/// 2026-09-12). Emitted once per pool by `migrate_pool`; the value is always
+/// `MIN_SEATS_V1`, the floor that pool's players entered under.
+#[event]
+pub struct PoolMigrated {
+    pub pool: Pubkey,
+    pub min_seats: u16,
 }
 
 #[event]

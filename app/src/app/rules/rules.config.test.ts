@@ -36,7 +36,13 @@ describe('tierRows', () => {
 describe('FIELD_RULES', () => {
   it('carries the shared minimum field and timings, never hand-typed', () => {
     expect(FIELD_RULES.minSeats).to.equal(Number(MIN_SEATS));
-    expect(FIELD_RULES.minSeats).to.equal(52);
+    // R7-b (founder instruction 2026-09-12): 40, down from D-E4's 52. The
+    // literal is kept beside the mirror deliberately — the assertion above
+    // proves the page follows the shared constant, and this one proves the
+    // shared constant is the number the founder ratified. Together they
+    // catch a drift in either direction; the first alone would pass if both
+    // moved by accident.
+    expect(FIELD_RULES.minSeats).to.equal(40);
     // Founder ruling 2026-09-07: 12 hours, one clock; five-minute cooldown.
     expect(FIELD_RULES.fillDeadlineHours).to.equal(12);
     expect(FIELD_RULES.cooldownMinutes).to.equal(5);

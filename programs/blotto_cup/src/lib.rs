@@ -104,6 +104,18 @@ pub mod blotto_cup {
         instructions::handle_migrate_config(ctx, keeper)
     }
 
+    /// One-shot growth of a pre-R7-b Pool account to the current layout
+    /// (permissionless; refused once migrated). Runs once per existing pool
+    /// right after the 2026-09-13 upgrade — until it has, every instruction
+    /// touching that pool fails on the short account, `pay_next_place` and
+    /// `release_escrow` among them. Writes `MIN_SEATS_V1`, the floor that
+    /// pool's players entered under, never the new constant. A pool opened by
+    /// the current `open_pool` is already at the new layout and never calls
+    /// this.
+    pub fn migrate_pool(ctx: Context<MigratePool>, pool_id: u64) -> Result<()> {
+        instructions::handle_migrate_pool(ctx, pool_id)
+    }
+
     /// Rotate the keeper — the only key `open_pool` accepts. Refuses the
     /// zero key (audit A7).
     pub fn set_keeper(ctx: Context<AdminOnly>, new_keeper: Pubkey) -> Result<()> {

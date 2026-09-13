@@ -1150,24 +1150,35 @@ proptest! {
             "the whole pot left the vault; the cushion stays");
         prop_assert_eq!(m.total_paid, pot as u128, "the winner set received exactly the pot");
         // The bootstrap (pot and cushion) left the treasury at open, so what
-        // remains is the field's entries; break-even (§11.1) means they
-        // exceed the pot the treasury funded — at the 52-seat floor too, not
-        // only at 64.
+        // remains is the field's entries. Those COVER the pot the treasury
+        // funded at every field size in range — with margin above the floor,
+        // and exactly at it.
+        //
+        // `>=`, not `>`, since R7-b (founder instruction 2026-09-12). This
+        // read `> pot` under D-E4's 52-seat floor, which carried a 12-seat
+        // buffer; the floor is now the break-even point itself, by the
+        // founder's ruling of 2026-09-13. The property that matters is
+        // unchanged and is the one asserted here: a pool that plays never
+        // pays out more than it took in.
         prop_assert_eq!(m.platform, fill as u128 * price as u128, "treasury holds the field's entries");
-        prop_assert!(m.platform > pot as u128, "the minimum field clears the pot with margin");
+        prop_assert!(m.platform >= pot as u128, "the field covers the pot the treasury funded");
+        if fill == MIN {
+            prop_assert_eq!(m.platform, pot as u128, "at the floor, exactly break-even");
+        }
     }
 
     /// Prompt v2 §C.5 — the widest tie a minimum field can produce, paid in
-    /// batches as ONE transaction each: a 52-way tie for first at every
-    /// tier, batches of twelve, with one batch that FAILS (it repeats an
+    /// batches as ONE transaction each: a tie for first across the whole
+    /// floor at every tier (52-way before R7-b, 40-way now), batches of
+    /// twelve, with one batch that FAILS (it repeats an
     /// already-paid seat) and reverts whole — nothing moves, the pool stays
     /// Scored — then resumes. The pot is conserved to the lamport, the
     /// indivisible remainder sits on the lowest seat, and the vault ends at
     /// exactly its cushion.
     #[test]
-    fn a_52_way_tie_settles_across_batches_and_survives_a_failed_batch(
+    fn a_floor_wide_tie_settles_across_batches_and_survives_a_failed_batch(
         tier in 0usize..TIER_ENTRY_LAMPORTS.len(),
-        bad_batch in 0usize..5,
+        bad_batch in 0usize..MIN.div_ceil(12),
     ) {
         let price = TIER_ENTRY_LAMPORTS[tier];
         let pot = TIER_POT_LAMPORTS[tier];
@@ -1180,7 +1191,7 @@ proptest! {
         // Everyone tied for first, in seat order.
         let ranking: Vec<usize> = (0..MIN).collect();
         m.commit_ranking(&ranking, &[MIN]);
-        prop_assert_eq!(m.committed.len(), MIN, "every seat is paid in a 52-way tie");
+        prop_assert_eq!(m.committed.len(), MIN, "every seat is paid in a floor-wide tie");
         let each = pot / MIN as u64;
         let rem = pot % MIN as u64;
         prop_assert_eq!(m.committed[0].1, each + rem, "remainder to the lowest seat");
@@ -1191,7 +1202,9 @@ proptest! {
             .chunks(12)
             .map(|c| c.to_vec())
             .collect();
-        prop_assert_eq!(batches.len(), 5);
+        // Derived, not repeated: 52 seats in twelves was five batches, 40 is
+        // four. A hard-coded count is a second copy of the floor.
+        prop_assert_eq!(batches.len(), MIN.div_ceil(12));
         let mut paid_so_far: u128 = 0;
         for (i, batch) in batches.iter().enumerate() {
             if i == bad_batch && i > 0 {
