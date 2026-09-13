@@ -63,6 +63,21 @@ const MPL_CORE_ID = new PublicKey('CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d'
 export const ENTRY_SPACE = 228;
 
 /**
+ * `Pool::SPACE` — 8 discriminator + `Pool::LEN` 839 (`state.rs`, pinned by
+ * its own layout test).
+ *
+ * Used as a LENGTH GUARD, which `getPool` had none of (audit 2026-09-11,
+ * G-06). Every field below is read at a hard-coded offset, so an account
+ * that is not a Pool is decoded as one: an Entry handed here by a wrong
+ * address reads its `flagged` byte as `results_committed`, walks a payout
+ * list out of a battles hash, and then fails on a range error 600 bytes
+ * later — if it fails at all. Refusing by length, by name, up front, is the
+ * difference between "this account is 228 bytes and a Pool is 847" and an
+ * opaque buffer-bounds message from the middle of a settlement run.
+ */
+export const POOL_SPACE = 847;
+
+/**
  * Where `getEntries` reads each Entry field: BYTE OFFSETS from the start of
  * the account (the 8-byte discriminator included), keyed by the field's
  * name in `state.rs`. Borsh lays the struct out in declaration order with
@@ -214,6 +229,15 @@ export class Web3Chain implements KeeperChain {
     const info = await this.cfg.connection.getAccountInfo(this.poolPda(poolId), 'confirmed');
     if (!info) throw new Error(`pool ${poolId} account not found`);
     const d = info.data;
+    // Length first (audit 2026-09-11, G-06): every read below is a hard-coded
+    // offset, and an account of the wrong type decodes into plausible numbers
+    // rather than into an error. `test/chain-web3.spec.ts` pins both the
+    // refusal and every offset against `state.rs`.
+    if (d.length !== POOL_SPACE) {
+      throw new Error(
+        `pool ${poolId} account is ${d.length} bytes; Pool::SPACE is ${POOL_SPACE} — refusing to decode it`
+      );
+    }
     // Offsets mirror state.rs since D-A1 v2 (asserted by its serialize-LEN
     // tests and the LiteSVM readers): disc 8 | id 8 | tier 1 |
     // entry_lamports 8 | pot_lamports 8 | entrants 2 | opened_at 8 |

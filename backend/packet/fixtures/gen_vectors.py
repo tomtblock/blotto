@@ -60,6 +60,12 @@ def main() -> None:
         ("kyc_tier_1", b58encode(bytes([7]) * 32), b58encode(bytes([9]) * 32), 2**63, 1, 1, 1, 2_000_000_000, 1),
         ("uncleared", b58encode(bytes([1]) * 32), b58encode(bytes([2]) * 32), 0, 0, 0, 0, 0, 0),
         ("terms_v2", b58encode(bytes([5]) * 32), b58encode(bytes([6]) * 32), 7, 1, 1, 0, 1_800_000_000, 2),
+        # ASYMMETRIC geo/age (audit 2026-09-11, F-14). Every case above sets
+        # geo_cleared and age_verified to the same value, so a copy of this
+        # layout that swapped the two adjacent bytes reproduced all four
+        # vectors exactly — the oracle could not tell the layouts apart. This
+        # case can: geo cleared, age not.
+        ("geo_without_age", b58encode(bytes([3]) * 32), b58encode(bytes([4]) * 32), 1, 1, 0, 0, 1_760_000_000, 1),
     ]:
         raw = encode(wallet, pool, nonce, geo, age, kyc, issued, terms)
         assert len(raw) == 85

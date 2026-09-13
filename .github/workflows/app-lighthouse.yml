@@ -1,0 +1,84 @@
+# The D4 Lighthouse gate, run (audit 2026-09-11, A-33 / G-20).
+#
+# `app/scripts/lighthouse-gate.mjs` asserts performance ≥ 90 and
+# accessibility ≥ 90 on the Play page and a Pool page, against the production
+# build in fixture mode. It is real, it is maintained, and until now no
+# workflow invoked it — the same pattern `deny.toml` and `.cargo/audit.toml`
+# were in: a gate nobody runs is a comment.
+#
+# WHY IT IS NOT IN `ci-fast`. It does not currently pass. Measured
+# 2026-09-12 on a clean fixture build:
+#
+#     play   performance 75   accessibility 93
+#     pool   performance 88   accessibility 100
+#
+# with a threshold of 90. Two of the four numbers are short, and the
+# accessibility findings are specific (colour contrast, touch-target size on
+# the Play page; bf-cache on the pool page). Wiring that into the always-on
+# lane would block every unrelated change on a pre-existing product
+# deficiency, and moving the threshold to make a lane green is a founder
+# decision (D4 set it), not a workflow's.
+#
+# So it runs HERE: on demand, and weekly, where the numbers are visible and
+# actionable. When the pages clear the bar, move this job into `ci-fast`
+# beside `journey` and delete this file — a gate that passes belongs on
+# every change.
+#
+# Performance scores on a shared runner are noisier than on a workstation;
+# treat a single point below the line as a signal to re-run before treating
+# it as a regression, and the accessibility numbers (which are deterministic)
+# as the harder of the two.
+
+name: app-lighthouse
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Mondays, 06:20 UTC. Off the hour so it does not queue behind the
+    # platform's own peak.
+    - cron: '20 6 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: app-lighthouse-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  lighthouse:
+    name: performance and accessibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v4.4.0
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: install
+        run: cd app && npm ci --no-audit --no-fund
+
+      # The gate drives a real Chrome through chrome-launcher. The runner
+      # ships one; CHROME_PATH below points the gate at it instead of at the
+      # Playwright Chromium it defaults to on the dev machine.
+      - name: install chromium
+        run: cd app && npx playwright install --with-deps chromium
+
+      # Same build the journey uses: NEXT_PUBLIC_FIXTURE_DATA is compiled in,
+      # so it has to be on the build (app/playwright.config.ts explains why).
+      - name: build (fixture mode)
+        run: cd app && NEXT_PUBLIC_FIXTURE_DATA=1 npm run build
+
+      - name: performance ≥ 90 and accessibility ≥ 90 (D4)
+        run: |
+          cd app
+          CHROME_PATH="$(node -e "console.log(require('@playwright/test').chromium.executablePath())")"
+          export CHROME_PATH
+          echo "chrome: $CHROME_PATH"
+          npm run lighthouse

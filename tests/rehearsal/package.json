@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "license": "Apache-2.0",
   "private": true,
-  "description": "The dress-rehearsal harness (roadmap Phase 5): entrant strategies, the pool-cycle orchestrator, an OFFLINE 20-pool rehearsal that runs in CI, and the Playwright entry-flow spec + devnet runbook for the credentialed run.",
+  "description": "The dress-rehearsal harness (roadmap Phase 5): entrant strategies, the pool-cycle orchestrator, and an OFFLINE 20-pool rehearsal that runs in CI over a FakeChain. The credentialed devnet run is the daemon over Web3Chain and is driven by docs/devnet-rehearsal.md, not from here.",
   "engines": {
     "node": ">=20"
   },

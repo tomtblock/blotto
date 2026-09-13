@@ -27,6 +27,35 @@ clusterGate();
 
 const nextConfig: NextConfig = {
   /*
+   * THE DEV-ONLY ROUTES ARE NOT BUILT AT ALL IN PRODUCTION (audit
+   * 2026-09-11, A-30).
+   *
+   * `/dev/components` and `/dev/preview` called `notFound()` when
+   * `NODE_ENV === "production"`, which made them 404 at REQUEST time but did
+   * nothing about BUILD time: the routes were compiled, and the component
+   * gallery's client chunk — 40,013 bytes, measured in `.next/static/chunks`
+   * on the 2026-09-12 build — was served from the static path of every
+   * production deploy. A 404 you can still download is not a 404.
+   *
+   * `pageExtensions` decides which files Next treats as routes. The four
+   * defaults are listed explicitly (setting this option REPLACES them), and
+   * `dev.tsx` is appended only outside a production build. The two pages are
+   * named `page.dev.tsx`, so in development they are ordinary routes and in
+   * a production build no route exists, nothing compiles, and nothing is
+   * emitted. The journey suite's assertion that `/dev/components` returns
+   * 404 against `next start` still holds — now because the route is absent
+   * rather than because it refuses itself.
+   *
+   * Rejected: (a) deleting the gallery, which is the design-system surface
+   * the screenshot script reads its route list off; (b) a dynamic import,
+   * which changes which chunk is emitted, not whether one is.
+   */
+  pageExtensions:
+    process.env.NODE_ENV === "production"
+      ? ["tsx", "ts", "jsx", "js"]
+      : ["tsx", "ts", "jsx", "js", "dev.tsx"],
+
+  /*
    * Pin the workspace root instead of letting Turbopack infer it.
    *
    * Next infers the root by looking for a lockfile (pnpm-lock.yaml,

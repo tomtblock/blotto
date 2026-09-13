@@ -134,6 +134,7 @@ hard way:
 | `app/` | The Next.js frontend — play, pools, results, verify, profile, rules, admin |
 | `tests/litesvm/` | The integration suite that drives the compiled program |
 | `tests/rehearsal/` | The offline settlement rehearsal and the skill-evidence study |
+| `tests/postgres/` | The only suite that executes SQL: the migrations from an empty database, then every Postgres-backed store against the schema they build |
 | `scripts/` | Deploy, the admin CLI, and the three CI gates |
 
 ## Verifying a change
@@ -143,6 +144,7 @@ cargo test --workspace                          # program units + the vault fuzz
 anchor build --ignore-keys                      # the SBF artifact (Solana toolchain)
 cd tests/litesvm && cargo test                  # integration, against that artifact
 cd app && npm run lint && npm run typecheck && npm test && npm run build
+cd app && NEXT_PUBLIC_FIXTURE_DATA=1 npm run build && npm run journey   # the browser journey
 ./scripts/check-language.sh                     # the PID §8.7 lexicon
 ./scripts/check-standing-rules.sh               # the vault's exits; class out of scoring
 ./scripts/check-env-examples.sh                 # every env var a service reads is documented
@@ -154,6 +156,18 @@ python3 scripts/check-mirrors.py                # Rust and TypeScript constants 
 
 Every backend package has `npm run typecheck` and `npm test`. CI runs all of it;
 `docs/AS-BUILT.md` §7 has the full sequence and what each step depends on.
+
+The SQL suite needs a scratch database and is gated on its URL — without one
+every case is reported PENDING rather than passing:
+
+```
+cd tests/postgres && BLOTTO_TEST_DATABASE_URL=postgres://…/blotto_test npm test
+```
+
+It DROPS the `public` schema of whatever it is pointed at, so the database name
+has to contain `test`, `scratch`, `ci` or `tmp` before it will run at all. CI
+gives it a service container (`ci-fast`'s `postgres` job) and fails the lane if
+any case came back pending.
 
 ## Reports
 

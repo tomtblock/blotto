@@ -12,6 +12,7 @@ import {
   decodeBattleSet,
   encodeBattleSet,
   potForTier,
+  rankOrder,
   scorePool,
   leafBytes,
   merkleRoot,
@@ -188,6 +189,92 @@ describe('verifyPool', () => {
    * published lost-ciphertext rule (TECH-ARCH §5) makes a missing entry
    * legitimate, so it is not a mismatch; it is not a verification either.
    */
+  /*
+   * The canonical leaf order, across the language boundary (audit
+   * 2026-09-11, G-15).
+   *
+   * `verifyPool` rebuilds the Merkle root from its own hand-written sort —
+   * `rank asc, index asc` — rather than from `rankOrder()`, the function in
+   * `@blotto/scoring` that owns the order and that the Python oracle's
+   * vectors pin. Two more copies of the same comparator live in
+   * `backend/reveal/src/ranking.ts` and `backend/indexer/src/archive.ts`
+   * (held against the owner by `backend/reveal/test/ranking-field.spec.ts`).
+   *
+   * A comparator that drifted HERE would not throw. The page would simply
+   * tell every player that the root does not match, on a pool that is
+   * perfectly sound — the verify page's entire purpose, inverted. So the
+   * order this page uses is asserted against the owner directly, on a field
+   * whose ties make the index tie-break decide.
+   */
+  describe('the leaf order it rebuilds the root from (G-15)', () => {
+    /**
+     * A field with REPEATED RANKS, so the `index` tie-break is what decides
+     * the leaf positions. Three entries are unpublished, which scores them
+     * as all losses under the published rule — they tie with each other at
+     * the bottom, exactly as a real settled pool with lost ciphertexts does.
+     */
+    function tiedFixture() {
+      const { bundle, chain } = fixture();
+      for (const i of [40, 12, 55]) {
+        bundle.entries[i].battles = null;
+        bundle.entries[i].salt = null;
+        bundle.entries[i].status = 'missing_ciphertext';
+      }
+      const rest = fixtureMissing(bundle);
+      chain.resultsRootHex = rest.root;
+      chain.committedPayouts = rest.committed;
+      chain.payouts = rest.payouts;
+      return { bundle, chain };
+    }
+
+    it('is rankOrder`s order, on a field where the tie-break decides', () => {
+      const { bundle, chain } = tiedFixture();
+      const results = bundle.results.map((r) => ({
+        index: r.index,
+        rank: r.rank,
+        scoreHalf: r.score_half,
+        zones: r.zones,
+        amountLamports: BigInt(r.amount_lamports),
+      }));
+      // The field really does contain repeated ranks, or the tie-break is
+      // untested and everything below is about nothing.
+      const ranks = results.map((r) => r.rank);
+      expect(new Set(ranks).size, 'the fixture must contain a tie').toBeLessThan(ranks.length);
+      // The published sequence IS the owner's answer for the same rows.
+      expect(results.map((r) => r.index)).toEqual(rankOrder(results));
+      // And the page agrees with the chain on the root built from it.
+      const report = verifyPool(bundle, chain);
+      expect(report.checks.find((c) => c.name === 'results-root')!.ok).toBe(true);
+    });
+
+    it('turns results-root red against a root built in any other order', () => {
+      // The page re-derives the order itself; it does not take the bundle's
+      // published sequence on trust (swapping two rows of `bundle.results`
+      // changes nothing here, and that is the right behaviour). So the order
+      // it uses is pinned from the other side: a root committed over the
+      // SAME rows in a different leaf order must not verify.
+      const { bundle, chain } = tiedFixture();
+      const tied = bundle.results.filter((r) => r.rank === bundle.results[63].rank);
+      expect(tied.length, 'the bottom of this field is a tie group').toBeGreaterThan(1);
+      const swappedOrder = [...bundle.results];
+      const last = swappedOrder.length - 1;
+      [swappedOrder[last], swappedOrder[last - 1]] = [swappedOrder[last - 1], swappedOrder[last]];
+      chain.resultsRootHex = hex(
+        merkleRoot(
+          swappedOrder.map((r) =>
+            leafBytes({
+              player: base58Decode(r.player),
+              rank: r.rank,
+              amountLamports: BigInt(r.amount_lamports),
+            })
+          )
+        )
+      );
+      const report = verifyPool(bundle, chain);
+      expect(report.checks.find((c) => c.name === 'results-root')!.ok).toBe(false);
+    });
+  });
+
   describe('entries that cannot be checked (D-10)', () => {
     const unpublish = (bundle: PublishedBundle, index: number, status: string) => {
       bundle.entries[index].battles = null;

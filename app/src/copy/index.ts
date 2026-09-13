@@ -99,7 +99,6 @@ export const COPY = {
     title: 'Your wallet',
     signInFirst: 'Sign in to see your wallet.',
     balanceLabel: 'In your wallet now',
-    wonLabel: 'Won to date',
     balanceUnavailable: 'Balance could not be read right now.',
     refresh: 'Refresh',
     whichEmbedded: 'Blotto wallet, made at sign-in',
@@ -138,11 +137,8 @@ export const COPY = {
       'You will be shown this wallet’s private key on a screen we cannot read. Paste it into Phantom under “Import private key” and this wallet, with everything in it, lives in Phantom from then on. Never share the key with anyone.',
     exportConfirm: 'Show my private key',
     linkTitle: 'Use a different wallet',
-    linkExplain:
-      'Connect a wallet you already have — Phantom, Solflare, Backpack — to this account. You choose which one plays and is paid.',
     // Shown inside the provider's connect modal.
     linkDescription: 'Connect a wallet to your Blotto account.',
-    explorer: 'View on explorer',
   },
   gate: {
     ageAttestation:
@@ -266,10 +262,6 @@ export const COPY = {
     // the shared constant (callers pass MIN_SEATS), never hand-typed.
     entrantsOf: (n: number, minSeats: number) => `${n} / 64 entered · ${minSeats} needed to run`,
     fillDeadline: 'Pool closes for entries in',
-    // Prompt v2 §B.6: the tier's cooldown after a pool settles — shown when
-    // no pool is open, from the on-chain `tier_next_open_at`. A fixture
-    // clock like fillDeadline — calm, never beside a pay control.
-    nextPoolIn: 'Next pool opens in',
     // D-E2: the prize is ONE number — the pot — shown as a Stat, with the
     // rule beside it. The per-position table is gone (a one-row table reads
     // as a bug, not a rule).
@@ -304,7 +296,6 @@ export const COPY = {
     // already provides, said out loud instead of read as a cut.
     potFixedAtOpen:
       'This pool\u2019s prize pool was fixed when it opened and is unaffected by later changes.',
-    lockedTier: 'Opens when the treasury covers it',
     noOpenPool: 'No tournament is open for entries right now.',
     noOpenPoolDetail:
       'A tier opens once the prize treasury holds its full prize pool, the previous tournament in that tier has paid out or closed, and the tier\u2019s short cooldown has passed.',
@@ -349,7 +340,6 @@ export const COPY = {
     // PHASE-N-REVIEW (2026-09-09): the marquee line on the landing machine.
     demoStatus: 'Practice machine',
     openPoolTitle: 'Open now',
-    seatsLabel: 'seats filled',
   },
 
   howItWorks: {
@@ -459,25 +449,27 @@ export const COPY = {
   battle: {
     screenOf: (k: number) => `Battle ${k} of 7`,
     evenSplit: 'Even split',
-    lockIn: 'Lock in',
-    // R9-b (founder addendum 2026-09-07, amending R9): an unlocked battle —
-    // the one on screen included — is entered as the even split. The
-    // wording is the founder's, verbatim, and goes on the battle screen as
-    // well as the rules page.
-    timerNote:
-      'Lock each battle before its timer ends. Any battle you have not locked when the timer ends \u2014 including the one on your screen \u2014 is entered as an even split of 20 points in each of the five stats.',
     // The effect of the default, stated as how the allocation PERFORMS —
     // never as a chance of anything (the addendum's note for this line).
     timerEffect:
       'The even split is the weakest allocation in the game. Against any allocation that concentrates points on three stats, an even split loses that battle three stats to two, every time. Nothing is decided at random: the even split is simply the shape your entry starts from, and leaving it there is a decision like any other.',
-    reviewTitle: 'Your seven battles',
     // The two-step seal (v3 D2): arm, then confirm. §8.6 renders above step 2.
     seal: 'Seal my allocation',
     sealConfirm: 'Confirm — seal and submit',
     sealCancel: 'Go back',
     sealing: 'Sealing your battles…',
-    remainingPoints: 'Points to place',
-    statNames: ['Strength', 'Speed', 'Heart', 'Wit', 'Durability'] as const,
+    /*
+     * NOT HERE, DELIBERATELY (audit 2026-09-11, A-29): a points-remaining
+     * counter. This block carried `remainingPoints: 'Points to place'`,
+     * unrendered. PID §4.2 is explicit — "the player never does arithmetic
+     * and never sees a 'points remaining' counter" — because the counter is
+     * what turns a shape into a budgeting puzzle with round targets, and
+     * §4.3 quantifies what round targets do to the draw rate. A key that
+     * exists is a key someone renders. Also gone: a second copy of the stat
+     * names, which are `STAT_NAMES` in `battle/allocation.ts` and must have
+     * exactly one definition on the client — they are the fixed stat order
+     * the encoding depends on, not decoration.
+     */
 
     /* v4 run (founder brief 2026-09-06), the timer sentence amended by the
      * founder's addendum of 2026-09-07 (R9-b): an unlocked battle is
@@ -487,7 +479,6 @@ export const COPY = {
     ruleNinety:
       'Ninety seconds for all seven battles. Any battle you have not locked when the timer ends \u2014 including the one on your screen \u2014 is entered as an even split of 20 points in each of the five stats.',
     lockBattle: (n: number) => `Lock in battle ${n}`,
-    sevenTitle: 'Seven made',
     expiredNote: 'Time ran out \u2014 every battle you had not locked was entered as the even split.',
     montageHeadlineFirst: 'I just made my first Blott.',
     montageHeadlineSeven: 'I just made seven Blotts.',
@@ -736,6 +727,22 @@ export const COPY = {
         cannot:
           'Move money. No admin instruction transfers a lamport \u2014 an upheld flag leaves the prize in the tournament\u2019s own vault for the next eligible player; pausing never blocks settlement or refunds.',
       },
+      /*
+       * WRITTEN BUT NOT RENDERED (audit 2026-09-11, A-29 — reported, not
+       * removed). `custodyView()` in app/custody/custody.config.ts builds
+       * seven rows and this is not one of them, so the disclosure page
+       * omits a key the program treats as real: `Config.keeper` is the ONLY
+       * signer `open_pool` accepts (programs/blotto_cup/src/state.rs), and
+       * the admin rotates it with `set_keeper`.
+       *
+       * It is NOT wired here because the row needs a holder and there is no
+       * `keys.keeper` in the founder-owned `config/custody.json` — that
+       * file's committed value discloses the devnet keeper inside the
+       * settlement signer's own string instead. Inventing a holder, or
+       * rendering "not yet set" over a key whose holder IS recorded, would
+       * both be worse than the omission. Adding `keys.keeper` to the config
+       * is a founder edit; the row follows it.
+       */
       keeper: {
         name: 'Keeper',
         can: 'Open the next tournament of a tier once the previous one has paid out or closed and the tier\u2019s cooldown has passed. Nobody else can open a tournament, however long a tier sits idle: if the keeper stops, no new tournament opens and no money is at risk — sealing and refunding a tournament that is already running stay open to anyone, and the admin can rotate the keeper at any time.',

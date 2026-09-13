@@ -509,3 +509,75 @@ not route, and a test fails if the public route returns.
 
 **Still open, and operator-owned:** nothing scrapes the endpoint and no alert destination is
 configured. Both are named in the comment beside the setting in each deployment file.
+
+## Addendum — Waves 3.4, 5.2 and 5.4a (2026-09-12)
+
+Merged as PR #116. Three batches, forty-two rows: the app, the rest of the CI and deploy work, and
+the documentation-and-orphans half of X1.
+
+### The app (A1)
+
+| Audit id | What is true now |
+|---|---|
+| **A-07 / C-26 / D-15 / E-01** | A production build with no indexer address served in-repo fixture tournaments through the ordinary pages, with an Enter button, and the fixture pool's identifier then dead-ended the entry journey. Every read fails into the existing unavailable state. Fixtures survive in development and, in a production build, only behind an explicit flag the mainnet gate refuses outright |
+| **B-40** | The device marker was stable across pools and published verbatim in every bundle, so two bundles linked every wallet one browser had used. It is derived per pool now — detection within a pool unchanged — with a fresh secret, and the old value deleted on sight because it is already public |
+| **B-53** | A global suppressing the embedded wallet's signing confirmation shipped ungated in production while its sibling automation hook was gated and proven absent by a CI lane. Both are behind the flag, and that lane checks both |
+| **D-10 / D-29 / D-04** | The verify page could only say yes or no: an entry published with nothing to check verified green, and a committed-but-unpaid pool verified red. A third verdict exists, and the bundle address is prefilled and stated rather than dropped when the published bundle does not match the committed root |
+| **C-17 / D-13, C-14** | Seven allocations are no longer destroyed by a transient reconnect, and a broadcast-but-unconfirmed entry is no longer reported as not-entered and sent round again — a double-entry risk |
+| **F-04** | The run clock counted timer firings, so a backgrounded tab bought arbitrary extra deliberation. It measures elapsed time, in integer milliseconds with the remainder carried, because a float cannot reach the allocation path |
+| **A-06 / E-02** | The cluster guard was dead outside its own test. It runs in the build, verified by watching a mainnet build fail |
+| **B-54** | Security headers on every response, written from the origins the installed wallet SDK actually contacts. Two deliberate weakenings are marked and explained |
+| C-13, D-12, C-15/D-16, D-17, D-14, D-34, D-35, D-41, F-07, F-15 | Each closed as its row describes |
+
+### CI and deploy (C1 remainder)
+
+Advisories run at last, in two jobs so a red advisory never hides a red test — Rust blocking,
+Node reporting, because two of its high-severity findings have no fix available and a blocking lane
+would be red from the first run. Secrets are scanned in history. The env gate could not see the
+dominant read pattern, so it passed green while production variables went undocumented. A green
+deploy could ship two services of four. The deploy script passed an invalid cluster name on its
+mainnet branch, could not tell "no program here" from "the node did not answer", and signed with
+whatever key the tool happened to have configured.
+
+**Two cross-language checks now exist that did not.** The three Python oracles run in CI, so the
+committed vectors cannot drift from the independent generator that is the point of having them; and
+twelve constants and twenty-five event layouts are compared across Rust and TypeScript. That second
+one is the check that would have caught this morning's rent-cushion regression, and it was proven by
+re-introducing that exact regression and watching it fire.
+
+### Documentation and orphans (X1a)
+
+Fourteen of the program's public instruction docs described something the program does not do, and
+they become the IDL. All thirty-two handlers were read and every wrong comment rewritten against the
+code.
+
+**E-12 is a real defect found in that pass, not a documentation fix.** The storage network had its
+own selector, defaulting to devnet and never checked against the cluster — so a mainnet deployment
+that left it unset published its bundles to a devnet network. A bundle published to the wrong
+network cannot be moved and cannot be republished under the same identifier, so the verifiability the
+bundle exists for would be gone, silently. One resolver now, and a mismatch refuses at boot.
+
+**A-23**: the daemon shipped a second loop inside its deployment entry, so the loop with a test suite
+was dead in production and the loop that ran had none. One loop, and it is the tested one.
+
+**Raised, not buried — for the program-upgrade batch.** The prize band table is not enforced on
+chain. The program checks the total, the count, the seat range and the ordering of a committed
+results list, and pays it. It does not check who gets what, so a list that handed the whole pot to
+the wrong seat would be accepted, and only recomputation from the published bundle catches it. That
+is a consequence of the design rather than a defect a doc comment can fix.
+
+## Addendum — Wave 5.3, batch O1: the rest (2026-09-12)
+
+Merged as PR #117 and PR #119.
+
+| Audit id | What was true | What is true now |
+|---|---|---|
+| **E-21** | `clientKeyFrom`'s doc described a `trustProxy` gate since the day the territory bypass was found, and the function had no such parameter. Every caller gated the headers itself, by convention | A required parameter of the resolver and a required field on the hygiene request, so forgetting it is a type error. Exposed directly the resolver believes only the socket peer |
+| **D-06** | The runbook says of a stuck pool "send it by hand — it is permissionless", then gives a read-only command. Nothing could send `seal_at_deadline`, `trigger_refund` or `refund` outside the daemon | All three are commands, and all three are in the daily drift check — verified against the deployed devnet program, taking its coverage from 16 to 19 of the 32 instructions |
+| **D-08** | `register-signers` did not rotate `Config.keeper`, the only key `open_pool` accepts, so a settlement rotation stopped every new pool opening until someone noticed | The keeper follows the settlement signer in the same transaction, with an explicit flag for a deployment that runs them apart |
+| **D-21** | Nothing could read back the KYC threshold or the detection switch, while the manual said `status` showed them | It prints both |
+| **B-19 / B-38 / B-39** | The limiter's documented sweep had no caller until the review service got one today, leaving the entry gate and the public read API growing a bucket per caller for as long as they stayed up | Both arm it, both release it with the server, and a disabled limiter arms nothing |
+| **C-18, second half** | A service that booted with the mirrored list absent still screened, but said so only in a boot log the next restart wipes | `/health` names which it is and which sources answered. Still 200: degraded is not down, and it recovers on its own |
+
+Also: the deploy did not carry `BLOTTO_REVIEW_OPERATOR_TOKEN`, so the reviewer's detection surface
+would have answered 503 on a deployed service however the code behaved.

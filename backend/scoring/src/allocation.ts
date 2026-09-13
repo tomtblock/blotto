@@ -12,8 +12,18 @@
  * That is the sealing property, and it costs exactly this — the two real
  * enforcement points are
  *
- *   1. the CLIENT, at submission (`app/src/battle/allocation.ts` holds the
- *      same rule, and the interaction cannot express a violating shape); and
+ *   1. the CLIENT, at submission — which is THIS MODULE TOO, not a second
+ *      copy of the rule. `app/src/entry/submit.ts` encodes through
+ *      `encodePayload` (`backend/sealing/src/payload.ts`), which calls
+ *      `encodeBattleSet` below, which calls `assertBattleSet`; a violating
+ *      set throws before any ciphertext or `battles_hash` exists, so
+ *      nothing can reach the chain around it. The interaction upstream
+ *      (`app/src/components/blot/rebalance.ts`) cannot express a violating
+ *      shape either, but it is defence in depth, not the boundary.
+ *      Corrected 2026-09-12: this comment used to name
+ *      `app/src/battle/allocation.ts` as the client's copy of the rule.
+ *      That module's guard had no caller and is gone; the client and the
+ *      crank have enforced one rule from one source all along.
  *   2. THIS MODULE, at reveal — `decodeBattleSet` refuses a malformed set, so
  *      an entry whose sealed bytes break the rule cannot be scored as if it
  *      had played. The crank treats that refusal exactly like a lost
@@ -22,7 +32,9 @@
  *      publishes its status, so one malformed entry can never halt a pool's
  *      settlement.
  *
- * A mismatch between (1) and (2) is a defect in one of them.
+ * (1) and (2) cannot disagree, because they are the same three functions
+ * called at two moments. That is the point of keeping the rule here rather
+ * than restating it client-side.
  *
  * Pure module: no I/O, no Date, no randomness.
  */

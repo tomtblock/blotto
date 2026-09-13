@@ -4,10 +4,17 @@
  * WIRING, STATED HONESTLY (audit 2026-09-11, A-21/A-31/F-18): no application
  * module imports this package today. It is built, typechecked and tested in
  * CI, its constants are checked against the program's by
- * `scripts/check-mirrors.py`, and the fair-play page cites
- * `src/digest.ts` as the published proof that the draw is replayable — but
- * the verify page does not yet run it, so a player who wants to replay their
- * own draw must do it themselves from the published events.
+ * `scripts/check-mirrors.py`, and the fair-play page cites `src/digest.ts` as
+ * the published proof that the draw is replayable — but the verify page does
+ * not yet run it, so a player who wants to replay their own draw must do it
+ * themselves from the published events.
+ *
+ * The one importer outside this package is a TEST:
+ * `app/src/app/fair-play/fair-play.test.ts` runs the replay over the
+ * committed Python vectors, so the page's claim is checked by exercising the
+ * mechanism rather than by asserting the file is on disk (2026-09-12, F-18).
+ * That is coverage of the claim, not the wiring — no page renders anything
+ * this module computes.
  *
  * It is kept rather than deleted because the replay it implements is a
  * published property of the product: ADR-021 (bag without replacement) and
