@@ -1260,6 +1260,41 @@ ratified numbers and nothing in CI catches it.
 | 5 | 256.00 | **200** |
 | 6 | 384.00 | **300** |
 
+**R7-b changed what these are.** Until 2026-09-13 they were stale but legal:
+the break-even rule was `pot < 52 × price` and every one of them cleared it,
+tier 3 most narrowly at 51.2 < 52. The rule is now `pot <= 40 × price` and
+**all six violate it.** They are no longer "numbers to tidy up"; they are
+numbers the current rule would refuse.
+
+What each would cost if its tier opened before `set_tier_economics` corrects
+it — intake at the 40-seat floor against the pot the vault would be funded
+with:
+
+| tier | entry | on-chain pot | intake at 40 | result at 40 | result at 64 |
+|---|---|---|---|---|---|
+| 1 | 0.5 | 25.6 | 20 | **−5.6 SOL** | +6.4 |
+| 2 | 0.75 | 38.4 | 30 | **−8.4 SOL** | +9.6 |
+| 3 | 1 | 51.2 | 40 | **−11.2 SOL** | +12.8 |
+| 4 | 2.5 | 128 | 100 | **−28 SOL** | +32 |
+| 5 | 5 | 256 | 200 | **−56 SOL** | +64 |
+| 6 | 7.5 | 384 | 300 | **−84 SOL** | +96 |
+
+**Where the protection actually lives, stated plainly.** Nothing on chain
+stops this. `set_tier_economics` enforces the break-even rule on a WRITE, and
+neither `set_open_tiers` nor `open_pool` re-checks it on a READ — `open_pool`
+funds the vault with whatever `Config.tier_pot_lamports[tier]` holds. The
+guard that would refuse it is in the admin CLI: `set-open-tiers` compares the
+live price and pot against the ratified table and refuses a tier that
+disagrees (`scripts/admin.ts`, the R6 gate). That is defensible, because
+`set_open_tiers` is admin-only and Squads-gated and the CLI is the only
+realistic way to build the transaction — but it is a tool-level guard on an
+on-chain risk, and it should be read as one.
+
+**Therefore: correcting these six is a precondition of opening any tier above
+0, not housekeeping.** Run `set-tier-economics` per tier to the ratified
+values, which are exactly `40 × price` and so land on the guard rather than
+outside it, and the CLI's own refusal lifts at the same moment.
+
 Entry prices are already correct at every tier and are **not changed** by these
 proposals — `set_tier_economics` writes both fields, so each one passes the
 existing price back unchanged alongside the corrected pot.
