@@ -38,7 +38,7 @@
  * only be served by a development or test build (`data/api.ts`).
  */
 
-import { TIER_POT_LAMPORTS } from '@blotto/scoring';
+import { MIN_SEATS, TIER_POT_LAMPORTS } from '@blotto/scoring';
 import type {
   CareerRow,
   EntryRow,
@@ -105,6 +105,8 @@ function poolSummary(over: Partial<PoolSummary> & { pool: string; id: string }):
     state: 'Open',
     sealing_pubkey: SEALING_PUBKEY,
     entrants: 0,
+    // R7-b: derived by the read API from the seat count and the floor.
+    min_seats: Number(MIN_SEATS),
     results_root: null,
     secret: null,
     // Stage C: derived by the read API; closed by default, opened by the
@@ -114,6 +116,12 @@ function poolSummary(over: Partial<PoolSummary> & { pool: string; id: string }):
     resolving_until: null,
     server_time: serverNow(),
     ...over,
+    // Recomputed AFTER the overrides, from whatever seat count they set.
+    // A fixture that says 50 seated and "would refund" is a contradiction
+    // the preview pages would render as fact.
+    outcome_if_deadline_now:
+      over.outcome_if_deadline_now ??
+      ((over.entrants ?? 0) >= Number(MIN_SEATS) ? 'seal' : 'refund'),
   };
 }
 

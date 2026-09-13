@@ -274,6 +274,20 @@ export const COPY = {
     // the shared constant (callers pass MIN_SEATS), never hand-typed.
     entrantsOf: (n: number, minSeats: number) => `${n} / 64 entered · ${minSeats} needed to run`,
     fillDeadline: 'Pool closes for entries in',
+    /**
+     * What the deadline would do right now (R7-b, founder instruction
+     * 2026-09-12 §4.4). The page already shows a countdown beside a seat
+     * count; this saves a player knowing the rule and doing the comparison
+     * in their head while they decide whether to enter.
+     *
+     * SUBSTANCE FIXED: both branches state a rule the program enforces, and
+     * the refund branch must not soften it — "would refund" is what happens,
+     * and a player deciding whether to pay is entitled to it plainly.
+     */
+    outcomeIfDeadlineNow: (outcome: 'seal' | 'refund', minSeats: number) =>
+      outcome === 'seal'
+        ? 'Enough players are seated: if the clock ran out now, this pool would run.'
+        : `Not enough players yet: if the clock ran out now, every entry would be refunded in full. ${minSeats} are needed.`,
     // D-E2: the prize is ONE number — the pot — shown as a Stat, with the
     // rule beside it. The per-position table is gone (a one-row table reads
     // as a bug, not a rule).

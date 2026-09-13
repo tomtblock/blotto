@@ -216,11 +216,12 @@ and safe. Everything else is founder-signed.
 | `status` | Reads Config: keys, tiers, prices, pots, switches, treasury, timings |
 | `pools` | Reads every pool and its state — the drain check |
 | `init-config` | One-time setup. Signer becomes admin |
-| `migrate-config` | One-shot account growth after a layout upgrade. Self-disabling |
+| `migrate-config` | One-shot Config growth after a layout upgrade. Self-disabling |
+| `migrate-pool` | One-shot POOL growth after the R7-b upgrade (2026-09-12). Permissionless, self-disabling, once per existing pool. Until it runs, every instruction touching that pool fails on the short account |
 | `set-keeper` | Rotates the key allowed to open pools |
 | `set-pool-timing` | The fill deadline and cooldown for **future** pools |
 | `set-open-tiers` | Which tiers may open a pool |
-| `set-tier-economics` | One tier's price and pot. Refuses a pot at or above 52 × price |
+| `set-tier-economics` | One tier's price and pot. Refuses a pot ABOVE the minimum field's intake (40 × price). Exactly equal is allowed — that is the launch relationship (R7-b) |
 | `set-treasury-policy` | The reserve and the minimum balance |
 | `set-vault-ceiling` | One tier's gross-intake ceiling |
 | `set-paused` | Blocks new entries |
@@ -259,7 +260,7 @@ thing the published sentence promises we do not do.
 ```
 open_pool → commit_vrf_seed → create_pass_collection → register × n
    ↓
-64th seat, or the deadline with ≥ 52          the deadline with < 52
+64th seat, or the deadline with ≥ 40          the deadline with < 40
    ↓                                                    ↓
 Sealed → reveal_pool_secret → commit_results → Scored   Refunding
    ↓                                                    ↓

@@ -77,6 +77,7 @@ const ALL_MIGRATIONS = [
   '0019_sanctions.sql',
   '0020_review_decision_signed_text.sql',
   '0021_detection_reports.sql',
+  '0022_drop_go_deadline.sql',
 ];
 
 describe('the re-derive marker, against the real migrations (audit E-15)', () => {
@@ -88,7 +89,15 @@ describe('the re-derive marker, against the real migrations (audit E-15)', () =>
   });
 
   it('does not see it in migrations that invalidate nothing', () => {
-    for (const file of ['0001_events_ledger.sql', '0003_derived_tables.sql', '0018_events_seq.sql']) {
+    for (const file of [
+      '0001_events_ledger.sql',
+      '0003_derived_tables.sql',
+      '0018_events_seq.sql',
+      // R7-b: drops `pools.go_deadline`, a column no projection op ever
+      // wrote. A replay would rebuild identical rows, so asking for one
+      // would be an hour of work for no difference.
+      '0022_drop_go_deadline.sql',
+    ]) {
       expect(declaresRederive(migrationSql(file)), file).to.equal(false);
     }
   });

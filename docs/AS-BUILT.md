@@ -33,8 +33,8 @@ ninety seconds they allocate five stats across seven battles, each battle a
 distribution of exactly 100 points. The battle set is encrypted **on their
 device** before payment and only a hash of it goes on-chain.
 
-A pool has 64 seats and runs with at least 52. It closes when the 64th seat
-fills, or when its 12-hour deadline passes with 52 or more seated. Below 52 at
+A pool has 64 seats and runs with at least 40. It closes when the 64th seat
+fills, or when its 12-hour deadline passes with 40 or more seated. Below 40 at
 the deadline every entry refunds in full. Nothing an operator holds decides
 which of those happens.
 
@@ -252,7 +252,7 @@ reissue it**; the divergences are listed so the reissue is a single pass.
 |---|---|---|
 | PID §1, §6, §2 table, §7 diagram | Top 16 paid; prize pool is 80% of entries; platform retains 20% | One paid place. Pots are fixed constants funded before entries open; the operator's margin is entries minus the pot |
 | PID §2 | Prize pools 5.12 / 25.60 SOL at the first two tiers | 4 / 20 / 30 / 40 / 100 / 200 / 300 SOL across seven tiers |
-| PID §2 | Fill deadline 72 hours; 32–63 run at reduced size; fewer than 32 refunds | 12 hours; 52–63 run; fewer than 52 refunds |
+| PID §2 | Fill deadline 72 hours; 32–63 run at reduced size; fewer than 32 refunds | 12 hours (D-E6); **40–63 run; fewer than 40 refunds** (R7-b, 2026-09-12 — was 52 under D-E4) |
 | PID §5 | Prose implies entry order can affect ranking | Entry order decides only the indivisible remainder and the published leaf order. Ranks come from score and zones alone |
 | PID §8.3 table | "Paid 16 who are genuinely top-16" | One paid place; the skill evidence needs restating against rank-1 rate |
 | TECH-ARCH §10 | Five steppers with quick-set chips | A draggable pentagon with live normalisation and an even-split button (PID §4 overrides; recorded in `INDEX.md`) |
