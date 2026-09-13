@@ -11,12 +11,15 @@ import { lamportsToSol } from '@/data/format';
 import { AppHeader } from '@/components/shell/app-header';
 import { TabBar } from '@/components/shell/tab-bar';
 import { Card } from '@/components/ui/card';
+import { BackLink } from '@/components/ui/back-link';
+import { SiteFooter } from '@/components/shell/site-footer';
 import { LiveDataUnavailable } from '@/components/shell/live-unavailable';
 import { ResultsReveal, VerifyAlways, type RevealRow } from './results-reveal';
 import { ArchiveStandings } from './archive-standings';
 import { AllBattles } from './all-battles';
 import { WhatBeatYouPanel } from './what-beat-you-panel';
 import { ShareResult } from './share-result';
+import { ShareSeven } from './share-seven';
 import { PaidConfetti } from './paid-confetti';
 import { AppealClient } from './appeal-client';
 
@@ -41,7 +44,7 @@ export default async function ResultsPage({ params }: { params: Promise<{ pool: 
     return (
       <>
         <AppHeader />
-        <main className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 pb-24">
+        <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 pb-24">
           <LiveDataUnavailable />
         </main>
         <TabBar />
@@ -75,9 +78,12 @@ export default async function ResultsPage({ params }: { params: Promise<{ pool: 
   return (
     <>
       <AppHeader />
-      <main className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 pb-24">
+      <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 pb-24">
+        <div className="mb-2">
+          <BackLink href={`/pools/${pool.pool}`}>{COPY.shell.nav.backToPool}</BackLink>
+        </div>
         <header className="mb-5 flex items-baseline gap-3">
-          <h1 className="font-display text-[24px] font-bold text-ink">
+          <h1 className="font-display text-[34px] leading-[38px] font-extrabold text-ink">
             Pool #{pool.id} — results
           </h1>
         </header>
@@ -134,6 +140,8 @@ export default async function ResultsPage({ params }: { params: Promise<{ pool: 
               seatByPlayer={Object.fromEntries(entries.map((e) => [e.player, e.idx]))}
               paidSeats={results.filter((r) => BigInt(r.amount) > 0n).map((r) => r.seat)}
             />
+            {/* The player's own seven, shareable now the pool has closed (2026-09-13). */}
+            <ShareSeven poolAddress={pool.pool} state={pool.state} />
             {archive && <ArchiveStandings archive={archive} />}
             {/* Founder 2026-09-09: every battle of every player, from the
                 same verified bundle, after the reveal. */}
@@ -142,6 +150,7 @@ export default async function ResultsPage({ params }: { params: Promise<{ pool: 
         )}
         <VerifyAlways pool={pool.pool} bundleUri={archive?.uri} />
       </main>
+      <SiteFooter />
       <TabBar />
     </>
   );

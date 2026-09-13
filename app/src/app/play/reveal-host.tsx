@@ -43,9 +43,9 @@ import {
 } from '@/reveal/machine';
 import { beatTimer } from '@/reveal/host-timing';
 import { RevealStage, type RevealStageBeat } from '@/reveal/stages/reveal-stage';
-import { classColorToken } from '@/reveal/class-colour';
 import type { RevealResult } from '@/reveal/types';
-import { truncateAddress } from '@/wallet/types';
+import { Card } from '@/components/ui/card';
+import { PassCard } from './pass-card';
 
 const STAGE_BEATS: ReadonlySet<string> = new Set([
   'entry',
@@ -60,9 +60,13 @@ export function RevealHost({
   result,
   onRetry,
   onDone,
+  poolNumber,
 }: {
   /** The entry's terminal state — resolves, never rejects (outcome.ts). */
   result: Promise<RevealResult>;
+  /** The pool's number, for the pass card (2026-09-13). Optional: the card
+   *  omits it rather than guess. */
+  poolNumber?: string | number;
   /** Re-submit after a failure whose `retryable` is true (nothing landed,
    *  nothing can); absent = no retry offered. */
   onRetry?: () => Promise<RevealResult>;
@@ -122,31 +126,18 @@ export function RevealHost({
   }
 
   if (visual.beat === 'card') {
+    // The pass, and — now that the entry is CONFIRMED — the share
+    // (2026-09-13; see pass-card.tsx for what moved here and why).
     return (
-      <section className="flex max-w-prose flex-col items-center gap-4 p-6" aria-live="polite">
-        <h2 className="text-lg">{COPY.reveal.cardTitle}</h2>
-        <div
-          className="rounded-lg border px-8 py-10 text-center"
-          style={{ borderColor: `var(${classColorToken(visual.class)})` }}
-        >
-          <p className="font-mono text-[11px] tracking-[0.14em] uppercase opacity-70">
-            {COPY.reveal.rarityNames[visual.class]} · {COPY.reveal.rarityOf(COPY.reveal.rarityCounts[visual.class])}
-          </p>
-          <p className="mt-1 text-2xl">{COPY.reveal.classNames[visual.class]}</p>
-          <p className="mt-2 text-sm opacity-70">{COPY.reveal.cardSeat(visual.entryIndex)}</p>
-          <p className="mt-1 font-mono text-xs opacity-50">{truncateAddress(visual.asset)}</p>
-        </div>
-        <p className="max-w-prose text-center text-[13px] leading-5 opacity-70">
-          {revealCopy.EGG_NO_EFFECT}
-        </p>
-        <button
-          type="button"
-          className="rounded bg-brand px-6 py-2 text-(--color-base)"
-          onClick={() => dispatch({ kind: 'dismiss' })}
-        >
-          {COPY.reveal.cardDone}
-        </button>
-      </section>
+      <div className="flex flex-col items-center p-2">
+        <PassCard
+          classIndex={visual.class}
+          entryIndex={visual.entryIndex}
+          asset={visual.asset}
+          poolNumber={poolNumber}
+          onDone={() => dispatch({ kind: 'dismiss' })}
+        />
+      </div>
     );
   }
 
@@ -203,13 +194,13 @@ function EggGuide({ confirming }: { confirming: boolean }) {
       <p className="text-[14px] leading-6 text-ink-muted">
         {confirming ? revealCopy.EGG_CONFIRMING : revealCopy.EGG_WHAT}
       </p>
-      <div className="rounded-2xl border border-line bg-raised px-4 py-3 text-left">
+      <Card className="px-4 py-3 text-left">
         <p className="font-mono text-[11px] tracking-[0.14em] text-ink-muted uppercase">
           {revealCopy.EGG_RARITY_TITLE}
         </p>
         <p className="mt-1 text-[13px] leading-5 text-ink">{revealCopy.EGG_RARITY}</p>
         <p className="mt-2 text-[13px] leading-5 text-ink-muted">{revealCopy.EGG_NO_EFFECT}</p>
-      </div>
+      </Card>
     </section>
   );
 }

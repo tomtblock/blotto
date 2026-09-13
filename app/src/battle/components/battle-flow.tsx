@@ -29,7 +29,6 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { COPY } from '@/copy';
-import { XMark } from '@/wallet/wallet-icons';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Sheet } from '@/components/ui/sheet';
@@ -44,7 +43,6 @@ import { ConfettiBurst } from '@/components/celebrate/confetti-burst';
 import { EVEN_SPLIT, type Allocation } from '../allocation';
 import { BATTLES, initialState, reduce } from '../machine';
 import { sampleTick } from '../run-clock';
-import { composeMontage } from '../montage';
 import { saveStill } from '../stills';
 import { SevenTiles, type TileEntry } from './seven-tiles';
 
@@ -56,7 +54,6 @@ const TICK_MS = 100;
 /** The drop through the chute (blot.css `.blot-drop`, 780 ms) plus a beat. */
 const LOCK_BEAT_MS = 1000;
 /** Set the first time this wallet seals — flips the share line to "seven". */
-const SEALED_ONCE_KEY = 'blotto.sealed.once';
 
 export interface BattleFlowProps {
   /** Pool address — keys the lock-in stills in IndexedDB. */
@@ -85,8 +82,6 @@ export function BattleFlow({ poolAddress, onConfirm, onRunStarted }: BattleFlowP
   // Object URLs are revoked on unmount.
   const [stillUrls, setStillUrls] = useState<(string | null)[]>([]);
   const tileUrls = useRef<string[]>([]);
-  const [montage, setMontage] = useState<{ url: string; blob: Blob } | null>(null);
-  const [shareNote, setShareNote] = useState<string | null>(null);
   const [celebrated, setCelebrated] = useState(false);
   const reduced = usePrefersReducedMotion();
 
@@ -149,7 +144,6 @@ export function BattleFlow({ poolAddress, onConfirm, onRunStarted }: BattleFlowP
     if (state.phase === 'confirmed' && !confirmed.current) {
       confirmed.current = true;
       try {
-        localStorage.setItem(SEALED_ONCE_KEY, '1');
       } catch {
         /* the share line heuristic degrades to "first" — harmless */
       }
@@ -212,37 +206,29 @@ export function BattleFlow({ poolAddress, onConfirm, onRunStarted }: BattleFlowP
   }, [battle, locking, poolAddress, reduced, attachStill]);
 
   /* Seven made: make sure all seven stills and tiles exist (expiry can skip
-   * some — those battles are the even split), then compose the montage once. */
+   * some — those battles are the even split). The stills stay ON THIS DEVICE
+   * (stills.ts) until the pool closes: a still is the allocation drawn, and
+   * the montage that used to be composed here — and offered for sharing
+   * before anything was sealed — was the sealed line-up in silhouette. The
+   * seven-Blott share now lives on the results page, once the pool has
+   * closed (results/share-seven.tsx); the pass is what a player shares at
+   * entry (play/pass-card.tsx). 2026-09-13. */
   const review = state.phase === 'review' ? state : null;
   useEffect(() => {
-    if (!review || montage) return;
+    if (!review) return;
     let cancelled = false;
     (async () => {
-      const blobs: Blob[] = [];
       for (let k = 0; k < BATTLES; k++) {
-        let b = stillBlobs.current[k];
-        if (!b) {
-          try {
-            b = await renderBlottStill(review.battles[k]);
-            stillBlobs.current[k] = b;
-            if (!cancelled) attachStill(k, b);
-            void saveStill({ pool: poolAddress, battle: k + 1, allocation: review.battles[k], png: b });
-          } catch {
-            b = null;
-          }
+        if (stillBlobs.current[k]) continue;
+        try {
+          const b = await renderBlottStill(review.battles[k]);
+          if (cancelled) return;
+          stillBlobs.current[k] = b;
+          attachStill(k, b);
+          void saveStill({ pool: poolAddress, battle: k + 1, allocation: review.battles[k], png: b });
+        } catch {
+          /* best-effort; the tile shows its numbers without a still */
         }
-        if (b) blobs.push(b);
-      }
-      if (cancelled || blobs.length < BATTLES) return;
-      const first = !hasSealedBefore();
-      try {
-        const blob = await composeMontage(
-          blobs,
-          first ? COPY.battle.montageHeadlineFirst : COPY.battle.montageHeadlineSeven
-        );
-        if (!cancelled) setMontage({ url: URL.createObjectURL(blob), blob });
-      } catch {
-        /* montage is a bonus; the seal path below never depends on it */
       }
     })();
     return () => {
@@ -258,47 +244,6 @@ export function BattleFlow({ poolAddress, onConfirm, onRunStarted }: BattleFlowP
     return () => cancelAnimationFrame(raf);
   }, [review, celebrated]);
 
-  const share = useCallback(async () => {
-    if (!montage) return;
-    const first = !hasSealedBefore();
-    const text = first ? COPY.battle.shareTextFirst : COPY.battle.shareTextSeven;
-    const file = new File([montage.blob], 'blotto-seven.png', { type: 'image/png' });
-    try {
-      if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], text });
-        return;
-      }
-    } catch {
-      /* fall through to the download path (user cancel included) */
-    }
-    const a = document.createElement('a');
-    a.href = montage.url;
-    a.download = 'blotto-seven.png';
-    a.click();
-    try {
-      await navigator.clipboard.writeText(text);
-      setShareNote(COPY.battle.shareFallbackCopied);
-    } catch {
-      setShareNote(null);
-    }
-  }, [montage]);
-
-  /* Founder 2026-09-09: a direct door to X. The web intent takes text only,
-   * so the image is downloaded alongside for the player to attach. */
-  const postOnX = useCallback(() => {
-    if (!montage) return;
-    const text = hasSealedBefore() ? COPY.battle.shareTextSeven : COPY.battle.shareTextFirst;
-    const a = document.createElement('a');
-    a.href = montage.url;
-    a.download = 'blotto-seven.png';
-    a.click();
-    window.open(
-      `https://x.com/intent/post?text=${encodeURIComponent(text)}`,
-      '_blank',
-      'noopener,noreferrer'
-    );
-    setShareNote(COPY.battle.shareXNote);
-  }, [montage]);
 
   /* The rack: locked allocations from the machine's record — plus the Blot
    * dropping through the chute right now — zipped with their stills. */
@@ -395,6 +340,8 @@ export function BattleFlow({ poolAddress, onConfirm, onRunStarted }: BattleFlowP
                 onDragStart={setDragStat}
                 onDragEnd={() => setDragStat(null)}
                 onEvenSplit={() => dispatch({ type: 'even_split' })}
+                locks={battle.locks}
+                onToggleLock={(k) => dispatch({ type: 'toggle_lock', stat: k })}
                 disabled={locking}
               />
               <p className="text-[12px] leading-5 text-game-ink-muted">{COPY.battle.ruleNinety}</p>
@@ -461,46 +408,19 @@ export function BattleFlow({ poolAddress, onConfirm, onRunStarted }: BattleFlowP
             rack. Seeded by each battle's first stat so no two runs match;
             reads the allocation for nothing else. */}
         <Playground count={BATTLES} seeds={review.battles.map((b) => b[0])} size={64} />
-        {montage ? (
-          <div className="flex flex-col gap-3">
-            {/* eslint-disable-next-line @next/next/no-img-element -- object-URL preview of a canvas composition */}
-            <img
-              src={montage.url}
-              alt="Your seven Blotts, shapes only"
-              className="w-full max-w-md self-center rounded-2xl"
-            />
-            <div className="flex flex-col items-center gap-2">
-              <div className="flex flex-wrap justify-center gap-2">
-                <Button intent="prize" onClick={share}>
-                  {COPY.battle.share}
-                </Button>
-                <Button intent="quiet" onClick={postOnX} data-testid="share-x">
-                  <XMark size={16} />
-                  <span className="ml-2">{COPY.battle.shareX}</span>
-                </Button>
-              </div>
-              {shareNote && <p className="max-w-prose text-center text-[12px] text-ink-muted">{shareNote}</p>}
-            </div>
+        {/* 2026-09-13: the share that stood here is gone, deliberately. It
+            offered a picture of the seven Blotts before anything was sealed —
+            and a Blott's silhouette is its allocation (components/blott/warp.ts),
+            so the image was the sealed line-up, published while the pool was
+            open. The share now lives on the character pass, after the network
+            has confirmed the entry. What stands here is the seal, explained. */}
+        <Card className="flex items-center gap-4 p-4">
+          <SealLock />
+          <div className="flex min-w-0 flex-col gap-1">
+            <p className="text-[14px] leading-5 text-ink">{COPY.battle.sealWhat}</p>
+            <p className="text-[13px] leading-5 text-ink-muted">{COPY.battle.sealAfter}</p>
           </div>
-        ) : (
-          <Card className="p-1">
-            <ol className="flex flex-col">
-              {review.battles.map((b, k) => (
-                <li
-                  key={k}
-                  className={'flex items-center gap-4 px-4 py-2.5 ' + (k > 0 ? 'border-t border-line' : '')}
-                >
-                  <span className="text-[12px] uppercase tracking-[0.14em] text-ink-muted">
-                    {COPY.battle.screenOf(k + 1)}
-                  </span>
-                  <span className="tnum ml-auto font-display text-[18px] font-bold text-ink">
-                    {b.join(' · ')}
-                  </span>
-                </li>
-              ))}
-            </ol>
-          </Card>
-        )}
+        </Card>
         {sealArmed ? (
           <div className="flex flex-col gap-3">
             {/* PID §8.6 — above the confirm, always. Do not move it below. */}
@@ -546,12 +466,21 @@ export function BattleFlow({ poolAddress, onConfirm, onRunStarted }: BattleFlowP
   );
 }
 
-function hasSealedBefore(): boolean {
-  try {
-    return localStorage.getItem(SEALED_ONCE_KEY) === '1';
-  } catch {
-    return false;
-  }
+/** The seal's object (2026-09-13): a candy padlock, rendered once by the
+ * founder's image pipeline (public/candy/lock.webp). Decorative. */
+function SealLock() {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- a static asset at a fixed size
+    <img
+      src="/candy/lock.webp"
+      alt=""
+      aria-hidden
+      width={96}
+      height={96}
+      draggable={false}
+      className="h-24 w-24 shrink-0 select-none"
+    />
+  );
 }
 
 export { EVEN_SPLIT };
