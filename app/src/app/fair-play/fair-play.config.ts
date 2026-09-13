@@ -11,6 +11,7 @@
  */
 
 import evidence from '@docs/skill-evidence/results.json';
+import { CAPACITY, MIN_SEATS } from '@blotto/scoring';
 import { COPY } from '@/copy';
 import { availability, type Availability } from '@/app/rules/rules.config';
 
@@ -18,8 +19,18 @@ import { availability, type Availability } from '@/app/rules/rules.config';
 export const SKILL_CLASSES = ['uniform', 'random', 'heuristic', 'optimised'] as const;
 export type SkillClass = (typeof SKILL_CLASSES)[number];
 
-export const FULL_FIELD = 64;
-export const MIN_FIELD = 52;
+/**
+ * The two field sizes the study measures, read from the same shared mirrors of
+ * the program constants the rules page uses — NOT typed here.
+ *
+ * `MIN_FIELD` was the literal `52` until 2026-09-13. When R7-b lowered the
+ * minimum field to 40 the study re-ran at 40, and `rateFor` below throws on a
+ * field size the evidence has no row for — so the literal would have taken the
+ * page down at build time rather than quietly showing a stale number. That is
+ * the right failure, and deriving the number removes the occasion for it.
+ */
+export const FULL_FIELD = Number(CAPACITY);
+export const MIN_FIELD = Number(MIN_SEATS);
 
 export interface SkillRow {
   cls: SkillClass;

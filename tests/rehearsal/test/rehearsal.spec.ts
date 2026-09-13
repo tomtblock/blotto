@@ -8,7 +8,17 @@
 import { expect } from 'chai';
 import { runOfflinePool } from '../src';
 import { poolPopulation } from '../src/strategies';
-import { potForTier } from '../../../backend/scoring/src';
+import { MIN_SEATS, potForTier } from '../../../backend/scoring/src';
+
+/** The minimum field, and the largest field that refunds, as small integers.
+ * Read from the shared mirror of `constants.rs::MIN_SEATS` rather than typed:
+ * these two cases ARE the boundary, so a literal here would go on asserting
+ * the old rule against the new program. Rewritten 2026-09-13 for R7-b (the
+ * founder instruction of 2026-09-12 §4, standing rule 0.7 — a test encoding a
+ * replaced rule is rewritten in place, never deleted); they read 52 and 51
+ * under D-E4. */
+const MIN_FIELD = Number(MIN_SEATS);
+const LARGEST_REFUNDING_FIELD = MIN_FIELD - 1;
 import { FakeChain } from '../../../backend/reveal/src';
 import { crankPool } from '../../../backend/reveal/src';
 import { LocalCustody, MemoryCiphertextStore } from '../../../backend/sealing/src';
@@ -48,23 +58,23 @@ describe('the offline dress rehearsal', () => {
     }
   });
 
-  it('a 52-seat pool (the minimum field, D-E4) settles to Paid with the pot conserved', async function () {
+  it('a pool at exactly the minimum field settles to Paid with the pot conserved', async function () {
     this.timeout(60_000);
     const pot = potForTier(0);
-    const population = poolPopulation(77).slice(0, 52);
+    const population = poolPopulation(77).slice(0, MIN_FIELD);
     const run = await runOfflinePool(77, { population });
     expect(run.outcome.finalState).to.equal('Paid');
     const pool = await run.chain.getPool(run.poolId);
-    expect(pool.entrants).to.equal(52);
+    expect(pool.entrants).to.equal(MIN_FIELD);
     let total = 0n;
     for (const v of run.chain.paid.values()) total += v;
     for (const v of run.chain.escrowed.values()) total += v;
-    expect(total, 'conservation over 52 seats').to.equal(pot);
-    // The tree has 52 leaves; the paid set is the rank-1 group.
+    expect(total, `conservation over ${MIN_FIELD} seats`).to.equal(pot);
+    // The tree has one leaf per seat; the paid set is the rank-1 group.
     const bundle = run.publisher.published.get(run.outcome.bundleUri!)!;
-    expect(bundle.results.length).to.equal(52);
+    expect(bundle.results.length).to.equal(MIN_FIELD);
     for (const c of pool.payouts) {
-      expect(c.entryIndex).to.be.below(52);
+      expect(c.entryIndex).to.be.below(MIN_FIELD);
       expect(bundle.results.find((r) => r.index === c.entryIndex)!.rank).to.equal(1);
     }
   });
@@ -112,11 +122,13 @@ describe('the offline dress rehearsal', () => {
     expect(paid, 'the pot reached wallets in full').to.equal(potForTier(0));
   });
 
-  it('the refund fork drains a 51-entry pool in full (R7 as amended by D-E4)', async () => {
-    // 51 is the largest field that refunds: at 52 the pool seals and plays
-    // instead (the daemon specs cover that fork over the same FakeChain).
+  it('the refund fork drains a pool one seat under the minimum field, in full', async () => {
+    // One below the floor is the largest field that refunds: at the floor the
+    // pool seals and plays instead (the daemon specs cover that fork over the
+    // same FakeChain). Both numbers derive from MIN_SEATS — see the note at
+    // the top of this file.
     const chain = new FakeChain(() => 0n);
-    const players = Array.from({ length: 51 }, (_, i) =>
+    const players = Array.from({ length: LARGEST_REFUNDING_FIELD }, (_, i) =>
       base58Encode(new Uint8Array(createHash('sha256').update(`r:${i}`).digest()))
     );
     chain.pools.set('9', {
@@ -132,7 +144,7 @@ describe('the offline dress rehearsal', () => {
       resultsCommitted: false,
       paidMask: 0n,
       payouts: [],
-      entrants: 51,
+      entrants: LARGEST_REFUNDING_FIELD,
     });
     chain.entries.set(
       '9',
@@ -158,6 +170,9 @@ describe('the offline dress rehearsal', () => {
     expect(outcome.finalState).to.equal('Closed');
     let total = 0n;
     for (const v of chain.paid.values()) total += v;
-    expect(total).to.equal(100_000_000n * 51n, 'every entry back in FULL, nothing withheld');
+    expect(total).to.equal(
+      100_000_000n * BigInt(LARGEST_REFUNDING_FIELD),
+      'every entry back in FULL, nothing withheld'
+    );
   });
 });

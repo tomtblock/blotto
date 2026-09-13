@@ -127,7 +127,7 @@ export async function runOfflinePool(
     resultsCommitted: false,
     paidMask: 0n,
     payouts: [],
-    // The real field size: a pool seals at 64, or at 52..63 when its
+    // The real field size: a pool seals at 64, or at its floor..63 when its
     // deadline passes (D-E4). The crank commits over `entrants`, so a
     // population smaller than 64 rehearses the minimum-field path.
     entrants: population.length,

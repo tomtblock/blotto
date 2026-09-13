@@ -129,9 +129,10 @@ detection signal implementation within the design space the founder has set; fra
 and tooling within agreed defaults; compute-budget management; test coverage and "done" criteria.
 
 **Founder reserves the call on:** entry prices and pool sizes; the prize band table; the fill
-deadline and minimum fill; the per-screen timer default; the claim window; class names and art
-direction; the KYC threshold; the operating entity and the blocked-territory list; brand voice and
-all user-facing language; and anything fixed in the PID until superseded by a later PID version.
+deadline and minimum field; the per-screen timer default; the published review window; class names
+and art direction; the KYC threshold; the operating entity and the blocked-territory list; brand
+voice and all user-facing language; and anything fixed in the PID until superseded by a later PID
+version.
 
 When proposing values in the founder's column, present them as proposals awaiting ratification, not
 facts. **If you cannot tell which column something falls in, treat it as founder-owned and ask** —
