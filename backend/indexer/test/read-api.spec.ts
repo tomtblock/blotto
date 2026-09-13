@@ -281,3 +281,97 @@ describe('read API — the /pools filters (E3)', () => {
     }
   });
 });
+
+/**
+ * GET /tiers — enablement (founder instruction 2026-09-12 §2.3).
+ *
+ * The route used to serve cooldown stamps only, for whichever tiers had
+ * settled a pool. No route the app could reach published `open_tiers` at
+ * all, so the landing page carried its own `LAUNCH_TIER = 0` constant and
+ * `set_open_tiers` could not move the site. These pin the shape that
+ * replaced it.
+ */
+describe('GET /tiers — which tiers may open a pool', () => {
+  /** A `Queryable` that answers the two queries the route makes. */
+  function tiersDb(opts: {
+    status?: Array<{ tier: number; next_open_at: string; last_pool_id: string | null }>;
+    tiersOpened?: boolean[] | null;
+  }): Queryable {
+    return db((sql) => {
+      if (sql.includes('FROM tier_status')) return opts.status ?? [];
+      if (sql.includes("name = $1")) {
+        return opts.tiersOpened ? [{ raw: { open_tiers: opts.tiersOpened } }] : [];
+      }
+      return [];
+    });
+  }
+
+  it('serves a row per CONFIGURED tier, not per tier that has settled a pool', async () => {
+    // Only tier 0 has ever run one; the other six must still appear, marked
+    // closed, or the app cannot tell "closed" from "not in the response".
+    const res = await handleRead(
+      tiersDb({ status: [{ tier: 0, next_open_at: '1700', last_pool_id: '9' }] }),
+      '/tiers'
+    );
+    expect(res.status).to.equal(200);
+    const body = res.body as { tiers: Array<Record<string, unknown>>; enablement_source: string };
+    expect(body.tiers).to.have.length(7);
+    expect(body.tiers.map((t) => t.tier)).to.deep.equal([0, 1, 2, 3, 4, 5, 6]);
+    // Tier 0's stamp survives; the rest report a zero stamp and no pool.
+    expect(body.tiers[0]).to.include({ next_open_at: '1700', last_pool_id: '9' });
+    expect(body.tiers[3]).to.include({ next_open_at: '0', last_pool_id: null });
+  });
+
+  it('falls back to init_config’s posture when the founder has never sent set_open_tiers', async () => {
+    const res = await handleRead(tiersDb({}), '/tiers');
+    const body = res.body as { tiers: Array<Record<string, unknown>>; enablement_source: string };
+    expect(body.enablement_source).to.equal('launch_default');
+    expect(body.tiers[0]).to.include({ enabled: true, status: 'open' });
+    for (const t of body.tiers.slice(1)) expect(t).to.include({ enabled: false, status: 'closed' });
+  });
+
+  it('follows the newest TiersOpened event when there is one', async () => {
+    const res = await handleRead(
+      tiersDb({ tiersOpened: [true, true, false, false, false, false, false] }),
+      '/tiers'
+    );
+    const body = res.body as { tiers: Array<Record<string, unknown>>; enablement_source: string };
+    expect(body.enablement_source).to.equal('ledger');
+    expect(body.tiers[1]).to.include({ enabled: true, status: 'open' });
+    expect(body.tiers[2]).to.include({ enabled: false, status: 'closed' });
+  });
+
+  it('prefers the live Config account over the ledger, and says so', async () => {
+    // The ledger's newest event says tiers 0 and 1; the account says tier 0
+    // alone. The account wins — a `set_open_tiers` the indexer has not yet
+    // ingested must not leave a closed tier showing as open.
+    const chain = async () =>
+      ({
+        openTiers: [true, false, false, false, false, false, false],
+      }) as never;
+    const res = await handleRead(
+      tiersDb({ tiersOpened: [true, true, false, false, false, false, false] }),
+      '/tiers',
+      undefined,
+      chain
+    );
+    const body = res.body as { tiers: Array<Record<string, unknown>>; enablement_source: string };
+    expect(body.enablement_source).to.equal('chain');
+    expect(body.tiers[1]).to.include({ enabled: false, status: 'closed' });
+  });
+
+  it('degrades to the ledger rather than failing when the chain read throws', async () => {
+    const chain = async () => {
+      throw new Error('rpc down');
+    };
+    const res = await handleRead(
+      tiersDb({ tiersOpened: [true, true, false, false, false, false, false] }),
+      '/tiers',
+      undefined,
+      chain
+    );
+    expect(res.status).to.equal(200);
+    const body = res.body as { enablement_source: string };
+    expect(body.enablement_source).to.equal('ledger');
+  });
+});

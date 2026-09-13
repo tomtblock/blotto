@@ -168,6 +168,40 @@ describe('the daemon (C8): keeper', () => {
     expect((await w.chain.getPool(2n)).entryLamports).to.equal(TIER_ENTRY_LAMPORTS[1]);
   });
 
+  // Founder instruction 2026-09-12 §2: the LAUNCH posture, which is the one
+  // that actually runs. The test above enables three tiers to prove each
+  // gets its own pool; this one proves the opposite — with six tiers shut,
+  // a settled pool is replaced by exactly one more in the same tier and the
+  // crank never reaches for another. A regression that read `open_tiers` as
+  // "any tier is open" would pass the test above and fail here.
+  it('at the launch posture the crank replaces the tier-0 pool and opens nothing else', async function () {
+    this.timeout(30000);
+    const w = await makeWorld();
+    // `makeWorld` already seeds the launch bitmap; restated so the test says
+    // what it depends on rather than inheriting it silently.
+    w.chain.config!.openTiers = [true, false, false, false, false, false, false];
+
+    const first = await w.daemon.tick();
+    expect(first.opened).to.deep.equal([{ poolId: 1n, tier: 0 }]);
+
+    // Fill it, run it to Paid.
+    await enterPlayers(w, 1n, 52);
+    w.clock.t = (await w.chain.getPool(1n)).fillDeadline + 1n;
+    const settled = await w.daemon.tick();
+    expect(settled.errors).to.deep.equal([]);
+    expect(settled.cranked).to.deep.equal([{ poolId: 1n, finalState: 'Paid' }]);
+    // The slot frees at Paid, but the cooldown still holds this tick.
+    expect(settled.opened).to.deep.equal([]);
+
+    // Past the cooldown: one new pool, tier 0, and nothing in tiers 1-6
+    // however much the treasury holds.
+    const next = await tickAfterCooldown(w);
+    expect(next.errors).to.deep.equal([]);
+    expect(next.opened).to.deep.equal([{ poolId: 2n, tier: 0 }]);
+    expect((await w.chain.getConfig()).nextPoolId).to.equal(3n);
+    expect((await w.chain.getPool(2n)).tier).to.equal(0);
+  });
+
   it('a paused config holds the keeper (settlement is separate)', async () => {
     const w = await makeWorld();
     w.chain.config!.paused = true;

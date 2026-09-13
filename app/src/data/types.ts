@@ -48,16 +48,27 @@ export interface PoolSummary {
   server_time: string;
 }
 
-/** One tier's cooldown stamp (prompt v2 §B.6), from GET /tiers. */
+/** One tier's enablement and cooldown stamp, from GET /tiers. One row per
+ * CONFIGURED tier, whether or not it has ever run a pool. */
 export interface TierStatusRow {
   tier: number;
-  /** Unix seconds, decimal string; the tier's next pool may open from here. */
+  /** The founder's `Config.open_tiers[tier]` — whether a pool may be opened
+   * in this tier at all (roadmap R6/D1). Nothing in the app may decide this
+   * for itself; see `enablement_source`. */
+  enabled: boolean;
+  status: 'open' | 'closed';
+  /** Unix seconds, decimal string; the tier's next pool may open from here.
+   * '0' for a tier that has never settled a pool. */
   next_open_at: string;
   last_pool_id: string | null;
 }
 
 export interface TiersResponse {
   server_time: string;
+  /** Where `enabled` came from: the live Config account, the event ledger,
+   * or `init_config`'s seeded posture when the founder has never sent
+   * `set_open_tiers`. Published so a stale answer is visible. */
+  enablement_source: 'chain' | 'ledger' | 'launch_default';
   tiers: TierStatusRow[];
 }
 

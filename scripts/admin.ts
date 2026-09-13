@@ -38,6 +38,10 @@ import {
 const N_TIERS = 7;
 const DEFAULT_PROGRAM_ID = '5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17';
 import { resolveRpcUrl } from '../backend/_shared/src/cluster';
+// The ratified tier table, from the same module the program's constants are
+// mirrored into and `check-mirrors.py` pins. `set-open-tiers` compares the
+// live account against it before opening a tier — see cmdSetOpenTiers.
+import { TIER_ENTRY_LAMPORTS, TIER_POT_LAMPORTS } from '../backend/scoring/src/prizes';
 /** The devnet fallback; the endpoint follows BLOTTO_CLUSTER / BLOTTO_RPC_URL (RPC_URL kept as an alias). */
 const DEFAULT_RPC = resolveRpcUrl({ BLOTTO_CLUSTER: process.env.BLOTTO_CLUSTER, BLOTTO_RPC_URL: process.env.BLOTTO_RPC_URL ?? process.env.RPC_URL });
 
@@ -90,8 +94,18 @@ commands
                             command to PLACE one — the crank does that from
                             a screening, never an operator by hand
       --pool-id <u64> --player <pubkey>
-  set-open-tiers            which tiers may open pools (founder-owned)
+  set-open-tiers            which tiers may open pools (founder-owned). This
+                            is the ONLY way a tier becomes openable, and it
+                            is Squads-gated: the admin is the multisig vault,
+                            so in practice you run it with --emit-proposal
+                            and the signers approve it. Refuses to open a
+                            tier whose on-chain price or pot disagrees with
+                            the ratified table, and refuses to open more than
+                            one additional tier per call. Closing is never
+                            refused. See docs/RUNBOOK_open-tier.md
       --tiers <7 comma-separated 0/1, e.g. 1,0,0,0,0,0,0>
+      [--dry-run]           run the checks, print current vs proposed, send
+                            nothing
   set-paused                the kill switch: blocks register, and ONLY
                             register (reveal/payout/refund keep working, so
                             a pause never strands funds)
@@ -179,6 +193,22 @@ interface Cli {
   emitProposal: boolean;
 }
 
+/**
+ * Flags that are SWITCHES rather than settings: present means on, and they
+ * take no value.
+ *
+ * An allowlist rather than "a flag followed by another flag is a switch",
+ * on purpose: the parser's `flag X needs a value` error is what catches
+ * `--tiers --dry-run`, which would otherwise set an empty tier list and
+ * send it. Only names listed here may be bare.
+ *
+ * `keep-keeper` is listed because it has always been READ as a switch
+ * (`flags.get('keep-keeper') !== undefined`) and documented as one in the
+ * usage block, but the parser had no way to accept a bare flag — so the
+ * documented form threw and it could only be passed with a dummy value.
+ */
+const SWITCHES = new Set(['dry-run', 'keep-keeper']);
+
 function parseArgs(argv: string[]): Cli {
   const [command, ...rest] = argv;
   const flags = new Map<string, string>();
@@ -190,6 +220,10 @@ function parseArgs(argv: string[]): Cli {
       continue;
     }
     if (!a.startsWith('--')) throw new Error(`unexpected argument: ${a}`);
+    if (SWITCHES.has(a.slice(2))) {
+      flags.set(a.slice(2), 'on');
+      continue;
+    }
     const value = rest[i + 1];
     if (value === undefined || value.startsWith('--')) {
       throw new Error(`flag ${a} needs a value`);
@@ -596,6 +630,33 @@ function adminOnlyIx(ctx: Ctx, name: string, args: Buffer): TransactionInstructi
   });
 }
 
+/**
+ * `set-open-tiers` — the ONLY way a tier becomes openable, and the last
+ * guard before a pool can be funded at the wrong prize.
+ *
+ * TWO REFUSALS WERE ADDED ON 2026-09-13 (founder instruction 2026-09-12
+ * §2.5), both about the same failure, which the devnet rehearsal runbook
+ * describes at §E2 and which the pre-flight of the same day confirmed by
+ * reading the account:
+ *
+ *   Six tiers on devnet still carry their PRE-D-E1 pots — tier 1 reads
+ *   25.6 SOL where the ratified table says 20. `open_pool` funds a vault
+ *   from the treasury at whatever `Config` says, and a prize once published
+ *   cannot be un-published. `open_tiers` is the only thing holding that
+ *   back, so the command that lifts it is the right place to check.
+ *
+ * So: this refuses to enable a tier whose live pot or price disagrees with
+ * the source table, and it refuses to enable more than one additional tier
+ * in a single call — `1,1,1,1,1,1,1` is one keystroke away from
+ * `1,0,0,0,0,0,0` and would open six mispriced tiers at once.
+ *
+ * `--dry-run` prints the comparison and sends nothing. Both refusals apply
+ * to a real send AND to `--emit-proposal`, because the proposal is the thing
+ * a signer will approve without re-deriving any of this.
+ *
+ * Disabling is never refused. Closing a tier cannot publish a wrong prize,
+ * and an operator closing a tier under pressure must not be argued with.
+ */
 async function cmdSetOpenTiers(ctx: Ctx): Promise<void> {
   const tiers = need(ctx.cli, 'tiers')
     .split(',')
@@ -604,6 +665,73 @@ async function cmdSetOpenTiers(ctx: Ctx): Promise<void> {
       return v === '1' ? 1 : 0;
     });
   if (tiers.length !== N_TIERS) throw new Error(`--tiers must list exactly ${N_TIERS} values`);
+
+  const info = await ctx.connection.getAccountInfo(ctx.pdas.config(), 'confirmed');
+  if (!info) throw new Error('config: NOT INITIALISED (run init-config)');
+  const d = info.data;
+  const current: number[] = [];
+  const livePrice: bigint[] = [];
+  const livePot: bigint[] = [];
+  for (let t = 0; t < N_TIERS; t++) {
+    current.push(d[105 + t]);
+    livePrice.push(d.readBigUInt64LE(168 + 8 * t));
+    livePot.push(d.readBigUInt64LE(224 + 8 * t));
+  }
+
+  const opening = tiers.map((v, t) => v === 1 && current[t] !== 1).reduce<number[]>(
+    (acc, isOpening, t) => (isOpening ? [...acc, t] : acc),
+    []
+  );
+  const closing = tiers
+    .map((v, t) => v === 0 && current[t] === 1)
+    .reduce<number[]>((acc, isClosing, t) => (isClosing ? [...acc, t] : acc), []);
+
+  console.log(`config:   ${ctx.pdas.config().toBase58()}`);
+  console.log(`current:  [${current.join(', ')}]`);
+  console.log(`proposed: [${tiers.join(', ')}]`);
+  console.log(`opening:  ${opening.length === 0 ? '(none)' : opening.join(', ')}`);
+  console.log(`closing:  ${closing.length === 0 ? '(none)' : closing.join(', ')}`);
+
+  if (opening.length > 1) {
+    throw new Error(
+      `REFUSED — this call would open ${opening.length} additional tiers at once ` +
+        `(${opening.join(', ')}). Open one tier per call, each with its own ` +
+        'proposal and its own verification. (docs/RUNBOOK_open-tier.md)'
+    );
+  }
+
+  // Every tier being OPENED must already carry the ratified economics. A
+  // tier already open is not re-checked: this command is not the place to
+  // discover that, and refusing here would block an operator trying to
+  // CLOSE something.
+  const wrong: string[] = [];
+  for (const t of opening) {
+    if (livePrice[t] !== TIER_ENTRY_LAMPORTS[t]) {
+      wrong.push(
+        `tier ${t}: price on chain ${livePrice[t]} lamports, source table ${TIER_ENTRY_LAMPORTS[t]}`
+      );
+    }
+    if (livePot[t] !== TIER_POT_LAMPORTS[t]) {
+      wrong.push(
+        `tier ${t}: pot on chain ${livePot[t]} lamports, source table ${TIER_POT_LAMPORTS[t]}`
+      );
+    }
+  }
+  if (wrong.length > 0) {
+    throw new Error(
+      'REFUSED — a tier being opened does not carry the ratified economics:\n  ' +
+        wrong.join('\n  ') +
+        '\n\nThe next pool in that tier would be funded from the treasury at the ' +
+        'figure above and would publish it as the prize. Run `set-tier-economics` ' +
+        'for that tier first, confirm with `status`, then run this again. ' +
+        '(docs/RUNBOOK_open-tier.md)'
+    );
+  }
+
+  if (ctx.cli.flags.get('dry-run') !== undefined) {
+    console.log('\ndry run: checks passed, nothing sent.');
+    return;
+  }
   await deliver(ctx, [adminOnlyIx(ctx, 'set_open_tiers', Buffer.from(tiers))], 'admin');
 }
 
