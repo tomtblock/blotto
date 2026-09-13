@@ -16,6 +16,23 @@ body {
   font-family: var(--font-body);
 }
 
+/* Keyboard focus is visible on EVERY interactive element (2026-09-13).
+ * Until now only <Button> drew a ring; a plain link, the tab bar and the
+ * header wordmark were invisible to a keyboard user. Cream on plum, offset
+ * so it never hugs the shape; `:where` keeps it at zero specificity so a
+ * component's own ring still wins. Mouse focus stays quiet — this is
+ * :focus-visible, not :focus. */
+:where(a, button, [role="button"], [role="radio"], summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-brand-cream);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+/* Focus moved to <main> after a route change (RouteFocus) is programmatic —
+ * announced, not drawn. */
+main:focus {
+  outline: none;
+}
+
 /* --- Pass motion -------------------------------------------------------- *
  * VIOLET/MAGENTA ONLY — gold is class-reserved (D-04) and an NG-007
  * outcome-hint risk, so no pass animation may reference the rarity tokens.
