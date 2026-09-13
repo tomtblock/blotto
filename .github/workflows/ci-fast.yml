@@ -353,7 +353,9 @@ jobs:
       # it stays: it sees files a history scan does not reason about, and it
       # is the fastest signal on the change in front of us.
       - name: Scan working tree
-        run: gitleaks dir . --no-banner --redact --config .gitleaks.toml
+        run: |
+          gitleaks dir . --no-banner --redact --config .gitleaks.toml \
+            --report-format json --report-path "$RUNNER_TEMP/gitleaks-tree.json"
 
       # THE HISTORY (audit 2026-09-11, B-51). The working-tree scan sees only
       # what the checkout currently contains, so a key committed by mistake
@@ -378,11 +380,56 @@ jobs:
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             echo "scanning this branch's own commits"
             gitleaks git . --no-banner --redact --config .gitleaks.toml \
+              --report-format json --report-path "$RUNNER_TEMP/gitleaks-history.json" \
               --log-opts "${{ github.event.pull_request.base.sha }}..HEAD"
           else
             echo "scanning the full history ($(git rev-list --count HEAD) commits)"
-            gitleaks git . --no-banner --redact --config .gitleaks.toml
+            gitleaks git . --no-banner --redact --config .gitleaks.toml \
+              --report-format json --report-path "$RUNNER_TEMP/gitleaks-history.json"
           fi
+
+      # WHAT WAS FOUND, NOT HOW MANY (2026-09-13).
+      #
+      # On 2026-09-12 this lane went red on main and said, in full:
+      # `WRN leaks found: 7`. No rule, no path, no commit — because gitleaks
+      # itemises findings only under `-v`, and this lane did not pass it. The
+      # count blocked a backend deploy through `deploy-backend`'s gate, and
+      # working out what the seven were took a clone, a pinned gitleaks build
+      # and a JSON report. A gate that can stop a deploy has to be able to say
+      # what it stopped it for.
+      #
+      # `--redact` stays on every invocation above, so the reports these read
+      # carry `REDACTED` in place of every secret value. The table below prints
+      # rule, file, line, commit and date, and never a value — so the log stays
+      # safe to paste into a chat or an issue, which is exactly what an operator
+      # does with it.
+      - name: What was found
+        if: failure()
+        run: |
+          shopt -s nullglob
+          found=0
+          for report in "$RUNNER_TEMP"/gitleaks-*.json; do
+            count=$(jq 'length' "$report")
+            [ "$count" -eq 0 ] && continue
+            found=1
+            echo "::group::$(basename "$report" .json) — $count finding(s)"
+            jq -r '.[] | "  rule=\(.RuleID)\n    file=\(.File):\(.StartLine)\n    commit=\(.Commit[0:9])  date=\(.Date[0:10])  author=\(.Author)\n    fingerprint=\(.Fingerprint)"' "$report"
+            echo "::endgroup::"
+          done
+          if [ "$found" = 1 ]; then
+            echo "::error::gitleaks found secrets. Each finding is listed above with its fingerprint. Triage every one: a LIVE credential must be ROTATED at the provider — deleting it from the tip revokes nothing, it is already in the history. Only once a finding is proven dead or a false positive does its fingerprint go in .gitleaksignore, with the justification written beside it. Read that file's header before adding anything."
+          fi
+
+      # The reports themselves, for a finding whose context does not fit a log
+      # line. Redacted, so they carry no secret value.
+      - name: The findings, itemised
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: gitleaks-reports
+          path: ${{ runner.temp }}/gitleaks-*.json
+          if-no-files-found: ignore
+          retention-days: 7
 
   # Roadmap §3 standing rules 4–6: the PID §8.7 language gate and the two
   # structural greps (no `class` in the scoring path; the vault's exits are

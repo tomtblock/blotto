@@ -581,3 +581,39 @@ Merged as PR #117 and PR #119.
 
 Also: the deploy did not carry `BLOTTO_REVIEW_OPERATOR_TOKEN`, so the reviewer's detection surface
 would have answered 503 on a deployed service however the code behaved.
+
+## Addendum — B-51 fired on real history, and what it found (2026-09-13)
+
+The history scan added for **B-51** did exactly what it was built to do, and the way it reported
+doing it was not good enough.
+
+**What happened.** From the moment it landed (`d0762bf`, merged in #116 at 22:13 on 2026-09-12),
+`ci-fast` was red on `main` and green on every PR. That is the design working as specified — a PR
+scans only the branch's own commits, a push to `main` scans all 298 — but nobody read it that way,
+because the failure was only ever looked at through PR checks. Five pushes to `main` went red in a
+row, and the fifth blocked a `deploy-backend` run at its CI gate. `stop-the-line` filed issue #118
+correctly at 22:18 and it went unread for two hours.
+
+**What the seven findings were.** One false positive, counted seven times. All seven are the rule
+`solana-keypair-json` against `backend/scoring/fixtures/vectors.json` in a single commit,
+`363fd042` of 2026-08-27, at seven different lines — each one a `leaf_order` array, the results-tree
+leaf ordering for a pool, which is a list of **player indices**. A full pool is 64 players, and the
+rule matches a JSON array of exactly 64 numbers because that is the shape of a Solana secret key. The
+two are indistinguishable by shape. **No credential of any kind is involved and nothing was rotated.**
+
+Only that commit is affected: the fixtures were pretty-printed then, one number per line, and the
+rule's `\s*` spans newlines. The generator now emits `"leaf_order": "3,7,11,..."` as a compact
+string, so no array exists at HEAD and the working-tree scan has always been clean.
+
+**What changed.**
+
+| | What was true | What is true now |
+|---|---|---|
+| **The finding** | Seven findings failed `main` with no way to tell what they were | Seven fingerprints in `.gitleaksignore`, each with the justification above written beside it. Proved narrow by measurement: with 0 of 7 present the scan reports 7, with 1 it reports 6, with 6 it reports 1, with 7 it is clean — one entry excuses exactly one finding and nothing else |
+| **The reporting** | `WRN leaks found: 7`. No rule, no path, no commit — `gitleaks` itemises only under `-v`, which this lane did not pass. Finding out what they were took a clone, a pinned build and a JSON report | Both scans write a redacted JSON report; a failure prints rule, file, line, commit, date and fingerprint per finding, and uploads the reports. `--redact` stays on every invocation, so the log carries no secret value and is safe to paste into an issue |
+| **The rule** | — | Unchanged and deliberately so. It was written in the predecessor repository after a real committed keypair that the default ruleset missed entirely. Loosening it to stop matching 64-element arrays would blind it to the thing it exists for. A new 64-byte key still trips it — verified against a generated one |
+
+The standing instruction in `.gitleaks.toml` is unchanged and now has a sibling: an entry goes in
+`.gitleaksignore` only once a finding is proven dead or a false positive, and a **live** credential is
+rotated at the provider first. A value that reached git history is already exposed to anyone who has
+cloned the repository; deleting it from the tip revokes nothing.
