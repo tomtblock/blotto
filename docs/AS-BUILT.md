@@ -398,6 +398,7 @@ gate that has stopped working says so instead of reporting clean:
 ./scripts/check-standing-rules.sh               # the vault's exit set, class out of scoring
 npx tsx scripts/check-territories.ts            # the founder's schedule is enforceable
 npx tsx scripts/sim/fill-replay.ts --self-test  # the simulation still models the fill rule
+npx tsx scripts/drain-verdict.ts --self-test    # the upgrade pre-flight still refuses
 ./scripts/check-env-examples.sh                 # every env var a service reads is documented
 ./scripts/check-container-user.sh               # no service image runs as root
 ./scripts/check-fixtures.sh                     # the Python oracles reproduce their vectors
@@ -409,7 +410,7 @@ python3 scripts/check-mirrors.py                # Rust and TypeScript constants 
 All eleven, in the lane's own order. `ci-fast` runs five further jobs —
 `rust`, `node`, `postgres`, `journey` and `gitleaks`.
 
-The last of the eleven drives the upgrade pre-flight's verdict through its
+The fifth of the eleven drives the upgrade pre-flight's verdict through its
 fixtures. The pre-flight (`pools --upgrade-preflight`) refuses a program
 upgrade while any pool is Open — see §5's note on the floor the read API
 serves, and `RUNBOOK_r7b-upgrade.md`. **The verdict lives in

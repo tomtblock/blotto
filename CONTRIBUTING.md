@@ -86,13 +86,13 @@ That lane runs **eleven** checks, not one, and any of them can fail your change.
 | `check-standing-rules.sh` | Roadmap rules 5 (no `class` in the scoring path) and 6 (the vault's exits are exactly the enumerated set) |
 | `check-territories.ts` | A founder territory schedule the entry service could not actually enforce |
 | `sim/fill-replay.ts --self-test` | A fill simulation that has drifted from the program's seal/refund boundary |
+| `drain-verdict.ts --self-test` | An upgrade pre-flight that has quietly stopped refusing while a pool is taking entries. It imports nothing, so this lane can run it without installing a workspace; operators reach the same fixtures via `admin.ts pools --self-test` |
 | `check-env-examples.sh` | An environment variable a service reads and no example documents |
 | `check-container-user.sh` | A service image whose entrypoint runs as root |
 | `check-fixtures.sh` | A Python oracle that no longer reproduces its committed vectors |
 | `check-mirrors.py` | A constant or event layout where Rust and TypeScript disagree |
 | `ci-gate.sh --self-test` | A deploy gate that has stopped judging correctly |
 | `deploy-devnet.sh --self-test` | A program deploy that can no longer tell an outage from a fresh cluster |
-| `drain-verdict.ts --self-test` | An upgrade pre-flight that has quietly stopped refusing while a pool is taking entries. It imports nothing, so this lane can run it without installing a workspace; operators reach the same fixtures via `admin.ts pools --self-test` |
 
 Each one self-tests before it reports, so a gate that has stopped working says so rather than
 reporting clean.

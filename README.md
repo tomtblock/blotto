@@ -172,7 +172,7 @@ hard way:
 | `tests/rehearsal/` | The offline settlement rehearsal and the skill-evidence study |
 | `tests/postgres/` | The only suite that executes SQL: the migrations from an empty database, then every Postgres-backed store against the schema they build |
 | `config/` | **Founder-owned JSON**: the territory schedule, the terms version, the reviewer registry, the custody policy. Changed only on a founder instruction, each in its own commit |
-| `scripts/` | Deploy, the admin CLI, and the ten checks CI's `standing-rules` lane runs |
+| `scripts/` | Deploy, the admin CLI, and the eleven checks CI's `standing-rules` lane runs |
 | `scripts/sim/` | The arrival simulation behind the fill rule — it re-implements the seal/refund boundary to measure how often a pool runs, and self-tests against the program's numbers in CI |
 
 ## Verifying a change
@@ -187,25 +187,25 @@ cd app && NEXT_PUBLIC_FIXTURE_DATA=1 npm run build && npm run journey   # the br
 ./scripts/check-standing-rules.sh               # the vault's exits; class out of scoring
 npx tsx scripts/check-territories.ts            # the founder's schedule is enforceable
 npx tsx scripts/sim/fill-replay.ts --self-test  # the simulation still models the fill rule
+npx tsx scripts/drain-verdict.ts --self-test    # the upgrade pre-flight still refuses
 ./scripts/check-env-examples.sh                 # every env var a service reads is documented
 ./scripts/check-container-user.sh               # no service image runs as root
 ./scripts/check-fixtures.sh                     # the Python oracles reproduce their vectors
 python3 scripts/check-mirrors.py                # Rust and TypeScript constants agree
 ./scripts/ci-gate.sh --self-test                # the deploy gate still judges correctly
 ./scripts/deploy-devnet.sh --self-test          # the program deploy still reads a cluster
-npx tsx scripts/drain-verdict.ts --self-test    # the upgrade pre-flight still refuses
 ```
 
 Those eleven are the whole of CI's `standing-rules` lane, in its order — run
 them and that lane cannot surprise you. `ci-fast` has five more jobs: `rust`,
 `node`, `postgres`, `journey` and `gitleaks`.
 
-The last one proves the pre-flight that stops a program upgrade landing while a
-pool is taking entries; a version of it that quietly stopped refusing would
-report CLEAR for ever. Its verdict lives in its own module, with no imports, so
-this lane can run it without installing anything — `scripts/admin.ts` imports
-`@solana/web3.js` and cannot run here. Operators use the familiar command
-instead, which calls the same fixtures:
+The fifth, `drain-verdict.ts`, proves the pre-flight that stops a program
+upgrade landing while a pool is taking entries; a version of it that quietly
+stopped refusing would report CLEAR for ever. Its verdict lives in its own
+module, with no imports, so this lane can run it without installing anything —
+`scripts/admin.ts` imports `@solana/web3.js` and cannot run here. Operators use
+the familiar command instead, which calls the same fixtures:
 
 ```
 npx ts-node --transpile-only scripts/admin.ts pools --self-test
