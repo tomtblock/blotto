@@ -18,10 +18,20 @@ describe('signInDestination', () => {
     expect(signInDestination(`/play?pool=${POOL}`)).toBe(`/play?pool=${POOL}`);
   });
 
-  it('falls back to the arena when nothing was carried', () => {
+  it('falls back to the home page when nothing was carried', () => {
     for (const nothing of [null, undefined, '', '   ']) {
       expect(signInDestination(nothing)).toBe(DEFAULT_SIGNIN_DESTINATION);
     }
+  });
+
+  // 2026-09-13: this test used to accept whatever the constant said. The
+  // constant said `/play`, which without `?pool=` renders "No pool selected"
+  // — so the header's sign-in (which carries no pool) delivered every player
+  // to a dead end. The default is now pinned to a page that renders without
+  // a parameter; `/play` is only ever a RETURN destination, carrying its pool.
+  it('the default is a page that needs no parameter — never the entry flow', () => {
+    expect(DEFAULT_SIGNIN_DESTINATION).toBe('/');
+    expect(DEFAULT_SIGNIN_DESTINATION.startsWith('/play')).toBe(false);
   });
 
   it('returns to the other pages worth returning to', () => {

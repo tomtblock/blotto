@@ -185,7 +185,7 @@ export function Gallery() {
 
   return (
     <ToastProvider>
-      <main className="mx-auto max-w-4xl px-5 py-10">
+      <main id="main" className="mx-auto max-w-4xl px-5 py-10">
         <p className="mb-2 text-[12px] uppercase tracking-[0.14em] text-ink-muted">
           dev preview — not routed in production
         </p>

@@ -19,8 +19,16 @@
  * that is not one we serve.
  */
 
-/** Where a signed-in player goes when the link carried nothing usable. */
-export const DEFAULT_SIGNIN_DESTINATION = '/play';
+/**
+ * Where a signed-in player goes when the link carried nothing usable.
+ *
+ * `/`, not `/play` (2026-09-13). `/play` is the entry flow for ONE pool and
+ * needs `?pool=`; the header's sign-in link can never supply one, so every
+ * player who signed in from the header landed on "No pool selected" — the
+ * very screen D-17 was meant to stop, reached by the other door. The home
+ * page IS the Play tab (tab-nav.ts), and it shows the open pool.
+ */
+export const DEFAULT_SIGNIN_DESTINATION = '/';
 
 /**
  * The routes sign-in may return to. An allowlist rather than "any path on

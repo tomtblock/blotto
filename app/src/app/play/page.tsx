@@ -27,7 +27,7 @@ export default async function PlayFlowPage({
   return (
     <>
       <AppHeader />
-      <main className="mx-auto w-full max-w-xl flex-1 px-4 py-8">
+      <main id="main" className="mx-auto w-full max-w-xl flex-1 px-4 py-8">
         <Suspense>
           <PlayClient initial={initial} />
         </Suspense>

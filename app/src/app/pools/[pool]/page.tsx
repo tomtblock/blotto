@@ -21,6 +21,9 @@ import { AppHeader } from '@/components/shell/app-header';
 import { TabBar } from '@/components/shell/tab-bar';
 import { LiveDataUnavailable } from '@/components/shell/live-unavailable';
 import { Card } from '@/components/ui/card';
+import { Pill } from '@/components/ui/pill';
+import { BackLink } from '@/components/ui/back-link';
+import { SiteFooter } from '@/components/shell/site-footer';
 import { Stat } from '@/components/ui/stat';
 import { ProgressRing } from '@/components/ui/progress-ring';
 import { Countdown } from '@/components/ui/countdown';
@@ -38,7 +41,7 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
     return (
       <>
         <AppHeader />
-        <main className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 pb-24">
+        <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 pb-24">
           <LiveDataUnavailable />
         </main>
         <TabBar />
@@ -58,17 +61,20 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
   return (
     <>
       <AppHeader />
-      <main className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 pb-24">
-        <header className="mb-5 flex items-baseline gap-3">
-          <h1 className="font-display text-[24px] font-bold text-ink">Pool #{pool.id}</h1>
-          <span className="rounded-full border border-line px-2.5 py-0.5 text-[12px] uppercase tracking-[0.1em] text-ink-muted">
-            {poolStateLabel(pool)}
-          </span>
+      <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 pb-24">
+        <div className="mb-2">
+          <BackLink href="/pools">{COPY.shell.nav.backToPools}</BackLink>
+        </div>
+        <header className="mb-5 flex flex-wrap items-baseline gap-3">
+          <h1 className="font-display text-[34px] leading-[38px] font-extrabold text-ink">
+            {COPY.reveal.passPool(pool.id)}
+          </h1>
+          <Pill tone={pool.resolving ? 'resolving' : open ? 'open' : 'muted'}>{poolStateLabel(pool)}</Pill>
           <Link
             href={`/verify?pool=${pool.pool}`}
-            className="ml-auto text-[13px] text-ink-muted underline underline-offset-2 hover:text-ink"
+            className="ml-auto rounded-full text-[13px] text-ink-muted underline underline-offset-2 hover:text-ink"
           >
-            Verify this pool
+            {COPY.pool.verifyThisPool}
           </Link>
         </header>
 
@@ -110,7 +116,7 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
                 tone="prize"
               />
               <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
-                <Stat label="Entry" value={lamportsToSol(pool.entry_lamports)} unit="SOL" />
+                <Stat label={COPY.pool.entryLabel} value={lamportsToSol(pool.entry_lamports)} unit="SOL" />
                 {open && (
                   <Countdown
                     deadlineUnix={pool.fill_deadline}
@@ -162,7 +168,7 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
             </p>
             <Link
               href={`/play?pool=${pool.pool}`}
-              className="flex h-14 items-center justify-center rounded-xl bg-brand text-[17px] font-semibold text-(--color-base) transition-colors hover:bg-brand-hot"
+              className="key-action flex h-14 items-center justify-center rounded-full bg-brand font-display text-[18px] font-bold uppercase tracking-wide text-(--color-base) transition-colors hover:bg-brand-hot"
             >
               {COPY.pool.enter}
             </Link>
@@ -170,12 +176,13 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
         ) : (
           <Link
             href={`/pools/${pool.pool}/results`}
-            className="flex h-12 items-center justify-center rounded-xl border border-line text-[15px] font-medium text-ink transition-colors hover:border-brand hover:text-brand"
+            className="flex h-12 items-center justify-center rounded-full border border-white/20 text-[15px] font-medium text-ink transition-colors hover:border-brand hover:text-brand"
           >
-            Results
+            {COPY.pool.resultsLink}
           </Link>
         )}
       </main>
+      <SiteFooter />
       <TabBar />
     </>
   );

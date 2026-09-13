@@ -33,7 +33,7 @@ export const metadata: Metadata = {
 
 export default function GatePage() {
   return (
-    <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 py-16">
+    <main id="main" className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 py-16">
       <div className="flex flex-col gap-6">
         <div>
           <h1 className="font-display text-[34px] leading-[38px] font-extrabold text-ink">
