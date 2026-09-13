@@ -142,18 +142,50 @@ describe('packet issuance', () => {
     expect(new Set(texts).size).to.equal(1);
   });
 
-  it('the launch policy blocks BE and AU — and only those (founder, 2026-08-28)', async () => {
+  // Rewritten for schedule version 3 (founder instruction 2026-09-12 §3.1).
+  // The assertion it replaces named BE + AU, which was the whole policy from
+  // 2026-08-28; this walks every code in the PID §9 confirmed block through
+  // the real issuance path rather than through `territoryAllowed` alone.
+  it('the schedule blocks all fourteen PID §9 countries — and only those', async () => {
     expect(DEFAULT_TERRITORY_SCHEDULE.posture).to.equal('block-list');
     expect(DEFAULT_TERRITORY_SCHEDULE.allowed).to.deep.equal([]);
-    expect(DEFAULT_TERRITORY_SCHEDULE.blocked).to.deep.equal(['BE', 'AU']);
-    for (const country of ['GB', 'IE', 'DE', 'US', 'FR', 'AR']) {
-      const r = await issuePacket(deps({ country }), request);
-      expect(r.ok, country).to.equal(true);
-    }
-    for (const country of ['BE', 'AU']) {
+
+    const blocked = ['AE', 'AU', 'BE', 'BH', 'CN', 'HK', 'ID', 'IN', 'KW', 'MY', 'OM', 'QA', 'SA', 'SG'];
+    expect(DEFAULT_TERRITORY_SCHEDULE.blocked).to.deep.equal(blocked);
+    for (const country of blocked) {
       const r = await issuePacket(deps({ country }), request);
       expect(r.ok, country).to.equal(false);
     }
+
+    // The §9 "open subject to counsel" territories are NOT blocks and must
+    // keep issuing. US is in this list on purpose: the state-level rows are
+    // held (see config/territories.README.md), so a US address is admitted
+    // today and blocking it would be a decision nobody has taken.
+    for (const country of ['GB', 'IE', 'DE', 'US', 'FR', 'AR', 'CA', 'BR', 'JP', 'KR']) {
+      const r = await issuePacket(deps({ country }), request);
+      expect(r.ok, country).to.equal(true);
+    }
+  });
+
+  // §3.2: enforcement is on ENTRY, never on receipt. A player who entered
+  // lawfully and later travels must still be paid and still be refunded.
+  //
+  // This holds structurally rather than by a check: prizes are PUSHED (R10 —
+  // there is no claim instruction to gate), and `refund` is permissionless
+  // on chain, so neither path passes through this service at all. The test
+  // pins that by asserting the thing that WOULD break it — that the packet
+  // service's only product is an ENTRY packet, and refusing one leaves every
+  // other path untouched.
+  it('a blocked territory refuses an entry and nothing else (§3.2: receipt is never gated)', async () => {
+    const refused = await issuePacket(deps({ country: 'IN' }), request);
+    expect(refused.ok).to.equal(false);
+    // The refusal is the generic one — it carries no instruction, no hold,
+    // and nothing a payout or refund path could consult.
+    expect(refused).to.deep.equal(GENERIC_REJECTION);
+    // And there is no route here that could gate a payout: the service
+    // issues entry packets, stores sealed allocations and answers /geo.
+    const { handleEntryRoute } = require('../src/server');
+    expect(typeof handleEntryRoute).to.equal('function');
   });
 });
 

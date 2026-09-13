@@ -65,7 +65,10 @@ function deps(
 const request = { wallet: WALLET, pool: POOL, ip: '203.0.113.7' };
 
 describe('the committed territory schedule', () => {
-  it('config/territories.json parses and matches the launch policy (2026-08-28: block BE + AU)', () => {
+  // Rewritten for schedule version 3 (founder instruction 2026-09-12 §3.1):
+  // the PID §9 legal-review block, confirmed rows only. The previous
+  // assertion named BE + AU, which was the whole policy from 2026-08-28.
+  it('config/territories.json parses and matches the schedule this build enforces', () => {
     const committed = parseTerritorySchedule(
       readFileSync(join(__dirname, '..', '..', '..', 'config', 'territories.json'), 'utf8')
     );
@@ -73,6 +76,32 @@ describe('the committed territory schedule', () => {
     expect(committed.allowed).to.deep.equal(DEFAULT_TERRITORY_SCHEDULE.allowed);
     expect(committed.blocked).to.deep.equal(DEFAULT_TERRITORY_SCHEDULE.blocked);
     expect(committed.version).to.be.at.least(1);
+  });
+
+  it('carries the fourteen confirmed PID §9 countries and nothing else', () => {
+    const committed = parseTerritorySchedule(
+      readFileSync(join(__dirname, '..', '..', '..', 'config', 'territories.json'), 'utf8')
+    );
+    expect(committed.blocked).to.deep.equal([
+      'AE', 'AU', 'BE', 'BH', 'CN', 'HK', 'ID', 'IN', 'KW', 'MY', 'OM', 'QA', 'SA', 'SG',
+    ]);
+    // A block-list with a populated allow-list misstates the policy; the
+    // parser refuses it, and this says so at the committed file too.
+    expect(committed.allowed).to.deep.equal([]);
+  });
+
+  it('carries NO sub-national code, because nothing wired here can resolve a region', () => {
+    // The PID §9 US-state rows are held on exactly this (see
+    // config/territories.README.md). `assertRegionCapability` refuses to
+    // start the service rather than admit the people such a row names, so a
+    // code landing here would take the entry service down at deploy. This
+    // is the same assertion `scripts/check-territories.ts` makes on the
+    // change under review, kept here too because this suite is what runs on a
+    // packet change.
+    const committed = parseTerritorySchedule(
+      readFileSync(join(__dirname, '..', '..', '..', 'config', 'territories.json'), 'utf8')
+    );
+    expect(committed.blocked.filter((c) => c.includes('-'))).to.deep.equal([]);
   });
 });
 

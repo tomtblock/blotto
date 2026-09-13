@@ -19,7 +19,6 @@ import {
   TIER_ENTRY_LAMPORTS,
   TIER_POT_LAMPORTS,
 } from '@blotto/scoring';
-import territories from '@config/territories.json';
 import { COPY } from '@/copy';
 import { lamportsToSol } from '@/data/format';
 
@@ -56,36 +55,25 @@ export const FIELD_RULES = {
   cooldownMinutes: Number(DEFAULT_COOLDOWN_SECS / 60n),
 } as const;
 
-/** Display names for the ISO codes the schedule can carry today; an
- * unmapped code renders as the code itself (never silently dropped). */
-const ISO_NAMES: Record<string, string> = {
-  GB: 'United Kingdom',
-  IE: 'Ireland',
-  DE: 'Germany',
-  BE: 'Belgium',
-  AU: 'Australia',
-};
+// The five-entry ISO_NAMES table that used to live here moved to
+// `@/rules/territoryNames` on 2026-09-13 (founder instruction 2026-09-12
+// §3.3). It covered GB/IE/DE/BE/AU, which was survivable with two
+// territories in the schedule and is not with fourteen: an unmapped code
+// renders as the bare code, so a blocked player would be told they are
+// blocked by a page reading "SG". `scripts/check-territories.ts` now fails
+// the build if a code reaches the schedule without a name.
 
-const territoryName = (code: string) => ISO_NAMES[code] ?? code;
+// The `Availability` shape and `availability()` moved to
+// `@/rules/territories` on 2026-09-13 (founder instruction 2026-09-12 §3.3):
+// the block screen and the entry surfaces need the same generated list, and
+// a module under `app/src/app/rules/` is a route's data source rather than a
+// shared one. Re-exported here so this file stays the rules page's single
+// entry point.
+import type { Availability } from '@/rules/territories';
+import { availability } from '@/rules/territories';
 
-export interface Availability {
-  /** Which way an unlisted territory falls (founder posture, 2026-08-28:
-   * block-list — available everywhere except `blocked`). */
-  posture: 'allow-list' | 'block-list';
-  allowed: string[];
-  blocked: string[];
-  scheduleVersion: number;
-}
-
-/** Rendered from config/territories.json — the founder-owned schedule. */
-export function availability(): Availability {
-  return {
-    posture: territories.posture === 'block-list' ? 'block-list' : 'allow-list',
-    allowed: territories.allowed.map(territoryName),
-    blocked: territories.blocked.map(territoryName),
-    scheduleVersion: territories.version,
-  };
-}
+export type { Availability };
+export { availability };
 
 export type RulesSection =
   | { id: string; heading: string; kind: 'text'; body: string; appendix?: string }
