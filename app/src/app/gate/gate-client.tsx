@@ -4,9 +4,17 @@ import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { safeNext } from '@/gate/gate';
 
-/* The code form. The refusal message deliberately says nothing about WHY a
- * code failed — wrong code, empty body and unconfigured deployment are
- * indistinguishable from here, and that is the point. */
+/* The code form, and nothing else.
+ *
+ * The heading and lead sentence moved to the server component on 2026-09-13
+ * (see page.tsx): `useSearchParams()` keeps this subtree out of the prerender,
+ * so anything rendered here is invisible until the client bundle arrives, and
+ * on the day the bundle was refused that meant an entirely blank page. Only
+ * what genuinely needs interactivity belongs in here.
+ *
+ * The refusal message deliberately says nothing about WHY a code failed —
+ * wrong code, empty body and unconfigured deployment are indistinguishable
+ * from here, and that is the point. */
 export function GateClient() {
   const router = useRouter();
   const params = useSearchParams();
@@ -31,51 +39,40 @@ export function GateClient() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="font-display text-[34px] leading-[38px] font-extrabold text-ink">
-          Blotto Cup
-        </h1>
-        <p className="mt-2 text-[15px] leading-6 text-ink-muted">
-          This preview is invitation only. Enter your access code to continue.
+    <div className="flex flex-col gap-3">
+      <input
+        type="password"
+        inputMode="text"
+        autoComplete="off"
+        autoFocus
+        value={code}
+        onChange={(e) => {
+          setCode(e.target.value);
+          if (state === 'refused') setState('idle');
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') void submit();
+        }}
+        placeholder="Access code"
+        aria-label="Access code"
+        aria-invalid={state === 'refused'}
+        className="h-14 rounded-xl border border-line bg-transparent px-4 text-[17px] text-ink outline-none transition-colors focus:border-brand"
+      />
+
+      <button
+        type="button"
+        onClick={() => void submit()}
+        disabled={state === 'checking' || code.trim() === ''}
+        className="flex h-14 items-center justify-center rounded-xl bg-brand text-[17px] font-semibold text-(--color-base) transition-colors hover:bg-brand-hot disabled:opacity-40"
+      >
+        {state === 'checking' ? 'Checking…' : 'Continue'}
+      </button>
+
+      {state === 'refused' && (
+        <p role="alert" className="text-[14px] leading-5 text-ink-muted">
+          That code is not valid.
         </p>
-      </div>
-
-      <div className="flex flex-col gap-3">
-        <input
-          type="password"
-          inputMode="text"
-          autoComplete="off"
-          autoFocus
-          value={code}
-          onChange={(e) => {
-            setCode(e.target.value);
-            if (state === 'refused') setState('idle');
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') void submit();
-          }}
-          placeholder="Access code"
-          aria-label="Access code"
-          aria-invalid={state === 'refused'}
-          className="h-14 rounded-xl border border-line bg-transparent px-4 text-[17px] text-ink outline-none transition-colors focus:border-brand"
-        />
-
-        <button
-          type="button"
-          onClick={() => void submit()}
-          disabled={state === 'checking' || code.trim() === ''}
-          className="flex h-14 items-center justify-center rounded-xl bg-brand text-[17px] font-semibold text-(--color-base) transition-colors hover:bg-brand-hot disabled:opacity-40"
-        >
-          {state === 'checking' ? 'Checking…' : 'Continue'}
-        </button>
-
-        {state === 'refused' && (
-          <p role="alert" className="text-[14px] leading-5 text-ink-muted">
-            That code is not valid.
-          </p>
-        )}
-      </div>
+      )}
     </div>
   );
 }
