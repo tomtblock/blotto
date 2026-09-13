@@ -533,6 +533,10 @@ export function makeDaemon(deps: DaemonDeps): Daemon {
           const verdict = nextOpenable(cur, balance, states, deps.now(), cushion);
           if (verdict.tier === null) {
             log('keeper:hold', { reason: verdict.reason });
+            // §2.2: a tier skipped because it is not open is the launch
+            // posture working; the same silence from a shortfall or a stuck
+            // pool is an incident. The label is what tells them apart.
+            deps.monitor?.recordEvent(METRIC.reveal.keeperHold, { reason: verdict.reason });
             break;
           }
           const tier = verdict.tier;

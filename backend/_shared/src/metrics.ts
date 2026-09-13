@@ -83,6 +83,19 @@ export const METRIC = {
     /** Counter (label `outcome`: ok|failed): the settlement daemon completed a tick. */
     tick: 'reveal_tick',
     /**
+     * Counter (label `reason`): the keeper opened NO pool on this tick, and
+     * why — a tier the founder has not enabled, a tier still cooling down, a
+     * tier whose previous pool has not settled, or a treasury that cannot
+     * fund the next pot (founder instruction 2026-09-12 §2.2).
+     *
+     * The reason matters more than the count. "No tier is enabled" is the
+     * launch posture working as intended and should be the steady state for
+     * six of seven tiers; the same silence caused by a treasury shortfall or
+     * a stuck previous pool is an incident. Until this existed both looked
+     * identical from outside the process — one log line and no signal.
+     */
+    keeperHold: 'reveal_keeper_hold',
+    /**
      * Counter (label `reason`: sanctions_hold|forfeit_logged): the review clock
      * left a held share where it was instead of releasing it — a sanctions hold
      * the program would refuse anyway, or a reviewer's forfeit already logged

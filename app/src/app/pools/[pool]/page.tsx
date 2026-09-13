@@ -119,6 +119,23 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
                   />
                 )}
               </div>
+              {/* R7-b §4.4: the countdown and the seat count are both above;
+                  this says what they MEAN together, so a player deciding
+                  whether to enter does not have to know the rule and do the
+                  comparison. Only while entries are open — once a pool has
+                  sealed or refunded the question is settled. */}
+              {open && (
+                <p
+                  className={`text-[13px] leading-5 ${
+                    pool.outcome_if_deadline_now === 'seal' ? 'text-ink-muted' : 'text-brand'
+                  }`}
+                >
+                  {COPY.pool.outcomeIfDeadlineNow(
+                    pool.outcome_if_deadline_now,
+                    pool.min_seats
+                  )}
+                </p>
+              )}
             </div>
           </div>
         </Card>

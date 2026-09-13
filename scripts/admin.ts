@@ -55,6 +55,16 @@ commands
       --entry-signer <pubkey> --settlement-signer <pubkey> --keeper <pubkey>
       --ceilings <7 comma-separated lamport values>
       --min-platform <lamports | SOL decimal ending in "sol", e.g. 2sol>
+  migrate-pool              PERMISSIONLESS. The ONE-SHOT R7-b pool migration
+                            (2026-09-12): grows one Pool account by the two
+                            bytes min_seats needs and writes 52, the floor
+                            that pool's players entered under. Run it for
+                            EVERY pool the 'pools' command lists, right after the
+                            program upgrade — until it has, every instruction
+                            touching that pool fails on the short account.
+                            Self-disabling; a pool already at the current
+                            layout is reported and skipped
+      --pool-id <u64>
   migrate-config            the ONE-SHOT 2026-09-07 layout migration: grows
                             the live Config (380 → 484 bytes) and seeds the
                             keeper + timings. Run right after the upgrade,
@@ -348,6 +358,11 @@ async function cmdStatus(ctx: Ctx): Promise<void> {
 
 /** `Config::SPACE` since 2026-09-07 and the pre-migration size (state.rs). */
 const CONFIG_SPACE = 484;
+
+/** `Pool::SPACE` since R7-b (state.rs) — 849; it was 847 before the
+ * 2026-09-12 upgrade appended `min_seats`. `migrate-pool` tells the two
+ * apart by length. */
+const POOL_SPACE = 849;
 const CONFIG_SPACE_V1 = 380;
 
 const POOL_STATES = ['Open', 'Sealed', 'Scored', 'Paid', 'Refunding', 'Closed'] as const;
@@ -760,6 +775,48 @@ async function cmdRegisterSigners(ctx: Ctx): Promise<void> {
  * `--emit-proposal` works on them like every other command here, though none
  * of them needs the multisig: they are not admin instructions.
  */
+/**
+ * `migrate-pool` — the one-shot R7-b account growth, once per existing pool.
+ *
+ * The upgrade of 2026-09-12 appended `min_seats` to `Pool`, and Anchor
+ * refuses a short account, so until this runs against a pool EVERY
+ * instruction touching it fails — `pay_next_place` and `release_escrow`
+ * included, on pools that are already Paid. Run it for every pool
+ * `admin.ts pools` lists, immediately after the program upgrade.
+ *
+ * Permissionless and self-disabling: it writes one known constant into one
+ * PDA-checked account, refuses anything already at the current layout, and
+ * writes 52 — the floor those players entered under, never the new 40.
+ */
+async function cmdMigratePool(ctx: Ctx): Promise<void> {
+  const poolId = parsePoolId(need(ctx.cli, 'pool-id'));
+  const info = await ctx.connection.getAccountInfo(ctx.pdas.pool(poolId), 'confirmed');
+  if (!info) throw new Error(`pool ${poolId}: no account at ${ctx.pdas.pool(poolId).toBase58()}`);
+  // Said before sending, because the on-chain refusal is a bare error code
+  // and an operator working through nine pools needs to tell "already done"
+  // from "wrong pool".
+  console.log(`pool ${poolId}: ${info.data.length} bytes on chain`);
+  if (info.data.length >= POOL_SPACE) {
+    console.log(`pool ${poolId}: already at the current layout (${POOL_SPACE}) — nothing to do`);
+    return;
+  }
+  await deliver(
+    ctx,
+    [
+      new TransactionInstruction({
+        programId: ctx.programId,
+        keys: [
+          { pubkey: signerPubkey(ctx.cli), isSigner: true, isWritable: true },
+          { pubkey: ctx.pdas.pool(poolId), isSigner: false, isWritable: true },
+          { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+        ],
+        data: Buffer.concat([disc('migrate_pool'), u64le(poolId)]),
+      }),
+    ],
+    'any signer (permissionless)'
+  );
+}
+
 async function cmdSealAtDeadline(ctx: Ctx): Promise<void> {
   const poolId = parsePoolId(need(ctx.cli, 'pool-id'));
   await deliver(
@@ -924,6 +981,8 @@ async function main(): Promise<void> {
       return cmdSetTreasuryPolicy(ctx);
     case 'seal-at-deadline':
       return cmdSealAtDeadline(ctx);
+    case 'migrate-pool':
+      return cmdMigratePool(ctx);
     case 'trigger-refund':
       return cmdTriggerRefund(ctx);
     case 'refund':

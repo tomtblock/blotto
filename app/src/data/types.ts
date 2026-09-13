@@ -20,6 +20,14 @@ export interface PoolSummary {
   /** Hex, 32 bytes — the X25519 key entries seal to (from PoolOpened). */
   sealing_pubkey: string;
   entrants: number;
+  /** The floor this pool plays at (R7-b). Below it at the deadline, every
+   * entry refunds in full; at or above, the pool seals and plays. */
+  min_seats: number;
+  /** What the deadline would do RIGHT NOW, derived by the read API from the
+   * seat count and the floor. The page shows a live countdown beside an
+   * entrant count, and a player should not have to know the rule and do the
+   * comparison themselves. */
+  outcome_if_deadline_now: 'seal' | 'refund';
   results_root: string | null;
   secret: string | null;
   /**

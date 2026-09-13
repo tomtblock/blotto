@@ -451,6 +451,21 @@ jobs:
       - name: Structural rules (roadmap §3 rules 5–6)
         run: ./scripts/check-standing-rules.sh
 
+      # The fill-rule simulation (founder instruction 2026-09-12 §5.2)
+      # RE-IMPLEMENTS the seal/refund boundary to measure it, so it is the one
+      # place that can drift from the program while every other lane stays
+      # green — and its output is a report the founder reads to decide whether
+      # the numbers stay. Its self-test pins the same boundaries
+      # tests/litesvm/tests/fill_rule.rs pins on chain.
+      #
+      # First TypeScript check in this job, hence the Node setup.
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v4.4.0
+        with:
+          node-version: 20
+
+      - name: The fill simulation still models the rule (§5.2)
+        run: npx --yes tsx@4.20.3 scripts/sim/fill-replay.ts --self-test
+
       # Widened 2026-09-12 to see `env.NAME` property reads, the backend's
       # dominant shape, which it was blind to (audit 2026-09-11, A-09 / E-07 /
       # D-38). It now self-tests before reporting, like its neighbours.

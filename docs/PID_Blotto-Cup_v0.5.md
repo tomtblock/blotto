@@ -213,3 +213,27 @@ Never: lottery · gamble · bet · wager · casino · pull · pack · odds · ja
 ---
 
 *Filed: 10_BLOTTO_CUP.*
+
+---
+
+## Appendix — decisions taken after this version was filed
+
+**Appended 2026-09-13 on the founder's instruction of 2026-09-12 §4.5, which asks that §2 and D1
+be annotated as superseded rather than rewritten. Nothing above this line has been altered.**
+
+This document is v0.5 and is the founder's to reissue. Until a v0.6 exists, the rows below are where
+the body is known to be behind what is built. The full list — including the prize structure and the
+prize amounts — is maintained in `INDEX.md` under "The PID is behind the build", and `AS-BUILT.md`
+§5 carries the same table with the code-side detail.
+
+| Where | This document says | The build, and since when |
+|---|---|---|
+| §2 pool-cadence paragraph; **D1** | Fill deadline **72 hours**; 32–63 entrants run at reduced size; fewer than 32 refunds | Fill deadline **12 hours** (D-E6, 2026-09-07), held in `Config.fill_deadline_seconds` and copied onto each pool at open. A pool runs with **40–63** seated as well as at 64; below 40 at the deadline every entry refunds in full (**R7-b**, founder instruction 2026-09-12 — the floor was 52 under D-E4 from 2026-09-06). The floor is carried per pool, so a change never moves it under players already seated |
+| §2 table; §6 | Prize pools 5.12 / 25.60 SOL; top 16 paid | **4 / 20 / 30 / 40 / 100 / 200 / 300 SOL** across seven tiers (D-E1, 2026-09-06), and **one paid place** — the winner takes the pool whole (D-E2, 2026-09-06) |
+| **D3** | Per-screen timer default **10s** | **15 seconds** (R9), recorded on each pool at open |
+
+The 40-seat floor is exactly break-even at the D-E1 prize pools: forty entries at 0.1 SOL is the
+4 SOL prize. That was ratified deliberately on 2026-09-13 on the ground that the prize is pre-funded
+from the treasury before any entry is sold, so a pool's ability to pay has never depended on how many
+players it has. `docs/CHANGE-2026-09-12_sim-report.md` measures what the floor does to the rate at
+which pools run.

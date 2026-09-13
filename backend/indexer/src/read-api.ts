@@ -61,7 +61,7 @@ import {
   startBucketSweeper,
   type HygieneConfig,
 } from '../../_shared/src/http-hygiene';
-import { REVIEW_WINDOW_SECS } from '../../scoring/src/prizes';
+import { MIN_SEATS, REVIEW_WINDOW_SECS } from '../../scoring/src/prizes';
 import type { Queryable } from './shared';
 import { treasuryReport } from './treasury-report';
 import {
@@ -147,6 +147,23 @@ function poolRow(r: Record<string, unknown>, now: Now): Json {
     // Stage C: held shares and the derived resolving flag (see `resolvingOf`).
     held_shares: heldShares,
     ...resolvingOf(heldShares, settledAt, nowUnix),
+    // R7-b (founder instruction 2026-09-12 §4.3): the floor this pool plays
+    // at, and what its deadline would do RIGHT NOW.
+    //
+    // Read from the SHARED CONSTANT, not from the pool's own `min_seats`.
+    // The chain carries the floor per pool so an upgrade cannot move it
+    // under seated players, and that is the number the program enforces —
+    // but the derived `pools` table has no column for it, and the only
+    // pools whose stored floor differs from the constant are the nine that
+    // predate the field, all of them long terminal. A live pool's stored
+    // floor IS this constant. If that ever stops being true — a second
+    // change to the floor, with pools open — this needs the column and the
+    // event field to fill it, and this comment is the marker for that. The app shows a live
+    // countdown beside an entrant count, and until this existed a player
+    // watching a pool at 38 seats with an hour left had to know the rule and
+    // do the comparison themselves.
+    min_seats: Number(MIN_SEATS),
+    outcome_if_deadline_now: Number(r.entrants) >= Number(MIN_SEATS) ? 'seal' : 'refund',
     // The clock the app's countdowns derive from (unix seconds, string).
     server_time: String(nowUnix),
   };

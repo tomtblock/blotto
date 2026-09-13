@@ -13,8 +13,8 @@ Compliance item C4. It blocks launch, so its contents are not a matter of taste:
 - The allocation rules: free integers, live normalisation, no presets. PID §8.6 requires these to be
   published *because they are part of why the game is skilful*.
 - That decisions are final on submission.
-- The fill deadline (12 hours, one clock), the minimum field (52), and the automatic full refund
-  below it.
+- The fill deadline (12 hours, one clock), the minimum field (40 — R7-b, founder instruction
+  2026-09-12; was 52), and the automatic full refund below it.
 - The fixed prize pool per tier: the winner receives it whole; a tie for first splits it equally;
   a forfeited share passes to the next eligible players and never to the operator.
 - How sealing works, described accurately — see the fixed wording in `backend/sealing/README.md`.
