@@ -35,7 +35,7 @@ export const COPY = {
     // landmark, which no page had. PHASE-N-REVIEW: drafts; founder voice.
     skipToContent: 'Skip to content',
     footerNavLabel: 'Rules and fairness',
-    footerVerify: 'Verify a pool',
+    footerVerify: 'Verify',
     footerCustody: 'Who holds which keys',
     // The way back from a leaf page (2026-09-13). Every informational page
     // — rules, fair play, verify, custody, a pool, its results — is reached
