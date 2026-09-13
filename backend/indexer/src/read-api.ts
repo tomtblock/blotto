@@ -29,9 +29,13 @@
  *   GET /profiles/:player              → ProfileRow
  *   GET /profiles/:player/history      → career rows off player_history (D3)
  *   GET /profiles/:player/rivals       → most-shared co-entrants (D3)
- *   GET /tiers                         → per-tier `next_open_at` (the
- *                                        cooldown stamp, prompt v2 §B.6)
- *                                        plus `server_time`
+ *   GET /tiers                         → one row per CONFIGURED tier:
+ *                                        `enabled` / `status` (the founder's
+ *                                        `open_tiers`, resolved by the same
+ *                                        function /treasury uses) and
+ *                                        `next_open_at` (the cooldown stamp,
+ *                                        prompt v2 §B.6), plus `server_time`
+ *                                        and `enablement_source`
  *   GET /time                          → { server_time } — the clock every
  *                                        countdown in the app derives from
  *                                        (never the device's Date.now())
@@ -63,7 +67,7 @@ import {
 } from '../../_shared/src/http-hygiene';
 import { REVIEW_WINDOW_SECS } from '../../scoring/src/prizes';
 import type { Queryable } from './shared';
-import { treasuryReport } from './treasury-report';
+import { tierEnablement, treasuryReport } from './treasury-report';
 import {
   defaultTreasuryChainReader,
   type TreasuryChainReader,
@@ -178,17 +182,37 @@ export async function handleRead(
   if (parts[0] === 'tiers' && parts.length === 1) {
     // Prompt v2 §B.6: the per-tier cooldown stamp, for the "next pool in"
     // countdown. Tiers with no row never settled a pool (next_open_at 0).
+    //
+    // ENABLEMENT WAS ADDED HERE on 2026-09-13 (founder instruction
+    // 2026-09-12 §2.3). Until then this route served cooldown stamps and
+    // nothing else, no route the app could reach published `open_tiers` at
+    // all, and the landing page carried its own `LAUNCH_TIER = 0` constant
+    // instead — so `set_open_tiers` could enable a tier and the site would
+    // not move. `tierEnablement` is the SAME function `GET /treasury` uses,
+    // so the two can never disagree.
+    //
+    // A row per CONFIGURED tier, not per settled one: a tier that has never
+    // run a pool has no `tier_status` row, and the app needs to know it
+    // exists and is closed rather than infer it from an absence.
     const res = await db.query('SELECT tier, next_open_at, last_pool_id FROM tier_status ORDER BY tier ASC');
     const rows = res.rows as Array<{ tier: number; next_open_at: unknown; last_pool_id: unknown }>;
+    const byTier = new Map(rows.map((t) => [Number(t.tier), t]));
+    const { enabled, source } = await tierEnablement(db, chain);
     return {
       status: 200,
       body: {
         server_time: String(now()),
-        tiers: rows.map((t) => ({
-          tier: Number(t.tier),
-          next_open_at: String(t.next_open_at),
-          last_pool_id: t.last_pool_id === null ? null : String(t.last_pool_id),
-        })),
+        enablement_source: source,
+        tiers: enabled.map((isOpen, tier) => {
+          const t = byTier.get(tier);
+          return {
+            tier,
+            enabled: isOpen,
+            status: isOpen ? 'open' : 'closed',
+            next_open_at: t === undefined ? '0' : String(t.next_open_at),
+            last_pool_id: t === undefined || t.last_pool_id === null ? null : String(t.last_pool_id),
+          };
+        }),
       },
     };
   }

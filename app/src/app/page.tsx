@@ -35,8 +35,6 @@ const HERO_TIERS: readonly ClipTier[] = [
   { mp4: '/motion/landing/hero_montage.mp4', webm: '/motion/landing/hero_montage.webm' },
 ];
 
-/** The tier `open_tiers` enables at launch (D-E1): 0.1 SOL entry, 4 SOL prize pool. */
-const LAUNCH_TIER = 0;
 import { LiveDemo } from '@/components/landing/LiveDemo';
 import { HowItWorksCarousel } from '@/components/landing/HowItWorksCarousel';
 import { PreloaderGate } from '@/components/preloader/PreloaderGate';
@@ -78,9 +76,10 @@ function SeatRing({ entrants }: { entrants: number }) {
 export default async function LandingPage() {
   const api = indexerApi();
   // SSR outage guard: a dead indexer degrades this page, never kills it.
-  const [poolsLive, treasuryLive] = await Promise.all([
+  const [poolsLive, treasuryLive, tiersLive] = await Promise.all([
     live(() => api.listPools()),
     live(() => api.getTreasury()),
+    live(() => api.getTiers()),
   ]);
   const pools = poolsLive.ok ? poolsLive.value : [];
   const treasury = treasuryLive.ok ? treasuryLive.value : null;
@@ -90,6 +89,26 @@ export default async function LandingPage() {
   const hero = open[0];
   const openByTier = new Map(open.map((p) => [p.tier, p]));
   const tierStatus = new Map(treasury?.tiers.map((t) => [t.tier, t]) ?? []);
+  // WHICH TIERS THE FOUNDER HAS OPENED — read, never assumed (founder
+  // instruction 2026-09-12 §2.3, §2.4). This page used to carry its own
+  // `LAUNCH_TIER = 0` constant, so `set_open_tiers` could enable a tier on
+  // chain and nothing here would move. `GET /tiers` resolves it from the
+  // live Config account.
+  //
+  // On an indexer outage the fallback is the ground truth in `/pools` — a
+  // tier holding an Open pool is open by construction — rather than another
+  // constant, which is the defect being removed.
+  const tiersRead = tiersLive.ok ? tiersLive.value : null;
+  const enabledByTier = tiersRead
+    ? new Map(tiersRead.tiers.map((t) => [t.tier, t.enabled]))
+    : new Map(open.map((p) => [p.tier, true]));
+  // A tier appears if the founder has opened it, OR if it is still running a
+  // pool. The second half matters: `open_tiers` gates `open_pool` and
+  // nothing else — `register` never reads it — so closing a tier must not
+  // hide a pool that is still taking entries from the players in it.
+  const ladder = TIER_ENTRY_LAMPORTS.map((entry, tier) => ({ entry, tier })).filter(
+    ({ tier }) => enabledByTier.get(tier) === true || openByTier.has(tier)
+  );
 
   return (
     <>
@@ -264,31 +283,30 @@ export default async function LandingPage() {
               {COPY.fixtures.title}
             </h2>
             <ul className="overflow-hidden rounded-2xl bg-game-base">
-              {TIER_ENTRY_LAMPORTS.map((entry, tier) => {
+              {ladder.map(({ entry, tier }) => {
                 const openPool = openByTier.get(tier);
                 const status = tierStatus.get(tier);
-                // Founder 2026-09-09: only the launch tier (tier 0, the 4 SOL
-                // prize pool) shows its live status; every other tier reads
-                // "Coming soon" until it is switched on. `LAUNCH_TIER` is the
-                // one tier `open_tiers` enables at launch (D-E1).
-                const comingSoon = tier !== LAUNCH_TIER && !openPool;
+                // A closed tier is not listed at all (founder instruction
+                // 2026-09-12 §2.4) — the "Coming soon" row this page used to
+                // show for tiers 1-6 is gone, because the approved copy
+                // carries no such wording and an unopenable tier advertising
+                // a prize pool is a statement about availability we are not
+                // in a position to make. `ladder` has already filtered.
                 const label = openPool
                   ? COPY.fixtures.statusOpen
-                  : comingSoon
-                    ? COPY.fixtures.statusComingSoon
-                    : status?.status === 'settling'
-                      ? COPY.fixtures.statusSettling
-                      : status?.status === 'openable'
-                        ? COPY.fixtures.statusOpenable
-                        : COPY.fixtures.statusShort;
+                  : status?.status === 'settling'
+                    ? COPY.fixtures.statusSettling
+                    : status?.status === 'openable'
+                      ? COPY.fixtures.statusOpenable
+                      : COPY.fixtures.statusShort;
                 const shortBy =
-                  !openPool && !comingSoon && status?.status === 'short' && BigInt(status.short_by_lamports) > 0n
+                  !openPool && status?.status === 'short' && BigInt(status.short_by_lamports) > 0n
                     ? COPY.fixtures.shortBy(lamportsToSol(status.short_by_lamports))
                     : null;
                 const row = (
                   <div
                     className={`flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-game-raised px-4 py-3.5 sm:px-5 ${
-                      openPool ? 'bg-game-raised/40' : comingSoon ? 'opacity-70' : ''
+                      openPool ? 'bg-game-raised/40' : ''
                     }`}
                   >
                     <span className="tnum w-24 font-display text-[17px] font-bold text-game-ink">
