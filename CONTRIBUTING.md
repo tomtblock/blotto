@@ -73,25 +73,44 @@ Run it from the repository root before every commit:
 ./scripts/check-language.sh
 ```
 
-The script holds the pattern and the exclusion list, each exclusion with its reason. It runs as
-the **`standing-rules` CI lane on every PR** (roadmap §3 rule 4), together with
-`scripts/check-standing-rules.sh` — the structural greps for roadmap rules 5 (no `class` in the
-scoring path) and 6 (the vault's exits are exactly the enumerated set). Two additional forbidden
-words come from roadmap R11/§6.4: **promotional** and **sweepstake** — they denote free-entry
-sweepstakes and put the product in the wrong regulatory box.
+The script holds the pattern and the exclusion list, each exclusion with its reason. It runs as the
+first step of the **`standing-rules` CI lane on every PR** (roadmap §3 rule 4). Two additional
+forbidden words come from roadmap R11/§6.4: **promotional** and **sweepstake** — they denote
+free-entry sweepstakes and put the product in the wrong regulatory box.
+
+That lane runs **eleven** checks, not one, and any of them can fail your change. In its order:
+
+| Check | What it refuses to let through |
+|---|---|
+| `check-language.sh` | The §8.7 lexicon, above |
+| `check-standing-rules.sh` | Roadmap rules 5 (no `class` in the scoring path) and 6 (the vault's exits are exactly the enumerated set) |
+| `check-territories.ts` | A founder territory schedule the entry service could not actually enforce |
+| `sim/fill-replay.ts --self-test` | A fill simulation that has drifted from the program's seal/refund boundary |
+| `drain-verdict.ts --self-test` | An upgrade pre-flight that has quietly stopped refusing while a pool is taking entries. It imports nothing, so this lane can run it without installing a workspace; operators reach the same fixtures via `admin.ts pools --self-test` |
+| `check-env-examples.sh` | An environment variable a service reads and no example documents |
+| `check-container-user.sh` | A service image whose entrypoint runs as root |
+| `check-fixtures.sh` | A Python oracle that no longer reproduces its committed vectors |
+| `check-mirrors.py` | A constant or event layout where Rust and TypeScript disagree |
+| `ci-gate.sh --self-test` | A deploy gate that has stopped judging correctly |
+| `deploy-devnet.sh --self-test` | A program deploy that can no longer tell an outage from a fresh cluster |
+
+Each one self-tests before it reports, so a gate that has stopped working says so rather than
+reporting clean.
 
 ### What is excluded, and why
 
 | Excluded | Why |
 |---|---|
 | `docs/reference/`, `docs/archive/` | Historical by definition, and marked non-authoritative in their own headers and in `docs/INDEX.md`. |
-| The five source documents in `docs/` (PID, TECH-ARCH, brief, playbook, `BUILD-ROADMAP_v1.0.md`) | Copied verbatim — inputs to this repository rather than content authored in it. PID §8.7 necessarily *lists* the words it forbids, and the roadmap's R11 discusses the forbidden word it bans. |
+| The six source documents in `docs/` (PID v0.5, the **v0.6 draft**, TECH-ARCH, brief, playbook, `BUILD-ROADMAP_v1.0.md`) | Copied verbatim — inputs to this repository rather than content authored in it. PID §8.7 necessarily *lists* the words it forbids, and the roadmap's R11 discusses the forbidden word it bans. The v0.6 draft is excluded for the same reason as v0.5: it reproduces §8 word for word so the two can be diffed, and the phrases in it that would otherwise fail are all carried, not authored — each flagged inside the draft. Two of these documents now carry a **dated appendix authored here** (the PID's, founder-authorised 2026-09-13; TECH-ARCH's, architect-authored the same day). Those appendices are held to the gate like anything else — write them clean, whatever the exclusion allows. |
 | `EXTRACTION-REPORT.md`, `TRANSITION-REPORT.md` | Both have to name the old product and the components that were not carried in order to be useful. |
 | `CONTRIBUTING.md`, `CLAUDE.md` | Both quote the forbidden list in order to forbid it. |
 | `docs/phase-reports/step-vocabulary.md` | The D-B7 step report: it documents which forbidden words were amended and to what, which requires naming them. No other report gets this exclusion. |
 | `Cargo.lock`, `package-lock.json`, `yarn.lock` | Dependency metadata, machine-generated. Package names like `pump`, `escape-string-regexp` and `solana-program-pack` are not ours to rename. |
 | `LICENSE` | The verbatim Apache-2.0 text ("Licensed under…"). Legal boilerplate nobody here authored; software licensing, not a gaming-licence claim. |
-| `node_modules/`, `target/`, `.next/`, `.git/` | Not repository content. |
+| `handoff/` | The founder's own working folder, untracked by design. |
+| `check-language.sh` itself | It holds the pattern, so it necessarily contains every forbidden word. |
+| `node_modules/`, `target/`, `.next/`, `.git/`, `*.so`, `*.png`, `*.tsbuildinfo`, `lifecycle-logs.json` | Not repository content, or not text: compiled artifacts, images, build caches and generated logs. |
 
 **Everything else is live and must pass.** Exactly one token is allowlisted anywhere:
 `pull_request`, a GitHub Actions event name in `.github/workflows/*.yml`. It cannot be renamed and
@@ -141,8 +160,10 @@ program as a genesis fixture (`tests/fixtures/mpl_core.so`) so the suite runs of
 
 ## CI
 
-`ci-fast` runs on every pull request and every push to the default branch. Three jobs: `rust`,
-`gitleaks`, and `standing-rules` (language gate + roadmap §3 rules 5–6).
+`ci-fast` runs on every pull request and every push to the default branch. Six jobs: `rust`,
+`node`, `postgres`, `journey`, `gitleaks`, and `standing-rules` (the eleven checks tabled above).
+`postgres` needs a scratch database and **fails the lane if any case came back pending** rather
+than passing them by; `journey` drives the browser against a fixture build.
 
 **If the default branch goes red, fixing it outranks new work.** The `stop-the-line` workflow files
 an issue assigned to the merging author automatically and closes it when the lane next runs green —

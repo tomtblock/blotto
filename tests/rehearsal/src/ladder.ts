@@ -44,23 +44,31 @@ const sha = (s: string) => createHash('sha256').update(s).digest();
  *
  * It bounds how many times a colliding entrant may be regenerated with a
  * bumped salt before we call it a bug. It read as a bare `64` until seat
- * counts became a parameter (n=52, D-E4's minimum field), where a reader
- * could easily mistake it for the field size. It is not: it is a ceiling on
- * retries, and it is unrelated to how many players are in the pool.
+ * counts became a parameter (the minimum field), where a reader could easily
+ * mistake it for the field size. It is not: it is a ceiling on retries, and
+ * it is unrelated to how many players are in the pool.
  */
 const DEDUPE_SALT_LIMIT = 64;
 
 /**
- * Field sizes the study runs. 64 is a full pool (CAPACITY); 52 is the
- * MINIMUM a pool may seal and run at (D-E4 — a pool whose deadline passes
- * with 52..63 entrants plays out rather than refunding).
+ * Field sizes the study runs. 64 is a full pool (CAPACITY); `MIN_FIELD` is
+ * the MINIMUM a pool may seal and run at — a pool whose deadline passes with
+ * `MIN_FIELD..63` entrants plays out rather than refunding.
+ *
+ * **This tracks `MIN_SEATS` in `programs/blotto_cup/src/constants.rs` and
+ * must be changed with it.** It was 52 under D-E4 and is 40 since R7-b
+ * (2026-09-13). The number matters here because the study answers "what
+ * happens in the smallest field the rules allow?", and an answer measured at
+ * a field size the rules no longer permit answers nothing. Lowering it
+ * re-measures: fewer players is the harder case for a skill claim, so the
+ * result is the thing to read rather than assume.
  *
  * Both must divide by the number of ladder classes so a mixed field carries
  * equal numbers of each, leaving class membership uncorrelated with anything:
- * 64/4 = 16 and 52/4 = 13, both exact.
+ * 64/4 = 16 and 40/4 = 10, both exact.
  */
 export const FULL_FIELD = 64;
-export const MIN_FIELD = 52;
+export const MIN_FIELD = 40;
 
 /** All ten 3-of-5 stat trios, in a fixed order. */
 const TRIOS: readonly (readonly [number, number, number])[] = [
@@ -210,7 +218,7 @@ export function ensureUniqueWithinClass(
  *
  * `seats` defaults to a full pool. Pass MIN_FIELD to measure the shortest
  * field the rules allow: the claim being published is about the competition
- * as offered, and a pool that seals at 52 is as real as one that fills.
+ * as offered, and a pool that seals at its floor is as real as one that fills.
  */
 export function ladderPopulation(
   poolSeed: number,

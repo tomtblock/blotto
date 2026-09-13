@@ -16,10 +16,12 @@ what was intended. `01_PRODUCT_FACTS/PRODUCT-FACTS_BlottoCup_v1.md` states the
 same system for counsel and auditors, fact by fact with citations; this file is
 the engineer's version of it.
 
-Last verified against the branch: **2026-09-12**. The program, the backend
+Last verified against the branch: **2026-09-13**. The program, the backend
 packages and the repository's gates were re-read and re-run for the
-2026-09-11 audit's X1 wave; the LiteSVM suite and `anchor build` were not
-re-run in that pass (they need the Solana toolchain — see §7).
+2026-09-11 audit's X1 wave and again for the 2026-09-12 founder instruction
+(the tier gate, the country block and the 40-at-12h fill rule). The LiteSVM
+suite and `anchor build` ran for the fill-rule change; they need the Solana
+toolchain — see §7.
 
 ---
 
@@ -81,7 +83,7 @@ crank and the browser), `backend/sealing` (the sealed-box payload format and
 pool-key custody), `backend/sanctions` (list loading and screening, used by the
 entry gate and the crank alike), and `backend/class-digest` (the class draw
 replayed in TypeScript — its own package so the scoring path can never mention
-"class", and **imported by nothing today**: see §6).
+"class", and **imported by no application module**: see §6).
 
 ## 3. The program
 
@@ -120,21 +122,33 @@ also quote the id in worked examples.
 | PDA | Seeds | Size | Holds |
 |---|---|---|---|
 | `Config` | `["config"]` | 476 (+8 = 484) | The four service keys, the tier tables, the switches, the treasury book-keeping, the timings and the per-tier cooldown stamps. Singleton. |
-| `Pool` | `["pool", id]` | 839 (+8 = 847) | One competition: tier, prices, pot, deadline, state, the class bag, the sealing commitments, the results root and the committed payout list. |
-| `Entry` | `["entry", pool, player]` | 219 (+8 = 227) | One seat: player, index, battles hash, class, flags, escrow, and the next-place split book-keeping. Keying on the player is what makes one entry per wallet per pool structural. |
+| `Pool` | `["pool", id]` | 841 (+8 = 849) | One competition: tier, prices, pot, deadline, **the minimum field it plays by** (`min_seats`), state, the class bag, the sealing commitments, the results root and the committed payout list. |
+| `Entry` | `["entry", pool, player]` | 220 (+8 = 228) | One seat: player, index, battles hash, class, flags, escrow, the sanctions hold, and the next-place split book-keeping. Keying on the player is what makes one entry per wallet per pool structural. |
 | prize vault | `["vault", id]` | 0 | Zero-data, system-owned. Holds that pool's pot. |
 | platform treasury | `["platform"]` | 0 | Zero-data, system-owned. Receives 100% of entry payments and funds every pot. |
 | pass collection | `["pass_collection", pool]` | — | The Metaplex Core collection whose frozen state every pass inherits. |
 
 Layouts are pinned byte-for-byte by `account_layouts_are_pinned` in `state.rs`.
-The `Config` tail (`keeper`, `fill_deadline_seconds`, `cooldown_seconds`,
-`tier_next_open_at`) was appended **after** `bump` on 2026-09-07 so every
-existing offset reader stayed valid; `migrate_config` grows the live account
-once.
+
+**Both growths so far appended, and each has a one-shot migration.** Appending
+rather than inserting is not a style preference: external readers hold byte
+offsets into these accounts (`entrants` at 33, `fill_deadline` at 43, `state`
+at 51), and Anchor refuses to deserialise an account shorter than its current
+layout — so a live account has to be grown before the new program can read it.
+
+| Growth | When | Field(s) | Migration |
+|---|---|---|---|
+| `Config` 372 → 476 | 2026-09-07 | `keeper`, `fill_deadline_seconds`, `cooldown_seconds`, `tier_next_open_at`, appended after `bump` | `migrate_config`, once |
+| `Pool` 839 → 841 | 2026-09-13 | `min_seats`, appended after `vault_bump` (R7-b) | `migrate_pool`, once per existing pool |
+
+`migrate_pool` is permissionless, moves no lamports, refuses an account already
+at the current size, and writes `MIN_SEATS_V1` = 52 — the floor the players in
+those pools actually entered under, not today's 40. The order it runs in is
+`docs/RUNBOOK_r7b-upgrade.md`.
 
 ### Instructions
 
-Thirty-two instructions, by who may send them.
+Thirty-three instructions, by who may send them.
 
 *Admin (the Squads vault; devnet uses a fee-payer stand-in).* `init_config`,
 `migrate_config`, `set_keeper`, `set_pool_timing`, `set_paused`,
@@ -149,8 +163,8 @@ act may uphold a forfeit or clear a list match.
 founder ruling of 2026-09-07 (audit O9b/A5b). The 24-hour liveness fallback
 that used to let any signer open a long-idle tier is gone: the opener supplies
 the pool's sealing key, so a pool opened by anyone but us can never be
-revealed, therefore never settled, and past `MIN_SEATS` it can no longer
-refund either — the pot and up to 64 entries with no on-chain route to anyone.
+revealed, therefore never settled, and past its own `min_seats` it can no
+longer refund either — the pot and up to 64 entries with no on-chain route to anyone.
 A frozen tier strands nothing by comparison, and the admin can rotate the
 keeper at any time. Sealing and refunding an *existing* pool remain
 permissionless, which is what actually protects players. `tier_next_open_at`
@@ -158,8 +172,11 @@ survives as the tier's cooldown alone, and the keeper may never be the zero
 key (audit A7).
 
 *Anyone.* `fund_platform_wallet`, `commit_vrf_seed`, `create_pass_collection`,
-`seal_at_deadline`, `trigger_refund`, `refund`, and `release_escrow` once the
-seven-day safeguard window has passed.
+`seal_at_deadline`, `trigger_refund`, `refund`, `migrate_pool`, and
+`release_escrow` once the seven-day safeguard window has passed. `migrate_pool`
+is permissionless on purpose: it only grows an account to the current layout
+and cannot move a lamport, so gating it would add a key without adding a
+protection.
 
 *Players.* `register`.
 
@@ -246,15 +263,17 @@ on-chain root, with the wallet disconnected and no operator involvement.
 Nothing in this section is a bug. Each is a place where a document written
 earlier has not been reissued, and where a reader trusting the document would be
 misled. **`PID_Blotto-Cup_v0.5.md` is founder-owned and only the founder can
-reissue it**; the divergences are listed so the reissue is a single pass.
+reissue it**; the divergences are listed so the reissue is a single pass. Since
+2026-09-13 the PID carries a founder-authorised appendix that already annotates
+the first three rows below; the rest are still unannotated in the PID itself.
 
 | Document | Says | The build |
 |---|---|---|
 | PID §1, §6, §2 table, §7 diagram | Top 16 paid; prize pool is 80% of entries; platform retains 20% | One paid place. Pots are fixed constants funded before entries open; the operator's margin is entries minus the pot |
 | PID §2 | Prize pools 5.12 / 25.60 SOL at the first two tiers | 4 / 20 / 30 / 40 / 100 / 200 / 300 SOL across seven tiers |
-| PID §2 | Fill deadline 72 hours; 32–63 run at reduced size; fewer than 32 refunds | 12 hours (D-E6); **40–63 run; fewer than 40 refunds** (R7-b, 2026-09-12 — was 52 under D-E4) |
+| PID §2 | Fill deadline 72 hours; 32–63 run at reduced size; fewer than 32 refunds | 12 hours (D-E6); **40–63 run; fewer than 40 refunds** (R7-b, founder ruling 2026-09-12, landed 2026-09-13 — was 52 under D-E4) |
 | PID §5 | Prose implies entry order can affect ranking | Entry order decides only the indivisible remainder and the published leaf order. Ranks come from score and zones alone |
-| PID §8.3 table | "Paid 16 who are genuinely top-16" | One paid place; the skill evidence needs restating against rank-1 rate |
+| PID §4.5 table (cited by §8.3) | "Paid 16 who are genuinely top-16" | One paid place; the skill evidence needs restating against rank-1 rate |
 | TECH-ARCH §10 | Five steppers with quick-set chips | A draggable pentagon with live normalisation and an even-split button (PID §4 overrides; recorded in `INDEX.md`) |
 | TECH-ARCH §3.2, §13 | A `claim` instruction and a claim step | Prizes are pushed. There is no claim step |
 | TECH-ARCH table of instructions | `register` splits 80/20 into vault and platform | `register` credits 100% to the treasury; the vault is read-only to it |
@@ -320,10 +339,19 @@ Stated plainly, because these were once published as though they were built.
    alone (`backend/detection/src/appeals.ts`). What is missing is founder-owned:
    `config/reviewers.json` holds one member, so an appeal can be lodged but
    none can be decided, and the service says so at boot (audit O24).
-4. **The territory list** covers Belgium and Australia only. The jurisdictions
-   the founder listed (Australia, Belgium, India, the United States, the UAE and
-   the GCC, China, Hong Kong, Singapore, Malaysia, Indonesia, and sanctioned
-   jurisdictions) are not in `config/territories.json`.
+4. **Two rows of the founder's territory list are still not enforceable.**
+   `config/territories.json` carries fourteen country codes as of schedule
+   version 3 (2026-09-12) — India, Belgium, Australia, the six GCC states,
+   China, Hong Kong, Singapore, Malaysia, Indonesia. The **US states** are
+   held on a technical constraint, not a decision: the geo source of record
+   returns a subdivision name, never an ISO 3166-2 code, so `assertRegionCapability`
+   refuses to start the entry service with any sub-national code in the
+   schedule — a rule that cannot be applied must not look like one that is.
+   The **sanctioned jurisdictions** row waits on counsel's exact list, and
+   opens nothing meanwhile: those wallets are already refused by the entry
+   screening, which checks live lists rather than a country code.
+   `config/territories.README.md` carries one row per code and what would
+   unblock each of the two.
 5. **Cost instrumentation.** The daemon does not measure what a pool cycle
    costs; only a test seam for that measurement exists. It does have a
    balance threshold, but a coarse one: `assertCanPayFees` refuses to start
@@ -366,13 +394,33 @@ Then every gate CI's `standing-rules` lane runs — each one self-tests, so a
 gate that has stopped working says so instead of reporting clean:
 
 ```
-./scripts/check-language.sh        # the PID §8.7 lexicon
-./scripts/check-standing-rules.sh  # the vault's exit set, class out of scoring
-./scripts/check-env-examples.sh    # every env var a service reads is documented
-./scripts/check-container-user.sh  # no service image runs as root
-./scripts/check-fixtures.sh        # the Python oracles reproduce their vectors
-python3 scripts/check-mirrors.py   # Rust and TypeScript constants agree
-./scripts/ci-gate.sh --self-test   # the deploy gate still judges correctly
+./scripts/check-language.sh                     # the PID §8.7 lexicon
+./scripts/check-standing-rules.sh               # the vault's exit set, class out of scoring
+npx tsx scripts/check-territories.ts            # the founder's schedule is enforceable
+npx tsx scripts/sim/fill-replay.ts --self-test  # the simulation still models the fill rule
+npx tsx scripts/drain-verdict.ts --self-test    # the upgrade pre-flight still refuses
+./scripts/check-env-examples.sh                 # every env var a service reads is documented
+./scripts/check-container-user.sh               # no service image runs as root
+./scripts/check-fixtures.sh                     # the Python oracles reproduce their vectors
+python3 scripts/check-mirrors.py                # Rust and TypeScript constants agree
+./scripts/ci-gate.sh --self-test                # the deploy gate still judges correctly
+./scripts/deploy-devnet.sh --self-test          # the program deploy still reads a cluster
+```
+
+All eleven, in the lane's own order. `ci-fast` runs five further jobs —
+`rust`, `node`, `postgres`, `journey` and `gitleaks`.
+
+The fifth of the eleven drives the upgrade pre-flight's verdict through its
+fixtures. The pre-flight (`pools --upgrade-preflight`) refuses a program
+upgrade while any pool is Open — see §5's note on the floor the read API
+serves, and `RUNBOOK_r7b-upgrade.md`. **The verdict lives in
+`scripts/drain-verdict.ts`, importing nothing**, precisely so this lane can run
+it: the lane installs no workspace, and `scripts/admin.ts` imports
+`@solana/web3.js`. Operators reach the same fixtures through the familiar
+command:
+
+```
+npx ts-node --transpile-only scripts/admin.ts pools --self-test
 ```
 
 Every backend package additionally has `npm run typecheck` and `npm test`

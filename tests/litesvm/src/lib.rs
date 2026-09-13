@@ -497,7 +497,7 @@ pub fn migrate_pool_ix(payer: &Pubkey, pool_id: u64) -> Instruction {
     }
 }
 
-/// Shrink a pool account back to its PRE-R7-B size, as the nine pools on
+/// Shrink a pool account back to its PRE-R7-B size, as the pools on
 /// devnet actually are.
 ///
 /// There is no way to allocate one at the old size with the current program

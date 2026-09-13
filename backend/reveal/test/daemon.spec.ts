@@ -363,7 +363,7 @@ describe('the daemon (C8): the minimum field (D-E4)', () => {
     await expectRejects(async () => w.chain.setPoolTiming(0n, 60n), 'InvalidTiming');
   });
 
-  it('a 52-seat pool past its deadline seals, cranks to Paid and the tier reopens after the cooldown', async function () {
+  it('a 52-seat pool — comfortably above the floor — seals at its deadline, cranks to Paid and the tier reopens after the cooldown', async function () {
     this.timeout(30000);
     const w = await makeWorld();
     await w.daemon.tick(); // opens pool 1

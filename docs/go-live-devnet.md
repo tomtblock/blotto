@@ -175,11 +175,14 @@ for them) or switch Phantom to devnet (Settings → Developer settings →
 Testnet mode) and tap Phantom on the sign-in page. Profile → **Get test SOL**
 → airdrop to the address shown (faucet.solana.com is rate-limited; if it
 refuses, send 0.2 SOL from your Phantom on devnet). Then Enter this
-tournament: seven battles, about ninety seconds. Fewer than 52 entrants at
-the deadline means everyone is refunded automatically.
+tournament: seven battles, about ninety seconds. Fewer entrants than the
+pool's published minimum at the deadline means everyone is refunded
+automatically — 40 for pools opened from now on, and 52 for pool 1, which
+opened under the older rule and keeps the figure its players entered under.
 
-Location is checked by IP against `config/territories.json` (currently BE
-and AU blocked); a VPN can be refused. The age/terms screen is signed once
+Location is checked by IP against `config/territories.json` (fourteen
+countries blocked as of schedule version 3 — `config/territories.README.md`
+lists them with the reason for each); a VPN can be refused. The age/terms screen is signed once
 per wallet per terms version.
 
 **Timeline, automatic from the unpause:**
@@ -189,9 +192,9 @@ per wallet per terms version.
 | after unpause | pool 1 takes entries; each sends 0.1 SOL to the treasury and mints a pass |
 | 04:47:22 UTC, 9 Sept | pool 1 deadline; under 52 entrants the daemon triggers the refund; every entrant gets 0.1 SOL back; 5.12 SOL returns to the treasury |
 | ~04:52 UTC | cooldown over; the daemon opens pool 2: 4 SOL pot, 0.1 SOL entry, 12 h deadline |
-| ~16:52 UTC | pool 2 deadline: ≥52 seals, reveals, scores and pays within minutes; fewer refunds, pool 3 five minutes later |
+| ~16:52 UTC | pool 2 deadline: ≥40 seals, reveals, scores and pays within minutes; fewer refunds, pool 3 five minutes later |
 
-A paid result needs 52 real entries. The first night proves sign-in,
+A paid result needs 40 real entries. The first night proves sign-in,
 wallets, entry, sealing and refunds.
 
 ## 7. Pausing, stopping, redeploying

@@ -172,17 +172,20 @@ describe('blotto event decoding against real emitted bytes', () => {
     const pools = Object.values(snap.pools);
     expect(pools.length).to.equal(3);
     const fullPool = pools.find((p) => p.state === 'Paid' && p.entrants === 64);
-    const minFieldPool = pools.find((p) => p.state === 'Paid' && p.entrants === 52);
+    // A 52-seat pool: not the minimum field (that is 40 since R7-b), just a
+    // deadline-sealed pool short of capacity — which is what this fixture
+    // exercises. Renamed 2026-09-13 so the name stops asserting the old floor.
+    const shortFieldPool = pools.find((p) => p.state === 'Paid' && p.entrants === 52);
     const closedPool = pools.find((p) => p.state === 'Closed');
     expect(fullPool, 'the 64-seat pool ends Paid').to.exist;
-    expect(minFieldPool, 'the 52-seat pool ends Paid').to.exist;
+    expect(shortFieldPool, 'the 52-seat pool ends Paid').to.exist;
     expect(closedPool, 'the refund pool ends Closed').to.exist;
     // u64 seat bitmask, decimal string. The full pool's fixture committed a
     // two-way tie for first (seats 0 and 1 — bits 0..1); the minimum-field
     // pool paid its single winner (bit 0). Winner-takes-all, D-E2.
     expect(fullPool!.paid_mask).to.equal('3');
-    expect(minFieldPool!.paid_mask).to.equal('1');
-    for (const p of [fullPool!, minFieldPool!]) {
+    expect(shortFieldPool!.paid_mask).to.equal('1');
+    for (const p of [fullPool!, shortFieldPool!]) {
       expect(p.pot_lamports).to.equal(POT);
       expect(p.secret).to.equal('2a'.repeat(32)); // the harness secret
     }
@@ -190,7 +193,7 @@ describe('blotto event decoding against real emitted bytes', () => {
     // paid onward against it); the minimum-field pool's is the harness pin.
     expect(fullPool!.results_root).to.match(/^[0-9a-f]{64}$/);
     expect(fullPool!.results_root).to.not.equal('01'.repeat(32));
-    expect(minFieldPool!.results_root).to.equal('01'.repeat(32));
+    expect(shortFieldPool!.results_root).to.equal('01'.repeat(32));
     // Option A (2026-09-07): no pool carries a go-deadline — the deadline
     // set at open is the only clock.
     for (const p of pools) expect(p.go_deadline).to.equal(undefined);
@@ -201,11 +204,11 @@ describe('blotto event decoding against real emitted bytes', () => {
     expect(tierStatus[0].tier).to.equal(0);
     expect(tierStatus[0].next_open_at).to.be.a('string');
     expect(BigInt(tierStatus[0].next_open_at as string) > 0n).to.equal(true);
-    expect(tierStatus[0].last_pool_id).to.equal(String(minFieldPool!.id));
+    expect(tierStatus[0].last_pool_id).to.equal(String(shortFieldPool!.id));
     // Pools 1 and 3 had their seeds patched directly (no event); pool 2's
     // landed via a real commit_vrf_seed with value 0x4d bytes.
     expect(fullPool!.vrf_seed).to.equal(undefined);
-    expect(minFieldPool!.vrf_seed).to.equal(undefined);
+    expect(shortFieldPool!.vrf_seed).to.equal(undefined);
     expect(closedPool!.vrf_seed).to.equal('4d'.repeat(32));
 
     const entries = Object.values(snap.entries);
@@ -225,7 +228,7 @@ describe('blotto event decoding against real emitted bytes', () => {
       return bag;
     };
     expect(bagOf(fullPool!.pool)).to.deep.equal([38, 15, 7, 3, 1]);
-    const minBag = bagOf(minFieldPool!.pool);
+    const minBag = bagOf(shortFieldPool!.pool);
     expect(minBag.reduce((a, b) => a + b, 0)).to.equal(52);
     minBag.forEach((n, i) => expect(n, `class ${i}`).to.be.at.most([38, 15, 7, 3, 1][i]));
 
@@ -236,13 +239,13 @@ describe('blotto event decoding against real emitted bytes', () => {
     expect(results.length).to.equal(3);
     const payouts = Object.values(snap.payouts);
     expect(payouts.length).to.equal(3);
-    for (const p of [fullPool!, minFieldPool!]) {
+    for (const p of [fullPool!, shortFieldPool!]) {
       expect(sumFor(results, p.pool), 'committed list conserves the pot').to.equal(POT);
       expect(sumFor(payouts, p.pool), 'settled payouts conserve the pot').to.equal(POT);
     }
     const tie = payouts.filter((p) => p.pool === fullPool!.pool).map((p) => p.amount);
     expect(tie).to.deep.equal(['2000000000', '2000000000']);
-    const solo = payouts.filter((p) => p.pool === minFieldPool!.pool);
+    const solo = payouts.filter((p) => p.pool === shortFieldPool!.pool);
     expect(solo.length).to.equal(1);
     expect(solo[0].seat).to.equal(0);
     expect(solo[0].amount).to.equal(POT);
@@ -286,7 +289,7 @@ describe('blotto event decoding against real emitted bytes', () => {
     expect(forfeitedRow.amount_lamports).to.equal('0');
     const paidAmounts = paidRows.map((h) => ({ pool: h.pool, amount: h.amount_lamports }));
     expect(sumFor(paidAmounts, fullPool!.pool)).to.equal(POT);
-    expect(sumFor(paidAmounts, minFieldPool!.pool)).to.equal(POT);
+    expect(sumFor(paidAmounts, shortFieldPool!.pool)).to.equal(POT);
     // The history row's seat agrees with the payout's seat for each winner.
     const h0 = history.find((h) => h.player === fullSeat0.player && h.pool === fullSeat0.pool)!;
     expect(h0.seat).to.equal(0);
@@ -398,11 +401,11 @@ describe('backfill pages newest-first and ingests oldest-first (audit B-05, F-19
     // was applied live, and the walk's 52 replayed increments write a decimal
     // string over it. The type of that column is itself a symptom of the
     // re-application this test is about.
-    const minField = pools.find((p) => String(p.entrants) === '52')!;
-    expect(minField, 'the fixture still has a 52-seat pool').to.exist;
-    expect(minField.state, 'a pool that has paid reads as Open').to.equal('Open');
+    const shortField = pools.find((p) => String(p.entrants) === '52')!;
+    expect(shortField, 'the fixture still has a 52-seat pool').to.exist;
+    expect(shortField.state, 'a pool that has paid reads as Open').to.equal('Open');
     expect(
-      Object.values(store.projection.snapshot().payouts).some((p) => p.pool === minField.pool),
+      Object.values(store.projection.snapshot().payouts).some((p) => p.pool === shortField.pool),
       'while its payout row is right there'
     ).to.equal(true);
     expect(pools.filter((p) => p.state === 'Paid').length).to.equal(1);

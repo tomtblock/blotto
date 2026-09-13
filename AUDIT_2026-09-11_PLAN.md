@@ -79,10 +79,13 @@ rule in `docs/OPERATING-MANUAL.md:31-33`).**
 7. Redeploy the backend (Actions → `deploy-backend`) so the daemon image carries the reveal client
    that sends `pay_prizes` with Config writable (`d29464d`) and the crank guards. Then
    `GET /health` on all four Fly apps and Actions → `backend-status`.
-8. **Prove B-03 on devnet, cheaply, before the rehearsal**: open one tier-0 pool via the keeper (the
-   daemon does this), send its vault 1 lamport from any wallet (the vault address is
-   `["vault", pool_id]`), let it run to payout or refund, and confirm the pool reaches Paid/Closed
-   and the tier slot frees. This is the vault_dust test replayed against the real cluster.
+8. ~~**Prove B-03 on devnet, cheaply, before the rehearsal**~~ — **DONE 2026-09-13, pool 9.** The
+   lamport was sent at 19:13 UTC on 2026-09-12, an entry landed at 04:48, and `trigger_refund` at
+   the 05:29:49 deadline moved exactly the 4 SOL pot, leaving 650,241 lamports. Pool reached
+   `Closed`, the entry refunded in full, the tier slot freed and pool 10 opened after the cooldown.
+   Because the lamport preceded the close, this also shows `trigger_refund` returns the pot as a
+   constant rather than sweeping the balance or sweeping to the rent floor — either would have been
+   visible. The vault's own transaction ledger is in the runbook's recovery notes.
 9. Record the deploy slot and date in `docs/devnet-rehearsal-runbook.md` (its Key Register and
    recovery notes are the operating memory) and tick O15 in `docs/AUDIT-2026-09-07.md`.
 

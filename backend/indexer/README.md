@@ -45,7 +45,7 @@ over the code. In registration order:
 | `PoolVrfSeeded` | `randomness_account, vrf_seed, slot` — the class draw's seed |
 | `PassCollectionCreated` | `pass_collection, name, uri` |
 | `EntryRegistered` | `player, index, battles_hash, class, slot_hash, pass_asset, terms_version` |
-| `PoolSealed` | `entrants` — the field the pool plays with: 64 at the 64th entry, or 52..63 when `seal_at_deadline` closed it (D-E4) |
+| `PoolSealed` | `entrants` — the field the pool plays with: 64 at the 64th entry, or the pool's own floor..63 when `seal_at_deadline` closed it (40..63 since R7-b). Since R7-b the event also carries `pot_lamports` and `reason` (`Capacity` or `DeadlineMinFill`); the decoder is length-aware, so events recorded before that still replay |
 | `TierSlotFreed` | `tier, pool_id, next_open_at` — the cooldown stamp the "next pool in" countdown reads |
 | `PoolSecretRevealed` | `secret` — after which anyone can decrypt and verify |
 | `ResultsCommitted` | `root` — the results-tree root the verify page recomputes against (R10: no claim, prizes are pushed), plus the seat-keyed committed payout list |

@@ -55,6 +55,16 @@ commands
                             D-E2/D-E4 runbook section records before an
                             upgrade (read-only; exits 1 while any pool is
                             Sealed, Scored or Refunding)
+      [--upgrade-preflight] ALSO refuse while any pool is Open. Off by
+                            default because a pool is Open almost always and
+                            this is the ordinary status command. Required
+                            before the R7-b program upgrade: a pool open
+                            across that upgrade keeps the floor it opened
+                            with while the site reads the shared constant,
+                            so the two can disagree. See
+                            docs/RUNBOOK_r7b-upgrade.md
+      [--self-test]         drive the verdict through its fixtures and exit.
+                            Touches no network
   init-config               one-time setup (admin = the signing key)
       --entry-signer <pubkey> --settlement-signer <pubkey> --keeper <pubkey>
       --ceilings <7 comma-separated lamport values>
@@ -207,7 +217,7 @@ interface Cli {
  * usage block, but the parser had no way to accept a bare flag — so the
  * documented form threw and it could only be passed with a dummy value.
  */
-const SWITCHES = new Set(['dry-run', 'keep-keeper']);
+const SWITCHES = new Set(['dry-run', 'keep-keeper', 'upgrade-preflight', 'self-test']);
 
 function parseArgs(argv: string[]): Cli {
   const [command, ...rest] = argv;
@@ -399,12 +409,15 @@ const CONFIG_SPACE = 484;
 const POOL_SPACE = 849;
 const CONFIG_SPACE_V1 = 380;
 
-const POOL_STATES = ['Open', 'Sealed', 'Scored', 'Paid', 'Refunding', 'Closed'] as const;
-/** States in which a pool is mid-settlement — the drain gate of the
- * D-E2/D-E4 runbook section (proposal E1 §8): no upgrade or backend deploy
- * while any pool sits here, because the prize rule is enforced by the
- * engine that settles it. */
-const MID_SETTLEMENT = new Set(['Sealed', 'Scored', 'Refunding']);
+/* The drain verdict and its fixtures live in their own module so CI can run
+ * them with no dependencies at all — this file imports @solana/web3.js and the
+ * standing-rules lane installs no workspace. See scripts/drain-verdict.ts. */
+import {
+  POOL_STATES,
+  drainVerdict,
+  selfTestDrainVerdict,
+  type PoolRow,
+} from './drain-verdict';
 
 /** Read-only: every pool 1..next_pool_id−1 by fixed offsets (state.rs since
  * D-A1 v2 — the same offsets chain-web3.ts::getPool and the LiteSVM readers
@@ -412,6 +425,11 @@ const MID_SETTLEMENT = new Set(['Sealed', 'Scored', 'Refunding']);
  * fill_deadline 43 | state 51), then the drain verdict, timestamped so the
  * output can be kept as the record the runbook asks for. */
 async function cmdPools(ctx: Ctx): Promise<void> {
+  if (ctx.cli.flags.get('self-test') !== undefined) {
+    process.exitCode = selfTestDrainVerdict();
+    return;
+  }
+  const upgradePreflight = ctx.cli.flags.get('upgrade-preflight') !== undefined;
   const cfg = await ctx.connection.getAccountInfo(ctx.pdas.config(), 'confirmed');
   if (!cfg) {
     console.log('config: NOT INITIALISED (run init-config)');
@@ -420,7 +438,7 @@ async function cmdPools(ctx: Ctx): Promise<void> {
   const next = cfg.data.readBigUInt64LE(315);
   console.log(`drain query at ${new Date().toISOString()} — program ${ctx.programId.toBase58()}`);
   console.log('id    tier  state      entrants  pot_lamports     fill_deadline (unix)');
-  const blocking: bigint[] = [];
+  const rows: PoolRow[] = [];
   const tally = new Map<string, number>();
   for (let id = 1n; id < next; id++) {
     const info = await ctx.connection.getAccountInfo(ctx.pdas.pool(id), 'confirmed');
@@ -431,7 +449,7 @@ async function cmdPools(ctx: Ctx): Promise<void> {
     const d = info.data;
     const state = POOL_STATES[d[51]] ?? `unknown(${d[51]})`;
     tally.set(state, (tally.get(state) ?? 0) + 1);
-    if (MID_SETTLEMENT.has(state)) blocking.push(id);
+    rows.push({ id, state });
     console.log(
       `${id.toString().padEnd(5)} ${String(d[16]).padEnd(5)} ${state.padEnd(10)} ` +
         `${String(d.readUInt16LE(33)).padEnd(9)} ${d.readBigUInt64LE(25).toString().padEnd(16)} ` +
@@ -442,12 +460,9 @@ async function cmdPools(ctx: Ctx): Promise<void> {
     `pools: ${next - 1n} — ` +
       [...tally.entries()].map(([s, n]) => `${s} ${n}`).join(', ')
   );
-  if (blocking.length === 0) {
-    console.log('drain: CLEAR — no pool is Sealed, Scored or Refunding');
-  } else {
-    console.log(`drain: BLOCKED — mid-settlement pool ids: ${blocking.join(', ')}`);
-    process.exitCode = 1;
-  }
+  const verdict = drainVerdict(rows, upgradePreflight);
+  for (const line of verdict.lines) console.log(line);
+  if (verdict.blocked) process.exitCode = 1;
 }
 
 async function cmdInitConfig(ctx: Ctx): Promise<void> {
@@ -921,7 +936,7 @@ async function cmdMigratePool(ctx: Ctx): Promise<void> {
   const info = await ctx.connection.getAccountInfo(ctx.pdas.pool(poolId), 'confirmed');
   if (!info) throw new Error(`pool ${poolId}: no account at ${ctx.pdas.pool(poolId).toBase58()}`);
   // Said before sending, because the on-chain refusal is a bare error code
-  // and an operator working through nine pools needs to tell "already done"
+  // and an operator working through a list of pools needs to tell "already done"
   // from "wrong pool".
   console.log(`pool ${poolId}: ${info.data.length} bytes on chain`);
   if (info.data.length >= POOL_SPACE) {

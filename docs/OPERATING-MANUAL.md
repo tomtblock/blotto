@@ -232,6 +232,17 @@ and safe. Everything else is founder-signed.
 | `forfeit-escrow` | Records that review upheld a flag. **Moves no lamports** |
 | `lift-sanctions-hold` | Clears a hold review found to be a false positive. **Moves no lamports** |
 | `register-signers` | Rotates the entry and settlement signers |
+| `seal-at-deadline` | **Permissionless.** Seals a pool whose deadline has passed with its floor seated. The daemon does this; the command is the manual fallback when the daemon is down |
+| `trigger-refund` | **Permissionless.** Starts the refund of a pool that reached its deadline under its floor — returns the untouched pot to the treasury. Refuses at the floor and above (`FieldReached`) |
+| `refund` | **Permissionless.** Repays one entry in full, from the treasury, after `trigger-refund`. One call per entry |
+
+**`--emit-proposal` works on every founder-signed command.** It prints the
+instruction — accounts plus base64 data — and signs and sends nothing, which is
+what goes into a Squads proposal. On mainnet the admin *is* the Squads vault, so
+this is the normal path and direct signing is the devnet-only one. Nothing in
+this script can sign for a multisig, by design. `set-open-tiers` in particular
+is expected to be run this way; `--dry-run` on it runs every check and prints
+current-versus-proposed without sending.
 
 Three worth thinking twice about:
 

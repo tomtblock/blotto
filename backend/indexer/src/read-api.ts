@@ -157,15 +157,37 @@ function poolRow(r: Record<string, unknown>, now: Now): Json {
     // Read from the SHARED CONSTANT, not from the pool's own `min_seats`.
     // The chain carries the floor per pool so an upgrade cannot move it
     // under seated players, and that is the number the program enforces —
-    // but the derived `pools` table has no column for it, and the only
-    // pools whose stored floor differs from the constant are the nine that
-    // predate the field, all of them long terminal. A live pool's stored
-    // floor IS this constant. If that ever stops being true — a second
-    // change to the floor, with pools open — this needs the column and the
-    // event field to fill it, and this comment is the marker for that. The app shows a live
-    // countdown beside an entrant count, and until this existed a player
-    // watching a pool at 38 seats with an hour left had to know the rule and
-    // do the comparison themselves.
+    // but `PoolOpened` does not carry it and the derived `pools` table has
+    // no column for it, so there is nothing here to read it from. The
+    // derived tables are a pure function of the event ledger by design; a
+    // chain read in this path would break that, which is why the honest fix
+    // is an event field rather than a lookup.
+    //
+    // WHAT MAKES THIS SAFE, precisely — it is an operational rule, not a
+    // property of the data: **`admin.ts pools --upgrade-preflight` refuses
+    // the program upgrade while any pool is Open**, so no pool is ever open
+    // across a change to the floor, so every live pool's stored floor IS
+    // this constant. `docs/RUNBOOK_r7b-upgrade.md` is where the rule is
+    // carried out and says why.
+    //
+    // An earlier version of this comment justified the shortcut differently
+    // — that the only pools with a different floor were the ones predating
+    // the field, "all of them long terminal". That was wrong on 2026-09-13:
+    // pool 10 was Open and predated the field, so the migration would have
+    // given it 52 while this served 40, and a pool of it sitting between the
+    // two at its deadline would have been shown "will play" and then
+    // refunded. It does not take a SECOND change to the floor to break the
+    // assumption; the first one already leaves pools open across an upgrade.
+    //
+    // BEFORE MAINNET: add `min_seats` to `PoolOpened`, store it per pool,
+    // and serve the stored value. Then the site cannot disagree with the
+    // chain whatever the deploy order, and the pre-flight refusal goes back
+    // to being belt-and-braces. Anyone relaxing that refusal must do this
+    // first — this comment is the marker.
+    //
+    // The app shows a live countdown beside an entrant count, and until this
+    // existed a player watching a pool at 38 seats with an hour left had to
+    // know the rule and do the comparison themselves.
     min_seats: Number(MIN_SEATS),
     outcome_if_deadline_now: Number(r.entrants) >= Number(MIN_SEATS) ? 'seal' : 'refund',
     // The clock the app's countdowns derive from (unix seconds, string).

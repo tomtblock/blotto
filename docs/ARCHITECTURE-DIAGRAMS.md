@@ -175,15 +175,18 @@ stateDiagram-v2
    new pool's vault before a single entry exists, generates the pool's sealing key, and stamps a
    12-hour deadline that is never rewritten.
 2. **Two ways to seal.** The 64th entry seals in the same transaction. At the deadline anyone may
-   seal a pool holding at least 52. Sealing releases the pool's entry payments from the refundable
-   floor: from here refunds are impossible and the money is revenue.
+   seal a pool holding at least its own `min_seats` — 40 for every pool opened since R7-b, and the
+   figure that pool published when its players entered. `PoolSealed.reason` records which of the
+   two sealed it. Sealing releases the pool's entry payments from the refundable floor: from here
+   refunds are impossible and the money is revenue.
 3. **Reveal then commit.** The settlement signer publishes the secret, hash-checked against the
    commitment made at open, then commits the results root and the payout list, which the program
    checks sums exactly to the pot.
 4. **Paying is batched and idempotent.** Each committed seat is paid once. A flagged or
    sanctions-held seat is escrowed instead of sent. All seats settled means Paid.
-5. **The refund fork.** Below 52 at the deadline anyone may trigger the refund: the untouched pot
-   returns to the treasury, then each entry is repaid in full from the treasury, permissionlessly,
+5. **The refund fork.** Below its floor at the deadline anyone may trigger the refund: the
+   untouched pot returns to the treasury, then each entry is repaid in full from the treasury,
+   permissionlessly,
    until Closed.
 6. **A held share has no door to us.** A flag is released by review, by the daemon's 12-hour clock,
    or by anyone after seven days. An upheld flag is paid onward to the next eligible place, equally
@@ -264,7 +267,7 @@ flowchart LR
   NOBODY["5 Nobody, ever<br/>no vault exit to the operator"]
   FOUNDER -- "bootstrap deposits" --> TREAS
   PLAYER -- "3 register: the price, 0.1 SOL<br/>refundable until the pool seals" --> TREAS
-  TREAS -- "refund: the full price<br/>when a pool stays below 52" --> PLAYER
+  TREAS -- "refund: the full price<br/>when a pool stays below its floor" --> PLAYER
   TREAS -- "open_pool: the fixed pot<br/>4 SOL at tier 0, before any entry" --> VAULT
   VAULT -- "trigger_refund: the untouched pot returns" --> TREAS
   TREAS -- "only above the floor" --> ADMIN

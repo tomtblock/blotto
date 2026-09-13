@@ -13,11 +13,13 @@
 #                    mode, at 375px and 1280px (audit 2026-09-11, G-20 / A-33)
 #   gitleaks       — the checkout AND the git history, pinned binary,
 #                    checksum-verified
-#   standing-rules — the PID §8.7 language gate, the structural greps, the
-#                    env-example coverage check, the container-user check,
-#                    the Python oracles' fixtures, the Rust↔TypeScript mirror
-#                    check, and the self-tests of the deploy gate and the
-#                    program-deploy script
+#   standing-rules — eleven checks, in this order: the PID §8.7 language gate,
+#                    the structural greps, the founder's territory schedule,
+#                    the fill simulation's self-test, the upgrade pre-flight's
+#                    verdict, the env-example coverage check, the
+#                    container-user check, the Python oracles' fixtures, the
+#                    Rust↔TypeScript mirror check, and the self-tests of the
+#                    deploy gate and the program-deploy script
 #
 # No Solana CLI or Anchor install here — nothing in this lane builds SBF. The
 # compiled artifact and the LiteSVM suite that drives it are the separate
@@ -479,6 +481,16 @@ jobs:
 
       - name: The fill simulation still models the rule (§5.2)
         run: npx --yes tsx@4.20.3 scripts/sim/fill-replay.ts --self-test
+
+      # The upgrade pre-flight's verdict (R7-b, 2026-09-13). Its failure mode
+      # is silent permissiveness: a verdict that quietly stopped refusing would
+      # report CLEAR for ever and the next program upgrade would land while a
+      # pool was taking entries. Same reasoning as ci-gate.sh — the decision is
+      # pure, so the fixtures need no cluster. It lives in its own module
+      # precisely so it can run here with nothing installed; scripts/admin.ts
+      # imports @solana/web3.js and could not.
+      - name: The upgrade pre-flight still refuses (R7-b)
+        run: npx --yes tsx@4.20.3 scripts/drain-verdict.ts --self-test
 
       # Widened 2026-09-12 to see `env.NAME` property reads, the backend's
       # dominant shape, which it was blind to (audit 2026-09-11, A-09 / E-07 /

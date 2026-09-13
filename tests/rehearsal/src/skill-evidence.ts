@@ -39,10 +39,11 @@ export interface StudyParams {
    * Field sizes to study. Default: a FULL pool and the MINIMUM one.
    *
    * Added 2026-09-08. Until then the study ran only full 64-seat pools,
-   * while D-E4 lets a pool seal and play at 52..63. Publishing a skill claim
-   * measured at one field size, for a competition offered at several, leaves
-   * the obvious question — what happens in the smallest field the rules
-   * allow? — answered by nobody. Now it is answered here.
+   * while the rules let a pool seal and play at its floor..63. Publishing a
+   * skill claim measured at one field size, for a competition offered at
+   * several, leaves the obvious question — what happens in the smallest
+   * field the rules allow? — answered by nobody. Now it is answered here.
+   * The floor is `MIN_FIELD`, which tracks the program's `MIN_SEATS`.
    */
   fields?: readonly number[];
 }
@@ -304,6 +305,11 @@ function renderReport(params: StudyParams, fields: FieldResult[], pot: bigint): 
     .join(', and ');
 
   const sizes = fields.map((f) => f.seats).join(' and ');
+  // "16 per class at 64 seats, 10 per class at 40 seats" — derived, because
+  // this sentence was hand-written and went stale the moment the floor moved.
+  const perClass = fields
+    .map((f) => `${f.seats / LADDER.length} per class at ${f.seats} seats`)
+    .join(', ');
 
   return `# Skill evidence — outcome statistics by strategy class
 
@@ -312,11 +318,12 @@ by hand. Deterministic: the same parameters reproduce this file byte for
 byte, and the nightly CI job re-runs the study and diffs it against this
 committed copy.*
 
-Every run below is measured at **two field sizes**: ${sizes} seats. 64 is a
-full pool; 52 is the smallest field the rules allow a pool to play at (D-E4 —
-a pool whose deadline passes holding 52..63 entrants runs rather than
-refunding). A claim measured only at full capacity would leave the obvious
-question about the shortest field unanswered.
+Every run below is measured at **two field sizes**: ${sizes} seats.
+${FULL_FIELD} is a full pool; ${MIN_FIELD} is the smallest field the rules
+allow a pool to play at — a pool whose deadline passes holding
+${MIN_FIELD}..${FULL_FIELD - 1} entrants runs rather than refunding (R7-b,
+2026-09-13; it was 52 under D-E4). A claim measured only at full capacity
+would leave the obvious question about the shortest field unanswered.
 
 ## Headline: considered play against unconsidered play
 
@@ -388,9 +395,9 @@ exactly the shape a skill competition's outcomes should have.
 ## Methodology
 
 - **Runs**: at EACH field size (${sizes} seats), one mixed-field run
-  (${params.pools} pools, equal numbers of each class — 16 per class at 64
-  seats, 13 at 52 — seat order shuffled per pool by a seeded Fisher–Yates so
-  class is uncorrelated with seat index) and three homogeneous-field runs
+  (${params.pools} pools, equal numbers of each class — ${perClass} — seat
+  order shuffled per pool by a seeded Fisher–Yates so class is uncorrelated
+  with seat index) and three homogeneous-field runs
   (${params.pools} pools of one class each, for random / heuristic /
   optimised).
 - **Seeds**: base seed **${params.baseSeed}**. Field size k offsets every

@@ -5,11 +5,12 @@ by hand. Deterministic: the same parameters reproduce this file byte for
 byte, and the nightly CI job re-runs the study and diffs it against this
 committed copy.*
 
-Every run below is measured at **two field sizes**: 64 and 52 seats. 64 is a
-full pool; 52 is the smallest field the rules allow a pool to play at (D-E4 —
-a pool whose deadline passes holding 52..63 entrants runs rather than
-refunding). A claim measured only at full capacity would leave the obvious
-question about the shortest field unanswered.
+Every run below is measured at **two field sizes**: 64 and 40 seats.
+64 is a full pool; 40 is the smallest field the rules
+allow a pool to play at — a pool whose deadline passes holding
+40..63 entrants runs rather than refunding (R7-b,
+2026-09-13; it was 52 under D-E4). A claim measured only at full capacity
+would leave the obvious question about the shortest field unanswered.
 
 ## Headline: considered play against unconsidered play
 
@@ -26,12 +27,12 @@ for first splitting it evenly per D3-B):
 | 64 | random | 3200 | 0.000% | 0.00% | 100.00% | 0.0000% |
 | 64 | heuristic | 3200 | 1.093% | 1.09% | 98.90% | 1.0937% |
 | 64 | optimised | 3200 | 5.156% | 5.15% | 94.84% | 5.1562% |
-| 52 | random | 2600 | 0.038% | 0.03% | 99.96% | 0.0384% |
-| 52 | heuristic | 2600 | 1.384% | 1.38% | 98.61% | 1.3846% |
-| 52 | optimised | 2600 | 6.269% | 6.26% | 93.73% | 6.2692% |
+| 40 | random | 2000 | 0.000% | 0.00% | 100.00% | 0.0000% |
+| 40 | heuristic | 2000 | 1.850% | 1.85% | 98.15% | 1.8500% |
+| 40 | optimised | 2000 | 8.150% | 8.15% | 91.85% | 8.1500% |
 
 The everyone-equal baseline — what one seat is worth if nothing an entrant
-does matters — is 1.5625% in a 64-seat pool, and 1.9230% in a 52-seat pool. The gap between the rows above, produced
+does matters — is 1.5625% in a 64-seat pool, and 2.5000% in a 40-seat pool. The gap between the rows above, produced
 purely by allocation choices, is the product's skill evidence, and it holds
 at both field sizes.
 
@@ -47,7 +48,7 @@ opens the flow, touches nothing, and locks in all seven battles.
 | Seats | Class | Entrants | Rank-1 rate | Paid-seat rate | Eliminated from the paid set | Mean payout share of pot |
 |---|---|---|---|---|---|---|
 | 64 | uniform | 3200 | 0.000% | 0.00% | 100.00% | 0.0000% |
-| 52 | uniform | 2600 | 0.000% | 0.00% | 100.00% | 0.0000% |
+| 40 | uniform | 2000 | 0.000% | 0.00% | 100.00% | 0.0000% |
 
 **The claim here is stronger than a statistical one, and it should be read
 as the stronger claim.** A battle is won by taking three of the five stats.
@@ -80,9 +81,9 @@ the spread is who takes which slice).
 | 64 | random | 12800 | 1.562% | 1.56% | 98.43% | 1.5625% |
 | 64 | heuristic | 12800 | 1.562% | 1.56% | 98.43% | 1.5625% |
 | 64 | optimised | 12800 | 1.562% | 1.56% | 98.43% | 1.5625% |
-| 52 | random | 10400 | 1.923% | 1.92% | 98.07% | 1.9230% |
-| 52 | heuristic | 10400 | 1.923% | 1.92% | 98.07% | 1.9230% |
-| 52 | optimised | 10400 | 1.923% | 1.92% | 98.07% | 1.9230% |
+| 40 | random | 8000 | 2.500% | 2.50% | 97.50% | 2.5000% |
+| 40 | heuristic | 8000 | 2.500% | 2.50% | 97.50% | 2.5000% |
+| 40 | optimised | 8000 | 2.500% | 2.50% | 97.50% | 2.5000% |
 
 Reading: among equals, no entrant holds an edge — the mean share sits at
 the baseline for every class, at both field sizes. Skill differentiates
@@ -91,10 +92,10 @@ exactly the shape a skill competition's outcomes should have.
 
 ## Methodology
 
-- **Runs**: at EACH field size (64 and 52 seats), one mixed-field run
-  (200 pools, equal numbers of each class — 16 per class at 64
-  seats, 13 at 52 — seat order shuffled per pool by a seeded Fisher–Yates so
-  class is uncorrelated with seat index) and three homogeneous-field runs
+- **Runs**: at EACH field size (64 and 40 seats), one mixed-field run
+  (200 pools, equal numbers of each class — 16 per class at 64 seats, 10 per class at 40 seats — seat
+  order shuffled per pool by a seeded Fisher–Yates so class is uncorrelated
+  with seat index) and three homogeneous-field runs
   (200 pools of one class each, for random / heuristic /
   optimised).
 - **Seeds**: base seed **20260827**. Field size k offsets every
