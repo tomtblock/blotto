@@ -6,6 +6,8 @@ import { QueryProvider } from "@/query/query-provider";
 import { ToastProvider } from "@/components/ui/toast";
 import "./globals.css";
 import { SiteAntics } from '@/components/blott/SiteAntics';
+import { SkipLink } from '@/components/shell/skip-link';
+import { RouteFocus } from '@/components/shell/route-focus';
 
 // The display face (D1): Big Shoulders — a condensed athletic family built
 // for scoreboards and stadium signage, which is exactly what prize amounts,
@@ -58,11 +60,14 @@ export default function RootLayout({
       className={`${bigShoulders.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
+        {/* First in the tab order on every page (2026-09-13). */}
+        <SkipLink />
         <AuthProvider>
           <QueryProvider>
             <ToastProvider>
               {children}
               <SiteAntics />
+              <RouteFocus />
             </ToastProvider>
           </QueryProvider>
         </AuthProvider>

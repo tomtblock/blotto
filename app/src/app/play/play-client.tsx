@@ -67,7 +67,7 @@ const SIGNER_WAIT_MS = 8_000;
  * sentence — same panel shape whatever stopped the flow. */
 function StatePanel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="animate-rise flex flex-col gap-2 rounded-2xl border border-line bg-raised p-6">
+    <section className="candy candy-gloss animate-rise relative flex flex-col gap-2 overflow-hidden rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,var(--color-overlay)_0%,var(--color-raised)_38%,var(--color-base)_100%)] p-6">
       <h2 className="font-display text-[24px] font-bold text-ink">{title}</h2>
       <div className="flex max-w-prose flex-col gap-2 text-[15px] leading-6 text-ink-muted">
         {children}
@@ -336,11 +336,22 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
 
   if (!poolId) {
     return (
-      <StatePanel title="No pool selected">
-        <p>Pick an open tournament from the Play tab to enter.</p>
-        <Link href="/" className="mt-1 text-brand underline underline-offset-2">
-          Back to Play
-        </Link>
+      <StatePanel title={COPY.gate.noPoolTitle}>
+        <p>{COPY.gate.noPool}</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <Link
+            href="/"
+            className="inline-flex h-11 items-center rounded-full bg-brand px-6 text-[15px] font-semibold text-(--color-base) hover:bg-brand-hot"
+          >
+            {COPY.shell.nav.backToPlay}
+          </Link>
+          <Link
+            href="/pools"
+            className="inline-flex h-11 items-center rounded-full border border-white/20 px-6 text-[15px] text-ink hover:border-brand hover:text-brand"
+          >
+            {COPY.gate.browsePools}
+          </Link>
+        </div>
       </StatePanel>
     );
   }
@@ -350,7 +361,7 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
         <StatePanel title={COPY.gate.poolMissingTitle}>
           <p>{COPY.gate.poolMissing}</p>
           <Link href="/" className="mt-1 text-brand underline underline-offset-2">
-            Back to Play
+            {COPY.shell.nav.backToPlay}
           </Link>
         </StatePanel>
       );
@@ -525,6 +536,7 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
       : null;
     return (
       <RevealHost
+        poolNumber={pool.id}
         result={revealRun}
         onRetry={
           retry

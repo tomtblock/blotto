@@ -11,6 +11,8 @@ import Link from 'next/link';
 import { COPY } from '@/copy';
 import { AppHeader } from '@/components/shell/app-header';
 import { TabBar } from '@/components/shell/tab-bar';
+import { SiteFooter } from '@/components/shell/site-footer';
+import { PageIntro } from '@/components/ui/page-intro';
 import { rulesSections, type TierRow } from './rules.config';
 
 function TierPriceTable({ rows }: { rows: TierRow[] }) {
@@ -45,15 +47,16 @@ export default function RulesPage() {
   return (
     <>
       <AppHeader />
-      <main className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 pb-24">
-        <h1 className="mb-2 font-display text-[34px] leading-[38px] font-extrabold text-ink">
-          {COPY.rules.title}
-        </h1>
-        <p className="mb-6 text-[15px]">
-          <Link href="/fair-play" className="text-brand underline underline-offset-2 hover:text-brand-hot">
-            {COPY.rules.fairPlayLink}
-          </Link>
-        </p>
+      <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 pb-24">
+        <PageIntro
+          title={COPY.rules.title}
+          back={{ href: '/', label: COPY.shell.nav.backToPlay }}
+          lead={
+            <Link href="/fair-play" className="text-brand underline underline-offset-2 hover:text-brand-hot">
+              {COPY.rules.fairPlayLink}
+            </Link>
+          }
+        />
         {rulesSections().map((s) => (
           <section key={s.id} id={s.id} className="mb-9">
             <h2 className="mb-2 font-display text-[24px] leading-[30px] font-bold text-ink">
@@ -114,6 +117,7 @@ export default function RulesPage() {
           </section>
         ))}
       </main>
+      <SiteFooter />
       <TabBar />
     </>
   );

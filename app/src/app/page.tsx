@@ -38,6 +38,7 @@ const HERO_TIERS: readonly ClipTier[] = [
 import { LiveDemo } from '@/components/landing/LiveDemo';
 import { HowItWorksCarousel } from '@/components/landing/HowItWorksCarousel';
 import { PreloaderGate } from '@/components/preloader/PreloaderGate';
+import { FounderWelcome } from '@/components/landing/FounderWelcome';
 
 /** Seat-fill ring in game colours (the arena ProgressRing is blue). */
 function SeatRing({ entrants }: { entrants: number }) {
@@ -179,19 +180,19 @@ export default async function LandingPage() {
             </p>
           </div>
         </section>
-        <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-28 sm:px-6">
+        <main id="main" className="mx-auto w-full max-w-5xl flex-1 px-4 pb-28 sm:px-6">
 
           {/* ——— The open pool: plum card, every number on the game layer. */}
           <section className="mt-10">
             {!poolsLive.ok ? (
-              <div className="rounded-2xl bg-game-base p-6">
+              <div className="candy candy-gloss relative overflow-hidden rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,var(--color-overlay)_0%,var(--color-game-raised)_38%,var(--color-game-base)_100%)] p-6">
                 <p className="text-[16px] font-medium text-game-ink">{COPY.shell.liveDataUnavailable}</p>
                 <p className="mt-1 max-w-prose text-[13px] leading-5 text-game-ink-muted">
                   {COPY.shell.liveDataUnavailableDetail}
                 </p>
               </div>
             ) : hero ? (
-              <div className="rounded-2xl bg-game-base p-5 sm:p-6">
+              <div className="candy candy-gloss relative overflow-hidden rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,var(--color-overlay)_0%,var(--color-game-raised)_38%,var(--color-game-base)_100%)] p-5 sm:p-6">
                 <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-game-ink-muted">
                   {COPY.landing.openPoolTitle}
                 </p>
@@ -236,7 +237,7 @@ export default async function LandingPage() {
                 </p>
                 <Link
                   href={`/pools/${hero.pool}`}
-                  className="mt-3 flex h-14 items-center justify-center rounded-full bg-game-action font-display text-[18px] font-bold uppercase tracking-wide text-game-base hover:brightness-105"
+                  className="key-action mt-3 flex h-14 items-center justify-center rounded-full bg-game-action font-display text-[18px] font-bold uppercase tracking-wide text-game-base hover:brightness-105"
                 >
                   {COPY.pool.enter}
                 </Link>
@@ -282,7 +283,7 @@ export default async function LandingPage() {
             <h2 className="mb-3 font-display text-[28px] font-extrabold leading-8 text-brand-berry">
               {COPY.fixtures.title}
             </h2>
-            <ul className="overflow-hidden rounded-2xl bg-game-base">
+            <ul className="candy candy-gloss relative overflow-hidden rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,var(--color-overlay)_0%,var(--color-game-raised)_30%,var(--color-game-base)_100%)]">
               {ladder.map(({ entry, tier }) => {
                 const openPool = openByTier.get(tier);
                 const status = tierStatus.get(tier);
@@ -305,8 +306,8 @@ export default async function LandingPage() {
                     : null;
                 const row = (
                   <div
-                    className={`flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-game-raised px-4 py-3.5 sm:px-5 ${
-                      openPool ? 'bg-game-raised/40' : ''
+                    className={`flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-white/8 px-4 py-3.5 transition-colors sm:px-5 ${
+                      openPool ? 'bg-white/5 hover:bg-white/8' : ''
                     }`}
                   >
                     <span className="tnum w-24 font-display text-[17px] font-bold text-game-ink">
@@ -347,6 +348,8 @@ export default async function LandingPage() {
         </main>
       </div>
       <TabBar />
+      {/* The founder's note, once per wallet, after sign-in (2026-09-13). */}
+      <FounderWelcome />
     </>
   );
 }

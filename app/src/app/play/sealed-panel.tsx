@@ -31,6 +31,7 @@
 import Link from 'next/link';
 import { COPY } from '@/copy';
 import { BlottSprite } from '@/components/blott/BlottSprite';
+import { Card } from '@/components/ui/card';
 
 export function SealedPanel({ poolAddress }: { poolAddress: string }) {
   return (
@@ -53,25 +54,30 @@ export function SealedPanel({ poolAddress }: { poolAddress: string }) {
       <h2 className="font-display text-[34px] leading-[38px] font-extrabold text-ink">Sealed</h2>
       <p className="max-w-prose text-[15px] leading-6 text-ink-muted">{COPY.pool.sealed}</p>
 
-      <div className="flex w-full max-w-md flex-col gap-3 rounded-2xl border border-line bg-raised p-5 text-left">
+      <Card className="flex w-full max-w-md flex-col gap-3 p-5 text-left">
         <h3 className="font-display text-[24px] leading-7 font-bold text-ink">{COPY.pool.checkBackTitle}</h3>
         <p className="text-[15px] leading-6 text-ink">{COPY.pool.checkBack}</p>
-      </div>
+      </Card>
 
       <div className="flex w-full max-w-md flex-col gap-2 sm:flex-row">
         <Link
           href={`/pools/${poolAddress}`}
-          className="flex h-12 flex-1 items-center justify-center rounded-xl bg-brand px-6 text-[15px] font-semibold text-(--color-base) transition-colors hover:bg-brand-hot"
+          className="key-action flex h-12 flex-1 items-center justify-center rounded-full bg-brand px-6 text-[15px] font-semibold text-(--color-base) transition-colors hover:bg-brand-hot"
         >
           {COPY.pool.viewPool}
         </Link>
         <Link
           href={`/pools/${poolAddress}/results`}
-          className="flex h-12 flex-1 items-center justify-center rounded-xl border border-line px-6 text-[15px] font-semibold text-ink transition-colors hover:bg-overlay"
+          className="flex h-12 flex-1 items-center justify-center rounded-full border border-white/20 px-6 text-[15px] font-semibold text-ink transition-colors hover:border-brand hover:text-brand"
         >
           {COPY.pool.viewResults}
         </Link>
       </div>
+      {/* 2026-09-13: the way home. This screen had two exits, both deeper
+          into the pool; the header wordmark was the only route back. */}
+      <Link href="/" className="rounded-full text-[14px] text-ink-muted underline underline-offset-2 hover:text-ink">
+        {COPY.shell.nav.backToHome}
+      </Link>
     </section>
   );
 }

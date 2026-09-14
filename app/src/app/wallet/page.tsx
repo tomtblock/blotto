@@ -5,6 +5,7 @@
  */
 import type { Metadata } from 'next';
 import { AppHeader } from '@/components/shell/app-header';
+import { PageIntro } from '@/components/ui/page-intro';
 import { TabBar } from '@/components/shell/tab-bar';
 import { WalletCard } from '@/components/wallet/wallet-card';
 import { COPY } from '@/copy';
@@ -15,10 +16,8 @@ export default function WalletPage() {
   return (
     <>
       <AppHeader />
-      <main className="mx-auto w-full max-w-md flex-1 px-4 pt-6 pb-24">
-        <h1 className="mb-4 font-display text-[34px] leading-[38px] font-extrabold text-ink">
-          {COPY.wallet.title}
-        </h1>
+      <main id="main" className="mx-auto w-full max-w-md flex-1 px-4 pt-6 pb-24">
+        <PageIntro title={COPY.wallet.title} back={{ href: '/profile', label: COPY.shell.tabs.profile }} />
         <WalletCard />
       </main>
       <TabBar />

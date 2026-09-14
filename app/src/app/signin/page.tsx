@@ -17,7 +17,7 @@ export default function SignInPage() {
   return (
     <>
       <AppHeader />
-      <main className="mx-auto w-full max-w-md flex-1 px-4 pt-6 pb-24">
+      <main id="main" className="mx-auto w-full max-w-md flex-1 px-4 pt-6 pb-24">
         <h1 className="mb-2 font-display text-[34px] leading-[38px] font-extrabold text-ink">
           {COPY.signin.title}
         </h1>

@@ -6,6 +6,8 @@
  */
 import { COPY } from '@/copy';
 import { AppHeader } from '@/components/shell/app-header';
+import { SiteFooter } from '@/components/shell/site-footer';
+import { PageIntro } from '@/components/ui/page-intro';
 import { TabBar } from '@/components/shell/tab-bar';
 import { Card } from '@/components/ui/card';
 import { custodyView, type CustodyValue } from './custody.config';
@@ -23,11 +25,8 @@ export default function CustodyPage() {
   return (
     <>
       <AppHeader />
-      <main className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 pb-24">
-        <h1 className="mb-2 font-display text-[34px] leading-[38px] font-extrabold text-ink">
-          {c.title}
-        </h1>
-        <p className="mb-6 max-w-prose text-[15px] leading-6 text-ink-muted">{c.intro}</p>
+      <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 pb-24">
+        <PageIntro title={c.title} back={{ href: '/fair-play', label: COPY.fairPlay.title }} lead={c.intro} />
 
         <Card className="mb-6 flex flex-col gap-5 p-5">
           <div>
@@ -99,6 +98,7 @@ export default function CustodyPage() {
           {c.updatedPrefix} {view.updated}.
         </p>
       </main>
+      <SiteFooter />
       <TabBar />
     </>
   );

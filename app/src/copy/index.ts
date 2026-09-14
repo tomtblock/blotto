@@ -31,6 +31,23 @@ export const COPY = {
     liveDataUnavailable: 'Live tournament data is temporarily unavailable.',
     liveDataUnavailableDetail:
       'The data service could not be reached. Refresh in a moment — nothing on-chain is affected.',
+    // 2026-09-13 (accessibility baseline): the skip link and the footer
+    // landmark, which no page had. PHASE-N-REVIEW: drafts; founder voice.
+    skipToContent: 'Skip to content',
+    footerNavLabel: 'Rules and fairness',
+    footerVerify: 'Verify',
+    footerCustody: 'Who holds which keys',
+    // The way back from a leaf page (2026-09-13). Every informational page
+    // — rules, fair play, verify, custody, a pool, its results — is reached
+    // by a link and until now offered no route back but the browser button.
+    nav: {
+      backToPlay: 'Back to Play',
+      backToPools: 'Back to pools',
+      backToPool: 'Back to the pool',
+      backToHome: 'Back to homepage',
+      backToRules: 'Back to the rules',
+      backToWallet: 'Back to your wallet',
+    },
   },
   signin: {
     title: 'Sign in',
@@ -141,6 +158,14 @@ export const COPY = {
     linkDescription: 'Connect a wallet to your Blotto account.',
   },
   gate: {
+    // 2026-09-13: the "no pool" state used to be three literals inline in
+    // play-client.tsx — the only strings on the entry path outside this
+    // file. It is also where the header's sign-in used to land every player
+    // (return-to.ts); that default is fixed, and this panel now offers the
+    // two places a pool can be found rather than one.
+    noPoolTitle: 'No pool selected',
+    noPool: 'Pick an open tournament to enter. The open pool is on the Play tab; every pool is on the Pools tab.',
+    browsePools: 'See all pools',
     ageAttestation:
       'I confirm I am 18 or older and that entering a paid tournament for prizes is lawful where I live.',
     // D-B4: the versioned clickwrap around the line above. SUBSTANCE FIXED:
@@ -305,6 +330,10 @@ export const COPY = {
     sealed:
       'Battles are encrypted on your device to a key our systems hold locked against export until the pool closes; their hash is recorded on-chain at entry.',
     enter: 'Enter this tournament',
+    // 2026-09-13: three literals on the pool page, now here.
+    verifyThisPool: 'Verify this pool',
+    entryLabel: 'Entry',
+    resultsLink: 'Results',
     ageTerritoryNote: '18+ only · not available in some territories',
     // Founder 2026-09-09: "It must be super clear to the user that they
     // should check back when the pool has reached 64 and concluded." The
@@ -511,13 +540,17 @@ export const COPY = {
     ruleNinety:
       'Ninety seconds for all seven battles. Any battle you have not locked when the timer ends \u2014 including the one on your screen \u2014 is entered as an even split of 20 points in each of the five stats.',
     lockBattle: (n: number) => `Lock in battle ${n}`,
+    /* Dial locks (founder 2026-09-13): a locked stat keeps its value while
+     * the other dials move, and the others share what remains — shown as
+     * the dials' RANGE, never as a number (PID §4.2: no points-remaining
+     * counter). PHASE-N-REVIEW: drafts; the founder owns the words. */
+    lockStat: (name: string, value: number) => `Lock ${name} at ${value}`,
+    unlockStat: (name: string) => `Unlock ${name}`,
+    lockedStat: (name: string) => `${name} is locked`,
+    locksHint: 'A locked stat holds its value. The other dials share what is left.',
     expiredNote: 'Time ran out \u2014 every battle you had not locked was entered as the even split.',
-    montageHeadlineFirst: 'I just made my first Blott.',
-    montageHeadlineSeven: 'I just made seven Blotts.',
     montageFooter: 'BLOTTO CUP \u00b7 blotto.gg \u00b7 18+ only \u00b7 not available in some territories',
     share: 'Share',
-    shareTextFirst: 'I just made my first Blott. Join the battle at blotto.gg',
-    shareTextSeven: 'I just made seven Blotts. Join the battle at blotto.gg',
     shareFallbackCopied: 'Share line copied — the image downloaded to your device.',
     // Founder 2026-09-09: "users should be able to share this to X".
     shareX: 'Post on X',
@@ -537,6 +570,34 @@ export const COPY = {
     tileEmpty: (n: number) => `Battle ${n} — not yet made`,
     crescendo: 'All seven made.',
     crescendoLine: 'Your Blotts are in the machine. Seal them to enter the pool.',
+    // 2026-09-13: what the seal IS, one line, beside the lock. The share
+    // that used to sit here moved to the character pass, after the seal is
+    // confirmed — see reveal.passShareLine for why.
+    sealWhat:
+      'Sealing encrypts your seven battles on this device and records their hash on-chain with your entry. Your wallet will ask you to sign once.',
+    sealAfter: 'Once sealed, you draw your character pass and can share it.',
+  },
+  /*
+   * The founder's welcome (2026-09-13): a personal note in the corner of the
+   * home page the first time a wallet is signed in, then never again for
+   * that wallet. FORMAT borrowed from a reference the founder liked; the
+   * WORDS are written to PID §8.7 and are the founder's to re-voice — every
+   * line here is a draft, the name included. Substance: what this is, that
+   * results are recomputable, and what to do next. No promise this product
+   * cannot keep.
+   */
+  welcome: {
+    founderName: 'Tom',
+    founderRole: 'Founder',
+    greeting: 'Welcome to Blotto Cup.',
+    paragraphs: [
+      "I'm Tom, the founder. Thank you for joining — I mean that.",
+      'Blotto Cup is a competition of judgement: seven sealed battles, five stats to place in each, and the player ranked first takes the whole prize pool. Nothing is decided at random, and every result can be recomputed by anyone from published data.',
+      'Pick a pool, make your seven, seal them, and check back when it has played. If anything is unclear, the rules page says it plainly.',
+    ],
+    justNow: 'Just now',
+    dismiss: 'Close',
+    cta: 'Find a pool',
   },
   // v3 D3: retention surfaces — mastery and standing only. Factual state
   // changes, never pressure; the do-not-build vocabulary is CI-enforced.
@@ -588,6 +649,15 @@ export const COPY = {
     button: 'Share your result card',
   },
   results: {
+    // Share my seven (2026-09-13): the seven-Blott montage, offered only on
+    // a closed pool's results page — see results/share-seven.tsx for why it
+    // left the review screen. PHASE-N-REVIEW: drafts; the founder owns the words.
+    sevenHeadline: 'My seven battles.',
+    sevenAlt: 'Your seven Blotts, shapes only',
+    shareSevenTitle: 'Share your seven',
+    shareSevenLine:
+      'This pool has closed, so your seven Blotts can be shown. Every battle in it is on the Verify page, recomputable by anyone.',
+    shareSevenText: 'My seven Blotts from Blotto Cup — every result recomputable from published data. blotto.gg',
     paidAutomatically:
       'Prizes are paid automatically when results are committed. No claim step.',
     // Founder addendum 2026-09-07, ruling 1: the published rule is 12 hours.
@@ -732,8 +802,11 @@ export const COPY = {
     totalPrizes: 'Total prizes',
     readOnlyNote: 'Profiles are a read-only record. Nothing here affects any pool.',
     myBlots: 'My Blotts',
+    // 2026-09-13: this line said "Shapes, never numbers" — but a Blott's
+    // shape IS its numbers (components/blott/warp.ts), which is why the
+    // grid no longer offers a share. It says what is true instead.
     myBlotsNote:
-      'Every battle you have locked, as its Blott — kept on this device only. Shapes, never numbers.',
+      'Every battle you have locked, as its Blott — kept on this device only. Once a pool has closed, its results page lets you share the seven.',
   },
   custody: {
     // C13: the disclosure page. Everything here describes MECHANICS —
@@ -833,6 +906,27 @@ export const COPY = {
     rarityOf: (count: number) => `${count} of every 64 passes`,
     cardSeat: (n: number) => `Seat ${n + 1} of 64`,
     cardDone: 'Continue',
+    /*
+     * The pass as a SHAREABLE card (2026-09-13). This replaces the share
+     * that used to sit on the review screen BEFORE sealing: that one handed
+     * the player a picture of their seven Blotts, and a Blott's silhouette is
+     * a deterministic function of its five stats (components/blott/warp.ts)
+     * — so the image was the sealed allocation, readable, offered for
+     * publication while the pool was still open. The pass carries the class,
+     * the seat and the pool number: cosmetic and public, nothing sealed.
+     * PHASE-N-REVIEW: drafts; the founder owns the words.
+     */
+    passEntered: "I'm in.",
+    passPool: (n: string | number) => `Pool #${n}`,
+    passShareTitle: 'Share your pass',
+    passShareLine: 'Your seven battles stay sealed. The pass shows the look you drew and your seat — nothing more.',
+    passShareText: (n: string | number) =>
+      `I'm in Blotto Cup pool #${n}. Seven sealed battles, the winner takes the prize pool. blotto.gg`,
+    passShare: 'Share',
+    passShareX: 'Post on X',
+    passShareFallbackCopied: 'Share line copied — the pass downloaded to your device.',
+    passShareXNote: 'X opened with your line. The pass downloaded to your device — attach it to the post.',
+    passFooter: 'BLOTTO CUP · blotto.gg · 18+ only · not available in some territories',
     stalled:
       'Confirmation is taking longer than usual. Your entry is submitted and nothing further is needed — results appear on the pool page once the network confirms.',
     stalledDismiss: 'Back to the pool',

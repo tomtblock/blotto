@@ -147,12 +147,17 @@
 .blot-dial::-webkit-slider-runnable-track {
   height: 18px;
   border-radius: 9px;
+  /* Fill to the value, plain track to the dial's reach, then the stretch
+   * the locked stats hold — shaded, unreachable (dial locks, 2026-09-13).
+   * With no locks --dial-max is 100% and the last stop is empty. */
   background: linear-gradient(
     to right,
     var(--dial-colour) 0%,
     var(--dial-colour) var(--dial-fill, 0%),
     var(--color-game-raised) var(--dial-fill, 0%),
-    var(--color-game-raised) 100%
+    var(--color-game-raised) var(--dial-max, 100%),
+    color-mix(in oklab, var(--color-game-base), var(--color-blot-visor) 45%) var(--dial-max, 100%),
+    color-mix(in oklab, var(--color-game-base), var(--color-blot-visor) 45%) 100%
   );
   box-shadow:
     inset 0 2px 3px rgba(0, 0, 0, 0.35),
@@ -200,4 +205,44 @@
   outline: 3px solid var(--color-brand-cream);
   outline-offset: 4px;
   border-radius: 9px;
+}
+
+/* DIAL LOCKS (founder 2026-09-13). A locked row keeps its number and loses
+ * its knob's invitation: the track dims, the knob outlines, the padlock
+ * fills. The lock button is a 44px target; pressed state is the shut glyph
+ * plus the action colour. */
+.blot-dial-lock {
+  color: var(--color-game-ink-muted);
+  border: 1.5px solid color-mix(in oklab, var(--color-game-ink-muted), transparent 65%);
+  background: transparent;
+  transition: color 120ms linear, border-color 120ms linear, background-color 120ms linear;
+}
+.blot-dial-lock:hover:not(:disabled) {
+  color: var(--color-game-ink);
+  border-color: var(--color-game-ink-muted);
+}
+.blot-dial-lock[aria-pressed='true'] {
+  color: var(--color-game-base);
+  background: var(--color-game-action);
+  border-color: var(--color-game-action);
+}
+.blot-dial-lock:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.blot-dial-row.is-locked .blot-dial {
+  opacity: 0.55;
+}
+.blot-dial-row.is-locked .blot-dial::-webkit-slider-thumb {
+  background: var(--color-game-raised);
+  border-color: var(--color-game-ink-muted);
+  box-shadow: none;
+}
+.blot-dial-row.is-locked .blot-dial::-moz-range-thumb {
+  background: var(--color-game-raised);
+  border-color: var(--color-game-ink-muted);
+  box-shadow: none;
+}
+.blot-dial-row.is-locked .blot-dial-readout {
+  color: var(--color-game-ink-muted);
 }

@@ -200,6 +200,20 @@ export const elevation = {
   sheet: '0 -12px 48px rgba(0, 0, 0, 0.6)',
   glowAction: '0 0 24px rgba(61, 139, 255, 0.35)',
   glowPrize: '0 0 32px rgba(255, 170, 51, 0.3)',
+  /* Candy material (2026-09-13): inflated-vinyl depth for plum and light
+   * surfaces, and the pressable "key" edge for buttons. Recipes, not
+   * colours — see tokens.css for the reasoning. */
+  candy:
+    '0 1.5px 0 rgba(255, 246, 236, 0.14) inset, 0 -3px 0 rgba(42, 16, 48, 0.3) inset, ' +
+    '0 12px 28px rgba(42, 16, 48, 0.3), 0 2px 6px rgba(42, 16, 48, 0.2)',
+  candyHover:
+    '0 1.5px 0 rgba(255, 246, 236, 0.18) inset, 0 -3px 0 rgba(42, 16, 48, 0.3) inset, ' +
+    '0 18px 36px rgba(42, 16, 48, 0.34), 0 4px 10px rgba(42, 16, 48, 0.22)',
+  candyLight:
+    '0 2px 0 rgba(255, 255, 255, 0.55) inset, 0 -3px 0 rgba(214, 60, 140, 0.18) inset, ' +
+    '0 14px 32px rgba(94, 27, 64, 0.28), 0 2px 6px rgba(94, 27, 64, 0.16)',
+  keyAction: '0 4px 0 var(--color-brand-deep), 0 10px 20px rgba(42, 16, 48, 0.28)',
+  keyPrize: '0 4px 0 var(--color-blot-shade), 0 10px 20px rgba(42, 16, 48, 0.28)',
 } as const;
 
 export type PaletteToken = keyof typeof palette;

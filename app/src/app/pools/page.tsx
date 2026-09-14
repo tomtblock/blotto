@@ -13,6 +13,8 @@ import { COPY } from '@/copy';
 import { AppHeader } from '@/components/shell/app-header';
 import { TabBar } from '@/components/shell/tab-bar';
 import { Card } from '@/components/ui/card';
+import { Pill } from '@/components/ui/pill';
+import { SiteFooter } from '@/components/shell/site-footer';
 import { LiveDataUnavailable } from '@/components/shell/live-unavailable';
 import { PoolStateBlot } from '@/components/pools/PoolStateBlot';
 import { poolStateLabel } from '@/components/pools/pool-state-label';
@@ -42,14 +44,14 @@ export default async function PoolsPage() {
   return (
     <>
       <AppHeader />
-      <main className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 pb-24">
+      <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 pb-24">
         <div className="mb-5 flex items-baseline justify-between">
           <h1 className="font-display text-[34px] leading-[38px] font-extrabold text-ink">
-            Pools
+            {COPY.shell.tabs.pools}
           </h1>
           <Link
             href="/rules"
-            className="text-[13px] text-ink-muted underline underline-offset-2 hover:text-ink"
+            className="rounded-full text-[13px] text-ink-muted underline underline-offset-2 hover:text-ink"
           >
             {COPY.pool.tierTableLink}
           </Link>
@@ -81,12 +83,11 @@ export default async function PoolsPage() {
                   <ul className="flex flex-col gap-3">
                     {byTier.get(tier)!.map((p) => (
                       <li key={p.pool}>
-                        <Link href={`/pools/${p.pool}`}>
+                        <Link href={`/pools/${p.pool}`} className="block rounded-[24px]">
                           <Card
-                            className={
-                              'flex items-center gap-4 px-4 py-3 transition-colors hover:border-brand/40 ' +
-                              (p.state === 'Open' ? 'border-brand/40' : '')
-                            }
+                            interactive
+                            live={p.state === 'Open'}
+                            className="flex items-center gap-4 px-4 py-3.5"
                           >
                             {/* The 48px state object (master prompt D): the
                                 pool's lifecycle as a Blot shape. No amount
@@ -97,15 +98,18 @@ export default async function PoolsPage() {
                               entrants={p.entrants}
                               resolving={p.resolving}
                             />
-                            <span className="tnum font-mono text-[12px] text-ink-muted">
+                            <span className="tnum font-display text-[18px] font-bold text-ink">
                               #{p.id}
                             </span>
                             <span className="text-[13px] text-ink-muted">
                               {COPY.pool.entrantsOf(p.entrants, Number(MIN_SEATS))}
                             </span>
-                            <span className="ml-auto rounded-full border border-line px-2.5 py-0.5 text-[11px] uppercase tracking-[0.1em] text-ink-muted">
+                            <Pill
+                              tone={p.resolving ? 'resolving' : p.state === 'Open' ? 'open' : 'muted'}
+                              className="ml-auto"
+                            >
                               {poolStateLabel(p)}
-                            </span>
+                            </Pill>
                           </Card>
                         </Link>
                       </li>
@@ -127,18 +131,16 @@ export default async function PoolsPage() {
             <ul className="flex flex-col gap-2">
               {archived.map((p) => (
                 <li key={p.pool}>
-                  <Link href={`/pools/${p.pool}/results`}>
-                    <Card className="flex items-center gap-4 px-4 py-3 transition-colors hover:border-brand/40">
-                      <span className="tnum font-mono text-[12px] text-ink-muted">#{p.id}</span>
+                  <Link href={`/pools/${p.pool}/results`} className="block rounded-[24px]">
+                    <Card interactive className="flex items-center gap-4 px-4 py-3">
+                      <span className="tnum font-display text-[16px] font-bold text-ink">#{p.id}</span>
                       <span className="text-[13px] text-ink-muted">
                         {COPY.pool.tierEntry(lamportsToSol(p.entry_lamports))}
                       </span>
                       <span className="tnum text-[13px] font-semibold text-prize">
                         {COPY.pool.tierPot(lamportsToSol(p.pot_lamports))}
                       </span>
-                      <span className="ml-auto rounded-full border border-line px-2.5 py-0.5 text-[11px] uppercase tracking-[0.1em] text-ink-muted">
-                        {p.state}
-                      </span>
+                      <Pill className="ml-auto">{p.state}</Pill>
                     </Card>
                   </Link>
                 </li>
@@ -147,6 +149,7 @@ export default async function PoolsPage() {
           </section>
         )}
       </main>
+      <SiteFooter />
       <TabBar />
     </>
   );

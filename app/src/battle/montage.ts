@@ -2,9 +2,18 @@
  * The Seven-made montage (master prompt C5): 1080×1350, candy-pink field,
  * seven cream tiles in a 4+3 grid, mono battle labels, the headline, and
  * the age/territory footer BAKED INTO THE PIXELS — a shared image carries
- * its own disclosure wherever it travels. Shapes only: the stills contain
- * no numbers (render-still guarantees it), so nothing leaks before the
- * pool closes. Composed entirely in the browser.
+ * its own disclosure wherever it travels. Composed entirely in the browser.
+ *
+ * OFFERED ONLY AFTER THE POOL HAS CLOSED (2026-09-13). This header used to
+ * say "the stills contain no numbers, so nothing leaks before the pool
+ * closes" — and that inference was wrong. A still is the allocation drawn:
+ * the Blott's silhouette is a deterministic, per-stat-monotone function of
+ * its five stats (components/blott/warp.ts, blotGeometry.ts), so seven
+ * labelled stills ARE the seven sealed line-ups, readable from the image.
+ * The montage therefore left the review screen, where it was offered
+ * before sealing, and is composed only on a closed pool's results page
+ * (pools/[pool]/results/share-seven.tsx), where nothing can be countered.
+ * The stills themselves never leave the device before then (stills.ts).
  */
 
 import { COPY } from '@/copy';
