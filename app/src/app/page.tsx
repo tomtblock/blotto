@@ -38,7 +38,7 @@ const HERO_TIERS: readonly ClipTier[] = [
 import { LiveDemo } from '@/components/landing/LiveDemo';
 import { HowItWorksCarousel } from '@/components/landing/HowItWorksCarousel';
 import { PreloaderGate } from '@/components/preloader/PreloaderGate';
-import { FounderWelcome } from '@/components/landing/FounderWelcome';
+import { WelcomeNote } from '@/components/landing/WelcomeNote';
 
 /** Seat-fill ring in game colours (the arena ProgressRing is blue). */
 function SeatRing({ entrants }: { entrants: number }) {
@@ -349,7 +349,7 @@ export default async function LandingPage() {
       </div>
       <TabBar />
       {/* The founder's note, once per wallet, after sign-in (2026-09-13). */}
-      <FounderWelcome />
+      <WelcomeNote />
     </>
   );
 }

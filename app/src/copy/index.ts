@@ -578,20 +578,24 @@ export const COPY = {
     sealAfter: 'Once sealed, you draw your character pass and can share it.',
   },
   /*
-   * The founder's welcome (2026-09-13): a personal note in the corner of the
-   * home page the first time a wallet is signed in, then never again for
-   * that wallet. FORMAT borrowed from a reference the founder liked; the
-   * WORDS are written to PID §8.7 and are the founder's to re-voice — every
-   * line here is a draft, the name included. Substance: what this is, that
-   * results are recomputable, and what to do next. No promise this product
-   * cannot keep.
+   * The welcome note (2026-09-13; re-voiced 2026-09-14): a short note in the
+   * corner of the home page the first time a wallet is signed in, then never
+   * again for that wallet. FORMAT borrowed from a reference the founder
+   * liked; the WORDS are written to PID §8.7 and are the founder's to
+   * re-voice — every line here is a draft.
+   *
+   * IT IS SIGNED BY THE TEAM, AND NAMES NO INDIVIDUAL (founder instruction
+   * 2026-09-14). It was signed with the founder's first name until then.
+   * `teamName` is the whole of the signature: there is no person to put a
+   * role beside, so the role line is gone rather than re-pointed. Substance
+   * is unchanged — what this is, that results are recomputable, and what to
+   * do next. No promise this product cannot keep.
    */
   welcome: {
-    founderName: 'Tom',
-    founderRole: 'Founder',
+    teamName: 'The Blotto Cup team',
     greeting: 'Welcome to Blotto Cup.',
     paragraphs: [
-      "I'm Tom, the founder. Thank you for joining — I mean that.",
+      "We're the Blotto Cup team. Thank you for joining — we mean that.",
       'Blotto Cup is a competition of judgement: seven sealed battles, five stats to place in each, and the player ranked first takes the whole prize pool. Nothing is decided at random, and every result can be recomputed by anyone from published data.',
       'Pick a pool, make your seven, seal them, and check back when it has played. If anything is unclear, the rules page says it plainly.',
     ],

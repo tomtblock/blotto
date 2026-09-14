@@ -1,12 +1,18 @@
 'use client';
 
 /*
- * The founder's welcome (2026-09-13): a personal note, bottom-right of the
- * home page, the first time a wallet is signed in — then never again for
- * that wallet. The founder liked the FORMAT of a message they saw elsewhere
- * (avatar, a first name, "just now", a card in the corner); the words here
- * are written to PID §8.7 and are theirs to re-voice (copy/index.ts →
- * welcome).
+ * The welcome note (2026-09-13; re-voiced 2026-09-14): a short note from the
+ * TEAM, bottom-right of the home page, the first time a wallet is signed in
+ * — then never again for that wallet. The founder liked the FORMAT of a
+ * message they saw elsewhere (avatar, a name, "just now", a card in the
+ * corner); the words here are written to PID §8.7 and are theirs to re-voice
+ * (copy/index.ts → welcome).
+ *
+ * NO INDIVIDUAL IS NAMED, here or in the copy. It was signed with the
+ * founder's first name and the role "Founder" until 2026-09-14, when the
+ * founder instructed that it come from the team instead; `welcome.teamName`
+ * is the whole of the signature, and this file was `FounderWelcome.tsx`
+ * until the same change.
  *
  * Behaviour: appears ~1 s after sign-in resolves on `/`, dismisses on the
  * close button, Escape, or the call to action; remembers the dismissal per
@@ -25,7 +31,7 @@ import { BlottSprite } from '@/components/blott/BlottSprite';
 const KEY = (wallet: string) => `blotto:welcomed:${wallet}`;
 const APPEAR_MS = 900;
 
-export function FounderWelcome() {
+export function WelcomeNote() {
   const { status, walletAddress } = useAuth();
   const [open, setOpen] = useState(false);
   const w = COPY.welcome;
@@ -67,7 +73,7 @@ export function FounderWelcome() {
       role="status"
       aria-live="polite"
       aria-label={w.greeting}
-      data-testid="founder-welcome"
+      data-testid="welcome-note"
       className="fixed right-4 bottom-[calc(4rem+1rem+env(safe-area-inset-bottom))] z-50 w-[min(24rem,calc(100vw-2rem))] animate-rise sm:right-6"
     >
       <Card tone="light" className="p-5">
@@ -83,7 +89,7 @@ export function FounderWelcome() {
         </button>
         <div className="flex items-start gap-3">
           <div className="relative -mt-1 -ml-1 h-14 w-14 shrink-0">
-            <BlottSprite pose="wave" size={56} label={w.founderName} />
+            <BlottSprite pose="wave" size={56} label={w.teamName} />
           </div>
           <div className="min-w-0 pr-8">
             <h2 className="font-display text-[22px] leading-6 font-extrabold text-brand-berry">{w.greeting}</h2>
@@ -93,7 +99,7 @@ export function FounderWelcome() {
               ))}
             </div>
             <p className="mt-3 text-[12px] text-brand-berry/60">
-              {w.founderName} · {w.founderRole} · {w.justNow}
+              {w.teamName} · {w.justNow}
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <Link
