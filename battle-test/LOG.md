@@ -40,3 +40,5 @@
 2026-09-15 23:35 UTC | cc      | —  | MANUAL.md amended in place: banner + §0.1, §0.3, §1, §3.1, §4.0, §7.3, §9, §12. WP0 acceptance met | battle-test/MANUAL.md
 2026-09-15 23:36 UTC | cc      | —  | enter.ts now drives from the frozen plan (--plan): seat list, generator and seed all come from the committed prediction. Dry run over T1's 10 seats OK, 10 distinct battle hashes | scripts/enter.ts
 2026-09-15 23:36 UTC | cc      | —  | CORRECTION (2nd): four more lines carried estimated rather than read clock times. Corrected. Rule adopted: read the clock before writing a log line, never estimate | —
+2026-09-15 23:39 UTC | cc      | —  | T1 opening balances captured BEFORE any entry: funder 7.999995, treasury 1.9967488, UI-A 4.9911176, UI-B 9.9911219, 72 headless 2.0 total (slot 499011584) | evidence/T1/balances-before-T1.json
+2026-09-15 23:39 UTC | cc      | —  | CI on PR #132 head 3becf58: standing-rules, gitleaks, rust, postgres, security-sweep and all 3 rehearsal jobs PASS; app build + browser journey still running | —
