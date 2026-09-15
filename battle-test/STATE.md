@@ -1,12 +1,12 @@
-# STATE — 2026-09-15 20:25 local (UTC−3) — by Claude Code
+# STATE — 2026-09-15 20:30 local (23:30 UTC) — by Claude Code
 
-Phase:            WP0 complete (DRIFT.md written, 0 unresolved rows) · T1 plan frozen and awaiting merge
-Waiting on:       founder — read DRIFT.md §A and §G (P-02), then merge the WP0 PR. Then **F-12 at 22:46**.
+Phase:            WP0 complete · WP4 (enter.ts) built and proven by simulation · T1 plan frozen, awaiting merge
+Waiting on:       founder — read DRIFT.md §A and §G (P-02), then **merge PR #132 before 22:40**. Then F-12 at 22:46.
 After that:       F-19 ~10:46 Wed (T1 deadline) · F-01b more faucet before the first full pool
 Live deadlines:   pool 13 (tier 0, 0 entrants, NOT a test) closes 22:41 tonight → pool 14 opens ~22:46 = **T1**
                   T1 deadline ~10:46 Wed
-Blocked:          headless entries — enter.ts is not built (WP4). T1 degrades honestly to its UI seats if it
-                  is not ready inside the 12-hour window; missing seats reconcile as ABSENT.
+Blocked:          nothing. enter.ts is built and its register leg SIMULATED OK against the deployed program
+                  (71796 CU, no state written). T1's ten headless seats can land as soon as pool 14 opens.
 Results so far:   T1 plan frozen, not yet entered · T2–T8 not started
 
 Decisions taken since P-01 (all recorded in DRIFT.md §G):
@@ -22,6 +22,11 @@ Decisions taken since P-01 (all recorded in DRIFT.md §G):
     T3's pause, forfeit-escrow for T7.
   - **Two UI accounts, not three.** Roles rotate per pool instead of being fixed to a wallet.
 
+WP4 findings (both would have failed T1 at 22:46 if found then):
+  - the packet service refuses any wallet with no stored attestation at the current terms version; the
+    manual never mentions this because in the app it is the clickwrap. enter.ts attests first.
+  - the packet service answers in base64, not hex. Decoding corrected against app/src/entry/services.ts.
+
 Verified on chain tonight (Helius devnet RPC):
   config 484 bytes and pool 849 bytes — migrations done, no legacy 52-seat pool open
   fill_deadline − opened_at = 43200 on pool 13 · cooldown 300 s · keeper = settlement signer
@@ -33,7 +38,8 @@ Verified on chain tonight (Helius devnet RPC):
 Open founder questions (DRIFT.md §G5), none blocking tonight:
   Q6 admin signing — direct keypair or Squads proposal? (blocks T3's pause, T7's forfeit)
   Q7 who holds reviewer key 4ydb…wcL1? (blocks T7 entirely)
-  Q8 geo stub or vendor? (Claude Code tests this itself with one packet request)
+  Q8 ANSWERED — the geo gate PASSES from this container. The earlier 403 was a missing age/terms
+     attestation, which enter.ts now makes for each wallet exactly as the app's clickwrap does.
   Q9 Playwright — build it, or record quota 0 against roadmap 5.1? (recommend quota 0)
   Q10 tiers 1–6 carry superseded economics — recommend leaving them, logged as a product follow-up
 
