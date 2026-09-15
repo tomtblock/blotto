@@ -378,7 +378,9 @@ If `enter.ts` is not ready inside T1's 12-hour window, the nine headless seats r
 
 ### G5. Unresolved rows
 
-**0.** Every row above is either carried into the manual amendment in this PR, or recorded as an explicit founder question below. The five questions do not block WP0; they block specific later actions, named per question.
+**0.** The manual was amended in place on 2026-09-15 (banner plus §0.1, §0.3, §1, §3.1, §4.0, §7.3,
+§9 and §12), so every *changed* or *gone* row above is now carried in the document a reader picks up
+cold. `FOUNDER-ACTIONS.md` carries the founder-facing rewrite. Every row above is either carried into the manual amendment in this PR, or recorded as an explicit founder question below. The five questions do not block WP0; they block specific later actions, named per question.
 
 | # | Question | Blocks | Recommendation |
 |---|---|---|---|

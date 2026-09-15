@@ -1,5 +1,35 @@
 # Blotto Cup — Devnet Battle-Test Manual
 
+> ## AMENDED 2026-09-15 — read this box before anything else
+>
+> The drift check (WP0) read every claim in this document against the live tree and the deployed
+> program. **`DRIFT.md` is authoritative wherever it and this manual disagree**, and the sections
+> below have been amended in place. The amendments, shortest form:
+>
+> 1. **A pool with 40 or more seats plays.** `MIN_SEATS` is 40 and `seal_at_deadline` seals any pool
+>    at or above it. Only a pool **below 40** refunds. §0.1, §1 and the §9 cards are rewritten.
+> 2. **Rank 1 takes the whole pot.** One paid place. There is no top 16, no 270/1024 band, no
+>    1.35 SOL, and nothing to predict but the ranking itself.
+> 3. **The 12-hour deadline is already live** and is settable at runtime by an admin instruction.
+>    §4.0's eleven-point change is already done; it survives only as a verification.
+> 4. **Every test runs on tier 0.** Tier 1 cannot be opened — the admin tool refuses a tier whose
+>    live economics differ from the ratified table, and tiers 1–6 on chain still carry a superseded
+>    derivation. §4.9 and §4.10 as written were mutually exclusive.
+> 5. **The pentagon is gone**: five slider dials with per-stat locks, one 90-second clock for the
+>    whole run that starts on the first dial movement, and an expiry that enters the **even split**
+>    rather than the shape on screen. §7.3 is rewritten.
+> 6. **`forfeit_escrow` moves no lamports** and **detection never flags by itself**. §9's T7 is
+>    rewritten; a forfeit is a reviewer decision plus a separate admin transaction.
+> 7. **Two UI accounts, not three**, and there is no email login — the app offers Google, Apple, X
+>    and wallet. Roles rotate per pool.
+> 8. **A headless entrant must first record an age and terms attestation**, which the app performs
+>    as its clickwrap. Without it the packet service refuses with a generic 403. Not in the original
+>    text at all; found by probing the live service.
+>
+> Founder instructions live in **`FOUNDER-ACTIONS.md`**, which is written against the control that
+> exists today. Where this manual still describes the old one, that file wins.
+
+
 **Version 1.2 · 15 September 2026 · Owner: founder · Driver: Claude Code · Companion to roadmap Phase 5 and `docs/devnet-rehearsal.md`**
 
 This manual is designed to be picked up cold by either party. Claude Code drives: it runs the tooling, keeps the records, and tells the founder what to do and when. The founder does the things only a human with the accounts and the admin key can do — and those are listed, timed and numbered in §3 so nothing arrives as a surprise. If you close this for a week and come back, read `STATE.md` and `LOG.md` first (§2.3), then the schedule (§3).
@@ -10,32 +40,57 @@ This manual is designed to be picked up cold by either party. Claude Code drives
 
 The brief as originally written cannot be executed against the program that is deployed, and this manual itself was written from a snapshot. Four things need saying first.
 
-**1. There is no partial-fill pool.** Decision R7 (roadmap §1.2) removed it: *"full 64 or automatic full refund. No partial-fill pools in v1."* The program enforces it — `refund.rs` is titled "full 64 or full refund" and `register.rs` seals only at `entrants == 64`. The PID v0.5 text about 32–63 entrants running at reduced size is superseded, and the rules copy already says so. So "pool runs at 40" and "pool runs with 40–63 players" do not exist. What does exist, and is the correct thing to test, is that a pool at 40 and a pool at 63 both refund every lamport after the deadline — the 63-seat case is roadmap step 5.2 verbatim. §1 is mapped accordingly. Partial-fill is a v2 program change, not a test.
+**1. A pool with at least 40 seats PLAYS; only a pool below 40 refunds.** *(Amended — the original
+text here said the opposite.)* R7's "full 64 or automatic full refund" was superseded by D-E4 and
+R7-b: `MIN_SEATS` is **40** (`constants.rs:75`), and at the fill deadline `seal_at_deadline`
+(`seal.rs:64-67`) seals any pool holding at least that many, which then scores and pays. Only below
+40 does `trigger_refund` apply (`refund.rs:75`); calling it on a larger field reverts with
+`FieldReached` (6052). A pool still seals immediately at the 64th seat. So "a pool at 40 and a pool
+at 63 both refund" — the original claim — is false, and the two tests built on it are remapped in §1:
+**T2 tests 39 seats, the last count that refunds; T3 tests 40, the first that plays.**
 
 **2. This is devnet, not testnet.** The program, Irys uploads, the Switchboard queue, the Privy RPC config and every script default to devnet. Nothing is deployed to testnet. All evidence carries `?cluster=devnet` and the report says devnet.
 
-**3. The fill deadline is a compiled constant, now 12 hours.** `FILL_DEADLINE_SECS` in `constants.rs` is written into each pool at `open_pool`; there is no admin flag and devnet's clock cannot be warped. The founder's 12-hour decision (2026-09-15, amending R7) is landed in code and docs on Day 0 — §4.0 is the change-control list. Two consequences: the three refund tests settle in 12 hours, so they run back-to-back on one tier rather than in parallel on three, which cuts the week's pot capital by two thirds; and a pool opened before the upgrade keeps its old 72-hour deadline, because `fill_deadline` is a stored field. Any pool open before Day 0 is closed out or excluded.
+**3. The fill deadline is already 12 hours, and it is admin-settable.** *(Amended.)* The constant is
+`DEFAULT_FILL_DEADLINE_SECS` (not `FILL_DEADLINE_SECS`), it has read `12 * 60 * 60` since the founder
+ruling of 2026-09-07, and it only *seeds* `Config.fill_deadline_seconds`, which is copied onto each
+pool at open. The live value on chain reads 43200. There **is** an admin flag — `set_pool_timing`
+(`admin.rs:184-200`) — so the original claim that the deadline cannot be moved is wrong; it applies
+to pools opened from then on and never rewrites a deadline players already entered under. §4.0's
+eleven-point change-control list is therefore already landed and survives only as the on-chain
+verification at its point 11. There is also a **five-minute cooldown** between a tier's pools
+(`DEFAULT_COOLDOWN_SECS`), which this manual nowhere mentions and every schedule line depends on.
 
 **4. This manual is a snapshot and must be verified against the live repo before anything runs.** It was written from the PID, the roadmap, the decision register and a read of the code as they stood on 15 September 2026 — not from a build. Things have moved since some of those were written: the allocation screen is described here as a draggable pentagon, and that feature has evolved; `admin.ts` flags, DOM selectors in the Playwright spec, the `assignPrizes` signature, `Entry::LEN`, and whether `deviceHash()` and `__BLOTTO_TEST_SIGNER__` are live are all things the repo knows and this document only remembers. So the **first work package is a drift check** (§2.5, and WP0 in the session prompt): Claude Code reads the manual against the tree, writes `battle-test/DRIFT.md` listing every assumption that is stale, and amends the manual by PR — including rewriting every founder instruction that describes the UI so it describes the UI that exists — before Day 0 starts. Nothing in §3 onward is trusted until `DRIFT.md` says so.
 
 ---
 
-## 1. The test matrix
+## 1. The test matrix — AMENDED
 
-Eight tests. Five are the founder's required set; three close roadmap gates cheaply.
+Eight tests. The entrant counts and expected states below are the amended ones; the originals assumed
+a 64-or-refund program and a sixteen-place prize table, and neither exists.
 
 | # | Test | Entrants | Tier | Expected terminal state | Roadmap |
 |---|---|---|---|---|---|
-| T1 | Refund, sparse | 12 (3 UI + 9 headless) | 1 | `Closed` after 12h; 12 × full refund | 5.2 |
-| T2 | Refund at 40 | 40 (3 UI + 37 headless) | 1 | `Closed` after 12h; 40 × full refund | 5.2 / R7 |
-| T3 | Refund at 63 + pause mid-fill | 63 (3 UI + 60 headless) | 1 | `Closed` after 12h; 63 × full refund; one paused attempt rejected | 5.2 |
-| T4 | Full pool — **UI wallet wins** | 64 (3 UI + 61 headless) | 0 | `Paid`; UI-A rank 1 | 5.1 |
-| T5 | Full pool — **headless wallet wins** | 64 (3 UI + 61 headless) | 0 | `Paid`; W63 rank 1; no UI wallet paid | 5.1 |
-| T6 | Oversubscribed + load | 64 land, 9 more attempt | 0 | `Sealed` at exactly 64; 9 reverts; fill < 5 min; crank < 2 min | 5.4 |
-| T7 | Same-device hard block → review | 64 (2 UI from one browser) | 0 | `Paid` with 2 seats escrowed; release one, forfeit one | 4.3 / 4.4 |
-| T8 | Verify page + non-founder recompute | — (uses T4–T7) | — | Every `results_root` independently reproduced | 5.3 |
+| T1 | Refund, sparse | 12 (2 UI + 10 headless) | 0 | `Closed` after 12h; 12 × full refund | 5.2 |
+| T2 | Refund at the boundary | **39** (2 UI + 37 headless) | 0 | `Closed` after 12h; 39 × full refund | 5.2 / R7-b |
+| T3 | **Seal at the minimum field** + pause mid-fill | **40** (2 UI + 38 headless) | 0 | **`Paid`** — seals at the deadline, rank 1 takes the pot; one paused attempt rejected | 5.2 / D-E4 |
+| T4 | Full pool — **UI wallet wins** | 64 (2 UI + 62 headless) | 0 | `Paid`; UI-A rank 1, paid the whole pot | 5.1 |
+| T5 | Full pool — **headless wallet wins** | 64 (2 UI + 62 headless) | 0 | `Paid`; W63 rank 1; no UI wallet paid | 5.1 |
+| T6 | Oversubscribed + load | 64 land, 9 more attempt | 0 | `Sealed` at exactly 64; 9 reverts with `PoolNotOpen` (6000); fill < 5 min; crank < 2 min | 5.4 |
+| T7 | Same-device → review | 64 (2 UI from one browser) | 0 | `Paid` with 2 seats escrowed; release one, forfeit one | 4.3 / 4.4 |
+| T8 | Verify page + non-founder recompute | — (uses T3–T7) | — | Every `results_root` independently reproduced | 5.3 |
 
-Two tiers are open all week. **Tier 0** carries the four full pools, each settling within minutes of its 64th entry. **Tier 1** carries the three refund pools back-to-back: 12 hours each, and the daemon opens the next tier-1 pool the moment one closes. Pools per tier are sequential, so T1 → T2 → T3 is a forced order and the tier-1 chain is the critical path — about 36 hours plus fill time. It starts at 09:00 on Day 1 so that all three deadlines fall in waking hours.
+**Everything runs on tier 0, sequentially.** Tier 1 cannot be opened (`DRIFT.md` §F2), and pools per
+tier are sequential (D-A1), so the tests run one after another rather than two tiers in parallel. A
+deadline test occupies a 12-hour cycle; a full pool settles minutes after its 64th entry. The
+schedule in §3.1 is rewritten around that and around the founder's 11:00 / 23:00 availability.
+
+**Three consequences worth stating plainly.** T3 is no longer a refund test: at exactly the minimum
+field it seals at its deadline and pays, which exercises the fork the program actually defends and
+the site actually advertises. T6's predicted error is `PoolNotOpen` (6000), not `PoolFull` — the 64th
+entry seals the pool, so a 65th fails the state gate before it reaches the capacity gate. And the
+63-seat case is dropped: mechanically it is identical to 40.
 
 ---
 
@@ -127,43 +182,31 @@ Columns: local time · actor (`founder`, `cc`, `daemon`, `chain`) · test · eve
 
 Four days, Monday to Thursday. Times are local and assume tier 1 opens at exactly 09:00 on Day 1; if that slips, every tier-1 time slips with it and Claude Code re-issues the schedule. Founder time is roughly three hours a day, in blocks, never continuous — the rest of the day is Claude Code's.
 
-### 3.1 The calendar
+### 3.1 The calendar — AMENDED
 
-| Day | Time | F-ID | What the founder does | ~Min |
+*Rebuilt around one tier, a sequential pool order, and the founder's 11:00 / 23:00 availability.
+Times are local. Each pool's successor opens five minutes after it closes, so the cycle drifts a few
+minutes later each day; Claude Code re-issues the times from the actual `fill_deadline` on chain
+rather than from this table.*
+
+| Pool | Test | Opens | Settles / closes | Founder actions |
 |---|---|---|---|---|
-| **0 Mon** | 09:00 | F-01 | Faucet transfers into the funder address Claude Code gives you; repeat through the day until it holds the `CAPITAL.md` total (expect ~30 SOL before shrinking anything) | 5 × 6 |
-| | 09:30 | F-02 | Create UI-A/B/C (three email logins, three browser profiles), sign clickwrap, send addresses + screenshots | 30 |
-| | 11:00 | F-03 | Review and merge the change-control PR; run `deploy-devnet.sh`; send upgrade signature | 20 |
-| | 14:00 | F-04 | Run `set-tier-economics --tier 1` as prepared; send signature | 5 |
-| | 14:10 | F-05 | Run `fund-platform-wallet`; send signature | 5 |
-| | 15:00 | F-06 | Pentagon drag practice against the fixture pool until ≥ 26 on three stats in under 10 s, reliably | 15 |
-| | 15:20 | F-07 | UI dry run with UI-A to the review screen — **abandon before paying** | 10 |
-| | 17:00 | F-08 | Read `ENVIRONMENT.md`, `CAPITAL.md`; confirm the §4.14 gate; approve Day 1 | 15 |
-| **1 Tue** | 09:00 | F-11 | Run `set-open-tiers 1,1,0,0,0,0,0`; send signature; confirm two pools opened and T1's deadline is 21:00 | 10 |
-| | 09:15 | F-12 | T1 UI entries ×3, played naturally | 20 |
-| | 10:00 | F-13 | Merge T4 freeze PR | 3 |
-| | 10:15 | F-14 | T4 UI entries: A winner, B loser, C timer-expiry | 25 |
-| | ~11:30 | F-15 | T4 settled — screenshot pool ranking and A/B/C profile pages | 10 |
-| | 13:00 | F-16 | Merge T5 freeze PR | 3 |
-| | 13:15 | F-17 | T5 UI entries ×3, all capped (no stat above 25) | 20 |
-| | ~14:15 | F-18 | T5 settled — screenshot the losing experience for all three | 10 |
-| | 21:00 | F-19 | T1 deadline — after refunds land, screenshot UI balances and the Closed pool page | 10 |
-| | 21:15 | F-20 | T2 pool is now open — T2 UI entries ×3, played naturally | 20 |
-| **2 Wed** | 09:05 | F-21 | T2 deadline — screenshots as F-19 | 10 |
-| | 09:30 | F-22 | T3 UI entries ×3, played naturally | 20 |
-| | ~10:00 | F-23 | On Claude Code's call at ~30 entrants: `set-paused true`; UI-C attempts an entry, screenshot; `set-paused false`; send both signatures | 10 |
-| | 11:00 | F-24 | Merge T6 freeze PR | 3 |
-| | 11:15 | F-25 | T6: UI-A and UI-B enter normally, then **wait** | 15 |
-| | on call | F-26 | On Claude Code's "GO" at 62/64: UI-C starts a session, takes the full 90 s, submits; screenshot the rejection | 5 |
-| | ~12:00 | F-27 | T6 settled — screenshots; confirm UI-C was not charged | 10 |
-| | 14:00 | F-28 | T7 (if testable): merge freeze PR; UI-A and UI-B from **one** browser profile, UI-C separate; all capped | 25 |
-| | ~15:00 | F-29 | T7 review page: release UI-A, forfeit UI-B; send both signatures | 10 |
-| | 21:10 | F-30 | T3 deadline — screenshots as F-19 | 10 |
-| **3 Thu** | 10:00 | F-31 | T8: hand the four bundles and `oracle.ts` to a non-founder; collect one signed line per pool | 60 (theirs) |
-| | 11:00 | F-32 | Run `set-open-tiers 1,0,0,0,0,0,0` to close tier 1; send signature | 5 |
-| | 15:00 | F-33 | Review `REPORT.md`; resolve every open item; sign off | 45 |
+| 14 | **T1** refund, 12 seats | Day 0, 22:46 | Day 1, ~10:46 | F-12 entries at open · F-19 at the deadline |
+| 15 | **T4** full, UI wins | Day 1, ~10:56 | ~11:40 | freeze merge · entries · settled screenshots |
+| 16 | **T5** full, headless wins | Day 1, ~11:45 | ~12:30 | freeze merge · entries · settled screenshots |
+| 17 | **T6** oversubscribed | Day 1, ~12:35 | ~13:20 | freeze merge · two entries then wait · the late attempt on call |
+| 18 | **T7** same device → review | Day 1, ~13:25 | ~14:30 | freeze merge · both accounts from one profile · the review decision + the admin forfeit |
+| 19 | **T2** refund at 39 | Day 1, ~22:46 | Day 2, ~10:46 | entries at open · deadline screenshots |
+| 20 | **T3** seal at 40 + pause | Day 2, ~10:56 | Day 2, ~22:56 | entries · the pause on call · deadline screenshots |
+| — | **T8** verify + recompute | Day 3 | — | hand the bundles to a non-founder |
 
-F-09 and F-10 are reserved for Day 0 contingencies (a re-deploy, a second faucet round). Claude Code assigns them if needed.
+**Deleted from the original calendar**, all three because the work is already done or cannot be done
+(`DRIFT.md` §G2): the change-control merge and deploy, the tier-1 economics call, and the
+open-tiers call. Tier 0 is already open at ratified economics and the deadline is already 12 hours.
+**Two admin writes remain in the whole week**: the pause on and off for T3, and the forfeit for T7.
+
+Every founder action is defined in **`FOUNDER-ACTIONS.md`** with its exact steps. That file, not this
+table, is what the founder follows.
 
 ### 3.2 What each block feels like
 
@@ -187,24 +230,28 @@ Day 0 is a full working day for Claude Code and about three hours, in blocks, fo
 
 **The trap, restated.** Pools per tier are sequential. A "just to see" registration into an open pool locks that tier for 12 hours and cannot be undone. Never register into a pool that is not a named test. This is why §4.8 measures cost off-chain.
 
-### 4.0 Land the 12-hour decision first — change control (Claude Code prepares, founder merges: F-03)
+### 4.0 The 12-hour decision — ALREADY LANDED, verify only (AMENDED)
 
-The deadline is a compiled constant whose doc comment cites a ratified decision, and `CLAUDE.md`'s rule is that no value is invented. So the register is amended before the code. One PR, eleven points, in order:
+*The original eleven-point change-control list is deleted. Every point was either already done before
+this manual was written or describes a file that does not say what the manual claimed.* The founder
+ruling of 2026-09-07 (D-E6) landed the 12-hour deadline in the program, the shared constants, the
+rules copy and the tests; the rules test now **forbids** the old figure rather than asserting it, and
+the app's copy carries no hard-coded hours at all — it interpolates from the shared constant. The
+deployed program matches the branch (`check-deployed`, run 2026-09-15).
 
-1. **`docs/BUILD-ROADMAP_v1.0.md`, R7** — append a dated amendment; do not overwrite:
-   > **R7 (amended 2026-09-15): fill deadline 12 hours**, was 72. Rationale: a stalled pool holds its tier and its pre-funded pot for the whole window (pools per tier are sequential), so a shorter deadline recycles a dead tier six times faster. Accepted cost: 12 hours cannot span a sleep cycle or a weekend, so at low fill rates more pools refund, and each refunded entry leaves the entrant out of pocket for Entry PDA and pass-asset rent, which the 100% guarantee does not cover. Revisit on R17's observed fill rates. Full 64 or full refund is unchanged.
-2. **`docs/PID_Blotto-Cup_v0.5.md`** — §2 "Fill deadline 72 hours" → 12; §7 diagram and §8.6 if they name it. Mark §2's "32–63 run at reduced size" and §11 D1 as superseded by R7.
-3. **`programs/blotto_cup/src/constants.rs`** — `FILL_DEADLINE_SECS: i64 = 12 * 60 * 60;` with the citation "(PID §2, roadmap R7 as amended 2026-09-15)".
-4. **`programs/blotto_cup/src/instructions/refund.rs`** — header comment says "72h".
-5. **`app/src/copy/index.ts`** — `rules.refund` and `pool.refundRule` both say "within 72 hours". One is the C4 published rule; wording must match the code.
-6. **`app/src/app/rules/rules.config.test.ts`** — asserts the copy contains `'72 hours'`. **It fails before you touch it; that is the tripwire working.** Change it to `'12 hours'` after the copy, never before.
-7. **`app/src/rules/README.md`** — "fill deadline (72 hours), the minimum fill (32)": both halves wrong; fix both.
-8. **Grep for stragglers** — `72 \* 3600`, `72h`, `72 hours`, `259200`. Known: `tests/litesvm/tests/lifecycle.rs` advances the clock by a literal. Replace every literal with an import of `FILL_DEADLINE_SECS`.
-9. **Full suite green** — `cargo test`, LiteSVM, `vitest`, `check-language.sh`, `check-standing-rules.sh`.
-10. **Deploy** (founder, F-03) — `deploy-devnet.sh`; same-size build, no programdata extension. Upgrade signature and build SHA into `ENVIRONMENT.md`.
-11. **Confirm on-chain** — on the first pool opened in §4.10, `fill_deadline − opened_at == 43200`. If it is 259200, the upgrade did not land.
+What survives is the verification, and it is a read:
 
-**One product flag, then dropped.** A refunded entrant gets `entry_lamports` back in full but not the Entry PDA or pass-asset rent, which the program keeps. At 12 hours with a small launch audience, refunded pools may be common. The measured figure from §4.8 says whether that is material against a 0.1 SOL entry; if it is, it belongs on the rules page and in the R7 amendment. Phase 6's problem — record it and move on.
+- `admin.ts status` prints `fill deadline: 43200 s` and `cooldown: 300 s`.
+- On the first pool opened, `fill_deadline − opened_at == Config.fill_deadline_seconds`. Read
+  `opened_at` from the Pool account: the `PoolOpened` event does not carry it.
+- If the deadline ever needs to move mid-week, `set_pool_timing` is the admin instruction. It affects
+  pools opened from then on and never rewrites one players have already entered.
+
+**One flag, then dropped.** A refunded entrant gets `entry_lamports` back in full but not the Entry
+account's rent or the pass asset's, which the program keeps: **0.004436 SOL per entry**, measured on
+devnet 2026-09-11 (`docs/INFRASTRUCTURE.md`). Every pool opened also sinks one vault rent cushion of
+**0.00065024 SOL**, measured 2026-09-15, which is never recovered. Both belong in the conservation
+table; whether they belong on the rules page is Phase 6's problem.
 
 ### 4.1 Confirm the environment is up (Claude Code)
 
@@ -680,20 +727,43 @@ Because the whole field is yours, outcomes are constructed, not hoped for.
 
 **Mid-table — even split.** 20 × 5 against `cappedField` finishes in the middle. Letting the timer expire seven times produces exactly this (R9 lock-current) and tests that rule for free.
 
-### 7.3 Through the UI, under a 15-second timer
+### 7.3 Through the UI — AMENDED for the control that exists
 
-*Written against the pentagon-radar design in PID v0.5 §4. The allocation screen has evolved since; WP0 rewrites this table and every founder instruction that depends on it to match the current control. The tolerance bands and the field cap are what matter and survive any UI change.*
+*The pentagon radar is gone. The allocation screen is five horizontal slider dials, one per stat in
+the fixed order, each with a live integer and a padlock button, under a rack of seven tiles that
+fill as battles are locked. The tolerance bands and the field cap below are what matter and survive
+any UI change; the keystrokes are current as of 2026-09-15. `FOUNDER-ACTIONS.md` carries the
+step-by-step.*
 
-The founder sets each battle by hand, so UI targets are tolerance bands and the field cap is the margin:
+**The three rules that changed, and that decide whether a recipe works:**
 
-| Role | Instruction | Holds if |
+1. **One 90-second clock for the whole run of seven**, not 15 seconds per screen. It starts on the
+   **first dial movement or lock press** and never stops between battles. Touching nothing does not
+   start it, so a player who touches nothing waits forever rather than timing out.
+2. **On expiry every unlocked battle is entered as the even split** — 20/20/20/20/20 — including the
+   one on screen, whatever shape it was showing. (The original text cited "R9 lock-current"; that was
+   superseded by the founder addendum of 2026-09-07.)
+3. **Moving one dial re-apportions the other four proportionally**, integer-only, largest remainder,
+   so the five always total exactly 100. A stat already at 0 stays at 0. The dragged stat lands
+   exactly on its target, so **UI allocations are now exact and predictable** — which means
+   `INPUT_DRIFT` on a UI seat is a failure like any other, not the expected noise §5.5 assumed.
+
+| Role | Instruction (keyboard is fastest and exact) | Holds if |
 |---|---|---|
-| Winner | Three vertices out hard, two at centre; aim 33/33/34/0/0; vary which three | any three stats ≥ 26 |
-| Loser | One vertex to the rim, rotate it | one stat ≥ 76 (in practice it lands at 100) |
-| Mid | Touch nothing; let the timer expire × 7 | exactly 20 × 5 |
-| Capped (T5, T7) | Gentle drags; no stat above 25 | screenshots prove it |
+| Winner | Focus two dials and press **Home** on each. Result 34/33/33/0/0. Rotate which two each battle | any three stats ≥ 26 |
+| Loser | Focus any dial, press **End**. Result exactly 100 on that stat. Rotate it each battle | one stat ≥ 76 |
+| Mid | Press **one padlock** to start the clock, then wait out the 90 seconds without locking | exactly 20 × 5 on all seven |
+| Capped (T5, T7) | Focus Strength, press **Shift+ArrowRight** once → 25/19/19/19/18 | no stat above 25 |
 
-Practise the winner drag on Day 0 (F-06). **Screenshot every lock-in** — the five integers under the pentagon are the record of what you sealed.
+Exact integers that free movement cannot reach are reachable **with locks**: set a stat, lock it, set
+the next, lock it, and the last unlocked dial is fully determined. This is how 33/33/34/0/0 is made,
+if the literal plan target is wanted rather than the tolerance.
+
+**Screenshot the rack, not each lock-in.** After seven battles one image of the rack carries all
+seven allocations with their five numbers each. The per-lock-in shots remain a useful backup.
+
+**A timer-expiry entry has a distinctive timing profile** — roughly 90000 ms on battle 1 and 0 ms on
+battles 2 through 7 — which the plan should predict rather than discover.
 
 ### 7.4 Predict, then verify
 
@@ -725,33 +795,72 @@ Explorer: `https://explorer.solana.com/tx/<sig>?cluster=devnet`, `.../address/<p
 
 ---
 
-## 9. Recipe cards
+## 9. Recipe cards — AMENDED
 
-What changes inside the §8 loop, per test. F-IDs point to §3.1.
+What changes inside the §8 loop, per test. All eight run on **tier 0**, sequentially. Founder steps
+are in `FOUNDER-ACTIONS.md`; these are the plans and the pass criteria.
 
-### T1 — Refund, sparse (tier 1 · 12 · F-12, F-19)
-UI-A/B/C natural (F-12, 09:15 Day 1); W03–W11 `poolPopulation`. Get all 12 in within two hours; the clock started at 09:00. At 21:00 the daemon reports `refundsTriggered` + `cranked → Closed`; `RefundTriggered` returns the pot; 12 `Refunded` at full price. **Pass:** every after-balance = before + `entry_lamports` exactly (rent not returned — record it as sunk); vault gone; treasury unchanged; pool `Closed`; tier reopened. Founder screenshots the Refunding/Closed page and a UI balance (F-19).
+**Two facts apply to every card below.** Rank 1 takes the **entire pot** (4 SOL at tier 0) and no
+other rank is paid, so "the top 16" appears nowhere. And every pool opened permanently sinks one
+vault rent cushion of 650240 lamports, so no vault ever ends at zero.
 
-### T2 — Refund at 40 (tier 1 · 40 · F-20, F-21)
-Opens automatically ~21:05 Day 1 when T1 closes; deadline ~09:05 Day 2. UI entries the same evening (F-20); W03–W39 `poolPopulation`. Documentary purpose: 40 does **not** run and does refund in full. Pass as T1 with 40 refunds.
+### T1 — Refund, sparse (12 · F-12, F-19)
+Both UI accounts played naturally; W00–W09 from the four-strategy mix. 12 is far below the 40-seat
+floor, so at the deadline the daemon calls `trigger_refund`, the untouched pot returns from the
+vault to the treasury, and each entry is refunded exactly `entry_lamports` **from the treasury**.
+**Pass:** state `Closed`; every after-balance = before + exactly 0.1 SOL; each entrant down only the
+sunk rent and fees; the vault holds exactly the rent cushion; the tier's next pool opens five minutes
+later. The plan is frozen without an oracle — a refund pool is never scored.
 
-### T3 — Refund at 63 + pause (tier 1 · 63 · F-22, F-23, F-30)
-Opens ~09:10 Day 2; deadline ~21:10. UI ×3 (F-22); W03–W62 `poolPopulation`; **stop at 63 — the 64th seals.** Fill concurrently; 63 inside a 12-hour window is the tightest fill of the week. At ~30 entrants Claude Code calls F-23: founder `set-paused true`, one `enter.ts` attempt (expect the paused error, log it), UI-C attempts (screenshot what a player sees), `set-paused false`. Resume to 63. Pass as T1 with 63 refunds, plus the paused attempt reverted and nothing else affected.
+### T2 — Refund at the boundary (39 · amended from 40)
+As T1 with 39 seats: the **last count that still refunds**. Documentary purpose: the fork is decided
+at 40, and 39 is on the refunding side of it. Pass as T1 with 39 refunds.
 
-### T4 — Full pool, UI wallet wins (tier 0 · 64 · F-13, F-14, F-15)
-UI-A winner, UI-B loser, UI-C timer-expiry (R9). W03–W62 `cappedField`; W63 the existing `scripted_uniform` bot. UI first, headless after. Plan: seat 0 rank 1, seat 1 rank 64, seat 2 mid, W63 `timing_profile` note. **Pass:** root and payouts match; UI-A + band 1 exactly (270/1024 of the pot, 1.35 SOL); UI-B unpaid; UI-A's revealed battles match her screenshots; UI-C's are seven 20 × 5 sets; W63 logged, not blocked.
+### T3 — Seal at the minimum field + pause (40 · amended from "refund at 63")
+**This is no longer a refund test.** At exactly 40 seats the pool reaches its deadline at the floor,
+so `seal_at_deadline` seals it, the crank scores it, and rank 1 is paid the whole pot. It is the
+first count that plays, and it exercises the fork the site advertises on every pool page.
+At about 30 entrants the founder pauses entries: one headless attempt should be refused with
+`Paused` (6005) and one UI attempt should show the paused copy, having paid only a transaction fee.
+Then entries resume to exactly 40. **Stop at 40 — a 41st is harmless, but the boundary is the point.**
+**Pass:** state `Paid`, not `Closed`; `seal_at_deadline` fired, not `trigger_refund`; the recomputed
+root matches on chain; rank 1 received the pot; the paused attempts reverted and nothing else was
+affected.
 
-### T5 — Full pool, headless wallet wins (tier 0 · 64 · F-16, F-17, F-18)
-All three UI capped (no stat above 25 — this is what makes it certain). W03–W62 `cappedField`; **W63 `wall`**, entered last so the 64th ticket wins. Plan: W63 rank 1; no UI seat in the top 16. **Pass:** root and payouts match; W63 + band 1; all UI balances down by exactly entry + rent; the losing experience screenshotted (F-18).
+### T4 — Full pool, UI wallet wins (64 · UI-A winner, UI-B loser)
+W00–W61 capped field (no stat above 25), W62 the scripted bot, UI-A the wall, UI-B the pole. UI seats
+first, headless after. **Pass:** root and payouts match; UI-A is rank 1 and receives the **whole 4 SOL
+pot**; UI-B is last and unpaid; UI-A's revealed battles match the rack screenshot exactly — since the
+dials land on exact integers, any difference is a failure, not dragging noise.
 
-### T6 — Oversubscribed + load (tier 0 · 64 land, 73 attempt · F-24–F-27)
-UI-A and UI-B early and normally (F-25), then wait. Claude Code fires W02–W63 **and** W64–W71 concurrently from `enter.ts` and calls **GO** when the pool shows 62/64; UI-C starts a session and takes the full 90 s (F-26), aiming to land `register` against a sealed pool. Record first-register slot, `PoolSealed` slot, wall-clock fill and crank. **Pass:** exactly 64 `EntryRegistered`; nine reverts with the program's not-open/full error captured; fill < 5 min; crank < 2 min; UI-C's screen shows a legible failure, not a spinner; UI-C charged only the fee; note whether her ciphertext was stored before the failed payment (expected — ciphertext-first ordering).
+### T5 — Full pool, headless wallet wins (64 · both UI accounts capped)
+Both UI accounts capped at 25, W00–W61 capped field, **W62 the wall**, entered last. **Pass:** W62 is
+rank 1 and takes the pot; neither UI wallet is paid; both UI balances down exactly entry plus rent.
 
-### T7 — Same-device hard block → review (tier 0 · 64 · F-28, F-29) — only if `deviceHash` is wired
-UI-A and UI-B from **one** profile (`deviceGroup: device-1` for both in the plan), UI-C separate; all capped. W03–W62 `cappedField`, W63 `wall`. If A and B would be unranked, lower the field cap to 20 and have them drag to ~24 so they place. Plan predicts both seats hard-blocked with `device fingerprint shared by 2 entries`. Founder: review page, release UI-A, forfeit UI-B (F-29). **Pass:** `flag_entry` before `pay_prizes`; both on the review page with evidence; release pays A's held share; forfeit moves B's to the treasury; vault ends at zero; signed review log records both.
+### T6 — Oversubscribed + load (64 land, 9 attempt)
+UI-A and UI-B early, then wait. Claude Code fires the headless field concurrently and calls GO at
+62/64; UI-B starts a session, **moves one dial to start the clock**, takes the full 90 seconds and
+submits into a sealed pool. **Pass:** exactly 64 `EntryRegistered`; nine reverts carrying
+**`PoolNotOpen` (6000)**, not `PoolFull`; fill under 5 minutes; crank under 2; the late entrant sees
+the legible "filled before your entry reached it" copy, not a spinner, and is charged only the fee;
+her ciphertext was stored before the failed payment, which is the documented ordering.
 
-### T8 — Verify page + non-founder recompute (F-31)
-Desk work. Four bundles + `oracle.ts` to someone who is not the founder; one signed line per pool that the root matched. Attach to the report.
+### T7 — Same device → review (64 · both UI accounts in ONE browser profile)
+Both UI accounts signed in to the **same** browser profile, so they derive an identical device marker
+for this pool; all capped; W62 the wall so a headless seat wins. **Detection will not flag them by
+itself** — the daemon stores a report and alerts, then hard-blocks nobody, by the manual-only policy
+ruling. So T7 is a test of the **review path**: the finding appears in the detection report, a
+configured reviewer signs a decision for each seat, and the forfeit is then landed on chain by the
+admin key as a **separate transaction**. **Pass:** `flag_entry` lands before `pay_prizes`; both seats
+escrow; the release pays its player; the forfeit **moves no lamports** — the share stays in the pool's
+vault until `pay_next_place` divides it among the next eligible place, and it never reaches the
+operator. The appeal path is **not testable**: the reviewer registry holds one member.
+**T7 is NOT TESTABLE at all unless the founder holds that reviewer key** — see `DRIFT.md` Q7.
+
+### T8 — Verify page + non-founder recompute
+Desk work. Hand a non-founder the pool addresses and the **bundle URIs from each `actual.json`** — the
+verify page only auto-fills a bundle when the pool has a verified archive — plus the oracle. One
+signed line per pool that the root matched. No wallet or login is needed to verify.
 
 ---
 
@@ -793,14 +902,29 @@ Deviations:
 
 ---
 
-## 12. Things that will bite
+## 12. Things that will bite — AMENDED
 
-- **The 12-hour window is tighter than it reads.** It runs from `open_pool`, not from the first entry, and T3 needs 63 entries inside it.
-- **T2 and T3 open without you.** The daemon opens the next tier-1 pool the instant the previous closes; their deadlines are set while you may be asleep. That is why the chain starts at 09:00.
-- **Deploying the 12-hour change after opening a tier.** `fill_deadline` is stored per pool; an upgrade does not rewrite it.
-- **Letting seat 63 into T3.** It seals. No undo.
-- **Editing a plan after the fact.** It voids every prediction claim in the report. Deviations go in `reconcile.md`.
-- **Drag discipline.** A "winner" at 25/25/25 on a field capped at 25 draws every stat and the outcome collapses. Thirty-plus, every time.
-- **Same browser, three emails, outside T7.** Never, if `deviceHash` is wired.
-- **Faucet.** Everything recirculates except rent and fees, but the upfront capital is real. Start at 09:00 Day 0.
-- **Language.** Anything under `docs/` runs through `check-language.sh`. This manual passes; your notes in `CARD.md` may not.
+- **The floor is 40, and it decides everything.** Below it a pool refunds; at or above it the pool
+  plays. Two of the original eight tests were built on the opposite rule.
+- **The 12-hour window runs from `open_pool`, not from the first entry**, and a pool's successor
+  opens **five minutes** after it closes, not instantly.
+- **A pool keeps the deadline and the floor it opened under.** Both are copied onto the pool; a later
+  `set_pool_timing` or a program upgrade never moves them for players already seated.
+- **The clock does not start until the first dial movement.** "Touch nothing and let it expire" waits
+  forever. Press one padlock first.
+- **Expiry enters the even split**, not the shape on screen. A great allocation left unlocked is lost.
+- **Never let a stray entry into a pool that is not a named test.** It locks tier 0 — the only tier
+  the week uses — for the whole fill window, and cannot be undone.
+- **Both accounts in one browser profile is T7 and only T7.** Outside it they must be separate
+  profiles, and never a private window: a fresh profile secret breaks the grouping T7 needs.
+- **A refunded entry is invisible on the profile.** The evidence is the wallet balance and the pool
+  page state, nothing else.
+- **A headless entrant must attest first.** No stored age and terms attestation means the packet
+  service refuses with a generic 403 that names no reason.
+- **`set-paused` does not stop a new pool opening.** It blocks entries only. Stopping the daemon is
+  what prevents an open — and that also stops settlement.
+- **Language.** `check-language.sh` greps the **whole tree**, including `battle-test/`, on every
+  change. It has already caught this manual three times and the tooling three more. A review-link URL
+  and several ordinary English words are on the list; read the failure rather than arguing with it.
+- **Faucet.** Everything recirculates except rent and fees, but the upfront capital is real: about
+  0.0044 SOL sunk per entry and 0.00065 SOL per pool opened, neither recoverable.
