@@ -138,3 +138,59 @@ Read directly from the cluster with `@solana/web3.js` and `admin.ts`, so these a
 `open_pool` requires `available = platform − platform_refundable ≥ (pot + cushion) + min_platform + idle-tier reserve` (`open_pool.rs:144-162`, `treasury.rs:57-69`).
 
 With tier 1 enabled at its **current** economics (pot 25.6 SOL) the requirement is far beyond the 1.9967 SOL held. Even after `set-tier-economics --tier 1 --pot 1024`, opening tier 1's pool needs its own cushion plus the floor, and opening the **next tier-0** pool needs 4.0 SOL + cushion + 0.5 SOL floor + tier 1's idle reserve. The treasury is refilled by `fund-platform-wallet`, which is permissionless — so this is a funding action (F-05), not an admin one, and it is on the critical path before F-11. Exact figure in `CAPITAL.md` once the faucet total is known.
+
+---
+
+## D. Backend (`backend/**`, indexer, packet, review)
+
+The manual names three backend packages (§2.5, §4.11). There are **nine**: `_shared`, `class-digest`, `detection`, `indexer`, `packet`, `reveal`, `sanctions`, `scoring`, `sealing`. Two of the unnamed ones own behaviour the manual attributes to `reveal`.
+
+### D1. Scoring, sealing and the oracle
+
+| manual § | says | repo has | verdict | fix |
+|---|---|---|---|---|
+| §7.1 | stat to the larger number, ties to neither; battle at ≥3 of 5; win 2 / draw 1; rank by score then stats won; equal on both shares the rank and splits the prize | `engine.ts:41-50` `compareBattle`; `:89-94` win 2 / draw 1; `:100-111` rank; `:144` `assignPrizes` splits | **HOLDS** | The four-line rule is exactly right. Add only that a split now matters solely for a tie at rank 1. |
+| §4.11.2, §5.5 | `scorePool` → `assignPrizes` → `rankOrder` + Merkle root | `scorePool(players: readonly BattleSet[]) => PlayerResult[]` (`engine.ts:78`); `assignPrizes(results, pot: bigint)` (`:144`); `rankOrder(results)` (`:126`); `merkleRoot(leaves)` (`merkle.ts:72`); `leafBytes({player, rank, amountLamports})` (`merkle.ts:35`) | HOLDS | Exact signatures for `oracle.ts`. `PlayerResult = {index, scoreHalf, zones, rank, amountLamports}`. |
+| §4.13 | oracle reproduces the committed Python vectors | `backend/scoring/fixtures/vectors.json` present; `vectors.json.min_seats` is **40**, but its `rules` string still says "a pool runs with 52..64 players (D-E4)" | CHANGED | Fixture data is current; its prose is stale. Assert against the data, never the comment. |
+| §0.1, §9 T2/T3 | 40 and 63 refund | `prizes.ts:35` `MIN_SEATS = 40n`; daemon `daemon.ts:279` seals at `entrants >= MIN_SEATS` | GONE | A3 (matrix remapped). |
+| §9 T4 | band 1 = 270/1024 | `prizes.ts:124,127` `PAID_RANKS = 1`, `PRIZE_BANDS_1024 = [1024n]` | GONE | A4. |
+| §6.1 | `enter.ts` mirrors `submit.ts`: encode → seal → putCiphertext → requestPacket → register | Pipeline confirmed; packet is **85 bytes** (`packet.ts:29` `PACKET_LEN`), though `packet/src/service.ts:113` still says "83 canonical bytes" | CHANGED | `enter.ts` reads `PACKET_LEN`, never the comment. |
+
+### D2. The daemon — what it actually does at a deadline
+
+| manual § | says | repo has | verdict | fix |
+|---|---|---|---|---|
+| §8.7, §9 | "at the deadline the daemon triggers and refunds" | `daemon.ts:279-297`: `entrants >= MIN_SEATS` → `sealAtDeadline` then cranks in the same tick; else `triggerRefund`, then `crank.ts:179-188` refunds each entry one at a time | CHANGED | §8.7 branches. T3 (40 seats) seals **and settles in the same tick** — the founder's screenshot window is minutes, not hours. |
+| §12 | "the daemon opens the next pool the instant the previous closes" | 5-minute cooldown (`prizes.ts:55`, `Config.tier_next_open_at`) | CHANGED | Five minutes, everywhere in the schedule. |
+| §8.7 | "watch the daemon — `PoolSealed`, reveal, `commit_results`, `pay_prizes`" | The daemon has **no status endpoint beyond `/health`**; per-step narration, open reasons and detection JSON go to **stdout only** (`main.ts:446, 546, 582`) | CHANGED | "Watch the daemon" means reading its hosted logs. Capture them per pool as evidence or they are lost. Chain events remain the authoritative record. |
+| §5.4 | harvest reads the Irys bundle | The bundle is published **after** payment; failures are swallowed and retried on a **10-minute** backoff, alerting after 3 (`crank.ts:346-351`, `daemon.ts:170-171`) | CHANGED | `harvest.ts` polls for the bundle; a Paid pool with no bundle yet is normal, not a failure. |
+| §4.1 | "five services up" | The list names four. The **review service** (`detection/src/server.ts:621`) is the fifth and T7 depends on it | CHANGED | Added to the §4.1 table and the Day-0 gate. |
+| — | settlement can stall on a lagging RPC | `crank.ts:417` throws unless the `Entry` account count equals `Pool.entrants` | new | A full pool may stall for a few ticks with a visible tick error. Expected; do not call it a FAIL at 8.7. |
+
+### D3. Detection — the T7 finding
+
+| manual § | says | repo has | verdict | fix |
+|---|---|---|---|---|
+| §9 T7 | "plan predicts both seats hard-blocked"; "`flag_entry` before `pay_prizes`" | The daemon **runs** detection and **stores** the report (`main.ts:409-446`), alerts when review is recommended (`:453`), and then **returns `[]`** (`:459`) — it hard-blocks nobody. It also passes `{fullEscrowTier: false}` (`:423`), making the widening branch (`pipeline.ts:115`) unreachable | **CHANGED — decisive for T7** | Detection is **observable but never automatic**, by founder ruling D-E9 (manual-only policy). The device-correlation finding will appear in the stored report; **no `flag_entry` happens by itself.** T7 becomes a test of the *review* path: a configured reviewer must sign a decision. |
+| §9 T7 | "release UI-A, forfeit UI-B; send both signatures" | `POST /decisions` with `action=forfeit` returns **202 "forfeit recorded, admin lands it"** — the review service holds no admin key; `GET /pending?pool=<pda>` lists forfeits logged but not landed (`server.ts:346`) | CHANGED | A forfeit is two steps: the reviewer's signed decision, then the founder's `admin.ts forfeit-escrow`. F-29 is re-written accordingly (§E). |
+| §4.5, §9 T7 | detection signals | `signals.ts` — full list captured in §E; `population_score` fires at `\|z\| >= 3` (`signals.ts:188`) | CHANGED | **An engineered `wall` winner taking all 882 half-points is many sigma out and will trip `population_score`.** The plan must predict this finding rather than be surprised by it. |
+| §4.5 | `ipHash` "populated?" | The daemon passes `ipHash: ''` unconditionally (`main.ts:420`) | GONE | No IP correlation is possible. The manual's predicted "IP-correlation note on every pool" will not appear. |
+| §4.2 | VRF stub worry | The class draw is quarantined from scoring by a standing-rule grep (`class-digest/digest.ts:11-13`) | CHANGED | A stub randomness account invalidates **only** the class draw, never a rank or a payout. Scope the ENVIRONMENT.md line accordingly. |
+
+### D4. The read APIs
+
+| Endpoint | Shape / caveat | file:line |
+|---|---|---|
+| `GET /pools`, `GET /pools/:id` | Live: id, tier, entry_lamports, pot_lamports, fill_deadline, timer_seconds, state, entrants, sealing_pubkey, results_root, secret, min_seats, **`outcome_if_deadline_now`**, server_time | `indexer/src/read-api.ts:190-194` |
+| `outcome_if_deadline_now` | A free, honest oracle for "will this pool seal or refund" — use it in the §8 loop instead of arithmetic | `read-api.ts:194` |
+| `min_seats` | Served as the **shared constant**, not the pool's own field (`PoolOpened` carries no `min_seats`) | `read-api.ts:190` |
+| `GET /pools/:pool/leaderboard` | `committed_fields: ['player','rank','amount_lamports']`, with `score_half`/`zones` under a `recomputed` sub-object | `read-api.ts:472-500` |
+| `GET /pools/:pool/sealed-entries` | 403 before reveal; after reveal `{seat, ciphertext_hex}` — **the only per-seat timings source**, and an independent decrypt path for T8 | `read-api.ts:522` |
+| Bundle announce | Off unless `BLOTTO_INDEXER_ANNOUNCE_URL` + `BLOTTO_HELIUS_WEBHOOK_SECRET` are set; unset means the leaderboard **404s fail-closed** until a backfill | `reveal/src/main.ts:35-41`, `read-api.ts:472` |
+| Rate limiting | **Off by default** everywhere; the proposed 600 rpm / 120 burst is `AWAITING_RATIFICATION`; the limiter is per-process and in-memory | `_shared/src/http-hygiene.ts:65-108` |
+
+**Consequence for T6.** With rate limiting off, T6 measures the app and the RPC, not a limiter. That is the honest thing to measure, but the setting must be recorded in `ENVIRONMENT.md` or the number means nothing.
+
+### D5. Stale comments that will re-introduce the manual's error
+
+`daemon.ts:7,187,189`, `chain.ts:229,232`, `engine.ts:174` and `vectors.json.rules` all still describe the **52**-seat D-E4 regime. The code uses `MIN_SEATS = 40` uniformly. These are repo-internal and out of scope for this PR (the battle test does not modify `backend/`); they are listed here so nobody reads a comment and reverts the matrix. **Logged as a product follow-up, not a battle-test change.**
