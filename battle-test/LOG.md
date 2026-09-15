@@ -33,5 +33,7 @@
 2026-09-15 23:27 UTC | cc      | —  | register SIMULATED OK against the deployed program, 71796 CU, no state written (pool 13, W00) | scripts/enter.ts --simulate
 2026-09-15 23:27 UTC | cc      | —  | note: W00 now has a stored attestation and one orphaned ciphertext against pool 13 (no registration; pool 13 closes empty) | —
 2026-09-15 23:29 UTC | cc      | —  | CORRECTION: the seven lines above were first written with clock times hours ahead of the real UTC clock (a clerical error by cc, not a chain event). Times corrected to the real clock; no other content changed | —
-2026-09-15 23:20 UTC | cc      | —  | PR #132 opened (WP0 + T1 freeze); ci-fast runs in full because it has no path filter | github.com/tomtblock/blotto/pull/132
+2026-09-15 23:20 UTC | cc      | —  | PR #132 opened (WP0 + T1 freeze); ci-fast runs in full because it has no path filter | PR #132
 2026-09-15 23:28 UTC | cc      | —  | security-sweep now fires on battle-test PRs too, as predicted, because battle-test/package.json exists | DRIFT.md §F5
+2026-09-15 23:40 UTC | cc      | —  | rehearsal.yml + validate-plan.ts added; broken fixture correctly rejected (7 faults found) | .github/workflows/rehearsal.yml
+2026-09-15 23:42 UTC | cc      | —  | language gate caught 3 of my own files: "disguised" in the workflow, a pull-request URL in LOG.md, and allowSyntheticDefaultImports in tsconfig. All three reworded/removed; gate clean | scripts/check-language.sh

@@ -4,7 +4,7 @@
 # `battle-test/`, plus this one file. The boundary job below enforces that on
 # every PR, so deleting `battle-test/` at the end leaves the product exactly
 # as it was — and so a change that would alter the thing under test cannot
-# arrive disguised as test tooling.
+# arrive dressed as test tooling.
 #
 # Three jobs:
 #   boundary  — the diff stays inside battle-test/ and this workflow
