@@ -35,7 +35,8 @@
 2026-09-15 23:29 UTC | cc      | —  | CORRECTION: the seven lines above were first written with clock times hours ahead of the real UTC clock (a clerical error by cc, not a chain event). Times corrected to the real clock; no other content changed | —
 2026-09-15 23:20 UTC | cc      | —  | PR #132 opened (WP0 + T1 freeze); ci-fast runs in full because it has no path filter | PR #132
 2026-09-15 23:28 UTC | cc      | —  | security-sweep now fires on battle-test PRs too, as predicted, because battle-test/package.json exists | DRIFT.md §F5
-2026-09-15 23:40 UTC | cc      | —  | rehearsal.yml + validate-plan.ts added; broken fixture correctly rejected (7 faults found) | .github/workflows/rehearsal.yml
-2026-09-15 23:42 UTC | cc      | —  | language gate caught 3 of my own files: a banned adjective in the workflow comment, a review-link URL in this log, and a TS compiler option. All three reworded or removed; gate clean. (This line itself had to be reworded for the same reason.) | scripts/check-language.sh
-2026-09-15 23:52 UTC | cc      | —  | MANUAL.md amended in place: banner + §0.1, §0.3, §1, §3.1, §4.0, §7.3, §9, §12. WP0 acceptance met | battle-test/MANUAL.md
-2026-09-15 23:58 UTC | cc      | —  | enter.ts now drives from the frozen plan (--plan): seat list, generator and seed all come from the committed prediction. Dry run over T1's 10 seats OK, 10 distinct battle hashes | scripts/enter.ts
+2026-09-15 23:30 UTC | cc      | —  | rehearsal.yml + validate-plan.ts added; broken fixture correctly rejected (7 faults found) | .github/workflows/rehearsal.yml
+2026-09-15 23:33 UTC | cc      | —  | language gate caught 3 of my own files: a banned adjective in the workflow comment, a review-link URL in this log, and a TS compiler option. All three reworded or removed; gate clean. (This line itself had to be reworded for the same reason.) | scripts/check-language.sh
+2026-09-15 23:35 UTC | cc      | —  | MANUAL.md amended in place: banner + §0.1, §0.3, §1, §3.1, §4.0, §7.3, §9, §12. WP0 acceptance met | battle-test/MANUAL.md
+2026-09-15 23:36 UTC | cc      | —  | enter.ts now drives from the frozen plan (--plan): seat list, generator and seed all come from the committed prediction. Dry run over T1's 10 seats OK, 10 distinct battle hashes | scripts/enter.ts
+2026-09-15 23:36 UTC | cc      | —  | CORRECTION (2nd): four more lines carried estimated rather than read clock times. Corrected. Rule adopted: read the clock before writing a log line, never estimate | —
