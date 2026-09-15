@@ -43,3 +43,6 @@
 2026-09-15 23:39 UTC | cc      | —  | T1 opening balances captured BEFORE any entry: funder 7.999995, treasury 1.9967488, UI-A 4.9911176, UI-B 9.9911219, 72 headless 2.0 total (slot 499011584) | evidence/T1/balances-before-T1.json
 2026-09-15 23:39 UTC | cc      | —  | CI on PR #132 head 3becf58: standing-rules, gitleaks, rust, postgres, security-sweep and all 3 rehearsal jobs PASS; app build + browser journey still running | —
 2026-09-15 23:40 UTC | cc      | —  | pushed the held commit (repo hook requires no unpushed work); CI re-runs from 76299e7. Merge window to 01:40 UTC is ample | 76299e7
+2026-09-15 23:44 UTC | cc      | —  | CI ALL GREEN on PR #132 — 12 checks passed (head 6a5d643)               | PR #132
+2026-09-15 23:45 UTC | cc      | —  | harvest.ts + reconcile.ts written and SELF-TESTED against settled pool 12: both UI seats MATCH, vault 650240 exactly as T1 predicts, and the run correctly FAILED on an entrant not in wallets.json (4mYx…rDxs) | scripts/harvest.ts, scripts/reconcile.ts
+2026-09-15 23:45 UTC | cc      | —  | NOTE: pool 12 shows UI-A and UI-B already entered and were refunded — their clickwrap (terms v2) is done, and a third unknown wallet also entered | indexer entries

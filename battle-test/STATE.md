@@ -1,7 +1,8 @@
-# STATE — 2026-09-15 20:30 local (23:30 UTC) — by Claude Code
+# STATE — 2026-09-15 20:45 local (23:45 UTC) — by Claude Code
 
-Phase:            WP0 complete · WP4 (enter.ts) built and proven by simulation · T1 plan frozen, awaiting merge
-Waiting on:       founder — read DRIFT.md §A and §G (P-02), then **merge PR #132 before 22:40**. Then F-12 at 22:46.
+Phase:            WP0, WP1 and WP4 complete · WP2 harvest+reconcile built and self-tested · T1 plan frozen, awaiting merge
+Waiting on:       founder — read DRIFT.md §A and §G (P-02), then **merge PR #132 before 22:40 local**. Then F-12 at 22:46.
+                  CI was ALL GREEN (12 checks) at 23:44 UTC on head 6a5d643; the harvest/reconcile push re-runs it.
 After that:       F-19 ~10:46 Wed (T1 deadline) · F-01b more faucet before the first full pool
 Live deadlines:   pool 13 (tier 0, 0 entrants, NOT a test) closes 22:41 tonight → pool 14 opens ~22:46 = **T1**
                   T1 deadline ~10:46 Wed
