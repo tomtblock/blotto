@@ -1,0 +1,71 @@
+{
+  "schema": "blotto-rehearsal-plan/1",
+  "test": "T1",
+  "title": "Refund, sparse — a pool below the minimum field returns every entry in full",
+  "cluster": "devnet",
+  "programId": "5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17",
+  "tier": 0,
+  "poolId": null,
+  "poolPda": null,
+  "entryLamports": "100000000",
+  "potLamports": "4000000000",
+  "minSeats": 40,
+  "fillDeadlineSeconds": 43200,
+  "frozenAt": null,
+  "gitCommit": null,
+
+  "poolIdNote": "The pool does not exist yet. The daemon opens it about five minutes after pool 13 reaches Closed, and it is expected to be pool id 14. harvest.ts records the id actually observed; if it is not 14, that is recorded as a deviation and the plan is NOT edited.",
+
+  "hypothesis": "A pool holding fewer than min_seats (40) at its fill deadline cannot seal. trigger_refund flips it to Refunding and returns the untouched 4 SOL pot from the prize vault to the platform treasury; refund then pays each entrant exactly entry_lamports back out of the treasury. No ranking, no scoring and no prize is involved. Every entrant ends down exactly the sunk rent and fees and nothing more, and the pool reaches Closed once every seat has been refunded.",
+
+  "expectations": {
+    "terminalState": "Closed",
+    "entrants": 12,
+    "sealsAtDeadline": false,
+    "settlementInstruction": "trigger_refund",
+    "refusedInstruction": "seal_at_deadline would revert with FieldBelowMinimum (6051)",
+    "potReturnedToTreasury": "4000000000",
+    "vaultAfter": "650240",
+    "vaultAfterNote": "the rent cushion, never recovered — this is not zero, and a zero here would be the surprise",
+    "treasuryDeltaOverPoolLife": "-650240",
+    "perSeatRefundLamports": "100000000",
+    "perSeatSunkLamports": "4436000",
+    "perSeatSunkNote": "0.004436 SOL measured on devnet 2026-09-11, docs/INFRASTRUCTURE.md lines 120-124: Entry rent 2613000, pass rent 1808000, fees 15000. The first real entry confirms it; a discrepancy above 10 percent stops the week until explained.",
+    "expectedBalanceDeltaPerSeat": "-4436000",
+    "paidSeatCount": 0,
+    "hardBlocks": [],
+    "detectionNotes": [
+      "Detection runs and stores a report but flags nobody: the daemon's hook returns an empty hard-block list by the manual-only policy ruling D-E9.",
+      "ipHash rides empty end to end, so no IP-correlation finding can appear.",
+      "UI-A and UI-B are in separate browser profiles, so their device markers differ and device_ip_correlation should not group them."
+    ]
+  },
+
+  "seats": [
+    { "seat": null, "wallet": "UI-A", "route": "ui", "role": "natural", "generator": "founder-played", "tolerance": "any valid allocation; played naturally", "expectedRank": null, "expectedLamports": "0", "expectedRefundLamports": "100000000" },
+    { "seat": null, "wallet": "UI-B", "route": "ui", "role": "natural", "generator": "founder-played", "tolerance": "any valid allocation; played naturally", "expectedRank": null, "expectedLamports": "0", "expectedRefundLamports": "100000000" },
+    { "seat": null, "wallet": "W00", "route": "direct", "role": "field", "generator": "poolPopulation", "seed": 1000, "expectedRefundLamports": "100000000" },
+    { "seat": null, "wallet": "W01", "route": "direct", "role": "field", "generator": "poolPopulation", "seed": 1001, "expectedRefundLamports": "100000000" },
+    { "seat": null, "wallet": "W02", "route": "direct", "role": "field", "generator": "poolPopulation", "seed": 1002, "expectedRefundLamports": "100000000" },
+    { "seat": null, "wallet": "W03", "route": "direct", "role": "field", "generator": "poolPopulation", "seed": 1003, "expectedRefundLamports": "100000000" },
+    { "seat": null, "wallet": "W04", "route": "direct", "role": "field", "generator": "poolPopulation", "seed": 1004, "expectedRefundLamports": "100000000" },
+    { "seat": null, "wallet": "W05", "route": "direct", "role": "field", "generator": "poolPopulation", "seed": 1005, "expectedRefundLamports": "100000000" },
+    { "seat": null, "wallet": "W06", "route": "direct", "role": "field", "generator": "poolPopulation", "seed": 1006, "expectedRefundLamports": "100000000" },
+    { "seat": null, "wallet": "W07", "route": "direct", "role": "field", "generator": "poolPopulation", "seed": 1007, "expectedRefundLamports": "100000000" },
+    { "seat": null, "wallet": "W08", "route": "direct", "role": "field", "generator": "poolPopulation", "seed": 1008, "expectedRefundLamports": "100000000" },
+    { "seat": null, "wallet": "W09", "route": "direct", "role": "field", "generator": "poolPopulation", "seed": 1009, "expectedRefundLamports": "100000000" }
+  ],
+
+  "seatNote": "Seat indices are assigned by the chain in arrival order and are recorded at harvest. Battle sets are not predicted here: a refund pool is never scored, the pool secret is revealed only after the deadline, and no rank or payout depends on any allocation. This is why T1's plan needs no oracle — and why it can be frozen before the scoring tooling exists.",
+
+  "contingency": "The ten headless seats depend on enter.ts, which is not built at freeze time. Any seat that does not land reconciles as ABSENT. The refund property is proved by whatever seats do land, since any count below 40 takes the same fork; a reduced count is recorded as a deviation in T1.reconcile.md and the plan is not edited.",
+
+  "passCriteria": [
+    "The pool reaches Closed, not Paid.",
+    "Every entrant's balance rises by exactly 100000000 lamports at refund.",
+    "Each entrant's net loss over the whole test equals the sunk rent and fees only.",
+    "The prize vault ends holding exactly 650240 lamports.",
+    "The platform treasury is unchanged by the pot round trip, down only the vault cushion.",
+    "The tier's next pool opens about five minutes after Closed."
+  ]
+}

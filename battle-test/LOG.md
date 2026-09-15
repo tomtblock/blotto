@@ -13,3 +13,15 @@
 2026-09-15 23:03 UTC | cc      | —  | check-deployed.ts: public devnet RPC 429 — blocked on a dedicated RPC (P-04) | —
 2026-09-15 23:06 UTC | cc      | —  | keys.ts written; master seed generated; funder 6z4wriiac4d6bay57Pe4Gj3jxhjeT9HfbcH2VaM4r3Ue + W00–W71 derived; keys/ gitignored | battle-test/scripts/keys.ts
 2026-09-15 23:08 UTC | cc      | —  | requested P-03 (store seed, confirm tz), P-04 (RPC URL), F-01 (faucet 18 SOL), F-02 (UI accounts) | STATE.md
+2026-09-15 23:10 UTC | cc      | —  | WP0 drift check complete: 4 slices, DRIFT.md written, 0 unresolved rows | battle-test/DRIFT.md
+2026-09-15 23:12 UTC | cc      | —  | finding: tier 1 cannot be opened (set-open-tiers refuses non-ratified economics; chain tier 1 pot 25.6 vs ratified 20) | DRIFT.md §F2
+2026-09-15 23:13 UTC | cc      | —  | decision: every test runs on tier 0, sequentially; F-03/F-04/F-11 deleted | DRIFT.md §G
+2026-09-15 22:55 UTC | founder | —  | P-03 done (seed stored); P-04 Helius devnet RPC supplied      | chat
+2026-09-15 22:55 UTC | founder | —  | F-01 partial: funder at 10 SOL                                | chat
+2026-09-15 22:55 UTC | founder | —  | F-02 done, TWO accounts: UI-A 7fpa…YPve, UI-B 6wqL…u3sa       | chat
+2026-09-15 23:15 UTC | cc      | —  | chain: UI-A 4.991 SOL, UI-B 9.991 SOL, neither is a service key; RPC ok | —
+2026-09-15 23:16 UTC | cc      | —  | check-deployed PASS via Helius — deployed program matches this branch | scripts/check-deployed.ts
+2026-09-15 23:18 UTC | cc      | —  | funded W00–W09 to 0.2 SOL (2.0 SOL); funder 8.0 SOL remaining | sig 48dyhJf3…SA7L9g
+2026-09-15 23:19 UTC | cc      | —  | wallets.json built: 72 headless + UI-A (device-1) + UI-B (device-2), terms v2 | registry/wallets.json
+2026-09-15 23:22 UTC | cc      | —  | T1.plan.json written — 12 seats, refund below the 40 floor, no oracle needed | registry/T1.plan.json
+2026-09-15 23:25 UTC | cc      | —  | FOUNDER-ACTIONS.md written; requested P-02 (read DRIFT.md) and F-12 (T1 entries, 22:46) | FOUNDER-ACTIONS.md

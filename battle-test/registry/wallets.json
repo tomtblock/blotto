@@ -1,0 +1,606 @@
+{
+  "schema": "blotto-rehearsal-wallets/1",
+  "cluster": "devnet",
+  "programId": "5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17",
+  "generatedAt": "2026-09-15T23:18:27.880Z",
+  "derivation": "HMAC-SHA256(master, \"blotto-battle-test/v1/\" + label); see scripts/keys.ts",
+  "funder": "6z4wriiac4d6bay57Pe4Gj3jxhjeT9HfbcH2VaM4r3Ue",
+  "termsVersion": 2,
+  "walletCount": 72,
+  "wallets": [
+    {
+      "id": "W00",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/00.json",
+      "address": "BoQJjB4fGGTkyQcFKgfgiV3KEmWpaP2jjEpqnoX3iUMR",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W01",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/01.json",
+      "address": "CF38D8UdFhCCakjK1Ty4RViSGpAfaKht5VEy8q79TTEH",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W02",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/02.json",
+      "address": "3PQbmPxu92J5UZPfra9bMofF7FjPepefHAW6UyMae7yT",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W03",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/03.json",
+      "address": "Coo447QMwr8SkSZZUABh86KKRo8AMpGcsAn4enVV8wEP",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W04",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/04.json",
+      "address": "H6iFKJMDttWj4ZfySPPPMG4EEE5cJkvNDZ9i1HNqRJdo",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W05",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/05.json",
+      "address": "7F3Mn8MMznLcCFGVB52jFn9J2xQbGHm8MH2V1NwC8wHa",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W06",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/06.json",
+      "address": "pmTjbpfoaCc2tZCNJXKdpDJZTr1qZ2f21apYXsQ7qq3",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W07",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/07.json",
+      "address": "21ShzyRaxjEuY91HmWaMzDaSfzB53A1zFShxYKSW6B3i",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W08",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/08.json",
+      "address": "BmttwNHBih1LkppkNM8nyfQj9o88DLcsWMkS3J8Zjt5D",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W09",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/09.json",
+      "address": "HAe7n7ZYHycQBvTdVtFRqKcWTfxFKHKQkjvYvfNM9Fts",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W10",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/10.json",
+      "address": "76TpE6MMG5uHEqA9ALJrrZyMr5Mv4LR47GgnEmByyfFn",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W11",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/11.json",
+      "address": "8jJSNEFqHbbS3Xonu75J7TbTDrBg8SryJBL849yofzKY",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W12",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/12.json",
+      "address": "EAnKMXm5NrD6uzoDDKn3FGooJoCRxxF1GVMMKKabALjR",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W13",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/13.json",
+      "address": "BdiQooDYCNnkBTEuWrvbUtapc1bEKNsvpXSU8U3FFNgn",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W14",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/14.json",
+      "address": "7LopdohKE7oojY2oaaVa5rCYUaQAwpnLSB4QfFaL5AaL",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W15",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/15.json",
+      "address": "5LFF41tQuiteJgqUwBtTrvHChQCsYFwnBzEPsoCYmnrP",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W16",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/16.json",
+      "address": "J8vnziqaqjr7miqNDmbiffGh8Hq3Pit8GNNjkk4hQeiJ",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W17",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/17.json",
+      "address": "6oqBtFcE46nP6SfPpSN5iX582sJXeMnBuAYBdN9FPuaG",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W18",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/18.json",
+      "address": "EfRD2Sh3R2rkja48U4uwb96F8tu3aZSzef5R2mQMJzu",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W19",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/19.json",
+      "address": "7vKioBwZHigM9zLVXPZe23BgrR44Sf2etmP9LfxcJUqm",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W20",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/20.json",
+      "address": "7NhgEuPtvjYVyqFD4isCnKFNqSxmLLCxZzSvky3JX4oX",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W21",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/21.json",
+      "address": "Bk4SKwVgvZvrZ2Y2txCknoDcZuoamhq7LdD94QUUR5Mu",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W22",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/22.json",
+      "address": "9wbGkEfUFXZFA8LTSXgQmPCMfVUMNLL5XGJbo95M29kA",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W23",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/23.json",
+      "address": "3MHZq2t7roYHsEPFX7LK1AcPGkUp5RVx82RzHHt6ZCj7",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W24",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/24.json",
+      "address": "7qvXkBndmUFQx6AHwZ5bQEVMWVmS5fb8jaNiimNxsyTq",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W25",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/25.json",
+      "address": "HbFoy8h6Y7Awavs1onxN9qSwZrRDUa3Ti8P3idE6Q2wq",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W26",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/26.json",
+      "address": "HfkvkWMPs9keMsaHcuH8AX1DCn3yeRuiaAbH3S6W8vZE",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W27",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/27.json",
+      "address": "69BuMKj1e7LNsDYgmbXfJtk1WppgoepFUFq6pWg7Nut7",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W28",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/28.json",
+      "address": "2CK7ubGSRqn2gwBbGZCq7oooWbthRqBJnqYYvJBR44pi",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W29",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/29.json",
+      "address": "HURavDvBLTvz3hFHcEWZ6LhP59qA2GQ5ZMfamVRNm7Jv",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W30",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/30.json",
+      "address": "85MN5Tc24gVRvCkZzRSjM3hkoKUbTd975XvCMRczPyEG",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W31",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/31.json",
+      "address": "ARKd8adMn8B2MUY7XjA3R3Vjj2zXMkC6UV97WmFmPUBC",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W32",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/32.json",
+      "address": "E97qquyinwkiAovRkV5aCMhVmMdT11c26LYgSQm1PiVi",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W33",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/33.json",
+      "address": "2c9pKUy6hx94bGPj4rJ4czb4HhH1La1anfhWf52tJy91",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W34",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/34.json",
+      "address": "E5DSmevYhFSDfyF1Yvp4WiLLd3cVHHrqzhA48pfM5BEC",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W35",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/35.json",
+      "address": "FHy2QgnPkbcNeiC5cMRe2Ymi6i2kWMnCmQRJdo1nB2b8",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W36",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/36.json",
+      "address": "HgnAG7HAMqHyhPgghNjH8fw5536nupNvZngCHkWFYvqA",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W37",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/37.json",
+      "address": "EdodvtHdYxgGwMzPwa3BzDR8NhMdL5jMkKTZKTzekaip",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W38",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/38.json",
+      "address": "CkhWcpxE8x465NvkZCa2L4TfcqPoQJh85KkgcLciMwQT",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W39",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/39.json",
+      "address": "54pNkrzjVZYD2dQfY3Jo5j5wzqnLJC6DR3dDfC7aXxUC",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W40",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/40.json",
+      "address": "HG3fCsSkj6Gm4wLqzNTUg4RAEL8z51EwZEfzcF8HaYSx",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W41",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/41.json",
+      "address": "C5xTL7cBqEvGZzfz9KwqTTz4Fe3WTDVh6KgoWgJSL6Ad",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W42",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/42.json",
+      "address": "CpH39cHwRhH1hXUtmZi9FZPtrfRAKfmvorMTVnCabRT2",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W43",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/43.json",
+      "address": "6s3aGq9GJmCqNCBh717evnmWserY653YrYy5LJeFF7XT",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W44",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/44.json",
+      "address": "7QDoEUbBxh1Dj8M3r9bJPjSfGuBD7McAwfEtLoZrHEh6",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W45",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/45.json",
+      "address": "fgZy7mdhgMMv4QYK9dpiiXLKw5pz1ZtUYvSPRXhPYFw",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W46",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/46.json",
+      "address": "JAdrczVWwDM5AqwHnWTF2PHFnui2G6EVhFNDSB9Aqzu3",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W47",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/47.json",
+      "address": "9g2xT2XaugDzNduz7qX6cu1UvnBkvs3xxtUxqu4Wfhgu",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W48",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/48.json",
+      "address": "6FdxTfSt1xHpaehv7UPMSRCJ8JwrnK5MpGRFjeVwQjiE",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W49",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/49.json",
+      "address": "J9GsYWxgN6qbzqATGX2caE1idyXfb996Fh18UxUHfivD",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W50",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/50.json",
+      "address": "3LPzJJMkhLamgUSHvn2fHuFLa2G71QuFzxfX78yzq9cc",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W51",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/51.json",
+      "address": "CLX9kRpa7mPtBCuRmkcviy6apf5reHtzQpNAG7YKWnPh",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W52",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/52.json",
+      "address": "9R8wPcTN7zZTbzNRXTFmPVh4KTr6f8paUpLyo3i25uxT",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W53",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/53.json",
+      "address": "5TZXbUEaSfAu9Hcpzgie8t67mBz3YXCBMZx2Rj5zRw7Z",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W54",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/54.json",
+      "address": "Btw9s22wBjx9DMtUx7k8kDEkpoeypqT32gHDD3aWcAh1",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W55",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/55.json",
+      "address": "7pWEwGeeq58kvQzFcqJdCLsGyPpsr2izi4qhpSdeWcq",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W56",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/56.json",
+      "address": "CfkK3yYBg3sDpHFHXdX9meQxbjTNYY6CFNsDC3kqu5vT",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W57",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/57.json",
+      "address": "HFGtkdwPurm1ny8Fi2v9LDd2KUiiocJ68jim1CfmSg9k",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W58",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/58.json",
+      "address": "2dSK8WADiGbkxo5kyQ5nGi6Pmd3oRL39BoSDPa5F8UXZ",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W59",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/59.json",
+      "address": "7tntKL2GLgFz2iL1CMxxCjxgTAFVERPswV3CuE5Gbe5y",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W60",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/60.json",
+      "address": "HKDtPphLse9pk3Z99nseQj688NE3Tg3h3UeqfPjgQZoN",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W61",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/61.json",
+      "address": "GjNf9i7LByLTXR5M44b6d3No8ApA26i9septKzNiiiSJ",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W62",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/62.json",
+      "address": "CBhA7Hb1RvTstwWbbqvx2RWbDhEB74Y6fJ5SkefmMd52",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W63",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/63.json",
+      "address": "8pQsAQ2fn8ryJDDutPT9XebF4qzDDNvJnpQV4kMcJ8Gn",
+      "notes": "",
+      "history": []
+    },
+    {
+      "id": "W64",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/64.json",
+      "address": "7VGVwdRgYRkygDht2XA6ausuaMNv4TYmGHxRVQbNRQFq",
+      "notes": "reserved for the T6 rejected-entry set",
+      "history": []
+    },
+    {
+      "id": "W65",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/65.json",
+      "address": "7EztACkvm1FhHwFdqXQxFETYAgMicxGLGLTWLuKx7mQb",
+      "notes": "reserved for the T6 rejected-entry set",
+      "history": []
+    },
+    {
+      "id": "W66",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/66.json",
+      "address": "FUiqCFsNwcb71Vdbtw4hFPZpU1z3BBHw2CFfmu8jtUGR",
+      "notes": "reserved for the T6 rejected-entry set",
+      "history": []
+    },
+    {
+      "id": "W67",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/67.json",
+      "address": "4XWvCx8EbL1eYaQx4WohwpYUKDyXLxg5RCiMkMhLgA9J",
+      "notes": "reserved for the T6 rejected-entry set",
+      "history": []
+    },
+    {
+      "id": "W68",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/68.json",
+      "address": "GR37EKjJKhp8QU6tfPWAeRciMYoffxTCqvcKGTWeNAdL",
+      "notes": "reserved for the T6 rejected-entry set",
+      "history": []
+    },
+    {
+      "id": "W69",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/69.json",
+      "address": "FjNn43eDPqEtBYEhwcuT9RDHtGUWxZkaqPrwHD5JyFaf",
+      "notes": "reserved for the T6 rejected-entry set",
+      "history": []
+    },
+    {
+      "id": "W70",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/70.json",
+      "address": "EzNWwKz1taUQt67G5iB5Ny2aPHnXmJKgvH5kE7KobaAA",
+      "notes": "reserved for the T6 rejected-entry set",
+      "history": []
+    },
+    {
+      "id": "W71",
+      "kind": "headless",
+      "keypair": "battle-test/keys/wallets/71.json",
+      "address": "3n4zaJDayDUwYneB75NhhnXQnXUUVRg9KJBBAbZQkGjc",
+      "notes": "reserved for the T6 rejected-entry set",
+      "history": []
+    },
+    {
+      "id": "UI-A",
+      "kind": "ui",
+      "address": "7fpaNh8mAi9SDJyvu6sVFxsqqP8LE3whvBJ1K9ZFYPve",
+      "deviceGroup": "device-1",
+      "termsVersion": 2,
+      "notes": "browser profile; embedded wallet created at social login",
+      "history": []
+    },
+    {
+      "id": "UI-B",
+      "kind": "ui",
+      "address": "6wqLMAS1guarBehRDGFSAApGUBLXuuHWmy9naepzu3sa",
+      "deviceGroup": "device-2",
+      "termsVersion": 2,
+      "notes": "browser profile; embedded wallet created at social login",
+      "history": []
+    }
+  ]
+}
