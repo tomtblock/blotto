@@ -25,3 +25,10 @@
 2026-09-15 23:19 UTC | cc      | —  | wallets.json built: 72 headless + UI-A (device-1) + UI-B (device-2), terms v2 | registry/wallets.json
 2026-09-15 23:22 UTC | cc      | —  | T1.plan.json written — 12 seats, refund below the 40 floor, no oracle needed | registry/T1.plan.json
 2026-09-15 23:25 UTC | cc      | —  | FOUNDER-ACTIONS.md written; requested P-02 (read DRIFT.md) and F-12 (T1 entries, 22:46) | FOUNDER-ACTIONS.md
+2026-09-15 23:50 UTC | cc      | —  | battle-test package created (own package.json + tsconfig + node_modules); imports backend/tests by relative path | battle-test/package.json
+2026-09-16 00:02 UTC | cc      | —  | enter.ts written, mirroring app/src/entry/submit.ts; dry run OK (payload 127B, ciphertext 175B, register data 48B, 12 accounts) | scripts/enter.ts
+2026-09-16 00:05 UTC | cc      | —  | FINDING: packet service refused a headless wallet 403. Cause is the missing age/terms attestation, NOT geo. enter.ts now attests first | backend/packet/src/service.ts:310-325
+2026-09-16 00:06 UTC | cc      | —  | Q8 ANSWERED: geo gate PASSES from this container — packet issued 200 after attestation | probe
+2026-09-16 00:08 UTC | cc      | —  | FINDING: the packet service answers in base64, not hex; enter.ts decoding corrected to match app services.ts | scripts/enter.ts
+2026-09-16 00:12 UTC | cc      | —  | register SIMULATED OK against the deployed program, 71796 CU, no state written (pool 13, W00) | scripts/enter.ts --simulate
+2026-09-16 00:12 UTC | cc      | —  | note: W00 now has a stored attestation and one orphaned ciphertext against pool 13 (no registration; pool 13 closes empty) | —
