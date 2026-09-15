@@ -1,0 +1,14 @@
+{
+  "schema": "blotto-rehearsal-plan/1",
+  "test": "BROKEN-FIXTURE",
+  "_comment": "A deliberately invalid plan. CI asserts the validator REJECTS this file. A gate that can only pass is not a gate. Five faults, one per rule: a battle summing to 99; a wallet not in the roster; the same wallet twice; two entrants sharing an identical seven-battle set; and only two distinct shapes for one entrant.",
+  "expectations": { "terminalState": "Paid", "entrants": 99, "paidSeatCount": 1 },
+  "seats": [
+    { "wallet": "W00", "battles": [[20,20,20,20,19],[30,30,20,10,10],[25,25,25,15,10],[40,20,20,10,10],[20,30,20,20,10],[10,10,30,30,20],[50,20,10,10,10]] },
+    { "wallet": "W01", "battles": [[20,20,20,20,20],[20,20,20,20,20],[20,20,20,20,20],[20,20,20,20,20],[20,20,20,20,20],[30,30,20,10,10],[30,30,20,10,10]] },
+    { "wallet": "W02", "battles": [[34,33,33,0,0],[33,34,33,0,0],[33,33,34,0,0],[40,30,30,0,0],[30,40,30,0,0],[30,30,40,0,0],[50,25,25,0,0]] },
+    { "wallet": "W03", "battles": [[34,33,33,0,0],[33,34,33,0,0],[33,33,34,0,0],[40,30,30,0,0],[30,40,30,0,0],[30,30,40,0,0],[50,25,25,0,0]] },
+    { "wallet": "W03", "battles": [[20,20,20,20,20],[30,30,20,10,10],[25,25,25,15,10],[40,20,20,10,10],[20,30,20,20,10],[10,10,30,30,20],[50,20,10,10,10]] },
+    { "wallet": "W999-NOT-IN-ROSTER", "battles": [[20,20,20,20,20],[30,30,20,10,10],[25,25,25,15,10],[40,20,20,10,10],[20,30,20,20,10],[10,10,30,30,20],[50,20,10,10,10]] }
+  ]
+}

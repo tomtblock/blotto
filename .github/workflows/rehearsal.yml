@@ -1,0 +1,161 @@
+# The devnet battle test's own lane (battle-test/MANUAL.md §2.4, §5.5, §11).
+#
+# THE BATTLE TEST DOES NOT TOUCH THE PRODUCT. Everything it builds lives in
+# `battle-test/`, plus this one file. The boundary job below enforces that on
+# every PR, so deleting `battle-test/` at the end leaves the product exactly
+# as it was — and so a change that would alter the thing under test cannot
+# arrive disguised as test tooling.
+#
+# Three jobs:
+#   boundary  — the diff stays inside battle-test/ and this workflow
+#   plans     — every committed plan is well formed, AND a deliberately
+#               broken fixture is rejected (a gate that can only pass is not
+#               a gate — the same reasoning as app-test-signer.yml)
+#   results   — a FAIL or UNFROZEN row in RESULTS.md must have a matching
+#               open item in REPORT.md §9. A failing test must be loud.
+#
+# The product's own lane (`ci-fast`) has no path filter, so it runs on these
+# PRs too and is what proves the product still builds. This lane only proves
+# the battle test's own rules.
+
+name: rehearsal
+
+on:
+  pull_request:
+    paths:
+      - 'battle-test/**'
+      - '.github/workflows/rehearsal.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'battle-test/**'
+      - '.github/workflows/rehearsal.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: rehearsal-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  boundary:
+    name: boundary — battle-test changes nothing else
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: The diff must stay inside battle-test/ and this workflow
+        run: |
+          set -euo pipefail
+          base="origin/${{ github.base_ref }}"
+          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          changed="$(git diff --name-only "$base"...HEAD)"
+          echo "changed files:"; echo "$changed" | sed 's/^/  /'
+          stray="$(echo "$changed" | grep -v -E '^(battle-test/|\.github/workflows/rehearsal\.yml$)' || true)"
+          if [ -n "$stray" ]; then
+            echo
+            echo "REFUSED — this battle-test PR changes files outside battle-test/:"
+            echo "$stray" | sed 's/^/  /'
+            echo
+            echo "The battle test is a separate folder by design (MANUAL.md 2.5). A product"
+            echo "change ships as its own PR so the two can never be confused."
+            exit 1
+          fi
+          echo
+          echo "boundary holds — nothing outside battle-test/ was touched."
+
+      - name: No secret material may be committed
+        run: |
+          set -euo pipefail
+          # keys/ is gitignored twice over and a pre-commit hook rejects a
+          # 64-integer array, but the check is cheap and the cost of being
+          # wrong is every disposable key in the history for good.
+          if git ls-files battle-test | grep -E '(^|/)keys/|\.pem$|keypair.*\.json$'; then
+            echo "REFUSED — key material is tracked under battle-test/"
+            exit 1
+          fi
+          echo "no key material tracked."
+
+  plans:
+    name: plans — frozen predictions are well formed
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install battle-test dependencies
+        working-directory: battle-test
+        run: npm ci --no-audit --no-fund
+
+      - name: Every committed plan validates
+        working-directory: battle-test
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          plans=(registry/*.plan.json)
+          if [ ${#plans[@]} -eq 0 ]; then
+            echo "no plans committed yet — nothing to validate"
+            exit 0
+          fi
+          npx ts-node --transpile-only \
+            --compiler-options '{"module":"commonjs","moduleResolution":"node"}' \
+            scripts/validate-plan.ts "${plans[@]}"
+
+      - name: The validator rejects a deliberately broken plan
+        working-directory: battle-test
+        run: |
+          set -euo pipefail
+          # A gate that can only pass is not a gate. This asserts the failing
+          # direction, exactly as app-test-signer.yml asserts both of its own.
+          if npx ts-node --transpile-only \
+               --compiler-options '{"module":"commonjs","moduleResolution":"node"}' \
+               scripts/validate-plan.ts ci-fixtures/broken.plan.json > /tmp/broken.log 2>&1; then
+            echo "REFUSED — the broken fixture PASSED validation. The gate is not working."
+            cat /tmp/broken.log
+            exit 1
+          fi
+          echo "the broken fixture was rejected, as it must be:"
+          sed 's/^/  /' /tmp/broken.log
+
+  results:
+    name: results — a failing test is loud
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: A FAIL or UNFROZEN row needs an open item in REPORT.md
+        run: |
+          set -euo pipefail
+          cd battle-test
+          if [ ! -f RESULTS.md ]; then
+            echo "RESULTS.md does not exist yet — no pools have settled."
+            exit 0
+          fi
+          bad=0
+          for token in FAIL UNFROZEN; do
+            if grep -q "$token" RESULTS.md; then
+              echo "RESULTS.md contains $token"
+              if [ ! -f REPORT.md ] || ! grep -q "$token" REPORT.md; then
+                echo "  ...but REPORT.md carries no matching open item."
+                bad=1
+              else
+                echo "  ...and REPORT.md carries a matching open item."
+              fi
+            fi
+          done
+          if [ "$bad" -ne 0 ]; then
+            echo
+            echo "REFUSED — a FAIL or UNFROZEN result must appear in REPORT.md section 9"
+            echo "(open items) with the roadmap item it belongs to. A failing test that is"
+            echo "quiet in the report is the one failure mode this gate exists to prevent."
+            exit 1
+          fi
+          echo "results gate clean."
