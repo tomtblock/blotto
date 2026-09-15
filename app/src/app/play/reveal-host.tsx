@@ -1,19 +1,26 @@
 'use client';
 
 /*
- * The reveal takeover host (C9) — the effectful shell around the PURE beat
+ * The entry takeover host (C9) — the effectful shell around the PURE beat
  * machine (src/reveal/machine.ts). The machine owns every transition; this
  * component owns exactly the effects the machine's header assigns to it:
  *
  *   - the outcome promise → `tx_confirmed` / `tx_failed`;
- *   - taps → `tap`;
- *   - the per-beat timers (host-timing.ts): strain's stall timer, the
- *     fixed-duration tell/unseal advances → `stall_timeout` / `beat_elapsed`;
+ *   - the waiting beat's stall timer (host-timing.ts) → `stall_timeout`;
  *   - dismiss / retry buttons → `dismiss` / `retry`.
  *
- * CONFIRMED-BEFORE-REVEAL is the machine's own invariant (typed, pinned in
- * machine.test.ts) — nothing here can render a class early because the
- * visual projection carries no class field before the tell.
+ * WHAT CHANGED 2026-09-15. Until then this host also rendered the reveal —
+ * the egg, the tapping, the class tell and unseal — from a stage component
+ * that read the drawn class off the machine's projection. The founder's
+ * instruction of 2026-09-14 removed the reveal: between the signature and
+ * the chain's answer the player now sees a quiet waiting hold, and the
+ * card that follows carries no class. The projection no longer has one to
+ * give (machine.ts, `RevealVisual`), so this file cannot show it even by
+ * accident.
+ *
+ * CONFIRMED-BEFORE-CARD is the machine's own invariant (typed, pinned in
+ * machine.test.ts) — nothing here can render the card early because the
+ * visual projection carries no outcome before `tx_confirmed`.
  *
  * Retry is offered ONLY when the failure says a fresh attempt is safe
  * (`TxFailure.retryable`, decided in tx/errors.ts): nothing landed and
@@ -32,7 +39,6 @@
 
 import { useEffect, useReducer, useState } from 'react';
 import { COPY } from '@/copy';
-import * as revealCopy from '@/reveal/copy';
 import {
   INITIAL_REVEAL_STATE,
   revealReducer,
@@ -42,19 +48,9 @@ import {
   type RevealState,
 } from '@/reveal/machine';
 import { beatTimer } from '@/reveal/host-timing';
-import { RevealStage, type RevealStageBeat } from '@/reveal/stages/reveal-stage';
 import type { RevealResult } from '@/reveal/types';
-import { Card } from '@/components/ui/card';
+import { PendingPanel } from '@/components/ui/pending-panel';
 import { PassCard } from './pass-card';
-
-const STAGE_BEATS: ReadonlySet<string> = new Set([
-  'entry',
-  'revealing',
-  'strain',
-  'failed',
-  'tell',
-  'unseal',
-]);
 
 export function RevealHost({
   result,
@@ -97,10 +93,9 @@ export function RevealHost({
     };
   }, [pending]);
 
-  // Beat timers, armed from the pure schedule.
+  // The stall timer, armed from the pure schedule.
   const visual = revealVisual(state);
   const beat = visual.beat;
-  const extended = visual.beat === 'tell' && visual.extended;
   useEffect(() => {
     const timer = beatTimer(revealVisual(state));
     if (!timer) return;
@@ -108,10 +103,16 @@ export function RevealHost({
     return () => clearTimeout(t);
     // Re-arm on beat identity, not every state object.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [beat, extended]);
+  }, [beat]);
 
   if (visual.beat === 'settled') {
     return <SettledExit exit={visual.exit} onDone={onDone} />;
+  }
+
+  if (visual.beat === 'entry') {
+    // Waiting for the chain. Nothing to tap, nothing to reveal; the stall
+    // timer above is what keeps this from being a dead end.
+    return <PendingPanel label={COPY.reveal.confirming} />;
   }
 
   if (visual.beat === 'stalled') {
@@ -127,11 +128,10 @@ export function RevealHost({
 
   if (visual.beat === 'card') {
     // The pass, and — now that the entry is CONFIRMED — the share
-    // (2026-09-13; see pass-card.tsx for what moved here and why).
+    // (2026-09-13; see pass-card.tsx for what it may show and why).
     return (
       <div className="flex flex-col items-center p-2">
         <PassCard
-          classIndex={visual.class}
           entryIndex={visual.entryIndex}
           asset={visual.asset}
           poolNumber={poolNumber}
@@ -141,67 +141,28 @@ export function RevealHost({
     );
   }
 
-  // The stage-owned beats.
+  // failed
   return (
     <div className="flex flex-col items-center gap-4">
-      {STAGE_BEATS.has(visual.beat) && (
-        <RevealStage
-          visual={visual as Parameters<typeof RevealStage>[0]['visual'] & { beat: RevealStageBeat }}
-          onTap={() => dispatch({ kind: 'tap' })}
-        />
-      )}
-      {(visual.beat === 'entry' || visual.beat === 'revealing' || visual.beat === 'strain') && (
-        <EggGuide confirming={visual.beat === 'strain'} />
-      )}
-      {visual.beat === 'failed' && (
-        <div className="flex max-w-prose flex-col gap-3 text-center" aria-live="polite">
-          <p className="text-sm text-red-400">{visual.failure.message}</p>
-          {onRetry && visual.failure.retryable && (
-            <button
-              type="button"
-              className="rounded border px-6 py-2"
-              onClick={() => {
-                dispatch({ kind: 'retry' });
-                setPending(onRetry());
-              }}
-            >
-              {COPY.reveal.failedRetry}
-            </button>
-          )}
-          <button type="button" className="underline" onClick={() => dispatch({ kind: 'dismiss' })}>
-            {COPY.reveal.failedDismiss}
+      <div className="flex max-w-prose flex-col gap-3 text-center" aria-live="polite">
+        <p className="text-sm text-red-400">{visual.failure.message}</p>
+        {onRetry && visual.failure.retryable && (
+          <button
+            type="button"
+            className="rounded border px-6 py-2"
+            onClick={() => {
+              dispatch({ kind: 'retry' });
+              setPending(onRetry());
+            }}
+          >
+            {COPY.reveal.failedRetry}
           </button>
-        </div>
-      )}
+        )}
+        <button type="button" className="underline" onClick={() => dispatch({ kind: 'dismiss' })}>
+          {COPY.reveal.failedDismiss}
+        </button>
+      </div>
     </div>
-  );
-}
-
-/**
- * The words around the egg (founder 2026-09-09): what the tapping is, how
- * the rarity works, and that it changes nothing about the competition.
- * Class-NEUTRAL text — it names all five looks equally and never the one
- * this entry drew, which the machine has not revealed yet.
- */
-function EggGuide({ confirming }: { confirming: boolean }) {
-  return (
-    <section
-      className="animate-settle flex w-full max-w-md flex-col gap-3 px-2 text-center"
-      data-testid="egg-guide"
-      aria-live="polite"
-    >
-      <h2 className="font-display text-[22px] leading-7 font-bold text-ink">{revealCopy.EGG_TITLE}</h2>
-      <p className="text-[14px] leading-6 text-ink-muted">
-        {confirming ? revealCopy.EGG_CONFIRMING : revealCopy.EGG_WHAT}
-      </p>
-      <Card className="px-4 py-3 text-left">
-        <p className="font-mono text-[11px] tracking-[0.14em] text-ink-muted uppercase">
-          {revealCopy.EGG_RARITY_TITLE}
-        </p>
-        <p className="mt-1 text-[13px] leading-5 text-ink">{revealCopy.EGG_RARITY}</p>
-        <p className="mt-2 text-[13px] leading-5 text-ink-muted">{revealCopy.EGG_NO_EFFECT}</p>
-      </Card>
-    </section>
   );
 }
 

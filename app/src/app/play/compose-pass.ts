@@ -1,36 +1,35 @@
 /*
- * The shareable character pass, composed on-device (2026-09-13).
+ * The shareable pass, composed on-device (2026-09-13; the character came
+ * off it 2026-09-15).
  *
  * WHAT IT MAY CONTAIN — and what it must not. Everything drawn here comes
  * from `RevealOutcome` (reveal/types.ts), which by construction carries no
- * allocation: the class, the seat, the pool. That is the whole point of
- * composing THIS rather than the seven-Blott montage that used to be
- * offered on the review screen: a Blott's silhouette is a deterministic,
- * per-stat-monotone function of its five stats (components/blott/warp.ts),
- * so a picture of seven of them was the sealed line-up, published while the
- * pool was open. The pass shows the look a player drew, which is cosmetic
- * (PID §8.4) and public on-chain the moment the pass is minted.
+ * allocation: the seat and the pool. That is the whole point of composing
+ * THIS rather than the seven-Blott montage that used to be offered on the
+ * review screen: a Blott's silhouette is a deterministic, per-stat-monotone
+ * function of its five stats (components/blott/warp.ts), so a picture of
+ * seven of them was the sealed line-up, published while the pool was open.
+ *
+ * THE DRAWN CLASS IS NOT ON THE CARD. Until 2026-09-15 the pass named the
+ * class, its rarity, and washed the card in the class hue. The founder's
+ * instruction of 2026-09-14 — the rarity assignment is not broadcast to
+ * players — took all three off; the one surface that shows rarity is the
+ * profile. What is left is the mascot, the pool, the seat, the wordmark
+ * and the footer: nothing drawn, nothing sealed.
  *
  * Colour comes from `design/tokens.ts` — a canvas renders outside the CSS
  * pipeline, so the palette is imported rather than referenced by name, and
- * no hex literal lives here. The class accent is the same placeholder hue
- * the reveal uses; it is art direction, never a signal of advantage.
+ * no hex literal lives here.
  *
- * Output: 1080×1350 PNG (the 4:5 social portrait, same frame as the
- * montage it replaces). Client-only: it needs a canvas and the page's
- * fonts, and it must never run on the server.
+ * Output: 1080×1350 PNG (the 4:5 social portrait). Client-only: it needs a
+ * canvas and the page's fonts, and it must never run on the server.
  */
 import { palette } from '@/design/tokens';
-import type { RevealClass } from '@/reveal/types';
 
 const W = 1080;
 const H = 1350;
 
 export interface PassCardInput {
-  classIndex: RevealClass;
-  className: string;
-  rarityName: string;
-  rarityLine: string;
   seatLine: string;
   poolLine: string;
   headline: string;
@@ -39,14 +38,6 @@ export interface PassCardInput {
   /** Pose image URL (a public/blott/*.webp render). */
   spriteUrl: string;
 }
-
-const CLASS_ACCENT: Readonly<Record<RevealClass, string>> = {
-  0: palette.class0,
-  1: palette.class1,
-  2: palette.class2,
-  3: palette.class3,
-  4: palette.class4,
-};
 
 /** The page's font families, read from the next/font variables so the
  * canvas draws the same faces the page does (falling back to the same
@@ -116,16 +107,15 @@ export async function composePassCard(input: PassCardInput): Promise<Blob> {
   ctx.strokeStyle = palette.brandBerry;
   ctx.stroke();
 
-  // Class accent: a soft halo behind the character. Cosmetic, like the
-  // class itself.
-  const accent = CLASS_ACCENT[input.classIndex];
+  // A soft brand-pink halo behind the mascot — the same on every pass,
+  // because the pass no longer carries anything that varies by draw.
   const haloX = W / 2;
   const haloY = cy + 430;
   const halo = ctx.createRadialGradient(haloX, haloY, 40, haloX, haloY, 320);
-  halo.addColorStop(0, accent);
+  halo.addColorStop(0, palette.brandPink);
   halo.addColorStop(1, 'rgba(255, 246, 236, 0)');
   ctx.save();
-  ctx.globalAlpha = 0.55;
+  ctx.globalAlpha = 0.45;
   ctx.fillStyle = halo;
   ctx.fillRect(cx + 4, cy + 4, cw - 8, ch - 8);
   ctx.restore();
@@ -137,26 +127,18 @@ export async function composePassCard(input: PassCardInput): Promise<Blob> {
   ctx.font = `700 30px ${f.mono}`;
   ctx.fillText(`${input.wordmark.toUpperCase()}  ·  ${input.poolLine.toUpperCase()}`, W / 2, cy + 92);
 
-  // The character.
+  // The mascot.
   const sprite = await loadImage(input.spriteUrl);
   const sw = 560;
   const sh = (sprite.naturalHeight / sprite.naturalWidth) * sw;
   ctx.drawImage(sprite, W / 2 - sw / 2, haloY - sh / 2 + 10, sw, sh);
 
-  // Headline, class, rarity, seat.
-  let y = cy + 760;
+  // Headline and seat.
+  let y = cy + 790;
   ctx.font = `800 118px ${f.display}`;
   ctx.fillText(input.headline, W / 2, y);
-  y += 96;
-  ctx.font = `800 66px ${f.display}`;
-  ctx.fillText(input.className.toUpperCase(), W / 2, y);
-  y += 56;
-  ctx.font = `500 30px ${f.body}`;
-  ctx.fillStyle = palette.brandDeepMagenta;
-  ctx.fillText(`${input.rarityName} · ${input.rarityLine}`, W / 2, y);
-  y += 54;
-  ctx.font = `600 34px ${f.body}`;
-  ctx.fillStyle = palette.brandBerry;
+  y += 88;
+  ctx.font = `600 40px ${f.body}`;
   ctx.fillText(input.seatLine, W / 2, y);
 
   // Footer, on the pink field below the card.

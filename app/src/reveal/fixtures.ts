@@ -27,8 +27,8 @@ export const FIXTURE_ENTRY_INDEX = 17;
  * One confirmed outcome for the given class.
  *
  * Everything except the class is fixed, so a test that varies the class varies
- * exactly one thing — which is what makes the machine's "no class leaks before
- * the tell" assertions meaningful.
+ * exactly one thing — which is what makes the machine's "the projection never
+ * carries a class" assertions meaningful.
  */
 export function fixtureRevealOutcome(classIndex: RevealClass): RevealOutcome {
   return {

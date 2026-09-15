@@ -16,15 +16,17 @@
 import type { TxFailure } from "@/tx/types";
 
 /**
- * The cosmetic character class, `0..4` — Goblin, Knight, Wizard, Dragon, Titan
- * (PID §3).
+ * The cosmetic character class, `0..4`, named to players by rarity tier only —
+ * Common, Uncommon, Rare, Epic, Mythic (`COPY.reveal.rarityNames`; founder
+ * 2026-09-15, dropping the creature names PID v0.5 §3 carried).
  *
  * The predecessor's equivalent ran `0..5` over six rarity tiers; this product has
  * five classes, drawn `[38, 15, 7, 3, 1]` from a bag summing to a pool's 64 seats.
  *
  * **A class confers nothing.** It does not affect any stat, any battle, any pool
- * or any prize (PID §8.4). It exists to be drawn and looked at. Anything in this
- * directory that reads a class is choosing artwork, and nothing else may.
+ * or any prize (PID §8.4). It exists to be drawn and looked at — and since
+ * 2026-09-15 it is not shown in the entry flow at all: the profile is the one
+ * surface that names it, beside `COPY.profile.rarityCaveat`.
  */
 export type RevealClass = 0 | 1 | 2 | 3 | 4;
 

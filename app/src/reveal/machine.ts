@@ -1,55 +1,58 @@
 /*
- * The reveal-loop beat machine (10.C Step 2) — a PURE reducer:
- * (state, event) -> state. No timers, no React, no I/O; the takeover
- * component owns every effect (tap capture, the outcome-seam call, the
- * stall timer, beat-duration timers) and feeds the results in as events.
+ * The entry-outcome beat machine — a PURE reducer: (state, event) -> state.
+ * No timers, no React, no I/O; the host component owns every effect (the
+ * outcome-seam call, the stall timer) and feeds the results in as events.
  *
- * Beats (reveal-spec.md §3):
- *   entry -> revealing(tapsSoFar) -> strain -> tell -> unseal -> card ->
- *   settled, plus failed (3f) and stalled (the PRD D-03 come-back state).
+ * WHAT THIS WAS, AND WHAT CHANGED. Until 2026-09-15 this machine drove a
+ * REVEAL: the player tapped an egg, it hatched, and the drawn character
+ * class was told and unsealed before the card (beats entry -> revealing ->
+ * strain -> tell -> unseal -> card). The founder's instruction of
+ * 2026-09-14 — "the rarity assignment will happen quietly under the hood
+ * and will not be something initially broadcast to users" — removes the
+ * theatre: no egg, no taps, no tell, no unseal. The beats that remain are
+ * the ones that were never about the egg, and they keep their proven
+ * behaviour:
+ *
+ *   entry -> card -> settled, plus failed (the honest failure state) and
+ *   stalled (the PRD D-03 come-back state).
  *
  * Invariants this machine enforces (each pinned in machine.test.ts):
  *
- *  - CONFIRMED-BEFORE-REVEAL, by type: tell/unseal/card hold a
- *    `ConfirmedOutcome`, a branded type only ever constructed inside this
- *    module's `tx_confirmed` case. No reachable state carries class data
- *    before a `tx_confirmed` event has been consumed.
- *  - HELD CONFIRMATION: a confirmation landing during entry/revealing is
- *    RECORDED, not applied — the machine stays put until the final tap,
- *    then resolves straight to the tell ("if confirmation already landed,
- *    the beat resolves instantly", spec §3 Beat 3 — strain is passed
- *    through, never rendered).
- *  - NG-007: extra taps are no-ops; nothing about tap timing, count past
- *    the final reveal, or rhythm can influence state. Class influences state
- *    from the tell ONWARD only — the visual projection (`revealVisual`)
- *    for every pre-tell beat has no class field AT THE TYPE LEVEL.
- *  - STALL ≠ FAILURE: `stalled` is reachable only from `strain` via
- *    `stall_timeout` (genuine stall); `failed` only via `tx_failed`.
- *    Distinct states, distinct copy (copy.ts), never conflated.
+ *  - CONFIRMED-BEFORE-CARD, by type: `card` holds a `ConfirmedOutcome`, a
+ *    branded type only ever constructed inside this module's `tx_confirmed`
+ *    case. No reachable state carries outcome data before a `tx_confirmed`
+ *    event has been consumed.
+ *  - STALL ≠ FAILURE: `stalled` is reachable only from `entry` via
+ *    `stall_timeout` (a genuine stall — the timer moved here from the old
+ *    strain beat, which was "fully revealed, confirmation not yet landed";
+ *    with nothing to reveal, waiting IS the entry beat); `failed` only via
+ *    `tx_failed`. Distinct states, distinct copy, never conflated.
+ *  - RESUME FROM STALLED (founder-RATIFIED 2026-08-11, 10.C Step 5a): a
+ *    confirmation landing while the come-back state is on screen shows the
+ *    card — never a restart, never a dropped outcome. The ruling was made
+ *    for the reveal and holds without one: leaving the player on "come back
+ *    later" when the chain has answered would be a dishonest state.
+ *  - THE CARD CARRIES NO CLASS. `RevealOutcome.class` still arrives from
+ *    the chain (the draw happens, and is replayable from published events)
+ *    and the state still holds it, but the visual projection of the card
+ *    does not expose it: the share card shows the pool and the seat, and
+ *    the one surface that shows rarity is the profile
+ *    (`COPY.profile.rarityCaveat` sits beside it there).
  *
  * The reducer is TOTAL — every (state, event) pair is defined, and events
  * that don't apply are no-ops (the same state object is returned). This
  * deliberately diverges from `lib/tx/lifecycle.ts`'s throwing reducer: the
  * trade machine is driven by one sequential executor, where an illegal
- * event is a driver bug; the reveal machine is fed by racing async sources
- * (user taps, the tx watcher, a stall timer, beat timers), where a stale
- * event — a stall timer firing just after confirmation, a duplicate
- * watcher callback — is structural, not a bug. Crashing the takeover over
- * a benign race would violate "never a dead end".
- *
- * Event-name note: the step spec names events TAP / TX_CONFIRMED /
- * TX_FAILED / STALL_TIMEOUT / DISMISS / RETRY; kinds here are lower-case
- * to match the repo's reducer idiom (`lib/tx/lifecycle.ts`). One event is
- * ADDED beyond that alphabet: `beat_elapsed`, the timer-driven advance for
- * the fixed-duration beats (tell -> unseal -> card). A timerless reducer
- * cannot advance them otherwise; the component dispatches it when the
- * beat's named duration (constants.ts) elapses.
+ * event is a driver bug; this machine is fed by racing async sources (the
+ * tx watcher, a stall timer), where a stale event — a stall timer firing
+ * just after confirmation, a duplicate watcher callback — is structural,
+ * not a bug. Crashing the takeover over a benign race would violate
+ * "never a dead end".
  */
 
 import { entryRecorded, landingUnresolved } from "@/tx/errors";
 import type { TxFailure } from "@/tx/types";
-import { EXTENDED_TELL_MIN_CLASS, TAP_COUNT } from "./constants";
-import type { RevealOutcome, RevealClass } from "./types";
+import type { RevealOutcome } from "./types";
 
 declare const CONFIRMED: unique symbol;
 
@@ -65,23 +68,15 @@ export type ConfirmedOutcome = RevealOutcome & {
 };
 
 export type RevealState =
-  /** Beat 1 — takeover mounted, pass idle, awaiting the first tap. */
-  | { beat: "entry"; confirmed: ConfirmedOutcome | null }
-  /** Beat 2 — tap-driven reveal progression, 1 ≤ tapsSoFar < tapCount. */
-  | { beat: "revealing"; tapsSoFar: number; confirmed: ConfirmedOutcome | null }
-  /** Beat 3 — fully revealed, confirmation not yet landed. Unbounded hold. */
-  | { beat: "strain" }
-  /** Beat 3f — tx failure. Credit untouched; retry present. */
+  /** Waiting: the entry is submitted and the chain has not yet answered. */
+  | { beat: "entry" }
+  /** Tx failure. Credit untouched; retry present when the failure allows it. */
   | { beat: "failed"; failure: TxFailure }
   /** D-03 come-back state — genuine stall only, never failure. */
   | { beat: "stalled" }
-  /** Beat 4 — the violet → class-colour tell. */
-  | { beat: "tell"; outcome: ConfirmedOutcome }
-  /** Beat 5 — shell burst + bounded class flash. */
-  | { beat: "unseal"; outcome: ConfirmedOutcome }
-  /** Beat 6 — the card, centred, awaiting the explicit dismiss. */
+  /** The card, centred, awaiting the explicit dismiss. */
   | { beat: "card"; outcome: ConfirmedOutcome }
-  /** Beat 7 — exit: control returns to the surface behind the takeover.
+  /** Exit: control returns to the surface behind the takeover.
    *  `outcome` is set only when the CARD was dismissed; `failure` only when the
    *  FAILED beat was; a dismiss from stalled carries neither (the transaction
    *  may still land). The host reads `revealVisual(...).exit` from these —
@@ -90,104 +85,57 @@ export type RevealState =
   | { beat: "settled"; outcome: ConfirmedOutcome | null; failure: TxFailure | null };
 
 export type RevealEvent =
-  | { kind: "tap" }
   | { kind: "tx_confirmed"; outcome: RevealOutcome }
   | { kind: "tx_failed"; failure: TxFailure }
   | { kind: "stall_timeout" }
-  | { kind: "beat_elapsed" }
   | { kind: "dismiss" }
   | { kind: "retry" };
 
-export const INITIAL_REVEAL_STATE: RevealState = {
-  beat: "entry",
-  confirmed: null,
-};
+export const INITIAL_REVEAL_STATE: RevealState = { beat: "entry" };
 
 /**
  * Advance the machine. Total: unlisted (state, event) pairs return `state`
  * unchanged (see the header for why no-op beats throwing here).
- *
- * `tapCount` is parameterized (defaulting to the Q-026 constant) so
- * property tests can exercise other magnitudes without editing canon.
  */
-export function revealReducer(
-  state: RevealState,
-  event: RevealEvent,
-  tapCount: number = TAP_COUNT,
-): RevealState {
+export function revealReducer(state: RevealState, event: RevealEvent): RevealState {
   switch (event.kind) {
-    case "tap": {
-      // NG-007: taps only matter during the reveal progression. Everywhere
-      // else — including strain and every post-confirmation beat — extra
-      // tapping changes NOTHING.
-      if (state.beat === "entry" || state.beat === "revealing") {
-        const taps = (state.beat === "revealing" ? state.tapsSoFar : 0) + 1;
-        if (taps < tapCount) {
-          return { beat: "revealing", tapsSoFar: taps, confirmed: state.confirmed };
-        }
-        // Final tap: a held confirmation resolves the strain beat
-        // instantly (pass-through); otherwise the pass strains.
-        return state.confirmed !== null
-          ? { beat: "tell", outcome: state.confirmed }
-          : { beat: "strain" };
-      }
-      return state;
-    }
-
     case "tx_confirmed": {
       // The ONLY site that mints a ConfirmedOutcome.
       const outcome = event.outcome as ConfirmedOutcome;
-      if (state.beat === "entry" || state.beat === "revealing") {
-        // Held, not applied — first confirmation wins, duplicates ignored.
-        if (state.confirmed !== null) return state;
-        return { ...state, confirmed: outcome };
-      }
-      if (state.beat === "strain") return { beat: "tell", outcome };
+      // Straight to the card — there is nothing to reveal first. A first
+      // confirmation wins: once on the card, a duplicate from the watcher
+      // is stale and changes nothing.
+      if (state.beat === "entry") return { beat: "card", outcome };
       if (state.beat === "stalled") {
         // Late confirmation while the come-back state is still on screen:
-        // RESUME the reveal — never restart, never drop the outcome.
-        // Leaving the user on "come back later" when the chain has
-        // answered would be a dishonest state. Founder-RATIFIED
+        // RESUME — never restart, never drop the outcome. Founder-RATIFIED
         // 2026-08-11 (10.C Step 5a); pinned in machine.test.ts.
-        return { beat: "tell", outcome };
+        return { beat: "card", outcome };
       }
-      // Post-reveal / post-failure duplicates from the watcher: stale.
+      // Post-card / post-failure duplicates from the watcher: stale.
       return state;
     }
 
-    case "tx_failed": {
-      // A failure can land in any pre-confirmation beat — including entry
-      // (the tx is in flight before the first tap) and stalled (the
-      // stalled tx eventually resolving as failed while the user is still
-      // looking). Swallowing any of those would be a dead end.
-      if (
-        (state.beat === "entry" || state.beat === "revealing") &&
-        state.confirmed === null
-      ) {
+    case "tx_failed":
+      // A failure can land while waiting, or while the stalled tx eventually
+      // resolves as failed with the come-back state still on screen.
+      // Swallowing either would be a dead end.
+      if (state.beat === "entry" || state.beat === "stalled") {
         return { beat: "failed", failure: event.failure };
       }
-      if (state.beat === "strain" || state.beat === "stalled") {
-        return { beat: "failed", failure: event.failure };
-      }
-      // Held/applied confirmation present, or already failed: stale event.
+      // Confirmation already applied, or already failed: stale event.
       return state;
-    }
 
     case "stall_timeout":
-      // ONLY strain can stall — a timer firing after the machine moved on
-      // (confirmation raced it) is the benign race the no-op design is for.
-      return state.beat === "strain" ? { beat: "stalled" } : state;
-
-    case "beat_elapsed":
-      // Timer-driven advance for the fixed-duration beats only. The card
-      // does NOT auto-advance: leaving is the user's explicit dismiss.
-      if (state.beat === "tell") return { beat: "unseal", outcome: state.outcome };
-      if (state.beat === "unseal") return { beat: "card", outcome: state.outcome };
-      return state;
+      // ONLY the waiting beat can stall — a timer firing after the machine
+      // moved on (confirmation raced it) is the benign race the no-op
+      // design is for.
+      return state.beat === "entry" ? { beat: "stalled" } : state;
 
     case "dismiss":
-      // The single explicit exit (Beat 7), plus the honest exits from the
-      // failure and come-back states. No dismiss exists mid-sequence.
+      // The single explicit exit from the card, plus the honest exits from
+      // the failure and come-back states. No dismiss exists while waiting:
+      // the stall timer is what guarantees the wait cannot be a dead end.
       if (state.beat === "card") {
         return { beat: "settled", outcome: state.outcome, failure: null };
       }
@@ -198,30 +146,25 @@ export function revealReducer(
       return state;
 
     case "retry":
-      // 3f retry: back to a clean pre-entry state — indistinguishable from
-      // a fresh takeover, nothing carried over, credit untouched (the
-      // machine holds no credit field at all; whole-key assertions pin that
-      // in machine.test.ts).
+      // Retry: back to a clean waiting state — indistinguishable from a
+      // fresh takeover, nothing carried over, credit untouched (the machine
+      // holds no credit field at all; whole-key assertions pin that in
+      // machine.test.ts).
       return state.beat === "failed" ? INITIAL_REVEAL_STATE : state;
   }
 }
 
 /**
  * The visual projection — EVERYTHING the takeover is allowed to render
- * from. This type is the NG-007 / confirmed-before-reveal guard made
- * structural: pre-tell variants carry NO class field, so a component
- * rendering from `RevealVisual` cannot leak class before the tell even by
- * accident. A held-but-unapplied confirmation is invisible here.
+ * from. No variant carries a class field: the drawn class is not shown
+ * anywhere in the entry flow (founder instruction 2026-09-14), so a
+ * component rendering from `RevealVisual` cannot show it even by accident.
  */
 export type RevealVisual =
   | { beat: "entry" }
-  | { beat: "revealing"; tapsSoFar: number }
-  | { beat: "strain" }
   | { beat: "failed"; failure: TxFailure }
   | { beat: "stalled" }
-  | { beat: "tell"; class: RevealClass; extended: boolean }
-  | { beat: "unseal"; class: RevealClass }
-  | { beat: "card"; class: RevealClass; entryIndex: number; asset: string }
+  | { beat: "card"; entryIndex: number; asset: string }
   | { beat: "settled"; exit: RevealExit };
 
 /**
@@ -261,26 +204,13 @@ export function revealVisual(state: RevealState): RevealVisual {
   switch (state.beat) {
     case "entry":
       return { beat: "entry" };
-    case "revealing":
-      return { beat: "revealing", tapsSoFar: state.tapsSoFar };
-    case "strain":
-      return { beat: "strain" };
     case "failed":
       return { beat: "failed", failure: state.failure };
     case "stalled":
       return { beat: "stalled" };
-    case "tell":
-      return {
-        beat: "tell",
-        class: state.outcome.class,
-        extended: state.outcome.class >= EXTENDED_TELL_MIN_CLASS,
-      };
-    case "unseal":
-      return { beat: "unseal", class: state.outcome.class };
     case "card":
       return {
         beat: "card",
-        class: state.outcome.class,
         entryIndex: state.outcome.entryIndex,
         asset: state.outcome.asset,
       };
@@ -290,13 +220,10 @@ export function revealVisual(state: RevealState): RevealVisual {
 }
 
 /** Fold an event sequence from the initial state — shared by the tests
- * and the dev lever (which reaches states by REPLAY, never by minting a
+ * and any dev lever (which reaches states by REPLAY, never by minting a
  * `ConfirmedOutcome` outside the reducer). */
-export function replayReveal(
-  events: readonly RevealEvent[],
-  tapCount: number = TAP_COUNT,
-): RevealState {
+export function replayReveal(events: readonly RevealEvent[]): RevealState {
   let state = INITIAL_REVEAL_STATE;
-  for (const event of events) state = revealReducer(state, event, tapCount);
+  for (const event of events) state = revealReducer(state, event);
   return state;
 }

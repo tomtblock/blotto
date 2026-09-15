@@ -205,11 +205,14 @@ export function ProfileClient() {
         <h2 className="mb-4 text-[12px] uppercase tracking-[0.14em] text-ink-muted">
           Character collection
         </h2>
+        {/* The ONE player-facing surface that names the drawn rarity
+            (founder 2026-09-15: profile only, tier names only, with the
+            caveat beneath). The per-tier hue is art and stays. */}
         <dl className="grid grid-cols-5 gap-3 text-center">
           {profile.class_counts.map((n, i) => (
             <div key={i} className="flex flex-col gap-1">
               <dt className="text-[10px] uppercase tracking-[0.12em] text-ink-muted">
-                {COPY.reveal.classNames[i]}
+                {COPY.reveal.rarityNames[i]}
               </dt>
               <dd
                 className="tnum font-display text-[28px] leading-[30px] font-bold"
@@ -220,6 +223,7 @@ export function ProfileClient() {
             </div>
           ))}
         </dl>
+        <p className="mt-4 text-[12px] leading-4 text-ink-muted">{COPY.profile.rarityCaveat}</p>
       </Card>
     </div>
   );

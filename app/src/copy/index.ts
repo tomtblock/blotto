@@ -805,6 +805,18 @@ export const COPY = {
     prizeFinishes: 'Prize finishes',
     totalPrizes: 'Total prizes',
     readOnlyNote: 'Profiles are a read-only record. Nothing here affects any pool.',
+    /*
+     * The caveat beside the rarity collection — the ONE place a player sees
+     * their drawn tier. The wording is the founder's ruling of 2026-09-14,
+     * accepted in place of "this rarity means nothing right now, but it
+     * might mean something in the future": that second half tells a paying
+     * player a random draw may later carry value, which inverts the PID
+     * §8.4 position that the class is decorative and worth nothing, and so
+     * is a founder-and-counsel question, not copy. This sentence states the
+     * ratified position and nothing more.
+     */
+    rarityCaveat:
+      "Rarity is decorative. It changes nothing: not your battles, not your score, not your ranking, and no prize. A Mythic's Strength is worth exactly a Common's.",
     myBlots: 'My Blotts',
     // 2026-09-13: this line said "Shapes, never numbers" — but a Blott's
     // shape IS its numbers (components/blott/warp.ts), which is why the
@@ -899,12 +911,13 @@ export const COPY = {
     },
   },
   reveal: {
-    // PID §3 class names, ladder order 0..4. Cosmetic: artwork labels,
-    // read by nothing in any scoring or prize path.
-    classNames: ['Goblin', 'Knight', 'Wizard', 'Dragon', 'Titan'] as const,
-    cardTitle: 'Your character pass',
-    // PID §3 rarity tiers in ladder order, and the count of each per pool of
-    // 64 (LAUNCH_CLASS_COUNTERS in the program — the published bag).
+    // The five classes are named to players by rarity tier ONLY — ladder
+    // order 0..4, and the count of each per pool of 64 (LAUNCH_CLASS_COUNTERS
+    // in the program — the published bag). The creature names PID v0.5 §3
+    // carried (Goblin … Titan) were dropped by the founder on 2026-09-15;
+    // the program's class indices are unchanged. Cosmetic: labels read by
+    // nothing in any scoring or prize path, and shown on the profile only.
+    cardTitle: 'Your pass',
     rarityNames: ['Common', 'Uncommon', 'Rare', 'Epic', 'Mythic'] as const,
     rarityCounts: [38, 15, 7, 3, 1] as const,
     rarityOf: (count: number) => `${count} of every 64 passes`,
@@ -916,14 +929,19 @@ export const COPY = {
      * the player a picture of their seven Blotts, and a Blott's silhouette is
      * a deterministic function of its five stats (components/blott/warp.ts)
      * — so the image was the sealed allocation, readable, offered for
-     * publication while the pool was still open. The pass carries the class,
-     * the seat and the pool number: cosmetic and public, nothing sealed.
+     * publication while the pool was still open. The pass carries the seat
+     * and the pool number: public, nothing sealed — and since 2026-09-15 not
+     * the drawn class either (founder 2026-09-14: the rarity assignment is
+     * not broadcast to players).
      * PHASE-N-REVIEW: drafts; the founder owns the words.
      */
     passEntered: "I'm in.",
     passPool: (n: string | number) => `Pool #${n}`,
     passShareTitle: 'Share your pass',
-    passShareLine: 'Your seven battles stay sealed. The pass shows the look you drew and your seat — nothing more.',
+    passShareLine: 'Your seven battles stay sealed. The pass shows your pool and your seat — nothing more.',
+    // The waiting beat, between the signature and the chain's answer. It
+    // replaced the egg's "keep tapping, or simply wait" (2026-09-15).
+    confirming: 'Confirming your entry with the network. Nothing more is needed from you.',
     passShareText: (n: string | number) =>
       `I'm in Blotto Cup pool #${n}. Seven sealed battles, the winner takes the prize pool. blotto.gg`,
     passShare: 'Share',

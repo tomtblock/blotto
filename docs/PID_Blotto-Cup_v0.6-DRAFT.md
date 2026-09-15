@@ -99,15 +99,20 @@ Metaplex Core with transfer permanently frozen. There is no instruction in the p
 unfreeze one. Class is drawn bag-without-replacement from a per-pool counter bag published on
 chain, seeded by Switchboard VRF.
 
-| Rarity | Class | Count of 64 |
-|---|---|---|
-| Common | Goblin | 38 |
-| Uncommon | Knight | 15 |
-| Rare | Wizard | 7 |
-| Epic | Dragon | 3 |
-| Mythic | Titan | 1 |
+| Rarity | Count of 64 |
+|---|---|
+| Common | 38 |
+| Uncommon | 15 |
+| Rare | 7 |
+| Epic | 3 |
+| Mythic | 1 |
 
-Class names are placeholders for art direction; the rarity structure is fixed.
+The tier name is the whole of a character's label. The creature names v0.5 §3 carried — Goblin,
+Knight, Wizard, Dragon, Titan — were dropped by the founder on 2026-09-15; the five looks and the
+rarity structure are unchanged, and the on-chain bag is indexed the same way. A player sees their
+tier on their profile only, beside a line stating that it is decorative; it is not shown in the
+entry flow (the egg-and-reveal was removed on the founder's instruction of 2026-09-14, so that the
+rarity assignment happens quietly and is not broadcast at the moment of entry).
 
 Each draw mixes five inputs into one digest, in this order: the pool's committed VRF seed, a slot
 hash from a slot deliberately in the past, the entry's seat number, the pool's address and the
@@ -115,7 +120,7 @@ player's address. Every draw can be replayed by anyone from the published events
 does not yet do so, which is recorded as not-built rather than claimed.
 
 **Class is cosmetic only.** It does not affect any zone, any battle, any pool, or any prize. A
-Titan's Strength is worth exactly what a Goblin's is. This is the load-bearing rule for the legal
+Mythic's Strength is worth exactly what a Common's is. This is the load-bearing rule for the legal
 position (§8.4) and the thing every future feature request will try to erode.
 
 *Changed from v0.5: the digest's fifth input was described as "opener's pubkey"; it is the pool's

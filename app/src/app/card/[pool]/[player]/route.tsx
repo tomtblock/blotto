@@ -1,7 +1,7 @@
 /*
  * The shareable result card (R16, roadmap 3.8; restyled by v3 D3): a
  * server-rendered OG image in the arena idiom — prize in molten amber over
- * the navy base, class name, pool id — plus nothing. No on-chain change, no
+ * the navy base, seat, pool id — plus nothing. No on-chain change, no
  * reward; any reward attached to sharing is a PID §8.4 question and out of
  * scope. (D3-B: rank labels are not indexed — the card shows the prize;
  * the full ranking with tie labels lives on the verify page.)
@@ -109,12 +109,14 @@ export async function GET(
               'Entered'
             )}
           </div>
-          <div style={{ fontSize: 34, color: INK_MUTED, display: 'flex', gap: 14 }}>
-            {entry ? COPY.reveal.classNames[entry.class] : ''}
-            {/* Seat count from the published constant, never typed: this card
-              * is the most redistributed surface in the product, so a capacity
-              * change must not leave a wrong number on every shared image. */}
-            {entry ? ` · seat ${entry.idx + 1} of ${CAPACITY}` : ` · of ${CAPACITY}`}
+          <div style={{ fontSize: 34, color: INK_MUTED, display: 'flex' }}>
+            {/* The drawn class is NOT on this card (founder 2026-09-14: the
+              * rarity assignment is not broadcast to players) — a public OG
+              * image is broadcast by definition. Seat count from the published
+              * constant, never typed: this card is the most redistributed
+              * surface in the product, so a capacity change must not leave a
+              * wrong number on every shared image. */}
+            {entry ? `seat ${entry.idx + 1} of ${CAPACITY}` : `${CAPACITY} seats`}
           </div>
         </div>
         <div style={{ marginTop: 36, fontSize: 24, color: INK_MUTED }}>
