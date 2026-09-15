@@ -52,7 +52,7 @@ acknowledge what is sacrificed.
   (`threat-tm-403`). This holds in the TypeScript scoring engine too — a score of "half a win" is
   carried as half-points in integer units, never as a float.
 - **Class is cosmetic and is read by nothing in the scoring path** (PID §3, §8.4; TECH-ARCH §4).
-  A Titan's Strength is worth exactly what a Goblin's is. No class may affect any stat, any battle,
+  A Mythic's Strength is worth exactly what a Common's is. No class may affect any stat, any battle,
   any pool, any prize, or any ranking tiebreak. Any proposed class reward faces two questions —
   *would anyone pay money for this, and does it improve the chance of winning?* Both must be no.
   This is the load-bearing rule for the legal position and the thing every future feature request

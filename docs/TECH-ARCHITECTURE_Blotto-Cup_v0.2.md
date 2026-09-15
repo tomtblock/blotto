@@ -341,3 +341,17 @@ threat model and its mitigation ids (`threat-tm-401`, `-402`, `-403`), the
 integer-only rule, the pentagon's granularity argument, and the reasoning for
 distinct PDA seed prefixes. Those are why the build looks as it does, and none
 of them has been superseded.
+
+### The character pass (§4) — added 2026-09-15
+
+- **Class names.** The body, like PID v0.5 §3, names the five classes Goblin, Knight, Wizard,
+  Dragon and Titan. The founder dropped the creature names on 2026-09-15: a character is labelled
+  by its rarity tier only — Common, Uncommon, Rare, Epic, Mythic — in the same index order as the
+  on-chain `class_counters` bag (`38 · 15 · 7 · 3 · 1` of 64), which is unchanged. The program was
+  not rebuilt for a label; the mapping is recorded here and in
+  `docs/CHANGE-2026-09-15_reveal-and-rarity.md`.
+- **Where a player sees it.** Nowhere in the entry flow. The reveal — the egg, the tapping, the
+  class tell — was removed on the founder's instruction of 2026-09-14 ("the rarity assignment will
+  happen quietly under the hood and will not be something initially broadcast to users"). The share
+  card and the public card image carry the pool and the seat; the profile is the one surface that
+  shows the tier, beside a line stating that it is decorative.

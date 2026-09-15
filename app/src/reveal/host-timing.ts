@@ -3,39 +3,25 @@
  * as data. The host component owns the actual setTimeout; keeping the
  * mapping pure pins the choreography in a unit test:
  *
- *   strain  → stall_timeout after STALL_THRESHOLD_MS (D-03 come-back)
- *   tell    → beat_elapsed after its (possibly extended) duration
- *   unseal  → beat_elapsed after UNSEAL_DURATION_MS
- *   every other beat → no timer (entry/revealing are tap-driven; card and
- *   the terminal beats advance only by explicit dismiss).
+ *   entry → stall_timeout after STALL_THRESHOLD_MS (D-03 come-back)
+ *   every other beat → no timer (the card and the terminal beats advance
+ *   only by explicit dismiss).
+ *
+ * Until 2026-09-15 the stall timer belonged to the strain beat ("fully
+ * revealed, confirmation not yet landed") and the tell and unseal beats
+ * advanced on fixed durations. The founder's instruction of 2026-09-14
+ * removed the reveal, so waiting IS the entry beat and the stall timer
+ * moved with it; the timed beats are gone.
  */
 
-import {
-  STALL_THRESHOLD_MS,
-  TELL_DURATION_MS,
-  TELL_EXTENDED_DURATION_MS,
-  UNSEAL_DURATION_MS,
-} from './constants';
-import type { RevealEvent } from './machine';
-import type { RevealVisual } from './machine';
+import { STALL_THRESHOLD_MS } from './constants';
+import type { RevealEvent, RevealVisual } from './machine';
 
 export interface BeatTimer {
-  event: Extract<RevealEvent['kind'], 'beat_elapsed' | 'stall_timeout'>;
+  event: Extract<RevealEvent['kind'], 'stall_timeout'>;
   ms: number;
 }
 
 export function beatTimer(visual: RevealVisual): BeatTimer | null {
-  switch (visual.beat) {
-    case 'strain':
-      return { event: 'stall_timeout', ms: STALL_THRESHOLD_MS };
-    case 'tell':
-      return {
-        event: 'beat_elapsed',
-        ms: visual.extended ? TELL_EXTENDED_DURATION_MS : TELL_DURATION_MS,
-      };
-    case 'unseal':
-      return { event: 'beat_elapsed', ms: UNSEAL_DURATION_MS };
-    default:
-      return null;
-  }
+  return visual.beat === 'entry' ? { event: 'stall_timeout', ms: STALL_THRESHOLD_MS } : null;
 }

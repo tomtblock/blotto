@@ -46,6 +46,7 @@ import {
 import { signInHref } from '@/app/signin/return-to';
 import { runInterruption } from './run-guard';
 import { RevealHost } from './reveal-host';
+import { PendingPanel } from '@/components/ui/pending-panel';
 import { SealedPanel } from './sealed-panel';
 
 /** D-C: the top-up prompt ships behind a flag, OFF by default. */
@@ -77,25 +78,6 @@ function StatePanel({ title, children }: { title: string; children: React.ReactN
 }
 
 /** After this long a hold says so, rather than looking frozen. */
-const SLOW_HOLD_MS = 4_000;
-
-/** A quiet in-progress hold (checks, loads) — never a bare ellipsis. Past
- *  SLOW_HOLD_MS it names the stage as slow so a stuck step is reportable. */
-function PendingPanel({ label }: { label: string }) {
-  const [slow, setSlow] = useState(false);
-  useEffect(() => {
-    const t = setTimeout(() => setSlow(true), SLOW_HOLD_MS);
-    return () => clearTimeout(t);
-  }, [label]);
-  return (
-    <section aria-live="polite" className="flex flex-col items-center gap-4 py-14">
-      <div className="h-8 w-8 rounded-full border-2 border-overlay border-t-brand motion-safe:animate-rotate" aria-hidden />
-      <p className="text-[13px] uppercase tracking-[0.14em] text-ink-muted">{label}</p>
-      {slow && <p className="max-w-prose text-center text-[13px] leading-5 text-ink-muted">{COPY.gate.slowHold}</p>}
-    </section>
-  );
-}
-
 /** Ceiling on the browser's fallback read of the pool. */
 const POOL_LOAD_TIMEOUT_MS = 8_000;
 

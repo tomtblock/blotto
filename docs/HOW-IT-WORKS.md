@@ -28,8 +28,8 @@ repaid their entry in full and the pool closes.
 About ninety seconds, once, and then nothing until the pool concludes.
 
 1. **They pay the entry** and receive a character pass — a non-transferable token with one of five
-   classes on it. The class is decorative. It is read by nothing that decides the result: a Titan's
-   Strength is worth exactly what a Goblin's is.
+   classes on it. The class is decorative. It is read by nothing that decides the result: a Mythic's
+   Strength is worth exactly what a Common's is.
 2. **They set seven battles.** Each battle distributes **100 points** across five stats — Strength,
    Speed, Heart, Wit, Durability — as whole numbers adding to exactly 100. Any distribution is
    allowed. There are no presets and no suggested splits.
