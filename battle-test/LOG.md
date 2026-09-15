@@ -38,3 +38,4 @@
 2026-09-15 23:40 UTC | cc      | —  | rehearsal.yml + validate-plan.ts added; broken fixture correctly rejected (7 faults found) | .github/workflows/rehearsal.yml
 2026-09-15 23:42 UTC | cc      | —  | language gate caught 3 of my own files: a banned adjective in the workflow comment, a review-link URL in this log, and a TS compiler option. All three reworded or removed; gate clean. (This line itself had to be reworded for the same reason.) | scripts/check-language.sh
 2026-09-15 23:52 UTC | cc      | —  | MANUAL.md amended in place: banner + §0.1, §0.3, §1, §3.1, §4.0, §7.3, §9, §12. WP0 acceptance met | battle-test/MANUAL.md
+2026-09-15 23:58 UTC | cc      | —  | enter.ts now drives from the frozen plan (--plan): seat list, generator and seed all come from the committed prediction. Dry run over T1's 10 seats OK, 10 distinct battle hashes | scripts/enter.ts

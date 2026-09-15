@@ -54,7 +54,7 @@
  */
 
 import { createHash, randomBytes } from 'crypto';
-import { appendFileSync, mkdirSync, writeFileSync } from 'fs';
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 import {
   Connection,
@@ -432,7 +432,17 @@ async function main(): Promise<void> {
   const test = flags.test ?? 'ad-hoc';
   const poolId = flags.pool;
   if (!poolId) throw new Error('--pool <id> is required');
-  const walletIds = parseWallets(flags.wallets ?? 'W00-W09');
+  // The plan is the source of truth for who enters and with what. Reading it
+  // here is what makes a run reproducible from the committed prediction.
+  interface PlanSeat { wallet: string; route?: string; generator?: string; seed?: number; battles?: number[][] }
+  let planSeats: PlanSeat[] | null = null;
+  if (flags.plan) {
+    const doc = JSON.parse(readFileSync(resolve(process.cwd(), flags.plan), 'utf8')) as { seats: PlanSeat[] };
+    planSeats = doc.seats.filter((x) => (x.route ?? 'direct') === 'direct');
+  }
+  const walletIds = planSeats
+    ? planSeats.map((x) => x.wallet)
+    : parseWallets(flags.wallets ?? 'W00-W09');
   const dryRun = flags['dry-run'] === 'true';
   const simulate = flags.simulate === 'true';
   const concurrency = Math.max(1, Math.min(16, Number(flags.concurrency ?? 4)));
@@ -459,9 +469,23 @@ async function main(): Promise<void> {
   const mode = dryRun ? 'DRY RUN — ' : simulate ? 'SIMULATE (no state written) — ' : '';
   console.log(`${mode}entering ${walletIds.length} seats: ${walletIds.join(', ')}\n`);
 
-  // Population: the four-strategy mix, indexed by the wallet's own number so
-  // a wallet's battles are reproducible from the plan's seed alone.
+  // Where the plan names a generator and a seed per seat, those decide the
+  // battles; otherwise fall back to the four-strategy mix indexed by seat.
   const population = poolPopulation(Number(flags.seed ?? pool.id));
+  const fromPlan = new Map<string, GeneratedEntrant>();
+  for (const seat of planSeats ?? []) {
+    if (seat.battles) {
+      fromPlan.set(seat.wallet, {
+        strategy: seat.generator ?? 'plan',
+        battles: seat.battles,
+        timingsMs: Array.from({ length: 7 }, (_, k) => 900 + ((seat.seed ?? 0) + k * 137) % 2600),
+      });
+    } else if (seat.seed !== undefined) {
+      // Deterministic from the frozen seed: the same plan always produces the
+      // same seven battle sets for this wallet, on any machine.
+      fromPlan.set(seat.wallet, generateEntrant('random', seat.seed));
+    }
+  }
 
   const results: SeatResult[] = [];
   for (let i = 0; i < walletIds.length; i += concurrency) {
@@ -469,7 +493,7 @@ async function main(): Promise<void> {
     const batch = await Promise.all(
       slice.map((id) => {
         const index = Number(id.replace(/^W/i, ''));
-        const entrant = population[index] ?? generateEntrant('random', index);
+        const entrant = fromPlan.get(id) ?? population[index] ?? generateEntrant('random', index);
         return enterOne({ connection, master, walletId: id, index, entrant, pool, packetApi, dryRun, terms, simulate });
       })
     );
