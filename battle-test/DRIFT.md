@@ -242,3 +242,148 @@ The manual names three backend packages (§2.5, §4.11). There are **nine**: `_s
 | §9 T7, F-29 | "review page: release UI-A, forfeit UI-B; send both signatures" | `/admin/review` behind an admin gate; buttons **Clear · Release · Forfeit**; the **reviewer's own wallet** signs a canonical message (`app/admin/review/review-client.tsx:167-185,297-315`), accepted only if listed in `config/reviewers.json`. The page itself carries a panel "Upheld forfeits the chain does not carry yet" | **CHANGED** | F-29 is a **two-part action**: a reviewer-signed decision in the browser, then the founder's `admin.ts forfeit-escrow` on chain. What comes back from the page is a decision, not a transaction signature. The registry holds one member, so the **appeal path is not testable**. |
 | — | cooldown countdown in the UI | Not built — the home page renders a status word (`Taking entries` / `Settling` / `Covered — opens next`), no `next_open_at` countdown | GONE | Do not ask for a cooldown-countdown screenshot. Use the ladder status word plus the new pool appearing on `/pools`. |
 | §12 | "same browser, three emails, outside T7 — never" | Correct, and confirmed live | HOLDS | Add: never a private window for a T7 seat either. |
+
+---
+
+## F. Scripts, tests, config and CI
+
+### F1. `admin.ts` — what the manual's commands actually do
+
+| manual § | says | repo has | verdict | fix |
+|---|---|---|---|---|
+| §4.9 | `set-tier-economics --tier 1 --price 0.1sol --pot 1024` | Syntax exact (`admin.ts:129-130`); local 1024-multiple check at `:810-812` | HOLDS (syntax) | But its **effect** breaks F-11 — see F2. |
+| §4.9 | silent on a pot ceiling | On chain only: `pot <= MIN_SEATS × price` (`treasury.rs:200-206`, `PotExceedsMinimumField` 6053). `admin.ts` does not mirror it | CHANGED | A bad pot burns a transaction. Ceiling is `40 × price`. |
+| §9 T3, F-23 | "founder `set-paused true`" | Flags are `--paused <true\|false>`; `parseBool` rejects anything else (`admin.ts:117-119, 755-762`) | CHANGED | Write it as `set-paused --paused true`. A bare `set-paused true` is invalid. |
+| §9 T7, F-29 | "release UI-A, forfeit UI-B" as two `admin.ts` commands | Only one exists. `forfeit-escrow --pool-id <u64> --player <pubkey>` (admin-signed, `admin.ts:88-91`). **There is no `release-escrow` command** — release is settlement-signed and reached through the review service (`detection/src/review.ts:220-226`, `POST /decisions`) | CHANGED | F-29 is two tools; see §E3. |
+| §4.2 | ENVIRONMENT.md fields | `status` prints admin, entry signer, settlement signer, paused, open tiers, tier prices, tier pots, reserve pots, min platform, reserved, refundable, kyc threshold, detection block, next pool id, keeper, fill deadline, cooldown, tier next open at, platform balance. It does **not** print VRF, geo mode, device/ip status or the RPC in use | HOLDS with additions | Template extended. The missing four come from elsewhere. |
+| §4.6(b) | "floor … from `admin.ts status`" | The ingredients print; **the floor is computed nowhere in `admin.ts`** | CHANGED | CAPITAL.md does the arithmetic by hand, including the rent cushion per reserved pot and `refundable`. |
+| §4.3 | tooling: `solana`, node ≥ 20, ts-node, playwright | No `solana`/`anchor` CLI in this container; `tsx` is used by newer CI scripts; Playwright is an `app/`-local dependency | CHANGED | `keys.ts` replaces `solana-keygen`; §4.12 step 4's `solana transfer` needs a web3.js transfer instead. |
+| §4.3 | RPC selection unspecified | Three names, not interchangeable: `admin.ts:1087` reads **`RPC_URL` first**, then `BLOTTO_RPC_URL`; `check-deployed.ts:53` reads **`BLOTTO_RPC_URL` only**; `resolveRpcUrl` refuses a mainnet URL under devnet | CHANGED | Set **both** `BLOTTO_RPC_URL` and `RPC_URL` to the same dedicated endpoint. |
+| §2.1 | founder "runs every `admin.ts` write" (direct-signed implied) | **`config/custody.json` names the devnet admin as a Squads vault** `9EEW…e34Z` (multisig `9EL1…mFyN`, threshold 1, one member). Direct signing needs `FEE_PAYER_KEYPAIR`; the vault path is `--emit-proposal --admin <vault>` plus an approval round | **CHANGED — founder question Q6** | With the plan in §G, only two admin writes remain in the whole week, so this matters twice rather than six times. |
+| §4.1, §8.1 | `admin.ts pools` not mentioned | It exists and is the drain query; prints `fill_deadline` per pool; **exits 1 while any pool is Sealed, Scored or Refunding** (by design) | **NEW — add it** | The only read that shows per-pool deadlines and confirms the next pool opened. A non-zero exit during a refund is the verdict working, not a failure. |
+
+### F2. The blocker: tier 1 cannot be opened
+
+`set-open-tiers` refuses to open any tier whose **live** economics differ from the ratified table (`admin.ts:721-747`).
+
+| tier | live on chain | ratified (`prizes.ts:91-121`) | can be opened? |
+|---|---|---|---|
+| 0 | price 0.1 SOL, pot 4.0 SOL | 0.1 / 4.0 | **yes — and it is already open** |
+| 1 | price 0.5 SOL, **pot 25.6 SOL** | 0.5 / **20.0** | **no** |
+| 2–6 | 38.4 / 51.2 / 128 / 256 / 384 SOL | 30 / 40 / 100 / 200 / 300 | no |
+
+Tiers 1 to 6 still carry the superseded 80%-of-gross derivation; only tier 0 was ever updated to the ratified D-E1 value. So **F-11 (`set-open-tiers --tiers 1,1,…`) would be refused today even without the manual's tier-1 shrink** — and the shrink in §4.9 is precisely the mismatch the refusal exists to prevent. §4.9 and §4.10 are mutually exclusive as written.
+
+Opening tier 1 properly would mean `set-tier-economics --tier 1 --price 0.5sol --pot 20sol` and then funding a **20 SOL** pot from the treasury. That is far beyond a faucet-funded devnet week. **Recommendation in §G: run every test on tier 0.**
+
+### F3. Tests, fixtures and measured costs
+
+| manual § | says | repo has | verdict | fix |
+|---|---|---|---|---|
+| §6.1 | "`orchestrator.ts` already sequences this over `FakeChain`; the devnet version swaps in the real RPC" | **It does not.** `runOfflinePool` seals into a memory store and then **fabricates** the entry rows, writing the pool straight to `Sealed`. No `register`, no packet, no HTTP. Its own header says "The devnet rehearsal is a different thing entirely" | **GONE** | `enter.ts` gets the **sealing half only** from the orchestrator. The register leg must be mirrored from `app/src/entry/submit.ts` and `backend/reveal/src/chain-web3.ts`. **This is materially more work than the manual assumes** — it lands in WP4. |
+| §4.13 | "`enter.ts` dry-runs against LiteSVM" | LiteSVM is a **Rust** crate driven by hand-encoded Rust instructions; a TypeScript script cannot dry-run against it | CHANGED | Pin `enter.ts`'s encoding against the byte layouts in `tests/litesvm/src/lib.rs` and `backend/reveal/test/chain-web3.spec.ts`, which pin the same encodings in TypeScript. |
+| §4.8 | "measure the per-entry sunk cost" | **Already measured and committed.** `docs/INFRASTRUCTURE.md:120-124`, devnet 2026-09-11: the player pays **0.104436 SOL** — 0.1 entry, 0.002613 Entry rent, 0.001808 pass rent, 0.000015 fees. **Sunk per entry = 0.004436 SOL** | **CHANGED — the work is done** | Quote INFRASTRUCTURE.md; confirm with the first real entry. The manual's "2 × 5000 lamports" is 3 signatures, 0.000015 SOL. |
+| §4.12 | headless target 0.2 SOL | 0.104436 × 1.2 = 0.125; 0.2 is ~1.9× | HOLDS | Generous and safe. |
+| §4.4 | `solana-keygen` loop; `echo keys/ >> .gitignore` | No `solana` CLI here; and `keys/` is **already ignored twice** (root `.gitignore:21`, `battle-test/.gitignore:1`). A pre-commit hook also rejects any staged 64-integer array | CHANGED | Replaced by `keys.ts`. Verify with `git check-ignore -v battle-test/keys/wallets/00.json`. |
+| §4.13 | "a sacrificial tier-4 pool" | Tier 4 is not open and cannot be opened (F2), and tier ≥ 1 has R6 preconditions including a written counsel opinion | GONE | Drop it, or accept a tier-0 pool at a 4 SOL pot. |
+
+### F4. Config and custody — answers the manual asked for
+
+| Question (§4.2) | Answer | Source |
+|---|---|---|
+| Entry signer | `9Xhw…y8TP`, **Turnkey, non-exportable** | `config/custody.json`; cross-check against `status` (they agree today) |
+| Settlement signer | `EaDf…jrSD`, also the **keeper** on devnet | same |
+| Admin | `9EEW…e34Z`, a **Squads vault** (threshold 1, one member) | same |
+| Upgrade authority | `GXKX…agXY`, single operator key on devnet | same |
+| Irys upload wallet | `HG56…w7uL` | same |
+| Terms version | **2**, updated 2026-09-06 | `config/terms.json` |
+| Geo posture | **block-list**, 14 codes blocked (AE AU BE BH CN HK ID IN KW MY OM QA SA SG); GB is not blocked | `config/territories.json` |
+| Geo mode (stub or vendor) | **UNKNOWN from the repo** — it depends on deployment secrets. The stub "admits every address as GB" | `.github/workflows/deploy-backend.yml:85` |
+| Reviewer registry | **one** member, `4ydb…wcL1` | `config/reviewers.json` |
+| Tier table location | `backend/scoring/src/prizes.ts`, **not** `config/` | — |
+
+**The geo trap.** If the deployment runs the vendor rather than the stub, an address the vendor cannot resolve is **refused in every posture**. Headless entries originate from this cloud container. That is the single most likely cause of a mass `enter.ts` failure, and it is not visible from the repo. **First WP4 task: request one packet for one derived wallet and see whether the geo gate passes.** A packet is a short-lived signed attestation; requesting one enters no pool and costs nothing.
+
+### F5. CI — what a battle-test PR actually triggers
+
+| manual § | says | repo has | verdict | fix |
+|---|---|---|---|---|
+| §2.4, §2.5 | implies only the battle-test lane runs | **`ci-fast` has no path filter at all.** A PR touching only `battle-test/**` runs the whole of it: rust, nine node packages, the app build, a real Postgres with 21 migrations, Playwright, gitleaks, and the standing-rules lane | **CHANGED** | Every freeze PR costs a full run (~20 min). **Budget it into §8.3** — the founder's merge waits on CI. Adding `battle-test/package.json` also starts firing `security-sweep` (`**/package.json`). |
+| §12 | "anything under `docs/` runs through `check-language.sh`" | The gate greps the **whole tree** from the repo root, on every PR | **CHANGED** | `battle-test/**` is in scope — the manual, the log, every `CARD.md`. Confirmed by the three word swaps this session. |
+| §2.4, §4.14 | "gitleaks stays green" | Keys are safe (ignored twice, absent from a clean checkout). **But** `.gitleaks.toml:18-21` has a custom rule matching **any JSON array of exactly 64 integers under 1000** — it already fires on a committed fixture. A `plan.json` holding a 64-element integer seat map, rank order or leaf order **will trip the identical rule**, and the lane scans this branch's own commits, so deleting the file later does not clear it | **CHANGED — design around it** | `plan.ts` and `harvest.ts` must never emit a bare 64-element integer array. Emit arrays of objects (`[{"seat":0,"rank":1},…]`). A `wallets.json` of base58 address strings is unaffected. |
+| §11 | a results gate | Not built; belongs in the new `rehearsal.yml` | HOLDS (to build) | — |
+| — | `stop-the-line.yml` | Watches ci-fast, on-chain and deployed-drift on **main** and auto-opens an issue **assigned to the merging author** | new | A freeze PR merged red files an issue against the founder. Warn in §8.3. |
+| — | boundary check | Not built. Good news: `check-env-examples.sh` and `check-standing-rules.sh` do not reach a new top-level package, so battle-test needs no `.env.example` rows | HOLDS (to build) | — |
+
+### F6. `fan-out.ts` against current conventions
+
+Keypair loading (`FEE_PAYER_KEYPAIR`) and the amount parser are **character-identical** to `admin.ts`. Commands, batching bounds and the idempotent top-up all behave as §4.12 describes. Two fixes:
+
+- **RPC (real divergence).** `fan-out.ts:43` hard-codes the public devnet endpoint and reads only `RPC_URL`; it does not use `resolveRpcUrl`, `BLOTTO_CLUSTER` or `BLOTTO_RPC_URL`. With only `BLOTTO_RPC_URL` set it silently uses the public endpoint — exactly the throttling that already 429'd tonight. **Until patched, always pass `--rpc` explicitly.** Fix is one import, and is in scope because the file lives in `battle-test/`.
+- **Cosmetic.** Its header says "the 64 entrant wallets"; it loads every `*.json` in the directory, so 72 works. Update when next touched.
+
+`§4.12` step 4 (`solana transfer` to the three UI wallets) cannot run here. It becomes a web3.js transfer or a `fan-out.ts` extension.
+
+---
+
+## G. What this means for the week
+
+### G1. Every test runs on tier 0
+
+Tier 1 cannot be opened (F2), and opening it properly would cost a 20 SOL pot. Tier 0 is already open, already carries ratified economics, and has a 4 SOL pot at a 0.1 SOL entry. So the manual's two-tier design — full pools on tier 0, the refund chain in parallel on tier 1 — collapses to **one tier, strictly sequential**, because pools per tier are sequential by D-A1.
+
+That is not as costly as it sounds, because the founder's own cadence absorbs it. A deadline test occupies a 12-hour cycle; a full pool settles minutes after its 64th entry. Alternating them fits the 11:00 / 23:00 rhythm exactly:
+
+| Pool | Test | Opens (local) | Settles / closes | Founder slot |
+|---|---|---|---|---|
+| 14 | **T1** refund, sparse (12 seats) | tonight ~22:48 | ~10:48 Wed | 23:00 and 11:00 |
+| 15 | **T4** full — UI-A wins | Wed ~10:58 | ~11:40 Wed | 11:00 block |
+| 16 | **T5** full — headless wins | Wed ~11:45 | ~12:30 Wed | 11:00 block |
+| 17 | **T6** oversubscribed + load | Wed ~12:35 | ~13:20 Wed | 11:00 block |
+| 18 | **T7** same-device → review | Wed ~13:25 | ~14:30 Wed | 11:00 block |
+| 19 | **T2** refund at 39 | Wed ~22:48 | ~10:48 Thu | 23:00 and 11:00 |
+| 20 | **T3** seal at 40 + pause | Thu ~10:58 | ~22:58 Thu | 11:00 and 23:00 |
+| — | **T8** verify + recompute | Thu desk work | — | any |
+
+**T3 changes character and improves.** At exactly 40 seats it seals at its deadline and pays its winner. That exercises `seal_at_deadline`, the boundary the program actually defends, and the R7-b fork the site advertises — a better test than a third refund. T2 at 39 is the boundary from below.
+
+### G2. Founder actions that disappear
+
+- **F-03** (merge the change-control PR, deploy): the 12-hour decision is already live. Nothing to merge. A deploy is needed only if `check-deployed` reports drift, and that check is blocked on the dedicated RPC.
+- **F-04** (`set-tier-economics --tier 1`): deleted. Tier 1 is not used, and the command would make tier 1 unopenable.
+- **F-11** (`set-open-tiers --tiers 1,1,…`): deleted. Tier 0 is already open; the call would be refused.
+- **F-05** (`fund-platform-wallet`): probably unnecessary. When pool 13 refunds its untouched pot, the treasury returns to about 5.997 SOL, and opening the next tier-0 pool needs 4.0 pot + 0.00065 cushion + 0.5 floor = about 4.5 SOL, with no idle-tier reserve because tier 0 is the only enabled tier. Held in reserve as a contingency.
+
+**Two admin writes remain in the whole week**: `set-paused` on and off for T3's pause test, and `forfeit-escrow` for T7. Both need the Squads question answered (Q6).
+
+### G3. Capital, with the measured numbers
+
+| Item | Figure | Source |
+|---|---|---|
+| Entry price, tier 0 | 0.1 SOL | chain |
+| Pot, tier 0 | 4.0 SOL, pre-funded from the treasury at open | chain |
+| Sunk per entry (not refunded) | **0.004436 SOL** — Entry rent 0.002613, pass rent 0.001808, fees 0.000015 | `docs/INFRASTRUCTURE.md:120-124`, measured devnet 2026-09-11 |
+| Sunk per pool opened | **0.00065024 SOL** — the vault rent cushion, never recovered | measured tonight, §C |
+| Headless top-up target | 0.2 SOL each × 72 = 14.4 SOL | §4.12, ~1.9× the measured per-entry cost |
+| UI wallets | 0.5 SOL each × 3 = 1.5 SOL | §4.12 |
+| **Faucet target** | **~18 SOL** including margin | — |
+
+Money recirculates: entries flow to the treasury, refunds come back from it, prizes come from the pre-funded vault. A full pool takes in 6.4 SOL of entries and pays out a 4 SOL pot, so the treasury **grows** on played pools. Only rent and fees are ever truly spent.
+
+### G4. Tonight — what can and cannot be frozen before pool 14
+
+A refund test needs **no scoring oracle**: nothing is ranked, and the prediction is that every entry returns exactly `entry_lamports` while rent stays sunk. So T1's plan can be frozen tonight honestly, without waiting for `plan.ts`, the population generators or the Merkle work. The full pools need all of that and are Wednesday's work.
+
+If `enter.ts` is not ready inside T1's 12-hour window, the nine headless seats reconcile as **ABSENT** — the verdict that exists for exactly this — and the three UI seats still prove the refund. The test degrades honestly rather than failing.
+
+### G5. Unresolved rows
+
+**0.** Every row above is either carried into the manual amendment in this PR, or recorded as an explicit founder question below. The five questions do not block WP0; they block specific later actions, named per question.
+
+| # | Question | Blocks | Recommendation |
+|---|---|---|---|
+| Q6 | Is the live `Config.admin` signed **directly** by a keypair you hold, or through the **Squads vault** with a proposal and approval round? | T3's pause (F-23), T7's forfeit (F-29) | Answer from how you have run admin commands before. If it is the vault, those two founder blocks need 20 minutes each, not 5. |
+| Q7 | Who holds the reviewer key `4ydb…wcL1`, the only member of `config/reviewers.json`? | T7 entirely | If it is not you, T7 needs that person or T7 is NOT TESTABLE and goes in report §9. |
+| Q8 | Is the packet service running the **geo stub** or a **vendor**? | every headless entry | I will test this myself with one packet request rather than ask you to find out. Recorded here because a vendor refusal would explain a mass failure. |
+| Q9 | The Playwright route needs a **self-built app** with the test-signer flag, and the spec must be written from scratch. Build it, or record quota 0 against roadmap 5.1? | WP4 scope | Recommend **quota 0** and a recorded reduction. The direct route proves the chain path; the Playwright route proves the browser path, and building it would cost more than the week has. Your call. |
+| Q10 | Tier 1 to 6 carry superseded economics on chain. Fix them, or leave them? | nothing in this test | Recommend **leave them** and log it as a product follow-up. Changing them is a founder-owned economics action with no bearing on a tier-0 week. |
