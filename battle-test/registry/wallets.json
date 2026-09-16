@@ -14,7 +14,16 @@
       "keypair": "battle-test/keys/wallets/00.json",
       "address": "BoQJjB4fGGTkyQcFKgfgiV3KEmWpaP2jjEpqnoX3iUMR",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T1",
+          "poolId": "14",
+          "seat": "4",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
+        }
+      ]
     },
     {
       "id": "W01",
@@ -22,7 +31,16 @@
       "keypair": "battle-test/keys/wallets/01.json",
       "address": "CF38D8UdFhCCakjK1Ty4RViSGpAfaKht5VEy8q79TTEH",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T1",
+          "poolId": "14",
+          "seat": "3",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
+        }
+      ]
     },
     {
       "id": "W02",
@@ -30,7 +48,16 @@
       "keypair": "battle-test/keys/wallets/02.json",
       "address": "3PQbmPxu92J5UZPfra9bMofF7FjPepefHAW6UyMae7yT",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T1",
+          "poolId": "14",
+          "seat": "2",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
+        }
+      ]
     },
     {
       "id": "W03",
@@ -38,7 +65,16 @@
       "keypair": "battle-test/keys/wallets/03.json",
       "address": "Coo447QMwr8SkSZZUABh86KKRo8AMpGcsAn4enVV8wEP",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T1",
+          "poolId": "14",
+          "seat": "7",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
+        }
+      ]
     },
     {
       "id": "W04",
@@ -46,7 +82,16 @@
       "keypair": "battle-test/keys/wallets/04.json",
       "address": "H6iFKJMDttWj4ZfySPPPMG4EEE5cJkvNDZ9i1HNqRJdo",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T1",
+          "poolId": "14",
+          "seat": "6",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
+        }
+      ]
     },
     {
       "id": "W05",
@@ -54,7 +99,16 @@
       "keypair": "battle-test/keys/wallets/05.json",
       "address": "7F3Mn8MMznLcCFGVB52jFn9J2xQbGHm8MH2V1NwC8wHa",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T1",
+          "poolId": "14",
+          "seat": "5",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
+        }
+      ]
     },
     {
       "id": "W06",
@@ -62,7 +116,16 @@
       "keypair": "battle-test/keys/wallets/06.json",
       "address": "pmTjbpfoaCc2tZCNJXKdpDJZTr1qZ2f21apYXsQ7qq3",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T1",
+          "poolId": "14",
+          "seat": "10",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
+        }
+      ]
     },
     {
       "id": "W07",
@@ -70,7 +133,16 @@
       "keypair": "battle-test/keys/wallets/07.json",
       "address": "21ShzyRaxjEuY91HmWaMzDaSfzB53A1zFShxYKSW6B3i",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T1",
+          "poolId": "14",
+          "seat": "8",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
+        }
+      ]
     },
     {
       "id": "W08",
@@ -78,7 +150,16 @@
       "keypair": "battle-test/keys/wallets/08.json",
       "address": "BmttwNHBih1LkppkNM8nyfQj9o88DLcsWMkS3J8Zjt5D",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T1",
+          "poolId": "14",
+          "seat": "9",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
+        }
+      ]
     },
     {
       "id": "W09",
@@ -86,7 +167,16 @@
       "keypair": "battle-test/keys/wallets/09.json",
       "address": "HAe7n7ZYHycQBvTdVtFRqKcWTfxFKHKQkjvYvfNM9Fts",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T1",
+          "poolId": "14",
+          "seat": "11",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
+        }
+      ]
     },
     {
       "id": "W10",
@@ -591,7 +681,16 @@
       "deviceGroup": "device-1",
       "termsVersion": 2,
       "notes": "browser profile; embedded wallet created at social login",
-      "history": []
+      "history": [
+        {
+          "pool": "T1",
+          "poolId": "14",
+          "seat": "0",
+          "role": "natural",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
+        }
+      ]
     },
     {
       "id": "UI-B",
@@ -600,7 +699,16 @@
       "deviceGroup": "device-2",
       "termsVersion": 2,
       "notes": "browser profile; embedded wallet created at social login",
-      "history": []
+      "history": [
+        {
+          "pool": "T1",
+          "poolId": "14",
+          "seat": "1",
+          "role": "natural",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
+        }
+      ]
     }
   ]
 }

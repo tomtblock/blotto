@@ -85,6 +85,36 @@ async function main(): Promise<void> {
 
   const connection = new Connection(rpc, { commitment: 'confirmed' });
   const keys = entries.map((e) => new PublicKey(e.player));
+
+  // Seats enter.ts did not place — the founder's UI entries — have no line in
+  // our log, but the chain has the answer: an Entry PDA is created by
+  // `register` and by nothing else, so its OLDEST signature is that register.
+  // Without this the report would carry evidence for the headless seats and a
+  // dash for the human ones, which is the wrong way round.
+  const poolKey = new PublicKey(pool.pool);
+  const missing = entries.filter((e) => {
+    const w = byAddress.get(e.player);
+    return !w || !sigByWallet.has(w.id);
+  });
+  for (const e of missing) {
+    const [entryPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from('entry'), poolKey.toBuffer(), new PublicKey(e.player).toBuffer()],
+      PROGRAM_ID
+    );
+    try {
+      const sigs = await connection.getSignaturesForAddress(entryPda, { limit: 20 }, 'confirmed');
+      const landed = sigs.filter((x) => !x.err);
+      const oldest = landed[landed.length - 1];
+      if (oldest) {
+        const w = byAddress.get(e.player);
+        sigByWallet.set(w?.id ?? e.player, { signature: oldest.signature, slot: oldest.slot });
+      }
+    } catch {
+      // A signature lookup that fails leaves the field null rather than
+      // failing the harvest — the entry itself is already proven by the
+      // indexer and the Entry account's existence.
+    }
+  }
   const [platform] = PublicKey.findProgramAddressSync([Buffer.from('platform')], PROGRAM_ID);
   const le = Buffer.alloc(8); le.writeBigUInt64LE(BigInt(pool.id));
   const [vault] = PublicKey.findProgramAddressSync([Buffer.from('vault'), le], PROGRAM_ID);

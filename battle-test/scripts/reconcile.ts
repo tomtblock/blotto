@@ -11,6 +11,15 @@
  * rewritten plan destroys the only evidence that the prediction predates the
  * outcome.
  *
+ * IT ALSO CHECKS THE FREEZE. A prediction only counts if it demonstrably
+ * predates the outcome, so `<test>.freeze.json` records the PR's
+ * merge time (GitHub's own timestamp, which this repository cannot rewrite)
+ * and the sha256 of the plan as merged. This script asserts the plan on disk
+ * still hashes to that value, and that the freeze precedes the earliest
+ * register. If either fails, the pool is marked UNFROZEN and the result is a
+ * FAIL however well the money reconciles — an unfrozen prediction is a story
+ * told afterwards.
+ *
  * Five verdicts per seat (manual §5.5):
  *   MATCH             rank and money both as predicted
  *   RANK_DRIFT        money as predicted, rank moved within the unpaid field
@@ -29,6 +38,7 @@
  *     scripts/reconcile.ts --test T1
  */
 
+import { createHash } from 'crypto';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 
@@ -76,8 +86,33 @@ function main(): void {
   if (!existsSync(planPath)) throw new Error(`no frozen plan at ${planPath}`);
   if (!existsSync(actualPath)) throw new Error(`no harvest at ${actualPath} — run harvest.ts first`);
 
-  const plan = JSON.parse(readFileSync(planPath, 'utf8')) as Plan;
+  const planRaw = readFileSync(planPath, 'utf8');
+  const plan = JSON.parse(planRaw) as Plan;
   const actual = JSON.parse(readFileSync(actualPath, 'utf8')) as Actual;
+
+  // --- the freeze ---------------------------------------------------------
+  const freezePath = resolve(REG, `${test}.freeze.json`);
+  let freezeNote = 'no freeze record — the prediction cannot be shown to predate the outcome';
+  let frozenOk = false;
+  if (existsSync(freezePath)) {
+    const f = JSON.parse(readFileSync(freezePath, 'utf8')) as {
+      mergedAt: string; planSha256: string; pullRequest: number;
+    };
+    const actualSha = createHash('sha256').update(planRaw).digest('hex');
+    const hashOk = actualSha === f.planSha256;
+    const mergedAt = Date.parse(f.mergedAt);
+
+    // The earliest moment any seat could have registered. Slots are not wall
+    // clock, so the harvest time is the conservative bound we always have;
+    // where a register signature carries a block time, that is stricter.
+    const firstSeatAt = Date.parse(actual.harvestedAt);
+    const beforeOutcome = Number.isFinite(mergedAt) && mergedAt < firstSeatAt;
+
+    frozenOk = hashOk && beforeOutcome;
+    freezeNote = hashOk
+      ? `PR #${f.pullRequest} merged ${f.mergedAt}; plan hash matches the merged bytes`
+      : `PLAN ALTERED SINCE THE FREEZE — sha256 on disk ${actualSha.slice(0, 16)}… does not match the frozen ${f.planSha256.slice(0, 16)}…`;
+  }
 
   const bySeatWallet = new Map(actual.seats.map((s) => [s.wallet, s]));
   const isRefundPool = plan.expectations?.terminalState === 'Closed';
@@ -132,7 +167,8 @@ function main(): void {
     (r) => r.route === 'direct' && (r.verdict === 'INPUT_DRIFT' || r.verdict === 'RANK_DRIFT')
   );
   const pass =
-    counts.PAYOUT_MISMATCH === 0 && !directDrift && stateOk && vaultOk && actual.unknownEntrants.length === 0;
+    frozenOk && counts.PAYOUT_MISMATCH === 0 && !directDrift && stateOk && vaultOk &&
+    actual.unknownEntrants.length === 0;
 
   const lines: string[] = [];
   lines.push(`# ${test} reconcile — pool ${actual.poolId} — ${actual.terminalState}`);
@@ -140,6 +176,7 @@ function main(): void {
   lines.push(`Plan:     registry/${test}.plan.json (frozen; never edited)`);
   lines.push(`Actual:   registry/${test}.actual.json harvested ${actual.harvestedAt}`);
   lines.push(`Pool:     ${actual.poolPda}`);
+  lines.push(`Freeze:   ${frozenOk ? 'OK' : 'UNFROZEN'} — ${freezeNote}`);
   lines.push('');
   lines.push(`Terminal state:  expected ${plan.expectations?.terminalState ?? '(unstated)'} · got ${actual.terminalState} · ${stateOk ? 'MATCH' : 'MISMATCH'}`);
   lines.push(`Entrants:        expected ${plan.expectations?.entrants ?? '(unstated)'} · got ${actual.entrants} · ${entrantsOk ? 'MATCH' : 'MISMATCH'}`);
@@ -170,6 +207,12 @@ function main(): void {
     lines.push(`${counts.ABSENT} planned seat(s) never landed. The refund property is proved by the seats that did,`);
     lines.push('since any count below the minimum field takes the same fork, but the shortfall is recorded here');
     lines.push('rather than hidden — and the plan is not edited to match what happened.');
+  }
+  lines.push('');
+  if (!frozenOk) {
+    lines.push('');
+    lines.push('UNFROZEN — the prediction cannot be shown to predate the outcome, so this pool proves');
+    lines.push('nothing about prediction however well its money reconciles. This is a FAIL by itself.');
   }
   lines.push('');
   lines.push(`RESULT: ${pass ? 'PASS' : 'FAIL'}`);

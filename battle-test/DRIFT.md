@@ -6,6 +6,8 @@ Every row: where the manual says it · what it says · what the repo actually ha
 
 Verdicts: **HOLDS** (claim true as written) · **CHANGED** (true in substance, wrong in detail) · **GONE** (claim false against this tree).
 
+**Sections A–G are the WP0 read of the manual against the tree (2026-09-15). [Section H](#h-findings-discovered-in-execution-after-wp0) carries what *running* the tests later found — read it too.**
+
 ---
 
 ## A. Headline findings (read these first)
@@ -389,3 +391,88 @@ cold. `FOUNDER-ACTIONS.md` carries the founder-facing rewrite. Every row above i
 | Q8 | Is the packet service running the **geo stub** or a **vendor**? | every headless entry | I will test this myself with one packet request rather than ask you to find out. Recorded here because a vendor refusal would explain a mass failure. |
 | Q9 | The Playwright route needs a **self-built app** with the test-signer flag, and the spec must be written from scratch. Build it, or record quota 0 against roadmap 5.1? | WP4 scope | Recommend **quota 0** and a recorded reduction. The direct route proves the chain path; the Playwright route proves the browser path, and building it would cost more than the week has. Your call. |
 | Q10 | Tier 1 to 6 carry superseded economics on chain. Fix them, or leave them? | nothing in this test | Recommend **leave them** and log it as a product follow-up. Changing them is a founder-owned economics action with no bearing on a tier-0 week. |
+
+---
+
+## H. Findings discovered in execution (after WP0)
+
+Section A–G above is the WP0 drift check: the manual read against the tree at `66a43d8`, finished
+2026-09-15. This section is different. It carries what **running** the tests found, which WP0 could
+not have found by reading — each row dated, each traced to source, and each one a product finding
+rather than a manual correction.
+
+### H1. A refunded pool never reveals its sealing secret (2026-09-16, found by T1)
+
+**What was observed.** Pool 14 (`FZDhx4PU…afaL`) reached its deadline with 12 of 40 seats,
+refunded all twelve correctly, and reached `Closed` at 13:50 UTC. Seventy-five minutes later its
+secret was still unpublished — `secret_revealed` read as `0` **directly from the pool account at
+offset 158**, not from the indexer. It is still `0` now.
+
+**Why.** Not a delay, not a race. There is no code path that can do it.
+
+| # | Link in the chain | Evidence |
+|---|---|---|
+| 1 | The **program permits** the reveal, and says why in its own words: *"allowed once the pool is `Sealed`, or past the fill deadline (a `Refunding` pool's entrants can then verify no one — operator included — could have read allocations before the refund)"*. The gate is `state != Open \|\| past_deadline`. | `programs/blotto_cup/src/instructions/reveal_commit.rs:43-60` |
+| 2 | The **only** production caller of `revealPoolSecret` is inside `assembleBundle`. | `backend/reveal/src/crank.ts:395-397` — sole non-test call site, verified by grep across `backend/` and `scripts/` |
+| 3 | `crankPool` returns for a `Refunding` pool **before** `assembleBundle` is reached… | `backend/reveal/src/crank.ts:179-188` |
+| 4 | …and no-ops for a `Closed` one. `assembleBundle` is called at `:196`, after both. | `backend/reveal/src/crank.ts:189-192` |
+| 5 | The daemon's own trigger list never includes `Closed`, so once refunds finish nothing re-enters the pool. | `backend/reveal/src/daemon.ts:294`, `:209` (`TERMINAL = ['Paid','Closed']`) |
+| 6 | There is **no operator fallback**: `admin.ts` has 21 commands and none of them reveals a secret. | `scripts/admin.ts:1094-1140` |
+| 7 | Custody is **not** what blocks it. The export policy is `state !== 'Open' \|\| now > fillDeadline`, which a closed pool satisfies. The secret would be released if anything asked. | `backend/reveal/src/main.ts:332-337` |
+
+**Corroboration across the whole devnet history.** Every pool that has ever closed by refund — 9,
+10, 11, 12, 13 and 14 — reports `secret: null`. Not one has ever revealed. This is not pool 14.
+
+**Verdict: GONE.** The reveal_commit doc comment's promise — that a refunding pool's entrants can
+verify nobody read their allocations — is not delivered by any code in this tree.
+
+**Consequence for the test.** T1's twelve allocations stay `COMMITTED` permanently; `VERIFIED` is
+unreachable for them. **T2 (39 seats) will hit the same wall** — expect it, do not re-diagnose it.
+T3 onward seal and score, so `assembleBundle` runs and those allocations verify normally.
+
+This does **not** change T1's verdict. T1 tested the refund path and every frozen prediction held.
+
+**Proposed fix — NOT made here.** It is a few lines in `backend/`, which is outside this week's
+source boundary, so it is written down and left alone: reveal before the refund fork returns. The
+natural shape is to hoist steps 1's export-and-reveal out of `assembleBundle` into `crankPool`
+ahead of the `Refunding` branch, so both forks pass through it, and to let the `Closed` branch
+reveal too when `!pool.secretRevealed` — that second half is what would repair pools 9–14
+retroactively, since the on-chain gate still accepts them today. An `admin.ts reveal-secret`
+command would be the smaller alternative and would leave the promise dependent on an operator
+remembering. **Founder decision, after the week (F-20).**
+
+### H2. The 15-second per-screen timer is not what the client runs (2026-09-16, found preparing T4)
+
+**What still says 15 seconds.** `CLAUDE.md` lists "the per-screen timer (15s, R9)" among the
+founder-owned numbers with published consequences, the manual assumes it, and `Pool.timer_seconds`
+reads 15 on every pool on chain. (`FOUNDER-ACTIONS.md` §F-12 already carried the real rule — it was
+corrected during the manual amendment on 2026-09-15 — so this row is about the documents that still
+do not, and about what the rule means for a SCORED test, which T1 did not have to care about.)
+
+**What the live client does.** One **90-second run clock for the whole run**, started at the player's
+FIRST dial interaction (never at payment confirmation, so a slow wallet does not eat it), idempotent
+thereafter. On expiry every battle **not locked in — the one on screen included** — is entered as the
+**even split `[20,20,20,20,20]`**.
+
+| Evidence | |
+|---|---|
+| `app/src/battle/run-clock.ts:54` | `RUN_CLOCK_BUDGET_MS = 90_000` |
+| `app/src/battle/run-clock.ts:36-45` | starts on first interaction; expiry enters the even split, via `machine.ts`'s `lockAllRemaining` |
+| `app/src/battle/run-clock.ts:47-52` | R9 and the on-chain `Pool.timer_seconds` "remain ratified and untouched on-chain; the client simply no longer presents time per screen", and the rules-page copy does not change until counsel signs off |
+| `admin.ts status` / indexer | `timer_seconds: 15` is still on every pool, and nothing reads it |
+
+**Verdict: CHANGED.** R9 is not repealed and the field is still on chain; the client stopped
+presenting it. This is a founder-and-counsel matter for the rules page, not an architect one, and it
+is recorded here rather than acted on.
+
+**Consequence for the test, which is the reason this was chased.** T4 needs UI-A to play a wall and
+UI-B a pole in **all seven** battles. If the run clock expires on an unlocked battle, that battle
+becomes the even split — three stats at 20, none at 26 — which is neither role and would break the
+prediction for that battle. So the founder instruction is built around the real clock: **two dial
+drags per battle for UI-A, one for UI-B, lock in each battle, 90 seconds for all seven.**
+
+The exact sets that recipe produces were not chosen — they were computed by running the app's own
+`rebalance` from `EVEN_SPLIT`, and `src/populations.test.ts` re-derives all fourteen drags through
+`app/src/components/blot/rebalance.ts` and fails if they ever stop matching `uiWall()`/`uiPole()`.
+The alternative — asking the founder to dial thirty-five arbitrary numbers under a 90-second clock —
+would have failed in the pool rather than in a test.

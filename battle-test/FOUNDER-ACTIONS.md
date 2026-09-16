@@ -100,3 +100,103 @@ chain and will tell you whether they match.
 **Expected, so you can check rather than guess:** each account is up exactly **0.1 SOL** from its
 post-entry balance, and down about **0.0044 SOL** against where it started, which is the account rent
 and fees the program keeps. That gap is the documented, never-recovered cost of an entry.
+
+---
+
+## F-21 — T4 entries: the first pool that actually pays (pool 15)
+
+**When:** as soon as you have merged the freeze (step 1 below). Pool 15's deadline is **01:52:26Z**,
+which is **22:52 Tuesday your time** — but do not wait for it: the pool seals the moment the 64th
+entry lands, and settles minutes later.
+**Est:** 5 minutes to merge, then about 10 minutes for the two entries.
+**Why:** T4 is the first test that is scored and the first that moves a real prize. 4 SOL goes to one
+wallet, and that wallet is **yours** — by arithmetic, not by luck.
+
+### Step 1 — merge the freeze. This has to come first.
+
+Merge **PR 133** in the repository — the one titled "battle-test: T4's plan, frozen". (Its link is
+not written out here: a GitHub PR URL contains a word the §8.7 gate refuses, and the gate makes no
+exception for links.)
+
+That merge is what makes T4 evidence rather than a story: GitHub's merge timestamp proves the
+prediction existed before anybody entered, and it cannot be rewritten from inside this repository.
+**Nobody may enter pool 15 until it is merged** — not you, not the headless wallets.
+
+### Step 2 — your two entries, in this order
+
+Open **https://www.blotto.gg**, sign in as **UI-A**, and enter **pool 15**. Then do the same in the
+**other browser profile** as **UI-B**. Separate profiles, as for T1. No private windows.
+
+The clock: **90 seconds for all seven battles together**, starting the instant you first move a dial.
+It is not 15 seconds a screen. If it runs out, every battle you have not locked in is entered as an
+even 20/20/20/20/20 — which would break the prediction. So move, lock, move on.
+
+**UI-A — two drags per battle. Drag the named stat to zero, then the next one, then lock in.**
+
+| battle | drag to 0 | then drag to 0 | you should see |
+|---|---|---|---|
+| 1 | Strength | Speed | 0, 0, 34, 33, 33 |
+| 2 | Speed | Heart | 34, 0, 0, 33, 33 |
+| 3 | Heart | Wit | 34, 33, 0, 0, 33 |
+| 4 | Wit | Durability | 34, 33, 33, 0, 0 |
+| 5 | Durability | Strength | 0, 34, 33, 33, 0 |
+| 6 | Strength | Heart | 0, 34, 0, 33, 33 |
+| 7 | Speed | Wit | 34, 0, 33, 0, 33 |
+
+**UI-B — one drag per battle. Drag the named stat to 100, then lock in.**
+
+| battle | drag to 100 | you should see |
+|---|---|---|
+| 1 | Strength | 100, 0, 0, 0, 0 |
+| 2 | Speed | 0, 100, 0, 0, 0 |
+| 3 | Heart | 0, 0, 100, 0, 0 |
+| 4 | Wit | 0, 0, 0, 100, 0 |
+| 5 | Durability | 0, 0, 0, 0, 100 |
+| 6 | Heart | 0, 0, 100, 0, 0 |
+| 7 | Strength | 100, 0, 0, 0, 0 |
+
+The stat order on screen is always Strength, Speed, Heart, Wit, Durability.
+
+**If a number comes out one or two off** — say 33 where the table says 34 — that is fine and changes
+nothing. What matters is the SHAPE: UI-A needs three stats at 26 or more in every battle, UI-B needs
+everything on one stat. The exact numbers only affect a secondary check, and the reconciliation
+records the difference rather than failing the test.
+
+### Step 3 — send back
+
+The two transaction signatures, screenshots of each rack at "All seven made." and of each pass card,
+into `battle-test/evidence/T4-pool-15/UI-A/` and `/UI-B/`, and the words **"F-21 done"**.
+
+Then I run the 62 headless seats. The 64th entry seals the pool on the spot and the daemon scores
+and pays within minutes.
+
+### What should happen, so you can check rather than take my word for it
+
+- **UI-A finishes first and is paid the entire 4 SOL pot.** One paid place, not sixteen.
+- **UI-B finishes 64th**, last of 64, and is paid nothing.
+- UI-A ends up about **3.8956 SOL** better off than before it entered; UI-B about **0.1044** worse.
+- The pool page reads **Paid**.
+- You will likely see an internal review alert fire on UI-A. That is correct and expected — UI-A is
+  wildly unlike the rest of the field, which is the whole point. It is an alert, not a block, and it
+  does not delay the prize.
+
+### Do not
+
+- enter any pool other than 15 — a stray entry locks the tier for 12 hours;
+- enter before PR 133 is merged;
+- sign in to both accounts in the same browser profile;
+- use a private window.
+
+---
+
+## F-20 — a decision, whenever you like. Nothing waits on it.
+
+A refunded pool never publishes its sealing secret. The program allows it and says why in its own
+code; no code path asks. Details in `REPORT.md` §2, finding F-1.
+
+Nobody lost money and no test failed. What it costs is this: a player whose pool refunds gets their
+money back but cannot check that their sealed allocation stayed sealed — they have to take our word
+for it, on the one point the design exists to put beyond anyone's word.
+
+The fix is a few lines in the settlement daemon. It is outside this test's boundary, so I have
+written it down rather than made it. **Your call, after the week: product change, or accepted?**

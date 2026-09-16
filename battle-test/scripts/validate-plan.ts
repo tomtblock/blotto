@@ -128,7 +128,11 @@ function validate(path: string, roster: Set<string>): void {
     }
     if (!allOk) continue;
 
-    const shapes = new Set(sets.map((b) => JSON.stringify([...b].sort((x, y) => x - y))));
+    // Measured as `backend/detection/src/signals.ts` measures it: unsorted,
+    // `b.join(',')`. A sorted comparison would call a rotating `pole` a single
+    // shape and reject a legitimate plan, since a pole's sorted form never
+    // changes however far it rotates.
+    const shapes = new Set(sets.map((b) => b.join(',')));
     if (shapes.size < 3) {
       fail(name, `${who}: only ${shapes.size} distinct shapes across 7 battles — allocation_entropy fires strong at 2 or fewer`);
     }
