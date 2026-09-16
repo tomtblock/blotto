@@ -16,6 +16,20 @@ body {
   font-family: var(--font-body);
 }
 
+/* Desktop scale (founder 2026-09-16: "on a desktop, the site looks better at
+ * 90% zoom"). Every layout here was tuned at phone widths and a wide screen
+ * shows the same column, larger. Until the desktop type scale exists
+ * (CHANGE-2026-09-16_ui-uplift.md §A2 (b)), the page renders at 0.9 on a
+ * wide screen with a fine pointer. `zoom` reflows layout (CSS Viewport
+ * module; Chromium 128+, Safari, Firefox 126+) where `transform: scale`
+ * would not; the dials are native range inputs, so no pointer maths is
+ * affected, and coarse pointers are excluded outright. */
+@media (min-width: 1280px) and (pointer: fine) {
+  html {
+    zoom: 0.9;
+  }
+}
+
 /* Keyboard focus is visible on EVERY interactive element (2026-09-13).
  * Until now only <Button> drew a ring; a plain link, the tab bar and the
  * header wordmark were invisible to a keyboard user. Cream on plum, offset
