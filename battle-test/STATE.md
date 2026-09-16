@@ -1,16 +1,31 @@
-# STATE — 2026-09-16 15:34 local (18:34 UTC) — by Claude Code
+# STATE — 2026-09-16 16:04 local (19:04 UTC) — by Claude Code
 
-Phase:            **T4 BLOCKED — the entry gate is refusing everyone.** Plan frozen (PR 133, 16:22:00Z),
-                  62 wallets funded, nothing entered. The founder's UI-A entry was refused at 18:20Z and
-                  so is every wallet I control. Server-side, total, and /health says it is fine.
-Waiting on:       **F-22 — read the blotto-packet log.** One line ("entry packet NOT issued — <reason>")
-                  separates a stale OFAC mirror from a signer fault. DO NOT restart blind: with the mirror
-                  as the only source, a broken download means the service refuses to boot at all.
-After that:       gate reopens → F-21 step 2 (UI-A, UI-B enter pool 15) → I run W00–W61 → seals and pays.
-Live deadlines:   pool 15 deadline 01:52:26Z, ~7h15m. If the gate is still shut near it, pool 15 refunds
-                  and T4 moves to the next pool. The frozen plan is reusable; only poolId/poolPda/freeze change.
-Blocked:          T4 and everything after it, on F-22.
+Phase:            **T4 ready to run. Gate REOPENED at 18:56:02Z** — the founder upgraded Turnkey and
+                  restarted the packet service. Plan frozen (PR 133, 16:22:00Z), 62 wallets funded,
+                  nothing entered, nothing spent.
+Waiting on:       **F-21 step 2 — the founder's two UI entries.** The gate answers 200 for BOTH UI-A and
+                  UI-B's own addresses as of 19:02:45. The founder reported a refusal at ~19:02; asked for
+                  a hard refresh (the page was likely loaded while the gate was shut) and the exact wording.
+After that:       I run W00–W61 with enter.ts. The 64th entry seals the pool; then harvest, reconcile,
+                  allocations, verdict.
+Live deadlines:   pool 15 deadline 01:52:26Z, ~6h50m. Below 40 seats at the deadline it refunds and T4
+                  moves to the next pool — reschedule, not failure; only poolId/poolPda/freeze change.
+Blocked:          nothing on my side. Out of plan mode as of 19:02, so enter.ts can run.
 Results so far:   T1 **PASS** · T2–T8 not started
+
+**The entry-gate outage (02:18Z–18:56Z) — the week's biggest finding.**
+  Every entry on the platform was refused for at least sixteen hours because Turnkey stopped signing:
+  the organisation was over its free-tier quota. Resolved by the founder upgrading the plan.
+  What survives, and matters more than the quota: **/health read `ok: true` throughout**, and carries
+  no signal about the signer at all — it was still green after the restart, with the gate shut.
+  Every instrument an operator or an uptime monitor would check stayed green through a total outage.
+  → I named two candidate causes and leaned toward the wrong one (a stale sanctions mirror). The
+    evidence against it was already in hand. Recorded as a correction in DRIFT §H3, not quietly fixed.
+  → H4: a failed packet logs "packet issued" one line BEFORE it fails (service.ts:363).
+  → H5: packet service and settlement daemon share one Turnkey org. T4 alone is ~65 activities, the
+    week ~450, and a retrying settlement spends quota because exportSecret runs at the top of every
+    crank pass. F-23 raised: size the plan for the week, not the night.
+  DRIFT.md §H3–H5 · REPORT.md §2 F-2.
 
 **The T1 reveal finding (15:08 UTC) — read this one.**
   Pool 14 refunded all twelve seats correctly but will NEVER publish its sealing secret. Traced end to

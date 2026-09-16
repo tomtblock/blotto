@@ -477,7 +477,11 @@ The exact sets that recipe produces were not chosen — they were computed by ru
 The alternative — asking the founder to dial thirty-five arbitrary numbers under a 90-second clock —
 would have failed in the pool rather than in a test.
 
-### H3. The entry gate is closed for everyone, and `/health` says it is fine (2026-09-16, found by T4)
+### H3. The entry gate was closed for everyone, and `/health` said it was fine (2026-09-16, found by T4)
+
+**RESOLVED 18:56Z, and the cause is confirmed: the Turnkey signing quota was exhausted.** The
+section below is kept as written, with the correction and the evidence at the end — the reasoning
+under uncertainty is part of the record, including the part I got wrong.
 
 **What was observed.** At 18:20Z the founder's UI-A entry was refused with the generic
 `entryRefused` copy. It is not their account and not the browser. Probed from this container with
@@ -540,3 +544,89 @@ come up at all. Read the log first, then decide.
 deadline is 01:52:26Z; if the gate is still shut near it, pool 15 refunds and T4 moves to the next
 pool. That is a reschedule, not a failure, and the frozen plan is reusable as-is — only `poolId`,
 `poolPda` and the freeze record change.
+
+
+#### The answer, from the live log
+
+The founder read `blotto-packet`'s log. It names the cause with no ambiguity:
+
+```
+18:30:21  packet: geo ALLOW 35.239.x.x — packet issued: country=US
+18:30:21  packet: entry packet NOT issued — Turnkey error 8: Resource exhausted:
+          Signing is disabled because your organization is over its allotted quota.
+          Please upgrade to a paid plan, or reach out to the Turnkey team.
+```
+
+**It was cause 2, the signer. Not the mirror.** I offered both, then leaned toward the stale mirror
+on the strength of "release v43, three days ago". That was wrong, and the evidence against it was
+already in hand when I said it: `/health` reported `ofac_loaded: true`, and — decisively — the
+failing entries reached the signer at all, which means every gate check before it had already
+passed, sanctions included. A boot after the restart put it beyond doubt:
+`ofac-sdn mirror loaded — 19385 entries, 1043 digital-currency addresses, published 09/16/2026`,
+refreshing every 540 min exactly as designed.
+
+The warning not to restart blindly was still the right call, for the wrong reason. Once the log
+showed entries reaching the signer, the boot-refusal risk was gone and the restart was safe — which
+is what was then recommended, and the service came back clean.
+
+**The log also confirmed the probe method.** The never-attested control appears as
+`geo BLOCK 146.148.x.x — packet refused: attestation-missing-or-stale`, refused for precisely the
+reason it was built to be refused for.
+
+**Resolution.** The founder upgraded the Turnkey plan. Signing resumed at **18:56:02Z** — eight
+consecutive `200`s on the probe, and `200` for UI-A and UI-B's own addresses. Total outage: at least
+sixteen hours, from some time after T1's last entry at 02:18Z.
+
+#### What survives, and it is the part that matters
+
+**The health-endpoint finding stands, and the true cause sharpens it.** `/health` returns `ok: true`
+with `ofac_loaded: true`, and reports **nothing whatever about the signer** — the component that
+actually failed. Every check an operator or an uptime monitor would run stayed green through a total
+entry outage. It was still green at 18:50, after the restart, with the gate shut. The fix is not
+"report mirror staleness"; it is that **every condition which closes the gate for all callers must
+be readable from the health endpoint.** The uniform rejection exists to stop a player probing the
+gate; it should not also hide the gate's state from the operator. Those are different audiences and
+the code answers both with one silence.
+
+**The signer-identity boot line proved its worth.** `signer-select.ts` prints
+`entry signer = TURNKEY (key 79672a…709c, org ba9f83…9414, pubkey 7ebb34…a4b6)` because a
+deployment once silently fell back to the development seed and nothing looked wrong from outside.
+Here it served a second purpose nobody designed it for: naming the exact organisation to upgrade, so
+"did you upgrade the right org?" was answerable in seconds.
+
+### H4. A failed packet logs that it was issued, one line before it fails (2026-09-16)
+
+`service.ts:363` logs `packet issued: country=…` **before** calling the signer, which is the next
+statement. So every failed packet emits a line claiming issuance, immediately above the line saying
+it was not issued — visible twice over in the founder's screenshot at 18:30:21 and again at
+18:50:04. An operator grepping for issuance gets one false positive per failure, and a rate of
+"packets issued" computed from this log would have read normal throughout the outage.
+
+**Fix:** move the line after the signature succeeds, or reword it to `packet cleared` — it is
+logging that the *gate* passed, not that a packet exists. One line either way.
+
+### H5. Two services share one Turnkey organisation, and a settlement retry spends quota (2026-09-16)
+
+Chasing why roughly twelve signatures exhausted a quota: it was not a leak, it is the total.
+
+| operation | Turnkey activities | where |
+|---|---|---|
+| `createPoolKey` at pool open | 2 (`initImportPrivateKey` + `importPrivateKey`) | `custody-turnkey.ts:250,260` |
+| each entry | 1 (`signRawPayload`) | `signer-turnkey.ts:60` |
+| `exportSecret` at settlement | 1 (`exportPrivateKey`) | `custody-turnkey.ts:297` |
+
+The packet service and the settlement daemon use the **same** `TURNKEY_ORGANIZATION_ID`
+(`backend/reveal/src/main.ts:161-172`). Fifteen pools and about thirty entries since late August is
+on the order of seventy-five activities for the whole month — a small allowance consumed gradually,
+with T1's twelve entries merely the ones that crossed the line.
+
+Two consequences:
+
+1. **T4 alone costs about 65 activities** — 64 entry signatures plus one export — in roughly ten
+   minutes, nearly the whole month to date. The remaining matrix is ~450 more. A plan sized for
+   tonight and not for the week puts the ceiling back in the middle of a filling pool, with real
+   money in it.
+2. **A retrying settlement spends quota.** `exportSecret` is called at the top of every crank pass
+   (`crank.ts:395`), *before* the guard that refuses to settle against a short entries read — a
+   guard whose whole design is to throw and retry next tick. Each retry is another Turnkey activity.
+   Not a bug; worth knowing before a settlement starts looping.
