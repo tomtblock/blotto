@@ -1,0 +1,27 @@
+{
+  "schema": "blotto-rehearsal-freeze/1",
+  "test": "T1",
+  "_why": "The plan is evidence only if it demonstrably predates the outcome. Commit dates can be set to anything; GitHub's merge timestamp cannot. This file records that timestamp and binds it to the exact bytes of the plan that was merged. It is written SEPARATELY so that T1.plan.json stays byte-identical to what was frozen — the plan is never edited after its freeze, not even to fill in its own metadata.",
+
+  "pullRequest": 132,
+  "repository": "tomtblock/blotto",
+  "mergedAt": "2026-09-16T00:07:24Z",
+  "mergedBy": "tomtblock",
+  "mergeCommit": "3cd0ec7fe27bda1991b723a52ee299b091690193",
+  "headCommit": "cb10910048dcece178619cf8c766608f7cb862ed",
+
+  "planPath": "battle-test/registry/T1.plan.json",
+  "planSha256": "215cb73cb1372b7f560c9838f2bbae1a3a1100be5c4009219b6f08e9026c6cb8",
+
+  "verifyIndependently": [
+    "The merge time is served by GitHub's own API for PR 132 and cannot be rewritten by this repository.",
+    "sha256 of the plan file at the merge commit must equal planSha256 above.",
+    "reconcile.ts asserts this timestamp precedes the first register's block time, and marks the pool UNFROZEN if it does not."
+  ],
+
+  "poolAtFreeze": {
+    "note": "T1's pool did not exist when the plan was frozen. Pool 13 was the open tier-0 pool, holding zero entrants, with its deadline at 2026-09-16T01:41:21Z. T1's pool is the one the daemon opens about five minutes after that closes.",
+    "openPoolId": 13,
+    "openPoolEntrants": 0
+  }
+}

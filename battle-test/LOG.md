@@ -46,3 +46,8 @@
 2026-09-15 23:44 UTC | cc      | —  | CI ALL GREEN on PR #132 — 12 checks passed (head 6a5d643)               | PR #132
 2026-09-15 23:45 UTC | cc      | —  | harvest.ts + reconcile.ts written and SELF-TESTED against settled pool 12: both UI seats MATCH, vault 650240 exactly as T1 predicts, and the run correctly FAILED on an entrant not in wallets.json (4mYx…rDxs) | scripts/harvest.ts, scripts/reconcile.ts
 2026-09-15 23:45 UTC | cc      | —  | NOTE: pool 12 shows UI-A and UI-B already entered and were refunded — their clickwrap (terms v2) is done, and a third unknown wallet also entered | indexer entries
+2026-09-16 00:04 UTC | cc      | —  | container restarted. Repo, master seed, derived keys, funded wallets and deps all survived; only a background watch was lost. Key derivation re-verified identical | —
+2026-09-16 00:07 UTC | founder | T1 | **FREEZE** — PR #132 merged 00:07:24Z, merge commit 3cd0ec7. T1's prediction now demonstrably predates its outcome | PR #132
+2026-09-16 00:09 UTC | cc      | T1 | freeze recorded in T1.freeze.json and bound to the merged plan's sha256 215cb73c…; plan on disk, at the merge commit and in the record all agree | registry/T1.freeze.json
+2026-09-16 00:09 UTC | cc      | —  | reconcile.ts now asserts the freeze: an altered plan or a freeze later than the outcome marks the pool UNFROZEN and FAILs it. Verified by deliberately altering a plan copy | scripts/reconcile.ts
+2026-09-16 00:09 UTC | cc      | —  | branch restarted from merged main; follow-up work goes to a new PR | 3cd0ec7
