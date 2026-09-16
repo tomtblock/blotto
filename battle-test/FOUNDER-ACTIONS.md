@@ -265,3 +265,66 @@ Pool 15's deadline is **22:52 tonight your time**. If the gate is still shut as 
 pool 15 simply refunds and T4 runs on the next pool instead. The frozen plan is reusable exactly as
 it is — only the pool id and a new freeze record change, and the prediction does not move. That is a
 reschedule, not a failure, and it costs about 0.00065 SOL in pool rent.
+
+---
+
+## F-24 — why your retries cannot work, and what we do instead
+
+**Nothing for you to do right now.** This is the explanation you are owed, and the plan.
+
+### Why it keeps failing
+
+When you played your seven battles during the outage, the app did two things in this order: it
+**sealed and stored your allocation**, and *then* asked for permission to enter. The first succeeded.
+The second was refused, because Turnkey had stopped signing.
+
+The store deliberately refuses to accept a *second, different* allocation for the same wallet in the
+same pool. That protection is right — without it, starting a second run could destroy your own
+already-paid entry. But playing again always produces a different sealed allocation, because each
+run gets fresh random data. So every retry is refused, and the app shows you the same message it
+showed the first time.
+
+There is no way to clear it. I checked: the store can only be written to and read from. Nothing in
+the codebase can delete a stored allocation — not the service, not the admin tools.
+
+**So UI-A and UI-B can never enter pool 15.** You have paid nothing and entered nothing. The message
+saying "trying again will not change the answer" is, accidentally, exactly right.
+
+### This is the most serious thing the test has found
+
+The outage was a billing problem, fixed in an hour. This is structural: **any** brief failure after
+you seal — the service hiccuping, a wallet prompt dismissed, a laptop closing — bars that wallet
+from that pool permanently, and tells nobody.
+
+On a live product that means one short entry-service blip does not just fail the entries happening at
+that moment. It locks out every player who got as far as sealing, for good, and the pool may then
+fail to fill with people who were willing to pay. It turns a ten-minute incident into a lasting
+problem and a queue of confused, unhappy players.
+
+It is written up in `REPORT.md` §2 as finding F-4, with two proposed fixes. The honest one: the
+overwrite should be refused only once the seat is genuinely registered on the chain, which is the
+thing that actually distinguishes a paid seat from an abandoned attempt. **Your call after the week
+— it is F-24 in the open items.**
+
+### What happens to T4
+
+T4 needs UI-A to win, and UI-A cannot enter pool 15. So:
+
+1. **Pool 15 lapses** at its deadline, 01:52:26Z — **22:52 your time**. It holds no entries, so it
+   simply closes. Cost: one rent cushion, 0.00065 SOL.
+2. **The daemon opens the next pool** about five minutes later, around **22:57 your time** — which
+   lands almost exactly on your 23:00 cadence.
+3. **T4 runs there, unchanged.** The frozen plan is reused as-is: every predicted rank, every score
+   and the winner's payout stay exactly as frozen. Only the pool id and a new freeze record change,
+   and I will record both.
+
+Nothing is lost. The plan stays frozen, the 62 wallets stay funded, and no test result is affected.
+
+### The one change to how we do it
+
+From now on I probe the entry gate for **your exact wallets, immediately before you play** — never
+after. A seal made into a broken gate cannot be undone, so the check has to come first. I will give
+you an explicit go-ahead each time, seconds before you start.
+
+**Next contact:** I will tell you when the new pool is open and the gate is confirmed healthy for
+both your accounts. Around 23:00 your time.

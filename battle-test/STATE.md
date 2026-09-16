@@ -1,19 +1,38 @@
-# STATE — 2026-09-16 16:04 local (19:04 UTC) — by Claude Code
+# STATE — 2026-09-16 16:11 local (19:11 UTC) — by Claude Code
 
-Phase:            **T4 ready to run. Gate REOPENED at 18:56:02Z** — the founder upgraded Turnkey and
-                  restarted the packet service. Plan frozen (PR 133, 16:22:00Z), 62 wallets funded,
-                  nothing entered, nothing spent.
-Waiting on:       **F-21 step 2 — the founder's two UI entries.** The gate answers 200 for BOTH UI-A and
-                  UI-B's own addresses as of 19:02:45. The founder reported a refusal at ~19:02; asked for
-                  a hard refresh (the page was likely loaded while the gate was shut) and the exact wording.
-After that:       I run W00–W61 with enter.ts. The 64th entry seals the pool; then harvest, reconcile,
-                  allocations, verdict.
-Live deadlines:   pool 15 deadline 01:52:26Z, ~6h50m. Below 40 seats at the deadline it refunds and T4
-                  moves to the next pool — reschedule, not failure; only poolId/poolPda/freeze change.
-Blocked:          nothing on my side. Out of plan mode as of 19:02, so enter.ts can run.
+Phase:            **T4 moves to the next pool. UI-A and UI-B are permanently barred from pool 15.**
+                  Not a wallet problem and not fixable: the app stores the sealed allocation BEFORE it
+                  asks for an entry packet, so the founder's play during the Turnkey outage stored a
+                  ciphertext that was never registered. Every retry replays with a fresh salt, so the
+                  bytes differ, so the store refuses with 409 "already sealed". No delete path exists.
+Waiting on:       nothing from the founder tonight. F-24 written: the explanation and the plan.
+After that:       pool 15 lapses 01:52:26Z (22:52 local, holds no entries) → daemon opens the next pool
+                  ~5 min later (~22:57 local, on the 23:00 cadence) → T4 runs there on the SAME frozen
+                  plan. Only poolId, poolPda and a new freeze record change; no rank or payout moves.
+Live deadlines:   pool 15 deadline 01:52:26Z. Entry gate HEALTHY since 18:56:02Z (200 for both UI wallets).
+Blocked:          nothing. Out of plan mode; enter.ts can run once the new pool is open and the founder
+                  has entered.
+
+**STANDING RULE, adopted 19:09Z:** probe the entry gate for the exact wallets IMMEDIATELY BEFORE the
+founder plays, never after. A seal made into a broken gate cannot be undone. An explicit go-ahead
+goes out seconds before each UI entry from now on.
 Results so far:   T1 **PASS** · T2–T8 not started
 
-**The entry-gate outage (02:18Z–18:56Z) — the week's biggest finding.**
+**H6 — the worst finding of the test (19:09Z). A failure between sealing and registering bars that
+  wallet from that pool FOREVER.**
+  submit.ts:99-100 stores the ciphertext, THEN requests the packet. The store refuses a second,
+  DIFFERENT allocation for a seat that already has one (audit D-01, and right on its own terms — it
+  stops a second run destroying a paid entry). But a replay always has a fresh salt, so it is always
+  different, so it is always refused. MEASURED on W63: first seal 204, same bytes 204 (idempotent),
+  different bytes 409 "already sealed". CiphertextStore has only put and get — no delete anywhere.
+  → Any transient failure after the seal permanently removes that wallet from that pool, silently.
+  → On mainnet one entry-service blip bars every player who reached the seal, for good, and the pool
+    may then fail to fill with people who would have paid.
+  → The copy says "Trying again will not change the answer" — true, for a reason nobody can discover.
+  → Fix (not made): gate the overwrite on whether an Entry PDA exists on chain, not on the store.
+  DRIFT.md §H6 · REPORT.md §2 F-4 · decision F-24.
+
+**The entry-gate outage (02:18Z–18:56Z) — the finding that exposed H6.**
   Every entry on the platform was refused for at least sixteen hours because Turnkey stopped signing:
   the organisation was over its free-tier quota. Resolved by the founder upgrading the plan.
   What survives, and matters more than the quota: **/health read `ok: true` throughout**, and carries

@@ -129,6 +129,54 @@ one whose is.
   alone costs ~65 activities and the remaining matrix ~450; a plan sized for one night puts the
   ceiling back mid-fill, with real money in the pool.
 
+### F-4 · A failure between sealing and registering bars that wallet from that pool forever
+
+**The most serious finding of the test.** It is measured, not theorised, and it happened to the
+founder tonight on both accounts.
+
+**What happens.** The app stores the sealed allocation and *then* asks for an entry packet
+(`submit.ts:99-100`). The ciphertext store refuses a second, *different* allocation for a seat that
+already has one — a deliberate protection, so that starting a second run cannot destroy a player's
+own paid entry. Re-posting identical bytes is idempotent, so a plain network retry is fine. But a
+player who plays again gets a fresh salt, so the bytes are never identical, so they are refused.
+
+Measured on a spare wallet at 19:09Z: first seal `204`, same bytes again `204`, **different bytes
+`409 already sealed`**. And there is no way back — `CiphertextStore` has exactly `put` and `get`;
+no delete exists in the store, the service, or the admin CLI.
+
+**What it did tonight.** During the entry outage (F-2) the founder played seven battles. The app
+sealed and stored the allocation successfully, then asked for a packet and was refused. Every retry
+since has replayed with a new salt, hit the 409, and shown the same generic refusal — whose text
+reads *"Trying again will not change the answer."* True, and for a reason neither the player nor the
+app can discover. Both accounts are permanently barred from that pool, having paid nothing.
+
+**Why it outranks the outage that exposed it.** The quota was a billing fact and was fixed in an
+hour. This is structural. **Any** transient failure after the seal — the entry service blipping, a
+dismissed wallet prompt, a closed laptop, a crashed tab — permanently removes that wallet from that
+pool. On mainnet a single entry-service blip does not just fail the entries in flight: it bars every
+player who reached the seal from that pool for good, silently, and can leave a pool unable to fill
+with players who would gladly pay. It also converts any brief outage into lasting damage, which is
+what turns an incident into a refund-and-apology problem.
+
+**Proposed fix — the second one is the honest one.**
+
+1. Reorder so the packet is requested before the ciphertext is stored. Cheap, closes tonight's exact
+   sequence, but only narrows the window: a failure between the store and the register still locks
+   the seat.
+2. **Gate the overwrite on the chain rather than on the store.** What actually separates "paid seat,
+   protect it" from "abandoned attempt, safe to replace" is whether an `Entry` PDA exists on chain
+   for that wallet and pool. Refuse the overwrite only once the seat is genuinely registered. The
+   protection is preserved in full, the lockout disappears, and it costs one account read per write.
+
+Not made here — `backend/` and `app/` are outside this week's boundary.
+
+**What it cost the test.** T4 cannot run on pool 15, which needs UI-A to win and UI-A cannot enter.
+Pool 15 lapses; T4 moves to the next pool on the same frozen plan, with only the pool id and a new
+freeze record changed. One rent cushion, 0.00065 SOL.
+
+**Standing rule adopted for the rest of the week:** probe the entry gate for the exact wallets
+immediately BEFORE the founder plays, never after. A seal made into a broken gate cannot be undone.
+
 ---
 
 ## 9. Open items
@@ -145,3 +193,4 @@ Open, but not a failing test:
 | F-20 | Does the reveal gap (§2, F-1) become a product PR after the week? | nothing — every remaining test proceeds either way | founder |
 | F-22 | ~~The entry gate is refusing every entry~~ — **RESOLVED 18:56Z**, Turnkey plan upgraded. | nothing | closed |
 | F-23 | Size the Turnkey plan for the week, not the night: ~450 more signing activities (§2, F-2 and DRIFT §H5). | T5 onward if the ceiling is low | founder |
+| F-24 | Does the seal-then-lockout (§2, F-4) become a product PR? It is the most serious finding so far. | nothing in the test — T4 reruns on the next pool | founder |

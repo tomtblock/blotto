@@ -630,3 +630,73 @@ Two consequences:
    (`crank.ts:395`), *before* the guard that refuses to settle against a short entries read — a
    guard whose whole design is to throw and retry next tick. Each retry is another Turnkey activity.
    Not a bug; worth knowing before a settlement starts looping.
+
+### H6. A failure between sealing and registering bars that wallet from that pool forever (2026-09-16)
+
+**The worst finding of the test so far.** It is not a theory: it happened to the founder tonight, on
+both accounts, and the mechanism is measured rather than inferred.
+
+**The order.** `app/src/entry/submit.ts:99-100` stores the sealed ciphertext and *then* requests the
+entry packet:
+
+```ts
+await services.putCiphertext(input.pool, input.player, ciphertext);   // :99
+const packet = await services.requestPacket(input.pool, input.player); // :100
+```
+
+**The gate.** `backend/packet/src/ciphertexts.ts` refuses a second, *different* allocation for a
+seat that already has one — audit D-01, and correct on its own terms: the ciphertext write happens
+before the chain's duplicate check, so without it a second run would destroy a player's own paid
+entry. Re-posting the SAME bytes is idempotent, so an ordinary network retry is unaffected.
+
+**But a replay is never the same bytes.** The salt is fresh per run, so a player who plays again
+produces a different ciphertext and is refused.
+
+Measured on W63 (outside T4's field), pool 15, 19:09Z:
+
+| post | result |
+|---|---|
+| first seal | `204` stored |
+| same bytes again | `204` — idempotent, as documented |
+| **different bytes** | **`409 {"error":"already sealed"}`** |
+
+**And there is no way back.** `backend/sealing/src/store.ts` gives `CiphertextStore` exactly two
+methods, `put` and `get`. No delete exists anywhere in the tree — not in the store, not in the
+service, not in `admin.ts`.
+
+**What it did tonight.** During the Turnkey outage (§H3) the founder played seven battles on UI-A.
+The app sealed and stored the ciphertext — successfully — and then asked for a packet and was
+refused. Every retry since has produced a fresh salt, hit the 409, and rendered the SAME generic
+`entryRefused` copy, whose text reads *"Trying again will not change the answer"*. That sentence is
+true and for a reason neither the player nor the app can discover. Both UI accounts are permanently
+barred from pool 15, having paid nothing and entered nothing.
+
+**Why this is worse than the outage that exposed it.** The Turnkey quota was a billing fact, fixed
+in an hour. This is structural: **any** transient failure after the seal — the entry service
+blipping, a wallet prompt dismissed, a laptop lid closed, a browser tab crashing — permanently
+removes that wallet from that pool. On mainnet, a single entry-service blip does not merely fail the
+entries in flight; it bars every player who got as far as sealing from that pool for good, while
+telling them nothing. A pool can be left unable to fill by players who would gladly pay.
+
+**Verdict: GONE** — the product's implied promise that a failed entry can be retried does not hold
+after the seal.
+
+**Proposed fixes, not made here.** Two, and the second is the honest one:
+
+1. **Reorder**: request the packet before storing the ciphertext (`submit.ts`). Cheap, and it closes
+   tonight's exact sequence — but it only narrows the window, it does not remove it. A failure
+   between the ciphertext write and the register still locks the seat.
+2. **Gate the overwrite on the chain, not on the store.** The condition that actually distinguishes
+   "paid seat, must not be overwritten" from "abandoned attempt, safe to replace" is whether an
+   `Entry` PDA exists on chain for that wallet and pool — which is exactly what audit D-01 was
+   reaching for. Refuse the overwrite only once the seat is really registered. That preserves the
+   protection completely and removes the lockout, at the cost of one account read per ciphertext
+   write.
+
+**Consequence for the test.** T4 cannot run on pool 15: it requires UI-A to win, and UI-A cannot
+enter. Pool 15 lapses at its deadline and T4 moves to the next pool. The frozen plan is reusable
+unchanged — only `poolId`, `poolPda` and a new freeze record move, and no predicted rank or payout
+changes. Cost: one rent cushion, 0.00065 SOL.
+
+**Operational rule for every future test, from now on:** probe the entry gate for the exact wallets
+immediately BEFORE the founder plays, never after. A seal made into a broken gate cannot be undone.
