@@ -264,7 +264,7 @@ export default async function LandingPage() {
             <h2 className="mb-4 font-display text-[28px] font-extrabold leading-8 text-brand-berry">
               {COPY.howItWorks.title}
             </h2>
-            <HowItWorksCarousel steps={COPY.howItWorks.steps} />
+            <HowItWorksCarousel steps={COPY.howItWorks.steps(Number(MIN_SEATS))} />
             <p className="mt-4 flex gap-5 text-[13px] text-brand-berry">
               <Link href="/rules" className="underline underline-offset-2">
                 {COPY.howItWorks.rulesLink}
