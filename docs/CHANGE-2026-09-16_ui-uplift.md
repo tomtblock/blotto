@@ -440,6 +440,163 @@ build` in fixture mode, `npm run journey`, `./scripts/check-language.sh`,
 
 ---
 
-# §B — The report (appended by the executor when done)
+# §B — The report
 
-_Not yet written._
+**Produced:** 2026-09-16 evening, unattended, on `claude/clever-rubin-uyyns0` from `a56ac9a` (the
+plan) — nine code commits, `3ed949c` through `bfdc1fa`, then one docs commit carrying this report, the
+`docs/INDEX.md` row and the review captures. The founder approved §A with every default (D1–D9) at 19:58 UTC.
+**Status:** built and on the branch; nothing deployed, nothing merged; no PR opened (D8: the branch
+keeps its machine name until the founder names the real one). Every new or changed string is a
+`PHASE-N-REVIEW` proposal in `app/src/copy/index.ts`. The dial rule, the entry path and the run
+machine were not opened for editing.
+
+## B0. The headline
+
+Seven of the eight asks are built; the eighth (a red flashing seal button) is built as a one-line
+switch with pink as the default (D3, `SEAL_KEY_TONE` in `app/src/app/play/play-client.tsx`).
+Four loops and one one-shot clip were generated in the founder’s Blott style and closed into seamless loops;
+a Figma file holds the prototype frames; the local gates and the journey lane are green.
+
+Two things worth reading first:
+
+| Found | What was done |
+|---|---|
+| The run clip's first generation drifted its whole palette to teal — unusable behind a crossfade from the pink scene | A second still pins the END frame (the full jar, lid on, empty belt, same pink room); the run was regenerated with both frames pinned. §B3 |
+| `seal-stage.ts` and `seal-stage.tsx` cannot coexist — the `.ts` wins module resolution | The machine is `seal-stage-machine.ts`; the component keeps `seal-stage.tsx` |
+
+## B1. What was asked, and what was done
+
+| # | The ask | Done | Where |
+|---|---|---|---|
+| 1 | Desktop looks better at 90 % | `zoom: 0.9` at ≥ 1280 px with a fine pointer; the header's container widens to the landing column at lg | `app/src/app/globals.css`, `components/shell/app-header.tsx` |
+| 2 | Back pages: the boxing on pink, headings as the glowing Blotto Cup box | `MarqueeHeading` + `NeonSection` (the cabinet's two recipes, copied, tokens only); `/rules`, `/fair-play`, `/verify`, `/custody` on the pink field; heading text unchanged | `components/ui/marquee.css`, `marquee-heading.tsx`, `neon-section.tsx`, `page-intro.tsx`, `back-link.tsx`, the four pages |
+| 3 | Is `/custody` necessary on a public URL | Kept public, restyled (D4): it is the C13 disclosure Fair play promises, and every value on it is on-chain anyway | `app/src/app/custody/page.tsx` |
+| 4 | The lock on the homepage dial | The machine's existing padlocks wired into the landing demo; Even split clears them; no clock, so a lock starts nothing; `rebalance.ts` and `allocation.ts` untouched | `components/landing/LiveDemo.tsx`; journey step in `e2e/journey.spec.ts` |
+| 5 | A looping Blott in the pool card | A 4:3 well on the right (a 16:9 band on top below sm), masked into the plum; `AmbientClip` with play-when-visible keeps the one-loop-per-viewport rule; the hero pauses once mostly scrolled away | `app/src/app/page.tsx`, `components/ui/ambient-clip.tsx`, `public/motion/pool/blott-card.*` |
+| 6 | Pool page: yellow, dynamic, conveyor rails converging on Enter | Yellow field (D2, caveat kept: every number stays on plum); two sticky rails from ONE portrait loop, the right one mirrored; a strip below lg; marquee title; the rule paragraphs in a neon box; §8.6 line and Enter unchanged and last | `app/src/app/pools/[pool]/page.tsx`, `pool-page.css`, `public/motion/pool/rail.*`, `strip.*` |
+| 7 | Is "Verify this pool" needed on an open pool | Hidden while Open (D5): the Verify page recomputes a result from a bundle an open pool does not have yet | `app/src/app/pools/[pool]/page.tsx` |
+| 8 | The success page: seven Blotts on a conveyor into a blender; a big button on its base; the Privy prompt; the blender runs once signed, while the network confirms; then the new page | The seal stage (§B2): belt loop → the two-step seal on the blender's base → the Privy prompt over the scene → lid on the message signature → the blender runs on the transaction signature → the pass card over the settled jar | `app/src/app/play/seal-stage*.{ts,tsx,css}`, `observed-signer.ts`, `play-client.tsx`, `reveal-host.tsx`, `battle/components/battle-flow.tsx`, `public/motion/seal/*` |
+| — | Copy line 508 (`tx.entryRefused`) | Reworded so it is true for the eligibility decline AND the ciphertext-store 409 lockout, still generic, pointing at the pool page (D6, `PHASE-N-REVIEW`) | `app/src/copy/index.ts` |
+
+## B2. The seal stage — how it is wired, and why nothing forbidden moved
+
+- **`seal-stage-machine.ts`** (pure, 17 tests): `made → armed → signing → locked → blending → done`,
+  with `failed` reachable from any in-flight phase and `retry` / `reset` back. `sealStageVisual`
+  is the only thing the component reads: which clip, whether the belt runs, whether the lid is
+  down, whether the key pulses. The blender runs ONLY on `transaction-signed` — the founder's
+  "once the transactions are signed" — and a failure from any in-flight phase stops the belt and
+  never blends (nothing landed, so nothing was blended).
+- **`observed-signer.ts`** (3 tests): the signer `play-client.tsx` already hands to
+  `makeLiveEntryServices` is wrapped so that `signMessage` (the packet — the Privy "Sign message"
+  prompt in the reference image) and `signTransaction` (the money step) each report after they
+  resolve. Delegation is by method call on the original, never by spread; `signMessage` stays
+  absent when the adapter has none, so the fail-closed path in `services.ts` is unchanged; a
+  rejection passes through untouched. `app/src/entry/**` is not edited.
+- **`seal-stage.tsx` + `seal-stage.css`**: a full-bleed 16:9 box with the clip's exact aspect, so the
+  painted button is a fixed fraction of the box and the seal controls sit on it at ≥ 768 px; below
+  that the controls drop under the scene. Two clips — the idle loop and the one-shot run — cut from
+  the same still, crossfaded 300 ms. Reduced motion: a still of the right moment, no `<video>`.
+  The generic Blotts in the scene are the prompt's, never the player's seven (a Blott's silhouette
+  is its allocation; the stage reads no allocation).
+- **Where it is mounted** — `play-client.tsx`, outside the flow and the takeover, so the loop
+  survives the swap from `BattleFlow` to `RevealHost`; `stageOn` is sticky from the first review
+  until the flow resets or is done. `BattleFlow` gains `onReviewApi` (the confirm handle; with it
+  set it draws no seal buttons and no playground); `RevealHost` gains `onBeat` (card → done,
+  failed → stopped) and `quiet` (its entry beat renders nothing; the blender is the wait). The
+  two-step seal, its wording, and the §8.6 line above each step are unchanged — the surface moved,
+  the order did not.
+- **The button (D3)**: action pink, oversized, a 1.2 s glow pulse (0.83 Hz, under WCAG 2.3.1's
+  three flashes a second) until pressed. `SEAL_KEY_TONE = 'red'` is the founder's flip; the CSS for
+  it exists (`.seal-stage[data-tone='red']`) and the exception would be recorded in `tokens.ts`.
+- **`/dev/seal-stage`** (`page.dev.tsx`, dev builds only): every phase with dummy controls, so the
+  stage can be reviewed without a wallet. The credentialed run stays on the founder's devnet review.
+
+## B3. Assets — what was generated, with what, for how much
+
+Reference set (already in the Higgsfield account): character stills `e9f687e5…` and
+`7ebafb7a…`; the prompt base is the founder's own pose-pipeline wording.
+
+| Asset | Still (gpt_image_2_5, high/2k) | Clip (minimax_h3, 2K) | Shipped as |
+|---|---|---|---|
+| Card loop | `03c35866…` (cabinet window) | `b59524cc…` 8 s 4:3, start = end | `motion/pool/blott-card.{mp4,webm,jpg}` 720×540 — 190 KB / 151 KB |
+| Rail loop | `c5010a69…` (neon arch tunnel) | `1abd65b7…` 8 s 9:16, start = end | `motion/pool/rail.*` 720×1280 — 834 KB / 530 KB |
+| Strip loop | `0e8dc647…` (pink wall, seven varied) | `98253892…` 8 s 16:9, start = end | `motion/pool/strip.*` 1280×720 — 712 KB / 393 KB |
+| Blender idle | `d65da4a8…` (pink button, Blott mid-drop) | `8bfe2468…` 8 s, start = end (`cdabc7e8…` a calmer spare) | `motion/seal/blender-idle.*` 1280×720 — 1.22 MB / 1.13 MB |
+| Blender run | start `d65da4a8…`, end `e6aa6a82…` (full jar, lid on, empty belt) | minimax `4139f9ea…` and `0d8a315e…` both drifted to a teal room from 3 s (the second shipped provisionally in `360def1`); `seedance_2_0_mini` `3ba78a83…` 8 s holds the pink room throughout and is the one shipped | `motion/seal/blender-run.*` 1280×720, 8.04 s, one-shot — 1.46 MB / 1.12 MB, plus `blender-done.jpg` 97 KB (its last frame) for the settled state, swapped in by `bfdc1fa`. One blemish stays: around 2 s a grey mechanical hand lowers the lid, which reads as part of the machine |
+
+Loop closure: first-versus-last-frame SSIM was 0.958–0.972 on the raw loops, so every loop was
+closed with a 0.4 s tail-to-head crossfade (ffmpeg `xfade`; `fps=24` must follow `trim`, or the
+filter refuses the input as variable-rate). Encodes: H.264 crf 23 slow + faststart, VP9 crf 33,
+poster JPEG q3. Total added under `app/public/motion/`: 8.2 MB (`pool/` rail, strip, blott-card; `seal/` blender-idle, blender-run, blender-done).
+
+Credits: 182 of the 300 cap (balance before 2,926.66, after 2,744.66; the account's transaction list
+agrees to the credit — ten stills at 3, eight minimax clips at 12–20, one seedance clip at 20). The
+last minimax attempt, `4169378c…` 6 s, was started as a fallback while seedance rendered and was
+neither compared nor used. Alternates kept in the account,
+not the repo: stills `a07af880…`, `70fe519a…`, `9720722d…`, `9d0534a2…` (the red-button
+blender), `18058443…`; clip `cdabc7e8…`.
+
+D7 deviation: the card loop was generated (16 credits) rather than cut from a library clip — no
+library clip is a loop, and closing one would have cost the same crossfade plus an hour of
+browsing.
+
+## B4. Figma
+
+`Blotto Cup — UI uplift 2026-09-16` — https://www.figma.com/design/VBAO4nqwOSMOReAN9xfUYR
+(plan `team::1669240224739880472`). One page: the reference row (the four chosen stills and two
+real captures of the built pages), `Seal stage · made · 1440` and `· 390`, `Pool page · rails ·
+1440`, `Home · Open-now card with Blott well · 1440`; a `Blotto tokens` variable collection (14
+colours from `tokens.ts`, scoped) and seven text styles in the product's faces (Big Shoulders,
+Space Grotesk, JetBrains Mono). Frames were built before the pages were coded and the code
+matched to them; the time-box (75 min) held.
+
+## B5. Judgement calls (every one is also a `PHASE-N-REVIEW` in the code)
+
+- `landing.demoHint` gains "Press a padlock to hold a stat where it is." (§A11).
+- `pool.aboutHeading` = "How this pool pays" — the marquee over the pool page's rule paragraphs.
+- `battle.sealStageAria` — the stage's description for assistive tech.
+- `tx.entryRefused` — the §A7 wording.
+- The motion rule (one ambient loop per viewport) is kept by play-when-visible; two loops can
+  overlap for a beat mid-scroll on the landing.
+- The stage box is `min(100vw, 78vh × 16/9)`, so on a very wide, short screen the pink field shows
+  either side of the scene; the pink field is the brand surface, so this reads as intended.
+- `marquee.css` duplicates ~40 lines of `cabinet.css` rather than sharing them, so a back-page
+  tweak can never be a play-route change; unifying them is a follow-up.
+
+## B6. Deliberately not done
+
+- The full desktop type scale and a top navigation at lg (§A2 (b)).
+- A verify-page mode for OPEN pools.
+- The 409-specific refusal string (waits on the founder's part-4 fix).
+- `/pools` and `/profile` restyles.
+- The 390-wide pool page and home card Figma frames (the built captures stand in).
+
+## B7. Verification — on the last commit
+
+On `bfdc1fa`, the last code commit, from `app/`: `npm run typecheck` — clean; `npm run lint` — clean;
+`npm test` — 62 files, 489 tests passed; `NEXT_PUBLIC_FIXTURE_DATA=1 npm run build` — compiled, 18 static
+pages. From the root: `./scripts/check-language.sh` — clean (self-test passed) and
+`./scripts/check-standing-rules.sh` — rules 5 and 6 clean (self-test passed); both were run again after
+this report was written, since the language gate reads the docs too.
+
+`npm run journey` on that fixture build — 16 of 16 passed across mobile-375 and desktop-1280 (11.5 s),
+the new `landing: the practice machine can hold a stat` among them. The lane's screenshot output under
+`docs/phase-reports/screenshots` was restored with `git checkout` before committing, as §A requires;
+`app/next-env.d.ts` likewise.
+
+After-captures for the founder's morning review: `docs/design/uplift-2026-09-16/` — home-1440, home-390, rules-1440, fair-play-390, pool-1440, pool-390, seal-stage-1440, seal-stage-390 (JPEG, each under 300 KB, captured from the fixture-mode dev server; `/dev/seal-stage` is the dev-only preview). The harness that produced them
+(`playwright-core` + the installed Chromium) lives in the session scratchpad, not the repo.
+
+## B8. The commits
+
+- `3ed949c` app: desktop scale — 0.9 on a wide screen, and the header lines up with the landing column
+- `b3f0c6e` app: the pool page offers "Verify this pool" only once the pool has sealed
+- `8d7dc2b` copy: the entry refusal no longer points a locked-out wallet at the Rules page
+- `bffaab8` landing: the practice machine gets the padlocks the run already has
+- `34519f2` app: the informational pages wear the landing's field — marquee headings on neon boxes, on pink
+- `f295859` landing: a looping Blott in the open-pool card, and one AmbientClip for every ambient loop
+- `9285946` pool page: the yellow field, conveyor rails converging on Enter, and a neon rule box
+- `360def1` play: the seal stage — seven Blotts into a blender, the seal on its base, the blender runs once signed
+- `bfdc1fa` play: the run clip regenerated without the palette drift
+- the docs commit after it: this report (§B), the `docs/INDEX.md` row and `docs/design/uplift-2026-09-16/`
+  (eight review captures)
