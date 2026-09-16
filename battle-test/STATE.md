@@ -1,10 +1,10 @@
-# STATE — 2026-09-15 21:09 local (00:09 UTC, 16 Sep) — by Claude Code
+# STATE — 2026-09-15 22:55 local (01:55 UTC, 16 Sep) — by Claude Code
 
-Phase:            WP0/WP1/WP2/WP4 complete · **T1 PLAN IS FROZEN** — PR #132 merged 2026-09-16T00:07:24Z
-Waiting on:       the chain — pool 13's deadline at 22:41 local, then the new pool opens ~22:46. Then founder F-12.
-                  A server-side wake-up is scheduled for 22:43 local, so the GO does not depend on this container.
+Phase:            **T1 IS LIVE** — pool 14 open on tier 0, frozen plan merged, awaiting the founder's two UI entries
+Waiting on:       founder — **F-12 now**: UI-A and UI-B entries into pool 14, separate browser profiles.
+                  The ten headless seats run the moment those two land (the plan puts the founder first).
 After that:       F-19 ~10:46 Wed (T1 deadline) · F-01b more faucet before the first full pool
-Live deadlines:   pool 13 (tier 0, 0 entrants, NOT a test) closes 22:41 tonight → pool 14 opens ~22:46 = **T1**
+Live deadlines:   T1 / pool 14 / tier 0 → 13:46:49Z = **Wed 10:46 local**. Below 40 seats it refunds in full.
                   T1 deadline ~10:46 Wed
 Blocked:          nothing. enter.ts is built and its register leg SIMULATED OK against the deployed program
                   (71796 CU, no state written). T1's ten headless seats can land as soon as pool 14 opens.

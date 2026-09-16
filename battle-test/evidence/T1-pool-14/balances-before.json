@@ -1,0 +1,551 @@
+{
+  "schema": "blotto-rehearsal-snapshot/1",
+  "label": "before",
+  "test": "T1",
+  "poolId": "14",
+  "cluster": "devnet",
+  "takenAt": "2026-09-16T01:54:36.888Z",
+  "slot": 499061000,
+  "headlessTotalLamports": "2000000000",
+  "rows": [
+    {
+      "id": "funder",
+      "kind": "funder",
+      "address": "6z4wriiac4d6bay57Pe4Gj3jxhjeT9HfbcH2VaM4r3Ue",
+      "lamports": "7999995000",
+      "sol": "7.999995000"
+    },
+    {
+      "id": "treasury",
+      "kind": "program",
+      "address": "CMFfvTpbsnjMSWhjpnivQ17kWiG5qD88gPND54tZxTqh",
+      "lamports": "1996098560",
+      "sol": "1.996098560"
+    },
+    {
+      "id": "W00",
+      "kind": "headless",
+      "address": "BoQJjB4fGGTkyQcFKgfgiV3KEmWpaP2jjEpqnoX3iUMR",
+      "lamports": "200000000",
+      "sol": "0.200000000"
+    },
+    {
+      "id": "W01",
+      "kind": "headless",
+      "address": "CF38D8UdFhCCakjK1Ty4RViSGpAfaKht5VEy8q79TTEH",
+      "lamports": "200000000",
+      "sol": "0.200000000"
+    },
+    {
+      "id": "W02",
+      "kind": "headless",
+      "address": "3PQbmPxu92J5UZPfra9bMofF7FjPepefHAW6UyMae7yT",
+      "lamports": "200000000",
+      "sol": "0.200000000"
+    },
+    {
+      "id": "W03",
+      "kind": "headless",
+      "address": "Coo447QMwr8SkSZZUABh86KKRo8AMpGcsAn4enVV8wEP",
+      "lamports": "200000000",
+      "sol": "0.200000000"
+    },
+    {
+      "id": "W04",
+      "kind": "headless",
+      "address": "H6iFKJMDttWj4ZfySPPPMG4EEE5cJkvNDZ9i1HNqRJdo",
+      "lamports": "200000000",
+      "sol": "0.200000000"
+    },
+    {
+      "id": "W05",
+      "kind": "headless",
+      "address": "7F3Mn8MMznLcCFGVB52jFn9J2xQbGHm8MH2V1NwC8wHa",
+      "lamports": "200000000",
+      "sol": "0.200000000"
+    },
+    {
+      "id": "W06",
+      "kind": "headless",
+      "address": "pmTjbpfoaCc2tZCNJXKdpDJZTr1qZ2f21apYXsQ7qq3",
+      "lamports": "200000000",
+      "sol": "0.200000000"
+    },
+    {
+      "id": "W07",
+      "kind": "headless",
+      "address": "21ShzyRaxjEuY91HmWaMzDaSfzB53A1zFShxYKSW6B3i",
+      "lamports": "200000000",
+      "sol": "0.200000000"
+    },
+    {
+      "id": "W08",
+      "kind": "headless",
+      "address": "BmttwNHBih1LkppkNM8nyfQj9o88DLcsWMkS3J8Zjt5D",
+      "lamports": "200000000",
+      "sol": "0.200000000"
+    },
+    {
+      "id": "W09",
+      "kind": "headless",
+      "address": "HAe7n7ZYHycQBvTdVtFRqKcWTfxFKHKQkjvYvfNM9Fts",
+      "lamports": "200000000",
+      "sol": "0.200000000"
+    },
+    {
+      "id": "W10",
+      "kind": "headless",
+      "address": "76TpE6MMG5uHEqA9ALJrrZyMr5Mv4LR47GgnEmByyfFn",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W11",
+      "kind": "headless",
+      "address": "8jJSNEFqHbbS3Xonu75J7TbTDrBg8SryJBL849yofzKY",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W12",
+      "kind": "headless",
+      "address": "EAnKMXm5NrD6uzoDDKn3FGooJoCRxxF1GVMMKKabALjR",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W13",
+      "kind": "headless",
+      "address": "BdiQooDYCNnkBTEuWrvbUtapc1bEKNsvpXSU8U3FFNgn",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W14",
+      "kind": "headless",
+      "address": "7LopdohKE7oojY2oaaVa5rCYUaQAwpnLSB4QfFaL5AaL",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W15",
+      "kind": "headless",
+      "address": "5LFF41tQuiteJgqUwBtTrvHChQCsYFwnBzEPsoCYmnrP",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W16",
+      "kind": "headless",
+      "address": "J8vnziqaqjr7miqNDmbiffGh8Hq3Pit8GNNjkk4hQeiJ",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W17",
+      "kind": "headless",
+      "address": "6oqBtFcE46nP6SfPpSN5iX582sJXeMnBuAYBdN9FPuaG",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W18",
+      "kind": "headless",
+      "address": "EfRD2Sh3R2rkja48U4uwb96F8tu3aZSzef5R2mQMJzu",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W19",
+      "kind": "headless",
+      "address": "7vKioBwZHigM9zLVXPZe23BgrR44Sf2etmP9LfxcJUqm",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W20",
+      "kind": "headless",
+      "address": "7NhgEuPtvjYVyqFD4isCnKFNqSxmLLCxZzSvky3JX4oX",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W21",
+      "kind": "headless",
+      "address": "Bk4SKwVgvZvrZ2Y2txCknoDcZuoamhq7LdD94QUUR5Mu",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W22",
+      "kind": "headless",
+      "address": "9wbGkEfUFXZFA8LTSXgQmPCMfVUMNLL5XGJbo95M29kA",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W23",
+      "kind": "headless",
+      "address": "3MHZq2t7roYHsEPFX7LK1AcPGkUp5RVx82RzHHt6ZCj7",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W24",
+      "kind": "headless",
+      "address": "7qvXkBndmUFQx6AHwZ5bQEVMWVmS5fb8jaNiimNxsyTq",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W25",
+      "kind": "headless",
+      "address": "HbFoy8h6Y7Awavs1onxN9qSwZrRDUa3Ti8P3idE6Q2wq",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W26",
+      "kind": "headless",
+      "address": "HfkvkWMPs9keMsaHcuH8AX1DCn3yeRuiaAbH3S6W8vZE",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W27",
+      "kind": "headless",
+      "address": "69BuMKj1e7LNsDYgmbXfJtk1WppgoepFUFq6pWg7Nut7",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W28",
+      "kind": "headless",
+      "address": "2CK7ubGSRqn2gwBbGZCq7oooWbthRqBJnqYYvJBR44pi",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W29",
+      "kind": "headless",
+      "address": "HURavDvBLTvz3hFHcEWZ6LhP59qA2GQ5ZMfamVRNm7Jv",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W30",
+      "kind": "headless",
+      "address": "85MN5Tc24gVRvCkZzRSjM3hkoKUbTd975XvCMRczPyEG",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W31",
+      "kind": "headless",
+      "address": "ARKd8adMn8B2MUY7XjA3R3Vjj2zXMkC6UV97WmFmPUBC",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W32",
+      "kind": "headless",
+      "address": "E97qquyinwkiAovRkV5aCMhVmMdT11c26LYgSQm1PiVi",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W33",
+      "kind": "headless",
+      "address": "2c9pKUy6hx94bGPj4rJ4czb4HhH1La1anfhWf52tJy91",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W34",
+      "kind": "headless",
+      "address": "E5DSmevYhFSDfyF1Yvp4WiLLd3cVHHrqzhA48pfM5BEC",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W35",
+      "kind": "headless",
+      "address": "FHy2QgnPkbcNeiC5cMRe2Ymi6i2kWMnCmQRJdo1nB2b8",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W36",
+      "kind": "headless",
+      "address": "HgnAG7HAMqHyhPgghNjH8fw5536nupNvZngCHkWFYvqA",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W37",
+      "kind": "headless",
+      "address": "EdodvtHdYxgGwMzPwa3BzDR8NhMdL5jMkKTZKTzekaip",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W38",
+      "kind": "headless",
+      "address": "CkhWcpxE8x465NvkZCa2L4TfcqPoQJh85KkgcLciMwQT",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W39",
+      "kind": "headless",
+      "address": "54pNkrzjVZYD2dQfY3Jo5j5wzqnLJC6DR3dDfC7aXxUC",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W40",
+      "kind": "headless",
+      "address": "HG3fCsSkj6Gm4wLqzNTUg4RAEL8z51EwZEfzcF8HaYSx",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W41",
+      "kind": "headless",
+      "address": "C5xTL7cBqEvGZzfz9KwqTTz4Fe3WTDVh6KgoWgJSL6Ad",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W42",
+      "kind": "headless",
+      "address": "CpH39cHwRhH1hXUtmZi9FZPtrfRAKfmvorMTVnCabRT2",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W43",
+      "kind": "headless",
+      "address": "6s3aGq9GJmCqNCBh717evnmWserY653YrYy5LJeFF7XT",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W44",
+      "kind": "headless",
+      "address": "7QDoEUbBxh1Dj8M3r9bJPjSfGuBD7McAwfEtLoZrHEh6",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W45",
+      "kind": "headless",
+      "address": "fgZy7mdhgMMv4QYK9dpiiXLKw5pz1ZtUYvSPRXhPYFw",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W46",
+      "kind": "headless",
+      "address": "JAdrczVWwDM5AqwHnWTF2PHFnui2G6EVhFNDSB9Aqzu3",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W47",
+      "kind": "headless",
+      "address": "9g2xT2XaugDzNduz7qX6cu1UvnBkvs3xxtUxqu4Wfhgu",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W48",
+      "kind": "headless",
+      "address": "6FdxTfSt1xHpaehv7UPMSRCJ8JwrnK5MpGRFjeVwQjiE",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W49",
+      "kind": "headless",
+      "address": "J9GsYWxgN6qbzqATGX2caE1idyXfb996Fh18UxUHfivD",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W50",
+      "kind": "headless",
+      "address": "3LPzJJMkhLamgUSHvn2fHuFLa2G71QuFzxfX78yzq9cc",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W51",
+      "kind": "headless",
+      "address": "CLX9kRpa7mPtBCuRmkcviy6apf5reHtzQpNAG7YKWnPh",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W52",
+      "kind": "headless",
+      "address": "9R8wPcTN7zZTbzNRXTFmPVh4KTr6f8paUpLyo3i25uxT",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W53",
+      "kind": "headless",
+      "address": "5TZXbUEaSfAu9Hcpzgie8t67mBz3YXCBMZx2Rj5zRw7Z",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W54",
+      "kind": "headless",
+      "address": "Btw9s22wBjx9DMtUx7k8kDEkpoeypqT32gHDD3aWcAh1",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W55",
+      "kind": "headless",
+      "address": "7pWEwGeeq58kvQzFcqJdCLsGyPpsr2izi4qhpSdeWcq",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W56",
+      "kind": "headless",
+      "address": "CfkK3yYBg3sDpHFHXdX9meQxbjTNYY6CFNsDC3kqu5vT",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W57",
+      "kind": "headless",
+      "address": "HFGtkdwPurm1ny8Fi2v9LDd2KUiiocJ68jim1CfmSg9k",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W58",
+      "kind": "headless",
+      "address": "2dSK8WADiGbkxo5kyQ5nGi6Pmd3oRL39BoSDPa5F8UXZ",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W59",
+      "kind": "headless",
+      "address": "7tntKL2GLgFz2iL1CMxxCjxgTAFVERPswV3CuE5Gbe5y",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W60",
+      "kind": "headless",
+      "address": "HKDtPphLse9pk3Z99nseQj688NE3Tg3h3UeqfPjgQZoN",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W61",
+      "kind": "headless",
+      "address": "GjNf9i7LByLTXR5M44b6d3No8ApA26i9septKzNiiiSJ",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W62",
+      "kind": "headless",
+      "address": "CBhA7Hb1RvTstwWbbqvx2RWbDhEB74Y6fJ5SkefmMd52",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W63",
+      "kind": "headless",
+      "address": "8pQsAQ2fn8ryJDDutPT9XebF4qzDDNvJnpQV4kMcJ8Gn",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W64",
+      "kind": "headless",
+      "address": "7VGVwdRgYRkygDht2XA6ausuaMNv4TYmGHxRVQbNRQFq",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W65",
+      "kind": "headless",
+      "address": "7EztACkvm1FhHwFdqXQxFETYAgMicxGLGLTWLuKx7mQb",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W66",
+      "kind": "headless",
+      "address": "FUiqCFsNwcb71Vdbtw4hFPZpU1z3BBHw2CFfmu8jtUGR",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W67",
+      "kind": "headless",
+      "address": "4XWvCx8EbL1eYaQx4WohwpYUKDyXLxg5RCiMkMhLgA9J",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W68",
+      "kind": "headless",
+      "address": "GR37EKjJKhp8QU6tfPWAeRciMYoffxTCqvcKGTWeNAdL",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W69",
+      "kind": "headless",
+      "address": "FjNn43eDPqEtBYEhwcuT9RDHtGUWxZkaqPrwHD5JyFaf",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W70",
+      "kind": "headless",
+      "address": "EzNWwKz1taUQt67G5iB5Ny2aPHnXmJKgvH5kE7KobaAA",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "W71",
+      "kind": "headless",
+      "address": "3n4zaJDayDUwYneB75NhhnXQnXUUVRg9KJBBAbZQkGjc",
+      "lamports": "0",
+      "sol": "0.000000000"
+    },
+    {
+      "id": "UI-A",
+      "kind": "ui",
+      "address": "7fpaNh8mAi9SDJyvu6sVFxsqqP8LE3whvBJ1K9ZFYPve",
+      "lamports": "4991117577",
+      "sol": "4.991117577"
+    },
+    {
+      "id": "UI-B",
+      "kind": "ui",
+      "address": "6wqLMAS1guarBehRDGFSAApGUBLXuuHWmy9naepzu3sa",
+      "lamports": "9991121928",
+      "sol": "9.991121928"
+    },
+    {
+      "id": "vault-14",
+      "kind": "program",
+      "address": "4ZgFHPKnVVReaAtwewWwJRrNkA6pTrW9vkUf8HyUFYNW",
+      "lamports": "4000650240",
+      "sol": "4.000650240"
+    }
+  ]
+}
