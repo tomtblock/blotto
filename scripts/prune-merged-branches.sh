@@ -14,12 +14,12 @@
 # THE TEST. A branch is deleted only on POSITIVE proof that its work is in main:
 #
 #   1. its tip is an ancestor of main, or
-#   2. main's history carries `Merge pull request #N from <owner>/<branch>`, or
+#   2. main's history carries a merge commit naming it (`... from <owner>/<branch>`), or
 #   3. `git cherry` finds every one of its patches already in main (a squash).
 #
 # Anything failing all three is LEFT ALONE and printed. No branch is deleted for
 # looking old, and none is deleted on the GitHub API's `merged` flag, which
-# reads false even for pull requests sitting in main's history.
+# reads false even for merged PRs sitting in main's history.
 #
 # RUN A FULL CLONE. A shallow clone has no real ancestry: `git merge-base`
 # fails, every branch looks unmerged, and a naive reading of that says "delete
