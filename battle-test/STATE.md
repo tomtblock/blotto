@@ -1,48 +1,81 @@
-# STATE — 2026-09-16 11:04 local (14:04 UTC) — by Claude Code
+# STATE — 2026-09-16 12:10 local (15:10 UTC) — by Claude Code
 
-Phase:            **T1 PASSED** — pool 14 Closed, 12/12 refunded, reconcile PASS. T4 is next and is BLOCKED.
-Waiting on:       founder — F-19 (screenshot the Closed pool page + both wallet balances) and **F-01b, now blocking**:
-                  T4 needs 64 entrants; only 12 wallets are funded and the funder holds 8.0 SOL against ~12.4 needed.
-After that:       F-19 ~10:46 Wed (T1 deadline) · F-01b more faucet before the first full pool
-Live deadlines:   pool 15 open on tier 0, deadline 01:52:26Z. NOT a test pool — nobody enters until T4's plan is frozen.
-                  T1 deadline ~10:46 Wed
-Blocked:          nothing. enter.ts is built and its register leg SIMULATED OK against the deployed program
-                  (71796 CU, no state written). T1's ten headless seats can land as soon as pool 14 opens.
-Results so far:   T1 plan frozen, not yet entered · T2–T8 not started
+Phase:            **T1 PASSED and is closed out.** T4 is UNBLOCKED and is the work in progress — pool 15,
+                  the first pool that actually plays and pays a real 4 SOL prize.
+Waiting on:       nothing blocking. F-19 (screenshot the Closed pool page + both wallet balances) is still
+                  outstanding but holds nothing up. Next founder block is F-21, and I will call it.
+After that:       F-21 — merge the T4 freeze PR, then make the UI-A and UI-B entries on pool 15
+Live deadlines:   **pool 15, tier 0, deadline 01:52:26Z — about 10h40m.** It is now T4's pool (founder
+                  decision 14:18 UTC). Still nobody enters until T4's plan is frozen.
+Blocked:          nothing.
+Results so far:   T1 **PASS** · T2–T8 not started
+
+**The T1 reveal finding (15:08 UTC) — read this one.**
+  Pool 14 refunded all twelve seats correctly but will NEVER publish its sealing secret. Traced end to
+  end: the program permits the reveal and says why in its own doc comment, but `crankPool` returns for a
+  Refunding pool and no-ops for a Closed one, both before `assembleBundle` — which holds the only
+  production call to `revealPoolSecret`. No `admin.ts` fallback either. Custody is not the blocker.
+  Corroborated across pools 9, 10, 11, 12, 13 and 14: not one refunded pool has ever revealed.
+  → T1's 12 allocations are permanently COMMITTED; VERIFIED is unreachable for them.
+  → T2 (39 seats) will hit the same wall. Expect it, do not re-diagnose it.
+  → T3 onward seal and score, so those verify normally.
+  → T1's PASS is unchanged. It tested refunds and every frozen prediction held.
+  → The fix is a few lines in `backend/`, outside this week's source boundary. NOT made.
+  Full evidence DRIFT.md §H1 · founder-facing REPORT.md §2 F-1 · decision F-20.
+
+T4 readiness, all read live at 15:05 UTC:
+  pool 15 Open, 0 entrants, vrf seed committed (non-sentinel), pass collection PPvM1R3B…enBRf exists
+  → enter.ts's readiness guard will pass. **No founder admin write is needed to prepare the pool.**
+  funder 6z4wriia…r3Ue holds 7.999995 SOL. 52 wallets at 0.15 plus fees = 7.80026, leaving 0.1997. It fits.
+  W00–W09 were refunded and still hold 0.195559 each — comfortably over the 0.104443 an entry costs.
+  populations.ts is written and property-tested: wall beats cappedField 11200/11200, pole loses
+  11200/11200, 64 unique sets, every allocation sums to 100.
+
+T4 work remaining, in order:
+  1. scripts/oracle.ts — compose backend/scoring's scorePool / assignPrizes / rankOrder, checked against
+     the committed Python vectors FIRST
+  2. registry/T4.plan.json — 64 seats, every predicted rank and the winner's payout, plus the detection
+     notes the plan should predict rather than discover
+  3. fund W10–W61 at 0.15, then the freeze PR
+  4. F-21: founder merges, then enters UI-A and UI-B; I run the 62 headless seats; the 64th seals it
 
 Decisions taken since P-01 (all recorded in DRIFT.md §G):
   - **Every test runs on tier 0.** Tier 1 cannot be opened: `set-open-tiers` refuses a tier whose live
     economics differ from the ratified table, and tiers 1–6 on chain still carry the superseded
-    derivation (tier 1 reads a 25.6 SOL pot against a ratified 20). Opening it properly would cost a
-    20 SOL pot. Tier 0 is already open at ratified economics.
-  - Pools per tier are sequential, so the eight tests run one after another. The founder's 11:00/23:00
-    cadence absorbs this: a deadline test fills a 12-hour cycle, a full pool settles in minutes.
-  - **T3 changes character**: at exactly 40 seats it seals at its deadline and pays. That exercises
-    seal_at_deadline, the boundary the program actually defends. T2 at 39 is the boundary from below.
+    derivation. Tier 0 is already open at ratified economics.
+  - Pools per tier are sequential, so the eight tests run one after another. The 11:00/23:00 cadence
+    absorbs this: a deadline test fills a 12-hour cycle, a full pool settles in minutes.
+  - **T3 changes character**: at exactly 40 seats it seals at its deadline and pays. T2 at 39 is the
+    boundary from below.
   - F-03, F-04 and F-11 are deleted (DRIFT.md §G2). Two admin writes remain all week: set-paused for
     T3's pause, forfeit-escrow for T7.
   - **Two UI accounts, not three.** Roles rotate per pool instead of being fixed to a wallet.
+  - **Fund at 0.15 per wallet, not 0.2** (founder, 14:18 UTC), and run T4 on pool 15 rather than let it lapse.
 
-WP4 findings (both would have failed T1 at 22:46 if found then):
-  - the packet service refuses any wallet with no stored attestation at the current terms version; the
-    manual never mentions this because in the app it is the clickwrap. enter.ts attests first.
+WP4 findings (both would have failed T1 if found later):
+  - the packet service refuses any wallet with no stored attestation at the current terms version; in the
+    app that is the clickwrap. enter.ts attests first.
   - the packet service answers in base64, not hex. Decoding corrected against app/src/entry/services.ts.
 
-Verified on chain tonight (Helius devnet RPC):
+Verified on chain (Helius devnet RPC):
   config 484 bytes and pool 849 bytes — migrations done, no legacy 52-seat pool open
-  fill_deadline − opened_at = 43200 on pool 13 · cooldown 300 s · keeper = settlement signer
+  fill_deadline − opened_at = 43200 · cooldown 300 s · keeper = settlement signer
   vault rent cushion = **650240 lamports** measured (the 890880 figure is mainnet and wrong here)
   check-deployed: PASS — the deployed program matches this branch's wire contract on 19/33 instructions
-  funder 8.0 SOL after funding · UI-A 4.99 SOL · UI-B 9.99 SOL · W00–W09 at 0.2 SOL each
-  treasury 1.997 SOL, reserved 4.0 (pool 13's pot, returns at its refund)
+  per-entry sunk cost 0.104443 SOL measured against 0.104436 predicted — within 0.007%
+  treasury 1.995448320 after T1, which is what the money-conservation arithmetic predicts to the lamport
 
-Open founder questions (DRIFT.md §G5), none blocking tonight:
+Open founder questions (DRIFT.md §G5), none blocking T4:
   Q6 admin signing — direct keypair or Squads proposal? (blocks T3's pause, T7's forfeit)
   Q7 who holds reviewer key 4ydb…wcL1? (blocks T7 entirely)
   Q8 ANSWERED — the geo gate PASSES from this container. The earlier 403 was a missing age/terms
      attestation, which enter.ts now makes for each wallet exactly as the app's clickwrap does.
   Q9 Playwright — build it, or record quota 0 against roadmap 5.1? (recommend quota 0)
   Q10 tiers 1–6 carry superseded economics — recommend leaving them, logged as a product follow-up
+  F-20 NEW — does the reveal gap become a product PR after the week? Blocks nothing; T4 proceeds either way.
+
+A faucet round is still wanted before T5: 0.15 × 52 spends 7.8 of the 8.0 available and leaves the funder
+nearly empty until T4's sweep returns the money.
 
 Conventions: P-IDs for preparation actions; F-IDs from the manual §3.1 as renumbered in FOUNDER-ACTIONS.md.
 Keys: re-derive each session with

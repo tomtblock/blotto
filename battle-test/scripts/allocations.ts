@@ -113,6 +113,14 @@ function main(): void {
     : null;
   const bySeat = new Map((actual?.seats ?? []).map((s) => [s.wallet, s]));
   const revealed = Boolean(actual?.revealedSecret);
+  // A pool that refunded is finished, and a finished pool that has not
+  // revealed never will: `crankPool` returns for a `Refunding` pool
+  // (crank.ts:179-188) and no-ops for a `Closed` one (:189-192), both before
+  // `assembleBundle`, which holds the only production call to
+  // `revealPoolSecret` (crank.ts:395-397). So COMMITTED is this table's
+  // terminal state for a refunded pool, not a waiting one, and it says so
+  // rather than leaving twelve seats looking unfinished. DRIFT.md §H1.
+  const neverReveals = !revealed && actual?.terminalState === 'Closed';
 
   // Addresses come from the roster, so a wallet is identifiable before it has
   // entered anything — the founder should be able to look one up at any point,
@@ -154,6 +162,13 @@ function main(): void {
   L.push('|---|---|');
   L.push('| `PENDING` | no entry has landed yet; the intended allocation only |');
   L.push('| `COMMITTED` | the entry landed and the chain holds `sha256(battles ‖ salt)`, which nobody can open yet |');
+  if (neverReveals) {
+    L.push(
+      '| | **For this pool `COMMITTED` is terminal.** It refunded, and a refunded pool never ' +
+      'reveals its secret on this tree — so these hashes stay sealed and no seat here can reach ' +
+      '`VERIFIED`. The finding, with its evidence, is `DRIFT.md` §H1. |'
+    );
+  }
   L.push('| `VERIFIED` | the pool revealed its secret; the published battles and salt recompute to the hash the chain recorded at entry |');
   L.push('');
   L.push(
@@ -226,7 +241,11 @@ function main(): void {
     if (state === 'VERIFIED') {
       L.push('| recomputed | matches the hash committed at entry |');
     } else if (state === 'COMMITTED') {
-      L.push('| recomputed | not yet — the pool has not revealed its secret |');
+      L.push(
+        neverReveals
+          ? '| recomputed | **never** — this pool refunded and its secret was never revealed (DRIFT.md §H1) |'
+          : '| recomputed | not yet — the pool has not revealed its secret |'
+      );
     }
     L.push(
       `| register | ${got?.registerSig ? `[\`${short(got.registerSig)}\`](${EXPLORER}/tx/${got.registerSig}?cluster=devnet)${got.slot ? ` · slot ${got.slot}` : ''}` : '—'} |`
