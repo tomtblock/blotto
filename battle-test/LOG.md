@@ -64,3 +64,11 @@
 2026-09-16 01:55 UTC | chain   | T1 | opening pool 14 cost the treasury exactly pot + cushion: 5.996748800 → 1.996098560 (−4.000650240). Vault 14 holds 4.000650240 | snapshot
 2026-09-16 01:55 UTC | cc      | T1 | evidence captured BEFORE any entry: pool.json + balances-before.json at slot 499061000 | evidence/T1-pool-14/
 2026-09-16 01:55 UTC | cc      | T1 | GO issued to founder for F-12 (two UI entries, separate profiles). Deadline 13:46:49Z = Wed 10:46 local | FOUNDER-ACTIONS.md
+2026-09-16 02:11 UTC | founder | T1 | UI-A entered pool 14, seat 0 — 3eMcrFTh…HcByN slot 499067184. Cost 0.104443386 SOL | explorer
+2026-09-16 02:13 UTC | founder | T1 | UI-B entered pool 14, seat 1 — 4jQ3DSEo…iwqua slot 499067982. Cost 0.104441184 SOL | explorer
+2026-09-16 02:18 UTC | cc      | T1 | FREEZE HOLDS: plan frozen 00:07:24Z, first entry 02:11:29Z — the prediction precedes the outcome by 2h04m | T1.freeze.json
+2026-09-16 02:18 UTC | cc      | T1 | per-entry cost prediction confirmed: predicted 0.104436 SOL, observed 0.1044434 and 0.1044412 — within 0.007%, far inside the manual's 10% stop | INFRASTRUCTURE.md §3
+2026-09-16 02:18 UTC | cc      | T1 | enter.ts landed all 10 headless seats first time, slots 499069060–499069113. Pool 14 now 12/64 | evidence/T1-pool-14/headless-register.log
+2026-09-16 02:18 UTC | cc      | T1 | harvest extended: a seat with no line in our log (the founder's UI entries) now takes its register signature from the chain — an Entry PDA is created by register and nothing else, so its oldest signature IS that register | scripts/harvest.ts
+2026-09-16 02:18 UTC | cc      | T1 | allocation table complete: 12 seats COMMITTED, every one with address, battles hash, register signature, slot, pass asset and explorer links | registry/T1.allocations.md
+2026-09-16 02:18 UTC | cc      | T1 | pool 14 holds 12 of 40 needed, so outcome_if_deadline_now = refund. Deadline 13:46:49Z = Wed 10:46 local | indexer

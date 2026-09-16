@@ -1,8 +1,8 @@
-# STATE — 2026-09-15 22:55 local (01:55 UTC, 16 Sep) — by Claude Code
+# STATE — 2026-09-15 23:18 local (02:18 UTC, 16 Sep) — by Claude Code
 
-Phase:            **T1 IS LIVE** — pool 14 open on tier 0, frozen plan merged, awaiting the founder's two UI entries
-Waiting on:       founder — **F-12 now**: UI-A and UI-B entries into pool 14, separate browser profiles.
-                  The ten headless seats run the moment those two land (the plan puts the founder first).
+Phase:            **T1 FILLED** — pool 14 holds 12/64 (2 UI + 10 headless), all COMMITTED. Waiting on its deadline.
+Waiting on:       the chain — T1's deadline at 13:46:49Z = Wed 10:46 local. The daemon then refunds all 12.
+                  founder — F-19 about 15 min after that: screenshot the Closed pool page and both wallet balances.
 After that:       F-19 ~10:46 Wed (T1 deadline) · F-01b more faucet before the first full pool
 Live deadlines:   T1 / pool 14 / tier 0 → 13:46:49Z = **Wed 10:46 local**. Below 40 seats it refunds in full.
                   T1 deadline ~10:46 Wed
