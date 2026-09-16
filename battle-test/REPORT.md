@@ -67,6 +67,47 @@ the secret is still unrevealed — that second half is what would repair pools
 promise depending on an operator remembering to run it. The recommendation is
 the first: a published promise should not need a human in the loop.
 
+### F-2 · The entry gate can close for everyone while `/health` reports healthy
+
+**Severity: the highest the test has found.** On mainnet this is every entry failing while every
+instrument says the platform is fine.
+
+**What happened.** At 18:20Z on 2026-09-16 the founder's entry was refused by the live site. It was
+not their account: probing from the test container with wallets we control got the same refusal for
+all of them — a fresh wallet, a never-attested control, and a wallet that had entered pool 14
+successfully sixteen hours earlier — on both open pools, with attestations the service itself
+accepted. Every entry, everywhere, refused.
+
+**Why it is invisible.** `issuePacket` wraps every check in one try/catch and answers a deliberately
+uninformative rejection on any throw, so the gate cannot be probed. That is correct for a player and
+correct for an attacker. The problem is what the OPERATOR can see. The sanctions mirror **throws**
+once its snapshot passes 36 hours, on the sound principle that a stale list is a failed source
+rather than a clean answer — and a failed background refresh **keeps the old list and clears no
+flag**. Meanwhile `/health` reports `ofac_loaded`, which is set true at boot and **never set back to
+false**: not on a failed refresh, not when the data ages out.
+
+So the single endpoint an operator checks reports `ok: true, ofac_loaded: true` throughout a total
+entry outage. It did while I wrote this.
+
+**What it costs.** Here, a day of the test. In production, the entire entry revenue of however long
+it takes somebody to notice by other means — and nothing in the monitoring path would be the thing
+that told them. The staleness alert exists (B-28), so the alerting is there; the gap is that the
+signal an operator actually reads cannot go red.
+
+**Proposed fixes — two, and the second is the one that matters.**
+
+1. Make the mirror refresh's failure visible where it is looked for: have `ofacLoaded` reflect
+   whether the snapshot can still answer, rather than whether one ever loaded, and let `/health`
+   report degraded when it cannot. That is a few lines in `backend/sanctions/src/wire.ts` and
+   `backend/packet/src/server.ts`.
+2. More generally: **every condition that closes the gate for all callers should be readable from
+   the health endpoint.** The uniform rejection protects the gate from being probed by a player; it
+   should not also hide the gate's state from the operator. Those are different audiences and the
+   code currently serves them with one answer.
+
+Neither is made here — `backend/` is outside this week's boundary. F-22 is the operational half:
+which of the two possible causes it actually was, which one log line settles.
+
 ---
 
 ## 9. Open items
@@ -81,3 +122,4 @@ Open, but not a failing test:
 | # | Item | Blocks | Owner |
 |---|---|---|---|
 | F-20 | Does the reveal gap (§2, F-1) become a product PR after the week? | nothing — every remaining test proceeds either way | founder |
+| F-22 | The entry gate is refusing every entry (§2, F-2). One log line names the cause. | **T4, and every test after it** | founder |

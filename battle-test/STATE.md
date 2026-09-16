@@ -1,16 +1,15 @@
-# STATE — 2026-09-16 14:35 local (17:35 UTC) — by Claude Code
+# STATE — 2026-09-16 15:34 local (18:34 UTC) — by Claude Code
 
-Phase:            **T1 PASSED and is closed out.** T4 is UNBLOCKED and is the work in progress — pool 15,
-                  the first pool that actually plays and pays a real 4 SOL prize.
-Waiting on:       **F-21 step 2, now the only blocker.** PR 133 was MERGED at 16:22:00Z — the plan is
-                  frozen and registry/T4.freeze.json records it. **Pool 15 is still at 0 entrants**, so
-                  UI-A and UI-B have not entered yet. Drag tables are in FOUNDER-ACTIONS.md §F-21.
-                  I am entering nothing until they do: the plan's role order is UI first, and a headless
-                  seat taking seat 0 would break it. F-19 (T1 screenshots) still outstanding, blocks nothing.
-After that:       I run the 62 headless seats; the 64th entry seals the pool and it pays within minutes
-Live deadlines:   **pool 15, tier 0, deadline 01:52:26Z — about 10h40m.** It is now T4's pool (founder
-                  decision 14:18 UTC). Still nobody enters until T4's plan is frozen.
-Blocked:          nothing.
+Phase:            **T4 BLOCKED — the entry gate is refusing everyone.** Plan frozen (PR 133, 16:22:00Z),
+                  62 wallets funded, nothing entered. The founder's UI-A entry was refused at 18:20Z and
+                  so is every wallet I control. Server-side, total, and /health says it is fine.
+Waiting on:       **F-22 — read the blotto-packet log.** One line ("entry packet NOT issued — <reason>")
+                  separates a stale OFAC mirror from a signer fault. DO NOT restart blind: with the mirror
+                  as the only source, a broken download means the service refuses to boot at all.
+After that:       gate reopens → F-21 step 2 (UI-A, UI-B enter pool 15) → I run W00–W61 → seals and pays.
+Live deadlines:   pool 15 deadline 01:52:26Z, ~7h15m. If the gate is still shut near it, pool 15 refunds
+                  and T4 moves to the next pool. The frozen plan is reusable; only poolId/poolPda/freeze change.
+Blocked:          T4 and everything after it, on F-22.
 Results so far:   T1 **PASS** · T2–T8 not started
 
 **The T1 reveal finding (15:08 UTC) — read this one.**

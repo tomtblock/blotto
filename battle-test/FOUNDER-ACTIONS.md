@@ -200,3 +200,68 @@ for it, on the one point the design exists to put beyond anyone's word.
 
 The fix is a few lines in the settlement daemon. It is outside this test's boundary, so I have
 written it down rather than made it. **Your call, after the week: product change, or accepted?**
+
+---
+
+## F-22 — the entry gate is refusing everyone. One log line says why. **Blocks T4.**
+
+**When:** now, if you can. T4 cannot run until this is fixed.
+**Est:** 5 minutes to read the log. The fix depends on what it says.
+
+### What is happening
+
+Your entry was not rejected because of anything about your account. **Every entry is being
+refused** — I tested from here with wallets I control and got the same refusal for all of them,
+including a wallet that entered pool 14 successfully at 03:18 your time this morning, on both
+pools, with a fresh and accepted age-and-terms confirmation.
+
+Nothing was signed, nothing was charged, and nothing entered the pool. You are not out a lamport.
+
+### The part that matters beyond this test
+
+The entry service's health check **says everything is fine**. It reads `ok: true` and reports its
+sanctions screening as loaded, right now, while refusing every entry in the world. The flag it
+reports is set once when the service starts and is never turned off again — not when a background
+refresh fails, not when the data goes too old to use.
+
+So a monitoring dashboard, a status page and an uptime check would all show green through a total
+entry outage. On devnet that costs us a test. On mainnet that is every entry failing while every
+instrument says the platform is healthy. I think this is the most serious thing the battle test has
+turned up, and it goes in the report regardless of how quickly it is fixed.
+
+### Do — read the log before touching anything
+
+Open the entry service's recent logs (the `blotto-packet` service on Fly) and look for lines
+containing:
+
+- `entry packet NOT issued` — this is the refusal, printed once per attempt, with the reason
+- `mirror refresh FAILED` — the background download of the sanctions list has been failing
+- `mirror is` … `h old` — the list has gone past its 36-hour limit and now refuses to answer
+
+**Send me back those lines** (or just tell me which of the three you see).
+
+Two causes fit everything I can see from outside, and the log separates them:
+
+1. **The sanctions list has gone stale.** It refreshes every nine hours; if those refreshes have
+   been failing, the old copy keeps working until it is 36 hours old and then refuses outright —
+   which closes the gate for everybody, exactly like this.
+2. **The signing key for entry packets is failing.** Same generic refusal from outside.
+
+### Do NOT just restart the service
+
+If the sanctions list download is the broken part, restarting makes things **worse**, not better:
+the service refuses to start at all when that list is its only screening source, on the principle
+that a service which starts there screens nobody. You would turn a closed gate into a dead site.
+
+Read the log first. If it is the stale list, the fix is to get the download working again and then
+restart. If it is the signer, restarting may well clear it.
+
+### What happens to T4 meanwhile
+
+Nothing is lost. The plan is frozen and stays frozen; the 62 wallets stay funded; I have entered
+nothing.
+
+Pool 15's deadline is **22:52 tonight your time**. If the gate is still shut as that approaches,
+pool 15 simply refunds and T4 runs on the next pool instead. The frozen plan is reusable exactly as
+it is — only the pool id and a new freeze record change, and the prediction does not move. That is a
+reschedule, not a failure, and it costs about 0.00065 SOL in pool rent.

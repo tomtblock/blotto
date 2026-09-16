@@ -476,3 +476,67 @@ The exact sets that recipe produces were not chosen — they were computed by ru
 `app/src/components/blot/rebalance.ts` and fails if they ever stop matching `uiWall()`/`uiPole()`.
 The alternative — asking the founder to dial thirty-five arbitrary numbers under a 90-second clock —
 would have failed in the pool rather than in a test.
+
+### H3. The entry gate is closed for everyone, and `/health` says it is fine (2026-09-16, found by T4)
+
+**What was observed.** At 18:20Z the founder's UI-A entry was refused with the generic
+`entryRefused` copy. It is not their account and not the browser. Probed from this container with
+wallets we control — packet requests only, nothing registered:
+
+| probe | result |
+|---|---|
+| W62, fresh attestation accepted (204), pool 15 | **403** `entry_unavailable` |
+| W00, which entered pool 14 successfully at 02:18Z today, pool 14 | **403** |
+| W00, pool 15 | **403** |
+| W00, pool 15 after re-attesting (204 accepted) | **403** |
+| W63, never attested (control), both pools | **403** |
+| `GET /geo` | **200 `{"allowed":true}`** |
+| `GET /health` | **200 `{"ok":true,"screening":{"ofac_loaded":true}}`** |
+
+So: every wallet, both pools, regardless of attestation. Server-side and total.
+
+**What it rules out.** The `/attestation` route returning **204** proves the database is up and that
+the deployed terms config matches `config/terms.json` exactly — the route verifies the signature
+against its own `{version, updated}`, so a mismatch could not have stored. `/geo` returning
+`allowed: true` clears territory, the sub-national region rule and the VPN check, which is
+everything `geoVerdict` tests. Terms are still v2, unchanged since 2026-09-06.
+
+**The mechanism, from the code.** `issuePacket` wraps every check in one try/catch and answers
+`GENERIC_REJECTION` on any throw, deliberately, so the gate is not probeable
+(`backend/packet/src/service.ts:312-399`). Two things inside it can throw for every caller at once:
+
+1. **A stale OFAC mirror.** `screen()` (`service.ts:199-207`) does not catch, and
+   `OfacSdnList.screen` **throws** past `maxAgeMs` — "a stale mirror is a failed source, never a
+   clean answer" (`backend/sanctions/src/ofac-sdn.ts:200-208`, limit 36 h). A failed refresh
+   **keeps the old list and raises no flag**: `wire.ts:355-360` logs "refresh FAILED (previous list
+   kept, refuses past 36 h)". The mirror is the only source configured here — `/health` lists
+   `ofac-sdn mirror` and a per-address cache, nothing else — so a throwing mirror is a throwing
+   screener is a refused entry, for everybody.
+2. **A signing failure.** `deps.signer.sign()` throws into the same catch. The module's own header
+   says this was once indistinguishable from a blocked territory.
+
+**And `/health` cannot tell you which, or even that anything is wrong.** `ofacLoaded` is set true at
+boot and **never set back to false** (`wire.ts:275, 283, 343`) — not when a refresh fails, not when
+the snapshot ages past its limit. The one endpoint an operator checks reports `ok: true,
+ofac_loaded: true` while the entry gate refuses every entry on the planet.
+
+**Verdict: this is a product finding, and a serious one.** Not drift against the manual — a live
+failure mode. On devnet it costs a test. On mainnet it is a complete revenue outage that a health
+check, a status page and an uptime monitor would all report as healthy, for as long as nobody tries
+to enter. The staleness watch (B-28) does alert, so the alert path exists; what is missing is the
+one signal the operator actually reads.
+
+**What distinguishes the two causes: one log line.** Both throw into the same catch, which prints
+`packet: entry packet NOT issued — <reason>`. A stale mirror names itself ("mirror is N h old
+(limit 36 h)"); a signer fault carries the signer's error. That is a founder action — we do not hold
+the deployment credentials — and it is F-22.
+
+**Do NOT simply restart the service.** If the mirror download is what is broken, `wireScreening`
+**refuses to boot** when the mirror is the only configured source — "a service that starts here
+screens nobody" (`wire.ts:295-305`). A restart would turn a closed gate into a service that will not
+come up at all. Read the log first, then decide.
+
+**Consequence for the test.** T4 cannot run until the gate reopens. Pool 15's plan is frozen and its
+deadline is 01:52:26Z; if the gate is still shut near it, pool 15 refunds and T4 moves to the next
+pool. That is a reschedule, not a failure, and the frozen plan is reusable as-is — only `poolId`,
+`poolPda` and the freeze record change.
