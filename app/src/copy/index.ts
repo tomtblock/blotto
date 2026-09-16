@@ -521,8 +521,15 @@ export const COPY = {
     // deliberately gives no reason (PID §8: the refusal is generic), so
     // neither does this; what it must not do is call a refusal a network
     // fault and offer a retry that can only fail again.
+    // PHASE-N-REVIEW (founder 2026-09-16, CHANGE-2026-09-16_ui-uplift.md §A7):
+    // the same string also answers the ciphertext store's 409 — one seal per
+    // wallet per pool, so a retry after a partial failure is refused before
+    // anything is signed (battle-test/LOG.md, 2026-09-16 00:19). The old
+    // wording sent that player to the Rules page's eligibility list, which
+    // is the wrong explanation. This one is true for both cases and stays
+    // generic (PID §8: the refusal gives no reason). Proposal until ratified.
     entryRefused:
-      "This entry was not accepted. Nothing was signed and nothing was charged. Trying again will not change the answer — the Rules page explains who can enter, and you can ask us about your own entry.",
+      "This entry was not accepted, so nothing was signed and nothing was charged this time. Trying again will not change the answer. If this wallet already made one attempt at this pool, that attempt is the one that stands — the pool page shows whether a seat was taken, and you can ask us about your own entry.",
   },
   battle: {
     screenOf: (k: number) => `Battle ${k} of 7`,
