@@ -674,3 +674,39 @@ wanted.
 
 - `e1fefa3` app: round two — the welcome strap under the word, and the pool page on pink
 - the docs commit after it: this section and the five captures
+
+## C6. "Not available here" on the preview — checked while the founder was out
+
+At about 21:20 UTC the founder met the territory panel on the entry page again, signed in as UI-A.
+Checked from this container at 21:30 UTC, the same way as on 2026-09-14:
+
+| Probe | Answer |
+|---|---|
+| `GET blotto-packet.fly.dev/health` | `ok`, screening loaded |
+| `GET …/geo` with `Origin: https://www.blotto.gg` | `200 {"allowed":true}`, `access-control-allow-origin: https://www.blotto.gg` |
+| the same with `https://blotto.gg` and `https://blotto-jade.vercel.app` | allowed, header present |
+| the same with a branch-preview origin (`https://blotto-git-…vercel.app`) | `200`, **no allow-origin header** — the browser discards the answer |
+| `GET blotto-indexer.fly.dev/health` with the www origin | `200`, header present |
+
+Production is healthy and answers every origin it did on the 14th. A branch preview is not one of
+them: `BLOTTO_APP_ORIGINS` is an exact-match list and every preview has a different address, so on
+the preview the browser refuses the `/geo` answer, `entry/geo-gate.ts` fails closed as designed and
+`play-client.tsx` shows the territory panel — the 2026-09-14 mechanism with a different origin, and
+the outcome §B and §C predicted for previews. No code changed and nothing was redeployed. The
+backend carries one commit since the 14th (`f344903`, the data-minimisation set) and
+`config/territories.json` is unchanged.
+
+If the panel appears on `www.blotto.gg` itself, that is a different fault. Opening
+`https://blotto-packet.fly.dev/geo` directly in the same browser answers for that connection with
+no origin rule in the way: `{"allowed":true}` means the site's own call failed for another reason;
+`{"allowed":false}` means the connection is classified as blocked — a VPN exit, or the vendor's
+answer for that address — which the 2026-09-14 note's §5 discusses (the panel does not distinguish
+the two, by founder instruction).
+
+What would make previews testable end to end — a founder decision after T4, since it needs a
+backend redeploy and the freeze holds while T4 runs: (a) a fixed staging deployment on a stable
+address (a `staging` branch with its own Vercel alias) added once to `BLOTTO_APP_ORIGINS`; or (b)
+accept the rule and test entry flows only on the production alias after a merge. (a) is the
+recommendation: it keeps the exact-match list — no wildcard, which `http-hygiene.ts` deliberately
+refuses — and makes every future round reviewable before it ships. Rejected: adding each preview
+address by hand (a redeploy per branch) and a wildcard (the reason the list is exact-match).
