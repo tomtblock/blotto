@@ -476,3 +476,278 @@ The exact sets that recipe produces were not chosen — they were computed by ru
 `app/src/components/blot/rebalance.ts` and fails if they ever stop matching `uiWall()`/`uiPole()`.
 The alternative — asking the founder to dial thirty-five arbitrary numbers under a 90-second clock —
 would have failed in the pool rather than in a test.
+
+### H3. The entry gate was closed for everyone, and `/health` said it was fine (2026-09-16, found by T4)
+
+**RESOLVED 18:56Z, and the cause is confirmed: the Turnkey signing quota was exhausted.** The
+section below is kept as written, with the correction and the evidence at the end — the reasoning
+under uncertainty is part of the record, including the part I got wrong.
+
+**What was observed.** At 18:20Z the founder's UI-A entry was refused with the generic
+`entryRefused` copy. It is not their account and not the browser. Probed from this container with
+wallets we control — packet requests only, nothing registered:
+
+| probe | result |
+|---|---|
+| W62, fresh attestation accepted (204), pool 15 | **403** `entry_unavailable` |
+| W00, which entered pool 14 successfully at 02:18Z today, pool 14 | **403** |
+| W00, pool 15 | **403** |
+| W00, pool 15 after re-attesting (204 accepted) | **403** |
+| W63, never attested (control), both pools | **403** |
+| `GET /geo` | **200 `{"allowed":true}`** |
+| `GET /health` | **200 `{"ok":true,"screening":{"ofac_loaded":true}}`** |
+
+So: every wallet, both pools, regardless of attestation. Server-side and total.
+
+**What it rules out.** The `/attestation` route returning **204** proves the database is up and that
+the deployed terms config matches `config/terms.json` exactly — the route verifies the signature
+against its own `{version, updated}`, so a mismatch could not have stored. `/geo` returning
+`allowed: true` clears territory, the sub-national region rule and the VPN check, which is
+everything `geoVerdict` tests. Terms are still v2, unchanged since 2026-09-06.
+
+**The mechanism, from the code.** `issuePacket` wraps every check in one try/catch and answers
+`GENERIC_REJECTION` on any throw, deliberately, so the gate is not probeable
+(`backend/packet/src/service.ts:312-399`). Two things inside it can throw for every caller at once:
+
+1. **A stale OFAC mirror.** `screen()` (`service.ts:199-207`) does not catch, and
+   `OfacSdnList.screen` **throws** past `maxAgeMs` — "a stale mirror is a failed source, never a
+   clean answer" (`backend/sanctions/src/ofac-sdn.ts:200-208`, limit 36 h). A failed refresh
+   **keeps the old list and raises no flag**: `wire.ts:355-360` logs "refresh FAILED (previous list
+   kept, refuses past 36 h)". The mirror is the only source configured here — `/health` lists
+   `ofac-sdn mirror` and a per-address cache, nothing else — so a throwing mirror is a throwing
+   screener is a refused entry, for everybody.
+2. **A signing failure.** `deps.signer.sign()` throws into the same catch. The module's own header
+   says this was once indistinguishable from a blocked territory.
+
+**And `/health` cannot tell you which, or even that anything is wrong.** `ofacLoaded` is set true at
+boot and **never set back to false** (`wire.ts:275, 283, 343`) — not when a refresh fails, not when
+the snapshot ages past its limit. The one endpoint an operator checks reports `ok: true,
+ofac_loaded: true` while the entry gate refuses every entry on the planet.
+
+**Verdict: this is a product finding, and a serious one.** Not drift against the manual — a live
+failure mode. On devnet it costs a test. On mainnet it is a complete revenue outage that a health
+check, a status page and an uptime monitor would all report as healthy, for as long as nobody tries
+to enter. The staleness watch (B-28) does alert, so the alert path exists; what is missing is the
+one signal the operator actually reads.
+
+**What distinguishes the two causes: one log line.** Both throw into the same catch, which prints
+`packet: entry packet NOT issued — <reason>`. A stale mirror names itself ("mirror is N h old
+(limit 36 h)"); a signer fault carries the signer's error. That is a founder action — we do not hold
+the deployment credentials — and it is F-22.
+
+**Do NOT simply restart the service.** If the mirror download is what is broken, `wireScreening`
+**refuses to boot** when the mirror is the only configured source — "a service that starts here
+screens nobody" (`wire.ts:295-305`). A restart would turn a closed gate into a service that will not
+come up at all. Read the log first, then decide.
+
+**Consequence for the test.** T4 cannot run until the gate reopens. Pool 15's plan is frozen and its
+deadline is 01:52:26Z; if the gate is still shut near it, pool 15 refunds and T4 moves to the next
+pool. That is a reschedule, not a failure, and the frozen plan is reusable as-is — only `poolId`,
+`poolPda` and the freeze record change.
+
+
+#### The answer, from the live log
+
+The founder read `blotto-packet`'s log. It names the cause with no ambiguity:
+
+```
+18:30:21  packet: geo ALLOW 35.239.x.x — packet issued: country=US
+18:30:21  packet: entry packet NOT issued — Turnkey error 8: Resource exhausted:
+          Signing is disabled because your organization is over its allotted quota.
+          Please upgrade to a paid plan, or reach out to the Turnkey team.
+```
+
+**It was cause 2, the signer. Not the mirror.** I offered both, then leaned toward the stale mirror
+on the strength of "release v43, three days ago". That was wrong, and the evidence against it was
+already in hand when I said it: `/health` reported `ofac_loaded: true`, and — decisively — the
+failing entries reached the signer at all, which means every gate check before it had already
+passed, sanctions included. A boot after the restart put it beyond doubt:
+`ofac-sdn mirror loaded — 19385 entries, 1043 digital-currency addresses, published 09/16/2026`,
+refreshing every 540 min exactly as designed.
+
+The warning not to restart blindly was still the right call, for the wrong reason. Once the log
+showed entries reaching the signer, the boot-refusal risk was gone and the restart was safe — which
+is what was then recommended, and the service came back clean.
+
+**The log also confirmed the probe method.** The never-attested control appears as
+`geo BLOCK 146.148.x.x — packet refused: attestation-missing-or-stale`, refused for precisely the
+reason it was built to be refused for.
+
+**Resolution.** The founder upgraded the Turnkey plan. Signing resumed at **18:56:02Z** — eight
+consecutive `200`s on the probe, and `200` for UI-A and UI-B's own addresses. Total outage: at least
+sixteen hours, from some time after T1's last entry at 02:18Z.
+
+#### What survives, and it is the part that matters
+
+**The health-endpoint finding stands, and the true cause sharpens it.** `/health` returns `ok: true`
+with `ofac_loaded: true`, and reports **nothing whatever about the signer** — the component that
+actually failed. Every check an operator or an uptime monitor would run stayed green through a total
+entry outage. It was still green at 18:50, after the restart, with the gate shut. The fix is not
+"report mirror staleness"; it is that **every condition which closes the gate for all callers must
+be readable from the health endpoint.** The uniform rejection exists to stop a player probing the
+gate; it should not also hide the gate's state from the operator. Those are different audiences and
+the code answers both with one silence.
+
+**The signer-identity boot line proved its worth.** `signer-select.ts` prints
+`entry signer = TURNKEY (key 79672a…709c, org ba9f83…9414, pubkey 7ebb34…a4b6)` because a
+deployment once silently fell back to the development seed and nothing looked wrong from outside.
+Here it served a second purpose nobody designed it for: naming the exact organisation to upgrade, so
+"did you upgrade the right org?" was answerable in seconds.
+
+### H4. A failed packet logs that it was issued, one line before it fails (2026-09-16)
+
+`service.ts:363` logs `packet issued: country=…` **before** calling the signer, which is the next
+statement. So every failed packet emits a line claiming issuance, immediately above the line saying
+it was not issued — visible twice over in the founder's screenshot at 18:30:21 and again at
+18:50:04. An operator grepping for issuance gets one false positive per failure, and a rate of
+"packets issued" computed from this log would have read normal throughout the outage.
+
+**Fix:** move the line after the signature succeeds, or reword it to `packet cleared` — it is
+logging that the *gate* passed, not that a packet exists. One line either way.
+
+### H5. Two services share one Turnkey organisation, and a settlement retry spends quota (2026-09-16)
+
+Chasing why roughly twelve signatures exhausted a quota: it was not a leak, it is the total.
+
+| operation | Turnkey activities | where |
+|---|---|---|
+| `createPoolKey` at pool open | 2 (`initImportPrivateKey` + `importPrivateKey`) | `custody-turnkey.ts:250,260` |
+| each entry | 1 (`signRawPayload`) | `signer-turnkey.ts:60` |
+| `exportSecret` at settlement | 1 (`exportPrivateKey`) | `custody-turnkey.ts:297` |
+
+The packet service and the settlement daemon use the **same** `TURNKEY_ORGANIZATION_ID`
+(`backend/reveal/src/main.ts:161-172`). Fifteen pools and about thirty entries since late August is
+on the order of seventy-five activities for the whole month — a small allowance consumed gradually,
+with T1's twelve entries merely the ones that crossed the line.
+
+Two consequences:
+
+1. **T4 alone costs about 65 activities** — 64 entry signatures plus one export — in roughly ten
+   minutes, nearly the whole month to date. The remaining matrix is ~450 more. A plan sized for
+   tonight and not for the week puts the ceiling back in the middle of a filling pool, with real
+   money in it.
+2. **A retrying settlement spends quota.** `exportSecret` is called at the top of every crank pass
+   (`crank.ts:395`), *before* the guard that refuses to settle against a short entries read — a
+   guard whose whole design is to throw and retry next tick. Each retry is another Turnkey activity.
+   Not a bug; worth knowing before a settlement starts looping.
+
+### H6. A failure between sealing and registering bars that wallet from that pool forever (2026-09-16)
+
+**The worst finding of the test so far.** It is not a theory: it happened to the founder tonight, on
+both accounts, and the mechanism is measured rather than inferred.
+
+**The order.** `app/src/entry/submit.ts:99-100` stores the sealed ciphertext and *then* requests the
+entry packet:
+
+```ts
+await services.putCiphertext(input.pool, input.player, ciphertext);   // :99
+const packet = await services.requestPacket(input.pool, input.player); // :100
+```
+
+**The gate.** `backend/packet/src/ciphertexts.ts` refuses a second, *different* allocation for a
+seat that already has one — audit D-01, and correct on its own terms: the ciphertext write happens
+before the chain's duplicate check, so without it a second run would destroy a player's own paid
+entry. Re-posting the SAME bytes is idempotent, so an ordinary network retry is unaffected.
+
+**But a replay is never the same bytes.** The salt is fresh per run, so a player who plays again
+produces a different ciphertext and is refused.
+
+Measured on W63 (outside T4's field), pool 15, 19:09Z:
+
+| post | result |
+|---|---|
+| first seal | `204` stored |
+| same bytes again | `204` — idempotent, as documented |
+| **different bytes** | **`409 {"error":"already sealed"}`** |
+
+**And there is no way back.** `backend/sealing/src/store.ts` gives `CiphertextStore` exactly two
+methods, `put` and `get`. No delete exists anywhere in the tree — not in the store, not in the
+service, not in `admin.ts`.
+
+**What it did tonight.** During the Turnkey outage (§H3) the founder played seven battles on UI-A.
+The app sealed and stored the ciphertext — successfully — and then asked for a packet and was
+refused. Every retry since has produced a fresh salt, hit the 409, and rendered the SAME generic
+`entryRefused` copy, whose text reads *"Trying again will not change the answer"*. That sentence is
+true and for a reason neither the player nor the app can discover. Both UI accounts are permanently
+barred from pool 15, having paid nothing and entered nothing.
+
+**Why this is worse than the outage that exposed it.** The Turnkey quota was a billing fact, fixed
+in an hour. This is structural: **any** transient failure after the seal — the entry service
+blipping, a wallet prompt dismissed, a laptop lid closed, a browser tab crashing — permanently
+removes that wallet from that pool. On mainnet, a single entry-service blip does not merely fail the
+entries in flight; it bars every player who got as far as sealing from that pool for good, while
+telling them nothing. A pool can be left unable to fill by players who would gladly pay.
+
+**Verdict: GONE** — the product's implied promise that a failed entry can be retried does not hold
+after the seal.
+
+**Proposed fixes, not made here.** Two, and the second is the honest one:
+
+1. **Reorder**: request the packet before storing the ciphertext (`submit.ts`). Cheap, and it closes
+   tonight's exact sequence — but it only narrows the window, it does not remove it. A failure
+   between the ciphertext write and the register still locks the seat.
+2. **Gate the overwrite on the chain, not on the store.** The condition that actually distinguishes
+   "paid seat, must not be overwritten" from "abandoned attempt, safe to replace" is whether an
+   `Entry` PDA exists on chain for that wallet and pool — which is exactly what audit D-01 was
+   reaching for. Refuse the overwrite only once the seat is really registered. That preserves the
+   protection completely and removes the lockout, at the cost of one account read per ciphertext
+   write.
+
+**Consequence for the test.** T4 cannot run on pool 15: it requires UI-A to win, and UI-A cannot
+enter. Pool 15 lapses at its deadline and T4 moves to the next pool. The frozen plan is reusable
+unchanged — only `poolId`, `poolPda` and a new freeze record move, and no predicted rank or payout
+changes. Cost: one rent cushion, 0.00065 SOL.
+
+**Operational rule for every future test, from now on:** probe the entry gate for the exact wallets
+immediately BEFORE the founder plays, never after. A seal made into a broken gate cannot be undone.
+
+#### Guardrails built, 2026-09-16 (inside the source boundary)
+
+The product fix belongs in `app/` and `backend/` and is specified, not applied, in
+`battle-test/docs/FIX-seal-lockout.md`. What the test could defend itself with, it now has:
+
+1. **`scripts/preflight.ts`** — the go/no-go check that must exit 0 before anybody plays. Proves the
+   pool is Open and register-ready (vrf seed committed, pass collection created), that no named
+   wallet is already seated, and that the entry gate issues a real packet **for each named wallet
+   against this pool** — the exact call the browser is about to make, per wallet, because the gate
+   decides per wallet. It requests packets and nothing else.
+   **Its limit is stated in its own output:** it cannot see whether a wallet is ALREADY barred,
+   because there is no read path for that. Run against pool 15 it reported GO for both founder
+   accounts, which were already barred. That is why part 3 of the fix adds a wallet-authenticated
+   read.
+2. **`enter.ts` stops on the first burnt seat.** A `sealed` flag is set the moment a ciphertext is
+   stored; a seat that sealed and then failed is named as permanently barred, and the run halts
+   instead of marching into the next batch. Proven on pool 15: W64 sealed, failed to pay, the run
+   stopped, and **W65 was never touched**. Against a broken gate this turns sixty-two losses into
+   one.
+3. **`--simulate` no longer seals** — see §H7, which is the same defect in my own tooling.
+
+### H7. My own "safe" mode was not safe, and it burnt a wallet (2026-09-16, self-inflicted)
+
+Found while proving the §H6 guardrail. `enter.ts --simulate` announced
+`SIMULATE (no state written)` and its header said "a simulation writes no state, so it carries none
+of that risk". **Both were false.** The simulate path ran `attest` → `putCiphertext` → `requestPacket`
+and only then simulated — so the mode built to be safe stored a ciphertext, which under §H6 cannot
+be replaced or deleted. It permanently barred every wallet it was run on.
+
+It had already done so to **W62 on pool 15**, at 19:07Z, and I did not notice until the guardrail
+run refused W62 with `409 already sealed` and I had to explain why a wallet I had only *simulated*
+was sealed.
+
+**Fixed.** `register` needs the battles hash and the entry packet; it never needs the stored
+ciphertext, which is read only at reveal. So the write is skipped under `--simulate`, which costs
+the simulation nothing and makes the claim true. The banner now reads
+`SIMULATE (nothing sent, nothing sealed)`.
+
+**Verified rather than asserted:** after a `--simulate` run, W66's first-ever ciphertext write
+returned `204`, proving the simulate had not sealed it.
+
+**Why this is in the record.** The same mistake in the same shape as §H6 — an action with an
+invisible, irreversible side effect, behind a name that promised safety. I wrote the tool, wrote the
+claim, and used it. It is here because a test whose own instrument has a landmine in it should say
+so, and because the manual's rule "never dry-run against devnet" was aimed at SENDING and missed
+this entirely.
+
+**Spare wallets burnt on pool 15 in the course of this work**, none of them in T4's field
+(W00–W61), and pool 15 is being abandoned: W62 (the old simulate), W63 (the §H6 proof), W64 (the
+guardrail proof), W66 (the fix verification).

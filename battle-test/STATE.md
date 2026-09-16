@@ -1,15 +1,64 @@
-# STATE — 2026-09-16 12:23 local (15:23 UTC) — by Claude Code
+# STATE — 2026-09-16 16:23 local (19:23 UTC) — by Claude Code
 
-Phase:            **T1 PASSED and is closed out.** T4 is UNBLOCKED and is the work in progress — pool 15,
-                  the first pool that actually plays and pays a real 4 SOL prize.
-Waiting on:       **F-21, now blocking.** Merge PR 133 (the freeze), then enter pool 15 as UI-A and UI-B
-                  with the drag tables in FOUNDER-ACTIONS.md. Nothing may enter pool 15 before that merge.
-                  F-19 (T1 screenshots) is still outstanding but holds nothing up.
-After that:       I run the 62 headless seats; the 64th entry seals the pool and it pays within minutes
-Live deadlines:   **pool 15, tier 0, deadline 01:52:26Z — about 10h40m.** It is now T4's pool (founder
-                  decision 14:18 UTC). Still nobody enters until T4's plan is frozen.
-Blocked:          nothing.
+Phase:            **T4 moves to the next pool. UI-A and UI-B are permanently barred from pool 15.**
+                  Not a wallet problem and not fixable: the app stores the sealed allocation BEFORE it
+                  asks for an entry packet, so the founder's play during the Turnkey outage stored a
+                  ciphertext that was never registered. Every retry replays with a fresh salt, so the
+                  bytes differ, so the store refuses with 409 "already sealed". No delete path exists.
+Waiting on:       **F-25 — one decision, not blocking.** Apply the seal-lockout product fix now as a
+                  separate PR (touches app/ and backend/, against this week's boundary), or ship it
+                  after the test week? Recommendation: after. Guardrails already stop it recurring here.
+After that:       pool 15 lapses 01:52:26Z (22:52 local, holds no entries) → daemon opens the next pool
+                  ~5 min later (~22:57 local, on the 23:00 cadence) → T4 runs there on the SAME frozen
+                  plan. Only poolId, poolPda and a new freeze record change; no rank or payout moves.
+Live deadlines:   pool 15 deadline 01:52:26Z. Entry gate HEALTHY since 18:56:02Z (200 for both UI wallets).
+Blocked:          nothing. Out of plan mode; enter.ts can run once the new pool is open and the founder
+                  has entered.
+
+**STANDING RULE, adopted 19:09Z:** probe the entry gate for the exact wallets IMMEDIATELY BEFORE the
+founder plays, never after. A seal made into a broken gate cannot be undone. An explicit go-ahead
+goes out seconds before each UI entry from now on.
 Results so far:   T1 **PASS** · T2–T8 not started
+
+**GUARDRAILS BUILT 19:22Z, in boundary, proven:**
+  1. scripts/preflight.ts — go/no-go before anybody plays: pool open and register-ready, no wallet
+     already seated, and a real packet issued PER NAMED WALLET against this pool. Requests packets
+     only. **Prints its own blind spot**: it cannot see whether a wallet is ALREADY barred (no read
+     path exists), and says GO for pool 15 where both UI accounts ARE barred.
+  2. enter.ts STOPS on the first seat that sealed and then failed. Proven: W64 sealed, failed to pay,
+     run halted, W65 never touched. One loss instead of sixty-two.
+  3. --simulate no longer seals (§H7 — my own bug; the "safe" mode was barring wallets, and had
+     already burnt W62). Verified: W66's first-ever seal returned 204 after a simulate run.
+  Product fix SPECIFIED NOT APPLIED in docs/FIX-seal-lockout.md — four parts, the central one is a
+  single indexed read the packet service can already make. app/ and backend/ untouched.
+
+**H6 — the worst finding of the test (19:09Z). A failure between sealing and registering bars that
+  wallet from that pool FOREVER.**
+  submit.ts:99-100 stores the ciphertext, THEN requests the packet. The store refuses a second,
+  DIFFERENT allocation for a seat that already has one (audit D-01, and right on its own terms — it
+  stops a second run destroying a paid entry). But a replay always has a fresh salt, so it is always
+  different, so it is always refused. MEASURED on W63: first seal 204, same bytes 204 (idempotent),
+  different bytes 409 "already sealed". CiphertextStore has only put and get — no delete anywhere.
+  → Any transient failure after the seal permanently removes that wallet from that pool, silently.
+  → On mainnet one entry-service blip bars every player who reached the seal, for good, and the pool
+    may then fail to fill with people who would have paid.
+  → The copy says "Trying again will not change the answer" — true, for a reason nobody can discover.
+  → Fix (not made): gate the overwrite on whether an Entry PDA exists on chain, not on the store.
+  DRIFT.md §H6 · REPORT.md §2 F-4 · decision F-24.
+
+**The entry-gate outage (02:18Z–18:56Z) — the finding that exposed H6.**
+  Every entry on the platform was refused for at least sixteen hours because Turnkey stopped signing:
+  the organisation was over its free-tier quota. Resolved by the founder upgrading the plan.
+  What survives, and matters more than the quota: **/health read `ok: true` throughout**, and carries
+  no signal about the signer at all — it was still green after the restart, with the gate shut.
+  Every instrument an operator or an uptime monitor would check stayed green through a total outage.
+  → I named two candidate causes and leaned toward the wrong one (a stale sanctions mirror). The
+    evidence against it was already in hand. Recorded as a correction in DRIFT §H3, not quietly fixed.
+  → H4: a failed packet logs "packet issued" one line BEFORE it fails (service.ts:363).
+  → H5: packet service and settlement daemon share one Turnkey org. T4 alone is ~65 activities, the
+    week ~450, and a retrying settlement spends quota because exportSecret runs at the top of every
+    crank pass. F-23 raised: size the plan for the week, not the night.
+  DRIFT.md §H3–H5 · REPORT.md §2 F-2.
 
 **The T1 reveal finding (15:08 UTC) — read this one.**
   Pool 14 refunded all twelve seats correctly but will NEVER publish its sealing secret. Traced end to
@@ -40,7 +89,11 @@ T4 work — DONE except the founder's part:
      UI-B rank 64, field 2..63 unpaid. Root 3950d12c…a34ac, conditional on the planned seat order.
      validate-plan accepts it and still rejects the broken fixture.
   3. DONE funding. W10–W61 at 0.15 each, 3 transactions, funder left at 0.199980 exactly.
-  4. TODO F-21 — the founder merges and enters. Then me: 62 headless seats, and the 64th seals it.
+  4. DONE freeze. PR 133 merged 16:22:00Z, merge commit 6324f615…105e9. The plan's sha256 at that
+     commit is c74333f0…e064 and the working copy hashes identically.
+  5. TODO F-21 step 2 — the founder's two entries. Then me: 62 headless seats, and the 64th seals it.
+     8h17m left on pool 15's deadline as of 17:35Z. Below 40 seats at the deadline it refunds and T4
+     moves to the next pool — that is a reschedule, not a failure.
 
 Why UI-A must win, in one line, so nobody has to trust the oracle: a wall's score floor is 875
 half-points and the best any field seat can reach is 868. Full arithmetic in the plan's

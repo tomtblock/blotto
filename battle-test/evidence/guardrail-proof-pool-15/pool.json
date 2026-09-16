@@ -1,0 +1,20 @@
+{
+  "pool": "4rZWzP13Wz5uadk1LY8jiBmuCsPUE8RSZYKXDYocdKkn",
+  "id": "15",
+  "tier": 0,
+  "entry_lamports": "100000000",
+  "pot_lamports": "4000000000",
+  "fill_deadline": "1789609946",
+  "timer_seconds": 15,
+  "state": "Open",
+  "entrants": 0,
+  "sealing_pubkey": "e647486630d486bfd5b9ca61cb45076353d940b0ebe9556fd23220a2c1180d33",
+  "results_root": null,
+  "secret": null,
+  "held_shares": 0,
+  "resolving": false,
+  "resolving_until": null,
+  "min_seats": 40,
+  "outcome_if_deadline_now": "refund",
+  "server_time": "1789586475"
+}

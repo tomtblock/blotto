@@ -200,3 +200,202 @@ for it, on the one point the design exists to put beyond anyone's word.
 
 The fix is a few lines in the settlement daemon. It is outside this test's boundary, so I have
 written it down rather than made it. **Your call, after the week: product change, or accepted?**
+
+---
+
+## F-22 — the entry gate is refusing everyone. One log line says why. **Blocks T4.**
+
+**When:** now, if you can. T4 cannot run until this is fixed.
+**Est:** 5 minutes to read the log. The fix depends on what it says.
+
+### What is happening
+
+Your entry was not rejected because of anything about your account. **Every entry is being
+refused** — I tested from here with wallets I control and got the same refusal for all of them,
+including a wallet that entered pool 14 successfully at 03:18 your time this morning, on both
+pools, with a fresh and accepted age-and-terms confirmation.
+
+Nothing was signed, nothing was charged, and nothing entered the pool. You are not out a lamport.
+
+### The part that matters beyond this test
+
+The entry service's health check **says everything is fine**. It reads `ok: true` and reports its
+sanctions screening as loaded, right now, while refusing every entry in the world. The flag it
+reports is set once when the service starts and is never turned off again — not when a background
+refresh fails, not when the data goes too old to use.
+
+So a monitoring dashboard, a status page and an uptime check would all show green through a total
+entry outage. On devnet that costs us a test. On mainnet that is every entry failing while every
+instrument says the platform is healthy. I think this is the most serious thing the battle test has
+turned up, and it goes in the report regardless of how quickly it is fixed.
+
+### Do — read the log before touching anything
+
+Open the entry service's recent logs (the `blotto-packet` service on Fly) and look for lines
+containing:
+
+- `entry packet NOT issued` — this is the refusal, printed once per attempt, with the reason
+- `mirror refresh FAILED` — the background download of the sanctions list has been failing
+- `mirror is` … `h old` — the list has gone past its 36-hour limit and now refuses to answer
+
+**Send me back those lines** (or just tell me which of the three you see).
+
+Two causes fit everything I can see from outside, and the log separates them:
+
+1. **The sanctions list has gone stale.** It refreshes every nine hours; if those refreshes have
+   been failing, the old copy keeps working until it is 36 hours old and then refuses outright —
+   which closes the gate for everybody, exactly like this.
+2. **The signing key for entry packets is failing.** Same generic refusal from outside.
+
+### Do NOT just restart the service
+
+If the sanctions list download is the broken part, restarting makes things **worse**, not better:
+the service refuses to start at all when that list is its only screening source, on the principle
+that a service which starts there screens nobody. You would turn a closed gate into a dead site.
+
+Read the log first. If it is the stale list, the fix is to get the download working again and then
+restart. If it is the signer, restarting may well clear it.
+
+### What happens to T4 meanwhile
+
+Nothing is lost. The plan is frozen and stays frozen; the 62 wallets stay funded; I have entered
+nothing.
+
+Pool 15's deadline is **22:52 tonight your time**. If the gate is still shut as that approaches,
+pool 15 simply refunds and T4 runs on the next pool instead. The frozen plan is reusable exactly as
+it is — only the pool id and a new freeze record change, and the prediction does not move. That is a
+reschedule, not a failure, and it costs about 0.00065 SOL in pool rent.
+
+---
+
+## F-24 — why your retries cannot work, and what we do instead
+
+**Nothing for you to do right now.** This is the explanation you are owed, and the plan.
+
+### Why it keeps failing
+
+When you played your seven battles during the outage, the app did two things in this order: it
+**sealed and stored your allocation**, and *then* asked for permission to enter. The first succeeded.
+The second was refused, because Turnkey had stopped signing.
+
+The store deliberately refuses to accept a *second, different* allocation for the same wallet in the
+same pool. That protection is right — without it, starting a second run could destroy your own
+already-paid entry. But playing again always produces a different sealed allocation, because each
+run gets fresh random data. So every retry is refused, and the app shows you the same message it
+showed the first time.
+
+There is no way to clear it. I checked: the store can only be written to and read from. Nothing in
+the codebase can delete a stored allocation — not the service, not the admin tools.
+
+**So UI-A and UI-B can never enter pool 15.** You have paid nothing and entered nothing. The message
+saying "trying again will not change the answer" is, accidentally, exactly right.
+
+### This is the most serious thing the test has found
+
+The outage was a billing problem, fixed in an hour. This is structural: **any** brief failure after
+you seal — the service hiccuping, a wallet prompt dismissed, a laptop closing — bars that wallet
+from that pool permanently, and tells nobody.
+
+On a live product that means one short entry-service blip does not just fail the entries happening at
+that moment. It locks out every player who got as far as sealing, for good, and the pool may then
+fail to fill with people who were willing to pay. It turns a ten-minute incident into a lasting
+problem and a queue of confused, unhappy players.
+
+It is written up in `REPORT.md` §2 as finding F-4, with two proposed fixes. The honest one: the
+overwrite should be refused only once the seat is genuinely registered on the chain, which is the
+thing that actually distinguishes a paid seat from an abandoned attempt. **Your call after the week
+— it is F-24 in the open items.**
+
+### What happens to T4
+
+T4 needs UI-A to win, and UI-A cannot enter pool 15. So:
+
+1. **Pool 15 lapses** at its deadline, 01:52:26Z — **22:52 your time**. It holds no entries, so it
+   simply closes. Cost: one rent cushion, 0.00065 SOL.
+2. **The daemon opens the next pool** about five minutes later, around **22:57 your time** — which
+   lands almost exactly on your 23:00 cadence.
+3. **T4 runs there, unchanged.** The frozen plan is reused as-is: every predicted rank, every score
+   and the winner's payout stay exactly as frozen. Only the pool id and a new freeze record change,
+   and I will record both.
+
+Nothing is lost. The plan stays frozen, the 62 wallets stay funded, and no test result is affected.
+
+### The one change to how we do it
+
+From now on I probe the entry gate for **your exact wallets, immediately before you play** — never
+after. A seal made into a broken gate cannot be undone, so the check has to come first. I will give
+you an explicit go-ahead each time, seconds before you start.
+
+**Next contact:** I will tell you when the new pool is open and the gate is confirmed healthy for
+both your accounts. Around 23:00 your time.
+
+---
+
+## F-25 — what I built so this cannot happen again, and the one decision left to you
+
+You asked for documentation and a guardrail fix. Both are done. Here is what changed, and the part
+that needs your ratification.
+
+### First, a correction you need before mainnet
+
+**Payment infrastructure will not prevent this.** The dry signing quota was tonight's *trigger*, not
+the defect. The lockout fires on **any** failure between sealing and registering: a wallet prompt
+dismissed, a laptop lid closed, a connection dropped, a browser tab crashed. None of those care
+whether the account is funded. Fixing billing removes one cause out of many and leaves the trap
+exactly where it is.
+
+Worth having it stated plainly, because "we'll have proper payment infra on mainnet" is the kind of
+reassurance that quietly closes a question that is still open.
+
+### What is now protected, inside the test (done, working, proven)
+
+**A go/no-go check before anybody plays.** `scripts/preflight.ts` confirms the pool is open and
+ready, that neither account is already seated, and — the important one — that the entry gate issues
+a real entry permit **for each of your wallets, against that pool**, which is the exact request your
+browser is about to make. It asks for permits and nothing else: nothing is sealed, nothing entered,
+nothing spent. From now on you get a go-ahead from me only after this passes, seconds before you
+play.
+
+It tells you its own blind spot rather than hiding it: it **cannot** see whether a wallet is already
+barred, because nothing in the system can answer that question. Run against pool 15 it says GO for
+both your accounts — which are barred. A check that lies by omission is worse than none, so it says
+so out loud.
+
+**The headless run now stops instead of repeating the mistake.** If a wallet seals and then fails,
+it is burnt, and the runner halts and names it rather than doing the same to the next sixty. I
+proved it on pool 15: one wallet sealed and failed, the run stopped, and the next wallet was never
+touched. During an outage that is **one loss instead of sixty-two**.
+
+**And I found the same bug in my own tooling.** The runner's "simulate" mode announced that it wrote
+no state. It did: it sealed the wallet before simulating, which barred it permanently — it had
+already done that to a spare wallet earlier this evening without my noticing. Fixed, and verified by
+proving a wallet was still unsealed afterwards. It is written up as a finding against myself
+(`DRIFT.md` §H7), because a test whose own instrument has a landmine in it should say so.
+
+### The product fix — specified, not applied. **This is your call.**
+
+The real fix is in the app and the backend, which this week's rules put off limits to me. So I have
+written it as a ready-to-apply patch rather than applying it: `battle-test/docs/FIX-seal-lockout.md`.
+
+It turned out **cheaper than I expected**. The entry service already talks to the database that
+records who has entered, so the central fix is one extra lookup on a connection it already holds:
+
+1. **Refuse to replace an allocation only once the seat is actually paid for** — that is the thing
+   the protection was always aiming at. An allocation with no entry behind it is an abandoned
+   attempt, and replacing it harms nobody. This alone removes the lockout.
+2. **Ask permission before sealing, not after** — closes tonight's exact sequence. Ship it with (1),
+   not instead of it: on its own it narrows the window rather than closing it.
+3. **Let a wallet ask whether it is sealed** — today nobody can find out, not you, not a player, not
+   a support agent. The wallet signs the question, so this does not open the sealed allocations to
+   anyone else.
+4. **Stop showing a "you may not enter" message to someone whose entry simply broke.** They are
+   different things and the app already has the information to tell them apart.
+
+**▶ Your decision:** do you want me to apply that patch as a separate product PR — which means
+touching `app/` and `backend/`, against the boundary you set for this week — or leave it specified
+and ship it after the test week ends?
+
+I have not touched either directory. Recommendation: **leave it until the week ends** unless the
+lockout blocks another test. It is not blocking T4, the guardrails above stop it recurring inside
+the test, and a product change made mid-test muddies what the test is measuring. But it should not
+reach mainnet, and if you want it now, say so and I will do it properly with tests.
