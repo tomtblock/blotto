@@ -440,3 +440,36 @@ reveal too when `!pool.secretRevealed` — that second half is what would repair
 retroactively, since the on-chain gate still accepts them today. An `admin.ts reveal-secret`
 command would be the smaller alternative and would leave the promise dependent on an operator
 remembering. **Founder decision, after the week (F-20).**
+
+### H2. The 15-second per-screen timer is not what the client runs (2026-09-16, found preparing T4)
+
+**What the manual and this project's own notes assume.** "The per-screen timer (15s, R9)" — a fresh
+clock on each of the seven battle screens.
+
+**What the live client does.** One **90-second run clock for the whole run**, started at the player's
+FIRST dial interaction (never at payment confirmation, so a slow wallet does not eat it), idempotent
+thereafter. On expiry every battle **not locked in — the one on screen included** — is entered as the
+**even split `[20,20,20,20,20]`**.
+
+| Evidence | |
+|---|---|
+| `app/src/battle/run-clock.ts:54` | `RUN_CLOCK_BUDGET_MS = 90_000` |
+| `app/src/battle/run-clock.ts:36-45` | starts on first interaction; expiry enters the even split, via `machine.ts`'s `lockAllRemaining` |
+| `app/src/battle/run-clock.ts:47-52` | R9 and the on-chain `Pool.timer_seconds` "remain ratified and untouched on-chain; the client simply no longer presents time per screen", and the rules-page copy does not change until counsel signs off |
+| `admin.ts status` / indexer | `timer_seconds: 15` is still on every pool, and nothing reads it |
+
+**Verdict: CHANGED.** R9 is not repealed and the field is still on chain; the client stopped
+presenting it. This is a founder-and-counsel matter for the rules page, not an architect one, and it
+is recorded here rather than acted on.
+
+**Consequence for the test, which is the reason this was chased.** T4 needs UI-A to play a wall and
+UI-B a pole in **all seven** battles. If the run clock expires on an unlocked battle, that battle
+becomes the even split — three stats at 20, none at 26 — which is neither role and would break the
+prediction for that battle. So the founder instruction is built around the real clock: **two dial
+drags per battle for UI-A, one for UI-B, lock in each battle, 90 seconds for all seven.**
+
+The exact sets that recipe produces were not chosen — they were computed by running the app's own
+`rebalance` from `EVEN_SPLIT`, and `src/populations.test.ts` re-derives all fourteen drags through
+`app/src/components/blot/rebalance.ts` and fails if they ever stop matching `uiWall()`/`uiPole()`.
+The alternative — asking the founder to dial thirty-five arbitrary numbers under a 90-second clock —
+would have failed in the pool rather than in a test.

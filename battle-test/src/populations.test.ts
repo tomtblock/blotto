@@ -14,8 +14,8 @@
 
 import { compareBattle } from '../../backend/scoring/src/engine';
 import {
-  cappedField, wall, pole, distinctShapes, roundShare,
-  BATTLES, FIELD_CAP, ALLOCATION_SUM,
+  cappedField, wall, pole, uiWall, uiPole, distinctShapes, roundShare,
+  BATTLES, FIELD_CAP, ALLOCATION_SUM, WALL_MIN,
 } from './populations';
 
 const SEEDS = 400;
@@ -128,5 +128,88 @@ if (poleRound < 0.9) fail(`pole roundShare ${poleRound} — expected >= 0.9, the
 const fieldRound = roundShare(cappedField(1).battles);
 if (fieldRound >= 0.9) fail(`cappedField roundShare ${fieldRound} — the field should NOT draw the round-number note`);
 console.log(`  allocation_entropy round-number half: pole ${Math.round(poleRound*100)}% (note expected), field ${Math.round(fieldRound*100)}% (clean)`);
+
+
+// 8. The two sets the FOUNDER actually plays. `wall(seed)` and `pole(seed)`
+//    are for wallets we drive; UI-A and UI-B are typed into the live dials
+//    under a 90-second run clock, so T4 uses `uiWall()` and `uiPole()` — the
+//    exact output of the shortest drag sequence that reaches each role. The
+//    claim T4 rests on has to hold for THESE, not just for the generated ones.
+{
+  const w = uiWall();
+  const p = uiPole();
+  for (const [name, e] of [['uiWall', w], ['uiPole', p]] as const) {
+    if (e.battles.length !== BATTLES) fail(`${name}: ${e.battles.length} battles`);
+    for (const b of e.battles) {
+      const sum = b.reduce((a, v) => a + v, 0);
+      if (sum !== ALLOCATION_SUM) fail(`${name}: ${JSON.stringify(b)} sums to ${sum}`);
+    }
+    const shapes = distinctShapes(e.battles);
+    if (shapes < 3) fail(`${name}: only ${shapes} distinct shapes — allocation_entropy fires strong`);
+  }
+  for (const b of w.battles) {
+    const big = b.filter((v) => v >= WALL_MIN).length;
+    if (big < 3) fail(`uiWall ${JSON.stringify(b)}: only ${big} stats at ${WALL_MIN}+`);
+  }
+
+  let uw = 0;
+  let up = 0;
+  for (let fs = 0; fs < 200; fs++) {
+    const f = cappedField(4000 + fs);
+    for (let k = 0; k < BATTLES; k++) {
+      const a = compareBattle(w.battles[k] as never, f.battles[k] as never).outcome;
+      if (a !== 'win') fail(`uiWall battle ${k} did NOT beat cappedField(${4000 + fs}) — got ${a}`);
+      uw++;
+      const b = compareBattle(p.battles[k] as never, f.battles[k] as never).outcome;
+      if (b !== 'loss') fail(`uiPole battle ${k} did NOT lose to cappedField(${4000 + fs}) — got ${b}`);
+      up++;
+    }
+  }
+  for (let k = 0; k < BATTLES; k++) {
+    const r = compareBattle(w.battles[k] as never, p.battles[k] as never).outcome;
+    if (r === 'loss') fail(`uiWall battle ${k} LOST to uiPole — the whole prediction inverts`);
+  }
+  console.log(`  uiWall beats the field ${uw}/${uw}, uiPole loses ${up}/${up}, and uiWall never loses to uiPole`);
+}
+
+// 9. The founder instruction and these numbers must not drift apart. Re-derive
+//    both sets from the APP'S OWN dial rule and require an exact match: if
+//    someone changes `rebalance.ts`, this fails here rather than in a 4 SOL
+//    pool. The alias below is only so the app's `@/...` imports resolve from
+//    this runner; nothing under app/ is touched.
+{
+  const Module = require('module');
+  const { join } = require('path');
+  const APP = join(__dirname, '..', '..', 'app', 'src');
+  const orig = Module._resolveFilename;
+  Module._resolveFilename = function (request: string, ...rest: unknown[]) {
+    return orig.call(this, request.startsWith('@/') ? join(APP, request.slice(2)) : request, ...rest);
+  };
+  try {
+    const { rebalance } = require(join(APP, 'components', 'blot', 'rebalance'));
+    const { EVEN_SPLIT } = require(join(APP, 'battle', 'allocation'));
+
+    const pairs: [number, number][] = [[0,1],[1,2],[2,3],[3,4],[4,0],[0,2],[1,3]];
+    pairs.forEach(([x, y], k) => {
+      const got = [...rebalance(rebalance(EVEN_SPLIT, x, 0), y, 0)];
+      const want = uiWall().battles[k];
+      if (got.join(',') !== want.join(',')) {
+        fail(`uiWall battle ${k}: the dials produce ${JSON.stringify(got)} but populations.ts says ${JSON.stringify(want)}`);
+      }
+    });
+
+    const spikes = [0, 1, 2, 3, 4, 2, 0];
+    spikes.forEach((x, k) => {
+      const got = [...rebalance(EVEN_SPLIT, x, 100)];
+      const want = uiPole().battles[k];
+      if (got.join(',') !== want.join(',')) {
+        fail(`uiPole battle ${k}: the dials produce ${JSON.stringify(got)} but populations.ts says ${JSON.stringify(want)}`);
+      }
+    });
+    console.log('  dial recipe: all 14 founder drags reproduce uiWall and uiPole exactly, through app/ rebalance.ts');
+  } finally {
+    Module._resolveFilename = orig;
+  }
+}
 
 console.log('\nALL PROPERTIES HOLD — the engineered outcome is arithmetic, not hope.');

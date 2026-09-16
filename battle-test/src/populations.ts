@@ -172,6 +172,75 @@ export function pole(seed: number): Entrant {
 }
 
 /**
+ * The same two roles, but reachable THROUGH THE LIVE DIAL UI in a handful of
+ * drags — which is what the founder's two seats actually need.
+ *
+ * `wall(seed)` and `pole(seed)` above are for wallets we drive, where any legal
+ * set can be submitted exactly. A founder playing on blotto.gg has neither of
+ * those luxuries:
+ *
+ *  - the dials re-apportion the other four stats after every drag
+ *    (`app/src/components/blot/rebalance.ts`), so an arbitrary five-number
+ *    target takes many careful drags to hit;
+ *  - the run clock is **90 seconds for all seven battles** together, starting
+ *    at the first dial touch (`app/src/battle/run-clock.ts`), and on expiry
+ *    every battle not locked in is entered as the EVEN SPLIT — which is
+ *    neither a wall nor a pole and would break the prediction outright.
+ *
+ * So these two sets are not chosen; they are DERIVED from the app's own dial
+ * rule, as the exact output of the shortest drag sequence that reaches each
+ * role from the even split every screen opens at:
+ *
+ *   wall — drag two stats to 0, a different pair each battle (2 drags)
+ *   pole — drag one stat to 100, rotating which           (1 drag)
+ *
+ * 14 drags and 7 drags across the whole run. The values below were computed by
+ * running `rebalance` from `EVEN_SPLIT`, not written by hand, and the founder
+ * instruction in FOUNDER-ACTIONS.md is the drag list that produces them.
+ */
+const UI_WALL_ZERO_PAIRS: readonly (readonly [number, number])[] = [
+  [0, 1], [1, 2], [2, 3], [3, 4], [4, 0], [0, 2], [1, 3],
+];
+
+/** Seven battles, three stats at 33 or 34 in each — all above the field cap. */
+export function uiWall(): Entrant {
+  const battles: Allocation[] = [
+    [0, 0, 34, 33, 33],
+    [34, 0, 0, 33, 33],
+    [34, 33, 0, 0, 33],
+    [34, 33, 33, 0, 0],
+    [0, 34, 33, 33, 0],
+    [0, 34, 0, 33, 33],
+    [34, 0, 33, 0, 33],
+  ];
+  battles.forEach((b, k) => {
+    assertAllocation(b, `uiWall(${k})`);
+    if (b.filter((v) => v >= WALL_MIN).length < 3) {
+      throw new Error(`uiWall battle ${k}: fewer than three stats at ${WALL_MIN} or above`);
+    }
+  });
+  if (battles.length !== UI_WALL_ZERO_PAIRS.length) {
+    throw new Error('uiWall: one allocation per drag pair, or the founder instruction does not match');
+  }
+  return { generator: 'uiWall', battles, timingsMs: timings(0, 'uiWall') };
+}
+
+/** Seven battles, everything on one stat, rotating which. */
+export function uiPole(): Entrant {
+  const battles: Allocation[] = [
+    [100, 0, 0, 0, 0],
+    [0, 100, 0, 0, 0],
+    [0, 0, 100, 0, 0],
+    [0, 0, 0, 100, 0],
+    [0, 0, 0, 0, 100],
+    [0, 0, 100, 0, 0],
+    [100, 0, 0, 0, 0],
+  ];
+  battles.forEach((b, k) => assertAllocation(b, `uiPole(${k})`));
+  return { generator: 'uiPole', battles, timingsMs: timings(0, 'uiPole') };
+}
+
+/**
  * How many distinct shapes a set carries, measured EXACTLY as the detection
  * signal measures it: `backend/detection/src/signals.ts` does
  * `e.battles.map((b) => b.join(','))` and counts the distinct strings, so the
