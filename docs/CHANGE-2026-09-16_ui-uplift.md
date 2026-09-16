@@ -1,0 +1,445 @@
+# UI uplift — founder feedback 2026-09-16 (back pages · homepage locks · pool card · pool page rails · the blender seal)
+
+**Produced:** 2026-09-16 evening, on `claude/clever-rubin-uyyns0` from `fb56dbb` (the merge of #135).
+**Status of this document:** §A is the PLAN, written for the founder's approval and then handed to an
+executor agent running unattended overnight. §B is the REPORT the executor appends when the work is
+done. Until §B exists, nothing below has shipped.
+**Scope:** the founder's feedback doc of 2026-09-16 (Drive folder `1jozpFVHqmAUFzPTlkHcrqELu9FjHqijn`,
+"Feedback" plus seven reference screenshots) and the four rules that came with it. Nothing here
+touches the program, the backend, `config/*.json`, any PID value, the dial rule, or the entry path.
+
+---
+
+# §A — The plan
+
+## A0. The headline, in plain language
+
+Eight asks. Seven are built tonight. One — a red flashing seal button — is built as a two-tone switch
+with pink as the default, and the founder flips it in the morning if they still want red (A3, D3).
+
+Three things the feedback did not ask for but the work found:
+
+| Found | Why it matters | What the plan does |
+|---|---|---|
+| The dial lock the founder wants on the homepage **already exists** in the machine (`StatDials`, `rebalanceLocked`, founder 2026-09-13). The landing demo simply never passes it in | The ask is a wiring change, not a feature. `rebalance.ts` and `allocation.ts` are not touched, so the frozen §F-21 drag table stands | A4 |
+| The moment "the transactions are signed" is **observable outside `app/src/entry/**`**: the signer object is handed in by `play-client.tsx`, so a thin observer wrapped around it reports `message-signed` and `transaction-signed` without the entry path knowing | The blender can start on the real event, and the seal-lockout code under test tonight is never edited | A8 |
+| The founder's Blott source clips and the two character reference stills are **already in the Higgsfield account** as reusable media ids (the hero montage and every pose sprite were made from them) | New loops can reference the exact same character and material, and the pool card can reuse an existing clip for zero credits | A10 |
+
+The four rules the founder set are hard constraints on the executor (A12): the dial logic and the
+entry path are read-only; nothing is deployed to blotto.gg; the work stays on this branch.
+
+**On the reference images.** The Drive connector lists all seven and returns their text, but not
+their pixels, and the direct download is behind Google sign-in. Rather than stop, the plan was built
+from full-resolution renders of the same screens (the app in fixture mode at 1440, 1024 and 390, and
+at 90 % zoom), the founder's flow mockups in `docs/design/flows/`, and the Blott reference stills.
+The one thing this cannot see is a hand-drawn mark on a screenshot; if any image carried one that
+changes an ask, the founder should say so in the morning and it is a small correction.
+
+## A1. Ground truth on the branch (verified, not assumed)
+
+- **"The glowing box style of Blotto Cup"** is `.cab-marquee` in `app/src/components/blot/cabinet.css`:
+  a cream-to-yellow backlit plaque, 2 px pink ring, yellow outer glow, berry uppercase display word
+  with a yellow text-shadow. **"The boxing on the pink background"** is `.cab`: a plum panel with a
+  triple pink neon ring and a berry drop, standing on `bg-brand-pink`. Both are tokens-only recipes.
+- Back pages today: `/rules`, `/fair-play`, `/verify`, `/custody` render on the plum `base` with a
+  plain `PageIntro` h1 and plain h2 sections (`app/src/app/{rules,fair-play,custody}/page.tsx`,
+  `verify/verify-client.tsx`). The journey lane asserts the h1 text on each (`app/e2e/journey.spec.ts`
+  lines 89–98): `Rules`, `Who holds which keys`, `Verify a pool`. Heading TEXT must not change.
+- Locks: `StatDials` takes `locks` + `onToggleLock` and renders the padlock column; `rebalance()` is
+  literally `rebalanceLocked(alloc, k, target, NO_LOCKS)` (`rebalance.ts:48`). `LiveDemo.tsx` calls
+  `rebalance` and passes no locks.
+- The homepage "Open now" card is the reference "Pool Card" (OCR: OPEN NOW · OF 64 · PRIZE POOL · 4
+  SOL · POOL CLOSES FOR ENTRIES IN). It lives inline in `app/src/app/page.tsx` (~lines 200–245).
+- The pool page `app/src/app/pools/[pool]/page.tsx` is the reference "Enter Pool": `Verify this pool`
+  sits in the header `ml-auto`; the §8.6 line renders above the Enter link (legal requirement — keep).
+- The seal screen is the `review` phase of `app/src/battle/components/battle-flow.tsx` (~lines 388–
+  455): crescendo heading, `SevenTiles`, `Playground`, the `SealLock` card, then the TWO-STEP seal
+  (arm → confirm) with `COPY.pool.decisionsFinal` above BOTH controls (PID §8.6 — keep both steps and
+  both lines). `dispatch({type:'confirm'})` → `onConfirm` → `startSubmit` → `RevealHost` takes the
+  screen (`play-client.tsx:519`) with beats `entry` (a `PendingPanel`) → `card` (`PassCard`) or
+  `failed` / `stalled`; `SettledExit` hands back `entered | pending | not-entered`.
+- The signing order inside the (read-only) entry path: `putCiphertext` → `requestPacket`
+  (`signer.signMessage`, the Privy "Sign message" iframe in the reference image) → `sendRegister` →
+  `executeTrade` (`signer.signTransaction`, then `rpc.sendTransaction`, then confirmation). The
+  signer is built in `play-client.tsx` `startSubmit` and passed to `makeLiveEntryServices({signer})`.
+  `TxSigner` (`app/src/tx/types.ts`): `address`, `kind`, `label`, `signTransaction`, optional
+  `signMessage`.
+- The refusal copy at `app/src/copy/index.ts:524` (`tx.entryRefused`; the founder's "line 508" moved
+  with #135) is mapped for the generic `entry-refused` failure in `app/src/tx/errors.ts:162`. The
+  ciphertext store's 409 "already sealed" (one seal per wallet per pool — `battle-test/LOG.md`
+  2026-09-16 00:19) surfaces through the same string, which is why it points at the Rules page.
+- Video convention: `HeroClip` (mp4 + webm sources, poster, muted/loop/playsInline, poster-only under
+  reduced motion) and the step loops under `app/public/motion/landing/steps/` (mp4 + webm + jpg).
+- Fixture mode: `next dev` with no indexer URL serves `src/data/scenarios.ts`; the open pool is
+  `/pools/F1XTUREPoo1111111111111111111111111111111111`. `/play` stops at the geo gate in fixture
+  mode, so the seal screen is exercised by unit tests and by the founder's devnet review, not by the
+  journey lane.
+- Tooling verified in this sandbox: the app builds and serves on `:3005` after installing the seven
+  backend sibling packages; a screenshot harness (`playwright-core` + the installed Chromium 1194)
+  captures every page at 1440 / 1440 @ 90 % / 1024 / 390; `ffmpeg-static` 7.0.2 with libx264 and
+  libvpx-vp9 installs and runs; Higgsfield result URLs (`d8j0ntlcm91z4.cloudfront.net`) are
+  fetchable with curl; Higgsfield balance 2,926 credits; cost preflights: `gpt_image_2_5` still = 1
+  credit, `minimax_h3` 8 s 16:9 at 2K = 16 credits, `flux_3_video` 8 s 1080p = 72 credits.
+
+## A2. Desktop looks better at 90 % — what is actually wrong, and the fix
+
+At 1440 wide every page is a phone layout scaled up: the header centres its wordmark in a 448 px
+box (`max-w-md`), content sits in a 768 px column, the tab bar is a bottom-fixed phone bar, and the
+display sizes were tuned for 390 px. At 90 % the same layout simply takes less of the screen, which
+is what the founder is seeing.
+
+**Recommendation (D1, default):** ship the literal observation as a standard CSS rule, plus the one
+structural fix that is obviously safe.
+
+```css
+/* app/src/app/globals.css — desktop scale (founder 2026-09-16) */
+@media (min-width: 1280px) and (pointer: fine) {
+  html { zoom: 0.9; }
+}
+```
+
+and `AppHeader`'s container `max-w-md` → `max-w-md lg:max-w-5xl lg:px-6`, so the wordmark lines up
+with the content's left edge instead of floating mid-screen.
+
+Why `zoom` and not `transform: scale`: `zoom` reflows layout (standardised in the CSS Viewport
+module; Chromium 128+, Safari, Firefox 126+); `scale` does not. Why it is safe for the dials: they
+are native `<input type="range">` elements — the browser maps the pointer, no custom coordinate
+maths exists to break, and the rule is excluded on coarse pointers anyway. The journey lane runs at
+375 and 1280 and asserts text, not pixels.
+
+**Rejected:** (b) a full desktop type scale and a top navigation for ≥ lg. It is the right long-term
+answer and is listed as follow-up (§A13); it touches every page in one night before a money test.
+
+## A3. Back pages — `/rules`, `/fair-play`, `/verify`, `/custody`
+
+**The module.** One new presentation component pair, tokens only, in `app/src/components/ui/`:
+
+- `marquee-heading.tsx` + `marquee.css`: `<MarqueeHeading as="h1"|"h2" id status?>` — the
+  `.cab-marquee` recipe copied into `.marquee` / `.marquee-word` / `.marquee-status` (cream→yellow
+  backlit plaque, pink ring, yellow glow, berry uppercase display). The heading element is a REAL
+  `h1`/`h2` whose accessible name is exactly its text (the journey lane reads it). Sizes: h1 word
+  30/34 px, h2 word 20/22 px, 18 px at ≤ 390.
+- `neon-section.tsx`: `<NeonSection id heading>` — a plum candy panel (`Card`'s gradient +
+  `--elevation-candy`) with the `.cab` triple-pink neon ring and berry drop, 24 px radius, 20–24 px
+  padding, `scroll-mt-20`; the `MarqueeHeading as="h2"` sits overlapping the panel's top edge by
+  ~14 px like a sign on a cabinet. Body typography unchanged (ink / ink-muted on plum). Tables keep
+  their current markup.
+
+Why copy the recipe rather than import `cabinet.css`: the cabinet is the play machine; a shared
+class would make a rules-page tweak a play-route change. ~40 duplicated lines, noted as follow-up.
+
+**The pages.** Each becomes: `<div className="bg-brand-pink">` wrapping `<main>` (the landing's
+pattern), `PageIntro` gains `tone="marquee"` (h1 in a plaque; back link and lead in berry on pink),
+every section → `NeonSection`. Footer and tab bar stay outside the pink wrapper, on plum, exactly as
+the landing does.
+
+- `/rules`: `rulesSections()` map → `NeonSection` per section; the tier table and the availability
+  list unchanged inside. `PageIntro back` stays.
+- `/fair-play`: the local `Section` helper → `NeonSection`. The skill table keeps `data-testid`.
+- `/verify`: `VerifyClient`'s h1 (line 166) → `MarqueeHeading as="h1"`; its "How to use this page"
+  h2 → marquee; the form and report `Card`s already read as plum boxes on pink.
+- `/custody`: same treatment. **Keep it public (D4, default).** It is the C13 custody disclosure the
+  Fair-play page promises ("See who holds which keys, and what each cannot do") and one of the three
+  "look for yourself" pages; every value on it is public on-chain anyway. Hiding it trades away
+  checkability (tradeoff order #3) for nothing. Unset values already render "not yet set".
+
+Mobile: plaques wrap; panels go edge-to-edge with 16 px gutters; no horizontal scroll (the tier
+table keeps `overflow-x-auto`).
+
+**Done when:** all four pages render on pink with marquee headings and neon panels at 390 / 1024 /
+1440; every journey assertion on them passes; contrast: berry on cream ≥ 10:1, ink on plum ≥ 10:1.
+
+## A4. Homepage practice machine — the lock
+
+`app/src/components/landing/LiveDemo.tsx` only:
+
+```ts
+const [locks, setLocks] = useState<Locks>(NO_LOCKS);
+// onDrag:      setTarget((a) => rebalanceLocked(a, k, t, locks));
+// onToggleLock: setLocks((l) => l.map((v, i) => (i === k ? !v : v)));
+// onEvenSplit:  setTarget(EVEN_SPLIT); setLocks(NO_LOCKS);   // rule 4 of CHANGE-2026-09-13 §4
+```
+
+Pass `locks` and `onToggleLock` to `StatDials`; the padlock column, the shaded unreachable range,
+`aria-valuemax`, and the `locksHint` line all appear with no CSS work. No clock on the landing, so
+the lock-starts-the-clock rule (§6.3) does not apply here. `rebalance.ts` and `allocation.ts` are
+not opened. Copy: `landing.demoHint` gains one sentence about the padlock as a `PHASE-N-REVIEW`
+proposal (A11).
+
+Test: a journey step on `/` — `lock-0` is visible, pressing it disables the Strength dial
+(`aria-valuetext` reads "Strength is locked"), Even split re-enables it.
+
+## A5. Homepage pool card — a looping Blott
+
+The "Open now" card in `app/src/app/page.tsx` gains a video well: at ≥ 640 px a rounded (20 px)
+window on the card's right, ~40 % of the card width, aspect 4:3; below 640 px a 16:9 band across the
+top of the card. The well is masked into the plum (`mask-image: linear-gradient(...)` on the side
+facing the numbers; a berry inner shadow) so the clip sits IN the card rather than on it. Numbers
+never share the frame with the Blott (tokens.ts: the prize amount and the Blot are both yellow and
+must never be in one frame) — the well is its own frame.
+
+Playback: extract `HeroClip` into a general `AmbientClip` (same props, plus `playWhenVisible`): the
+card clip plays only while ≥ 60 % in view, and the hero reel pauses while ≤ 20 % visible, so the
+"one ambient loop per viewport" rule holds during the scroll (`PHASE-N-REVIEW`: the two can overlap
+for a beat mid-scroll). Poster-only under reduced motion.
+
+Asset (D7, default): choose from the founder's existing clips in the Higgsfield library
+(`show_generations type=video`; the 4K results of 2026-09-09 are the hero-montage series), pick the
+one that loops cleanly, trim to a loop point with a 400 ms crossfade, encode to
+`app/public/motion/pool/blott-card.{mp4,webm,jpg}` at 720 px, ≤ 1.5 MB per format. Generate a new
+one (A10 prompt P1) only if no existing clip loops cleanly.
+
+## A6. Pool page — yellow field, conveyor rails, a page that wants you in
+
+**Field colour (D2, default = as asked, with a caveat named).** The page wraps in
+`bg-brand-yellow` with berry text. The caveat: `tokens.ts` reserves yellow-as-prize for amounts a
+player is paid, and the v4 brand layer names hot pink as THE page surface. A yellow page does not
+break the reservation — every number stays on plum cards, the prize amount stays the only yellow
+object inside a card — but it does spend some of yellow's exclusivity. If the founder would rather
+keep pink and let yellow stay the celebration colour, it is one class name.
+
+**Layout at ≥ 1024 px:** three columns — left rail · centre column (`max-w-2xl`, the existing
+content) · right rail. Each rail is `position: sticky; top: 56px; height: calc(100vh - 56px)`, holds
+ONE portrait loop (`AmbientClip`, 9:16), masked top and bottom and toward the centre so the belt
+reads as running INTO the page behind the card. The right rail is the same asset with
+`transform: scaleX(-1)` — the two belts converge on the centre where the Enter control is, and the
+page ships one video, not two. Below 1024 px: no rails; one 16:9 strip (the same clip, cropped) sits
+between the header and the pool card, 140 px tall, masked.
+
+**Content:** marquee h1 (`Pool #15` + the state pill), the fixture `Card` unchanged, the three rule
+paragraphs move into a `NeonSection` (heading text proposed under A11), §8.6 line + Enter control
+unchanged and still last.
+
+**Verify link (D5, default = hide while Open).** `/verify` recomputes a result from the published
+bundle and the on-chain record; an Open pool has neither, so today the link leads to "nothing to
+check yet". Render it only when `!open` (Sealed, Scored, Paid, Refunding, Closed). While Open the
+page already says what is verifiable and when.
+
+**Done when:** rails play on desktop, mirror correctly, are poster-only under reduced motion; the
+journey assertions on the pool page pass (prize pool text, no table, the §8.6 line, the Enter link).
+
+## A7. Copy — the refusal that points at the wrong explanation (D6)
+
+`COPY.tx.entryRefused` today: "… Trying again will not change the answer — the Rules page explains
+who can enter, and you can ask us about your own entry." For a wallet locked out by the 409 (a first
+attempt stored its ciphertext; the retry is refused before anything is signed) that is accidentally
+true and points at eligibility, which is not the reason.
+
+Proposed wording, `PHASE-N-REVIEW`, correct for both the eligibility decline and the lockout, and
+still generic as PID §8 requires:
+
+> This entry was not accepted, so nothing was signed and nothing was charged this time. Trying
+> again will not change the answer. If this wallet already made one attempt at this pool, that
+> attempt is the one that stands — the pool page shows whether a seat was taken, and you can ask
+> us about your own entry.
+
+The 409-specific sentence stays a proposal in §B unless the founder's own "part 4" lands first; if
+it does, the executor leaves this string alone. No file under `app/src/entry/` is touched to tell
+the two cases apart.
+
+## A8. The seal — the blender
+
+**The journey the founder described, mapped onto the code that exists:**
+
+| Beat | What the player sees | Where it comes from |
+|---|---|---|
+| Seven made | Full-width scene: seven Blotts of varying proportions ride a conveyor in from the back and drop off its end into a big glass blender (looping). Under the scene: the seven tiles (the player's record), then the §8.6 line, then a big **SEAL MY ALLOCATION** button on the blender's base | `battle-flow.tsx` review phase; the scene is a new `SealStage` |
+| Armed | The button becomes **Confirm — seal and submit** with **Go back**; §8.6 line above it again; the blender lid lowers, a slow glow pulse on the button | `sealArmed` (unchanged two-step seal) |
+| Confirm | The Privy "Sign message" iframe opens OVER the scene; the belt keeps running behind it | `dispatch confirm` → `onConfirm` → `startSubmit`; the modal is Privy's |
+| Message signed | Lid locks with a soft clunk of light | observer: `signMessage` resolved |
+| Transaction signed | **The blender runs**: the Blotts churn into glossy yellow, the jar fills, while the network confirms. Status line: "Sealing your battles…" then "Confirming your entry with the network…" | observer: `signTransaction` resolved; `RevealHost` beat `entry` |
+| Confirmed | The blend settles, the stage fades, the pass card rises (the existing `PassCard`), then `SealedPanel` | beat `card` → `SettledExit('entered')` |
+| Failed / stalled | The belt stops; the blender does NOT run (nothing landed); the existing failure or stalled copy and the retry/dismiss controls render over the scene; retry rewinds to "Seven made" | beats `failed` / `stalled` |
+
+**Architecture (UI only; `entry/**` and `battle/machine.ts` untouched):**
+
+1. `app/src/app/play/seal-stage.tsx` + `seal-stage.ts` (pure): a stage phase reducer
+   `made → armed → signing → locked → blending → done | failed`, events `arm | disarm | confirm |
+   message-signed | transaction-signed | confirmed | failed | retry`. Rendered as a fixed
+   full-viewport layer under the content (`position: fixed; inset: 0; z-index` below the header),
+   holding two clips: `blender-idle` (seamless loop) and `blender-run` (one-shot, holds its last
+   frame), crossfaded 300 ms at the switch; a `blender-done.jpg` poster; poster + CSS glow only
+   under reduced motion. The stage is mounted by `play-client.tsx` from the moment `BattleFlow`
+   reports `review` (a new optional `onReview` callback, one line in `battle-flow.tsx`) until the
+   `card` beat, so it survives the `BattleFlow → RevealHost` swap that would otherwise unmount it.
+2. `app/src/app/play/observed-signer.ts` (pure, tested): `observeSigner(signer, on)` returns a
+   `TxSigner` that delegates by method call (never by spread — a wallet adapter may be a class
+   instance), keeps `signMessage` undefined when the source has none (fail-closed, as today), and
+   reports `message-signed` / `transaction-signed` after each resolves. `startSubmit` wraps the
+   signer it already has before `makeLiveEntryServices({ signer })`. Nothing else changes.
+3. `RevealHost`'s `entry` beat renders a slim status line instead of the `PendingPanel` when a stage
+   is present (prop `quiet`); the blender IS the in-progress indicator. `stalled`, `failed`, `card`
+   render as today, over the stage.
+4. `battle-flow.tsx` review phase: `Playground` is replaced by the stage's presence (the Blotts are
+   in the scene now); `SevenTiles`, the `SealLock` card, the §8.6 lines and the two-step buttons
+   stay, restyled onto the blender base (`Button size="lg"` full width, `h-16`, `.key-action`).
+
+**The button colour (D3).** The founder asked for a big flashing red button. Recommendation: the
+action pink, oversized, with a slow 1.2 s glow pulse until pressed. Reasons: `tokens.ts` reserves
+red (`priceDown`) for loss semantics only, and `button.tsx` makes the action pink "the colour a
+player learns for 'this spends'" — the seal is the one step that spends; and "flashing" on a money
+step reads as alarm (WCAG 2.3.1 caps flashes at three per second regardless). Built as a single
+constant `SEAL_KEY_TONE: 'action' | 'red'` so the founder can flip it in the morning; if flipped,
+the exception is recorded beside the reservation in `tokens.ts`.
+
+**Sealing guard.** The scene's Blotts are generic — seven varied silhouettes from the prompt, never
+derived from the player's allocation. A Blott's silhouette IS its allocation (`warp.ts`; the leak
+closed on 2026-09-13), so the stage reads `review.battles` for nothing.
+
+**Tests:** `seal-stage.test.ts` (every transition, failure rewinds to `made`, `confirmed` only from
+`blending` or `locked`), `observed-signer.test.ts` (delegation, event order, fail-closed
+`signMessage`, rejection passes through untouched). Existing `machine.test.ts` and
+`reveal/machine.test.ts` unchanged and green.
+
+**Done when:** the founder can run the devnet flow on the PR preview and see: scene → sign → lid →
+blend during confirmation → pass card, with no new copy on screen beyond the proposals in A11.
+
+## A9. Figma — prototype before code, time-boxed
+
+Create `Blotto Cup — UI uplift 2026-09-16` (Design, plan `team::1669240224739880472`, the founder's
+one plan) after loading `figma-create-new-file`, `figma-use` and `figma-generate-design`. Frames:
+
+1. Back-page module — marquee heading + neon section on pink, 1440 and 390.
+2. `/rules` composed, 1440.
+3. `/pools/[pool]` with rails on the yellow field, 1440 and 390 (strip variant).
+4. The seal stage in five states (made · armed · signing · blending · done), 1440 and 390, with the
+   generated stills placed (`upload_assets`).
+5. The homepage card with the video well, 1440 and 390.
+
+Tokens from `app/src/design/tokens.ts` as variables. Time-box 75 minutes, after the stills exist
+and before A6/A8 code. If the Figma MCP fails or rate-limits, note it in §B and continue — the code
+is the deliverable; the file is the founder's morning review aid.
+
+## A10. Higgsfield — assets, prompts, budget
+
+**Reference set (already in the account; use as medias, never re-upload):**
+- character stills, role `image` / `image_references`: `e9f687e5-d07f-4837-bce9-4d48a1c99e0c`,
+  `7ebafb7a-dfa9-48c7-8a41-e9a669d85445` (the founder's two Blott-in-a-display-case frames);
+- a source clip, role `video_references` where the model accepts one:
+  `7cef8e35-c04d-4e96-a779-da2b166b3f41`.
+
+**House prompt base** (the wording the founder's own pose pipeline uses): *"the identical original
+toy character from the reference images: a plump inflatable glossy yellow vinyl creature with a
+rounded pentagon body, soft stitched seam lines like a beach ball, two small stubby yellow horn
+nubs on top, one wide glossy black wraparound visor, a soft pink glowing blush on its belly-face,
+short stubby arms and legs, no mouth. Premium 3D render, soft warm studio product lighting with a
+gentle pink rim light, ultra sharp, high-end toy photography look. No text, no watermark, no logo."*
+Variation is proportion, never colour: *"seven of them of varying proportions — tall and narrow,
+wide and squat, top-heavy, one perfectly even."*
+
+**Stills** (`gpt_image_2_5`, 1 credit each, 2 candidates each; the chosen still is BOTH the start
+and the end frame of its loop, which is what makes the loop seamless):
+- P1 *card*: one Blott idling on a lit disc inside a candy display case, hot pink behind, 4:3.
+- P2 *rail*: a pink candy-factory conveyor belt, low three-quarter view, running from the bottom of
+  the frame away to a smooth plum wall at the top-centre where it enters a rounded dark slot; plum
+  belt, cream rollers, neon-pink light strips; a line of Blotts of varying proportions standing on
+  it, evenly spaced; 9:16.
+- P3 *strip*: the same scene, belt running left to right into a slot at the right edge; 16:9.
+- P4 *blender*: a wide candy-factory scene — the belt enters from the back-centre and runs toward
+  the front-left, ending above a giant glossy cream-and-plum blender with a clear jar standing
+  centre-right on a hot pink floor; a large round push button on the blender's base (pink; a second
+  candidate red, for D3); seven Blotts of varying proportions ride the belt toward the drop; two
+  already in the jar looking up; 16:9.
+
+**Videos** (`minimax_h3`, 2K, 8 s, 16 credits each; `start_image` = `end_image` = the still for
+every loop; `seedance_2_0_mini` as the cheap fallback; never `flux_3_video` at 72):
+- V1 *rail loop* (from P2, 9:16): the belt carries the Blotts steadily toward the wall slot; each
+  disappears through it as the next enters from the bottom; constant speed; locked camera; seamless.
+- V2 *strip loop* (from P3, 16:9): same, left to right.
+- V3 *blender idle loop* (from P4): the belt runs; Blotts ride forward and hop off the end into the
+  jar one at a time; the jar's contents bob; lid open; locked camera; seamless.
+- V4 *blender run* (start = P4, no end frame): the lid closes, the blender runs at full speed, the
+  Blotts churn into a smooth glossy yellow liquid with a pink glow, the jar fills, the machine
+  settles and stops; locked camera; ends on a held frame.
+- V5 *card loop* only if A5 finds no reusable clip.
+
+Loop check: with ffmpeg-static, compare the first and last frames (SSIM ≥ 0.97); below that, take
+the better of two variants or apply a 400 ms tail-to-head crossfade — always seamless in the end.
+
+**Encode** (ffmpeg-static, in the scratchpad, then copy in): H.264 `-crf 23 -preset slow -movflags
++faststart` and VP9 `-crf 33 -b:v 0`, no audio, poster jpg at q 82; rails 720×1280, strips and
+blender 1280×720, card 720 px. Budget: ≤ 2.5 MB per file, ≤ 14 MB added to `app/public/motion/`
+in total. Files: `motion/pool/blott-card.*`, `motion/pool/rail.*`, `motion/pool/strip.*`,
+`motion/seal/blender-idle.*`, `motion/seal/blender-run.*`, `motion/seal/blender-done.jpg`.
+
+**Credits (D9):** expected ~110 (8 stills, 4 loops, 2 variants); hard cap **300**. At the cap, stop
+generating, ship what exists, and record the gap in §B. The founder's balance is 2,926.
+
+## A11. Copy proposals — every one marked `PHASE-N-REVIEW` in `app/src/copy/index.ts`
+
+| Key | Proposal | Why |
+|---|---|---|
+| `landing.demoHint` | "Drag a dial — the other four give way. Press a padlock to hold a stat where it is. Nothing to sign, nothing to pay: this one is just to feel it." | A4 |
+| `pool.aboutHeading` (new) | "How this pool pays" | A6 neon section over the three rule paragraphs |
+| `tx.entryRefused` | the A7 wording | A7 |
+| `battle.sealStageAria` (new, aria only) | "Seven Blotts on a conveyor dropping into a blender; the blender runs once your entry is signed." | A8 accessibility |
+
+Nothing else changes wording. The seal buttons keep `battle.seal`, `battle.sealConfirm`,
+`battle.sealCancel`; the holds keep `battle.sealing` and `reveal.confirming`.
+
+## A12. Rules for the executor — read before the first edit
+
+1. **Never edit** `app/src/components/blot/rebalance.ts`, `app/src/battle/allocation.ts`, anything
+   under `app/src/entry/`, or `app/src/battle/machine.ts`. Read them freely. If a task seems to
+   need a change there, stop that task, note it in §B, and continue with the others.
+2. **Never deploy.** Pushes to `claude/clever-rubin-uyyns0` are allowed all night (a branch push
+   only creates a Vercel preview; production follows `main`). Never merge, never touch `main`,
+   never run a Vercel deploy, never change environment values, never edit `config/*.json`.
+3. **Branch (D8).** Stay on `claude/clever-rubin-uyyns0`. Do not open a PR unless the founder's
+   approval names the branch to rename to (CONTRIBUTING renames a machine-generated branch BEFORE
+   its PR exists); with a name, rename at the very end and open a **draft** PR using
+   `.github/pull_request_template.md`, verification evidence filled in.
+4. **Copy discipline.** Every new or changed string lives in `app/src/copy/index.ts` with a
+   `PHASE-N-REVIEW` comment; never inline text in a component. Heading TEXT the journey asserts
+   does not change.
+5. **Language gate.** `./scripts/check-language.sh` after every commit; the pattern list is in the
+   script. Identifiers, comments and prompts included — the blender *runs*, *churns*, *blends*.
+6. **Next.js.** This repo's Next is newer than training data: read the guide under
+   `app/node_modules/next/dist/docs/` before Next-specific code (`app/AGENTS.md`).
+7. **Do not commit** `app/next-env.d.ts` (rewritten by `next dev`) — `git checkout` it first.
+8. **Commit per work package**, message says what and why, ending with the session's attribution.
+9. **Credits cap** 300 (A10). Reference medias by id; never upload the Drive files.
+10. **When something is unclear**, prefer the smaller change, mark it `PHASE-N-REVIEW`, and write
+    it up in §B — never a silent judgement call.
+
+**The run, in order (≈ 11 h):** preflight (baseline gates, dev server on `:3005`, harness "before"
+set) → A2 → A4 → A6-verify-link → A7 → A3 (four pages) → A10 stills (batch) → A9 Figma (75 min) →
+A10 videos (batch, wait, download, check, encode) → A5 → A6 → A8 → full gates + journey + harness
+"after" set → §B written → INDEX row → commit, push.
+
+**Gates before each push:** `npm run typecheck`, `npm run lint`, `npm test` (vitest), `npm run
+build` in fixture mode, `npm run journey`, `./scripts/check-language.sh`,
+`./scripts/check-standing-rules.sh`, `scripts/check-env-examples.sh` if any env name is read.
+
+**Visual QA:** the harness at `scratchpad/shoot.js` (paths in §B) captures every page at 1440,
+1440 @ 90 %, 1024 and 390; six "after" captures go to `docs/design/uplift-2026-09-16/` as JPEG
+≤ 300 KB each for the founder's morning review.
+
+## A13. Deliberately not done tonight
+
+- The full desktop type scale and a desktop top navigation (A2 (b)).
+- Making `Cabinet` consume the shared marquee classes (A3) — a play-route change.
+- A verify-page mode for OPEN pools (checking the sealing key and entry hashes) — a real feature,
+  not a link.
+- The 409-specific refusal string (A7) — waits on the founder's part-4 fix.
+- Restyling `/pools` (the list) and `/profile` — not asked.
+
+## A14. What the founder decides (defaults apply if the approval says nothing)
+
+| # | Decision | Default | Alternative |
+|---|---|---|---|
+| D1 | Desktop scale | `zoom: 0.9` ≥ 1280 + header width | full desktop type scale (follow-up) |
+| D2 | Pool page field | brand yellow, as asked | keep pink |
+| D3 | Seal button | action pink, slow glow pulse | red (recorded exception) |
+| D4 | `/custody` | keep public, restyled | unlist from the footer |
+| D5 | Verify link on an Open pool | hidden while Open | keep |
+| D6 | `tx.entryRefused` | A7 wording, `PHASE-N-REVIEW` | leave for part 4 |
+| D7 | Pool-card clip | reuse an existing library clip | generate new |
+| D8 | Branch / PR | stay on the working branch, no PR | name the branch; draft PR at the end |
+| D9 | Credits cap | 300 | — |
+
+---
+
+# §B — The report (appended by the executor when done)
+
+_Not yet written._
