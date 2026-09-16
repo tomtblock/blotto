@@ -70,12 +70,19 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
             {COPY.reveal.passPool(pool.id)}
           </h1>
           <Pill tone={pool.resolving ? 'resolving' : open ? 'open' : 'muted'}>{poolStateLabel(pool)}</Pill>
-          <Link
-            href={`/verify?pool=${pool.pool}`}
-            className="ml-auto rounded-full text-[13px] text-ink-muted underline underline-offset-2 hover:text-ink"
-          >
-            {COPY.pool.verifyThisPool}
-          </Link>
+          {/* Founder 2026-09-16 (D5): the Verify page recomputes a RESULT from
+              the published bundle and the on-chain record, and an open pool
+              has neither yet — the link led to "nothing to check". It appears
+              once the pool has sealed; until then the page's own copy says
+              what becomes verifiable and when. */}
+          {!open && (
+            <Link
+              href={`/verify?pool=${pool.pool}`}
+              className="ml-auto rounded-full text-[13px] text-ink-muted underline underline-offset-2 hover:text-ink"
+            >
+              {COPY.pool.verifyThisPool}
+            </Link>
+          )}
         </header>
 
         {pool.resolving && pool.resolving_until !== null && (
