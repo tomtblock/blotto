@@ -328,3 +328,74 @@ you an explicit go-ahead each time, seconds before you start.
 
 **Next contact:** I will tell you when the new pool is open and the gate is confirmed healthy for
 both your accounts. Around 23:00 your time.
+
+---
+
+## F-25 — what I built so this cannot happen again, and the one decision left to you
+
+You asked for documentation and a guardrail fix. Both are done. Here is what changed, and the part
+that needs your ratification.
+
+### First, a correction you need before mainnet
+
+**Payment infrastructure will not prevent this.** The dry signing quota was tonight's *trigger*, not
+the defect. The lockout fires on **any** failure between sealing and registering: a wallet prompt
+dismissed, a laptop lid closed, a connection dropped, a browser tab crashed. None of those care
+whether the account is funded. Fixing billing removes one cause out of many and leaves the trap
+exactly where it is.
+
+Worth having it stated plainly, because "we'll have proper payment infra on mainnet" is the kind of
+reassurance that quietly closes a question that is still open.
+
+### What is now protected, inside the test (done, working, proven)
+
+**A go/no-go check before anybody plays.** `scripts/preflight.ts` confirms the pool is open and
+ready, that neither account is already seated, and — the important one — that the entry gate issues
+a real entry permit **for each of your wallets, against that pool**, which is the exact request your
+browser is about to make. It asks for permits and nothing else: nothing is sealed, nothing entered,
+nothing spent. From now on you get a go-ahead from me only after this passes, seconds before you
+play.
+
+It tells you its own blind spot rather than hiding it: it **cannot** see whether a wallet is already
+barred, because nothing in the system can answer that question. Run against pool 15 it says GO for
+both your accounts — which are barred. A check that lies by omission is worse than none, so it says
+so out loud.
+
+**The headless run now stops instead of repeating the mistake.** If a wallet seals and then fails,
+it is burnt, and the runner halts and names it rather than doing the same to the next sixty. I
+proved it on pool 15: one wallet sealed and failed, the run stopped, and the next wallet was never
+touched. During an outage that is **one loss instead of sixty-two**.
+
+**And I found the same bug in my own tooling.** The runner's "simulate" mode announced that it wrote
+no state. It did: it sealed the wallet before simulating, which barred it permanently — it had
+already done that to a spare wallet earlier this evening without my noticing. Fixed, and verified by
+proving a wallet was still unsealed afterwards. It is written up as a finding against myself
+(`DRIFT.md` §H7), because a test whose own instrument has a landmine in it should say so.
+
+### The product fix — specified, not applied. **This is your call.**
+
+The real fix is in the app and the backend, which this week's rules put off limits to me. So I have
+written it as a ready-to-apply patch rather than applying it: `battle-test/docs/FIX-seal-lockout.md`.
+
+It turned out **cheaper than I expected**. The entry service already talks to the database that
+records who has entered, so the central fix is one extra lookup on a connection it already holds:
+
+1. **Refuse to replace an allocation only once the seat is actually paid for** — that is the thing
+   the protection was always aiming at. An allocation with no entry behind it is an abandoned
+   attempt, and replacing it harms nobody. This alone removes the lockout.
+2. **Ask permission before sealing, not after** — closes tonight's exact sequence. Ship it with (1),
+   not instead of it: on its own it narrows the window rather than closing it.
+3. **Let a wallet ask whether it is sealed** — today nobody can find out, not you, not a player, not
+   a support agent. The wallet signs the question, so this does not open the sealed allocations to
+   anyone else.
+4. **Stop showing a "you may not enter" message to someone whose entry simply broke.** They are
+   different things and the app already has the information to tell them apart.
+
+**▶ Your decision:** do you want me to apply that patch as a separate product PR — which means
+touching `app/` and `backend/`, against the boundary you set for this week — or leave it specified
+and ship it after the test week ends?
+
+I have not touched either directory. Recommendation: **leave it until the week ends** unless the
+lockout blocks another test. It is not blocking T4, the guardrails above stop it recurring inside
+the test, and a product change made mid-test muddies what the test is measuring. But it should not
+reach mainnet, and if you want it now, say so and I will do it properly with tests.

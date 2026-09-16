@@ -700,3 +700,54 @@ changes. Cost: one rent cushion, 0.00065 SOL.
 
 **Operational rule for every future test, from now on:** probe the entry gate for the exact wallets
 immediately BEFORE the founder plays, never after. A seal made into a broken gate cannot be undone.
+
+#### Guardrails built, 2026-09-16 (inside the source boundary)
+
+The product fix belongs in `app/` and `backend/` and is specified, not applied, in
+`battle-test/docs/FIX-seal-lockout.md`. What the test could defend itself with, it now has:
+
+1. **`scripts/preflight.ts`** — the go/no-go check that must exit 0 before anybody plays. Proves the
+   pool is Open and register-ready (vrf seed committed, pass collection created), that no named
+   wallet is already seated, and that the entry gate issues a real packet **for each named wallet
+   against this pool** — the exact call the browser is about to make, per wallet, because the gate
+   decides per wallet. It requests packets and nothing else.
+   **Its limit is stated in its own output:** it cannot see whether a wallet is ALREADY barred,
+   because there is no read path for that. Run against pool 15 it reported GO for both founder
+   accounts, which were already barred. That is why part 3 of the fix adds a wallet-authenticated
+   read.
+2. **`enter.ts` stops on the first burnt seat.** A `sealed` flag is set the moment a ciphertext is
+   stored; a seat that sealed and then failed is named as permanently barred, and the run halts
+   instead of marching into the next batch. Proven on pool 15: W64 sealed, failed to pay, the run
+   stopped, and **W65 was never touched**. Against a broken gate this turns sixty-two losses into
+   one.
+3. **`--simulate` no longer seals** — see §H7, which is the same defect in my own tooling.
+
+### H7. My own "safe" mode was not safe, and it burnt a wallet (2026-09-16, self-inflicted)
+
+Found while proving the §H6 guardrail. `enter.ts --simulate` announced
+`SIMULATE (no state written)` and its header said "a simulation writes no state, so it carries none
+of that risk". **Both were false.** The simulate path ran `attest` → `putCiphertext` → `requestPacket`
+and only then simulated — so the mode built to be safe stored a ciphertext, which under §H6 cannot
+be replaced or deleted. It permanently barred every wallet it was run on.
+
+It had already done so to **W62 on pool 15**, at 19:07Z, and I did not notice until the guardrail
+run refused W62 with `409 already sealed` and I had to explain why a wallet I had only *simulated*
+was sealed.
+
+**Fixed.** `register` needs the battles hash and the entry packet; it never needs the stored
+ciphertext, which is read only at reveal. So the write is skipped under `--simulate`, which costs
+the simulation nothing and makes the claim true. The banner now reads
+`SIMULATE (nothing sent, nothing sealed)`.
+
+**Verified rather than asserted:** after a `--simulate` run, W66's first-ever ciphertext write
+returned `204`, proving the simulate had not sealed it.
+
+**Why this is in the record.** The same mistake in the same shape as §H6 — an action with an
+invisible, irreversible side effect, behind a name that promised safety. I wrote the tool, wrote the
+claim, and used it. It is here because a test whose own instrument has a landmine in it should say
+so, and because the manual's rule "never dry-run against devnet" was aimed at SENDING and missed
+this entirely.
+
+**Spare wallets burnt on pool 15 in the course of this work**, none of them in T4's field
+(W00–W61), and pool 15 is being abandoned: W62 (the old simulate), W63 (the §H6 proof), W64 (the
+guardrail proof), W66 (the fix verification).

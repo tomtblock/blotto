@@ -1,11 +1,13 @@
-# STATE — 2026-09-16 16:11 local (19:11 UTC) — by Claude Code
+# STATE — 2026-09-16 16:23 local (19:23 UTC) — by Claude Code
 
 Phase:            **T4 moves to the next pool. UI-A and UI-B are permanently barred from pool 15.**
                   Not a wallet problem and not fixable: the app stores the sealed allocation BEFORE it
                   asks for an entry packet, so the founder's play during the Turnkey outage stored a
                   ciphertext that was never registered. Every retry replays with a fresh salt, so the
                   bytes differ, so the store refuses with 409 "already sealed". No delete path exists.
-Waiting on:       nothing from the founder tonight. F-24 written: the explanation and the plan.
+Waiting on:       **F-25 — one decision, not blocking.** Apply the seal-lockout product fix now as a
+                  separate PR (touches app/ and backend/, against this week's boundary), or ship it
+                  after the test week? Recommendation: after. Guardrails already stop it recurring here.
 After that:       pool 15 lapses 01:52:26Z (22:52 local, holds no entries) → daemon opens the next pool
                   ~5 min later (~22:57 local, on the 23:00 cadence) → T4 runs there on the SAME frozen
                   plan. Only poolId, poolPda and a new freeze record change; no rank or payout moves.
@@ -17,6 +19,18 @@ Blocked:          nothing. Out of plan mode; enter.ts can run once the new pool 
 founder plays, never after. A seal made into a broken gate cannot be undone. An explicit go-ahead
 goes out seconds before each UI entry from now on.
 Results so far:   T1 **PASS** · T2–T8 not started
+
+**GUARDRAILS BUILT 19:22Z, in boundary, proven:**
+  1. scripts/preflight.ts — go/no-go before anybody plays: pool open and register-ready, no wallet
+     already seated, and a real packet issued PER NAMED WALLET against this pool. Requests packets
+     only. **Prints its own blind spot**: it cannot see whether a wallet is ALREADY barred (no read
+     path exists), and says GO for pool 15 where both UI accounts ARE barred.
+  2. enter.ts STOPS on the first seat that sealed and then failed. Proven: W64 sealed, failed to pay,
+     run halted, W65 never touched. One loss instead of sixty-two.
+  3. --simulate no longer seals (§H7 — my own bug; the "safe" mode was barring wallets, and had
+     already burnt W62). Verified: W66's first-ever seal returned 204 after a simulate run.
+  Product fix SPECIFIED NOT APPLIED in docs/FIX-seal-lockout.md — four parts, the central one is a
+  single indexed read the packet service can already make. app/ and backend/ untouched.
 
 **H6 — the worst finding of the test (19:09Z). A failure between sealing and registering bars that
   wallet from that pool FOREVER.**

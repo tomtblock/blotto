@@ -47,8 +47,8 @@
  * transaction would be accepted, without committing it. This is how the
  * register leg is proved before a real pool depends on it: the manual says
  * never to dry-run against devnet, and it is right about SENDING — a stray
- * registration locks its tier for the whole fill window. A simulation writes
- * no state, so it carries none of that risk, and it is the only way to check
+ * registration locks its tier for the whole fill window. A simulation sends
+ * nothing, so it carries none of that risk, and it is the only way to check
  * the account order and the instruction data against the deployed program
  * rather than against our own reading of it.
  */
@@ -367,6 +367,15 @@ export interface SeatResult {
   battlesHashHex?: string;
   error?: string;
   at: string;
+  /**
+   * True once this wallet's ciphertext is STORED. A seat that sealed and then
+   * failed is not a retryable seat: the store refuses a second, different
+   * allocation for the same wallet and pool, a replay always differs because
+   * the salt is fresh, and no delete path exists anywhere (DRIFT.md §H6). That
+   * wallet can never enter this pool again, so the runner stops rather than
+   * doing it to the rest of the field.
+   */
+  sealed?: boolean;
 }
 
 /** The device marker for this wallet in this pool — per wallet, per pool. */
@@ -386,6 +395,7 @@ async function enterOne(args: {
   const player = deriveKeypair(master, walletLabel(index));
   const at = new Date().toISOString();
   const base: SeatResult = { wallet: walletId, address: player.publicKey.toBase58(), ok: false, at };
+  let sealed = false;
 
   try {
     const salt = Uint8Array.from(randomBytes(32));
@@ -419,8 +429,22 @@ async function enterOne(args: {
     // version the packet service refuses, and its refusal is generic.
     await attest(packetApi, player, terms);
 
-    // Ciphertext BEFORE money.
-    await putCiphertext(packetApi, pool.pool, player, ciphertext);
+    // Ciphertext BEFORE money. This ORDER is the app's (submit.ts:99-100) and
+    // is mirrored deliberately — the test must exercise the real path, not a
+    // safer one. What the runner adds is the stop: see `sealed` above.
+    //
+    // EXCEPT under --simulate, which must not seal (2026-09-16). This module
+    // claimed a simulation "writes no state" while storing a ciphertext, and a
+    // stored ciphertext cannot be replaced or deleted (DRIFT.md §H6) — so the
+    // SAFE mode permanently barred the wallet it was run on. It did exactly
+    // that to W62 on pool 15. `register` needs the battles hash and the
+    // packet, never the stored ciphertext, which is read only at reveal; so
+    // skipping the write here costs the simulation nothing and makes the
+    // claim true.
+    if (!simulate) {
+      await putCiphertext(packetApi, pool.pool, player, ciphertext);
+      sealed = true;
+    }
     const packet = await requestPacket(packetApi, pool.pool, player.publicKey.toBase58());
 
     const passAsset = Keypair.generate();
@@ -467,7 +491,13 @@ async function enterOne(args: {
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
     console.error(`  ${walletId} FAILED  ${error}`);
-    return { ...base, error };
+    if (sealed) {
+      console.error(
+        `  ${walletId} SEALED THEN FAILED — this wallet can never enter pool ${pool.id} again. ` +
+        `Its ciphertext is stored and cannot be replaced or deleted (DRIFT.md §H6).`
+      );
+    }
+    return { ...base, sealed, error };
   }
 }
 
@@ -529,7 +559,11 @@ async function main(): Promise<void> {
       );
     }
   }
-  const mode = dryRun ? 'DRY RUN — ' : simulate ? 'SIMULATE (no state written) — ' : '';
+  const mode = dryRun
+    ? 'DRY RUN — '
+    : simulate
+      ? 'SIMULATE (nothing sent, nothing sealed) — '
+      : '';
   console.log(`${mode}entering ${walletIds.length} seats: ${walletIds.join(', ')}\n`);
 
   // Where the plan names a generator and a seed per seat, those decide the
@@ -561,10 +595,32 @@ async function main(): Promise<void> {
       })
     );
     results.push(...batch);
+
+    // THE STOP (DRIFT.md §H6). A seat that sealed and then failed is burnt:
+    // that wallet is barred from this pool for good. If the cause is the entry
+    // gate rather than this one wallet, marching into the next batch burns the
+    // rest of the field the same way — which is precisely how one outage would
+    // cost sixty wallets instead of one. Stop, name the casualties, and let a
+    // human decide.
+    const burnt = batch.filter((r) => r.sealed && !r.ok);
+    if (burnt.length > 0) {
+      console.error(
+        `\nSTOPPING after ${results.length} of ${walletIds.length} seats. ` +
+        `${burnt.length} sealed and then failed: ${burnt.map((r) => r.wallet).join(', ')}.\n` +
+        `Those wallets are barred from pool ${pool.id} permanently and must be replaced from the ` +
+        `spare roster, not retried. Diagnose the gate before running again — if it is down, every ` +
+        `remaining seat would be burnt the same way.`
+      );
+      break;
+    }
   }
 
   const ok = results.filter((r) => r.ok).length;
+  const burntAll = results.filter((r) => r.sealed && !r.ok);
   console.log(`\n${ok}/${results.length} landed`);
+  if (burntAll.length > 0) {
+    console.log(`${burntAll.length} BURNT (sealed, never registered): ${burntAll.map((r) => r.wallet).join(', ')}`);
+  }
 
   if (!dryRun && !simulate) {
     const dir = resolve(__dirname, '..', 'evidence', `${test}-pool-${pool.id}`);
