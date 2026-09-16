@@ -5,9 +5,9 @@
   "poolPda": "FZDhx4PUGCJmhskbbNFdUXzgRivSLwZHCcejxeF2afaL",
   "tier": 0,
   "cluster": "devnet",
-  "harvestedAt": "2026-09-16T02:17:39.411Z",
-  "slot": 499069439,
-  "terminalState": "Open",
+  "harvestedAt": "2026-09-16T14:04:01.217Z",
+  "slot": 499325555,
+  "terminalState": "Closed",
   "entrants": 12,
   "minSeats": 40,
   "entryLamports": "100000000",
@@ -16,8 +16,8 @@
   "resultsRoot": null,
   "revealedSecret": null,
   "outcomeIfDeadlineNow": "refund",
-  "treasuryLamports": "3196098560",
-  "vaultLamports": "4000650240",
+  "treasuryLamports": "1995448320",
+  "vaultLamports": "650240",
   "sources": {
     "poolState": "https://blotto-indexer.fly.dev/pools",
     "entries": "https://blotto-indexer.fly.dev/pools/FZDhx4PUGCJmhskbbNFdUXzgRivSLwZHCcejxeF2afaL/entries",
@@ -35,12 +35,12 @@
       "passAsset": "4GxVb9Q49L6bYKmeEPAYQC6NHokHsQoqjRR61K7FRn8i",
       "termsVersion": 2,
       "flagged": false,
-      "refunded": false,
+      "refunded": true,
       "sanctionsHold": false,
       "nextPlaceLamports": "0",
       "registerSig": "3eMcrFThrdzLG3KsAoM8AnZfxq61u1uppWEFfbFPCBP5grpmD7asuDa3oqUNpT2cVijrpN44MWJbver8whxHcByN",
       "slot": 499067184,
-      "balanceAfter": "4886674191"
+      "balanceAfter": "4986674191"
     },
     {
       "seat": 1,
@@ -51,12 +51,12 @@
       "passAsset": "GG9xaeSyNioP8xb5ZN9vJDSUx6LXiExuaARTWr5j3sjn",
       "termsVersion": 2,
       "flagged": false,
-      "refunded": false,
+      "refunded": true,
       "sanctionsHold": false,
       "nextPlaceLamports": "0",
       "registerSig": "4jQ3DSEomJ6fZkR4v1K8hxh21PAtqJEPfBj6LvnehPWEYnVvBexMRdpSd2FR88tNCPH2hfCP4Au8dPrngaSiwqua",
       "slot": 499067982,
-      "balanceAfter": "9886680744"
+      "balanceAfter": "9986680744"
     },
     {
       "seat": 2,
@@ -67,12 +67,12 @@
       "passAsset": "4uAoAhHjNvyr9M1izL9GATmTNdn5ssGnryLiCpQw174H",
       "termsVersion": 2,
       "flagged": false,
-      "refunded": false,
+      "refunded": true,
       "sanctionsHold": false,
       "nextPlaceLamports": "0",
       "registerSig": "4RKz6RbZ3TAbqVF2VRL9UqzNdQAf5AhQYXUJz7742KBbmXbyKuiLmcvhDAHWmxPPz5MYtaJkdjPXkRUqBQh5fpeV",
       "slot": 499069060,
-      "balanceAfter": "95558920"
+      "balanceAfter": "195558920"
     },
     {
       "seat": 3,
@@ -83,12 +83,12 @@
       "passAsset": "EN7po5RHajatmDFT3nQePj5scV6rYuoQzvTS3Mhmy357",
       "termsVersion": 2,
       "flagged": false,
-      "refunded": false,
+      "refunded": true,
       "sanctionsHold": false,
       "nextPlaceLamports": "0",
       "registerSig": "2L8ntbBYU7DTCN3irtkuJeXwLVxZfC4uitP4uK9Et2vgNJzsvPUduCYbfTG51nh14F4NcvPrGcaGRhDmuoBZE8rr",
       "slot": 499069068,
-      "balanceAfter": "95558920"
+      "balanceAfter": "195558920"
     },
     {
       "seat": 4,
@@ -99,12 +99,12 @@
       "passAsset": "Xy18GeLocjrEETomraBKTCDQEHce89C7bxeKhVg154p",
       "termsVersion": 2,
       "flagged": false,
-      "refunded": false,
+      "refunded": true,
       "sanctionsHold": false,
       "nextPlaceLamports": "0",
       "registerSig": "3JoNHCzcPhGBJ2NV4NUVzCEULw3P3nFQB5VWfBfDzRzczdZ67QiMUE2x1KVK4vWxhMeQnDMom89ZWzyvAby7nnnN",
       "slot": 499069068,
-      "balanceAfter": "95558920"
+      "balanceAfter": "195558920"
     },
     {
       "seat": 5,
@@ -115,12 +115,12 @@
       "passAsset": "F14bgUfNe7vk7G7RPEHA5BHZ2XCHhyZXtjMw1PmBjfxw",
       "termsVersion": 2,
       "flagged": false,
-      "refunded": false,
+      "refunded": true,
       "sanctionsHold": false,
       "nextPlaceLamports": "0",
       "registerSig": "5Fg5xus1hEcRBFZ51kVfvGGydHuUn2jF34RnwmmqNAEhunrSP6YihK72DxNA8dGMAjgRyw9TMWPCyjUS2E9tr9ry",
       "slot": 499069082,
-      "balanceAfter": "95558920"
+      "balanceAfter": "195558920"
     },
     {
       "seat": 6,
@@ -131,12 +131,12 @@
       "passAsset": "3LZnJ8xDyiJ16akQYhyfFv793oNrp2S51GzXUtyQs9gQ",
       "termsVersion": 2,
       "flagged": false,
-      "refunded": false,
+      "refunded": true,
       "sanctionsHold": false,
       "nextPlaceLamports": "0",
       "registerSig": "2kf2ZJUFAAHJFKQZpghwMCjojrgeCg8VcSwGjmJGZPTpBYTqn5NTpifj92sBmZYPAafGj13FWUyJdov5BodwerE6",
       "slot": 499069082,
-      "balanceAfter": "95558920"
+      "balanceAfter": "195558920"
     },
     {
       "seat": 7,
@@ -147,12 +147,12 @@
       "passAsset": "FLZpBH53SDDqCZq52f7BVMkJqapiGgCyY88adfFZE4P6",
       "termsVersion": 2,
       "flagged": false,
-      "refunded": false,
+      "refunded": true,
       "sanctionsHold": false,
       "nextPlaceLamports": "0",
       "registerSig": "DJsDWb5Bguq9hSvXx3FANZkC2es8vYEkLcvqv5Tv8jDmavDdVWaP3CgLZupWccsLwEawvkBudksNzSZLZxJxD8v",
       "slot": 499069082,
-      "balanceAfter": "95558920"
+      "balanceAfter": "195558920"
     },
     {
       "seat": 8,
@@ -163,12 +163,12 @@
       "passAsset": "G94rPFhqZt98iY3tJTpR4PMv1FMn53Mg1YKRrSZV8ckC",
       "termsVersion": 2,
       "flagged": false,
-      "refunded": false,
+      "refunded": true,
       "sanctionsHold": false,
       "nextPlaceLamports": "0",
       "registerSig": "3etZC3kCzuWsgcads2sCPQtsqmFsE9PGK1JPZ3Lc5R6YRw3d1LqXSP7ZkeW99p7u1n81d3VPG6X4nd6boYAgMhoL",
       "slot": 499069102,
-      "balanceAfter": "95558920"
+      "balanceAfter": "195558920"
     },
     {
       "seat": 9,
@@ -179,12 +179,12 @@
       "passAsset": "4NPpWCSuMVBroYnuak4m4mdTxKLScLnhQQvtMmp7noeB",
       "termsVersion": 2,
       "flagged": false,
-      "refunded": false,
+      "refunded": true,
       "sanctionsHold": false,
       "nextPlaceLamports": "0",
       "registerSig": "5vkT48odYnFBGj7KgYArjtujNfJpsegSJpsVuQGaA1gWXbcDmuoR1BcjK4ePDcPaa1htSfU4fsUrTYA6VRexix2Z",
       "slot": 499069102,
-      "balanceAfter": "95558920"
+      "balanceAfter": "195558920"
     },
     {
       "seat": 10,
@@ -195,12 +195,12 @@
       "passAsset": "8shVpqP8RCQogshQfw6nc3bt5Zw3RqpNcGgVE1w1tgoZ",
       "termsVersion": 2,
       "flagged": false,
-      "refunded": false,
+      "refunded": true,
       "sanctionsHold": false,
       "nextPlaceLamports": "0",
       "registerSig": "4z9nQeJ8rEeRs26MJddFDbe6TL8rTLye7Uefu1JzH4yXAtLzdNxr2o3gZuWNbZNBCJunJQbRDJdwKQDroiVN9bXV",
       "slot": 499069103,
-      "balanceAfter": "95553840"
+      "balanceAfter": "195553840"
     },
     {
       "seat": 11,
@@ -211,12 +211,12 @@
       "passAsset": "3f8bdZRF23z1spZaKbe9R4YtPGuwUgJjK7oRuMiNETzo",
       "termsVersion": 2,
       "flagged": false,
-      "refunded": false,
+      "refunded": true,
       "sanctionsHold": false,
       "nextPlaceLamports": "0",
       "registerSig": "25BdzU3NRmpfXZwPGmB3vx5xQcnpnJNdMZhaN3ekqT6MbuGL55NVvZKjdcyM8btXrc36eLYN66ypPz3LBx6Cugkc",
       "slot": 499069113,
-      "balanceAfter": "95553840"
+      "balanceAfter": "195553840"
     }
   ]
 }

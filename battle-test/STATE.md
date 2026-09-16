@@ -1,10 +1,10 @@
-# STATE — 2026-09-15 23:18 local (02:18 UTC, 16 Sep) — by Claude Code
+# STATE — 2026-09-16 11:04 local (14:04 UTC) — by Claude Code
 
-Phase:            **T1 FILLED** — pool 14 holds 12/64 (2 UI + 10 headless), all COMMITTED. Waiting on its deadline.
-Waiting on:       the chain — T1's deadline at 13:46:49Z = Wed 10:46 local. The daemon then refunds all 12.
-                  founder — F-19 about 15 min after that: screenshot the Closed pool page and both wallet balances.
+Phase:            **T1 PASSED** — pool 14 Closed, 12/12 refunded, reconcile PASS. T4 is next and is BLOCKED.
+Waiting on:       founder — F-19 (screenshot the Closed pool page + both wallet balances) and **F-01b, now blocking**:
+                  T4 needs 64 entrants; only 12 wallets are funded and the funder holds 8.0 SOL against ~12.4 needed.
 After that:       F-19 ~10:46 Wed (T1 deadline) · F-01b more faucet before the first full pool
-Live deadlines:   T1 / pool 14 / tier 0 → 13:46:49Z = **Wed 10:46 local**. Below 40 seats it refunds in full.
+Live deadlines:   pool 15 open on tier 0, deadline 01:52:26Z. NOT a test pool — nobody enters until T4's plan is frozen.
                   T1 deadline ~10:46 Wed
 Blocked:          nothing. enter.ts is built and its register leg SIMULATED OK against the deployed program
                   (71796 CU, no state written). T1's ten headless seats can land as soon as pool 14 opens.

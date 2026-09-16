@@ -72,3 +72,11 @@
 2026-09-16 02:18 UTC | cc      | T1 | harvest extended: a seat with no line in our log (the founder's UI entries) now takes its register signature from the chain — an Entry PDA is created by register and nothing else, so its oldest signature IS that register | scripts/harvest.ts
 2026-09-16 02:18 UTC | cc      | T1 | allocation table complete: 12 seats COMMITTED, every one with address, battles hash, register signature, slot, pass asset and explorer links | registry/T1.allocations.md
 2026-09-16 02:18 UTC | cc      | T1 | pool 14 holds 12 of 40 needed, so outcome_if_deadline_now = refund. Deadline 13:46:49Z = Wed 10:46 local | indexer
+2026-09-16 13:46 UTC | chain   | T1 | pool 14 reached its deadline with 12 of 40 seats — below the minimum field, so trigger_refund rather than seal_at_deadline | indexer
+2026-09-16 13:50 UTC | daemon  | T1 | all 12 entries refunded; pool 14 Closed | indexer entries
+2026-09-16 13:52 UTC | daemon  | —  | pool 15 opened on tier 0 (0/64, deadline 01:52:26Z). NOT a test pool yet — T4 needs its plan frozen and 62 more funded wallets first | indexer
+2026-09-16 14:04 UTC | cc      | T1 | **T1 RECONCILED: PASS.** 12 MATCH, 0 PAYOUT_MISMATCH, 0 INPUT_DRIFT, 0 ABSENT. Freeze OK — plan hash matches the merged bytes | registry/T1.reconcile.md
+2026-09-16 14:04 UTC | cc      | T1 | every prediction held: state Closed, 12 entrants, each refunded exactly 0.1 SOL, vault 650240 exactly, pot returned to treasury | —
+2026-09-16 14:04 UTC | cc      | T1 | money closes to the lamport: 1.996098560 + 1.2 entries + 4.0 pot returned − 1.2 refunds − 4.000650240 for pool 15 = 1.995448320, as read | evidence/T1-pool-14/balances-after.json
+2026-09-16 14:04 UTC | cc      | T1 | observation, not a deviation: W06 and W09 each spent 5080 lamports more in fees than the other eight. Entry price returned in full for both | reconcile
+2026-09-16 14:04 UTC | cc      | T1 | allocations stay COMMITTED: pool 14 has not revealed its secret yet (publication runs on a 10-minute backoff). VERIFIED comes on a later pass | registry/T1.allocations.md
