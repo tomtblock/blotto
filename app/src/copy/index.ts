@@ -401,7 +401,11 @@ export const COPY = {
     // already ratified elsewhere in this file.
     heroTitle: 'Make your Blott',
     tryDials: 'Try the dials',
-    demoHint: 'Drag a dial — the other four give way. Nothing to sign, nothing to pay: this one is just to feel it.',
+    // PHASE-N-REVIEW (founder 2026-09-16, CHANGE-2026-09-16_ui-uplift.md §A11):
+    // the practice machine now carries the padlocks the run has; one
+    // sentence says what they do. Proposal until ratified.
+    demoHint:
+      'Drag a dial — the other four give way. Press a padlock to hold a stat where it is. Nothing to sign, nothing to pay: this one is just to feel it.',
     // PHASE-N-REVIEW (2026-09-09): the marquee line on the landing machine.
     demoStatus: 'Practice machine',
     openPoolTitle: 'Open now',
