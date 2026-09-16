@@ -1,10 +1,11 @@
-# STATE — 2026-09-16 12:10 local (15:10 UTC) — by Claude Code
+# STATE — 2026-09-16 12:23 local (15:23 UTC) — by Claude Code
 
 Phase:            **T1 PASSED and is closed out.** T4 is UNBLOCKED and is the work in progress — pool 15,
                   the first pool that actually plays and pays a real 4 SOL prize.
-Waiting on:       nothing blocking. F-19 (screenshot the Closed pool page + both wallet balances) is still
-                  outstanding but holds nothing up. Next founder block is F-21, and I will call it.
-After that:       F-21 — merge the T4 freeze PR, then make the UI-A and UI-B entries on pool 15
+Waiting on:       **F-21, now blocking.** Merge PR 133 (the freeze), then enter pool 15 as UI-A and UI-B
+                  with the drag tables in FOUNDER-ACTIONS.md. Nothing may enter pool 15 before that merge.
+                  F-19 (T1 screenshots) is still outstanding but holds nothing up.
+After that:       I run the 62 headless seats; the 64th entry seals the pool and it pays within minutes
 Live deadlines:   **pool 15, tier 0, deadline 01:52:26Z — about 10h40m.** It is now T4's pool (founder
                   decision 14:18 UTC). Still nobody enters until T4's plan is frozen.
 Blocked:          nothing.
@@ -31,13 +32,24 @@ T4 readiness, all read live at 15:05 UTC:
   populations.ts is written and property-tested: wall beats cappedField 11200/11200, pole loses
   11200/11200, 64 unique sets, every allocation sums to 100.
 
-T4 work remaining, in order:
-  1. scripts/oracle.ts — compose backend/scoring's scorePool / assignPrizes / rankOrder, checked against
-     the committed Python vectors FIRST
-  2. registry/T4.plan.json — 64 seats, every predicted rank and the winner's payout, plus the detection
-     notes the plan should predict rather than discover
-  3. fund W10–W61 at 0.15, then the freeze PR
-  4. F-21: founder merges, then enters UI-A and UI-B; I run the 62 headless seats; the 64th seals it
+T4 work — DONE except the founder's part:
+  1. DONE scripts/oracle.ts. No scoring logic of its own; it composes backend/scoring. Self-checks
+     against all 36 committed Python pool vectors first, and a negative control proved that check
+     can fail.
+  2. DONE registry/T4.plan.json. 64 seats. UI-A rank 1 at 881 half-points paid the whole 4 SOL pot,
+     UI-B rank 64, field 2..63 unpaid. Root 3950d12c…a34ac, conditional on the planned seat order.
+     validate-plan accepts it and still rejects the broken fixture.
+  3. DONE funding. W10–W61 at 0.15 each, 3 transactions, funder left at 0.199980 exactly.
+  4. TODO F-21 — the founder merges and enters. Then me: 62 headless seats, and the 64th seals it.
+
+Why UI-A must win, in one line, so nobody has to trust the oracle: a wall's score floor is 875
+half-points and the best any field seat can reach is 868. Full arithmetic in the plan's
+`unconditionalDerivation`. It holds for ANY wall against a field capped at 25, not just these numbers.
+
+The one way T4 breaks: the run clock is 90 seconds for ALL SEVEN battles, not 15 a screen, and on
+expiry every unlocked battle is entered as the even split — neither a wall nor a pole. So UI-A's
+recipe is two dial drags a battle and UI-B's is one, and the exact sets were computed by running the
+app's own rebalance.ts rather than chosen. DRIFT.md §H2.
 
 Decisions taken since P-01 (all recorded in DRIFT.md §G):
   - **Every test runs on tier 0.** Tier 1 cannot be opened: `set-open-tiers` refuses a tier whose live

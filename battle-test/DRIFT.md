@@ -443,8 +443,11 @@ remembering. **Founder decision, after the week (F-20).**
 
 ### H2. The 15-second per-screen timer is not what the client runs (2026-09-16, found preparing T4)
 
-**What the manual and this project's own notes assume.** "The per-screen timer (15s, R9)" — a fresh
-clock on each of the seven battle screens.
+**What still says 15 seconds.** `CLAUDE.md` lists "the per-screen timer (15s, R9)" among the
+founder-owned numbers with published consequences, the manual assumes it, and `Pool.timer_seconds`
+reads 15 on every pool on chain. (`FOUNDER-ACTIONS.md` §F-12 already carried the real rule — it was
+corrected during the manual amendment on 2026-09-15 — so this row is about the documents that still
+do not, and about what the rule means for a SCORED test, which T1 did not have to care about.)
 
 **What the live client does.** One **90-second run clock for the whole run**, started at the player's
 FIRST dial interaction (never at payment confirmation, so a slow wallet does not eat it), idempotent
