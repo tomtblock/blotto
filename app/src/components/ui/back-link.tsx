@@ -13,17 +13,25 @@ export function BackLink({
   href,
   children,
   className = "",
+  tone = "ink",
 }: {
   href: string;
   children: ReactNode;
   className?: string;
+  /** `ink` on a plum surface; `berry` on the pink field (founder 2026-09-16). */
+  tone?: "ink" | "berry";
 }) {
+  const colour =
+    tone === "berry"
+      ? "text-brand-berry hover:text-brand-deep-magenta"
+      : "text-ink-muted hover:text-ink";
   return (
     <Link
       href={href}
       className={
-        "inline-flex items-center gap-1.5 rounded-full py-1 pr-2 text-[13px] text-ink-muted " +
-        "transition-colors hover:text-ink " +
+        "inline-flex items-center gap-1.5 rounded-full py-1 pr-2 text-[13px] transition-colors " +
+        colour +
+        " " +
         className
       }
     >

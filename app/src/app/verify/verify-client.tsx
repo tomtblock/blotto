@@ -29,6 +29,8 @@ import { useSearchParams } from 'next/navigation';
 import { COPY } from '@/copy';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { MarqueeHeading } from '@/components/ui/marquee-heading';
+import { NeonSection } from '@/components/ui/neon-section';
 import { indexerApi } from '@/data/api';
 import {
   verifyPool,
@@ -163,13 +165,14 @@ export function VerifyClient() {
 
   return (
     <section className="flex flex-col gap-4">
-      <h1 className="font-display text-[34px] leading-[38px] font-extrabold text-ink">
+      {/* Founder 2026-09-16: the title as the landing machine's backlit sign,
+          the explainer in berry on the pink field, the guide as a neon box. */}
+      <MarqueeHeading as="h1" className="self-start">
         {COPY.verify.title}
-      </h1>
-      <p className="max-w-prose text-[15px] leading-6 text-ink-muted">{COPY.verify.explainer}</p>
+      </MarqueeHeading>
+      <p className="max-w-prose text-[15px] leading-6 text-brand-berry">{COPY.verify.explainer}</p>
 
-      <Card className="flex flex-col gap-3 p-5" data-testid="verify-guide">
-        <h2 className="font-display text-[20px] font-bold text-ink">{COPY.verify.howTitle}</h2>
+      <NeonSection heading={COPY.verify.howTitle} className="mb-2" data-testid="verify-guide">
         <ol className="flex flex-col gap-3">
           {COPY.verify.howSteps.map((step, i) => (
             <li key={i} className="flex gap-3">
@@ -183,9 +186,9 @@ export function VerifyClient() {
             </li>
           ))}
         </ol>
-        <p className="text-[13px] leading-5 text-ink-muted">{COPY.verify.howVerdict}</p>
+        <p className="mt-3 text-[13px] leading-5 text-ink-muted">{COPY.verify.howVerdict}</p>
         <p className="text-[13px] leading-5 text-ink-muted">{COPY.verify.howWhen}</p>
-      </Card>
+      </NeonSection>
 
       <Card className="flex flex-col gap-3 p-4">
         <label className="flex flex-col gap-1.5 text-[13px] text-ink-muted">

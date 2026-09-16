@@ -1,0 +1,108 @@
+/*
+ * The marquee and the neon box (founder 2026-09-16: "use the boxing on the
+ * pink background as the rule … make the headings in the glowing box style
+ * of Blotto Cup") — the landing machine's two signature recipes, lifted for
+ * the informational pages. They are COPIED from components/blot/cabinet.css
+ * (.cab-marquee, .cab), not imported: the cabinet is the play machine, and a
+ * rules-page tweak must never be a play-route change. Tokens only; the neon
+ * is box-shadow; both recipes assume the brand-pink page behind them.
+ */
+
+/* The marquee: a warm backlit sign — cream to yellow, a pink ring, a yellow
+ * glow, berry display type. Rendered as a real heading element so the
+ * accessible name is exactly the word on the sign. */
+.marquee {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  max-width: 100%;
+  margin: 0;
+  padding: 10px 20px;
+  border-radius: 16px;
+  background:
+    radial-gradient(120% 140% at 50% 120%, rgba(255, 222, 89, 0.35), transparent 60%),
+    linear-gradient(
+      180deg,
+      var(--color-brand-cream),
+      color-mix(in oklab, var(--color-brand-cream), var(--color-brand-yellow) 35%)
+    );
+  box-shadow:
+    0 0 0 2px rgba(255, 122, 200, 0.7),
+    0 0 22px 4px rgba(255, 222, 89, 0.35),
+    inset 0 -3px 0 rgba(94, 27, 64, 0.15);
+  color: var(--color-brand-berry);
+}
+.marquee-word {
+  font-family: var(--font-display, inherit);
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-shadow: 0 0 12px rgba(255, 222, 89, 0.9);
+  overflow-wrap: anywhere;
+}
+.marquee-h1 .marquee-word {
+  font-size: 28px;
+}
+.marquee-h2 .marquee-word {
+  font-size: 18px;
+}
+.marquee-status {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+@media (min-width: 640px) {
+  .marquee-h1 .marquee-word {
+    font-size: 34px;
+  }
+  .marquee-h2 .marquee-word {
+    font-size: 22px;
+  }
+}
+
+/* The neon box: a plum panel ringed in hot-pink neon with a berry drop,
+ * standing on the pink page — the cabinet's frame without its window. */
+.neon-box {
+  position: relative;
+  border-radius: 24px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--color-game-base), black 6%) 0%,
+    var(--color-game-base) 55%,
+    color-mix(in oklab, var(--color-game-base), black 18%) 100%
+  );
+  box-shadow:
+    0 0 0 3px var(--color-brand-pink),
+    0 0 16px 3px rgba(255, 122, 200, 0.55),
+    0 0 44px 10px rgba(255, 122, 200, 0.22),
+    0 18px 50px rgba(42, 16, 48, 0.45),
+    inset 0 0 0 1px rgba(255, 246, 236, 0.06);
+  isolation: isolate;
+}
+
+/* A section on the pink page: its marquee sits on the box's top edge like a
+ * sign mounted on a cabinet, so the heading paints ABOVE the box's ring. */
+.neon-section {
+  position: relative;
+  margin-top: 8px;
+}
+.neon-section > .marquee {
+  position: relative;
+  z-index: 1;
+  margin: 0 0 -18px 16px;
+}
+.neon-section > .neon-box {
+  padding: 34px 18px 22px;
+}
+@media (min-width: 640px) {
+  .neon-section > .marquee {
+    margin-left: 22px;
+  }
+  .neon-section > .neon-box {
+    padding: 38px 26px 26px;
+  }
+}

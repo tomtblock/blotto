@@ -13,6 +13,7 @@ import { AppHeader } from '@/components/shell/app-header';
 import { TabBar } from '@/components/shell/tab-bar';
 import { SiteFooter } from '@/components/shell/site-footer';
 import { PageIntro } from '@/components/ui/page-intro';
+import { NeonSection } from '@/components/ui/neon-section';
 import { rulesSections, type TierRow } from './rules.config';
 
 function TierPriceTable({ rows }: { rows: TierRow[] }) {
@@ -47,21 +48,28 @@ export default function RulesPage() {
   return (
     <>
       <AppHeader />
-      <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 pb-24">
+      {/* Founder 2026-09-16: the informational pages wear the landing's field —
+          pink page, each section a plum box ringed in neon with its heading
+          on a backlit marquee (NeonSection). The footer and tab bar stay on
+          plum outside the field, exactly as the landing does. */}
+      <div className="flex-1 bg-brand-pink">
+      <main id="main" className="mx-auto w-full max-w-3xl px-4 pt-6 pb-24">
         <PageIntro
+          tone="marquee"
           title={COPY.rules.title}
           back={{ href: '/', label: COPY.shell.nav.backToPlay }}
           lead={
-            <Link href="/fair-play" className="text-brand underline underline-offset-2 hover:text-brand-hot">
+            <Link
+              href="/fair-play"
+              className="text-brand-berry underline underline-offset-2 hover:text-brand-deep-magenta"
+            >
               {COPY.rules.fairPlayLink}
             </Link>
           }
         />
+        <div className="flex flex-col gap-10">
         {rulesSections().map((s) => (
-          <section key={s.id} id={s.id} className="mb-9">
-            <h2 className="mb-2 font-display text-[24px] leading-[30px] font-bold text-ink">
-              {s.heading}
-            </h2>
+          <NeonSection key={s.id} id={s.id} heading={s.heading}>
             <p className="max-w-prose text-[15px] leading-6 text-ink-muted">{s.body}</p>
             {s.kind === 'text' && s.appendix && (
               <p className="mt-2 max-w-prose text-[15px] leading-6 text-ink-muted">{s.appendix}</p>
@@ -114,9 +122,11 @@ export default function RulesPage() {
                 </p>
               </div>
             )}
-          </section>
+          </NeonSection>
         ))}
+        </div>
       </main>
+      </div>
       <SiteFooter />
       <TabBar />
     </>

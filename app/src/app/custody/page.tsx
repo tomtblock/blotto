@@ -9,14 +9,14 @@ import { AppHeader } from '@/components/shell/app-header';
 import { SiteFooter } from '@/components/shell/site-footer';
 import { PageIntro } from '@/components/ui/page-intro';
 import { TabBar } from '@/components/shell/tab-bar';
-import { Card } from '@/components/ui/card';
+import { NeonSection } from '@/components/ui/neon-section';
 import { custodyView, type CustodyValue } from './custody.config';
 
 function Value({ v }: { v: CustodyValue }) {
   if (v.value === null) {
     return <span className="italic text-ink-muted">{COPY.custody.notYetSet}</span>;
   }
-  return <span className="break-all font-mono text-[13px] text-ink">{v.value}</span>;
+  return <span className="font-mono text-[13px] text-ink [overflow-wrap:anywhere]">{v.value}</span>;
 }
 
 export default function CustodyPage() {
@@ -25,27 +25,31 @@ export default function CustodyPage() {
   return (
     <>
       <AppHeader />
-      <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 pb-24">
-        <PageIntro title={c.title} back={{ href: '/fair-play', label: COPY.fairPlay.title }} lead={c.intro} />
+      {/* Founder 2026-09-16: the pink field, one neon box per disclosure, each
+          headed by the marquee it already had a heading for — no new words. */}
+      <div className="flex-1 bg-brand-pink">
+      <main id="main" className="mx-auto w-full max-w-3xl px-4 pt-6 pb-24">
+        <PageIntro
+          tone="marquee"
+          title={c.title}
+          back={{ href: '/fair-play', label: COPY.fairPlay.title }}
+          lead={c.intro}
+        />
 
-        <Card className="mb-6 flex flex-col gap-5 p-5">
-          <div>
-            <h2 className="mb-1 font-display text-[18px] font-bold text-ink">{c.programIdLabel}</h2>
-            <p className="mb-2 max-w-prose text-[13px] leading-5 text-ink-muted">
-              {c.programIdNote}
-            </p>
-            <Value v={view.programId} />
-          </div>
-          <div>
-            <h2 className="mb-1 font-display text-[18px] font-bold text-ink">
-              {c.upgradeAuthorityLabel}
-            </h2>
-            <p className="mb-2 max-w-prose text-[13px] leading-5 text-ink-muted">
-              {c.upgradeAuthorityNote}
-            </p>
-            <Value v={view.upgradeAuthority} />
-          </div>
-          <div className="flex gap-10">
+        <div className="flex flex-col gap-10">
+        <NeonSection heading={c.programIdLabel}>
+          <p className="mb-2 max-w-prose text-[13px] leading-5 text-ink-muted">
+            {c.programIdNote}
+          </p>
+          <Value v={view.programId} />
+        </NeonSection>
+
+        <NeonSection heading={c.upgradeAuthorityLabel}>
+          <p className="mb-2 max-w-prose text-[13px] leading-5 text-ink-muted">
+            {c.upgradeAuthorityNote}
+          </p>
+          <Value v={view.upgradeAuthority} />
+          <div className="mt-5 flex gap-10">
             <div>
               <h3 className="mb-1 text-[12px] uppercase tracking-[0.14em] text-ink-muted">
                 {c.thresholdLabel}
@@ -59,9 +63,9 @@ export default function CustodyPage() {
               <Value v={view.timelock} />
             </div>
           </div>
-        </Card>
+        </NeonSection>
 
-        <h2 className="mb-3 font-display text-[24px] font-bold text-ink">{c.inventoryHeading}</h2>
+        <NeonSection heading={c.inventoryHeading}>
         <div className="overflow-x-auto rounded-2xl border border-line bg-raised">
           <table className="w-full text-left text-sm">
             <thead>
@@ -94,10 +98,13 @@ export default function CustodyPage() {
             </tbody>
           </table>
         </div>
-        <p className="mt-6 text-[12px] text-ink-muted">
+        <p className="mt-5 text-[12px] text-ink-muted">
           {c.updatedPrefix} {view.updated}.
         </p>
+        </NeonSection>
+        </div>
       </main>
+      </div>
       <SiteFooter />
       <TabBar />
     </>
