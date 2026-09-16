@@ -186,6 +186,25 @@ Two rules matter more than the prefix, because they are what actually keeps the 
 Left alone, this drifts fast: on 2026-09-16 the repository carried 28 branches under three competing
 conventions, 21 of them fully merged and simply never removed.
 
+**The one-time catch-up is `scripts/prune-merged-branches.sh`.** With no argument it prints a
+verdict for every branch and changes nothing:
+
+```sh
+scripts/prune-merged-branches.sh            # dry run — deletes nothing
+scripts/prune-merged-branches.sh --delete   # remove the ones it called MERGED
+```
+
+It deletes a branch only on positive proof that its **current tip** is in `main`: the tip is an
+ancestor of `main`, or `git cherry` finds every one of its patches already applied there. A branch
+name appearing in an old merge commit is **not** proof and is not a test — branches here are
+routinely merged, removed, and later recreated under the same name, and the first version of this
+script marked a live branch deletable for exactly that reason. `--self-test` builds that case and
+asserts the branch is kept, so the mistake cannot come back quietly. Run it on a full clone; it
+refuses a shallow one, where ancestry is not knowable.
+
+Agent sessions cannot run the `--delete` half: their token creates refs but is refused `403` on
+deleting them. Someone with normal repository rights has to run it.
+
 ## CI
 
 `ci-fast` runs on every pull request and every push to the default branch. Six jobs: `rust`,
