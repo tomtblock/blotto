@@ -600,3 +600,77 @@ After-captures for the founder's morning review: `docs/design/uplift-2026-09-16/
 - `bfdc1fa` play: the run clip regenerated without the palette drift
 - the docs commit after it: this report (§B), the `docs/INDEX.md` row and `docs/design/uplift-2026-09-16/`
   (eight review captures)
+
+---
+
+# §C — Round two (founder feedback on the preview, 2026-09-16 ~21:00 UTC)
+
+Three asks, taken in the order given. Same boundaries as §A: the dial rule, the entry path and
+the run were not opened; nothing deployed, nothing merged; every new string is a `PHASE-N-REVIEW`
+proposal in `app/src/copy/index.ts`.
+
+## C1. The welcome curtain (`app/src/components/preloader/Preloader.tsx`)
+
+- The Enter block moved from 76 % of the height (across the letters' feet) to the bottom band —
+  `bottom: max(3.5rem, safe-area + 3rem)` — and the film is cover-cropped from the top
+  (`object-position: 50% 85%`) so that band survives a wide, short window: at 1920×830 with the
+  0.9 scale the word's feet sit at about 78 % and the block starts under them. At 1440×900 there
+  is clear floor between the two; on a phone the film is letterboxed above the block as before.
+- The line is set in the display face, capitals, 22 / 26 / 30 px by breakpoint, in three pieces
+  that wrap whole (a phone gets two lines, split at a dot); the button grew to 26 / 30 px. Still
+  words, not digits, on the brand surface.
+- Wording (`preloader.line`): "Sixty-four seats · Seven battles · Winner takes the prize pool" —
+  the last piece is the ratified D-E2 form (`pool.tierWinner`). Alternates if the founder wants
+  it sharper still: (a) "Sixty-four seats · Seven battles · First place takes the prize pool";
+  (b) "Seven battles · Sixty-four seats · One prize pool". The screen-reader intro is unchanged.
+
+## C2. The pool page (`app/src/app/pools/[pool]/`)
+
+- Field back to pink; the rails flush to the viewport edges (the 1440 cap on the field is gone,
+  their basis `clamp(200px, 23vw, 440px)`), the column between them `max-w-3xl` (768 px) instead
+  of 672; the inner-edge fades are pink.
+- The card: the ring at 140, the prize, entry and clock at a new `lg` size on `Stat` and
+  `Countdown` (40 px extra-bold, 13 px labels), padding 24 / 32. **The R7-b line ("Not enough
+  players yet…", founder instruction 2026-09-12 §4.4) is off the card at the founder's request.**
+  That reverses the 2026-09-12 instruction; the rule it restated is the last two points of the
+  box below, and `pool.outcomeIfDeadlineNow` stays in the copy module because the read API still
+  reports the field. Worth a conscious yes rather than a silent one.
+- "How this pool pays": four bullets at 17 / 26 px in ink (was three 13 px paragraphs in muted),
+  `pool.aboutPoints`. The ratified long forms `prizeRule` / `sealed` / `refundRule` stay in the
+  module (`sealed` is still the sealed panel's line). Dropped from this page, not from the
+  product: the lamport-remainder rule, which the Rules page carries in its ties and randomness
+  sections.
+- The state chip beside the marquee gets a `field` tone (cream plaque, berry ink) — on pink the
+  `open` tone was pink on pink. The Enter control wears the welcome curtain's cream ring for the
+  same reason; the §8.6 line is 16 px semibold and still above it (the journey test asserts the
+  order).
+- `e2e/journey.spec.ts`: the prize-sentence assertion follows the new first bullet.
+
+## C3. A capture bug found on the way
+
+Every review capture in §B was taken through `127.0.0.1`. Next 16's dev server treats that as a
+cross-origin dev request and withholds the client chunks, so those captures are the server render
+without hydration: the pool card's clock shows the `--:--:--` placeholder in §B's `pool-1440` /
+`pool-390`, and the welcome curtain (client-mounted) could not be captured at all. Through
+`localhost` both are right; this round's captures were taken that way and the two pool ones
+replace §B's. Nothing in the product was affected — the journey lane runs the production build on
+its own server — and the harness in the scratchpad now uses `localhost`.
+
+## C4. Verification and captures
+
+On `e1fefa3`, from `app/`: `npm run typecheck` — clean; `npm run lint` — clean; `npm test` — 62
+files, 489 tests passed; `NEXT_PUBLIC_FIXTURE_DATA=1 npm run build` — compiled; `npm run journey` —
+16 of 16 across mobile-375 and desktop-1280 (10.7 s), the pool assertion updated. From the root,
+`./scripts/check-language.sh` — clean, run again after this section was written. The lane's
+screenshot output and `app/next-env.d.ts` were restored before committing.
+
+Captures (`docs/design/uplift-2026-09-16/`): `welcome-1440.jpg`, `welcome-390.jpg` and
+`welcome-1920x830.jpg` (the founder's own geometry) are new; `pool-1440.jpg` and `pool-390.jpg`
+are replaced. Figma was not updated this round — the founder is reviewing the built pages
+directly, and the §B4 pool frame now shows the yellow field; refreshing it is a follow-up if
+wanted.
+
+## C5. Commits
+
+- `e1fefa3` app: round two — the welcome strap under the word, and the pool page on pink
+- the docs commit after it: this section and the five captures
