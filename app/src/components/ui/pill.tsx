@@ -4,17 +4,20 @@
  * pink object a plum card may carry (the two-layer rule), `resolving`
  * wears the coral accent, `muted` and `ink` are quiet. There is no prize
  * tone on purpose — prize yellow is for amounts a player is paid, and a
- * chip is never that.
+ * chip is never that. `field` (2026-09-16) is the chip beside a marquee
+ * heading on the pink field: cream plaque, berry ink, whatever the state —
+ * there the word carries the state, since pink-on-pink would not.
  */
 import type { ReactNode } from "react";
 
-type Tone = "open" | "resolving" | "muted" | "ink";
+type Tone = "open" | "resolving" | "muted" | "ink" | "field";
 
 const TONE: Record<Tone, string> = {
   open: "border-brand/60 bg-brand/12 text-brand",
   resolving: "border-brand-coral/60 bg-brand-coral/10 text-brand-coral",
   muted: "border-white/15 text-ink-muted",
   ink: "border-white/25 text-ink",
+  field: "border-brand-berry/40 bg-brand-cream text-brand-berry",
 };
 
 export function Pill({

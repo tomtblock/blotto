@@ -34,6 +34,8 @@ export interface CountdownProps {
   label?: string;
   /** Injectable clock for tests (device milliseconds). */
   now?: () => number;
+  /** lg matches Stat's lg — the pool page's fixture numbers (2026-09-16). */
+  size?: "md" | "lg";
 }
 
 interface Remaining {
@@ -58,7 +60,13 @@ const pad = (n: number) => String(n).padStart(2, "0");
 /** The deterministic pre-tick placeholder (same width class as the clock). */
 const PLACEHOLDER = "--:--:--";
 
-export function Countdown({ deadlineUnix, serverTimeUnix, label, now = Date.now }: CountdownProps) {
+export function Countdown({
+  deadlineUnix,
+  serverTimeUnix,
+  label,
+  now = Date.now,
+  size = "md",
+}: CountdownProps) {
   const deadline = Number(deadlineUnix);
   const serverTime = serverTimeUnix === undefined ? null : Number(serverTimeUnix);
   // null until the first client tick — see the hydration rule above.
@@ -91,9 +99,18 @@ export function Countdown({ deadlineUnix, serverTimeUnix, label, now = Date.now 
   return (
     <div className="flex flex-col gap-1">
       {label ? (
-        <span className="text-[12px] uppercase tracking-[0.14em] text-ink-muted">{label}</span>
+        <span
+          className={`${size === "lg" ? "text-[13px]" : "text-[12px]"} uppercase tracking-[0.14em] text-ink-muted`}
+        >
+          {label}
+        </span>
       ) : null}
-      <time className="tnum font-display text-[24px] leading-[30px] font-bold text-ink">
+      <time
+        className={
+          "tnum font-display text-ink " +
+          (size === "lg" ? "text-[40px] leading-[44px] font-extrabold" : "text-[24px] leading-[30px] font-bold")
+        }
+      >
         {clock}
       </time>
     </div>

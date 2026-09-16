@@ -11,24 +11,26 @@ export interface StatProps {
   /** Trailing unit, rendered smaller ("SOL", "seats"). */
   unit?: string;
   tone?: "ink" | "prize" | "brand";
-  /** moment = the hero number of a screen. */
-  size?: "md" | "moment";
+  /**
+   * moment = the hero number of a screen; lg (founder 2026-09-16, round
+   * two) = the fixture's numbers on the pool page, larger than a list cell
+   * but not the one number a screen is about.
+   */
+  size?: "md" | "lg" | "moment";
 }
 
 const TONE = { ink: "text-ink", prize: "text-prize", brand: "text-brand" } as const;
+const SIZE = {
+  md: { value: "text-[24px] leading-[30px] font-bold", label: "text-[12px]" },
+  lg: { value: "text-[40px] leading-[44px] font-extrabold", label: "text-[13px]" },
+  moment: { value: "text-[56px] leading-[58px] font-extrabold", label: "text-[12px]" },
+} as const;
 
 export function Stat({ label, value, unit, tone = "ink", size = "md" }: StatProps) {
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-[12px] uppercase tracking-[0.14em] text-ink-muted">{label}</span>
-      <span
-        className={
-          `tnum font-display ${TONE[tone]} ` +
-          (size === "moment"
-            ? "text-[56px] leading-[58px] font-extrabold"
-            : "text-[24px] leading-[30px] font-bold")
-        }
-      >
+      <span className={`${SIZE[size].label} uppercase tracking-[0.14em] text-ink-muted`}>{label}</span>
+      <span className={`tnum font-display ${TONE[tone]} ${SIZE[size].value}`}>
         {value}
         {unit ? (
           <span className="ml-1 align-baseline font-body text-[0.45em] font-medium text-ink-muted">

@@ -64,7 +64,7 @@ test('pool page: the fixed pot as one Stat, §8.6 above the enter control', asyn
   await expect(page.getByText('Prize pool', { exact: true })).toBeVisible();
   await expect(page.locator('.text-prize').first()).toHaveText('4SOL');
   await expect(
-    page.getByText('The player ranked first receives the full prize pool.')
+    page.getByText('The player ranked first takes the whole prize pool. A tie for first splits it equally.')
   ).toBeVisible();
   await expect(page.getByRole('table')).toHaveCount(0);
   const finalText = page.getByText(/Decisions are final/);

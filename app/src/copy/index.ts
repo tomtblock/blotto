@@ -288,7 +288,13 @@ export const COPY = {
     // brand statement as shell.tagline, lowercased for the pink surface.
     enter: 'Enter',
     skip: 'Skip',
-    line: 'sixty-four seats \u00b7 seven battles \u00b7 the winner takes the prize pool',
+    // PHASE-N-REVIEW (founder 2026-09-16, round two: "more punchy and larger"):
+    // the strap is set as display capitals under the film, in three pieces
+    // that wrap whole, and "the winner takes" becomes the ratified D-E2 form
+    // "Winner takes the prize pool" (pool.tierWinner). Still words, not
+    // digits, on the brand surface. Proposal until ratified; alternates in
+    // CHANGE-2026-09-16_ui-uplift.md §C.
+    line: 'Sixty-four seats \u00b7 Seven battles \u00b7 Winner takes the prize pool',
     // Visually hidden equivalent of the decorative video, for screen readers.
     srIntro: 'Blotto Cup. Sixty-four seats, seven battles, the winner takes the prize pool.',
     dialogLabel: 'Blotto Cup intro',
@@ -309,6 +315,9 @@ export const COPY = {
      * the refund branch must not soften it — "would refund" is what happens,
      * and a player deciding whether to pay is entitled to it plainly.
      */
+    // Founder 2026-09-16 (round two): the pool card no longer renders this —
+    // the rule it restated is in pool.aboutPoints directly below the card.
+    // Kept because the read API still reports the field it names.
     outcomeIfDeadlineNow: (outcome: 'seal' | 'refund', minSeats: number) =>
       outcome === 'seal'
         ? 'Enough players are seated: if the clock ran out now, this pool would run.'
@@ -336,6 +345,21 @@ export const COPY = {
     // the marquee over the pool page's three rule paragraphs, now a neon box
     // on the yellow field. Proposal until ratified.
     aboutHeading: 'How this pool pays',
+    // PHASE-N-REVIEW (founder 2026-09-16, round two: "condense the number of
+    // words, maybe bullet points, larger"): the four points under that
+    // marquee, in place of the three ratified paragraphs prizeRule / sealed /
+    // refundRule, which stay as the long forms (sealed is still the sealed
+    // panel's line). Substance unchanged: one paid place and a tie for first
+    // splits equally (the lamport-remainder rule lives on the Rules page),
+    // the key our systems hold locked until the pool closes, the fill clock,
+    // the field, the refund. Numbers come from the shared constants via the
+    // caller. Proposal until ratified.
+    aboutPoints: (minSeats: number, fillHours: number): readonly string[] => [
+      'The player ranked first takes the whole prize pool. A tie for first splits it equally.',
+      'Your battles are encrypted on your device; the key stays locked in our systems until the pool closes. Only their hash goes on-chain at entry.',
+      `Entries stay open for up to ${fillHours} hours. The pool runs the moment all 64 seats fill, or at the deadline with at least ${minSeats} seated.`,
+      `Fewer than ${minSeats} seated at the deadline: every entry is refunded in full.`,
+    ],
     entryLabel: 'Entry',
     resultsLink: 'Results',
     ageTerritoryNote: '18+ only · not available in some territories',
