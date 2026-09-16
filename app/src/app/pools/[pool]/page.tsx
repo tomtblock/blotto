@@ -28,6 +28,23 @@ import { Stat } from '@/components/ui/stat';
 import { ProgressRing } from '@/components/ui/progress-ring';
 import { Countdown } from '@/components/ui/countdown';
 import { poolStateLabel } from '@/components/pools/pool-state-label';
+import { MarqueeHeading } from '@/components/ui/marquee-heading';
+import { NeonSection } from '@/components/ui/neon-section';
+import { AmbientClip } from '@/components/ui/ambient-clip';
+import './pool-page.css';
+
+/*
+ * Founder 2026-09-16 (CHANGE-2026-09-16_ui-uplift.md §A6): the page a player
+ * decides on wears the yellow field (D2), and on a wide screen two conveyor
+ * rails run down either side into the centre where the Enter control is —
+ * ONE portrait loop, the right rail its mirror, so the page ships one clip.
+ * Below lg a single strip carries the same scene above the card. Every
+ * number stays on plum; the prize amount stays the only yellow inside a card.
+ */
+const RAIL = [{ mp4: '/motion/pool/rail.mp4', webm: '/motion/pool/rail.webm' }];
+const RAIL_POSTER = '/motion/pool/rail.jpg';
+const STRIP = [{ mp4: '/motion/pool/strip.mp4', webm: '/motion/pool/strip.webm' }];
+const STRIP_POSTER = '/motion/pool/strip.jpg';
 
 const MIN_SEATS_N = Number(MIN_SEATS);
 const FILL_HOURS = Number(DEFAULT_FILL_DEADLINE_SECS / 3600n);
@@ -61,14 +78,23 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
   return (
     <>
       <AppHeader />
-      <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 pb-24">
-        <div className="mb-2">
-          <BackLink href="/pools">{COPY.shell.nav.backToPools}</BackLink>
+      <div className="flex-1 bg-brand-yellow">
+      <div className="pool-field mx-auto flex w-full max-w-[1440px]">
+        <aside className="pool-rail pool-rail-left" aria-hidden="true">
+          <AmbientClip tiers={RAIL} poster={RAIL_POSTER} className="pool-rail-clip" />
+          <div className="pool-rail-fade" />
+        </aside>
+      <main id="main" className="mx-auto w-full max-w-2xl px-4 pt-6 pb-24">
+        <div className="pool-strip lg:hidden" aria-hidden="true">
+          <AmbientClip tiers={STRIP} poster={STRIP_POSTER} className="pool-strip-clip" playWhenVisible={0.5} />
         </div>
-        <header className="mb-5 flex flex-wrap items-baseline gap-3">
-          <h1 className="font-display text-[34px] leading-[38px] font-extrabold text-ink">
-            {COPY.reveal.passPool(pool.id)}
-          </h1>
+        <div className="mb-2">
+          <BackLink href="/pools" tone="berry">
+            {COPY.shell.nav.backToPools}
+          </BackLink>
+        </div>
+        <header className="mb-5 flex flex-wrap items-center gap-3">
+          <MarqueeHeading as="h1">{COPY.reveal.passPool(pool.id)}</MarqueeHeading>
           <Pill tone={pool.resolving ? 'resolving' : open ? 'open' : 'muted'}>{poolStateLabel(pool)}</Pill>
           {/* Founder 2026-09-16 (D5): the Verify page recomputes a RESULT from
               the published bundle and the on-chain record, and an open pool
@@ -78,7 +104,7 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
           {!open && (
             <Link
               href={`/verify?pool=${pool.pool}`}
-              className="ml-auto rounded-full text-[13px] text-ink-muted underline underline-offset-2 hover:text-ink"
+              className="ml-auto rounded-full text-[13px] text-brand-berry underline underline-offset-2 hover:text-brand-deep-magenta"
             >
               {COPY.pool.verifyThisPool}
             </Link>
@@ -153,24 +179,26 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
           </div>
         </Card>
 
-        <section className="mb-6 flex flex-col gap-2 text-[13px] leading-5 text-ink-muted">
-          <p>{COPY.pool.prizeRule}</p>
-          <p>{COPY.pool.sealed}</p>
-          <p>{COPY.pool.refundRule(MIN_SEATS_N, FILL_HOURS)}</p>
-          <p className="flex gap-4">
-            <Link href="/rules" className="underline underline-offset-2 hover:text-ink">
-              {COPY.rules.title}
-            </Link>
-            <Link href="/fair-play" className="underline underline-offset-2 hover:text-ink">
-              {COPY.fairPlay.title}
-            </Link>
-          </p>
-        </section>
+        <NeonSection heading={COPY.pool.aboutHeading} className="mb-8">
+          <div className="flex flex-col gap-2 text-[13px] leading-5 text-ink-muted">
+            <p>{COPY.pool.prizeRule}</p>
+            <p>{COPY.pool.sealed}</p>
+            <p>{COPY.pool.refundRule(MIN_SEATS_N, FILL_HOURS)}</p>
+            <p className="flex gap-4">
+              <Link href="/rules" className="underline underline-offset-2 hover:text-ink">
+                {COPY.rules.title}
+              </Link>
+              <Link href="/fair-play" className="underline underline-offset-2 hover:text-ink">
+                {COPY.fairPlay.title}
+              </Link>
+            </p>
+          </div>
+        </NeonSection>
 
         {open ? (
           <section className="flex flex-col gap-3">
             {/* PID §8.6: above the Enter control. Do not move it below. */}
-            <p className="text-[14px] font-medium leading-5 text-ink">
+            <p className="text-[14px] font-medium leading-5 text-brand-berry">
               {COPY.pool.decisionsFinal}
             </p>
             <Link
@@ -183,12 +211,18 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
         ) : (
           <Link
             href={`/pools/${pool.pool}/results`}
-            className="flex h-12 items-center justify-center rounded-full border border-white/20 text-[15px] font-medium text-ink transition-colors hover:border-brand hover:text-brand"
+            className="flex h-12 items-center justify-center rounded-full border border-brand-berry/40 text-[15px] font-medium text-brand-berry transition-colors hover:border-brand-berry hover:bg-brand-berry/10"
           >
             {COPY.pool.resultsLink}
           </Link>
         )}
       </main>
+        <aside className="pool-rail pool-rail-right" aria-hidden="true">
+          <AmbientClip tiers={RAIL} poster={RAIL_POSTER} className="pool-rail-clip" mirror />
+          <div className="pool-rail-fade" />
+        </aside>
+      </div>
+      </div>
       <SiteFooter />
       <TabBar />
     </>

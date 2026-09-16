@@ -332,6 +332,10 @@ export const COPY = {
     enter: 'Enter this tournament',
     // 2026-09-13: three literals on the pool page, now here.
     verifyThisPool: 'Verify this pool',
+    // PHASE-N-REVIEW (founder 2026-09-16, CHANGE-2026-09-16_ui-uplift.md §A11):
+    // the marquee over the pool page's three rule paragraphs, now a neon box
+    // on the yellow field. Proposal until ratified.
+    aboutHeading: 'How this pool pays',
     entryLabel: 'Entry',
     resultsLink: 'Results',
     ageTerritoryNote: '18+ only · not available in some territories',
@@ -596,6 +600,11 @@ export const COPY = {
     tilesLabel: 'Your seven Blotts',
     tileLocked: (n: number, stats: string) => `Battle ${n} locked: ${stats}`,
     tileEmpty: (n: number) => `Battle ${n} — not yet made`,
+    // PHASE-N-REVIEW (founder 2026-09-16, CHANGE-2026-09-16_ui-uplift.md §A11):
+    // the seal stage's description for assistive tech — the scene is decorative,
+    // the sentence says what it shows. Proposal until ratified.
+    sealStageAria:
+      'Seven Blotts on a conveyor dropping into a blender; the blender runs once your entry is signed.',
     crescendo: 'All seven made.',
     crescendoLine: 'Your Blotts are in the machine. Seal them to enter the pool.',
     // 2026-09-13: what the seal IS, one line, beside the lock. The share
