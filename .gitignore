@@ -63,3 +63,9 @@ app/screens/
 
 # Founder design-handoff folder (reference inputs + fetched assets) — never committed.
 handoff/
+
+# A stray vitest/playwright last-run artifact. app/.gitignore already ignores
+# its own; the ROOT copy escaped that and was committed reading
+# {"status":"failed","failedTests":[]} — a red status naming no test, which is
+# worse than no file at all (found 2026-09-16).
+/test-results/

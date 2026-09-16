@@ -277,7 +277,7 @@ Founder-owned. Claude Code drafts; founder edits; counsel red-lines when engaged
 3. **No constant invented.** If it isn't in the PID, TECH-ARCH, or this register, the step stops and asks.
 4. **Forbidden-word grep runs in CI** on every PR from Phase 0 onward, excluding `docs/reference/`, `docs/archive/`, and the two reports.
 5. **Class is read by nothing in the scoring path.** A CI test greps `backend/scoring/` and `pay_prizes` for `class` and fails on any hit.
-6. **The vault has exactly three exits** (`pay_prizes`, `release_escrow`, `refund`). A CI test asserts it.
+6. **The vault has exactly four exits** (`pay_prizes`, `release_escrow`, `pay_next_place`, `refund` — `trigger_refund`'s pot return lives in the same file). A CI test asserts it (`scripts/check-standing-rules.sh`, check 6(i), which pins every `vault_debit` call to a named `file:fn` pair). `pay_next_place` arrived with D-E6/D-E7 on 2026-09-07, when an upheld flag's share stopped returning to the operator and started passing to the next eligible player; §1.4 was corrected then and this line was missed until 2026-09-16.
 7. **Never a keypair in the repo.** The pre-commit hook and gitleaks rule from Phase 0 stay.
 8. **Founder reads every gate.** Gates are written to be checkable by running a command or opening a page. If a gate can't be checked that way, the step that produced it is not done.
 

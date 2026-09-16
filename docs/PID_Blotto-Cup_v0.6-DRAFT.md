@@ -393,7 +393,7 @@ that it does.*
 | # | Item | Blocks | State |
 |---|---|---|---|
 | C1 | Counsel opinions on §8.3 and §8.2 — UK, DE, four US states | Launch | **Not started** |
-| C2 | Entry-packet gate on `register`; geolocation vendor of record | Launch | Built |
+| C2 | Entry-packet gate on `register`; geolocation vendor of record | Launch | **Split, 2026-09-16.** The packet gate is **built** and the geo path is real (IPLocate, fail-closed at every edge). The **vendor of record is not contracted**, and the second source is an empty seam — `geo-adapters.ts` says so in its own header, and D-E14 makes a second geography and screening vendor a precondition of the first pool with strangers in it. One source on a fail-closed control means a vendor outage refuses every entry. |
 | C3 | Age gate before payment | Launch | Built |
 | C4 | Published rules incl. scoring formula, allocation rules, fill deadline, refund, "decisions are final" | Launch | Built |
 | C5 | Prize vault with no admin withdrawal; automatic payment; refund and review hold | Launch | Built |
@@ -401,7 +401,7 @@ that it does.*
 | C7 | Restricted-territory schedule matching the block | Launch | **Partial — see §9** |
 | C8 | KYC above a threshold | First settlement | Switch exists, **off** |
 | C9 | Detection on the seven-battle session; a staffed review within the published window | First settlement | Detection built and advisory; the review registry holds one member, so **no appeal can yet be decided** |
-| C10 | DPIA; privacy notice | Launch | Built |
+| C10 | DPIA; privacy notice | Launch | **Not started.** Corrected 2026-09-16: this row read "Built", which was wrong. There is no DPIA and no privacy notice anywhere in the repository, and no `/privacy` route in the app. Roadmap step 6.3 is where it belongs and it is not done. (The roadmap has its own C10 — the review service — which is built; that is a different C10 and is the likeliest source of the error.) |
 | C11 | Prompt blocklist for class art; vendor indemnity | Launch | **Not started** |
 | C12 | Language audit against §8.7 | Launch | Built, and enforced on every change |
 
