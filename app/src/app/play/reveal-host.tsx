@@ -57,7 +57,13 @@ export function RevealHost({
   onRetry,
   onDone,
   poolNumber,
+  onBeat,
+  quiet = false,
 }: {
+  /** Founder 2026-09-16: the seal stage follows the beats (card → done, failed → stopped). */
+  onBeat?: (beat: RevealState['beat']) => void;
+  /** The page shows the wait itself (the blender); the entry beat renders nothing. */
+  quiet?: boolean;
   /** The entry's terminal state — resolves, never rejects (outcome.ts). */
   result: Promise<RevealResult>;
   /** The pool's number, for the pass card (2026-09-13). Optional: the card
@@ -105,6 +111,11 @@ export function RevealHost({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [beat]);
 
+  // Report each beat once to whoever draws the scene behind this host.
+  useEffect(() => {
+    onBeat?.(state.beat);
+  }, [state.beat, onBeat]);
+
   if (visual.beat === 'settled') {
     return <SettledExit exit={visual.exit} onDone={onDone} />;
   }
@@ -112,6 +123,7 @@ export function RevealHost({
   if (visual.beat === 'entry') {
     // Waiting for the chain. Nothing to tap, nothing to reveal; the stall
     // timer above is what keeps this from being a dead end.
+    if (quiet) return null;
     return <PendingPanel label={COPY.reveal.confirming} />;
   }
 

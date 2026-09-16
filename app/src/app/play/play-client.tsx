@@ -11,7 +11,7 @@
  * of a timer it cannot afford to finish.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { address } from '@solana/kit';
@@ -49,6 +49,19 @@ import { RevealHost } from './reveal-host';
 import { PendingPanel } from '@/components/ui/pending-panel';
 import { sweepStills } from '@/battle/stills-sweep';
 import { SealedPanel } from './sealed-panel';
+import { SealStage, type SealKeyTone } from './seal-stage';
+import { INITIAL_SEAL_STAGE, reduceSealStage } from './seal-stage-machine';
+import { observeSigner } from './observed-signer';
+import type { ReviewSealApi } from '@/battle/components/battle-flow';
+import type { RevealState } from '@/reveal/machine';
+
+/*
+ * D3 (founder 2026-09-16): the seal key's colour. `action` is the pink every
+ * money-moving control wears (button.tsx); `red` is the founder's ask, held
+ * behind this one constant because tokens.ts reserves red for loss
+ * semantics — flipping it is a recorded exception, not a style choice.
+ */
+const SEAL_KEY_TONE: SealKeyTone = 'action';
 
 /** D-C: the top-up prompt ships behind a flag, OFF by default. */
 const TOPUP_ENABLED = process.env.NEXT_PUBLIC_TOPUP_ENABLED === '1';
@@ -230,6 +243,23 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
   const balance: BalanceGateState | 'checking' =
     balanceResult && balanceResult.key === balanceKey ? balanceResult.verdict : 'checking';
 
+  /*
+   * THE SEAL STAGE (founder 2026-09-16, CHANGE-2026-09-16_ui-uplift.md §A8):
+   * the scene behind the seal, from "seven made" to the pass. Its phase is
+   * fed by facts this page already has — the seal steps, the wallet's two
+   * signatures (observed on the signer object this page hands to the entry
+   * path, never inside it), and the reveal machine's beats. It is mounted
+   * HERE, outside the flow and the takeover, so it survives the swap from
+   * BattleFlow to RevealHost without restarting its loop.
+   */
+  const [stagePhase, stageDispatch] = useReducer(reduceSealStage, INITIAL_SEAL_STAGE);
+  const [reviewApi, setReviewApi] = useState<ReviewSealApi | null>(null);
+  const onReviewApi = useCallback((api: ReviewSealApi | null) => setReviewApi(api), []);
+  const onRevealBeat = useCallback((beat: RevealState['beat']) => {
+    if (beat === 'card') stageDispatch({ type: 'confirmed' });
+    else if (beat === 'failed') stageDispatch({ type: 'failed' });
+  }, []);
+
   const startSubmit = useCallback(
     (battles: readonly Allocation[], timingsMs: readonly number[]): Promise<RevealResult> | null => {
       if (!pool || auth.status !== 'signed-in' || !auth.walletAddress) return null;
@@ -239,7 +269,8 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
         apiBase: process.env.NEXT_PUBLIC_ENTRY_API_URL,
         programId: process.env.NEXT_PUBLIC_PROGRAM_ID,
         rpc,
-        signer,
+        // The stage learns "signed" from the object the entry path is given.
+        signer: observeSigner(signer, (e) => stageDispatch({ type: e })),
         poolId: BigInt(pool.id),
       });
       return submitForReveal(services, rpc, {
@@ -313,6 +344,65 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
   const retrySubmit = useCallback(() => {
     if (lastConfirmed) void onConfirm(lastConfirmed.battles, lastConfirmed.timingsMs);
   }, [lastConfirmed, onConfirm]);
+
+  /* The seal controls, drawn on the blender's base while the seven are made
+   * and nothing is in flight. The two steps and the §8.6 line above each are
+   * exactly battle-flow.tsx's — the surface moved, the order did not. */
+  const sealControls =
+    reviewApi && !revealRun && (stagePhase === 'made' || stagePhase === 'armed') ? (
+      stagePhase === 'armed' ? (
+        <>
+          {/* PID §8.6 — above the confirm, always. Do not move it below. */}
+          <p className="seal-stage-line text-[13px] font-semibold leading-5">{COPY.pool.decisionsFinal}</p>
+          <Button
+            size="lg"
+            className="seal-stage-key w-full"
+            data-testid="seal-confirm"
+            onClick={() => {
+              stageDispatch({ type: 'confirm' });
+              reviewApi.confirm();
+            }}
+          >
+            {COPY.battle.sealConfirm}
+          </Button>
+          <Button intent="quiet" onClick={() => stageDispatch({ type: 'disarm' })}>
+            {COPY.battle.sealCancel}
+          </Button>
+        </>
+      ) : (
+        <>
+          {/* PID §8.6 — above the seal control on step one as well. */}
+          <p className="seal-stage-line text-[13px] leading-5">{COPY.pool.decisionsFinal}</p>
+          <Button
+            size="lg"
+            className="seal-stage-key w-full"
+            data-testid="seal-arm"
+            onClick={() => stageDispatch({ type: 'arm' })}
+          >
+            {COPY.battle.seal}
+          </Button>
+        </>
+      )
+    ) : null;
+  const stageStatus =
+    stagePhase === 'signing' || stagePhase === 'locked'
+      ? COPY.battle.sealing
+      : stagePhase === 'blending'
+        ? COPY.reveal.confirming
+        : null;
+  // Sticky on purpose: from the first review until the flow is reset or
+  // done, so the scene never unmounts between the review ending and the
+  // takeover starting — a remount would restart its loop.
+  const stageOn = reviewApi !== null || revealRun !== null || stagePhase !== 'made';
+  const stage = stageOn ? (
+    <SealStage
+      phase={stagePhase}
+      tone={SEAL_KEY_TONE}
+      controls={sealControls}
+      status={stageStatus}
+      busy={stagePhase === 'signing' || stagePhase === 'locked' || stagePhase === 'blending'}
+    />
+  ) : null;
 
   /** A run is on screen: begun, not sealed, not handed to the takeover. */
   const interruption = runInterruption(runWallet, auth);
@@ -518,18 +608,22 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
     return <SealedPanel poolAddress={pool.pool} />;
   }
 
-  // The reveal takeover owns the screen from confirm onward.
+  // The reveal takeover owns the screen from confirm onward — over the stage.
   if (revealRun) {
     const retry = lastConfirmed
       ? () => startSubmit(lastConfirmed.battles, lastConfirmed.timingsMs)
       : null;
     return (
+      <>
       <RevealHost
         poolNumber={pool.id}
         result={revealRun}
+        onBeat={onRevealBeat}
+        quiet
         onRetry={
           retry
             ? () => {
+                stageDispatch({ type: 'retry' });
                 const run = retry();
                 if (run) return run;
                 return revealRun;
@@ -570,8 +664,11 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
           setPool(null);
           setPoolLoad('loading');
           setPoolRun((n) => n + 1);
+          stageDispatch({ type: 'reset' });
         }}
       />
+      {stage}
+      </>
     );
   }
 
@@ -623,8 +720,10 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
           poolAddress={pool.pool}
           onConfirm={onConfirm}
           onRunStarted={() => setRunWallet(flowWallet)}
+          onReviewApi={onReviewApi}
         />
       </BalanceGateView>
+      {stage}
     </AttestationGate>
   );
 }
