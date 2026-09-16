@@ -159,6 +159,33 @@ program as a genesis fixture (`tests/fixtures/mpl_core.so`) so the suite runs of
 - A commit that touches on-chain money paths, the pass mint, or anything in PID §8 says so in its
   body.
 
+### Branch names
+
+A branch name says what the work is, not who or what typed it. **`<prefix>/<subject>`**, lower case,
+hyphenated, and a date on anything dated:
+
+| Prefix | For |
+|---|---|
+| `step/` | a build step from the roadmap |
+| `fix/` | a defect |
+| `docs/` | documentation only |
+| `review/` | an audit or a review — date it, e.g. `review/compliance-2026-09-16` |
+| `revert/` | a revert |
+| `ops/` | deploy, CI and infrastructure |
+
+Two rules matter more than the prefix, because they are what actually keeps the list readable:
+
+- **Rename a machine-generated branch before you open its PR.** An agent session opens on a name
+  like `claude/jolly-ramanujan-wgxffx`, which says nothing. Push to the real name first, confirm the
+  new ref matches, then delete the old one — in that order, and while no PR points at it yet, because
+  a rename is create-then-delete and there is no rename that keeps a PR's thread.
+- **Delete the branch when its PR merges.** GitHub can do this for you: Settings → General →
+  *Automatically delete head branches*. Turning that on is the single highest-value thing available
+  here, because it makes the cleanup continuous instead of occasional.
+
+Left alone, this drifts fast: on 2026-09-16 the repository carried 28 branches under three competing
+conventions, 21 of them fully merged and simply never removed.
+
 ## CI
 
 `ci-fast` runs on every pull request and every push to the default branch. Six jobs: `rust`,
