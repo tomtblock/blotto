@@ -401,7 +401,7 @@ that it does.*
 | C7 | Restricted-territory schedule matching the block | Launch | **Partial — see §9** |
 | C8 | KYC above a threshold | First settlement | Switch exists, **off** |
 | C9 | Detection on the seven-battle session; a staffed review within the published window | First settlement | Detection built and advisory; the review registry holds one member, so **no appeal can yet be decided** |
-| C10 | DPIA; privacy notice | Launch | **Not started.** Corrected 2026-09-16: this row read "Built", which was wrong. There is no DPIA and no privacy notice anywhere in the repository, and no `/privacy` route in the app. Roadmap step 6.3 is where it belongs and it is not done. (The roadmap has its own C10 — the review service — which is built; that is a different C10 and is the likeliest source of the error.) |
+| C10 | DPIA; privacy notice | Launch | **Not started** — this draft said "Built" until 2026-09-16, which was wrong: no privacy notice, DPIA or retention policy exists. The 2026-09-15 data inventory (`CHANGE-2026-09-16_data-minimisation.md` §1) is the first input; the text is counsel's. (Two reviewers reached this independently on the same day. The likely source of the original error: the roadmap has its own C10 — the review service — which **is** built, and is a different C10 from this one.) |
 | C11 | Prompt blocklist for class art; vendor indemnity | Launch | **Not started** |
 | C12 | Language audit against §8.7 | Launch | Built, and enforced on every change |
 

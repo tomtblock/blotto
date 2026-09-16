@@ -80,8 +80,8 @@ npm run re-derive   # rebuild derived tables from the ledger alone
 
 `./src/read-api.ts` is the app's data seam (`app/src/data/`): read-only JSON
 served off the derived tables — the pool list and one pool, a pool's entries,
-results, payouts, verified archive ranking, verify record and sealed entries; a
-player's profile, career history and rivals; the per-tier cooldown stamps; the
+results, payouts, verified archive ranking and verify record; a player's profile
+and career history; the per-tier cooldown stamps; the
 server clock every countdown derives from; the treasury report; and the D-A2
 history summaries. Its module header carries the route table, and that header is
 where a route's exact shape and its fail-closed rules are documented — this

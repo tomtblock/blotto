@@ -24,6 +24,7 @@
 import { attestationMessage, type TermsEdition } from '@blotto/shared/attestation-message';
 import termsConfig from '@config/terms.json';
 import { classifySigningError } from '@/tx/errors';
+import { migrateLegacyKey, opaqueKey } from '@/storage/opaque-key';
 
 export { attestationMessage, type TermsEdition };
 
@@ -45,12 +46,22 @@ export const TERMS_VERSION: number = TERMS.version;
  */
 export const ATTESTATION_TIMEOUT_MS = 90_000;
 
-const cacheKey = (wallet: string, version: number) => `blotto:attested:v${version}:${wallet}`;
+const legacyCacheKey = (wallet: string, version: number) => `blotto:attested:v${version}:${wallet}`;
+/** Opaque since 2026-09-16 (storage/opaque-key.ts): the key no longer names
+ * the wallet, so the cache cannot be read as a list of wallets used on this
+ * device. A pre-change entry is carried once. Null when storage is closed. */
+const cacheKey = (wallet: string, version: number): string | null => {
+  const key = opaqueKey(`attested:v${version}`, wallet);
+  migrateLegacyKey(legacyCacheKey(wallet, version), key);
+  return key;
+};
 
 /** Device-cache check only — the server is the authority at issuance. */
 export function hasLocalAttestation(wallet: string, version: number = TERMS_VERSION): boolean {
   try {
-    return typeof localStorage !== 'undefined' && localStorage.getItem(cacheKey(wallet, version)) === '1';
+    if (typeof localStorage === 'undefined') return false;
+    const key = cacheKey(wallet, version);
+    return key !== null && localStorage.getItem(key) === '1';
   } catch {
     return false;
   }
@@ -58,7 +69,8 @@ export function hasLocalAttestation(wallet: string, version: number = TERMS_VERS
 
 export function rememberLocalAttestation(wallet: string, version: number = TERMS_VERSION): void {
   try {
-    localStorage.setItem(cacheKey(wallet, version), '1');
+    const key = cacheKey(wallet, version);
+    if (key !== null) localStorage.setItem(key, '1');
   } catch {
     /* private mode: the clickwrap shows again next visit — harmless */
   }

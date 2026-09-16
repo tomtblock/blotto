@@ -355,3 +355,21 @@ of them has been superseded.
   happen quietly under the hood and will not be something initially broadcast to users"). The share
   card and the public card image carry the pool and the seat; the profile is the one surface that
   shows the tier, beside a line stating that it is decorative.
+
+### Data minimisation (§5, §9) — added 2026-09-16
+
+- **§9's "device/IP correlation" is device-only.** The IP half was never fed — the detection input
+  existed and always arrived empty — and was removed on 2026-09-16 under the founder's ruling of
+  2026-09-15: no IP-derived value is captured, stored or sealed at entry. The signal keeps its
+  persisted name. Proposed register row, pending the founder (D-E16): *"The IP half of R11/4.3's
+  device/IP correlation is removed: no IP-derived value is captured, stored or sealed at entry;
+  device correlation within a pool stays. The sealed boxes have no public reader; the published
+  bundle is the only public battle set."*
+- **§5's sealed boxes have no public reader.** The read API served every seat's box once the secret
+  was on chain, which published the timings and device hash that bundle version 2 (B-31) keeps out
+  of the published set. That route is gone; the what-beat-you view reads the published bundle and
+  checks each seat against its on-chain hash (`battlesCommitment`, `backend/sealing/src/payload.ts`).
+- **Removed surfaces.** The profile's rivals graph and its route. The public entries route names its
+  columns. Logs and alerts carry truncated identifiers only.
+- **Designed, deferred, on the record:** appeal grounds private to reviewers; the timings and device
+  marker sealed to a per-pool detection key. Both in `docs/CHANGE-2026-09-16_data-minimisation.md` §8.

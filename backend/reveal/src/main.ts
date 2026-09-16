@@ -53,10 +53,11 @@
  *                                unscreened while the rules page says it
  *                                checks them
  *
- * One seam stays open, on the record (docs/hosting.md):
- *   - the detection ipHash rides empty (the hashed-IP capture at ciphertext
- *     submission is not stored yet) — device correlation still runs on the
- *     sealed device hash.
+ * The hashed-IP detection input this header once listed as an open seam
+ * ("rides empty; the capture is not stored yet") was REMOVED on 2026-09-16
+ * under the founder's data-minimisation ruling of 2026-09-15: no IP-derived
+ * value is captured, stored or sealed at entry, and device correlation runs
+ * on the sealed device hash alone (`detection/src/signals.ts`).
  *
  * Detection is MANUAL-ONLY (prompt v2 §E, recorded 2026-09-07; report path
  * ratified as D-E9 on 2026-09-12): the pipeline runs on every pool and its
@@ -417,7 +418,6 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
           battles: e.battles as number[][],
           timingsMs: e.timingsMs ?? [],
           deviceHash: e.deviceHash ?? '',
-          ipHash: '',
           scoreHalf: e.scoreHalf,
         })),
       { fullEscrowTier: false }
@@ -442,9 +442,14 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
         error: e instanceof Error ? e.message : String(e),
       });
     }
-    if (report.findings.length > 0) {
-      console.log(`${SERVICE}: detection pool=${id}`, JSON.stringify(report));
-    }
+    // One counts line, never the report itself (2026-09-16, data
+    // minimisation): the report names players a signal fired on before any
+    // human has looked. It is persisted above for the reviewer's page, and a
+    // log stream outlives that purpose.
+    console.log(
+      `${SERVICE}: detection pool=${id} findings=${report.findings.length} ` +
+        `reviewRecommended=${report.reviewRecommended.length} hardBlocks=${report.hardBlocks.length}`
+    );
     if (report.reviewRecommended.length > 0) {
       // The whole control, under a manual policy: a person has to look. The
       // review window is hours, so this has to reach someone now, not at the

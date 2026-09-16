@@ -103,6 +103,7 @@ import type { PublishedBundleStore } from './published-store';
 import type { RevealBundle, RevealBundleEntry } from './bundle';
 import { ALERT } from '../../_shared/src/metrics';
 import type { Monitor } from '../../_shared/src/monitor';
+import { short } from '../../_shared/src/short';
 import type { RevealedEntryForDetection } from './ranking';
 
 const hex = (b: Uint8Array) => Buffer.from(b).toString('hex');
@@ -207,9 +208,13 @@ export async function crankPool(deps: CrankDeps, poolId: bigint): Promise<CrankO
   // (audit 2026-09-11, C-12) — the alert is the operator's cue, and the
   // manual's §7 says what to do with it.
   if (allLosses.length > 0) {
+    // Truncated, never the whole wallets (2026-09-16, data minimisation): an
+    // alert can be forwarded off-box. The bundle's `scored_as_all_losses` is
+    // the full list the manual's §7 pays from, so shortening here loses nothing.
     deps.monitor?.alert(ALERT.reveal.entryRefundOwed, {
       poolId: poolId.toString(),
-      players: allLosses,
+      count: allLosses.length,
+      players: allLosses.map((p) => short(p)),
       entryLamports: pool.entryLamports.toString(),
     });
   }

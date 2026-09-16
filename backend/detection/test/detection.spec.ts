@@ -30,7 +30,8 @@ function human(i: number): RevealedEntry {
     battles,
     timingsMs: timings,
     deviceHash: sha(`dev:${i}`).toString('hex'),
-    ipHash: sha(`ip:${i}`).toString('hex'),
+    // `ipHash` left this fixture on 2026-09-16 with the field itself: no
+    // IP-derived value reaches detection (founder ruling 2026-09-15).
     scoreHalf: 400 + (sha(`s:${i}`)[0] % 100),
   };
 }

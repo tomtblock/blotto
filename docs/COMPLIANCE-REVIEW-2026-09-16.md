@@ -8,9 +8,15 @@ actually reads. It was commissioned by the founder on 2026-09-16 with one questi
 we to launching a lawful, checkable competition of skill, and where do we stand on the licensing,
 cryptocurrency and online-gaming questions.
 
-**Dated by design.** It reviews one branch head — `3cd0ec7`, before the five commits of 2026-09-16
-that answered part of it (§6). It is canonical for nothing except its own findings. A later review
-gets its own file and this one becomes history.
+**Dated by design.** It reviews one branch head — `3cd0ec7`, before the changes of 2026-09-16 that
+answered part of it (§6). It is canonical for nothing except its own findings. A later review gets
+its own file and this one becomes history.
+
+**Reconciled with `main` before it was filed.** `main` moved to `0d9beafc` (PR #134) while this was
+being written, and that change deleted code three findings cite. Rather than quietly rewrite the
+findings, each one states what was true at `3cd0ec7` and then what #134 did about it — the same
+treatment `internal-review.md` IR-3 gets. A review whose subject is documents describing code the
+project stopped running does not get to be one.
 
 **It does not replace `AUDIT-2026-09-07.md`.** That document's Open Items and Road to Mainnet
 remain the live lists, as `INDEX.md` says. Where this review finds something already on them — the
@@ -101,7 +107,7 @@ Verified against source, not taken from the documents. Ten hard invariants, all 
 7. **Integer-only money.** No floats anywhere in `programs/`; `overflow-checks = true` at the
    workspace root; `unsafe_code = "forbid"`; `u128` intermediates on every product; and every
    indivisible remainder disposed of explicitly. The last payment of a forfeited share **must empty
-   it exactly** (`escrow.rs:505-508`) or the call is refused.
+   it exactly** (`escrow.rs:501-508`) or the call is refused.
 8. **Six PDA types, six distinct seed prefixes**, pinned by a test that derives all six from
    related inputs and asserts the addresses differ (`state.rs:453-471`).
 9. **Refunds are permissionless on both halves** and program-held: entries land in the treasury and
@@ -131,9 +137,12 @@ Verified against source, not taken from the documents. Ten hard invariants, all 
 - **The fixtures are an independent oracle.** `backend/scoring/fixtures/gen_vectors.py` is a
   separate implementation of the scoring rule in Python, not a capture of our own output, and
   `check-fixtures.sh` fails on drift.
-- **The read API fails closed in both places that matter.** `/sealed-entries` returns 403 until the
-  secret is on chain. `/leaderboard` recomputes the results root from the fetched bundle and, on a
-  mismatch, **deletes the rankings and serves nothing** (`backend/indexer/src/archive.ts:115-180`).
+- **The read API fails closed where it matters.** `/leaderboard` recomputes the results root from
+  the fetched bundle and, on a mismatch, **deletes the rankings and serves nothing**
+  (`backend/indexer/src/archive.ts:115-180`). At `3cd0ec7` this section also credited
+  `/sealed-entries` with returning 403 until the secret was on chain; **PR #134 went further on
+  2026-09-16 and removed the route altogether** — the sealed boxes now have no public reader at any
+  point in a pool's life, before or after the reveal. The stronger fact replaces the weaker one.
 - **Sealing is sound, and both leaks found on 2026-09-13 are closed.** The export policy is chain
   state read fresh per export, off the **Clock sysvar** rather than host wall-clock. The ciphertext
   route is authorised: the pool must be Open, the submission carries the player's own signature over
@@ -225,9 +234,15 @@ day (§6); two remain and are listed in §7.
    seats"* over data computed at 40. The configuration derived the number correctly; only the
    heading was missed.
 4. **Half of detection signal 4 did not run.** The rules page published *"the same device or
-   network origin behind multiple entries in one pool."* `backend/reveal/src/main.ts:420` passes
-   `ipHash: ''` for every entry and `deviceIpCorrelation` skips an empty key, so the network half
-   correlated nothing and never could.
+   network origin behind multiple entries in one pool."* At `3cd0ec7`,
+   `backend/reveal/src/main.ts:420` passed `ipHash: ''` for every entry and `deviceIpCorrelation`
+   skipped an empty key, so the network half correlated nothing and never could.
+   **Resolved twice over, independently, on 2026-09-16.** PR #134 deleted the `ipHash` input and the
+   IP-correlation branch from the code (`backend/detection/src/signals.ts` keeps only a note where
+   they were); this branch narrowed the published sentence to the device half. Both were needed:
+   #134 removed the dead code and left the claim describing it, and the claim is what a player
+   reads. `backend/reveal/src/main.ts:420` now carries `deviceHash`, which still reaches detection
+   through the non-published `forDetection` channel.
 5. **The lost-ciphertext refund is a promise with no code path.** `backend/reveal/src/crank.ts:30-60`
    says so in capitals: *"The published rule says that player's entry fee is refunded. NOTHING
    IN THIS CODEBASE PAYS IT."* The remedy is one manual admin
@@ -263,8 +278,10 @@ are about whether that stays true when the operator is unhelpful or absent.
    no `BundlePublished` event. The URI lives in our `published_bundles` table and is served by our
    own API, and publication is best-effort — a failure is caught and recorded without stopping
    settlement. A player's fallbacks are the permanent-storage tags the crank writes (workable, and
-   documented to nobody) or `/sealed-entries` plus the revealed secret, which is our database
-   again. The data is checkable; *finding* it depends on us.
+   documented to nobody). At `3cd0ec7` there was a second fallback, `/sealed-entries` plus the
+   revealed secret; **PR #134 removed that route on 2026-09-16**, on privacy grounds, which is the
+   right call and which also narrows a player's options to the bundle alone. The data is checkable;
+   *finding* it depends on us, now more than when this was written.
 
 ### 4.5 §8's own evidence describes a product we stopped building
 
@@ -395,8 +412,9 @@ prize — the absent privacy notice is a hard requirement, not a polish item.
 Five commits answered the part of this review that needed no decision. Recorded here so the
 document is accurate on the day it lands rather than describing defects that are already gone.
 
-| Commit | What changed |
+| Change | What changed |
 |---|---|
+| **PR #134** (merged 03:40, before this session) | The founder's data-minimisation ruling, and it lands on three findings below. It **deleted the `ipHash` input and the IP-correlation branch**, **removed the `/rivals` and `/sealed-entries` routes** so the sealed boxes have no public reader, and **already corrected the `PRODUCT-FACTS` published-post-reveal row** — the same error this review found independently a few hours later. Recorded here because a reader comparing this document to `main` would otherwise find three citations describing code that is gone |
 | `3cbf39c` | The three field-size drifts of §4.3. All three now take the shared constant, following the convention `rules.howToEnter` already states. `app/src/copy/field-size.test.ts` pins each and sweeps every rendered string for a superseded floor — the sweep exists because the landing string spelled the number out, so digits alone would not have caught it |
 | `2ef9c15` | Detection signal 4 narrowed to the device half, which is real and is the hard-block half under R11. Not widened by building the network capture first: a published claim does not wait on a build, and putting a network identifier into the detection pipeline is a privacy decision as much as an engineering one. Registered in `published-claims.test.ts` so the narrowing is load-bearing |
 | `c99279c` | `scripts/check-published-numbers.ts` — the twelfth gate. A value a shared constant used to have may not appear in a rendered copy string, as digits or as a number word. Reads the program's own `constants.rs`, so the chain of custody is Rust → (`check-mirrors`, `mirror.spec`) → TypeScript → (this gate) → published copy. Verified against the real failure: with all three original strings restored it names each surface, value, constant and register row and exits 1; sabotaging its word matching makes it exit 2 and say so |

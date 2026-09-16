@@ -31,8 +31,6 @@ import type {
   PoolSummary,
   ProfileRow,
   ResultRow,
-  RivalRow,
-  SealedEntryRow,
   TiersResponse,
   TreasuryTiers,
 } from './types';
@@ -82,18 +80,6 @@ class HttpIndexerApi implements IndexerApi {
   }
   async getCareer(player: string) {
     return (await this.get<CareerRow[]>(`/profiles/${player}/history`)) ?? [];
-  }
-  async getRivals(player: string) {
-    return (await this.get<RivalRow[]>(`/profiles/${player}/rivals`)) ?? [];
-  }
-  async getSealedEntries(pool: string) {
-    // 403 = the pool secret is not on-chain yet (the endpoint fails closed);
-    // render that the same as "nothing to show".
-    try {
-      return (await this.get<SealedEntryRow[]>(`/pools/${pool}/sealed-entries`)) ?? [];
-    } catch {
-      return [];
-    }
   }
   async getTreasury() {
     return this.get<TreasuryTiers>('/treasury');

@@ -242,6 +242,14 @@ export const ALERT = {
      * being refused. The most serious operational state the entry path has.
      */
     geoAllSourcesFailed: 'packet geo all sources failed',
+    /**
+     * A sanctions refusal was answered but its durable record could not be
+     * written (2026-09-16). The refusal stands either way; the evidence is now
+     * only a truncated log line, so someone has to look at the store. Until
+     * this alert the fallback was the whole record, wallet and all, dumped
+     * into standard output.
+     */
+    sanctionsRefusalUnrecorded: 'packet sanctions refusal not recorded',
   },
   reveal: {
     /**

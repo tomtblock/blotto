@@ -222,7 +222,8 @@ flowchart LR
 1. **The secret leaves custody only now.** Turnkey's export is refused unless the pool is Sealed or
    past its deadline. The daemon does nothing when custody and the chain disagree.
 2. **The reveal is on chain.** Anyone can fetch the secret from the pool account from this moment.
-   The read API also starts serving the ciphertexts.
+   (Until 2026-09-16 the read API also started serving the ciphertexts here; it no longer serves
+   them at all — the published bundle is the only public battle set.)
 3. **Every entry is checked against its own commitment.** A missing ciphertext, a failed decryption,
    a hash mismatch or a malformed battle set is scored all losses by a published rule and named in
    the bundle. One bad entry never halts a pool.
@@ -356,7 +357,8 @@ flowchart LR
    entries, results, payouts, rankings, profiles, player history, tier status, and the verified
    archive of bundles.
 4. **The packet service's tables** hold the signed attestations, the email opt-ins and the sealed
-   ciphertexts. The ciphertexts are served only after the pool's secret is on chain.
+   ciphertexts. The ciphertexts are read by the daemon at settlement and served to nobody
+   (2026-09-16; the read API's post-reveal route is gone).
 5. **The bundle** is the published record of a settled pool, addressed by content on Irys: the
    secret, every decrypted entry, the results, the payouts, the root, and the list of entries scored
    all losses.

@@ -16,6 +16,9 @@
 import { encodePacket, type EntryPacketFields, type PacketSigner } from './packet';
 import { territoryAllowed, type TerritorySchedule } from './territories';
 import type { AttestationStore } from './attestations';
+import { ALERT } from '../../_shared/src/metrics';
+import type { Monitor } from '../../_shared/src/monitor';
+import { ipPrefix, short } from '../../_shared/src/short';
 
 export interface GeoLookupResult {
   /** ISO 3166-1 alpha-2 country code. */
@@ -155,6 +158,12 @@ export interface PacketServiceDeps {
   now(): bigint;
   /** Injected nonce source. */
   nonce(): bigint;
+  /**
+   * Where a sanctions refusal that could NOT be recorded is reported
+   * (2026-09-16). Optional so every offline route suite is unchanged; without
+   * it the failure is still logged, just not paged.
+   */
+  monitor?: Monitor;
 }
 
 /**
@@ -171,16 +180,11 @@ export interface PacketServiceDeps {
  * The two are not in tension: the log is not reachable by the caller.
  */
 
-/** First two octets of a v4 address, or the first hextet of a v6 — enough to
- * correlate an entrant across log lines during a run, without writing whole
- * addresses to a log that outlives the reason for holding them. The same
- * truncation is what reaches the durable refusal record (B-36), so the store
- * never holds more of an address than the log does. */
-export function ipPrefix(ip: string): string {
-  if (ip.includes(':')) return `${ip.split(':')[0]}:…`;
-  const parts = ip.split('.');
-  return parts.length === 4 ? `${parts[0]}.${parts[1]}.x.x` : 'unparsed';
-}
+/** The address truncation every log line and the durable refusal record
+ * (B-36) apply — since 2026-09-16 the one shared rule in
+ * `_shared/src/short.ts`, re-exported here for the callers that always
+ * imported it from this module. */
+export { ipPrefix };
 
 function logGeo(verdict: 'ALLOW' | 'BLOCK', ip: string, detail: string): void {
   console.log(`packet: geo ${verdict} ${ipPrefix(ip)} — ${detail}`);
@@ -222,11 +226,19 @@ async function screen(
  */
 async function recordSanctionsRefusal(
   sanctions: SanctionsList,
-  refusal: SanctionsRefusal
+  refusal: SanctionsRefusal,
+  monitor?: Monitor
 ): Promise<void> {
+  // Truncated identifiers on the log path (2026-09-16, the founder's
+  // data-minimisation ruling of 2026-09-15): the durable refusal record is
+  // the evidence, and a log line that outlives it must not be a second,
+  // unbounded copy of the wallet. Until then this line carried the whole
+  // wallet, and a failed insert dumped the entire record — matches,
+  // the listed party's name and all — into standard output.
   const lists = refusal.screening.matches.map((m) => `${m.source}:${m.listName}`).join(', ');
+  const who = `wallet=${short(refusal.wallet)} pool=${short(refusal.pool)}`;
   console.warn(
-    `packet: SANCTIONS REFUSAL wallet=${refusal.wallet} pool=${refusal.pool} ` +
+    `packet: SANCTIONS REFUSAL ${who} ` +
       `lists=[${lists}] consulted=[${refusal.screening.consulted.join(', ')}] ` +
       `failed=[${refusal.screening.failed.join(', ')}] country=${refusal.country ?? 'unknown'} ` +
       `ip=${refusal.ipPrefix} at=${refusal.screening.checkedAt}`
@@ -235,10 +247,18 @@ async function recordSanctionsRefusal(
   try {
     await sanctions.recordRefusal(refusal);
   } catch (e) {
-    console.error(
-      `packet: FAILED to persist a sanctions refusal — ${e instanceof Error ? e.message : String(e)}. ` +
-        `The record follows so it is not lost: ${JSON.stringify(refusal)}`
-    );
+    const message = e instanceof Error ? e.message : String(e);
+    console.error(`packet: FAILED to persist a sanctions refusal (${who}) — ${message}`);
+    // The refusal stands; what is lost is the durable evidence, so this pages
+    // rather than reprinting the record. The vendor's own query log and the
+    // truncated line above are what remain to reconstruct it from.
+    monitor?.alert(ALERT.packet.sanctionsRefusalUnrecorded, {
+      wallet: short(refusal.wallet),
+      pool: short(refusal.pool),
+      lists,
+      at: refusal.screening.checkedAt,
+      error: message,
+    });
   }
 }
 
@@ -326,13 +346,17 @@ export async function issuePacket(
       ].filter(Boolean);
       logGeo('BLOCK', req.ip, `packet refused: ${failed.join(', ')}`);
       if (sanctioned) {
-        await recordSanctionsRefusal(deps.sanctions, {
-          wallet: req.wallet,
-          pool: req.pool,
-          country: geo.country ?? null,
-          ipPrefix: ipPrefix(req.ip),
-          screening,
-        });
+        await recordSanctionsRefusal(
+          deps.sanctions,
+          {
+            wallet: req.wallet,
+            pool: req.pool,
+            country: geo.country ?? null,
+            ipPrefix: ipPrefix(req.ip),
+            screening,
+          },
+          deps.monitor
+        );
       }
       return GENERIC_REJECTION;
     }

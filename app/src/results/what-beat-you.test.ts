@@ -1,12 +1,19 @@
 /*
- * What-beat-you specs (v3 D3): a real seal → decrypt round trip with the
- * production sealing code, and the head-to-head recomputation pinned
+ * What-beat-you specs (v3 D3): the published bundle read back through the
+ * production commitment code, and the head-to-head recomputation pinned
  * against hand-computed comparisons.
+ *
+ * Rewritten in place on 2026-09-16 (the founder's data-minimisation ruling
+ * of 2026-09-15): the first cases used to seal a payload with the production
+ * sealing code and decrypt it with the revealed secret, the way the view
+ * worked when it read the sealed boxes from the read API. The view now reads
+ * the published bundle and checks each seat against its committed hash, so
+ * that is what these cases exercise.
  */
 import { describe, expect, it } from 'vitest';
-import { generateKeypair, seal, encodePayload } from '@blotto/sealing';
-import type { BattleSet } from '@blotto/scoring';
-import { decryptSeatBattles, whatFinishedAbove } from './what-beat-you';
+import { battlesCommitment } from '@blotto/sealing';
+import { encodeBattleSet, type BattleSet } from '@blotto/scoring';
+import { battlesFromBundle, whatFinishedAbove } from './what-beat-you';
 
 const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
 
@@ -14,39 +21,38 @@ const flat: BattleSet = Array.from({ length: 7 }, () => [20, 20, 20, 20, 20] as 
 // Beats `flat` in every battle: three stats strictly higher (21 > 20).
 const spiky: BattleSet = Array.from({ length: 7 }, () => [21, 21, 21, 17, 20] as const);
 
-function sealed(battles: BattleSet, recipientPk: Uint8Array): string {
-  return hex(
-    seal(
-      encodePayload({
-        battles,
-        salt: new Uint8Array(32).fill(7),
-        timingsMs: Array.from({ length: 7 }, () => 1000),
-        deviceHash: new Uint8Array(32).fill(9),
-      }),
-      recipientPk
-    )
-  );
+/** One published entry, exactly as the bundle carries it: battles and salt
+ * as hex, and the hash the chain committed to. */
+function published(index: number, battles: BattleSet, saltByte = 7) {
+  const salt = new Uint8Array(32).fill(saltByte);
+  return {
+    player: `P${index}`,
+    index,
+    battles: hex(encodeBattleSet(battles)),
+    salt: hex(salt),
+    battles_hash: hex(battlesCommitment(battles, salt)),
+    status: 'ok',
+  };
 }
 
 describe('what finished above you', () => {
-  const kp = generateKeypair();
-  const rows = [
-    { seat: 0, ciphertext_hex: sealed(flat, kp.publicKey) },
-    { seat: 1, ciphertext_hex: sealed(spiky, kp.publicKey) },
-  ];
+  const entries = [published(0, flat), published(1, spiky)];
 
-  it('decrypts served ciphertexts with the revealed secret, skipping garbage', () => {
-    const battles = decryptSeatBattles(hex(kp.secretKey), [
-      ...rows,
-      { seat: 2, ciphertext_hex: 'ab'.repeat(75) },
-    ]);
+  it('reads the published battles whose hash recomputes, and skips everything else', () => {
+    const tampered = { ...published(2, spiky), battles: hex(encodeBattleSet(flat)) };
+    const unrevealed = { ...published(3, flat), battles: null, salt: null };
+    const garbage = { ...published(4, flat), battles: 'ab'.repeat(10) };
+    const battles = battlesFromBundle({ entries: [...entries, tampered, unrevealed, garbage] });
     expect(battles.size).toBe(2);
     expect(battles.get(0)).toEqual(flat);
     expect(battles.get(1)).toEqual(spiky);
+    // A seat whose published battles are not the committed ones is not
+    // shown at all — never a guess.
+    expect(battles.has(2)).toBe(false);
   });
 
   it('recomputes the head-to-head for every seat that finished above yours', () => {
-    const battles = decryptSeatBattles(hex(kp.secretKey), rows);
+    const battles = battlesFromBundle({ entries });
     const standings = [
       { seat: 0, rank: 2, amountLamports: '0' },
       { seat: 1, rank: 1, amountLamports: '4000000000' },

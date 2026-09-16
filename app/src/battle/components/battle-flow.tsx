@@ -192,7 +192,7 @@ export function BattleFlow({ poolAddress, onConfirm, onRunStarted }: BattleFlowP
       .then((png) => {
         stillBlobs.current[battleNo - 1] = png;
         attachStill(battleNo - 1, png);
-        return saveStill({ pool: poolAddress, battle: battleNo, allocation: alloc, png });
+        return saveStill({ pool: poolAddress, battle: battleNo, png });
       })
       .catch(() => {});
     setLocking(true);
@@ -225,7 +225,7 @@ export function BattleFlow({ poolAddress, onConfirm, onRunStarted }: BattleFlowP
           if (cancelled) return;
           stillBlobs.current[k] = b;
           attachStill(k, b);
-          void saveStill({ pool: poolAddress, battle: k + 1, allocation: review.battles[k], png: b });
+          void saveStill({ pool: poolAddress, battle: k + 1, png: b });
         } catch {
           /* best-effort; the tile shows its numbers without a still */
         }

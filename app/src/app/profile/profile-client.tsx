@@ -3,8 +3,12 @@
 /*
  * The career record (R15; restyled by v3 D2, extended by D3): lifetime
  * pools, paid finishes, prize totals in prize amber, the prize-record
- * chart and rivals off the player_history read API, the class collection
- * as artwork shelf. Read-only — nothing here can affect a pool.
+ * chart off the player_history read API, the class collection as artwork
+ * shelf. Read-only — nothing here can affect a pool.
+ *
+ * The rivals panel (D3, "the wallets most often in your pools") was removed
+ * on 2026-09-16 under the founder's data-minimisation ruling of 2026-09-15:
+ * a co-entrant graph nothing in scoring, payment or verification needed.
  *
  * PHASE-D3-REVIEW: v3 asks for a "rank history" chart. Rank labels are
  * not indexed (D3-B: they live in the published bundle), so the chart is
@@ -17,7 +21,7 @@ import { COPY } from '@/copy';
 import { useAuth } from '@/wallet/auth-context';
 import { indexerApi, live, type Live } from '@/data/api';
 import { lamportsToSol } from '@/data/format';
-import type { CareerRow, ProfileRow, RivalRow } from '@/data/types';
+import type { CareerRow, ProfileRow } from '@/data/types';
 import { Card } from '@/components/ui/card';
 import { LiveDataUnavailable } from '@/components/shell/live-unavailable';
 import { Stat } from '@/components/ui/stat';
@@ -60,28 +64,6 @@ function PrizeRecordChart({ career }: { career: CareerRow[] }) {
   );
 }
 
-function Rivals({ rivals }: { rivals: RivalRow[] }) {
-  if (rivals.length === 0) return null;
-  return (
-    <Card className="p-5">
-      <h2 className="mb-1 text-[12px] uppercase tracking-[0.14em] text-ink-muted">
-        {COPY.career.rivalsTitle}
-      </h2>
-      <p className="mb-4 text-[12px] leading-4 text-ink-muted">{COPY.career.rivalsNote}</p>
-      <ul className="flex flex-col gap-2">
-        {rivals.map((r) => (
-          <li key={r.player} className="flex items-center gap-3">
-            <span className="font-mono text-[13px] text-ink">{r.player.slice(0, 8)}…</span>
-            <span className="tnum ml-auto text-[13px] text-ink-muted">
-              {COPY.career.sharedPools(r.pools_shared)}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </Card>
-  );
-}
-
 /**
  * What the page shows for a career read (audit 2026-09-11, C-15 / D-16).
  *
@@ -118,7 +100,6 @@ export function ProfileClient() {
      */
     profile: Live<ProfileRow | null>;
     career: CareerRow[];
-    rivals: RivalRow[];
   } | null>(null);
 
   useEffect(() => {
@@ -126,15 +107,14 @@ export function ProfileClient() {
     let cancelled = false;
     const api = indexerApi();
     void (async () => {
-      const [profile, career, rivals] = await Promise.all([
+      const [profile, career] = await Promise.all([
         live(() => api.getProfile(wallet)),
-        // Secondary panels: the chart and the rivals list simply do not
-        // render when their read fails. Neither can be mistaken for a
-        // statement about the player, so neither degrades the whole page.
+        // A secondary panel: the chart simply does not render when its read
+        // fails. It cannot be mistaken for a statement about the player, so
+        // it does not degrade the whole page.
         api.getCareer(wallet).catch(() => [] as CareerRow[]),
-        api.getRivals(wallet).catch(() => [] as RivalRow[]),
       ]);
-      if (!cancelled) setResult({ wallet, profile, career, rivals });
+      if (!cancelled) setResult({ wallet, profile, career });
     })();
     return () => {
       cancelled = true;
@@ -200,7 +180,6 @@ export function ProfileClient() {
       </Card>
       <MyBlots />
       <PrizeRecordChart career={result?.career ?? []} />
-      <Rivals rivals={result?.rivals ?? []} />
       <Card className="p-5">
         <h2 className="mb-4 text-[12px] uppercase tracking-[0.14em] text-ink-muted">
           Character collection

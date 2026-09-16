@@ -48,8 +48,6 @@ import type {
   PoolSummary,
   ProfileRow,
   ResultRow,
-  RivalRow,
-  SealedEntryRow,
   TreasuryTiers,
 } from './types';
 
@@ -68,7 +66,6 @@ function fixtureId(label: string): string {
 /** The viewer these scenarios are written from — a stable, obviously-fake wallet. */
 export const FIXTURE_PLAYER = fixtureId('P1ayer');
 /** A second wallet, so "someone else won" renders differently from "you won". */
-export const FIXTURE_RIVAL = fixtureId('Riva1');
 
 const HOUR = 3600;
 /** Deadlines are relative to render time so countdowns animate rather than sit dead. */
@@ -90,7 +87,6 @@ export interface Scenario {
   readonly entries: EntryRow[];
   readonly results: ResultRow[];
   readonly payouts: PayoutRow[];
-  readonly sealedEntries: SealedEntryRow[];
   /** E3: the verified-archive ranking; null where no bundle verified. */
   readonly leaderboard?: PoolLeaderboard | null;
 }
@@ -226,13 +222,6 @@ function leaderboard(pool: string, field = 64): PoolLeaderboard {
   };
 }
 
-function sealed(count: number): SealedEntryRow[] {
-  return Array.from({ length: count }, (_, seat) => ({
-    seat,
-    ciphertext_hex: `${seat.toString(16).padStart(2, '0')}${'cd'.repeat(47)}`,
-  }));
-}
-
 const OPEN = fixtureId('Poo'); // the original fixture id — kept so it never moves
 const FILLING = fixtureId('fi11ing');
 const SEALED = fixtureId('sea1ed');
@@ -253,7 +242,6 @@ export const SCENARIOS: readonly Scenario[] = [
     entries: entries(OPEN, 3),
     results: [],
     payouts: [],
-    sealedEntries: [],
   },
   {
     key: 'filling',
@@ -267,7 +255,6 @@ export const SCENARIOS: readonly Scenario[] = [
     entries: entries(FILLING, 61),
     results: [],
     payouts: [],
-    sealedEntries: [],
   },
   {
     key: 'field',
@@ -281,7 +268,6 @@ export const SCENARIOS: readonly Scenario[] = [
     entries: entries(FIELD, 55),
     results: [],
     payouts: [],
-    sealedEntries: [],
   },
   {
     key: 'field-paid',
@@ -298,7 +284,6 @@ export const SCENARIOS: readonly Scenario[] = [
     entries: entries(FIELD_PAID, 55),
     results: results(),
     payouts: payouts(FIELD_PAID),
-    sealedEntries: sealed(55),
     leaderboard: leaderboard(FIELD_PAID, 55),
   },
   {
@@ -313,7 +298,6 @@ export const SCENARIOS: readonly Scenario[] = [
     entries: entries(DEADLINE, 12),
     results: [],
     payouts: [],
-    sealedEntries: [],
   },
   {
     key: 'sealed',
@@ -328,7 +312,6 @@ export const SCENARIOS: readonly Scenario[] = [
     entries: entries(SEALED, 64),
     results: [],
     payouts: [],
-    sealedEntries: [],
   },
   {
     key: 'scored',
@@ -345,7 +328,6 @@ export const SCENARIOS: readonly Scenario[] = [
     entries: entries(SCORED, 64),
     results: results(),
     payouts: [],
-    sealedEntries: sealed(64),
   },
   {
     key: 'paid',
@@ -362,7 +344,6 @@ export const SCENARIOS: readonly Scenario[] = [
     entries: entries(PAID, 64),
     results: results(),
     payouts: payouts(PAID),
-    sealedEntries: sealed(64),
     leaderboard: leaderboard(PAID),
   },
   {
@@ -387,7 +368,6 @@ export const SCENARIOS: readonly Scenario[] = [
     ),
     results: results(),
     payouts: payouts(ESCROW, 3),
-    sealedEntries: sealed(64),
     leaderboard: leaderboard(ESCROW),
   },
   {
@@ -403,7 +383,6 @@ export const SCENARIOS: readonly Scenario[] = [
     entries: entries(REFUNDING, 12, { refunded: true }),
     results: [],
     payouts: [],
-    sealedEntries: [],
   },
   {
     key: 'closed',
@@ -418,7 +397,6 @@ export const SCENARIOS: readonly Scenario[] = [
     entries: entries(CLOSED, 12, { refunded: true }),
     results: [],
     payouts: [],
-    sealedEntries: [],
   },
 ];
 
@@ -486,12 +464,6 @@ export const FIXTURE_CAREER: CareerRow[] = [
     pot_lamports: TIER0_POT,
     state: 'Sealed',
   },
-];
-
-export const FIXTURE_RIVALS: RivalRow[] = [
-  { player: FIXTURE_RIVAL, pools_shared: '6', paid_in_shared: '2' },
-  { player: fixtureId('Riva12'), pools_shared: '4', paid_in_shared: '1' },
-  { player: fixtureId('Riva13'), pools_shared: '2', paid_in_shared: '0' },
 ];
 
 /*

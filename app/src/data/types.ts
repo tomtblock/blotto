@@ -188,19 +188,13 @@ export interface PoolLeaderboard {
   rows: LeaderboardRow[];
 }
 
-/** One rival (D3): a wallet often in the same pools, co-entry facts only. */
-export interface RivalRow {
-  player: string;
-  pools_shared: string;
-  paid_in_shared: string;
-}
-
-/** One sealed ciphertext (D3), seat-keyed and anonymised; served by the
- * read API only after the pool secret is on-chain. */
-export interface SealedEntryRow {
-  seat: number;
-  ciphertext_hex: string;
-}
+/*
+ * Gone on 2026-09-16 (the founder's data-minimisation ruling of 2026-09-15):
+ * `RivalRow` and `getRivals` (the profile's co-entrant graph, which nothing
+ * in scoring, payment or verification needed) and `SealedEntryRow` and
+ * `getSealedEntries` (the sealed boxes, which have no public reader — the
+ * what-beat-you view reads the published bundle instead).
+ */
 
 /** The tier rows of GET /treasury the app renders (D3 fixture list). The
  * full TreasuryReport carries more; the app reads only what it shows. */
@@ -226,8 +220,6 @@ export interface IndexerApi {
   getProfile(player: string): Promise<ProfileRow | null>;
   /** D3 additions. */
   getCareer(player: string): Promise<CareerRow[]>;
-  getRivals(player: string): Promise<RivalRow[]>;
-  getSealedEntries(pool: string): Promise<SealedEntryRow[]>;
   getTreasury(): Promise<TreasuryTiers | null>;
   /** GET /tiers — the per-tier cooldown stamps plus the server's clock. */
   getTiers(): Promise<TiersResponse | null>;

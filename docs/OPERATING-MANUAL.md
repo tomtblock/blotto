@@ -322,7 +322,8 @@ state holds the sweep's floor until its bundle is on record, which is deliberate
 applied: the sealed entry could not be read back (missing, undecryptable, or a
 hash mismatch) and was scored zero. The bundle lists the player under
 `scored_as_all_losses`, and since 2026-09-12 the daemon raises `reveal entry
-refund owed after lost ciphertext` naming the pool and the players. The entry
+refund owed after lost ciphertext` naming the pool, how many, and — since
+2026-09-16 — the players in truncated form; the bundle is the full list. The entry
 fee is OWED to each from the platform treasury — an off-chain payment nobody
 else makes. Until the indexer carries a table and the admin CLI a command for
 it (plan batch I1), the alert and the bundle are the record; pay it by hand and

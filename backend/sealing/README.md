@@ -29,7 +29,9 @@ work.**
 The payload is fixed-width, 127 bytes (`payload.ts`): the seven battles, a salt, per-battle timings,
 and a device hash. The battles and salt are what the on-chain `battles_hash` commits to. The timings
 and device hash ride along sealed and reach the detection layer only — the published reveal bundle
-carries neither.
+carries neither, and since 2026-09-16 no public route serves a box either: the bundle is the only
+public battle set, and a browser checks it with `battlesCommitment` (`payload.ts`), the one
+definition of the on-chain hash.
 
 ---
 
