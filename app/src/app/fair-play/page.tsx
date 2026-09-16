@@ -10,7 +10,7 @@ import { AppHeader } from '@/components/shell/app-header';
 import { SiteFooter } from '@/components/shell/site-footer';
 import { PageIntro } from '@/components/ui/page-intro';
 import { TabBar } from '@/components/shell/tab-bar';
-import { fairPlayView } from './fair-play.config';
+import { FULL_FIELD, MIN_FIELD, fairPlayView } from './fair-play.config';
 
 export const metadata: Metadata = { title: COPY.fairPlay.title };
 
@@ -48,8 +48,10 @@ export default function FairPlayPage() {
               <thead>
                 <tr className="text-[12px] uppercase tracking-[0.1em] text-ink-muted">
                   <th className="py-2 pr-4 font-medium">{c.skillHeadings.player}</th>
-                  <th className="pr-4 text-right font-medium">{c.skillHeadings.full}</th>
-                  <th className="text-right font-medium">{c.skillHeadings.min}</th>
+                  <th className="pr-4 text-right font-medium">
+                    {c.skillHeadings.full(FULL_FIELD)}
+                  </th>
+                  <th className="text-right font-medium">{c.skillHeadings.min(MIN_FIELD)}</th>
                 </tr>
               </thead>
               <tbody>

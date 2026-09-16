@@ -27,7 +27,10 @@
  *
  * The derivation, kept because a ratified number still has to be defensible:
  *
- *   A pool holds at most 64 entries (PID §4: 52..64 players). The largest
+ *   A pool holds at most 64 entries and runs with at least MIN_SEATS, which
+ *   is 40 since R7-b (2026-09-12; it was 52 under D-E4, which is what this
+ *   line used to cite). The bound below reasons from the CAPACITY end, so
+ *   the floor moving does not change it. The largest
  *   HONEST burst of review work that can exist at one moment is therefore one
  *   pool's worth of entries, 64, and that is already an extreme: it is every
  *   seat in a pool flagged and decided by one person inside an hour.
