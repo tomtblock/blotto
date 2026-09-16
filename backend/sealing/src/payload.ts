@@ -85,10 +85,25 @@ export function decodePayload(bytes: Uint8Array): SealedPayload {
 }
 
 /** The on-chain commitment over a payload's battles + salt. */
-export function payloadBattlesHash(p: SealedPayload): Uint8Array {
-  const bytes = encodeBattleSet(p.battles);
+/**
+ * The on-chain commitment from its two inputs alone: `sha256(battles ‖ salt)`.
+ *
+ * One definition (R20): the client commits with it at entry, the crank checks
+ * it at reveal, and — since 2026-09-16 — a browser reading the PUBLISHED
+ * bundle recomputes it to decide whether a seat's published battles are the
+ * ones that were committed, instead of opening the sealed box itself.
+ */
+export function battlesCommitment(battles: BattleSet, salt: Uint8Array): Uint8Array {
+  if (salt.length !== SALT_BYTES) {
+    throw new Error(`salt must be ${SALT_BYTES} bytes, got ${salt.length}`);
+  }
+  const bytes = encodeBattleSet(battles);
   const input = new Uint8Array(BATTLE_SET_BYTES + SALT_BYTES);
   input.set(bytes, 0);
-  input.set(p.salt, BATTLE_SET_BYTES);
+  input.set(salt, BATTLE_SET_BYTES);
   return sha256(input);
+}
+
+export function payloadBattlesHash(p: SealedPayload): Uint8Array {
+  return battlesCommitment(p.battles, p.salt);
 }

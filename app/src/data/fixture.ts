@@ -19,7 +19,6 @@ import {
   FIXTURE_CAREER,
   FIXTURE_PLAYER,
   FIXTURE_PROFILE,
-  FIXTURE_RIVALS,
   FIXTURE_TREASURY,
   SCENARIOS,
   SCENARIO_BY_POOL,
@@ -49,14 +48,6 @@ export const FIXTURE_API: IndexerApi = {
   },
   async getCareer() {
     return FIXTURE_CAREER;
-  },
-  async getRivals() {
-    return FIXTURE_RIVALS;
-  },
-  async getSealedEntries(pool) {
-    // The read API serves these only once the pool secret is on-chain; the
-    // scenarios encode that by carrying rows only where `secret` is set.
-    return SCENARIO_BY_POOL.get(pool)?.sealedEntries ?? [];
   },
   async getTiers() {
     // The fixture has no settled tier to count toward; the clock is the

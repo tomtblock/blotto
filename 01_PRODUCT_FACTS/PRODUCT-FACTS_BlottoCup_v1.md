@@ -66,7 +66,7 @@ engine).
 | Fact | Value | Source |
 |---|---|---|
 | What is sealed | the 127-byte payload: battles (35) + salt (32) + per-screen timings (28) + device hash (32), encrypted **on the player's device before payment** to the pool's X25519 key | `backend/sealing/src/payload.ts`; TECH-ARCH §5 |
-| Who can read it early | no one, operator included: the pool secret is generated locally, imported to Turnkey, wiped, and export-locked until the pool is sealed or past deadline (the policy is enforced at custody, and the read API refuses ciphertexts pre-reveal) | `backend/sealing/src/custody-turnkey.ts`, `custody.ts` `ExportPolicy`; `backend/indexer/src/read-api.ts` sealed-entries 403 |
+| Who can read it early | no one, operator included: the pool secret is generated locally, imported to Turnkey, wiped, and export-locked until the pool is sealed or past deadline (the policy is enforced at custody, and since 2026-09-16 the read API serves no ciphertext at all, before or after the reveal) | `backend/sealing/src/custody-turnkey.ts`, `custody.ts` `ExportPolicy`; `backend/indexer/src/read-api.ts` (no sealed-entries route) |
 | On-chain commitments | `sha256(battles‖salt)` per entry at registration; `sha256(secret)` at pool open; the results tree root at commit | `register.rs`, `open_pool.rs`, `reveal_commit.rs` |
 | What is published at reveal | the pool secret (on-chain) and the full bundle (permanent storage): every decrypted payload, per-seat scores, competition ranks, split-pot amounts, and the tree | `backend/reveal/src/bundle.ts`, `publisher-irys.ts` |
 | Who can recompute | anyone, in a browser, with no operator involvement: the verify page re-runs the identical engine (one module, crank and browser — R20) and compares against the on-chain root; the results page additionally re-scores head-to-head from the post-reveal ciphertexts | `app/src/verify/logic.ts`; `app/src/results/what-beat-you.ts` |
@@ -90,7 +90,7 @@ engine).
 |---|---|---|
 | Identity data held | the wallet address; the sign-in provider (Privy) holds any email — the product's own stores never hold one | provider model D-08; `backend/packet/src/notify.ts` (choice only, no address) |
 | Per-entry data | sealed payload (above), IP-derived geo verdict at issuance (boolean outcome), acceptance records | packet service |
-| Published post-reveal | battles, salts, timings, device hashes, scores, ranks, amounts — by design, so results are recomputable | `bundle.ts` (the disclosure is the verifiability mechanism) |
+| Published post-reveal | battles, salts, scores, ranks, amounts — by design, so results are recomputable. Timings and device hashes are NOT published (bundle version 2, audit B-31, 2026-09-12) and the sealed boxes that carry them have no public reader (2026-09-16) | `backend/reveal/src/bundle.ts` (the disclosure is the verifiability mechanism); `docs/CHANGE-2026-09-16_data-minimisation.md` |
 | Notifications | opt-in only, wallet-signed, factual state changes; the retention design explicitly excludes pressure mechanics, and their vocabulary fails CI | v3 D3; `scripts/check-language.sh` `PATTERN_D3` |
 
 ## 7. Language controls

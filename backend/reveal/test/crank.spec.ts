@@ -6,6 +6,7 @@
 import { expect } from 'chai';
 import { createHash } from 'crypto';
 import { ALERT } from '../../_shared/src/metrics';
+import { short } from '../../_shared/src/short';
 import {
   crankPool,
   publishBundle,
@@ -486,7 +487,6 @@ describe('detection wired into the crank (R11, roadmap 4.3)', () => {
               battles: e.battles,
               timingsMs: e.timingsMs ?? [],
               deviceHash: e.deviceHash ?? '',
-              ipHash: `ip:${e.player}`,
               scoreHalf: e.scoreHalf,
             })),
           { fullEscrowTier: false }
@@ -598,7 +598,6 @@ describe('detection wired into the crank (R11, roadmap 4.3)', () => {
                 battles: e.battles,
                 timingsMs: e.timingsMs ?? [],
                 deviceHash: e.deviceHash ?? '',
-                ipHash: `ip:${e.player}`,
                 scoreHalf: e.scoreHalf,
               })),
             { fullEscrowTier: false }
@@ -783,7 +782,18 @@ describe('the settlement crank: the publish record (2026-09-12)', () => {
     await crankPool(deps, 1n);
     expect(alerts.map((a) => a.reason)).to.deep.equal([ALERT.reveal.entryRefundOwed]);
     expect(alerts[0].detail.poolId).to.equal('1');
-    expect((alerts[0].detail.players as string[]).sort()).to.deep.equal([t.players[3], t.players[7]].sort());
+    // Rewritten in place on 2026-09-16 (the founder's data-minimisation ruling
+    // of 2026-09-15): the alert names HOW MANY and the TRUNCATED wallets,
+    // never a whole address — an alert can be forwarded off-box. The bundle's
+    // `scored_as_all_losses` remains the full list the manual pays from.
+    expect(alerts[0].detail.count).to.equal(2);
+    expect((alerts[0].detail.players as string[]).sort()).to.deep.equal(
+      [short(t.players[3]), short(t.players[7])].sort()
+    );
+    for (const named of alerts[0].detail.players as string[]) {
+      expect(named).to.not.equal(t.players[3]);
+      expect(named).to.not.equal(t.players[7]);
+    }
     expect(alerts[0].detail.entryLamports).to.equal('100000000');
   });
 });

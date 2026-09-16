@@ -21,6 +21,8 @@ import { useEffect, useState } from 'react';
 import { COPY } from '@/copy';
 import { Card } from '@/components/ui/card';
 import { allStills, type StoredStill } from '@/battle/stills';
+import { sweepStills } from '@/battle/stills-sweep';
+import { indexerApi } from '@/data/api';
 
 interface Row extends StoredStill {
   url: string;
@@ -32,7 +34,11 @@ export function MyBlots() {
   useEffect(() => {
     let cancelled = false;
     const urls: string[] = [];
-    allStills().then((stills) => {
+    // Forget the stills of pools whose allocation will never be published
+    // (2026-09-16, data minimisation), then show what remains.
+    sweepStills(indexerApi())
+      .then(() => allStills())
+      .then((stills) => {
       if (cancelled) return;
       const withUrls = stills.map((s) => {
         const url = URL.createObjectURL(s.png);

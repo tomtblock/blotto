@@ -69,6 +69,10 @@ describe('AppealPanel', () => {
     const form = panel({ kind: 'position', position: forfeited });
     expect(form).toContain('id="appeal-grounds"');
     expect(form).toContain(c.submit);
+    // 2026-09-16 (the founder's data-minimisation ruling of 2026-09-15): the
+    // form says, before the player types, that the text is published.
+    expect(form).toContain(c.groundsPublicNote);
+    expect(form).toContain('aria-describedby="appeal-grounds-public"');
 
     const lodged = panel({
       kind: 'position',

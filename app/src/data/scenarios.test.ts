@@ -47,14 +47,15 @@ describe('the preview scenarios', () => {
     for (const s of SCENARIOS) expect(s.summary.pool.startsWith('F1XTURE')).toBe(true);
   });
 
-  it('never publishes a secret for a pool that has not been revealed', () => {
-    // Sealing is a property, not a promise: a fixture that hands out sealed
-    // entries for an Open pool would teach the UI to render something the
-    // real system must never produce.
+  it('carries no sealed material at all — the boxes have no public reader', () => {
+    // Rewritten in place on 2026-09-16 (the founder's data-minimisation
+    // ruling of 2026-09-15). This case used to assert that no fixture handed
+    // out sealed entries for a pool whose secret was not yet public. Sealing
+    // is still a property, not a promise; the fixture now proves the stronger
+    // thing the real system does: NO surface serves a sealed box, revealed or
+    // not, so no scenario carries one to serve.
     for (const s of SCENARIOS) {
-      if (s.summary.secret === null) {
-        expect(s.sealedEntries, `${s.key} leaks sealed entries`).toHaveLength(0);
-      }
+      expect('sealedEntries' in s, `${s.key} carries sealed entries`).toBe(false);
     }
   });
 

@@ -14,6 +14,7 @@
 
 import { LocalPacketSigner, type PacketSigner } from './packet';
 import { TurnkeyPacketSigner } from './signer-turnkey';
+import { short } from '../../_shared/src/short';
 
 const SERVICE = 'packet';
 
@@ -21,8 +22,9 @@ const SERVICE = 'packet';
  * used on a secret — only on ids and public keys, which are public by
  * definition — but truncated anyway so a pasted log stays boring. */
 export function redact(v: string | undefined): string {
-  if (!v) return '<unset>';
-  return v.length <= 12 ? v : `${v.slice(0, 6)}…${v.slice(-4)}`;
+  // The shared 6…4 rule (`_shared/src/short.ts`, 2026-09-16) with this
+  // module's own placeholder for a missing variable.
+  return short(v, '<unset>');
 }
 
 export function buildSigner(env: NodeJS.ProcessEnv): PacketSigner {

@@ -27,8 +27,16 @@ import { COPY } from '@/copy';
 import { useAuth } from '@/wallet/auth-context';
 import { Card } from '@/components/ui/card';
 import { BlottSprite } from '@/components/blott/BlottSprite';
+import { migrateLegacyKey, opaqueKey } from '@/storage/opaque-key';
 
-const KEY = (wallet: string) => `blotto:welcomed:${wallet}`;
+const LEGACY_KEY = (wallet: string) => `blotto:welcomed:${wallet}`;
+/** Opaque since 2026-09-16 (storage/opaque-key.ts): the key no longer names
+ * the wallet. Null when storage is closed. */
+const KEY = (wallet: string): string | null => {
+  const key = opaqueKey('welcomed', wallet);
+  migrateLegacyKey(LEGACY_KEY(wallet), key);
+  return key;
+};
 const APPEAR_MS = 900;
 
 export function WelcomeNote() {
@@ -39,7 +47,8 @@ export function WelcomeNote() {
   useEffect(() => {
     if (status !== 'signed-in' || !walletAddress) return;
     try {
-      if (localStorage.getItem(KEY(walletAddress))) return;
+      const key = KEY(walletAddress);
+      if (key !== null && localStorage.getItem(key)) return;
     } catch {
       /* storage unavailable: show it; it is a note, not a gate */
     }
@@ -51,7 +60,8 @@ export function WelcomeNote() {
     setOpen(false);
     if (!walletAddress) return;
     try {
-      localStorage.setItem(KEY(walletAddress), new Date().toISOString());
+      const key = KEY(walletAddress);
+      if (key !== null) localStorage.setItem(key, new Date().toISOString());
     } catch {
       /* fine — it will show once more next time */
     }

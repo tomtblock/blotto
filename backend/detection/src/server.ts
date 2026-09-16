@@ -97,6 +97,7 @@ import {
 } from '../../_shared/src/http-hygiene';
 import { ALERT, METRIC } from '../../_shared/src/metrics';
 import type { Monitor } from '../../_shared/src/monitor';
+import { ipPrefix, short } from '../../_shared/src/short';
 import {
   APPEAL_GROUNDS_MAX,
   appealDecisionRefusal,
@@ -190,29 +191,10 @@ const APPEAL_DECISIONS: ReadonlySet<string> = new Set(['appeal_upheld', 'appeal_
 /** The kinds that take a chain action and therefore have chain preconditions. */
 const CHAIN_ACTIONS: ReadonlySet<string> = new Set(['flag', 'clear', 'release', 'forfeit']);
 
-/**
- * First 6 and last 4 of an identifier — the repo's convention for writing a
- * public key to a log (`backend/packet/src/signer-select.ts`). These keys are
- * public by definition and the decision log publishes them in full; they are
- * truncated here anyway, so a pasted request log stays boring.
- */
-function short(v: string | undefined): string {
-  if (!v) return '<none>';
-  return v.length <= 12 ? v : `${v.slice(0, 6)}…${v.slice(-4)}`;
-}
-
-/**
- * First two octets of a v4 address, or the first hextet of a v6 — enough to
- * correlate one caller across lines during an incident, without writing whole
- * addresses into a log that outlives the reason for holding them. Same rule
- * as the entry gate's (`backend/packet/src/service.ts`).
- */
-function ipPrefix(ip: string | undefined): string {
-  if (!ip) return 'unknown';
-  if (ip.includes(':')) return `${ip.split(':')[0]}:…`;
-  const parts = ip.split('.');
-  return parts.length === 4 ? `${parts[0]}.${parts[1]}.x.x` : 'unparsed';
-}
+// `short` (6…4) and `ipPrefix` (two octets, or one hextet) are the one shared
+// rule for anything that reaches a log or an alert — `_shared/src/short.ts`
+// since 2026-09-16. This file carried its own copies until then, and its two
+// alerts below bypassed them with whole wallets.
 
 function parseAppeal(body: unknown): AppealSubmission | null {
   const b = body as Record<string, unknown>;
@@ -557,10 +539,9 @@ export async function handleReviewRoute(
       // is already irreversible; the log write is what failed, and that is
       // an operator problem, loudly.
       deps.monitor?.alert(ALERT.review.decisionNotLogged, {
-        action: decision.action,
-        reviewer: short(decision.decidedBy),
-        pool: decision.pool,
-        player: decision.player,
+        // The same truncated identifiers as the request log (2026-09-16): an
+        // alert can be forwarded off-box, and this one carried the whole wallet.
+        ...where,
         decidedAt: decision.decidedAt,
         error: outcome.logError,
       });
@@ -586,9 +567,7 @@ export async function handleReviewRoute(
       // key here" is routine, anything else is not, and the operator is the
       // only one who can tell which from the text.
       deps.monitor?.alert(ALERT.review.forfeitNotLanded, {
-        reviewer: short(decision.decidedBy),
-        pool: decision.pool,
-        player: decision.player,
+        ...where,
         decidedAt: decision.decidedAt,
         chainError: outcome.chainError,
       });

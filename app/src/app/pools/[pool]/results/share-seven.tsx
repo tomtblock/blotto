@@ -19,7 +19,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { COPY } from '@/copy';
 import { allStills } from '@/battle/stills';
+import { sweepStills } from '@/battle/stills-sweep';
 import { composeMontage } from '@/battle/montage';
+import { indexerApi } from '@/data/api';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { XMark } from '@/wallet/wallet-icons';
@@ -38,6 +40,9 @@ export function ShareSeven({ poolAddress, state }: { poolAddress: string; state:
     let url: string | null = null;
     (async () => {
       try {
+        // Forget what will never be published (2026-09-16) before reading:
+        // a refunded pool has no montage to share.
+        await sweepStills(indexerApi());
         const mine = (await allStills()).filter((s) => s.pool === poolAddress);
         // One per battle, the latest if a run was repeated.
         const byBattle = new Map<number, (typeof mine)[number]>();

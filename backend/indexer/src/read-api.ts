@@ -23,12 +23,14 @@
  *                                        (not the derived tables — the verify
  *                                        story deliberately reads closer to
  *                                        the chain)
- *   GET /pools/:pool/sealed-entries    → seat-keyed ciphertexts, served only
- *                                        after the pool secret is on-chain
- *                                        (D3 what-beat-you; fail-closed)
  *   GET /profiles/:player              → ProfileRow
  *   GET /profiles/:player/history      → career rows off player_history (D3)
- *   GET /profiles/:player/rivals       → most-shared co-entrants (D3)
+ *
+ *   Removed 2026-09-16 (the founder's data-minimisation ruling of 2026-09-15):
+ *   `/pools/:pool/sealed-entries` — the sealed boxes have NO public reader;
+ *   after reveal the battles and salts are in the published bundle, which is
+ *   what the what-beat-you view now reads — and `/profiles/:player/rivals`,
+ *   a co-entrant graph nothing in scoring, payment or verification needed.
  *   GET /tiers                         → one row per CONFIGURED tier:
  *                                        `enabled` / `status` (the founder's
  *                                        `open_tiers`, resolved by the same
@@ -110,6 +112,16 @@ const POOL_DERIVED_COLUMNS = `
     WHERE ev.name = 'PrizesPaid' AND ev.raw->>'pool' = p.pool) AS settled_at`;
 
 const POOL_SELECT = `SELECT p.*,${POOL_DERIVED_COLUMNS} FROM pools p`;
+
+/**
+ * The entry row, column by column — every one of them an on-chain fact
+ * (migrations 0003, 0005, 0013, 0019). Until 2026-09-16 this was `SELECT *`,
+ * which meant adding a column to `entries` published it, unreviewed, on an
+ * unauthenticated route. A new column now has to be named here to be served.
+ */
+const ENTRY_COLUMNS =
+  'pool, player, idx, battles_hash, class, slot_hash, pass_asset, flagged, refunded, ' +
+  'escrow_settled, terms_version, next_place_lamports, sanctions_hold, sanctions_hold_at';
 
 /**
  * "Resolving", derived rather than stored (Phase 2 Stage C): a pool is
@@ -271,7 +283,7 @@ export async function handleRead(
     }
     if (parts[2] === 'entries') {
       const res = await db.query(
-        'SELECT * FROM entries WHERE pool = $1 ORDER BY idx ASC',
+        `SELECT ${ENTRY_COLUMNS} FROM entries WHERE pool = $1 ORDER BY idx ASC`,
         [pool]
       );
       return { status: 200, body: res.rows };
@@ -298,9 +310,7 @@ export async function handleRead(
     if (parts[2] === 'verify-record') {
       return verifyRecord(db, pool);
     }
-    if (parts[2] === 'sealed-entries') {
-      return sealedEntries(db, pool);
-    }
+    // `sealed-entries` was served here until 2026-09-16 — see the header.
     return { status: 404, body: { error: 'not found' } };
   }
 
@@ -348,24 +358,11 @@ export async function handleRead(
       );
       return { status: 200, body: res.rows };
     }
-    // D3: rivals — the wallets most often in the same pools. Public
-    // on-chain co-entry facts only; no ordering by who beat whom (rank
-    // labels are not indexed).
-    if (parts[2] === 'rivals') {
-      const res = await db.query(
-        `SELECT o.player,
-                COUNT(*)::text AS pools_shared,
-                SUM(CASE WHEN o.paid THEN 1 ELSE 0 END)::text AS paid_in_shared
-           FROM player_history me
-           JOIN player_history o ON o.pool = me.pool AND o.player <> me.player
-          WHERE me.player = $1
-          GROUP BY o.player
-          ORDER BY COUNT(*) DESC, o.player ASC
-          LIMIT 8`,
-        [player]
-      );
-      return { status: 200, body: res.rows };
-    }
+    // The rivals route (D3, "the wallets most often in the same pools") was
+    // removed on 2026-09-16 under the founder's data-minimisation ruling of
+    // 2026-09-15: a co-entrant graph that nothing in scoring, payment or
+    // verification needs. The facts stay derivable from public chain data;
+    // the API simply no longer computes and serves them.
     return { status: 404, body: { error: 'not found' } };
   }
 
@@ -508,35 +505,18 @@ async function leaderboard(db: Queryable, pool: string): Promise<ReadApiResult> 
  */
 const COMMITTED_FIELDS = ['player', 'rank', 'amount_lamports'] as const;
 
-/**
- * D3: the sealed ciphertexts, seat-keyed and ANONYMISED (no player column),
- * served ONLY once the pool's secret is on-chain. Before reveal this
- * endpoint refuses — the sealing property (no early read) is enforced here
- * exactly as everywhere else, even though a ciphertext without the secret
- * is unreadable anyway. After reveal the same bytes are already public in
- * substance: the published bundle carries every decrypted payload, so this
- * adds a bundle-independent path for the what-beat-you view to decrypt and
- * re-score in the browser with the revealed secret.
+/*
+ * `sealedEntries` lived here until 2026-09-16: the sealed ciphertexts,
+ * seat-keyed, served once the pool secret was on-chain so the what-beat-you
+ * view could decrypt in the browser. Its premise — "after reveal the same
+ * bytes are already public in substance" — stopped being true on 2026-09-12,
+ * when bundle version 2 (audit B-31) dropped the per-screen timings and the
+ * device marker from the published set: the box still carried both, and this
+ * route handed every box to anyone. Under the founder's data-minimisation
+ * ruling of 2026-09-15 the boxes now have no public reader at all; the
+ * battles and salts a browser needs are in the bundle, and the what-beat-you
+ * view reads them there and checks each seat against its on-chain hash.
  */
-async function sealedEntries(db: Queryable, pool: string): Promise<ReadApiResult> {
-  const state = await db.query('SELECT id, secret FROM pools WHERE pool = $1', [pool]);
-  if (state.rows.length === 0) return { status: 404, body: { error: 'not found' } };
-  const row = state.rows[0] as { id: unknown; secret: unknown };
-  if (row.secret === null || row.secret === undefined) {
-    // Fail closed: nothing sealed is served before the reveal.
-    return { status: 403, body: { error: 'pool secret not revealed' } };
-  }
-  const res = await db.query(
-    `SELECT e.idx AS seat, encode(s.ciphertext, 'hex') AS ciphertext_hex
-       FROM pools p
-       JOIN sealed_entries s ON s.pool_id = p.id
-       JOIN entries e ON e.pool = p.pool AND e.player = s.player
-      WHERE p.pool = $1
-      ORDER BY e.idx ASC`,
-    [pool]
-  );
-  return { status: 200, body: res.rows };
-}
 
 /**
  * The verify page's on-chain record, assembled from the RAW EVENT LEDGER —

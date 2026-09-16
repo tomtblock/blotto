@@ -1,47 +1,58 @@
 /*
  * "What finished above you" (v3 D3) — pure logic, browser-ready, no wallet.
  *
- * Post-reveal the pool secret is public on-chain, and the read API serves
- * the seat-keyed ciphertexts (only after that reveal — the endpoint fails
- * closed). This module decrypts them with the revealed secret and compares
- * every better-committed seat head-to-head against yours with the SAME
- * engine the crank runs (R20) — the player's machine reaches the numbers
- * itself, trusting nothing.
+ * Post-reveal the pool's battle set is PUBLISHED: the bundle at the archive's
+ * permanent URI carries every seat's battles and salt beside the hash the
+ * chain committed to. This module reads that bundle, recomputes each seat's
+ * commitment (`sha256(battles ‖ salt)`, the sealing package's one
+ * definition) and keeps only the seats whose published battles match what
+ * was committed — then compares every better-ranked seat head-to-head
+ * against yours with the SAME engine the crank runs (R20). The player's
+ * machine reaches the numbers itself, trusting nothing.
+ *
+ * WHAT CHANGED 2026-09-16 (the founder's data-minimisation ruling of
+ * 2026-09-15). Until then this module opened the sealed boxes, fetched from
+ * the read API's `sealed-entries` route, with the revealed secret. The box
+ * carries two things the published bundle deliberately does not (bundle
+ * version 2, audit B-31): the seven per-screen timings and the device
+ * marker. Decoding them here "and dropping them" did not make them private;
+ * serving the boxes did the opposite. The route is gone, the boxes have no
+ * public reader, and the bundle — which is what verification recomputes from
+ * anyway — is the only source this view reads.
  *
  * Anonymised by seat: nothing here touches a wallet address, and only the
- * battle sets leave this module — the sealed payload's timings and device
- * hash are decoded and dropped.
+ * battle sets leave this module.
  */
 
-import { sealOpen, publicKeyOf, decodePayload } from '@blotto/sealing';
-import { compareBattle, type BattleComparison, type BattleSet } from '@blotto/scoring';
-import type { SealedEntryRow } from '@/data/types';
+import { battlesCommitment } from '@blotto/sealing';
+import { compareBattle, decodeBattleSet, type BattleComparison, type BattleSet } from '@blotto/scoring';
+import type { PublishedBundle } from '@/verify/logic';
 
 const unhex = (s: string): Uint8Array => {
   const out = new Uint8Array(s.length / 2);
   for (let i = 0; i < out.length; i++) out[i] = parseInt(s.slice(i * 2, i * 2 + 2), 16);
   return out;
 };
+const hex = (b: Uint8Array): string => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
 
 /**
- * Decrypt every served ciphertext with the revealed pool secret. A row that
- * fails to open or decode is skipped (the verify page is the full-integrity
- * story; this view renders what opens cleanly).
+ * Every seat's battles from the published bundle, keyed by seat — but ONLY a
+ * seat whose published battles and salt recompute to its committed hash. A
+ * seat with no published plaintext (a missing reveal), an undecodable set,
+ * or a hash that does not match is skipped, never guessed: the verify page is
+ * the full-integrity story, and this view renders what checks out.
  */
-export function decryptSeatBattles(
-  revealedSecretHex: string,
-  rows: readonly SealedEntryRow[]
-): Map<number, BattleSet> {
-  const secretKey = unhex(revealedSecretHex);
-  const keypair = { publicKey: publicKeyOf(secretKey), secretKey };
+export function battlesFromBundle(bundle: Pick<PublishedBundle, 'entries'>): Map<number, BattleSet> {
   const out = new Map<number, BattleSet>();
-  for (const row of rows) {
+  for (const entry of bundle.entries) {
+    if (entry.battles === null || entry.salt === null) continue;
     try {
-      const opened = sealOpen(unhex(row.ciphertext_hex), keypair);
-      if (opened === null) continue;
-      out.set(row.seat, decodePayload(opened).battles);
+      const battles = decodeBattleSet(unhex(entry.battles));
+      const committed = entry.battles_hash.toLowerCase();
+      if (hex(battlesCommitment(battles, unhex(entry.salt))) !== committed) continue;
+      out.set(entry.index, battles);
     } catch {
-      // Undecodable row — skip; never guess.
+      // Undecodable entry — skip; never guess.
     }
   }
   return out;
@@ -66,9 +77,9 @@ export interface AboveYouRow {
 /**
  * One seat's standing, as the panel must be given it (audit 2026-09-11,
  * F-07). `rank` is the committed field of the results-root leaf; `seat` is
- * how the ciphertexts are keyed and is NOT committed (the read API says so
- * itself — `LeaderboardRow`), which is fine for a display panel and would
- * not be for anything a player is paid on.
+ * how the bundle's entries are indexed and is NOT committed (the read API
+ * says so itself — `LeaderboardRow`), which is fine for a display panel and
+ * would not be for anything a player is paid on.
  */
 export interface StandingRow {
   seat: number;

@@ -47,6 +47,7 @@ import { signInHref } from '@/app/signin/return-to';
 import { runInterruption } from './run-guard';
 import { RevealHost } from './reveal-host';
 import { PendingPanel } from '@/components/ui/pending-panel';
+import { sweepStills } from '@/battle/stills-sweep';
 import { SealedPanel } from './sealed-panel';
 
 /** D-C: the top-up prompt ships behind a flag, OFF by default. */
@@ -259,6 +260,12 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
     battles: readonly Allocation[];
     timingsMs: readonly number[];
   } | null>(null);
+
+  // Forget the stills of pools whose allocation will never be published
+  // (2026-09-16, data minimisation) — once, when the play page mounts.
+  useEffect(() => {
+    void sweepStills(indexerApi());
+  }, []);
 
   /*
    * C-17 / D-13 (audit 2026-09-11). THE RUN IS THE PLAYER'S WORK, and until
@@ -537,6 +544,9 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
            * into "Your seven battles are sealed" with nothing paid.
            */
           if (exit === 'entered') {
+            // The retry copy of the run exists for a failure nothing landed
+            // from; once a seat is held it is surplus (2026-09-16).
+            setLastConfirmed(null);
             setDone(true);
             return;
           }
@@ -544,6 +554,7 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
             // Broadcast and not yet confirmed: it may still land, so neither
             // a second run nor "Sealed" is honest. The pool page is, and it
             // shows the entry the moment the network confirms it.
+            setLastConfirmed(null);
             router.push(`/pools/${pool.pool}`);
             return;
           }

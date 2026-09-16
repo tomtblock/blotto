@@ -55,6 +55,7 @@ import {
 } from "./standard-wallets";
 import { pickActiveWallet } from "./active-wallet";
 import { signingUiOptions } from "./signing-ui";
+import { migrateLegacyKey, opaqueKey, opaqueToken } from "@/storage/opaque-key";
 import type { TxSigner } from "@/tx/types";
 import { rpcUrl } from "@/chain/rpc";
 import { SOLANA_CHAIN } from "@/chain/cluster";
@@ -153,23 +154,31 @@ function PrivyAdapter({ onAuth }: { onAuth: (auth: Auth) => void }) {
    * update-loop rule in auth-provider.tsx and the lint rule that enforces it
    * both refuse setState inside an effect body.
    */
-  const storageKey = user?.id ? `blotto.activeWallet.${user.id}` : null;
-  const stored = useMemo(() => {
+  // Opaque since 2026-09-16 (storage/opaque-key.ts): neither the key nor the
+  // value names the provider id or the wallet. The value is a TOKEN of the
+  // chosen address, resolved against the connected signers below; the
+  // pre-change entry (`blotto.activeWallet.<id>` = address) is carried once.
+  const legacyStorageKey = user?.id ? `blotto.activeWallet.${user.id}` : null;
+  const storageKey = user?.id ? opaqueKey("activeWallet", user.id) : null;
+  const storedToken = useMemo(() => {
     if (!storageKey) return null;
     try {
+      if (legacyStorageKey) {
+        migrateLegacyKey(legacyStorageKey, storageKey, (addr) => opaqueToken("activeWallet", addr) ?? "");
+      }
       return window.localStorage.getItem(storageKey);
     } catch {
       return null;
     }
-  }, [storageKey]);
+  }, [storageKey, legacyStorageKey]);
   const [override, setOverride] = useState<{ key: string; address: string } | null>(null);
-  const chosen = override && override.key === storageKey ? override.address : stored;
   const setActiveWallet = useCallback(
     (addr: string) => {
       if (!storageKey) return;
       setOverride({ key: storageKey, address: addr });
       try {
-        window.localStorage.setItem(storageKey, addr);
+        const token = opaqueToken("activeWallet", addr);
+        if (token !== null) window.localStorage.setItem(storageKey, token);
       } catch {
         // Storage can be unavailable (private mode); the choice still holds
         // for this session through `override`.
@@ -341,6 +350,15 @@ function PrivyAdapter({ onAuth }: { onAuth: (auth: Auth) => void }) {
      * wallet screen lets them switch back, and the choice persists.
      */
     // The rule and its reasons live in active-wallet.ts, unit-pinned.
+    // The stored choice is a token; the address it names is whichever
+    // connected signer's token matches. A wallet no longer connected resolves
+    // to nothing, exactly as its plain address did before 2026-09-16.
+    const chosen =
+      override && override.key === storageKey
+        ? override.address
+        : storedToken === null
+          ? null
+          : (signers.find((s) => opaqueToken("activeWallet", s.address) === storedToken)?.address ?? null);
     const walletAddress = pickActiveWallet({ signers, linked: linkedAddresses, chosen });
 
     const hasEmbedded = signers.some((s) => s.kind === "embedded");
@@ -423,7 +441,9 @@ function PrivyAdapter({ onAuth }: { onAuth: (auth: Auth) => void }) {
     detectedWallets,
     lastError,
     clearError,
-    chosen,
+    override,
+    storageKey,
+    storedToken,
     setActiveWallet,
     signInWithWallet,
     signTransaction,
