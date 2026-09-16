@@ -315,6 +315,47 @@ async function requestPacket(api: string, pool: string, player: string): Promise
   };
 }
 
+/**
+ * Is this pool missing either follow-up transaction? Returns a human reason, or
+ * null when the pool is ready to take entries.
+ *
+ * `open_pool` is the first of THREE transactions: `commit_vrf_seed` replaces a
+ * 32-byte zero sentinel with the randomness seed, and `create_pass_collection`
+ * creates the collection every pass is minted into. Until both land `register`
+ * reverts with VrfSeedNotCommitted (6004) or fails inside the mint CPI.
+ *
+ * VRF_SEED_OFFSET is computed from the `Pool` field order in `state.rs`:
+ * discriminator 8 + id 8 + tier 1 + entry_lamports 8 + pot_lamports 8 +
+ * entrants 2 + opened_at 8 + fill_deadline 8 + state 1 + sealing_pubkey 32 +
+ * sealing_secret_hash 32 = 116. The arithmetic is checked by the three offsets
+ * `state.rs` pins for external readers — entrants 33, fill_deadline 43,
+ * state 51 — which this same walk reproduces exactly.
+ */
+const VRF_SEED_OFFSET = 116;
+
+async function poolNotReady(connection: Connection, pool: PoolView): Promise<string | null> {
+  const poolKey = new PublicKey(pool.pool);
+  const [collection] = PublicKey.findProgramAddressSync(
+    [Buffer.from('pass_collection'), poolKey.toBuffer()],
+    PROGRAM_ID
+  );
+  const [poolInfo, collInfo] = await connection.getMultipleAccountsInfo(
+    [poolKey, collection],
+    'confirmed'
+  );
+  if (!poolInfo) return 'the pool account could not be read';
+  if (poolInfo.data.length < VRF_SEED_OFFSET + 32) {
+    return `the pool account is ${poolInfo.data.length} bytes, too short to hold a vrf seed — it may predate a migration`;
+  }
+  if (!collInfo) return 'its pass collection does not exist yet (create_pass_collection has not landed)';
+
+  const seed = poolInfo.data.subarray(VRF_SEED_OFFSET, VRF_SEED_OFFSET + 32);
+  if (seed.equals(Buffer.alloc(32))) {
+    return 'its vrf seed is still the uncommitted sentinel (commit_vrf_seed has not landed)';
+  }
+  return null;
+}
+
 // --- one seat ----------------------------------------------------------------
 
 export interface SeatResult {
@@ -394,9 +435,14 @@ async function enterOne(args: {
 
     if (simulate) {
       // Ask the deployed program, commit nothing.
+      //
+      // The signers are passed DELIBERATELY. web3.js sets `sigVerify` only when
+      // they are (lib/index.cjs.js:8080), so simulating without them checks the
+      // program's logic and the Ed25519 packet instruction but NOT this
+      // transaction's own signatures — which is less than "the transaction
+      // would be accepted", and was claimed as more until 2026-09-16.
       tx.recentBlockhash = (await connection.getLatestBlockhash('confirmed')).blockhash;
-      tx.sign(player, passAsset);
-      const sim = await connection.simulateTransaction(tx);
+      const sim = await connection.simulateTransaction(tx, [player, passAsset]);
       const err = sim.value.err;
       if (err) {
         const logs = (sim.value.logs ?? []).filter((l) => /Error|failed|Program log/.test(l)).slice(-6);
@@ -465,6 +511,23 @@ async function main(): Promise<void> {
   console.log(`if the deadline passed now: ${pool.outcome_if_deadline_now}`);
   if (pool.state !== 'Open' && !dryRun) {
     throw new Error(`pool ${pool.id} is ${pool.state}, not Open — refusing to enter`);
+  }
+
+  // A freshly opened pool is not enterable for a few seconds. `open_pool` is
+  // the first of THREE transactions: `commit_vrf_seed` fills the randomness
+  // sentinel and `create_pass_collection` creates the collection every pass is
+  // minted into, both separately and permissionlessly. Until both land,
+  // `register` reverts with VrfSeedNotCommitted (6004) or fails inside the mint
+  // CPI. Checking here turns a bare program error at the rollover into an
+  // instruction to wait one more tick.
+  if (!dryRun) {
+    const notReady = await poolNotReady(connection, pool);
+    if (notReady) {
+      throw new Error(
+        `pool ${pool.id} is Open but not yet enterable — ${notReady}. ` +
+        'The daemon lands these within a tick or two of opening; re-run shortly.'
+      );
+    }
   }
   const mode = dryRun ? 'DRY RUN — ' : simulate ? 'SIMULATE (no state written) — ' : '';
   console.log(`${mode}entering ${walletIds.length} seats: ${walletIds.join(', ')}\n`);
