@@ -337,11 +337,15 @@ export const COPY = {
     ageTerritoryNote: '18+ only · not available in some territories',
     // Founder 2026-09-09: "It must be super clear to the user that they
     // should check back when the pool has reached 64 and concluded." The
-    // size rule is D-E4's (a pool plays at 64, or at its deadline with at
-    // least 52). PHASE-N-REVIEW: drafts; the founder owns the words.
+    // size rule was D-E4's (52) and is now R7-b's (40, 2026-09-12) — this
+    // string carried 52 until 2026-09-16 and is the screen a player reads
+    // immediately AFTER paying, where PID §8.6 requires the fill deadline
+    // and refund rule to be stated accurately. It is a function of the
+    // shared constant for that reason, not for tidiness.
+    // PHASE-N-REVIEW: drafts; the founder owns the words.
     checkBackTitle: 'Now the pool fills',
-    checkBack:
-      'Your seven battles are sealed. Nothing more to do here. The pool plays when it reaches 64 players, or at its deadline with at least 52 — every battle is then revealed and scored, and the ranking appears on the pool page. Check back then.',
+    checkBack: (minSeats: number) =>
+      `Your seven battles are sealed. Nothing more to do here. The pool plays when it reaches 64 players, or at its deadline with at least ${minSeats} — every battle is then revealed and scored, and the ranking appears on the pool page. Check back then.`,
     // D-E11 (founder ruling 2026-09-13): the two email lines that stood here
     // — "Email me when this pool has concluded" and "We will email you when a
     // pool you are in has concluded." — are gone. Nothing in this repository
@@ -408,7 +412,12 @@ export const COPY = {
     // Founder wording, 2026-09-09 (replaces "Five stats. One hundred points.
     // Where you put them is the whole game.").
     pentagonCaption: 'Spread Your Skill. Outsmart Your Opponent. Best Strategy Wins.',
-    steps: [
+    // R7-b (2026-09-12) moved the minimum field 52 -> 40, and step 3 carried
+    // the old figure on the LANDING PAGE until 2026-09-16. Like
+    // `rules.howToEnter` below, the steps are now a function of the shared
+    // constant so the number cannot go stale again; `check-published-numbers`
+    // fails the build if a literal comes back.
+    steps: (minSeats: number) => [
       {
         title: 'Take a seat',
         body:
@@ -425,7 +434,7 @@ export const COPY = {
       {
         title: 'Everyone fights everyone',
         body:
-          'When the pool runs — all sixty-four seats filled, or at least fifty-two seated when its clock ends — entries are revealed. Your battle one faces every other player’s battle one, and so on through seven. A battle is won by taking three of the five stats.',
+          `When the pool runs — all sixty-four seats filled, or at least ${minSeats} seated when its clock ends — entries are revealed. Your battle one faces every other player’s battle one, and so on through seven. A battle is won by taking three of the five stats.`,
       },
       {
         title: 'The winner takes the prize pool',
@@ -457,7 +466,15 @@ export const COPY = {
     skillHeading: 'Skill, measured',
     skillIntro:
       'Two hundred pools were played with the same scoring engine that pays every real pool, at both field sizes. The only thing that differed between the players below was how they split their points across the seven battles. A player who leaves every battle on the default even split never placed first — not rarely, never: against any battle that concentrates its points on three stats, an even split takes only the two that were left short, and loses three to two by construction.',
-    skillHeadings: { player: 'Player', full: 'First place, 64 seats', min: 'First place, 52 seats' },
+    // The two field sizes the study is measured at. Hard-coded until
+    // 2026-09-16, when `min` still read "52 seats" over data computed at
+    // MIN_SEATS = 40 (fair-play.config.ts derives the number; only the
+    // heading was missed). Both are functions of the shared constants now.
+    skillHeadings: {
+      player: 'Player',
+      full: (seats: number) => `First place, ${seats} seats`,
+      min: (seats: number) => `First place, ${seats} seats`,
+    },
     skillRows: {
       uniform: 'Leaves the default split',
       random: 'Splits at random',
@@ -719,7 +736,8 @@ export const COPY = {
         failed: 'The review service did not accept the appeal. Try again.',
       } as Record<string, string>,
     },
-    // No denominator: a pool runs with 52..64 players (D-E4) and the career
+    // No denominator: a pool runs with MIN_SEATS..64 players (R7-b, which
+    // superseded D-E4's 52 on 2026-09-12) and the career
     // row does not carry its field size.
     rank: (r: number) => `Ranked #${r}`,
     // SUBSTANCE FIXED (D3-B, ratified 2026-08-27; substance amended by D-E2,
@@ -1051,7 +1069,16 @@ export const COPY = {
       '(1) allocation patterns — reuse of the same split, uniform round numbers; ' +
       '(2) timing — how the ninety seconds were actually spent, screen by screen; ' +
       '(3) duplicate or near-duplicate battle sets across entries; ' +
-      '(4) the same device or network origin behind multiple entries in one pool; ' +
+      // NARROWED 2026-09-16. This read "the same device or network origin"
+      // until a review found the network half does not run: the daemon
+      // passes `ipHash: ''` for every entry (backend/reveal/src/main.ts),
+      // the hashed-IP capture at ciphertext submission is not built, and
+      // `deviceIpCorrelation` correctly skips an empty key -- so the IP
+      // branch is inert rather than wrong, and correlates nothing, ever.
+      // The device half is real and is the HARD-BLOCK half (R11).
+      // A published claim does not wait on a build, so the sentence is
+      // narrowed to what runs; it widens again when the capture lands.
+      '(4) the same device behind multiple entries in one pool; ' +
       '(5) a score far outside the field’s distribution. ' +
       'These signals are computed for every tournament and published with the review log. Nothing is flagged automatically: a flag is a decision by a named reviewer that an entry meets one of the criteria above, ' +
       'and a flag never decides anything by itself \u2014 it only sends the entry to the signed review process below.',

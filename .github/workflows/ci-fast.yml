@@ -479,6 +479,18 @@ jobs:
       - name: Territory schedule (founder instruction 2026-09-12)
         run: npx --yes tsx@4.20.3 scripts/check-territories.ts
 
+      # A number a player reads must be the number the program enforces. On
+      # 2026-09-12 R7-b moved MIN_SEATS 52 -> 40; three player-facing strings
+      # kept the old figure and every gate in this lane reported clean,
+      # because none of them looks at the copy. One of the three was the
+      # screen shown immediately AFTER payment, where PID §8.6 requires the
+      # fill deadline and refund rule to be stated accurately. This reads the
+      # program's own constants.rs and refuses any rendered string still
+      # carrying a superseded value — as digits or spelled out, because the
+      # landing page spelled it.
+      - name: Published numbers match the program (PID §8.6)
+        run: npx --yes tsx@4.20.3 scripts/check-published-numbers.ts
+
       - name: The fill simulation still models the rule (§5.2)
         run: npx --yes tsx@4.20.3 scripts/sim/fill-replay.ts --self-test
 

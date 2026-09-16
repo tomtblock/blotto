@@ -78,13 +78,14 @@ first step of the **`standing-rules` CI lane on every PR** (roadmap §3 rule 4).
 forbidden words come from roadmap R11/§6.4: **promotional** and **sweepstake** — they denote
 free-entry sweepstakes and put the product in the wrong regulatory box.
 
-That lane runs **eleven** checks, not one, and any of them can fail your change. In its order:
+That lane runs **twelve** checks, not one, and any of them can fail your change. In its order:
 
 | Check | What it refuses to let through |
 |---|---|
 | `check-language.sh` | The §8.7 lexicon, above |
 | `check-standing-rules.sh` | Roadmap rules 5 (no `class` in the scoring path) and 6 (the vault's exits are exactly the enumerated set) |
 | `check-territories.ts` | A founder territory schedule the entry service could not actually enforce |
+| `check-published-numbers.ts` | A number in player-facing copy that a shared constant has since moved. Reads the program's own `constants.rs`, and catches the value spelled out as well as in digits — R7-b moved `MIN_SEATS` 52 → 40 and the landing page kept "fifty-two", where a digit sweep would have passed it. History in a comment beside the string is fine and is the convention; it is the rendered text that must be current |
 | `sim/fill-replay.ts --self-test` | A fill simulation that has drifted from the program's seal/refund boundary |
 | `drain-verdict.ts --self-test` | An upgrade pre-flight that has quietly stopped refusing while a pool is taking entries. It imports nothing, so this lane can run it without installing a workspace; operators reach the same fixtures via `admin.ts pools --self-test` |
 | `check-env-examples.sh` | An environment variable a service reads and no example documents |
@@ -157,6 +158,33 @@ program as a genesis fixture (`tests/fixtures/mpl_core.so`) so the suite runs of
 - Branch from the default branch; never commit directly to it.
 - A commit that touches on-chain money paths, the pass mint, or anything in PID §8 says so in its
   body.
+
+### Branch names
+
+A branch name says what the work is, not who or what typed it. **`<prefix>/<subject>`**, lower case,
+hyphenated, and a date on anything dated:
+
+| Prefix | For |
+|---|---|
+| `step/` | a build step from the roadmap |
+| `fix/` | a defect |
+| `docs/` | documentation only |
+| `review/` | an audit or a review — date it, e.g. `review/compliance-2026-09-16` |
+| `revert/` | a revert |
+| `ops/` | deploy, CI and infrastructure |
+
+Two rules matter more than the prefix, because they are what actually keeps the list readable:
+
+- **Rename a machine-generated branch before you open its PR.** An agent session opens on a name
+  like `claude/jolly-ramanujan-wgxffx`, which says nothing. Push to the real name first, confirm the
+  new ref matches, then delete the old one — in that order, and while no PR points at it yet, because
+  a rename is create-then-delete and there is no rename that keeps a PR's thread.
+- **Delete the branch when its PR merges.** GitHub can do this for you: Settings → General →
+  *Automatically delete head branches*. Turning that on is the single highest-value thing available
+  here, because it makes the cleanup continuous instead of occasional.
+
+Left alone, this drifts fast: on 2026-09-16 the repository carried 28 branches under three competing
+conventions, 21 of them fully merged and simply never removed.
 
 ## CI
 

@@ -171,8 +171,11 @@ hard way:
 | `tests/litesvm/` | The integration suite that drives the compiled program |
 | `tests/rehearsal/` | The offline settlement rehearsal and the skill-evidence study |
 | `tests/postgres/` | The only suite that executes SQL: the migrations from an empty database, then every Postgres-backed store against the schema they build |
+| `docs/` | Every document, mapped by [`docs/INDEX.md`](docs/INDEX.md), which says which one is canonical for which subject. Read that before adding one |
+| `battle-test/` | The **live devnet trial**: a scripted week of real pools entered by headless wallets and by hand, to prove the whole path end to end before mainnet. Its plan is frozen in advance so a run cannot be rationalised afterwards. `MANUAL.md` is the procedure, `STATE.md` is where the run has got to, `FOUNDER-ACTIONS.md` is what it needs a human to do |
+| `deploy/` | The Fly.io service definitions — four backend apps, Frankfurt, one `.fly.toml` each |
 | `config/` | **Founder-owned JSON**: the territory schedule, the terms version, the reviewer registry, the custody policy. Changed only on a founder instruction, each in its own commit |
-| `scripts/` | Deploy, the admin CLI, and the eleven checks CI's `standing-rules` lane runs |
+| `scripts/` | Deploy, the admin CLI, and the twelve checks CI's `standing-rules` lane runs |
 | `scripts/sim/` | The arrival simulation behind the fill rule — it re-implements the seal/refund boundary to measure how often a pool runs, and self-tests against the program's numbers in CI |
 
 ## Verifying a change
@@ -186,6 +189,7 @@ cd app && NEXT_PUBLIC_FIXTURE_DATA=1 npm run build && npm run journey   # the br
 ./scripts/check-language.sh                     # the PID §8.7 lexicon
 ./scripts/check-standing-rules.sh               # the vault's exits; class out of scoring
 npx tsx scripts/check-territories.ts            # the founder's schedule is enforceable
+npx tsx scripts/check-published-numbers.ts      # published copy carries no superseded constant
 npx tsx scripts/sim/fill-replay.ts --self-test  # the simulation still models the fill rule
 npx tsx scripts/drain-verdict.ts --self-test    # the upgrade pre-flight still refuses
 ./scripts/check-env-examples.sh                 # every env var a service reads is documented
@@ -196,11 +200,11 @@ python3 scripts/check-mirrors.py                # Rust and TypeScript constants 
 ./scripts/deploy-devnet.sh --self-test          # the program deploy still reads a cluster
 ```
 
-Those eleven are the whole of CI's `standing-rules` lane, in its order — run
+Those twelve are the whole of CI's `standing-rules` lane, in its order — run
 them and that lane cannot surprise you. `ci-fast` has five more jobs: `rust`,
 `node`, `postgres`, `journey` and `gitleaks`.
 
-The fifth, `drain-verdict.ts`, proves the pre-flight that stops a program
+The sixth, `drain-verdict.ts`, proves the pre-flight that stops a program
 upgrade landing while a pool is taking entries; a version of it that quietly
 stopped refusing would report CLEAR for ever. Its verdict lives in its own
 module, with no imports, so this lane can run it without installing anything —

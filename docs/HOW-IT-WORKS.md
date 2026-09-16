@@ -117,10 +117,13 @@ still paid, and is still repaid if their pool does not fill.
 **Built and running on a test network:** the program, the entry gate, the sealing, the scoring, the
 settlement process, the website, and the published-results pages.
 
-**Not done:** it has never run on the main network, and no real money has ever entered it. That
-step waits on counsel sign-off. An independent security review of the program is planned after the
-first ten settled pools rather than before — a decision taken deliberately, and the reason the
-entry price is capped at 0.1 SOL until then.
+**Not done:** it has never run on the main network, and no real money has ever entered it. No
+outside opinion has been obtained on the characterisation in §8 of the product document: the
+decision to proceed on the operator's own analysis, with opinions pursued in parallel rather than
+as a precondition, is register row R1 and was reaffirmed on 2026-09-16. One written opinion remains
+a precondition for the 0.5 SOL tier and above (R6). An independent security review of the program
+is planned after the first ten settled pools rather than before — a decision taken deliberately,
+and the reason the entry price is capped at 0.1 SOL until then.
 
 **Founder-set numbers**, changeable without new code: the entry prices, the prize amounts, the
 12-hour window, the 40-player minimum, the territory list, and which entry tiers are open. Only the

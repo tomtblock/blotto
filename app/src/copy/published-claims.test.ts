@@ -102,6 +102,23 @@ const PROMISES: readonly Promised[] = [
     proof: 'backend/detection/src/appeals.ts',
   },
   {
+    phrase: 'the same device behind multiple entries in one pool',
+    commitment:
+      'Entries sharing one device inside a pool are correlated and surfaced to the reviewer.',
+    // NARROWED 2026-09-16, and listed here so the narrowing is load-bearing
+    // rather than a one-off edit. The sentence read "the same device or
+    // network origin" while the daemon passed `ipHash: ''` for every entry:
+    // `deviceIpCorrelation` skips an empty key, so the network half
+    // correlated nothing and never could. The device half is real, runs on
+    // the sealed device hash, and is the HARD-BLOCK half under R11.
+    //
+    // Widening this sentence again requires the hashed-IP capture at
+    // ciphertext submission, which is a privacy decision as well as a build:
+    // it puts a network identifier into the detection pipeline. Until then
+    // the claim stays the size of the code.
+    proof: 'backend/detection/src/signals.ts',
+  },
+  {
     phrase: 'We do not seek to recover a prize already paid',
     commitment: 'A paid prize is never clawed back.',
     // Structural, and the strongest promise on this list: there is no

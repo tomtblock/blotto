@@ -29,6 +29,7 @@
  */
 
 import Link from 'next/link';
+import { MIN_SEATS } from '@blotto/scoring';
 import { COPY } from '@/copy';
 import { BlottSprite } from '@/components/blott/BlottSprite';
 import { Card } from '@/components/ui/card';
@@ -56,7 +57,7 @@ export function SealedPanel({ poolAddress }: { poolAddress: string }) {
 
       <Card className="flex w-full max-w-md flex-col gap-3 p-5 text-left">
         <h3 className="font-display text-[24px] leading-7 font-bold text-ink">{COPY.pool.checkBackTitle}</h3>
-        <p className="text-[15px] leading-6 text-ink">{COPY.pool.checkBack}</p>
+        <p className="text-[15px] leading-6 text-ink">{COPY.pool.checkBack(Number(MIN_SEATS))}</p>
       </Card>
 
       <div className="flex w-full max-w-md flex-col gap-2 sm:flex-row">

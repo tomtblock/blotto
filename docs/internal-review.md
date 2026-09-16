@@ -48,6 +48,21 @@ donation strands harmlessly (and keeps a reaped account alive, also
 harmless). The vault-model suite's ledger identity intentionally models
 program-driven flows only. No action.
 
+> **CORRECTED 2026-09-16 — this finding was wrong, and its text is left
+> standing because the record of what was thought is the useful part.** The
+> 2026-09-11 cold read raised the same scenario as **B-03, CRITICAL**: a
+> donated lamport is harmless to the program's *arithmetic*, which is what the
+> paragraph above reasons about, but not to the *runtime*. Every exit drains a
+> computed amount, so one stray lamport left a zero-data vault ending at 1 —
+> a balance Solana refuses, since such an account may end at zero or at rent
+> exemption and never between. The pot froze and the tier died with it. The
+> audit's own words: *"a risk that was seen, reasoned about, and closed for a
+> reason that is true about the program and false about the runtime."*
+> **Fixed and proven on chain:** `open_pool` now funds a rent cushion read
+> from the network, both debit helpers assert the post-balance lands on zero
+> or at rent exemption (`WouldStrandRentBalance`), and pool 9 carried a
+> donated lamport through an entry and out the other side on 2026-09-13.
+
 ### IR-4 — ACCEPTED: escrowed shares depend on settlement-signer liveness
 
 A flagged or KYC-escrowed share can only leave the vault via
@@ -55,8 +70,15 @@ settlement-signed `release_escrow`/`forfeit_escrow`. A vanished operator
 strands escrow (unlike refunds and payouts, which are permissionless or
 push). This is R10/R11's design — escrow exists precisely so a human
 reviews — and the KYC path releases on a packet, not operator grace. Recorded
-so nobody mistakes it for an oversight; the 24h-review commitment
-(TECH-ARCH §9) is the operational mitigation.
+so nobody mistakes it for an oversight. The operational mitigation is the
+review window — **12 hours**, which is the published rule (D-E7 ruling 1,
+`REVIEW_WINDOW_SECS`), not TECH-ARCH §9's 24, which this line cited until
+2026-09-16. Behind it the program's own permissionless release at seven days
+(`ESCROW_AUTO_RELEASE_SECS`) means that even a settlement signer who never
+returns cannot hold a share for ever: after the window, any signer may release
+it to its player. Inaction pays the player, never the operator. That seven-day
+figure is a safeguard against our own failure and is deliberately never
+published as the deadline.
 
 ---
 
@@ -88,8 +110,11 @@ so nobody mistakes it for an oversight; the 24h-review commitment
 ## Standing property checks (CI, every push)
 
 - `system_program::transfer` appears only in `vault.rs`; `vault_debit` call
-  sites pinned to `pay_prizes/escrow/refund`; `fees_debit` to
-  `register/refund` (standing rule 6).
+  sites pinned to `pay_prizes/escrow/refund`; `platform_debit` to
+  `open_pool/refund/treasury` (standing rule 6). Corrected 2026-09-16: this
+  read `fees_debit` to `register/refund`, naming a helper that no longer
+  exists and sites that are no longer its — entries have gone 100% to the
+  treasury since D-A1, and `register` cannot address a vault at all.
 - No `class` token anywhere in the scoring path (standing rule 5).
 - Forbidden-vocabulary grep (PID §8.7) over the whole tree.
 - Greps that must stay empty forever: `frozen: false`,
