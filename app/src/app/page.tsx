@@ -21,7 +21,20 @@ import { lamportsToSol } from '@/data/format';
 import { AppHeader } from '@/components/shell/app-header';
 import { TabBar } from '@/components/shell/tab-bar';
 import { Countdown } from '@/components/ui/countdown';
-import { HeroClip, type ClipTier } from '@/components/landing/HeroClip';
+import type { ClipTier } from '@/components/landing/HeroClip';
+import { AmbientClip } from '@/components/ui/ambient-clip';
+
+/*
+ * Founder 2026-09-16 (CHANGE-2026-09-16_ui-uplift.md §A5): the open-pool
+ * card carries a looping Blott in a well of its own. The motion rule (one
+ * ambient loop per viewport) is kept by AmbientClip: the hero reel pauses
+ * once it is mostly scrolled away, the card clip plays only while mostly
+ * in view. PHASE-N-REVIEW: the two can overlap for a beat mid-scroll.
+ */
+const CARD_CLIP: readonly ClipTier[] = [
+  { mp4: '/motion/pool/blott-card.mp4', webm: '/motion/pool/blott-card.webm' },
+];
+const CARD_POSTER = '/motion/pool/blott-card.jpg';
 
 /**
  * The hero reel in three cuts of the same 2160p master (founder
@@ -125,10 +138,11 @@ export default async function LandingPage() {
             looping, and a still under reduced motion (HeroClip). The section
             is full-bleed; everything below stays in the 5xl column. */}
         <section className="relative isolate overflow-hidden bg-brand-berry">
-          <HeroClip
+          <AmbientClip
             tiers={HERO_TIERS}
             poster="/motion/landing/hero_montage_poster.jpg"
             className="absolute inset-0 h-full w-full object-cover"
+            playWhenVisible={0.2}
           />
           {/* Legibility scrim: heavy at the text edge, clear on the right so the
               reel reads; a soft fade into the page pink along the bottom. */}
@@ -202,7 +216,8 @@ export default async function LandingPage() {
                     {COPY.pool.potFixedAtOpen}
                   </p>
                 )}
-                <div className="mt-4 flex flex-wrap items-center gap-6">
+                <div className="mt-4 grid gap-5 sm:grid-cols-[minmax(0,1fr)_minmax(200px,38%)]">
+                <div className="flex flex-wrap items-center gap-6">
                   <SeatRing entrants={hero.entrants} />
                   <div className="min-w-0 flex-1">
                     <p className="text-[12px] uppercase tracking-[0.14em] text-game-ink-muted">
@@ -230,6 +245,24 @@ export default async function LandingPage() {
                       />
                     </div>
                   </div>
+                </div>
+                {/* The Blott's well: its own frame inside the card, never
+                    sharing one with a number (tokens.ts: the prize amount and
+                    the Blot are both yellow). A soft plum fade on the side
+                    facing the numbers and a berry inner shadow seat it in the
+                    vinyl rather than on it. */}
+                <div
+                  aria-hidden="true"
+                  className="relative -order-1 aspect-video overflow-hidden rounded-[20px] shadow-[inset_0_0_0_1px_rgba(255,246,236,0.08),inset_0_10px_24px_rgba(42,16,48,0.35)] sm:order-none sm:aspect-auto sm:self-stretch"
+                >
+                  <AmbientClip
+                    tiers={CARD_CLIP}
+                    poster={CARD_POSTER}
+                    className="absolute inset-0 h-full w-full object-cover"
+                    playWhenVisible={0.6}
+                  />
+                  <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,var(--color-game-raised)_0%,transparent_28%)] sm:bg-[linear-gradient(90deg,var(--color-game-raised)_0%,transparent_32%)]" />
+                </div>
                 </div>
                 {/* §8.6: above the enter control, always. */}
                 <p className="mt-5 max-w-prose text-[12px] leading-5 text-game-ink-muted">
