@@ -1,10 +1,12 @@
-# STATE — 2026-09-16 12:23 local (15:23 UTC) — by Claude Code
+# STATE — 2026-09-16 14:35 local (17:35 UTC) — by Claude Code
 
 Phase:            **T1 PASSED and is closed out.** T4 is UNBLOCKED and is the work in progress — pool 15,
                   the first pool that actually plays and pays a real 4 SOL prize.
-Waiting on:       **F-21, now blocking.** Merge PR 133 (the freeze), then enter pool 15 as UI-A and UI-B
-                  with the drag tables in FOUNDER-ACTIONS.md. Nothing may enter pool 15 before that merge.
-                  F-19 (T1 screenshots) is still outstanding but holds nothing up.
+Waiting on:       **F-21 step 2, now the only blocker.** PR 133 was MERGED at 16:22:00Z — the plan is
+                  frozen and registry/T4.freeze.json records it. **Pool 15 is still at 0 entrants**, so
+                  UI-A and UI-B have not entered yet. Drag tables are in FOUNDER-ACTIONS.md §F-21.
+                  I am entering nothing until they do: the plan's role order is UI first, and a headless
+                  seat taking seat 0 would break it. F-19 (T1 screenshots) still outstanding, blocks nothing.
 After that:       I run the 62 headless seats; the 64th entry seals the pool and it pays within minutes
 Live deadlines:   **pool 15, tier 0, deadline 01:52:26Z — about 10h40m.** It is now T4's pool (founder
                   decision 14:18 UTC). Still nobody enters until T4's plan is frozen.
@@ -40,7 +42,11 @@ T4 work — DONE except the founder's part:
      UI-B rank 64, field 2..63 unpaid. Root 3950d12c…a34ac, conditional on the planned seat order.
      validate-plan accepts it and still rejects the broken fixture.
   3. DONE funding. W10–W61 at 0.15 each, 3 transactions, funder left at 0.199980 exactly.
-  4. TODO F-21 — the founder merges and enters. Then me: 62 headless seats, and the 64th seals it.
+  4. DONE freeze. PR 133 merged 16:22:00Z, merge commit 6324f615…105e9. The plan's sha256 at that
+     commit is c74333f0…e064 and the working copy hashes identically.
+  5. TODO F-21 step 2 — the founder's two entries. Then me: 62 headless seats, and the 64th seals it.
+     8h17m left on pool 15's deadline as of 17:35Z. Below 40 seats at the deadline it refunds and T4
+     moves to the next pool — that is a reschedule, not a failure.
 
 Why UI-A must win, in one line, so nobody has to trust the oracle: a wall's score floor is 875
 half-points and the best any field seat can reach is 868. Full arithmetic in the plan's
