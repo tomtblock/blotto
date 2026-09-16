@@ -164,7 +164,6 @@ export async function runOfflinePool(
                   battles: e.battles as number[][],
                   timingsMs: e.timingsMs ?? [],
                   deviceHash: e.deviceHash ?? '',
-                  ipHash: `ip:${e.player}`,
                   scoreHalf: e.scoreHalf,
                 })),
               { fullEscrowTier: false }

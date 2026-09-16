@@ -99,7 +99,12 @@ export function AppealPanel(p: AppealPanelProps) {
             maxLength={2000}
             value={p.grounds}
             onChange={(e) => p.onGroundsChange(e.target.value)}
+            aria-describedby="appeal-grounds-public"
           />
+          {/* Said before the player types (2026-09-16): the text is published. */}
+          <p id="appeal-grounds-public" className="text-[12px] text-ink-muted">
+            {c.groundsPublicNote}
+          </p>
           <p className="text-[12px] text-ink-muted">{c.windowNote(position.lodgeUntil ?? '')}</p>
           <button
             type="button"

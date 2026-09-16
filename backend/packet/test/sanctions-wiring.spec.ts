@@ -26,6 +26,8 @@ import {
 import { base58Encode } from '../src/shared';
 import { ofacRefreshIntervalMs, wireSanctions } from '../src/sanctions-wiring';
 import { MemorySanctionsRefusalLog } from '../../sanctions/src/refusal-log';
+import { ALERT } from '../../_shared/src/metrics';
+import { short } from '../../_shared/src/short';
 
 /** The verbatim SDN excerpt the sanctions package tests against. */
 const FIXTURE = join(__dirname, '..', '..', 'sanctions', 'fixtures', 'ofac-sdn-excerpt.xml');
@@ -215,7 +217,15 @@ describe('a sanctions refusal is written down (B-36)', () => {
     wired.stop();
   });
 
-  it('a store that will not write cannot change the answer, and shouts the record', async () => {
+  it('a store that will not write cannot change the answer, and pages — without reprinting the record', async () => {
+    // Rewritten in place on 2026-09-16 under the founder's data-minimisation
+    // ruling of 2026-09-15. Until then this case asserted that a failed
+    // insert "shouted the record": the whole refusal — wallet, matches, the
+    // listed party's name — dumped into standard output as the fallback
+    // evidence. A log stream is the wrong place for a second, unbounded
+    // copy of a wallet. The failure is now named with TRUNCATED identifiers
+    // and raised as an alert, so the operator learns the record is missing
+    // from a page rather than from a grep.
     const broken = {
       async record(): Promise<void> {
         throw new Error('connection refused');
@@ -223,21 +233,40 @@ describe('a sanctions refusal is written down (B-36)', () => {
     };
     const wired = await wireSanctions(ofacEnv, { ...quiet, refusals: broken });
     const errors: string[] = [];
+    const warnings: string[] = [];
+    const alerts: { reason: string; detail: Record<string, unknown> }[] = [];
+    const monitor = {
+      recordEvent: () => undefined,
+      reportGauge: () => undefined,
+      alert: (reason: string, detail: Record<string, unknown>) => void alerts.push({ reason, detail }),
+    };
     const realError = console.error;
+    const realWarn = console.warn;
     console.error = (...args: unknown[]) => errors.push(args.join(' '));
+    console.warn = (...args: unknown[]) => warnings.push(args.join(' '));
     try {
       assert.deepEqual(
-        await issuePacket(depsWith(wired.list), request(LISTED_SOL)),
+        await issuePacket({ ...depsWith(wired.list), monitor }, request(LISTED_SOL)),
         GENERIC_REJECTION,
         'still refused — the record is evidence, never a gate'
       );
     } finally {
       console.error = realError;
+      console.warn = realWarn;
     }
-    assert.ok(
-      errors.some((e) => /FAILED to persist a sanctions refusal/.test(e) && e.includes(LISTED_SOL)),
-      `expected the record in the log, got: ${errors.join(' | ')}`
+    const failure = errors.find((e) => /FAILED to persist a sanctions refusal/.test(e));
+    assert.ok(failure, `expected the failure named in the log, got: ${errors.join(' | ')}`);
+    assert.ok(failure.includes(short(LISTED_SOL)), 'the truncated wallet is enough to find the row');
+    for (const line of [...errors, ...warnings]) {
+      assert.ok(!line.includes(LISTED_SOL), `a whole wallet reached the log: ${line}`);
+    }
+    assert.deepEqual(
+      alerts.map((a) => a.reason),
+      [ALERT.packet.sanctionsRefusalUnrecorded],
+      'the missing record pages'
     );
+    assert.equal(alerts[0].detail.wallet, short(LISTED_SOL));
+    assert.ok(!JSON.stringify(alerts[0].detail).includes(LISTED_SOL), 'nor does the alert');
     wired.stop();
   });
 

@@ -258,6 +258,7 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
         config: { territories, kycTier: 0, termsVersion, termsUpdated: terms.updated },
         now: () => BigInt(Math.floor(Date.now() / 1000)),
         nonce: () => BigInt('0x' + randomBytes(8).toString('hex')),
+        monitor,
       },
       // What the screener is standing on, so a degraded start is visible from
       // outside rather than only in the boot log (audit C-18's other half).

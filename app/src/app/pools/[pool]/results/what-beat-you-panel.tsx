@@ -1,12 +1,19 @@
 'use client';
 
 /*
- * The what-finished-above-you panel (v3 D3): after the reveal, decrypt the
- * pool's sealed battles in the browser with the on-chain secret and show
- * how each seat that finished above you played you, battle by battle.
- * Anonymised by seat; the recomputation is the same engine as the crank
- * (R20) via src/results/what-beat-you.ts. Win/loss cells wear
- * priceUp/priceDown — their one sanctioned semantics.
+ * The what-finished-above-you panel (v3 D3): after the reveal, read the
+ * pool's PUBLISHED battle set in the browser, check each seat against the
+ * hash the chain committed to, and show how each seat that finished above
+ * you played you, battle by battle. Anonymised by seat; the recomputation is
+ * the same engine as the crank (R20) via src/results/what-beat-you.ts.
+ * Win/loss cells wear priceUp/priceDown — their one sanctioned semantics.
+ *
+ * SOURCE (2026-09-16, the founder's data-minimisation ruling of 2026-09-15):
+ * the bundle at the archive's permanent URI — the same bytes the Verify page
+ * and the all-battles table read. This panel used to fetch the sealed boxes
+ * from the read API and open them with the secret; the boxes carry the
+ * timings and device marker the published set deliberately omits, so that
+ * route no longer exists and nothing serves a box.
  *
  * ABOVE IS BY RANK (audit 2026-09-11, F-07). The panel used to be handed
  * the committed PAYOUT list and decide "above" by a larger amount: that
@@ -23,13 +30,13 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { COPY } from '@/copy';
-import { indexerApi } from '@/data/api';
 import { lamportsToSol } from '@/data/format';
 import type { PoolLeaderboard } from '@/data/types';
+import type { PublishedBundle } from '@/verify/logic';
 import { useAuth } from '@/wallet/auth-context';
 import { Card } from '@/components/ui/card';
 import {
-  decryptSeatBattles,
+  battlesFromBundle,
   whatFinishedAbove,
   type AboveYouRow,
   type StandingRow,
@@ -71,23 +78,25 @@ export function WhatBeatYouPanel({ pool, secretHex, archive, seatByPlayer }: Wha
     [archive]
   );
 
+  const bundleUri = archive?.uri ?? null;
   useEffect(() => {
-    if (mySeat === null || secretHex === null || standings.length === 0) return;
+    if (mySeat === null || secretHex === null || bundleUri === null || standings.length === 0) return;
     let cancelled = false;
-    indexerApi()
-      .getSealedEntries(pool)
-      .then((sealedRows) => {
+    (async () => {
+      try {
+        const res = await fetch(bundleUri, { cache: 'no-store' });
+        if (!res.ok) throw new Error(String(res.status));
+        const bundle = (await res.json()) as PublishedBundle;
         if (cancelled) return;
-        const battles = decryptSeatBattles(secretHex, sealedRows);
-        setRows(whatFinishedAbove(mySeat, standings, battles));
-      })
-      .catch(() => {
+        setRows(whatFinishedAbove(mySeat, standings, battlesFromBundle(bundle)));
+      } catch {
         if (!cancelled) setRows([]);
-      });
+      }
+    })();
     return () => {
       cancelled = true;
     };
-  }, [pool, secretHex, mySeat, standings]);
+  }, [pool, secretHex, bundleUri, mySeat, standings]);
 
   // Not signed in, not entered, pre-reveal, or no verified archive to take
   // ranks from: this panel simply is not for this viewer — nothing renders.

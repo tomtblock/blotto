@@ -401,7 +401,7 @@ that it does.*
 | C7 | Restricted-territory schedule matching the block | Launch | **Partial — see §9** |
 | C8 | KYC above a threshold | First settlement | Switch exists, **off** |
 | C9 | Detection on the seven-battle session; a staffed review within the published window | First settlement | Detection built and advisory; the review registry holds one member, so **no appeal can yet be decided** |
-| C10 | DPIA; privacy notice | Launch | Built |
+| C10 | DPIA; privacy notice | Launch | **Not started** — this draft said "Built" until 2026-09-16, which was wrong: no privacy notice, DPIA or retention policy exists. The 2026-09-15 data inventory (`CHANGE-2026-09-16_data-minimisation.md` §1) is the first input; the text is counsel's |
 | C11 | Prompt blocklist for class art; vendor indemnity | Launch | **Not started** |
 | C12 | Language audit against §8.7 | Launch | Built, and enforced on every change |
 

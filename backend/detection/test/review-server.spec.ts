@@ -9,6 +9,7 @@ import { expect } from 'chai';
 import nacl from 'tweetnacl';
 import { base58Encode } from '../../_shared/src/blotto-events';
 import { ALERT } from '../../_shared/src/metrics';
+import { short } from '../../_shared/src/short';
 import type { SettlementChain } from '../../reveal/src/chain';
 import {
   MemoryDecisionLog,
@@ -568,7 +569,7 @@ describe('honest outcomes (audit B-24, C-07)', () => {
     // B-24: this used to answer 502 action_failed for work that had executed,
     // so the reviewer was told to retry something irreversible.
     const calls: string[] = [];
-    const alerts: string[] = [];
+    const alerts: { reason: string; detail: Record<string, unknown> }[] = [];
     const log = new MemoryDecisionLog();
     const failing = {
       ...log,
@@ -588,14 +589,20 @@ describe('honest outcomes (audit B-24, C-07)', () => {
       monitor: {
         recordEvent: () => undefined,
         reportGauge: () => undefined,
-        alert: (reason: string) => void alerts.push(reason),
+        alert: (reason: string, detail: Record<string, unknown>) => void alerts.push({ reason, detail }),
       },
     };
     const res = await handleReviewRoute(d, 'POST', '/decisions', signedDecision(alice));
     expect(res.status, 'not a 502 — the action executed').to.equal(200);
     expect(res.body).to.deep.include({ applied: true, logged: false, error: 'log_write_failed' });
     expect(calls, 'the chain action really did land').to.deep.equal([`clear:${PLAYER}`]);
-    expect(alerts).to.deep.equal([ALERT.review.decisionNotLogged]);
+    expect(alerts.map((a) => a.reason)).to.deep.equal([ALERT.review.decisionNotLogged]);
+    // 2026-09-16 (the founder's data-minimisation ruling of 2026-09-15): the
+    // alert carries the same truncated identifiers as the request log. It
+    // used to carry the whole wallet, and an alert can be forwarded off-box.
+    expect(alerts[0].detail.player).to.equal(short(PLAYER));
+    expect(alerts[0].detail.pool).to.equal(short(POOL));
+    expect(JSON.stringify(alerts[0].detail)).to.not.contain(PLAYER);
   });
 
   it('a chain refusal BEFORE the log still answers 502 and logs nothing', async () => {
@@ -641,6 +648,9 @@ describe('honest outcomes (audit B-24, C-07)', () => {
     expect(String((res.body as { detail: string }).detail)).to.contain('admin-signed');
     expect(alerts.map((a) => a.reason)).to.deep.equal([ALERT.review.forfeitNotLanded]);
     expect(String(alerts[0].detail.chainError)).to.contain('admin-signed');
+    // 2026-09-16: truncated identifiers here too — never the whole wallet.
+    expect(alerts[0].detail.player).to.equal(short(PLAYER));
+    expect(JSON.stringify(alerts[0].detail)).to.not.contain(PLAYER);
   });
 
   it('GET /pending shows an upheld forfeit the chain does not carry yet (C-07)', async () => {

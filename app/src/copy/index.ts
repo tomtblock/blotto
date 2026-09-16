@@ -638,13 +638,15 @@ export const COPY = {
   career: {
     chartTitle: 'Prize record',
     chartNote: 'Prize per tournament, in entry order. Prize finishes in amber.',
-    rivalsTitle: 'Rivals',
-    rivalsNote: 'The wallets most often in your pools — public co-entry facts only.',
-    sharedPools: (n: string) => `${n} pools together`,
+    // The rivals strings left with the panel on 2026-09-16 (the founder's
+    // data-minimisation ruling of 2026-09-15).
   },
   beatYou: {
     title: 'What finished above you',
-    note: 'Decrypted and re-scored in your browser from the revealed pool data. Seats only — no names.',
+    // 2026-09-16: the panel reads the published battle set and checks each
+    // seat against its on-chain fingerprint; it no longer opens sealed
+    // boxes. PHASE-N-REVIEW: wording is a proposal pending the founder's voice.
+    note: 'Re-scored in your browser from the published battle set, each seat checked against its on-chain fingerprint. Seats only — no names.',
     headToHead: (w: number, d: number, l: number) => `${w}W · ${d}D · ${l}L against you`,
     unavailable:
       'The sealed battles for this pool are not available to decrypt yet. The Verify page recomputes the full result from the published bundle.',
@@ -679,6 +681,13 @@ export const COPY = {
       note:
         'A reviewer upheld a flag against your entry and your prize passed to the next eligible player. You may appeal within 7 days. A different reviewer decides the appeal within a further 7 days, and every decision is published in the signed log. If your appeal succeeds, we pay you the full prize ourselves.',
       groundsLabel: 'Your grounds',
+      // 2026-09-16 (the founder's data-minimisation ruling of 2026-09-15):
+      // the grounds are published in the signed log, permanently, and the
+      // form did not say so. The interim is this line; keeping the text
+      // private to reviewers is designed and deferred. PHASE-N-REVIEW:
+      // wording is a proposal pending the founder's voice.
+      groundsPublicNote:
+        'What you write here is published in the signed decision log and cannot be withdrawn. Do not include personal details.',
       windowNote: (until: string) => `Appeals close ${until ? `at ${until}` : 'seven days after the decision'}. Your wallet signs the appeal; nothing else is submitted.`,
       submit: 'Sign and lodge the appeal',
       lodgedOn: (at: string) => `Your appeal was lodged at ${at}. A different reviewer will decide it within 7 days; the decision is published in the signed log.`,

@@ -27,6 +27,7 @@ import { indexerApi } from '@/data/api';
 import { useAuth } from '@/wallet/auth-context';
 import { Sheet } from '@/components/ui/sheet';
 import { useToast } from '@/components/ui/toast';
+import { migrateLegacyKey, opaqueKey, opaqueToken } from '@/storage/opaque-key';
 
 interface Item {
   key: string;
@@ -40,11 +41,29 @@ interface Item {
 /** How often an open tab re-reads the player's pools for a new state. */
 const POLL_MS = 60_000;
 
-const seenKey = (wallet: string) => `blotto:notify-seen:${wallet}`;
+const LEGACY_SEEN_KEY = (wallet: string) => `blotto:notify-seen:${wallet}`;
+/** A seen item as stored: an opaque token of `${pool}:${state}`, never the
+ * pool address itself (2026-09-16, storage/opaque-key.ts). */
+const seenToken = (itemKey: string) => opaqueToken('notify-seen', itemKey);
+/** Opaque since 2026-09-16: the key no longer names the wallet, the value no
+ * longer lists the pools. A pre-change entry is carried once, tokenised. */
+const seenKey = (wallet: string): string | null => {
+  const key = opaqueKey('notify-seen', wallet);
+  migrateLegacyKey(LEGACY_SEEN_KEY(wallet), key, (old) => {
+    try {
+      const keys = JSON.parse(old) as string[];
+      return JSON.stringify(keys.map(seenToken).filter((t): t is string => t !== null));
+    } catch {
+      return '[]';
+    }
+  });
+  return key;
+};
 
 function readSeen(wallet: string): Set<string> {
   try {
-    const raw = localStorage.getItem(seenKey(wallet));
+    const key = seenKey(wallet);
+    const raw = key === null ? null : localStorage.getItem(key);
     return new Set(raw ? (JSON.parse(raw) as string[]) : []);
   } catch {
     return new Set();
@@ -104,7 +123,7 @@ export function NotificationsBell() {
         });
         setItems(next.reverse());
         const seen = readSeen(wallet);
-        setUnseen(next.filter((i) => !seen.has(i.key)).length);
+        setUnseen(next.filter((i) => !seen.has(seenToken(i.key) ?? '')).length);
         // A state that arrived since the last read is announced once.
         if (known) {
           for (const i of next) if (!known.has(i.key)) toast.show(i.message);
@@ -126,7 +145,11 @@ export function NotificationsBell() {
     setOpen(true);
     if (!wallet) return;
     try {
-      localStorage.setItem(seenKey(wallet), JSON.stringify(items.map((i) => i.key)));
+      const key = seenKey(wallet);
+      if (key !== null) {
+        const tokens = items.map((i) => seenToken(i.key)).filter((t): t is string => t !== null);
+        localStorage.setItem(key, JSON.stringify(tokens));
+      }
     } catch {
       // Best-effort convenience only.
     }

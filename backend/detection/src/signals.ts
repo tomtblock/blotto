@@ -21,12 +21,18 @@ export interface RevealedEntry {
   timingsMs: number[];
   /** Hex device fingerprint (Privy, R19) from the sealed payload. */
   deviceHash: string;
-  /** Hashed IP recorded at ciphertext submission. */
-  ipHash: string;
   /** Final half-point score, once scored. */
   scoreHalf: number;
 }
 
+/**
+ * `device_ip_correlation` keeps its name although the IP half is gone
+ * (2026-09-16, the founder's data-minimisation ruling of 2026-09-15): the
+ * name is a persisted string in every detection report, the reviewer's page
+ * renders it, and the battle-test manual (scenario T7) reads it. Renaming a
+ * persisted label to match a removed input would cost every reader more than
+ * the misnomer costs.
+ */
 export type SignalName =
   | 'allocation_entropy'
   | 'timing_profile'
@@ -143,9 +149,17 @@ export function duplicateSets(entries: RevealedEntry[]): Finding[] {
   return findings;
 }
 
-/** 4. Device / IP correlation within a pool. Same device is a HARD BLOCK
- * signal (R11) — one entry per wallet is a program invariant, so the same
- * device behind two wallets IS multi-accounting. */
+/** 4. Device correlation within a pool. Same device is a HARD BLOCK signal
+ * (R11) — one entry per wallet is a program invariant, so the same device
+ * behind two wallets IS multi-accounting.
+ *
+ * The IP half of R11's "device/IP correlation" was removed on 2026-09-16
+ * under the founder's data-minimisation ruling of 2026-09-15: no IP-derived
+ * value is captured, stored or sealed at entry, so there is nothing here to
+ * correlate. Until then `RevealedEntry.ipHash` existed and always arrived
+ * empty — a field inviting somebody to start collecting hashed addresses to
+ * "finish" it. The function keeps its name for the same reason the signal
+ * does (see `SignalName`). */
 export function deviceIpCorrelation(entries: RevealedEntry[]): Finding[] {
   const findings: Finding[] = [];
   const byKey = (key: (e: RevealedEntry) => string, severity: 'note' | 'strong', what: string) => {
@@ -169,7 +183,6 @@ export function deviceIpCorrelation(entries: RevealedEntry[]): Finding[] {
     }
   };
   byKey((e) => e.deviceHash, 'strong', 'device fingerprint');
-  byKey((e) => e.ipHash, 'note', 'IP address');
   return findings;
 }
 

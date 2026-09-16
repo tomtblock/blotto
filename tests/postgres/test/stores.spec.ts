@@ -111,11 +111,14 @@ const PLAYER = keyFor('player', 4);
     );
   });
 
-  it('the read API serves seat-keyed ciphertexts only after the reveal (real join)', async () => {
-    // `read-api.ts:468` joins pools → sealed_entries → entries across three
-    // tables and two key types (the pool PDA and the NUMERIC pool id). It
-    // had never been executed against rows in any test — the read-api spec
-    // hands its handler canned result sets.
+  it('the sealed boxes stay in the store and the read API serves none of them, before or after the reveal', async () => {
+    // Rewritten in place on 2026-09-16 (the founder's data-minimisation
+    // ruling of 2026-09-15). Until then this case exercised the real
+    // pools → sealed_entries → entries join behind `/sealed-entries`, which
+    // served every seat's box once the secret was on chain. That route is
+    // gone: the boxes have no public reader. What this case still proves
+    // against real rows is that the store holds the boxes the daemon needs
+    // and that the API, with the same rows in front of it, refuses.
     await truncate(pool, ['pools', 'entries', 'sealed_entries']);
     await pool.query(
       `INSERT INTO pools (pool, id, tier, state, entrants) VALUES ($1, $2, 0, 'Scored', 2)`,
@@ -135,19 +138,16 @@ const PLAYER = keyFor('player', 4);
     }
 
     const before = await handleRead(pool, `/pools/${POOL_PDA}/sealed-entries`);
-    expect(before.status, 'nothing sealed is served before the reveal').to.equal(403);
+    expect(before.status, 'no box is served before the reveal').to.equal(404);
 
     await pool.query('UPDATE pools SET secret = $2 WHERE pool = $1', [POOL_PDA, 'ff'.repeat(32)]);
     const after = await handleRead(pool, `/pools/${POOL_PDA}/sealed-entries`);
-    expect(after.status).to.equal(200);
-    expect(after.body, 'the join found both rows, seat-ascending').to.deep.equal([
-      { seat: 0, ciphertext_hex: 'beef' },
-      { seat: 1, ciphertext_hex: 'dead' },
-    ]);
-    // ANONYMISED (D3): the served rows carry a seat and never a wallet.
-    for (const row of after.body as Record<string, unknown>[]) {
-      expect(Object.keys(row).sort()).to.deep.equal(['ciphertext_hex', 'seat']);
-    }
+    expect(after.status, 'and none after it either').to.equal(404);
+
+    // The daemon's own read is untouched: both boxes are there, in order.
+    const held = await store.listForPool(41n);
+    expect(held.map((r) => r.player).sort()).to.deep.equal(seats.map((s) => s.player).sort());
+    expect(Array.from((await store.get(41n, seats[1].player))!.ciphertext)).to.deep.equal([0xbe, 0xef]);
   });
 });
 

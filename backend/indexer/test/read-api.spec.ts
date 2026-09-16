@@ -177,51 +177,81 @@ describe('read API — D3 routes', () => {
     expect(body[0].paid).to.equal(true);
   });
 
-  it('serves rivals and 404s an unknown profile subroute', async () => {
-    const rows = [{ player: 'R1', pools_shared: '4', paid_in_shared: '2' }];
+  it('the rivals route is gone (2026-09-16); unknown profile subroutes still 404, bad players 400', async () => {
+    // Rewritten in place under the founder's data-minimisation ruling of
+    // 2026-09-15: this case used to assert that `/rivals` served the eight
+    // most-shared co-entrants. Nothing in scoring, payment or verification
+    // needed that graph, so the route no longer exists — and, as before, no
+    // query is issued for a subroute the API does not know.
+    const issued: string[] = [];
     const res = await handleRead(
-      db((sql) => (sql.includes('JOIN player_history o') ? rows : [])),
+      db((sql) => {
+        issued.push(sql);
+        return [{ player: 'R1', pools_shared: '4', paid_in_shared: '2' }];
+      }),
       `/profiles/${PLAYER}/rivals`
     );
-    expect(res.status).to.equal(200);
-    expect((res.body as unknown[]).length).to.equal(1);
+    expect(res.status).to.equal(404);
+    expect(issued, 'no co-entrant query is issued any more').to.deep.equal([]);
     expect((await handleRead(db(() => []), `/profiles/${PLAYER}/nope`)).status).to.equal(404);
     expect((await handleRead(db(() => []), '/profiles/not-base58!/history')).status).to.equal(400);
   });
 
-  it('sealed-entries fails CLOSED before the reveal and serves seat-keyed rows after', async () => {
-    // No pool → 404.
-    expect((await handleRead(db(() => []), `/pools/${POOL}/sealed-entries`)).status).to.equal(404);
-
-    // Pool exists, secret not yet on-chain → 403, and the ciphertext query
-    // is never reached (the canned db would return rows for it).
-    const before = await handleRead(
-      db((sql) =>
-        sql.includes('SELECT id, secret')
-          ? [{ id: '1', secret: null }]
-          : [{ seat: 0, ciphertext_hex: 'aa' }]
-      ),
-      `/pools/${POOL}/sealed-entries`
+  it('the sealed boxes have NO public reader: sealed-entries is gone before and after the reveal', async () => {
+    // Rewritten in place on 2026-09-16 (the founder's data-minimisation
+    // ruling of 2026-09-15). This case used to prove the route failed closed
+    // before the reveal and served seat-keyed ciphertexts after it. The
+    // boxes still carry the per-screen timings and the device marker that
+    // bundle version 2 (audit B-31) keeps out of the published set, so
+    // serving them after reveal published both anyway. Now nothing serves a
+    // box, revealed or not, and no sealed_entries query is ever issued.
+    const issued: string[] = [];
+    const canned = (secret: string | null) =>
+      db((sql) => {
+        issued.push(sql);
+        return sql.includes('SELECT id, secret')
+          ? [{ id: '1', secret }]
+          : [{ seat: 0, ciphertext_hex: 'aa'.repeat(35) }];
+      });
+    expect((await handleRead(canned(null), `/pools/${POOL}/sealed-entries`)).status).to.equal(404);
+    expect((await handleRead(canned('cc'.repeat(32)), `/pools/${POOL}/sealed-entries`)).status).to.equal(
+      404
     );
-    expect(before.status).to.equal(403);
+    expect(issued.filter((sql) => /sealed_entries/i.test(sql))).to.deep.equal([]);
+  });
 
-    // Secret revealed → anonymised seat-keyed ciphertexts.
-    const after = await handleRead(
-      db((sql) =>
-        sql.includes('SELECT id, secret')
-          ? [{ id: '1', secret: 'cc'.repeat(32) }]
-          : [
-              { seat: 0, ciphertext_hex: 'aa'.repeat(35) },
-              { seat: 1, ciphertext_hex: 'bb'.repeat(35) },
-            ]
-      ),
-      `/pools/${POOL}/sealed-entries`
+  it('serves the entry rows by NAMED columns, never SELECT * (2026-09-16)', async () => {
+    // Every column named here is an on-chain fact; a column added to the
+    // table later is not served until someone adds it to the list.
+    const issued: string[] = [];
+    const res = await handleRead(
+      db((sql) => {
+        issued.push(sql);
+        return [{ pool: POOL, player: PLAYER, idx: 0, flagged: false, sanctions_hold: false }];
+      }),
+      `/pools/${POOL}/entries`
     );
-    expect(after.status).to.equal(200);
-    const body = after.body as Array<Record<string, unknown>>;
-    expect(body.length).to.equal(2);
-    expect(body[0].seat).to.equal(0);
-    expect(Object.keys(body[0])).to.not.include('player');
+    expect(res.status).to.equal(200);
+    expect(issued.length).to.equal(1);
+    expect(issued[0]).to.not.match(/SELECT\s+\*/i);
+    for (const column of [
+      'pool',
+      'player',
+      'idx',
+      'battles_hash',
+      'class',
+      'slot_hash',
+      'pass_asset',
+      'flagged',
+      'refunded',
+      'escrow_settled',
+      'terms_version',
+      'next_place_lamports',
+      'sanctions_hold',
+      'sanctions_hold_at',
+    ]) {
+      expect(issued[0], `names ${column}`).to.match(new RegExp(`\\b${column}\\b`));
+    }
   });
 });
 
