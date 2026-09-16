@@ -1060,7 +1060,16 @@ export const COPY = {
       '(1) allocation patterns — reuse of the same split, uniform round numbers; ' +
       '(2) timing — how the ninety seconds were actually spent, screen by screen; ' +
       '(3) duplicate or near-duplicate battle sets across entries; ' +
-      '(4) the same device or network origin behind multiple entries in one pool; ' +
+      // NARROWED 2026-09-16. This read "the same device or network origin"
+      // until a review found the network half does not run: the daemon
+      // passes `ipHash: ''` for every entry (backend/reveal/src/main.ts),
+      // the hashed-IP capture at ciphertext submission is not built, and
+      // `deviceIpCorrelation` correctly skips an empty key -- so the IP
+      // branch is inert rather than wrong, and correlates nothing, ever.
+      // The device half is real and is the HARD-BLOCK half (R11).
+      // A published claim does not wait on a build, so the sentence is
+      // narrowed to what runs; it widens again when the capture lands.
+      '(4) the same device behind multiple entries in one pool; ' +
       '(5) a score far outside the field’s distribution. ' +
       'These signals are computed for every tournament and published with the review log. Nothing is flagged automatically: a flag is a decision by a named reviewer that an entry meets one of the criteria above, ' +
       'and a flag never decides anything by itself \u2014 it only sends the entry to the signed review process below.',
