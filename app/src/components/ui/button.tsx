@@ -5,7 +5,11 @@
  * and must never sit on a payment step — money-moving actions are always
  * `primary`, so the colour a player learns for "this spends" never varies.
  *
- * Candy: every button is a pill, and the two filled intents are KEYS — a
+ * `cream` (round four A2, 2026-09-17) is the cream key (tokens.css
+ * `.key-cream`): a key's thickness without the commit colour, for the
+ * actions on a page that move no money — send, export, share, verify.
+ *
+ * Candy: every button is a pill, and the filled intents are KEYS — a
  * visible bottom edge is the object's thickness, and the button sinks onto
  * it when pressed (tokens.css `.key-action` / `.key-prize`). The large size
  * wears the display face, matching the landing page's Enter control, so a
@@ -13,7 +17,7 @@
  */
 import { forwardRef, type ButtonHTMLAttributes } from "react";
 
-type Intent = "primary" | "quiet" | "prize";
+type Intent = "primary" | "quiet" | "prize" | "cream";
 type Size = "md" | "lg";
 
 const INTENT: Record<Intent, string> = {
@@ -28,6 +32,7 @@ const INTENT: Record<Intent, string> = {
   prize:
     "key-prize bg-prize text-(--color-base) font-semibold hover:bg-prize-hot " +
     "disabled:bg-overlay disabled:text-ink-muted",
+  cream: "key-cream font-semibold disabled:bg-overlay disabled:text-ink-muted",
 };
 
 const SIZE: Record<Size, string> = {

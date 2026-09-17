@@ -206,6 +206,29 @@
 .key-prize:disabled {
   box-shadow: none;
 }
+/* The cream key (founder 2026-09-17, round four A2: "3D buttons" on every
+ * page): a commit control's shape and thickness without the commit colour —
+ * for the actions that move no money (verify, share, sign in, keep me
+ * updated). Cream face, berry ink, the action key's depth; yellow on hover. */
+.key-cream {
+  background: var(--color-brand-cream);
+  color: var(--color-brand-berry);
+  box-shadow: var(--elevation-key-action);
+  transition:
+    box-shadow 120ms var(--ease-snap),
+    transform 120ms var(--ease-snap),
+    background-color 150ms;
+}
+.key-cream:hover:not(:disabled) {
+  background: var(--color-brand-yellow);
+}
+.key-cream:active:not(:disabled) {
+  box-shadow: var(--elevation-key-action-down);
+  transform: translateY(3px);
+}
+.key-cream:disabled {
+  box-shadow: none;
+}
 .candy-gloss::before {
   content: '';
   position: absolute;

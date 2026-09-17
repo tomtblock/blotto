@@ -19,7 +19,7 @@
 
 import { useEffect, useState } from 'react';
 import { COPY } from '@/copy';
-import { Card } from '@/components/ui/card';
+import { NeonSection } from '@/components/ui/neon-section';
 import { allStills, type StoredStill } from '@/battle/stills';
 import { sweepStills } from '@/battle/stills-sweep';
 import { indexerApi } from '@/data/api';
@@ -56,11 +56,8 @@ export function MyBlots() {
   if (!rows || rows.length === 0) return null; // no stills on this device — no empty shell
 
   return (
-    <Card className="p-5">
-      <h2 className="mb-1 text-[12px] uppercase tracking-[0.14em] text-ink-muted">
-        {COPY.profile.myBlots}
-      </h2>
-      <p className="mb-4 text-[12px] leading-4 text-ink-muted">{COPY.profile.myBlotsNote}</p>
+    <NeonSection heading={COPY.profile.myBlots}>
+      <p className="mb-4 text-[13px] leading-5 text-ink-muted">{COPY.profile.myBlotsNote}</p>
       <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4">
         {rows.map((s) => (
           <li key={s.key} className="relative overflow-hidden rounded-xl bg-brand-cream">
@@ -72,7 +69,7 @@ export function MyBlots() {
           </li>
         ))}
       </ul>
-    </Card>
+    </NeonSection>
   );
 }
 
