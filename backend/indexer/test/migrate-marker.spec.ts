@@ -78,6 +78,7 @@ const ALL_MIGRATIONS = [
   '0020_review_decision_signed_text.sql',
   '0021_detection_reports.sql',
   '0022_drop_go_deadline.sql',
+  '0023_notify_pool_optin.sql',
 ];
 
 describe('the re-derive marker, against the real migrations (audit E-15)', () => {
@@ -97,6 +98,9 @@ describe('the re-derive marker, against the real migrations (audit E-15)', () =>
       // wrote. A replay would rebuild identical rows, so asking for one
       // would be an hour of work for no difference.
       '0022_drop_go_deadline.sql',
+      // Notify v2 (§F): a new table the packet service owns, fed by signed
+      // opt-ins rather than the ledger. Nothing derived is touched.
+      '0023_notify_pool_optin.sql',
     ]) {
       expect(declaresRederive(migrationSql(file)), file).to.equal(false);
     }
