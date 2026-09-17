@@ -6,6 +6,8 @@ export * from './territories';
 export * from './geo-adapters';
 export * from './attestations';
 export * from './notify';
+export * from './notify-pool';
+export * from './email-sender';
 export * from './pool-ids';
 export * from './ciphertexts';
 export * from './ciphertext-message';

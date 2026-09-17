@@ -6,6 +6,12 @@
  *
  *   BLOTTO_PACKET_PORT          default 8082
  *   BLOTTO_DATABASE_URL         Postgres (attestations, notify, ciphertexts)
+ *   EMAIL_API_URL, EMAIL_API_KEY, EMAIL_FROM
+ *                               the mail provider for the one-message opt-in
+ *                               (round four, 2026-09-17); all three or the
+ *                               dispatcher stays off. BLOTTO_SITE_ORIGIN is the
+ *                               pool-page link's origin (default www.blotto.gg);
+ *                               NOTIFY_DISPATCH_INTERVAL_MS the pass interval.
  *   BLOTTO_TERRITORIES_PATH     default config/territories.json
  *   BLOTTO_TERMS_PATH           default config/terms.json
  *   BLOTTO_TRUST_PROXY          "1" ONLY behind our own proxy (Fly/compose)
@@ -65,7 +71,9 @@ import { intEnv, optionalIntEnv, portEnv } from '../../_shared/src/env-number';
 import { startMetricsListener } from '../../_shared/src/metrics-listener';
 import { loadTerms } from './attestations';
 import { loadTerritorySchedule } from './territories';
-import { PgAttestationStore, PgNotifyPreferenceStore } from './stores-pg';
+import { PgAttestationStore, PgNotifyPreferenceStore, PgPoolNotifyStore, PgPoolStateReader } from './stores-pg';
+import { HttpEmailSender } from './email-sender';
+import { runNotifyDispatch } from './notify-pool';
 import { assertRegionCapability, type GeoLookup } from './service';
 
 const SERVICE = 'packet';
@@ -247,6 +255,40 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
       `${sanctions.describe.join('; ')}`
   );
 
+  // Round four (2026-09-17): the one-message opt-in and its dispatcher. The
+  // store is always on (the shared database has the table); the SENDER is a
+  // deployment decision — a provider account and a sending domain — and
+  // without it the dispatcher does not run and /health does not advertise
+  // the opt-in, so the app offers nothing it cannot deliver.
+  const notifyPool = new PgPoolNotifyStore(db);
+  const emailSender =
+    env.EMAIL_API_URL && env.EMAIL_API_KEY && env.EMAIL_FROM
+      ? new HttpEmailSender(env.EMAIL_API_URL, env.EMAIL_API_KEY, env.EMAIL_FROM)
+      : null;
+  if (emailSender) {
+    const siteOrigin = (env.BLOTTO_SITE_ORIGIN ?? 'https://www.blotto.gg').replace(/\/$/, '');
+    const intervalMs = optionalIntEnv(env, 'NOTIFY_DISPATCH_INTERVAL_MS') ?? 60_000;
+    const tick = () =>
+      runNotifyDispatch({
+        store: notifyPool,
+        pools: new PgPoolStateReader(db),
+        sender: emailSender,
+        poolPageUrl: (pool) => `${siteOrigin}/pools/${pool}`,
+        now: () => new Date(),
+        log: (line) => console.log(`${SERVICE}: ${line}`),
+      }).catch((err: unknown) => {
+        console.error(`${SERVICE}: notify dispatch failed:`, err instanceof Error ? err.message : err);
+      });
+    setInterval(tick, intervalMs).unref();
+    void tick();
+    console.log(`${SERVICE}: notify dispatch ON every ${intervalMs} ms — ${emailSender.describe}`);
+  } else {
+    console.log(
+      `${SERVICE}: notify dispatch OFF — set EMAIL_API_URL, EMAIL_API_KEY and EMAIL_FROM; ` +
+        `until then /health does not advertise the opt-in and the app does not offer it`
+    );
+  }
+
   serveEntryApi(
     {
       packet: {
@@ -266,6 +308,8 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
       ciphertexts: new PgCiphertextStore(db),
       poolIds: new PgPoolIdResolver(db),
       notify: new PgNotifyPreferenceStore(db),
+      notifyPool,
+      notifyDeliverable: emailSender !== null,
       trustProxyHeader: env.BLOTTO_TRUST_PROXY === '1',
       // BR-005 posture from env (BLOTTO_API_CORS_ORIGINS etc.), widened in
       // CODE to this service's browser-facing POST surface — which methods a
