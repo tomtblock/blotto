@@ -1,24 +1,37 @@
-# STATE — 2026-09-16 16:23 local (19:23 UTC) — by Claude Code
+# STATE — 2026-09-16 23:27 local (2026-09-17 02:27 UTC) — by Claude Code
 
-Phase:            **T4 moves to the next pool. UI-A and UI-B are permanently barred from pool 15.**
-                  Not a wallet problem and not fixable: the app stores the sealed allocation BEFORE it
-                  asks for an entry packet, so the founder's play during the Turnkey outage stored a
-                  ciphertext that was never registered. Every retry replays with a fresh salt, so the
-                  bytes differ, so the store refuses with 409 "already sealed". No delete path exists.
-Waiting on:       **F-25 — one decision, not blocking.** Apply the seal-lockout product fix now as a
-                  separate PR (touches app/ and backend/, against this week's boundary), or ship it
-                  after the test week? Recommendation: after. Guardrails already stop it recurring here.
-After that:       pool 15 lapses 01:52:26Z (22:52 local, holds no entries) → daemon opens the next pool
-                  ~5 min later (~22:57 local, on the 23:00 cadence) → T4 runs there on the SAME frozen
-                  plan. Only poolId, poolPda and a new freeze record change; no rank or payout moves.
-Live deadlines:   pool 15 deadline 01:52:26Z. Entry gate HEALTHY since 18:56:02Z (200 for both UI wallets).
-Blocked:          nothing. Out of plan mode; enter.ts can run once the new pool is open and the founder
-                  has entered.
+Phase:            **T4 PASSED on pool 16. UI-A took the entire 4 SOL pot; UI-B finished 64th.**
+                  Paid 64/64, secret revealed, results root committed. Reconcile 60 MATCH, 0 RANK_DRIFT,
+                  0 PAYOUT_MISMATCH, 4 ABSENT. Freeze OK — merge precedes the first entry by 9h43m.
+Waiting on:       nothing blocking. Two founder decisions open, neither urgent: F-24 (does the
+                  seal-lockout fix ship now or after the week) and F-25 (same, as a product PR).
+                  Vercel ignore-step is approved and ready to apply — ~85% off build minutes.
+After that:       T2 (39 seats, refund) is next in the matrix. T3, T5, T6, T7, T8 follow.
+Live deadlines:   none. Pool 16 is settled and Paid.
+Blocked:          nothing.
+Results so far:   T1 **PASS** (refund) · **T4 PASS** (scored, paid) · T2, T3, T5–T8 not started
 
-**STANDING RULE, adopted 19:09Z:** probe the entry gate for the exact wallets IMMEDIATELY BEFORE the
-founder plays, never after. A seal made into a broken gate cannot be undone. An explicit go-ahead
-goes out seconds before each UI entry from now on.
-Results so far:   T1 **PASS** · T2–T8 not started
+**T4's result, and what it actually proved (2026-09-17 02:23Z):**
+  UI-A net +3.895554578 SOL against +3.895564000 predicted — 9422 lamports apart. Vault 650240
+  EXACTLY as predicted. The chain's own committed payout list is [{"seat":0,"amount":"4000000000"}].
+  → The plan was frozen naming pool 15 and ran UNEDITED on pool 16. A prediction frozen before its
+    pool existed is stronger evidence, not weaker.
+  → **H10 — the finding worth keeping.** The founder's hand-dialled allocations matched the plan's
+    exact numbers in 1 of 7 battles (UI-A) and 4 of 7 (UI-B). Every CONDITIONAL prediction about
+    those numbers was wrong; every UNCONDITIONAL one was exactly right, because all seven UI-A
+    battles still held three stats at 26+. The claim under test was "rank 1 holds for ANY wall
+    against a field capped at 25" — and a different wall, played by a human under a 90-second
+    clock, took rank 1 and the whole pot.
+  → **H8 — five wallets burnt, and the fault was MINE.** W22, W42, W43, W55, W65 sealed then failed
+    to register. The gate was healthy at every probe; my runner let sendAndConfirmTransaction pick
+    its own blockhash and the failure was always in PREFLIGHT. skipPreflight + a `confirmed`
+    blockhash fixed it. My first fix (a `finalized` blockhash) was WRONG and burnt W55.
+    The guardrail built hours earlier stopped each run at its first casualty — five, not sixty-two.
+    All five replaced by spares playing the burnt seats' own frozen allocations, so the scored field
+    was exactly the planned field.
+  → **H9 — reconcile's 0 INPUT_DRIFT is a limitation, not a fact.** harvest never reads the
+    published bundle (PR 134 removed /sealed-entries), so it cannot compare allocations. Same reason
+    allocations.ts shows 60 COMMITTED and 0 VERIFIED on a pool that DID reveal. Fix specified.
 
 **GUARDRAILS BUILT 19:22Z, in boundary, proven:**
   1. scripts/preflight.ts — go/no-go before anybody plays: pool open and register-ready, no wallet

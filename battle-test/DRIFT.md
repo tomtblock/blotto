@@ -751,3 +751,88 @@ this entirely.
 **Spare wallets burnt on pool 15 in the course of this work**, none of them in T4's field
 (W00–W61), and pool 15 is being abandoned: W62 (the old simulate), W63 (the §H6 proof), W64 (the
 guardrail proof), W66 (the fix verification).
+
+### H8. My own runner burnt five wallets, and the guardrail is why it was only five (2026-09-17, T4)
+
+Five headless seats sealed and then failed to register on pool 16, barring each permanently under
+§H6: **W22, W42, W43, W55, W65**. The entry gate was healthy throughout — probed `200` at every
+step. The fault was this runner's transaction handling.
+
+| # | wallet | error | cause |
+|---|---|---|---|
+| 1 | W22 | `Blockhash not found` | concurrency 4, Helius answering `429`; preflight simulated against a node that had not seen the blockhash |
+| 2-3 | W42, W43 | `Blockhash not found` | same, at concurrency 2 — at which point I stopped guessing and read the send path |
+| 4 | W55 | `block height exceeded` | **my first fix was wrong.** I took a `finalized` blockhash, which is ~32 slots old and spent most of its validity window before the send |
+| 5 | W65 | `block height exceeded` | the corrected fix was in place; this one still timed out under load |
+
+**The real cause and the real fix.** `sendAndConfirmTransaction` was left to pick its own blockhash,
+and the failure was always in its **preflight simulation**, never in the send. `skipPreflight: true`
+removes the entire failure class: preflight's only job is to catch a malformed transaction, this
+one's shape is proven by `--simulate` and by 58 landed seats, and a transaction that fails on chain
+burns the wallet either way — so preflight buys nothing here and costs seats. Paired with a
+`confirmed` blockhash for the full validity window. The last six planned seats and all four
+substitutes landed clean afterwards.
+
+**Why it was five and not sixty.** The §H6 guardrail stopped the run on each first burnt seat rather
+than marching into the next batch. Measured at every stop: 23 of 62 seats attempted, then 18, then
+11, then 6 — each halt leaving the untouched wallets intact. Without it the first `429` storm would
+have burnt every remaining seat in the field.
+
+**Substitution, and why the prediction survived it.** Each burnt seat was replaced by a spare
+playing **the burnt seat's own frozen allocation** (`enter.ts --substitute W22=W62,…`), funded by
+sweeping the burnt wallets back to the funder. A rank falls out of the allocations, never the wallet
+holding them, so the field the engine scored was exactly the field the plan predicted. Only the
+results root moved, and it was conditional on seat order from the start.
+
+**Recorded against myself.** This is the second time in two days my own tooling carried an
+irreversible side effect (§H7 was the first). The lesson is the same both times: on a path where
+failure is permanent, the runner must stop, and every "safe" mode must be proven safe rather than
+named safe.
+
+### H9. `reconcile.ts` cannot see input drift on a scored pool (2026-09-17, T4)
+
+T4's reconcile reported **0 INPUT_DRIFT**. That number is a limitation, not a fact.
+
+The founder's two seats were played by hand on the live dials, and the published bundle shows both
+drifted from the frozen plan — **UI-A matched the plan in only 1 of 7 battles, UI-B in 4 of 7**.
+`reconcile.ts` did not notice, because `harvest.ts` never fetches the published bundle: it reads the
+indexer and the chain, and since PR 134 removed `/sealed-entries` there is no allocation to compare
+against. It compares ranks and payouts, which matched, and reports `MATCH`.
+
+**Fix:** `harvest.ts` should fetch the bundle from the `uri` on
+`/pools/<pda>/leaderboard` — it is public, it carries every revealed `battles` — and record the
+revealed allocations per seat. `reconcile.ts` can then compare them to the plan and raise a real
+`INPUT_DRIFT`, and `allocations.ts` can finally move seats from `COMMITTED` to `VERIFIED`, which it
+currently cannot do for the same reason (T4 shows 60 COMMITTED, 0 VERIFIED, on a pool that revealed
+its secret).
+
+**This does not weaken T4's PASS** — the verdict rests on rank and payout, both confirmed against
+the chain's own committed payout list. It means the report must say "input drift not checked"
+rather than "no input drift", and it is written that way.
+
+### H10. The unconditional derivation is the finding, and it held (2026-09-17, T4)
+
+The plan split its expectations in two: **unconditional** (UI-A rank 1 and paid the whole pot, UI-B
+last, nobody else paid — derived from the shapes alone) and **conditional** (exact scores, the leaf
+order, the results root — which assume the exact allocations).
+
+The founder, dragging dials against a 90-second clock, produced a wall that matched the plan's exact
+numbers in **one battle of seven**. Every conditional prediction about their allocations was
+therefore wrong.
+
+**Every unconditional one was exactly right.** All seven of UI-A's battles still held three stats at
+26 or above — the only property that matters — so:
+
+- UI-A: **rank 1**, paid **4000000000** lamports, the entire pot.
+- UI-B: last, paid nothing.
+- No other seat paid: the chain's committed list is `[{"seat":0,"amount":"4000000000"}]`.
+
+The one score difference is fully explained: predicted 881 half-points, actual **882**. The plan's
+wall drew its seventh battle with the pole (2 stats each, nobody reaching 3); the founder's actual
+battle 7, `[36,1,33,0,30]`, carried a 1 where the plan had a 0, which won that stat and turned the
+draw into a win — one extra half-point, and the theoretical maximum of 63 × 7 × 2.
+
+**This is a better outcome than a clean match would have been.** A test where the founder reproduced
+35 numbers perfectly would have proved the arithmetic. This proved the *derivation*: the claim was
+"rank 1 holds for ANY wall against a field capped at 25", and a genuinely different wall, played by
+a human under time pressure, took rank 1 and the whole pot.
