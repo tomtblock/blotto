@@ -48,7 +48,9 @@ describe('ArchiveStandings', () => {
   it('renders the committed row and its recomputed score', () => {
     const html = render([row()]);
     expect(html).toContain('#1');
-    expect(html).toContain('6½'); // 13 half-points, integer arithmetic only
+    expect(html).toContain('6.5'); // 13 half-points, integer arithmetic only
+    expect(html).not.toContain('½'); // the glyph read as a percentage (round four A2)
+    expect(html).toContain(c.battleScoreNote);
     expect(html).toContain('4 SOL');
   });
 

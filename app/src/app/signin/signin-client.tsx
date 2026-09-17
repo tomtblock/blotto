@@ -160,8 +160,8 @@ export function SignInClient() {
         }}
         data-testid="signin-google"
         className={
-          "flex h-14 w-full items-center justify-center gap-3 rounded-xl bg-ink text-[17px] " +
-          "font-semibold text-(--color-base) transition-colors hover:bg-brand-cream " +
+          "key-cream flex h-14 w-full items-center justify-center gap-3 rounded-full " +
+          "text-[17px] font-semibold " +
           "focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none " +
           "disabled:cursor-not-allowed disabled:opacity-50"
         }
@@ -184,10 +184,9 @@ export function SignInClient() {
               signInWithSocial(provider);
             }}
             className={
-              "flex h-14 items-center justify-center rounded-xl border border-line bg-raised " +
-              "text-ink transition-colors hover:border-brand focus-visible:ring-2 " +
-              "focus-visible:ring-brand-cream focus-visible:outline-none " +
-              "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-line"
+              "key-cream flex h-14 items-center justify-center rounded-full " +
+              "focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none " +
+              "disabled:cursor-not-allowed disabled:opacity-50"
             }
           >
             <Mark size={22} />

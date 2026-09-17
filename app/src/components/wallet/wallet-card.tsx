@@ -33,7 +33,7 @@ import { makeTxRpc } from "@/tx/tx-rpc";
 import { checkSend, maxSendableLamports, sendSol } from "@/tx/send-sol";
 import type { TradeResult } from "@/tx/execute";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { NeonSection } from "@/components/ui/neon-section";
 import { Sheet } from "@/components/ui/sheet";
 import { Stat } from "@/components/ui/stat";
 import { CopyableAddressPill } from "@/components/copyable-address";
@@ -49,7 +49,7 @@ const FAUCET_URL = "https://faucet.solana.com/";
  */
 const FUNDING_METHOD = isMainnet() ? ("any" as const) : ("receive" as const);
 
-export function WalletCard() {
+export function WalletCard({ headingAs = "h2" }: { headingAs?: "h1" | "h2" } = {}) {
   const auth = useAuth();
   const wallet = auth.status === "signed-in" ? auth.walletAddress : null;
   const balance = useBalance(wallet);
@@ -67,9 +67,9 @@ export function WalletCard() {
 
   if (!wallet) {
     return (
-      <Card className="p-6">
+      <NeonSection heading={COPY.wallet.title} headingAs={headingAs}>
         <p className="text-[15px] text-ink-muted">{COPY.wallet.signInFirst}</p>
-      </Card>
+      </NeonSection>
     );
   }
 
@@ -81,7 +81,8 @@ export function WalletCard() {
     : null;
 
   return (
-    <Card className="flex flex-col gap-5 p-5 sm:p-6" data-testid="wallet-card">
+    <NeonSection heading={COPY.wallet.title} headingAs={headingAs} data-testid="wallet-card">
+      <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <Stat
           label={COPY.wallet.balanceLabel}
@@ -166,16 +167,16 @@ export function WalletCard() {
             {COPY.wallet.addSol}
           </Button>
         ) : null}
-        <Button intent="quiet" data-testid="wallet-send" onClick={() => setSendOpen(true)}>
+        <Button intent="cream" data-testid="wallet-send" onClick={() => setSendOpen(true)}>
           {COPY.wallet.send}
         </Button>
         {auth.exportWallet && active?.kind === "embedded" ? (
-          <Button intent="quiet" data-testid="wallet-export" onClick={() => setExportOpen(true)}>
+          <Button intent="cream" data-testid="wallet-export" onClick={() => setExportOpen(true)}>
             {COPY.wallet.exportTitle}
           </Button>
         ) : null}
         {auth.linkWallet ? (
-          <Button intent="quiet" data-testid="wallet-link" onClick={() => auth.linkWallet?.()}>
+          <Button intent="cream" data-testid="wallet-link" onClick={() => auth.linkWallet?.()}>
             {COPY.wallet.linkTitle}
           </Button>
         ) : null}
@@ -234,7 +235,8 @@ export function WalletCard() {
           {COPY.wallet.exportConfirm}
         </Button>
       </Sheet>
-    </Card>
+      </div>
+    </NeonSection>
   );
 }
 

@@ -63,7 +63,7 @@ export function GateClient() {
         type="button"
         onClick={() => void submit()}
         disabled={state === 'checking' || code.trim() === ''}
-        className="flex h-14 items-center justify-center rounded-xl bg-brand text-[17px] font-semibold text-(--color-base) transition-colors hover:bg-brand-hot disabled:opacity-40"
+        className="key-action flex h-14 items-center justify-center rounded-full border-[3px] border-brand-cream bg-brand font-display text-[18px] font-bold uppercase tracking-wide text-(--color-base) transition-colors hover:bg-brand-hot disabled:opacity-40"
       >
         {state === 'checking' ? 'Checking…' : 'Continue'}
       </button>

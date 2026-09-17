@@ -23,6 +23,7 @@ import { useEffect, useState } from 'react';
 import { decodeBattleSet } from '@blotto/scoring';
 import { COPY } from '@/copy';
 import type { PublishedBundle } from '@/verify/logic';
+import { NeonSection } from '@/components/ui/neon-section';
 
 const unhex = (s: string) => {
   const out = new Uint8Array(s.length / 2);
@@ -74,21 +75,18 @@ export function AllBattles({ uri }: { uri: string }) {
   }, [open, rows, uri]);
 
   return (
-    <section className="mb-6">
-      <div className="mb-2 flex items-baseline justify-between gap-3">
-        <h2 className="text-[12px] uppercase tracking-[0.14em] text-ink-muted">
-          {COPY.results.allBattles.title}
-        </h2>
+    <NeonSection heading={COPY.results.allBattles.title} data-testid="all-battles">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+        <p className="max-w-prose text-[13px] leading-5 text-ink-muted">{COPY.results.allBattles.note}</p>
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
           aria-expanded={open}
-          className="text-[13px] font-medium text-brand underline underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
+          className="key-cream h-11 shrink-0 rounded-full px-5 text-[14px] font-semibold"
         >
           {open ? COPY.results.allBattles.hide : COPY.results.allBattles.show}
         </button>
       </div>
-      <p className="mb-3 max-w-prose text-[13px] leading-5 text-ink-muted">{COPY.results.allBattles.note}</p>
       {open && failed && <p className="text-[13px] text-ink-muted">{COPY.results.allBattles.failed}</p>}
       {open && !failed && !rows && (
         <p aria-live="polite" className="text-[13px] text-ink-muted">
@@ -96,7 +94,7 @@ export function AllBattles({ uri }: { uri: string }) {
         </p>
       )}
       {open && rows && (
-        <div className="overflow-x-auto rounded-2xl border border-line">
+        <div className="overflow-x-auto rounded-2xl border border-white/10 bg-white/5">
           <table className="w-full min-w-[640px] border-collapse text-[12px]">
             <thead>
               <tr className="text-left text-[11px] uppercase tracking-[0.12em] text-ink-muted">
@@ -131,6 +129,6 @@ export function AllBattles({ uri }: { uri: string }) {
           </table>
         </div>
       )}
-    </section>
+    </NeonSection>
   );
 }

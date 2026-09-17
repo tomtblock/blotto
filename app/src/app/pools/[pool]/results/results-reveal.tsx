@@ -101,7 +101,7 @@ export function VerifyAlways({ pool, bundleUri }: { pool: string; bundleUri?: st
   return (
     <Link
       href={href}
-      className="flex h-12 items-center justify-center rounded-xl border border-line text-[15px] font-medium text-ink transition-colors hover:border-brand hover:text-brand"
+      className="key-cream flex h-14 items-center justify-center rounded-full font-display text-[18px] font-bold uppercase tracking-wide"
     >
       {COPY.verify.title}
     </Link>

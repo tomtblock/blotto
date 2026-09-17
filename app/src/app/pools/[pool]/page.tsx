@@ -59,9 +59,11 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
     return (
       <>
         <AppHeader />
-        <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 pb-24">
-          <LiveDataUnavailable />
-        </main>
+        <div className="flex-1 bg-brand-pink">
+          <main id="main" className="mx-auto w-full max-w-3xl px-4 pt-6 pb-24">
+            <LiveDataUnavailable />
+          </main>
+        </div>
         <TabBar />
       </>
     );
@@ -210,7 +212,7 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
         ) : (
           <Link
             href={`/pools/${pool.pool}/results`}
-            className="flex h-14 items-center justify-center rounded-full border-2 border-brand-berry/40 text-[16px] font-semibold text-brand-berry transition-colors hover:border-brand-berry hover:bg-brand-berry/10"
+            className="key-cream flex h-14 items-center justify-center rounded-full font-display text-[18px] font-bold uppercase tracking-wide"
           >
             {COPY.pool.resultsLink}
           </Link>

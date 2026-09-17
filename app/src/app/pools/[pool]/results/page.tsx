@@ -3,6 +3,11 @@
  * list staged as a reveal (results-reveal.tsx), the paid-automatically
  * state (R10 — no claim step), escrow copy where a share is held, and the
  * Verify path always on screen.
+ *
+ * Round four A2 (founder 2026-09-17): the pink field, "Pool #N" on the
+ * marquee with a Results chip beside it, and every block a titled neon
+ * box — the payout list, what finished above you, the appeal, the seven,
+ * the standings, every battle — with the Verify key at the foot.
  */
 import { notFound } from 'next/navigation';
 import { COPY } from '@/copy';
@@ -10,8 +15,10 @@ import { indexerApi, live } from '@/data/api';
 import { lamportsToSol } from '@/data/format';
 import { AppHeader } from '@/components/shell/app-header';
 import { TabBar } from '@/components/shell/tab-bar';
-import { Card } from '@/components/ui/card';
 import { BackLink } from '@/components/ui/back-link';
+import { MarqueeHeading } from '@/components/ui/marquee-heading';
+import { NeonSection } from '@/components/ui/neon-section';
+import { Pill } from '@/components/ui/pill';
 import { SiteFooter } from '@/components/shell/site-footer';
 import { LiveDataUnavailable } from '@/components/shell/live-unavailable';
 import { ResultsReveal, VerifyAlways, type RevealRow } from './results-reveal';
@@ -44,9 +51,11 @@ export default async function ResultsPage({ params }: { params: Promise<{ pool: 
     return (
       <>
         <AppHeader />
-        <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 pb-24">
-          <LiveDataUnavailable />
-        </main>
+        <div className="flex-1 bg-brand-pink">
+          <main id="main" className="mx-auto w-full max-w-3xl px-4 pt-6 pb-24">
+            <LiveDataUnavailable />
+          </main>
+        </div>
         <TabBar />
       </>
     );
@@ -78,37 +87,50 @@ export default async function ResultsPage({ params }: { params: Promise<{ pool: 
   return (
     <>
       <AppHeader />
-      <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 pb-24">
+      <div className="flex-1 bg-brand-pink">
+      <main id="main" className="mx-auto w-full max-w-3xl px-4 pt-6 pb-24">
         <div className="mb-2">
-          <BackLink href={`/pools/${pool.pool}`}>{COPY.shell.nav.backToPool}</BackLink>
+          <BackLink href={`/pools/${pool.pool}`} tone="berry">
+            {COPY.shell.nav.backToPool}
+          </BackLink>
         </div>
-        <header className="mb-5 flex items-baseline gap-3">
-          <h1 className="font-display text-[34px] leading-[38px] font-extrabold text-ink">
-            Pool #{pool.id} — results
-          </h1>
+        <header className="mb-6 flex flex-wrap items-center gap-3">
+          <MarqueeHeading as="h1">{COPY.reveal.passPool(pool.id)}</MarqueeHeading>
+          <Pill tone="field">{COPY.results.title}</Pill>
         </header>
         {pool.state === 'Paid' && (
-          <p className="mb-4 text-[13px] leading-5 text-ink-muted">
+          <p className="-mt-2 mb-6 max-w-prose text-[15px] leading-6 font-medium text-brand-berry">
             {COPY.results.paidAutomatically}
           </p>
         )}
+        <div className="flex flex-col gap-10">
         {results.length === 0 ? (
-          <Card className="mb-5 flex flex-col gap-2 p-6">
+          <NeonSection heading={COPY.results.title}>
             <p className="text-[17px] font-medium text-ink">Results are not committed yet.</p>
-            <p className="max-w-prose text-[13px] leading-5 text-ink-muted">
+            <p className="mt-2 max-w-prose text-[14px] leading-5 text-ink-muted">
               When the pool seals, the pool secret is published and results are committed
               on-chain — this page fills in at that moment, and everything on it can be
               recomputed on the Verify page.
             </p>
-          </Card>
+          </NeonSection>
         ) : (
           <>
-            <Card className="mb-4 p-1">
-              <ResultsReveal rows={rows} />
-            </Card>
-            <p className="mb-5 max-w-prose text-[13px] leading-5 text-ink-muted">
-              {COPY.results.tieNote}
-            </p>
+            <NeonSection heading={COPY.results.title} data-testid="results-box">
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-1">
+                <ResultsReveal rows={rows} />
+              </div>
+              <p className="mt-4 max-w-prose text-[13px] leading-5 text-ink-muted">
+                {COPY.results.tieNote}
+              </p>
+              {/* The player's own result card, once results are in. */}
+              <div className="mt-5">
+                <ShareResult
+                  pool={pool.pool}
+                  seatByPlayer={Object.fromEntries(entries.map((e) => [e.player, e.idx]))}
+                  paidSeats={results.filter((r) => BigInt(r.amount) > 0n).map((r) => r.seat)}
+                />
+              </div>
+            </NeonSection>
             {/* v3 D3: browser-side decrypt + re-score of the seats above
                 yours, and the share card for your own result. */}
             {/* F-07: "above" is decided by RANK, which lives in the
@@ -135,11 +157,6 @@ export default async function ResultsPage({ params }: { params: Promise<{ pool: 
                 .filter((e) => e.escrow_settled === 'forfeited')
                 .map((e) => e.player)}
             />
-            <ShareResult
-              pool={pool.pool}
-              seatByPlayer={Object.fromEntries(entries.map((e) => [e.player, e.idx]))}
-              paidSeats={results.filter((r) => BigInt(r.amount) > 0n).map((r) => r.seat)}
-            />
             {/* The player's own seven, shareable now the pool has closed (2026-09-13). */}
             <ShareSeven poolAddress={pool.pool} state={pool.state} />
             {archive && <ArchiveStandings archive={archive} />}
@@ -149,7 +166,9 @@ export default async function ResultsPage({ params }: { params: Promise<{ pool: 
           </>
         )}
         <VerifyAlways pool={pool.pool} bundleUri={archive?.uri} />
+        </div>
       </main>
+      </div>
       <SiteFooter />
       <TabBar />
     </>

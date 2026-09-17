@@ -31,7 +31,7 @@ export function ShareResult({
       href={`/card/${pool}/${wallet}`}
       target="_blank"
       rel="noreferrer"
-      className="mb-5 flex h-12 items-center justify-center rounded-xl bg-prize text-[15px] font-semibold text-(--color-base) transition-colors hover:bg-prize-hot"
+      className="key-prize flex h-14 items-center justify-center rounded-full bg-prize font-display text-[18px] font-bold uppercase tracking-wide text-(--color-base) transition-colors hover:bg-prize-hot"
     >
       {COPY.share.button}
     </a>

@@ -21,6 +21,7 @@
 
 import { COPY } from '@/copy';
 import type { AppealRead, LodgeOutcome } from './appeal';
+import { NeonSection } from '@/components/ui/neon-section';
 
 export interface AppealPanelProps {
   read: AppealRead | 'loading';
@@ -36,11 +37,10 @@ const c = COPY.results.appeal;
 
 function Frame({ children }: { children: React.ReactNode }) {
   return (
-    <section data-testid="appeal-panel" className="mb-5 rounded-xl border border-line p-5">
-      <h2 className="font-display text-[18px] font-bold text-ink">{c.title}</h2>
-      <p className="mt-1 max-w-prose text-[13px] leading-5 text-ink-muted">{c.note}</p>
+    <NeonSection heading={c.title} data-testid="appeal-panel">
+      <p className="max-w-prose text-[13px] leading-5 text-ink-muted">{c.note}</p>
       {children}
-    </section>
+    </NeonSection>
   );
 }
 
@@ -67,7 +67,7 @@ export function AppealPanel(p: AppealPanelProps) {
           type="button"
           data-testid="appeal-retry"
           onClick={p.onRetry}
-          className="mt-3 h-11 rounded-xl border border-line px-4 text-[14px] font-medium text-ink transition-colors hover:border-brand hover:text-brand"
+          className="key-cream mt-3 h-11 rounded-full px-5 text-[14px] font-semibold"
         >
           {c.retry}
         </button>
@@ -110,7 +110,7 @@ export function AppealPanel(p: AppealPanelProps) {
             type="button"
             disabled={p.busy || p.grounds.trim().length === 0}
             onClick={p.onSubmit}
-            className="h-11 rounded-xl border border-line px-4 text-[14px] font-medium text-ink transition-colors hover:border-brand hover:text-brand disabled:opacity-50"
+            className="key-cream h-11 rounded-full px-5 text-[14px] font-semibold disabled:opacity-50"
           >
             {c.submit}
           </button>
