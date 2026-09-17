@@ -248,7 +248,16 @@ async function main(): Promise<void> {
     potLamports: pool.pot_lamports,
     fillDeadline: pool.fill_deadline,
     resultsRoot: pool.results_root,
-    revealedSecret: pool.secret,
+    // A BOOLEAN, not the secret itself (2026-09-17). The pool's X25519 secret is
+    // published by design — `reveal_pool_secret` emits it on chain and the
+    // bundle carries it — so committing it here leaked nothing. But nothing in
+    // this tooling uses the VALUE, only whether a reveal has happened, and a
+    // 64-character high-entropy string in a committed file is a thing the
+    // secret scanner must flag and a reader must then triage. It flagged this
+    // one (PR 144, rule generic-api-key), and the honest fix is not an ignore
+    // entry: it is to stop storing what is not needed. A verifier who wants the
+    // secret takes it from `sources.publishedBundle` below, or from the chain.
+    secretRevealed: pool.secret !== null && pool.secret !== undefined,
     outcomeIfDeadlineNow: pool.outcome_if_deadline_now,
     treasuryLamports,
     vaultLamports,

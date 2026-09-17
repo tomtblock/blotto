@@ -73,7 +73,7 @@ interface ActualSeat {
 }
 interface Actual {
   test: string; poolId: string; poolPda: string; terminalState: string;
-  entrants: number; entryLamports: string; revealedSecret: string | null;
+  entrants: number; entryLamports: string; secretRevealed: boolean;
   seats: ActualSeat[];
 }
 
@@ -118,7 +118,7 @@ function main(): void {
     ? (JSON.parse(readFileSync(actualPath, 'utf8')) as Actual)
     : null;
   const bySeat = new Map((actual?.seats ?? []).map((s) => [s.wallet, s]));
-  const revealed = Boolean(actual?.revealedSecret);
+  const revealed = Boolean(actual?.secretRevealed);
   // A pool that refunded is finished, and a finished pool that has not
   // revealed never will: `crankPool` returns for a `Refunding` pool
   // (crank.ts:179-188) and no-ops for a `Closed` one (:189-192), both before

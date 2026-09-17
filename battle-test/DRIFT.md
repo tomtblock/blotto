@@ -878,3 +878,45 @@ draw into a win — one extra half-point, and the theoretical maximum of 63 × 7
 35 numbers perfectly would have proved the arithmetic. This proved the *derivation*: the claim was
 "rank 1 holds for ANY wall against a field capped at 25", and a genuinely different wall, played by
 a human under time pressure, took rank 1 and the whole pot.
+
+### H11. The secret scanner caught me committing a pool secret, and the fix was to stop storing it (2026-09-17)
+
+CI on PR 144 failed one check — `gitleaks`, one finding:
+
+```
+rule=generic-api-key
+  file=battle-test/registry/T4.actual.json:17
+```
+
+Line 17 was `"revealedSecret": "2e1289d4…c5cb"` — pool 16's X25519 sealing secret, written there by
+`harvest.ts`.
+
+**Was it a leak? No, and that is not the point.** The pool secret is published BY DESIGN: the
+program emits it on chain in `reveal_pool_secret`'s event, and the published bundle carries it in
+its `secret` field. Anyone can read it from two public places. Committing it disclosed nothing.
+
+**Why it was still wrong.** Nothing in this tooling uses the VALUE — `allocations.ts` reads it only
+as a boolean, to decide whether a seat can move from `COMMITTED` to `VERIFIED`. So a 64-character
+high-entropy string sat in a committed file, used for nothing, where a scanner must flag it and a
+human must then triage it. The repo's `.gitleaksignore` header sets the bar for an exception: "an
+entry states what the value is, why it is not a secret, and how that was established." That bar
+could have been met. **It should not have been reached.**
+
+The honest fix is the founder's own data-minimisation ruling applied to the test's own files: do not
+store what you do not need. `harvest.ts` now writes `secretRevealed: true` — the only fact anything
+consumes — and a verifier who wants the secret takes it from `sources.publishedBundle`, which the
+same file records, or from the chain. No ignore entry, no secret in the repository, and the
+evidence chain is unbroken.
+
+Worth noting the likely trigger: `resultsRoot` and all 64 per-seat `battlesHash` values are 64-hex
+strings too and did not fire. The rule keys on the FIELD NAME, and the field was called
+`revealedSecret`. Renaming it to a boolean removed the value and the trigger together.
+
+**Also checked, not assumed:** no salt is stored anywhere (the per-seat hash check fetches salts
+from the bundle at harvest time and keeps only the boolean result), no field named secret/key/token
+carries a long value, and no 64-integer array — the Solana keypair shape the `solana-keypair-json`
+rule guards — appears in any registry file.
+
+**The check did its job.** It is the second time in two days that a gate I did not write caught
+something I did: the language gate on §8.7 wording, and now the secret scanner. Both are cheap and
+both were right.
