@@ -372,6 +372,10 @@ export const COPY = {
     // shared constant for that reason, not for tidiness.
     // PHASE-N-REVIEW: drafts; the founder owns the words.
     checkBackTitle: 'Now the pool fills',
+    // PHASE-N-REVIEW (founder 2026-09-17, round four, §E): the same rule in
+    // two lines, for the column beside the blender.
+    checkBackShort: (minSeats: number) =>
+      `The pool plays at 64 players, or at its deadline with at least ${minSeats}. Every battle is then revealed and scored, and the ranking appears on the pool page.`,
     checkBack: (minSeats: number) =>
       `Your seven battles are sealed. Nothing more to do here. The pool plays when it reaches 64 players, or at its deadline with at least ${minSeats} — every battle is then revealed and scored, and the ranking appears on the pool page. Check back then.`,
     // D-E11 (founder ruling 2026-09-13): the two email lines that stood here
@@ -691,6 +695,21 @@ export const COPY = {
     // supporting lines are removed from this surface too, for the same reason
     // as the sealed screen's — we cannot send the mail we were offering. What
     // is left below is in-app delivery to an open tab, which we do perform.
+    // PHASE-N-REVIEW (founder 2026-09-17, round four, CHANGE-2026-09-16_ui-uplift.md
+    // §E): the one-message opt-in on the sealed screen — back, with an
+    // address and a pool this time, and a dispatcher behind it
+    // (backend/packet/src/notify-pool.ts). Offered only when the entry
+    // service advertises it. Proposals until ratified.
+    keepUpdated: 'Keep me updated when this pool ends',
+    keepUpdatedEmailPrompt: 'Where should the one message go?',
+    keepUpdatedEmailPlaceholder: 'you@example.com',
+    keepUpdatedSend: 'Send it there',
+    keepUpdatedSigning: 'Confirm in your wallet…',
+    keepUpdatedDone: (email: string) =>
+      `One message will go to ${email} when this pool ends. The address is deleted the moment it is sent.`,
+    keepUpdatedFailed: 'That did not save. Try again in a moment.',
+    keepUpdatedBadEmail: 'That does not look like an address.',
+    keepUpdatedNote: 'One message about this pool, nothing else. The address is kept only until it is sent.',
     sealed: (id: string) => `Pool #${id} sealed — battles are being revealed`,
     scored: (id: string) => `Pool #${id}: results are committed`,
     paid: (id: string) => `Pool #${id}: prizes are paid`,
@@ -989,6 +1008,8 @@ export const COPY = {
     // the program's class indices are unchanged. Cosmetic: labels read by
     // nothing in any scoring or prize path, and shown on the profile only.
     cardTitle: 'Your pass',
+    // Round four (§E): the heading beside the trophy Blott on the sealed column.
+    sealedTitle: 'Sealed',
     rarityNames: ['Common', 'Uncommon', 'Rare', 'Epic', 'Mythic'] as const,
     rarityCounts: [38, 15, 7, 3, 1] as const,
     rarityOf: (count: number) => `${count} of every 64 passes`,

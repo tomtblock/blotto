@@ -159,3 +159,10 @@ main:focus {
     animation: none;
   }
 }
+
+/* The play route's field (play/page.tsx): an inline-size container, so the
+ * seal stage can break out of the narrow column with `100cqw` — under the
+ * 0.9 desktop scale above, a viewport unit is 90 % of the window. */
+.play-field {
+  container-type: inline-size;
+}

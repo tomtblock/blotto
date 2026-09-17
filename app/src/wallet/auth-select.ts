@@ -40,6 +40,7 @@ export const AUTH_INIT_TIMEOUT_MS = 10_000;
 export const INITIALIZING: Auth = {
   status: "initializing",
   walletAddress: null,
+  email: null,
   signers: [],
   detectedWallets: [],
   lastError: null,
@@ -94,6 +95,7 @@ export function unconfiguredAuth(reason: "absent" | "rejected" | "unreachable"):
     status: "signed-out",
     unavailable: reason,
     walletAddress: null,
+    email: null,
     signers: [],
     detectedWallets: [],
     lastError: null,

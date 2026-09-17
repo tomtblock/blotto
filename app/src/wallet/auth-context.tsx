@@ -16,6 +16,7 @@ const noProvider = () => {
 export const AuthContext = createContext<Auth>({
   status: "initializing",
   walletAddress: null,
+  email: null,
   signers: [],
   detectedWallets: [],
   lastError: null,

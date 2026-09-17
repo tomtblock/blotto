@@ -94,6 +94,7 @@ function testSignerAuth(): Auth | null {
   return {
     status: "signed-in",
     walletAddress: signer.address,
+    email: null,
     signers: [signer],
     detectedWallets: [],
     lastError: null,

@@ -89,6 +89,14 @@ export interface Auth {
    */
   walletAddress: string | null;
   /**
+   * The address the sign-in provider knows for this account — a Google or
+   * Apple sign-in carries one; a wallet or X sign-in does not, and this is
+   * null. Read by the one-message opt-in on the sealed screen (round four,
+   * 2026-09-17) so a social sign-in is one press; never sent anywhere
+   * without the wallet signing the request that carries it.
+   */
+  email: string | null;
+  /**
    * Every connected wallet as a `TxSigner` for the tx seam (10.B Step 2) —
    * embedded and external side by side; empty until a wallet connects. The
    * dependency points auth → tx (types only) so lib/tx stays provider-free.
