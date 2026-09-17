@@ -751,3 +751,247 @@ this entirely.
 **Spare wallets burnt on pool 15 in the course of this work**, none of them in T4's field
 (W00–W61), and pool 15 is being abandoned: W62 (the old simulate), W63 (the §H6 proof), W64 (the
 guardrail proof), W66 (the fix verification).
+
+### H8. My own runner burnt five wallets, and the guardrail is why it was only five (2026-09-17, T4)
+
+Five headless seats sealed and then failed to register on pool 16, barring each permanently under
+§H6: **W22, W42, W43, W55, W65**. The entry gate was healthy throughout — probed `200` at every
+step. The fault was this runner's transaction handling.
+
+| # | wallet | error | cause |
+|---|---|---|---|
+| 1 | W22 | `Blockhash not found` | concurrency 4, Helius answering `429`; preflight simulated against a node that had not seen the blockhash |
+| 2-3 | W42, W43 | `Blockhash not found` | same, at concurrency 2 — at which point I stopped guessing and read the send path |
+| 4 | W55 | `block height exceeded` | **my first fix was wrong.** I took a `finalized` blockhash, which is ~32 slots old and spent most of its validity window before the send |
+| 5 | W65 | `block height exceeded` | the corrected fix was in place; this one still timed out under load |
+
+**The real cause and the real fix.** `sendAndConfirmTransaction` was left to pick its own blockhash,
+and the failure was always in its **preflight simulation**, never in the send. `skipPreflight: true`
+removes the entire failure class: preflight's only job is to catch a malformed transaction, this
+one's shape is proven by `--simulate` and by 58 landed seats, and a transaction that fails on chain
+burns the wallet either way — so preflight buys nothing here and costs seats. Paired with a
+`confirmed` blockhash for the full validity window. The last six planned seats and all four
+substitutes landed clean afterwards.
+
+**Why it was five and not sixty.** The §H6 guardrail stopped the run on each first burnt seat rather
+than marching into the next batch. Measured at every stop: 23 of 62 seats attempted, then 18, then
+11, then 6 — each halt leaving the untouched wallets intact. Without it the first `429` storm would
+have burnt every remaining seat in the field.
+
+**Substitution, and why the prediction survived it.** Each burnt seat was replaced by a spare
+playing **the burnt seat's own frozen allocation** (`enter.ts --substitute W22=W62,…`), funded by
+sweeping the burnt wallets back to the funder. A rank falls out of the allocations, never the wallet
+holding them, so the field the engine scored was exactly the field the plan predicted. Only the
+results root moved, and it was conditional on seat order from the start.
+
+**Recorded against myself.** This is the second time in two days my own tooling carried an
+irreversible side effect (§H7 was the first). The lesson is the same both times: on a path where
+failure is permanent, the runner must stop, and every "safe" mode must be proven safe rather than
+named safe.
+
+### H9. `reconcile.ts` did not check a scored pool at all — it returned MATCH unconditionally (2026-09-17, T4)
+
+**AMENDED the same day, and the amendment is worse than the original.** This row first said harvest
+could not fetch the revealed allocations, so input drift went unseen. That was true but not the
+point. Reading the code to fix it showed the scored-pool branch was a **stub**:
+
+```ts
+} else {
+  // Scored pools: compare money first, then rank.
+  verdict = 'MATCH';
+  note = 'scored-pool reconcile lands with the first full pool';
+}
+```
+
+It compared **nothing**. Every seat in a scored pool was handed `MATCH` before anything was looked
+at. T4's first reconcile reported `60 MATCH · 0 RANK_DRIFT · 0 PAYOUT_MISMATCH · 0 INPUT_DRIFT` and
+**none of those four numbers was a measurement.** A verdict that cannot fail is not a verdict.
+
+The headline claim survived only because it was checked by hand against the chain's own committed
+payout list, the published leaderboard and the wallet balances — not because reconcile said so.
+
+**Fixed.** `harvest.ts` now fetches the published bundle from the `uri` on
+`/pools/<pda>/leaderboard` and records, per seat, the revealed `battles`, the rank, the score and
+the amount paid — and recomputes `sha256(battles ‖ salt)` against the `battles_hash` the chain
+recorded at entry. `reconcile.ts` now compares money, then rank, then the allocation itself, and
+raises `PAYOUT_MISMATCH`, `RANK_DRIFT` or `INPUT_DRIFT` accordingly.
+
+**T4 re-run against the real check:**
+
+| | first run (stub) | real check |
+|---|---|---|
+| MATCH | 60 | **58** |
+| RANK_DRIFT | 0 | **0** — every field rank exactly as predicted |
+| PAYOUT_MISMATCH | 0 | **0** |
+| INPUT_DRIFT | 0 | **2** — UI-A and UI-B, played by hand |
+| ABSENT | 4 | 4 |
+| verdict | PASS | **PASS** |
+
+All 64 revealed allocations reproduce their committed hashes. The verdict is unchanged; what changed
+is that it now rests on evidence rather than on a placeholder.
+
+### H9-a. The original symptom, kept because it is its own defect
+
+
+T4's reconcile reported **0 INPUT_DRIFT**. That number is a limitation, not a fact.
+
+The founder's two seats were played by hand on the live dials, and the published bundle shows both
+drifted from the frozen plan — **UI-A matched the plan in only 1 of 7 battles, UI-B in 4 of 7**.
+`reconcile.ts` did not notice, because `harvest.ts` never fetches the published bundle: it reads the
+indexer and the chain, and since PR 134 removed `/sealed-entries` there is no allocation to compare
+against. It compares ranks and payouts, which matched, and reports `MATCH`.
+
+**Fix:** `harvest.ts` should fetch the bundle from the `uri` on
+`/pools/<pda>/leaderboard` — it is public, it carries every revealed `battles` — and record the
+revealed allocations per seat. `reconcile.ts` can then compare them to the plan and raise a real
+`INPUT_DRIFT`, and `allocations.ts` can finally move seats from `COMMITTED` to `VERIFIED`, which it
+currently cannot do for the same reason (T4 shows 60 COMMITTED, 0 VERIFIED, on a pool that revealed
+its secret).
+
+**This does not weaken T4's PASS** — the verdict rests on rank and payout, both confirmed against
+the chain's own committed payout list. It means the report must say "input drift not checked"
+rather than "no input drift", and it is written that way.
+
+### H10. The unconditional derivation is the finding, and it held (2026-09-17, T4)
+
+The plan split its expectations in two: **unconditional** (UI-A rank 1 and paid the whole pot, UI-B
+last, nobody else paid — derived from the shapes alone) and **conditional** (exact scores, the leaf
+order, the results root — which assume the exact allocations).
+
+The founder, dragging dials against a 90-second clock, produced a wall that matched the plan's exact
+numbers in **one battle of seven**. Every conditional prediction about their allocations was
+therefore wrong.
+
+**Every unconditional one was exactly right.** All seven of UI-A's battles still held three stats at
+26 or above — the only property that matters — so:
+
+- UI-A: **rank 1**, paid **4000000000** lamports, the entire pot.
+- UI-B: last, paid nothing.
+- No other seat paid: the chain's committed list is `[{"seat":0,"amount":"4000000000"}]`.
+
+The one score difference is fully explained: predicted 881 half-points, actual **882**. The plan's
+wall drew its seventh battle with the pole (2 stats each, nobody reaching 3); the founder's actual
+battle 7, `[36,1,33,0,30]`, carried a 1 where the plan had a 0, which won that stat and turned the
+draw into a win — one extra half-point, and the theoretical maximum of 63 × 7 × 2.
+
+**This is a better outcome than a clean match would have been.** A test where the founder reproduced
+35 numbers perfectly would have proved the arithmetic. This proved the *derivation*: the claim was
+"rank 1 holds for ANY wall against a field capped at 25", and a genuinely different wall, played by
+a human under time pressure, took rank 1 and the whole pot.
+
+### H11. The secret scanner caught me committing a pool secret, and the fix was to stop storing it (2026-09-17)
+
+CI on PR 144 failed one check — `gitleaks`, one finding:
+
+```
+rule=generic-api-key
+  file=battle-test/registry/T4.actual.json:17
+```
+
+Line 17 was `"revealedSecret": "2e1289d4…c5cb"` — pool 16's X25519 sealing secret, written there by
+`harvest.ts`.
+
+**Was it a leak? No, and that is not the point.** The pool secret is published BY DESIGN: the
+program emits it on chain in `reveal_pool_secret`'s event, and the published bundle carries it in
+its `secret` field. Anyone can read it from two public places. Committing it disclosed nothing.
+
+**Why it was still wrong.** Nothing in this tooling uses the VALUE — `allocations.ts` reads it only
+as a boolean, to decide whether a seat can move from `COMMITTED` to `VERIFIED`. So a 64-character
+high-entropy string sat in a committed file, used for nothing, where a scanner must flag it and a
+human must then triage it. The repo's `.gitleaksignore` header sets the bar for an exception: "an
+entry states what the value is, why it is not a secret, and how that was established." That bar
+could have been met. **It should not have been reached.**
+
+The honest fix is the founder's own data-minimisation ruling applied to the test's own files: do not
+store what you do not need. `harvest.ts` now writes `secretRevealed: true` — the only fact anything
+consumes — and a verifier who wants the secret takes it from `sources.publishedBundle`, which the
+same file records, or from the chain. The evidence chain is unbroken.
+
+**That fix was half a fix, and I called it done.** I wrote the paragraph above, pushed, and told the
+founder to merge. The lane failed again, and the log named the half I had missed:
+
+```
+Scan working tree ........ passed — no leaks found
+Scan the git history ..... FAILED — leaks found: 1
+  rule=generic-api-key  file=battle-test/registry/T4.actual.json:17
+  commit=b64d770aa
+```
+
+Removing a value from the tip does not remove it from a commit that is already pushed. The lane has
+two steps for exactly that reason, and the second is the one that matters: a scanner that read only
+the working tree would let anyone launder a live credential out of view with one follow-up commit
+while it stayed valid in the history. The gate is built so that cannot happen, and it caught me
+doing it by accident.
+
+**The finding was never at the commit I recorded.** I wrote `0d0a4c8` from memory. It is at
+`b64d770`, the commit that recorded T4 PASSED. The log said so and I had not read the log before
+writing it down. Twice in two days now: the Turnkey diagnosis (§H3) and this. Read the evidence
+before recording the conclusion.
+
+**What the value is, established three ways rather than asserted:**
+
+1. An unauthenticated `GET https://blotto-indexer.fly.dev/pools/EgbFPxSR…` returns this exact value
+   in its `secret` field. Fetched again while resolving this.
+2. `sha256(value)` sits at byte offset 84 of the LIVE on-chain Pool account for
+   `EgbFPxSRgtc8hd68vbxjsQ8irYAifen7Zxf5uYNkrngq` — its `sealing_secret_hash`, committed at
+   `open_pool` and checked at reveal. The chain therefore commits to this value being pool 16's
+   secret, and no other value can satisfy that hash.
+3. The raw bytes are NOT in the Pool account (searched; offset -1). They are in the event log,
+   exactly where `reveal_commit.rs`'s module doc says reveal puts them: reveal "publishes the pool's
+   X25519 secret ON-CHAIN (in the event log) ... the verifiability spine".
+
+So: published by design, nothing to rotate, and removing it from the history hides nothing from
+anybody.
+
+**Two candidate resolutions, and why the second was rejected.**
+
+*(a) Remove it from the branch's own commits.* Chosen. The commits are strictly linear, no tracked
+file references any of their hashes, and the freeze records are anchored on merged-change
+timestamps, the plan's own sha256 and on-chain signatures — not on git identity. So the rewrite
+costs the evidence chain nothing, and it leaves nothing behind.
+
+*(b) A justified `.gitleaksignore` entry.* Written first, and it works — verified, history scan
+clean, exit 0. Rejected on two counts. First, `.gitleaksignore` lives at the REPOSITORY ROOT, and
+the `boundary` lane refuses any change outside `battle-test/`: fixing one red check would have made
+another red, and shipping it separately is a second change for the founder to merge. Second and
+decisively, it leaves a permanent root-level exception naming a `battle-test/` file — and the
+standing constraint on this whole exercise is that deleting `battle-test/` at the end leaves the
+product exactly as it was. An ignore entry is precisely that kind of leftover.
+
+I argued the opposite first — that rewriting an evidence commit would damage what the test exists to
+demonstrate — and then checked instead of assuming. Nothing references the commit hashes. The
+objection was real but did not survive contact with the repository.
+
+**How the rewrite was done, and what was proven before anything moved.** The commits were rebuilt
+with git plumbing (`read-tree` / `commit-tree` against a scratch index), replacing one line in
+`T4.actual.json` — `"revealedSecret": "<value>"` becomes `"secretRevealed": true`, the same form the
+harvester now emits. Nothing else in any file changes. The whole operation was rehearsed first in a
+throwaway clone and four things checked there before the real branch was touched:
+
+| proof | result |
+|---|---|
+| final tree byte-identical to the original tip | PASS — same tree, so the working files are unchanged |
+| author, committer and both dates preserved per commit | PASS — all four matched to the second |
+| the value present in no commit of the new history | PASS — 0 commits add or remove it |
+| gitleaks history scan, pinned v8.30.1, same range shape as CI | PASS — no leaks found, exit 0 |
+
+The superseded commits were `b64d770 · 0d0a4c8 · 94ef10b · 7be5335`. They are written down rather
+than quietly dropped, so the rewrite is auditable: anyone still holding those objects can diff them
+against what the branch now carries and confirm that one line changed and nothing else.
+
+**A note for mainnet.** A mainnet pool secret is the same kind of value and equally published, but
+do not reason by analogy from this entry. The harvester no longer stores it at all, which is the
+durable fix; the rewrite was cleanup after the fact.
+
+Worth noting the likely trigger: `resultsRoot` and all 64 per-seat `battlesHash` values are 64-hex
+strings too and did not fire. The rule keys on the FIELD NAME, and the field was called
+`revealedSecret`. Renaming it to a boolean removed the value and the trigger together.
+
+**Also checked, not assumed:** no salt is stored anywhere (the per-seat hash check fetches salts
+from the bundle at harvest time and keeps only the boolean result), no field named secret/key/token
+carries a long value, and no 64-integer array — the Solana keypair shape the `solana-keypair-json`
+rule guards — appears in any registry file.
+
+**The check did its job.** It is the second time in two days that a gate I did not write caught
+something I did: the language gate on §8.7 wording, and now the secret scanner. Both are cheap and
+both were right.

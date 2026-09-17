@@ -142,10 +142,53 @@ function main(): void {
         note = `refunded ${sol(expectedRefund)} SOL`;
       }
     } else {
-      // Scored pools: compare money first, then rank. Rank comes from the
-      // engine re-run, which is added when the first full pool settles.
-      verdict = 'MATCH';
-      note = 'scored-pool reconcile lands with the first full pool';
+      // Scored pools: money first, then rank, then the allocation itself.
+      //
+      // Until 2026-09-17 this branch was a STUB that returned MATCH for every
+      // seat without comparing anything — so T4's first run reported
+      // "60 MATCH · 0 INPUT_DRIFT" having checked nothing per-seat at all. The
+      // headline claim survived only because it was verified by hand against
+      // the chain's committed payout list. A verdict that cannot fail is not a
+      // verdict, and this is what it should always have done.
+      const wantPaid = BigInt(seat.expectedLamports ?? '0');
+      const gotPaid = got.amountLamports === undefined ? null : BigInt(got.amountLamports);
+
+      if (gotPaid === null) {
+        verdict = 'PAYOUT_MISMATCH';
+        note = 'no published result for this seat — the bundle did not carry one';
+      } else if (gotPaid !== wantPaid) {
+        verdict = 'PAYOUT_MISMATCH';
+        note = `paid ${sol(gotPaid)} SOL, plan said ${sol(wantPaid)}`;
+      } else if (seat.expectedRank !== undefined && got.rank !== undefined && got.rank !== seat.expectedRank) {
+        verdict = 'RANK_DRIFT';
+        note = `rank ${got.rank}, plan said ${seat.expectedRank}`;
+      } else if (
+        seat.battles &&
+        got.revealedBattles &&
+        JSON.stringify(got.revealedBattles) !== JSON.stringify(seat.battles)
+      ) {
+        // The allocation played is not the allocation planned. On a headless
+        // seat that is a defect in this runner. On a UI seat it is a human at
+        // a dial under a ninety-second clock, and is expected — what matters
+        // is whether the rank and the money still landed where the plan said,
+        // which the two checks above have already established by this point.
+        const differing = got.revealedBattles.filter(
+          (b, i) => JSON.stringify(b) !== JSON.stringify(seat.battles![i])
+        ).length;
+        verdict = 'INPUT_DRIFT';
+        note =
+          `${differing} of 7 battles differ from the plan` +
+          (seat.route === 'ui' ? ' (played by hand — rank and payout still match)' : '');
+      } else if (got.recomputedHashMatches === false) {
+        verdict = 'INPUT_DRIFT';
+        note = 'revealed allocation does NOT reproduce the hash committed at entry';
+      } else {
+        verdict = 'MATCH';
+        note =
+          got.rank !== undefined
+            ? `rank ${got.rank}` + (gotPaid > 0n ? `, paid ${sol(gotPaid)} SOL` : ', not paid')
+            : 'rank and payout match the plan';
+      }
     }
 
     counts[verdict]++;
@@ -204,9 +247,16 @@ function main(): void {
   }
   if (counts.ABSENT > 0) {
     lines.push('');
-    lines.push(`${counts.ABSENT} planned seat(s) never landed. The refund property is proved by the seats that did,`);
-    lines.push('since any count below the minimum field takes the same fork, but the shortfall is recorded here');
-    lines.push('rather than hidden — and the plan is not edited to match what happened.');
+    lines.push(`${counts.ABSENT} planned seat(s) never landed, and the plan is not edited to match.`);
+    if (isRefundPool) {
+      lines.push('The refund property is proved by the seats that did, since any count below the');
+      lines.push('minimum field takes the same fork — the shortfall is recorded rather than hidden.');
+    } else {
+      lines.push('On a scored pool each was replaced by a spare playing THAT SEAT\'S OWN frozen');
+      lines.push('allocation, so the field the engine scored is the field the plan predicted: a rank');
+      lines.push('falls out of the allocations, never the wallet holding them. The absent rows are the');
+      lines.push('burnt wallets (DRIFT.md §H6, §H8), recorded rather than quietly substituted.');
+    }
   }
   lines.push('');
   if (!frozenOk) {

@@ -22,6 +22,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "4",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 23, not paid"
         }
       ]
     },
@@ -39,6 +47,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "2",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 47, not paid"
         }
       ]
     },
@@ -56,6 +72,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "5",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 27, not paid"
         }
       ]
     },
@@ -73,6 +97,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "3",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 22, not paid"
         }
       ]
     },
@@ -90,6 +122,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "7",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 41, not paid"
         }
       ]
     },
@@ -107,6 +147,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "6",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 24, not paid"
         }
       ]
     },
@@ -124,6 +172,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "9",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 16, not paid"
         }
       ]
     },
@@ -141,6 +197,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "8",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 15, not paid"
         }
       ]
     },
@@ -158,6 +222,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "11",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 25, not paid"
         }
       ]
     },
@@ -175,6 +247,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "10",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 54, not paid"
         }
       ]
     },
@@ -184,7 +264,16 @@
       "keypair": "battle-test/keys/wallets/10.json",
       "address": "76TpE6MMG5uHEqA9ALJrrZyMr5Mv4LR47GgnEmByyfFn",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "13",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 34, not paid"
+        }
+      ]
     },
     {
       "id": "W11",
@@ -192,7 +281,16 @@
       "keypair": "battle-test/keys/wallets/11.json",
       "address": "8jJSNEFqHbbS3Xonu75J7TbTDrBg8SryJBL849yofzKY",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "12",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 55, not paid"
+        }
+      ]
     },
     {
       "id": "W12",
@@ -200,7 +298,16 @@
       "keypair": "battle-test/keys/wallets/12.json",
       "address": "EAnKMXm5NrD6uzoDDKn3FGooJoCRxxF1GVMMKKabALjR",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "14",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 63, not paid"
+        }
+      ]
     },
     {
       "id": "W13",
@@ -208,7 +315,16 @@
       "keypair": "battle-test/keys/wallets/13.json",
       "address": "BdiQooDYCNnkBTEuWrvbUtapc1bEKNsvpXSU8U3FFNgn",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "15",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 61, not paid"
+        }
+      ]
     },
     {
       "id": "W14",
@@ -216,7 +332,16 @@
       "keypair": "battle-test/keys/wallets/14.json",
       "address": "7LopdohKE7oojY2oaaVa5rCYUaQAwpnLSB4QfFaL5AaL",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "16",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 20, not paid"
+        }
+      ]
     },
     {
       "id": "W15",
@@ -224,7 +349,16 @@
       "keypair": "battle-test/keys/wallets/15.json",
       "address": "5LFF41tQuiteJgqUwBtTrvHChQCsYFwnBzEPsoCYmnrP",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "17",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 52, not paid"
+        }
+      ]
     },
     {
       "id": "W16",
@@ -232,7 +366,16 @@
       "keypair": "battle-test/keys/wallets/16.json",
       "address": "J8vnziqaqjr7miqNDmbiffGh8Hq3Pit8GNNjkk4hQeiJ",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "21",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 49, not paid"
+        }
+      ]
     },
     {
       "id": "W17",
@@ -240,7 +383,16 @@
       "keypair": "battle-test/keys/wallets/17.json",
       "address": "6oqBtFcE46nP6SfPpSN5iX582sJXeMnBuAYBdN9FPuaG",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "19",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 35, not paid"
+        }
+      ]
     },
     {
       "id": "W18",
@@ -248,7 +400,16 @@
       "keypair": "battle-test/keys/wallets/18.json",
       "address": "EfRD2Sh3R2rkja48U4uwb96F8tu3aZSzef5R2mQMJzu",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "20",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 29, not paid"
+        }
+      ]
     },
     {
       "id": "W19",
@@ -256,7 +417,16 @@
       "keypair": "battle-test/keys/wallets/19.json",
       "address": "7vKioBwZHigM9zLVXPZe23BgrR44Sf2etmP9LfxcJUqm",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "18",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 46, not paid"
+        }
+      ]
     },
     {
       "id": "W20",
@@ -264,7 +434,16 @@
       "keypair": "battle-test/keys/wallets/20.json",
       "address": "7NhgEuPtvjYVyqFD4isCnKFNqSxmLLCxZzSvky3JX4oX",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "24",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 21, not paid"
+        }
+      ]
     },
     {
       "id": "W21",
@@ -272,7 +451,16 @@
       "keypair": "battle-test/keys/wallets/21.json",
       "address": "Bk4SKwVgvZvrZ2Y2txCknoDcZuoamhq7LdD94QUUR5Mu",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "23",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 40, not paid"
+        }
+      ]
     },
     {
       "id": "W22",
@@ -280,7 +468,16 @@
       "keypair": "battle-test/keys/wallets/22.json",
       "address": "9wbGkEfUFXZFA8LTSXgQmPCMfVUMNLL5XGJbo95M29kA",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "—",
+          "role": "field",
+          "verdict": "ABSENT",
+          "note": "planned seat never landed"
+        }
+      ]
     },
     {
       "id": "W23",
@@ -288,7 +485,16 @@
       "keypair": "battle-test/keys/wallets/23.json",
       "address": "3MHZq2t7roYHsEPFX7LK1AcPGkUp5RVx82RzHHt6ZCj7",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "22",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 6, not paid"
+        }
+      ]
     },
     {
       "id": "W24",
@@ -296,7 +502,16 @@
       "keypair": "battle-test/keys/wallets/24.json",
       "address": "7qvXkBndmUFQx6AHwZ5bQEVMWVmS5fb8jaNiimNxsyTq",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "26",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 14, not paid"
+        }
+      ]
     },
     {
       "id": "W25",
@@ -304,7 +519,16 @@
       "keypair": "battle-test/keys/wallets/25.json",
       "address": "HbFoy8h6Y7Awavs1onxN9qSwZrRDUa3Ti8P3idE6Q2wq",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "25",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 53, not paid"
+        }
+      ]
     },
     {
       "id": "W26",
@@ -312,7 +536,16 @@
       "keypair": "battle-test/keys/wallets/26.json",
       "address": "HfkvkWMPs9keMsaHcuH8AX1DCn3yeRuiaAbH3S6W8vZE",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "28",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 32, not paid"
+        }
+      ]
     },
     {
       "id": "W27",
@@ -320,7 +553,16 @@
       "keypair": "battle-test/keys/wallets/27.json",
       "address": "69BuMKj1e7LNsDYgmbXfJtk1WppgoepFUFq6pWg7Nut7",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "27",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 43, not paid"
+        }
+      ]
     },
     {
       "id": "W28",
@@ -328,7 +570,16 @@
       "keypair": "battle-test/keys/wallets/28.json",
       "address": "2CK7ubGSRqn2gwBbGZCq7oooWbthRqBJnqYYvJBR44pi",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "30",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 28, not paid"
+        }
+      ]
     },
     {
       "id": "W29",
@@ -336,7 +587,16 @@
       "keypair": "battle-test/keys/wallets/29.json",
       "address": "HURavDvBLTvz3hFHcEWZ6LhP59qA2GQ5ZMfamVRNm7Jv",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "29",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 31, not paid"
+        }
+      ]
     },
     {
       "id": "W30",
@@ -344,7 +604,16 @@
       "keypair": "battle-test/keys/wallets/30.json",
       "address": "85MN5Tc24gVRvCkZzRSjM3hkoKUbTd975XvCMRczPyEG",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "32",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 60, not paid"
+        }
+      ]
     },
     {
       "id": "W31",
@@ -352,7 +621,16 @@
       "keypair": "battle-test/keys/wallets/31.json",
       "address": "ARKd8adMn8B2MUY7XjA3R3Vjj2zXMkC6UV97WmFmPUBC",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "31",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 38, not paid"
+        }
+      ]
     },
     {
       "id": "W32",
@@ -360,7 +638,16 @@
       "keypair": "battle-test/keys/wallets/32.json",
       "address": "E97qquyinwkiAovRkV5aCMhVmMdT11c26LYgSQm1PiVi",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "34",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 56, not paid"
+        }
+      ]
     },
     {
       "id": "W33",
@@ -368,7 +655,16 @@
       "keypair": "battle-test/keys/wallets/33.json",
       "address": "2c9pKUy6hx94bGPj4rJ4czb4HhH1La1anfhWf52tJy91",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "33",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 5, not paid"
+        }
+      ]
     },
     {
       "id": "W34",
@@ -376,7 +672,16 @@
       "keypair": "battle-test/keys/wallets/34.json",
       "address": "E5DSmevYhFSDfyF1Yvp4WiLLd3cVHHrqzhA48pfM5BEC",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "36",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 42, not paid"
+        }
+      ]
     },
     {
       "id": "W35",
@@ -384,7 +689,16 @@
       "keypair": "battle-test/keys/wallets/35.json",
       "address": "FHy2QgnPkbcNeiC5cMRe2Ymi6i2kWMnCmQRJdo1nB2b8",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "35",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 10, not paid"
+        }
+      ]
     },
     {
       "id": "W36",
@@ -392,7 +706,16 @@
       "keypair": "battle-test/keys/wallets/36.json",
       "address": "HgnAG7HAMqHyhPgghNjH8fw5536nupNvZngCHkWFYvqA",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "38",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 9, not paid"
+        }
+      ]
     },
     {
       "id": "W37",
@@ -400,7 +723,16 @@
       "keypair": "battle-test/keys/wallets/37.json",
       "address": "EdodvtHdYxgGwMzPwa3BzDR8NhMdL5jMkKTZKTzekaip",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "37",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 45, not paid"
+        }
+      ]
     },
     {
       "id": "W38",
@@ -408,7 +740,16 @@
       "keypair": "battle-test/keys/wallets/38.json",
       "address": "CkhWcpxE8x465NvkZCa2L4TfcqPoQJh85KkgcLciMwQT",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "39",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 58, not paid"
+        }
+      ]
     },
     {
       "id": "W39",
@@ -416,7 +757,16 @@
       "keypair": "battle-test/keys/wallets/39.json",
       "address": "54pNkrzjVZYD2dQfY3Jo5j5wzqnLJC6DR3dDfC7aXxUC",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "40",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 39, not paid"
+        }
+      ]
     },
     {
       "id": "W40",
@@ -424,7 +774,16 @@
       "keypair": "battle-test/keys/wallets/40.json",
       "address": "HG3fCsSkj6Gm4wLqzNTUg4RAEL8z51EwZEfzcF8HaYSx",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "42",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 19, not paid"
+        }
+      ]
     },
     {
       "id": "W41",
@@ -432,7 +791,16 @@
       "keypair": "battle-test/keys/wallets/41.json",
       "address": "C5xTL7cBqEvGZzfz9KwqTTz4Fe3WTDVh6KgoWgJSL6Ad",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "41",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 18, not paid"
+        }
+      ]
     },
     {
       "id": "W42",
@@ -440,7 +808,16 @@
       "keypair": "battle-test/keys/wallets/42.json",
       "address": "CpH39cHwRhH1hXUtmZi9FZPtrfRAKfmvorMTVnCabRT2",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "—",
+          "role": "field",
+          "verdict": "ABSENT",
+          "note": "planned seat never landed"
+        }
+      ]
     },
     {
       "id": "W43",
@@ -448,7 +825,16 @@
       "keypair": "battle-test/keys/wallets/43.json",
       "address": "6s3aGq9GJmCqNCBh717evnmWserY653YrYy5LJeFF7XT",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "—",
+          "role": "field",
+          "verdict": "ABSENT",
+          "note": "planned seat never landed"
+        }
+      ]
     },
     {
       "id": "W44",
@@ -456,7 +842,16 @@
       "keypair": "battle-test/keys/wallets/44.json",
       "address": "7QDoEUbBxh1Dj8M3r9bJPjSfGuBD7McAwfEtLoZrHEh6",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "43",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 44, not paid"
+        }
+      ]
     },
     {
       "id": "W45",
@@ -464,7 +859,16 @@
       "keypair": "battle-test/keys/wallets/45.json",
       "address": "fgZy7mdhgMMv4QYK9dpiiXLKw5pz1ZtUYvSPRXhPYFw",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "44",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 2, not paid"
+        }
+      ]
     },
     {
       "id": "W46",
@@ -472,7 +876,16 @@
       "keypair": "battle-test/keys/wallets/46.json",
       "address": "JAdrczVWwDM5AqwHnWTF2PHFnui2G6EVhFNDSB9Aqzu3",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "45",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 4, not paid"
+        }
+      ]
     },
     {
       "id": "W47",
@@ -480,7 +893,16 @@
       "keypair": "battle-test/keys/wallets/47.json",
       "address": "9g2xT2XaugDzNduz7qX6cu1UvnBkvs3xxtUxqu4Wfhgu",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "46",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 62, not paid"
+        }
+      ]
     },
     {
       "id": "W48",
@@ -488,7 +910,16 @@
       "keypair": "battle-test/keys/wallets/48.json",
       "address": "6FdxTfSt1xHpaehv7UPMSRCJ8JwrnK5MpGRFjeVwQjiE",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "47",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 8, not paid"
+        }
+      ]
     },
     {
       "id": "W49",
@@ -496,7 +927,16 @@
       "keypair": "battle-test/keys/wallets/49.json",
       "address": "J9GsYWxgN6qbzqATGX2caE1idyXfb996Fh18UxUHfivD",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "48",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 37, not paid"
+        }
+      ]
     },
     {
       "id": "W50",
@@ -504,7 +944,16 @@
       "keypair": "battle-test/keys/wallets/50.json",
       "address": "3LPzJJMkhLamgUSHvn2fHuFLa2G71QuFzxfX78yzq9cc",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "49",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 36, not paid"
+        }
+      ]
     },
     {
       "id": "W51",
@@ -512,7 +961,16 @@
       "keypair": "battle-test/keys/wallets/51.json",
       "address": "CLX9kRpa7mPtBCuRmkcviy6apf5reHtzQpNAG7YKWnPh",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "50",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 57, not paid"
+        }
+      ]
     },
     {
       "id": "W52",
@@ -520,7 +978,16 @@
       "keypair": "battle-test/keys/wallets/52.json",
       "address": "9R8wPcTN7zZTbzNRXTFmPVh4KTr6f8paUpLyo3i25uxT",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "51",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 17, not paid"
+        }
+      ]
     },
     {
       "id": "W53",
@@ -528,7 +995,16 @@
       "keypair": "battle-test/keys/wallets/53.json",
       "address": "5TZXbUEaSfAu9Hcpzgie8t67mBz3YXCBMZx2Rj5zRw7Z",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "52",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 48, not paid"
+        }
+      ]
     },
     {
       "id": "W54",
@@ -536,7 +1012,16 @@
       "keypair": "battle-test/keys/wallets/54.json",
       "address": "Btw9s22wBjx9DMtUx7k8kDEkpoeypqT32gHDD3aWcAh1",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "53",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 12, not paid"
+        }
+      ]
     },
     {
       "id": "W55",
@@ -544,7 +1029,16 @@
       "keypair": "battle-test/keys/wallets/55.json",
       "address": "7pWEwGeeq58kvQzFcqJdCLsGyPpsr2izi4qhpSdeWcq",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "—",
+          "role": "field",
+          "verdict": "ABSENT",
+          "note": "planned seat never landed"
+        }
+      ]
     },
     {
       "id": "W56",
@@ -552,7 +1046,16 @@
       "keypair": "battle-test/keys/wallets/56.json",
       "address": "CfkK3yYBg3sDpHFHXdX9meQxbjTNYY6CFNsDC3kqu5vT",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "54",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 7, not paid"
+        }
+      ]
     },
     {
       "id": "W57",
@@ -560,7 +1063,16 @@
       "keypair": "battle-test/keys/wallets/57.json",
       "address": "HFGtkdwPurm1ny8Fi2v9LDd2KUiiocJ68jim1CfmSg9k",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "55",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 11, not paid"
+        }
+      ]
     },
     {
       "id": "W58",
@@ -568,7 +1080,16 @@
       "keypair": "battle-test/keys/wallets/58.json",
       "address": "2dSK8WADiGbkxo5kyQ5nGi6Pmd3oRL39BoSDPa5F8UXZ",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "56",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 50, not paid"
+        }
+      ]
     },
     {
       "id": "W59",
@@ -576,7 +1097,16 @@
       "keypair": "battle-test/keys/wallets/59.json",
       "address": "7tntKL2GLgFz2iL1CMxxCjxgTAFVERPswV3CuE5Gbe5y",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "57",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 33, not paid"
+        }
+      ]
     },
     {
       "id": "W60",
@@ -584,7 +1114,16 @@
       "keypair": "battle-test/keys/wallets/60.json",
       "address": "HKDtPphLse9pk3Z99nseQj688NE3Tg3h3UeqfPjgQZoN",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "58",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 26, not paid"
+        }
+      ]
     },
     {
       "id": "W61",
@@ -592,7 +1131,16 @@
       "keypair": "battle-test/keys/wallets/61.json",
       "address": "GjNf9i7LByLTXR5M44b6d3No8ApA26i9septKzNiiiSJ",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "59",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 30, not paid"
+        }
+      ]
     },
     {
       "id": "W62",
@@ -689,6 +1237,14 @@
           "role": "natural",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "0",
+          "role": "wall",
+          "verdict": "INPUT_DRIFT",
+          "note": "6 of 7 battles differ from the plan (played by hand — rank and payout still match)"
         }
       ]
     },
@@ -707,6 +1263,14 @@
           "role": "natural",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T4",
+          "poolId": "16",
+          "seat": "1",
+          "role": "pole",
+          "verdict": "INPUT_DRIFT",
+          "note": "3 of 7 battles differ from the plan (played by hand — rank and payout still match)"
         }
       ]
     }

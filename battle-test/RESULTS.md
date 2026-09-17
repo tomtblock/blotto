@@ -8,7 +8,7 @@ open item in the report; CI refuses the default branch otherwise.
 | T1 | Refund, sparse — below the minimum field | 14 | Closed | 12 | PR 132, 2026-09-16T00:07:24Z | 2026-09-16T14:04Z | **PASS** |
 | T2 | Refund at the boundary (39) | — | not started | — | — | — | — |
 | T3 | Seal at the minimum field (40) + pause | — | not started | — | — | — | — |
-| T4 | Full pool — UI wallet wins | — | not started | — | — | — | — |
+| T4 | Full pool — UI wallet wins | 16 | Paid | 64 | PR 133, 2026-09-16T16:22:00Z | 2026-09-17T02:23Z | **PASS** |
 | T5 | Full pool — headless wallet wins | — | not started | — | — | — | — |
 | T6 | Oversubscribed + load | — | not started | — | — | — | — |
 | T7 | Same device → review | — | not started | — | — | — | — |
@@ -27,3 +27,49 @@ minimum field.
 **Unexplained deviations: none.** One observation, not a deviation: W06 and W09
 each spent 5080 lamports more in fees than the other eight headless seats. Their
 entry price returned in full like every other seat.
+
+---
+
+## T4 — the first pool that played, and paid
+
+**UI-A took the entire 4 SOL pot. UI-B finished 64th.** Both confirmed against the chain's own
+committed payout list, `[{"seat":0,"amount":"4000000000"}]` — exactly one paid seat.
+
+| | predicted (frozen 16:22:00Z) | actual | |
+|---|---|---|---|
+| UI-A net | +3.895564000 SOL | **+3.895554578** | 9422 lamports apart |
+| UI-B net | −0.104436000 SOL | **−0.104441167** | 5167 lamports apart |
+| prize vault after | 650240 | **650240** | exact |
+| terminal state | Paid | **Paid** | |
+| entrants | 64 | **64** | |
+| paid seats | 1 | **1** | |
+| flagged · sanctions holds | none · none | **none · none** | |
+
+Reconcile: **58 MATCH · 0 RANK_DRIFT · 0 PAYOUT_MISMATCH · 2 INPUT_DRIFT · 4 ABSENT**. Freeze **OK** — the plan's
+sha256 matches the bytes merged in PR 133, and the merge preceded the first entry by 9 h 43 min.
+
+**The plan was frozen against pool 15 and ran on pool 16, unedited.** Pool 15 was lost to the
+seal-lockout (§H6); the plan was not changed, because a rank falls out of the allocations and not
+the pool. A prediction frozen before its pool existed is stronger evidence, not weaker.
+
+**The first reconcile checked nothing per-seat (§H9).** Its scored-pool branch was a stub that
+returned `MATCH` unconditionally. It has been implemented and re-run; the table above is the real
+check. All 64 revealed allocations reproduce the `battles_hash` the chain recorded at entry, and
+every field seat's rank is exactly the one the plan predicted.
+
+The 2 INPUT_DRIFT are the founder's own seats, played by hand against a 90-second clock: UI-A
+matched the plan's exact numbers in **1 of 7 battles**, UI-B in **4 of 7**. Rank and payout matched
+regardless — which is the point.
+
+**And that is the result worth keeping (§H10).** Every *conditional* prediction about those exact
+numbers was wrong. Every *unconditional* one was exactly right: all seven of UI-A's battles still
+held three stats at 26 or above, so it won every battle and took the whole pot. The claim under test
+was "rank 1 holds for ANY wall against a field capped at 25" — and a genuinely different wall,
+played by a human against a 90-second clock, proved it.
+
+**Cost: five wallets, and the fault was the runner's, not the product's (§H8).** W22, W42, W43, W55
+and W65 sealed and then failed to register — `Blockhash not found` from a preflight the send did not
+need. Each is barred from pool 16 by §H6. The guardrail built earlier the same day stopped the run
+at each first casualty instead of marching on, which is why it was five and not sixty-two. All five
+were replaced by spares playing the burnt seats' own frozen allocations, so the scored field was
+exactly the planned field.

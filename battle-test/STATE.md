@@ -1,24 +1,66 @@
-# STATE — 2026-09-16 16:23 local (19:23 UTC) — by Claude Code
+# STATE — 2026-09-17 17:35 local (20:35 UTC) — by Claude Code
 
-Phase:            **T4 moves to the next pool. UI-A and UI-B are permanently barred from pool 15.**
-                  Not a wallet problem and not fixable: the app stores the sealed allocation BEFORE it
-                  asks for an entry packet, so the founder's play during the Turnkey outage stored a
-                  ciphertext that was never registered. Every retry replays with a fresh salt, so the
-                  bytes differ, so the store refuses with 409 "already sealed". No delete path exists.
-Waiting on:       **F-25 — one decision, not blocking.** Apply the seal-lockout product fix now as a
-                  separate PR (touches app/ and backend/, against this week's boundary), or ship it
-                  after the test week? Recommendation: after. Guardrails already stop it recurring here.
-After that:       pool 15 lapses 01:52:26Z (22:52 local, holds no entries) → daemon opens the next pool
-                  ~5 min later (~22:57 local, on the 23:00 cadence) → T4 runs there on the SAME frozen
-                  plan. Only poolId, poolPda and a new freeze record change; no rank or payout moves.
-Live deadlines:   pool 15 deadline 01:52:26Z. Entry gate HEALTHY since 18:56:02Z (200 for both UI wallets).
-Blocked:          nothing. Out of plan mode; enter.ts can run once the new pool is open and the founder
-                  has entered.
+Phase:            **T5 planned and funded — waiting on the freeze merge, then the founder's two entries.**
+                  T4 PASSED on pool 16 (UI-A took the whole 4 SOL pot). T5 inverts it: a HEADLESS
+                  wallet wins and neither founder wallet does.
+Waiting on:       **merge the T5 freeze change (144)** — the gitleaks failure is resolved and CI
+                  should be green — then enter as ordinary field seats (see below).
+                  Also open, neither urgent: F-24/F-25 (seal-lockout fix now or after the week) and
+                  the Vercel ignore step, approved and ready to apply (~85% off build minutes).
+After that:       I sweep and re-fund the roster from the 10 SOL, then run 62 headless seats.
+Live deadlines:   none for T5 — the plan deliberately names no pool.
+Blocked:          nothing. The gitleaks failure on 144 is RESOLVED — see H11 below.
+Results so far:   T1 **PASS** (refund) · T4 **PASS** (scored, paid) · T2, T3, T5–T8 not started
 
-**STANDING RULE, adopted 19:09Z:** probe the entry gate for the exact wallets IMMEDIATELY BEFORE the
-founder plays, never after. A seal made into a broken gate cannot be undone. An explicit go-ahead
-goes out seconds before each UI entry from now on.
-Results so far:   T1 **PASS** · T2–T8 not started
+**T5 — what it tests and what the founder sets:**
+  W00 takes the wall and the 4 SOL pot. W01 takes the pole and last place. BOTH founder wallets are
+  ORDINARY FIELD SEATS that do not win — the claim T4 could not make, since there the operator's own
+  account won and nothing ruled out that it was privileged.
+  → UI-A: one drag a battle, a stat to 25, in order Strength, Speed, Heart, Wit, Durability,
+    Strength, Heart. UI-B: the same but Durability, Wit, Heart, Speed, Strength, Wit, Speed.
+    THE ONLY RULE THAT MATTERS: every stat between 1 and 25. Never above 25, never down to 0.
+  → PROVEN over 60 seeds: such a seat loses to a wall 840/840 and beats a pole 840/840, so it lands
+    in ranks 2..63 for ANY allocation in that range — not just the recipe.
+  → The non-zero floor is load-bearing: two or more zeroes can DRAW with a pole, and "cannot come
+    last" stops holding.
+  → Founder ranks are predicted as a RANGE, not a number. T4 showed hand-dialling lands elsewhere
+    (1 of 7 battles matched), so exact positions are computed at reveal. Nominally 62nd and 63rd —
+    near the bottom, because a near-even spread is the weakest shape the game has.
+  → Funder holds 10.049945 SOL. Roster needs sweeping and re-funding before the run.
+
+**T4's result, and what it actually proved (2026-09-17 02:23Z):**
+  UI-A net +3.895554578 SOL against +3.895564000 predicted — 9422 lamports apart. Vault 650240
+  EXACTLY as predicted. The chain's own committed payout list is [{"seat":0,"amount":"4000000000"}].
+  → The plan was frozen naming pool 15 and ran UNEDITED on pool 16. A prediction frozen before its
+    pool existed is stronger evidence, not weaker.
+  → **H10 — the finding worth keeping.** The founder's hand-dialled allocations matched the plan's
+    exact numbers in 1 of 7 battles (UI-A) and 4 of 7 (UI-B). Every CONDITIONAL prediction about
+    those numbers was wrong; every UNCONDITIONAL one was exactly right, because all seven UI-A
+    battles still held three stats at 26+. The claim under test was "rank 1 holds for ANY wall
+    against a field capped at 25" — and a different wall, played by a human under a 90-second
+    clock, took rank 1 and the whole pot.
+  → **H8 — five wallets burnt, and the fault was MINE.** W22, W42, W43, W55, W65 sealed then failed
+    to register. The gate was healthy at every probe; my runner let sendAndConfirmTransaction pick
+    its own blockhash and the failure was always in PREFLIGHT. skipPreflight + a `confirmed`
+    blockhash fixed it. My first fix (a `finalized` blockhash) was WRONG and burnt W55.
+    The guardrail built hours earlier stopped each run at its first casualty — five, not sixty-two.
+    All five replaced by spares playing the burnt seats' own frozen allocations, so the scored field
+    was exactly the planned field.
+  → **H9 — reconcile's scored branch was a STUB and I reported its output as a result.** It set
+    verdict = 'MATCH' with no comparison at all, so the first T4 reconcile's "60 MATCH / 0 drift"
+    was not a measurement. Implemented and re-run: 58 MATCH · 0 RANK_DRIFT · 0 PAYOUT_MISMATCH ·
+    2 INPUT_DRIFT · 4 ABSENT — still PASS, this time measured. harvest now reads the published
+    bundle, so all 60 allocations read VERIFIED against their committed hashes.
+
+  → **H11 — the secret scanner caught me, and my first fix was half a fix.** T4.actual.json carried
+    pool 16's revealed X25519 secret. The harvester now stores a boolean instead — but that cleaned
+    only the TIP, and the lane's second step scans the branch's COMMITS, where it still sat at
+    b64d770. Resolved by rebuilding those commits without it, NOT by an ignore entry: that file is
+    at the repository root, which the boundary lane refuses, and it would leave a permanent
+    exception naming a battle-test file that gets deleted at the end. Proven before anything moved —
+    final tree byte-identical to the original tip, authors and dates preserved, value in no commit,
+    gitleaks history clean. The superseded commit IDs are in DRIFT H11 and LOG.md, so the rewrite is
+    auditable rather than silent.
 
 **GUARDRAILS BUILT 19:22Z, in boundary, proven:**
   1. scripts/preflight.ts — go/no-go before anybody plays: pool open and register-ready, no wallet

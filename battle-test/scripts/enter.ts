@@ -479,9 +479,29 @@ async function enterOne(args: {
       return { ...base, ok: true, battlesHashHex };
     }
 
+    // A 'confirmed' blockhash can be newer than the node that runs preflight,
+    // which answers "Blockhash not found" and fails the send. On this runner
+    // that is not a retryable annoyance: the ciphertext is already stored, so
+    // every such failure BURNS the wallet for this pool (DRIFT.md §H6). It
+    // cost W22, W42 and W43 on pool 16 before this was fixed.
+    //
+    // The fix is to SKIP PREFLIGHT, not to age the blockhash. Preflight's only
+    // job is to catch a malformed transaction, and this one's shape is proven
+    // by `--simulate` and by every seat that has landed; a transaction that
+    // fails on chain burns the wallet either way, so preflight buys nothing
+    // here and costs seats.
+    //
+    // A 'finalized' blockhash was tried first and was WORSE: it is ~32 slots
+    // old, so it spends most of its validity window before the send and
+    // expired mid-confirmation — "block height exceeded", which burnt W55.
+    // 'confirmed' gives the full window, and skipping preflight means no node
+    // has to have seen it before the send.
+    const { blockhash } = await connection.getLatestBlockhash('confirmed');
+    tx.recentBlockhash = blockhash;
     const signature = await sendAndConfirmTransaction(connection, tx, [player, passAsset], {
       commitment: 'confirmed',
-      maxRetries: 3,
+      maxRetries: 5,
+      skipPreflight: true,
     });
     const parsed = await connection.getTransaction(signature, {
       commitment: 'confirmed', maxSupportedTransactionVersion: 0,
@@ -516,7 +536,8 @@ async function main(): Promise<void> {
     const doc = JSON.parse(readFileSync(resolve(process.cwd(), flags.plan), 'utf8')) as { seats: PlanSeat[] };
     planSeats = doc.seats.filter((x) => (x.route ?? 'direct') === 'direct');
   }
-  const walletIds = planSeats
+  // Mutable: --substitute swaps a burnt seat for its spare in place, below.
+  const walletIds: string[] = planSeats
     ? planSeats.map((x) => x.wallet)
     : parseWallets(flags.wallets ?? 'W00-W09');
   const dryRun = flags['dry-run'] === 'true';
@@ -582,6 +603,28 @@ async function main(): Promise<void> {
       // same seven battle sets for this wallet, on any machine.
       fromPlan.set(seat.wallet, generateEntrant('random', seat.seed));
     }
+  }
+
+  // A burnt seat (sealed, never registered) can never enter this pool again, so
+  // it must be replaced by a spare. The replacement plays the BURNT SEAT'S OWN
+  // planned allocation, not a fresh one: a rank falls out of the allocations,
+  // never the wallet holding them, so substituting this way leaves every
+  // predicted rank and payout in the frozen plan exactly as frozen. Only the
+  // results root moves, and that was always conditional on seat order.
+  for (const pair of (flags.substitute ?? '').split(',').filter(Boolean)) {
+    const [burnt, spare] = pair.split('=').map((x) => x.trim());
+    const seat = fromPlan.get(burnt);
+    if (!seat) throw new Error(`--substitute ${pair}: ${burnt} is not in the plan`);
+    if (fromPlan.has(spare)) throw new Error(`--substitute ${pair}: ${spare} is already a plan seat`);
+    fromPlan.set(spare, seat);
+    // The seat list comes from the PLAN when --plan is given, so the spare has
+    // to be swapped into it too or it is never attempted. The burnt id comes
+    // out: it cannot enter this pool again, and leaving it in only produces a
+    // noisy 409 per run.
+    const at = walletIds.indexOf(burnt);
+    if (at >= 0) walletIds.splice(at, 1, spare);
+    else walletIds.push(spare);
+    console.log(`  substitute: ${spare} plays ${burnt}'s frozen allocation`);
   }
 
   const results: SeatResult[] = [];

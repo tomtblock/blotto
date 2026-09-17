@@ -13,19 +13,28 @@
   "planPath": "battle-test/registry/T4.plan.json",
   "planSha256": "c74333f022b04eed298987cc71d77a6ac19d50ad275c68eaa6eeefce2cf0e064",
 
+  "poolRelocated": {
+    "note": "The plan was frozen naming pool 15. Pool 15 never ran: the entry-gate outage (DRIFT §H3) caused both founder accounts to seal without registering, which bars them from that pool permanently (DRIFT §H6). Pool 15 lapsed at 01:52:26Z holding zero entries and T4 ran on pool 16 instead. THE PLAN WAS NOT EDITED — not one predicted rank, score or payout changed, because a rank falls out of the allocations and not the pool. That the prediction was frozen before this pool existed makes it stronger evidence, not weaker.",
+    "plannedPoolId": 15,
+    "actualPoolId": 16,
+    "actualPoolPda": "EgbFPxSRgtc8hd68vbxjsQ8irYAifen7Zxf5uYNkrngq",
+    "poolOpenedAt": "2026-09-17T01:57:46Z",
+    "firstEntryAt": "2026-09-17T02:05Z",
+    "freezePrecedesFirstEntryBy": "9 h 43 min"
+  },
+
+  "substitutions": {
+    "note": "Five seats sealed and then failed to register during the headless run and are barred from pool 16 by DRIFT §H6. The cause was this runner's own transaction handling, not the entry gate — see DRIFT §H8. Each was replaced by a spare playing THE BURNT SEAT'S OWN FROZEN ALLOCATION, so the field's allocations are exactly those in the plan and every predicted rank holds. Only the results root moves, and it was always conditional on seat order.",
+    "W22": "W62",
+    "W42": "W63",
+    "W43": "W64",
+    "W55": "W66",
+    "alsoBurnt": "W65 — burnt while substituting for W55, replaced in turn by W66"
+  },
+
   "verifyIndependently": [
     "The merge time is served by GitHub's own API for PR 133 and cannot be rewritten by this repository.",
-    "sha256 of the plan file at the merge commit must equal planSha256 above. Checked at 17:35Z: the merge commit's copy and the working copy hash identically.",
-    "reconcile.ts asserts this timestamp precedes the first register's block time, and marks the pool UNFROZEN if it does not."
-  ],
-
-  "poolAtFreeze": {
-    "note": "Unlike T1, T4's pool already existed at the freeze and is named in the plan: pool 15. It held zero entrants when the plan was merged. That is read rather than assumed — the indexer reported pool 15 Open at 0/64 at 16:18Z, four minutes BEFORE the merge, and again at 17:34Z, seventy-two minutes after it. Nothing entered in between, so it was 0 at 16:22:00Z.",
-    "poolId": 15,
-    "poolPda": "4rZWzP13Wz5uadk1LY8jiBmuCsPUE8RSZYKXDYocdKkn",
-    "poolState": "Open",
-    "poolEntrants": 0,
-    "fillDeadline": "1789609946",
-    "fillDeadlineIso": "2026-09-17T01:52:26Z"
-  }
+    "sha256 of the plan file at the merge commit must equal planSha256 above.",
+    "reconcile.ts asserts this timestamp precedes the first register's block time, and marks the pool UNFROZEN if it does not. It reported Freeze OK for pool 16."
+  ]
 }
