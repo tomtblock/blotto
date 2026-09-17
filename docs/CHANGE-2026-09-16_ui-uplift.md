@@ -873,9 +873,6 @@ stand-in: numbers for tiles, a placeholder asset).
 Branch `step/seal-columns-2026-09-17`, one commit. Pool 17 was open with no entrant at the merge;
 the 62 headless seats never touch the frontend, and the founder was reviewing, not entering.
 
-<<<<<<< HEAD
----
-
 # §F — Round four B: the one-message dispatcher (2026-09-17)
 
 The third ask: "build the workflow for notifying opted-in users when the pool has completed."
@@ -959,8 +956,8 @@ store and the state reader in the `postgres` job of `ci-fast` (typecheck clean l
   same database (`PgPoolIdResolver`), so the reader is a query.
 - Putting the dispatcher in the settlement daemon (`backend/reveal`): the opt-ins live in the
   packet service's store, and the daemon has no reason to learn addresses.
-=======
-# §G. Round four A2 — one field for the whole site (2026-09-17)
+
+# §G — Round four A2: one field for the whole site (founder feedback on production, 2026-09-17 ~03:00 UTC)
 
 The founder, after #140 went live: *"Make the notifications button in the same style as the other
 text boxes. If a wallet has won a prize, there should be a celebration moment when they open the
@@ -1041,4 +1038,3 @@ from the dev gallery).
 ## G5. Shipping
 
 Branch `step/one-field-2026-09-17`, one commit. Pool 17 was open with no entrant at the merge.
->>>>>>> origin/main
