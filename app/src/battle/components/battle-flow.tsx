@@ -28,6 +28,7 @@
 
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { createPortal } from 'react-dom';
 import { COPY } from '@/copy';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -74,6 +75,15 @@ export interface BattleFlowProps {
    */
   onReviewApi?: (api: ReviewSealApi | null) => void;
   /**
+   * Round three (founder 2026-09-17, §D): with the seal stage on the page,
+   * the review — heading, lead, the rack, the explainer — is drawn INTO the
+   * stage's widget slot rather than above the scene. This is that slot's
+   * element; the review portals into it and this component keeps owning
+   * the seven and their stills. Null until the stage has mounted the slot,
+   * and the review draws nothing in the meantime (one frame).
+   */
+  reviewHost?: HTMLElement | null;
+  /**
    * Fired when the player BEGINS the run — from here until the seal, seven
    * allocations exist only in this component's state and unmounting it
    * destroys them. The page uses this to stop transient auth or balance
@@ -82,7 +92,13 @@ export interface BattleFlowProps {
   onRunStarted?: () => void;
 }
 
-export function BattleFlow({ poolAddress, onConfirm, onRunStarted, onReviewApi }: BattleFlowProps) {
+export function BattleFlow({
+  poolAddress,
+  onConfirm,
+  onRunStarted,
+  onReviewApi,
+  reviewHost = null,
+}: BattleFlowProps) {
   const router = useRouter();
   const [state, dispatch] = useReducer(reduce, undefined, () => initialState());
   const confirmed = useRef(false);
@@ -412,17 +428,32 @@ export function BattleFlow({ poolAddress, onConfirm, onRunStarted, onReviewApi }
   /* ——— Seven made: the crescendo, the rack, montage, share, and the
    * untouched two-step seal. */
   if (review) {
-    return (
-      <section className="flex flex-col gap-5">
+    // Hosted (round three): the review is the stage's widget — compact type,
+    // the explainer as a row rather than a card-in-a-card, no playground
+    // (the scene is the playground), no seal buttons (they sit under the
+    // frame, play-client.tsx). Unhosted: the original screen, unchanged.
+    const hosted = Boolean(onReviewApi);
+    const content = (
+      <>
         {celebrated && <ConfettiBurst pieces={52} durationMs={1800} />}
         <div className="animate-settle flex flex-col gap-1">
-          <h2 className="font-display text-[40px] leading-[42px] font-extrabold text-ink">
+          <h2
+            className={
+              hosted
+                ? 'font-display text-[28px] leading-[30px] font-extrabold text-ink'
+                : 'font-display text-[40px] leading-[42px] font-extrabold text-ink'
+            }
+          >
             {COPY.battle.crescendo}
           </h2>
-          <p className="max-w-prose text-[15px] leading-6 text-ink-muted">{COPY.battle.crescendoLine}</p>
+          <p className={hosted ? 'text-[14px] leading-5 text-ink-muted' : 'max-w-prose text-[15px] leading-6 text-ink-muted'}>
+            {COPY.battle.crescendoLine}
+          </p>
         </div>
         {review.expired && (
-          <p className="text-[14px] leading-5 text-ink-muted">{COPY.battle.expiredNote}</p>
+          <p className={hosted ? 'text-[13px] leading-5 text-ink-muted' : 'text-[14px] leading-5 text-ink-muted'}>
+            {COPY.battle.expiredNote}
+          </p>
         )}
         <SevenTiles locked={tiles} crescendo={celebrated} />
         {/* Founder 2026-09-09: once the seven are made they get to play —
@@ -431,7 +462,7 @@ export function BattleFlow({ poolAddress, onConfirm, onRunStarted, onReviewApi }
             reads the allocation for nothing else. Founder 2026-09-16: when
             the page hosts the seal stage, the stage is the scene and the
             playground stands down. */}
-        {!onReviewApi && (
+        {!hosted && (
           <Playground count={BATTLES} seeds={review.battles.map((b) => b[0])} size={64} />
         )}
         {/* 2026-09-13: the share that stood here is gone, deliberately. It
@@ -440,17 +471,34 @@ export function BattleFlow({ poolAddress, onConfirm, onRunStarted, onReviewApi }
             so the image was the sealed line-up, published while the pool was
             open. The share now lives on the character pass, after the network
             has confirmed the entry. What stands here is the seal, explained. */}
-        <Card className="flex items-center gap-4 p-4">
-          <SealLock />
-          <div className="flex min-w-0 flex-col gap-1">
-            <p className="text-[14px] leading-5 text-ink">{COPY.battle.sealWhat}</p>
-            <p className="text-[13px] leading-5 text-ink-muted">{COPY.battle.sealAfter}</p>
+        {hosted ? (
+          <div className="flex items-center gap-3">
+            <SealLock size={64} />
+            <div className="flex min-w-0 flex-col gap-1">
+              <p className="text-[13px] leading-5 text-ink">{COPY.battle.sealWhat}</p>
+              <p className="text-[12px] leading-4 text-ink-muted">{COPY.battle.sealAfter}</p>
+            </div>
           </div>
-        </Card>
-        {/* With a seal stage on the page the two-step seal — and its §8.6
-            lines — render on the blender's base (play-client.tsx); the order
-            and the wording are the same, only the surface moves. */}
-        {onReviewApi ? null : sealArmed ? (
+        ) : (
+          <Card className="flex items-center gap-4 p-4">
+            <SealLock />
+            <div className="flex min-w-0 flex-col gap-1">
+              <p className="text-[14px] leading-5 text-ink">{COPY.battle.sealWhat}</p>
+              <p className="text-[13px] leading-5 text-ink-muted">{COPY.battle.sealAfter}</p>
+            </div>
+          </Card>
+        )}
+      </>
+    );
+    if (hosted) {
+      return reviewHost
+        ? createPortal(<div className="flex flex-col gap-4">{content}</div>, reviewHost)
+        : null;
+    }
+    return (
+      <section className="flex flex-col gap-5">
+        {content}
+        {sealArmed ? (
           <div className="flex flex-col gap-3">
             {/* PID §8.6 — above the confirm, always. Do not move it below. */}
             <p className="text-[15px] font-semibold leading-6 text-ink">{COPY.pool.decisionsFinal}</p>
@@ -497,17 +545,17 @@ export function BattleFlow({ poolAddress, onConfirm, onRunStarted, onReviewApi }
 
 /** The seal's object (2026-09-13): a candy padlock, rendered once by the
  * founder's image pipeline (public/candy/lock.webp). Decorative. */
-function SealLock() {
+function SealLock({ size = 96 }: { size?: 64 | 96 }) {
   return (
     // eslint-disable-next-line @next/next/no-img-element -- a static asset at a fixed size
     <img
       src="/candy/lock.webp"
       alt=""
       aria-hidden
-      width={96}
-      height={96}
+      width={size}
+      height={size}
       draggable={false}
-      className="h-24 w-24 shrink-0 select-none"
+      className={(size === 64 ? 'h-16 w-16' : 'h-24 w-24') + ' shrink-0 select-none'}
     />
   );
 }

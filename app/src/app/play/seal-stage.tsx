@@ -13,9 +13,14 @@
  * is its allocation (components/blott/warp.ts), and this stage reads no
  * allocation at all.
  *
- * The box has the clip's exact aspect (seal-stage.css), so the controls
- * land on the painted button on a wide screen and drop below the scene on
- * a phone. Reduced motion: a still of the right moment and no <video>.
+ * Round three (founder 2026-09-17, CHANGE-2026-09-16_ui-uplift.md §D): the
+ * scene sits in a plum frame on the pink field; the review — heading, lead,
+ * the rack of seven, the sealing explainer — is a candy widget over the
+ * right of the scene on a wide screen and a card under it on a phone; the
+ * §8.6 line and the seal key sit below the frame with room of their own.
+ * The widget is a SLOT: BattleFlow portals its review into it (`widgetRef`),
+ * so the flow keeps owning the seven and their stills. Reduced motion: a
+ * still of the right moment and no <video>.
  */
 
 import type { ReactNode } from 'react';
@@ -38,12 +43,15 @@ export function SealStage({
   controls,
   status,
   busy = false,
+  widgetRef,
 }: {
   phase: SealStagePhase;
   /** D3: the founder's call on the key's colour; `action` is the default. */
   tone?: SealKeyTone;
-  /** The seal controls (§8.6 line + the key), rendered on the blender's base. */
+  /** The seal controls (§8.6 line + the key), rendered below the frame. */
   controls?: ReactNode;
+  /** The widget slot's element, for the host to portal the review into. */
+  widgetRef?: (el: HTMLDivElement | null) => void;
   /** A one-line hold under the scene while the network works. */
   status?: ReactNode;
   /** Show the in-progress ring beside the status line. */
@@ -61,6 +69,7 @@ export function SealStage({
       data-tone={tone}
       aria-label={COPY.battle.sealStageAria}
     >
+      <div className="seal-stage-frame">
       <div className="seal-stage-box">
         {reduced ? (
           // eslint-disable-next-line @next/next/no-img-element -- poster swap for a video; next/image adds nothing here
@@ -90,6 +99,9 @@ export function SealStage({
             )}
           </>
         )}
+      </div>
+      {/* Empty until the flow portals the review in; hidden while empty (CSS). */}
+      <div className="seal-stage-widget" ref={widgetRef} />
       </div>
       {controls ? <div className="seal-stage-controls">{controls}</div> : null}
       {status ? (

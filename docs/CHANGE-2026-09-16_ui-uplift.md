@@ -710,3 +710,88 @@ accept the rule and test entry flows only on the production alias after a merge.
 recommendation: it keeps the exact-match list — no wildcard, which `http-hygiene.ts` deliberately
 refuses — and makes every future round reviewable before it ships. Rejected: adding each preview
 address by hand (a redeploy per branch) and a wildcard (the reason the list is exact-match).
+
+---
+
+# §D — Round three: the seal screen relaid (founder feedback on production, 2026-09-17 ~01:30 UTC)
+
+The founder reached the seal screen on the live build (a run on pool 15, left to lapse) and
+called the page "appalling": the review text sat above the scene on plum, the scene ran
+edge to edge with pink showing either side, and the seal key on the blender's base crowded
+the blender. The ask, in the founder's words: put all the text above the video into a
+candy box that sits as a widget inside the video on the right; pink background; the video
+framed nicely; the seal button somewhere that fits, still standing out.
+
+## D1. What was built
+
+- **The field is pink** from the header down (`.seal-stage` rises over the play column's top
+  padding and fills the viewport), the footer and tab bar stay on plum outside
+  it, as on every pink page.
+- **The scene is framed**: a plum panel with the battle cabinet's gradient, rimmed in cream
+  with a berry shade — the cabinet recipe the player has just spent seven screens in, on the
+  field where the pink neon ring would vanish. The scene keeps the clip's exact 16:9 inside
+  it. Its width is the column, capped at 1400 and at what leaves the §8.6 line, the key and
+  a Go back inside the window (`--stage-w`), so the screen a decision is made on scrolls for
+  nothing: 830 px tall at 1920 wide holds the armed state exactly.
+- **The review is a candy widget over the right of the scene** (from 1024 px): heading,
+  lead, the time-ran-out note when it applies, the rack of seven, and the sealing explainer
+  as a row — a translucent plum card with the candy elevation and a backdrop blur, so the
+  jar's edge and the pipes read through it as glass. Under 1024 px the same widget sits
+  under the scene inside the frame, a card in the cabinet.
+- **The widget is a slot.** `BattleFlow` keeps owning the seven and their stills and
+  portals its review into the slot (`reviewHost`, handed down by `play-client.tsx` from the
+  stage's `widgetRef`); when hosted it draws the compact variant and no playground or seal
+  buttons. Nothing about the run's state moved. After the confirm the flow leaves review,
+  the portal empties and the widget hides (`:empty`), so the blender runs alone.
+- **The rack in the widget is two rows, four and three.** At seven across the tiles are
+  40 px and the five numbers under each wrap one per line; at four across a still is 80 px
+  and its numbers hold two lines — the rack is what F-21 screenshots as the record of the
+  allocations, so its numbers have to read.
+- **The §8.6 line and the seal key sit under the frame**, centred in a 560 px band: the
+  line in berry, then the key — action pink, 64 px tall, 20 px type, with the cream rim
+  every commit control wears on the pink field, the candy key elevation and the slow glow
+  while it is the player's to press. Step two swaps it for the confirm and adds Go back. The
+  order (line above key) is unchanged, and it is now impossible for the key to crowd
+  anything in the scene.
+- `/dev/seal-stage` portals a stand-in review into the slot the way the flow does, with an
+  expired toggle, so the layout can be seen without a run.
+
+## D2. What did not change
+
+The two-step seal and its wording, the §8.6 line above each step, `SEAL_KEY_TONE` and the
+red variant, the clips, the machine (`seal-stage-machine.ts`), the signer wrapper, and
+everything under `app/src/entry/`. The seal-stage machine's tests and the flow's tests are
+untouched and pass.
+
+## D3. Rejected
+
+- Lifting the review data (tiles, expiry) through `ReviewSealApi` so the page renders the
+  widget: the stills arrive asynchronously, so the api would re-register on every change
+  and its cleanup would drop the stage for a frame each time. The portal keeps ownership
+  where it is and moves only the drawing.
+- Keeping the key on the blender's base with the widget beside it: the founder's complaint
+  exactly — two things competing for the blender.
+- A wider scene on a very wide window: the height budget wins, because the key must be
+  reachable without scrolling on the screen a decision is made on.
+
+## D4. Verification and captures
+
+On the branch head, from `app/`: `npm run typecheck` — clean; `npm run lint` — clean; `npm test` — 62
+files, 489 tests passed; `NEXT_PUBLIC_FIXTURE_DATA=1 npm run build` — compiled; `npm run journey` —
+16 of 16 (10.2 s). From the root, `./scripts/check-language.sh` — clean after this section was written
+(it refused one word in a comment and here, both reworded). Measured on `/dev/seal-stage` through
+`localhost`, in the browser's own pixels at the 0.9 scale: at 1920×830 the scene is 912×513, the
+widget 337×357 with nothing hidden, and both seal states fit the window (page 830 of 830); at
+1440×900 the same with room; a 1366×700 laptop moves down 62 px to reach the key.
+
+Captures (`docs/design/uplift-2026-09-16/`): `seal-stage-1440.jpg` and `seal-stage-390.jpg`
+replaced; `seal-stage-1920x830.jpg` (the founder's geometry) and
+`seal-stage-armed-1920x830.jpg` (step two) new. From `/dev/seal-stage`: the tiles show
+numbers because the stand-in has no stills; a real run shows the lock-in stills.
+
+## D5. Shipping
+
+Branch `step/seal-screen-2026-09-17`, one commit carrying the code, this section and the
+captures. Merging deploys; the
+merge waits until the founder is off the seal screen and no entry is in flight, per the
+same reasoning as §C — a deploy cannot touch a pool, but it can reload a browser mid-run.
