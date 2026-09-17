@@ -13,14 +13,15 @@
  * is its allocation (components/blott/warp.ts), and this stage reads no
  * allocation at all.
  *
- * Round three (founder 2026-09-17, CHANGE-2026-09-16_ui-uplift.md §D): the
- * scene sits in a plum frame on the pink field; the review — heading, lead,
- * the rack of seven, the sealing explainer — is a candy widget over the
- * right of the scene on a wide screen and a card under it on a phone; the
- * §8.6 line and the seal key sit below the frame with room of their own.
- * The widget is a SLOT: BattleFlow portals its review into it (`widgetRef`),
- * so the flow keeps owning the seven and their stills. Reduced motion: a
- * still of the right moment and no <video>.
+ * Round four (founder 2026-09-17, CHANGE-2026-09-16_ui-uplift.md §E): two
+ * columns on a wide screen — the scene in its plum frame on the left, and
+ * on the right, tops aligned, the review widget with the §8.6 line and the
+ * seal key directly under it; a phone stacks the same pieces. The widget is
+ * a SLOT: BattleFlow portals its review into it (`widgetRef`), so the flow
+ * keeps owning the seven and their stills. `side` is what the column shows
+ * after the review — the pass, the sealed note, the actions — while the
+ * blender stays on screen. Reduced motion: a still of the right moment and
+ * no <video>.
  */
 
 import type { ReactNode } from 'react';
@@ -44,6 +45,7 @@ export function SealStage({
   status,
   busy = false,
   widgetRef,
+  side,
 }: {
   phase: SealStagePhase;
   /** D3: the founder's call on the key's colour; `action` is the default. */
@@ -52,6 +54,8 @@ export function SealStage({
   controls?: ReactNode;
   /** The widget slot's element, for the host to portal the review into. */
   widgetRef?: (el: HTMLDivElement | null) => void;
+  /** The side column's content once the review is over (the pass, the sealed note, the actions). */
+  side?: ReactNode;
   /** A one-line hold under the scene while the network works. */
   status?: ReactNode;
   /** Show the in-progress ring beside the status line. */
@@ -69,6 +73,7 @@ export function SealStage({
       data-tone={tone}
       aria-label={COPY.battle.sealStageAria}
     >
+      <div className="seal-stage-grid">
       <div className="seal-stage-frame">
       <div className="seal-stage-box">
         {reduced ? (
@@ -100,16 +105,20 @@ export function SealStage({
           </>
         )}
       </div>
-      {/* Empty until the flow portals the review in; hidden while empty (CSS). */}
-      <div className="seal-stage-widget" ref={widgetRef} />
       </div>
-      {controls ? <div className="seal-stage-controls">{controls}</div> : null}
-      {status ? (
-        <p className="seal-stage-status" aria-live="polite">
-          {busy ? <span className="seal-stage-status-ring" aria-hidden="true" /> : null}
-          {status}
-        </p>
-      ) : null}
+      <div className="seal-stage-side">
+        {/* Empty until the flow portals the review in; hidden while empty (CSS). */}
+        <div className="seal-stage-widget" ref={widgetRef} />
+        {side}
+        {controls ? <div className="seal-stage-controls">{controls}</div> : null}
+        {status ? (
+          <p className="seal-stage-status" aria-live="polite">
+            {busy ? <span className="seal-stage-status-ring" aria-hidden="true" /> : null}
+            {status}
+          </p>
+        ) : null}
+      </div>
+      </div>
     </section>
   );
 }

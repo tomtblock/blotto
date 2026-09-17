@@ -33,6 +33,7 @@ function snapshot(overrides: Partial<Auth> = {}): Auth {
   return {
     status: "signed-in",
     walletAddress: ADDRESS,
+    email: null,
     signers: [signer(ADDRESS, "embedded")],
     detectedWallets: [{ id: "phantom", name: "Phantom", icon: "data:," }],
     lastError: null,

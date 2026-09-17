@@ -11,7 +11,7 @@
  * of a timer it cannot afford to finish.
  */
 
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { address } from '@solana/kit';
@@ -52,6 +52,8 @@ import { SealedPanel } from './sealed-panel';
 import { SealStage, type SealKeyTone } from './seal-stage';
 import { INITIAL_SEAL_STAGE, reduceSealStage } from './seal-stage-machine';
 import { observeSigner } from './observed-signer';
+import { EnteredPanel } from './entered-panel';
+import { entryServiceNotifyVersion } from '@/notify/pool-notify';
 import type { ReviewSealApi } from '@/battle/components/battle-flow';
 import type { RevealState } from '@/reveal/machine';
 
@@ -258,6 +260,10 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
   // Round three (§D): the stage's widget slot, handed to the flow so it can
   // portal the review into it. A ref callback, so it is a stable setter.
   const [reviewHost, setReviewHost] = useState<HTMLDivElement | null>(null);
+  // Round four (§E): whether the entry service can deliver the one-message
+  // opt-in — asked once the entry is in flight, so the sealed column offers
+  // it only when there is a dispatcher behind it.
+  const [notifyVersion, setNotifyVersion] = useState<string | null>(null);
   const onRevealBeat = useCallback((beat: RevealState['beat']) => {
     if (beat === 'card') stageDispatch({ type: 'confirmed' });
     else if (beat === 'failed') stageDispatch({ type: 'failed' });
@@ -401,16 +407,32 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
   // done, so the scene never unmounts between the review ending and the
   // takeover starting — a remount would restart its loop.
   const stageOn = reviewApi !== null || revealRun !== null || stagePhase !== 'made';
-  const stage = stageOn ? (
-    <SealStage
-      phase={stagePhase}
-      tone={SEAL_KEY_TONE}
-      controls={sealControls}
-      status={stageStatus}
-      busy={stagePhase === 'signing' || stagePhase === 'locked' || stagePhase === 'blending'}
-      widgetRef={setReviewHost}
-    />
-  ) : null;
+  // The stage with whatever the side column shows after the review (the
+  // takeover's beats — round four, §E); `stage` is the plain one.
+  const stageWith = (side: ReactNode = null) =>
+    stageOn ? (
+      <SealStage
+        phase={stagePhase}
+        tone={SEAL_KEY_TONE}
+        controls={sealControls}
+        status={stageStatus}
+        busy={stagePhase === 'signing' || stagePhase === 'locked' || stagePhase === 'blending'}
+        widgetRef={setReviewHost}
+        side={side}
+      />
+    ) : null;
+  const stage = stageWith();
+
+  useEffect(() => {
+    if (!revealRun) return;
+    let live = true;
+    void entryServiceNotifyVersion(process.env.NEXT_PUBLIC_ENTRY_API_URL).then((v) => {
+      if (live) setNotifyVersion(v);
+    });
+    return () => {
+      live = false;
+    };
+  }, [revealRun]);
 
   /** A run is on screen: begun, not sealed, not handed to the takeover. */
   const interruption = runInterruption(runWallet, auth);
@@ -621,13 +643,25 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
     const retry = lastConfirmed
       ? () => startSubmit(lastConfirmed.battles, lastConfirmed.timingsMs)
       : null;
-    return (
-      <>
+    const revealHost = (
       <RevealHost
         poolNumber={pool.id}
         result={revealRun}
         onBeat={onRevealBeat}
         quiet
+        renderCard={(card) => (
+          <EnteredPanel
+            entryIndex={card.entryIndex}
+            asset={card.asset}
+            poolNumber={pool.id}
+            poolAddress={pool.pool}
+            wallet={auth.walletAddress ?? ''}
+            signer={auth.signers.find((s) => s.address === auth.walletAddress)}
+            email={auth.email}
+            apiBase={process.env.NEXT_PUBLIC_ENTRY_API_URL}
+            notifyOffered={notifyVersion === 'v2'}
+          />
+        )}
         onRetry={
           retry
             ? () => {
@@ -675,9 +709,10 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
           stageDispatch({ type: 'reset' });
         }}
       />
-      {stage}
-      </>
     );
+    // The takeover's beats draw in the stage's side column, the blender
+    // staying on screen through the confirm and after it (round four, §E).
+    return <>{stageWith(revealHost)}</>;
   }
 
   /*

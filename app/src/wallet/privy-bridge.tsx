@@ -363,6 +363,12 @@ function PrivyAdapter({ onAuth }: { onAuth: (auth: Auth) => void }) {
 
     const hasEmbedded = signers.some((s) => s.kind === "embedded");
 
+    // The address the provider holds for a social sign-in, if any (round
+    // four, 2026-09-17): a Google or Apple account carries one; an X or
+    // wallet sign-in does not. Read only — nothing here sends it.
+    const email =
+      user?.email?.address ?? user?.google?.email ?? user?.apple?.email ?? null;
+
     return {
       status: !ready
         ? "initializing"
@@ -370,6 +376,7 @@ function PrivyAdapter({ onAuth }: { onAuth: (auth: Auth) => void }) {
           ? "signed-in"
           : "signed-out",
       walletAddress,
+      email,
       signers,
       detectedWallets,
       lastError,

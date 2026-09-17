@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { SevenTiles } from '@/battle/components/seven-tiles';
 import { EVEN_SPLIT } from '@/battle/allocation';
 import { SealStage, type SealKeyTone } from '../../play/seal-stage';
+import { EnteredPanel } from '../../play/entered-panel';
 import type { SealStagePhase } from '../../play/seal-stage-machine';
 
 const PHASES: SealStagePhase[] = ['made', 'armed', 'signing', 'locked', 'blending', 'done', 'failed'];
@@ -25,17 +26,17 @@ function DemoReview({ expired }: { expired: boolean }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
-        <h2 className="font-display text-[28px] leading-[30px] font-extrabold text-ink">{COPY.battle.crescendo}</h2>
-        <p className="text-[14px] leading-5 text-ink-muted">{COPY.battle.crescendoLine}</p>
+        <h2 className="font-display text-[30px] leading-[32px] font-extrabold text-ink">{COPY.battle.crescendo}</h2>
+        <p className="text-[15px] leading-6 text-ink-muted">{COPY.battle.crescendoLine}</p>
       </div>
-      {expired && <p className="text-[13px] leading-5 text-ink-muted">{COPY.battle.expiredNote}</p>}
+      {expired && <p className="text-[14px] leading-5 text-ink-muted">{COPY.battle.expiredNote}</p>}
       <SevenTiles locked={DEMO_TILES} />
       <div className="flex items-center gap-3">
         {/* eslint-disable-next-line @next/next/no-img-element -- a static asset at a fixed size */}
         <img src="/candy/lock.webp" alt="" aria-hidden width={64} height={64} className="h-16 w-16 shrink-0" />
         <div className="flex min-w-0 flex-col gap-1">
-          <p className="text-[13px] leading-5 text-ink">{COPY.battle.sealWhat}</p>
-          <p className="text-[12px] leading-4 text-ink-muted">{COPY.battle.sealAfter}</p>
+          <p className="text-[14px] leading-5 text-ink">{COPY.battle.sealWhat}</p>
+          <p className="text-[13px] leading-5 text-ink-muted">{COPY.battle.sealAfter}</p>
         </div>
       </div>
     </div>
@@ -76,7 +77,8 @@ export default function SealStagePreview() {
         ? COPY.reveal.confirming
         : null;
   return (
-    <main id="main" className="mx-auto w-full max-w-xl flex-1 px-4 py-8">
+    <div className="play-field flex-1 bg-brand-pink">
+    <main id="main" className="mx-auto w-full max-w-xl px-4 py-8">
       {/* Above the stage in z-order: the stage rises over the column's top padding. */}
       <div className="relative z-10 mb-4 flex flex-wrap gap-2 pb-8" data-testid="seal-stage-preview-controls">
         {PHASES.map((p) => (
@@ -116,8 +118,24 @@ export default function SealStagePreview() {
         status={status}
         busy={phase === 'signing' || phase === 'locked' || phase === 'blending'}
         widgetRef={setHost}
+        side={
+          phase === 'done' ? (
+            <EnteredPanel
+              entryIndex={0}
+              asset="97t2ZFh3xkQ1mNpR4sT6uV8wX9yZ2aB3cD4eF5gH6iJ7"
+              poolNumber={16}
+              poolAddress="F1XTUREPoo1111111111111111111111111111111111"
+              wallet="F1XTUREWa11et11111111111111111111111111111111"
+              signer={undefined}
+              email={null}
+              apiBase={undefined}
+              notifyOffered
+            />
+          ) : null
+        }
       />
       {inReview && host ? createPortal(<DemoReview expired={expired} />, host) : null}
     </main>
+    </div>
   );
 }

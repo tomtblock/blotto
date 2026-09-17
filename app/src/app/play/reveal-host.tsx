@@ -37,7 +37,7 @@
  * audit O25.
  */
 
-import { useEffect, useReducer, useState } from 'react';
+import { useEffect, useReducer, useState, type ReactNode } from 'react';
 import { COPY } from '@/copy';
 import {
   INITIAL_REVEAL_STATE,
@@ -59,9 +59,18 @@ export function RevealHost({
   poolNumber,
   onBeat,
   quiet = false,
+  renderCard,
 }: {
   /** Founder 2026-09-16: the seal stage follows the beats (card → done, failed → stopped). */
   onBeat?: (beat: RevealState['beat']) => void;
+  /**
+   * Round four (2026-09-17): the host that draws the scene also draws the
+   * confirmed entry — the pass, the sealed note, the actions — in its own
+   * column (entered-panel.tsx). Given, the card beat renders this instead of
+   * the page-layout PassCard, and there is no Continue: the column is the
+   * end of the flow, its links the exits.
+   */
+  renderCard?: (card: { entryIndex: number; asset: string }) => ReactNode;
   /** The page shows the wait itself (the blender); the entry beat renders nothing. */
   quiet?: boolean;
   /** The entry's terminal state — resolves, never rejects (outcome.ts). */
@@ -139,6 +148,7 @@ export function RevealHost({
   }
 
   if (visual.beat === 'card') {
+    if (renderCard) return <>{renderCard({ entryIndex: visual.entryIndex, asset: visual.asset })}</>;
     // The pass, and — now that the entry is CONFIRMED — the share
     // (2026-09-13; see pass-card.tsx for what it may show and why).
     return (
