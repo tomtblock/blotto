@@ -27,11 +27,19 @@ export default async function PlayFlowPage({
   return (
     <>
       <AppHeader />
-      <main id="main" className="mx-auto w-full max-w-xl flex-1 px-4 py-8">
-        <Suspense>
-          <PlayClient initial={initial} />
-        </Suspense>
-      </main>
+      {/* Founder 2026-09-17 (CHANGE-2026-09-16_ui-uplift.md §E): the play
+          route wears the pink field like every other page. The wrapper is
+          also an inline-size CONTAINER: under the 0.9 desktop scale
+          (globals.css) `100vw` is 90 % of the window, so anything that
+          breaks out of the narrow column sizes against `100cqw` of this
+          wrapper instead — the seal stage does. */}
+      <div className="play-field flex-1 bg-brand-pink">
+        <main id="main" className="mx-auto w-full max-w-xl px-4 py-8">
+          <Suspense>
+            <PlayClient initial={initial} />
+          </Suspense>
+        </main>
+      </div>
     </>
   );
 }

@@ -798,6 +798,83 @@ same reasoning as §C — a deploy cannot touch a pool, but it can reload a brow
 
 ---
 
+# §E — Round four A: the seal screen in two columns, and the sealed column (founder feedback on production, 2026-09-17 ~02:20 UTC)
+
+The founder entered pool 16 on the new build — the signing wrapper's first real transaction, and
+it worked: "I'm in, seat 1 of 64", the blender blended. Then three asks: the entry box as a right
+column in line with the video rather than over it, the key under the box; after the transaction,
+keep the blender and put the pass, the sealed note, **Post on X** (the other share gone) and
+**Keep me updated when this pool ends** where the key was, with an address prompt for a sign-in
+that has none; and build the workflow that sends. This section is the first two; §F is the third.
+
+## E1. Two columns
+
+- From 1024 px the stage is a grid: the framed scene left, a `clamp(320px, 34%, 440px)` column
+  right, tops aligned, the column stretched to the frame's height so the key sits on the frame's
+  bottom edge (1920×830: both end at 701 px; 1440×900: 681). The frame takes its column or what
+  the window's height allows; the grid caps at 1600. A phone stacks scene, card, key.
+- The widget is a solid plum candy card now, not a glass overlay, at legible sizes (30 px heading,
+  15 px lead, 14 px explainer); the rack stays seven across with its numbers on two lines.
+- **A defect found on the way, and worth its own line: under the 0.9 desktop scale (globals.css),
+  `100vw` is 90 % of the window.** The stage broke out of the narrow play column with
+  `width: 100vw; margin-inline: calc(50% − 50vw)`, so on production it sat 90 % wide with plum
+  strips either side — visible in the founder's own capture. Fix: the play route's wrapper is an
+  inline-size container (`.play-field`, globals.css) and the stage sizes against `100cqw`, which
+  is the document's width whatever the scale. The wrapper also carries the pink field for the
+  whole route, which §A2 asks for anyway. The other viewport-unit users in the app (the Blott
+  antics' run-off, the confetti fall, the welcome note's max width, the pool rails' height) are
+  animations or caps where 90 % is harmless; none draws a field.
+
+## E2. The sealed column
+
+- `RevealHost` takes `renderCard`; with it, the card beat renders the host's own column instead
+  of the page-layout `PassCard`, and there is no Continue — the column is the end of the flow and
+  its two links (Follow this pool, Back to homepage) the exits. `play-client.tsx` hands the
+  takeover to the stage as `side`, so the blender stays on screen through the confirm and after.
+- `entered-panel.tsx`: the pass (cream, the cheer Blott, "I'm in", the seat, the asset), a plum
+  note with the trophy Blott, "Sealed" and the rule in two lines (`pool.checkBackShort`), then
+  Post on X as the pink key and Keep me updated as a cream key, the one-message note, the links.
+  The pass PNG and the X intent are `pass-card.tsx`'s, now exported (`usePassImage`,
+  `openXWithPass`); the page-layout card still uses them.
+- **The opt-in is offered only when the entry service advertises `notify: v2` on `/health`** —
+  the page asks once the entry is in flight (`entryServiceNotifyVersion`). Until the dispatcher
+  (§F) is deployed the key does not appear, so nothing on the screen is a promise with nothing
+  behind it, which was the whole of the D-E11 ruling.
+- The sign-in now carries `email` (`wallet/types.ts`): a Google or Apple account's address from
+  the provider, null for a wallet or X sign-in. With it the key is one press and one wallet
+  prompt; without it the key opens a field ("Where should the one message go?"), checked for
+  shape before any prompt. Either way the wallet signs
+  `blotto-cup notify v2 / wallet / pool / email / at` (`notify/pool-notify.ts`, tested) and the
+  service verifies before storing.
+
+## E3. Not changed
+
+The two-step seal, its wording and the §8.6 order; the machine; the clips; the signer wrapper;
+`app/src/entry/`; the page-layout pass card and sealed panel (unreachable while the stage hosts
+the flow, kept for the reduced-layout path).
+
+## E4. Verification and captures
+
+On the branch head, from `app/`: `npm run typecheck` — clean; `npm run lint` — clean; `npm test` — 63
+files, 495 tests passed (six new for the opt-in client); `NEXT_PUBLIC_FIXTURE_DATA=1 npm run build` —
+compiled; `npm run journey` — 16 of 16 (10.4 s). From the root, `./scripts/check-language.sh` and
+`./scripts/check-standing-rules.sh` — clean. Measured on `/dev/seal-stage` through `localhost` in the
+browser's own pixels: 1920×830 — frame 1026×588, column 396 wide, key on the frame's bottom edge,
+page 830 of 830; 1440×900 — frame 990×568, the same; 1366×700 — frame 916×526, page 700 of 700;
+the sealed column 613 tall at 1920, inside the window.
+
+Captures (`docs/design/uplift-2026-09-16/`): `seal-stage-1440.jpg`, `seal-stage-390.jpg`,
+`seal-stage-1920x830.jpg`, `seal-stage-armed-1920x830.jpg` replaced; `seal-stage-sealed-1920x830.jpg`,
+`seal-stage-sealed-email-1920x830.jpg` and `seal-stage-sealed-390.jpg` new (the dev preview's
+stand-in: numbers for tiles, a placeholder asset).
+
+## E5. Shipping
+
+Branch `step/seal-columns-2026-09-17`, one commit. Pool 17 was open with no entrant at the merge;
+the 62 headless seats never touch the frontend, and the founder was reviewing, not entering.
+
+---
+
 # §F — Round four B: the one-message dispatcher (2026-09-17)
 
 The third ask: "build the workflow for notifying opted-in users when the pool has completed."

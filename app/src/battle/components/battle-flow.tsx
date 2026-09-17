@@ -440,18 +440,18 @@ export function BattleFlow({
           <h2
             className={
               hosted
-                ? 'font-display text-[28px] leading-[30px] font-extrabold text-ink'
+                ? 'font-display text-[30px] leading-[32px] font-extrabold text-ink'
                 : 'font-display text-[40px] leading-[42px] font-extrabold text-ink'
             }
           >
             {COPY.battle.crescendo}
           </h2>
-          <p className={hosted ? 'text-[14px] leading-5 text-ink-muted' : 'max-w-prose text-[15px] leading-6 text-ink-muted'}>
+          <p className={hosted ? 'text-[15px] leading-6 text-ink-muted' : 'max-w-prose text-[15px] leading-6 text-ink-muted'}>
             {COPY.battle.crescendoLine}
           </p>
         </div>
         {review.expired && (
-          <p className={hosted ? 'text-[13px] leading-5 text-ink-muted' : 'text-[14px] leading-5 text-ink-muted'}>
+          <p className="text-[14px] leading-5 text-ink-muted">
             {COPY.battle.expiredNote}
           </p>
         )}
@@ -475,8 +475,8 @@ export function BattleFlow({
           <div className="flex items-center gap-3">
             <SealLock size={64} />
             <div className="flex min-w-0 flex-col gap-1">
-              <p className="text-[13px] leading-5 text-ink">{COPY.battle.sealWhat}</p>
-              <p className="text-[12px] leading-4 text-ink-muted">{COPY.battle.sealAfter}</p>
+              <p className="text-[14px] leading-5 text-ink">{COPY.battle.sealWhat}</p>
+              <p className="text-[13px] leading-5 text-ink-muted">{COPY.battle.sealAfter}</p>
             </div>
           </div>
         ) : (

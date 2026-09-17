@@ -7,30 +7,57 @@
  * the seal key have the field below the frame to themselves. Tokens only.
  */
 .seal-stage {
-  /* The scene's width: the column, capped at 1400, and on a wide screen
-   * what leaves the header, the §8.6 line, the key and a Go back inside the
-   * window (260 px) — a decision screen needs no scrolling. Never under
-   * 880 px on a desktop, though: a short laptop window moves down a little
-   * rather than shrink the scene past what the widget needs. */
-  --stage-w: min(100vw - 40px, 1400px, max(880px, calc((100dvh - 260px) * 16 / 9)));
   --frame-pad: 14px;
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 14px;
-  width: 100vw;
-  min-height: calc(100dvh - 56px);
-  margin-inline: calc(50% - 50vw);
+  /* Breaks out of the play column to the route's wrapper (play/page.tsx),
+   * measured in container units: under the 0.9 desktop scale a viewport
+   * unit is 90 % of the window, and this used to leave plum strips either
+   * side of the field on production. */
+  width: 100cqw;
+  margin-inline: calc(50% - 50cqw);
   margin-top: -32px; /* the play column's top padding — the field starts at the header */
   padding: 16px 0 28px;
-  background: var(--color-brand-pink);
+}
+/* One column on a phone: the scene, then the review card, then the key.
+ * Two from lg: the scene left, the column right, tops aligned. */
+.seal-stage-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(100cqw - 24px, 1440px);
+}
+@media (min-width: 1024px) {
+  .seal-stage-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) clamp(320px, 34%, 440px);
+    gap: 20px;
+    align-items: stretch;
+    width: min(100cqw - 40px, 1600px);
+  }
+  /* The column stands as tall as the frame, its key on the frame's bottom
+   * edge — the two in line, as the founder asked. */
+  .seal-stage-side {
+    height: 100%;
+  }
+  .seal-stage-side .seal-stage-controls {
+    margin-top: auto;
+  }
+  /* The scene takes its column, or what the window's height allows — the
+   * frame, the line and the key stay in view on the screen a decision is
+   * made on — and sits against the column beside it. */
+  .seal-stage-frame {
+    justify-self: end;
+    align-self: start; /* natural height — only the column stretches to meet it */
+    width: min(100%, calc((100dvh - 120px) * 16 / 9));
+  }
 }
 /* The frame: the battle cabinet's plum panel, rimmed in cream so it reads on pink. */
 .seal-stage-frame {
   position: relative;
-  width: calc(var(--stage-w) + 2 * var(--frame-pad));
-  max-width: calc(100vw - 24px);
+  width: 100%;
   padding: var(--frame-pad);
   border-radius: 28px;
   background: linear-gradient(
@@ -84,64 +111,40 @@
   pointer-events: none;
   background: radial-gradient(60% 45% at 63% 42%, rgba(42, 16, 48, 0) 55%, rgba(42, 16, 48, 0.22) 100%);
 }
-/* The review widget: a candy card. Under the scene inside the frame by
- * default; over the right of the scene from lg. Hidden while nothing is
- * portalled into it (after the confirm the scene runs alone). */
-.seal-stage-widget {
-  margin-top: var(--frame-pad);
-  border-radius: 22px;
-  padding: 18px;
+/* The side column: the review widget (a candy card, the plum surface every
+ * number and rule sits on), then whatever follows the review, then the
+ * line and the key. */
+.seal-stage-side {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.seal-stage-widget,
+.seal-stage-note {
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 20px;
   color: var(--color-ink);
-  background: linear-gradient(180deg, rgba(74, 26, 66, 0.96), rgba(42, 16, 48, 0.96));
+  background: linear-gradient(180deg, var(--color-overlay) 0%, var(--color-raised) 38%, var(--color-base) 100%);
   box-shadow: var(--elevation-candy);
 }
 .seal-stage-widget:empty {
   display: none;
 }
-@media (min-width: 1024px) {
-  .seal-stage-widget {
-    position: absolute;
-    top: 50%;
-    right: calc(var(--frame-pad) + 2.5%);
-    width: clamp(300px, 36%, 460px);
-    max-height: calc(100% - 2 * var(--frame-pad) - 8px);
-    overflow-y: auto;
-    margin: 0;
-    padding: 16px;
-    transform: translateY(-50%);
-    background: linear-gradient(180deg, rgba(74, 26, 66, 0.86), rgba(42, 16, 48, 0.9));
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-  }
-  /* The widget's height budget is the scene's, and the scene's height is
-   * the window's (--stage-w): on a 1920×830 screen at the 0.9 scale the
-   * scene is about 500 px tall. So the widget is set compact — the type a
-   * step down, the rack seven across at ~44 px with its five numbers on
-   * two lines in a smaller mono — and it still holds the time-ran-out note.
-   * The rack keeps its numbers because it is the record F-21 screenshots. */
-  .seal-stage-widget .seven-tiles {
-    gap: 4px;
-  }
-  .seal-stage-widget .seven-tile-stats {
-    font-size: 8.5px;
-    line-height: 1.2;
-    letter-spacing: 0;
-  }
-  .seal-stage-widget h2 {
-    font-size: 24px;
-    line-height: 26px;
-  }
-  .seal-stage-widget > div {
-    gap: 12px;
-  }
+/* The rack's five numbers under a ~50 px tile: two lines, not three. */
+.seal-stage-widget .seven-tile-stats {
+  font-size: 8.5px;
+  letter-spacing: 0;
+  word-spacing: 0;
 }
-/* The controls, below the frame: the §8.6 line, then the key, centred. */
+/* The controls, under the widget: the §8.6 line, then the key. */
 .seal-stage-controls {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   gap: 12px;
-  width: min(560px, calc(100vw - 32px));
+  width: 100%;
 }
 /* §8.6 above the key, in berry on the pink field. */
 .seal-stage-line {
@@ -199,6 +202,17 @@
       0 10px 20px rgba(42, 16, 48, 0.28),
       0 0 28px 6px rgba(255, 246, 236, 0.6);
   }
+}
+/* The second key of the sealed column (entered-panel.tsx): cream with berry
+ * ink — a commit control's shape without the commit colour, since it moves
+ * no money. */
+.seal-stage-key-cream {
+  background: var(--color-brand-cream);
+  color: var(--color-brand-berry);
+  border-color: var(--color-brand-berry);
+}
+.seal-stage-key-cream:hover:not(:disabled) {
+  background: var(--color-brand-yellow);
 }
 /* The founder's red, if D3 is flipped: the key wears the loss red only by
  * explicit exception (SEAL_KEY_TONE in play-client.tsx). */

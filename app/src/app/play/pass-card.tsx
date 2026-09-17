@@ -30,6 +30,72 @@ import { BlottSprite, blottPoseUrl } from '@/components/blott/BlottSprite';
 import { truncateAddress } from '@/wallet/types';
 import { composePassCard } from './compose-pass';
 
+export interface PassImage {
+  url: string;
+  blob: Blob;
+}
+
+/** The pool line on the pass, or the wordmark when the page could not read the pool. */
+export function passPoolLine(poolNumber?: string | number): string {
+  return poolNumber !== undefined ? COPY.reveal.passPool(poolNumber) : COPY.shell.title;
+}
+
+/** The line that goes with the pass when it is posted. */
+export function passShareTextFor(poolNumber?: string | number): string {
+  return poolNumber !== undefined ? COPY.reveal.passShareText(poolNumber) : COPY.shell.tagline;
+}
+
+/**
+ * The pass as a PNG, composed once on mount. A bonus: if the canvas fails
+ * this stays null and the share controls simply do not appear; nothing else
+ * on the screen depends on it. Shared by the page-layout card and the
+ * sealed column beside the blender (round four, entered-panel.tsx).
+ */
+export function usePassImage(entryIndex: number, poolNumber?: string | number): PassImage | null {
+  const [png, setPng] = useState<PassImage | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    const r = COPY.reveal;
+    (async () => {
+      try {
+        const blob = await composePassCard({
+          seatLine: r.cardSeat(entryIndex),
+          poolLine: passPoolLine(poolNumber),
+          headline: r.passEntered,
+          wordmark: COPY.shell.title,
+          footer: r.passFooter,
+          spriteUrl: blottPoseUrl('cheer'),
+        });
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setPng({ url: objectUrl, blob });
+      } catch {
+        /* no share controls; the pass on screen is unaffected */
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [entryIndex, poolNumber]);
+  return png;
+}
+
+/* The web intent takes text only, so the image downloads alongside for the
+ * player to attach. */
+export function openXWithPass(png: PassImage, shareText: string): void {
+  const a = document.createElement('a');
+  a.href = png.url;
+  a.download = 'blotto-pass.png';
+  a.click();
+  window.open(
+    `https://x.com/intent/post?text=${encodeURIComponent(shareText)}`,
+    '_blank',
+    'noopener,noreferrer'
+  );
+}
+
 export function PassCard({
   entryIndex,
   asset,
@@ -43,40 +109,11 @@ export function PassCard({
   poolNumber?: string | number;
   onDone: () => void;
 }) {
-  const [png, setPng] = useState<{ url: string; blob: Blob } | null>(null);
+  const png = usePassImage(entryIndex, poolNumber);
   const [note, setNote] = useState<string | null>(null);
   const r = COPY.reveal;
-  const poolLine = poolNumber !== undefined ? r.passPool(poolNumber) : COPY.shell.title;
-  const shareText = poolNumber !== undefined ? r.passShareText(poolNumber) : COPY.shell.tagline;
-
-  // Compose once, on mount. The pass is a bonus: if the canvas fails the
-  // buttons simply do not appear, and nothing else on the screen depends on it.
-  useEffect(() => {
-    let cancelled = false;
-    let objectUrl: string | null = null;
-    (async () => {
-      try {
-        const blob = await composePassCard({
-          seatLine: r.cardSeat(entryIndex),
-          poolLine,
-          headline: r.passEntered,
-          wordmark: COPY.shell.title,
-          footer: r.passFooter,
-          spriteUrl: blottPoseUrl('cheer'),
-        });
-        if (cancelled) return;
-        objectUrl = URL.createObjectURL(blob);
-        setPng({ url: objectUrl, blob });
-      } catch {
-        /* no share buttons; the pass on screen is unaffected */
-      }
-    })();
-    return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one pass per outcome
-  }, [entryIndex, poolNumber]);
+  const poolLine = passPoolLine(poolNumber);
+  const shareText = passShareTextFor(poolNumber);
 
   const share = useCallback(async () => {
     if (!png) return;
@@ -101,19 +138,9 @@ export function PassCard({
     }
   }, [png, shareText, r]);
 
-  /* The web intent takes text only, so the image downloads alongside for
-   * the player to attach. */
   const postOnX = useCallback(() => {
     if (!png) return;
-    const a = document.createElement('a');
-    a.href = png.url;
-    a.download = 'blotto-pass.png';
-    a.click();
-    window.open(
-      `https://x.com/intent/post?text=${encodeURIComponent(shareText)}`,
-      '_blank',
-      'noopener,noreferrer'
-    );
+    openXWithPass(png, shareText);
     setNote(r.passShareXNote);
   }, [png, shareText, r]);
 
