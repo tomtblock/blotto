@@ -5,6 +5,7 @@
  *   POST /ciphertexts  { pool, player, ciphertext }   → 204
  *   POST /attestation  { wallet, termsVersion, signature } → 204 | 403
  *   POST /notify       { wallet, emailOptIn, atUnix, signature } → 204 | 403
+ *   POST /notify/pool  { wallet, pool, email, atUnix, signature } → 204 | 403 (round four, v2)
  *   GET  /geo                                         → { allowed: boolean }
  *
  * `/attestation` (D-B4) stores the signature-verified clickwrap record; a
@@ -43,6 +44,7 @@ import {
 } from './service';
 import { acceptAttestation } from './attestations';
 import { acceptNotifyPreference, type NotifyPreferenceStore } from './notify';
+import { acceptPoolNotify, type PoolNotifyStore } from './notify-pool';
 import type { PoolIdResolver } from './pool-ids';
 import { acceptCiphertext } from './ciphertexts';
 
@@ -58,6 +60,18 @@ export interface EntryServerDeps {
   /** v3 D3: the email-notification opt-in store. Optional — a deployment
    * without it answers /notify with 503 rather than pretending to record. */
   notify?: NotifyPreferenceStore;
+  /**
+   * Round four (2026-09-17): the v2 opt-in store — per pool, with the
+   * address. Optional the same way; without it /notify/pool answers 503.
+   */
+  notifyPool?: PoolNotifyStore;
+  /**
+   * A mail provider is configured, so a recorded opt-in will actually be
+   * sent. /health advertises `notify: "v2"` only when this AND the store are
+   * present — the app offers the opt-in on nothing less (D-E11: never a
+   * promise with nothing behind it).
+   */
+  notifyDeliverable?: boolean;
   trustProxyHeader: boolean;
   /**
    * BR-005 hygiene (CORS / rate limit / security headers) for the socket
@@ -150,6 +164,7 @@ export async function handleEntryRoute(
     // returning 503 would take the entry gate out of the platform's rotation
     // over a condition that recovers on its own within ten minutes. The
     // reader is told which it is.
+    const notify = deps.notifyPool && deps.notifyDeliverable ? { notify: 'v2' } : {};
     return {
       status: 200,
       body: deps.screening
@@ -160,8 +175,9 @@ export async function handleEntryRoute(
               ofac_loaded: deps.screening.ofacLoaded,
               sources: [...deps.screening.describe],
             },
+            ...notify,
           }
-        : { ok: true, service: 'packet' },
+        : { ok: true, service: 'packet', ...notify },
     };
   }
 
@@ -230,6 +246,44 @@ export async function handleEntryRoute(
     const stored = await acceptNotifyPreference(deps.notify, deps.packet.now, {
       wallet: b.wallet as string,
       emailOptIn: b.emailOptIn,
+      atUnix,
+      signature: b.signature,
+    });
+    return stored ? { status: 204, body: null } : { status: 403, body: { ok: false } };
+  }
+
+  if (path === '/notify/pool') {
+    // Round four (2026-09-17): the one-message opt-in, v2. Same discipline as
+    // /notify — nothing stored unless the keyholder signed it; a refusal is
+    // the generic 403 whatever the reason.
+    if (!deps.notifyPool) return { status: 503, body: { error: 'unconfigured' } };
+    const b = body as {
+      wallet?: string;
+      pool?: string;
+      email?: string;
+      atUnix?: string | number;
+      signature?: string;
+    };
+    if (
+      !b ||
+      !B58.test(b.wallet ?? '') ||
+      !B58.test(b.pool ?? '') ||
+      typeof b.email !== 'string' ||
+      typeof b.signature !== 'string' ||
+      (typeof b.atUnix !== 'string' && typeof b.atUnix !== 'number')
+    ) {
+      return { status: 403, body: { ok: false } };
+    }
+    let atUnix: bigint;
+    try {
+      atUnix = BigInt(b.atUnix);
+    } catch {
+      return { status: 403, body: { ok: false } };
+    }
+    const stored = await acceptPoolNotify(deps.notifyPool, deps.packet.now, {
+      wallet: b.wallet as string,
+      pool: b.pool as string,
+      email: b.email,
       atUnix,
       signature: b.signature,
     });

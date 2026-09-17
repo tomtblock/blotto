@@ -795,3 +795,89 @@ Branch `step/seal-screen-2026-09-17`, one commit carrying the code, this section
 captures. Merging deploys; the
 merge waits until the founder is off the seal screen and no entry is in flight, per the
 same reasoning as §C — a deploy cannot touch a pool, but it can reload a browser mid-run.
+
+---
+
+# §F — Round four B: the one-message dispatcher (2026-09-17)
+
+The third ask: "build the workflow for notifying opted-in users when the pool has completed."
+Why it did not exist: the 2026-09-13 ruling (D-E11) took the email promise off the app because
+v1 of the opt-in (`backend/packet/src/notify.ts`, migration 0009) stored a per-wallet yes/no with
+no address and no pool, assumed the sign-in provider would supply an address at send time, and
+nothing ever sent. This section is the version that does.
+
+## F1. What was built (`backend/packet`, one migration)
+
+- **Migration 0023 `notify_pool_optin`** — `(pool, wallet)` primary key, the address, the signed
+  timestamp, the signature, `received_at`, `sent_at`. The address is kept only until the message
+  goes: `markSent` sets `sent_at` and NULLs `email` in one statement, so what remains afterwards
+  is that a message went, never where to. v1's table stays, dormant.
+- **`notify-pool.ts`** — the v2 message (`blotto-cup notify v2 / wallet / pool / email / at`),
+  `acceptPoolNotify` (address shape, key shapes, the 600 s skew window, Ed25519 over the exact
+  bytes, an older captured message never overwrites a newer choice; a newer one replaces and
+  reopens), the memory store, and `runNotifyDispatch`: every pending row whose pool is **Paid
+  or Closed** gets its message; Open, Sealed, Scored and Refunding wait; a provider refusal
+  leaves the row pending with its address for the next pass, and nothing is marked until the
+  provider has accepted. Log lines carry a masked address (`t***@example.com`) and never the real
+  one.
+- **`email-sender.ts`** — the seam. `HttpEmailSender` is a JSON POST with a bearer key in the
+  shape Resend speaks (`{ from, to, subject, text }`); another provider is a change to one
+  method. `MemoryEmailSender` for the suites.
+- **`stores-pg.ts`** — `PgPoolNotifyStore` (the upsert reopens; `pending` reads unsent rows with
+  an address; `markSent` as above) and `PgPoolStateReader`, which reads the indexer's `pools`
+  projection in the shared database — no HTTP hop to the indexer.
+- **`server.ts`** — `POST /notify/pool { wallet, pool, email, atUnix, signature }` → 204 | 403,
+  the generic refusal whatever the reason, 503 without a store. `/health` carries
+  `notify: "v2"` **only when both the store and a provider are configured** — the app offers
+  the opt-in on exactly that, so the screen never promises what the backend cannot do.
+- **`main.ts`** — the store is always on; the sender exists only with `EMAIL_API_URL`,
+  `EMAIL_API_KEY` and `EMAIL_FROM` all set, in which case the dispatcher runs every
+  `NOTIFY_DISPATCH_INTERVAL_MS` (default 60 s) and once at boot, links to
+  `BLOTTO_SITE_ORIGIN` (default `https://www.blotto.gg`) `/pools/<pda>`. Without the three the
+  boot log says so and nothing is advertised.
+- **The message** (`composePoolMessage`, `PHASE-N-REVIEW`): subject "Pool #N has finished";
+  paid or closed in one line; the pool page link; "every number there is recomputable from the
+  published data"; "you asked for this one message when you entered — the address it went to
+  was deleted the moment it was sent"; the 18+ footer. Plain text, one link, no second message.
+- **Deploy** — `deploy-backend.yml` passes `EMAIL_API_URL` and `EMAIL_API_KEY` (secrets) and
+  `EMAIL_FROM` (a Variable) to the packet app, all three or it clears them; `docs/deploy-backend.md`
+  has the rows.
+
+## F2. Verified
+
+`backend/packet`: typecheck clean; `npm test` — 187 passing, the new suites among them: the
+opt-in (verified choice, foreign key, tampered address, tampered pool, no-shape address, skew,
+monotonic, per pool) and the dispatcher (sends only for done pools, strips the address, a second
+pass sends nothing, a provider failure leaves the row for retry, an unknown pool waits, the
+message's wording, the mask). `tests/postgres/test/notify-pool.spec.ts` drives the Postgres
+store and the state reader in the `postgres` job of `ci-fast` (typecheck clean locally).
+
+## F3. Founder actions — the dispatcher is off until these are done
+
+1. **Pick a provider and make the account.** The sender is shaped for **Resend**
+   (`https://api.resend.com/emails`); Postmark or SES would mean a small change to
+   `HttpEmailSender.send`. Verify a sending domain there (`blotto.gg`, or a subdomain such as
+   `mail.blotto.gg`) — the provider's DNS records, once.
+2. **In GitHub → Settings → Secrets and variables → Actions:** secrets `EMAIL_API_URL`
+   (`https://api.resend.com/emails`) and `EMAIL_API_KEY` (from the provider); Variable
+   `EMAIL_FROM` (e.g. `Blotto Cup <hello@blotto.gg>`, on the verified domain).
+3. **Run the backend deploy** (Actions → deploy-backend → Run workflow, on `main`) once this PR
+   and #140 are merged. It applies migration 0023 and restarts the packet service with the
+   dispatcher on; the boot log says `notify dispatch ON`, and `curl blotto-packet.fly.dev/health`
+   then shows `"notify":"v2"` — from that moment the sealed screen offers the key.
+4. **A line in the privacy wording** — collecting an address is personal data (PID §8,
+   founder and counsel). Proposed: *"If you ask us to tell you when a pool you entered has
+   finished, we keep the address you give us only until that one message is sent, then delete
+   it."* Where the terms live is the founder's call.
+
+## F4. Rejected
+
+- Resolving the address from the sign-in provider at send time (v1's design): the dispatcher
+  would need a provider credential and an account lookup per send, and a wallet sign-in has no
+  address there at all. The consent carries its own address.
+- Keeping the address after sending, for a second message or an audit: nothing here sends a
+  second message, and the audit needs only that one went.
+- Polling the indexer's HTTP read API for pool states: the packet service already reads the
+  same database (`PgPoolIdResolver`), so the reader is a query.
+- Putting the dispatcher in the settlement daemon (`backend/reveal`): the opt-ins live in the
+  packet service's store, and the daemon has no reason to learn addresses.

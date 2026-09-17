@@ -218,6 +218,12 @@ jobs:
       SANCTIONS_OPENSANCTIONS_API_KEY: ${{ secrets.SANCTIONS_OPENSANCTIONS_API_KEY }}
       SWITCHBOARD_QUEUE: ${{ secrets.SWITCHBOARD_QUEUE }}
       IRYS_UPLOAD_KEY: ${{ secrets.IRYS_UPLOAD_KEY }}
+      # Round four (2026-09-17): the one-message opt-in's mail provider, for the
+      # packet service. All three or the dispatcher stays off and the app
+      # offers no opt-in. EMAIL_FROM is a Variable (an address, not a secret).
+      EMAIL_API_URL: ${{ secrets.EMAIL_API_URL }}
+      EMAIL_API_KEY: ${{ secrets.EMAIL_API_KEY }}
+      EMAIL_FROM: ${{ vars.EMAIL_FROM }}
       SETTLEMENT_SIGNER_KEYPAIR_B64: ${{ secrets.SETTLEMENT_SIGNER_KEYPAIR_B64 }}
       DEV_CREDS: ${{ inputs.allow_dev_credentials }}
     steps:
@@ -543,6 +549,21 @@ jobs:
             BLOTTO_API_CORS_ORIGINS="$APP_ORIGIN" \
             BLOTTO_API_RATE_LIMIT_ENABLED="1" \
             BLOTTO_API_SECURITY_HEADERS_ENABLED="1"
+
+          # Round four (2026-09-17): the one-message opt-in's provider — all
+          # three or none. A partial set is cleared, so the dispatcher can
+          # never run against half a configuration.
+          if [ -n "$EMAIL_API_URL" ] && [ -n "$EMAIL_API_KEY" ] && [ -n "$EMAIL_FROM" ]; then
+            flyctl secrets set --app "$PACKET_APP" --stage \
+              EMAIL_API_URL="$EMAIL_API_URL" \
+              EMAIL_API_KEY="$EMAIL_API_KEY" \
+              EMAIL_FROM="$EMAIL_FROM" \
+              BLOTTO_SITE_ORIGIN="https://www.blotto.gg"
+            echo "packet: notify dispatch on"
+          else
+            flyctl secrets unset --app "$PACKET_APP" --stage EMAIL_API_URL EMAIL_API_KEY EMAIL_FROM || true
+            echo "packet: notify dispatch off (EMAIL_API_URL, EMAIL_API_KEY and EMAIL_FROM are not all set)"
+          fi
 
           # Entry signer — independent of geo (see preflight).
           if [ "${{ steps.pre.outputs.signer_mode }}" = "turnkey" ]; then

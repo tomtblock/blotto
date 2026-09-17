@@ -118,6 +118,9 @@ name in the run's first step, before anything is deployed.
 | `ENTRY_SIGNER_PUBLIC_KEY_HEX` | that key's public key, hex | packet |
 | `GEO_VENDOR_URL` | the geo vendor | packet |
 | `GEO_VENDOR_API_KEY` | the geo vendor | packet |
+| `EMAIL_API_URL` | the mail provider's send endpoint, for the one-message opt-in (Resend: `https://api.resend.com/emails`) — optional, all three or none | packet |
+| `EMAIL_API_KEY` | the provider's API key — optional, with the two beside it | packet |
+| `EMAIL_FROM` (a **Variable**, not a secret) | the sending address on a domain the provider has verified, e.g. `Blotto Cup <hello@blotto.gg>` | packet |
 | `SANCTIONS_CHAINALYSIS_API_KEY` | Chainalysis (optional — the OFAC SDN mirror runs without it) | packet |
 | `SANCTIONS_OPENSANCTIONS_API_KEY` | OpenSanctions (optional, cross-check) | packet |
 | `TURNKEY_USER_ID` | Turnkey console | daemon |
