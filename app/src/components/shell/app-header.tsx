@@ -41,7 +41,9 @@ export function AppHeader() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-overlay bg-base/90 backdrop-blur-md">
-      <div className="mx-auto flex h-14 max-w-md items-center justify-between px-4">
+      {/* Founder 2026-09-16: on a wide screen the wordmark lines up with the
+          landing column (max-w-5xl) instead of floating in a phone-width box. */}
+      <div className="mx-auto flex h-14 max-w-md items-center justify-between px-4 lg:max-w-5xl lg:px-6">
         <Link
           href="/"
           className="font-display text-[17px] font-extrabold tracking-[0.06em] text-ink uppercase"

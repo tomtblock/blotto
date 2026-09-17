@@ -9,11 +9,14 @@ import { COPY } from '@/copy';
 import { AppHeader } from '@/components/shell/app-header';
 import { SiteFooter } from '@/components/shell/site-footer';
 import { PageIntro } from '@/components/ui/page-intro';
+import { NeonSection } from '@/components/ui/neon-section';
 import { TabBar } from '@/components/shell/tab-bar';
 import { FULL_FIELD, MIN_FIELD, fairPlayView } from './fair-play.config';
 
 export const metadata: Metadata = { title: COPY.fairPlay.title };
 
+/* Founder 2026-09-16: every section is a neon box with a marquee heading on
+ * the pink field (NeonSection); the body classes inside are unchanged. */
 function Section({
   id,
   heading,
@@ -24,10 +27,9 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section id={id} className="mb-9">
-      <h2 className="mb-2 font-display text-[24px] leading-[30px] font-bold text-ink">{heading}</h2>
+    <NeonSection id={id} heading={heading}>
       {children}
-    </section>
+    </NeonSection>
   );
 }
 
@@ -38,8 +40,15 @@ export default function FairPlayPage() {
   return (
     <>
       <AppHeader />
-      <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 pb-24">
-        <PageIntro title={c.title} back={{ href: '/rules', label: COPY.shell.nav.backToRules }} lead={c.intro} />
+      <div className="flex-1 bg-brand-pink">
+      <main id="main" className="mx-auto w-full max-w-3xl px-4 pt-6 pb-24">
+        <PageIntro
+          tone="marquee"
+          title={c.title}
+          back={{ href: '/rules', label: COPY.shell.nav.backToRules }}
+          lead={c.intro}
+        />
+        <div className="flex flex-col gap-10">
 
         <Section id="skill" heading={c.skillHeading}>
           <p className="max-w-prose text-[15px] leading-6 text-ink-muted">{c.skillIntro}</p>
@@ -121,7 +130,9 @@ export default function FairPlayPage() {
             </li>
           </ul>
         </Section>
+        </div>
       </main>
+      </div>
       <SiteFooter />
       <TabBar />
     </>

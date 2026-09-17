@@ -207,7 +207,7 @@ export function Preloader({ onDone }: PreloaderProps) {
       {phase !== 'static' && (
         <video
           ref={videoRef}
-          className={`h-full w-full ${letterbox ? 'object-contain' : 'object-cover'}`}
+          className={`h-full w-full ${letterbox ? 'object-contain' : 'object-cover object-[50%_85%]'}`}
           poster={POSTER_START}
           autoPlay
           muted
@@ -232,7 +232,7 @@ export function Preloader({ onDone }: PreloaderProps) {
           src={POSTER_SETTLE}
           alt=""
           aria-hidden="true"
-          className={`h-full w-full ${letterbox ? 'object-contain' : 'object-cover'}`}
+          className={`h-full w-full ${letterbox ? 'object-contain' : 'object-cover object-[50%_85%]'}`}
           onClick={enter}
         />
       )}
@@ -252,18 +252,37 @@ export function Preloader({ onDone }: PreloaderProps) {
         </button>
       )}
 
-      {/* Enter — the one commit-coloured object on the surface (state B/C). */}
+      {/* Enter — the one commit-coloured object on the surface (state B/C).
+          Founder 2026-09-16 (round two): the block sits in the bottom band,
+          on the floor under the word rather than across it — the film is
+          cover-cropped from the top (object-position above) so that floor
+          survives a wide, short window — and the line is set as display
+          capitals in three pieces that wrap whole. Still words, not digits. */}
       {settledOrStatic && (
-        <div className="absolute inset-x-0 top-[76%] flex -translate-y-1/2 flex-col items-center gap-3 px-6">
+        <div
+          className="absolute inset-x-0 flex flex-col items-center gap-3 px-6 sm:gap-4"
+          style={{ bottom: 'max(3.5rem, calc(env(safe-area-inset-bottom) + 3rem))' }}
+        >
           <button
             ref={enterRef}
             type="button"
             onClick={enter}
-            className="preloader-enter min-h-11 rounded-full border-[3px] border-brand-cream bg-game-action px-10 py-3 font-display text-[22px] font-bold uppercase tracking-wide text-brand-berry shadow-[0_6px_24px_rgba(94,27,64,0.35)] focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-4 focus-visible:outline-brand-cream"
+            className="preloader-enter min-h-12 rounded-full border-[3px] border-brand-cream bg-game-action px-12 py-3.5 font-display text-[26px] font-bold uppercase tracking-wide text-brand-berry shadow-[0_6px_24px_rgba(94,27,64,0.35)] focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-4 focus-visible:outline-brand-cream sm:px-14 sm:text-[30px]"
           >
             {COPY.preloader.enter}
           </button>
-          <p className="text-center text-[14px] text-brand-berry">{COPY.preloader.line}</p>
+          <p className="text-center font-display text-[22px] font-extrabold uppercase leading-[1.15] tracking-wide text-brand-berry sm:text-[26px] lg:text-[30px]">
+            {COPY.preloader.line.split(' \u00b7 ').flatMap((piece, i) => [
+              i > 0 ? (
+                <span key={`dot-${i}`} aria-hidden="true">
+                  {' \u00b7 '}
+                </span>
+              ) : null,
+              <span key={piece} className="inline-block whitespace-nowrap">
+                {piece}
+              </span>,
+            ])}
+          </p>
         </div>
       )}
 

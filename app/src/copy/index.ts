@@ -288,7 +288,13 @@ export const COPY = {
     // brand statement as shell.tagline, lowercased for the pink surface.
     enter: 'Enter',
     skip: 'Skip',
-    line: 'sixty-four seats \u00b7 seven battles \u00b7 the winner takes the prize pool',
+    // PHASE-N-REVIEW (founder 2026-09-16, round two: "more punchy and larger"):
+    // the strap is set as display capitals under the film, in three pieces
+    // that wrap whole, and "the winner takes" becomes the ratified D-E2 form
+    // "Winner takes the prize pool" (pool.tierWinner). Still words, not
+    // digits, on the brand surface. Proposal until ratified; alternates in
+    // CHANGE-2026-09-16_ui-uplift.md §C.
+    line: 'Sixty-four seats \u00b7 Seven battles \u00b7 Winner takes the prize pool',
     // Visually hidden equivalent of the decorative video, for screen readers.
     srIntro: 'Blotto Cup. Sixty-four seats, seven battles, the winner takes the prize pool.',
     dialogLabel: 'Blotto Cup intro',
@@ -309,6 +315,9 @@ export const COPY = {
      * the refund branch must not soften it — "would refund" is what happens,
      * and a player deciding whether to pay is entitled to it plainly.
      */
+    // Founder 2026-09-16 (round two): the pool card no longer renders this —
+    // the rule it restated is in pool.aboutPoints directly below the card.
+    // Kept because the read API still reports the field it names.
     outcomeIfDeadlineNow: (outcome: 'seal' | 'refund', minSeats: number) =>
       outcome === 'seal'
         ? 'Enough players are seated: if the clock ran out now, this pool would run.'
@@ -332,6 +341,25 @@ export const COPY = {
     enter: 'Enter this tournament',
     // 2026-09-13: three literals on the pool page, now here.
     verifyThisPool: 'Verify this pool',
+    // PHASE-N-REVIEW (founder 2026-09-16, CHANGE-2026-09-16_ui-uplift.md §A11):
+    // the marquee over the pool page's three rule paragraphs, now a neon box
+    // on the yellow field. Proposal until ratified.
+    aboutHeading: 'How this pool pays',
+    // PHASE-N-REVIEW (founder 2026-09-16, round two: "condense the number of
+    // words, maybe bullet points, larger"): the four points under that
+    // marquee, in place of the three ratified paragraphs prizeRule / sealed /
+    // refundRule, which stay as the long forms (sealed is still the sealed
+    // panel's line). Substance unchanged: one paid place and a tie for first
+    // splits equally (the lamport-remainder rule lives on the Rules page),
+    // the key our systems hold locked until the pool closes, the fill clock,
+    // the field, the refund. Numbers come from the shared constants via the
+    // caller. Proposal until ratified.
+    aboutPoints: (minSeats: number, fillHours: number): readonly string[] => [
+      'The player ranked first takes the whole prize pool. A tie for first splits it equally.',
+      'Your battles are encrypted on your device; the key stays locked in our systems until the pool closes. Only their hash goes on-chain at entry.',
+      `Entries stay open for up to ${fillHours} hours. The pool runs the moment all 64 seats fill, or at the deadline with at least ${minSeats} seated.`,
+      `Fewer than ${minSeats} seated at the deadline: every entry is refunded in full.`,
+    ],
     entryLabel: 'Entry',
     resultsLink: 'Results',
     ageTerritoryNote: '18+ only · not available in some territories',
@@ -401,7 +429,11 @@ export const COPY = {
     // already ratified elsewhere in this file.
     heroTitle: 'Make your Blott',
     tryDials: 'Try the dials',
-    demoHint: 'Drag a dial — the other four give way. Nothing to sign, nothing to pay: this one is just to feel it.',
+    // PHASE-N-REVIEW (founder 2026-09-16, CHANGE-2026-09-16_ui-uplift.md §A11):
+    // the practice machine now carries the padlocks the run has; one
+    // sentence says what they do. Proposal until ratified.
+    demoHint:
+      'Drag a dial — the other four give way. Press a padlock to hold a stat where it is. Nothing to sign, nothing to pay: this one is just to feel it.',
     // PHASE-N-REVIEW (2026-09-09): the marquee line on the landing machine.
     demoStatus: 'Practice machine',
     openPoolTitle: 'Open now',
@@ -521,8 +553,15 @@ export const COPY = {
     // deliberately gives no reason (PID §8: the refusal is generic), so
     // neither does this; what it must not do is call a refusal a network
     // fault and offer a retry that can only fail again.
+    // PHASE-N-REVIEW (founder 2026-09-16, CHANGE-2026-09-16_ui-uplift.md §A7):
+    // the same string also answers the ciphertext store's 409 — one seal per
+    // wallet per pool, so a retry after a partial failure is refused before
+    // anything is signed (battle-test/LOG.md, 2026-09-16 00:19). The old
+    // wording sent that player to the Rules page's eligibility list, which
+    // is the wrong explanation. This one is true for both cases and stays
+    // generic (PID §8: the refusal gives no reason). Proposal until ratified.
     entryRefused:
-      "This entry was not accepted. Nothing was signed and nothing was charged. Trying again will not change the answer — the Rules page explains who can enter, and you can ask us about your own entry.",
+      "This entry was not accepted, so nothing was signed and nothing was charged this time. Trying again will not change the answer. If this wallet already made one attempt at this pool, that attempt is the one that stands — the pool page shows whether a seat was taken, and you can ask us about your own entry.",
   },
   battle: {
     screenOf: (k: number) => `Battle ${k} of 7`,
@@ -585,6 +624,11 @@ export const COPY = {
     tilesLabel: 'Your seven Blotts',
     tileLocked: (n: number, stats: string) => `Battle ${n} locked: ${stats}`,
     tileEmpty: (n: number) => `Battle ${n} — not yet made`,
+    // PHASE-N-REVIEW (founder 2026-09-16, CHANGE-2026-09-16_ui-uplift.md §A11):
+    // the seal stage's description for assistive tech — the scene is decorative,
+    // the sentence says what it shows. Proposal until ratified.
+    sealStageAria:
+      'Seven Blotts on a conveyor dropping into a blender; the blender runs once your entry is signed.',
     crescendo: 'All seven made.',
     crescendoLine: 'Your Blotts are in the machine. Seal them to enter the pool.',
     // 2026-09-13: what the seal IS, one line, beside the lock. The share

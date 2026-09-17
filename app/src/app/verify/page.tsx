@@ -12,14 +12,19 @@ export default function VerifyPage() {
   return (
     <>
       <AppHeader />
-      <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 pb-24">
-        <div className="mb-3">
-          <BackLink href="/pools">{COPY.shell.nav.backToPools}</BackLink>
-        </div>
-        <Suspense>
-          <VerifyClient />
-        </Suspense>
-      </main>
+      {/* Founder 2026-09-16: the pink field, as on every informational page. */}
+      <div className="flex-1 bg-brand-pink">
+        <main id="main" className="mx-auto w-full max-w-3xl px-4 pt-6 pb-24">
+          <div className="mb-3">
+            <BackLink href="/pools" tone="berry">
+              {COPY.shell.nav.backToPools}
+            </BackLink>
+          </div>
+          <Suspense>
+            <VerifyClient />
+          </Suspense>
+        </main>
+      </div>
       <SiteFooter />
       <TabBar />
     </>

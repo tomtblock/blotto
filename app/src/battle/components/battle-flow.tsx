@@ -55,10 +55,24 @@ const TICK_MS = 100;
 const LOCK_BEAT_MS = 1000;
 /** Set the first time this wallet seals — flips the share line to "seven". */
 
+/** What the page needs to drive the seal from outside (the seal stage). */
+export interface ReviewSealApi {
+  /** Step two of the two-step seal: confirm — seal and submit. */
+  confirm: () => void;
+}
+
 export interface BattleFlowProps {
   /** Pool address — keys the lock-in stills in IndexedDB. */
   poolAddress: string;
   onConfirm: (battles: readonly Allocation[], timingsMs: readonly number[]) => void;
+  /**
+   * Founder 2026-09-16 (CHANGE-2026-09-16_ui-uplift.md §A8): when the page
+   * hosts the seal stage, it renders the seal controls on the blender's base
+   * itself and needs the confirm. Called with the api when the seven are
+   * made, with null when the review ends. With it set, this component
+   * draws no seal buttons and no playground — the stage is the scene.
+   */
+  onReviewApi?: (api: ReviewSealApi | null) => void;
   /**
    * Fired when the player BEGINS the run — from here until the seal, seven
    * allocations exist only in this component's state and unmounting it
@@ -68,7 +82,7 @@ export interface BattleFlowProps {
   onRunStarted?: () => void;
 }
 
-export function BattleFlow({ poolAddress, onConfirm, onRunStarted }: BattleFlowProps) {
+export function BattleFlow({ poolAddress, onConfirm, onRunStarted, onReviewApi }: BattleFlowProps) {
   const router = useRouter();
   const [state, dispatch] = useReducer(reduce, undefined, () => initialState());
   const confirmed = useRef(false);
@@ -86,6 +100,14 @@ export function BattleFlow({ poolAddress, onConfirm, onRunStarted }: BattleFlowP
   const reduced = usePrefersReducedMotion();
 
   const battle = state.phase === 'battle' ? state : null;
+  const inReview = state.phase === 'review';
+  // The seal stage's handle on step two (founder 2026-09-16). Registered
+  // when the seven are made, withdrawn when the review ends or this unmounts.
+  useEffect(() => {
+    if (!inReview || !onReviewApi) return;
+    onReviewApi({ confirm: () => dispatch({ type: 'confirm' }) });
+    return () => onReviewApi(null);
+  }, [inReview, onReviewApi]);
   const allocation: Allocation = battle ? battle.alloc : EVEN_SPLIT;
   const { display, velocity } = useBlotSprings(allocation, reduced);
   const [dragStat, setDragStat] = useState<number | null>(null);
@@ -406,8 +428,12 @@ export function BattleFlow({ poolAddress, onConfirm, onRunStarted }: BattleFlowP
         {/* Founder 2026-09-09: once the seven are made they get to play —
             the rendered Blotts running, bouncing and napping under the
             rack. Seeded by each battle's first stat so no two runs match;
-            reads the allocation for nothing else. */}
-        <Playground count={BATTLES} seeds={review.battles.map((b) => b[0])} size={64} />
+            reads the allocation for nothing else. Founder 2026-09-16: when
+            the page hosts the seal stage, the stage is the scene and the
+            playground stands down. */}
+        {!onReviewApi && (
+          <Playground count={BATTLES} seeds={review.battles.map((b) => b[0])} size={64} />
+        )}
         {/* 2026-09-13: the share that stood here is gone, deliberately. It
             offered a picture of the seven Blotts before anything was sealed —
             and a Blott's silhouette is its allocation (components/blott/warp.ts),
@@ -421,7 +447,10 @@ export function BattleFlow({ poolAddress, onConfirm, onRunStarted }: BattleFlowP
             <p className="text-[13px] leading-5 text-ink-muted">{COPY.battle.sealAfter}</p>
           </div>
         </Card>
-        {sealArmed ? (
+        {/* With a seal stage on the page the two-step seal — and its §8.6
+            lines — render on the blender's base (play-client.tsx); the order
+            and the wording are the same, only the surface moves. */}
+        {onReviewApi ? null : sealArmed ? (
           <div className="flex flex-col gap-3">
             {/* PID §8.6 — above the confirm, always. Do not move it below. */}
             <p className="text-[15px] font-semibold leading-6 text-ink">{COPY.pool.decisionsFinal}</p>

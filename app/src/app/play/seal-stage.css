@@ -1,0 +1,132 @@
+/*
+ * The seal stage (founder 2026-09-16, CHANGE-2026-09-16_ui-uplift.md §A8).
+ * Full-bleed, 16:9, contained — the box has the clip's exact aspect, so a
+ * point on the scene (the blender's button) is a fixed fraction of the box
+ * and the seal controls can sit on it. Tokens only.
+ */
+.seal-stage {
+  --stage-w: min(100vw, calc(78vh * 16 / 9));
+  position: relative;
+  width: 100vw;
+  margin-inline: calc(50% - 50vw);
+  background: var(--color-brand-pink);
+}
+.seal-stage-box {
+  position: relative;
+  width: var(--stage-w);
+  aspect-ratio: 16 / 9;
+  margin-inline: auto;
+  overflow: hidden;
+  background: var(--color-brand-pink);
+}
+.seal-stage-clip {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.seal-stage-clip.is-run {
+  animation: seal-fade-in 300ms var(--ease-glide) both;
+}
+@keyframes seal-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+/* A stopped belt: the failure and the settle both hold the picture. */
+.seal-stage[data-belt='stopped'] .seal-stage-clip {
+  filter: saturate(0.85);
+}
+/* Lid down: a soft plum vignette closes over the top of the jar. */
+.seal-stage[data-lid='down'] .seal-stage-box::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(60% 45% at 63% 42%, rgba(42, 16, 48, 0) 55%, rgba(42, 16, 48, 0.22) 100%);
+}
+/* The controls: on the blender base on a wide screen, below the scene on a phone. */
+.seal-stage-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 16px 16px 20px;
+}
+@media (min-width: 768px) {
+  .seal-stage-controls {
+    position: absolute;
+    left: calc(50% + (0.627 - 0.5) * var(--stage-w));
+    /* The key's centre sits on the painted button (84 % down the scene). */
+    top: calc(0.84 * var(--stage-w) * 9 / 16 + 32px);
+    width: min(460px, calc(0.34 * var(--stage-w)));
+    transform: translate(-50%, -100%);
+    padding: 0;
+    align-items: center;
+  }
+}
+/* §8.6 above the key, on the base: a translucent plum pill so it reads on the scene. */
+.seal-stage-line {
+  border-radius: 999px;
+  padding: 8px 14px;
+  background: rgba(94, 27, 64, 0.84);
+  color: var(--color-ink);
+  text-align: center;
+}
+/* The key invites while the seal is still the player's to press (D3: action
+ * pink; a slow glow, well under three flashes a second). */
+.seal-stage[data-pulse='1'] .seal-stage-key {
+  animation: seal-key-pulse 1.2s ease-in-out infinite;
+}
+@keyframes seal-key-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 4px 0 var(--color-brand-deep),
+      0 10px 20px rgba(42, 16, 48, 0.28),
+      0 0 0 0 rgba(255, 122, 200, 0);
+  }
+  50% {
+    box-shadow:
+      0 4px 0 var(--color-brand-deep),
+      0 10px 20px rgba(42, 16, 48, 0.28),
+      0 0 28px 6px rgba(255, 122, 200, 0.55);
+  }
+}
+/* The founder's red, if D3 is flipped: the key wears the loss red only by
+ * explicit exception (SEAL_KEY_TONE in battle-flow.tsx). */
+.seal-stage[data-tone='red'] .seal-stage-key {
+  background: var(--color-price-down);
+  color: var(--color-ink);
+}
+.seal-stage-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 16px 0;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-brand-berry);
+}
+.seal-stage-status-ring {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 2px solid var(--color-brand-berry);
+  border-top-color: transparent;
+  animation: rotate-once 1s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .seal-stage-clip.is-run,
+  .seal-stage[data-pulse='1'] .seal-stage-key,
+  .seal-stage-status-ring {
+    animation: none;
+  }
+}

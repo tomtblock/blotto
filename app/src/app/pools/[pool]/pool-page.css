@@ -1,0 +1,51 @@
+/*
+ * The pool page's conveyor rails (founder 2026-09-16, §A6; round two the
+ * same evening: the field is pink, the rails sit flush against the viewport
+ * edges and the column between them is wider). Tokens only. Below lg the
+ * rails do not exist and a single strip carries the scene.
+ */
+.pool-rail {
+  display: none;
+}
+.pool-strip {
+  position: relative;
+  height: 150px;
+  margin: 0 -16px 18px;
+  overflow: hidden;
+  mask-image: linear-gradient(90deg, transparent 0, black 12%, black 88%, transparent 100%);
+}
+.pool-strip-clip {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+@media (min-width: 1024px) {
+  .pool-rail {
+    display: block;
+    position: sticky;
+    top: 56px;
+    align-self: flex-start;
+    flex: 0 0 clamp(200px, 23vw, 440px);
+    height: calc(100vh - 56px);
+    overflow: hidden;
+    mask-image: linear-gradient(180deg, transparent 0, black 10%, black 90%, transparent 100%);
+  }
+  .pool-rail-clip {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  /* The inner edge fades into the field so the belts read as running INTO the page. */
+  .pool-rail-fade {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  .pool-rail-left .pool-rail-fade {
+    background: linear-gradient(90deg, transparent 55%, var(--color-brand-pink) 100%);
+  }
+  .pool-rail-right .pool-rail-fade {
+    background: linear-gradient(270deg, transparent 55%, var(--color-brand-pink) 100%);
+  }
+}

@@ -28,6 +28,24 @@ import { Stat } from '@/components/ui/stat';
 import { ProgressRing } from '@/components/ui/progress-ring';
 import { Countdown } from '@/components/ui/countdown';
 import { poolStateLabel } from '@/components/pools/pool-state-label';
+import { MarqueeHeading } from '@/components/ui/marquee-heading';
+import { NeonSection } from '@/components/ui/neon-section';
+import { AmbientClip } from '@/components/ui/ambient-clip';
+import './pool-page.css';
+
+/*
+ * Founder 2026-09-16 (CHANGE-2026-09-16_ui-uplift.md §A6, then §C the same
+ * evening): the page a player decides on wears the pink field, and on a wide
+ * screen two conveyor rails run down the viewport's edges into the centre
+ * where the Enter control is — ONE portrait loop, the right rail its mirror,
+ * so the page ships one clip. Below lg a single strip carries the same scene
+ * above the card. Every number stays on plum; the prize amount stays the
+ * only yellow inside a card.
+ */
+const RAIL = [{ mp4: '/motion/pool/rail.mp4', webm: '/motion/pool/rail.webm' }];
+const RAIL_POSTER = '/motion/pool/rail.jpg';
+const STRIP = [{ mp4: '/motion/pool/strip.mp4', webm: '/motion/pool/strip.webm' }];
+const STRIP_POSTER = '/motion/pool/strip.jpg';
 
 const MIN_SEATS_N = Number(MIN_SEATS);
 const FILL_HOURS = Number(DEFAULT_FILL_DEADLINE_SECS / 3600n);
@@ -61,96 +79,110 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
   return (
     <>
       <AppHeader />
-      <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 pb-24">
-        <div className="mb-2">
-          <BackLink href="/pools">{COPY.shell.nav.backToPools}</BackLink>
+      <div className="flex-1 bg-brand-pink">
+      <div className="pool-field flex w-full">
+        <aside className="pool-rail pool-rail-left" aria-hidden="true">
+          <AmbientClip tiers={RAIL} poster={RAIL_POSTER} className="pool-rail-clip" />
+          <div className="pool-rail-fade" />
+        </aside>
+      <main id="main" className="mx-auto w-full max-w-3xl px-4 pt-6 pb-24 sm:px-6">
+        <div className="pool-strip lg:hidden" aria-hidden="true">
+          <AmbientClip tiers={STRIP} poster={STRIP_POSTER} className="pool-strip-clip" playWhenVisible={0.5} />
         </div>
-        <header className="mb-5 flex flex-wrap items-baseline gap-3">
-          <h1 className="font-display text-[34px] leading-[38px] font-extrabold text-ink">
-            {COPY.reveal.passPool(pool.id)}
-          </h1>
-          <Pill tone={pool.resolving ? 'resolving' : open ? 'open' : 'muted'}>{poolStateLabel(pool)}</Pill>
-          <Link
-            href={`/verify?pool=${pool.pool}`}
-            className="ml-auto rounded-full text-[13px] text-ink-muted underline underline-offset-2 hover:text-ink"
-          >
-            {COPY.pool.verifyThisPool}
-          </Link>
+        <div className="mb-2">
+          <BackLink href="/pools" tone="berry">
+            {COPY.shell.nav.backToPools}
+          </BackLink>
+        </div>
+        <header className="mb-6 flex flex-wrap items-center gap-3">
+          <MarqueeHeading as="h1">{COPY.reveal.passPool(pool.id)}</MarqueeHeading>
+          <Pill tone="field">{poolStateLabel(pool)}</Pill>
+          {/* Founder 2026-09-16 (D5): the Verify page recomputes a RESULT from
+              the published bundle and the on-chain record, and an open pool
+              has neither yet — the link led to "nothing to check". It appears
+              once the pool has sealed; until then the page's own copy says
+              what becomes verifiable and when. */}
+          {!open && (
+            <Link
+              href={`/verify?pool=${pool.pool}`}
+              className="ml-auto rounded-full text-[14px] text-brand-berry underline underline-offset-2 hover:text-brand-deep-magenta"
+            >
+              {COPY.pool.verifyThisPool}
+            </Link>
+          )}
         </header>
 
         {pool.resolving && pool.resolving_until !== null && (
-          <Card className="mb-5 flex flex-col gap-2 p-5">
+          <Card className="mb-6 flex flex-col gap-3 p-6 sm:p-8">
             {/* Stage C: the published resolving window, counted down from the
                 server's clock like every other timer, with the rule beside it.
                 The window's start is the indexer's sight of PrizesPaid; the
                 daemon acts on the on-chain escrow timestamp (Stage D). */}
             <Countdown
+              size="lg"
               deadlineUnix={pool.resolving_until}
               serverTimeUnix={pool.server_time}
               label={COPY.pool.resolvingEndsIn}
             />
-            <p className="max-w-prose text-[13px] leading-5 text-ink-muted">
+            <p className="max-w-prose text-[15px] leading-6 text-ink-muted">
               {COPY.pool.resolvingNote(REVIEW_HOURS)}
             </p>
           </Card>
         )}
 
-        <Card live={open} className="mb-5 p-5">
+        <Card live={open} className="mb-6 p-6 sm:p-8">
           {potDiffers && (
-            <p className="mb-3 text-[13px] leading-5 text-ink-muted">
+            <p className="mb-4 text-[15px] leading-6 text-ink-muted">
               {COPY.pool.potFixedAtOpen}
             </p>
           )}
-          <div className="flex flex-wrap items-center gap-5">
+          {/* Founder 2026-09-16 (round two): the card carries the fixture's
+              numbers, larger, and nothing else. The R7-b line saying what the
+              deadline would do right now (founder instruction 2026-09-12
+              §4.4) came off at the founder's request; the rule it restated is
+              the last two points in the box below. PHASE-N-REVIEW. */}
+          <div className="flex flex-wrap items-center gap-6 sm:gap-8">
             <ProgressRing
               value={pool.entrants}
               total={64}
-              size={104}
+              size={140}
               label={`${pool.entrants} of 64 seats filled`}
-            />
-            <div className="flex min-w-0 flex-1 flex-col gap-3">
+            >
+              <span className="tnum font-display text-[28px] font-bold leading-none text-ink">
+                {pool.entrants}
+                <span className="text-[18px] text-ink-muted">/64</span>
+              </span>
+            </ProgressRing>
+            <div className="flex min-w-0 flex-1 flex-col gap-5">
               <Stat
+                size="lg"
                 label={COPY.pool.prizeLabel}
                 value={lamportsToSol(pool.pot_lamports)}
                 unit="SOL"
                 tone="prize"
               />
-              <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
-                <Stat label={COPY.pool.entryLabel} value={lamportsToSol(pool.entry_lamports)} unit="SOL" />
+              <div className="flex flex-wrap items-end gap-x-10 gap-y-4">
+                <Stat size="lg" label={COPY.pool.entryLabel} value={lamportsToSol(pool.entry_lamports)} unit="SOL" />
                 {open && (
                   <Countdown
+                    size="lg"
                     deadlineUnix={pool.fill_deadline}
                     serverTimeUnix={pool.server_time}
                     label={COPY.pool.fillDeadline}
                   />
                 )}
               </div>
-              {/* R7-b §4.4: the countdown and the seat count are both above;
-                  this says what they MEAN together, so a player deciding
-                  whether to enter does not have to know the rule and do the
-                  comparison. Only while entries are open — once a pool has
-                  sealed or refunded the question is settled. */}
-              {open && (
-                <p
-                  className={`text-[13px] leading-5 ${
-                    pool.outcome_if_deadline_now === 'seal' ? 'text-ink-muted' : 'text-brand'
-                  }`}
-                >
-                  {COPY.pool.outcomeIfDeadlineNow(
-                    pool.outcome_if_deadline_now,
-                    pool.min_seats
-                  )}
-                </p>
-              )}
             </div>
           </div>
         </Card>
 
-        <section className="mb-6 flex flex-col gap-2 text-[13px] leading-5 text-ink-muted">
-          <p>{COPY.pool.prizeRule}</p>
-          <p>{COPY.pool.sealed}</p>
-          <p>{COPY.pool.refundRule(MIN_SEATS_N, FILL_HOURS)}</p>
-          <p className="flex gap-4">
+        <NeonSection heading={COPY.pool.aboutHeading} className="mb-8">
+          <ul className="flex list-disc flex-col gap-3 pl-5 text-[17px] leading-[26px] text-ink marker:text-brand">
+            {COPY.pool.aboutPoints(MIN_SEATS_N, FILL_HOURS).map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+          <p className="mt-5 flex gap-5 text-[15px] text-ink-muted">
             <Link href="/rules" className="underline underline-offset-2 hover:text-ink">
               {COPY.rules.title}
             </Link>
@@ -158,17 +190,19 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
               {COPY.fairPlay.title}
             </Link>
           </p>
-        </section>
+        </NeonSection>
 
         {open ? (
-          <section className="flex flex-col gap-3">
+          <section className="flex flex-col gap-4">
             {/* PID §8.6: above the Enter control. Do not move it below. */}
-            <p className="text-[14px] font-medium leading-5 text-ink">
+            <p className="text-[16px] font-semibold leading-6 text-brand-berry">
               {COPY.pool.decisionsFinal}
             </p>
+            {/* On the pink field the commit colour needs the cream ring the
+                welcome curtain's Enter wears, or pink sits on pink. */}
             <Link
               href={`/play?pool=${pool.pool}`}
-              className="key-action flex h-14 items-center justify-center rounded-full bg-brand font-display text-[18px] font-bold uppercase tracking-wide text-(--color-base) transition-colors hover:bg-brand-hot"
+              className="key-action flex h-16 items-center justify-center rounded-full border-[3px] border-brand-cream bg-brand font-display text-[20px] font-bold uppercase tracking-wide text-(--color-base) transition-colors hover:bg-brand-hot"
             >
               {COPY.pool.enter}
             </Link>
@@ -176,12 +210,18 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
         ) : (
           <Link
             href={`/pools/${pool.pool}/results`}
-            className="flex h-12 items-center justify-center rounded-full border border-white/20 text-[15px] font-medium text-ink transition-colors hover:border-brand hover:text-brand"
+            className="flex h-14 items-center justify-center rounded-full border-2 border-brand-berry/40 text-[16px] font-semibold text-brand-berry transition-colors hover:border-brand-berry hover:bg-brand-berry/10"
           >
             {COPY.pool.resultsLink}
           </Link>
         )}
       </main>
+        <aside className="pool-rail pool-rail-right" aria-hidden="true">
+          <AmbientClip tiers={RAIL} poster={RAIL_POSTER} className="pool-rail-clip" mirror />
+          <div className="pool-rail-fade" />
+        </aside>
+      </div>
+      </div>
       <SiteFooter />
       <TabBar />
     </>
