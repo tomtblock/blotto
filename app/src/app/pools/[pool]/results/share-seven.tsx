@@ -23,7 +23,7 @@ import { sweepStills } from '@/battle/stills-sweep';
 import { composeMontage } from '@/battle/montage';
 import { indexerApi } from '@/data/api';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { NeonSection } from '@/components/ui/neon-section';
 import { XMark } from '@/wallet/wallet-icons';
 
 const BATTLES = 7;
@@ -106,20 +106,21 @@ export function ShareSeven({ poolAddress, state }: { poolAddress: string; state:
   if (!png) return null;
 
   return (
-    <Card className="mb-6 flex flex-col items-center gap-3 p-5" data-testid="share-seven">
-      <h2 className="font-display text-[22px] leading-7 font-bold text-ink">{r.shareSevenTitle}</h2>
+    <NeonSection heading={r.shareSevenTitle} data-testid="share-seven">
+      <div className="flex flex-col items-center gap-3">
       {/* eslint-disable-next-line @next/next/no-img-element -- object-URL preview of a canvas composition */}
       <img src={png.url} alt={r.sevenAlt} className="w-full max-w-sm rounded-2xl" />
       <div className="flex flex-wrap justify-center gap-2">
         <Button intent="prize" onClick={share}>
           {COPY.battle.share}
         </Button>
-        <Button intent="quiet" onClick={postOnX}>
+        <Button intent="cream" onClick={postOnX}>
           <XMark size={16} />
           <span className="ml-2">{COPY.battle.shareX}</span>
         </Button>
       </div>
-      <p className="max-w-prose text-center text-[12px] leading-5 text-ink-muted">{note ?? r.shareSevenLine}</p>
-    </Card>
+      <p className="max-w-prose text-center text-[13px] leading-5 text-ink-muted">{note ?? r.shareSevenLine}</p>
+      </div>
+    </NeonSection>
   );
 }

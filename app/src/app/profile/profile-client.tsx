@@ -22,7 +22,7 @@ import { useAuth } from '@/wallet/auth-context';
 import { indexerApi, live, type Live } from '@/data/api';
 import { lamportsToSol } from '@/data/format';
 import type { CareerRow, ProfileRow } from '@/data/types';
-import { Card } from '@/components/ui/card';
+import { NeonSection } from '@/components/ui/neon-section';
 import { LiveDataUnavailable } from '@/components/shell/live-unavailable';
 import { Stat } from '@/components/ui/stat';
 import { MyBlots } from './my-blots';
@@ -34,11 +34,8 @@ function PrizeRecordChart({ career }: { career: CareerRow[] }) {
     return v > m ? v : m;
   }, 0n);
   return (
-    <Card className="p-5">
-      <h2 className="mb-1 text-[12px] uppercase tracking-[0.14em] text-ink-muted">
-        {COPY.career.chartTitle}
-      </h2>
-      <p className="mb-4 text-[12px] leading-4 text-ink-muted">{COPY.career.chartNote}</p>
+    <NeonSection heading={COPY.career.chartTitle}>
+      <p className="mb-4 text-[13px] leading-5 text-ink-muted">{COPY.career.chartNote}</p>
       <div className="flex h-28 items-end gap-1.5" role="img" aria-label={COPY.career.chartTitle}>
         {career.map((r) => {
           const v = BigInt(r.amount_lamports);
@@ -60,7 +57,7 @@ function PrizeRecordChart({ career }: { career: CareerRow[] }) {
           );
         })}
       </div>
-    </Card>
+    </NeonSection>
   );
 }
 
@@ -125,13 +122,13 @@ export function ProfileClient() {
 
   if (!wallet) {
     return (
-      <Card className="flex flex-col gap-2 p-6">
+      <NeonSection heading={COPY.profile.lifetime}>
         <p className="text-[17px] font-medium text-ink">Sign in to see your record.</p>
-        <p className="max-w-prose text-[13px] leading-5 text-ink-muted">
+        <p className="mt-2 max-w-prose text-[14px] leading-5 text-ink-muted">
           Your career — every tournament entered, every paid finish, every character pass —
           is built from on-chain data for the wallet you sign in with.
         </p>
-      </Card>
+      </NeonSection>
     );
   }
   if (view === 'loading') {
@@ -151,22 +148,19 @@ export function ProfileClient() {
   }
   if (view === 'empty') {
     return (
-      <Card className="flex flex-col gap-2 p-6">
+      <NeonSection heading={COPY.profile.lifetime}>
         <p className="text-[17px] font-medium text-ink">No entries yet.</p>
-        <p className="max-w-prose text-[13px] leading-5 text-ink-muted">
+        <p className="mt-2 max-w-prose text-[14px] leading-5 text-ink-muted">
           Your first tournament starts your record — the Play tab has the open pool.
         </p>
-      </Card>
+      </NeonSection>
     );
   }
 
   const profile = view.row;
   return (
-    <div className="animate-rise flex flex-col gap-4">
-      <Card className="p-5">
-        <h2 className="mb-4 text-[12px] uppercase tracking-[0.14em] text-ink-muted">
-          {COPY.profile.lifetime}
-        </h2>
+    <div className="animate-rise flex flex-col gap-10">
+      <NeonSection heading={COPY.profile.lifetime}>
         <div className="flex flex-wrap items-end gap-x-10 gap-y-4">
           <Stat label={COPY.profile.poolsEntered} value={profile.pools_entered} />
           <Stat label={COPY.profile.prizeFinishes} value={profile.seats_paid} tone="brand" />
@@ -177,13 +171,10 @@ export function ProfileClient() {
             tone="prize"
           />
         </div>
-      </Card>
+      </NeonSection>
       <MyBlots />
       <PrizeRecordChart career={result?.career ?? []} />
-      <Card className="p-5">
-        <h2 className="mb-4 text-[12px] uppercase tracking-[0.14em] text-ink-muted">
-          Character collection
-        </h2>
+      <NeonSection heading={COPY.profile.collection}>
         {/* The ONE player-facing surface that names the drawn rarity
             (founder 2026-09-15: profile only, tier names only, with the
             caveat beneath). The per-tier hue is art and stays. */}
@@ -202,8 +193,8 @@ export function ProfileClient() {
             </div>
           ))}
         </dl>
-        <p className="mt-4 text-[12px] leading-4 text-ink-muted">{COPY.profile.rarityCaveat}</p>
-      </Card>
+        <p className="mt-4 text-[13px] leading-5 text-ink-muted">{COPY.profile.rarityCaveat}</p>
+      </NeonSection>
     </div>
   );
 }

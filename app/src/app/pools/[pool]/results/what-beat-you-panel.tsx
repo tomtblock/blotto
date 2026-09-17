@@ -34,7 +34,7 @@ import { lamportsToSol } from '@/data/format';
 import type { PoolLeaderboard } from '@/data/types';
 import type { PublishedBundle } from '@/verify/logic';
 import { useAuth } from '@/wallet/auth-context';
-import { Card } from '@/components/ui/card';
+import { NeonSection } from '@/components/ui/neon-section';
 import {
   battlesFromBundle,
   whatFinishedAbove,
@@ -104,9 +104,8 @@ export function WhatBeatYouPanel({ pool, secretHex, archive, seatByPlayer }: Wha
   if (rows.length === 0) return null;
 
   return (
-    <Card className="mb-5 p-5">
-      <h2 className="mb-1 font-display text-[18px] font-bold text-ink">{COPY.beatYou.title}</h2>
-      <p className="mb-4 max-w-prose text-[12px] leading-4 text-ink-muted">{COPY.beatYou.note}</p>
+    <NeonSection heading={COPY.beatYou.title}>
+      <p className="mb-4 max-w-prose text-[13px] leading-5 text-ink-muted">{COPY.beatYou.note}</p>
       <ol className="flex flex-col gap-3">
         {rows.slice(0, SHOWN).map((r) => (
           <li key={r.seat} className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -137,6 +136,6 @@ export function WhatBeatYouPanel({ pool, secretHex, archive, seatByPlayer }: Wha
           and {rows.length - SHOWN} more — the Verify page recomputes the full field.
         </p>
       )}
-    </Card>
+    </NeonSection>
   );
 }

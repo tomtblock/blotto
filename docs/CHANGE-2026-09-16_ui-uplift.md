@@ -873,6 +873,7 @@ stand-in: numbers for tiles, a placeholder asset).
 Branch `step/seal-columns-2026-09-17`, one commit. Pool 17 was open with no entrant at the merge;
 the 62 headless seats never touch the frontend, and the founder was reviewing, not entering.
 
+<<<<<<< HEAD
 ---
 
 # §F — Round four B: the one-message dispatcher (2026-09-17)
@@ -958,3 +959,86 @@ store and the state reader in the `postgres` job of `ci-fast` (typecheck clean l
   same database (`PgPoolIdResolver`), so the reader is a query.
 - Putting the dispatcher in the settlement daemon (`backend/reveal`): the opt-ins live in the
   packet service's store, and the daemon has no reason to learn addresses.
+=======
+# §G. Round four A2 — one field for the whole site (2026-09-17)
+
+The founder, after #140 went live: *"Make the notifications button in the same style as the other
+text boxes. If a wallet has won a prize, there should be a celebration moment when they open the
+notification that says 'CONGRATULATIONS, YOU WON X SOL'. Go through the site and make sure all pages
+are in the bright pink background as default and the tables/leaderboard/info are all boxed and
+titled in the same style throughout (gradient box, 3D buttons, glowing headline). Check the
+leaderboard as some of the battles won are given as a percentage."*
+
+## G1. What changed
+
+- **Every player-facing page is on the pink field** now, not only the informational ones §A3
+  converted: `/pools`, `/pools/[pool]/results`, `/profile`, `/signin`, `/wallet`, and the
+  pre-launch door `/gate`. The two "data unavailable" branches (the pool page's and the results
+  page's) are on it too, so an indexer outage never shows a plum page. The admin pages
+  (`/admin/*`) are operator tools and stay as they are — they are not the product.
+- **Every block is a titled neon box** — `NeonSection` (§A3's marquee heading on the plum,
+  neon-ringed panel), which gained `headingAs` so the box's sign can be the page's h1 where the
+  box IS the page (the wallet, the sign-in, the gate). Converted: the pools tiers (entry price on
+  the marquee, prize pool as the first line, plain rows inside) and the archive; on the results
+  page the payout list, "What finished above you", the appeal, "Share your seven", "Full
+  standings" and "Every battle"; on the profile the wallet, "Lifetime record", "My Blotts",
+  "Prize record" and "Character collection"; the sign-in; the gate; and the honest degraded
+  state (`LiveDataUnavailable`). The `Sheet` — every dialog, the notifications included — is the
+  same box with the same sign.
+- **Keys.** A cream key (`.key-cream`, tokens.css; `Button intent="cream"`) joins the action and
+  prize keys: a key's thickness without the commit colour, for the actions that move no money —
+  Verify a pool, the results link on a closed pool, the standings toggle, the appeal's two
+  buttons, the wallet's send/export/link, Post on X, the sign-in's three social buttons. The
+  share-card link is the prize key; the gate's Continue is the action key with the cream ring the
+  pool page's Enter wears. Money-moving controls are unchanged: pink, and only pink.
+- **The bell is a chip** like the balance and the address beside it (a bordered pill with the
+  icon and the unseen count inside), and **the sheet leads with the win**: a Paid pool that paid
+  THIS wallet (`CareerRow.paid` and a positive `amount_lamports` — the indexer's own record,
+  which a forfeited share resets) renders, at the top of the sheet, the trophy Blott,
+  CONGRATULATIONS in prize yellow, "You won X SOL", the pool, and a "See the results" prize key,
+  with a confetti burst each time the sheet opens on it. The list line and the toast for that
+  pool read "Pool #N: you won X SOL". **The headline waits for the pool to resolve**: on open the
+  bell reads the pool once and celebrates only when it is not `resolving` (Stage C, a share
+  under review) — the committed payout is the chain's fact and the list says it, but the
+  celebration is for a prize the player keeps. The amount is the career row's string; nothing
+  here computes one. `NotificationsPanel` is pure over its props, so the dev gallery shows it
+  over the fixture career and the test renders it.
+- **Half-battles are written `.5`**, not `½` — the glyph read as a percentage in the standings.
+  `battleScoreLabel` builds "6.5" from the integer halves, never from a division; a line under
+  the table says what a half is ("A drawn battle counts as half a battle won."); the test pins
+  "6.5" and the absence of the glyph.
+
+## G2. Copy (PHASE-N-REVIEW, all proposals)
+
+`notify.won(id, sol)` "Pool #N: you won X SOL" · `notify.wonHeadline` "Congratulations" ·
+`notify.wonLine(sol)` "You won X SOL" · `notify.wonSeeResults` "See the results" ·
+`results.title` "Results" (the chip beside "Pool #N" and the payout box's sign) ·
+`results.archive.battleScoreNote` · `profile.collection` (moved from code, same words).
+
+## G3. Not changed
+
+The play route and its flows (`app/src/entry/**`, the dial logic, the seal stage), the landing,
+the rules/fair-play/verify/custody pages (already on the field), the `quiet` button intent (the
+run's Go back keeps its shape), the pool page's card and rails, the admin pages.
+
+## G4. Verification and captures
+
+On the branch head, from `app/`: `npm run typecheck` — clean; `npm run lint` — clean; `npm test` —
+64 files, 501 tests passed (six new: the win derivation and the panel); `NEXT_PUBLIC_FIXTURE_DATA=1
+npm run build` — compiled; `npm run journey` — 16 of 16. From the root, `./scripts/check-language.sh`
+and `./scripts/check-standing-rules.sh` — clean. No horizontal overflow on any converted page at
+1440 or 390 (measured in the capture run).
+
+Two console lines on the fixture results page predate this change and are the fixture's: a
+duplicate React key (the fixture archive seats one player address many times; the row is keyed by
+player, which one wallet holds once in a real pool) and one 404 for a fixture resource.
+
+Captures (`docs/design/uplift-2026-09-16/`): `pools-1440.jpg`, `pools-390.jpg`, `results-1440.jpg`,
+`results-390.jpg` (the standings with 5.5 / 4.5 …), `profile-1440.jpg`, `signin-1440.jpg`,
+`wallet-1440.jpg`, `gate-1440.jpg`, `notifications-1440.jpg` (the panel over the fixture career,
+from the dev gallery).
+
+## G5. Shipping
+
+Branch `step/one-field-2026-09-17`, one commit. Pool 17 was open with no entrant at the merge.
+>>>>>>> origin/main

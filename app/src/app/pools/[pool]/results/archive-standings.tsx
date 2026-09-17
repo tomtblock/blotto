@@ -21,13 +21,16 @@
 import { COPY } from '@/copy';
 import { lamportsToSol } from '@/data/format';
 import type { PoolLeaderboard } from '@/data/types';
-import { Card } from '@/components/ui/card';
+import { NeonSection } from '@/components/ui/neon-section';
 
 /** Stands in for a number this row does not carry. */
 const ABSENT = '—';
 
 /**
- * 13 → "6½", 14 → "7" — half-points to a battles-won label, no floats.
+ * 13 → "6.5", 14 → "7" — half-points to a battles-won label, no floats: the
+ * string is built from the integer halves, never from a division. (Round
+ * four A2, founder 2026-09-17: the ½ glyph read as a percentage; a decimal
+ * half does not, and the note under the table says what a half is.)
  *
  * PHASE-N-REVIEW (D-E8): the argument is widened and guarded rather than
  * trusted. `recomputed` is required by the type, but the type describes a
@@ -39,7 +42,7 @@ const ABSENT = '—';
 function battleScoreLabel(scoreHalf: number | null | undefined): string {
   if (typeof scoreHalf !== 'number' || !Number.isInteger(scoreHalf)) return ABSENT;
   const whole = Math.floor(scoreHalf / 2);
-  return scoreHalf % 2 === 0 ? String(whole) : `${whole}½`;
+  return scoreHalf % 2 === 0 ? String(whole) : `${whole}.5`;
 }
 
 const shortAddr = (p: string) => `${p.slice(0, 8)}…`;
@@ -47,12 +50,11 @@ const shortAddr = (p: string) => `${p.slice(0, 8)}…`;
 export function ArchiveStandings({ archive }: { archive: PoolLeaderboard }) {
   const winners = archive.rows.filter((r) => r.rank === 1);
   return (
-    <section className="mb-6">
-      <h2 className="mb-2 text-[12px] uppercase tracking-[0.14em] text-ink-muted">
-        {COPY.results.archive.title}
-      </h2>
+    // Round four A2 (founder 2026-09-17): the standings are a titled neon box
+    // like every block on the pink field; the table sits inside it.
+    <NeonSection heading={COPY.results.archive.title} data-testid="archive-standings">
       {winners.length > 0 && (
-        <p className="mb-3 text-[15px] font-semibold text-ink">
+        <p className="mb-3 text-[17px] font-semibold text-prize">
           {winners
             .map((w) =>
               COPY.results.archive.winner(shortAddr(w.player), lamportsToSol(w.amount_lamports))
@@ -60,8 +62,8 @@ export function ArchiveStandings({ archive }: { archive: PoolLeaderboard }) {
             .join(' · ')}
         </p>
       )}
-      <Card className="mb-3 overflow-x-auto p-1">
-        <table className="w-full min-w-[480px] border-collapse text-[13px]">
+      <div className="mb-3 overflow-x-auto rounded-2xl border border-white/10 bg-white/5">
+        <table className="w-full min-w-[480px] border-collapse text-[14px]">
           <caption className="sr-only">{COPY.results.archive.title}</caption>
           <thead>
             <tr className="text-left text-[11px] uppercase tracking-[0.1em] text-ink-muted">
@@ -106,7 +108,10 @@ export function ArchiveStandings({ archive }: { archive: PoolLeaderboard }) {
             ))}
           </tbody>
         </table>
-      </Card>
+      </div>
+      <p className="mb-2 max-w-prose text-[13px] leading-5 text-ink-muted">
+        {COPY.results.archive.battleScoreNote}
+      </p>
       <p className="mb-2 max-w-prose text-[13px] leading-5 text-ink-muted">
         {COPY.results.archive.note}
       </p>
@@ -134,6 +139,6 @@ export function ArchiveStandings({ archive }: { archive: PoolLeaderboard }) {
           {COPY.results.archive.verifyLink}
         </a>
       </p>
-    </section>
+    </NeonSection>
   );
 }

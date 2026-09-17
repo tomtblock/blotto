@@ -713,6 +713,15 @@ export const COPY = {
     sealed: (id: string) => `Pool #${id} sealed — battles are being revealed`,
     scored: (id: string) => `Pool #${id}: results are committed`,
     paid: (id: string) => `Pool #${id}: prizes are paid`,
+    // PHASE-N-REVIEW (founder 2026-09-17, round four A2: "if a wallet has won
+    // a prize, there should be a celebration moment when they open the
+    // notification"). A Paid pool that paid THIS wallet reads as the win it
+    // is — the list line, the toast, and the headline at the top of the
+    // sheet. The amount is the chain's (career row, bigint → string).
+    won: (id: string, sol: string) => `Pool #${id}: you won ${sol} SOL`,
+    wonHeadline: 'Congratulations',
+    wonLine: (sol: string) => `You won ${sol} SOL`,
+    wonSeeResults: 'See the results',
     refunding: (id: string) => `Pool #${id} did not reach its minimum field — refunds are open`,
   },
   career: {
@@ -735,6 +744,10 @@ export const COPY = {
     button: 'Share your result card',
   },
   results: {
+    // PHASE-N-REVIEW (round four A2, 2026-09-17): the results page is titled
+    // like the pool page — "Pool #N" on the marquee, this word on the chip
+    // beside it and on the box the payout list sits in.
+    title: 'Results',
     // Share my seven (2026-09-13): the seven-Blott montage, offered only on
     // a closed pool's results page — see results/share-seven.tsx for why it
     // left the review screen. PHASE-N-REVIEW: drafts; the founder owns the words.
@@ -834,6 +847,10 @@ export const COPY = {
       rank: 'Rank',
       /** Battle score across the seven battles; a drawn battle counts half. */
       battleScore: 'Battles won',
+      // PHASE-N-REVIEW (founder 2026-09-17: "some of the battles won are
+      // given as a percentage" — the ½ glyph read as one). Halves are
+      // written .5 now, and this line under the table says why a half exists.
+      battleScoreNote: 'A drawn battle counts as half a battle won.',
       prize: 'Prize',
     },
     // Founder 2026-09-09: "an environment where everyone can view the
@@ -907,6 +924,8 @@ export const COPY = {
      */
     rarityCaveat:
       "Rarity is decorative. It changes nothing: not your battles, not your score, not your ranking, and no prize. A Mythic's Strength is worth exactly a Common's.",
+    // Moved here from profile-client.tsx on 2026-09-17 (same words).
+    collection: 'Character collection',
     myBlots: 'My Blotts',
     // 2026-09-13: this line said "Shapes, never numbers" — but a Blott's
     // shape IS its numbers (components/blott/warp.ts), which is why the

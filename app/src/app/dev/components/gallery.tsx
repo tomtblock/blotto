@@ -18,6 +18,9 @@ import { RankBadge } from "@/components/ui/rank-badge";
 import { PrizeTable } from "@/components/ui/prize-table";
 import { ToastProvider, useToast } from "@/components/ui/toast";
 import { Sheet } from "@/components/ui/sheet";
+import { NeonSection } from "@/components/ui/neon-section";
+import { NotificationsPanel, itemFor } from "@/components/shell/notifications";
+import { FIXTURE_CAREER } from "@/data/scenarios";
 import { BlotMorph } from "@/components/blot/BlotMorph";
 import { StatDials } from "@/components/blot/StatDials";
 import { Timer } from "@/components/blot/Timer";
@@ -343,6 +346,22 @@ export function Gallery() {
               focus is trapped by the native dialog element.
             </p>
           </Sheet>
+        </Section>
+
+        <Section title="Notifications (round four A2)">
+          {/* The sheet's body over the fixture career, which holds a paid pool:
+              the win headline over the trophy, then the list. */}
+          <div className="max-w-lg">
+            <NeonSection heading="Notifications" data-testid="notifications-demo">
+              <NotificationsPanel
+                items={FIXTURE_CAREER.flatMap((row) => {
+                  const item = itemFor(row);
+                  return item ? [item] : [];
+                })}
+                win={itemFor(FIXTURE_CAREER[0])}
+              />
+            </NeonSection>
+          </div>
         </Section>
 
         <Section title="Elevation">
