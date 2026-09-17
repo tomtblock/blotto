@@ -1,15 +1,31 @@
-# STATE — 2026-09-16 23:27 local (2026-09-17 02:27 UTC) — by Claude Code
+# STATE — 2026-09-17 09:21 local (12:21 UTC) — by Claude Code
 
-Phase:            **T4 PASSED on pool 16. UI-A took the entire 4 SOL pot; UI-B finished 64th.**
-                  Paid 64/64, secret revealed, results root committed. Reconcile 60 MATCH, 0 RANK_DRIFT,
-                  0 PAYOUT_MISMATCH, 4 ABSENT. Freeze OK — merge precedes the first entry by 9h43m.
-Waiting on:       nothing blocking. Two founder decisions open, neither urgent: F-24 (does the
-                  seal-lockout fix ship now or after the week) and F-25 (same, as a product PR).
-                  Vercel ignore-step is approved and ready to apply — ~85% off build minutes.
-After that:       T2 (39 seats, refund) is next in the matrix. T3, T5, T6, T7, T8 follow.
-Live deadlines:   none. Pool 16 is settled and Paid.
+Phase:            **T5 planned and funded — waiting on the freeze merge, then the founder's two entries.**
+                  T4 PASSED on pool 16 (UI-A took the whole 4 SOL pot). T5 inverts it: a HEADLESS
+                  wallet wins and neither founder wallet does.
+Waiting on:       **merge the T5 freeze PR**, then enter as ordinary field seats (see below).
+                  Also open, neither urgent: F-24/F-25 (seal-lockout fix now or after the week) and
+                  the Vercel ignore step, approved and ready to apply (~85% off build minutes).
+After that:       I sweep and re-fund the roster from the 10 SOL, then run 62 headless seats.
+Live deadlines:   none for T5 — the plan deliberately names no pool.
 Blocked:          nothing.
-Results so far:   T1 **PASS** (refund) · **T4 PASS** (scored, paid) · T2, T3, T5–T8 not started
+Results so far:   T1 **PASS** (refund) · T4 **PASS** (scored, paid) · T2, T3, T5–T8 not started
+
+**T5 — what it tests and what the founder sets:**
+  W00 takes the wall and the 4 SOL pot. W01 takes the pole and last place. BOTH founder wallets are
+  ORDINARY FIELD SEATS that do not win — the claim T4 could not make, since there the operator's own
+  account won and nothing ruled out that it was privileged.
+  → UI-A: one drag a battle, a stat to 25, in order Strength, Speed, Heart, Wit, Durability,
+    Strength, Heart. UI-B: the same but Durability, Wit, Heart, Speed, Strength, Wit, Speed.
+    THE ONLY RULE THAT MATTERS: every stat between 1 and 25. Never above 25, never down to 0.
+  → PROVEN over 60 seeds: such a seat loses to a wall 840/840 and beats a pole 840/840, so it lands
+    in ranks 2..63 for ANY allocation in that range — not just the recipe.
+  → The non-zero floor is load-bearing: two or more zeroes can DRAW with a pole, and "cannot come
+    last" stops holding.
+  → Founder ranks are predicted as a RANGE, not a number. T4 showed hand-dialling lands elsewhere
+    (1 of 7 battles matched), so exact positions are computed at reveal. Nominally 62nd and 63rd —
+    near the bottom, because a near-even spread is the weakest shape the game has.
+  → Funder holds 10.049945 SOL. Roster needs sweeping and re-funding before the run.
 
 **T4's result, and what it actually proved (2026-09-17 02:23Z):**
   UI-A net +3.895554578 SOL against +3.895564000 predicted — 9422 lamports apart. Vault 650240

@@ -241,6 +241,61 @@ export function uiPole(): Entrant {
 }
 
 /**
+ * T5's two founder seats: ORDINARY FIELD players, reachable in ONE drag a battle.
+ *
+ * T4 needed the founder to hold a winning shape. T5 needs the opposite — both
+ * founder wallets are ordinary entrants who do NOT win, because the point of
+ * the test is that the winner is not privileged by being the operator's own
+ * account. So the rule they play by is the field's own rule: **every stat
+ * between 1 and 25**.
+ *
+ * That range is what makes the prediction unconditional in both directions.
+ * Nothing at 25 or below can beat a wall holding three stats at 26+, so a
+ * founder seat cannot take rank 1; and five NON-ZERO stats beat a pole's single
+ * spike four stats to one, so it cannot come last either. Ranks 2..63,
+ * whatever the exact numbers — which matters, because T4 showed a human at a
+ * dial under a ninety-second clock lands on different numbers than the plan
+ * (§H10). The zero floor is load-bearing: a seat with two or more zeroes can
+ * DRAW with a pole instead of beating it, and the "cannot come last" half stops
+ * holding.
+ *
+ * Derived from the app's own dial rule, like `uiWall`/`uiPole`: from the even
+ * split every screen opens at, one drag takes a stat to 25 and the other four
+ * absorb it, landing on 19s and an 18. The two wallets rotate through different
+ * stats so their seven-battle sets differ — an identical set shared by two
+ * entrants is `duplicate_sets`, the one allocation signal that hard-blocks.
+ */
+function uiFieldFrom(order: readonly number[], generator: string): Entrant {
+  const battles: Allocation[] = order.map((k) => {
+    // The dial rule's own arithmetic: 100 − 25 = 75 over four stats is 18.75,
+    // which largest-remainder rounds to three 19s and one 18. The 18 lands on
+    // the last stat, or the second-to-last when the last is the one dragged.
+    const a = new Array<number>(STATS).fill(19);
+    a[k === STATS - 1 ? STATS - 2 : STATS - 1] = 18;
+    a[k] = 25;
+    return a;
+  });
+  battles.forEach((b, i) => {
+    assertAllocation(b, `${generator}(${i})`);
+    if (b.some((v) => v < 1 || v > FIELD_CAP)) {
+      throw new Error(`${generator} battle ${i}: a stat is outside 1..${FIELD_CAP}`);
+    }
+  });
+  return { generator, battles, timingsMs: timings(0, generator) };
+}
+
+/** UI-A in T5 — an ordinary field seat. Rotates Strength→Durability. */
+export function uiFieldA(): Entrant {
+  return uiFieldFrom([0, 1, 2, 3, 4, 0, 2], 'uiFieldA');
+}
+
+/** UI-B in T5 — an ordinary field seat, rotating the other way so the two
+ * wallets never share a seven-battle set. */
+export function uiFieldB(): Entrant {
+  return uiFieldFrom([4, 3, 2, 1, 0, 3, 1], 'uiFieldB');
+}
+
+/**
  * How many distinct shapes a set carries, measured EXACTLY as the detection
  * signal measures it: `backend/detection/src/signals.ts` does
  * `e.battles.map((b) => b.join(','))` and counts the distinct strings, so the

@@ -40,7 +40,7 @@ import { potForEntry } from '../../backend/scoring/src/prizes';
 import { leafBytes, merkleRoot } from '../../backend/scoring/src/merkle';
 import type { BattleSet, Allocation as EngineAllocation } from '../../backend/scoring/src/allocation';
 
-import { cappedField, uiWall, uiPole, distinctShapes, roundShare, type Entrant } from '../src/populations';
+import { cappedField, wall, pole, uiWall, uiPole, uiFieldA, uiFieldB, distinctShapes, roundShare, type Entrant } from '../src/populations';
 
 const SCORING = resolve(__dirname, '..', '..', 'backend', 'scoring');
 const REG = resolve(__dirname, '..', 'registry');
@@ -197,6 +197,50 @@ export function t4Field(): PlannedSeat[] {
   // Then 62 headless seats, W00 through W61.
   for (let i = 0; i < 62; i++) {
     const seed = T4_FIELD_SEED_BASE + i;
+    add(`W${String(i).padStart(2, '0')}`, 'direct', 'field', cappedField(seed), { seed });
+  }
+  return seats;
+}
+
+/** T5's seeds, fixed here and never moved once the plan is frozen. */
+const T5_WALL_SEED = 5100;
+const T5_POLE_SEED = 5200;
+const T5_FIELD_SEED_BASE = 5000;
+
+/**
+ * T5's 64 seats — the mirror of T4.
+ *
+ * The winner is a HEADLESS wallet, and both founder wallets are ordinary field
+ * seats that do not win. That is the whole point: T4 proved a scored pool pays
+ * correctly when the operator's own account wins, and could not rule out that
+ * the account was privileged. T5 rules it out.
+ *
+ * Roles: W00 takes the wall and the pot, W01 takes the pole and last place,
+ * W02..W61 and both UI wallets are the capped field.
+ */
+export function t5Field(): PlannedSeat[] {
+  const seats: PlannedSeat[] = [];
+  const add = (
+    wallet: string,
+    route: 'ui' | 'direct',
+    role: PlannedSeat['role'],
+    e: Entrant,
+    extra: { seed?: number; recipe?: string }
+  ) =>
+    seats.push({ wallet, route, role, generator: e.generator, battles: e.battles, timingsMs: e.timingsMs, ...extra });
+
+  // The founder enters first, as in T4 — but as ordinary players this time.
+  add('UI-A', 'ui', 'field', uiFieldA(), {
+    recipe: 'each battle, drag ONE stat to 25 and leave the rest — in order: Strength, Speed, Heart, Wit, Durability, Strength, Heart. Never take a stat above 25 or down to 0.',
+  });
+  add('UI-B', 'ui', 'field', uiFieldB(), {
+    recipe: 'each battle, drag ONE stat to 25 and leave the rest — in order: Durability, Wit, Heart, Speed, Strength, Wit, Speed. Never take a stat above 25 or down to 0.',
+  });
+  // W00 wins. W01 comes last. The rest are the field.
+  add('W00', 'direct', 'wall', wall(T5_WALL_SEED), { seed: T5_WALL_SEED });
+  add('W01', 'direct', 'pole', pole(T5_POLE_SEED), { seed: T5_POLE_SEED });
+  for (let i = 2; i < 62; i++) {
+    const seed = T5_FIELD_SEED_BASE + i;
     add(`W${String(i).padStart(2, '0')}`, 'direct', 'field', cappedField(seed), { seed });
   }
   return seats;
@@ -453,6 +497,180 @@ function t4Plan(p: Prediction): Record<string, unknown> {
   };
 }
 
+/**
+ * `registry/T5.plan.json`. Same two-tier honesty as T4: what follows from the
+ * SHAPES alone is unconditional, what depends on exact numbers is not — and
+ * T4 proved that distinction is load-bearing, because the founder's hand-dialled
+ * allocations matched the plan's exact numbers in one battle of seven and every
+ * unconditional prediction still held (DRIFT.md §H10).
+ *
+ * T5 goes further than T4 in one place and less far in another. Further: the
+ * founder's seats are predicted only to land in ranks 2..63 — their exact
+ * positions among sixty-one other field seats depend on numbers a human at a
+ * dial will not reproduce, so the plan does not pretend to know them. Less far:
+ * there is nothing here that T4 did not already establish about paying a pool.
+ * What is new is WHO wins.
+ */
+function t5Plan(p: Prediction): Record<string, unknown> {
+  const N = 64;
+  const B = 7;
+  const field = N - 2;
+  const winner = p.seats.find((s) => s.role === 'wall')!;
+  const loser = p.seats.find((s) => s.role === 'pole')!;
+
+  return {
+    schema: 'blotto-rehearsal-plan/1',
+    test: 'T5',
+    title: 'Full pool — a HEADLESS wallet wins, and neither founder wallet does',
+    cluster: 'devnet',
+    programId: '5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17',
+    tier: 0,
+    poolId: null,
+    poolPda: null,
+    poolIdNote:
+      'Deliberately unnamed. T4 was frozen against pool 15, lost that pool to the seal-lockout ' +
+      '(DRIFT §H6) and ran unedited on pool 16 — which made the prediction stronger evidence, not ' +
+      'weaker, because it was fixed before the pool existed. T5 is frozen the same way on purpose. ' +
+      'The pool is recorded in T5.freeze.json when the first entry lands.',
+    entryLamports: p.entryLamports,
+    potLamports: p.potLamports,
+    minSeats: 40,
+    fillDeadlineSeconds: 43200,
+    frozenAt: null,
+    gitCommit: null,
+    hypothesis:
+      'The winner of a Blotto Cup pool is decided by the allocations and nothing else. T4 showed a ' +
+      "pool paying the operator's own account the whole pot; it could not show that the account " +
+      'was not privileged, because that account won. T5 inverts it: a headless wallet takes rank 1 ' +
+      'and the entire 4 SOL pot, another headless wallet takes last, and both founder wallets are ' +
+      'ordinary entrants who finish in the middle and are paid nothing.',
+    unconditionalDerivation: {
+      _: 'What follows from the shapes alone — no seed, no exact numbers, no assumption about what the founder dials.',
+      scoringRule:
+        'A stat goes to the larger number. A battle goes to whoever wins at least 3 of 5 stats, ' +
+        'otherwise it is a draw. Score is 2 half-points a win and 1 a draw, across 7 battles ' +
+        'against each of the other 63 entrants.',
+      maxScore: `${(N - 1) * B * 2}`,
+      winnerIsHeadless:
+        `W00 holds three stats at 26 or above in every battle; no field seat exceeds 25 and the ` +
+        `pole holds one stat. So W00 wins all ${field * B} battles against the field and never ` +
+        `loses to the pole: its floor is ${field * B * 2 + B}. Every field seat loses all ${B} ` +
+        `battles to W00, so the best any of them can reach is ${(field - 1) * B * 2 + B * 2}, ` +
+        'which is below that floor. **W00 is rank 1 whatever anyone else does, including the ' +
+        'founder.**',
+      founderSeatsCannotWin:
+        'UI-A and UI-B hold every stat between 1 and 25, so they are field seats by the line ' +
+        'above and cannot take rank 1. This holds for ANY allocation inside that range — it does ' +
+        'not depend on the founder reproducing the recipe.',
+      founderSeatsCannotComeLast:
+        'Five non-zero stats beat a single spike four stats to one, so UI-A and UI-B each beat ' +
+        `the pole in all ${B} battles — at least ${B * 2} half-points. The pole scores at most ` +
+        `${B}. **So both founder seats finish in ranks 2..${N - 1}.** The non-zero floor is what ` +
+        'carries this: a seat with two or more zeroes can draw with a pole instead of beating it.',
+      poleIsLast:
+        `Every field seat beats the pole in every battle, so W01 scores 0 against all ${field} of ` +
+        `them and at most ${B} against W00. The worst any field seat can do is ${B * 2}, from the ` +
+        'pole alone. **W01 is last whatever the field does.**',
+    },
+    expectations: {
+      terminalState: 'Paid',
+      entrants: N,
+      sealsAtDeadline: false,
+      sealReason: 'Capacity — the 64th register seals the pool immediately',
+      settlementSequence: ['reveal_pool_secret', 'commit_results', 'pay_prizes'],
+      paidSeatCount: 1,
+      winner: 'W00',
+      winnerIsHeadless: true,
+      winnerLamports: p.potLamports,
+      potLamports: p.potLamports,
+      lastPlace: 'W01',
+      founderSeatsPaid: '0',
+      founderRankRange: [2, N - 1],
+      founderRankNote:
+        'A RANGE, not a number, and deliberately so. UI-A and UI-B play by hand against a ' +
+        '90-second clock; T4 showed that produces different numbers from any recipe (§H10). ' +
+        'Their exact ranks among 61 other field seats are COMPUTED AT REVEAL, not predicted. The ' +
+        'nominal allocations below are what the recipe produces and are the conditional case.',
+      vaultAfter: '650240',
+      vaultAfterNote: 'the rent cushion, never recovered',
+      perSeatSunkLamports: '4436000',
+      winnerNetLamports: '3895564000',
+      loserNetLamports: '-104436000',
+      resultsRootConditional: p.resultsRoot,
+      leafOrderConditional: p.leafOrder.join(','),
+      conditionalNote:
+        'The root, the leaf order, every exact score and every field rank assume the exact ' +
+        'allocations below AND the planned seat order. A founder allocation inside 1..25 that is ' +
+        'not the recipe breaks these and none of the unconditional claims above.',
+      hardBlocks: [],
+      detectionNotes: [
+        'Detection computes and persists a report but flags nobody, under the manual-only policy ' +
+          'ruling D-E9. No flag, no escrow, no delay to the payout.',
+        'population_score is predicted to fire on W00 — it is many sigma from the field by design, ' +
+          'exactly as it did on UI-A in T4. Finding it there is a detection PASS, not a fault. That ' +
+          'it fires on a HEADLESS wallet this time is itself worth recording: the signal follows ' +
+          'the allocation, not the route.',
+        'allocation_entropy raises its round-number note on W01: a pole is all zeroes and a ' +
+          'hundred, so 100% of its stat values are multiples of ten.',
+        'allocation_entropy must NOT fire "strong" on anyone: every seat carries at least 3 ' +
+          'distinct shapes (UI-A and UI-B carry 5 each, W00 7, W01 5, the field 7).',
+        'duplicate_sets must not fire. UI-A and UI-B rotate through different stats precisely so ' +
+          'their seven-battle sets differ — two entrants sharing a set is the one allocation ' +
+          'signal that hard-blocks.',
+        'Sanctions screening runs on the winner before payment. W00 is a derived devnet key and no ' +
+          'match is expected.',
+      ],
+    },
+    seats: p.seats.map((s) => ({
+      seat: null,
+      plannedSeat: s.plannedSeat,
+      wallet: s.wallet,
+      route: s.route,
+      role: s.role,
+      generator: s.generator,
+      ...(s.seed !== undefined ? { seed: s.seed } : {}),
+      ...(s.recipe ? { recipe: s.recipe } : {}),
+      battles: s.battles,
+      expectedRank: s.rank,
+      expectedScoreHalf: s.scoreHalf,
+      expectedZones: s.zones,
+      expectedLamports: s.amountLamports,
+      distinctShapes: s.distinctShapes,
+      ...(s.route === 'ui'
+        ? { rankIsConditional: true, unconditionalRankRange: [2, N - 1] }
+        : {}),
+    })),
+    seatNote:
+      '`seat` is null until the pool runs. `plannedSeat` is the index this plan assumes; only the ' +
+      'root and the leaf order depend on it.',
+    contingency: [
+      'If a headless seat seals and then fails to register it is barred from the pool for good ' +
+        '(DRIFT §H6) and enter.ts stops the run (§H8). Replace it from the spare roster with ' +
+        '--substitute, which makes the spare play THAT SEAT\'S frozen allocation, so the scored ' +
+        'field stays the planned field. If the seat that burns is W00, the WINNER changes wallet ' +
+        'but not allocation — record it and say so plainly.',
+      'If the founder plays an allocation inside 1..25 that is not the recipe, the unconditional ' +
+        'expectations hold and the two UI seats reconcile as INPUT_DRIFT — as they did in T4.',
+      'If a founder seat takes a stat ABOVE 25, it is no longer a field seat and could beat W00. ' +
+        'That would be a genuine FAIL of the test as designed, not of the product, and the rerun ' +
+        'is on the next pool.',
+      'If fewer than 64 land before the deadline, the pool seals at whatever it holds provided ' +
+        'that is at least 40, and still plays and pays. The engineered roles are unaffected.',
+    ],
+    passCriteria: [
+      'The pool reaches Paid with 64 entrants.',
+      'Exactly one seat is paid; it is **W00**, a headless wallet, and the amount is the whole ' +
+        '4000000000 lamport pot.',
+      'W01 is ranked last.',
+      'NEITHER founder wallet is paid, and both finish between rank 2 and rank 63.',
+      'Every revealed allocation reproduces the battles_hash the chain recorded at entry.',
+      'The recomputed results root equals the on-chain results_root.',
+      'The vault ends at 650240 lamports.',
+      'No seat is flagged and no sanctions hold is placed.',
+    ],
+  };
+}
+
 // ---------------------------------------------------------------------------
 // 4. CLI
 // ---------------------------------------------------------------------------
@@ -471,11 +689,11 @@ function main(): void {
   );
   if (process.argv.includes('--check-only')) return;
 
-  const test = flag('test') ?? fail('--test <T4> is required');
-  if (test !== 'T4') fail(`no field is defined for ${test} yet — only T4`);
+  const test = flag('test') ?? fail('--test <T4|T5> is required');
+  if (test !== 'T4' && test !== 'T5') fail(`no field is defined for ${test} — only T4 and T5`);
 
   const entryLamports = 100_000_000n; // tier 0, read from chain and from the plan
-  const p = predict(t4Field(), entryLamports);
+  const p = predict(test === 'T4' ? t4Field() : t5Field(), entryLamports);
 
   console.log(`\n${test} — ${p.seats.length} seats · pot ${p.potLamports} lamports · entry ${p.entryLamports}\n`);
   console.log('seat  wallet  role    rank   score  zones   shapes  round%  lamports');
@@ -502,7 +720,7 @@ function main(): void {
 
   const planOut = flag('plan');
   if (planOut) {
-    writeFileSync(planOut, JSON.stringify(t4Plan(p), null, 2) + '\n');
+    writeFileSync(planOut, JSON.stringify(test === 'T4' ? t4Plan(p) : t5Plan(p), null, 2) + '\n');
     console.log(`wrote ${planOut}`);
   }
 }
