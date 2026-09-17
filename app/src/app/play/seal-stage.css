@@ -1,13 +1,16 @@
 /*
  * The seal stage (founder 2026-09-16, CHANGE-2026-09-16_ui-uplift.md §A8;
- * relaid §D, 2026-09-17). The pink field fills the viewport under the
- * header; the scene sits in a plum frame with a cream rim, at the clip's
- * exact 16:9; the review widget rides over the right of the scene on a wide
- * screen and stacks under it inside the frame on a phone; the §8.6 line and
- * the seal key have the field below the frame to themselves. Tokens only.
+ * relaid §D, 2026-09-17; two columns §E the same day). The pink field fills
+ * the viewport under the header; the scene sits in a plum frame with a cream
+ * rim, at the clip's exact 16:9; the review widget is the column beside it
+ * on a wide screen and stacks under it on a phone; the §8.6 line and the
+ * seal key sit under the widget. Tokens only.
  */
 .seal-stage {
   --frame-pad: 14px;
+  /* The gap under the header (founder 2026-09-17, §G6: "more gap spacing
+   * between the video and the top of the page"). Wider from lg. */
+  --stage-top: 24px;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -19,7 +22,7 @@
   width: 100cqw;
   margin-inline: calc(50% - 50cqw);
   margin-top: -32px; /* the play column's top padding — the field starts at the header */
-  padding: 16px 0 28px;
+  padding: var(--stage-top) 0 28px;
 }
 /* One column on a phone: the scene, then the review card, then the key.
  * Two from lg: the scene left, the column right, tops aligned. */
@@ -30,6 +33,9 @@
   width: min(100cqw - 24px, 1440px);
 }
 @media (min-width: 1024px) {
+  .seal-stage {
+    --stage-top: 44px;
+  }
   .seal-stage-grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr) clamp(320px, 34%, 440px);
@@ -51,7 +57,9 @@
   .seal-stage-frame {
     justify-self: end;
     align-self: start; /* natural height — only the column stretches to meet it */
-    width: min(100%, calc((100dvh - 120px) * 16 / 9));
+    /* The height budget: the header (56), the gap above, the bottom
+     * padding (28) and a little slack — so the key stays in view. */
+    width: min(100%, calc((100dvh - var(--stage-top) - 104px) * 16 / 9));
   }
 }
 /* The frame: the battle cabinet's plum panel, rimmed in cream so it reads on pink. */

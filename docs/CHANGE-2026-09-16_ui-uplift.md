@@ -1038,3 +1038,14 @@ from the dev gallery).
 ## G5. Shipping
 
 Branch `step/one-field-2026-09-17`, one commit. Pool 17 was open with no entrant at the merge.
+
+## G6. The seal screen: the gap above the frame (founder, 2026-09-17 ~03:45 UTC)
+
+The founder sent a capture of the seal screen with the entry box over the scene and asked for it
+to move to the bottom-left corner of the video, plus "more gap spacing between the video and the
+top of the page". The capture was the §D layout from their pool-16 entry; the live screen since
+#140 has the box beside the video (§E), which overlaps nothing. Asked which they wanted, the
+founder kept the column. So one change: `--stage-top` (seal-stage.css) is the gap under the header,
+24 px on a phone and 44 px from lg (was 16 px everywhere), and the frame's height budget subtracts
+it so the key stays in view. Branch `fix/seal-top-gap-2026-09-17`.
+
