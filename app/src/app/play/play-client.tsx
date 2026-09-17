@@ -255,6 +255,9 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
   const [stagePhase, stageDispatch] = useReducer(reduceSealStage, INITIAL_SEAL_STAGE);
   const [reviewApi, setReviewApi] = useState<ReviewSealApi | null>(null);
   const onReviewApi = useCallback((api: ReviewSealApi | null) => setReviewApi(api), []);
+  // Round three (§D): the stage's widget slot, handed to the flow so it can
+  // portal the review into it. A ref callback, so it is a stable setter.
+  const [reviewHost, setReviewHost] = useState<HTMLDivElement | null>(null);
   const onRevealBeat = useCallback((beat: RevealState['beat']) => {
     if (beat === 'card') stageDispatch({ type: 'confirmed' });
     else if (beat === 'failed') stageDispatch({ type: 'failed' });
@@ -353,29 +356,33 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
       stagePhase === 'armed' ? (
         <>
           {/* PID §8.6 — above the confirm, always. Do not move it below. */}
-          <p className="seal-stage-line text-[13px] font-semibold leading-5">{COPY.pool.decisionsFinal}</p>
-          <Button
-            size="lg"
-            className="seal-stage-key w-full"
-            data-testid="seal-confirm"
-            onClick={() => {
-              stageDispatch({ type: 'confirm' });
-              reviewApi.confirm();
-            }}
-          >
-            {COPY.battle.sealConfirm}
-          </Button>
-          <Button intent="quiet" onClick={() => stageDispatch({ type: 'disarm' })}>
-            {COPY.battle.sealCancel}
-          </Button>
+          <p className="seal-stage-line text-[15px] leading-6">{COPY.pool.decisionsFinal}</p>
+          {/* Step two: Go back beside the confirm on a wide screen (a row keeps
+              the key inside the window), under it on a phone. */}
+          <div className="seal-stage-keys">
+            <Button intent="quiet" className="seal-stage-back" onClick={() => stageDispatch({ type: 'disarm' })}>
+              {COPY.battle.sealCancel}
+            </Button>
+            <Button
+              size="lg"
+              className="seal-stage-key"
+              data-testid="seal-confirm"
+              onClick={() => {
+                stageDispatch({ type: 'confirm' });
+                reviewApi.confirm();
+              }}
+            >
+              {COPY.battle.sealConfirm}
+            </Button>
+          </div>
         </>
       ) : (
         <>
           {/* PID §8.6 — above the seal control on step one as well. */}
-          <p className="seal-stage-line text-[13px] leading-5">{COPY.pool.decisionsFinal}</p>
+          <p className="seal-stage-line text-[15px] leading-6">{COPY.pool.decisionsFinal}</p>
           <Button
             size="lg"
-            className="seal-stage-key w-full"
+            className="seal-stage-key"
             data-testid="seal-arm"
             onClick={() => stageDispatch({ type: 'arm' })}
           >
@@ -401,6 +408,7 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
       controls={sealControls}
       status={stageStatus}
       busy={stagePhase === 'signing' || stagePhase === 'locked' || stagePhase === 'blending'}
+      widgetRef={setReviewHost}
     />
   ) : null;
 
@@ -721,6 +729,7 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
           onConfirm={onConfirm}
           onRunStarted={() => setRunWallet(flowWallet)}
           onReviewApi={onReviewApi}
+          reviewHost={reviewHost}
         />
       </BalanceGateView>
       {stage}
