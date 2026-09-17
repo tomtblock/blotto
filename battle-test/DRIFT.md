@@ -905,8 +905,83 @@ could have been met. **It should not have been reached.**
 The honest fix is the founder's own data-minimisation ruling applied to the test's own files: do not
 store what you do not need. `harvest.ts` now writes `secretRevealed: true` — the only fact anything
 consumes — and a verifier who wants the secret takes it from `sources.publishedBundle`, which the
-same file records, or from the chain. No ignore entry, no secret in the repository, and the
-evidence chain is unbroken.
+same file records, or from the chain. The evidence chain is unbroken.
+
+**That fix was half a fix, and I called it done.** I wrote the paragraph above, pushed, and told the
+founder to merge. The lane failed again, and the log named the half I had missed:
+
+```
+Scan working tree ........ passed — no leaks found
+Scan the git history ..... FAILED — leaks found: 1
+  rule=generic-api-key  file=battle-test/registry/T4.actual.json:17
+  commit=b64d770aa
+```
+
+Removing a value from the tip does not remove it from a commit that is already pushed. The lane has
+two steps for exactly that reason, and the second is the one that matters: a scanner that read only
+the working tree would let anyone launder a live credential out of view with one follow-up commit
+while it stayed valid in the history. The gate is built so that cannot happen, and it caught me
+doing it by accident.
+
+**The finding was never at the commit I recorded.** I wrote `0d0a4c8` from memory. It is at
+`b64d770`, the commit that recorded T4 PASSED. The log said so and I had not read the log before
+writing it down. Twice in two days now: the Turnkey diagnosis (§H3) and this. Read the evidence
+before recording the conclusion.
+
+**What the value is, established three ways rather than asserted:**
+
+1. An unauthenticated `GET https://blotto-indexer.fly.dev/pools/EgbFPxSR…` returns this exact value
+   in its `secret` field. Fetched again while resolving this.
+2. `sha256(value)` sits at byte offset 84 of the LIVE on-chain Pool account for
+   `EgbFPxSRgtc8hd68vbxjsQ8irYAifen7Zxf5uYNkrngq` — its `sealing_secret_hash`, committed at
+   `open_pool` and checked at reveal. The chain therefore commits to this value being pool 16's
+   secret, and no other value can satisfy that hash.
+3. The raw bytes are NOT in the Pool account (searched; offset -1). They are in the event log,
+   exactly where `reveal_commit.rs`'s module doc says reveal puts them: reveal "publishes the pool's
+   X25519 secret ON-CHAIN (in the event log) ... the verifiability spine".
+
+So: published by design, nothing to rotate, and removing it from the history hides nothing from
+anybody.
+
+**Two candidate resolutions, and why the second was rejected.**
+
+*(a) Remove it from the branch's own commits.* Chosen. The commits are strictly linear, no tracked
+file references any of their hashes, and the freeze records are anchored on merged-change
+timestamps, the plan's own sha256 and on-chain signatures — not on git identity. So the rewrite
+costs the evidence chain nothing, and it leaves nothing behind.
+
+*(b) A justified `.gitleaksignore` entry.* Written first, and it works — verified, history scan
+clean, exit 0. Rejected on two counts. First, `.gitleaksignore` lives at the REPOSITORY ROOT, and
+the `boundary` lane refuses any change outside `battle-test/`: fixing one red check would have made
+another red, and shipping it separately is a second change for the founder to merge. Second and
+decisively, it leaves a permanent root-level exception naming a `battle-test/` file — and the
+standing constraint on this whole exercise is that deleting `battle-test/` at the end leaves the
+product exactly as it was. An ignore entry is precisely that kind of leftover.
+
+I argued the opposite first — that rewriting an evidence commit would damage what the test exists to
+demonstrate — and then checked instead of assuming. Nothing references the commit hashes. The
+objection was real but did not survive contact with the repository.
+
+**How the rewrite was done, and what was proven before anything moved.** The commits were rebuilt
+with git plumbing (`read-tree` / `commit-tree` against a scratch index), replacing one line in
+`T4.actual.json` — `"revealedSecret": "<value>"` becomes `"secretRevealed": true`, the same form the
+harvester now emits. Nothing else in any file changes. The whole operation was rehearsed first in a
+throwaway clone and four things checked there before the real branch was touched:
+
+| proof | result |
+|---|---|
+| final tree byte-identical to the original tip | PASS — same tree, so the working files are unchanged |
+| author, committer and both dates preserved per commit | PASS — all four matched to the second |
+| the value present in no commit of the new history | PASS — 0 commits add or remove it |
+| gitleaks history scan, pinned v8.30.1, same range shape as CI | PASS — no leaks found, exit 0 |
+
+The superseded commits were `b64d770 · 0d0a4c8 · 94ef10b · 7be5335`. They are written down rather
+than quietly dropped, so the rewrite is auditable: anyone still holding those objects can diff them
+against what the branch now carries and confirm that one line changed and nothing else.
+
+**A note for mainnet.** A mainnet pool secret is the same kind of value and equally published, but
+do not reason by analogy from this entry. The harvester no longer stores it at all, which is the
+durable fix; the rewrite was cleanup after the fact.
 
 Worth noting the likely trigger: `resultsRoot` and all 64 per-seat `battlesHash` values are 64-hex
 strings too and did not fire. The rule keys on the FIELD NAME, and the field was called
