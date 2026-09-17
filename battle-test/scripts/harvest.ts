@@ -20,6 +20,7 @@
  *     scripts/harvest.ts --test T1 --pool 14
  */
 
+import { createHash } from 'crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 import { Connection, PublicKey } from '@solana/web3.js';
@@ -125,6 +126,63 @@ async function main(): Promise<void> {
   const treasuryLamports = String(infos[keys.length]?.lamports ?? 0);
   const vaultLamports = String(infos[keys.length + 1]?.lamports ?? 0);
 
+  // The PUBLISHED BUNDLE — the allocations themselves, revealed (2026-09-17).
+  //
+  // Until now this was the missing half of the evidence: harvest read the chain
+  // and the indexer, so it could see WHAT was committed but never WHAT WAS
+  // PLAYED. The sealed boxes have no public reader (PR 134 removed
+  // /sealed-entries), which left `reconcile.ts` unable to detect input drift at
+  // all and `allocations.ts` unable to move a single seat past COMMITTED —
+  // even on a pool that had revealed its secret (DRIFT.md §H9).
+  //
+  // The bundle is the public reader that does exist. `/pools/<pda>/leaderboard`
+  // carries its `uri`, and the bundle carries every entry's revealed `battles`
+  // and `salt`. With those, each seat's allocation can be recomputed and
+  // checked against the `battles_hash` the chain recorded at entry — which is
+  // the whole verifiability claim, checked rather than asserted.
+  //
+  // Absent or unreachable is not an error: a pool that has not revealed has no
+  // bundle, and the seats stay COMMITTED, which is the truth about them.
+  const revealedByPlayer = new Map<string, { battles: number[][]; salt?: string; status?: string }>();
+  const scoredBySeat = new Map<number, { rank: number; scoreHalf: number; zones: number; amountLamports: string }>();
+  let bundleUri: string | null = null;
+  try {
+    const lb = await fetch(`${indexer}/pools/${pool.pool}/leaderboard`);
+    if (lb.ok) {
+      const doc = (await lb.json()) as { uri?: string };
+      if (doc.uri) {
+        bundleUri = doc.uri;
+        const res = await fetch(doc.uri, { redirect: 'follow' });
+        if (res.ok) {
+          const bundle = (await res.json()) as {
+            entries?: { player: string; battles?: string; salt?: string; status?: string }[];
+            results?: { index: number; score_half: number; zones: number; rank: number; amount_lamports: string }[];
+          };
+          for (const r of bundle.results ?? []) {
+            scoredBySeat.set(r.index, {
+              rank: r.rank,
+              scoreHalf: r.score_half,
+              zones: r.zones,
+              amountLamports: r.amount_lamports,
+            });
+          }
+          for (const e of bundle.entries ?? []) {
+            if (!e.battles) continue;
+            const by = Buffer.from(e.battles, 'hex');
+            if (by.length !== 35) continue;
+            const battles = Array.from({ length: 7 }, (_, k) => [...by.subarray(k * 5, k * 5 + 5)]);
+            revealedByPlayer.set(e.player, { battles, salt: e.salt, status: e.status });
+          }
+        }
+      }
+    }
+  } catch {
+    /* no bundle yet, or unreachable — seats stay COMMITTED, which is honest */
+  }
+  if (revealedByPlayer.size > 0) {
+    console.log(`published bundle: ${revealedByPlayer.size} revealed allocations from ${bundleUri}`);
+  }
+
   const seats = entries
     .sort((a, b) => a.idx - b.idx)
     .map((e) => {
@@ -144,6 +202,30 @@ async function main(): Promise<void> {
         nextPlaceLamports: e.next_place_lamports,
         registerSig: sig?.signature ?? null,
         slot: sig?.slot ?? null,
+        // Recomputed here, not trusted: sha256(battles ‖ salt) must equal the
+        // `battles_hash` the chain recorded at register. A seat whose revealed
+        // allocation does not reproduce its own committed hash is exactly what
+        // the published lost-ciphertext rule scores all losses, so the answer
+        // belongs in the evidence either way.
+        ...(() => {
+          const r = revealedByPlayer.get(e.player);
+          if (!r) return {};
+          let hashMatches: boolean | null = null;
+          if (r.salt) {
+            const bytes = Buffer.concat([
+              Buffer.from(r.battles.flat()),
+              Buffer.from(r.salt, 'hex'),
+            ]);
+            hashMatches = createHash('sha256').update(bytes).digest('hex') === e.battles_hash;
+          }
+          const scored = scoredBySeat.get(e.idx);
+          return {
+            revealedBattles: r.battles,
+            revealedStatus: r.status ?? null,
+            recomputedHashMatches: hashMatches,
+            ...(scored ?? {}),
+          };
+        })(),
         balanceAfter: balanceOf.get(e.player) ?? null,
       };
     });
@@ -175,6 +257,7 @@ async function main(): Promise<void> {
       entries: `${indexer}/pools/${pool.pool}/entries`,
       balances: 'cluster, getMultipleAccountsInfo at the slot above',
       registerSignatures: existsSync(logPath) ? 'evidence/…/headless-register.log' : 'not present (no headless seats yet)',
+      publishedBundle: bundleUri ?? 'none — the pool has not published one',
     },
     unknownEntrants: unknown.map((s) => s.address),
     seats,

@@ -45,17 +45,21 @@ committed payout list, `[{"seat":0,"amount":"4000000000"}]` — exactly one paid
 | paid seats | 1 | **1** | |
 | flagged · sanctions holds | none · none | **none · none** | |
 
-Reconcile: **60 MATCH · 0 RANK_DRIFT · 0 PAYOUT_MISMATCH · 4 ABSENT**. Freeze **OK** — the plan's
+Reconcile: **58 MATCH · 0 RANK_DRIFT · 0 PAYOUT_MISMATCH · 2 INPUT_DRIFT · 4 ABSENT**. Freeze **OK** — the plan's
 sha256 matches the bytes merged in PR 133, and the merge preceded the first entry by 9 h 43 min.
 
 **The plan was frozen against pool 15 and ran on pool 16, unedited.** Pool 15 was lost to the
 seal-lockout (§H6); the plan was not changed, because a rank falls out of the allocations and not
 the pool. A prediction frozen before its pool existed is stronger evidence, not weaker.
 
-**Input drift was NOT checked — see §H9.** `harvest.ts` does not read the published bundle, so the
-`0 INPUT_DRIFT` figure above is a limitation rather than a finding. Reading the bundle by hand
-afterwards showed the founder's hand-dialled allocations matched the plan's exact numbers in **1 of
-7 battles for UI-A and 4 of 7 for UI-B**.
+**The first reconcile checked nothing per-seat (§H9).** Its scored-pool branch was a stub that
+returned `MATCH` unconditionally. It has been implemented and re-run; the table above is the real
+check. All 64 revealed allocations reproduce the `battles_hash` the chain recorded at entry, and
+every field seat's rank is exactly the one the plan predicted.
+
+The 2 INPUT_DRIFT are the founder's own seats, played by hand against a 90-second clock: UI-A
+matched the plan's exact numbers in **1 of 7 battles**, UI-B in **4 of 7**. Rank and payout matched
+regardless — which is the point.
 
 **And that is the result worth keeping (§H10).** Every *conditional* prediction about those exact
 numbers was wrong. Every *unconditional* one was exactly right: all seven of UI-A's battles still

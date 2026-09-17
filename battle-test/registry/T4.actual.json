@@ -5,8 +5,8 @@
   "poolPda": "EgbFPxSRgtc8hd68vbxjsQ8irYAifen7Zxf5uYNkrngq",
   "tier": 0,
   "cluster": "devnet",
-  "harvestedAt": "2026-09-17T02:22:56.235Z",
-  "slot": 499593720,
+  "harvestedAt": "2026-09-17T02:30:52.817Z",
+  "slot": 499596607,
   "terminalState": "Paid",
   "entrants": 64,
   "minSeats": 40,
@@ -16,13 +16,14 @@
   "resultsRoot": "0867584752741d72d7266b87b91c1f51417fe736bfd6150fbe44ed571ed7b156",
   "secretRevealed": true,
   "outcomeIfDeadlineNow": "seal",
-  "treasuryLamports": "8394798080",
+  "treasuryLamports": "4394147840",
   "vaultLamports": "650240",
   "sources": {
     "poolState": "https://blotto-indexer.fly.dev/pools",
     "entries": "https://blotto-indexer.fly.dev/pools/EgbFPxSRgtc8hd68vbxjsQ8irYAifen7Zxf5uYNkrngq/entries",
     "balances": "cluster, getMultipleAccountsInfo at the slot above",
-    "registerSignatures": "evidence/…/headless-register.log"
+    "registerSignatures": "evidence/…/headless-register.log",
+    "publishedBundle": "https://gateway.irys.xyz/9kqh3ZxNY9mAVSxcArnv5dVzBQCkUkBTiXUSmtyE8twN"
   },
   "unknownEntrants": [],
   "seats": [
@@ -40,6 +41,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "3YfN2axeoEybKJxTueQdB9KPm7sQBNQXKQyu9ihf4i5PsPBXe1buMaQein1ahoLe62ZiPpRL3SnRNa6K8F5PS2qv",
       "slot": 499588038,
+      "revealedBattles": [
+        [
+          0,
+          0,
+          34,
+          33,
+          33
+        ],
+        [
+          34,
+          0,
+          0,
+          34,
+          32
+        ],
+        [
+          36,
+          35,
+          0,
+          0,
+          29
+        ],
+        [
+          40,
+          31,
+          28,
+          1,
+          0
+        ],
+        [
+          0,
+          36,
+          1,
+          33,
+          30
+        ],
+        [
+          0,
+          36,
+          34,
+          28,
+          2
+        ],
+        [
+          36,
+          1,
+          33,
+          0,
+          30
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 1,
+      "scoreHalf": 882,
+      "zones": 1324,
+      "amountLamports": "4000000000",
       "balanceAfter": "8882228769"
     },
     {
@@ -56,6 +114,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "3G5Q2wLd9KfykkVNTVtfNpGYx9AAT2BbPvFiYSXhVdcx168iwNY7sBt65MoJjKoQMChMqVMSBDNaA3TDJuyYMMpA",
       "slot": 499589208,
+      "revealedBattles": [
+        [
+          100,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          100,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          100,
+          0,
+          0
+        ],
+        [
+          1,
+          0,
+          0,
+          0,
+          99
+        ],
+        [
+          0,
+          0,
+          100,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          100
+        ],
+        [
+          100,
+          0,
+          0,
+          0,
+          0
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 64,
+      "scoreHalf": 0,
+      "zones": 441,
+      "amountLamports": "0",
       "balanceAfter": "9882239577"
     },
     {
@@ -72,6 +187,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "5VgFvY6YgnzFaRJhsoTi9U11YXPTfmTH2PxeDXDSWHiBU1WqUBvVtU1f5tRDZjFt8iYagJADFuiebWY8xFaN4XsJ",
       "slot": 499589760,
+      "revealedBattles": [
+        [
+          21,
+          22,
+          16,
+          16,
+          25
+        ],
+        [
+          16,
+          16,
+          18,
+          25,
+          25
+        ],
+        [
+          23,
+          22,
+          23,
+          7,
+          25
+        ],
+        [
+          24,
+          13,
+          16,
+          25,
+          22
+        ],
+        [
+          25,
+          16,
+          19,
+          22,
+          18
+        ],
+        [
+          25,
+          25,
+          9,
+          20,
+          21
+        ],
+        [
+          19,
+          16,
+          25,
+          24,
+          16
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 47,
+      "scoreHalf": 413,
+      "zones": 963,
+      "amountLamports": "0",
       "balanceAfter": "91117840"
     },
     {
@@ -88,6 +260,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "ANSn2U2kPS4oyje8hgodSnGVLNM2MMFzZLeyVP96aKXkeJG9wtzYk3PGFXJ7Nnve7VHbvKwJvv6DNprTM67pajB",
       "slot": 499589760,
+      "revealedBattles": [
+        [
+          25,
+          16,
+          16,
+          24,
+          19
+        ],
+        [
+          25,
+          20,
+          17,
+          25,
+          13
+        ],
+        [
+          25,
+          22,
+          24,
+          4,
+          25
+        ],
+        [
+          14,
+          16,
+          25,
+          25,
+          20
+        ],
+        [
+          22,
+          14,
+          25,
+          14,
+          25
+        ],
+        [
+          24,
+          25,
+          16,
+          16,
+          19
+        ],
+        [
+          25,
+          19,
+          21,
+          25,
+          10
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 22,
+      "scoreHalf": 457,
+      "zones": 987,
+      "amountLamports": "0",
       "balanceAfter": "91117840"
     },
     {
@@ -104,6 +333,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "5Lihteyzhid8bcnZ3svKczUGQ8DnrigpsRR3L9w4axHF1orohowGTdatWXdynVVr9JACc292JsyG63bjGuEzTg6q",
       "slot": 499589761,
+      "revealedBattles": [
+        [
+          15,
+          25,
+          10,
+          25,
+          25
+        ],
+        [
+          20,
+          14,
+          22,
+          25,
+          19
+        ],
+        [
+          25,
+          12,
+          20,
+          18,
+          25
+        ],
+        [
+          19,
+          16,
+          25,
+          17,
+          23
+        ],
+        [
+          13,
+          20,
+          25,
+          25,
+          17
+        ],
+        [
+          25,
+          13,
+          17,
+          25,
+          20
+        ],
+        [
+          18,
+          16,
+          16,
+          25,
+          25
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 23,
+      "scoreHalf": 457,
+      "zones": 967,
+      "amountLamports": "0",
       "balanceAfter": "91117840"
     },
     {
@@ -120,6 +406,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "4g6NYwVgso7nQfQYkHc7n57tEJFfZ1RRKc6x3ZnLSiy7BTZ365NsCkobi9LG8D41VZ93FE5DEHbkUmT8kAAUVE8i",
       "slot": 499589763,
+      "revealedBattles": [
+        [
+          25,
+          19,
+          17,
+          14,
+          25
+        ],
+        [
+          24,
+          25,
+          19,
+          22,
+          10
+        ],
+        [
+          25,
+          25,
+          21,
+          24,
+          5
+        ],
+        [
+          18,
+          25,
+          16,
+          22,
+          19
+        ],
+        [
+          25,
+          25,
+          7,
+          25,
+          18
+        ],
+        [
+          25,
+          21,
+          16,
+          19,
+          19
+        ],
+        [
+          25,
+          18,
+          16,
+          16,
+          25
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 27,
+      "scoreHalf": 454,
+      "zones": 966,
+      "amountLamports": "0",
       "balanceAfter": "91117840"
     },
     {
@@ -136,6 +479,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "25JZMA6x862u5Ufco2GmughaF5hHJsAyASiGnNwMCig6cgPLUV4PyWccNLHYVLTp4xetns42xo9ZtHVcMySSvhNi",
       "slot": 499589775,
+      "revealedBattles": [
+        [
+          20,
+          25,
+          7,
+          23,
+          25
+        ],
+        [
+          22,
+          15,
+          19,
+          25,
+          19
+        ],
+        [
+          24,
+          16,
+          25,
+          13,
+          22
+        ],
+        [
+          16,
+          19,
+          24,
+          16,
+          25
+        ],
+        [
+          21,
+          20,
+          25,
+          21,
+          13
+        ],
+        [
+          16,
+          25,
+          25,
+          9,
+          25
+        ],
+        [
+          25,
+          25,
+          19,
+          18,
+          13
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 24,
+      "scoreHalf": 456,
+      "zones": 982,
+      "amountLamports": "0",
       "balanceAfter": "91117840"
     },
     {
@@ -152,6 +552,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "2ZqU9aAaA4SiJL24vbLLTFUQYxNnkz2PumHbCeGR1PFue2GtKjFtn7ED7cAFYviRMRNRRvxqKDtzG9KrumKM78H3",
       "slot": 499589775,
+      "revealedBattles": [
+        [
+          25,
+          13,
+          18,
+          19,
+          25
+        ],
+        [
+          17,
+          19,
+          19,
+          20,
+          25
+        ],
+        [
+          25,
+          8,
+          25,
+          17,
+          25
+        ],
+        [
+          21,
+          25,
+          19,
+          22,
+          13
+        ],
+        [
+          25,
+          22,
+          20,
+          17,
+          16
+        ],
+        [
+          25,
+          22,
+          16,
+          14,
+          23
+        ],
+        [
+          22,
+          25,
+          17,
+          11,
+          25
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 41,
+      "scoreHalf": 419,
+      "zones": 943,
+      "amountLamports": "0",
       "balanceAfter": "91117840"
     },
     {
@@ -168,6 +625,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "5cEtLcjZ7LdYbGpZUi6Kx6iRyHaGc6d1GptxFiQvAhbhFdLwaqadvYnd8wFJYYveuFLWisADMwG9XW61kpGqwrAD",
       "slot": 499589775,
+      "revealedBattles": [
+        [
+          22,
+          16,
+          15,
+          25,
+          22
+        ],
+        [
+          23,
+          22,
+          11,
+          25,
+          19
+        ],
+        [
+          25,
+          17,
+          20,
+          25,
+          13
+        ],
+        [
+          19,
+          21,
+          25,
+          23,
+          12
+        ],
+        [
+          12,
+          25,
+          25,
+          18,
+          20
+        ],
+        [
+          7,
+          20,
+          23,
+          25,
+          25
+        ],
+        [
+          25,
+          20,
+          11,
+          25,
+          19
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 15,
+      "scoreHalf": 474,
+      "zones": 1018,
+      "amountLamports": "0",
       "balanceAfter": "91117840"
     },
     {
@@ -184,6 +698,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "3Eh869RKQyKQT5LBEnstNwZQNJNYwmtpXTZkgS4kg3QY8LEYAC4WGemj8fVEn1epsnXzSVxh5m1UYaqvtxZ9TemG",
       "slot": 499589775,
+      "revealedBattles": [
+        [
+          24,
+          18,
+          24,
+          9,
+          25
+        ],
+        [
+          25,
+          17,
+          17,
+          16,
+          25
+        ],
+        [
+          21,
+          22,
+          13,
+          19,
+          25
+        ],
+        [
+          22,
+          22,
+          24,
+          13,
+          19
+        ],
+        [
+          23,
+          25,
+          22,
+          13,
+          17
+        ],
+        [
+          5,
+          20,
+          25,
+          25,
+          25
+        ],
+        [
+          22,
+          25,
+          13,
+          17,
+          23
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 16,
+      "scoreHalf": 473,
+      "zones": 1014,
+      "amountLamports": "0",
       "balanceAfter": "91112760"
     },
     {
@@ -200,6 +771,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "4pVuqYekXpkHnCKQDnuW1wVaGRzro7dHsLxTrmMBC2JULeC3FfqymcWQ4XHhrpt1h6ebpFECQEEWBXr3vGdcRwMx",
       "slot": 499589789,
+      "revealedBattles": [
+        [
+          20,
+          25,
+          19,
+          25,
+          11
+        ],
+        [
+          16,
+          21,
+          25,
+          22,
+          16
+        ],
+        [
+          25,
+          9,
+          25,
+          25,
+          16
+        ],
+        [
+          25,
+          19,
+          23,
+          19,
+          14
+        ],
+        [
+          19,
+          16,
+          16,
+          24,
+          25
+        ],
+        [
+          14,
+          23,
+          19,
+          25,
+          19
+        ],
+        [
+          16,
+          19,
+          22,
+          21,
+          22
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 54,
+      "scoreHalf": 403,
+      "zones": 939,
+      "amountLamports": "0",
       "balanceAfter": "91107680"
     },
     {
@@ -216,6 +844,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "4Ya9CmjkakQiSTnPHtjvL5p8uHy3BGsLvpuu7fYbSJDrkzVrfagf7fen6jtTMJtMpTw2tspG19KLVamBJ9Fdbys9",
       "slot": 499589789,
+      "revealedBattles": [
+        [
+          18,
+          25,
+          22,
+          22,
+          13
+        ],
+        [
+          25,
+          23,
+          21,
+          11,
+          20
+        ],
+        [
+          18,
+          18,
+          25,
+          25,
+          14
+        ],
+        [
+          17,
+          25,
+          20,
+          25,
+          13
+        ],
+        [
+          25,
+          25,
+          13,
+          12,
+          25
+        ],
+        [
+          18,
+          20,
+          25,
+          18,
+          19
+        ],
+        [
+          16,
+          25,
+          20,
+          25,
+          14
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 25,
+      "scoreHalf": 456,
+      "zones": 981,
+      "amountLamports": "0",
       "balanceAfter": "91112760"
     },
     {
@@ -232,6 +917,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "3sH47HJwWpG9AwhX2HEwv8wWXeWMLRmf11EuTyenTEhbkNKgQvKZ1smJqSsKBHK6tMk3BBzaXzLiNj4rWg5qf7se",
       "slot": 499589789,
+      "revealedBattles": [
+        [
+          16,
+          16,
+          25,
+          20,
+          23
+        ],
+        [
+          22,
+          21,
+          16,
+          22,
+          19
+        ],
+        [
+          25,
+          21,
+          19,
+          22,
+          13
+        ],
+        [
+          15,
+          25,
+          25,
+          16,
+          19
+        ],
+        [
+          23,
+          10,
+          25,
+          25,
+          17
+        ],
+        [
+          25,
+          16,
+          21,
+          21,
+          17
+        ],
+        [
+          21,
+          17,
+          12,
+          25,
+          25
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 55,
+      "scoreHalf": 391,
+      "zones": 940,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -248,6 +990,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "2bNYs6HbFxUR5sfnuNTikKh9m6Dva3kVesCs2vZ4Q6nKa34ALQn2dNXyDLmZBrS1jDyH8Zt8R95XETSNCxUMKy9f",
       "slot": 499589789,
+      "revealedBattles": [
+        [
+          23,
+          25,
+          24,
+          15,
+          13
+        ],
+        [
+          10,
+          22,
+          18,
+          25,
+          25
+        ],
+        [
+          19,
+          19,
+          25,
+          13,
+          24
+        ],
+        [
+          18,
+          19,
+          22,
+          16,
+          25
+        ],
+        [
+          19,
+          19,
+          19,
+          22,
+          21
+        ],
+        [
+          25,
+          24,
+          13,
+          25,
+          13
+        ],
+        [
+          25,
+          15,
+          25,
+          25,
+          10
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 34,
+      "scoreHalf": 434,
+      "zones": 969,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -264,6 +1063,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "4ivpo5A2LJM34y99a47MymVyK2CxkjG8BXCdhzSkCTwWytbKn74MUJ5HxppFmxkGyQ73DqaGq3iXvpPQED8KoVDm",
       "slot": 499589800,
+      "revealedBattles": [
+        [
+          19,
+          22,
+          19,
+          19,
+          21
+        ],
+        [
+          22,
+          25,
+          18,
+          19,
+          16
+        ],
+        [
+          25,
+          11,
+          19,
+          22,
+          23
+        ],
+        [
+          19,
+          16,
+          21,
+          22,
+          22
+        ],
+        [
+          17,
+          20,
+          20,
+          25,
+          18
+        ],
+        [
+          25,
+          21,
+          15,
+          14,
+          25
+        ],
+        [
+          24,
+          17,
+          21,
+          13,
+          25
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 63,
+      "scoreHalf": 353,
+      "zones": 913,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -280,6 +1136,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "3XZ3aKbTBVRV37GzNKifCMkhtXrJxSpV6u59rEVXirpXPr6HPsQc2dnRrSEC9BzpKwfDrkuZjt5woNWSRLgyYE8h",
       "slot": 499589800,
+      "revealedBattles": [
+        [
+          25,
+          14,
+          25,
+          25,
+          11
+        ],
+        [
+          17,
+          17,
+          25,
+          25,
+          16
+        ],
+        [
+          25,
+          15,
+          18,
+          25,
+          17
+        ],
+        [
+          22,
+          19,
+          19,
+          24,
+          16
+        ],
+        [
+          19,
+          25,
+          13,
+          24,
+          19
+        ],
+        [
+          19,
+          24,
+          16,
+          22,
+          19
+        ],
+        [
+          15,
+          16,
+          25,
+          19,
+          25
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 61,
+      "scoreHalf": 379,
+      "zones": 923,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -296,6 +1209,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "9j3M2gxsYfykPTa6PSR6xBgumK9b8Agyy2MWKsXkr3h5huDpScgEkNvsGXDZyQU8YwB76Cm7z7rTNwS9XwZ3qtj",
       "slot": 499589804,
+      "revealedBattles": [
+        [
+          9,
+          25,
+          19,
+          22,
+          25
+        ],
+        [
+          14,
+          19,
+          20,
+          22,
+          25
+        ],
+        [
+          25,
+          21,
+          14,
+          15,
+          25
+        ],
+        [
+          21,
+          20,
+          12,
+          22,
+          25
+        ],
+        [
+          19,
+          25,
+          10,
+          21,
+          25
+        ],
+        [
+          25,
+          25,
+          5,
+          20,
+          25
+        ],
+        [
+          24,
+          17,
+          25,
+          11,
+          23
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 20,
+      "scoreHalf": 470,
+      "zones": 998,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -312,6 +1282,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "5TK1po7zhNifCcL2P3GjCcRdD5kdzqzQrTiRZggtCfZoJ68q2P9Gy29YzqRVmZUUkC966nxhysJ57ABsUzJT9tW7",
       "slot": 499589822,
+      "revealedBattles": [
+        [
+          23,
+          25,
+          8,
+          25,
+          19
+        ],
+        [
+          16,
+          22,
+          25,
+          25,
+          12
+        ],
+        [
+          13,
+          24,
+          16,
+          22,
+          25
+        ],
+        [
+          21,
+          22,
+          19,
+          16,
+          22
+        ],
+        [
+          18,
+          20,
+          18,
+          19,
+          25
+        ],
+        [
+          14,
+          25,
+          24,
+          20,
+          17
+        ],
+        [
+          15,
+          21,
+          16,
+          23,
+          25
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 52,
+      "scoreHalf": 407,
+      "zones": 968,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -328,6 +1355,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "wuz2r9bsbkbTiC1eRMud2HDkSxDM48Xra3PYdGDRUqtjYQLJhhofEXBQqdjtW8aiXwY3XPyeLDSfGzkxgUAxBnc",
       "slot": 499589834,
+      "revealedBattles": [
+        [
+          19,
+          13,
+          22,
+          22,
+          24
+        ],
+        [
+          25,
+          20,
+          14,
+          25,
+          16
+        ],
+        [
+          22,
+          22,
+          25,
+          13,
+          18
+        ],
+        [
+          11,
+          25,
+          20,
+          19,
+          25
+        ],
+        [
+          25,
+          24,
+          14,
+          17,
+          20
+        ],
+        [
+          22,
+          16,
+          19,
+          25,
+          18
+        ],
+        [
+          25,
+          20,
+          24,
+          15,
+          16
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 46,
+      "scoreHalf": 413,
+      "zones": 971,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -344,6 +1428,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "4jAQP58GN4PACW7Rzt1tjVJMsuwn2m4Gm6gEKc2scMNzyEUDHQRQd4RnuMG5ToH2VBHWCsHFZ6hV8VTTu5XTKvZj",
       "slot": 499589834,
+      "revealedBattles": [
+        [
+          14,
+          18,
+          25,
+          21,
+          22
+        ],
+        [
+          25,
+          15,
+          18,
+          17,
+          25
+        ],
+        [
+          14,
+          22,
+          25,
+          23,
+          16
+        ],
+        [
+          21,
+          19,
+          12,
+          23,
+          25
+        ],
+        [
+          25,
+          12,
+          21,
+          17,
+          25
+        ],
+        [
+          21,
+          21,
+          25,
+          22,
+          11
+        ],
+        [
+          25,
+          20,
+          25,
+          16,
+          14
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 35,
+      "scoreHalf": 433,
+      "zones": 986,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -360,6 +1501,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "2DdKDiyx1pjoaQyaaTmJxwtH3N6nFsRWS5oiCvo7ZkzsmSNraaa3exKSzPKn3qMLGXz6Letkb96DHd3VjpuhKpSp",
       "slot": 499589835,
+      "revealedBattles": [
+        [
+          25,
+          19,
+          15,
+          19,
+          22
+        ],
+        [
+          23,
+          21,
+          21,
+          25,
+          10
+        ],
+        [
+          19,
+          25,
+          24,
+          11,
+          21
+        ],
+        [
+          22,
+          19,
+          24,
+          16,
+          19
+        ],
+        [
+          25,
+          25,
+          24,
+          25,
+          1
+        ],
+        [
+          20,
+          17,
+          13,
+          25,
+          25
+        ],
+        [
+          18,
+          19,
+          19,
+          25,
+          19
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 29,
+      "scoreHalf": 441,
+      "zones": 977,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -376,6 +1574,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "2pMV1VxxS3NemfdzNuKCEhHXfiFmG4RrNd9W4baXVs6joNF1dmYJaKyhCWMsdZUgQUhgs8YkcaA8vTXyAve3zHuX",
       "slot": 499589841,
+      "revealedBattles": [
+        [
+          25,
+          25,
+          15,
+          25,
+          10
+        ],
+        [
+          25,
+          22,
+          20,
+          24,
+          9
+        ],
+        [
+          22,
+          25,
+          18,
+          16,
+          19
+        ],
+        [
+          25,
+          25,
+          22,
+          11,
+          17
+        ],
+        [
+          16,
+          25,
+          19,
+          24,
+          16
+        ],
+        [
+          21,
+          16,
+          25,
+          19,
+          19
+        ],
+        [
+          21,
+          17,
+          23,
+          25,
+          14
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 49,
+      "scoreHalf": 413,
+      "zones": 947,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -392,6 +1647,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "5oMYYj85p1Nh7i9yCmYsNkwtwh3t1iCJstWL7ktWwP1U2aXCEkbWv6th36CCuq5WgfWwxtNRNRYPyiuwmksxSqz8",
       "slot": 499589851,
+      "revealedBattles": [
+        [
+          25,
+          25,
+          16,
+          25,
+          9
+        ],
+        [
+          25,
+          24,
+          25,
+          16,
+          10
+        ],
+        [
+          11,
+          25,
+          25,
+          20,
+          19
+        ],
+        [
+          22,
+          25,
+          24,
+          19,
+          10
+        ],
+        [
+          16,
+          21,
+          25,
+          13,
+          25
+        ],
+        [
+          20,
+          25,
+          13,
+          17,
+          25
+        ],
+        [
+          25,
+          25,
+          22,
+          11,
+          17
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 6,
+      "scoreHalf": 510,
+      "zones": 1014,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -408,6 +1720,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "39eiytsMTNeZ9D2oyqUpdT82bqe49e8nenW6Ert2tw7gXMZME2qBPR19GAMCqmZW5hqfbZnYmtptvstMW4bMsMfB",
       "slot": 499589852,
+      "revealedBattles": [
+        [
+          15,
+          25,
+          13,
+          22,
+          25
+        ],
+        [
+          12,
+          22,
+          22,
+          22,
+          22
+        ],
+        [
+          24,
+          15,
+          20,
+          25,
+          16
+        ],
+        [
+          25,
+          22,
+          16,
+          19,
+          18
+        ],
+        [
+          22,
+          25,
+          16,
+          17,
+          20
+        ],
+        [
+          10,
+          25,
+          16,
+          25,
+          24
+        ],
+        [
+          24,
+          17,
+          25,
+          14,
+          20
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 40,
+      "scoreHalf": 419,
+      "zones": 971,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -424,6 +1793,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "5kogpEZVyaAoTwif1C9Bn5eFJys2EA9Vdtf4LwoPMLFkKnnShgiQAe6DqhNf1P5eAVMmt5kW5GxfXqPX95DYunEr",
       "slot": 499589854,
+      "revealedBattles": [
+        [
+          25,
+          22,
+          18,
+          19,
+          16
+        ],
+        [
+          17,
+          25,
+          25,
+          15,
+          18
+        ],
+        [
+          10,
+          25,
+          20,
+          21,
+          24
+        ],
+        [
+          23,
+          25,
+          20,
+          7,
+          25
+        ],
+        [
+          25,
+          25,
+          21,
+          13,
+          16
+        ],
+        [
+          25,
+          16,
+          21,
+          25,
+          13
+        ],
+        [
+          21,
+          24,
+          25,
+          14,
+          16
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 21,
+      "scoreHalf": 461,
+      "zones": 981,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -440,6 +1866,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "3htq2DEvq53S9EaMz6v6SxrSpZYUH1soc71EEZ2jBYfWhuvGFgXZ5RwBYq4BqMgeoJRmsMVW9L1F7cWchbuLoRrs",
       "slot": 499590334,
+      "revealedBattles": [
+        [
+          13,
+          24,
+          23,
+          25,
+          15
+        ],
+        [
+          14,
+          25,
+          15,
+          25,
+          21
+        ],
+        [
+          21,
+          22,
+          13,
+          25,
+          19
+        ],
+        [
+          18,
+          19,
+          19,
+          25,
+          19
+        ],
+        [
+          25,
+          20,
+          15,
+          25,
+          15
+        ],
+        [
+          25,
+          23,
+          15,
+          20,
+          17
+        ],
+        [
+          25,
+          22,
+          22,
+          21,
+          10
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 53,
+      "scoreHalf": 403,
+      "zones": 945,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -456,6 +1939,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "2d2SZ3uuo7fLm5ZFJLfgV4KS79BzeFhvPzzShzxYEofGua72WuprB461dZ4M6EJLKYnCN6scoESmLGtVa6TTVnas",
       "slot": 499590335,
+      "revealedBattles": [
+        [
+          21,
+          19,
+          18,
+          17,
+          25
+        ],
+        [
+          16,
+          16,
+          19,
+          24,
+          25
+        ],
+        [
+          17,
+          13,
+          25,
+          25,
+          20
+        ],
+        [
+          25,
+          11,
+          25,
+          23,
+          16
+        ],
+        [
+          25,
+          19,
+          23,
+          8,
+          25
+        ],
+        [
+          23,
+          15,
+          25,
+          12,
+          25
+        ],
+        [
+          25,
+          25,
+          11,
+          25,
+          14
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 14,
+      "scoreHalf": 475,
+      "zones": 990,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -472,6 +2012,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "3cAr1edCHQvQsgdrSvsyg4ZpT6ZqHikiPX6hPYDgc4Fr1ne2oyYWnE2me9WJW1uLrFasqgTsLa6U1b32RH164cBE",
       "slot": 499590349,
+      "revealedBattles": [
+        [
+          22,
+          21,
+          25,
+          19,
+          13
+        ],
+        [
+          15,
+          25,
+          25,
+          20,
+          15
+        ],
+        [
+          11,
+          15,
+          25,
+          25,
+          24
+        ],
+        [
+          20,
+          25,
+          20,
+          16,
+          19
+        ],
+        [
+          19,
+          25,
+          20,
+          11,
+          25
+        ],
+        [
+          25,
+          13,
+          19,
+          21,
+          22
+        ],
+        [
+          22,
+          15,
+          19,
+          25,
+          19
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 43,
+      "scoreHalf": 415,
+      "zones": 959,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -488,6 +2085,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "521CaLkzjpPGmcYPpcQJEgfucSjbE41XdMaZjkaKis2ySSSbpYnEDmsaM9Tnk9zWCJLwrx5MPBvpz8NEz2Hjgh9W",
       "slot": 499590349,
+      "revealedBattles": [
+        [
+          23,
+          10,
+          25,
+          17,
+          25
+        ],
+        [
+          17,
+          25,
+          17,
+          18,
+          23
+        ],
+        [
+          10,
+          24,
+          25,
+          20,
+          21
+        ],
+        [
+          13,
+          24,
+          22,
+          22,
+          19
+        ],
+        [
+          25,
+          14,
+          16,
+          25,
+          20
+        ],
+        [
+          18,
+          24,
+          22,
+          25,
+          11
+        ],
+        [
+          16,
+          22,
+          22,
+          22,
+          18
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 32,
+      "scoreHalf": 435,
+      "zones": 988,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -504,6 +2158,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "4jkuq9EPDZ8SUH2LBKFu68oQuGxuvfiWbi4gvX8itf8sn5jjpyvJzx5QLJ8KLLowbz4GUTfSnquoX4EqSbm9AmLe",
       "slot": 499590359,
+      "revealedBattles": [
+        [
+          25,
+          14,
+          20,
+          25,
+          16
+        ],
+        [
+          22,
+          22,
+          25,
+          15,
+          16
+        ],
+        [
+          18,
+          25,
+          22,
+          10,
+          25
+        ],
+        [
+          25,
+          22,
+          16,
+          14,
+          23
+        ],
+        [
+          16,
+          23,
+          13,
+          25,
+          23
+        ],
+        [
+          16,
+          23,
+          19,
+          17,
+          25
+        ],
+        [
+          25,
+          19,
+          13,
+          22,
+          21
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 31,
+      "scoreHalf": 438,
+      "zones": 973,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -520,6 +2231,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "2nsbbukoZ7robXZisMMPHHEdvv3AKpfFWRuG8n9tUyggpSXjdTYKo6k2grFu4r7QiZRZqKgZBf1n2prNjGPrduGW",
       "slot": 499590359,
+      "revealedBattles": [
+        [
+          24,
+          22,
+          19,
+          13,
+          22
+        ],
+        [
+          19,
+          10,
+          21,
+          25,
+          25
+        ],
+        [
+          19,
+          25,
+          21,
+          22,
+          13
+        ],
+        [
+          25,
+          22,
+          19,
+          13,
+          21
+        ],
+        [
+          25,
+          17,
+          25,
+          15,
+          18
+        ],
+        [
+          25,
+          13,
+          16,
+          24,
+          22
+        ],
+        [
+          20,
+          10,
+          25,
+          25,
+          20
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 28,
+      "scoreHalf": 449,
+      "zones": 983,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -536,6 +2304,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "9ktPpCF8wUa7h6F5J8FKcHtgnr35bi9xxauFu6HGjKVcFbq36j1wf4iUiAo8EDM9cD4WnkAsgeNTNY5kX1bEk4m",
       "slot": 499590372,
+      "revealedBattles": [
+        [
+          20,
+          17,
+          13,
+          25,
+          25
+        ],
+        [
+          21,
+          25,
+          25,
+          13,
+          16
+        ],
+        [
+          18,
+          25,
+          17,
+          25,
+          15
+        ],
+        [
+          25,
+          20,
+          25,
+          13,
+          17
+        ],
+        [
+          20,
+          9,
+          21,
+          25,
+          25
+        ],
+        [
+          20,
+          17,
+          25,
+          15,
+          23
+        ],
+        [
+          25,
+          21,
+          22,
+          16,
+          16
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 38,
+      "scoreHalf": 427,
+      "zones": 966,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -552,6 +2377,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "3vsPcza8zgZu6TK8qUty7s8dR6QTK2kbvdZUHiKyG7Y8Th5LgnksP8xyp5AJXH42ehDa6U6FmE8C71jNhm7Yp7ve",
       "slot": 499590372,
+      "revealedBattles": [
+        [
+          25,
+          16,
+          22,
+          18,
+          19
+        ],
+        [
+          17,
+          25,
+          25,
+          19,
+          14
+        ],
+        [
+          19,
+          16,
+          18,
+          25,
+          22
+        ],
+        [
+          19,
+          25,
+          19,
+          21,
+          16
+        ],
+        [
+          23,
+          19,
+          16,
+          25,
+          17
+        ],
+        [
+          25,
+          17,
+          17,
+          24,
+          17
+        ],
+        [
+          18,
+          21,
+          25,
+          11,
+          25
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 60,
+      "scoreHalf": 382,
+      "zones": 917,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -568,6 +2450,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "32XCQVQJZNrvahDoRs6ArkjbnQa7Z68texgPAefVRWkT9QcN6gZ44baeX7wvDwzMuQwLGZVkFdiJffX5oZFBEFS3",
       "slot": 499590395,
+      "revealedBattles": [
+        [
+          22,
+          23,
+          16,
+          14,
+          25
+        ],
+        [
+          12,
+          20,
+          25,
+          25,
+          18
+        ],
+        [
+          22,
+          24,
+          13,
+          22,
+          19
+        ],
+        [
+          25,
+          25,
+          10,
+          15,
+          25
+        ],
+        [
+          25,
+          25,
+          13,
+          25,
+          12
+        ],
+        [
+          5,
+          25,
+          25,
+          25,
+          20
+        ],
+        [
+          13,
+          25,
+          12,
+          25,
+          25
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 5,
+      "scoreHalf": 516,
+      "zones": 1005,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -584,6 +2523,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "3pBUVBpeY116j3DTskoKgrxRdAmQxRqVzt4cAsqwJQDKrWoA1BC5RKYYpauXPyY917DD7DZyyGMLTLUAhBWrufq7",
       "slot": 499590395,
+      "revealedBattles": [
+        [
+          21,
+          22,
+          19,
+          19,
+          19
+        ],
+        [
+          10,
+          25,
+          20,
+          20,
+          25
+        ],
+        [
+          18,
+          11,
+          25,
+          25,
+          21
+        ],
+        [
+          25,
+          15,
+          19,
+          19,
+          22
+        ],
+        [
+          25,
+          13,
+          24,
+          19,
+          19
+        ],
+        [
+          17,
+          25,
+          16,
+          25,
+          17
+        ],
+        [
+          19,
+          24,
+          19,
+          22,
+          16
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 56,
+      "scoreHalf": 387,
+      "zones": 936,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -600,6 +2596,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "636eyKy5iaAd4AVy3vaqBv8Q7hFzK2wzKdKZmmtekjAzFCD5eUWvJx7b5ixXTbeEzqUxndnzSwrSSuyGuFm3iVCJ",
       "slot": 499590405,
+      "revealedBattles": [
+        [
+          11,
+          21,
+          23,
+          25,
+          20
+        ],
+        [
+          17,
+          13,
+          25,
+          25,
+          20
+        ],
+        [
+          24,
+          11,
+          25,
+          17,
+          23
+        ],
+        [
+          25,
+          25,
+          21,
+          16,
+          13
+        ],
+        [
+          23,
+          15,
+          25,
+          25,
+          12
+        ],
+        [
+          12,
+          20,
+          25,
+          18,
+          25
+        ],
+        [
+          25,
+          25,
+          25,
+          18,
+          7
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 10,
+      "scoreHalf": 484,
+      "zones": 1001,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -616,6 +2669,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "xqVuH3pAG1osJqzChh2BZQMJhavnXA38ZzAf9ferhNYXEF7zTEwxXfn151PdhNtpZwf1LJCGF5cUC7VQy6xmyn2",
       "slot": 499590405,
+      "revealedBattles": [
+        [
+          18,
+          25,
+          21,
+          11,
+          25
+        ],
+        [
+          25,
+          10,
+          23,
+          23,
+          19
+        ],
+        [
+          15,
+          23,
+          25,
+          15,
+          22
+        ],
+        [
+          25,
+          24,
+          15,
+          25,
+          11
+        ],
+        [
+          19,
+          16,
+          22,
+          19,
+          24
+        ],
+        [
+          22,
+          21,
+          19,
+          19,
+          19
+        ],
+        [
+          18,
+          19,
+          25,
+          13,
+          25
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 42,
+      "scoreHalf": 418,
+      "zones": 976,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -632,6 +2742,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "5QgoLiB9CK5ZWkBD5sv2PyrQWXG4HBauqvenL887b44pXmzN3Q5wNccnsrEQi5WZY4yxfhw9rW2Dmh7pUwkYecx7",
       "slot": 499590416,
+      "revealedBattles": [
+        [
+          20,
+          13,
+          25,
+          17,
+          25
+        ],
+        [
+          25,
+          16,
+          22,
+          14,
+          23
+        ],
+        [
+          17,
+          25,
+          14,
+          19,
+          25
+        ],
+        [
+          25,
+          19,
+          22,
+          23,
+          11
+        ],
+        [
+          16,
+          19,
+          20,
+          25,
+          20
+        ],
+        [
+          14,
+          22,
+          20,
+          19,
+          25
+        ],
+        [
+          19,
+          24,
+          19,
+          16,
+          22
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 45,
+      "scoreHalf": 414,
+      "zones": 964,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -648,6 +2815,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "553bMgLppm59N3GghdeaJsPCrSGjfWXEVQWpmWVmGjgZY4M4xScKhTfv3Fbs6dXc8UYa1qTbgGmXyXnf95fBMC9q",
       "slot": 499590416,
+      "revealedBattles": [
+        [
+          25,
+          22,
+          25,
+          17,
+          11
+        ],
+        [
+          8,
+          25,
+          25,
+          17,
+          25
+        ],
+        [
+          12,
+          25,
+          25,
+          17,
+          21
+        ],
+        [
+          16,
+          18,
+          22,
+          25,
+          19
+        ],
+        [
+          21,
+          22,
+          13,
+          25,
+          19
+        ],
+        [
+          24,
+          10,
+          19,
+          25,
+          22
+        ],
+        [
+          11,
+          25,
+          25,
+          14,
+          25
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 9,
+      "scoreHalf": 489,
+      "zones": 1001,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -664,6 +2888,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "5vQ51yy9Nkawbqd6MeWqzKK7BUx9aBgLRKv3r1en5AYdwHhCJ8wo9TsqzJ42feVG5mFofNvFuMfDY3yUnaBBYdxJ",
       "slot": 499590426,
+      "revealedBattles": [
+        [
+          21,
+          25,
+          15,
+          14,
+          25
+        ],
+        [
+          22,
+          13,
+          22,
+          25,
+          18
+        ],
+        [
+          21,
+          15,
+          18,
+          21,
+          25
+        ],
+        [
+          22,
+          25,
+          14,
+          19,
+          20
+        ],
+        [
+          22,
+          19,
+          16,
+          19,
+          24
+        ],
+        [
+          21,
+          25,
+          19,
+          16,
+          19
+        ],
+        [
+          14,
+          24,
+          19,
+          25,
+          18
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 58,
+      "scoreHalf": 384,
+      "zones": 933,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -680,6 +2961,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "5dvYyHc3PrCGSL9uEjcMU79i6g7vMXfNNY4WLmG2kiQfG2GFFnrvC89Sd5jdpbWjBcMs5jubTvwboqjpnrZNEJM8",
       "slot": 499590427,
+      "revealedBattles": [
+        [
+          19,
+          24,
+          19,
+          13,
+          25
+        ],
+        [
+          23,
+          24,
+          13,
+          25,
+          15
+        ],
+        [
+          24,
+          19,
+          15,
+          17,
+          25
+        ],
+        [
+          22,
+          19,
+          18,
+          19,
+          22
+        ],
+        [
+          13,
+          25,
+          25,
+          25,
+          12
+        ],
+        [
+          22,
+          13,
+          25,
+          21,
+          19
+        ],
+        [
+          19,
+          25,
+          25,
+          25,
+          6
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 39,
+      "scoreHalf": 425,
+      "zones": 966,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -696,6 +3034,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "3ifGGgSg65XW7g8i9KPnbMAFJdVRGiNWLCN6MYd8pgETyz4vmevo6uox5ozuThBnWT5PjyWZfwzhS4pFrZxYcFDQ",
       "slot": 499590437,
+      "revealedBattles": [
+        [
+          25,
+          10,
+          21,
+          19,
+          25
+        ],
+        [
+          25,
+          21,
+          20,
+          13,
+          21
+        ],
+        [
+          10,
+          21,
+          22,
+          22,
+          25
+        ],
+        [
+          19,
+          13,
+          21,
+          25,
+          22
+        ],
+        [
+          19,
+          20,
+          25,
+          25,
+          11
+        ],
+        [
+          25,
+          16,
+          20,
+          17,
+          22
+        ],
+        [
+          25,
+          25,
+          19,
+          23,
+          8
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 18,
+      "scoreHalf": 473,
+      "zones": 1000,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -712,6 +3107,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "2CkhzETJYQEX2gFzvZLj31qBD3yFxCnZXGntjotgYowxP28Bga5jr8NFrt3qX2ymh6NTggUvVH2McbxanNVcPLoL",
       "slot": 499590437,
+      "revealedBattles": [
+        [
+          10,
+          25,
+          25,
+          15,
+          25
+        ],
+        [
+          22,
+          10,
+          19,
+          24,
+          25
+        ],
+        [
+          25,
+          11,
+          21,
+          25,
+          18
+        ],
+        [
+          25,
+          9,
+          20,
+          21,
+          25
+        ],
+        [
+          25,
+          16,
+          23,
+          16,
+          20
+        ],
+        [
+          25,
+          25,
+          21,
+          13,
+          16
+        ],
+        [
+          17,
+          19,
+          25,
+          21,
+          18
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 19,
+      "scoreHalf": 472,
+      "zones": 992,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -728,6 +3180,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "5pA9LhViwagJuvhNJTtBtsrGjd98yvmnb6NMn67h32TXWEhm7Zxy75S6vhorkBJRghhCanxxqdFYmdpRAaXQiPGr",
       "slot": 499591065,
+      "revealedBattles": [
+        [
+          22,
+          19,
+          25,
+          25,
+          9
+        ],
+        [
+          19,
+          13,
+          18,
+          25,
+          25
+        ],
+        [
+          18,
+          25,
+          25,
+          16,
+          16
+        ],
+        [
+          20,
+          17,
+          25,
+          13,
+          25
+        ],
+        [
+          25,
+          19,
+          19,
+          25,
+          12
+        ],
+        [
+          22,
+          19,
+          22,
+          19,
+          18
+        ],
+        [
+          19,
+          22,
+          22,
+          18,
+          19
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 44,
+      "scoreHalf": 415,
+      "zones": 947,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -744,6 +3253,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "4ADrANT91tCjQehSgeURAYJKhL8zMcjfTdiRyxMWTSTAZThHexQnN3FkNhcqnsA2ZvfmpS8yReGPTeMF6BteGSEF",
       "slot": 499591077,
+      "revealedBattles": [
+        [
+          25,
+          25,
+          18,
+          13,
+          19
+        ],
+        [
+          25,
+          25,
+          1,
+          25,
+          24
+        ],
+        [
+          22,
+          17,
+          25,
+          11,
+          25
+        ],
+        [
+          24,
+          25,
+          8,
+          22,
+          21
+        ],
+        [
+          25,
+          25,
+          25,
+          4,
+          21
+        ],
+        [
+          25,
+          22,
+          16,
+          16,
+          21
+        ],
+        [
+          25,
+          19,
+          11,
+          20,
+          25
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 2,
+      "scoreHalf": 539,
+      "zones": 1055,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -760,6 +3326,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "2DJ3JS1raxWm4oQEvBV9ijiR8fiUKzpMnRbkxTDZpJHC38uW5cKF2mThtPQbCmqiFUjXY7SxsYALeQ31dTLGyek8",
       "slot": 499591088,
+      "revealedBattles": [
+        [
+          25,
+          17,
+          25,
+          13,
+          20
+        ],
+        [
+          14,
+          25,
+          20,
+          20,
+          21
+        ],
+        [
+          21,
+          19,
+          25,
+          10,
+          25
+        ],
+        [
+          25,
+          24,
+          19,
+          18,
+          14
+        ],
+        [
+          25,
+          25,
+          25,
+          21,
+          4
+        ],
+        [
+          25,
+          25,
+          14,
+          23,
+          13
+        ],
+        [
+          4,
+          25,
+          24,
+          22,
+          25
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 4,
+      "scoreHalf": 520,
+      "zones": 1020,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -776,6 +3399,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "2J94GUBd2eFUwipJ6qcs2oW4VMKA5XP34f4Cqf2aGiy26YPkJBRVdwZsP18vgpZFhhtZbS39P9Uz7Zv4jiodMk8E",
       "slot": 499591099,
+      "revealedBattles": [
+        [
+          14,
+          22,
+          18,
+          25,
+          21
+        ],
+        [
+          22,
+          19,
+          21,
+          19,
+          19
+        ],
+        [
+          23,
+          25,
+          16,
+          17,
+          19
+        ],
+        [
+          25,
+          22,
+          19,
+          18,
+          16
+        ],
+        [
+          24,
+          5,
+          21,
+          25,
+          25
+        ],
+        [
+          18,
+          22,
+          19,
+          22,
+          19
+        ],
+        [
+          17,
+          25,
+          23,
+          19,
+          16
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 62,
+      "scoreHalf": 375,
+      "zones": 947,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -792,6 +3472,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "4RvNreZa3YF43hXMTwjy3rdgyTx5yw6kZJeTw9QYTt8FYbsDf1CVYi7xWqhVGiXbheuKBKTVGrfAVcUKNyAXsC3y",
       "slot": 499591110,
+      "revealedBattles": [
+        [
+          22,
+          25,
+          7,
+          25,
+          21
+        ],
+        [
+          19,
+          22,
+          19,
+          21,
+          19
+        ],
+        [
+          8,
+          21,
+          23,
+          25,
+          23
+        ],
+        [
+          25,
+          25,
+          14,
+          11,
+          25
+        ],
+        [
+          25,
+          18,
+          22,
+          16,
+          19
+        ],
+        [
+          16,
+          18,
+          25,
+          22,
+          19
+        ],
+        [
+          21,
+          25,
+          7,
+          25,
+          22
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 8,
+      "scoreHalf": 489,
+      "zones": 1014,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -808,6 +3545,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "3yyU2yUeoQipvcx2vzdHsz1jSSi38tPaR4DGh8cGncC6QN8kbUpX7zks7NekGhSPpLBPFCXvHxh1rnRYjVKaGCyW",
       "slot": 499591121,
+      "revealedBattles": [
+        [
+          16,
+          18,
+          25,
+          21,
+          20
+        ],
+        [
+          24,
+          18,
+          8,
+          25,
+          25
+        ],
+        [
+          17,
+          25,
+          19,
+          19,
+          20
+        ],
+        [
+          7,
+          25,
+          25,
+          19,
+          24
+        ],
+        [
+          25,
+          20,
+          20,
+          15,
+          20
+        ],
+        [
+          20,
+          19,
+          13,
+          23,
+          25
+        ],
+        [
+          23,
+          20,
+          17,
+          25,
+          15
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 37,
+      "scoreHalf": 431,
+      "zones": 1001,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -824,6 +3618,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "2f75MGPq7vCPcUyZHeL4ZWGwBx5juggiGB5MGv95qQ4DiLZbwNr4kEwZLMgK3R3jgeuDGbuqJbhfpzYjCkVeXdn4",
       "slot": 499591136,
+      "revealedBattles": [
+        [
+          22,
+          12,
+          20,
+          25,
+          21
+        ],
+        [
+          25,
+          21,
+          14,
+          20,
+          20
+        ],
+        [
+          25,
+          19,
+          21,
+          19,
+          16
+        ],
+        [
+          25,
+          13,
+          25,
+          12,
+          25
+        ],
+        [
+          16,
+          20,
+          20,
+          25,
+          19
+        ],
+        [
+          17,
+          17,
+          25,
+          16,
+          25
+        ],
+        [
+          22,
+          19,
+          25,
+          21,
+          13
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 36,
+      "scoreHalf": 433,
+      "zones": 958,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -840,6 +3691,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "5aDiXNpFk4XYfAD2BDsrjLQCKREdkMWs8hWfVwASFT9KVgpdhV4UkYiu3bdxJYM5b8qs5iQQbTuuCv4L8Uj9rnEQ",
       "slot": 499591146,
+      "revealedBattles": [
+        [
+          20,
+          13,
+          25,
+          22,
+          20
+        ],
+        [
+          25,
+          19,
+          15,
+          16,
+          25
+        ],
+        [
+          25,
+          20,
+          25,
+          13,
+          17
+        ],
+        [
+          16,
+          25,
+          21,
+          22,
+          16
+        ],
+        [
+          17,
+          15,
+          24,
+          25,
+          19
+        ],
+        [
+          25,
+          25,
+          23,
+          13,
+          14
+        ],
+        [
+          18,
+          18,
+          14,
+          25,
+          25
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 57,
+      "scoreHalf": 387,
+      "zones": 935,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -856,6 +3764,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "4Vnyg38z6KUAs2QaGghK8yeLoobLXsm97355M2dtzvGM7rNUmxV7nf7x9QEcndaa7ZwYZZw7mqGPWBHZcctbLdD5",
       "slot": 499591157,
+      "revealedBattles": [
+        [
+          21,
+          25,
+          19,
+          19,
+          16
+        ],
+        [
+          22,
+          25,
+          19,
+          24,
+          10
+        ],
+        [
+          19,
+          25,
+          11,
+          20,
+          25
+        ],
+        [
+          15,
+          25,
+          23,
+          20,
+          17
+        ],
+        [
+          25,
+          13,
+          23,
+          17,
+          22
+        ],
+        [
+          25,
+          25,
+          21,
+          19,
+          10
+        ],
+        [
+          25,
+          25,
+          25,
+          17,
+          8
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 17,
+      "scoreHalf": 473,
+      "zones": 1005,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -872,6 +3837,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "2Kbn3Mb9sNimGGpM8V5h3j14eSZEUKES4LanoAD9FxfMkLqmWfEGzKZGv1doYekAkrWfSnXZ8xY34nFtnd4rhyR1",
       "slot": 499591168,
+      "revealedBattles": [
+        [
+          22,
+          19,
+          19,
+          25,
+          15
+        ],
+        [
+          18,
+          25,
+          16,
+          16,
+          25
+        ],
+        [
+          22,
+          16,
+          22,
+          19,
+          21
+        ],
+        [
+          23,
+          17,
+          25,
+          25,
+          10
+        ],
+        [
+          19,
+          25,
+          16,
+          25,
+          15
+        ],
+        [
+          25,
+          11,
+          25,
+          19,
+          20
+        ],
+        [
+          22,
+          19,
+          24,
+          19,
+          16
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 48,
+      "scoreHalf": 413,
+      "zones": 948,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -888,6 +3910,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "5LCmrVj6DfZemjkhpAjgwJ85n7qUwhicb4FDg5TeFynqeZYDuzVzNpzLNqK6HMXHLUjmiq6JVkAFuBLfgW4BXids",
       "slot": 499591179,
+      "revealedBattles": [
+        [
+          17,
+          16,
+          25,
+          23,
+          19
+        ],
+        [
+          23,
+          25,
+          10,
+          17,
+          25
+        ],
+        [
+          25,
+          25,
+          19,
+          18,
+          13
+        ],
+        [
+          25,
+          25,
+          16,
+          9,
+          25
+        ],
+        [
+          20,
+          22,
+          17,
+          25,
+          16
+        ],
+        [
+          25,
+          25,
+          20,
+          13,
+          17
+        ],
+        [
+          14,
+          25,
+          25,
+          25,
+          11
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 12,
+      "scoreHalf": 477,
+      "zones": 964,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -904,6 +3983,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "bg7C5qzn1EL8wbbdyL93YQENWfYaR5g9p8vBbt3B9RmRVA5ZUqmDmM9UcSqAYMq77eV4gkYfzry5bmFQEoi1L2D",
       "slot": 499591556,
+      "revealedBattles": [
+        [
+          25,
+          19,
+          20,
+          16,
+          20
+        ],
+        [
+          24,
+          4,
+          25,
+          22,
+          25
+        ],
+        [
+          25,
+          12,
+          25,
+          25,
+          13
+        ],
+        [
+          22,
+          12,
+          19,
+          25,
+          22
+        ],
+        [
+          25,
+          22,
+          25,
+          14,
+          14
+        ],
+        [
+          16,
+          15,
+          25,
+          22,
+          22
+        ],
+        [
+          25,
+          22,
+          12,
+          25,
+          16
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 7,
+      "scoreHalf": 504,
+      "zones": 1017,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -920,6 +4056,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "3BtJfCEHuqnhTfsVavKS2UcKXAb5nW52Mm6XmRWWJqVYX87CfMo8okwS9ZNKVppsyT6C6Er7Nx6g8sR93aMtLT7W",
       "slot": 499591568,
+      "revealedBattles": [
+        [
+          23,
+          25,
+          17,
+          10,
+          25
+        ],
+        [
+          23,
+          25,
+          16,
+          19,
+          17
+        ],
+        [
+          17,
+          20,
+          13,
+          25,
+          25
+        ],
+        [
+          22,
+          23,
+          25,
+          14,
+          16
+        ],
+        [
+          25,
+          17,
+          10,
+          25,
+          23
+        ],
+        [
+          25,
+          25,
+          13,
+          25,
+          12
+        ],
+        [
+          25,
+          25,
+          22,
+          8,
+          20
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 11,
+      "scoreHalf": 483,
+      "zones": 987,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -936,6 +4129,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "53JmumjmHb6aDULSVp3bkQQvLbivpzd3juQq2xnrQUeEN9wnAvofB7wYYWzCUELB7miK3NiWGv5r6CBsu72QiUrf",
       "slot": 499591580,
+      "revealedBattles": [
+        [
+          11,
+          25,
+          22,
+          20,
+          22
+        ],
+        [
+          19,
+          21,
+          25,
+          10,
+          25
+        ],
+        [
+          25,
+          23,
+          20,
+          18,
+          14
+        ],
+        [
+          14,
+          25,
+          23,
+          18,
+          20
+        ],
+        [
+          16,
+          17,
+          25,
+          25,
+          17
+        ],
+        [
+          20,
+          25,
+          22,
+          19,
+          14
+        ],
+        [
+          16,
+          20,
+          19,
+          20,
+          25
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 50,
+      "scoreHalf": 412,
+      "zones": 958,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -952,6 +4202,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "4jspAWvbAJv33uFbrARfaoBgWaKnSmExitsDnDkXsk18adnB2rtxmAzhzVTNLzf37Ns3Jz2Bn2LePACgz1JVPonN",
       "slot": 499591590,
+      "revealedBattles": [
+        [
+          14,
+          14,
+          22,
+          25,
+          25
+        ],
+        [
+          25,
+          25,
+          11,
+          17,
+          22
+        ],
+        [
+          25,
+          20,
+          21,
+          16,
+          18
+        ],
+        [
+          25,
+          17,
+          21,
+          20,
+          17
+        ],
+        [
+          24,
+          25,
+          13,
+          22,
+          16
+        ],
+        [
+          23,
+          25,
+          17,
+          13,
+          22
+        ],
+        [
+          18,
+          25,
+          10,
+          22,
+          25
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 33,
+      "scoreHalf": 435,
+      "zones": 969,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -968,6 +4275,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "46tf565z8EdCQkiQ87ApiM9rAWmqYAPAq9T3x8SFFXskyLTsZH6KU9g8kTTrGQ8Ycg71YykwZ2KexcqyZ7qre2aQ",
       "slot": 499591600,
+      "revealedBattles": [
+        [
+          25,
+          25,
+          15,
+          10,
+          25
+        ],
+        [
+          22,
+          16,
+          20,
+          17,
+          25
+        ],
+        [
+          10,
+          19,
+          22,
+          25,
+          24
+        ],
+        [
+          24,
+          16,
+          25,
+          10,
+          25
+        ],
+        [
+          11,
+          20,
+          22,
+          25,
+          22
+        ],
+        [
+          25,
+          19,
+          17,
+          22,
+          17
+        ],
+        [
+          20,
+          20,
+          22,
+          13,
+          25
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 26,
+      "scoreHalf": 455,
+      "zones": 975,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -984,6 +4348,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "4Lpcnf3CAV3SXYQ2ZUKhnwA43pfuhRsBT2VNHuxFfps4hm7kzUuuppvnrFhvRYk11umQSsaqsL1sKPzP4g6JwyBC",
       "slot": 499591610,
+      "revealedBattles": [
+        [
+          16,
+          23,
+          23,
+          25,
+          13
+        ],
+        [
+          15,
+          25,
+          25,
+          19,
+          16
+        ],
+        [
+          22,
+          16,
+          19,
+          21,
+          22
+        ],
+        [
+          25,
+          17,
+          25,
+          8,
+          25
+        ],
+        [
+          25,
+          14,
+          16,
+          20,
+          25
+        ],
+        [
+          16,
+          17,
+          17,
+          25,
+          25
+        ],
+        [
+          15,
+          18,
+          25,
+          17,
+          25
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 30,
+      "scoreHalf": 441,
+      "zones": 967,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -1000,6 +4421,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "2B3NwJqeY4MTZhC4o5Tf5wWvR3YNTX4dL1TbxCftmcA991qHhqXvu7rcygoymJbXxawaUdQP4jSmL9fAog997Dva",
       "slot": 499592253,
+      "revealedBattles": [
+        [
+          21,
+          25,
+          22,
+          19,
+          13
+        ],
+        [
+          16,
+          22,
+          25,
+          18,
+          19
+        ],
+        [
+          16,
+          25,
+          24,
+          19,
+          16
+        ],
+        [
+          20,
+          25,
+          25,
+          10,
+          20
+        ],
+        [
+          18,
+          11,
+          21,
+          25,
+          25
+        ],
+        [
+          18,
+          16,
+          25,
+          19,
+          22
+        ],
+        [
+          24,
+          16,
+          22,
+          19,
+          19
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 59,
+      "scoreHalf": 382,
+      "zones": 945,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -1016,6 +4494,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "4LYKt2MVHyjYKbhWBVdRoevA8Z4QHEEkZCAcdaUnBTFULSLomkS7ZrpxVFFUKT6Mu8kGzXRHDF8e8hhYi5AbQNFM",
       "slot": 499592319,
+      "revealedBattles": [
+        [
+          6,
+          22,
+          25,
+          25,
+          22
+        ],
+        [
+          19,
+          23,
+          10,
+          23,
+          25
+        ],
+        [
+          17,
+          17,
+          25,
+          23,
+          18
+        ],
+        [
+          22,
+          18,
+          21,
+          25,
+          14
+        ],
+        [
+          15,
+          18,
+          22,
+          25,
+          20
+        ],
+        [
+          25,
+          18,
+          17,
+          15,
+          25
+        ],
+        [
+          19,
+          19,
+          19,
+          22,
+          21
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 51,
+      "scoreHalf": 410,
+      "zones": 972,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -1032,6 +4567,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "jb77hCAsA4vNMVStKex9bradFRSMJB4cJz7ajADABRKMH7qyvhZrybZBjixo9vA8WZ325Q4hwStAVhBkPQ5m78T",
       "slot": 499592330,
+      "revealedBattles": [
+        [
+          25,
+          16,
+          19,
+          25,
+          15
+        ],
+        [
+          24,
+          25,
+          25,
+          13,
+          13
+        ],
+        [
+          25,
+          19,
+          22,
+          21,
+          13
+        ],
+        [
+          16,
+          25,
+          20,
+          14,
+          25
+        ],
+        [
+          25,
+          25,
+          12,
+          25,
+          13
+        ],
+        [
+          25,
+          8,
+          17,
+          25,
+          25
+        ],
+        [
+          7,
+          25,
+          20,
+          23,
+          25
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 3,
+      "scoreHalf": 521,
+      "zones": 990,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     },
     {
@@ -1048,6 +4640,63 @@
       "nextPlaceLamports": "0",
       "registerSig": "2y2FQcZLrZdsWa2YJyFmPcCSiSmSXpK3SEngQTioSoTFRQ3mC4nxdkQxgojcaBo8yoXV1VQBf4T8zkqvdAZzti33",
       "slot": 499592848,
+      "revealedBattles": [
+        [
+          25,
+          22,
+          19,
+          13,
+          21
+        ],
+        [
+          25,
+          23,
+          25,
+          13,
+          14
+        ],
+        [
+          25,
+          25,
+          14,
+          19,
+          17
+        ],
+        [
+          10,
+          20,
+          25,
+          25,
+          20
+        ],
+        [
+          16,
+          23,
+          24,
+          12,
+          25
+        ],
+        [
+          12,
+          25,
+          25,
+          25,
+          13
+        ],
+        [
+          19,
+          22,
+          19,
+          15,
+          25
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 13,
+      "scoreHalf": 475,
+      "zones": 1002,
+      "amountLamports": "0",
       "balanceAfter": "45553840"
     }
   ]

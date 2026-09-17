@@ -789,7 +789,49 @@ irreversible side effect (§H7 was the first). The lesson is the same both times
 failure is permanent, the runner must stop, and every "safe" mode must be proven safe rather than
 named safe.
 
-### H9. `reconcile.ts` cannot see input drift on a scored pool (2026-09-17, T4)
+### H9. `reconcile.ts` did not check a scored pool at all — it returned MATCH unconditionally (2026-09-17, T4)
+
+**AMENDED the same day, and the amendment is worse than the original.** This row first said harvest
+could not fetch the revealed allocations, so input drift went unseen. That was true but not the
+point. Reading the code to fix it showed the scored-pool branch was a **stub**:
+
+```ts
+} else {
+  // Scored pools: compare money first, then rank.
+  verdict = 'MATCH';
+  note = 'scored-pool reconcile lands with the first full pool';
+}
+```
+
+It compared **nothing**. Every seat in a scored pool was handed `MATCH` before anything was looked
+at. T4's first reconcile reported `60 MATCH · 0 RANK_DRIFT · 0 PAYOUT_MISMATCH · 0 INPUT_DRIFT` and
+**none of those four numbers was a measurement.** A verdict that cannot fail is not a verdict.
+
+The headline claim survived only because it was checked by hand against the chain's own committed
+payout list, the published leaderboard and the wallet balances — not because reconcile said so.
+
+**Fixed.** `harvest.ts` now fetches the published bundle from the `uri` on
+`/pools/<pda>/leaderboard` and records, per seat, the revealed `battles`, the rank, the score and
+the amount paid — and recomputes `sha256(battles ‖ salt)` against the `battles_hash` the chain
+recorded at entry. `reconcile.ts` now compares money, then rank, then the allocation itself, and
+raises `PAYOUT_MISMATCH`, `RANK_DRIFT` or `INPUT_DRIFT` accordingly.
+
+**T4 re-run against the real check:**
+
+| | first run (stub) | real check |
+|---|---|---|
+| MATCH | 60 | **58** |
+| RANK_DRIFT | 0 | **0** — every field rank exactly as predicted |
+| PAYOUT_MISMATCH | 0 | **0** |
+| INPUT_DRIFT | 0 | **2** — UI-A and UI-B, played by hand |
+| ABSENT | 4 | 4 |
+| verdict | PASS | **PASS** |
+
+All 64 revealed allocations reproduce their committed hashes. The verdict is unchanged; what changed
+is that it now rests on evidence rather than on a placeholder.
+
+### H9-a. The original symptom, kept because it is its own defect
+
 
 T4's reconcile reported **0 INPUT_DRIFT**. That number is a limitation, not a fact.
 

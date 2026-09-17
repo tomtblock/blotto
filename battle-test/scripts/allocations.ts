@@ -92,7 +92,13 @@ function grid(battles: number[][]): string[] {
     out.push(`     ${String(i + 1).padEnd(8)} ${b.map((v) => String(v).padStart(9)).join(' ')}`);
   });
   const sums = new Set(battles.map((b) => b.reduce((a, v) => a + v, 0)));
-  const shapes = new Set(battles.map((b) => JSON.stringify([...b].sort((x, y) => x - y))));
+  // UNSORTED, exactly as `backend/detection/src/signals.ts` measures it
+  // (`b.join(',')`). Sorting was the bug: a rotating wall or pole is one sorted
+  // shape however far it rotates, so this read "1 distinct shapes" for a set
+  // with seven genuinely different rows. The same mistake was found and fixed
+  // in `validate-plan.ts` on 2026-09-16 and survived here until T4's table was
+  // read closely — fixed 2026-09-17.
+  const shapes = new Set(battles.map((b) => b.join(',')));
   out.push(
     `     ${'—'.padEnd(8)} every battle sums to ${[...sums].join('/')}, ${shapes.size} distinct shapes`
   );
@@ -247,6 +253,9 @@ function main(): void {
           : '| recomputed | not yet — the pool has not revealed its secret |'
       );
     }
+    if (got?.scoreHalf !== undefined) {
+      L.push(`| score | ${got.scoreHalf} half-points · ${got.zones} stats won |`);
+    }
     L.push(
       `| register | ${got?.registerSig ? `[\`${short(got.registerSig)}\`](${EXPLORER}/tx/${got.registerSig}?cluster=devnet)${got.slot ? ` · slot ${got.slot}` : ''}` : '—'} |`
     );
@@ -256,7 +265,17 @@ function main(): void {
     if (got) {
       const expected = seat.expectedRefundLamports ?? seat.expectedLamports ?? '0';
       L.push(
-        `| outcome | ${got.refunded ? `refunded ${sol(BigInt(expected))} SOL` : got.flagged ? 'flagged, held in escrow' : 'not yet settled'} |`
+        `| outcome | ${
+          got.refunded
+            ? `refunded ${sol(BigInt(expected))} SOL`
+            : got.flagged
+              ? 'flagged, held in escrow'
+              : got.amountLamports !== undefined
+                ? BigInt(got.amountLamports) > 0n
+                  ? `**PAID ${sol(BigInt(got.amountLamports))} SOL** — rank ${got.rank} of ${plan.seats.length}`
+                  : `not paid — rank ${got.rank} of ${plan.seats.length}`
+                : 'not yet settled'
+        } |`
       );
       if (got.balanceAfter) L.push(`| balance after | ${sol(BigInt(got.balanceAfter))} SOL |`);
     }

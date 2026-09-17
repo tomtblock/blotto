@@ -29,7 +29,7 @@
           "seat": "4",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 23, not paid"
         }
       ]
     },
@@ -54,7 +54,7 @@
           "seat": "2",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 47, not paid"
         }
       ]
     },
@@ -79,7 +79,7 @@
           "seat": "5",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 27, not paid"
         }
       ]
     },
@@ -104,7 +104,7 @@
           "seat": "3",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 22, not paid"
         }
       ]
     },
@@ -129,7 +129,7 @@
           "seat": "7",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 41, not paid"
         }
       ]
     },
@@ -154,7 +154,7 @@
           "seat": "6",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 24, not paid"
         }
       ]
     },
@@ -179,7 +179,7 @@
           "seat": "9",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 16, not paid"
         }
       ]
     },
@@ -204,7 +204,7 @@
           "seat": "8",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 15, not paid"
         }
       ]
     },
@@ -229,7 +229,7 @@
           "seat": "11",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 25, not paid"
         }
       ]
     },
@@ -254,7 +254,7 @@
           "seat": "10",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 54, not paid"
         }
       ]
     },
@@ -271,7 +271,7 @@
           "seat": "13",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 34, not paid"
         }
       ]
     },
@@ -288,7 +288,7 @@
           "seat": "12",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 55, not paid"
         }
       ]
     },
@@ -305,7 +305,7 @@
           "seat": "14",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 63, not paid"
         }
       ]
     },
@@ -322,7 +322,7 @@
           "seat": "15",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 61, not paid"
         }
       ]
     },
@@ -339,7 +339,7 @@
           "seat": "16",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 20, not paid"
         }
       ]
     },
@@ -356,7 +356,7 @@
           "seat": "17",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 52, not paid"
         }
       ]
     },
@@ -373,7 +373,7 @@
           "seat": "21",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 49, not paid"
         }
       ]
     },
@@ -390,7 +390,7 @@
           "seat": "19",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 35, not paid"
         }
       ]
     },
@@ -407,7 +407,7 @@
           "seat": "20",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 29, not paid"
         }
       ]
     },
@@ -424,7 +424,7 @@
           "seat": "18",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 46, not paid"
         }
       ]
     },
@@ -441,7 +441,7 @@
           "seat": "24",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 21, not paid"
         }
       ]
     },
@@ -458,7 +458,7 @@
           "seat": "23",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 40, not paid"
         }
       ]
     },
@@ -492,7 +492,7 @@
           "seat": "22",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 6, not paid"
         }
       ]
     },
@@ -509,7 +509,7 @@
           "seat": "26",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 14, not paid"
         }
       ]
     },
@@ -526,7 +526,7 @@
           "seat": "25",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 53, not paid"
         }
       ]
     },
@@ -543,7 +543,7 @@
           "seat": "28",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 32, not paid"
         }
       ]
     },
@@ -560,7 +560,7 @@
           "seat": "27",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 43, not paid"
         }
       ]
     },
@@ -577,7 +577,7 @@
           "seat": "30",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 28, not paid"
         }
       ]
     },
@@ -594,7 +594,7 @@
           "seat": "29",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 31, not paid"
         }
       ]
     },
@@ -611,7 +611,7 @@
           "seat": "32",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 60, not paid"
         }
       ]
     },
@@ -628,7 +628,7 @@
           "seat": "31",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 38, not paid"
         }
       ]
     },
@@ -645,7 +645,7 @@
           "seat": "34",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 56, not paid"
         }
       ]
     },
@@ -662,7 +662,7 @@
           "seat": "33",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 5, not paid"
         }
       ]
     },
@@ -679,7 +679,7 @@
           "seat": "36",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 42, not paid"
         }
       ]
     },
@@ -696,7 +696,7 @@
           "seat": "35",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 10, not paid"
         }
       ]
     },
@@ -713,7 +713,7 @@
           "seat": "38",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 9, not paid"
         }
       ]
     },
@@ -730,7 +730,7 @@
           "seat": "37",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 45, not paid"
         }
       ]
     },
@@ -747,7 +747,7 @@
           "seat": "39",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 58, not paid"
         }
       ]
     },
@@ -764,7 +764,7 @@
           "seat": "40",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 39, not paid"
         }
       ]
     },
@@ -781,7 +781,7 @@
           "seat": "42",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 19, not paid"
         }
       ]
     },
@@ -798,7 +798,7 @@
           "seat": "41",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 18, not paid"
         }
       ]
     },
@@ -849,7 +849,7 @@
           "seat": "43",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 44, not paid"
         }
       ]
     },
@@ -866,7 +866,7 @@
           "seat": "44",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 2, not paid"
         }
       ]
     },
@@ -883,7 +883,7 @@
           "seat": "45",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 4, not paid"
         }
       ]
     },
@@ -900,7 +900,7 @@
           "seat": "46",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 62, not paid"
         }
       ]
     },
@@ -917,7 +917,7 @@
           "seat": "47",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 8, not paid"
         }
       ]
     },
@@ -934,7 +934,7 @@
           "seat": "48",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 37, not paid"
         }
       ]
     },
@@ -951,7 +951,7 @@
           "seat": "49",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 36, not paid"
         }
       ]
     },
@@ -968,7 +968,7 @@
           "seat": "50",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 57, not paid"
         }
       ]
     },
@@ -985,7 +985,7 @@
           "seat": "51",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 17, not paid"
         }
       ]
     },
@@ -1002,7 +1002,7 @@
           "seat": "52",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 48, not paid"
         }
       ]
     },
@@ -1019,7 +1019,7 @@
           "seat": "53",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 12, not paid"
         }
       ]
     },
@@ -1053,7 +1053,7 @@
           "seat": "54",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 7, not paid"
         }
       ]
     },
@@ -1070,7 +1070,7 @@
           "seat": "55",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 11, not paid"
         }
       ]
     },
@@ -1087,7 +1087,7 @@
           "seat": "56",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 50, not paid"
         }
       ]
     },
@@ -1104,7 +1104,7 @@
           "seat": "57",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 33, not paid"
         }
       ]
     },
@@ -1121,7 +1121,7 @@
           "seat": "58",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 26, not paid"
         }
       ]
     },
@@ -1138,7 +1138,7 @@
           "seat": "59",
           "role": "field",
           "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "note": "rank 30, not paid"
         }
       ]
     },
@@ -1243,8 +1243,8 @@
           "poolId": "16",
           "seat": "0",
           "role": "wall",
-          "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "verdict": "INPUT_DRIFT",
+          "note": "6 of 7 battles differ from the plan (played by hand — rank and payout still match)"
         }
       ]
     },
@@ -1269,8 +1269,8 @@
           "poolId": "16",
           "seat": "1",
           "role": "pole",
-          "verdict": "MATCH",
-          "note": "scored-pool reconcile lands with the first full pool"
+          "verdict": "INPUT_DRIFT",
+          "note": "3 of 7 battles differ from the plan (played by hand — rank and payout still match)"
         }
       ]
     }
