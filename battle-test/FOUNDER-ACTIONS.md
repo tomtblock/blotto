@@ -399,3 +399,67 @@ I have not touched either directory. Recommendation: **leave it until the week e
 lockout blocks another test. It is not blocking T4, the guardrails above stop it recurring inside
 the test, and a product change made mid-test muddies what the test is measuring. But it should not
 reach mainnet, and if you want it now, say so and I will do it properly with tests.
+
+---
+
+## F-25 — DONE. The seal lockout is fixed.
+
+**Nothing for you to do here.** You said "yes fix seal" and it is written, tested and pushed. All
+four parts of F-24's patch shipped as commit `41d592d`.
+
+What changed, in plain terms:
+
+1. **The store now refuses to replace an allocation only when the entry is actually paid for.** If
+   your entry broke before it reached the chain, you can simply play again. That is the whole
+   lockout, gone — and the protection that matters (nobody, not even you, can overwrite an entry
+   the chain has accepted) is untouched and tested.
+2. **The app asks for permission before it seals**, not after. A refusal now arrives before anything
+   is stored, which is the exact sequence that struck on the 16th.
+3. **A wallet can now ask whether it has already sealed.** Nobody could find that out before — not
+   you, not a player, not a support agent. The wallet signs the question, so this opens nothing to
+   anyone else, and the answer is one yes-or-no and never the allocation itself.
+4. **A player whose entry simply broke is no longer told they are not allowed to enter.** They are
+   different things and the app now says the true one.
+
+**One thing I got wrong, and want on the record.** The specification I wrote for part 1 had the
+wrong database key in it. Had I typed it in as written, it would have matched nothing for anybody,
+which the code would have read as "this seat is not paid for" — and it would have allowed exactly
+the overwrite the protection exists to prevent. It never shipped: I read the database's own
+definition before writing the code, which is the rule for precisely this reason. There is now a test
+that uses the wrong key on purpose and fails if anyone reintroduces it.
+
+**One thing that is yours, not mine.** The new message a player sees is my wording, marked in the
+code as a proposal. Change it whenever you like.
+
+---
+
+## F-26 — ▶ FOUNDER ACTION: two changes, one branch, and I need your say-so
+
+**What is stuck.** The working branch now holds two unrelated things:
+
+- `ca06c1b` — T2's freeze record. A `battle-test/` file.
+- `41d592d` — the seal fix. `app/` and `backend/` files.
+
+The safety check we built for this week fires whenever a change touches `battle-test/`, and then
+**refuses that change if it touches anything else.** That check is the guarantee the whole test
+rests on: it is what proves the battle test cannot have quietly altered the product it is measuring.
+So I will not open one PR containing both, and I will not weaken the check to make it pass.
+
+They need to go up as two separate changes, off two branches. **Pushing to a second branch is
+something you told me never to do without asking**, so I am asking.
+
+**▶ Pick one:**
+
+- **(a) Say yes to a second branch (recommended).** I push the seal fix to a branch of its own,
+  open both PRs, and you merge them in whatever order you like. Costs you two merges instead of one.
+- **(b) Merge the battle-test commit first, from this branch, as it stands.** That PR is
+  battle-test-only in content but the branch also carries the product commit, so the boundary check
+  would see both and refuse. This does not actually work — I am listing it so you can see I checked.
+- **(c) Leave the seal fix sitting on the branch until the test week ends**, then land it on its
+  own. Nothing is lost; it just does not reach the product yet.
+
+I recommend **(a)**. The fix is tested and the lockout is the worst thing this test has found — it
+is not a defect you want sitting unmerged while the product is being shown to anyone.
+
+**Nothing is waiting on this.** T2 settles on its own at 01:15:58Z tomorrow; no admin key and no
+action from you is needed for it.

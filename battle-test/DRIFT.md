@@ -1137,3 +1137,41 @@ tampered bundle cannot reproduce that root.
 **Superseded, kept for the record:** the published bundle is fetched from `gateway.irys.xyz` at harvest time and
 is NOT archived under `evidence/`. That gateway returned an empty body twice tonight. The evidence
 chain currently depends on a third party staying reachable; it should keep its own copy.
+
+
+### H15. My own fix specification had the key wrong, in the direction that fails OPEN (2026-09-18)
+
+`docs/FIX-seal-lockout.md` part 1 — the central fix, the one the whole document calls "the actual
+fix" — specified this lookup:
+
+```ts
+'SELECT 1 FROM entries WHERE pool = $1 AND player = $2 LIMIT 1',
+[poolId.toString(), player]
+```
+
+**`entries.pool` does not hold the numeric pool id.** It is `TEXT` holding the pool's base58 PDA
+(`backend/_shared/migrations/0003_derived_tables.sql:28`), written from `EntryRegistered.pool`
+(`backend/indexer/src/projection.ts:126`) and read that way by the read API
+(`backend/indexer/src/read-api.ts:286`). The ciphertext STORE is keyed by the numeric id — that is
+`pool-ids.ts`'s whole reason for existing — and I carried the store's key into a query against a
+different table.
+
+**Which way it breaks matters more than that it breaks.** Passing the id matches zero rows for every
+player. Zero rows reads as "this seat is not registered". "Not registered" ALLOWS the overwrite. So
+the bug would have silently allowed every overwrite, including the one case the gate exists to
+refuse: a player destroying their own PAID entry, whose `battles_hash` the chain already holds. The
+result is an entry scored all losses. That is failing open, on a money path, in a fix whose own
+document says twice that it must fail closed.
+
+It was caught by reading the migration and both projection call sites before writing the code —
+`CLAUDE.md`'s branch-state rule, which says to verify every reference against the source rather than
+work from docs. The specification was a doc.
+
+**Fixed, and pinned so it cannot come back.** `backend/packet/src/seats.ts` takes the pool ADDRESS
+and says why in its module comment. A test registers a seat under the numeric id, proves the gate
+stays open, then registers the same seat under the PDA and proves it closes — so the wrong key fails
+the suite instead of passing it quietly.
+
+**The general shape, which is the part worth keeping:** two keys for the same object, each correct
+in its own table, and a type (`bigint` vs `string`) that does not stop you swapping them because
+`.toString()` is always available. The specification read plausibly for exactly that reason.

@@ -1,19 +1,62 @@
-# STATE — 2026-09-17 22:45 local (2026-09-18 01:45 UTC) — by Claude Code
+# STATE — 2026-09-18 17:00 UTC — by Claude Code
 
-Phase:            **T5 PASSED on pool 18 — a headless wallet took the whole 4 SOL pot and neither
-                  founder wallet won.** All eight frozen pass criteria met and checked.
-Waiting on:       **founder decision on §H13**, which is founder-and-counsel territory: the
-                  90-second timeout default makes two timed-out players a byte-identical pair, which
-                  is the strongest detection signal and hard-block-eligible. Nobody was flagged
-                  (correct — the daemon never flags), but a reviewer trusting it would block honest
-                  players who paid an entry.
-Also open:        F-24/F-25 (seal-lockout fix now or after the week) and the Vercel ignore step,
-                  approved and ready to apply (~85% off build minutes).
+Phase:            **T2 is entered and waiting on its deadline. The seal-lockout fix is written,
+                  tested and pushed.**
+Waiting on:       **a founder call on how to land two separate changes** — the branch carries a
+                  battle-test commit and a product commit, and the boundary lane refuses a mixed
+                  diff. See F-26 below. Nothing else is blocked by it.
+Also open:        **§H13**, founder-and-counsel territory: the 90-second timeout default makes two
+                  timed-out players a byte-identical pair, which is the strongest detection signal
+                  and hard-block-eligible. Detection policy already answered ("never flag at all —
+                  report only"); the duplicate-signal false positive is held as a patch awaiting its
+                  own PR. Vercel ignore step approved, still not applied (~85% off build minutes).
 Blocked:          nothing.
-Live deadlines:   none — pool 18 is Paid and settled.
-Results so far:   T1 **PASS** · T4 **PASS** · T5 **PASS** · T2, T3, T6-T8 not started
-Money:            funder 2.679882760 SOL reserve; roster funded to 0.15 each before the run. Sweep
-                  before the next pool — prize money and leftovers recirculate.
+Live deadlines:   **pool 20 (T2) settles at 2026-09-19T01:15:58Z.** No founder action needed — both
+                  `trigger_refund` and `refund` are permissionless.
+Results so far:   T1 **PASS** · T4 **PASS** · T5 **PASS** · **T2 running** · T3, T6-T8 not started
+Money:            per-seat sunk cost measured identically on T1, T4 and T5: **4441080 lamports**.
+                  T2 predicts that figure to the lamport for all 39 seats.
+
+**T2 — entered, frozen, and now just waiting (2026-09-18):**
+  Pool 20 `DhtdSBap…zwvqh`, 39 of 64 seats, one below MIN_SEATS. Freeze merged 14:42:47Z, first
+  entry 14:45:13Z — 2 min 26 s of margin, and the freeze record says plainly that this is weaker
+  than T4's in one respect: T4's freeze preceded the EXISTENCE of its pool and T2's does not.
+  → It predicts no ranks, no scores and no winner. Its claims are the refund fork, the entrant
+    count and a per-seat lamport figure — none of which any property of the pool could be tuned to.
+  → Two seats burnt on the way in (W15, W31) with `block height exceeded` at concurrency 1 and
+    ZERO 429s. That is neither §H8 nor §H12: baseline devnet flakiness, 2 of 32. Both replaced by
+    spares playing the burnt seats' OWN frozen allocations, so the field is the one the plan named.
+  → At settlement, verify: Closed not Paid · 39 refunds of 100000000 each · net loss exactly
+    4441080 per seat · vault 650240 · the 4 SOL pot returned to the treasury untouched.
+
+**THE SEAL LOCKOUT IS FIXED — commit 41d592d, pushed, not yet in a PR (2026-09-18):**
+  §H6 is what burnt eleven wallets across three pools: the app sealed BEFORE asking permission, and
+  the store refused any second, different allocation for a seat that already had one — so any
+  failure after the seal barred that wallet from that pool for good, having paid nothing.
+  → **The gate now asks whether the SEAT IS REGISTERED**, not whether a ciphertext exists. Those
+    are the same question only after the entry lands; before it they are opposites, and an
+    abandoned attempt can now be replaced. A registered seat is still protected, and a lookup that
+    cannot answer refuses — it fails closed.
+  → The app asks for the packet BEFORE sealing. That narrows the window; it does not close it,
+    which is why it is second and not first.
+  → `POST /ciphertexts/status` lets a wallet ask whether it has sealed. The lockout was not only
+    irreversible, it was INVISIBLE — our own preflight said GO for two wallets already barred.
+  → A 409 from the store is no longer shown as "you are not allowed to enter". New copy, marked as
+    a proposal: **user-facing language is yours, not mine.**
+  → **§H15 — my own specification had the key wrong, in the direction that fails OPEN.** It queried
+    `entries` by the numeric pool id; that column holds the base58 PDA. Zero rows would have read
+    as "not registered" and allowed every overwrite, including the one the gate exists to refuse.
+    Caught by reading the migration and both call sites before writing the code, and pinned by a
+    test that registers under the wrong key and proves the gate stays open.
+  → Proven, not asserted: 195 packet tests, 503 app tests, both packages typecheck, language gate
+    and standing-rules clean.
+
+**F-26 — the one thing that needs you: two changes, one branch.**
+  `claude/sharp-bohr-c8aeub` now carries `ca06c1b` (T2's freeze record, `battle-test/`) and
+  `41d592d` (the seal fix, `app/` + `backend/`). The boundary lane fires on any diff touching
+  `battle-test/**` and then refuses a diff touching anything else — which is the guarantee the
+  whole test rests on, so a mixed PR must not be opened. They need two PRs off two branches, and
+  pushing a second branch needs your say-so. Options are in FOUNDER-ACTIONS.md §F-26.
 
 **T5's result, and what it actually proved (2026-09-18 01:13Z):**
   W00 rank 1, paid **4000000000** lamports — the whole pot, to a headless wallet with no relationship
@@ -32,32 +75,25 @@ Money:            funder 2.679882760 SOL reserve; roster funded to 0.15 each bef
     public RPC, then expired blockhashes. Re-running the remaining 14 at concurrency 1 landed
     14 of 14 with zero 429s. Same gate, same code, one knob.
   → **§H14 — "recomputed root equals on-chain root" was a pass criterion nothing checked.**
-    reconcile only printed it. Computed by hand: MATCH. Two traps on the way — merkleRoot takes leaf
-    BYTES and hashes them itself, and a rank tie means rank order alone does not fix leaf order.
+    reconcile only printed it. Now recomputed on every run and PROVEN ABLE TO FAIL (one lamport
+    moved off the winner's payout → MISMATCH; restored → byte-identical). Two traps on the way:
+    merkleRoot takes leaf BYTES and hashes them itself, and a rank tie means rank order alone does
+    not fix leaf order — **ties break by seat index ascending, and the verify page must do the same
+    or a player recomputing their own payout gets a wrong root.**
 
-**Tooling changed tonight:**
+**Tooling changed since T5:**
   1. `enter.ts` no longer needs the master seed — it loads keypairs from `keys/wallets/`, proven
      equivalent because all 72 reproduce the addresses committed in `registry/wallets.json`.
   2. `--wallets` now SELECTS from a plan's seats instead of being silently ignored, so a part-way
      run can be resumed on the seats that are left.
   3. Device marker entropy moved from the master seed to each wallet's own secret key; distinctness
      per wallet per pool is preserved, which is the only property that matters.
+  4. `reconcile.ts` rebuilds the results tree and compares it to the on-chain root, and a failing
+     root now fails the run.
 
-**T5 — what it tests and what the founder sets:**
-  W00 takes the wall and the 4 SOL pot. W01 takes the pole and last place. BOTH founder wallets are
-  ORDINARY FIELD SEATS that do not win — the claim T4 could not make, since there the operator's own
-  account won and nothing ruled out that it was privileged.
-  → UI-A: one drag a battle, a stat to 25, in order Strength, Speed, Heart, Wit, Durability,
-    Strength, Heart. UI-B: the same but Durability, Wit, Heart, Speed, Strength, Wit, Speed.
-    THE ONLY RULE THAT MATTERS: every stat between 1 and 25. Never above 25, never down to 0.
-  → PROVEN over 60 seeds: such a seat loses to a wall 840/840 and beats a pole 840/840, so it lands
-    in ranks 2..63 for ANY allocation in that range — not just the recipe.
-  → The non-zero floor is load-bearing: two or more zeroes can DRAW with a pole, and "cannot come
-    last" stops holding.
-  → Founder ranks are predicted as a RANGE, not a number. T4 showed hand-dialling lands elsewhere
-    (1 of 7 battles matched), so exact positions are computed at reveal. Nominally 62nd and 63rd —
-    near the bottom, because a near-even spread is the weakest shape the game has.
-  → Funder holds 10.049945 SOL. Roster needs sweeping and re-funding before the run.
+---
+
+# History below this line — kept for evidence, not for status
 
 **T4's result, and what it actually proved (2026-09-17 02:23Z):**
   UI-A net +3.895554578 SOL against +3.895564000 predicted — 9422 lamports apart. Vault 650240

@@ -1,8 +1,19 @@
 # Fix: a failed entry must not bar a wallet from the pool
 
-**Status:** specified, NOT applied. The change lives in `app/` and `backend/`, which are outside the
-battle test's source boundary. This document is the patch, ready for a product PR the founder
-ratifies.
+**Status: APPLIED, 2026-09-18, commit `41d592d`** on `claude/sharp-bohr-c8aeub`, on the founder's
+ratification ("Yes fix seal"). All four parts shipped. 195 packet tests and 503 app tests pass, both
+packages typecheck, the language gate and the standing-rules check are clean. NOT yet in a PR
+— see the note at the foot of this document.
+
+**ONE CORRECTION TO THIS DOCUMENT, and it is the important part of it.** Part 1's query below is
+WRONG and was corrected in the implementation: `entries.pool` holds the pool's base58 **PDA**, not
+its numeric id. The specified query would have matched zero rows for every player, read as "this
+seat is not registered", and ALLOWED every overwrite — failing OPEN on the one case the gate exists
+to refuse. `DRIFT.md` §H15 carries it in full. The text below is left as written so the error is
+visible rather than tidied away; read it with §H15.
+
+*(Original status, for the record: specified, NOT applied. The change lives in `app/` and
+`backend/`, which are outside the battle test's source boundary.)*
 
 **The defect:** `DRIFT.md` §H6 · **Founder-facing:** `REPORT.md` §2 F-4 · **Decision:** F-24.
 
@@ -109,6 +120,13 @@ costs one `getAccountInfo`, but adds a chain dependency to a service that curren
 
 **Test to add:** a ciphertext may be replaced while no Entry row exists, and may not once one does.
 
+> **As shipped.** `backend/packet/src/seats.ts` takes the pool ADDRESS, not `pool.id` — see the
+> correction at the top and `DRIFT.md` §H15. Four tests in `backend/packet/test/packet.spec.ts`:
+> the overwrite is allowed with no seat registered (the lockout, gone), refused once one is
+> (the protection, intact), refused when the lookup cannot answer (fails closed), and — the one
+> that stops the error coming back — allowed when the seat is registered under the NUMERIC ID,
+> so the wrong key fails the suite instead of passing it quietly.
+
 ### 2. Ask permission before sealing (app) — narrows the window
 
 `app/src/entry/submit.ts:99-100`, swap the two calls:
@@ -159,6 +177,25 @@ must not be dressed as one.
 4. Kill the packet service mid-entry, then retry the entry: it succeeds.
 5. Point the seat resolver at a broken database: overwrites are refused, not allowed.
 
+## As shipped — the two places the implementation departs from this document
+
+1. **The seat key**, above and in §H15. The specification was wrong; the code is not.
+2. **Part 3's client half is not wired into the entry flow.** `checkSealed` is exported from
+   `app/src/entry/services.ts` and called by nothing. Asking costs a wallet signature prompt, and
+   putting one in front of every entry spends a prompt out of the ninety-second session to detect a
+   state part 1 has just made recoverable. It is there for the surfaces that need the truth about a
+   specific wallet — a support answer, `preflight.ts`, a "you already sealed here" panel if the
+   founder wants one. Whether the player-facing flow uses it is a UX call and founder-owned.
+
+Two follow-ons, neither blocking:
+
+- **`battle-test/scripts/preflight.ts` should now make the check it prints as its blind spot.** It
+  reported GO for two wallets that were already barred. The endpoint it needed now exists. This is a
+  battle-test change, so it lands with the battle-test records, not with the product change.
+- **Part 4's copy is an architect proposal.** User-facing language is founder-owned (PID §8.7 and
+  the ownership split): the new `sealConflict` string carries a `PHASE-N-REVIEW` note saying so, as
+  the string it was split out of already did.
+
 ## What this is worth
 
 On devnet it cost a pool and an evening. On mainnet a single entry-service blip does not merely fail
@@ -166,3 +203,15 @@ the entries in flight: it bars every player who reached the seal from that pool 
 and can leave the pool unable to fill with players who would gladly have paid. It converts a
 ten-minute incident into permanent damage and a queue of players who cannot be helped, because there
 is not even a way to confirm what happened to them.
+
+
+---
+
+## Why this is not in a PR yet
+
+`claude/sharp-bohr-c8aeub` carries both `ca06c1b` (T2's freeze record, `battle-test/`) and
+`41d592d` (this fix, `app/` + `backend/`). The boundary lane in `.github/workflows/rehearsal.yml`
+triggers on any diff touching `battle-test/**` and then **refuses a diff that touches anything
+else** — which is exactly the guarantee the battle test is built on, and the reason a mixed PR
+must not be opened. The two commits need to land as two PRs, and that needs a
+second branch, which is the founder's call to make.
