@@ -995,3 +995,119 @@ rule guards — appears in any registry file.
 **The check did its job.** It is the second time in two days that a gate I did not write caught
 something I did: the language gate on §8.7 wording, and now the secret scanner. Both are cheap and
 both were right.
+
+
+### H12. My runner burnt four more wallets, and again it was concurrency, not the gate (2026-09-18)
+
+T5's headless run stopped after 52 of 62 seats with four burnt — W48, W49, W50, W51 — each
+`SEALED THEN FAILED`, each barred from pool 18 permanently (§H6).
+
+**The log names the cause and it is not the product.** A storm of `429 Too Many Requests` from the
+public devnet RPC, then `Signature … has expired: block height exceeded`. Rate limiting delayed
+confirmation past the blockhash window. The entry gate answered every request; nothing in `app/`,
+`backend/` or `programs/` misbehaved.
+
+This is §H8's family a second time: **the runner's own transaction handling, not the thing under
+test.** §H8 was a blockhash chosen badly; this is too many senders at once. `--concurrency`
+defaults to 4, and four parallel senders against `api.devnet.solana.com` is over its limit.
+
+**The fix, and the proof it is the fix.** The remaining 14 seats — W52..W61 plus four substitutes
+playing the burnt seats' own frozen allocations — were re-run at `--concurrency 1`. Result:
+**14 of 14 landed, zero 429s, zero burnt.** Same gate, same RPC, same code, one knob. That is as
+close to a controlled experiment as this week gets.
+
+**The guardrail justified itself again.** The §H6 stop halted at the first casualty. Without it all
+ten remaining seats would have been burnt the same way, and pool 18 would have finished short of 64.
+
+**A second bug, found while fixing the first.** `--wallets` was silently IGNORED whenever `--plan`
+was given: the plan supplied the seat list and the flag did nothing. So a part-way run could not be
+resumed on the seats that were left — the only option was re-attempting all 62 and burying the real
+failures in `already registered` noise. `--wallets` now SELECTS from the plan's seats, while
+`fromPlan` is still built from the full list so a substitute can find its burnt seat's allocation.
+
+**Cost:** four wallets, 0.4 SOL of devnet entries that bought nothing, and about twenty minutes of a
+ninety-minute window.
+
+---
+
+### H13. Both founder wallets timed out into the even split — and it manufactured the strongest detection signal (2026-09-18)
+
+Every revealed battle for UI-A and UI-B in pool 18 is `[20, 20, 20, 20, 20]`. All seven. Both
+wallets. That is not a choice; it is `RUN_CLOCK_BUDGET_MS`, the ninety-second budget covering all
+seven battles, expiring and defaulting every unlocked battle to the even split.
+
+**What I told the founder beforehand, and what it was worth.** I said the clock could not break the
+test, because the even split keeps every stat between 1 and 25 and the unconditional claim was
+`rank 2..63`. That part held exactly: both finished **rank 62**, paid nothing, inside the range.
+
+**What I missed in the same breath.** I also told them the two rotations differed *on purpose*,
+because two identical sets trip `duplicate_sets` — the one allocation signal that hard-blocks. Then
+the timer made them identical anyway. I checked the rank property and did not check the property I
+had myself just named. The reassurance was right and incomplete, which is worse than either.
+
+**Confirmed by running the product's own code**, not inferred: `duplicateSets` from
+`backend/detection/src/signals.ts` over the 64 revealed sets returns exactly two findings —
+
+```
+UI-A  severity=strong  exact 35-byte duplicate battle set  correlated=["UI-B"]
+UI-B  severity=strong  exact 35-byte duplicate battle set  correlated=["UI-A"]
+```
+
+`strong` is the only severity `isHardBlockFinding` accepts for this signal.
+
+**Nobody was flagged, and that is correct.** `backend/reveal/src/main.ts:389` is explicit: detection
+is computed and persisted for every pool but **nothing is flagged by the daemon**, and
+`report.hardBlocks` is deliberately not returned — a flag is a reviewer's decision through
+`flag_entry`. On-chain both seats read `flagged: false`, no sanctions hold. I checked before
+claiming a gap, and there is no gap here.
+
+**The finding that survives, and it is a product one.** The strongest single signal in the detection
+suite — described in its own comment as "35 identical bytes between independent humans is
+near-impossible" — is **manufactured by the product's own timeout default**. Two honest players who
+both run out of time produce a byte-identical pair. There is no exemption for the even split in
+`duplicateSets`. It scales quadratically: k timed-out players in a pool produce k(k−1) strong
+findings, every one of them hard-block-eligible, every one a false positive.
+
+A reviewer who trusts "strong / exact duplicate" would block players whose only mistake was running
+out of time — players who have paid an entry. **This is for the founder and counsel, not for me:**
+it touches who gets blocked and why.
+
+Worth stating for scale: this happened on the FIRST pool where two humans played. It is not exotic.
+
+---
+
+### H14. A pass criterion no tool checked — and the check, run by hand, passes (2026-09-18)
+
+T5's frozen `passCriteria` has eight items. One is:
+
+> "The recomputed results root equals the on-chain results_root."
+
+**Nothing verifies it.** `reconcile.ts` line 229 *prints* `Results root: …` and never recomputes
+anything. This is §H9's sibling: a stated criterion whose satisfaction was being asserted by
+display. §H9 was a verdict that could not fail; this is a criterion that was never tested.
+
+**So it was computed by hand**, from published data, using the product's own canonical tree
+(`backend/scoring/src/merkle.ts` — the same module the verify page bundles):
+
+```
+on-chain root   : 0e1d6b87140f8696ef9252a3d1858c48133ce196b265b6c1881668af5b193bcc
+recomputed root : 0e1d6b87140f8696ef9252a3d1858c48133ce196b265b6c1881668af5b193bcc   MATCH
+```
+
+Two things had to be got right, and the first attempt got both wrong:
+
+1. `merkleRoot()` takes **leaf bytes** and applies the `0x00`-prefixed leaf hash itself. Pre-hashing
+   double-hashes and produces a plausible, wrong root.
+2. **Rank order alone does not determine leaf order.** UI-A and UI-B tied at rank 62, so the tree's
+   leaf sequence is ambiguous from ranks. Breaking the tie by seat index ascending reproduces the
+   on-chain root; breaking it the other way does not. That is why the published bundle carries a
+   `leaf_order` at all — the same field whose 64-integer shape trips the Solana-keypair rule in
+   `.gitleaksignore`.
+
+A player recomputing their own payout hits both. The verify page must break ties exactly this way,
+and the rule deserves to be written down somewhere a player can read rather than inferred from a
+matching root.
+
+**Also worth fixing:** the published bundle is fetched from `gateway.irys.xyz` at harvest time and
+is NOT archived under `evidence/`. That gateway returned an empty body twice tonight. The evidence
+chain currently depends on a third party staying reachable; it should keep its own copy.
