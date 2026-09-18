@@ -1175,3 +1175,68 @@ the suite instead of passing it quietly.
 **The general shape, which is the part worth keeping:** two keys for the same object, each correct
 in its own table, and a type (`bigint` vs `string`) that does not stop you swapping them because
 `.toString()` is always available. The specification read plausibly for exactly that reason.
+
+
+### H16. I broke a live test by sending 1 SOL without asking what it was for (2026-09-18)
+
+At 19:00Z the founder asked me to send 1 SOL to `CRCK62mRC4zxsFRAx41g4MbQzGqsJQD3SURM7Te4VnhW`. I
+checked the address was valid base58, on-curve rather than a PDA, absent from the roster, and that
+the funder could afford it. I wrote "T6 funding is unaffected" and sent it inside two minutes.
+
+```
+19:04:05Z   the transfer lands
+19:07:24Z   that wallet registers into pool 20 — seat idx=39, the 40th
+```
+
+**Pool 20 was T2, and T2's entire hypothesis is "39 seats, one below the boundary."** At 40 =
+MIN_SEATS the chain's `outcome_if_deadline_now` flipped from `refund` to `seal`. T2's frozen
+prediction fails on its headline claims: `entrants: 39`, `sealsAtDeadline: false`,
+`settlementInstruction: trigger_refund`.
+
+**The question I did not ask was "could this affect the test that is running right now?"** I had
+everything needed: I wrote the sentence "39 is the point of the test" myself, hours earlier, and
+T2's own contingency section says in terms that crossing the fork "would turn this into T3." I
+checked the transfer against the wrong thing — next week's budget instead of tonight's live pool.
+
+**What it cost, and what it did not.** T2 is SPOILED, not disproved: nothing was learned that
+contradicts the boundary claim, and nothing about the program misbehaved. The 39 seats and their
+sealed allocations are intact; the pool simply crosses the fork and plays instead of refunding.
+
+**The rule that follows, and it is narrow enough to keep.** While a named test's pool is open, no
+wallet outside its seat list gets funded without checking the seat count first. Written into
+`T2R.plan.json` as a stated limitation rather than a private habit, because the same thing can be
+done by a stranger on a public devnet and no procedure of ours prevents that.
+
+---
+
+### H17. I recommended a partial freeze on pool 20, then reversed it — the freeze could not have failed (2026-09-18)
+
+With pool 20 about to seal at exactly 40, I proposed freezing a partial prediction over its
+settlement: `Paid` not `Closed`, `seal_at_deadline` not `trigger_refund`, one seat paid exactly
+4000000000, vault 650240, per-seat sunk 4441080. The pitch was that the fork-at-40 evidence is
+otherwise unavailable this week.
+
+**Then I tested the idea against the one question that matters — could any of it have come out the
+other way?**
+
+| claim | could it fail? |
+|---|---|
+| `Paid`, `seal_at_deadline` | No. The pool holds 40, `MIN_SEATS` is 40, the rule is public. Already determined and readable by anyone. |
+| one seat paid `4000000000` | No. `PAID_RANKS = 1`, `PRIZE_BANDS_1024 = [1024]`. Constants. |
+| vault `650240` | No. Measured identically on three settled pools. |
+| per-seat `4441080` | No. Same. |
+
+Every line was already known. That is a verdict that cannot fail, dressed as a prediction — **§H9
+and §H14 in a third disguise**, and I was about to write it into the record having logged both.
+
+The one genuinely uncertain thing — who wins — is the one thing that cannot be predicted here, since
+three of the forty allocations are sealed and unknown to us.
+
+**The cost of doing it would not have been neutral.** This week's value rests on every number being
+backed by a prediction frozen before the outcome could be known. A record that does not meet that
+bar dilutes the ones that do: a careful reader finds a freeze that could not fail, a casual one
+over-credits it.
+
+**Pool 20 is therefore recorded as a plain observation and claims nothing.** The boundary claim is
+retried properly on the next pool (`registry/T2R.plan.json`), frozen before that pool exists —
+which is a stronger freeze than T2's own, and available only because the retry was forced.

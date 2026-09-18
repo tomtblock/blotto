@@ -608,3 +608,56 @@ You will be charged a transaction fee and nothing else. No entry, no 0.1 SOL.
 | two browser sessions | when I call them |
 
 Everything else is mine. T2 settles itself at 01:15:58Z and I am set to pick it up.
+
+---
+
+## F-29 — ▶ ONE MERGE, then you can go to bed
+
+**Merge the T2R freeze PR before ~01:21Z.** That is the whole ask. Everything after it is headless.
+
+### What this is
+
+T2 is spoiled and that is my fault — §H16, and I have written it up plainly. The 1 SOL you asked me
+to send funded the wallet that became pool 20's 40th seat three minutes later, which crossed the
+boundary T2 exists to test. I checked that transfer against next week's budget and never asked
+whether it touched the test that was running right then.
+
+**T2R is the retry, and it is stronger than the test it replaces.** T2's prediction was frozen
+against a pool that was already open. This one is frozen **before its pool exists** — the pool it
+will run on opens about five minutes after pool 20 closes. That is the strongest form of freeze this
+test has, and we only get it here because the retry was forced.
+
+### What happens once you merge
+
+Nothing that needs you.
+
+1. Pool 20 seals at 01:15:58Z and pays out. It is recorded as an **observation** — no prediction
+   attached, nothing claimed. I explain below why I am not dressing it up.
+2. The next pool opens ~01:21Z. I enter 39 headless wallets into it.
+3. Twelve hours later it misses its deadline one seat short and refunds all 39. **No admin key and
+   no action from you** — both settlement instructions are permissionless by design.
+4. I harvest, reconcile and report.
+
+All 72 wallets are funded at exactly 0.15 and nothing else is outstanding.
+
+### Why pool 20 gets no prediction
+
+I offered to freeze a partial one and then talked myself out of it, which is worth you knowing
+because it is the second time this project has nearly recorded a check that could not fail.
+
+Every line I would have frozen was already known before the event: the pool holds 40 and the
+minimum is 40, so the outcome is public arithmetic; "one seat paid the whole pot" is a constant; the
+vault figure and the per-seat cost have each been measured three times. A prediction that cannot be
+wrong is not evidence, and putting one in the record makes the honest ones worth less. So pool 20
+says what happened and claims nothing.
+
+### Two things T2R does NOT claim, said here rather than buried
+
+- **It runs headless, so it cannot show that your browser wallets are refunded on the same terms as
+  the scripted ones.** T2 was going to show that. It never got the chance, so nothing we already had
+  is lost — but it is owed, and I will put it on a later pool when you are around.
+- **Nothing stops a stranger entering a public devnet pool.** That is what ended T2, and an outsider
+  could have done it just as easily as we did. My guard is a rule, not a mechanism: fund no wallet
+  outside the seat list while a test pool is open. Worth knowing it is a real exposure.
+
+**▶ Merge the PR. Then nothing until morning.**
