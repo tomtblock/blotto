@@ -489,13 +489,29 @@ desk work with no pool at all. So T6 is next.
 
 ### Step 1 — merge PR 147 (above)
 
-### Step 2 — deploy
+### Step 2 — deploy. **This is not automatic, and I have confirmed it has not happened.**
 
-Both halves of the fix need to be live before T6, and they are independent — neither breaks if the
-other is older, so the order does not matter:
+Merging PR 147 shipped nothing to the entry service. `deploy-backend` only runs when somebody
+presses the button — it is a manual workflow, by design. I probed the live service after your merge:
 
-- **the entry service** (Fly, `blotto-packet`) — carries the gate change
-- **the web app** (Vercel) — carries the ask-before-sealing change and the new message
+```
+POST https://blotto-packet.fly.dev/ciphertexts/status  →  404
+```
+
+That 404 is the fix being absent. **The lockout is still live in production right now.** The web app
+half does deploy automatically on a merge to main, and that half is harmless on its own — asking for
+permission before sealing is strictly better whatever the service is running.
+
+**▶ Run the `deploy-backend` workflow** — GitHub → Actions → "deploy backend" → Run workflow, on
+`main`, both checkboxes left unticked.
+
+Worth noting: `/health` answered `ok: true` throughout, exactly as it did during the sixteen-hour
+entry outage. It still carries no signal about anything that actually broke. That is finding F-2 and
+it has not moved.
+
+`preflight.ts` now checks this for you. It asks the status route per wallet, and when the route is
+missing it prints the old lockout warning in full instead of a clean GO — so a stale deployment
+cannot be mistaken for a fixed one.
 
 **This is worth more to T6 than it sounds.** Every run so far has lost wallets to a seal that
 succeeded and a payment that did not: five in T4, four in T5, two in T2. Each one was gone for good
@@ -503,22 +519,17 @@ because it could not re-seal. After this deploys, a wallet in that state simply 
 71 of our 72 wallets, so before the fix a single burnt wallet would have stopped the test — and
 after it, nothing does.
 
-### Step 3 — send SOL back to the funder
+### Step 3 — funding. **DONE by you, nothing further needed.**
 
-The funder holds **4.253841480 SOL**. T6 needs 4.05 of it, which leaves 0.2 — too thin to absorb
-anything going wrong. Meanwhile UI-A is sitting on **8.673346435 SOL** and UI-B on **9.673357239**,
-mostly T4 and T5 prize money that should recirculate.
+You topped the funder up by 5 SOL. It now holds **9.253841480**, which covers T6 with a real reserve
+and T3 and T7 after it. UI-A and UI-B are untouched at 8.67 and 9.67, so the sweep I asked for is no
+longer needed — though that money is still sitting there when a later test wants it.
 
-**▶ Send 4 SOL from UI-A to the funder:**
-
-```
-6z4wriiac4d6bay57Pe4Gj3jxhjeT9HfbcH2VaM4r3Ue
-```
-
-That puts the funder at about 8.25, which covers T6 with a real reserve and T3 and T7 after it. Keep
-the rest where it is — UI-A needs only about 0.11 to play an entry, so nothing is at risk.
-
-Then I fan out to the 27 empty wallets (W45–W71) at 0.15 each. That is my job, not yours.
+**I am holding the fan-out until after T2 refunds, on purpose.** The funding command tops every
+wallet UP TO a target, and 37 of our wallets are currently light only because they are sitting in
+pool 20 waiting for their 0.1 back. Funding them now and refunding them at 01:15Z would spend about
+7.9 SOL where one pass afterwards spends about 4.2. Nothing is lost by waiting: T6 cannot start
+until the next pool opens, which is after T2 settles anyway.
 
 ### Step 4 — T2 settles itself, then the next pool opens
 
@@ -585,5 +596,15 @@ You will be charged a transaction fee and nothing else. No entry, no 0.1 SOL.
 
 ---
 
-**Recap of what is yours:** merge 147 · deploy both services · send 4 SOL from UI-A to the funder ·
-tell me if you want the UI-A/UI-B roles swapped · then two browser sessions when I call them.
+**Recap of what is yours, updated 18:30Z:**
+
+| | |
+|---|---|
+| ~~merge PR 147~~ | **done** |
+| ~~top up the funder~~ | **done** — 9.253841480 |
+| **merge PR 148** | the battle-test records; green on all ten checks |
+| **run `deploy-backend`** | the fix is merged but NOT live — confirmed by probe |
+| **ratify UI-A early / UI-B late** | or counter it |
+| two browser sessions | when I call them |
+
+Everything else is mine. T2 settles itself at 01:15:58Z and I am set to pick it up.

@@ -1,8 +1,11 @@
 # STATE — 2026-09-18 17:00 UTC — by Claude Code
 
-Phase:            **T2 is entered and waiting on its deadline. The seal-lockout fix is in PR 147.**
-Waiting on:       **the founder to merge PR 147 and deploy**, then the T6 preparation in F-28.
-                  Nothing is blocked meanwhile — T2 settles itself.
+Phase:            **T2 is entered and waiting on its deadline. The seal fix is MERGED but NOT LIVE.**
+Waiting on:       **the founder to run `deploy-backend`** — it is workflow_dispatch only, so the
+                  merge shipped nothing to the entry service. Probed at 18:24Z:
+                  `POST /ciphertexts/status` → **404**. The old lockout is still in force in
+                  production. Also: merge PR 148, and ratify the T6 role reading (F-28).
+                  Nothing is blocked meanwhile — T2 settles itself and the funder is funded.
 Also open:        **§H13**, founder-and-counsel territory: the 90-second timeout default makes two
                   timed-out players a byte-identical pair, which is the strongest detection signal
                   and hard-block-eligible. Detection policy already answered ("never flag at all —
@@ -60,8 +63,12 @@ Money:            per-seat sunk cost measured identically on T1, T4 and T5: **44
   4 SOL from UI-A to the funder · settle the UI-A/UI-B role question · two browser sessions on call.
   Full runbook and the dial table are in FOUNDER-ACTIONS.md §F-28.
 
-**Funding, measured on chain at 18:10Z:**
-  funder **4.253841480** · UI-A **8.673346435** · UI-B **9.673357239** · treasury 10.692197120.
+**Funding — the founder topped the funder up by 5 SOL at ~18:12Z:**
+  funder **9.253841480** · UI-A **8.673346435** · UI-B **9.673357239** · treasury 10.692197120.
+  The sweep F-28 asked for is no longer needed; the money is still there for a later test.
+  **The fan-out is held until after T2 refunds, on purpose:** `fund --target` tops every wallet up,
+  and 37 of them are light only because they are sitting in pool 20. One pass after settlement
+  spends ~4.2 SOL where one now would spend ~7.9. T6 cannot start before then anyway.
   W00-W38 hold ~0.0455 each because they are IN pool 20; T2's refund returns 0.1 to each.
   W39-W44 hold 0.15. **W45-W71 are EMPTY (27 wallets).**
   → T6 needs 71 of the 72 headless wallets. 27 × 0.15 = 4.05 against a funder holding 4.25 leaves
