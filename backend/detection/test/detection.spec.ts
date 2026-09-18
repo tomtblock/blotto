@@ -8,6 +8,7 @@ import {
   MemoryDecisionLog,
   decide,
   detectPool,
+  duplicateSets,
   type ReviewActions,
   type RevealedEntry,
 } from '../src';
@@ -155,5 +156,71 @@ describe('the review decision log (4.4)', () => {
     const rows = await log.list('POOL');
     expect(rows.length).to.equal(1);
     expect(rows[0].action).to.equal('clear');
+  });
+});
+
+/**
+ * The product's own default must not look like collusion (DRIFT §H13).
+ *
+ * The even split is what every battle screen opens at AND what every unlocked
+ * battle becomes when the ninety-second run clock expires. Two players who run
+ * out of time therefore submit byte-identical sets having chosen nothing. This
+ * was observed on the first devnet pool where two humans played: both timed
+ * out, and the old code called it "exact 35-byte duplicate", severity `strong`
+ * — the only severity this signal treats as conclusive on its own.
+ */
+describe('timed-out players are not colluders', () => {
+  const EVEN_SPLIT = [20, 20, 20, 20, 20];
+
+  /** A player whose run clock expired before they locked anything in. */
+  const timedOut = (i: number): RevealedEntry => ({
+    player: `T${i}`,
+    index: i,
+    battles: Array.from({ length: 7 }, () => [...EVEN_SPLIT]),
+    timingsMs: Array.from({ length: 7 }, () => 12_000),
+    deviceHash: sha(`dev:timeout:${i}`).toString('hex'),
+    scoreHalf: 267,
+  });
+
+  it('two players who both ran out of time raise NO duplicate_sets finding', () => {
+    const entries = [timedOut(1), timedOut(2), ...Array.from({ length: 10 }, (_, k) => human(k))];
+    const dupes = duplicateSets(entries).filter((f) => f.signal === 'duplicate_sets');
+    expect(dupes, 'the even split is the product speaking, not the player').to.have.length(0);
+  });
+
+  it('still catches genuine multi-accounting: identical CHOSEN allocations', () => {
+    const chosen = human(99).battles;
+    const seat = (n: number): RevealedEntry => ({
+      ...human(n),
+      player: `C${n}`,
+      battles: chosen.map((b) => [...b]),
+    });
+    const dupes = duplicateSets([seat(1), seat(2), ...Array.from({ length: 6 }, (_, k) => human(k))]);
+    expect(dupes, 'the attack worth detecting is unchanged').to.have.length(2);
+    expect(dupes.every((f) => f.severity === 'strong')).to.equal(true);
+  });
+
+  it('a partial timeout is judged only on the battles both players chose', () => {
+    // Both chose the same first four battles and then ran out of time.
+    const chosen = human(7).battles.slice(0, 4);
+    const partial = (n: number): RevealedEntry => ({
+      ...human(n),
+      player: `P${n}`,
+      battles: [...chosen.map((b) => [...b]), ...Array.from({ length: 3 }, () => [...EVEN_SPLIT])],
+    });
+    const dupes = duplicateSets([partial(1), partial(2)]);
+    expect(dupes, 'four identical chosen battles is still agreement').to.have.length(2);
+    expect(dupes[0].detail).to.contain('4 of 7 chosen battles');
+  });
+
+  it('agreement on too few chosen battles is not evidence', () => {
+    // Only three battles chosen by both — below MIN_COMPARABLE_BATTLES.
+    const chosen = human(8).battles.slice(0, 3);
+    const thin = (n: number): RevealedEntry => ({
+      ...human(n),
+      player: `X${n}`,
+      battles: [...chosen.map((b) => [...b]), ...Array.from({ length: 4 }, () => [...EVEN_SPLIT])],
+    });
+    expect(duplicateSets([thin(1), thin(2)])).to.have.length(0);
   });
 });

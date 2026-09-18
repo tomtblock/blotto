@@ -82,6 +82,50 @@ run_checks() {
     fi
   done
 
+  # ---- Rule 7: detection reports, it never blocks -------------------------
+  # Founder ruling 2026-09-18: "report only". The settlement daemon computes
+  # detection findings for every pool and acts on NONE of them — a flag is a
+  # reviewer's deliberate act through `flag_entry`, never something the
+  # pipeline does on its own. That was already how the daemon behaved
+  # (reveal/main.ts says so in its own comments); this rule stops it drifting
+  # back, because the drift would be silent and would cost a player money.
+  #
+  # Placed BEFORE rule 6 on purpose: rule 6 returns early when the program
+  # source is missing, so a rule after it is never reached on an empty tree
+  # and its `missing` self-test could never fire.
+  local REVEAL="$root/backend/reveal/src"
+  if [ ! -d "$REVEAL" ]; then
+    echo "standing-rule 7(missing) FAILED: reveal daemon source not found at backend/reveal/src — nothing was checked"
+    fail=1
+  else
+    local auto_flag escrow_tier
+    # (a) the daemon's detect hook must hand the crank NOTHING to flag.
+    #
+    # Read this before changing it. The crank's flag path is LIVE: crank.ts
+    # §4b takes whatever `deps.detect` returns and calls `chain.flagEntry` on
+    # each one. What stops a player being flagged is not the absence of
+    # machinery — it is main.ts's hook ending in `return [];`. Returning the
+    # report's hard-block list instead is a one-line edit, and it would take a
+    # winner's prize on a false positive before any human saw the finding.
+    # That single line is what this pins. A grep for `flagEntry(` cannot do it:
+    # the chain adapters legitimately DEFINE that method.
+    auto_flag="$(grep -rnE 'return[^;]*hardBlocks' "$REVEAL" --include='*.ts' || true)"
+    if [ -n "$auto_flag" ]; then
+      echo "standing-rule 7(a) FAILED: the settlement daemon returns hard blocks to the crank — detection must report, never block:"
+      echo "$auto_flag"
+      fail=1
+    fi
+    # (b) the full-escrow tier stays hardwired off. Any value but a literal
+    # false means the daemon could escalate a single strong signal to an
+    # escrow — which, on a false positive, takes a winner's prize.
+    escrow_tier="$(grep -rnE 'fullEscrowTier[[:space:]]*:' "$REVEAL" --include='*.ts' | grep -vE 'fullEscrowTier[[:space:]]*:[[:space:]]*false' || true)"
+    if [ -n "$escrow_tier" ]; then
+      echo "standing-rule 7(b) FAILED: fullEscrowTier is not hardwired false in the daemon:"
+      echo "$escrow_tier"
+      fail=1
+    fi
+  fi
+
   # ---- Rule 6: the vault's exits are exactly the enumerated set ------------
   # Every lamport debit from the vault PDA goes through the one helper
   # `vault_debit(` (defined in programs/blotto_cup/src/vault.rs). This check
@@ -275,7 +319,7 @@ run_checks() {
 # ---------------------------------------------------------------------------
 probe="$(mktemp -d)"
 trap 'rm -rf "$probe"' EXIT
-mkdir -p "$probe/programs/blotto_cup/src/instructions" "$probe/backend/scoring/src" "$probe/backend/scoring/fixtures"
+mkdir -p "$probe/programs/blotto_cup/src/instructions" "$probe/backend/scoring/src" "$probe/backend/scoring/fixtures" "$probe/backend/reveal/src"
 P="$probe/programs/blotto_cup/src"
 # rule 5: `class` in the scoring path, in every target
 echo 'const cls = { class: 1 };' > "$probe/backend/scoring/src/x.ts"
@@ -296,11 +340,13 @@ printf 'use PLATFORM_SEED;\npub fn handle_forfeit_escrow() -> Result<()> {\n    
 # lists (b)/(e); the A-34 gap.
 printf 'pub fn handle_pay_bonus(ctx: Context<PayBonus>, _pool_id: u64) -> Result<()> {\n    vault_debit(&v, 1)?;\n    Ok(())\n}\n' >> "$P/instructions/pay_prizes.rs"
 printf 'fn sweep(a: &AccountInfo, n: u64) -> Result<()> {\n    platform_debit(a, n)?;\n    Ok(())\n}\nimpl Sweeper {\n    fn drain(&self) -> Result<()> {\n        platform_debit(&self.a, 1)?;\n        Ok(())\n    }\n}\n' > "$P/instructions/treasury.rs"
+# rule 7: a daemon that flags on its own, and an escalating escrow tier
+printf 'return report.hardBlocks;\nconst cfg = { fullEscrowTier: true };\n' > "$probe/backend/reveal/src/main.ts"
 touch "$P/vault.rs"
 
 probe_out="$(run_checks "$probe" 2>&1 || true)"
 selftest_failures=""
-for expected in '5(class)' '6(a)' '6(b)' '6(c)' '6(d)' '6(e)' '6(f)' '6(g)' '6(h)' '6(i)'; do
+for expected in '5(class)' '6(a)' '6(b)' '6(c)' '6(d)' '6(e)' '6(f)' '6(g)' '6(h)' '6(i)' '7(a)' '7(b)'; do
   if ! printf '%s\n' "$probe_out" | grep -qF "standing-rule ${expected} FAILED"; then
     selftest_failures="${selftest_failures}${selftest_failures:+, }${expected}"
   fi
@@ -326,6 +372,9 @@ fi
 if ! printf '%s\n' "$empty_out" | grep -qF 'standing-rule 5(missing) FAILED'; then
   selftest_failures="${selftest_failures}${selftest_failures:+, }5(missing)"
 fi
+if ! printf '%s\n' "$empty_out" | grep -qF 'standing-rule 7(missing) FAILED'; then
+  selftest_failures="${selftest_failures}${selftest_failures:+, }7(missing)"
+fi
 
 if [ -n "$selftest_failures" ]; then
   echo "standing rules: BROKEN — the gate itself failed its self-test."
@@ -343,4 +392,4 @@ fi
 if ! run_checks "."; then
   exit 1
 fi
-echo "standing rules 5 and 6: clean (self-test passed)"
+echo "standing rules 5, 6 and 7: clean (self-test passed)"
