@@ -566,6 +566,21 @@ export const COPY = {
     // generic (PID §8: the refusal gives no reason). Proposal until ratified.
     entryRefused:
       "This entry was not accepted, so nothing was signed and nothing was charged this time. Trying again will not change the answer. If this wallet already made one attempt at this pool, that attempt is the one that stands — the pool page shows whether a seat was taken, and you can ask us about your own entry.",
+    // PHASE-N-REVIEW (2026-09-18, DRIFT.md §H6): split back out of
+    // entryRefused. The 2026-09-16 note above folded the ciphertext store's
+    // 409 into the eligibility refusal because, at the time, the two really
+    // did have the same consequence — one seal per wallet per pool, and a
+    // wallet that had sealed could never enter that pool again. That is no
+    // longer true: an abandoned attempt can now be replaced
+    // (backend/packet/src/seats.ts), so a 409 here means an attempt from
+    // this wallet is SETTLED or the pool has stopped taking entries — not
+    // that the player is ineligible. Sending them to the Rules page's
+    // eligibility list was the wrong explanation then and is a false one
+    // now. Stays generic (PID §8: the service gives no reason) and names no
+    // cause it cannot be sure of. Architect proposal until the founder
+    // ratifies the wording.
+    sealConflict:
+      "This attempt did not go through, and nothing was signed or charged this time. It was not a decision about you: either an earlier attempt from this wallet at this pool is the one that stands, or the pool stopped taking entries first. The pool page shows whether a seat was taken, and you can ask us about your own entry.",
   },
   battle: {
     screenOf: (k: number) => `Battle ${k} of 7`,

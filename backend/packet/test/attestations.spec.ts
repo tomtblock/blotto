@@ -166,6 +166,7 @@ describe('the /attestation route', () => {
       packet: deps(store),
       ciphertexts: new MemoryCiphertextStore(),
       poolIds: POOL_IDS(),
+      seats: new (require('../src/seats').MemorySeatResolver)(),
       trustProxyHeader: false,
     };
     const ok = await handleEntryRoute(

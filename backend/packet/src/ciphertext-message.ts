@@ -67,3 +67,38 @@ export function ciphertextMessage(
       `Sealed: ${ciphertextDigest(ciphertext)}\n`
   );
 }
+
+/**
+ * The bytes a wallet signs to ASK whether it has already sealed for a pool.
+ *
+ * A separate message from the write, deliberately, and not a convenience.
+ * The write message commits to a digest of the ciphertext — which is the
+ * whole of what makes a captured signature specific to one allocation
+ * rather than a standing permission. A reader has no ciphertext to commit
+ * to, so reusing that message would mean either inventing a digest or
+ * dropping the binding; both turn a read signature into something a write
+ * could be built from. This message is distinguishable from the write's by
+ * its first line, so neither can ever be replayed as the other.
+ *
+ * It carries a client timestamp for the same reason the notify message
+ * does: the verifier accepts only a bounded skew, so a captured read
+ * signature stops working. There is nothing behind it worth capturing — the
+ * answer is one boolean about the caller's own wallet — but a read
+ * endpoint that accepts a signature forever is a habit worth not forming.
+ */
+export function ciphertextStatusMessage(
+  pool: string,
+  player: string,
+  atUnix: bigint
+): Uint8Array {
+  if (!pool || !player) {
+    throw new Error('ciphertext status message needs both a pool and a player');
+  }
+  return new TextEncoder().encode(
+    `Blotto Cup\n` +
+      `I am asking whether I have already sealed for this tournament.\n` +
+      `Pool: ${pool}\n` +
+      `Wallet: ${player}\n` +
+      `At: ${atUnix}\n`
+  );
+}

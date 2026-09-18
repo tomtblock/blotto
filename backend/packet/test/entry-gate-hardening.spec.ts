@@ -17,6 +17,7 @@ import { intEnv, optionalIntEnv, portEnv } from '../../_shared/src/env-number';
 import { buildGeo } from '../src/main';
 import { serveEntryApi, type EntryServerDeps } from '../src/server';
 import { MemoryPoolIdResolver } from '../src/pool-ids';
+import { MemorySeatResolver } from '../src/seats';
 import { MemoryCiphertextStore } from '../../sealing/src';
 import type { Monitor } from '../../_shared/src/monitor';
 
@@ -168,6 +169,7 @@ describe('an unhandled route fault is logged, not just answered (B-13)', () => {
           throw new Error('the pools projection is unreachable');
         },
       },
+      seats: new MemorySeatResolver(),
       trustProxyHeader: false,
       onServerError: (line, err) => logged.push([line, err]),
     });
@@ -202,6 +204,7 @@ describe('an unhandled route fault is logged, not just answered (B-13)', () => {
       packet: undefined as unknown as EntryServerDeps['packet'],
       ciphertexts: new MemoryCiphertextStore(),
       poolIds: new MemoryPoolIdResolver(),
+      seats: new MemorySeatResolver(),
       trustProxyHeader: false,
       onServerError: (line) => logged.push(line),
     });
@@ -224,6 +227,7 @@ describe('/health says what the screener is standing on (audit C-18, second half
         packet: undefined as unknown as EntryServerDeps['packet'],
         ciphertexts: new MemoryCiphertextStore(),
         poolIds: new MemoryPoolIdResolver(),
+        seats: new MemorySeatResolver(),
         trustProxyHeader: false,
         screening,
       },
@@ -288,6 +292,7 @@ describe('the rate limiter is swept (audit B-19 / B-38 / B-39)', () => {
         packet: undefined as unknown as EntryServerDeps['packet'],
         ciphertexts: new MemoryCiphertextStore(),
         poolIds: new MemoryPoolIdResolver(),
+        seats: new MemorySeatResolver(),
         trustProxyHeader: false,
         hygiene: {
           rateLimit: { enabled: true, requestsPerMinute: 60, burst: 10, retryAfterSeconds: 1 },
@@ -320,6 +325,7 @@ describe('the rate limiter is swept (audit B-19 / B-38 / B-39)', () => {
         packet: undefined as unknown as EntryServerDeps['packet'],
         ciphertexts: new MemoryCiphertextStore(),
         poolIds: new MemoryPoolIdResolver(),
+        seats: new MemorySeatResolver(),
         trustProxyHeader: false,
         sweep: {
           setIntervalImpl: (_h, ms) => {
