@@ -109,6 +109,11 @@ hits="$(
     `# content authored in it, and its brief and design notes necessarily` \
     `# QUOTE the banned vocabulary in order to ban it.` \
     --exclude-dir=handoff \
+    `# The brief for counsel (docs/counsel-brief/). A document whose purpose` \
+    `# is to put the statutory tests in front of a lawyer cannot avoid the` \
+    `# statutory words, exactly as PID 8.7 cannot. It is dated, is quoted on` \
+    `# no player-facing surface, and INDEX.md says so.` \
+    --exclude-dir=counsel-brief \
     `# The six source documents, copied verbatim. They are inputs to this` \
     `# repository rather than content authored in it, and PID 8.7 necessarily` \
     `# LISTS the words it forbids.` \
@@ -165,7 +170,7 @@ camel_hits="$(
   grep -rnE "$PATTERN_CAMEL" . \
     --exclude-dir=node_modules --exclude-dir=target --exclude-dir=.git \
     --exclude-dir=.next --exclude-dir=reference --exclude-dir=archive \
-    --exclude-dir=handoff \
+    --exclude-dir=handoff --exclude-dir=counsel-brief \
     --exclude=PID_Blotto-Cup_v0.5.md \
     --exclude=PID_Blotto-Cup_v0.6-DRAFT.md \
     --exclude=TECH-ARCHITECTURE_Blotto-Cup_v0.2.md \
