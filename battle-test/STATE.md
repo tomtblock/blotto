@@ -1,27 +1,58 @@
-# STATE — 2026-09-18 17:00 UTC — by Claude Code
+# STATE — 2026-09-18 23:45 UTC — by Claude Code
 
-Phase:            **T2 is entered and waiting on its deadline. The seal fix is MERGED but NOT LIVE.**
-Waiting on:       **the founder to run `deploy-backend`** — it is workflow_dispatch only, so the
-                  merge shipped nothing to the entry service. Probed at 18:24Z:
-                  `POST /ciphertexts/status` → **404**. The old lockout is still in force in
-                  production. Also: merge PR 148, and ratify the T6 role reading (F-28).
-                  Nothing is blocked meanwhile — T2 settles itself and the funder is funded.
-Three PRs open, all green:
-                  **147 MERGED** (seal fix) · **148** (these records) · **149** (detection:
-                  report-only enforced + the duplicate_sets false positive). 149 clears §H13's
-                  product half — measured on pool 18's real data, 2 strong findings before, 0 after.
-
-Also open:        **§H13**, founder-and-counsel territory: the 90-second timeout default makes two
-                  timed-out players a byte-identical pair, which is the strongest detection signal
-                  and hard-block-eligible. Detection policy already answered ("never flag at all —
-                  report only"); the duplicate-signal false positive is held as a patch awaiting its
-                  own PR. Vercel ignore step approved, still not applied (~85% off build minutes).
+Phase:            **T2 is SPOILED on pool 20 — my error. T2R is the retry, frozen before its pool
+                  exists, and it runs overnight with nothing needed from the founder.**
+Waiting on:       **the founder to merge the T2R freeze PR.** It must land before the next pool
+                  opens (~01:21Z). After that, nothing — the run is headless and settlement is
+                  permissionless.
 Blocked:          nothing.
-Live deadlines:   **pool 20 (T2) settles at 2026-09-19T01:15:58Z.** No founder action needed — both
-                  `trigger_refund` and `refund` are permissionless.
-Results so far:   T1 **PASS** · T4 **PASS** · T5 **PASS** · **T2 running** · T3, T6-T8 not started
-Money:            per-seat sunk cost measured identically on T1, T4 and T5: **4441080 lamports**.
-                  T2 predicts that figure to the lamport for all 39 seats.
+Live deadlines:   **pool 20 seals at 01:15:58Z** and will PAY, not refund. Next pool ~01:21Z, which
+                  is T2R's.
+Results so far:   T1 **PASS** · T4 **PASS** · T5 **PASS** · T2 **SPOILED** · T2R frozen, not run
+Money:            all 72 wallets at exactly **0.150000000**, zero empty, 10.8 SOL held.
+                  Funder **0.339339200** — thin on purpose; T2R refunds its 39 seats back.
+
+**BOTH PRODUCT FIXES ARE LIVE (23:10Z deploy), and the seal fix was proven rather than inferred:**
+  `POST /ciphertexts/status` went **404 → 403** (route exists, rejects a bad signature), then end to
+  end with real signatures: W00 seated → `{"sealed":true}` · W45 untouched → `{"sealed":false}` ·
+  **W15 → `{"sealed":true}`**.
+  → W15 is one of the two wallets BURNT during T2's entry run. It sealed, its register died with
+    `block height exceeded`, and it was barred with no way for anyone to find out. It can now be
+    asked and it answers truthfully. §H6's invisibility half, closed and demonstrated on the exact
+    wallet that suffered it.
+  → The gate half is closed too: W15 holds no Entry, so it could re-seal and enter pool 20 right
+    now. NOT done — changing that field again is the mistake already made once today.
+  → The detection fix shipped in the same deploy, so pool 20 will be scored by the FIXED
+    duplicate_sets. If the founder wallets timed out into the even split again, that report now
+    correctly shows zero findings instead of two false `strong` ones. About two hours to spare.
+
+**§H16 — I BROKE T2 BY SENDING 1 SOL WITHOUT ASKING WHAT IT WAS FOR.**
+  19:04:05Z the transfer landed; 19:07:24Z that wallet registered into pool 20 as the 40th seat. At
+  40 = MIN_SEATS the fork flips and the pool seals instead of refunding.
+  → I checked the address, the curve, the roster and the T6 budget. I did not ask "could this affect
+    the test running right now" — having written "39 is the point of the test" myself hours earlier.
+  → T2 is SPOILED, not disproved. Nothing contradicts the boundary claim and nothing in the program
+    misbehaved. T2.plan.json is untouched, as the rule requires.
+  → Rule that follows: while a named test's pool is open, no wallet outside its seat list is funded
+    without checking the seat count first.
+
+**§H17 — I PROPOSED A PARTIAL FREEZE ON POOL 20 AND THEN REVERSED IT.**
+  Every claim it would have carried was already knowable: 40 ≥ MIN_SEATS makes the fork public, one
+  seat paid 4000000000 is a constant, vault 650240 and per-seat 4441080 were measured three times.
+  A verdict that cannot fail, dressed as a prediction — **§H9 and §H14 in a third disguise.**
+  → Pool 20 is recorded as a plain OBSERVATION and claims nothing.
+
+**T2R — the retry, and why it is STRONGER than the test it replaces:**
+  39 headless seats W00–W38, seeds 3000–3038, no UI seats. Validates clean.
+  → **Frozen before the pool it will run on EXISTS.** T2's freeze merged at 14:42:47Z against a pool
+    already open since 13:15:58Z, so it preceded every entry but not the pool. This is T4's
+    standard, the strongest this test has — available only because the retry was forced.
+  → Stated in the plan rather than hidden: running headless drops T2's route-equivalence sub-claim
+    (founder wallets refunded on identical terms). Never proven either, so nothing held is lost —
+    but it is owed on a later pool.
+  → Also stated rather than hidden: **this is a public devnet and nothing stops an outside wallet
+    registering.** That is what ended T2, and a stranger could have done it just as completely. The
+    guard is procedural and partial.
 
 **T2 — entered, frozen, and now just waiting (2026-09-18):**
   Pool 20 `DhtdSBap…zwvqh`, 39 of 64 seats, one below MIN_SEATS. Freeze merged 14:42:47Z, first
