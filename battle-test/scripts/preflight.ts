@@ -30,16 +30,35 @@
  * decides per wallet. It requests packets and nothing else — no allocation is
  * sealed, no ciphertext is stored, nothing is registered, nothing is spent.
  *
- * WHAT THIS CANNOT DO, stated plainly because a false GO is worse than no
- * check at all: it cannot tell whether a wallet is ALREADY barred. Detecting
- * that means asking whether a ciphertext is stored for this wallet and pool,
- * and there is no read path for that — the sealed boxes deliberately have no
- * public reader (PR 134), and probing by writing would itself seal the wallet.
- * So this check stops you CREATING a lockout; it cannot find one that already
- * exists. Run against pool 15 on 2026-09-16 it reported GO for both founder
- * accounts, which were already barred. An unbarred wallet cannot be
- * distinguished from a barred one from outside — which is why the product fix
- * in `docs/FIX-seal-lockout.md` includes a wallet-authenticated read.
+ *   4. whether the SEAL FIX IS LIVE on this entry service, and — for a wallet
+ *      whose key we hold — whether that wallet has already sealed here.
+ *
+ * (4) is new (2026-09-18, PR 147) and replaces this script's own worst caveat.
+ * The blind spot it used to carry is quoted here because the reason it closed
+ * matters more than the fact that it did:
+ *
+ *   > it cannot tell whether a wallet is ALREADY barred … there is no read
+ *   > path for that … probing by writing would itself seal the wallet. Run
+ *   > against pool 15 on 2026-09-16 it reported GO for both founder accounts,
+ *   > which were already barred.
+ *
+ * Two things changed. The gate now refuses an overwrite only for a seat the
+ * CHAIN HAS ACCEPTED, so a stored ciphertext with no Entry no longer bars
+ * anybody — and check (2) already reads that Entry straight from the chain.
+ * And `POST /ciphertexts/status` answers the question directly, for the wallet
+ * that signs for itself.
+ *
+ * TWO LIMITS, both stated rather than papered over, because a false GO is
+ * still worse than no check at all:
+ *
+ *   - **The fix has to be DEPLOYED.** `deploy-backend` is manual, so a merged
+ *     fix is not a live one. This script probes for the status endpoint and
+ *     says which world it is in. When the endpoint is absent, the old lockout
+ *     is still live and the old caveat still applies in full.
+ *   - **We cannot sign for UI-A or UI-B.** Their keys live in the founder's
+ *     browser, not in `keys/wallets/`, and the read is wallet-authenticated by
+ *     design. For those two the Entry-PDA check is what we have — which, with
+ *     the fix live, is the check that decides.
  *
  * COST, stated honestly: one Turnkey signing activity per wallet checked
  * (DRIFT.md §H5). Check the two UI wallets before the founder plays, not all
@@ -55,7 +74,10 @@
 
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { Connection, PublicKey } from '@solana/web3.js';
+import { Connection, Keypair, PublicKey } from '@solana/web3.js';
+import nacl from 'tweetnacl';
+
+import { ciphertextStatusMessage } from '../../backend/packet/src/ciphertext-message';
 
 const PROGRAM_ID = new PublicKey('5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17');
 const DEFAULT_INDEXER = 'https://blotto-indexer.fly.dev';
@@ -86,6 +108,62 @@ function roster(): Map<string, string> {
   return new Map(doc.wallets.map((w) => [w.id, w.address]));
 }
 
+/**
+ * The keypair for a headless wallet, or null when we do not hold one.
+ *
+ * UI-A and UI-B are the founder's browser wallets: their keys are in Privy,
+ * not on this disk, and no amount of wanting the check changes that. Returning
+ * null rather than throwing is the point — a wallet we cannot ask about is
+ * reported as unasked, never as clean.
+ */
+function keypairFor(id: string): Keypair | null {
+  const m = /^W(\d+)$/.exec(id);
+  if (!m) return null;
+  const path = resolve(__dirname, '..', 'keys', 'wallets', `${m[1].padStart(2, '0')}.json`);
+  try {
+    return Keypair.fromSecretKey(new Uint8Array(JSON.parse(readFileSync(path, 'utf8')) as number[]));
+  } catch {
+    return null;
+  }
+}
+
+type SealState = 'sealed' | 'clean' | 'cannot-ask' | 'not-deployed';
+
+/**
+ * Ask the entry service whether this wallet has already sealed for this pool.
+ *
+ * FAILS LOUD, NOT CLEAN. Every outcome that is not a definite answer maps to
+ * `cannot-ask` or `not-deployed`, never to `clean`. A check that guesses
+ * "clean" when it does not know is the false GO this whole script exists to
+ * prevent.
+ */
+async function sealState(
+  api: string, pool: string, id: string, atUnix: bigint
+): Promise<SealState> {
+  const kp = keypairFor(id);
+  if (!kp) return 'cannot-ask';
+  const player = kp.publicKey.toBase58();
+  const signature = Buffer.from(
+    nacl.sign.detached(ciphertextStatusMessage(pool, player, atUnix), kp.secretKey)
+  ).toString('base64');
+  let res: Response;
+  try {
+    res = await fetch(`${api}/ciphertexts/status`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ pool, player, atUnix: atUnix.toString(), signature }),
+    });
+  } catch {
+    return 'cannot-ask';
+  }
+  // A service that predates PR 147 has no such route and answers 404.
+  if (res.status === 404) return 'not-deployed';
+  if (!res.ok) return 'cannot-ask';
+  const body = (await res.json()) as { sealed?: unknown };
+  if (typeof body.sealed !== 'boolean') return 'cannot-ask';
+  return body.sealed ? 'sealed' : 'clean';
+}
+
 async function main(): Promise<void> {
   const poolId = flag('pool');
   const walletArg = flag('wallets');
@@ -101,6 +179,14 @@ async function main(): Promise<void> {
   const addresses = roster();
   const connection = new Connection(rpc, 'confirmed');
 
+  // The status message carries a client timestamp the service checks against a
+  // bounded skew, so it is taken once per run and signed per wallet.
+  const now = BigInt(Math.floor(Date.now() / 1000));
+  // Set false by the first wallet that finds no status route: that endpoint's
+  // absence is how this script detects that the seal fix is merged but not
+  // deployed (`deploy-backend` is manual — a merge does not ship it).
+  let fixLive = true;
+
   console.log(`preflight — pool ${poolId}, wallets ${ids.join(', ')}\n`);
 
   // ---- 1. the pool ------------------------------------------------------
@@ -108,7 +194,7 @@ async function main(): Promise<void> {
   const pool = pools.find((p) => p.id === String(poolId));
   if (!pool) {
     fail(`pool ${poolId} is not in the indexer's projection`);
-    return done();
+    return done(fixLive);
   }
   note(true, `pool ${pool.id} ${pool.pool}`);
 
@@ -171,21 +257,54 @@ async function main(): Promise<void> {
         `it would seal, fail, and be barred from pool ${pool.id} for good.`
       );
     }
+
+    // ---- 4. has it already sealed here? --------------------------------
+    const state = await sealState(packetApi, pool.pool, id, now);
+    if (state === 'not-deployed') {
+      fixLive = false;
+      note(false, `${id} cannot ask whether it has sealed — the service has no status route`);
+    } else if (state === 'cannot-ask') {
+      note(false, `${id} cannot ask whether it has sealed — we do not hold this wallet's key`);
+    } else if (state === 'clean') {
+      note(true, `${id} has not sealed for this pool`);
+    } else {
+      // Sealed with no Entry. Before PR 147 this was terminal. After it, the
+      // wallet can simply play again — so it is worth saying, and it is not
+      // a STOP. The seat check above is what decides.
+      note(true, `${id} has an allocation stored here from an earlier attempt`);
+      console.log(
+        `      (recoverable: the gate now refuses an overwrite only for a seat\n` +
+        `       the chain has accepted, and this wallet holds none)`
+      );
+    }
   }
 
-  done();
+  done(fixLive);
 }
 
-function done(): void {
+function done(fixLive: boolean): void {
   console.log('');
   if (problems.length === 0) {
     console.log('GO — every check passed. The named wallets may play this pool now.');
     console.log('Re-run this if more than a few minutes pass before they do.');
-    console.log(
-      'Caveat, and it is not a small one: this CANNOT see whether a wallet is already\n' +
-      'barred from this pool by a previous seal. There is no read path for that. GO means\n' +
-      '"nothing here will create a lockout", not "this wallet can definitely enter".'
-    );
+    if (fixLive) {
+      console.log(
+        'The seal fix (PR 147) IS live on this entry service: the status route answered.\n' +
+        'A wallet that seals and then fails to register can play again, so this GO no\n' +
+        'longer carries the old "it may already be barred and nobody can tell" caveat.\n' +
+        'For UI-A and UI-B the Entry-PDA check above is what decides — we cannot sign\n' +
+        'their status read, and with the fix live we do not need to.'
+      );
+    } else {
+      console.log(
+        'WARNING — the seal fix is NOT live on this entry service. The status route is\n' +
+        'absent, which means this deployment predates PR 147 (deploy-backend is manual,\n' +
+        'so merging it did not ship it). The old lockout is still in force: a wallet that\n' +
+        'seals and then fails for ANY reason is barred from this pool for good, and\n' +
+        'nothing can tell you which wallets already are. GO here means "nothing checked\n' +
+        'will CREATE a lockout", not "this wallet can definitely enter".'
+      );
+    }
     return;
   }
   console.log(`STOP — ${problems.length} problem(s):`);

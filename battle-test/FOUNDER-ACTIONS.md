@@ -399,3 +399,212 @@ I have not touched either directory. Recommendation: **leave it until the week e
 lockout blocks another test. It is not blocking T4, the guardrails above stop it recurring inside
 the test, and a product change made mid-test muddies what the test is measuring. But it should not
 reach mainnet, and if you want it now, say so and I will do it properly with tests.
+
+---
+
+## F-25 — DONE. The seal lockout is fixed.
+
+**Nothing for you to do here.** You said "yes fix seal" and it is written, tested and pushed. All
+four parts of F-24's patch shipped as commit `41d592d`.
+
+What changed, in plain terms:
+
+1. **The store now refuses to replace an allocation only when the entry is actually paid for.** If
+   your entry broke before it reached the chain, you can simply play again. That is the whole
+   lockout, gone — and the protection that matters (nobody, not even you, can overwrite an entry
+   the chain has accepted) is untouched and tested.
+2. **The app asks for permission before it seals**, not after. A refusal now arrives before anything
+   is stored, which is the exact sequence that struck on the 16th.
+3. **A wallet can now ask whether it has already sealed.** Nobody could find that out before — not
+   you, not a player, not a support agent. The wallet signs the question, so this opens nothing to
+   anyone else, and the answer is one yes-or-no and never the allocation itself.
+4. **A player whose entry simply broke is no longer told they are not allowed to enter.** They are
+   different things and the app now says the true one.
+
+**One thing I got wrong, and want on the record.** The specification I wrote for part 1 had the
+wrong database key in it. Had I typed it in as written, it would have matched nothing for anybody,
+which the code would have read as "this seat is not paid for" — and it would have allowed exactly
+the overwrite the protection exists to prevent. It never shipped: I read the database's own
+definition before writing the code, which is the rule for precisely this reason. There is now a test
+that uses the wrong key on purpose and fails if anyone reintroduces it.
+
+**One thing that is yours, not mine.** The new message a player sees is my wording, marked in the
+code as a proposal. Change it whenever you like.
+
+---
+
+## F-26 — ▶ FOUNDER ACTION: two changes, one branch, and I need your say-so
+
+**What is stuck.** The working branch now holds two unrelated things:
+
+- `ca06c1b` — T2's freeze record. A `battle-test/` file.
+- `41d592d` — the seal fix. `app/` and `backend/` files.
+
+The safety check we built for this week fires whenever a change touches `battle-test/`, and then
+**refuses that change if it touches anything else.** That check is the guarantee the whole test
+rests on: it is what proves the battle test cannot have quietly altered the product it is measuring.
+So I will not open one PR containing both, and I will not weaken the check to make it pass.
+
+They need to go up as two separate changes, off two branches. **Pushing to a second branch is
+something you told me never to do without asking**, so I am asking.
+
+**▶ Pick one:**
+
+- **(a) Say yes to a second branch (recommended).** I push the seal fix to a branch of its own,
+  open both PRs, and you merge them in whatever order you like. Costs you two merges instead of one.
+- **(b) Merge the battle-test commit first, from this branch, as it stands.** That PR is
+  battle-test-only in content but the branch also carries the product commit, so the boundary check
+  would see both and refuse. This does not actually work — I am listing it so you can see I checked.
+- **(c) Leave the seal fix sitting on the branch until the test week ends**, then land it on its
+  own. Nothing is lost; it just does not reach the product yet.
+
+I recommend **(a)**. The fix is tested and the lockout is the worst thing this test has found — it
+is not a defect you want sitting unmerged while the product is being shown to anyone.
+
+**Nothing is waiting on this.** T2 settles on its own at 01:15:58Z tomorrow; no admin key and no
+action from you is needed for it.
+
+---
+
+## F-27 — DONE. Two branches, two PRs, no mixing.
+
+You said do the recommendation, so I did.
+
+- **PR 147** — `claude/seal-lockout-fix`. The seal fix only: `app/` and `backend/`, nothing else.
+  It does not touch `battle-test/`, so the boundary check does not even fire on it.
+- **The battle-test records** stay on `claude/sharp-bohr-c8aeub` and go up as a second PR **after**
+  147 merges. I am not opening it yet on purpose: that branch still carries a copy of the seal-fix
+  commit, and until 147 is on main the boundary check would see both. Once 147 merges I bring main
+  into the branch and its change shrinks to `battle-test/` alone, which is what the check wants.
+
+**▶ Your action: merge PR 147.** Everything below waits on it.
+
+---
+
+## F-28 — ▶ FOUNDER ACTION: get us ready for T6
+
+T6 is the next test that needs nothing from you but two browser sessions. T3 needs an admin write
+(pausing entries) and is still blocked on Q6; T7 needs the reviewer key and is blocked on Q7; T8 is
+desk work with no pool at all. So T6 is next.
+
+### Step 1 — merge PR 147 (above)
+
+### Step 2 — deploy. **This is not automatic, and I have confirmed it has not happened.**
+
+Merging PR 147 shipped nothing to the entry service. `deploy-backend` only runs when somebody
+presses the button — it is a manual workflow, by design. I probed the live service after your merge:
+
+```
+POST https://blotto-packet.fly.dev/ciphertexts/status  →  404
+```
+
+That 404 is the fix being absent. **The lockout is still live in production right now.** The web app
+half does deploy automatically on a merge to main, and that half is harmless on its own — asking for
+permission before sealing is strictly better whatever the service is running.
+
+**▶ Run the `deploy-backend` workflow** — GitHub → Actions → "deploy backend" → Run workflow, on
+`main`, both checkboxes left unticked.
+
+Worth noting: `/health` answered `ok: true` throughout, exactly as it did during the sixteen-hour
+entry outage. It still carries no signal about anything that actually broke. That is finding F-2 and
+it has not moved.
+
+`preflight.ts` now checks this for you. It asks the status route per wallet, and when the route is
+missing it prints the old lockout warning in full instead of a clean GO — so a stale deployment
+cannot be mistaken for a fixed one.
+
+**This is worth more to T6 than it sounds.** Every run so far has lost wallets to a seal that
+succeeded and a payment that did not: five in T4, four in T5, two in T2. Each one was gone for good
+because it could not re-seal. After this deploys, a wallet in that state simply plays again. T6 needs
+71 of our 72 wallets, so before the fix a single burnt wallet would have stopped the test — and
+after it, nothing does.
+
+### Step 3 — funding. **DONE by you, nothing further needed.**
+
+You topped the funder up by 5 SOL. It now holds **9.253841480**, which covers T6 with a real reserve
+and T3 and T7 after it. UI-A and UI-B are untouched at 8.67 and 9.67, so the sweep I asked for is no
+longer needed — though that money is still sitting there when a later test wants it.
+
+**I am holding the fan-out until after T2 refunds, on purpose.** The funding command tops every
+wallet UP TO a target, and 37 of our wallets are currently light only because they are sitting in
+pool 20 waiting for their 0.1 back. Funding them now and refunding them at 01:15Z would spend about
+7.9 SOL where one pass afterwards spends about 4.2. Nothing is lost by waiting: T6 cannot start
+until the next pool opens, which is after T2 settles anyway.
+
+### Step 4 — T2 settles itself, then the next pool opens
+
+Pool 20 reaches its deadline at **01:15:58Z (02:15 your time)**. Nothing for you to do: both
+settlement instructions are permissionless. The 39 refunds land, and the daemon opens the next pool
+about five minutes later. T6 runs there.
+
+### Step 5 — the two browser sessions
+
+**▶ One thing I need you to settle first.** The manual's T6 line reads "UI-A and UI-B early, then
+wait", and then requires a **late entrant who sees the 'filled before your entry reached it'
+message**. Those cannot both be true with two accounts: if both enter early, nobody is left to
+arrive late, and the message is the thing T6 exists to check. So I am reading it as:
+
+- **UI-A enters early**, as an ordinary seat. One of the 64.
+- **UI-B arrives late**, after the pool is already full, and is refused.
+
+Say if you want it the other way round; nothing else changes.
+
+#### UI-A — an ordinary entry, played early
+
+I will tell you when the pool is open. Then: **one dial drag per battle, take one stat to 25**, in
+this order across the seven battles:
+
+| Battle | Drag this stat to 25 |
+|---|---|
+| 1 | Strength |
+| 2 | Speed |
+| 3 | Heart |
+| 4 | Wit |
+| 5 | Durability |
+| 6 | Strength |
+| 7 | Heart |
+
+Seven drags, one per screen. Lock in each battle.
+
+**T6 predicts no ranks, so the exact numbers do not matter this time** — unlike T4 and T5, where a
+stat above 25 would have broken the claim. The only thing that matters is that you actually play
+rather than let the clock run out. Remember the clock is **90 seconds for all seven battles**, not
+15 a screen, and it starts at your first dial touch. If it expires, every untouched battle is
+entered as the even split — and seven identical even splits is the pattern our own detection reads
+as machine-made. It flags nobody (that is the report-only ruling), but it puts a false finding in
+the report for no reason.
+
+#### UI-B — the late one. The timing is the test; the numbers are not.
+
+**Do not start until I say GO.** I will call it when the pool is at 63 of 64 and the last headless
+entry is going in. Then:
+
+1. Open the pool page and start a session.
+2. **Move one dial** — that starts the 90-second clock, which is the point.
+3. Play the seven battles however you like. Genuinely anything.
+4. **Take your time — use the full 90 seconds.** The pool must seal while you are still playing.
+5. Submit.
+
+**You should be refused, and that is the pass.** What I need from you is exactly what you see:
+
+- Does it say something like "this pool filled before your entry reached it", or does it just hang
+  on a loading indicator?
+- How long before it tells you?
+- **Screenshot it.** That message is a pass criterion and the screenshot is the evidence.
+
+You will be charged a transaction fee and nothing else. No entry, no 0.1 SOL.
+
+---
+
+**Recap of what is yours, updated 18:30Z:**
+
+| | |
+|---|---|
+| ~~merge PR 147~~ | **done** |
+| ~~top up the funder~~ | **done** — 9.253841480 |
+| **merge PR 148** | the battle-test records; green on all ten checks |
+| **run `deploy-backend`** | the fix is merged but NOT live — confirmed by probe |
+| **ratify UI-A early / UI-B late** | or counter it |
+| two browser sessions | when I call them |
+
+Everything else is mine. T2 settles itself at 01:15:58Z and I am set to pick it up.
