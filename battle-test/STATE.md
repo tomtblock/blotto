@@ -1,10 +1,8 @@
 # STATE — 2026-09-18 17:00 UTC — by Claude Code
 
-Phase:            **T2 is entered and waiting on its deadline. The seal-lockout fix is written,
-                  tested and pushed.**
-Waiting on:       **a founder call on how to land two separate changes** — the branch carries a
-                  battle-test commit and a product commit, and the boundary lane refuses a mixed
-                  diff. See F-26 below. Nothing else is blocked by it.
+Phase:            **T2 is entered and waiting on its deadline. The seal-lockout fix is in PR 147.**
+Waiting on:       **the founder to merge PR 147 and deploy**, then the T6 preparation in F-28.
+                  Nothing is blocked meanwhile — T2 settles itself.
 Also open:        **§H13**, founder-and-counsel territory: the 90-second timeout default makes two
                   timed-out players a byte-identical pair, which is the strongest detection signal
                   and hard-block-eligible. Detection policy already answered ("never flag at all —
@@ -51,12 +49,33 @@ Money:            per-seat sunk cost measured identically on T1, T4 and T5: **44
   → Proven, not asserted: 195 packet tests, 503 app tests, both packages typecheck, language gate
     and standing-rules clean.
 
-**F-26 — the one thing that needs you: two changes, one branch.**
-  `claude/sharp-bohr-c8aeub` now carries `ca06c1b` (T2's freeze record, `battle-test/`) and
-  `41d592d` (the seal fix, `app/` + `backend/`). The boundary lane fires on any diff touching
-  `battle-test/**` and then refuses a diff touching anything else — which is the guarantee the
-  whole test rests on, so a mixed PR must not be opened. They need two PRs off two branches, and
-  pushing a second branch needs your say-so. Options are in FOUNDER-ACTIONS.md §F-26.
+**F-26 ANSWERED, F-27 DONE — the branches are split.**
+  **PR 147** (`claude/seal-lockout-fix`) carries the seal fix alone: `app/` and `backend/`, nothing
+  under `battle-test/`, so the boundary lane does not fire on it at all. The battle-test records
+  stay on `claude/sharp-bohr-c8aeub` and go up as a second PR AFTER 147 merges — until then that
+  branch still carries a copy of the fix commit and the check would see both. No history was
+  rewritten: main gets merged into the branch once 147 lands and its diff shrinks to battle-test.
+
+**F-28 — what T6 needs from the founder.** Merge 147 · deploy the entry service and the app · send
+  4 SOL from UI-A to the funder · settle the UI-A/UI-B role question · two browser sessions on call.
+  Full runbook and the dial table are in FOUNDER-ACTIONS.md §F-28.
+
+**Funding, measured on chain at 18:10Z:**
+  funder **4.253841480** · UI-A **8.673346435** · UI-B **9.673357239** · treasury 10.692197120.
+  W00-W38 hold ~0.0455 each because they are IN pool 20; T2's refund returns 0.1 to each.
+  W39-W44 hold 0.15. **W45-W71 are EMPTY (27 wallets).**
+  → T6 needs 71 of the 72 headless wallets. 27 × 0.15 = 4.05 against a funder holding 4.25 leaves
+    0.2, which is too thin. Hence the 4 SOL sweep from UI-A — it is prize money that should
+    recirculate, and UI-A needs only ~0.11 to play.
+  → **The seal fix changes the wallet budget, not just the product.** Five wallets were lost in T4,
+    four in T5, two in T2, each gone for good because it could not re-seal. T6 needs 71 of 72, so
+    before the fix one burnt wallet stopped the test. After it deploys, that wallet just plays again.
+
+**T6, and the one thing in its spec that does not add up.** The manual says "UI-A and UI-B early,
+  then wait" and also requires a LATE entrant who sees the "filled before your entry reached it"
+  copy. With two accounts those cannot both hold. Reading it as UI-A early (an ordinary seat of the
+  64) and UI-B late (one of the nine refused), which is the reading that makes the pass criteria
+  testable. Founder to ratify or counter — nothing else depends on it.
 
 **T5's result, and what it actually proved (2026-09-18 01:13Z):**
   W00 rank 1, paid **4000000000** lamports — the whole pot, to a headless wallet with no relationship

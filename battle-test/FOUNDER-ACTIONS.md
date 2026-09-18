@@ -463,3 +463,127 @@ is not a defect you want sitting unmerged while the product is being shown to an
 
 **Nothing is waiting on this.** T2 settles on its own at 01:15:58Z tomorrow; no admin key and no
 action from you is needed for it.
+
+---
+
+## F-27 — DONE. Two branches, two PRs, no mixing.
+
+You said do the recommendation, so I did.
+
+- **PR 147** — `claude/seal-lockout-fix`. The seal fix only: `app/` and `backend/`, nothing else.
+  It does not touch `battle-test/`, so the boundary check does not even fire on it.
+- **The battle-test records** stay on `claude/sharp-bohr-c8aeub` and go up as a second PR **after**
+  147 merges. I am not opening it yet on purpose: that branch still carries a copy of the seal-fix
+  commit, and until 147 is on main the boundary check would see both. Once 147 merges I bring main
+  into the branch and its change shrinks to `battle-test/` alone, which is what the check wants.
+
+**▶ Your action: merge PR 147.** Everything below waits on it.
+
+---
+
+## F-28 — ▶ FOUNDER ACTION: get us ready for T6
+
+T6 is the next test that needs nothing from you but two browser sessions. T3 needs an admin write
+(pausing entries) and is still blocked on Q6; T7 needs the reviewer key and is blocked on Q7; T8 is
+desk work with no pool at all. So T6 is next.
+
+### Step 1 — merge PR 147 (above)
+
+### Step 2 — deploy
+
+Both halves of the fix need to be live before T6, and they are independent — neither breaks if the
+other is older, so the order does not matter:
+
+- **the entry service** (Fly, `blotto-packet`) — carries the gate change
+- **the web app** (Vercel) — carries the ask-before-sealing change and the new message
+
+**This is worth more to T6 than it sounds.** Every run so far has lost wallets to a seal that
+succeeded and a payment that did not: five in T4, four in T5, two in T2. Each one was gone for good
+because it could not re-seal. After this deploys, a wallet in that state simply plays again. T6 needs
+71 of our 72 wallets, so before the fix a single burnt wallet would have stopped the test — and
+after it, nothing does.
+
+### Step 3 — send SOL back to the funder
+
+The funder holds **4.253841480 SOL**. T6 needs 4.05 of it, which leaves 0.2 — too thin to absorb
+anything going wrong. Meanwhile UI-A is sitting on **8.673346435 SOL** and UI-B on **9.673357239**,
+mostly T4 and T5 prize money that should recirculate.
+
+**▶ Send 4 SOL from UI-A to the funder:**
+
+```
+6z4wriiac4d6bay57Pe4Gj3jxhjeT9HfbcH2VaM4r3Ue
+```
+
+That puts the funder at about 8.25, which covers T6 with a real reserve and T3 and T7 after it. Keep
+the rest where it is — UI-A needs only about 0.11 to play an entry, so nothing is at risk.
+
+Then I fan out to the 27 empty wallets (W45–W71) at 0.15 each. That is my job, not yours.
+
+### Step 4 — T2 settles itself, then the next pool opens
+
+Pool 20 reaches its deadline at **01:15:58Z (02:15 your time)**. Nothing for you to do: both
+settlement instructions are permissionless. The 39 refunds land, and the daemon opens the next pool
+about five minutes later. T6 runs there.
+
+### Step 5 — the two browser sessions
+
+**▶ One thing I need you to settle first.** The manual's T6 line reads "UI-A and UI-B early, then
+wait", and then requires a **late entrant who sees the 'filled before your entry reached it'
+message**. Those cannot both be true with two accounts: if both enter early, nobody is left to
+arrive late, and the message is the thing T6 exists to check. So I am reading it as:
+
+- **UI-A enters early**, as an ordinary seat. One of the 64.
+- **UI-B arrives late**, after the pool is already full, and is refused.
+
+Say if you want it the other way round; nothing else changes.
+
+#### UI-A — an ordinary entry, played early
+
+I will tell you when the pool is open. Then: **one dial drag per battle, take one stat to 25**, in
+this order across the seven battles:
+
+| Battle | Drag this stat to 25 |
+|---|---|
+| 1 | Strength |
+| 2 | Speed |
+| 3 | Heart |
+| 4 | Wit |
+| 5 | Durability |
+| 6 | Strength |
+| 7 | Heart |
+
+Seven drags, one per screen. Lock in each battle.
+
+**T6 predicts no ranks, so the exact numbers do not matter this time** — unlike T4 and T5, where a
+stat above 25 would have broken the claim. The only thing that matters is that you actually play
+rather than let the clock run out. Remember the clock is **90 seconds for all seven battles**, not
+15 a screen, and it starts at your first dial touch. If it expires, every untouched battle is
+entered as the even split — and seven identical even splits is the pattern our own detection reads
+as machine-made. It flags nobody (that is the report-only ruling), but it puts a false finding in
+the report for no reason.
+
+#### UI-B — the late one. The timing is the test; the numbers are not.
+
+**Do not start until I say GO.** I will call it when the pool is at 63 of 64 and the last headless
+entry is going in. Then:
+
+1. Open the pool page and start a session.
+2. **Move one dial** — that starts the 90-second clock, which is the point.
+3. Play the seven battles however you like. Genuinely anything.
+4. **Take your time — use the full 90 seconds.** The pool must seal while you are still playing.
+5. Submit.
+
+**You should be refused, and that is the pass.** What I need from you is exactly what you see:
+
+- Does it say something like "this pool filled before your entry reached it", or does it just hang
+  on a loading indicator?
+- How long before it tells you?
+- **Screenshot it.** That message is a pass criterion and the screenshot is the evidence.
+
+You will be charged a transaction fee and nothing else. No entry, no 0.1 SOL.
+
+---
+
+**Recap of what is yours:** merge 147 · deploy both services · send 4 SOL from UI-A to the funder ·
+tell me if you want the UI-A/UI-B roles swapped · then two browser sessions when I call them.
