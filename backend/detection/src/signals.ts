@@ -112,34 +112,100 @@ export function timingProfile(entries: RevealedEntry[]): Finding[] {
   return findings;
 }
 
+/**
+ * The allocation every battle screen OPENS at, and the one every battle not
+ * locked in is entered as when the run clock expires — `EVEN_SPLIT` in
+ * `app/src/battle/allocation.ts`, applied by `app/src/battle/run-clock.ts`.
+ *
+ * Pinned here as a literal rather than imported: the backend must not depend
+ * on the app. `signals.test.ts` asserts the two agree, so a change to one
+ * fails the other.
+ */
+const DEFAULT_ALLOCATION: readonly number[] = [20, 20, 20, 20, 20];
+
+/** True when a battle is the product's own default rather than a choice. */
+function isDefaultBattle(battle: readonly number[]): boolean {
+  return (
+    battle.length === DEFAULT_ALLOCATION.length &&
+    battle.every((v, i) => v === DEFAULT_ALLOCATION[i])
+  );
+}
+
+/**
+ * PROPOSED: how many battles two entries must have BOTH chosen before their
+ * agreement means anything. Four battles is twenty values; below that an
+ * exact match is thin evidence rather than the "35 identical bytes" the
+ * signal was named for.
+ */
+const MIN_COMPARABLE_BATTLES = 4;
+
 /** 3. Duplicate / near-duplicate battle sets across entries — the strongest
  * single signal (35 identical bytes between independent humans is
- * near-impossible). Exact duplicates are a HARD BLOCK signal (R11). */
+ * near-impossible). Exact duplicates are a HARD BLOCK signal (R11).
+ *
+ * BATTLES LEFT AT THE PRODUCT'S DEFAULT ARE NOT COMPARED (2026-09-18, after
+ * the devnet battle test, DRIFT §H13). The even split is what every screen
+ * opens at AND what every unlocked battle becomes when the ninety-second run
+ * clock expires. Two players who both run out of time therefore submit
+ * byte-identical sets without having chosen anything, and the old code called
+ * that "exact 35-byte duplicate", severity `strong` — the only severity this
+ * signal treats as conclusive alone.
+ *
+ * That is not a near-impossible coincidence; it is the product's own output.
+ * It was observed on the FIRST pool where two humans played: both timed out,
+ * both submitted seven even splits, and both drew a strong finding. At scale
+ * every pair of timed-out players would produce one, so the reviewer's queue
+ * would fill with the product's own artifact wearing the label reserved for
+ * the clearest evidence of multi-accounting.
+ *
+ * The fix removes the artifact, NOT the signal. Genuine multi-accounting —
+ * one person entering several seats behind the same strong allocation, which
+ * is the attack worth detecting because it is the only one that profits the
+ * person doing it — still matches on every battle those seats actually chose.
+ */
 export function duplicateSets(entries: RevealedEntry[]): Finding[] {
   const findings: Finding[] = [];
   for (let i = 0; i < entries.length; i++) {
     for (let j = i + 1; j < entries.length; j++) {
-      const a = entries[i].battles.flat();
-      const b = entries[j].battles.flat();
+      // Compare only battles BOTH entries chose. A default battle carries no
+      // information about its player, so agreeing on one is not agreement.
+      const chosen: number[] = [];
+      const battlesA = entries[i].battles;
+      const battlesB = entries[j].battles;
+      for (let k = 0; k < Math.min(battlesA.length, battlesB.length); k++) {
+        if (!isDefaultBattle(battlesA[k]) && !isDefaultBattle(battlesB[k])) chosen.push(k);
+      }
+      if (chosen.length < MIN_COMPARABLE_BATTLES) continue;
+
+      const a = chosen.flatMap((k) => battlesA[k]);
+      const b = chosen.flatMap((k) => battlesB[k]);
+      // The near-duplicate threshold scales with what was actually compared,
+      // so a four-battle comparison is not judged on a seven-battle budget.
+      const nearThreshold = Math.floor((10 * a.length) / 35);
       const l1 = a.reduce((acc, v, k) => acc + Math.abs(v - b[k]), 0);
+      const scope =
+        chosen.length === battlesA.length
+          ? `${a.length}-byte`
+          : `${a.length}-byte over ${chosen.length} of ${battlesA.length} chosen battles`;
       if (l1 === 0) {
         for (const e of [entries[i], entries[j]]) {
           findings.push({
             signal: 'duplicate_sets',
             player: e.player,
             severity: 'strong',
-            detail: 'exact 35-byte duplicate battle set',
+            detail: `exact ${scope} duplicate battle set`,
             correlated: [entries[i].player, entries[j].player].filter((p) => p !== e.player),
           });
         }
-      } else if (l1 <= 10) {
-        // PROPOSED: total L1 distance ≤ 10 across 35 values is a near-copy.
+      } else if (l1 <= nearThreshold) {
+        // PROPOSED: total L1 distance ≤ 10 across 35 compared values is a
+        // near-copy, scaled to however many values were actually compared.
         for (const e of [entries[i], entries[j]]) {
           findings.push({
             signal: 'duplicate_sets',
             player: e.player,
             severity: 'note',
-            detail: `near-duplicate battle set (L1 distance ${l1})`,
+            detail: `near-duplicate battle set (L1 distance ${l1} over ${a.length} compared values)`,
             correlated: [entries[i].player, entries[j].player].filter((p) => p !== e.player),
           });
         }
