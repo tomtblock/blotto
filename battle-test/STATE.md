@@ -1,16 +1,47 @@
-# STATE — 2026-09-17 17:35 local (20:35 UTC) — by Claude Code
+# STATE — 2026-09-17 22:45 local (2026-09-18 01:45 UTC) — by Claude Code
 
-Phase:            **T5 planned and funded — waiting on the freeze merge, then the founder's two entries.**
-                  T4 PASSED on pool 16 (UI-A took the whole 4 SOL pot). T5 inverts it: a HEADLESS
-                  wallet wins and neither founder wallet does.
-Waiting on:       **merge the T5 freeze change (144)** — the gitleaks failure is resolved and CI
-                  should be green — then enter as ordinary field seats (see below).
-                  Also open, neither urgent: F-24/F-25 (seal-lockout fix now or after the week) and
-                  the Vercel ignore step, approved and ready to apply (~85% off build minutes).
-After that:       I sweep and re-fund the roster from the 10 SOL, then run 62 headless seats.
-Live deadlines:   none for T5 — the plan deliberately names no pool.
-Blocked:          nothing. The gitleaks failure on 144 is RESOLVED — see H11 below.
-Results so far:   T1 **PASS** (refund) · T4 **PASS** (scored, paid) · T2, T3, T5–T8 not started
+Phase:            **T5 PASSED on pool 18 — a headless wallet took the whole 4 SOL pot and neither
+                  founder wallet won.** All eight frozen pass criteria met and checked.
+Waiting on:       **founder decision on §H13**, which is founder-and-counsel territory: the
+                  90-second timeout default makes two timed-out players a byte-identical pair, which
+                  is the strongest detection signal and hard-block-eligible. Nobody was flagged
+                  (correct — the daemon never flags), but a reviewer trusting it would block honest
+                  players who paid an entry.
+Also open:        F-24/F-25 (seal-lockout fix now or after the week) and the Vercel ignore step,
+                  approved and ready to apply (~85% off build minutes).
+Blocked:          nothing.
+Live deadlines:   none — pool 18 is Paid and settled.
+Results so far:   T1 **PASS** · T4 **PASS** · T5 **PASS** · T2, T3, T6-T8 not started
+Money:            funder 2.679882760 SOL reserve; roster funded to 0.15 each before the run. Sweep
+                  before the next pool — prize money and leftovers recirculate.
+
+**T5's result, and what it actually proved (2026-09-18 01:13Z):**
+  W00 rank 1, paid **4000000000** lamports — the whole pot, to a headless wallet with no relationship
+  to the operator. W01 rank 64. UI-A and UI-B both rank 62, paid nothing. Vault 650240 exact.
+  Recomputed results root equals the on-chain root.
+  → This is the claim T4 could not make. There the operator's own account won and nothing ruled out
+    that it was privileged. Here it did not win and the pot went to a wallet that could not be.
+  → **reconcile prints FAIL on 44 RANK_DRIFT and that is MY prediction, not a pass criterion.** The
+    plan marked only 2 of 64 seats conditional; all 62 field seats were equally conditional on how
+    the founders played. §H10 in a new disguise.
+  → **§H13 — both founder wallets timed out into [20,20,20,20,20]**, all seven battles. My advance
+    reassurance ("the clock cannot break this test") was right about the rank range and silent about
+    duplicate_sets, which I had named one paragraph earlier. Two identical sets = two `strong`
+    findings, confirmed by running the product's own detection code.
+  → **§H12 — four more wallets burnt (W48-W51) by my own concurrency**, not the gate: 429s from the
+    public RPC, then expired blockhashes. Re-running the remaining 14 at concurrency 1 landed
+    14 of 14 with zero 429s. Same gate, same code, one knob.
+  → **§H14 — "recomputed root equals on-chain root" was a pass criterion nothing checked.**
+    reconcile only printed it. Computed by hand: MATCH. Two traps on the way — merkleRoot takes leaf
+    BYTES and hashes them itself, and a rank tie means rank order alone does not fix leaf order.
+
+**Tooling changed tonight:**
+  1. `enter.ts` no longer needs the master seed — it loads keypairs from `keys/wallets/`, proven
+     equivalent because all 72 reproduce the addresses committed in `registry/wallets.json`.
+  2. `--wallets` now SELECTS from a plan's seats instead of being silently ignored, so a part-way
+     run can be resumed on the seats that are left.
+  3. Device marker entropy moved from the master seed to each wallet's own secret key; distinctness
+     per wallet per pool is preserved, which is the only property that matters.
 
 **T5 — what it tests and what the founder sets:**
   W00 takes the wall and the 4 SOL pot. W01 takes the pole and last place. BOTH founder wallets are

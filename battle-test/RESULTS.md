@@ -9,7 +9,7 @@ open item in the report; CI refuses the default branch otherwise.
 | T2 | Refund at the boundary (39) | — | not started | — | — | — | — |
 | T3 | Seal at the minimum field (40) + pause | — | not started | — | — | — | — |
 | T4 | Full pool — UI wallet wins | 16 | Paid | 64 | PR 133, 2026-09-16T16:22:00Z | 2026-09-17T02:23Z | **PASS** |
-| T5 | Full pool — headless wallet wins | — | not started | — | — | — | — |
+| T5 | Full pool — headless wallet wins | 18 | Paid | 64 | 144, 2026-09-17T22:51:00Z | 2026-09-18T01:38Z | **PASS** |
 | T6 | Oversubscribed + load | — | not started | — | — | — | — |
 | T7 | Same device → review | — | not started | — | — | — | — |
 | T8 | Verify page + non-founder recompute | — | not started | — | — | — | — |
@@ -73,3 +73,40 @@ need. Each is barred from pool 16 by §H6. The guardrail built earlier the same 
 at each first casualty instead of marching on, which is why it was five and not sixty-two. All five
 were replaced by spares playing the burnt seats' own frozen allocations, so the scored field was
 exactly the planned field.
+
+
+## T5 — a headless wallet won, and neither operator account did
+
+**All eight frozen pass criteria met, each checked against evidence rather than assumed.**
+
+| criterion (frozen 2026-09-17T22:51:00Z) | evidence |
+|---|---|
+| Paid with 64 entrants | Paid, 64/64 — sealed at capacity on the 64th entry |
+| Exactly one seat paid: **W00**, the whole pot | one paid seat, W00, **4000000000** lamports |
+| W01 ranked last | rank **64** of 64 |
+| Neither founder wallet paid, both in ranks 2..63 | UI-A **62**, UI-B **62**, both paid 0 |
+| Every revealed allocation reproduces its committed hash | **64 of 64**, none false |
+| Recomputed results root equals the on-chain root | **MATCH** — `0e1d6b87…3bcc`, computed by hand (§H14) |
+| Vault ends at 650240 lamports | **650240** |
+| No seat flagged, no sanctions hold | 0 flagged, 0 holds |
+
+**What this proves that T4 could not.** T4 paid the whole pot to the operator's own account, so it
+could not rule out that the account was privileged. Here a headless wallet with no relationship to
+the operator took rank 1 and all 4 SOL, another took last, and both founder wallets finished
+mid-field and were paid nothing. The winner is decided by the allocations and nothing else.
+
+**`reconcile.ts` prints `RESULT: FAIL`, and the reason is mine, not the product's.** 44 of 62 exact
+field ranks drifted, by one to five places each. Exact field ranks are **not** a pass criterion —
+the eight above are. The drift has a single cause: both founder wallets timed out into the even
+split (§H13) instead of the rotations the plan assumed, which changed every head-to-head against
+them and perturbed scores across the field.
+
+The plan marked only **2 of 64** seats `rankIsConditional` — the two founder seats. It should have
+marked all 62 headless field seats conditional too, because every one of their ranks depended on how
+the founders played. That is §H10 again in a new disguise: I saw that the founders' own ranks were
+conditional and did not see that everyone else's were conditional on the same input.
+
+**The three findings this pool produced:** §H12 (my concurrency burnt four more wallets; fixed and
+proved by re-running the remainder at concurrency 1 with zero losses), §H13 (the timeout default
+manufactures the strongest detection signal — **for the founder and counsel**), §H14 (a pass
+criterion no tool checked; checked by hand, it passes).
