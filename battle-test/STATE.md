@@ -6,6 +6,11 @@ Waiting on:       **the founder to run `deploy-backend`** — it is workflow_dis
                   `POST /ciphertexts/status` → **404**. The old lockout is still in force in
                   production. Also: merge PR 148, and ratify the T6 role reading (F-28).
                   Nothing is blocked meanwhile — T2 settles itself and the funder is funded.
+Three PRs open, all green:
+                  **147 MERGED** (seal fix) · **148** (these records) · **149** (detection:
+                  report-only enforced + the duplicate_sets false positive). 149 clears §H13's
+                  product half — measured on pool 18's real data, 2 strong findings before, 0 after.
+
 Also open:        **§H13**, founder-and-counsel territory: the 90-second timeout default makes two
                   timed-out players a byte-identical pair, which is the strongest detection signal
                   and hard-block-eligible. Detection policy already answered ("never flag at all —
