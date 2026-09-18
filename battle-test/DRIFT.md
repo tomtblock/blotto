@@ -1108,6 +1108,32 @@ A player recomputing their own payout hits both. The verify page must break ties
 and the rule deserves to be written down somewhere a player can read rather than inferred from a
 matching root.
 
-**Also worth fixing:** the published bundle is fetched from `gateway.irys.xyz` at harvest time and
+**FIXED 2026-09-18 — the check is now automatic and it gates the verdict.**
+`reconcile.ts` rebuilds the tree from the harvested per-seat data on every run,
+compares it to the chain's `results_root`, prints `VERIFIED` or `FAILED`, and
+folds the result into PASS/FAIL. Proven to be capable of failing, because a
+check that cannot fail is what §H9 was: one lamport was moved off the winner's
+payout in a copy of `T5.actual.json` and the run reported
+`FAILED — MISMATCH` and `RESULT: FAIL`. The evidence was then restored from git
+and confirmed byte-identical.
+
+Run against every settled pool: **T4's root verifies too** (a second,
+independent confirmation of the scoring engine and the tree), and T1 — a refund
+pool with no root — takes the no-root path and still passes.
+
+**A correction to the paragraph below.** I wrote that the gateway "returned an
+empty body twice tonight" and that the evidence chain depended on a third party
+staying reachable. The gateway was fine. It answers `302` and my `curl` was not
+following redirects; `harvest.ts` uses `fetch`, which follows them by default,
+which is why it worked throughout. Fetched with `-L` it returns `200` and 29 KB.
+
+The archiving point survives in weaker form and is worth stating correctly: the
+bundle is not stored in the repository, and it should not be — it carries the
+pool `secret`, so committing it would re-create §H11 exactly. It does not need
+storing. Its contents are checkable against a root the chain committed before
+anyone could read them, which is what the fix above now does on every run. A
+tampered bundle cannot reproduce that root.
+
+**Superseded, kept for the record:** the published bundle is fetched from `gateway.irys.xyz` at harvest time and
 is NOT archived under `evidence/`. That gateway returned an empty body twice tonight. The evidence
 chain currently depends on a third party staying reachable; it should keep its own copy.

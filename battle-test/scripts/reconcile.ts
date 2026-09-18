@@ -41,6 +41,9 @@
 import { createHash } from 'crypto';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
+import { PublicKey } from '@solana/web3.js';
+
+import { leafBytes, merkleRoot } from '../../backend/scoring/src/merkle';
 
 type Verdict = 'MATCH' | 'RANK_DRIFT' | 'PAYOUT_MISMATCH' | 'INPUT_DRIFT' | 'ABSENT';
 
@@ -75,6 +78,56 @@ interface Actual {
   minSeats: number; entryLamports: string; potLamports: string; resultsRoot: string | null;
   vaultLamports: string; treasuryLamports: string; harvestedAt: string;
   unknownEntrants: string[]; seats: ActualSeat[];
+}
+
+
+/**
+ * Recompute the results root from the harvested per-seat data and compare it
+ * to the root the chain committed.
+ *
+ * WHY THIS EXISTS (DRIFT §H14). Every plan's `passCriteria` states "the
+ * recomputed results root equals the on-chain results_root", and until
+ * 2026-09-18 nothing checked it: this file PRINTED the root and recomputed
+ * nothing. A criterion satisfied by display is §H9 again — a check that
+ * cannot fail.
+ *
+ * It is also the check that makes the published bundle safe to rely on. The
+ * revealed allocations come from a third party's gateway; they do not have to
+ * be trusted, because tampered results cannot reproduce a root the chain
+ * committed before anyone saw them.
+ *
+ * Two things must be right, and the first hand-written attempt got both
+ * wrong:
+ *   - `merkleRoot` takes LEAF BYTES and applies the 0x00-prefixed leaf hash
+ *     itself. Pre-hashing double-hashes and yields a plausible wrong root.
+ *   - Rank order alone does NOT fix leaf order. Ranks tie — pool 18 had two
+ *     seats at rank 62 — so the tie must break the same way the settlement
+ *     crank broke it. Seat index ascending reproduces the on-chain root.
+ */
+function verifyResultsRoot(actual: Actual): { ok: boolean; note: string } {
+  if (!actual.resultsRoot) return { ok: true, note: 'no root committed (pool did not score)' };
+  const scored = actual.seats.filter((s) => s.rank != null && s.address);
+  if (scored.length === 0) return { ok: false, note: 'no scored seats to rebuild the tree from' };
+  const ordered = [...scored].sort((a, b) => (a.rank as number) - (b.rank as number) || a.seat - b.seat);
+  let recomputed: string;
+  try {
+    recomputed = Buffer.from(
+      merkleRoot(
+        ordered.map((s) =>
+          leafBytes({
+            player: new PublicKey(s.address as string).toBytes(),
+            rank: s.rank as number,
+            amountLamports: BigInt(s.amountLamports ?? '0'),
+          })
+        )
+      )
+    ).toString('hex');
+  } catch (e) {
+    return { ok: false, note: `could not rebuild the tree: ${e instanceof Error ? e.message : e}` };
+  }
+  return recomputed === actual.resultsRoot
+    ? { ok: true, note: `recomputed from ${ordered.length} seats · MATCH` }
+    : { ok: false, note: `MISMATCH — recomputed ${recomputed}` };
 }
 
 function main(): void {
@@ -209,9 +262,14 @@ function main(): void {
   const directDrift = rows.some(
     (r) => r.route === 'direct' && (r.verdict === 'INPUT_DRIFT' || r.verdict === 'RANK_DRIFT')
   );
+  // The bundle's results must reproduce the root the chain committed. A
+  // tampered or mis-read bundle cannot, so this is what lets everything below
+  // rest on published data rather than on this script's word for it.
+  const rootCheck = verifyResultsRoot(actual);
+
   const pass =
     frozenOk && counts.PAYOUT_MISMATCH === 0 && !directDrift && stateOk && vaultOk &&
-    actual.unknownEntrants.length === 0;
+    rootCheck.ok && actual.unknownEntrants.length === 0;
 
   const lines: string[] = [];
   lines.push(`# ${test} reconcile — pool ${actual.poolId} — ${actual.terminalState}`);
@@ -226,7 +284,10 @@ function main(): void {
   lines.push(`Minimum field:   ${actual.minSeats} — the pool ${actual.entrants >= actual.minSeats ? 'reached' : 'did NOT reach'} it, so it ${actual.entrants >= actual.minSeats ? 'plays' : 'refunds'}`);
   lines.push(`Prize vault:     ${actual.vaultLamports} lamports${plan.expectations?.vaultAfter ? ` · expected ${plan.expectations.vaultAfter} · ${vaultOk ? 'MATCH' : 'MISMATCH'}` : ''}`);
   lines.push(`Treasury:        ${actual.treasuryLamports} lamports`);
-  if (actual.resultsRoot) lines.push(`Results root:    ${actual.resultsRoot}`);
+  if (actual.resultsRoot) {
+    lines.push(`Results root:    ${actual.resultsRoot}`);
+    lines.push(`                 ${rootCheck.ok ? 'VERIFIED' : 'FAILED'} — ${rootCheck.note}`);
+  }
   lines.push('');
   lines.push('wallet   role        route   seat  verdict           note');
   for (const r of rows) {
