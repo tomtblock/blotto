@@ -3,6 +3,7 @@
  *
  *   POST /packet       { wallet, pool }               → IssuedPacket | 403 generic
  *   POST /ciphertexts  { pool, player, ciphertext }   → 204
+ *   POST /ciphertexts/status { pool, player, atUnix, signature } → { sealed }
  *   POST /attestation  { wallet, termsVersion, signature } → 204 | 403
  *   POST /notify       { wallet, emailOptIn, atUnix, signature } → 204 | 403
  *   POST /notify/pool  { wallet, pool, email, atUnix, signature } → 204 | 403 (round four, v2)
@@ -46,7 +47,8 @@ import { acceptAttestation } from './attestations';
 import { acceptNotifyPreference, type NotifyPreferenceStore } from './notify';
 import { acceptPoolNotify, type PoolNotifyStore } from './notify-pool';
 import type { PoolIdResolver } from './pool-ids';
-import { acceptCiphertext } from './ciphertexts';
+import type { SeatResolver } from './seats';
+import { acceptCiphertext, ciphertextStatus } from './ciphertexts';
 
 export interface EntryServerDeps {
   packet: PacketServiceDeps;
@@ -57,6 +59,15 @@ export interface EntryServerDeps {
    * which is exactly the defect the 2026-09-11 audit found. See `pool-ids.ts`.
    */
   poolIds: PoolIdResolver;
+  /**
+   * "Has the chain accepted this seat?" — what gate 3 of the ciphertext
+   * route asks before refusing an overwrite. Required, not optional: a
+   * deployment that forgot to wire it would silently keep the lockout that
+   * cost eleven devnet wallets (DRIFT.md §H6), and a defect that returns
+   * quietly is the failure mode this service has already had twice. See
+   * `seats.ts`.
+   */
+  seats: SeatResolver;
   /** v3 D3: the email-notification opt-in store. Optional — a deployment
    * without it answers /notify with 503 rather than pretending to record. */
   notify?: NotifyPreferenceStore;
@@ -309,11 +320,36 @@ export async function handleEntryRoute(
     if (bytes.length !== CIPHERTEXT_LEN) {
       return { status: 400, body: { error: 'bad request' } };
     }
-    return acceptCiphertext(deps.poolIds, deps.ciphertexts, {
+    return acceptCiphertext(deps.poolIds, deps.seats, deps.ciphertexts, {
       pool: b.pool as string,
       player: b.player as string,
       ciphertext: new Uint8Array(bytes),
       signature: typeof b.signature === 'string' ? b.signature : '',
+    });
+  }
+
+  if (path === '/ciphertexts/status') {
+    const b = body as { pool?: string; player?: string; atUnix?: string | number; signature?: string };
+    if (
+      !b ||
+      !B58.test(b.pool ?? '') ||
+      !B58.test(b.player ?? '') ||
+      typeof b.signature !== 'string' ||
+      (typeof b.atUnix !== 'string' && typeof b.atUnix !== 'number')
+    ) {
+      return { status: 400, body: { error: 'bad request' } };
+    }
+    let atUnix: bigint;
+    try {
+      atUnix = BigInt(b.atUnix);
+    } catch {
+      return { status: 400, body: { error: 'bad request' } };
+    }
+    return ciphertextStatus(deps.poolIds, deps.ciphertexts, deps.packet.now, {
+      pool: b.pool as string,
+      player: b.player as string,
+      atUnix,
+      signature: b.signature,
     });
   }
 

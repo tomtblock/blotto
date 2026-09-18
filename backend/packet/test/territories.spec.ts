@@ -285,6 +285,7 @@ describe('the /geo route and the header stub', () => {
       packet: deps(async () => ({ country: 'GB', vpnOrProxy: false })),
       ciphertexts: new MemoryCiphertextStore(),
       poolIds: POOL_IDS(),
+      seats: new (require('../src/seats').MemorySeatResolver)(),
       trustProxyHeader: false,
       trustGeoStubHeaders,
     };

@@ -207,6 +207,52 @@ describe('submitForReveal', () => {
       }
     });
 
+    /*
+     * 2026-09-18 (DRIFT.md §H6). The ciphertext store's 409 says this
+     * wallet's allocation for this pool is already settled, or the pool
+     * stopped taking entries. Showing the eligibility refusal for it tells
+     * a player who failed mid-entry that they are not allowed to play,
+     * which is false and sends them to the Rules page for an answer that
+     * is not there.
+     */
+    it('a 409 from the CIPHERTEXT store is a conflict, not an eligibility refusal', async () => {
+      const r = await submitForReveal(
+        refusing(409, 'ciphertext'),
+        rpcWithLogs(null),
+        input,
+        noSleep
+      );
+      expect(r.kind).toBe('failed');
+      if (r.kind === 'failed') {
+        expect(r.failure.kind).toBe('seal-conflict');
+        expect(r.failure.retryable).toBe(false);
+        expect(r.failure.broadcast).toBe(false);
+        expect(r.failure.message).not.toMatch(/connection/i);
+      }
+    });
+
+    it('every OTHER ciphertext-stage refusal stays the eligibility refusal', async () => {
+      for (const status of [400, 403, 429]) {
+        const r = await submitForReveal(
+          refusing(status, 'ciphertext'),
+          rpcWithLogs(null),
+          input,
+          noSleep
+        );
+        expect(r.kind).toBe('failed');
+        if (r.kind === 'failed') expect(r.failure.kind, String(status)).toBe('entry-refused');
+      }
+      // And a 409 from the PACKET endpoint is not a seal conflict either.
+      const packet409 = await submitForReveal(
+        refusing(409, 'packet'),
+        rpcWithLogs(null),
+        input,
+        noSleep
+      );
+      expect(packet409.kind).toBe('failed');
+      if (packet409.kind === 'failed') expect(packet409.failure.kind).toBe('entry-refused');
+    });
+
     it('a service that is DOWN or unreachable is still an honest connection failure', async () => {
       for (const status of [500, 502, 503, null]) {
         const r = await submitForReveal(refusing(status), rpcWithLogs(null), input, noSleep);
@@ -218,10 +264,29 @@ describe('submitForReveal', () => {
       }
     });
 
+    /*
+     * D-12's property for the ciphertext stage, which is the enduring one:
+     * a refusal from the store is never reported as a connection failure
+     * with a retry that cannot work. WHICH refusal it is reported as was
+     * split on 2026-09-18 — see the two tests just above; this one pins the
+     * part that does not depend on that split.
+     */
     it('holds for the ciphertext store too, not only the packet endpoint', async () => {
-      const r = await submitForReveal(refusing(409, 'ciphertext'), rpcWithLogs(null), input, noSleep);
-      expect(r.kind).toBe('failed');
-      if (r.kind === 'failed') expect(r.failure.kind).toBe('entry-refused');
+      for (const status of [400, 403, 409, 429]) {
+        const r = await submitForReveal(
+          refusing(status, 'ciphertext'),
+          rpcWithLogs(null),
+          input,
+          noSleep
+        );
+        expect(r.kind).toBe('failed');
+        if (r.kind === 'failed') {
+          expect(r.failure.kind, String(status)).not.toBe('rpc-failure');
+          expect(r.failure.retryable).toBe(false);
+          expect(r.failure.broadcast).toBe(false);
+          expect(r.failure.message).not.toMatch(/connection/i);
+        }
+      }
     });
   });
 

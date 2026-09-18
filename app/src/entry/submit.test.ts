@@ -48,7 +48,7 @@ function services(pool: ReturnType<typeof generateKeypair>) {
 }
 
 describe('submitEntry', () => {
-  it('seals the exact payload the crank will decode, ciphertext before money', async () => {
+  it('asks permission, then seals, then pays — and seals what the crank decodes', async () => {
     const pool = generateKeypair();
     const { svc, calls, stored } = services(pool);
     const out = await submitEntry(svc, {
@@ -58,7 +58,20 @@ describe('submitEntry', () => {
       battles,
       timingsMs: [1, 2, 3, 4, 5, 6, 7],
     });
-    expect(calls).toEqual(['ciphertext', 'packet', 'register']);
+    /*
+     * The order is load-bearing in both directions (2026-09-18).
+     *
+     * `packet` first: a refusal — a dry signing quota, a blocked territory,
+     * a stale terms version — must arrive BEFORE anything is stored.
+     * Asking afterwards is what barred eleven devnet wallets from their
+     * pools (DRIFT.md §H6), because a stored ciphertext could not be
+     * replaced. Requesting a packet signs nothing and charges nothing.
+     *
+     * `ciphertext` still before `register`: a paid entry whose ciphertext
+     * never landed is the lost-ciphertext failure mode, and that invariant
+     * is unchanged.
+     */
+    expect(calls).toEqual(['packet', 'ciphertext', 'register']);
     expect(out.signature).toBe('SIG');
     // The crank can open and decode what the client sealed.
     const opened = sealOpen(stored[0], pool)!;

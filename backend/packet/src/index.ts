@@ -9,6 +9,7 @@ export * from './notify';
 export * from './notify-pool';
 export * from './email-sender';
 export * from './pool-ids';
+export * from './seats';
 export * from './ciphertexts';
 export * from './ciphertext-message';
 export * from './signer-turnkey';

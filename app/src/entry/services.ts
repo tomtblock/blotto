@@ -13,7 +13,10 @@
  * id throws a plain "not configured" error before anything is signed.
  */
 
-import { ciphertextMessage } from '@blotto/packet/ciphertext-message';
+import {
+  ciphertextMessage,
+  ciphertextStatusMessage,
+} from '@blotto/packet/ciphertext-message';
 import { generateKeyPair, getAddressFromPublicKey } from '@solana/kit';
 import { executeTrade } from '@/tx/execute';
 import type { TxRpc } from '@/tx/tx-rpc';
@@ -95,6 +98,56 @@ const toB64 = (b: Uint8Array): string => {
   for (const x of b) bin += String.fromCharCode(x);
   return btoa(bin);
 };
+
+/**
+ * "Has this wallet already sealed for this pool?" — the one question the
+ * lockout made unanswerable (DRIFT.md §H6).
+ *
+ * PHASE-N-REVIEW (2026-09-18): deliberately NOT called from `submitEntry`.
+ * Asking costs a wallet signature prompt, and putting one in front of every
+ * entry would spend a prompt on the ninety-second session to detect a state
+ * that the backend fix has just made recoverable. This is here for the
+ * surfaces that need the truth about a specific wallet — a support answer,
+ * the battle test's preflight, a "you already sealed here" panel if the
+ * founder wants one — not for the hot path. Wiring it into the flow is a UX
+ * decision, and the founder owns it.
+ *
+ * The wallet proves it is asking about ITSELF; the answer is a boolean and
+ * never the ciphertext, so nothing here reads a sealed allocation.
+ *
+ * @returns true/false, or null when the service could not answer.
+ */
+export async function checkSealed(
+  apiBase: string | undefined,
+  signer: Pick<TxSigner, 'signMessage'>,
+  pool: string,
+  player: string,
+  nowUnix: bigint = BigInt(Math.floor(Date.now() / 1000))
+): Promise<boolean | null> {
+  if (!apiBase) throw new Error('entry service not configured (NEXT_PUBLIC_ENTRY_API_URL)');
+  if (!signer.signMessage) throw new Error('this wallet cannot sign');
+  const signature = await signer.signMessage(
+    ciphertextStatusMessage(pool, player, nowUnix)
+  );
+  let res: Response;
+  try {
+    res = await fetch(`${apiBase}/ciphertexts/status`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        pool,
+        player,
+        atUnix: nowUnix.toString(),
+        signature: toB64(signature),
+      }),
+    });
+  } catch {
+    return null;
+  }
+  if (!res.ok) return null;
+  const body = (await res.json()) as { sealed?: unknown };
+  return typeof body.sealed === 'boolean' ? body.sealed : null;
+}
 
 export function makeLiveEntryServices(cfg: LiveEntryServicesConfig): EntryServices {
   const api = (): string => {

@@ -99,10 +99,23 @@ export async function submitForReveal(
      * did not answer, or fell over (5xx), genuinely is one.
      */
     if (e instanceof EntryServiceError) {
+      /*
+       * 2026-09-18 (DRIFT.md §H6). A 409 from the CIPHERTEXT store is not
+       * an eligibility decision and must not be dressed as one. It says
+       * this wallet's allocation for this pool is already settled, or the
+       * pool stopped taking entries — a state, not a judgement about the
+       * player. The stage matters: a 409 from the packet endpoint is not
+       * this, so the check names both.
+       */
+      const kind = !e.refused
+        ? 'rpc-failure'
+        : e.stage === 'ciphertext' && e.status === 409
+          ? 'seal-conflict'
+          : 'entry-refused';
       return {
         kind: 'failed',
         failure: makeFailure(
-          e.refused ? 'entry-refused' : 'rpc-failure',
+          kind,
           `${e.stage}: ${e.message} (status ${e.status ?? 'none'})`,
           false
         ),

@@ -24,6 +24,7 @@ import { expect } from 'chai';
 import nacl from 'tweetnacl';
 import { handleEntryRoute, type EntryServerDeps } from '../src/server';
 import { MemoryPoolIdResolver } from '../src/pool-ids';
+import { MemorySeatResolver } from '../src/seats';
 import {
   MemoryCiphertextStore,
   encodePayload,
@@ -82,6 +83,7 @@ function serverDeps(): EntryServerDeps {
     packet: undefined as unknown as EntryServerDeps['packet'],
     ciphertexts: new MemoryCiphertextStore(),
     poolIds,
+    seats: new MemorySeatResolver(),
     trustProxyHeader: false,
   };
 }
