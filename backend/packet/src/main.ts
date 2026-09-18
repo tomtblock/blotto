@@ -57,6 +57,7 @@ import { createPool } from '../../_shared/src/db';
 import { loadHygieneConfig } from '../../_shared/src/http-hygiene';
 import { PgCiphertextStore } from '../../sealing/src/store';
 import { PgPoolIdResolver } from './pool-ids';
+import { PgSeatResolver } from './seats';
 import { serveEntryApi } from './server';
 import { buildSigner } from './signer-select';
 import { wireSanctions } from './sanctions-wiring';
@@ -307,6 +308,7 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
       screening: sanctions,
       ciphertexts: new PgCiphertextStore(db),
       poolIds: new PgPoolIdResolver(db),
+      seats: new PgSeatResolver(db),
       notify: new PgNotifyPreferenceStore(db),
       notifyPool,
       notifyDeliverable: emailSender !== null,
