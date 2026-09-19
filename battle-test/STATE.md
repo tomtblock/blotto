@@ -1,12 +1,78 @@
-# STATE — 2026-09-19 17:10 UTC — by Claude Code
+# STATE — 2026-09-19 18:40 UTC — by Claude Code
 
-Phase:            **§H18 is resolved, and the answer is better than the finding.** T2R passed. No
-                  pool is running.
-Waiting on:       **the founder: merge PR 154, ratify its wording, and take §H22 to counsel.**
-                  Then the T6 role call (§F-28) to restart devnet testing.
+Phase:            **T6 is frozen against pool 23, which does not exist yet. Pool 22 is running as a
+                  shakedown.** Both calls are the founder's, ratified 2026-09-19.
+Waiting on:       **the founder (§F-32): 8 SOL from UI-B to the funder, and the T6 freeze PR
+                  merged.** I do not spend a lamport until that merge lands.
 Blocked:          T3 on Q6 (admin signing) · T7 on Q7 (reviewer key).
 Results so far:   T1 **PASS** · T4 **PASS** · T5 **PASS** · T2 **SPOILED** · **T2R PASS (7 of 8)**
-Money:            all 39 T2R seats refunded. Funder 0.339339200; wallets ~0.1455 each.
+Money:            funder **0.339339200** — not enough for T6, hence the ask. 72 wallets at ~0.15
+                  each (one entry apiece). UI-A 10.568905266 · UI-B 11.673357239.
+
+## What is running right now
+
+```
+pool 22  CDKBFm2DybDUrkYhZzDXpPExoL3PU2EJbcBD1JboPaF7
+         Open · 1 of 64 · deadline 2026-09-20T01:27Z · seat 0 = UI-A
+```
+
+Pool 22 **cannot be a test** — UI-A entered it before any prediction for it was written, so a plan
+frozen now would postdate the pool's first entry. It runs as an **observation** instead
+(`registry/pool-22.observation.md`), which claims nothing and grades nothing. Its job is to find out
+whether the oversubscription mechanics work *before* a frozen prediction is spent on them.
+
+## T6 is frozen, and frozen to the strongest standard available
+
+`registry/T6.plan.json` predicts **pool 23**, which opens roughly five minutes after pool 22 seals.
+The plan is written and validated; the freeze PR goes up with this commit. **Nothing gets filled
+until the founder merges it**, because the whole value of the artifact is that it predates its pool.
+
+Roles, ratified by the founder: **UI-A enters pool 23 early as one of the 64; UI-B arrives late and
+is refused.** The manual's T6 line ("UI-A and UI-B early, then wait") was written for a three-account
+roster and cannot be satisfied with two — if both enter early there is nobody to be refused, and the
+refusal is what T6 exists to check.
+
+What T6 claims, and the split between the two kinds of claim:
+
+| unconditional — from the program text and the shapes | conditional — on the exact allocations |
+|---|---|
+| 64 entrants, 9 refusals, every one **`PoolNotOpen` (6000)** | the results root and leaf order |
+| a refused wallet moves no lamports beyond the fee | every exact score and field rank |
+| **W00** takes rank 1 and the whole 4 SOL pot | UI-A's exact rank (a range, 2..63, is claimed) |
+| **W01** is last; UI-A is paid nothing | |
+
+**6000, not 6010, and this is read off the branch rather than remembered.** `register.rs` checks
+`pool.state == Open` **before** `entrants < CAPACITY`, and the 64th entry seals the pool — so the
+65th fails the state gate and never reaches the capacity gate. Anchor numbers the enum from 6000 in
+declaration order and `PoolNotOpen` is declared first.
+
+## §H23 — the per-seat check I wrote yesterday only worked on a pool that refunded
+
+`checkPerSeatCost` computed `startingBalance − balanceAfter`. Right for a refunded seat, wrong for
+every seat in a pool that pays — the entry does not come back and the winner is paid on top. It
+would have reported the T5 winner's sunk cost as about **−3.9 SOL**. T2R refunded, so the one pool it
+ever ran on was the single case where the naive subtraction happens to be right. §H9's family again.
+
+Fixed, and **proven on real T5 data in both directions**: the two-band prediction matches **62 of
+62** headless seats exactly, the single figure T5 actually froze fails on 62 of 62, and a
+deliberately wrong band fails on 54 — §H20's own number arriving from the other side. So T6's
+per-seat figures are a re-test of something measured, not a fresh guess.
+
+Two smaller things went in with it: `perSeatSunkLamports` may now be `{seats0to9, seats10plus}`
+because the cost genuinely is two numbers, and a plan may name wallets it does **not** predict
+(`perSeatSunkExcludes`) with the reason, printed rather than silently skipped. T6 excludes UI-A —
+the founder's wallet is not funded by `fan-out`, so its starting balance is not ours to declare.
+
+## A false claim was sitting in a committed evidence file
+
+Regenerating T2R's reconcile found that the committed `registry/T2R.reconcile.md` had been written
+**during** yesterday's both-directions probe, with the plan temporarily altered, and committed in
+that state. It read `UNFROZEN — the prediction cannot be shown to predate the outcome` about the
+best freeze in this whole test. T2R was frozen correctly — PR 151 merged 23:47:18Z, pool 21 created
+01:21:29Z — and the file now reads `Freeze: OK`. T2R's verdict is unchanged: `RESULT: FAIL` on the
+per-seat criterion, which remains honest.
+
+---
 
 ## §H22 — the even split is the MIDDLE of three tiers. READ THIS INSTEAD OF §H18.
 

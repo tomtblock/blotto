@@ -10,9 +10,13 @@ open item in the report; CI refuses the default branch otherwise.
 | T3 | Seal at the minimum field (40) + pause | — | not started | — | — | — | — |
 | T4 | Full pool — UI wallet wins | 16 | Paid | 64 | PR 133, 2026-09-16T16:22:00Z | 2026-09-17T02:23Z | **PASS** |
 | T5 | Full pool — headless wallet wins | 18 | Paid | 64 | 144, 2026-09-17T22:51:00Z | 2026-09-18T01:38Z | **PASS** |
-| T6 | Oversubscribed + load | — | not started | — | — | — | — |
+| T6 | Oversubscribed + load | 23 (not yet open) | frozen, not started | — | PR pending, 2026-09-19 | — | — |
 | T7 | Same device → review | — | not started | — | — | — | — |
 | T8 | Verify page + non-founder recompute | — | not started | — | — | — | — |
+
+**Pool 22 is not in this table, on purpose.** It is running as a shakedown for T6's failure path and
+is recorded as an observation (`registry/pool-22.observation.md`), not a test: UI-A entered it before
+any prediction for it was written, so nothing frozen from here could predate it. It claims nothing.
 
 **Money conserved.** T1 closes to the lamport. The treasury held 1.996098560 SOL
 after pool 14 was funded, took in 1.2 for twelve entries, received 4.0 back as

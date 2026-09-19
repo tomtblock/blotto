@@ -1469,3 +1469,76 @@ first question anyone should ask of a claimed dominant strategy.
 **Corrected in PR 154**, with four regression tests pinning all three tiers and the all-default case,
 because a published claim with no code behind it rots silently and this project has had three
 (§H9, §H14, §H21).
+
+---
+
+### §H23 — the per-seat check I wrote yesterday only worked on a pool that REFUNDED
+
+`checkPerSeatCost` (§H21, written 2026-09-18) computed the sunk cost as
+`startingBalance − balanceAfter`. That is correct for a refunded seat and **wrong for every seat in
+a pool that pays**, because the entry never comes back and the winner is paid 4 SOL on top:
+
+```
+refunded   balanceAfter = start − sunk                    →  sunk = start − after
+paid pool  balanceAfter = start − entry − sunk + prize    →  sunk = start − after − entry + prize
+```
+
+T2R refunded, so the only pool the check ever ran on was the one case where the naive difference
+happens to be right. On T4, T5 or T6 it would have reported DRIFT on all 64 seats — including a
+winner whose "sunk cost" would have come out at about **−3.9 SOL** — and the number would have been
+wrong in a direction that looks like a catastrophe rather than a typo, which is its own kind of
+noise in a report.
+
+**This is §H9's family again and I am naming it as such**: a check written against the one case in
+front of me, not against the cases it would next be asked about. The fix is in the same function and
+the formula above is in the code.
+
+Two other things went in with it, both from §H20 rather than new:
+
+- `perSeatSunkLamports` may now be `{ seats0to9, seats10plus }` as well as a scalar, so a plan can
+  state the two figures the cost actually has instead of one it already knows is wrong for most of
+  the field. T6's plan uses the object form.
+- A plan can only be checked against a **known** starting balance, so T6's plan declares one and the
+  fill is preceded by `fan-out fund --target 0.155sol`, which funds every wallet UP TO a target and
+  therefore leaves all of them at exactly 155000000.
+
+- A plan may name wallets the prediction does **not** cover, with the reason, in
+  `perSeatSunkExcludes`. T6 excludes `UI-A`: the founder's wallet is not funded by `fan-out`, so its
+  starting balance is whatever it is on the day. The check reports its figure and grades nothing on
+  it, and prints the exclusion in the reconcile line — a silent skip is the failure this check
+  exists to stop.
+
+**Proven in both directions on real data before being believed**, as §H21 was. Running the new check
+over T5's harvested balances with a declared start of 150000000:
+
+| prediction | result |
+|---|---|
+| `{seats0to9: 4441080, seats10plus: 4446160}` | **MATCH — all 62 headless seats, exactly** |
+| the single figure T5's plan actually froze (`4436000`) | DRIFT on 62 of 62 |
+| one band deliberately wrong (`4441080` for both) | DRIFT on **54** of 62 |
+
+That 54 is §H20's own number arriving from the other side, and the 62-of-62 match means T6's two
+figures are a re-test of something measured rather than a fresh guess. It also says plainly that
+**T5's frozen per-seat figure was wrong for every seat in the pool** and nothing noticed at the
+time; T5's verdict does not move, because that line was not one of its pass criteria, but the
+number in its plan is wrong and the reconcile of the day could not have said so.
+
+T2R's verdict is unchanged by this — it still reads `NOT CHECKED` / `RESULT: FAIL`, which remains
+the honest outcome for a prediction that was unverifiable when it was frozen.
+
+**But regenerating it found something else, and it is worse than a stale file.** The committed
+`registry/T2R.reconcile.md` was written DURING yesterday's both-directions probe, with the plan
+temporarily altered, and it was committed in that state. So the evidence file on the branch carried
+two claims that are false:
+
+```
+-Freeze:   UNFROZEN — PLAN ALTERED SINCE THE FREEZE — sha256 on disk 7464a5ad… does not match 0b878655…
+-UNFROZEN — the prediction cannot be shown to predate the outcome, so this pool proves
+-nothing about prediction however well its money reconciles. This is a FAIL by itself.
+```
+
+T2R was frozen correctly — PR 151 merged at 23:47:18Z, one hour 34 minutes before pool 21 existed —
+and the plan on disk hashes to the merged bytes. The committed reconcile said the opposite about our
+own strongest freeze. It is regenerated here from the untouched plan and now reads `Freeze: OK`.
+The lesson is narrow and worth stating: **a probe that edits an input must regenerate every output
+it touched, not just the one being examined.**

@@ -63,15 +63,30 @@ interface PlanSeat {
   expectedRank?: number | null; expectedLamports?: string;
   expectedRefundLamports?: string; battles?: number[][];
 }
+/**
+ * The predicted sunk cost. A SCALAR is one figure for every seat; a BAND
+ * object is two, because the real cost is not uniform and a scalar cannot
+ * express that (§H20). The pass asset is named `BLOTTO PASS #<pool>-<seat>`,
+ * so a two-digit seat index is one byte larger and costs 5080 lamports more
+ * rent. Seats 0-9 and seats 10+ are genuinely two numbers.
+ */
+type SunkPrediction = string | { seats0to9: string; seats10plus: string };
+
 interface Plan {
   test: string; title?: string;
   expectations?: {
     terminalState?: string; entrants?: number; vaultAfter?: string; perSeatRefundLamports?: string;
     /** What each seat is predicted to LOSE over the whole test (fees + rent). */
-    perSeatSunkLamports?: string;
+    perSeatSunkLamports?: SunkPrediction;
     /** What every seat held before it entered. Without this the line above
      *  cannot be tested, and `checkPerSeatCost` refuses to pass (§H21). */
     startingBalanceLamports?: string;
+    /** Wallets the line above does NOT cover, each with the reason. A founder
+     *  wallet is not funded by `fan-out`, so its starting balance is whatever
+     *  it happens to be on the day and its cost can only be REPORTED. Naming
+     *  them here excludes them from the verdict and prints them anyway — a
+     *  silent skip would be §H9 wearing a different hat. */
+    perSeatSunkExcludes?: Record<string, string>;
   };
   seats: PlanSeat[];
 }
@@ -79,6 +94,8 @@ interface ActualSeat {
   seat: number; wallet: string; route: string; address: string; battlesHash: string;
   refunded: boolean; flagged: boolean; registerSig: string | null; slot: number | null;
   balanceAfter: string | null;
+  /** Present once the pool has scored. */
+  rank?: number; amountLamports?: string;
 }
 interface Actual {
   test: string; poolId: string; poolPda: string; terminalState: string; entrants: number;
@@ -132,7 +149,10 @@ interface Actual {
  * Note for whoever writes the next prediction: the cost is NOT uniform. The
  * pass asset is named `BLOTTO PASS #<pool>-<seat>`, so a two-digit seat index
  * is one byte larger and costs 5080 more lamports of rent. Seats 0–9 and seats
- * 10+ are two different numbers; see §H20 for the measured table.
+ * 10+ are two different numbers; see §H20 for the measured table. Since
+ * 2026-09-19 `perSeatSunkLamports` may therefore be an OBJECT
+ * `{ seats0to9, seats10plus }` as well as a scalar, so a plan can state the
+ * truth instead of a figure it knows is wrong for most of the field.
  */
 function checkPerSeatCost(
   plan: Plan,
@@ -153,15 +173,40 @@ function checkPerSeatCost(
         `criterion does not pass (§H21)`,
     };
   }
-  const want = BigInt(predicted);
   const from = BigInt(start);
+  const entry = BigInt(actual.entryLamports);
+  /** The band a seat falls in, by the width of its index in the pass name. */
+  const wantFor = (seatIndex: number): bigint =>
+    typeof predicted === 'string'
+      ? BigInt(predicted)
+      : BigInt(seatIndex < 10 ? predicted.seats0to9 : predicted.seats10plus);
+
+  const excludes = plan.expectations?.perSeatSunkExcludes ?? {};
   const drifted: string[] = [];
+  const reported: string[] = [];
   let checked = 0;
   for (const seat of actual.seats) {
     if (seat.balanceAfter === undefined || seat.balanceAfter === null) continue;
+    if (excludes[seat.wallet] !== undefined) {
+      const after0 = BigInt(seat.balanceAfter);
+      const prize0 = BigInt(seat.amountLamports ?? '0');
+      reported.push(
+        `${seat.wallet}(seat ${seat.seat}) held ${after0} after` +
+        (prize0 > 0n ? ` including a ${prize0} prize` : '')
+      );
+      continue;
+    }
     checked++;
-    const sunk = from - BigInt(seat.balanceAfter);
-    if (sunk !== want) drifted.push(`${seat.wallet}(seat ${seat.seat})=${sunk}`);
+    // A refunded seat got its entry back, so what it is missing IS the sunk
+    // cost. A seat in a pool that PAID did not, and a seat that won was paid
+    // on top — both have to come out before the remainder means anything.
+    // Until T6 this only ever ran on a refund pool, and the naive difference
+    // happened to be right there and would have been wrong everywhere else.
+    const after = BigInt(seat.balanceAfter);
+    const prize = BigInt(seat.amountLamports ?? '0');
+    const sunk = seat.refunded ? from - after : from - after - entry + prize;
+    const want = wantFor(seat.seat);
+    if (sunk !== want) drifted.push(`${seat.wallet}(seat ${seat.seat})=${sunk} want ${want}`);
   }
   if (checked === 0) {
     return {
@@ -170,6 +215,14 @@ function checkPerSeatCost(
       note: 'no seat carries a balanceAfter — nothing to test against',
     };
   }
+  const aside =
+    reported.length > 0
+      ? `; ${reported.length} seat(s) excluded by the plan and reported only: ${reported.join(' ')}`
+      : '';
+  const describe =
+    typeof predicted === 'string'
+      ? `${predicted} lamports`
+      : `${predicted.seats0to9} (seats 0-9) / ${predicted.seats10plus} (seats 10+) lamports`;
   if (drifted.length > 0) {
     const shown = drifted.slice(0, 6).join(' ');
     return {
@@ -177,13 +230,13 @@ function checkPerSeatCost(
       verdict: 'DRIFT',
       note:
         `${drifted.length} of ${checked} seats differ from the predicted ` +
-        `${want} lamports: ${shown}${drifted.length > 6 ? ' …' : ''}`,
+        `${describe}: ${shown}${drifted.length > 6 ? ' …' : ''}${aside}`,
     };
   }
   return {
     ok: true,
     verdict: 'MATCH',
-    note: `all ${checked} seats sank exactly ${want} lamports`,
+    note: `all ${checked} seats sank exactly ${describe}${aside}`,
   };
 }
 

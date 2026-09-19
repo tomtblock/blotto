@@ -3,14 +3,14 @@
 Plan:     registry/T2R.plan.json (frozen; never edited)
 Actual:   registry/T2R.actual.json harvested 2026-09-19T13:26:16.161Z
 Pool:     967H53GL2g6CnLAJYsSNFNjBvkMtUELwLNAM27RUfeFk
-Freeze:   UNFROZEN — PLAN ALTERED SINCE THE FREEZE — sha256 on disk 7464a5ad5a77c979… does not match the frozen 0b878655669ac42e…
+Freeze:   OK — PR #151 merged 2026-09-18T23:47:18Z; plan hash matches the merged bytes
 
 Terminal state:  expected Closed · got Closed · MATCH
 Entrants:        expected 39 · got 39 · MATCH
 Minimum field:   40 — the pool did NOT reach it, so it refunds
 Prize vault:     650240 lamports · expected 650240 · MATCH
 Treasury:        10791546880 lamports
-Per-seat cost:   DRIFT — 10 of 39 seats differ from the predicted 4446160 lamports: W00(seat 0)=4441080 W01(seat 1)=4441080 W02(seat 2)=4441080 W03(seat 3)=4441080 W04(seat 4)=4441080 W05(seat 5)=4441080 …
+Per-seat cost:   NOT CHECKED — the plan predicts 4441080 lamports per seat but declares no startingBalanceLamports, so nothing can test it — an unverifiable criterion does not pass (§H21)
 
 wallet   role        route   seat  verdict           note
 W00      field       direct     0  MATCH             refunded 0.100000000 SOL
@@ -55,8 +55,5 @@ W38      field       direct    38  MATCH             refunded 0.100000000 SOL
 
 Verdicts: 39 MATCH · 0 RANK_DRIFT · 0 PAYOUT_MISMATCH · 0 INPUT_DRIFT · 0 ABSENT
 
-
-UNFROZEN — the prediction cannot be shown to predate the outcome, so this pool proves
-nothing about prediction however well its money reconciles. This is a FAIL by itself.
 
 RESULT: FAIL

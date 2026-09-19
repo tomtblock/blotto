@@ -21,7 +21,7 @@
  *     '{"module":"commonjs","moduleResolution":"node"}' scripts/oracle.ts --test T4
  *
  * Flags:
- *   --test <id>    which test's field to predict (T4 today)
+ *   --test <id>    which test's field to predict — T4, T5 or T6
  *   --check-only   run the vector self-check and stop
  *   --emit <path>  write the prediction as JSON for the plan builder
  */
@@ -241,6 +241,56 @@ export function t5Field(): PlannedSeat[] {
   add('W01', 'direct', 'pole', pole(T5_POLE_SEED), { seed: T5_POLE_SEED });
   for (let i = 2; i < 62; i++) {
     const seed = T5_FIELD_SEED_BASE + i;
+    add(`W${String(i).padStart(2, '0')}`, 'direct', 'field', cappedField(seed), { seed });
+  }
+  return seats;
+}
+
+/** T6's seeds, fixed here and never moved once the plan is frozen. */
+const T6_WALL_SEED = 6100;
+const T6_POLE_SEED = 6200;
+const T6_FIELD_SEED_BASE = 6000;
+
+/**
+ * T6's 64 LANDING seats, in the order they are intended to register.
+ *
+ * T6 is the oversubscription test, so the interesting seats are the nine that
+ * DO NOT land — and those are deliberately not in this list. `seats` in a plan
+ * means "entrants", `validate-plan.ts` checks it against
+ * `expectations.entrants`, and a rejected attempt is neither. The nine live in
+ * the plan's `lateAttempts` array instead, where nothing scores them.
+ *
+ * The founder ratified the roles on 2026-09-19: **UI-A enters early as one of
+ * the 64; UI-B arrives late and is refused.** The manual's T6 line ("UI-A and
+ * UI-B early, then wait") was written for a three-account roster and cannot be
+ * satisfied by two — if both enter early there is nobody left to be refused,
+ * and the refusal is the thing T6 exists to check.
+ *
+ * Roles are T5's, for a reason beyond tidiness: T6 pays a real 4 SOL prize
+ * whether or not anybody predicts it, so naming the winner costs nothing and
+ * buys a second independent confirmation of T5's central claim on a different
+ * pool with a different field.
+ */
+export function t6Field(): PlannedSeat[] {
+  const seats: PlannedSeat[] = [];
+  const add = (
+    wallet: string,
+    route: 'ui' | 'direct',
+    role: PlannedSeat['role'],
+    e: Entrant,
+    extra: { seed?: number; recipe?: string }
+  ) =>
+    seats.push({ wallet, route, role, generator: e.generator, battles: e.battles, timingsMs: e.timingsMs, ...extra });
+
+  // The founder enters first, as an ordinary seat. One of the 64.
+  add('UI-A', 'ui', 'field', uiFieldA(), {
+    recipe: 'each battle, drag ONE stat to 25 and leave the rest — in order: Strength, Speed, Heart, Wit, Durability, Strength, Heart. Never take a stat above 25 or down to 0.',
+  });
+  // W00 wins. W01 comes last. W02..W62 are the field.
+  add('W00', 'direct', 'wall', wall(T6_WALL_SEED), { seed: T6_WALL_SEED });
+  add('W01', 'direct', 'pole', pole(T6_POLE_SEED), { seed: T6_POLE_SEED });
+  for (let i = 2; i < 63; i++) {
+    const seed = T6_FIELD_SEED_BASE + i;
     add(`W${String(i).padStart(2, '0')}`, 'direct', 'field', cappedField(seed), { seed });
   }
   return seats;
@@ -671,6 +721,302 @@ function t5Plan(p: Prediction): Record<string, unknown> {
   };
 }
 
+/**
+ * The nine registrations T6 expects to FAIL, and why each is here.
+ *
+ * Eight are headless wallets we hold, fired the instant the 64th entry
+ * confirms; the ninth is the founder, mid-session, submitting by hand into a
+ * pool that sealed while they were still playing. The eight prove the program
+ * gate; the ninth proves the SENTENCE the player reads, which is the half no
+ * automated test can see.
+ *
+ * Each of the eight holds more than an entry costs, deliberately. A wallet
+ * that could not afford the 0.1 SOL would revert too, for the wrong reason,
+ * and the plan would record a pass the run had not actually demonstrated.
+ */
+function t6LateAttempts(): Record<string, unknown>[] {
+  const headless = Array.from({ length: 8 }, (_, i) => `W${63 + i}`);
+  return [
+    ...headless.map((wallet) => ({
+      wallet,
+      route: 'direct',
+      firedWhen: 'immediately after the 64th entry confirms',
+      expectedOutcome: 'register reverts',
+      expectedError: 'PoolNotOpen',
+      expectedErrorCode: 6000,
+      expectedLamportsSpent: 'the transaction fee only — no entry, no pass, no rent',
+    })),
+    {
+      wallet: 'UI-B',
+      route: 'ui',
+      firedWhen:
+        'the founder starts a session when Claude Code calls GO at 63 of 64, moves one dial to ' +
+        'start the 90-second clock, takes the full 90 seconds, and submits into a pool that has ' +
+        'sealed underneath them',
+      expectedOutcome: 'the entry is refused and the browser says so in words',
+      expectedError: 'PoolNotOpen',
+      expectedErrorCode: 6000,
+      expectedLamportsSpent: 'the transaction fee only — no entry, no pass, no rent',
+      expectedCopy:
+        'a legible sentence to the effect that the pool filled before the entry reached it — NOT ' +
+        'a spinner, NOT a generic failure, and NOT silence. The screenshot is the evidence and ' +
+        'the wording is a pass criterion in its own right.',
+      sealedBeforePayment:
+        'UI-B\'s ciphertext is stored BEFORE the payment that fails, which is the documented ' +
+        'ordering (app/src/entry/submit.ts, changed 2026-09-18). Before the seal fix that would ' +
+        'have barred UI-B from the pool for good; now it is recoverable and simply irrelevant, ' +
+        'because the pool is closed to everyone. Both facts are worth recording.',
+    },
+  ];
+}
+
+/**
+ * `registry/T6.plan.json` — oversubscription and load.
+ *
+ * T6 is the first test whose subject is a FAILURE PATH: what the program does
+ * to the 65th entrant, and what the site says to a person who was playing when
+ * the pool filled. Everything else here — the seal at capacity, the scoring,
+ * the 4 SOL to one seat — T4 and T5 already established, and T6 re-establishes
+ * it on a third pool for free.
+ *
+ * Two structural points, both deliberate:
+ *
+ *  - **The nine rejected attempts are NOT in `seats`.** `seats` means
+ *    entrants, `validate-plan.ts` checks its length against
+ *    `expectations.entrants`, and a registration that reverts is neither an
+ *    entrant nor a scored seat. They live in `lateAttempts`.
+ *  - **The per-seat cost is stated as TWO figures, not one.** T2R predicted a
+ *    single number and 29 of 39 seats missed it, because a two-digit seat
+ *    index makes the pass asset's name one byte longer and its rent 5080
+ *    lamports higher (DRIFT §H20). The plan also declares the starting
+ *    balance, without which nothing can test either figure (§H21).
+ */
+function t6Plan(p: Prediction): Record<string, unknown> {
+  const N = 64;
+  const B = 7;
+  const field = N - 2;
+  const LATE = 9;
+  const START = 155_000_000n; // the fan-out target every wallet is topped up to
+
+  return {
+    schema: 'blotto-rehearsal-plan/1',
+    test: 'T6',
+    title: 'Oversubscribed — 64 land, 9 are refused, and the refused ones are told why',
+    cluster: 'devnet',
+    programId: '5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17',
+    tier: 0,
+    poolId: null,
+    poolPda: null,
+    poolIdNote:
+      'Deliberately unnamed, and frozen BEFORE THE POOL EXISTS. Pool 22 is running as an ' +
+      'unfrozen shakedown as this is written; pool 23 opens minutes after pool 22 seals, and T6 ' +
+      'runs there. A prediction merged before its pool was created is the strongest form this ' +
+      'evidence takes — T4 and T5 both have it, and T6 keeps it on purpose. The pool is recorded ' +
+      'in T6.freeze.json when the first entry lands.',
+    entryLamports: p.entryLamports,
+    potLamports: p.potLamports,
+    minSeats: 40,
+    fillDeadlineSeconds: 43200,
+    frozenAt: null,
+    gitCommit: null,
+    hypothesis:
+      'A pool that fills refuses everyone after it, at the program and in words. The 64th entry ' +
+      'seals the pool, so the 65th fails the STATE gate before it ever reaches the capacity gate ' +
+      '— the error is PoolNotOpen (6000), not PoolFull (6010). Nine attempts are refused: eight ' +
+      'headless wallets that could each afford the entry, and the founder, mid-session, who sees ' +
+      'a sentence explaining what happened rather than a spinner. Nobody is charged more than a ' +
+      'transaction fee, and the pool pays out exactly as if the nine had never arrived.',
+    unconditionalDerivation: {
+      _: 'What follows from the shapes and from the program text alone — no seed, no exact numbers, no assumption about what the founder dials.',
+      errorIsPoolNotOpen:
+        'register.rs checks its gates in declaration order: paused, then the service-key bar, ' +
+        'then `pool.state == Open` (PoolNotOpen), then the deadline, then `entrants < CAPACITY` ' +
+        '(PoolFull). The 64th register sets the pool to Sealed, so every later attempt fails the ' +
+        'THIRD gate and never reaches the fifth. Anchor numbers the enum from 6000 in ' +
+        'declaration order and PoolNotOpen is declared first, so the code is **6000**. ' +
+        'Verified against programs/blotto_cup/src/error.rs and instructions/register.rs on the ' +
+        'branch, not from memory.',
+      refusedSeatsPayNothing:
+        'The entry payment is the THIRD section of the handler, after the gates and after the ' +
+        'entry-packet check. A transaction that reverts at a gate moves no lamports at all, so a ' +
+        'refused attempt costs its signer the network fee and nothing else. Each of the eight ' +
+        'headless attempters holds more than an entry costs, so a revert cannot be an ' +
+        'insufficient-funds revert wearing the right error code.',
+      scoringRule:
+        'A stat goes to the larger number. A battle goes to whoever wins at least 3 of 5 stats, ' +
+        'otherwise it is a draw. Score is 2 half-points a win and 1 a draw, across 7 battles ' +
+        'against each of the other 63 entrants.',
+      maxScore: `${(N - 1) * B * 2}`,
+      winnerIsHeadless:
+        'W00 holds three stats at 26 or above in every battle; no field seat exceeds 25 and the ' +
+        `pole holds one stat. So W00 wins all ${field * B} battles against the field and never ` +
+        `loses to the pole: its floor is ${field * B * 2 + B}. Every field seat loses all ${B} ` +
+        `battles to W00, so the best any of them can reach is ${(field - 1) * B * 2 + B * 2}, ` +
+        'which is below that floor. **W00 is rank 1 whatever anyone else does, including the ' +
+        'founder.** This is T5\'s derivation re-run on a different field, and T5 confirmed it.',
+      founderSeatCannotWin:
+        'UI-A holds every stat between 1 and 25, so it is a field seat by the line above and ' +
+        'cannot take rank 1. This holds for ANY allocation inside that range — it does not ' +
+        'depend on the founder reproducing the recipe.',
+      founderSeatCannotComeLast:
+        'Five non-zero stats beat a single spike four stats to one, so UI-A beats the pole in ' +
+        `all ${B} battles — at least ${B * 2} half-points. The pole scores at most ${B}. **So ` +
+        `UI-A finishes between rank 2 and rank ${N - 1}.**`,
+      poleIsLast:
+        `Every field seat beats the pole in every battle, so W01 scores 0 against all ${field} ` +
+        `of them and at most ${B} against W00. The worst any field seat can do is ${B * 2}, from ` +
+        'the pole alone. **W01 is last whatever the field does.**',
+    },
+    expectations: {
+      terminalState: 'Paid',
+      entrants: N,
+      sealsAtDeadline: false,
+      sealReason: 'Capacity — the 64th register seals the pool immediately',
+      settlementSequence: ['reveal_pool_secret', 'commit_results', 'pay_prizes'],
+      lateAttemptCount: LATE,
+      lateAttemptsRejected: LATE,
+      lateAttemptError: 'PoolNotOpen',
+      lateAttemptErrorCode: 6000,
+      entryRegisteredEvents: N,
+      paidSeatCount: 1,
+      winner: 'W00',
+      winnerIsHeadless: true,
+      winnerLamports: p.potLamports,
+      potLamports: p.potLamports,
+      lastPlace: 'W01',
+      founderSeatsPaid: '0',
+      founderRankRange: [2, N - 1],
+      founderRankNote:
+        'A RANGE, not a number. UI-A plays by hand against a 90-second clock and T4 showed that ' +
+        'produces different numbers from any recipe (§H10). Its exact rank among 62 other field ' +
+        'seats is COMPUTED AT REVEAL, not predicted.',
+      fillSeconds: 300,
+      fillSecondsNote:
+        'MANUAL §5.4: the 63 headless registrations complete within 5 minutes of the first. ' +
+        'Measured from the first headless register signature to the 64th, from enter.ts\'s own ' +
+        'log, NOT including the founder\'s hand-played entry.',
+      crankSeconds: 120,
+      crankSecondsNote:
+        'MANUAL §5.4: reveal_pool_secret through pay_prizes completes within 2 minutes of the ' +
+        'seal. Measured from the PoolSealed slot to the pay_prizes slot.',
+      vaultAfter: '650240',
+      vaultAfterNote: 'the rent cushion, never recovered',
+      startingBalanceLamports: START.toString(),
+      startingBalanceNote:
+        'Every headless wallet is topped up to exactly this by `fan-out fund --target 0.155sol` ' +
+        'before the fill — the command funds UP TO a target, so a uniform target gives a uniform ' +
+        'starting balance and makes the line below checkable at all (§H21).',
+      perSeatSunkLamports: {
+        seats0to9: '4441080',
+        seats10plus: '4446160',
+      },
+      perSeatSunkExcludes: {
+        'UI-A':
+          'The founder\'s wallet is not funded by fan-out, so its starting balance is whatever it ' +
+          'happens to be on the day and the figure above cannot be tested against it. Its cost is ' +
+          'REPORTED in the reconcile and predicted by nothing. Naming it here is deliberate: a ' +
+          'silent skip is the failure this whole check exists to stop.',
+      },
+      perSeatSunkNote:
+        'TWO figures, not one, and this is measured rather than derived. The pass asset is named ' +
+        '`BLOTTO PASS #<pool>-<seat>`, so a two-digit seat index makes the account one byte ' +
+        'larger: 92 bytes for seats 0-9, 93 for seats 10+, at 5080 lamports of devnet rent per ' +
+        'byte. T2R predicted a single figure and 29 of its 39 seats missed it (DRIFT §H20). ' +
+        'Both figures come from T2R\'s, T4\'s and T5\'s harvested balances, not from a rent ' +
+        'calculation — if a pool id gains a digit (pool 100) the names grow again and both ' +
+        'figures move. Pool 23 is two digits, as 21 and 22 were, so they should hold.',
+      resultsRootConditional: p.resultsRoot,
+      leafOrderConditional: p.leafOrder.join(','),
+      conditionalNote:
+        'The root, the leaf order, every exact score and every field rank assume the exact ' +
+        'allocations below AND the planned seat order. A founder allocation inside 1..25 that is ' +
+        'not the recipe breaks these and none of the unconditional claims above.',
+      hardBlocks: [],
+      detectionNotes: [
+        'Detection computes and persists a report but flags nobody, under the manual-only policy ' +
+          'ruling D-E9. No flag, no escrow, no delay to the payout.',
+        'population_score is predicted to fire on W00, as it did on UI-A in T4 and W00 in T5. ' +
+          'It is many sigma from the field by design; finding it there is a detection PASS.',
+        'allocation_entropy raises its round-number note on W01: a pole is all zeroes and a ' +
+          'hundred, so 100% of its stat values are multiples of ten.',
+        'allocation_entropy must NOT fire "strong" on anyone: every seat carries at least 3 ' +
+          'distinct shapes.',
+        'duplicate_sets must not fire.',
+        'The nine refused attempts never become entries, so detection should see 64 seats and ' +
+          'know nothing about the nine. If a refused wallet appears anywhere in the detection ' +
+          'report, that is a finding in its own right.',
+        'Sanctions screening runs on the winner before payment. W00 is a derived devnet key and ' +
+          'no match is expected.',
+      ],
+    },
+    lateAttempts: t6LateAttempts(),
+    lateAttemptsNote:
+      'NOT entrants, and deliberately not in `seats`: validate-plan.ts checks `seats.length` ' +
+      'against `expectations.entrants`, and a registration that reverts is neither an entrant ' +
+      'nor a scored seat. Nine attempts, of which one is the founder by hand.',
+    seats: p.seats.map((s) => ({
+      seat: null,
+      plannedSeat: s.plannedSeat,
+      wallet: s.wallet,
+      route: s.route,
+      role: s.role,
+      generator: s.generator,
+      ...(s.seed !== undefined ? { seed: s.seed } : {}),
+      ...(s.recipe ? { recipe: s.recipe } : {}),
+      battles: s.battles,
+      expectedRank: s.rank,
+      expectedScoreHalf: s.scoreHalf,
+      expectedZones: s.zones,
+      expectedLamports: s.amountLamports,
+      distinctShapes: s.distinctShapes,
+      ...(s.route === 'ui'
+        ? { rankIsConditional: true, unconditionalRankRange: [2, N - 1] }
+        : {}),
+    })),
+    seatNote:
+      '`seat` is null until the pool runs. `plannedSeat` is the index this plan assumes; only the ' +
+      'root, the leaf order and the per-seat cost band depend on it.',
+    contingency: [
+      'If a headless seat seals and then fails to register, it is no longer barred from the pool ' +
+        '— the seal fix of 2026-09-18 lets it retry, and T2R proved that live when W14 and W28 ' +
+        'both did exactly this and both landed. enter.ts still stops the run on the second ' +
+        'failure of one wallet; substitute from the spare roster with --substitute, which makes ' +
+        'the spare play THAT SEAT\'S frozen allocation.',
+      'W71 is held back as the spare and is in neither the 64 nor the nine.',
+      'If the founder plays an allocation inside 1..25 that is not the recipe, every ' +
+        'unconditional expectation holds and UI-A reconciles as INPUT_DRIFT, as it did in T4.',
+      'If a founder allocation takes a stat ABOVE 25, UI-A is no longer a field seat and could ' +
+        'beat W00. That is a FAIL of the test as designed, not of the product.',
+      'If UI-B submits too EARLY and lands as one of the 64, the oversubscription test is spoiled ' +
+        'in the same way T2 was spoiled by a stray entry (§H16). The eight headless attempts ' +
+        'still run and still prove the program gate; the copy half is rerun on the next pool.',
+      'If fewer than 64 land before the deadline the pool seals at whatever it holds, no late ' +
+        'attempt is refused, and T6 is NOT a test of anything. It reruns on the next pool with ' +
+        'this plan unedited.',
+    ],
+    passCriteria: [
+      'Exactly 64 EntryRegistered events, and the pool reaches Paid with 64 entrants.',
+      `All ${LATE} late registrations revert, and every one of them carries **PoolNotOpen ` +
+        '(6000)** — not PoolFull (6010), not a fee or funds error.',
+      'No refused wallet is charged anything beyond the transaction fee: no entry, no pass, no ' +
+        'rent.',
+      'UI-B sees a legible sentence naming what happened, screenshotted, and not a spinner.',
+      'The 63 headless registrations complete within 5 minutes; reveal through pay_prizes ' +
+        'completes within 2 minutes of the seal.',
+      'Exactly one seat is paid; it is **W00**, a headless wallet, and the amount is the whole ' +
+        '4000000000 lamport pot.',
+      'W01 is ranked last, and UI-A is paid nothing and finishes between rank 2 and 63.',
+      'Every revealed allocation reproduces the battles_hash the chain recorded at entry.',
+      'The recomputed results root equals the on-chain results_root.',
+      'The vault ends at 650240 lamports.',
+      'Every HEADLESS seat sank exactly 4441080 lamports (seats 0-9) or 4446160 (seats 10+) from ' +
+        'a starting balance of 155000000. Both figures are confirmed on T5\'s 62 headless seats ' +
+        'by the same check, so this is a re-test of a measured number rather than a new guess.',
+      'No seat is flagged and no sanctions hold is placed.',
+    ],
+  };
+}
+
 // ---------------------------------------------------------------------------
 // 4. CLI
 // ---------------------------------------------------------------------------
@@ -689,11 +1035,17 @@ function main(): void {
   );
   if (process.argv.includes('--check-only')) return;
 
-  const test = flag('test') ?? fail('--test <T4|T5> is required');
-  if (test !== 'T4' && test !== 'T5') fail(`no field is defined for ${test} — only T4 and T5`);
+  const FIELDS: Record<string, () => PlannedSeat[]> = { T4: t4Field, T5: t5Field, T6: t6Field };
+  const PLANS: Record<string, (p: Prediction) => Record<string, unknown>> = {
+    T4: t4Plan, T5: t5Plan, T6: t6Plan,
+  };
+  const known = Object.keys(FIELDS).join('|');
+
+  const test = flag('test') ?? fail(`--test <${known}> is required`);
+  const buildField = FIELDS[test] ?? fail(`no field is defined for ${test} — only ${known}`);
 
   const entryLamports = 100_000_000n; // tier 0, read from chain and from the plan
-  const p = predict(test === 'T4' ? t4Field() : t5Field(), entryLamports);
+  const p = predict(buildField(), entryLamports);
 
   console.log(`\n${test} — ${p.seats.length} seats · pot ${p.potLamports} lamports · entry ${p.entryLamports}\n`);
   console.log('seat  wallet  role    rank   score  zones   shapes  round%  lamports');
@@ -720,7 +1072,7 @@ function main(): void {
 
   const planOut = flag('plan');
   if (planOut) {
-    writeFileSync(planOut, JSON.stringify(test === 'T4' ? t4Plan(p) : t5Plan(p), null, 2) + '\n');
+    writeFileSync(planOut, JSON.stringify(PLANS[test](p), null, 2) + '\n');
     console.log(`wrote ${planOut}`);
   }
 }
