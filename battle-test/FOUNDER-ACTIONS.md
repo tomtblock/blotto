@@ -961,3 +961,64 @@ in about thirty seconds. Your call.
 Frozen, waiting, and needing nothing else from you once the above is done. I will fill the pool, call
 GO for UI-A early and UI-B late, and report against the prediction.
 
+
+---
+
+## F-35 — ▶ ONE BUTTON. That is all that stands between here and T6.
+
+Both PRs are merged and the RPC works. **One thing is left, and it is the same button that caught us
+on Thursday.**
+
+### ▶ GitHub → Actions → "deploy backend" → Run workflow, on `main`, both boxes unticked
+
+**I have confirmed it has not happened, rather than assuming.** I asked the live entry service what
+it would say to a late entrant on a pool that filled:
+
+```
+pool 22  (it FILLED — 64 of 64)   →  "pool closed to entries"     ← the OLD message
+pool 21  (ran out of time at 39)  →  "pool closed to entries"
+```
+
+Both identical, so the service is still running the code from before your merge. Once it deploys,
+pool 22 must answer **"pool filled"** and pool 21 must not. I will check it that way rather than
+trusting the workflow's green tick.
+
+Worth saying plainly: **`/health` has been answering `ok: true` this whole time** while running
+two-commit-old code. That is the same blind spot that hid a sixteen-hour entry outage last week. The
+image already knows which commit it was built from — the health check just does not say. Not urgent,
+but it is why I probe instead of asking it.
+
+### The RPC is in and measured
+
+It is a Helius devnet endpoint, and I checked it is really devnet by its genesis hash rather than by
+the word "devnet" in the URL.
+
+**It is rate-limited, and that turns out to be fine.** Hammered flat out, 45% of calls come back
+refused. At the pace the fill actually runs — roughly two calls a second — 119 of 120 sail through.
+The pool 22 fill spent about three seconds a seat, so it sits comfortably inside that. T6 will run
+one entry at a time for that reason.
+
+That is a real improvement on the free public endpoint, and not only because it is faster: when that
+one refused a call it failed **hard**, killing the transaction and burning the seat. This one just
+waits a moment and goes through.
+
+**▶ One housekeeping item, at your convenience:** you pasted the key into the chat, so rotate it in
+Helius once the test week is done. It takes about thirty seconds. Nothing is pressing about it —
+devnet keys are low-value — but it should not stay live indefinitely. I have kept it out of every
+file in the repository; it lives only in this session's scratch space.
+
+### Then T6 runs, and it needs nothing else from you until I call GO
+
+Pool 23 is open with about eight and a half hours left. When the deploy lands I will:
+
+1. Re-run the probe above and confirm the service answers **"pool filled"**.
+2. Tell you to enter pool 23 as **UI-A**, early — one stat to 25 per battle, and **keep every stat
+   between 1 and 25**, because the frozen plan says a test wallet wins outright and that claim holds
+   for any allocation inside that range.
+3. Fill the other 63 seats.
+4. Call **GO** for **UI-B** to arrive late and be refused — and this time the sentence it reads
+   should be the right one.
+
+If pool 23 lapses before the deploy, nothing is lost: T6 runs on the next pool with the plan
+unedited, exactly as T4 moved from pool 15 to pool 16. It costs one rent cushion, 0.00065 SOL.
+

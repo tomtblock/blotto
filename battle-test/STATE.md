@@ -1,124 +1,61 @@
-# STATE — 2026-09-19 20:10 UTC — by Claude Code
+# STATE — 2026-09-19 23:10 UTC — by Claude Code
 
-Phase:            **Pool 22's finding is FIXED and in review (PR 157).** T6 is frozen and ready.
-Waiting on:       **the founder (§F-34): merge PR 157, then RUN `deploy-backend` by hand, then get
-                  the RPC URL to this session.** All three before T6 runs.
-Blocked:          T6 on §F-34 · T3 on Q6 (admin signing) · T7 on Q7 (reviewer key).
+Phase:            **Everything is ready for T6 except one button.** PRs 157 and 158 merged, the RPC
+                  is in hand and measured, pool 23 is open, the freeze is timestamped.
+Waiting on:       **the founder (§F-35): run `deploy-backend` by hand.** That is the whole list.
+Blocked:          T6 on that one deploy · T3 on Q6 (admin signing) · T7 on Q7 (reviewer key).
 Results so far:   T1 **PASS** · T4 **PASS** · T5 **PASS** · T2 **SPOILED** · T2R **PASS (7 of 8)**
                   pool 22 = observation, not a test
-Money:            funder **10.339339200** · W00 **4.041117840** (pool 22's pot, back in the roster)
-                  UI-A 10.568905266 · UI-B 11.673357239 (unchanged — charged nothing at all)
+Money:            funder **10.339339200** · W00 **4.041117840** · UI-A 10.568905266 · UI-B 11.673357239
 
-## The founder's three rulings, and what was built
+## The one thing left, and it is CONFIRMED not done rather than assumed
 
-| ruling | answer | state |
-|---|---|---|
-| fix the refusal wiring | **yes** | built, PR 157 |
-| use the word "filled" | **yes** | built, PR 157 |
-| a devnet RPC | "already in secrets" | **correct, and unreadable — see below** |
+PR 157 and 158 merged. The web app redeployed itself. **The entry service did not** — §F-28's trap,
+third occurrence. Proven by a differential probe rather than by reading `/health`:
 
-`COPY.tx.poolFull` now reaches a player. The route answers `pool filled` at capacity and
-`pool closed to entries` below it, because a pool that filled and a pool that ran out of time are
-both simply not `Open` and only the seat count separates them. **The count gates nothing** — it
-picks the wording of a refusal the state has already decided, and a test pins that an `Open` pool at
-capacity is still accepted, so it cannot quietly become a second gate turning away the 64th honest
-entrant.
+```
+pool 22  (Paid, 64 seats — it FILLED)   →  {"error":"pool closed to entries"}    ← old code
+pool 21  (Closed, 39 seats)             →  {"error":"pool closed to entries"}
+```
 
-**The generic-refusal rule is intact, and this was the constraint to get right.** `services.ts` says
-in terms that a refusal never carries its reason (PID §8). True of `/packet` — geo, sanctions, age —
-where naming the failing check makes it an oracle a probe can walk. Not true of the ciphertext
-route's 409s, which are public pool facts plus the caller's own seat. So the carve-out is narrow and
-**enforced rather than trusted**: `EntryServiceError` drops a reason for the packet stage in the
-constructor, because a rule enforced by every call site's good manners lasts until the next call
-site. `/packet` is untouched.
+Identical, so the service is pre-157. **After the deploy, pool 22 must answer `pool filled` and
+pool 21 must not.** Gate 1 (pool state) runs before the signature check, so a junk body is enough to
+ask — nothing is written, no key is needed. That is a check that can FAIL, which is more than
+`/health` offers: it answered `ok: true` throughout while running two-commit-old code (F-2, third
+recorded instance). `Dockerfile.packet` bakes `BLOTTO_BUILD_COMMIT` into the image and `/health`
+simply does not report it.
 
-Two things tightened while testing it, both about the same worry — that the field could become a
-channel for text nobody vetted: a **closed allowlist** of the three strings the route sends, and an
-**own-property** requirement, because plain member access walks the prototype chain and a planted
-`Object.prototype.error` would otherwise be read out of a response carrying no error at all.
+## The RPC is in, and measured rather than trusted
 
-app **517** tests (+8) · packet **201** (+6) · both typecheck · both gates clean.
+A Helius devnet endpoint, supplied by paste (§F-34 option b). **Confirmed devnet by genesis hash**
+`EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG`, not by the word "devnet" in the URL. Held only in
+this session's scratch space, never in a repository file. **The founder should rotate it after the
+test week** — it went through the transcript.
 
-## THE RPC IS REAL, AND A GITHUB SECRET CANNOT BE READ BACK
+| pace | calls | 200 | 429 |
+|---|---|---|---|
+| flat out — 17.5/sec | 120 | 66 | **54** |
+| the fill's real pace — ~1.6/sec | 120 | **119** | 1 |
 
-`BLOTTO_DEVNET_RPC_URL` exists as a repository secret — a Helius devnet URL, staged to Fly as
-`BLOTTO_RPC_URL`. The founder is right that it is there. **Actions secrets are one-way by design**:
-handed to a workflow while it runs, never readable through the API, masked in logs. This session
-cannot get it from there and should not try.
+Rate-limited, and fine for this job: pool 22's fill ran ~3.2 s a seat, about two calls a second,
+well inside the clean band. **T6 stays at `--concurrency 1` for that reason, not out of caution.**
+And the two endpoints do not fail the same way — the public one failed HARD with `block height
+exceeded`, burning a transaction; a Helius 429 is retried and lands.
 
-§F-34 offers two routes: an environment variable on the session's environment (recommended — the
-URL carries an API key and should not enter the transcript), or pasting it here and rotating it
-afterwards.
+## §H24 — a probe I wrote tonight reported the opposite of what it measured
 
-## §F-28'S TRAP, BEFORE IT BITES AGAIN
+The first throughput probe printed `ok 320, failed 0 — no throttling at this rate` while **54 HTTP
+429s scrolled past above it**. `@solana/web3.js` retries a 429 internally, so a throttled call still
+resolves; the verdict was computed from `failed === 0`, a quantity that cannot see throttling.
+**§H9's family for the fourth time** (§H9, §H14, §H21, §H24). It cost nothing only because the
+library printed the 429s and I read them.
 
-**Merging PR 157 ships the app half only.** `deploy-backend` is `workflow_dispatch` — it runs when
-somebody presses it. On Thursday the seal fix sat merged-but-not-live for hours and was caught only
-by probing the live route.
+## T6 — frozen, funded, and waiting
 
-Nothing breaks in the gap, in either order: until the service deploys, the app receives the old
-single string and shows the cautious message, which stays true. But **T6 must not run until both
-halves are live**, or it tests the old behaviour and fails its copy criterion for a fault already
-fixed.
-
----
-
-## T6 is frozen, and the freeze holds BY CONSTRUCTION
-
-PR 156 merged **19:11:28Z**. At **19:13Z** the highest pool id in existence was **22** — pool 23 did
-not exist. And it could not have: pool 23 is created minutes after pool 22 seals, pool 22 could only
-seal on an entry that was ours to send, and the fill was held until the merge landed. Seventy-eight
-seconds separate them. `registry/T6.freeze.json` carries the merge commit, the plan hash
-(`e6595def…1297`, identical at the merge commit and on disk) and the corroboration.
-
-T2R holds the same standard only because a retry was forced. T6 holds it on purpose.
-
-## Pool 22 — settled clean, and the finding is in the copy layer
-
-64 seats, `Paid`. **Nine seconds from seal to payout** (reveal 19:36:07, commit 19:36:08, pay
-19:36:10) against T6's 120-second threshold — and unlike the fill time, that number is the daemon's
-own work and is not contaminated by the RPC. W00 took rank 1 and the whole 4 SOL. Per-seat cost came
-out at exactly **4441080**, confirming §H20's lower band on a third pool and exercising the §H23
-formula on a PAID seat — the case the old subtraction got wrong.
-
-### THE FINDING — T6 would fail its copy criterion today
-
-The founder played the full 90 seconds and submitted into a pool that had already scored. They were
-refused, charged **nothing at all** (balance unchanged to the last digit — not even a network fee),
-and shown a sentence rather than a spinner. All of that is right.
-
-But the sentence **hedges between two causes the server had already told the client apart**:
-
-| layer | what happens | why it is individually reasonable |
-|---|---|---|
-| `submit.ts` | ciphertext posts BEFORE the register, so a late entrant is refused at the seal step and never reaches the chain | a paid entry with no ciphertext is the worse failure |
-| `errors.ts` | `COPY.tx.poolFull` maps from 6010 `PoolFull`, which **can never fire** — `register.rs` checks state (6000) before capacity | the gate order is correct; T6's own plan derives it |
-| `outcome.ts:110` | branches on stage + status only, never reads the 409 body — so `pool closed to entries` and `already sealed` collapse into one hedged message | both really were one case until PR 147 |
-
-**The server knew. The app owns the right sentence. The wiring loses it.** `COPY.tx.poolFull` —
-*"This pool filled before your entry reached it"* — is T6's pass criterion almost verbatim and has
-never been shown to anybody.
-
-Fix proposed in §F-33 and awaiting a ruling: it is product code, so it is the founder's call.
-
-## The RPC mistake, and what it costs
-
-The pool 22 fill took five runs — about fifteen seats per run, then `block height exceeded`, with
-pacing perfectly steady at eight slots per seat right up to each failure. A service degrading under
-load slows down first; a throttle does not. `MANUAL.md` §4.3 said to use a dedicated devnet RPC and
-that the public endpoint would mean *"measuring the RPC, not the app"*. I used the public endpoint.
-
-Cost here: nothing — four wallets sealed-then-failed and **all four retried and landed**. Cost to
-T6: its **fill-under-5-minutes criterion is unmeasurable** on this endpoint (62 seats took 5m20s).
-**T6 needs a free RPC URL from the founder before it runs.**
-
-## The seal gate refused in BOTH directions, on live traffic
-
-Unplanned, and better evidence than anything designed for it. W14, W29, W43 and W57 sealed and then
-had their register expire, held no `Entry`, were **allowed** to re-seal, and all four landed. W43
-through W56, already registered, were **refused** `409 already sealed` when a later sweep tried to
-overwrite them — fourteen paid seats protected. Only the allowing half had been shown live before.
-**W43 did both by itself**: burnt, retried, landed, then correctly refused.
+`registry/T6.plan.json`, merged 19:11:28Z. Pool 23 created 19:41:23Z — **29 min 55 s later**, and
+the plan names no pool. Pool 23 is Open at 0 of 64 with about 8.5 h left. If it lapses first, T6
+runs on the next pool with the plan unedited, as T4 did between pools 15 and 16; the cost is one
+rent cushion, 0.00065 SOL.
 
 ---
 

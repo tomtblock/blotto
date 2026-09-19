@@ -1542,3 +1542,74 @@ and the plan on disk hashes to the merged bytes. The committed reconcile said th
 own strongest freeze. It is regenerated here from the untouched plan and now reads `Freeze: OK`.
 The lesson is narrow and worth stating: **a probe that edits an input must regenerate every output
 it touched, not just the one being examined.**
+
+---
+
+### §H24 — a probe I wrote tonight reported the opposite of what it measured
+
+Characterising the new Helius endpoint, I wrote a 320-call throughput probe. It printed:
+
+```
+  ok 320  failed 0
+  no throttling at this rate
+```
+
+while **fifty-four HTTP 429s scrolled past above it.** `@solana/web3.js` retries a 429 internally with
+500–2000 ms of backoff, so a throttled call still resolves; my probe counted only calls that
+exhausted those retries, and called everything else clean. The verdict line was computed from
+`failed === 0`, which is a quantity that cannot see throttling.
+
+**This is §H9's family for the fourth time** (§H9 stub verdict, §H14 unchecked root, §H21 unchecked
+per-seat cost, now this): a check whose pass condition is not connected to the thing it claims to
+measure. It cost nothing because the 429s were printed by the library and I read them, but had
+the library been quieter I would have recorded "no throttling" as a measured fact.
+
+**Re-measured with raw `fetch`, no client retry in the way**, at two paces:
+
+| pace | calls | 200 | 429 |
+|---|---|---|---|
+| flat out — 17.5/sec | 120 | 66 | **54** |
+| the fill's real pace — ~1.6/sec | 120 | **119** | 1 |
+
+So the endpoint is heavily rate-limited and **that is fine for what we need it for.** The pool 22
+fill ran at about 3.2 s per seat at `--concurrency 1`, roughly two RPC calls a second, which sits
+well inside the clean band. It would NOT be fine at high concurrency, and T6 must stay at
+`--concurrency 1` for that reason rather than out of caution.
+
+What this does not do is make the public endpoint's failure the same thing. There, the failure was
+HARD — `block height exceeded`, a burnt transaction. Here a throttled call is retried and lands.
+Different failure modes, and only one of them costs a seat.
+
+---
+
+### §H25 — the deploy trap fired, and there is now a one-command check for it
+
+PR 157 and PR 158 merged. The web app redeployed itself. **The entry service did not**, exactly as
+`deploy-backend`'s `workflow_dispatch` trigger says it will not, and exactly as it did not after the
+seal fix on 2026-09-18.
+
+The check that proves it is a **differential probe**, and it is better than anything `/health`
+offers because it can fail:
+
+```
+POST /ciphertexts  {pool: <a pool at capacity>, …}   →  {"error":"pool filled"}             deployed
+POST /ciphertexts  {pool: <a pool closed below 64>, …} →  {"error":"pool closed to entries"} both
+```
+
+Gate 1 (the pool's state) runs BEFORE the signature check, so a junk body is enough to read which
+message the running service holds — nothing is written and no signature is needed. Run against the
+live service at 23:00Z:
+
+```
+pool 22 (Paid, 64 seats — it FILLED)  → {"error":"pool closed to entries"}   ← old code
+pool 21 (Closed, 39 seats)            → {"error":"pool closed to entries"}
+```
+
+Both the same, so the service is pre-157. After the deploy, pool 22 must answer `pool filled` and
+pool 21 must not.
+
+**F-2 for the third recorded time.** `/health` answered `ok: true` throughout, with its screening
+sources listed, while running code two commits old. It has no signal for the build it is running,
+which is the same gap that hid a sixteen-hour entry outage (§F-28) and the seal fix's
+merged-but-not-live window. A `BLOTTO_BUILD_COMMIT` is baked into the image by
+`Dockerfile.packet` and `/health` does not report it — the value exists and is simply not surfaced.
