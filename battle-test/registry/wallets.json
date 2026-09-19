@@ -38,6 +38,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
+          "seat": "0",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
         }
       ]
     },
@@ -71,6 +79,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
+          "seat": "1",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
         }
       ]
     },
@@ -100,6 +116,14 @@
         {
           "pool": "T1",
           "poolId": "14",
+          "seat": "2",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
           "seat": "2",
           "role": "field",
           "verdict": "MATCH",
@@ -137,6 +161,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
+          "seat": "3",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
         }
       ]
     },
@@ -170,6 +202,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
+          "seat": "4",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
         }
       ]
     },
@@ -199,6 +239,14 @@
         {
           "pool": "T1",
           "poolId": "14",
+          "seat": "5",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
           "seat": "5",
           "role": "field",
           "verdict": "MATCH",
@@ -236,6 +284,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
+          "seat": "6",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
         }
       ]
     },
@@ -266,6 +322,14 @@
           "pool": "T1",
           "poolId": "14",
           "seat": "8",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
+          "seat": "7",
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
@@ -302,6 +366,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
+          "seat": "8",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
         }
       ]
     },
@@ -335,6 +407,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
+          "seat": "9",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
         }
       ]
     },
@@ -360,6 +440,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 34, not paid"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
+          "seat": "10",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
         }
       ]
     },
@@ -385,6 +473,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 55, not paid"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
+          "seat": "11",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
         }
       ]
     },
@@ -410,6 +506,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 63, not paid"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
+          "seat": "12",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
         }
       ]
     },
@@ -435,6 +539,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 61, not paid"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
+          "seat": "13",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
         }
       ]
     },
@@ -460,6 +572,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 20, not paid"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
+          "seat": "14",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
         }
       ]
     },
@@ -485,6 +605,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 52, not paid"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
+          "seat": "15",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
         }
       ]
     },
@@ -510,6 +638,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 49, not paid"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
+          "seat": "16",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
         }
       ]
     },
@@ -535,6 +671,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 35, not paid"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
+          "seat": "17",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
         }
       ]
     },
@@ -560,6 +704,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 29, not paid"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
+          "seat": "18",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
         }
       ]
     },
@@ -585,6 +737,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 46, not paid"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
+          "seat": "19",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
         }
       ]
     },
@@ -610,6 +770,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 21, not paid"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
+          "seat": "20",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
         }
       ]
     },
@@ -635,6 +803,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 40, not paid"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
+          "seat": "21",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
         }
       ]
     },
@@ -660,6 +836,14 @@
           "role": "field",
           "verdict": "ABSENT",
           "note": "planned seat never landed"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
+          "seat": "22",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
         }
       ]
     },
@@ -685,6 +869,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 6, not paid"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
+          "seat": "23",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
         }
       ]
     },
@@ -710,6 +902,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 14, not paid"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
+          "seat": "24",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
         }
       ]
     },
@@ -735,6 +935,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 53, not paid"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
+          "seat": "25",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
         }
       ]
     },
@@ -760,6 +968,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 32, not paid"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
+          "seat": "26",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
         }
       ]
     },
@@ -785,6 +1001,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 43, not paid"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
+          "seat": "27",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
         }
       ]
     },
@@ -810,6 +1034,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 28, not paid"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
+          "seat": "28",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
         }
       ]
     },
@@ -835,6 +1067,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 31, not paid"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
+          "seat": "29",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
         }
       ]
     },
@@ -860,6 +1100,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 60, not paid"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
+          "seat": "30",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
         }
       ]
     },
@@ -885,6 +1133,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 38, not paid"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
+          "seat": "31",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
         }
       ]
     },
@@ -910,6 +1166,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 56, not paid"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
+          "seat": "32",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
         }
       ]
     },
@@ -935,6 +1199,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 5, not paid"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
+          "seat": "33",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
         }
       ]
     },
@@ -960,6 +1232,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 42, not paid"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
+          "seat": "34",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
         }
       ]
     },
@@ -985,6 +1265,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 10, not paid"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
+          "seat": "35",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
         }
       ]
     },
@@ -1010,6 +1298,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 9, not paid"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
+          "seat": "36",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
         }
       ]
     },
@@ -1035,6 +1331,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 45, not paid"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
+          "seat": "37",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
         }
       ]
     },
@@ -1060,6 +1364,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 58, not paid"
+        },
+        {
+          "pool": "T2R",
+          "poolId": "21",
+          "seat": "38",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "refunded 0.100000000 SOL"
         }
       ]
     },

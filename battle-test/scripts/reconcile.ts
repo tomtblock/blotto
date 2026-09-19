@@ -65,7 +65,14 @@ interface PlanSeat {
 }
 interface Plan {
   test: string; title?: string;
-  expectations?: { terminalState?: string; entrants?: number; vaultAfter?: string; perSeatRefundLamports?: string };
+  expectations?: {
+    terminalState?: string; entrants?: number; vaultAfter?: string; perSeatRefundLamports?: string;
+    /** What each seat is predicted to LOSE over the whole test (fees + rent). */
+    perSeatSunkLamports?: string;
+    /** What every seat held before it entered. Without this the line above
+     *  cannot be tested, and `checkPerSeatCost` refuses to pass (§H21). */
+    startingBalanceLamports?: string;
+  };
   seats: PlanSeat[];
 }
 interface ActualSeat {
@@ -104,6 +111,82 @@ interface Actual {
  *     seats at rank 62 — so the tie must break the same way the settlement
  *     crank broke it. Seat index ascending reproduces the on-chain root.
  */
+/**
+ * The per-seat sunk cost, CHECKED rather than displayed (§H20, §H21).
+ *
+ * T2R's plan predicted one figure for every seat and called a single lamport
+ * of drift a failure. 29 of 39 seats missed it, and `reconcile` reported PASS,
+ * because nothing here looked: the script contained no reference to the claim
+ * at all. That is §H9's stub verdict and §H14's unchecked root a third time.
+ *
+ * It could not have looked anyway, which is the deeper half. Per-seat cost is
+ * `startingBalance − balanceAfter`, and the harvest records only the second.
+ * So a plan must now DECLARE `expectations.startingBalanceLamports` for this to
+ * be checkable at all.
+ *
+ * THE RULE THIS ENCODES: a plan that states a per-seat prediction without the
+ * starting balance to test it against does NOT pass. An unverifiable criterion
+ * is a failure of the plan, not a free pass for the run — the whole point is
+ * that a prediction nobody can check is not evidence.
+ *
+ * Note for whoever writes the next prediction: the cost is NOT uniform. The
+ * pass asset is named `BLOTTO PASS #<pool>-<seat>`, so a two-digit seat index
+ * is one byte larger and costs 5080 more lamports of rent. Seats 0–9 and seats
+ * 10+ are two different numbers; see §H20 for the measured table.
+ */
+function checkPerSeatCost(
+  plan: Plan,
+  actual: Actual
+): { ok: boolean; verdict: string; note: string } {
+  const predicted = plan.expectations?.perSeatSunkLamports;
+  if (!predicted) {
+    return { ok: true, verdict: 'n/a', note: 'the plan states no per-seat prediction' };
+  }
+  const start = plan.expectations?.startingBalanceLamports;
+  if (!start) {
+    return {
+      ok: false,
+      verdict: 'NOT CHECKED',
+      note:
+        `the plan predicts ${predicted} lamports per seat but declares no ` +
+        `startingBalanceLamports, so nothing can test it — an unverifiable ` +
+        `criterion does not pass (§H21)`,
+    };
+  }
+  const want = BigInt(predicted);
+  const from = BigInt(start);
+  const drifted: string[] = [];
+  let checked = 0;
+  for (const seat of actual.seats) {
+    if (seat.balanceAfter === undefined || seat.balanceAfter === null) continue;
+    checked++;
+    const sunk = from - BigInt(seat.balanceAfter);
+    if (sunk !== want) drifted.push(`${seat.wallet}(seat ${seat.seat})=${sunk}`);
+  }
+  if (checked === 0) {
+    return {
+      ok: false,
+      verdict: 'NOT CHECKED',
+      note: 'no seat carries a balanceAfter — nothing to test against',
+    };
+  }
+  if (drifted.length > 0) {
+    const shown = drifted.slice(0, 6).join(' ');
+    return {
+      ok: false,
+      verdict: 'DRIFT',
+      note:
+        `${drifted.length} of ${checked} seats differ from the predicted ` +
+        `${want} lamports: ${shown}${drifted.length > 6 ? ' …' : ''}`,
+    };
+  }
+  return {
+    ok: true,
+    verdict: 'MATCH',
+    note: `all ${checked} seats sank exactly ${want} lamports`,
+  };
+}
+
 function verifyResultsRoot(actual: Actual): { ok: boolean; note: string } {
   if (!actual.resultsRoot) return { ok: true, note: 'no root committed (pool did not score)' };
   const scored = actual.seats.filter((s) => s.rank != null && s.address);
@@ -266,10 +349,15 @@ function main(): void {
   // tampered or mis-read bundle cannot, so this is what lets everything below
   // rest on published data rather than on this script's word for it.
   const rootCheck = verifyResultsRoot(actual);
+  // A stated criterion with no code behind it is the failure mode this project
+  // has now had three times (§H9 the stub verdict, §H14 the results root, §H21
+  // this). So the per-seat cost is either CHECKED or reported NOT CHECKED — it
+  // is never silently absent, and NOT CHECKED does not pass.
+  const perSeat = checkPerSeatCost(plan, actual);
 
   const pass =
     frozenOk && counts.PAYOUT_MISMATCH === 0 && !directDrift && stateOk && vaultOk &&
-    rootCheck.ok && actual.unknownEntrants.length === 0;
+    rootCheck.ok && perSeat.ok && actual.unknownEntrants.length === 0;
 
   const lines: string[] = [];
   lines.push(`# ${test} reconcile — pool ${actual.poolId} — ${actual.terminalState}`);
@@ -284,6 +372,7 @@ function main(): void {
   lines.push(`Minimum field:   ${actual.minSeats} — the pool ${actual.entrants >= actual.minSeats ? 'reached' : 'did NOT reach'} it, so it ${actual.entrants >= actual.minSeats ? 'plays' : 'refunds'}`);
   lines.push(`Prize vault:     ${actual.vaultLamports} lamports${plan.expectations?.vaultAfter ? ` · expected ${plan.expectations.vaultAfter} · ${vaultOk ? 'MATCH' : 'MISMATCH'}` : ''}`);
   lines.push(`Treasury:        ${actual.treasuryLamports} lamports`);
+  lines.push(`Per-seat cost:   ${perSeat.verdict} — ${perSeat.note}`);
   if (actual.resultsRoot) {
     lines.push(`Results root:    ${actual.resultsRoot}`);
     lines.push(`                 ${rootCheck.ok ? 'VERIFIED' : 'FAILED'} — ${rootCheck.note}`);

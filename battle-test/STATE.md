@@ -1,11 +1,63 @@
-# STATE — 2026-09-19 01:45 UTC — by Claude Code
+# STATE — 2026-09-19 13:55 UTC — by Claude Code
 
-Phase:            **T2R is LIVE on pool 21 at exactly 39 seats. Pool 20 settled and produced the
-                  most serious finding of the test.**
-Waiting on:       **the founder, on §H18 — it is founder-and-counsel territory, not mine.**
-Blocked:          nothing. T2R settles itself at 13:21:29Z.
-Results so far:   T1 **PASS** · T4 **PASS** · T5 **PASS** · T2 **SPOILED** · **T2R running**
-Money:            funder 0.339339200; the 39 seats hold ~0.0455 each until their refund returns 0.1.
+Phase:            **T2R PASSED its boundary claim on pool 21. The refund fork at 39 is proven.**
+                  One of its eight criteria failed and the failure was in my prediction, not the
+                  chain — §H20.
+Waiting on:       **the founder, on §H18** (the even split won — founder-and-counsel) and on the
+                  T6 role ratification (§F-28).
+Blocked:          nothing running.
+Results so far:   T1 **PASS** · T4 **PASS** · T5 **PASS** · T2 **SPOILED** · **T2R PASS (7 of 8)**
+Money:            all 39 T2R seats refunded; wallets back to ~0.1455. Funder 0.339339200.
+
+## T2R — the boundary is PROVEN, and it was frozen before its pool existed
+
+PR 151 merged **23:47:18Z**; pool 21 was created by a Solana block at **01:21:29Z**, 1 h 34 min
+later. The plan named no pool. Neither clock is ours. Strongest freeze in this test — available
+only because T2 was spoiled and the retry was forced.
+
+  **MATCH:** Closed not Paid · exactly 39 entrants · `trigger_refund` settles it (no results_root,
+  no revealed secret) · 39 of 39 refunded exactly 100000000 · vault exactly 650240 · pot of
+  4000000000 returned · nothing flagged, no hold, no reviewer.
+  **FAILED:** each seat's net loss exactly 4441080 — **29 of 39 cost 4446160.**
+
+## §H20 — "measured on three pools to the lamport" was never true
+
+The per-seat cost is not one number. The pass asset is named `BLOTTO PASS #<pool>-<seat>`, so a
+two-digit seat index is one character longer, one byte bigger, and one byte of devnet rent is
+**5080 lamports**.
+
+| seats | pass asset | per-seat sunk |
+|---|---|---|
+| 0–9 | 92 bytes | **4441080** |
+| 10–63 | 93 bytes | **4446160** |
+
+  → **It was always true and I never looked.** T1, T4 and T5 all show 92 bytes at seat 9 and 93 at
+    seat 10. On T4 and T5, **54 of 64 seats** were at the higher figure.
+  → I read early seats, generalised to whole pools, then restated it as MORE certain each time —
+    "estimated" → "measured" → "measured to the lamport" → "a single lamport of drift is a failure"
+    — with nothing new measured between restatements, and froze it.
+  → The program is correct. Rent scaling with a name is right.
+
+## §H21 — reconcile printed PASS while that criterion failed
+
+`grep` finds no occurrence of `perSeatSunk`, `sunk` or `4441080` in the script. **§H9's stub verdict
+and §H14's unchecked root a third time** — last time I fixed the one instance and never asked which
+other criteria had no code behind them. Deeper: per-seat cost needs a starting balance the harvest
+never recorded, so the claim was **unverifiable** — it could neither pass nor fail.
+  → Fixed. reconcile now checks it and **refuses to pass a plan that states the prediction without
+    a `startingBalanceLamports` to test it against.** An unverifiable criterion is a failure of the
+    plan, not a free pass for the run.
+  → Proven both ways before being believed: 4441080 catches the 29 two-digit seats, 4446160 catches
+    the 10 single-digit ones, neither passes. Frozen plan restored byte-identical.
+
+## Two burnt seats RECOVERED — the seal fix on a live failure
+
+W14 and W28 each sealed then failed with `block height exceeded` (2 of 40, matching T2's 2 of 32).
+Both retried, both landed. **No substitutions — the 39 seats are the 39 the frozen plan named.**
+W14's state was read before retrying: `{"sealed":true}` with no Entry PDA, exactly the condition
+PR 147 addresses. Before the fix both wallets were gone.
+
+---
 
 ## §H18 — THE EVEN SPLIT WON. READ THIS FIRST.
 

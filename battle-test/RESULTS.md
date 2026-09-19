@@ -110,3 +110,53 @@ conditional and did not see that everyone else's were conditional on the same in
 proved by re-running the remainder at concurrency 1 with zero losses), §H13 (the timeout default
 manufactures the strongest detection signal — **for the founder and counsel**), §H14 (a pass
 criterion no tool checked; checked by hand, it passes).
+
+---
+
+## T2R — pool 21 — the boundary claim, retried and PROVEN. One criterion failed, and it was mine.
+
+**Frozen before the pool it ran on existed.** PR 151 merged **2026-09-18T23:47:18Z**; pool 21 was
+created by a Solana block at **2026-09-19T01:21:29Z**, one hour and 34 minutes later. The plan named
+no pool — `poolId` and `poolPda` are both null in the frozen bytes. Neither clock is ours. This is
+the strongest form of freeze in this test, and we have it here only because T2 was spoiled and the
+retry was forced (§H16).
+
+**The claim under test — the fork is at exactly 40, and 39 is on the refunding side — HELD.**
+
+| criterion | result |
+|---|---|
+| reaches `Closed`, not `Paid` | **MATCH** |
+| exactly 39 entrants at the deadline | **MATCH** |
+| `trigger_refund` settles it, not `seal_at_deadline` | **MATCH** — no `results_root`, no revealed secret |
+| every entrant refunded exactly `100000000` | **MATCH** — 39 of 39 |
+| prize vault ends at exactly `650240` | **MATCH** |
+| pot of `4000000000` returns to the treasury | **MATCH** — vault holds only the rent cushion; treasury net +4000000000 |
+| no flag, no sanctions hold, no reviewer | **MATCH** |
+| **each seat's net loss is exactly `4441080`** | **FAILED — 29 of 39 seats cost `4446160`** |
+
+**The failed criterion is a defect in my prediction, not in the product.** Every entry mints a pass
+asset named `BLOTTO PASS #<pool>-<seat>`. A two-digit seat index is one character longer, the
+account is one byte bigger, and one byte of devnet rent is 5080 lamports. Seats 0–9 cost 4441080;
+seats 10 and up cost 4446160. Rent scaling with a name is correct behaviour.
+
+**It was always true and I never looked.** Probing the earlier pools' pass assets directly: T1, T4
+and T5 all show 92 bytes at seat 9 and 93 bytes at seat 10. On T4 and T5, **54 of 64 seats** were at
+the higher figure. The plan's claim that "three settled pools measured the same figure to the
+lamport" described a measurement never made — early seats were read and the result generalised, then
+restated with increasing confidence until it was frozen as "a single lamport of drift is a failure".
+Full account in `DRIFT.md` §H20.
+
+**`reconcile.ts` reported PASS while that criterion failed** — it contained no reference to the
+claim at all (§H21). That is §H9's stub verdict and §H14's unchecked root a third time. It now
+checks the per-seat cost, and refuses to pass a plan that states the prediction without the
+starting balance needed to test it. Proven in both directions before being believed: predicting
+`4441080` catches the 29 two-digit seats, predicting `4446160` catches the 10 single-digit ones, and
+neither passes — because the cost genuinely is two numbers.
+
+**Two seats were burnt mid-run and BOTH RECOVERED.** W14 and W28 each sealed and then failed with
+`block height exceeded` (2 of 40, matching T2's 2 of 32). Before PR 147 each would have been barred
+from the pool permanently and replaced by a spare. Both were retried and both landed, so **no
+substitutions: the 39 seats are the 39 the frozen plan named.** W14's state was read directly before
+retrying — `{"sealed":true}` with no Entry PDA, exactly the condition the fix addresses.
+
+**Verdict: the boundary property is proven. The cost model was wrong and is now measured.**
