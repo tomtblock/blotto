@@ -74,7 +74,53 @@ The last row is the honest one. A rotating wall is the strongest play available 
 W00 about half the time. UI-A was sent the capped recipe, so the first row is what we expect — but
 the funding ask in §F-32 is sized so that **it does not matter which way this falls.**
 
-## Result
+## Observation 1 — the fill, and the RPC underneath it
+
+63 of 64 seats at 19:17:46Z. 62 headless wallets landed on top of UI-A's seat 0. Every wallet the
+field file named is in the pool; no substitutions.
+
+**It took five runs, and the reason is the RPC, not the app.** Each run landed about fifteen seats
+in roughly fifty seconds and then died with `Signature … has expired: block height exceeded`. The
+pacing was perfectly steady right up to each failure — eight slots between consecutive seats, no
+degradation — which is what rules the app out: a service degrading under load slows down first. A
+throttle does not.
+
+`MANUAL.md` §4.3 wrote this down in advance and it was not followed:
+
+> Choose a dedicated devnet RPC (Helius, QuickNode, Triton all have free tiers) — **the public
+> endpoint will throttle** T6's 73 concurrent registrations and **you would be measuring the RPC,
+> not the app.**
+
+This run used `api.devnet.solana.com`. Wall clock for the 62 seats was **5 min 20 s**, which is over
+T6's five-minute threshold — and that number is a measurement of the public endpoint, so it is not
+evidence about the product either way.
+
+**This is the shakedown doing its job.** Had T6 run first, its fill-time pass criterion would have
+failed against a threshold it was never testing, and the report would have carried a product finding
+that was really a configuration mistake. **T6 needs a dedicated devnet RPC before it runs.**
+
+## Observation 2 — the seal gate refused in BOTH directions, on live traffic
+
+Unplanned, and better evidence than anything designed for it. Across 80 attempts:
+
+| what happened | wallets | what the gate did |
+|---|---|---|
+| sealed, then the register expired — **no Entry on chain** | W14, W29, W43, W57 | **allowed** the re-seal; all four retried and landed |
+| sealed **and** already registered, re-attempted on a sweep | W43–W56 (14) | **refused**, `409 already sealed`, nothing written |
+
+Until now only the allowing half had been shown live (T2R, §H6). The refusing half is the one that
+protects a paying entrant's allocation from being overwritten, and it had never been exercised
+against a real paid seat outside a test suite. Here it refused fourteen of them.
+
+**W43 demonstrates both halves by itself**: it burnt, retried and landed, and was then correctly
+refused when a later sweep tried to seal it again. That is the exact distinction PR 147 was built to
+draw — a stored ciphertext with no paid seat is an abandoned attempt, and one with a paid seat is
+somebody's entry.
+
+Before the fix, the four in the first row would have been **lost wallets**, as eleven were across
+T2, T4 and T5.
+
+## Observation 3 — the refusal path
 
 Not yet run. Filled in below when it is, with the observations as observations.
 
