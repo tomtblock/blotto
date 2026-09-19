@@ -1415,3 +1415,57 @@ project declares a starting balance, so the sharpest numeric claim in T2R's plan
 from the evidence the run collects** — a criterion that could not have passed or failed. The fix is
 both halves: plans declare the starting balance, and reconcile prints NOT CHECKED, loudly and
 without passing, whenever a stated criterion has no data behind it.
+
+
+### H22. The even split is the MIDDLE of three tiers — and the founder's question found the answer (2026-09-19)
+
+§H18 reported that the even split won pool 20 and took the whole pot, and raised it as a threat to
+the skill characterisation. The founder then asked the two questions that settled it: *"I thought we
+proved the even split cannot win?"* and *"what if everyone did that?"*
+
+**The first question was right, and the proof exists.** `docs/skill-evidence/REPORT.md` publishes a
+0.000% rank-1 rate for the `uniform` class at both 64 and 40 seats, framed as *"stronger than a
+statistical one"* — *"they never place first and never take a lamport."* Re-running it reproduces
+exactly: **0 of 400 pools**.
+
+**And the study's field is half the one shape the default loses to by construction.** Its ladder is
+`uniform`, `random`, `heuristic`, `optimised` — and `heuristic` and `optimised` are *defined* as
+three-stat concentration. So the 0.000% is a property of the FIELD, not of the allocation.
+
+Measured over 400 pools of 40, with the product's own engine:
+
+| the other 39 seats | default's rank-1 rate | median rank |
+|---|---|---|
+| the study's mixed ladder | **0.0%** (0/400) | 26th of 40 |
+| three-stat concentrators only | **0.0%** (0/400) | **40th — last, every pool** |
+| arbitrary free-integer allocations | **100.0%** (400/400) | **1st** |
+
+**Three tiers: deliberate beats the default totally; the default beats careless totally.** Pool 20's
+field was the bottom tier — 38 seats concentrating on one or two stats with zeroes elsewhere, which
+is *worse than not playing*. The default did not beat skill. It beat unskilled play.
+
+**Why the published metric could not show this.** Rank-1 rate and paid-seat rate are zero for every
+class except the winner, so the middle tier and the bottom tier **both read 0.000% and look
+identical**. The superlative was never supported by the study's own data — within those runs the
+`uniform` class outscores the `random` class.
+
+**The second question is the one that resolves the legal worry, and the answer is clean.** If every
+seat leaves the default, all 40 score identically, all 40 tie for first, the pot divides 40 ways,
+and each entrant receives **exactly their entry back**. Nobody profits. Introduce ONE three-stat
+player and they win **outright** and take the **entire** pot — 200 of 200 pools, both classes.
+**One deliberate entrant is enough to make doing nothing pay zero.**
+
+So the correct framing for counsel is not "the players who did nothing took the pot" but **"the
+default is a break-even floor that any deliberate player beats totally."** That is a stronger skill
+story than the report previously told, because the gradient is total in both directions.
+
+**What I got wrong in §H18, and it was a framing error rather than a factual one.** Every number
+there is correct. But I presented the result as "doing nothing wins" and took it to counsel in those
+terms, when one more measurement — the one the founder asked for — showed doing nothing cannot win
+against anybody who thinks, and cannot profit even when it wins. I had the engine and the
+populations in hand both times. The difference was asking "what if everyone did this?", which is the
+first question anyone should ask of a claimed dominant strategy.
+
+**Corrected in PR 154**, with four regression tests pinning all three tiers and the all-default case,
+because a published claim with no code behind it rots silently and this project has had three
+(§H9, §H14, §H21).
