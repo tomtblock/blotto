@@ -47,6 +47,33 @@ Questions, not criteria. None of these is a pass or a fail.
    settlement crank take after the seal?
 5. Does the detection report contain any trace of a wallet that was refused?
 
+## The field, and the one thing it is engineered for
+
+`registry/pool-22.field.json` — 63 headless allocations, regenerable exactly with
+`scripts/shakedown-field.ts --wall-seed 2200 --field-base 2201 --seats 63`. It is a **field file,
+not a plan**: no expected ranks, no results root, no pass criteria, and CI's plan gate does not
+sweep it, because there is nothing here to hold to a prediction.
+
+One seat, W00, is a `wall` — three stats at 26 or above every battle, rotating. That is not
+decoration. **It makes a wallet we hold the likely winner, so the 4 SOL pot comes back to the test
+roster** rather than stopping somewhere the run cannot spend from.
+
+**Likely, not certain, and the difference is measured rather than assumed.** UI-A is already seated
+with an allocation nobody here chose or can see. Scoring this field against a range of UI-A plays:
+
+| what UI-A might have played | W00's rank | takes the whole pot? |
+|---|---|---|
+| the recipe it was sent (one stat to 25, rest 18–19) | 1 | yes |
+| an even split, 20×5 | 1 | yes |
+| everything on one stat | 1 | yes |
+| a static three-stat 34/33/33 | 1 | yes |
+| a static two-stat 50/50 | 1 | yes |
+| **a ROTATING three-stat wall, 300 seeds** | never worse than 2 | **only 152 of 300** |
+
+The last row is the honest one. A rotating wall is the strongest play available and it beats or ties
+W00 about half the time. UI-A was sent the capped recipe, so the first row is what we expect — but
+the funding ask in §F-32 is sized so that **it does not matter which way this falls.**
+
 ## Result
 
 Not yet run. Filled in below when it is, with the observations as observations.
