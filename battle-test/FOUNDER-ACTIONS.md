@@ -745,3 +745,83 @@ Also: two wallets failed mid-entry with the network error that cost us eleven wa
 week. **Both simply played again and landed.** That is the fix you deployed last night doing exactly
 what it was built for, on a real failure, within hours. No substitutes — the 39 seats are the 39 the
 plan named.
+
+---
+
+## F-32 — ▶ FOUNDER ACTION: one transfer, three merges, then stand by for a GO call
+
+You ratified both calls: **pool 22 runs as a shakedown** (an observation, not a test), and **T6 is
+frozen against pool 23 with UI-A early and UI-B late**. Both are done on my side. Three things are
+yours.
+
+### 1. ▶ Send 8 SOL from UI-B to the funder
+
+```
+from:  UI-B   6wqLMAS1guarBehRDGFSAApGUBLXuuHWmy9naepzu3sa
+to:    funder 6z4wriiac4d6bay57Pe4Gj3jxhjeT9HfbcH2VaM4r3Ue
+amount: 8 SOL
+```
+
+**Why, in plain numbers.** The 72 test wallets each hold about 0.15 SOL, which covers exactly one
+entry apiece — enough to fill pool 22 today and nothing after that. T6 needs all 71 of them topped
+back up to 0.155 SOL before pool 23, which is about **7.3 SOL**, and the funder holds **0.34**.
+
+If a test wallet wins pool 22's 4 SOL I can sweep it back and the gap drops to about 3.3 SOL. If
+**UI-A** wins it instead — and UI-A is already seated in pool 22 with an allocation I did not choose
+and cannot see — the 4 SOL lands in your wallet and the full 7.3 is needed. Eight SOL covers it
+either way, and it means I never have to stop and ask again mid-run. UI-B keeps about 3.7 SOL and
+only ever spends a transaction fee, because UI-B's job in both pools is to be refused.
+
+The devnet faucet would also work but is rate-limited to roughly 2 SOL a day; the transfer is
+instant.
+
+### 2. ▶ Merge three PRs
+
+- **PR 154** — the copy correction (the "weakest allocation" sentence) and the skill-evidence
+  report. Open since yesterday, 8 checks green.
+- **PR 155** — the §H22 record in `battle-test/`. 10 checks green.
+- **The new T6 freeze PR** — link below once it is open.
+
+**The T6 one is time-sensitive and the other two are not.** Pool 23 does not exist yet. The moment
+pool 22 fills, pool 23 opens about five minutes later — and a prediction merged after that is worth
+less than one merged before it. So: **merge the T6 PR, and tell me. I do not start filling pool 22
+until you have.**
+
+### 3. ▶ Then stand by. Two sessions, both on my call.
+
+**Pool 22 — UI-B, the shakedown.** I will fill pool 22 to 63 of 64 and then say GO. You:
+
+1. Open the pool page and start a session.
+2. **Move one dial.** That starts the 90-second clock, which is the whole point.
+3. Play the seven battles however you like — genuinely anything, the numbers do not matter.
+4. **Take the full 90 seconds.** The pool has to seal underneath you while you are still playing.
+5. Submit.
+
+**You should be refused, and being refused is the result.** What I need is exactly what you see:
+does it say something like *"this pool filled before your entry reached it"*, or does it hang on a
+spinner? How long before it tells you? **Screenshot it.** You are charged a transaction fee and
+nothing else — no entry, no 0.1 SOL.
+
+**Pool 23 — UI-A first, then UI-B late.** Same as above for UI-B. UI-A goes in early, as one of the
+64, the moment pool 23 opens and before I fill it:
+
+| Battle | Drag this stat to 25 |
+|---|---|
+| 1 | Strength |
+| 2 | Speed |
+| 3 | Heart |
+| 4 | Wit |
+| 5 | Durability |
+| 6 | Strength |
+| 7 | Heart |
+
+**One thing here does matter, unlike last time.** Keep every stat between 1 and 25 — never 0, never
+above 25. The frozen plan says a test wallet wins pool 23 outright, and that claim holds for any
+allocation you play inside that range and breaks if you go above 25. Seven drags, one per screen,
+lock in each battle, 90 seconds for all seven starting at your first touch.
+
+### What I am doing meanwhile
+
+Nothing that spends money until you have merged the T6 PR. After that: fill pool 22, call GO, record
+what we see, then top the wallets up and run T6 on pool 23 properly frozen.
+
