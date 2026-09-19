@@ -15,6 +15,7 @@
  */
 
 import { makeFailure } from '@/tx/errors';
+import type { TxFailureKind } from '@/tx/types';
 import type { TxRpc } from '@/tx/tx-rpc';
 import type { RevealResult } from '@/reveal/types';
 import { entryRegisteredFromLogs } from './register-tx';
@@ -80,6 +81,18 @@ async function readLogs(
   return null;
 }
 
+/**
+ * The ciphertext store's three 409 reasons, each to the failure kind whose
+ * copy says what actually happened. Both pool reasons are non-retryable and
+ * already carry sentences in `COPY.tx`; neither reveals anything about the
+ * caller (see `CIPHERTEXT_REASONS` in `services.ts` for why that matters).
+ */
+const CIPHERTEXT_409_KINDS: Readonly<Record<string, TxFailureKind>> = {
+  'pool filled': 'pool-full',
+  'pool closed to entries': 'pool-closed',
+  'already sealed': 'seal-conflict',
+};
+
 export async function submitForReveal(
   services: EntryServices,
   rpc: TxRpc,
@@ -106,11 +119,31 @@ export async function submitForReveal(
        * pool stopped taking entries — a state, not a judgement about the
        * player. The stage matters: a 409 from the packet endpoint is not
        * this, so the check names both.
+       *
+       * 2026-09-19 (battle-test pool 22, Observation 4; founder ruling).
+       * Those are THREE causes, not one, and collapsing them cost the player
+       * the only sentence that actually describes what happened. A late
+       * entrant on a full pool used to read "either an earlier attempt from
+       * this wallet is the one that stands, or the pool stopped taking
+       * entries first" — a hedge, about something the server had already
+       * disambiguated in its response body, while `COPY.tx.poolFull` ("this
+       * pool filled before your entry reached it") sat unreachable.
+       *
+       * Unreachable is literal. `poolFull` maps from the on-chain error 6010
+       * `PoolFull`, and `register.rs` checks `pool.state == Open` (6000
+       * `PoolNotOpen`) BEFORE `entrants < CAPACITY`, so a 65th entry always
+       * dies at the state gate and 6010 can never fire for a pool that
+       * filled. A late entrant does not reach the chain at all in any case:
+       * `submit.ts` posts the ciphertext first, by design, so the refusal
+       * happens here. This mapping is the only route to that sentence.
+       *
+       * A reason we do not recognise falls through to `seal-conflict`, whose
+       * copy is true of all three cases. Vaguer, never wrong.
        */
       const kind = !e.refused
         ? 'rpc-failure'
         : e.stage === 'ciphertext' && e.status === 409
-          ? 'seal-conflict'
+          ? CIPHERTEXT_409_KINDS[e.reason ?? ''] ?? 'seal-conflict'
           : 'entry-refused';
       return {
         kind: 'failed',

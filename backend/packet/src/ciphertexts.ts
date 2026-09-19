@@ -19,6 +19,10 @@
  *      seen cannot be keyed correctly (see `pool-ids.ts`), and a pool that
  *      has sealed can no longer legitimately receive an allocation — after
  *      the seal a victim could not repair an overwrite even if they noticed.
+ *      Since 2026-09-19 this gate says WHICH of the two closed cases it is,
+ *      because "the pool filled" and "the pool ran out of time" are different
+ *      things to the person reading the screen, and the app owns a sentence
+ *      for each. See the constants below for why that is not a §8 leak.
  *   2. THE SIGNATURE IS THE PLAYER'S, over a message binding the pool, the
  *      player and a digest of these exact bytes. Verified the same way the
  *      clickwrap is, with the same library, against the wallet's own key.
@@ -54,6 +58,7 @@
 import nacl from 'tweetnacl';
 import type { CiphertextStore } from '../../sealing/src';
 import { ciphertextMessage, ciphertextStatusMessage } from './ciphertext-message';
+import { CAPACITY } from '../../scoring/src/prizes';
 import type { PoolIdResolver } from './pool-ids';
 import type { SeatResolver } from './seats';
 import { base58Decode } from './shared';
@@ -74,6 +79,29 @@ export interface AcceptResult {
 /** The only pool state that may still receive a sealed allocation. */
 const OPEN = 'Open';
 
+/**
+ * The two ways a pool can already be shut when a late allocation arrives, and
+ * why the route bothers to tell them apart.
+ *
+ * These are the `error` strings a refused caller receives, and the app maps
+ * them to the two sentences it already owns: "this pool filled before your
+ * entry reached it" and "this pool is no longer taking entries". Until
+ * 2026-09-19 the route answered a single string for both, so the app could
+ * only show a message that hedged — and the "filled" sentence, which is the
+ * one a player in that situation actually wants, had never been shown to
+ * anybody (battle-test/registry/pool-22.observation.md, Observation 4).
+ *
+ * WHY THIS DOES NOT WEAKEN THE GENERIC-REFUSAL RULE (PID §8). The refusal
+ * that must stay generic is the ENTRY PACKET's — geo, sanctions, age — where
+ * naming the failing check would turn the endpoint into an oracle a probe
+ * could walk. These two say nothing about the caller. They are facts about
+ * the POOL, already published on its own page to anyone who loads it, and
+ * they are returned only from this route. `/packet` is untouched and still
+ * answers one generic refusal for every reason it has.
+ */
+const CLOSED_BECAUSE_FULL = 'pool filled';
+const CLOSED_TO_ENTRIES = 'pool closed to entries';
+
 function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
   if (a.length !== b.length) return false;
   let diff = 0;
@@ -93,7 +121,18 @@ export async function acceptCiphertext(
     return { status: 400, body: { error: 'unknown pool' } };
   }
   if (pool.state !== OPEN) {
-    return { status: 409, body: { error: 'pool closed to entries' } };
+    // A pool that took its 64th entry and a pool that reached its deadline
+    // are BOTH no longer Open, so `state` alone cannot separate them. The
+    // seat count can: at capacity it filled, below it the clock ran out.
+    // A pool can never exceed capacity — `register` refuses past it — so
+    // `>=` and `===` agree here; `>=` is used so a projection that ever
+    // over-counts degrades to the more specific message rather than the
+    // vaguer one.
+    const filled = pool.entrants >= Number(CAPACITY);
+    return {
+      status: 409,
+      body: { error: filled ? CLOSED_BECAUSE_FULL : CLOSED_TO_ENTRIES },
+    };
   }
 
   // ---- 2. the signature -------------------------------------------------

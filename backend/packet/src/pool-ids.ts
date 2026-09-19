@@ -30,6 +30,21 @@ export interface PoolFacts {
   id: bigint;
   /** The pool's lifecycle state as the indexer last projected it. */
   state: string;
+  /**
+   * Seats taken. Read for ONE purpose: telling a player whose entry arrived
+   * late whether the pool FILLED or simply stopped taking entries.
+   *
+   * Both look identical from `state` alone — a pool that took its 64th entry
+   * and a pool that reached its deadline are both no longer `Open` — and
+   * before 2026-09-19 the app could not tell them apart either, so it showed
+   * a sentence that hedged between two unrelated causes (battle-test pool 22,
+   * Observation 4). At capacity the pool filled; below it, it did not.
+   *
+   * This is public information. The pool page publishes the entrant count to
+   * anyone who loads it, so reporting it here reveals nothing that was not
+   * already readable, and nothing whatever about any individual entrant.
+   */
+  entrants: number;
 }
 
 export interface PoolIdResolver {
@@ -49,10 +64,22 @@ export class PgPoolIdResolver implements PoolIdResolver {
   constructor(private readonly db: Queryable) {}
 
   async lookup(pool: string): Promise<PoolFacts | null> {
-    const res = await this.db.query('SELECT id, state FROM pools WHERE pool = $1', [pool]);
-    const row = res.rows[0] as { id: unknown; state: unknown } | undefined;
+    const res = await this.db.query(
+      'SELECT id, state, entrants FROM pools WHERE pool = $1',
+      [pool]
+    );
+    const row = res.rows[0] as { id: unknown; state: unknown; entrants: unknown } | undefined;
     if (!row || row.id === null || row.id === undefined) return null;
-    return { id: BigInt(String(row.id)), state: String(row.state ?? '') };
+    // `entrants` is NOT NULL DEFAULT 0 in the projection, but a NUMERIC comes
+    // back as a string and a backfilled row can predate the column, so parse
+    // defensively: an unreadable count must not become a confident claim that
+    // the pool filled.
+    const seats = Number(row.entrants);
+    return {
+      id: BigInt(String(row.id)),
+      state: String(row.state ?? ''),
+      entrants: Number.isFinite(seats) && seats >= 0 ? seats : 0,
+    };
   }
 }
 
@@ -60,8 +87,8 @@ export class PgPoolIdResolver implements PoolIdResolver {
 export class MemoryPoolIdResolver implements PoolIdResolver {
   private readonly pools = new Map<string, PoolFacts>();
 
-  set(pool: string, id: bigint, state = 'Open'): void {
-    this.pools.set(pool, { id, state });
+  set(pool: string, id: bigint, state = 'Open', entrants = 0): void {
+    this.pools.set(pool, { id, state, entrants });
   }
 
   async lookup(pool: string): Promise<PoolFacts | null> {
