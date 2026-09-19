@@ -10,7 +10,11 @@ import { createHash } from 'crypto';
 import { PublicKey } from '@solana/web3.js';
 import type { TxRpc } from '@/tx/tx-rpc';
 import { submitForReveal } from './outcome';
-import { EntryServiceError, RegisterFailedError } from './services';
+import {
+  EntryServiceError,
+  RegisterFailedError,
+  type CiphertextReason,
+} from './services';
 import type { EntryServices } from './submit';
 
 const PLAYER = new PublicKey(createHash('sha256').update('player').digest()).toBase58();
@@ -188,9 +192,13 @@ describe('submitForReveal', () => {
    * as a connection problem, with a retry that cannot work.
    */
   describe('an entry the service declined (D-12)', () => {
-    const refusing = (status: number | null, stage: 'ciphertext' | 'packet' = 'packet') =>
+    const refusing = (
+      status: number | null,
+      stage: 'ciphertext' | 'packet' = 'packet',
+      reason: CiphertextReason | null = null
+    ) =>
       services(async () => {
-        throw new EntryServiceError(stage, status, 'entry unavailable');
+        throw new EntryServiceError(stage, status, 'entry unavailable', reason);
       });
 
     it('is entry-refused, with no retry offered', async () => {
@@ -229,6 +237,112 @@ describe('submitForReveal', () => {
         expect(r.failure.broadcast).toBe(false);
         expect(r.failure.message).not.toMatch(/connection/i);
       }
+    });
+
+    /*
+     * 2026-09-19 (battle-test pool 22, Observation 4; founder ruling).
+     *
+     * A real person filled the last seat of pool 22 while playing, submitted,
+     * and read a sentence that hedged: "either an earlier attempt from this
+     * wallet is the one that stands, or the pool stopped taking entries
+     * first." The server had already said which — the app was not reading it.
+     *
+     * The sentence that fits, `COPY.tx.poolFull`, had never reached a player
+     * and could not: it hangs off the on-chain 6010 `PoolFull`, which never
+     * fires, because `register.rs` checks the pool's state (6000) before its
+     * capacity — and a late entrant is refused at the seal step and never
+     * reaches the chain at all. This mapping is the only route to it.
+     */
+    it('"pool filled" reaches the sentence written for a full pool', async () => {
+      const r = await submitForReveal(
+        refusing(409, 'ciphertext', 'pool filled'),
+        rpcWithLogs(null),
+        input,
+        noSleep
+      );
+      expect(r.kind).toBe('failed');
+      if (r.kind === 'failed') {
+        expect(r.failure.kind).toBe('pool-full');
+        expect(r.failure.retryable).toBe(false);
+        expect(r.failure.broadcast).toBe(false);
+        // The claim the player is owed, and the one they did not get.
+        expect(r.failure.message).toMatch(/filled/i);
+        // It must not go back to hedging.
+        expect(r.failure.message).not.toMatch(/either/i);
+      }
+    });
+
+    it('"pool closed to entries" is a closed pool, NOT a full one', async () => {
+      // A pool that reached its deadline below capacity did not fill, and
+      // saying it did would be false to the player reading it.
+      const r = await submitForReveal(
+        refusing(409, 'ciphertext', 'pool closed to entries'),
+        rpcWithLogs(null),
+        input,
+        noSleep
+      );
+      expect(r.kind).toBe('failed');
+      if (r.kind === 'failed') {
+        expect(r.failure.kind).toBe('pool-closed');
+        expect(r.failure.retryable).toBe(false);
+        expect(r.failure.message).not.toMatch(/filled/i);
+      }
+    });
+
+    it('"already sealed" is still the seal conflict, and says nothing about the pool', async () => {
+      const r = await submitForReveal(
+        refusing(409, 'ciphertext', 'already sealed'),
+        rpcWithLogs(null),
+        input,
+        noSleep
+      );
+      expect(r.kind).toBe('failed');
+      if (r.kind === 'failed') expect(r.failure.kind).toBe('seal-conflict');
+    });
+
+    it('an UNRECOGNISED reason falls back to the cautious message, never a wrong one', async () => {
+      // Vaguer is survivable; wrong is not. If the server ever grows a reason
+      // this build has not heard of, the player must not be told their pool
+      // filled when it did not.
+      for (const reason of ['something new', '', 'POOL FILLED']) {
+        const r = await submitForReveal(
+          refusing(409, 'ciphertext', reason as CiphertextReason),
+          rpcWithLogs(null),
+          input,
+          noSleep
+        );
+        expect(r.kind).toBe('failed');
+        if (r.kind === 'failed') expect(r.failure.kind, reason).toBe('seal-conflict');
+      }
+    });
+
+    it('a ciphertext 409 with NO reason at all is the cautious message', async () => {
+      // The pre-2026-09-19 server, and any response whose body is missing or
+      // unparseable. A refusal must never depend on the body being well formed.
+      const r = await submitForReveal(
+        refusing(409, 'ciphertext', null),
+        rpcWithLogs(null),
+        input,
+        noSleep
+      );
+      expect(r.kind).toBe('failed');
+      if (r.kind === 'failed') expect(r.failure.kind).toBe('seal-conflict');
+    });
+
+    it('the PACKET stage never carries a reason, whatever it is handed (PID §8)', async () => {
+      // The generic-refusal rule bites here: naming the failing check would
+      // make /packet an oracle. The constructor drops the reason rather than
+      // trusting every future caller to remember, so this asserts the drop.
+      const e = new EntryServiceError('packet', 409, 'entry unavailable', 'pool filled');
+      expect(e.reason).toBeNull();
+      const r = await submitForReveal(
+        refusing(409, 'packet', 'pool filled'),
+        rpcWithLogs(null),
+        input,
+        noSleep
+      );
+      expect(r.kind).toBe('failed');
+      if (r.kind === 'failed') expect(r.failure.kind).toBe('entry-refused');
     });
 
     it('every OTHER ciphertext-stage refusal stays the eligibility refusal', async () => {
