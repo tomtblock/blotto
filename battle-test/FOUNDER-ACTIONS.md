@@ -825,3 +825,72 @@ lock in each battle, 90 seconds for all seven starting at your first touch.
 Nothing that spends money until you have merged the T6 PR. After that: fill pool 22, call GO, record
 what we see, then top the wallets up and run T6 on pool 23 properly frozen.
 
+
+---
+
+## F-33 — ▶ FOUNDER ACTION: pool 22 found a real one. Two rulings and an RPC.
+
+Pool 22 did its job. It settled cleanly — 64 seats, nine seconds from seal to payout, W00 took the
+whole 4 SOL and the money is back in the test wallets. And your 90 seconds found the thing no
+automated run could have.
+
+### What you saw, and why it is wrong
+
+Your screen said the attempt did not go through, and that it was **either** an earlier attempt from
+your wallet **or** the pool having stopped taking entries.
+
+**The server already knew which.** It answered "this pool is closed to entries" in plain words. The
+app throws that away and shows a message that covers both cases, so you were asked to go and work
+out for yourself something the system could simply have told you.
+
+And the right sentence is already written, in your own copy file:
+
+> "This pool filled before your entry reached it, so nothing settled. Another pool in this tier opens
+> once this one has been paid out."
+
+It has never been shown to anybody, and as things stand it never can be. Three separate design
+decisions, each sensible on its own, stack up to block it. That is the kind of fault that only shows
+up when a person actually sits in front of the screen.
+
+**What worked:** you were charged **nothing** — not the entry, not even a network fee. I checked your
+wallet against the chain and it is unchanged to the last digit. And it was a sentence, not a
+spinner. Those were the two things that mattered most and both held.
+
+### ▶ Ruling 1 — may I fix it? (I recommend yes)
+
+This is product code, outside the battle-test boundary, so it is your call. The small fix is about
+five lines: have the app read the reason the server already sends and show the message that matches.
+You would then get, truthfully and without hedging:
+
+> "This pool is no longer taking entries, so nothing settled. Open pools are listed on the Pools tab."
+
+**I recommend taking it.** It ships as its own PR, separate from anything else, with tests.
+
+### ▶ Ruling 2 — do you want the word "filled"? (this one is yours, it is brand voice)
+
+"No longer taking entries" is true and costs five lines. Saying **"filled"** is warmer and more
+specific, but it costs more: a pool that filled up and a pool that ran out of time both just look
+"closed" to the app, so the server would have to start saying which. Worth it only if you think
+"filled" reads materially better to a player. I have no strong view — this is your column.
+
+### ▶ Ruling 3 — I need a devnet RPC before T6
+
+Not urgent tonight, but it blocks T6. I filled pool 22 using the free public Solana endpoint, which
+throttled me: every run got about fifteen entries in and then stopped. It cost nothing — every
+affected wallet simply retried and landed, thanks to the fix you deployed on Thursday — but it means
+**the fill took 5 minutes 20 seconds, and T6 has "under 5 minutes" as a pass criterion.** That number
+would be measuring the free endpoint, not our product. Our own manual warned about this and I did not
+follow it.
+
+**What I need:** a free devnet RPC URL from **Helius**, **QuickNode** or **Triton**. All three have
+free tiers, it is a sign-up rather than a payment, takes a couple of minutes, and you paste me the
+URL. Any of the three is fine.
+
+### Where that leaves T6
+
+**T6 is frozen and safe** — merged before pool 23 existed, which is the strongest evidence standard
+we have, and I have the receipts recorded. It is ready to run and needs two things first: the RPC
+above, and a decision on whether the copy fix ships before it. **If the copy fix does not ship, T6
+will fail its copy criterion** — correctly, because the product does have this fault. I would rather
+fix it and have T6 test the fixed thing.
+

@@ -120,7 +120,92 @@ somebody's entry.
 Before the fix, the four in the first row would have been **lost wallets**, as eleven were across
 T2, T4 and T5.
 
-## Observation 3 — the refusal path
+## Observation 3 — the pool settled, and fast
 
-Not yet run. Filled in below when it is, with the observations as observations.
+| event | time | slot |
+|---|---|---|
+| W62 registers — the 64th seat, sealing the pool | 19:36:01Z | 501013613 |
+| `reveal_pool_secret` | 19:36:07Z | 501013649 |
+| `commit_results` | 19:36:08Z | 501013657 |
+| `pay_prizes` | 19:36:10Z | 501013664 |
+
+**Nine seconds from seal to paid**, against T6's 120-second threshold. Unlike the fill time, this
+number is not contaminated by the RPC: it is the settlement daemon's own work, measured in block
+times.
+
+**W00 took rank 1 and the whole 4000000000 pot**, as the field was built for. The 4 SOL is back in
+the test roster, so T6's funding does not depend on it.
+
+**The per-seat cost came out at exactly 4441080 lamports**, confirming §H20's lower band on a third
+pool: W00 started at 145558920, ended at 4041117840, and
+`145558920 − 4041117840 − 100000000 + 4000000000 = 4441080`. That is the §H23 formula run by hand on
+a seat that was PAID — the case the old subtraction got wrong.
+
+## Observation 4 — the refusal works, and the sentence is wrong. THIS IS THE FINDING.
+
+UI-B played the full session and submitted into a pool that was already `Scored`. It was refused.
+This is what it saw:
+
+> This attempt did not go through, and nothing was signed or charged this time. It was not a decision
+> about you: either an earlier attempt from this wallet at this pool is the one that stands, or the
+> pool stopped taking entries first. The pool page shows whether a seat was taken, and you can ask us
+> about your own entry.
+
+**What passed, and it is not nothing.** It is a sentence, not a spinner. It does not invite a retry
+that cannot work. It does not imply the player was judged. And its central claim is **literally
+true, verified independently**: UI-B's balance is byte-for-byte unchanged at **11.673357239** — it
+was not charged an entry, and it was not even charged a transaction fee, because no transaction was
+ever built.
+
+**What failed: the app says "either / or" about something the server already told it.** That is
+`COPY.tx.sealConflict`, and the player got it instead of the sentence written for this exact
+situation, which exists and was not shown:
+
+> `COPY.tx.poolFull` — "This pool filled before your entry reached it, so nothing settled. Another
+> pool in this tier opens once this one has been paid out."
+
+That is T6's pass criterion almost word for word. **Three separate layers keep it from ever
+reaching a player, and each one is individually reasonable:**
+
+1. **`submit.ts` posts the ciphertext BEFORE the register transaction** — deliberately, because a
+   paid entry whose ciphertext never landed is the worse failure. So a late entrant is refused at
+   the SEAL step and never reaches the chain, and no on-chain error code is ever consulted.
+2. **Even if it did reach the chain, `poolFull` is unreachable.** It maps from error 6010
+   (`PoolFull`), but `register.rs` checks `pool.state == Open` (6000 `PoolNotOpen`) *before*
+   `entrants < CAPACITY`. The 64th entry seals the pool, so a 65th always fails the state gate.
+   **6010 cannot fire for a pool that filled.** T6's own frozen plan derives this in
+   `unconditionalDerivation.errorIsPoolNotOpen` — written hours before this run — and the
+   consequence for the copy layer was not noticed until a person saw the screen.
+3. **`outcome.ts` discards the distinction the server made.** The route answers a non-Open pool with
+   `409 {"error":"pool closed to entries"}` and a genuine overwrite with
+   `409 {"error":"already sealed"}` — two different causes, deliberately distinguishable. The
+   client branches on **stage and status only**:
+
+```ts
+// app/src/entry/outcome.ts:110
+const kind = !e.refused ? 'rpc-failure'
+  : e.stage === 'ciphertext' && e.status === 409 ? 'seal-conflict'
+  : 'entry-refused';
+```
+
+The body is never read, so both collapse into one message that has to hedge. **The server knew. The
+app owned the right sentence. The wiring between them loses it.**
+
+**Consequence for T6, which is the whole point of running this first.** T6's criterion is *"the late
+entrant sees the legible 'filled before your entry reached it' copy, not a spinner"*. **As the
+product stands today, T6 would FAIL that criterion** — and the failure would read as a copy problem
+when it is a three-layer plumbing problem. The shakedown bought that for the price of one pool.
+
+### The fix, as a proposal — this is product code and needs the founder's say-so
+
+Smallest version: have `outcome.ts` read the 409 body's `error` field and map
+`'pool closed to entries'` → `pool-closed` and `'already sealed'` → `seal-conflict`. That alone
+makes `COPY.tx.poolClosed` — *"This pool is no longer taking entries, so nothing settled. Open pools
+are listed on the Pools tab."* — reachable, which is true, unhedged, and already written.
+
+Larger version, if the founder wants the word **filled**: the ciphertext route would also have to
+say WHY the pool is closed, because a pool that filled and a pool that hit its deadline are both
+simply not `Open`. The route already holds the pool's state and could carry the entrant count.
+Worth doing only if "filled" is judged materially better for a player than "no longer taking
+entries" — that is a brand-voice call, not an architecture one.
 

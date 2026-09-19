@@ -1,76 +1,72 @@
-# STATE — 2026-09-19 18:40 UTC — by Claude Code
+# STATE — 2026-09-19 19:50 UTC — by Claude Code
 
-Phase:            **T6 is frozen against pool 23, which does not exist yet. Pool 22 is running as a
-                  shakedown.** Both calls are the founder's, ratified 2026-09-19.
-Waiting on:       **the founder (§F-32): 8 SOL from UI-B to the funder, and the T6 freeze PR
-                  merged.** I do not spend a lamport until that merge lands.
-Blocked:          T3 on Q6 (admin signing) · T7 on Q7 (reviewer key).
-Results so far:   T1 **PASS** · T4 **PASS** · T5 **PASS** · T2 **SPOILED** · **T2R PASS (7 of 8)**
-Money:            funder **0.339339200** — not enough for T6, hence the ask. 72 wallets at ~0.15
-                  each (one entry apiece). UI-A 10.568905266 · UI-B 11.673357239.
+Phase:            **Pool 22 shakedown DONE and it found a real product fault.** T6 is frozen against
+                  pool 23 and ready to run.
+Waiting on:       **the founder (§F-33): three rulings — may I fix the refusal copy, do you want the
+                  word "filled", and a free devnet RPC URL.**
+Blocked:          T6 on the RPC (§F-33 ruling 3) · T3 on Q6 (admin signing) · T7 on Q7 (reviewer key).
+Results so far:   T1 **PASS** · T4 **PASS** · T5 **PASS** · T2 **SPOILED** · T2R **PASS (7 of 8)**
+                  pool 22 = observation, not a test
+Money:            funder **10.339339200** · W00 holds **4.041117840** (pool 22's pot, back in the
+                  roster) · UI-A 10.568905266 · UI-B 11.673357239 (unchanged — it was charged
+                  nothing at all)
 
-## What is running right now
+## T6 is frozen, and the freeze holds BY CONSTRUCTION
 
-```
-pool 22  CDKBFm2DybDUrkYhZzDXpPExoL3PU2EJbcBD1JboPaF7
-         Open · 1 of 64 · deadline 2026-09-20T01:27Z · seat 0 = UI-A
-```
+PR 156 merged **19:11:28Z**. At **19:13Z** the highest pool id in existence was **22** — pool 23 did
+not exist. And it could not have: pool 23 is created minutes after pool 22 seals, pool 22 could only
+seal on an entry that was ours to send, and the fill was held until the merge landed. Seventy-eight
+seconds separate them. `registry/T6.freeze.json` carries the merge commit, the plan hash
+(`e6595def…1297`, identical at the merge commit and on disk) and the corroboration.
 
-Pool 22 **cannot be a test** — UI-A entered it before any prediction for it was written, so a plan
-frozen now would postdate the pool's first entry. It runs as an **observation** instead
-(`registry/pool-22.observation.md`), which claims nothing and grades nothing. Its job is to find out
-whether the oversubscription mechanics work *before* a frozen prediction is spent on them.
+T2R holds the same standard only because a retry was forced. T6 holds it on purpose.
 
-## T6 is frozen, and frozen to the strongest standard available
+## Pool 22 — settled clean, and the finding is in the copy layer
 
-`registry/T6.plan.json` predicts **pool 23**, which opens roughly five minutes after pool 22 seals.
-The plan is written and validated; the freeze PR goes up with this commit. **Nothing gets filled
-until the founder merges it**, because the whole value of the artifact is that it predates its pool.
+64 seats, `Paid`. **Nine seconds from seal to payout** (reveal 19:36:07, commit 19:36:08, pay
+19:36:10) against T6's 120-second threshold — and unlike the fill time, that number is the daemon's
+own work and is not contaminated by the RPC. W00 took rank 1 and the whole 4 SOL. Per-seat cost came
+out at exactly **4441080**, confirming §H20's lower band on a third pool and exercising the §H23
+formula on a PAID seat — the case the old subtraction got wrong.
 
-Roles, ratified by the founder: **UI-A enters pool 23 early as one of the 64; UI-B arrives late and
-is refused.** The manual's T6 line ("UI-A and UI-B early, then wait") was written for a three-account
-roster and cannot be satisfied with two — if both enter early there is nobody to be refused, and the
-refusal is what T6 exists to check.
+### THE FINDING — T6 would fail its copy criterion today
 
-What T6 claims, and the split between the two kinds of claim:
+The founder played the full 90 seconds and submitted into a pool that had already scored. They were
+refused, charged **nothing at all** (balance unchanged to the last digit — not even a network fee),
+and shown a sentence rather than a spinner. All of that is right.
 
-| unconditional — from the program text and the shapes | conditional — on the exact allocations |
-|---|---|
-| 64 entrants, 9 refusals, every one **`PoolNotOpen` (6000)** | the results root and leaf order |
-| a refused wallet moves no lamports beyond the fee | every exact score and field rank |
-| **W00** takes rank 1 and the whole 4 SOL pot | UI-A's exact rank (a range, 2..63, is claimed) |
-| **W01** is last; UI-A is paid nothing | |
+But the sentence **hedges between two causes the server had already told the client apart**:
 
-**6000, not 6010, and this is read off the branch rather than remembered.** `register.rs` checks
-`pool.state == Open` **before** `entrants < CAPACITY`, and the 64th entry seals the pool — so the
-65th fails the state gate and never reaches the capacity gate. Anchor numbers the enum from 6000 in
-declaration order and `PoolNotOpen` is declared first.
+| layer | what happens | why it is individually reasonable |
+|---|---|---|
+| `submit.ts` | ciphertext posts BEFORE the register, so a late entrant is refused at the seal step and never reaches the chain | a paid entry with no ciphertext is the worse failure |
+| `errors.ts` | `COPY.tx.poolFull` maps from 6010 `PoolFull`, which **can never fire** — `register.rs` checks state (6000) before capacity | the gate order is correct; T6's own plan derives it |
+| `outcome.ts:110` | branches on stage + status only, never reads the 409 body — so `pool closed to entries` and `already sealed` collapse into one hedged message | both really were one case until PR 147 |
 
-## §H23 — the per-seat check I wrote yesterday only worked on a pool that refunded
+**The server knew. The app owns the right sentence. The wiring loses it.** `COPY.tx.poolFull` —
+*"This pool filled before your entry reached it"* — is T6's pass criterion almost verbatim and has
+never been shown to anybody.
 
-`checkPerSeatCost` computed `startingBalance − balanceAfter`. Right for a refunded seat, wrong for
-every seat in a pool that pays — the entry does not come back and the winner is paid on top. It
-would have reported the T5 winner's sunk cost as about **−3.9 SOL**. T2R refunded, so the one pool it
-ever ran on was the single case where the naive subtraction happens to be right. §H9's family again.
+Fix proposed in §F-33 and awaiting a ruling: it is product code, so it is the founder's call.
 
-Fixed, and **proven on real T5 data in both directions**: the two-band prediction matches **62 of
-62** headless seats exactly, the single figure T5 actually froze fails on 62 of 62, and a
-deliberately wrong band fails on 54 — §H20's own number arriving from the other side. So T6's
-per-seat figures are a re-test of something measured, not a fresh guess.
+## The RPC mistake, and what it costs
 
-Two smaller things went in with it: `perSeatSunkLamports` may now be `{seats0to9, seats10plus}`
-because the cost genuinely is two numbers, and a plan may name wallets it does **not** predict
-(`perSeatSunkExcludes`) with the reason, printed rather than silently skipped. T6 excludes UI-A —
-the founder's wallet is not funded by `fan-out`, so its starting balance is not ours to declare.
+The pool 22 fill took five runs — about fifteen seats per run, then `block height exceeded`, with
+pacing perfectly steady at eight slots per seat right up to each failure. A service degrading under
+load slows down first; a throttle does not. `MANUAL.md` §4.3 said to use a dedicated devnet RPC and
+that the public endpoint would mean *"measuring the RPC, not the app"*. I used the public endpoint.
 
-## A false claim was sitting in a committed evidence file
+Cost here: nothing — four wallets sealed-then-failed and **all four retried and landed**. Cost to
+T6: its **fill-under-5-minutes criterion is unmeasurable** on this endpoint (62 seats took 5m20s).
+**T6 needs a free RPC URL from the founder before it runs.**
 
-Regenerating T2R's reconcile found that the committed `registry/T2R.reconcile.md` had been written
-**during** yesterday's both-directions probe, with the plan temporarily altered, and committed in
-that state. It read `UNFROZEN — the prediction cannot be shown to predate the outcome` about the
-best freeze in this whole test. T2R was frozen correctly — PR 151 merged 23:47:18Z, pool 21 created
-01:21:29Z — and the file now reads `Freeze: OK`. T2R's verdict is unchanged: `RESULT: FAIL` on the
-per-seat criterion, which remains honest.
+## The seal gate refused in BOTH directions, on live traffic
+
+Unplanned, and better evidence than anything designed for it. W14, W29, W43 and W57 sealed and then
+had their register expire, held no `Entry`, were **allowed** to re-seal, and all four landed. W43
+through W56, already registered, were **refused** `409 already sealed` when a later sweep tried to
+overwrite them — fourteen paid seats protected. Only the allowing half had been shown live before.
+**W43 did both by itself**: burnt, retried, landed, then correctly refused.
 
 ---
 

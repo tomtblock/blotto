@@ -14,6 +14,12 @@ open item in the report; CI refuses the default branch otherwise.
 | T7 | Same device → review | — | not started | — | — | — | — |
 | T8 | Verify page + non-founder recompute | — | not started | — | — | — | — |
 
+**Pool 22 settled `Paid` at 64 seats, nine seconds from seal to payout, with W00 taking the whole
+4 SOL.** Its one finding is a product one and is recorded in the observation, not here: the late
+entrant is refused correctly and charged nothing at all, but is shown a message that hedges between
+two causes the server had already told the client apart. **T6's copy criterion would fail against
+the product as it stands** — see `registry/pool-22.observation.md` §Observation 4.
+
 **Pool 22 is not in this table, on purpose.** It is running as a shakedown for T6's failure path and
 is recorded as an observation (`registry/pool-22.observation.md`), not a test: UI-A entered it before
 any prediction for it was written, so nothing frozen from here could predate it. It claims nothing.

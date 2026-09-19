@@ -7,7 +7,7 @@
   "fill_deadline": "1789867686",
   "timer_seconds": 15,
   "state": "Open",
-  "entrants": 58,
+  "entrants": 63,
   "sealing_pubkey": "7bef4d32c92c943251e85895e2add14e8e836bfa72cd6f7bc3653893215be94d",
   "results_root": null,
   "secret": null,
@@ -16,5 +16,5 @@
   "resolving_until": null,
   "min_seats": 40,
   "outcome_if_deadline_now": "seal",
-  "server_time": "1789845453"
+  "server_time": "1789846559"
 }
