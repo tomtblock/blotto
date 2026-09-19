@@ -79,6 +79,7 @@ const ALL_MIGRATIONS = [
   '0021_detection_reports.sql',
   '0022_drop_go_deadline.sql',
   '0023_notify_pool_optin.sql',
+  '0024_complaints.sql',
 ];
 
 describe('the re-derive marker, against the real migrations (audit E-15)', () => {
@@ -101,6 +102,10 @@ describe('the re-derive marker, against the real migrations (audit E-15)', () =>
       // Notify v2 (§F): a new table the packet service owns, fed by signed
       // opt-ins rather than the ledger. Nothing derived is touched.
       '0023_notify_pool_optin.sql',
+      // The complaints record (2026-09-19): a new append-only table the
+      // review service owns, fed by player submissions rather than the
+      // ledger. Nothing derived is touched.
+      '0024_complaints.sql',
     ]) {
       expect(declaresRederive(migrationSql(file)), file).to.equal(false);
     }

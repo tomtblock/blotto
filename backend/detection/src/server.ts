@@ -10,6 +10,13 @@
  *                    | 400 / 401 / 409 / 429 / 502
  *   POST /appeals    { pool, player, grounds, signedAt, signature }
  *                    → 204 | 400 / 401 / 409       (player-signed)
+ *   POST /complaints { reference, category, wallet?, pool?, text,
+ *                      signedAt?, signature? }
+ *                    → 204 | 400 / 401 / 409 / 503 (signed for a decision or
+ *                      a payment; unsigned allowed otherwise, so a player
+ *                      locked out of their wallet can still reach us)
+ *   GET  /complaints?ref=<BC-XXXXXXXX>[&wallet=<wallet>]
+ *                    → the complaint's derived status | 404
  *   GET  /decisions?pool=<pda>[&player=<wallet>]  → { decisions }
  *   GET  /appeals?pool=<pda>&player=<wallet>      → the entry's appeal state
  *   GET  /pending?pool=<pda>   → upheld forfeits whose chain instruction has
@@ -109,6 +116,19 @@ import {
 } from './appeals';
 import { reviewSubmissionRefusal, type ReviewerRegistry } from './auth';
 import {
+  COMPLAINT_CATEGORY_KEYS,
+  COMPLAINT_TEXT_MAX,
+  complaintRuleRefusal,
+  complaintSignatureRefusal,
+  complaintStatus,
+  lodgedRow,
+  mayReadComplaint,
+  type ComplaintCategory,
+  type ComplaintStore,
+  type ComplaintSubmission,
+} from './complaints';
+import { COMPLAINT_REFERENCE_PATTERN } from './complaint-message';
+import {
   DEFAULT_REVIEWER_BUDGET,
   budgetRetryAfterSeconds,
   budgetWindowStart,
@@ -150,6 +170,12 @@ export interface ReviewServerDeps {
   budget?: ReviewerBudget;
   /** The detection report surface (A-18). Absent ⇒ `/detection` is 503. */
   reports?: DetectionReportStore;
+  /**
+   * The complaints record (2026-09-19). Absent ⇒ both `/complaints` routes
+   * answer 503 `not_configured`, which the form renders as its own distinct
+   * state — an absent service must never look like a refused complaint.
+   */
+  complaints?: ComplaintStore;
   /** Shared operator secret for `/detection`. Absent/empty ⇒ 503, fail-closed. */
   operatorToken?: string;
   /**
@@ -218,6 +244,54 @@ function parseAppeal(body: unknown): AppealSubmission | null {
     grounds: b.grounds,
     signedAt: b.signedAt,
     signature: b.signature,
+  };
+}
+
+/**
+ * Parse a complaint submission. Shape only — the RULES (which categories
+ * need a signature, whether the reference is free) are `complaints.ts`, and
+ * the signature is checked after this.
+ *
+ * An absent `wallet`, `pool`, `signedAt` or `signature` is legitimate: those
+ * four are what an unsigned submission omits. A PRESENT one must be
+ * well-formed, so a garbled address cannot be stored as though it were
+ * proven.
+ */
+function parseComplaint(body: unknown): ComplaintSubmission | null {
+  const b = body as Record<string, unknown>;
+  if (
+    !b ||
+    typeof b.reference !== 'string' ||
+    !COMPLAINT_REFERENCE_PATTERN.test(b.reference) ||
+    typeof b.category !== 'string' ||
+    !COMPLAINT_CATEGORY_KEYS.includes(b.category as ComplaintCategory) ||
+    typeof b.text !== 'string' ||
+    b.text.trim().length === 0 ||
+    b.text.length > COMPLAINT_TEXT_MAX
+  ) {
+    return null;
+  }
+  const optionalString = (v: unknown, pattern?: RegExp): string | null | undefined => {
+    if (v === undefined || v === null || v === '') return null;
+    if (typeof v !== 'string') return undefined;
+    if (pattern && !pattern.test(v)) return undefined;
+    return v;
+  };
+  const wallet = optionalString(b.wallet, B58);
+  const pool = optionalString(b.pool, B58);
+  const signedAt = optionalString(b.signedAt);
+  const signature = optionalString(b.signature);
+  if (wallet === undefined || pool === undefined || signedAt === undefined || signature === undefined) {
+    return null;
+  }
+  return {
+    reference: b.reference,
+    category: b.category as ComplaintCategory,
+    wallet,
+    pool,
+    text: b.text,
+    signedAt,
+    signature,
   };
 }
 
@@ -431,6 +505,77 @@ export async function handleReviewRoute(
     );
   }
 
+  if (route === '/complaints' && method === 'GET') {
+    // The player's handle on their own complaint. Every refusal is the SAME
+    // 404: "wrong wallet" would confirm the reference exists, and a
+    // reference is guessable in a way a pool PDA is not.
+    if (!deps.complaints) return line({ status: 503, body: { error: 'not_configured' } });
+    const q = new URLSearchParams(queryString ?? '');
+    const reference = q.get('ref');
+    if (!reference || !COMPLAINT_REFERENCE_PATTERN.test(reference)) {
+      return line({ status: 400, body: { error: 'ref' } });
+    }
+    const wallet = q.get('wallet');
+    if (wallet !== null && !B58.test(wallet)) return line({ status: 400, body: { error: 'wallet' } });
+    const thread = await deps.complaints.listFor(reference);
+    const status = mayReadComplaint(thread, wallet) ? complaintStatus(thread) : null;
+    if (status === null) {
+      return line({ status: 404, body: { error: 'not_found' } }, { reference });
+    }
+    return line({ status: 200, body: status }, { reference, complaintStatus: status.status });
+  }
+
+  if (route === '/complaints' && method === 'POST') {
+    // An ABSENT store is 503 `not_configured`, never a refusal: the form
+    // renders the two as different states on purpose, because "we did not
+    // receive your complaint" and "we refused your complaint" are different
+    // statements and a player must not be told the second when the first is
+    // true (the C-04 lesson, applied before it can bite).
+    if (!deps.complaints) return line({ status: 503, body: { error: 'not_configured' } });
+    const complaint = parseComplaint(body);
+    if (!complaint) return line({ status: 400, body: { error: 'malformed' } });
+    const now = deps.now ?? Date.now;
+
+    const signatureRefusal = complaintSignatureRefusal(complaint, now());
+    if (signatureRefusal !== null) {
+      // D-33's reasoning, same as the appeal route: a device clock a few
+      // minutes out is the complainant's to fix and they cannot fix it if we
+      // call it a bad signature. Nothing leaks — they signed with their own
+      // key over a message naming their own wallet.
+      const cause =
+        signatureRefusal === 'clock_skew' || signatureRefusal === 'bad_timestamp'
+          ? 'clock_skew'
+          : 'signature';
+      return line(
+        { status: 401, body: { error: 'unauthorized', reason: cause } },
+        { reference: complaint.reference, refusal: signatureRefusal }
+      );
+    }
+
+    const existing = await deps.complaints.listFor(complaint.reference);
+    const ruleRefusal = complaintRuleRefusal(complaint, existing);
+    if (ruleRefusal !== null) {
+      // `malformed` is a 400 wherever it is discovered; the other two are
+      // rule refusals for a submission whose shape and signature are fine.
+      const status = ruleRefusal === 'malformed' ? 400 : 409;
+      return line(
+        { status, body: { error: ruleRefusal } },
+        { reference: complaint.reference, refusal: ruleRefusal }
+      );
+    }
+
+    await deps.complaints.append(lodgedRow(complaint, new Date(now()).toISOString()));
+    return line(
+      { status: 204, body: null },
+      {
+        reference: complaint.reference,
+        category: complaint.category,
+        // Whether it was signed, never the signature itself or the text.
+        signed: complaint.signature !== null && complaint.signature !== undefined,
+      }
+    );
+  }
+
   if (route === '/decisions' && method === 'POST') {
     const decision = parseDecision(body);
     if (!decision) return line({ status: 400, body: { error: 'malformed' } });
@@ -588,7 +733,13 @@ export async function handleReviewRoute(
     return line({ status: 204, body: null }, { ...where, outcome: 'applied' });
   }
 
-  if (route === '/decisions' || route === '/appeals' || route === '/pending' || route === '/detection') {
+  if (
+    route === '/decisions' ||
+    route === '/appeals' ||
+    route === '/pending' ||
+    route === '/detection' ||
+    route === '/complaints'
+  ) {
     return line({ status: 405, body: { error: 'method' } });
   }
   return line({ status: 404, body: { error: 'not found' } });

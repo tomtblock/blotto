@@ -14,6 +14,9 @@
  * phrasing may change, with the substance intact.
  */
 
+import { PRIVACY } from './privacy';
+import { TERMS } from './terms';
+
 export const COPY = {
   shell: {
     title: 'Blotto Cup',
@@ -200,7 +203,7 @@ export const COPY = {
       'timed-out':
         'Your wallet did not answer. Open it, check for a pending request, and try again.',
       refused:
-        'The confirmation was not accepted. Nothing was recorded — please try again, and tell us if it keeps happening.',
+        'The confirmation was not accepted. Nothing was recorded \u2014 please try again, and tell us through /complaints if it keeps happening.',
       unreachable:
         'The confirmation could not be recorded. Check your connection and try again.',
     } as const,
@@ -216,7 +219,7 @@ export const COPY = {
     poolMissing: 'No tournament with this address is listed. It may have closed, or the link may be old.',
     poolLoadFailedTitle: 'The pool could not be loaded',
     poolLoadFailed:
-      'The tournament data did not arrive. Try again; if it keeps happening, tell us the web address you opened the site from.',
+      'The tournament data did not arrive. Try again; if it keeps happening, tell us through /complaints \u2014 include the web address you opened the site from.',
     poolLoadRetry: 'Try again',
     // 2026-09-09: the entry page checks the pool's state and this wallet's
     // existing entry BEFORE the ninety seconds start. PHASE-N-REVIEW.
@@ -565,7 +568,7 @@ export const COPY = {
     // is the wrong explanation. This one is true for both cases and stays
     // generic (PID §8: the refusal gives no reason). Proposal until ratified.
     entryRefused:
-      "This entry was not accepted, so nothing was signed and nothing was charged this time. Trying again will not change the answer. If this wallet already made one attempt at this pool, that attempt is the one that stands — the pool page shows whether a seat was taken, and you can ask us about your own entry.",
+      'This entry was not accepted, so nothing was signed and nothing was charged this time. Trying again will not change the answer. If this wallet already made one attempt at this pool, that attempt is the one that stands \u2014 the pool page shows whether a seat was taken, and you can ask us about your own entry through /complaints.',
   },
   battle: {
     screenOf: (k: number) => `Battle ${k} of 7`,
@@ -765,52 +768,35 @@ export const COPY = {
     // The held-row label (was a raw string in results-reveal.tsx until
     // Stage E — every user-facing string lives here).
     heldForReview: 'held for review',
-    // Phase 2 Stage E: the appeal route. Substance is the rules page's own
-    // sentences (7 days to lodge, a different reviewer, a further 7 days,
-    // an upheld appeal after payment honoured from our own funds); wording
-    // is a draft pending founder voice review like every line in this file.
-    appeal: {
-      title: 'Appeal this decision',
+    /*
+     * CHALLENGING A DECISION (2026-09-19; was `appeal` from Phase 2 Stage E).
+     *
+     * WHY THE RENAME. The appeal route published a promise it could not
+     * keep: "the appeal is decided by a different reviewer within a further
+     * 7 days", while the founder-owned reviewer registry holds one person,
+     * so no appeal could be decided at all (audit O24). The named-reviewer
+     * apparatus is out of the player-facing product — Blotto Cup is the
+     * reviewer of record, a human still decides — and a challenge goes
+     * through the complaints route, where a person reads it and answers
+     * within the published windows (COPY.complaints).
+     *
+     * The form itself is `complaints/complaint-form.tsx`, so the outcome
+     * states, the signed submission and the failure wording live in
+     * COPY.complaints and are not duplicated here. These two strings are
+     * what the results page adds around it.
+     *
+     * NO LODGE DEADLINE IS PUBLISHED. The old sentence gave seven days from
+     * being notified; the complaints route imposes no deadline, and
+     * publishing one the route does not enforce is exactly the defect the
+     * claims register exists to catch. A challenge is open for as long as we
+     * can do anything about it.
+     *
+     * PHASE-N-REVIEW: drafts pending the founder's voice.
+     */
+    challenge: {
+      title: 'Challenge this decision',
       note:
-        'A reviewer upheld a flag against your entry and your prize passed to the next eligible player. You may appeal within 7 days. A different reviewer decides the appeal within a further 7 days, and every decision is published in the signed log. If your appeal succeeds, we pay you the full prize ourselves.',
-      groundsLabel: 'Your grounds',
-      // 2026-09-16 (the founder's data-minimisation ruling of 2026-09-15):
-      // the grounds are published in the signed log, permanently, and the
-      // form did not say so. The interim is this line; keeping the text
-      // private to reviewers is designed and deferred. PHASE-N-REVIEW:
-      // wording is a proposal pending the founder's voice.
-      groundsPublicNote:
-        'What you write here is published in the signed decision log and cannot be withdrawn. Do not include personal details.',
-      windowNote: (until: string) => `Appeals close ${until ? `at ${until}` : 'seven days after the decision'}. Your wallet signs the appeal; nothing else is submitted.`,
-      submit: 'Sign and lodge the appeal',
-      lodgedOn: (at: string) => `Your appeal was lodged at ${at}. A different reviewer will decide it within 7 days; the decision is published in the signed log.`,
-      upheld: 'Your appeal was upheld. We pay you the full prize ourselves.',
-      dismissed: 'Your appeal was dismissed. The decision and its reason are in the signed log.',
-      // The honest failure states (audit 2026-09-11, C-04). Until 2026-09-12
-      // a review service that was unset, unreachable or answering badly
-      // rendered NOTHING here — no heading, no note, no control — while the
-      // rules page promised a seven-day window. The viewer is known to be
-      // the forfeited wallet from on-chain data before this renders, so
-      // saying so is safe. PHASE-N-REVIEW: wording pending the founder's voice.
-      unreachable:
-        'The review service could not be reached, so your appeal position cannot be shown right now. Your appeal window is unaffected — try again in a moment.',
-      retry: 'Try again',
-      outcome: {
-        lodged: 'Lodged.',
-        not_configured: 'The review service is not configured in this build.',
-        cannot_sign: 'This wallet cannot sign messages, and an appeal must be wallet-signed.',
-        declined: 'Signing was declined. Nothing was submitted.',
-        refused: 'The signature did not verify as this entry’s wallet.',
-        // D-33: a fixable local condition, said plainly, with the one
-        // reassurance that matters to someone watching a deadline.
-        // PHASE-N-REVIEW: drafted, founder may re-voice.
-        clock_skew:
-          'Your device’s clock is out of step with the service. Check the time on your device and try again; your appeal window is unaffected.',
-        window_closed: 'The appeal window for this decision has closed.',
-        already_lodged: 'An appeal is already lodged for this entry.',
-        nothing_to_appeal: 'There is no upheld flag on this entry to appeal.',
-        failed: 'The review service did not accept the appeal. Try again.',
-      } as Record<string, string>,
+        'A flag against your entry was upheld and your prize passed to the next eligible player. You can challenge that decision here. A person reads it, decides it against the published criteria, and the decision and the criterion cited are recorded. If a challenge succeeds after the prize has gone to another player, we pay you the full prize ourselves.',
     },
     // No denominator: a pool runs with MIN_SEATS..64 players (R7-b, which
     // superseded D-E4's 52 on 2026-09-12) and the career
@@ -870,6 +856,117 @@ export const COPY = {
       hide: 'Hide the battles',
     },
   },
+  /*
+   * THE COMPLAINTS ROUTE (2026-09-19). The way a player contests anything —
+   * a decision, a payment, the site, their data — and the route the terms
+   * and the privacy notice both point at.
+   *
+   * It replaces the appeal panel as the way to challenge a decision. The
+   * named-reviewer apparatus is out of the player-facing product: Blotto Cup
+   * is the reviewer of record, a human still decides, and this is how a
+   * player asks for that decision to be looked at again.
+   *
+   * THE TWO WINDOWS ARE FUNCTIONS OF THE CONSTANTS, never typed figures
+   * (COMPLAINT_ACKNOWLEDGE_WORKING_DAYS / COMPLAINT_RESOLVE_DAYS in
+   * backend/detection/src/complaints.ts), for the reason every number on a
+   * player-facing surface is: on 2026-09-12 a constant moved and three
+   * hand-typed strings kept the old figure while every gate reported clean.
+   *
+   * PHASE-N-REVIEW: every string here is a draft. Brand voice is
+   * founder-reserved, and the two response windows are a PROPOSAL awaiting
+   * ratification — five working days to acknowledge and thirty days to
+   * resolve are windows one person can meet while a pool is running, and a
+   * window we miss is worse than one we never published.
+   */
+  /*
+   * The founder-owned operator identity (config/operator.json), rendered by
+   * the terms and the privacy notice. No company exists yet, so every value
+   * is null and both pages print the line below — never a placeholder that
+   * reads as real. Same rule, and the same reason, as the custody page's
+   * "not yet set" (app/src/app/custody/custody.config.ts).
+   */
+  operator: {
+    notYetSet: 'not yet set',
+  },
+  /*
+   * THE TWO DOCUMENTS (2026-09-19), in their own modules because each is
+   * long enough to read on its own and both are drafted against
+   * 01_PRODUCT_FACTS. Exported through here so the one-place rule holds and
+   * so the language gate and the published-numbers gate scan them.
+   */
+  terms: TERMS,
+  privacy: PRIVACY,
+  complaints: {
+    title: 'Complaints',
+    /** The FORM's own heading. The page title is already "Complaints", and
+     * the same word twice down the page reads as a mistake. */
+    formTitle: 'Send a complaint',
+    intro:
+      'If something has gone wrong — a decision you want looked at again, a payment that did not arrive, a problem with the site, or anything about your own data — this is the route. A person reads every complaint.',
+    categoryLabel: 'What is this about?',
+    categories: {
+      decision: 'A decision I want challenged',
+      payment: 'A payment problem',
+      site: 'A problem with the site',
+      data_protection: 'Data protection',
+      other: 'Something else',
+    },
+    /** Which categories need a wallet signature, and why. */
+    signatureNote:
+      'Challenging a decision or reporting a payment problem asks us to change an outcome, so your wallet signs the complaint — that is what proves you control the address it concerns. Everything else can be sent without a signature, so you can still reach us if you cannot get into your wallet.',
+    signatureNeeded: 'Your wallet will be asked to sign this.',
+    signatureNotNeeded: 'No signature needed for this.',
+    textLabel: 'What happened',
+    textPlaceholder: 'What happened, and what you would like us to do.',
+    poolLabel: 'Which tournament (optional)',
+    submit: 'Send this complaint',
+    submitting: 'Sending…',
+    /** The published undertaking. Both figures come from the constants. */
+    windows: (acknowledgeWorkingDays: number, resolveDays: number) =>
+      `We will acknowledge your complaint within ${acknowledgeWorkingDays} working days and answer it within ${resolveDays} days. A person reads it; no software decides a complaint.`,
+    publishedNote:
+      'What you write here is not published. It is kept with the complaint, and a decision about a held prize is recorded in the signed decision log either way.',
+    referenceLabel: 'Your reference',
+    referenceKeep: (reference: string) =>
+      `Keep this reference: ${reference}. It is how you ask us about this complaint, and for a signed complaint it is the wallet that signed it that can read the status.`,
+    statusTitle: 'Check a complaint',
+    statusIntro: 'Already sent one? Enter your reference to see where it is.',
+    statusRefLabel: 'Reference',
+    statusSubmit: 'Check',
+    statusStates: {
+      received: 'Received. Nobody has answered it yet.',
+      acknowledged: 'Acknowledged. A person is looking at it.',
+      resolved: 'Answered.',
+    },
+    statusSignedYes: 'This complaint was signed by your wallet.',
+    statusSignedNo: 'This complaint was sent without a signature.',
+    statusNotFound:
+      'No complaint matches that reference for this wallet. Check the reference; a signed complaint can only be read by the wallet that signed it.',
+    /** One line per ending of a submission. Each says what to do next. */
+    outcome: {
+      submitted: 'Sent.',
+      not_configured:
+        'The complaints service is not configured in this build, so nothing was sent. Nothing about your entry or your prize is affected.',
+      unreachable:
+        'The complaints service could not be reached, so nothing was sent. Try again in a moment — your complaint has not been refused.',
+      signature_required:
+        'This kind of complaint is signed by the wallet it concerns. Sign in with that wallet and send it again, or choose \u201cSomething else\u201d to reach us without a signature.',
+      cannot_sign:
+        'This wallet cannot sign messages. Choose \u201cSomething else\u201d to send it without a signature, and say which address it is about.',
+      declined: 'Signing was declined, so nothing was sent.',
+      clock_skew:
+        'Your device\u2019s clock is out of step with the service, so the signature was not accepted. Check the time on your device and send it again.',
+      refused: 'The signature did not verify as this wallet\u2019s.',
+      already_lodged: 'That reference is already on the record. Nothing was sent twice.',
+      too_long: 'Write something first, and keep it under the length the form allows.',
+      /** PHASE-N-REVIEW: says whose fault it is, because it is ours, and
+       * names the route that does work rather than leaving the player to
+       * guess. It must not read as a refusal or as a length problem — the
+       * complaint was neither considered nor too long. */
+      not_accepted:
+        'The complaints service would not accept this complaint as sent, so nothing was sent — and nothing about your entry or your prize is affected. This is a fault at our end, not in what you wrote. Send it from the complaints page, where nothing is filled in for you.',
+    } as Record<string, string>,
+  },
   verify: {
     title: 'Verify a pool',
     explainer:
@@ -902,7 +999,7 @@ export const COPY = {
     // cannot supply it. PHASE-N-REVIEW: drafted, founder may re-voice.
     bundleUriFound: 'Bundle address filled in from the published archive.',
     bundleUriUnavailable:
-      'We could not supply this pool’s bundle address. That happens when the published bundle has not been verified against the on-chain commitment — which is exactly when checking it yourself matters most. The address is in the pool’s own publication record on the gateway, and we will give it to you on request.',
+      'We could not supply this pool\u2019s bundle address. That happens when the published bundle has not been verified against the on-chain commitment \u2014 which is exactly when checking it yourself matters most. The address is in the pool\u2019s own publication record on the gateway, and we will give it to you on request through /complaints.',
   },
   profile: {
     title: 'Your career',
@@ -1010,12 +1107,25 @@ export const COPY = {
         can: 'Pay to publish each pool’s reveal bundle to permanent storage.',
         cannot: 'Alter results. The published bundle is checkable against the on-chain commitment by anyone.',
       },
-      reviewers: {
-        name: 'Reviewer wallets',
-        holderNote: 'Listed in the published reviewer configuration',
+      /*
+       * RENAMED 2026-09-19, from `reviewers` / "Reviewer wallets". The
+       * named-reviewer apparatus is out of the player-facing product:
+       * Blotto Cup is the reviewer of record and a person still decides.
+       * The founder-owned key list (`config/reviewers.json`) is UNCHANGED
+       * and still gates the admin surfaces — what changed is that a player
+       * is no longer pointed at it, because a registry of names was never
+       * a disclosure they could act on.
+       *
+       * The two limits are the load-bearing half and are kept word for
+       * word: the key cannot pay itself, and an upheld prize goes to the
+       * next eligible player and never to us.
+       */
+      decisionKey: {
+        name: 'Operator decision key',
+        holderNote: 'Held by Blotto Cup',
         can: 'Sign review decisions on flagged entries; every decision is recorded in a public, signed log.',
         cannot:
-          'Pay themselves. A review decision can only release a held prize to its entrant or record that the flag was upheld \u2014 an upheld prize is paid to the next eligible player, never to us.',
+          'Pay itself. A review decision can only release a held prize to its entrant or record that the flag was upheld \u2014 an upheld prize is paid to the next eligible player, never to us.',
       },
     },
   },
@@ -1164,16 +1274,45 @@ export const COPY = {
       // narrowed to what runs; it widens again when the capture lands.
       '(4) the same device behind multiple entries in one pool; ' +
       '(5) a score far outside the field’s distribution. ' +
-      'These signals are computed for every tournament and published with the review log. Nothing is flagged automatically: a flag is a decision by a named reviewer that an entry meets one of the criteria above, ' +
+      'These signals are computed for every tournament and published with the review log. Nothing is flagged automatically: a flag is a decision taken by a person that an entry meets one of the criteria above, ' +
       'and a flag never decides anything by itself \u2014 it only sends the entry to the signed review process below.',
-    // C10 + the founder's addendum of 2026-09-07 (ruling 1, wording
-    // verbatim): resolving, review and appeal. The published rule is 12
-    // hours; the program's seven-day release is the safeguard, not the rule.
+    /*
+     * C10 + the founder's addendum of 2026-09-07 (ruling 1): resolving,
+     * review and the route to contest a decision. The published rule is 12
+     * hours; the program's seven-day release is the safeguard, not the rule.
+     *
+     * REWRITTEN 2026-09-19 — THE NAMED REVIEWER IS OUT OF THE PRODUCT.
+     * Three sentences went, and each for the same reason: they described an
+     * apparatus rather than an undertaking, and the apparatus could not
+     * keep them.
+     *
+     *   "a named reviewer decides that flag" \u2192 "a person decides". The
+     *   decision is still a human one signed into the append-only log; who
+     *   that person is was never a player's business and naming the role
+     *   implied a panel that does not exist.
+     *
+     *   "the appeal is decided by a different reviewer within a further 7
+     *   days" \u2192 gone. The founder-owned registry holds one person, so no
+     *   appeal could be decided at all (audit O24), and the seven-day lodge
+     *   deadline is not published any more either: a challenge goes through
+     *   the complaints route, which imposes no deadline. Publishing a
+     *   window nothing enforces is the exact defect this file's claims
+     *   register exists to catch.
+     *
+     *   "published in a signed log naming the reviewer" \u2192 "recorded". The
+     *   log is still append-only and still signed; what is no longer
+     *   promised to a player is a name in it.
+     *
+     * What did NOT change, and must not (brief \u00a71.4): the 12-hour clock
+     * read from REVIEW_WINDOW_SECS, the seven-day permissionless release,
+     * the decision record, and the undertaking to pay a successful
+     * challenge ourselves without recovering a prize already paid.
+     */
     reviewProcess:
       'When a tournament closes, results are published and the tournament enters resolving. Resolving lasts up to 12 hours. ' +
-      'During resolving we check the winning wallet against published sanctions lists, as we are required to. Where an entry has been flagged against the integrity criteria published above, a named reviewer decides that flag against those criteria. A flagged prize is held by the program: it is not paid to us and it is not paid to anyone else while the review runs. ' +
+      'During resolving we check the winning wallet against published sanctions lists, as we are required to. Where an entry has been flagged against the integrity criteria published above, a person decides that flag against those criteria. A flagged prize is held by the program: it is not paid to us and it is not paid to anyone else while the review runs. ' +
       'If no decision is made within 12 hours, the flag is cleared and the prize is paid. Separately, and as a safeguard against our own failure, the program allows anyone at all to release a held prize to the player it belongs to after seven days, without our involvement. ' +
-      'You may appeal within 7 days of being notified, and the appeal is decided by a different reviewer within a further 7 days. Every decision is published in a signed log naming the reviewer, the time, and the criterion cited. If an appeal succeeds after the prize has been paid to another player, we pay the appealing player the full prize ourselves. We do not seek to recover a prize already paid.',
+      'You may challenge a decision through our complaints route, and we will tell you which criterion was cited. Every decision and the criterion cited are recorded. If a challenge succeeds after the prize has been paid to another player, we pay you the full prize ourselves and do not seek to recover a prize already paid.',
     fairPlayLink: 'What keeps this fair, and who may enter',
     headings: {
       howToEnter: 'How to enter',

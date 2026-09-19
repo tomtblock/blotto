@@ -159,7 +159,12 @@ describe('appeal state (pure, from one entry’s thread)', () => {
       signature: lodge.signature,
     });
     expect(lodgeRefusal(thread, new Date(T0 + 2 * DAY).toISOString())).to.equal('already_lodged');
-    expect(appealDecisionRefusal(thread, alice.wallet)).to.equal('same_reviewer');
+    // 2026-09-19: the upholding reviewer is no longer refused. The rule that
+    // refused them made a one-member registry unable to decide anything, so
+    // the right it protected could not be exercised by anyone (audit O24);
+    // who decides a challenge is now an undertaking in the terms, answered
+    // through the complaints route. Both members may decide.
+    expect(appealDecisionRefusal(thread, alice.wallet)).to.equal(null);
     expect(appealDecisionRefusal(thread, bob.wallet)).to.equal(null);
     expect(appealState(thread).decideBy).to.equal(new Date(T0 + DAY + 7 * DAY).toISOString());
     thread.push(reviewerRow(bob, 'appeal_dismissed', T0 + 3 * DAY, 'device log shows one hand'));
@@ -270,16 +275,19 @@ describe('POST /appeals and the appeal decisions', () => {
     expect((await handleReviewRoute(w.deps, 'PUT', '/appeals', null)).status).to.equal(405);
   });
 
-  it('the appeal is decided by a different reviewer; the upholding reviewer is refused; a non-member 401s', async () => {
+  it('any member may decide an open appeal once; a non-member 401s; a second decision 409s', async () => {
+    // REWRITTEN 2026-09-19. This case used to assert that the upholding
+    // reviewer was refused, on the published promise that "the appeal is
+    // decided by a different reviewer" — which the founder-owned registry
+    // could not keep, because it holds one person. With that limb gone, what
+    // must still hold is everything else: authentication, one decision per
+    // lodge, and no chain action.
     const w = world();
     await handleReviewRoute(w.deps, 'POST', '/decisions', reviewerRow(alice, 'forfeit', T0));
     w.now.t = T0 + DAY;
     expect((await handleReviewRoute(w.deps, 'POST', '/appeals', appealBody(player, w.now.t))).status).to.equal(204);
     w.now.t = T0 + 3 * DAY;
 
-    const same = await handleReviewRoute(w.deps, 'POST', '/decisions', reviewerRow(alice, 'appeal_upheld', w.now.t, 'on reflection'));
-    expect(same.status).to.equal(409);
-    expect(same.body).to.deep.equal({ error: 'same_reviewer' });
     const outsider = await handleReviewRoute(w.deps, 'POST', '/decisions', reviewerRow(stranger, 'appeal_upheld', w.now.t));
     expect(outsider.status).to.equal(401);
 
@@ -289,14 +297,25 @@ describe('POST /appeals and the appeal decisions', () => {
     const twice = await handleReviewRoute(w.deps, 'POST', '/decisions', reviewerRow(bob, 'appeal_dismissed', w.now.t + 1000));
     expect(twice.status).to.equal(409);
     expect(twice.body).to.deep.equal({ error: 'no_open_appeal' });
+  });
 
-    // With ONE member the appeal can be lodged but never decided — the
-    // registry blocker the service warns about at boot (audit O24).
+  it('a ONE-member registry can now decide, which is the whole point of the change', async () => {
+    // The blocker this closes (audit O24): with one member, the upholding
+    // reviewer WAS the only possible decider and was refused, so a lodged
+    // appeal could never be decided by anybody. The player-facing right is
+    // the complaints route now, and the log's own route no longer
+    // deadlocks.
     const solo = world([alice]);
     await handleReviewRoute(solo.deps, 'POST', '/decisions', reviewerRow(alice, 'forfeit', T0));
     solo.now.t = T0 + DAY;
     expect((await handleReviewRoute(solo.deps, 'POST', '/appeals', appealBody(player, solo.now.t))).status).to.equal(204);
-    expect((await handleReviewRoute(solo.deps, 'POST', '/decisions', reviewerRow(alice, 'appeal_dismissed', solo.now.t))).status).to.equal(409);
+    const decided = await handleReviewRoute(
+      solo.deps,
+      'POST',
+      '/decisions',
+      reviewerRow(alice, 'appeal_dismissed', solo.now.t)
+    );
+    expect(decided.status).to.equal(204);
   });
 
   it('every accepted row re-verifies from the log alone; a tampered or misattributed row does not', async () => {

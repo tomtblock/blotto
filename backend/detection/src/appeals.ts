@@ -1,10 +1,19 @@
 /**
- * The appeal route (Phase 2 Stage E) — the rules page's:
+ * The appeal route (Phase 2 Stage E), as the rules page published it until
+ * 2026-09-19:
  *
  *   "You may appeal within 7 days of being notified, and the appeal is
  *    decided by a different reviewer within a further 7 days. Every
  *    decision is published in a signed log naming the reviewer, the time,
  *    and the criterion cited."
+ *
+ * THAT SENTENCE IS NO LONGER PUBLISHED. The named reviewer came out of the
+ * player-facing product on 2026-09-19 and a player now challenges a
+ * decision through the complaints route. Everything below stays: the
+ * append-only log, the canonical signed messages, the lodge window and the
+ * per-entry rules are the operator's record of a challenge, and the rows
+ * already written must go on verifying. Only the `same_reviewer` limb is
+ * gone — see the decision bullet.
  *
  * Everything here is a PURE function over one entry's thread in the signed
  * log (`DecisionLog.listFor`), so the rules are unit-tested without a
@@ -20,11 +29,21 @@
  *     appellant's SIGNED timestamp (which must also be fresh against the
  *     server clock, like every other signed submission here).
  *   - One appeal per upheld flag. A second lodge is refused.
- *   - The decision: by a registry member who is NOT the reviewer whose
- *     forfeit is under appeal. The seven days to decide are RECORDED (the
- *     lodge and decision rows carry their times) rather than enforced by a
- *     timer — a late decision is still better than none, and the log shows
- *     it was late.
+ *   - The decision: by any registry member. It used to be refused to the
+ *     reviewer whose forfeit was under appeal, on the published promise that
+ *     "the appeal is decided by a different reviewer" — a promise the
+ *     founder-owned registry could not keep, because it holds one person, so
+ *     no appeal could be decided AT ALL (audit O24). That limb came out on
+ *     2026-09-19 when the named-reviewer apparatus left the player-facing
+ *     product: Blotto Cup is the reviewer of record, a human still decides,
+ *     and a player challenges a decision through the complaints route
+ *     (`complaints.ts`), where a decision on a challenge is taken by
+ *     someone other than whoever made the original one WHEREVER THAT IS
+ *     POSSIBLE — the terms' words, and an undertaking about who we ask
+ *     rather than a check a one-member registry fails. The seven days to
+ *     decide are RECORDED (the lodge and decision rows carry their times)
+ *     rather than enforced by a timer — a late decision is still better
+ *     than none, and the log shows it was late.
  *   - No chain action. The program has no un-forfeit; an upheld appeal is
  *     the operator's published undertaking to pay from its own funds.
  *
@@ -122,16 +141,32 @@ export function lodgeRefusal(thread: readonly Decision[], signedAt: string): Lod
   return null;
 }
 
-export type AppealDecisionRefusal = 'no_open_appeal' | 'same_reviewer';
+export type AppealDecisionRefusal = 'no_open_appeal';
 
-/** May `reviewer` decide the open appeal on this thread? */
+/**
+ * May the open appeal on this thread be decided?
+ *
+ * ONE RULE NOW: there has to be an open appeal. The `same_reviewer` limb —
+ * refusing the reviewer whose forfeit was under appeal — was removed on
+ * 2026-09-19 with the published promise it enforced. It made the registry's
+ * single member unable to decide anything, so the right it protected could
+ * not be exercised by anyone (audit O24), and a check that blocks the only
+ * available decider protects nobody. Who decides a challenge is now an
+ * undertaking in the terms ("someone other than whoever made the original
+ * one wherever that is possible") answered through the complaints route,
+ * where a person reads it.
+ *
+ * `reviewer` is still taken, and still unused, deliberately: the signature
+ * on the row identifies the decider either way, and the parameter keeps the
+ * call sites and the log's attribution honest about what is being asked.
+ */
 export function appealDecisionRefusal(
   thread: readonly Decision[],
-  reviewer: string
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- kept: see the doc above
+  reviewer?: string
 ): AppealDecisionRefusal | null {
   const s = appealState(thread);
   if (!s.lodged || s.decided) return 'no_open_appeal';
-  if (s.forfeit && s.forfeit.decidedBy === reviewer) return 'same_reviewer';
   return null;
 }
 

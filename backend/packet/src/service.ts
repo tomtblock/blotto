@@ -15,6 +15,7 @@
 
 import { encodePacket, type EntryPacketFields, type PacketSigner } from './packet';
 import { territoryAllowed, type TerritorySchedule } from './territories';
+import { walletAllowed, type WalletBlocklist } from './blocked-wallets';
 import type { AttestationStore } from './attestations';
 import { ALERT } from '../../_shared/src/metrics';
 import type { Monitor } from '../../_shared/src/monitor';
@@ -97,6 +98,14 @@ export interface SanctionsList {
 export interface PacketServiceConfig {
   /** The founder-owned schedule from `config/territories.json` (D-B3). */
   territories: TerritorySchedule;
+  /**
+   * The founder-owned wallet blocklist (2026-09-19), behind the terms
+   * clause "Refusing entry and withholding a prize". Consulted in
+   * `issuePacket` beside the territory and sanctions checks, and answering
+   * with the SAME generic rejection — a refused address learns nothing
+   * about which check refused it. Shipped empty.
+   */
+  blockedWallets: WalletBlocklist;
   /** R3: KYC stays off at launch — issued packets carry tier 0. */
   kycTier: number;
   /** Current terms version from `config/terms.json` (D-B4). */
@@ -323,6 +332,11 @@ export async function issuePacket(
     // is the second line, for a deployment that never called it.
     const regionOk = !regionRuleUnenforceable(deps.config.territories, geo);
     const vpnOk = !geo.vpnOrProxy;
+    // 2026-09-19: the founder's own list, distinct from the sanctions
+    // sources below — those answer about published lists; this is the terms
+    // clause's enumerated grounds, recorded per address in
+    // config/blocked-wallets.README.md.
+    const walletOk = walletAllowed(deps.config.blockedWallets, req.wallet);
     const screening = await screen(deps.sanctions, req.wallet, geo.country);
     const sanctioned = screening.listed;
     // D-B4: the durable, signature-verified clickwrap record replaces the
@@ -333,7 +347,7 @@ export async function issuePacket(
       attestation.attested18 === true &&
       attestation.termsVersion === deps.config.termsVersion;
 
-    if (!territoryOk || !regionOk || !vpnOk || sanctioned || !ageOk) {
+    if (!territoryOk || !regionOk || !vpnOk || !walletOk || sanctioned || !ageOk) {
       // Every failing check, not just the first — the caller still learns
       // nothing, and an operator chasing a stalled fill needs to know
       // whether it is the territory schedule or a missing attestation.
@@ -341,6 +355,7 @@ export async function issuePacket(
         territoryOk ? null : `territory(${geo.country}${geo.region ? `-${geo.region}` : ''})`,
         regionOk ? null : `region-unresolved(${geo.country})`,
         vpnOk ? null : 'vpn-or-proxy',
+        walletOk ? null : 'wallet-blocklist',
         sanctioned ? 'sanctions' : null,
         ageOk ? null : 'attestation-missing-or-stale',
       ].filter(Boolean);

@@ -3,6 +3,7 @@ export * from './packet';
 export * from './service';
 export * from './server';
 export * from './territories';
+export * from './blocked-wallets';
 export * from './geo-adapters';
 export * from './attestations';
 export * from './notify';

@@ -9,6 +9,7 @@ import { join } from 'path';
 import nacl from 'tweetnacl';
 import {
   DEFAULT_TERRITORY_SCHEDULE,
+  DEFAULT_WALLET_BLOCKLIST,
   GENERIC_REJECTION,
   LocalPacketSigner,
   MemoryAttestationStore,
@@ -53,7 +54,7 @@ function deps(store: MemoryAttestationStore, termsVersion = 1): PacketServiceDep
     sanctions: { isSanctioned: async () => false },
     signer: new LocalPacketSigner(new Uint8Array(32).fill(7)),
     attestations: store,
-    config: { territories: DEFAULT_TERRITORY_SCHEDULE, kycTier: 0, termsVersion, termsUpdated: '2026-09-06' },
+    config: { blockedWallets: DEFAULT_WALLET_BLOCKLIST, territories: DEFAULT_TERRITORY_SCHEDULE, kycTier: 0, termsVersion, termsUpdated: '2026-09-06' },
     now: () => 1_756_000_000n,
     nonce: () => 42n,
   };

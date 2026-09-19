@@ -90,11 +90,14 @@ export function custodyView(): CustodyView {
         cannot: k.irysUpload.cannot,
       },
       {
-        name: k.reviewers.name,
-        // The reviewer set lives in its own founder-owned file.
-        holder: k.reviewers.holderNote,
-        can: k.reviewers.can,
-        cannot: k.reviewers.cannot,
+        name: k.decisionKey.name,
+        // 2026-09-19: the row no longer points a player at the founder-owned
+        // key list. That file is unchanged and still gates the admin
+        // surfaces; a registry of names was never a disclosure a player
+        // could act on, and the two LIMITS below are what this row is for.
+        holder: k.decisionKey.holderNote,
+        can: k.decisionKey.can,
+        cannot: k.decisionKey.cannot,
       },
     ],
     updated: c.updated,
