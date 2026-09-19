@@ -50,19 +50,51 @@ opens the flow, touches nothing, and locks in all seven battles.
 | 64 | uniform | 3200 | 0.000% | 0.00% | 100.00% | 0.0000% |
 | 40 | uniform | 2000 | 0.000% | 0.00% | 100.00% | 0.0000% |
 
-**The claim here is stronger than a statistical one, and it should be read
-as the stronger claim.** A battle is won by taking three of the five stats.
-Against any opponent who concentrates on three, the flat split loses those
-three and takes only the two the opponent starved — so it loses that battle
-3–2 by construction, not on average. A player who leaves the default does
-not merely do worse than one who thinks: across every pool in this study, at
-both field sizes, they never place first and never take a lamport.
+**The part of this that is structural.** A battle is won by taking three of
+the five stats. Against any opponent who concentrates on three, the flat
+split loses those three and takes only the two the opponent starved — so it
+loses that battle 3–2 **by construction, not on average**. That holds for
+any three-stat opponent and needs no statistics.
 
-That is also precisely why these rows are kept OUT of the headline
-comparison above. Measuring "skill" against a shape that cannot win a battle
-would overstate the effect — the honest measure of skill is the spread
-between entrants who are all genuinely competing, which is what the headline
-table reports.
+**The part of this that is about THIS population, corrected 2026-09-19.**
+The rows above say the default never places first and never takes a lamport
+*in this study*. Two of the four ladder classes — `heuristic` and `optimised`
+— are defined as three-stat concentration, so half of every mixed field is
+the one shape the default loses to by construction. The 0.000% is real and
+reproducible, and it is **a property of a field that is half deliberate
+play**, not a property of the allocation.
+
+An earlier version of this section read as though it were the latter, and a
+40-seat pool on devnet (pool 20, 2026-09-19) contradicted it: two entrants
+who left the default tied for first and split the whole pot, against a field
+that concentrated on one and two stats rather than three. The correction
+below is measured with the product's own scoring engine over 400 pools of 40
+seats, and is reproducible from `tests/rehearsal`:
+
+| the other 39 seats | default's rank-1 rate | median rank |
+|---|---|---|
+| this study's mixed ladder | **0.0%** (0/400) | 26th of 40 |
+| three-stat concentrators only | **0.0%** (0/400) | **40th — last, every pool** |
+| arbitrary free-integer allocations | **100.0%** (400/400) | **1st** |
+
+**So the default is the MIDDLE of three tiers, not the bottom.** Deliberate
+three-stat play beats it totally; careless concentration loses to it totally.
+The headline metrics cannot show this, because rank-1 rate and paid-seat rate
+are zero for every class except the winner — the middle tier and the bottom
+tier both read 0.000% and look identical. The superlative that used to appear
+here, and in the app's rules copy, is not supported by this study's own data:
+the `uniform` class outscores the `random` class within these very runs.
+
+**And the default is not a strategy, because it cannot be one.** If every
+seat leaves the default, all 40 scores are identical, all 40 tie for first,
+and the pot divides 40 ways — each entrant receives exactly their entry back
+and nobody profits. Introduce a single three-stat player into that field and
+they win outright and take the entire pot, in 200 of 200 measured pools. One
+deliberate entrant is enough to make doing nothing pay zero.
+
+That is also why these rows are kept OUT of the headline comparison above:
+the honest measure of skill is the spread between entrants who are all
+genuinely competing, which is what the headline table reports.
 
 ## Fields of equally-skilled entrants
 

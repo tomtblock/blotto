@@ -542,6 +542,21 @@ export const COPY = {
       "This pool filled before your entry reached it, so nothing settled. Another pool in this tier opens once this one has been paid out.",
     deadlinePassed:
       "This pool stopped taking entries at its deadline before your entry reached it, so nothing settled.",
+    /*
+     * 2026-09-19 (DRIFT §H18/§H22): the sentence "The even split is the
+     * weakest allocation in the game" was REMOVED from both places it
+     * appeared, because it is false and it is text a player reads. Measured
+     * with the product's own engine over 400 pools of 40: the even split
+     * beats arbitrary allocation 400/400, and loses to three-stat play
+     * 0/400. It is the MIDDLE of three tiers, not the bottom — deliberate
+     * play beats it totally, and careless play loses to it totally.
+     *
+     * What remains is the part that was always true and is the part a player
+     * needs: it loses 3–2 to anyone who concentrates on three stats, so it
+     * never beats someone who is thinking. Do not restore the superlative.
+     *
+     * Wording is an architect proposal; brand voice is founder-owned.
+     */
     // 2026-09-09: the two refusals the founder met that read as a network fault.
     alreadyEntered:
       "This wallet has already entered this pool, so nothing settled. One entry per wallet per pool is the rule — your seat is held and your battles are sealed. Check the pool page for your entry.",
@@ -588,7 +603,7 @@ export const COPY = {
     // The effect of the default, stated as how the allocation PERFORMS —
     // never as a chance of anything (the addendum's note for this line).
     timerEffect:
-      'The even split is the weakest allocation in the game. Against any allocation that concentrates points on three stats, an even split loses that battle three stats to two, every time. Nothing is decided at random: the even split is simply the shape your entry starts from, and leaving it there is a decision like any other.',
+      'Against any allocation that concentrates points on three stats, an even split loses that battle three stats to two, every time — so it never beats a player who is thinking. Nothing is decided at random: the even split is simply the shape your entry starts from, and leaving it there is a decision like any other.',
     // The two-step seal (v3 D2): arm, then confirm. §8.6 renders above step 2.
     seal: 'Seal my allocation',
     sealConfirm: 'Confirm — seal and submit',
@@ -1108,7 +1123,7 @@ export const COPY = {
     // wording verbatim — the rule, then its effect stated as how the
     // allocation performs, never as a chance of anything.
     battleTimer:
-      'Lock each battle before its timer ends. Any battle you have not locked when the timer ends \u2014 including the one on your screen \u2014 is entered as an even split of 20 points in each of the five stats. The even split is the weakest allocation in the game. Against any allocation that concentrates points on three stats, an even split loses that battle three stats to two, every time. Nothing is decided at random: the even split is simply the shape your entry starts from, and leaving it there is a decision like any other.',
+      'Lock each battle before its timer ends. Any battle you have not locked when the timer ends \u2014 including the one on your screen \u2014 is entered as an even split of 20 points in each of the five stats. Against any allocation that concentrates points on three stats, an even split loses that battle three stats to two, every time — so it never beats a player who is thinking. Nothing is decided at random: the even split is simply the shape your entry starts from, and leaving it there is a decision like any other.',
     // SUBSTANCE FIXED (D3-B; D-E2; the founder's addendum of 2026-09-07,
     // rulings 2 and 3, wording verbatim): ranking, ties, and where a
     // forfeited first-place share goes — always to a player, never to us.
