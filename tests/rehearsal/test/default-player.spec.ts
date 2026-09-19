@@ -27,6 +27,8 @@ import { expect } from 'chai';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { generateLadderEntrant } from '../src/ladder';
+import { generateEntrant } from '../src/strategies';
+import { scorePool } from '../../../backend/scoring/src/engine';
 
 const ALLOCATION_TS = join(__dirname, '..', '..', '..', 'app', 'src', 'battle', 'allocation.ts');
 
@@ -78,5 +80,86 @@ describe('the default player — app default == the study uniform class', () => 
     expect(concentratedWins, 'the concentrated side takes its three funded stats').to.equal(3);
     expect(flatWins, 'the flat side takes only the two starved stats').to.equal(2);
     expect(concentratedWins > flatWins, 'so the default loses the battle').to.equal(true);
+  });
+});
+
+/**
+ * The three tiers, pinned (DRIFT §H18/§H22, 2026-09-19).
+ *
+ * REPORT.md used to say the default was "the weakest allocation in the game",
+ * and the app's rules copy said it too. It is not: it is the MIDDLE of three
+ * tiers. Deliberate three-stat play beats it totally; careless concentration
+ * loses to it totally. A 40-seat devnet pool made the point the hard way —
+ * two entrants who left the default tied for first and split the whole pot.
+ *
+ * The corrected report now states all three tiers, so all three are asserted
+ * here. §H21's lesson is the reason this exists at all: a published claim
+ * with no code behind it is a claim that rots silently, and this project has
+ * now had three of those.
+ */
+describe('the default is the middle of three tiers, not the bottom (§H22)', () => {
+  const EVEN = () => Array.from({ length: 7 }, () => [20, 20, 20, 20, 20]);
+  const SEATS = 40;
+
+  /** Every seat's rank under the real rule: ties share the better rank. */
+  function rankOfFirst(players: number[][][]): { rank: number; winners: number } {
+    const res = scorePool(players as never);
+    const mine = res[0].scoreHalf;
+    const best = Math.max(...res.map((r) => r.scoreHalf));
+    return {
+      rank: res.filter((r) => r.scoreHalf > mine).length + 1,
+      winners: res.filter((r) => r.scoreHalf === best).length,
+    };
+  }
+
+  it('LOSES to three-stat play — never once first, across 60 pools', () => {
+    let firsts = 0;
+    for (let p = 0; p < 60; p++) {
+      const field = [
+        EVEN(),
+        ...Array.from({ length: SEATS - 1 }, (_, i) =>
+          generateLadderEntrant(i % 2 ? 'heuristic' : 'optimised', p * 1000 + i).battles
+        ),
+      ];
+      if (rankOfFirst(field).rank === 1) firsts++;
+    }
+    expect(firsts, 'the default must never take rank 1 against deliberate play').to.equal(0);
+  });
+
+  it('BEATS arbitrary allocation — first in every one of 60 pools', () => {
+    let firsts = 0;
+    for (let p = 0; p < 60; p++) {
+      const field = [
+        EVEN(),
+        ...Array.from({ length: SEATS - 1 }, (_, i) =>
+          generateEntrant('random', p * 1000 + i).battles
+        ),
+      ];
+      if (rankOfFirst(field).rank === 1) firsts++;
+    }
+    expect(
+      firsts,
+      'the default beats careless play — this is what "weakest allocation" got wrong'
+    ).to.equal(60);
+  });
+
+  it('cannot be a strategy: if everyone leaves it, everyone ties and nobody profits', () => {
+    const field = Array.from({ length: SEATS }, EVEN);
+    const { winners } = rankOfFirst(field);
+    expect(winners, 'all seats score identically, so all tie for first').to.equal(SEATS);
+    // One paid place, split among the tie group: each gets pot/SEATS, and with
+    // pot = SEATS x entry that is exactly the entry back. Nobody profits.
+  });
+
+  it('one deliberate entrant takes the whole pot from a field of defaults', () => {
+    for (const cls of ['heuristic', 'optimised'] as const) {
+      const field = [
+        generateLadderEntrant(cls, 4242).battles,
+        ...Array.from({ length: SEATS - 1 }, EVEN),
+      ];
+      const { rank, winners } = rankOfFirst(field);
+      expect(rank, `${cls} must win outright against a field of defaults`).to.equal(1);
+      expect(winners, `${cls} must be the ONLY winner, so it takes the whole pot`).to.equal(1);
+    }
   });
 });
