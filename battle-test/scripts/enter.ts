@@ -555,9 +555,18 @@ async function enterOne(args: {
     const error = e instanceof Error ? e.message : String(e);
     console.error(`  ${walletId} FAILED  ${error}`);
     if (sealed) {
+      // 2026-09-19: this used to read "can never enter this pool again", which
+      // was true until PR 147 shipped and is FALSE now. The gate refuses an
+      // overwrite only for a seat the CHAIN has accepted; a wallet that sealed
+      // and then failed to register holds no Entry, so it can simply seal
+      // again. Proven on this exact failure — W14 burnt on pool 21 at 01:48Z
+      // and landed on a retry minutes later. The stop below still fires,
+      // because a run that starts failing should be looked at before it is
+      // continued; what changed is that the cost is a retry, not a wallet.
       console.error(
-        `  ${walletId} SEALED THEN FAILED — this wallet can never enter pool ${pool.id} again. ` +
-        `Its ciphertext is stored and cannot be replaced or deleted (DRIFT.md §H6).`
+        `  ${walletId} SEALED THEN FAILED — it holds no Entry, so it is RECOVERABLE: ` +
+        `re-running this seat will re-seal and register it (the seal fix, PR 147). ` +
+        `Before that fix this wallet would have been barred from pool ${pool.id} for good.`
       );
     }
     return { ...base, sealed, error };
@@ -701,9 +710,10 @@ async function main(): Promise<void> {
       console.error(
         `\nSTOPPING after ${results.length} of ${walletIds.length} seats. ` +
         `${burnt.length} sealed and then failed: ${burnt.map((r) => r.wallet).join(', ')}.\n` +
-        `Those wallets are barred from pool ${pool.id} permanently and must be replaced from the ` +
-        `spare roster, not retried. Diagnose the gate before running again — if it is down, every ` +
-        `remaining seat would be burnt the same way.`
+        `Those seats are RECOVERABLE since PR 147 — re-run them with --wallets rather than ` +
+        `replacing them from the spare roster. The stop is still here on purpose: diagnose why ` +
+        `they failed before continuing, because if the gate is down every remaining seat fails ` +
+        `the same way and a retry storm is not a diagnosis.`
       );
       break;
     }

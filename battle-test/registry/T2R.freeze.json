@@ -1,0 +1,62 @@
+{
+  "schema": "blotto-rehearsal-freeze/1",
+  "test": "T2R",
+  "_why": "The plan is evidence only if it demonstrably predates the outcome. Commit dates can be set to anything; GitHub's merge timestamp and a Solana block time cannot. This file binds the two and is written SEPARATELY so T2R.plan.json stays byte-identical to what was frozen.",
+  "pullRequest": 151,
+  "repository": "tomtblock/blotto",
+  "mergedAt": "2026-09-18T23:47:18Z",
+  "mergedBy": "tomtblock",
+  "mergeCommit": "2dc5e66c194c0c3040562e59e869e43475c6d3cc",
+  "headCommit": "188618a3c7c61802e510dd58297ab7e24aaf25cc",
+  "planPath": "battle-test/registry/T2R.plan.json",
+  "planSha256": "0b878655669ac42e7918fb2e232e9d541d8729138bff33b50e7981a5e991de24",
+  "THE CLAIM THIS RECORD EXISTS TO MAKE": {
+    "statement": "THE PREDICTION WAS FROZEN BEFORE THE POOL IT RUNS ON EXISTED.",
+    "freezeMergedAt": "2026-09-18T23:47:18Z",
+    "poolCreatedAt": "2026-09-19T01:21:29Z",
+    "marginBeforeThePoolExisted": "1 h 34 min 11 s",
+    "corroboration": "At 23:57Z, ten minutes after the merge and eighty-four minutes before pool 21 was created, the highest pool id in the indexer's projection was 20. The plan names no pool: poolId and poolPda are both null in the frozen bytes.",
+    "whyItMatters": "This is T4's standard and the strongest form of freeze in this test. T2's own freeze merged at 14:42:47Z against a pool that had opened at 13:15:58Z, so it preceded every entry but not the pool. T2R is available at this standard only because the retry was forced \u2014 see DRIFT \u00a7H16."
+  },
+  "pool": {
+    "poolId": 21,
+    "poolPda": "967H53GL2g6CnLAJYsSNFNjBvkMtUELwLNAM27RUfeFk",
+    "tier": 0,
+    "entryLamports": "100000000",
+    "potLamports": "4000000000",
+    "minSeats": 40,
+    "createdAt": "2026-09-19T01:21:29Z",
+    "createdTx": "4tKFZ6ep3V1vTP31U15pnHPZd3Jcw2Mc22eCa7EokAs5ZefrSvd6nUcKWKHjqgqrVUKyXVCrDMZ94Svn4TD7ShjW",
+    "fillDeadlineAt": "2026-09-19T13:21:29Z",
+    "parametersMatchPlan": true
+  },
+  "timeline": {
+    "frozenAt": "2026-09-18T23:47:18Z",
+    "poolCreatedAt": "2026-09-19T01:21:29Z",
+    "firstEntryAt": "2026-09-19T01:28:03Z",
+    "firstEntryTx": "2HxESyCqwhNeeGy63y81xzfFaXn6kR7qAR3BUfyBUKh9VkDzLFWUP98wMNBjdxipyiXYo4GW2wUKonBwU3ang3hd",
+    "lastEntryAt": "2026-09-19T01:36:57Z",
+    "freezePrecedesPoolCreationBy": "1 h 34 min 11 s",
+    "freezePrecedesFirstEntryBy": "1 h 40 min 45 s"
+  },
+  "entrants": {
+    "target": 39,
+    "landed": 39,
+    "note": "39 is the point of the test: one seat below MIN_SEATS. The chain's own outcome_if_deadline_now read `refund` once the 39th landed, and reads it still.",
+    "founderSeats": 0,
+    "headlessSeats": 39,
+    "substitutions": "NONE. Every one of the 39 seats is the wallet the frozen plan named \u2014 W00 through W38, no spares. See below for why that is worth stating."
+  },
+  "twoBurntSeatsRECOVERED": {
+    "what": "W14 and W28 each sealed and then failed to register with `block height exceeded` at --concurrency 1, the same baseline devnet flakiness that cost T2 two wallets (2 of 40 attempts here, 2 of 32 there).",
+    "whyItIsDIFFERENTthisTime": "Both were RETRIED and both landed. Before PR 147 each would have been barred from this pool permanently and replaced from the spare roster \u2014 that is exactly how T2, T4 and T5 lost eleven wallets between them.",
+    "provenNotAssumed": "After W14 failed, its state was read directly: POST /ciphertexts/status answered {\"sealed\":true} and its Entry PDA did not exist on chain. Sealed with no paid seat \u2014 precisely the condition the fix was built for. The re-run then registered it.",
+    "consequenceForTheEvidence": "The field is the frozen field. No substitute is playing a burnt seat's allocation, so there is nothing to explain away when this pool reconciles."
+  },
+  "verifyIndependently": [
+    "The merge time is served by GitHub's own API for PR 151 and cannot be rewritten by this repository.",
+    "sha256 of the plan file at the merge commit must equal planSha256 above.",
+    "The pool's creation time and every entry time are block times read from devnet via getSignaturesForAddress on the pool PDA \u2014 not from this repository and not from the indexer.",
+    "The ORDER is the whole claim: GitHub's merge timestamp precedes the Solana block that created the pool. Neither clock is ours."
+  ]
+}

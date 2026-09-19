@@ -1,16 +1,59 @@
-# STATE — 2026-09-18 23:45 UTC — by Claude Code
+# STATE — 2026-09-19 01:45 UTC — by Claude Code
 
-Phase:            **T2 is SPOILED on pool 20 — my error. T2R is the retry, frozen before its pool
-                  exists, and it runs overnight with nothing needed from the founder.**
-Waiting on:       **the founder to merge the T2R freeze PR.** It must land before the next pool
-                  opens (~01:21Z). After that, nothing — the run is headless and settlement is
-                  permissionless.
-Blocked:          nothing.
-Live deadlines:   **pool 20 seals at 01:15:58Z** and will PAY, not refund. Next pool ~01:21Z, which
-                  is T2R's.
-Results so far:   T1 **PASS** · T4 **PASS** · T5 **PASS** · T2 **SPOILED** · T2R frozen, not run
-Money:            all 72 wallets at exactly **0.150000000**, zero empty, 10.8 SOL held.
-                  Funder **0.339339200** — thin on purpose; T2R refunds its 39 seats back.
+Phase:            **T2R is LIVE on pool 21 at exactly 39 seats. Pool 20 settled and produced the
+                  most serious finding of the test.**
+Waiting on:       **the founder, on §H18 — it is founder-and-counsel territory, not mine.**
+Blocked:          nothing. T2R settles itself at 13:21:29Z.
+Results so far:   T1 **PASS** · T4 **PASS** · T5 **PASS** · T2 **SPOILED** · **T2R running**
+Money:            funder 0.339339200; the 39 seats hold ~0.0455 each until their refund returns 0.1.
+
+## §H18 — THE EVEN SPLIT WON. READ THIS FIRST.
+
+Pool 20 sealed at 40 and scored. Both founder wallets had timed out into `[20,20,20,20,20]` again,
+and this time **they tied at rank 1 on 426 half-points and split the entire 4 SOL pot** — 2 SOL
+each. The best seat that actually played scored 318. **The 38 players who played got nothing.**
+
+  → **Verified, not inferred.** All 40 revealed sets re-scored through the product's own
+    `backend/scoring/src/engine.ts`, independently of the daemon: **40 compared, 0 mismatches.**
+  → **Nothing is broken.** `prize_math.rs::split_group` says in terms that a tie for first splits
+    the whole pot k ways and nobody else is paid. Every component did what the spec says.
+  → **It is a property of the FIELD, not the allocation.** All 38 field seats concentrate — max
+    stat 44 to 88, every one above 25. All-vs-all rewards winning the most head-to-heads, and an
+    even split beats an allocation that dumps 67 points into one stat, four stats to one. In T5 the
+    SAME allocation came 62nd of 64, because that field was capped at 25.
+  → **THE PUBLISHED COPY IS FALSE AS WRITTEN.** Twice, including the rules: "The even split is the
+    weakest allocation in the game." Its own next sentence names the condition under which that
+    holds — concentrating on THREE stats. As written it is unconditional, and one counterexample
+    settles it. This one is on chain at 40 seats.
+  → **Why it is founder-and-counsel.** PID §8 rests on skill. "The players who did nothing beat
+    everyone who played and took the whole prize" is a direct attack on that, and it makes the
+    timeout default a strategy: a player who learns this wins by closing their laptop.
+  → **NOT established, so it is not claimed:** this field is OUR generator, not humans. Whether a
+    real field concentrates this way is unknown and is now the question worth answering.
+
+## §H19 — my own "this could not fail" was wrong on one of four
+
+§H17 listed "one seat paid exactly 4000000000" among claims that could not fail. **Two seats were
+paid.** `PAID_RANKS = 1` fixes how many RANKS are paid, not how many PLAYERS. Had that freeze been
+written it would have FAILED on its headline payout line — and caught something real. The error was
+visible in my own message: I wrote "I cannot predict who wins" and then treated the payout shape as
+independent of who wins. Not freezing was still right, for a weaker reason than I gave.
+
+## T2R — live on pool 21, and frozen to the strongest standard this test has
+
+  **Pool 21 created 01:21:29Z. The freeze merged 23:47:18Z — one hour 34 minutes earlier.**
+  The prediction was frozen **before the pool it runs on existed**. That is T4's standard; T2's own
+  freeze preceded its first entry but not its pool. Neither clock is ours: GitHub's merge timestamp
+  and a Solana block time.
+  → 39 of 39 seats landed. `outcome_if_deadline_now` reads **refund**. Deadline 13:21:29Z.
+  → **No substitutions — the field is the frozen field.** W14 and W28 each sealed then failed with
+    `block height exceeded` (2 of 40, matching T2's 2 of 32), and **both were retried and both
+    landed.**
+  → **That is the seal fix paying for itself on a live failure.** After W14 failed its state was
+    read directly: `{"sealed":true}` with no Entry PDA — sealed with no paid seat, exactly the
+    condition PR 147 addresses. Before the fix both wallets would have been barred and replaced.
+  → `enter.ts`'s own guardrail message was corrected: it still said a burnt wallet "can never enter
+    this pool again... must be replaced, not retried". True until PR 147, false now.
 
 **BOTH PRODUCT FIXES ARE LIVE (23:10Z deploy), and the seal fix was proven rather than inferred:**
   `POST /ciphertexts/status` went **404 → 403** (route exists, rejects a bad signature), then end to
