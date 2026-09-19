@@ -1335,3 +1335,83 @@ claims genuinely could not fail, and the fourth could — which means the freeze
 action using an argument that was partly wrong.** Recorded because the reasoning error is more
 useful than the outcome: a constant naming ranks is not a constant naming players, and "X cannot
 fail" deserves the same scrutiny as "X will happen".
+
+
+### H20. "4441080 per seat, measured on three pools to the lamport" was never true (2026-09-19, T2R)
+
+T2R's frozen plan predicts a single per-seat cost and says so in the strongest terms available:
+
+> "THIS NUMBER IS NOW MEASURED, NOT ESTIMATED … Three settled pools have since measured the same
+> figure to the lamport … T2R predicts 4441080 EXACTLY for every one of the 39 seats — a single
+> lamport of drift on any seat is a failure, not rounding."
+
+**29 of the 39 seats came in at 4446160.** Ten were exact. The split is clean and it is not at a
+wallet id — it is at **seat index 10**.
+
+```
+seat  8, 9   pass asset 92 bytes   rent 2617600   sunk 4441080
+seat 10, 11  pass asset 93 bytes   rent 2622680   sunk 4446160
+                        +1 byte         +5080         +5080
+```
+
+**The cause, measured rather than guessed.** Every entry mints a Core pass asset named
+`BLOTTO PASS #<pool>-<seat>`. A two-digit seat index is one character longer than a one-digit one,
+the account is one byte bigger, and one byte of rent on devnet is **5080 lamports**. The program is
+behaving perfectly; rent scaling with a name is exactly right.
+
+**IT WAS ALWAYS LIKE THIS AND I NEVER LOOKED.** Probing the earlier pools' pass assets directly:
+
+```
+T1 (pool 14, 12 seats)  seat 0: 92 bytes   seat 9: 92   seat 10: 93   seat 11: 93
+T4 (pool 16, 64 seats)  seat 0: 92 bytes   seat 9: 92   seat 10: 93   seat 63: 93
+T5 (pool 18, 64 seats)  seat 0: 92 bytes   seat 9: 92   seat 10: 93   seat 63: 93
+```
+
+So on T1 two seats already cost the higher figure, and on T4 and T5 **fifty-four of sixty-four did**.
+The claim "three settled pools measured the same figure to the lamport" describes a measurement I
+did not actually make: I read early seats, got 4441080, and generalised it to whole pools. Then I
+repeated it in `STATE.md`, in `T2.plan.json`, in this file, and finally wrote it into a frozen
+prediction as the sharpest claim in the document.
+
+**This is the §H9 / §H14 family a third time** — asserting from a display rather than a measurement
+— and this time it survived long enough to be frozen. What makes it worse than those two is that I
+kept restating it as *more* certain each time: "estimated" became "measured", then "measured to the
+lamport", then "a single lamport of drift is a failure". Nothing new was measured between those
+restatements.
+
+**The correct model, for whoever predicts this next:**
+
+| seats | pass asset | per-seat sunk |
+|---|---|---|
+| 0–9 | 92 bytes | **4441080** |
+| 10–63 | 93 bytes | **4446160** |
+
+A 64-seat pool therefore sinks 10 × 4441080 + 54 × 4446160 = 284 502 440 lamports, not
+64 × 4441080 = 284 229 120. The gap is 273 320 lamports a pool, which is small money and a large
+hole in a claim that called itself exact.
+
+---
+
+### H21. reconcile printed PASS without checking the claim that failed (2026-09-19)
+
+`reconcile.ts` reported **RESULT: PASS** for T2R — 39 MATCH, 0 drift — while 29 seats missed the
+plan's per-seat prediction. It is not wrong about what it checked; it never checked this at all.
+`grep` over the script finds **no occurrence** of `perSeatSunk`, `sunk`, or `4441080`. Its verdict
+is built from:
+
+```
+frozenOk && PAYOUT_MISMATCH === 0 && !directDrift && stateOk && vaultOk
+  && rootCheck.ok && unknownEntrants.length === 0
+```
+
+**§H14 said this exact thing about the results root** — "a stated criterion whose satisfaction was
+being asserted by display" — and the fix then was to implement that one check. The general lesson
+was available and I took the specific one: I verified the root and did not ask which *other* pass
+criteria had no code behind them.
+
+**Why it could not have been checked anyway, which is the deeper gap.** Per-seat cost is
+`startingBalance − balanceAfter`, and the harvest records only `balanceAfter`. No plan in this
+project declares a starting balance, so the sharpest numeric claim in T2R's plan was **unverifiable
+from the evidence the run collects** — a criterion that could not have passed or failed. The fix is
+both halves: plans declare the starting balance, and reconcile prints NOT CHECKED, loudly and
+without passing, whenever a stated criterion has no data behind it.
