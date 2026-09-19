@@ -1,13 +1,46 @@
-# STATE — 2026-09-19 13:55 UTC — by Claude Code
+# STATE — 2026-09-19 17:10 UTC — by Claude Code
 
-Phase:            **T2R PASSED its boundary claim on pool 21. The refund fork at 39 is proven.**
-                  One of its eight criteria failed and the failure was in my prediction, not the
-                  chain — §H20.
-Waiting on:       **the founder, on §H18** (the even split won — founder-and-counsel) and on the
-                  T6 role ratification (§F-28).
-Blocked:          nothing running.
+Phase:            **§H18 is resolved, and the answer is better than the finding.** T2R passed. No
+                  pool is running.
+Waiting on:       **the founder: merge PR 154, ratify its wording, and take §H22 to counsel.**
+                  Then the T6 role call (§F-28) to restart devnet testing.
+Blocked:          T3 on Q6 (admin signing) · T7 on Q7 (reviewer key).
 Results so far:   T1 **PASS** · T4 **PASS** · T5 **PASS** · T2 **SPOILED** · **T2R PASS (7 of 8)**
-Money:            all 39 T2R seats refunded; wallets back to ~0.1455. Funder 0.339339200.
+Money:            all 39 T2R seats refunded. Funder 0.339339200; wallets ~0.1455 each.
+
+## §H22 — the even split is the MIDDLE of three tiers. READ THIS INSTEAD OF §H18.
+
+The founder asked the two questions that settled it: *"I thought we proved the even split cannot
+win?"* and *"what if everyone did that?"* Both were right to ask.
+
+  → **The proof exists and reproduces.** `docs/skill-evidence/REPORT.md` publishes 0.000% rank-1 for
+    the default at 64 and 40 seats. Re-run: **0 of 400 pools.**
+  → **And its field is half the one shape the default loses to by construction** — `heuristic` and
+    `optimised` are *defined* as three-stat concentration. The 0.000% is a property of the FIELD.
+
+| the other 39 seats | default's rank-1 | median rank |
+|---|---|---|
+| the study's mixed ladder | **0.0%** | 26th of 40 |
+| three-stat concentrators only | **0.0%** | **40th — last, every pool** |
+| arbitrary allocations | **100.0%** | **1st** |
+
+  → **Deliberate beats the default totally. The default beats careless totally.** Pool 20's field
+    was the bottom tier — 38 seats on one or two stats with zeroes. The default beat unskilled play,
+    not skill.
+  → **If EVERYONE leaves the default: all 40 tie, the pot divides 40 ways, each gets exactly their
+    entry back. Nobody profits.** Add ONE three-stat player and they take the ENTIRE pot, 200 of 200.
+  → **For counsel:** not "the players who did nothing took the pot" but **"the default is a
+    break-even floor that any deliberate player beats totally."** A stronger skill story than the
+    report told — the gradient is total in both directions.
+  → **My §H18 error was framing, not fact.** Every number there is right. I took "doing nothing
+    wins" to counsel when one more measurement — the founder's question — showed it cannot win
+    against anyone who thinks and cannot profit even when it wins.
+
+**PR 154** corrects the report's interpretation and removes "the even split is the weakest
+allocation in the game" from both places it appeared in the rules copy. Four regression tests pin
+all three tiers. **Wording is an architect proposal; brand voice is yours.**
+
+---
 
 ## T2R — the boundary is PROVEN, and it was frozen before its pool existed
 
