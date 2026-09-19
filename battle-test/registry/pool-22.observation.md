@@ -209,3 +209,38 @@ simply not `Open`. The route already holds the pool's state and could carry the 
 Worth doing only if "filled" is judged materially better for a player than "no longer taking
 entries" — that is a brand-voice call, not an architecture one.
 
+### RULED AND BUILT, 2026-09-19 — PR 157
+
+The founder took **both** halves: fix the wiring, and use the word **filled**. Shipped as its own
+product PR, outside this folder, with the boundary lane untouched.
+
+The route now answers `pool filled` at capacity and `pool closed to entries` below it. The seat
+count is the only thing that separates the two cases, since both are simply not `Open` — and it
+**gates nothing**: it chooses the wording of a refusal the state has already decided, and a test
+pins that an `Open` pool at capacity is still accepted, so this cannot quietly become a second gate
+that turns away the 64th honest entrant.
+
+The generic-refusal rule is intact. What PID §8 protects is the **entry packet's** refusal — geo,
+sanctions, age — where naming the failing check would make `/packet` an oracle a probe could walk.
+`/packet` is untouched. `EntryServiceError` carries a reason only for the ciphertext stage and drops
+it for the packet stage **in the constructor**, because a rule enforced by every call site's good
+manners lasts until the next call site.
+
+Two things tightened on the way through, both about the same worry — that this field could become a
+channel for text nobody vetted:
+
+- the reason passes a **closed allowlist** of the three strings the route sends; anything else
+  becomes null and the player gets the cautious message, which is true of all three cases;
+- the allowlist requires an **own** property, because plain member access walks the prototype chain
+  and a planted `Object.prototype.error` would otherwise be read out of a response carrying no error
+  at all — letting something other than the server choose the sentence.
+
+app **517** tests (+8), packet **201** (+6), both typecheck, both repository gates clean.
+
+**One thing to know about the deploy, and it is the §F-28 trap again:** the web app ships
+automatically on merge, the entry service does **not** — `deploy-backend` is `workflow_dispatch`
+only. Until it is run the app keeps receiving the old single string and keeps showing the cautious
+message, which stays correct. Nothing breaks in the gap, in either order. But **T6 must not run
+until both halves are live**, or it will test the old behaviour and its copy criterion will fail for
+a reason that has already been fixed.
+

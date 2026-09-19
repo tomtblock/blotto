@@ -894,3 +894,70 @@ above, and a decision on whether the copy fix ships before it. **If the copy fix
 will fail its copy criterion** — correctly, because the product does have this fault. I would rather
 fix it and have T6 test the fixed thing.
 
+
+---
+
+## F-34 — ▶ FOUNDER ACTION: merge, then press the deploy button, then the RPC
+
+All three of your rulings are built. **PR 157** is open — it is product code, on its own branch, and
+it touches nothing in the battle test.
+
+### What it does
+
+The route now tells the app **which** thing happened, and the app shows the matching sentence. A
+player in your position tonight will read:
+
+> "This pool filled before your entry reached it, so nothing settled. Another pool in this tier
+> opens once this one has been paid out."
+
+That sentence was already written. It had simply never been able to reach anybody.
+
+A pool that ran out of time instead of filling up gets the other, truthful one — *"no longer taking
+entries"* — because those are different things and telling someone their pool filled when it did not
+would be a new lie in place of the old hedge.
+
+**What I was careful about.** The entry gate deliberately never explains *why* it turns someone away
+— that is the geo and sanctions check, and explaining it would let someone probe it. That rule is
+untouched. The two new messages are facts about the **pool**, which its own page already shows to
+anybody, and they can never be sent by the part of the system that does the eligibility checks — the
+code drops them there rather than relying on whoever writes the next bit of code to remember.
+
+517 app tests and 201 service tests pass, both with new ones for this.
+
+### ▶ Step 1 — merge PR 157
+
+### ▶ Step 2 — and then press the deploy button. This is the one that caught us before.
+
+**Merging ships only half of it.** The website updates itself; the entry service does not. It has to
+be started by hand, exactly as it did on Thursday when the seal fix sat merged-but-not-live for
+hours and I only caught it by probing.
+
+**▶ GitHub → Actions → "deploy backend" → Run workflow**, on `main`, both boxes left unticked.
+
+Nothing breaks in the gap, in either order — until the service is deployed the app keeps showing the
+old cautious message, which is still true. But **T6 must not run until both halves are live**, or it
+will test the old behaviour and fail its copy criterion for a fault that is already fixed.
+
+### ▶ Step 3 — the RPC, and I cannot read it myself
+
+You said it is already in secrets, and you are right: it is `BLOTTO_DEVNET_RPC_URL`, a Helius devnet
+URL. **But a GitHub secret is deliberately one-way.** It can be handed to a workflow while it runs,
+and it is never readable back — not by me, not through the API, and it is blanked out of the logs.
+That is the point of it, and it is working as intended.
+
+So it has to reach this session some other way. Two options, and **I recommend the first**:
+
+**(a) Put it in the environment for these sessions.** In the Claude Code web settings, the
+environment this session runs in can carry environment variables. Add one called `BLOTTO_RPC_URL`
+with the Helius devnet URL as its value. It then reaches me without ever appearing in our chat or in
+any file — which matters, because the URL has your API key inside it.
+
+**(b) Paste it here.** Quicker, and it works immediately. The cost is that a key ends up in the
+transcript. It is a devnet key, so the exposure is small, and you can rotate it in Helius afterwards
+in about thirty seconds. Your call.
+
+### Then T6 runs
+
+Frozen, waiting, and needing nothing else from you once the above is done. I will fill the pool, call
+GO for UI-A early and UI-B late, and report against the prediction.
+

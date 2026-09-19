@@ -1,15 +1,67 @@
-# STATE — 2026-09-19 19:50 UTC — by Claude Code
+# STATE — 2026-09-19 20:10 UTC — by Claude Code
 
-Phase:            **Pool 22 shakedown DONE and it found a real product fault.** T6 is frozen against
-                  pool 23 and ready to run.
-Waiting on:       **the founder (§F-33): three rulings — may I fix the refusal copy, do you want the
-                  word "filled", and a free devnet RPC URL.**
-Blocked:          T6 on the RPC (§F-33 ruling 3) · T3 on Q6 (admin signing) · T7 on Q7 (reviewer key).
+Phase:            **Pool 22's finding is FIXED and in review (PR 157).** T6 is frozen and ready.
+Waiting on:       **the founder (§F-34): merge PR 157, then RUN `deploy-backend` by hand, then get
+                  the RPC URL to this session.** All three before T6 runs.
+Blocked:          T6 on §F-34 · T3 on Q6 (admin signing) · T7 on Q7 (reviewer key).
 Results so far:   T1 **PASS** · T4 **PASS** · T5 **PASS** · T2 **SPOILED** · T2R **PASS (7 of 8)**
                   pool 22 = observation, not a test
-Money:            funder **10.339339200** · W00 holds **4.041117840** (pool 22's pot, back in the
-                  roster) · UI-A 10.568905266 · UI-B 11.673357239 (unchanged — it was charged
-                  nothing at all)
+Money:            funder **10.339339200** · W00 **4.041117840** (pool 22's pot, back in the roster)
+                  UI-A 10.568905266 · UI-B 11.673357239 (unchanged — charged nothing at all)
+
+## The founder's three rulings, and what was built
+
+| ruling | answer | state |
+|---|---|---|
+| fix the refusal wiring | **yes** | built, PR 157 |
+| use the word "filled" | **yes** | built, PR 157 |
+| a devnet RPC | "already in secrets" | **correct, and unreadable — see below** |
+
+`COPY.tx.poolFull` now reaches a player. The route answers `pool filled` at capacity and
+`pool closed to entries` below it, because a pool that filled and a pool that ran out of time are
+both simply not `Open` and only the seat count separates them. **The count gates nothing** — it
+picks the wording of a refusal the state has already decided, and a test pins that an `Open` pool at
+capacity is still accepted, so it cannot quietly become a second gate turning away the 64th honest
+entrant.
+
+**The generic-refusal rule is intact, and this was the constraint to get right.** `services.ts` says
+in terms that a refusal never carries its reason (PID §8). True of `/packet` — geo, sanctions, age —
+where naming the failing check makes it an oracle a probe can walk. Not true of the ciphertext
+route's 409s, which are public pool facts plus the caller's own seat. So the carve-out is narrow and
+**enforced rather than trusted**: `EntryServiceError` drops a reason for the packet stage in the
+constructor, because a rule enforced by every call site's good manners lasts until the next call
+site. `/packet` is untouched.
+
+Two things tightened while testing it, both about the same worry — that the field could become a
+channel for text nobody vetted: a **closed allowlist** of the three strings the route sends, and an
+**own-property** requirement, because plain member access walks the prototype chain and a planted
+`Object.prototype.error` would otherwise be read out of a response carrying no error at all.
+
+app **517** tests (+8) · packet **201** (+6) · both typecheck · both gates clean.
+
+## THE RPC IS REAL, AND A GITHUB SECRET CANNOT BE READ BACK
+
+`BLOTTO_DEVNET_RPC_URL` exists as a repository secret — a Helius devnet URL, staged to Fly as
+`BLOTTO_RPC_URL`. The founder is right that it is there. **Actions secrets are one-way by design**:
+handed to a workflow while it runs, never readable through the API, masked in logs. This session
+cannot get it from there and should not try.
+
+§F-34 offers two routes: an environment variable on the session's environment (recommended — the
+URL carries an API key and should not enter the transcript), or pasting it here and rotating it
+afterwards.
+
+## §F-28'S TRAP, BEFORE IT BITES AGAIN
+
+**Merging PR 157 ships the app half only.** `deploy-backend` is `workflow_dispatch` — it runs when
+somebody presses it. On Thursday the seal fix sat merged-but-not-live for hours and was caught only
+by probing the live route.
+
+Nothing breaks in the gap, in either order: until the service deploys, the app receives the old
+single string and shows the cautious message, which stays true. But **T6 must not run until both
+halves are live**, or it tests the old behaviour and fails its copy criterion for a fault already
+fixed.
+
+---
 
 ## T6 is frozen, and the freeze holds BY CONSTRUCTION
 
