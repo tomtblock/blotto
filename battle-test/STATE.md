@@ -2,7 +2,8 @@
 
 Phase:            **Everything is ready for T6 except one button.** PRs 157 and 158 merged, the RPC
                   is in hand and measured, pool 23 is open, the freeze is timestamped.
-Waiting on:       **the founder (§F-35): run `deploy-backend` by hand.** That is the whole list.
+Waiting on:       **the founder: enter pool 23 (or its successor) as UI-A.** Everything else is
+                  done — the deploy landed 00:08Z and is verified live in both directions.
 Blocked:          T6 on that one deploy · T3 on Q6 (admin signing) · T7 on Q7 (reviewer key).
 Results so far:   T1 **PASS** · T4 **PASS** · T5 **PASS** · T2 **SPOILED** · T2R **PASS (7 of 8)**
                   pool 22 = observation, not a test
