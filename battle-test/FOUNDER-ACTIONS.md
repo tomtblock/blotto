@@ -399,3 +399,565 @@ I have not touched either directory. Recommendation: **leave it until the week e
 lockout blocks another test. It is not blocking T4, the guardrails above stop it recurring inside
 the test, and a product change made mid-test muddies what the test is measuring. But it should not
 reach mainnet, and if you want it now, say so and I will do it properly with tests.
+
+---
+
+## F-25 — DONE. The seal lockout is fixed.
+
+**Nothing for you to do here.** You said "yes fix seal" and it is written, tested and pushed. All
+four parts of F-24's patch shipped as commit `41d592d`.
+
+What changed, in plain terms:
+
+1. **The store now refuses to replace an allocation only when the entry is actually paid for.** If
+   your entry broke before it reached the chain, you can simply play again. That is the whole
+   lockout, gone — and the protection that matters (nobody, not even you, can overwrite an entry
+   the chain has accepted) is untouched and tested.
+2. **The app asks for permission before it seals**, not after. A refusal now arrives before anything
+   is stored, which is the exact sequence that struck on the 16th.
+3. **A wallet can now ask whether it has already sealed.** Nobody could find that out before — not
+   you, not a player, not a support agent. The wallet signs the question, so this opens nothing to
+   anyone else, and the answer is one yes-or-no and never the allocation itself.
+4. **A player whose entry simply broke is no longer told they are not allowed to enter.** They are
+   different things and the app now says the true one.
+
+**One thing I got wrong, and want on the record.** The specification I wrote for part 1 had the
+wrong database key in it. Had I typed it in as written, it would have matched nothing for anybody,
+which the code would have read as "this seat is not paid for" — and it would have allowed exactly
+the overwrite the protection exists to prevent. It never shipped: I read the database's own
+definition before writing the code, which is the rule for precisely this reason. There is now a test
+that uses the wrong key on purpose and fails if anyone reintroduces it.
+
+**One thing that is yours, not mine.** The new message a player sees is my wording, marked in the
+code as a proposal. Change it whenever you like.
+
+---
+
+## F-26 — ▶ FOUNDER ACTION: two changes, one branch, and I need your say-so
+
+**What is stuck.** The working branch now holds two unrelated things:
+
+- `ca06c1b` — T2's freeze record. A `battle-test/` file.
+- `41d592d` — the seal fix. `app/` and `backend/` files.
+
+The safety check we built for this week fires whenever a change touches `battle-test/`, and then
+**refuses that change if it touches anything else.** That check is the guarantee the whole test
+rests on: it is what proves the battle test cannot have quietly altered the product it is measuring.
+So I will not open one PR containing both, and I will not weaken the check to make it pass.
+
+They need to go up as two separate changes, off two branches. **Pushing to a second branch is
+something you told me never to do without asking**, so I am asking.
+
+**▶ Pick one:**
+
+- **(a) Say yes to a second branch (recommended).** I push the seal fix to a branch of its own,
+  open both PRs, and you merge them in whatever order you like. Costs you two merges instead of one.
+- **(b) Merge the battle-test commit first, from this branch, as it stands.** That PR is
+  battle-test-only in content but the branch also carries the product commit, so the boundary check
+  would see both and refuse. This does not actually work — I am listing it so you can see I checked.
+- **(c) Leave the seal fix sitting on the branch until the test week ends**, then land it on its
+  own. Nothing is lost; it just does not reach the product yet.
+
+I recommend **(a)**. The fix is tested and the lockout is the worst thing this test has found — it
+is not a defect you want sitting unmerged while the product is being shown to anyone.
+
+**Nothing is waiting on this.** T2 settles on its own at 01:15:58Z tomorrow; no admin key and no
+action from you is needed for it.
+
+---
+
+## F-27 — DONE. Two branches, two PRs, no mixing.
+
+You said do the recommendation, so I did.
+
+- **PR 147** — `claude/seal-lockout-fix`. The seal fix only: `app/` and `backend/`, nothing else.
+  It does not touch `battle-test/`, so the boundary check does not even fire on it.
+- **The battle-test records** stay on `claude/sharp-bohr-c8aeub` and go up as a second PR **after**
+  147 merges. I am not opening it yet on purpose: that branch still carries a copy of the seal-fix
+  commit, and until 147 is on main the boundary check would see both. Once 147 merges I bring main
+  into the branch and its change shrinks to `battle-test/` alone, which is what the check wants.
+
+**▶ Your action: merge PR 147.** Everything below waits on it.
+
+---
+
+## F-28 — ▶ FOUNDER ACTION: get us ready for T6
+
+T6 is the next test that needs nothing from you but two browser sessions. T3 needs an admin write
+(pausing entries) and is still blocked on Q6; T7 needs the reviewer key and is blocked on Q7; T8 is
+desk work with no pool at all. So T6 is next.
+
+### Step 1 — merge PR 147 (above)
+
+### Step 2 — deploy. **This is not automatic, and I have confirmed it has not happened.**
+
+Merging PR 147 shipped nothing to the entry service. `deploy-backend` only runs when somebody
+presses the button — it is a manual workflow, by design. I probed the live service after your merge:
+
+```
+POST https://blotto-packet.fly.dev/ciphertexts/status  →  404
+```
+
+That 404 is the fix being absent. **The lockout is still live in production right now.** The web app
+half does deploy automatically on a merge to main, and that half is harmless on its own — asking for
+permission before sealing is strictly better whatever the service is running.
+
+**▶ Run the `deploy-backend` workflow** — GitHub → Actions → "deploy backend" → Run workflow, on
+`main`, both checkboxes left unticked.
+
+Worth noting: `/health` answered `ok: true` throughout, exactly as it did during the sixteen-hour
+entry outage. It still carries no signal about anything that actually broke. That is finding F-2 and
+it has not moved.
+
+`preflight.ts` now checks this for you. It asks the status route per wallet, and when the route is
+missing it prints the old lockout warning in full instead of a clean GO — so a stale deployment
+cannot be mistaken for a fixed one.
+
+**This is worth more to T6 than it sounds.** Every run so far has lost wallets to a seal that
+succeeded and a payment that did not: five in T4, four in T5, two in T2. Each one was gone for good
+because it could not re-seal. After this deploys, a wallet in that state simply plays again. T6 needs
+71 of our 72 wallets, so before the fix a single burnt wallet would have stopped the test — and
+after it, nothing does.
+
+### Step 3 — funding. **DONE by you, nothing further needed.**
+
+You topped the funder up by 5 SOL. It now holds **9.253841480**, which covers T6 with a real reserve
+and T3 and T7 after it. UI-A and UI-B are untouched at 8.67 and 9.67, so the sweep I asked for is no
+longer needed — though that money is still sitting there when a later test wants it.
+
+**I am holding the fan-out until after T2 refunds, on purpose.** The funding command tops every
+wallet UP TO a target, and 37 of our wallets are currently light only because they are sitting in
+pool 20 waiting for their 0.1 back. Funding them now and refunding them at 01:15Z would spend about
+7.9 SOL where one pass afterwards spends about 4.2. Nothing is lost by waiting: T6 cannot start
+until the next pool opens, which is after T2 settles anyway.
+
+### Step 4 — T2 settles itself, then the next pool opens
+
+Pool 20 reaches its deadline at **01:15:58Z (02:15 your time)**. Nothing for you to do: both
+settlement instructions are permissionless. The 39 refunds land, and the daemon opens the next pool
+about five minutes later. T6 runs there.
+
+### Step 5 — the two browser sessions
+
+**▶ One thing I need you to settle first.** The manual's T6 line reads "UI-A and UI-B early, then
+wait", and then requires a **late entrant who sees the 'filled before your entry reached it'
+message**. Those cannot both be true with two accounts: if both enter early, nobody is left to
+arrive late, and the message is the thing T6 exists to check. So I am reading it as:
+
+- **UI-A enters early**, as an ordinary seat. One of the 64.
+- **UI-B arrives late**, after the pool is already full, and is refused.
+
+Say if you want it the other way round; nothing else changes.
+
+#### UI-A — an ordinary entry, played early
+
+I will tell you when the pool is open. Then: **one dial drag per battle, take one stat to 25**, in
+this order across the seven battles:
+
+| Battle | Drag this stat to 25 |
+|---|---|
+| 1 | Strength |
+| 2 | Speed |
+| 3 | Heart |
+| 4 | Wit |
+| 5 | Durability |
+| 6 | Strength |
+| 7 | Heart |
+
+Seven drags, one per screen. Lock in each battle.
+
+**T6 predicts no ranks, so the exact numbers do not matter this time** — unlike T4 and T5, where a
+stat above 25 would have broken the claim. The only thing that matters is that you actually play
+rather than let the clock run out. Remember the clock is **90 seconds for all seven battles**, not
+15 a screen, and it starts at your first dial touch. If it expires, every untouched battle is
+entered as the even split — and seven identical even splits is the pattern our own detection reads
+as machine-made. It flags nobody (that is the report-only ruling), but it puts a false finding in
+the report for no reason.
+
+#### UI-B — the late one. The timing is the test; the numbers are not.
+
+**Do not start until I say GO.** I will call it when the pool is at 63 of 64 and the last headless
+entry is going in. Then:
+
+1. Open the pool page and start a session.
+2. **Move one dial** — that starts the 90-second clock, which is the point.
+3. Play the seven battles however you like. Genuinely anything.
+4. **Take your time — use the full 90 seconds.** The pool must seal while you are still playing.
+5. Submit.
+
+**You should be refused, and that is the pass.** What I need from you is exactly what you see:
+
+- Does it say something like "this pool filled before your entry reached it", or does it just hang
+  on a loading indicator?
+- How long before it tells you?
+- **Screenshot it.** That message is a pass criterion and the screenshot is the evidence.
+
+You will be charged a transaction fee and nothing else. No entry, no 0.1 SOL.
+
+---
+
+**Recap of what is yours, updated 18:30Z:**
+
+| | |
+|---|---|
+| ~~merge PR 147~~ | **done** |
+| ~~top up the funder~~ | **done** — 9.253841480 |
+| **merge PR 148** | the battle-test records; green on all ten checks |
+| **run `deploy-backend`** | the fix is merged but NOT live — confirmed by probe |
+| **ratify UI-A early / UI-B late** | or counter it |
+| two browser sessions | when I call them |
+
+Everything else is mine. T2 settles itself at 01:15:58Z and I am set to pick it up.
+
+---
+
+## F-29 — ▶ ONE MERGE, then you can go to bed
+
+**Merge the T2R freeze PR before ~01:21Z.** That is the whole ask. Everything after it is headless.
+
+### What this is
+
+T2 is spoiled and that is my fault — §H16, and I have written it up plainly. The 1 SOL you asked me
+to send funded the wallet that became pool 20's 40th seat three minutes later, which crossed the
+boundary T2 exists to test. I checked that transfer against next week's budget and never asked
+whether it touched the test that was running right then.
+
+**T2R is the retry, and it is stronger than the test it replaces.** T2's prediction was frozen
+against a pool that was already open. This one is frozen **before its pool exists** — the pool it
+will run on opens about five minutes after pool 20 closes. That is the strongest form of freeze this
+test has, and we only get it here because the retry was forced.
+
+### What happens once you merge
+
+Nothing that needs you.
+
+1. Pool 20 seals at 01:15:58Z and pays out. It is recorded as an **observation** — no prediction
+   attached, nothing claimed. I explain below why I am not dressing it up.
+2. The next pool opens ~01:21Z. I enter 39 headless wallets into it.
+3. Twelve hours later it misses its deadline one seat short and refunds all 39. **No admin key and
+   no action from you** — both settlement instructions are permissionless by design.
+4. I harvest, reconcile and report.
+
+All 72 wallets are funded at exactly 0.15 and nothing else is outstanding.
+
+### Why pool 20 gets no prediction
+
+I offered to freeze a partial one and then talked myself out of it, which is worth you knowing
+because it is the second time this project has nearly recorded a check that could not fail.
+
+Every line I would have frozen was already known before the event: the pool holds 40 and the
+minimum is 40, so the outcome is public arithmetic; "one seat paid the whole pot" is a constant; the
+vault figure and the per-seat cost have each been measured three times. A prediction that cannot be
+wrong is not evidence, and putting one in the record makes the honest ones worth less. So pool 20
+says what happened and claims nothing.
+
+### Two things T2R does NOT claim, said here rather than buried
+
+- **It runs headless, so it cannot show that your browser wallets are refunded on the same terms as
+  the scripted ones.** T2 was going to show that. It never got the chance, so nothing we already had
+  is lost — but it is owed, and I will put it on a later pool when you are around.
+- **Nothing stops a stranger entering a public devnet pool.** That is what ended T2, and an outsider
+  could have done it just as easily as we did. My guard is a rule, not a mechanism: fund no wallet
+  outside the seat list while a test pool is open. Worth knowing it is a real exposure.
+
+**▶ Merge the PR. Then nothing until morning.**
+
+---
+
+## F-30 — ▶ READ THIS ONE. The even split won, and the rules page says it cannot.
+
+**Nothing to do right now. This is the most serious thing the test has found and it is your call,
+with counsel.**
+
+### What happened
+
+Pool 20 sealed at 40 seats and scored. Both your browser wallets ran out of time again, so all
+seven of their battles went in as the even split — 20 points in every stat, the shape the screen
+starts at. **They tied for first and split the whole 4 SOL prize between them.** Everyone else got
+nothing.
+
+The best player who actually made choices scored 318. Your two timed-out entries scored 426.
+
+### It is not a bug, and I checked rather than assumed
+
+I re-scored all forty entries myself, using the product's own scoring code but running it separately
+from the system that produced the result. Forty compared, zero disagreements. The tie-splitting is
+written into the program on purpose: a tie for first divides the entire prize among those tied and
+pays nobody else.
+
+### Why it happened, and why T5 showed the opposite
+
+In the earlier test the field was built so that nobody could put more than 25 points in one stat.
+Against that, the even split came 62nd of 64 — which is what the rules page describes.
+
+This field was not capped. Every one of the 38 other players concentrated hard: their biggest stat
+ran from 44 up to 88, some with zeroes elsewhere. Scoring compares every player against every other,
+stat by stat. Against someone who pours 67 points into one stat, an even split wins four of the five
+comparisons. It beat nearly everyone.
+
+**So the even split's strength depends on what everyone else does, not on the split itself.** The
+same allocation came last in one pool and first in another, unchanged.
+
+### The bit that needs you
+
+The rules page says, twice, in words a player reads:
+
+> "The even split is the weakest allocation in the game."
+
+That sentence is **not true as written**. The very next sentence in your copy names the condition
+under which it is true — when the other player has concentrated on *three* stats. Against one or two
+stats, the even split is strong.
+
+Two things follow, and both are yours:
+
+1. **The copy needs changing**, because it currently tells players something false about how the
+   game works. What it should say instead is brand voice and yours.
+2. **It touches PID §8, so it is you and counsel, not me.** The case that this is a game of skill
+   is harder to make on a pool where the two players who did nothing beat all 38 who played and took
+   the whole prize. It also means the timeout is a *strategy* — someone who works this out wins by
+   walking away from the screen.
+
+**What I have NOT shown, so you do not over-read it:** the 38 opponents were generated by our test
+code, not real people. Whether human players concentrate the way our generator does is unknown, and
+that is now the most valuable thing left to find out.
+
+### And a mistake of mine in the same breath
+
+Last night I listed four things about this pool that I said "could not fail" and used that to argue
+against recording a prediction. One of them was "exactly one player is paid the whole 4 SOL". Two
+were paid, 2 SOL each. I had the constant right and drew the wrong conclusion from it — it fixes how
+many *places* pay, not how many *people*. Had I recorded that prediction it would have failed, and
+it would have caught this a few hours earlier. Not recording it was still the right call, but my
+reasoning for it was partly wrong.
+
+---
+
+## F-31 — T2R is running, and nothing is needed from you
+
+Pool 21 holds exactly 39 seats and the chain reads **refund**. It settles itself at **13:21:29Z**
+and I will pick it up.
+
+Worth one line: the prediction was merged at 23:47:18Z and **pool 21 did not exist until
+01:21:29Z** — an hour and 34 minutes later. That is the strongest form of freeze in this test, and
+we only have it because the retry was forced.
+
+Also: two wallets failed mid-entry with the network error that cost us eleven wallets earlier in the
+week. **Both simply played again and landed.** That is the fix you deployed last night doing exactly
+what it was built for, on a real failure, within hours. No substitutes — the 39 seats are the 39 the
+plan named.
+
+---
+
+## F-32 — ▶ FOUNDER ACTION: one transfer, three merges, then stand by for a GO call
+
+You ratified both calls: **pool 22 runs as a shakedown** (an observation, not a test), and **T6 is
+frozen against pool 23 with UI-A early and UI-B late**. Both are done on my side. Three things are
+yours.
+
+### 1. ▶ Send 8 SOL from UI-B to the funder
+
+```
+from:  UI-B   6wqLMAS1guarBehRDGFSAApGUBLXuuHWmy9naepzu3sa
+to:    funder 6z4wriiac4d6bay57Pe4Gj3jxhjeT9HfbcH2VaM4r3Ue
+amount: 8 SOL
+```
+
+**Why, in plain numbers.** The 72 test wallets each hold about 0.15 SOL, which covers exactly one
+entry apiece — enough to fill pool 22 today and nothing after that. T6 needs all 71 of them topped
+back up to 0.155 SOL before pool 23, which is about **7.3 SOL**, and the funder holds **0.34**.
+
+If a test wallet wins pool 22's 4 SOL I can sweep it back and the gap drops to about 3.3 SOL. If
+**UI-A** wins it instead — and UI-A is already seated in pool 22 with an allocation I did not choose
+and cannot see — the 4 SOL lands in your wallet and the full 7.3 is needed. Eight SOL covers it
+either way, and it means I never have to stop and ask again mid-run. UI-B keeps about 3.7 SOL and
+only ever spends a transaction fee, because UI-B's job in both pools is to be refused.
+
+The devnet faucet would also work but is rate-limited to roughly 2 SOL a day; the transfer is
+instant.
+
+### 2. ▶ Merge three PRs
+
+- **PR 154** — the copy correction (the "weakest allocation" sentence) and the skill-evidence
+  report. Open since yesterday, 8 checks green.
+- **PR 155** — the §H22 record in `battle-test/`. 10 checks green.
+- **The new T6 freeze PR** — link below once it is open.
+
+**The T6 one is time-sensitive and the other two are not.** Pool 23 does not exist yet. The moment
+pool 22 fills, pool 23 opens about five minutes later — and a prediction merged after that is worth
+less than one merged before it. So: **merge the T6 PR, and tell me. I do not start filling pool 22
+until you have.**
+
+### 3. ▶ Then stand by. Two sessions, both on my call.
+
+**Pool 22 — UI-B, the shakedown.** I will fill pool 22 to 63 of 64 and then say GO. You:
+
+1. Open the pool page and start a session.
+2. **Move one dial.** That starts the 90-second clock, which is the whole point.
+3. Play the seven battles however you like — genuinely anything, the numbers do not matter.
+4. **Take the full 90 seconds.** The pool has to seal underneath you while you are still playing.
+5. Submit.
+
+**You should be refused, and being refused is the result.** What I need is exactly what you see:
+does it say something like *"this pool filled before your entry reached it"*, or does it hang on a
+spinner? How long before it tells you? **Screenshot it.** You are charged a transaction fee and
+nothing else — no entry, no 0.1 SOL.
+
+**Pool 23 — UI-A first, then UI-B late.** Same as above for UI-B. UI-A goes in early, as one of the
+64, the moment pool 23 opens and before I fill it:
+
+| Battle | Drag this stat to 25 |
+|---|---|
+| 1 | Strength |
+| 2 | Speed |
+| 3 | Heart |
+| 4 | Wit |
+| 5 | Durability |
+| 6 | Strength |
+| 7 | Heart |
+
+**One thing here does matter, unlike last time.** Keep every stat between 1 and 25 — never 0, never
+above 25. The frozen plan says a test wallet wins pool 23 outright, and that claim holds for any
+allocation you play inside that range and breaks if you go above 25. Seven drags, one per screen,
+lock in each battle, 90 seconds for all seven starting at your first touch.
+
+### What I am doing meanwhile
+
+Nothing that spends money until you have merged the T6 PR. After that: fill pool 22, call GO, record
+what we see, then top the wallets up and run T6 on pool 23 properly frozen.
+
+
+---
+
+## F-33 — ▶ FOUNDER ACTION: pool 22 found a real one. Two rulings and an RPC.
+
+Pool 22 did its job. It settled cleanly — 64 seats, nine seconds from seal to payout, W00 took the
+whole 4 SOL and the money is back in the test wallets. And your 90 seconds found the thing no
+automated run could have.
+
+### What you saw, and why it is wrong
+
+Your screen said the attempt did not go through, and that it was **either** an earlier attempt from
+your wallet **or** the pool having stopped taking entries.
+
+**The server already knew which.** It answered "this pool is closed to entries" in plain words. The
+app throws that away and shows a message that covers both cases, so you were asked to go and work
+out for yourself something the system could simply have told you.
+
+And the right sentence is already written, in your own copy file:
+
+> "This pool filled before your entry reached it, so nothing settled. Another pool in this tier opens
+> once this one has been paid out."
+
+It has never been shown to anybody, and as things stand it never can be. Three separate design
+decisions, each sensible on its own, stack up to block it. That is the kind of fault that only shows
+up when a person actually sits in front of the screen.
+
+**What worked:** you were charged **nothing** — not the entry, not even a network fee. I checked your
+wallet against the chain and it is unchanged to the last digit. And it was a sentence, not a
+spinner. Those were the two things that mattered most and both held.
+
+### ▶ Ruling 1 — may I fix it? (I recommend yes)
+
+This is product code, outside the battle-test boundary, so it is your call. The small fix is about
+five lines: have the app read the reason the server already sends and show the message that matches.
+You would then get, truthfully and without hedging:
+
+> "This pool is no longer taking entries, so nothing settled. Open pools are listed on the Pools tab."
+
+**I recommend taking it.** It ships as its own PR, separate from anything else, with tests.
+
+### ▶ Ruling 2 — do you want the word "filled"? (this one is yours, it is brand voice)
+
+"No longer taking entries" is true and costs five lines. Saying **"filled"** is warmer and more
+specific, but it costs more: a pool that filled up and a pool that ran out of time both just look
+"closed" to the app, so the server would have to start saying which. Worth it only if you think
+"filled" reads materially better to a player. I have no strong view — this is your column.
+
+### ▶ Ruling 3 — I need a devnet RPC before T6
+
+Not urgent tonight, but it blocks T6. I filled pool 22 using the free public Solana endpoint, which
+throttled me: every run got about fifteen entries in and then stopped. It cost nothing — every
+affected wallet simply retried and landed, thanks to the fix you deployed on Thursday — but it means
+**the fill took 5 minutes 20 seconds, and T6 has "under 5 minutes" as a pass criterion.** That number
+would be measuring the free endpoint, not our product. Our own manual warned about this and I did not
+follow it.
+
+**What I need:** a free devnet RPC URL from **Helius**, **QuickNode** or **Triton**. All three have
+free tiers, it is a sign-up rather than a payment, takes a couple of minutes, and you paste me the
+URL. Any of the three is fine.
+
+### Where that leaves T6
+
+**T6 is frozen and safe** — merged before pool 23 existed, which is the strongest evidence standard
+we have, and I have the receipts recorded. It is ready to run and needs two things first: the RPC
+above, and a decision on whether the copy fix ships before it. **If the copy fix does not ship, T6
+will fail its copy criterion** — correctly, because the product does have this fault. I would rather
+fix it and have T6 test the fixed thing.
+
+
+---
+
+## F-34 — ▶ FOUNDER ACTION: merge, then press the deploy button, then the RPC
+
+All three of your rulings are built. **PR 157** is open — it is product code, on its own branch, and
+it touches nothing in the battle test.
+
+### What it does
+
+The route now tells the app **which** thing happened, and the app shows the matching sentence. A
+player in your position tonight will read:
+
+> "This pool filled before your entry reached it, so nothing settled. Another pool in this tier
+> opens once this one has been paid out."
+
+That sentence was already written. It had simply never been able to reach anybody.
+
+A pool that ran out of time instead of filling up gets the other, truthful one — *"no longer taking
+entries"* — because those are different things and telling someone their pool filled when it did not
+would be a new lie in place of the old hedge.
+
+**What I was careful about.** The entry gate deliberately never explains *why* it turns someone away
+— that is the geo and sanctions check, and explaining it would let someone probe it. That rule is
+untouched. The two new messages are facts about the **pool**, which its own page already shows to
+anybody, and they can never be sent by the part of the system that does the eligibility checks — the
+code drops them there rather than relying on whoever writes the next bit of code to remember.
+
+517 app tests and 201 service tests pass, both with new ones for this.
+
+### ▶ Step 1 — merge PR 157
+
+### ▶ Step 2 — and then press the deploy button. This is the one that caught us before.
+
+**Merging ships only half of it.** The website updates itself; the entry service does not. It has to
+be started by hand, exactly as it did on Thursday when the seal fix sat merged-but-not-live for
+hours and I only caught it by probing.
+
+**▶ GitHub → Actions → "deploy backend" → Run workflow**, on `main`, both boxes left unticked.
+
+Nothing breaks in the gap, in either order — until the service is deployed the app keeps showing the
+old cautious message, which is still true. But **T6 must not run until both halves are live**, or it
+will test the old behaviour and fail its copy criterion for a fault that is already fixed.
+
+### ▶ Step 3 — the RPC, and I cannot read it myself
+
+You said it is already in secrets, and you are right: it is `BLOTTO_DEVNET_RPC_URL`, a Helius devnet
+URL. **But a GitHub secret is deliberately one-way.** It can be handed to a workflow while it runs,
+and it is never readable back — not by me, not through the API, and it is blanked out of the logs.
+That is the point of it, and it is working as intended.
+
+So it has to reach this session some other way. Two options, and **I recommend the first**:
+
+**(a) Put it in the environment for these sessions.** In the Claude Code web settings, the
+environment this session runs in can carry environment variables. Add one called `BLOTTO_RPC_URL`
+with the Helius devnet URL as its value. It then reaches me without ever appearing in our chat or in
+any file — which matters, because the URL has your API key inside it.
+
+**(b) Paste it here.** Quicker, and it works immediately. The cost is that a key ends up in the
+transcript. It is a devnet key, so the exposure is small, and you can rotate it in Helius afterwards
+in about thirty seconds. Your call.
+
+### Then T6 runs
+
+Frozen, waiting, and needing nothing else from you once the above is done. I will fill the pool, call
+GO for UI-A early and UI-B late, and report against the prediction.
+

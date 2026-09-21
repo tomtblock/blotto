@@ -1,0 +1,4256 @@
+{
+  "schema": "blotto-rehearsal-plan/1",
+  "test": "T5",
+  "title": "Full pool — a HEADLESS wallet wins, and neither founder wallet does",
+  "cluster": "devnet",
+  "programId": "5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17",
+  "tier": 0,
+  "poolId": null,
+  "poolPda": null,
+  "poolIdNote": "Deliberately unnamed. T4 was frozen against pool 15, lost that pool to the seal-lockout (DRIFT §H6) and ran unedited on pool 16 — which made the prediction stronger evidence, not weaker, because it was fixed before the pool existed. T5 is frozen the same way on purpose. The pool is recorded in T5.freeze.json when the first entry lands.",
+  "entryLamports": "100000000",
+  "potLamports": "4000000000",
+  "minSeats": 40,
+  "fillDeadlineSeconds": 43200,
+  "frozenAt": null,
+  "gitCommit": null,
+  "hypothesis": "The winner of a Blotto Cup pool is decided by the allocations and nothing else. T4 showed a pool paying the operator's own account the whole pot; it could not show that the account was not privileged, because that account won. T5 inverts it: a headless wallet takes rank 1 and the entire 4 SOL pot, another headless wallet takes last, and both founder wallets are ordinary entrants who finish in the middle and are paid nothing.",
+  "unconditionalDerivation": {
+    "_": "What follows from the shapes alone — no seed, no exact numbers, no assumption about what the founder dials.",
+    "scoringRule": "A stat goes to the larger number. A battle goes to whoever wins at least 3 of 5 stats, otherwise it is a draw. Score is 2 half-points a win and 1 a draw, across 7 battles against each of the other 63 entrants.",
+    "maxScore": "882",
+    "winnerIsHeadless": "W00 holds three stats at 26 or above in every battle; no field seat exceeds 25 and the pole holds one stat. So W00 wins all 434 battles against the field and never loses to the pole: its floor is 875. Every field seat loses all 7 battles to W00, so the best any of them can reach is 868, which is below that floor. **W00 is rank 1 whatever anyone else does, including the founder.**",
+    "founderSeatsCannotWin": "UI-A and UI-B hold every stat between 1 and 25, so they are field seats by the line above and cannot take rank 1. This holds for ANY allocation inside that range — it does not depend on the founder reproducing the recipe.",
+    "founderSeatsCannotComeLast": "Five non-zero stats beat a single spike four stats to one, so UI-A and UI-B each beat the pole in all 7 battles — at least 14 half-points. The pole scores at most 7. **So both founder seats finish in ranks 2..63.** The non-zero floor is what carries this: a seat with two or more zeroes can draw with a pole instead of beating it.",
+    "poleIsLast": "Every field seat beats the pole in every battle, so W01 scores 0 against all 62 of them and at most 7 against W00. The worst any field seat can do is 14, from the pole alone. **W01 is last whatever the field does.**"
+  },
+  "expectations": {
+    "terminalState": "Paid",
+    "entrants": 64,
+    "sealsAtDeadline": false,
+    "sealReason": "Capacity — the 64th register seals the pool immediately",
+    "settlementSequence": [
+      "reveal_pool_secret",
+      "commit_results",
+      "pay_prizes"
+    ],
+    "paidSeatCount": 1,
+    "winner": "W00",
+    "winnerIsHeadless": true,
+    "winnerLamports": "4000000000",
+    "potLamports": "4000000000",
+    "lastPlace": "W01",
+    "founderSeatsPaid": "0",
+    "founderRankRange": [
+      2,
+      63
+    ],
+    "founderRankNote": "A RANGE, not a number, and deliberately so. UI-A and UI-B play by hand against a 90-second clock; T4 showed that produces different numbers from any recipe (§H10). Their exact ranks among 61 other field seats are COMPUTED AT REVEAL, not predicted. The nominal allocations below are what the recipe produces and are the conditional case.",
+    "vaultAfter": "650240",
+    "vaultAfterNote": "the rent cushion, never recovered",
+    "perSeatSunkLamports": "4436000",
+    "winnerNetLamports": "3895564000",
+    "loserNetLamports": "-104436000",
+    "resultsRootConditional": "ff1bca37fbc29e51bfe65bd92a707fdf613e8b84ec7353ba64af74c1ca2819f3",
+    "leafOrderConditional": "2,22,14,49,58,46,6,29,48,7,44,12,61,19,23,8,54,13,18,21,16,27,9,20,35,34,53,28,30,51,11,38,36,25,31,37,33,39,4,40,62,17,32,60,42,15,45,59,50,43,10,24,52,63,56,47,5,41,57,55,26,0,1,3",
+    "conditionalNote": "The root, the leaf order, every exact score and every field rank assume the exact allocations below AND the planned seat order. A founder allocation inside 1..25 that is not the recipe breaks these and none of the unconditional claims above.",
+    "hardBlocks": [],
+    "detectionNotes": [
+      "Detection computes and persists a report but flags nobody, under the manual-only policy ruling D-E9. No flag, no escrow, no delay to the payout.",
+      "population_score is predicted to fire on W00 — it is many sigma from the field by design, exactly as it did on UI-A in T4. Finding it there is a detection PASS, not a fault. That it fires on a HEADLESS wallet this time is itself worth recording: the signal follows the allocation, not the route.",
+      "allocation_entropy raises its round-number note on W01: a pole is all zeroes and a hundred, so 100% of its stat values are multiples of ten.",
+      "allocation_entropy must NOT fire \"strong\" on anyone: every seat carries at least 3 distinct shapes (UI-A and UI-B carry 5 each, W00 7, W01 5, the field 7).",
+      "duplicate_sets must not fire. UI-A and UI-B rotate through different stats precisely so their seven-battle sets differ — two entrants sharing a set is the one allocation signal that hard-blocks.",
+      "Sanctions screening runs on the winner before payment. W00 is a derived devnet key and no match is expected."
+    ]
+  },
+  "seats": [
+    {
+      "seat": null,
+      "plannedSeat": 0,
+      "wallet": "UI-A",
+      "route": "ui",
+      "role": "field",
+      "generator": "uiFieldA",
+      "recipe": "each battle, drag ONE stat to 25 and leave the rest — in order: Strength, Speed, Heart, Wit, Durability, Strength, Heart. Never take a stat above 25 or down to 0.",
+      "battles": [
+        [
+          25,
+          19,
+          19,
+          19,
+          18
+        ],
+        [
+          19,
+          25,
+          19,
+          19,
+          18
+        ],
+        [
+          19,
+          19,
+          25,
+          19,
+          18
+        ],
+        [
+          19,
+          19,
+          19,
+          25,
+          18
+        ],
+        [
+          19,
+          19,
+          19,
+          18,
+          25
+        ],
+        [
+          25,
+          19,
+          19,
+          19,
+          18
+        ],
+        [
+          19,
+          19,
+          25,
+          19,
+          18
+        ]
+      ],
+      "expectedRank": 62,
+      "expectedScoreHalf": 323,
+      "expectedZones": 874,
+      "expectedLamports": "0",
+      "distinctShapes": 5,
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        2,
+        63
+      ]
+    },
+    {
+      "seat": null,
+      "plannedSeat": 1,
+      "wallet": "UI-B",
+      "route": "ui",
+      "role": "field",
+      "generator": "uiFieldB",
+      "recipe": "each battle, drag ONE stat to 25 and leave the rest — in order: Durability, Wit, Heart, Speed, Strength, Wit, Speed. Never take a stat above 25 or down to 0.",
+      "battles": [
+        [
+          19,
+          19,
+          19,
+          18,
+          25
+        ],
+        [
+          19,
+          19,
+          19,
+          25,
+          18
+        ],
+        [
+          19,
+          19,
+          25,
+          19,
+          18
+        ],
+        [
+          19,
+          25,
+          19,
+          19,
+          18
+        ],
+        [
+          25,
+          19,
+          19,
+          19,
+          18
+        ],
+        [
+          19,
+          19,
+          19,
+          25,
+          18
+        ],
+        [
+          19,
+          25,
+          19,
+          19,
+          18
+        ]
+      ],
+      "expectedRank": 63,
+      "expectedScoreHalf": 311,
+      "expectedZones": 883,
+      "expectedLamports": "0",
+      "distinctShapes": 5,
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        2,
+        63
+      ]
+    },
+    {
+      "seat": null,
+      "plannedSeat": 2,
+      "wallet": "W00",
+      "route": "direct",
+      "role": "wall",
+      "generator": "wall",
+      "seed": 5100,
+      "battles": [
+        [
+          32,
+          31,
+          0,
+          0,
+          37
+        ],
+        [
+          0,
+          34,
+          34,
+          0,
+          32
+        ],
+        [
+          0,
+          32,
+          0,
+          37,
+          31
+        ],
+        [
+          0,
+          36,
+          35,
+          0,
+          29
+        ],
+        [
+          0,
+          0,
+          32,
+          36,
+          32
+        ],
+        [
+          0,
+          29,
+          0,
+          36,
+          35
+        ],
+        [
+          32,
+          36,
+          32,
+          0,
+          0
+        ]
+      ],
+      "expectedRank": 1,
+      "expectedScoreHalf": 876,
+      "expectedZones": 1317,
+      "expectedLamports": "4000000000",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 3,
+      "wallet": "W01",
+      "route": "direct",
+      "role": "pole",
+      "generator": "pole",
+      "seed": 5200,
+      "battles": [
+        [
+          0,
+          100,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          100,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          100,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          100
+        ],
+        [
+          100,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          100,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          100,
+          0,
+          0
+        ]
+      ],
+      "expectedRank": 64,
+      "expectedScoreHalf": 6,
+      "expectedZones": 441,
+      "expectedLamports": "0",
+      "distinctShapes": 5
+    },
+    {
+      "seat": null,
+      "plannedSeat": 4,
+      "wallet": "W02",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5002,
+      "battles": [
+        [
+          15,
+          19,
+          25,
+          25,
+          16
+        ],
+        [
+          22,
+          25,
+          20,
+          20,
+          13
+        ],
+        [
+          16,
+          16,
+          25,
+          18,
+          25
+        ],
+        [
+          11,
+          18,
+          25,
+          25,
+          21
+        ],
+        [
+          18,
+          25,
+          25,
+          15,
+          17
+        ],
+        [
+          17,
+          16,
+          25,
+          17,
+          25
+        ],
+        [
+          25,
+          20,
+          25,
+          7,
+          23
+        ]
+      ],
+      "expectedRank": 39,
+      "expectedScoreHalf": 432,
+      "expectedZones": 928,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 5,
+      "wallet": "W03",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5003,
+      "battles": [
+        [
+          25,
+          20,
+          25,
+          23,
+          7
+        ],
+        [
+          25,
+          15,
+          19,
+          22,
+          19
+        ],
+        [
+          19,
+          23,
+          19,
+          14,
+          25
+        ],
+        [
+          25,
+          20,
+          22,
+          19,
+          14
+        ],
+        [
+          22,
+          20,
+          17,
+          25,
+          16
+        ],
+        [
+          25,
+          17,
+          25,
+          17,
+          16
+        ],
+        [
+          16,
+          19,
+          20,
+          20,
+          25
+        ]
+      ],
+      "expectedRank": 57,
+      "expectedScoreHalf": 397,
+      "expectedZones": 940,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 6,
+      "wallet": "W04",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5004,
+      "battles": [
+        [
+          21,
+          22,
+          22,
+          25,
+          10
+        ],
+        [
+          21,
+          22,
+          10,
+          22,
+          25
+        ],
+        [
+          14,
+          25,
+          14,
+          22,
+          25
+        ],
+        [
+          18,
+          22,
+          25,
+          25,
+          10
+        ],
+        [
+          25,
+          25,
+          10,
+          25,
+          15
+        ],
+        [
+          17,
+          25,
+          13,
+          25,
+          20
+        ],
+        [
+          25,
+          22,
+          22,
+          21,
+          10
+        ]
+      ],
+      "expectedRank": 7,
+      "expectedScoreHalf": 489,
+      "expectedZones": 990,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 7,
+      "wallet": "W05",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5005,
+      "battles": [
+        [
+          12,
+          23,
+          16,
+          24,
+          25
+        ],
+        [
+          25,
+          20,
+          25,
+          25,
+          5
+        ],
+        [
+          25,
+          20,
+          19,
+          23,
+          13
+        ],
+        [
+          10,
+          19,
+          21,
+          25,
+          25
+        ],
+        [
+          11,
+          25,
+          15,
+          24,
+          25
+        ],
+        [
+          25,
+          19,
+          8,
+          25,
+          23
+        ],
+        [
+          25,
+          24,
+          10,
+          16,
+          25
+        ]
+      ],
+      "expectedRank": 10,
+      "expectedScoreHalf": 481,
+      "expectedZones": 978,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 8,
+      "wallet": "W06",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5006,
+      "battles": [
+        [
+          11,
+          16,
+          25,
+          23,
+          25
+        ],
+        [
+          25,
+          25,
+          25,
+          15,
+          10
+        ],
+        [
+          12,
+          18,
+          25,
+          25,
+          20
+        ],
+        [
+          24,
+          25,
+          11,
+          15,
+          25
+        ],
+        [
+          16,
+          25,
+          25,
+          18,
+          16
+        ],
+        [
+          25,
+          16,
+          25,
+          21,
+          13
+        ],
+        [
+          22,
+          10,
+          22,
+          21,
+          25
+        ]
+      ],
+      "expectedRank": 16,
+      "expectedScoreHalf": 471,
+      "expectedZones": 948,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 9,
+      "wallet": "W07",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5007,
+      "battles": [
+        [
+          25,
+          7,
+          18,
+          25,
+          25
+        ],
+        [
+          19,
+          21,
+          22,
+          13,
+          25
+        ],
+        [
+          16,
+          24,
+          10,
+          25,
+          25
+        ],
+        [
+          10,
+          20,
+          23,
+          25,
+          22
+        ],
+        [
+          25,
+          25,
+          25,
+          20,
+          5
+        ],
+        [
+          16,
+          19,
+          25,
+          18,
+          22
+        ],
+        [
+          19,
+          23,
+          25,
+          13,
+          20
+        ]
+      ],
+      "expectedRank": 23,
+      "expectedScoreHalf": 463,
+      "expectedZones": 975,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 10,
+      "wallet": "W08",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5008,
+      "battles": [
+        [
+          20,
+          25,
+          19,
+          11,
+          25
+        ],
+        [
+          25,
+          25,
+          24,
+          13,
+          13
+        ],
+        [
+          17,
+          25,
+          21,
+          24,
+          13
+        ],
+        [
+          18,
+          22,
+          19,
+          19,
+          22
+        ],
+        [
+          25,
+          12,
+          25,
+          15,
+          23
+        ],
+        [
+          25,
+          20,
+          22,
+          17,
+          16
+        ],
+        [
+          25,
+          19,
+          25,
+          11,
+          20
+        ]
+      ],
+      "expectedRank": 51,
+      "expectedScoreHalf": 412,
+      "expectedZones": 937,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 11,
+      "wallet": "W09",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5009,
+      "battles": [
+        [
+          25,
+          19,
+          16,
+          22,
+          18
+        ],
+        [
+          12,
+          25,
+          19,
+          25,
+          19
+        ],
+        [
+          25,
+          19,
+          25,
+          13,
+          18
+        ],
+        [
+          25,
+          25,
+          18,
+          25,
+          7
+        ],
+        [
+          22,
+          25,
+          14,
+          14,
+          25
+        ],
+        [
+          25,
+          25,
+          17,
+          23,
+          10
+        ],
+        [
+          21,
+          25,
+          20,
+          11,
+          23
+        ]
+      ],
+      "expectedRank": 31,
+      "expectedScoreHalf": 444,
+      "expectedZones": 946,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 12,
+      "wallet": "W10",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5010,
+      "battles": [
+        [
+          25,
+          7,
+          25,
+          25,
+          18
+        ],
+        [
+          25,
+          25,
+          9,
+          16,
+          25
+        ],
+        [
+          16,
+          16,
+          25,
+          20,
+          23
+        ],
+        [
+          17,
+          18,
+          25,
+          19,
+          21
+        ],
+        [
+          12,
+          25,
+          25,
+          13,
+          25
+        ],
+        [
+          12,
+          25,
+          25,
+          13,
+          25
+        ],
+        [
+          25,
+          25,
+          13,
+          19,
+          18
+        ]
+      ],
+      "expectedRank": 12,
+      "expectedScoreHalf": 478,
+      "expectedZones": 944,
+      "expectedLamports": "0",
+      "distinctShapes": 6
+    },
+    {
+      "seat": null,
+      "plannedSeat": 13,
+      "wallet": "W11",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5011,
+      "battles": [
+        [
+          25,
+          15,
+          25,
+          17,
+          18
+        ],
+        [
+          16,
+          25,
+          16,
+          22,
+          21
+        ],
+        [
+          25,
+          20,
+          19,
+          13,
+          23
+        ],
+        [
+          25,
+          4,
+          21,
+          25,
+          25
+        ],
+        [
+          19,
+          25,
+          16,
+          19,
+          21
+        ],
+        [
+          12,
+          25,
+          16,
+          22,
+          25
+        ],
+        [
+          25,
+          13,
+          25,
+          12,
+          25
+        ]
+      ],
+      "expectedRank": 18,
+      "expectedScoreHalf": 467,
+      "expectedZones": 970,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 14,
+      "wallet": "W12",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5012,
+      "battles": [
+        [
+          11,
+          24,
+          15,
+          25,
+          25
+        ],
+        [
+          25,
+          25,
+          22,
+          16,
+          12
+        ],
+        [
+          16,
+          25,
+          9,
+          25,
+          25
+        ],
+        [
+          20,
+          25,
+          12,
+          25,
+          18
+        ],
+        [
+          19,
+          11,
+          25,
+          20,
+          25
+        ],
+        [
+          25,
+          19,
+          24,
+          25,
+          7
+        ],
+        [
+          15,
+          15,
+          20,
+          25,
+          25
+        ]
+      ],
+      "expectedRank": 3,
+      "expectedScoreHalf": 509,
+      "expectedZones": 981,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 15,
+      "wallet": "W13",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5013,
+      "battles": [
+        [
+          19,
+          21,
+          22,
+          22,
+          16
+        ],
+        [
+          25,
+          21,
+          13,
+          22,
+          19
+        ],
+        [
+          16,
+          15,
+          25,
+          25,
+          19
+        ],
+        [
+          25,
+          25,
+          25,
+          10,
+          15
+        ],
+        [
+          25,
+          19,
+          24,
+          19,
+          13
+        ],
+        [
+          17,
+          25,
+          21,
+          16,
+          21
+        ],
+        [
+          10,
+          15,
+          25,
+          25,
+          25
+        ]
+      ],
+      "expectedRank": 46,
+      "expectedScoreHalf": 423,
+      "expectedZones": 952,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 16,
+      "wallet": "W14",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5014,
+      "battles": [
+        [
+          11,
+          25,
+          16,
+          23,
+          25
+        ],
+        [
+          25,
+          16,
+          25,
+          10,
+          24
+        ],
+        [
+          8,
+          25,
+          25,
+          17,
+          25
+        ],
+        [
+          10,
+          25,
+          22,
+          18,
+          25
+        ],
+        [
+          19,
+          25,
+          20,
+          17,
+          19
+        ],
+        [
+          25,
+          17,
+          25,
+          16,
+          17
+        ],
+        [
+          14,
+          16,
+          20,
+          25,
+          25
+        ]
+      ],
+      "expectedRank": 21,
+      "expectedScoreHalf": 465,
+      "expectedZones": 952,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 17,
+      "wallet": "W15",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5015,
+      "battles": [
+        [
+          25,
+          10,
+          16,
+          24,
+          25
+        ],
+        [
+          21,
+          25,
+          25,
+          13,
+          16
+        ],
+        [
+          25,
+          18,
+          14,
+          25,
+          18
+        ],
+        [
+          13,
+          19,
+          22,
+          22,
+          24
+        ],
+        [
+          25,
+          17,
+          25,
+          19,
+          14
+        ],
+        [
+          19,
+          25,
+          25,
+          12,
+          19
+        ],
+        [
+          22,
+          17,
+          13,
+          23,
+          25
+        ]
+      ],
+      "expectedRank": 42,
+      "expectedScoreHalf": 429,
+      "expectedZones": 949,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 18,
+      "wallet": "W16",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5016,
+      "battles": [
+        [
+          17,
+          25,
+          16,
+          25,
+          17
+        ],
+        [
+          10,
+          20,
+          25,
+          23,
+          22
+        ],
+        [
+          21,
+          22,
+          25,
+          16,
+          16
+        ],
+        [
+          22,
+          15,
+          16,
+          22,
+          25
+        ],
+        [
+          10,
+          25,
+          25,
+          21,
+          19
+        ],
+        [
+          18,
+          25,
+          19,
+          13,
+          25
+        ],
+        [
+          25,
+          25,
+          10,
+          25,
+          15
+        ]
+      ],
+      "expectedRank": 19,
+      "expectedScoreHalf": 466,
+      "expectedZones": 978,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 19,
+      "wallet": "W17",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5017,
+      "battles": [
+        [
+          18,
+          12,
+          25,
+          20,
+          25
+        ],
+        [
+          19,
+          7,
+          25,
+          24,
+          25
+        ],
+        [
+          22,
+          10,
+          25,
+          21,
+          22
+        ],
+        [
+          14,
+          25,
+          25,
+          11,
+          25
+        ],
+        [
+          25,
+          25,
+          10,
+          15,
+          25
+        ],
+        [
+          13,
+          17,
+          25,
+          25,
+          20
+        ],
+        [
+          22,
+          13,
+          19,
+          22,
+          24
+        ]
+      ],
+      "expectedRank": 14,
+      "expectedScoreHalf": 473,
+      "expectedZones": 971,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 20,
+      "wallet": "W18",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5018,
+      "battles": [
+        [
+          10,
+          23,
+          17,
+          25,
+          25
+        ],
+        [
+          18,
+          22,
+          19,
+          25,
+          16
+        ],
+        [
+          12,
+          25,
+          13,
+          25,
+          25
+        ],
+        [
+          25,
+          12,
+          24,
+          25,
+          14
+        ],
+        [
+          14,
+          25,
+          23,
+          25,
+          13
+        ],
+        [
+          25,
+          22,
+          12,
+          19,
+          22
+        ],
+        [
+          24,
+          13,
+          16,
+          22,
+          25
+        ]
+      ],
+      "expectedRank": 24,
+      "expectedScoreHalf": 460,
+      "expectedZones": 966,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 21,
+      "wallet": "W19",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5019,
+      "battles": [
+        [
+          25,
+          17,
+          25,
+          18,
+          15
+        ],
+        [
+          19,
+          25,
+          24,
+          16,
+          16
+        ],
+        [
+          13,
+          13,
+          24,
+          25,
+          25
+        ],
+        [
+          19,
+          19,
+          16,
+          25,
+          21
+        ],
+        [
+          20,
+          25,
+          5,
+          25,
+          25
+        ],
+        [
+          25,
+          25,
+          25,
+          20,
+          5
+        ],
+        [
+          17,
+          25,
+          16,
+          17,
+          25
+        ]
+      ],
+      "expectedRank": 20,
+      "expectedScoreHalf": 465,
+      "expectedZones": 958,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 22,
+      "wallet": "W20",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5020,
+      "battles": [
+        [
+          25,
+          23,
+          25,
+          13,
+          14
+        ],
+        [
+          25,
+          20,
+          5,
+          25,
+          25
+        ],
+        [
+          8,
+          25,
+          20,
+          25,
+          22
+        ],
+        [
+          18,
+          25,
+          8,
+          25,
+          24
+        ],
+        [
+          18,
+          25,
+          21,
+          16,
+          20
+        ],
+        [
+          15,
+          25,
+          23,
+          12,
+          25
+        ],
+        [
+          13,
+          25,
+          14,
+          25,
+          23
+        ]
+      ],
+      "expectedRank": 2,
+      "expectedScoreHalf": 514,
+      "expectedZones": 1000,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 23,
+      "wallet": "W21",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5021,
+      "battles": [
+        [
+          21,
+          21,
+          13,
+          25,
+          20
+        ],
+        [
+          25,
+          20,
+          23,
+          14,
+          18
+        ],
+        [
+          11,
+          25,
+          14,
+          25,
+          25
+        ],
+        [
+          25,
+          25,
+          18,
+          20,
+          12
+        ],
+        [
+          15,
+          25,
+          12,
+          23,
+          25
+        ],
+        [
+          18,
+          22,
+          25,
+          25,
+          10
+        ],
+        [
+          21,
+          25,
+          16,
+          25,
+          13
+        ]
+      ],
+      "expectedRank": 15,
+      "expectedScoreHalf": 471,
+      "expectedZones": 967,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 24,
+      "wallet": "W22",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5022,
+      "battles": [
+        [
+          22,
+          25,
+          21,
+          16,
+          16
+        ],
+        [
+          25,
+          25,
+          21,
+          21,
+          8
+        ],
+        [
+          19,
+          22,
+          19,
+          21,
+          19
+        ],
+        [
+          19,
+          23,
+          25,
+          23,
+          10
+        ],
+        [
+          22,
+          21,
+          16,
+          22,
+          19
+        ],
+        [
+          23,
+          16,
+          25,
+          25,
+          11
+        ],
+        [
+          24,
+          25,
+          10,
+          16,
+          25
+        ]
+      ],
+      "expectedRank": 52,
+      "expectedScoreHalf": 410,
+      "expectedZones": 969,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 25,
+      "wallet": "W23",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5023,
+      "battles": [
+        [
+          25,
+          13,
+          25,
+          15,
+          22
+        ],
+        [
+          22,
+          25,
+          25,
+          15,
+          13
+        ],
+        [
+          23,
+          25,
+          13,
+          17,
+          22
+        ],
+        [
+          19,
+          17,
+          25,
+          20,
+          19
+        ],
+        [
+          25,
+          25,
+          10,
+          21,
+          19
+        ],
+        [
+          16,
+          22,
+          25,
+          17,
+          20
+        ],
+        [
+          25,
+          17,
+          11,
+          25,
+          22
+        ]
+      ],
+      "expectedRank": 34,
+      "expectedScoreHalf": 439,
+      "expectedZones": 956,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 26,
+      "wallet": "W24",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5024,
+      "battles": [
+        [
+          10,
+          23,
+          17,
+          25,
+          25
+        ],
+        [
+          25,
+          24,
+          12,
+          25,
+          14
+        ],
+        [
+          24,
+          22,
+          22,
+          16,
+          16
+        ],
+        [
+          22,
+          19,
+          18,
+          22,
+          19
+        ],
+        [
+          16,
+          18,
+          25,
+          16,
+          25
+        ],
+        [
+          14,
+          16,
+          25,
+          25,
+          20
+        ],
+        [
+          13,
+          25,
+          23,
+          22,
+          17
+        ]
+      ],
+      "expectedRank": 61,
+      "expectedScoreHalf": 375,
+      "expectedZones": 935,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 27,
+      "wallet": "W25",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5025,
+      "battles": [
+        [
+          20,
+          25,
+          22,
+          20,
+          13
+        ],
+        [
+          20,
+          14,
+          25,
+          16,
+          25
+        ],
+        [
+          22,
+          20,
+          25,
+          20,
+          13
+        ],
+        [
+          25,
+          13,
+          19,
+          18,
+          25
+        ],
+        [
+          14,
+          14,
+          25,
+          25,
+          22
+        ],
+        [
+          10,
+          15,
+          25,
+          25,
+          25
+        ],
+        [
+          25,
+          13,
+          21,
+          16,
+          25
+        ]
+      ],
+      "expectedRank": 22,
+      "expectedScoreHalf": 464,
+      "expectedZones": 958,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 28,
+      "wallet": "W26",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5026,
+      "battles": [
+        [
+          25,
+          25,
+          25,
+          9,
+          16
+        ],
+        [
+          25,
+          25,
+          25,
+          17,
+          8
+        ],
+        [
+          16,
+          13,
+          22,
+          25,
+          24
+        ],
+        [
+          22,
+          21,
+          14,
+          18,
+          25
+        ],
+        [
+          25,
+          25,
+          21,
+          9,
+          20
+        ],
+        [
+          20,
+          15,
+          15,
+          25,
+          25
+        ],
+        [
+          21,
+          19,
+          25,
+          16,
+          19
+        ]
+      ],
+      "expectedRank": 28,
+      "expectedScoreHalf": 453,
+      "expectedZones": 946,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 29,
+      "wallet": "W27",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5027,
+      "battles": [
+        [
+          16,
+          22,
+          25,
+          18,
+          19
+        ],
+        [
+          25,
+          11,
+          25,
+          14,
+          25
+        ],
+        [
+          25,
+          25,
+          25,
+          16,
+          9
+        ],
+        [
+          17,
+          25,
+          22,
+          25,
+          11
+        ],
+        [
+          21,
+          21,
+          25,
+          8,
+          25
+        ],
+        [
+          25,
+          13,
+          25,
+          23,
+          14
+        ],
+        [
+          20,
+          25,
+          21,
+          24,
+          10
+        ]
+      ],
+      "expectedRank": 8,
+      "expectedScoreHalf": 489,
+      "expectedZones": 973,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 30,
+      "wallet": "W28",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5028,
+      "battles": [
+        [
+          25,
+          25,
+          12,
+          23,
+          15
+        ],
+        [
+          25,
+          16,
+          25,
+          17,
+          17
+        ],
+        [
+          25,
+          25,
+          20,
+          19,
+          11
+        ],
+        [
+          11,
+          25,
+          20,
+          19,
+          25
+        ],
+        [
+          19,
+          15,
+          25,
+          25,
+          16
+        ],
+        [
+          25,
+          19,
+          20,
+          11,
+          25
+        ],
+        [
+          25,
+          24,
+          14,
+          17,
+          20
+        ]
+      ],
+      "expectedRank": 29,
+      "expectedScoreHalf": 451,
+      "expectedZones": 980,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 31,
+      "wallet": "W29",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5029,
+      "battles": [
+        [
+          19,
+          23,
+          20,
+          25,
+          13
+        ],
+        [
+          22,
+          20,
+          13,
+          25,
+          20
+        ],
+        [
+          16,
+          25,
+          22,
+          18,
+          19
+        ],
+        [
+          17,
+          17,
+          16,
+          25,
+          25
+        ],
+        [
+          8,
+          25,
+          25,
+          17,
+          25
+        ],
+        [
+          25,
+          17,
+          13,
+          25,
+          20
+        ],
+        [
+          21,
+          25,
+          12,
+          17,
+          25
+        ]
+      ],
+      "expectedRank": 35,
+      "expectedScoreHalf": 437,
+      "expectedZones": 941,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 32,
+      "wallet": "W30",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5030,
+      "battles": [
+        [
+          12,
+          25,
+          14,
+          25,
+          24
+        ],
+        [
+          25,
+          13,
+          25,
+          19,
+          18
+        ],
+        [
+          20,
+          17,
+          15,
+          23,
+          25
+        ],
+        [
+          15,
+          21,
+          15,
+          24,
+          25
+        ],
+        [
+          25,
+          16,
+          24,
+          13,
+          22
+        ],
+        [
+          13,
+          25,
+          25,
+          20,
+          17
+        ],
+        [
+          17,
+          25,
+          16,
+          17,
+          25
+        ]
+      ],
+      "expectedRank": 43,
+      "expectedScoreHalf": 425,
+      "expectedZones": 959,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 33,
+      "wallet": "W31",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5031,
+      "battles": [
+        [
+          21,
+          25,
+          18,
+          25,
+          11
+        ],
+        [
+          19,
+          25,
+          20,
+          16,
+          20
+        ],
+        [
+          15,
+          19,
+          16,
+          25,
+          25
+        ],
+        [
+          25,
+          13,
+          24,
+          19,
+          19
+        ],
+        [
+          25,
+          21,
+          25,
+          25,
+          4
+        ],
+        [
+          18,
+          25,
+          18,
+          25,
+          14
+        ],
+        [
+          25,
+          18,
+          25,
+          15,
+          17
+        ]
+      ],
+      "expectedRank": 37,
+      "expectedScoreHalf": 434,
+      "expectedZones": 953,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 34,
+      "wallet": "W32",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5032,
+      "battles": [
+        [
+          22,
+          25,
+          25,
+          8,
+          20
+        ],
+        [
+          17,
+          22,
+          23,
+          25,
+          13
+        ],
+        [
+          10,
+          25,
+          25,
+          15,
+          25
+        ],
+        [
+          15,
+          20,
+          24,
+          16,
+          25
+        ],
+        [
+          25,
+          21,
+          14,
+          15,
+          25
+        ],
+        [
+          13,
+          21,
+          16,
+          25,
+          25
+        ],
+        [
+          22,
+          10,
+          22,
+          25,
+          21
+        ]
+      ],
+      "expectedRank": 26,
+      "expectedScoreHalf": 456,
+      "expectedZones": 975,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 35,
+      "wallet": "W33",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5033,
+      "battles": [
+        [
+          19,
+          15,
+          19,
+          25,
+          22
+        ],
+        [
+          25,
+          13,
+          16,
+          23,
+          23
+        ],
+        [
+          25,
+          13,
+          25,
+          24,
+          13
+        ],
+        [
+          13,
+          23,
+          25,
+          14,
+          25
+        ],
+        [
+          9,
+          25,
+          25,
+          16,
+          25
+        ],
+        [
+          9,
+          25,
+          25,
+          22,
+          19
+        ],
+        [
+          12,
+          20,
+          25,
+          21,
+          22
+        ]
+      ],
+      "expectedRank": 25,
+      "expectedScoreHalf": 458,
+      "expectedZones": 966,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 36,
+      "wallet": "W34",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5034,
+      "battles": [
+        [
+          25,
+          19,
+          10,
+          25,
+          21
+        ],
+        [
+          23,
+          14,
+          16,
+          25,
+          22
+        ],
+        [
+          20,
+          25,
+          25,
+          20,
+          10
+        ],
+        [
+          23,
+          25,
+          22,
+          23,
+          7
+        ],
+        [
+          24,
+          25,
+          16,
+          15,
+          20
+        ],
+        [
+          20,
+          25,
+          14,
+          25,
+          16
+        ],
+        [
+          15,
+          19,
+          19,
+          25,
+          22
+        ]
+      ],
+      "expectedRank": 33,
+      "expectedScoreHalf": 440,
+      "expectedZones": 970,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 37,
+      "wallet": "W35",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5035,
+      "battles": [
+        [
+          20,
+          14,
+          25,
+          25,
+          16
+        ],
+        [
+          25,
+          25,
+          15,
+          10,
+          25
+        ],
+        [
+          22,
+          19,
+          19,
+          21,
+          19
+        ],
+        [
+          25,
+          25,
+          19,
+          17,
+          14
+        ],
+        [
+          25,
+          11,
+          25,
+          23,
+          16
+        ],
+        [
+          16,
+          24,
+          16,
+          22,
+          22
+        ],
+        [
+          13,
+          21,
+          25,
+          16,
+          25
+        ]
+      ],
+      "expectedRank": 36,
+      "expectedScoreHalf": 436,
+      "expectedZones": 946,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 38,
+      "wallet": "W36",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5036,
+      "battles": [
+        [
+          13,
+          24,
+          19,
+          19,
+          25
+        ],
+        [
+          16,
+          13,
+          22,
+          24,
+          25
+        ],
+        [
+          25,
+          22,
+          10,
+          20,
+          23
+        ],
+        [
+          25,
+          15,
+          25,
+          10,
+          25
+        ],
+        [
+          21,
+          25,
+          13,
+          16,
+          25
+        ],
+        [
+          21,
+          25,
+          10,
+          25,
+          19
+        ],
+        [
+          25,
+          24,
+          19,
+          13,
+          19
+        ]
+      ],
+      "expectedRank": 32,
+      "expectedScoreHalf": 441,
+      "expectedZones": 978,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 39,
+      "wallet": "W37",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5037,
+      "battles": [
+        [
+          22,
+          25,
+          19,
+          24,
+          10
+        ],
+        [
+          12,
+          19,
+          19,
+          25,
+          25
+        ],
+        [
+          21,
+          19,
+          25,
+          25,
+          10
+        ],
+        [
+          10,
+          24,
+          25,
+          22,
+          19
+        ],
+        [
+          17,
+          25,
+          20,
+          25,
+          13
+        ],
+        [
+          25,
+          17,
+          9,
+          24,
+          25
+        ],
+        [
+          16,
+          25,
+          18,
+          19,
+          22
+        ]
+      ],
+      "expectedRank": 38,
+      "expectedScoreHalf": 432,
+      "expectedZones": 962,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 40,
+      "wallet": "W38",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5038,
+      "battles": [
+        [
+          25,
+          19,
+          23,
+          20,
+          13
+        ],
+        [
+          16,
+          23,
+          25,
+          17,
+          19
+        ],
+        [
+          5,
+          21,
+          25,
+          24,
+          25
+        ],
+        [
+          22,
+          19,
+          25,
+          24,
+          10
+        ],
+        [
+          5,
+          21,
+          25,
+          24,
+          25
+        ],
+        [
+          25,
+          21,
+          16,
+          25,
+          13
+        ],
+        [
+          24,
+          13,
+          25,
+          19,
+          19
+        ]
+      ],
+      "expectedRank": 40,
+      "expectedScoreHalf": 429,
+      "expectedZones": 975,
+      "expectedLamports": "0",
+      "distinctShapes": 6
+    },
+    {
+      "seat": null,
+      "plannedSeat": 41,
+      "wallet": "W39",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5039,
+      "battles": [
+        [
+          25,
+          19,
+          25,
+          10,
+          21
+        ],
+        [
+          9,
+          25,
+          22,
+          23,
+          21
+        ],
+        [
+          21,
+          19,
+          22,
+          22,
+          16
+        ],
+        [
+          19,
+          22,
+          19,
+          25,
+          15
+        ],
+        [
+          25,
+          15,
+          18,
+          19,
+          23
+        ],
+        [
+          25,
+          19,
+          19,
+          19,
+          18
+        ],
+        [
+          17,
+          20,
+          25,
+          14,
+          24
+        ]
+      ],
+      "expectedRank": 58,
+      "expectedScoreHalf": 396,
+      "expectedZones": 950,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 42,
+      "wallet": "W40",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5040,
+      "battles": [
+        [
+          21,
+          9,
+          25,
+          20,
+          25
+        ],
+        [
+          16,
+          25,
+          16,
+          25,
+          18
+        ],
+        [
+          13,
+          20,
+          17,
+          25,
+          25
+        ],
+        [
+          22,
+          16,
+          16,
+          24,
+          22
+        ],
+        [
+          25,
+          14,
+          18,
+          18,
+          25
+        ],
+        [
+          24,
+          25,
+          8,
+          18,
+          25
+        ],
+        [
+          22,
+          16,
+          24,
+          25,
+          13
+        ]
+      ],
+      "expectedRank": 45,
+      "expectedScoreHalf": 423,
+      "expectedZones": 954,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 43,
+      "wallet": "W41",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5041,
+      "battles": [
+        [
+          25,
+          23,
+          25,
+          13,
+          14
+        ],
+        [
+          17,
+          23,
+          16,
+          19,
+          25
+        ],
+        [
+          15,
+          16,
+          19,
+          25,
+          25
+        ],
+        [
+          10,
+          22,
+          25,
+          20,
+          23
+        ],
+        [
+          25,
+          13,
+          25,
+          25,
+          12
+        ],
+        [
+          16,
+          22,
+          19,
+          24,
+          19
+        ],
+        [
+          21,
+          14,
+          25,
+          16,
+          24
+        ]
+      ],
+      "expectedRank": 50,
+      "expectedScoreHalf": 413,
+      "expectedZones": 942,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 44,
+      "wallet": "W42",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5042,
+      "battles": [
+        [
+          23,
+          25,
+          25,
+          8,
+          19
+        ],
+        [
+          16,
+          18,
+          22,
+          25,
+          19
+        ],
+        [
+          9,
+          16,
+          25,
+          25,
+          25
+        ],
+        [
+          25,
+          25,
+          13,
+          25,
+          12
+        ],
+        [
+          20,
+          23,
+          19,
+          13,
+          25
+        ],
+        [
+          25,
+          20,
+          20,
+          10,
+          25
+        ],
+        [
+          25,
+          13,
+          22,
+          24,
+          16
+        ]
+      ],
+      "expectedRank": 11,
+      "expectedScoreHalf": 478,
+      "expectedZones": 983,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 45,
+      "wallet": "W43",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5043,
+      "battles": [
+        [
+          21,
+          25,
+          13,
+          25,
+          16
+        ],
+        [
+          25,
+          22,
+          16,
+          15,
+          22
+        ],
+        [
+          10,
+          25,
+          20,
+          22,
+          23
+        ],
+        [
+          25,
+          23,
+          16,
+          13,
+          23
+        ],
+        [
+          20,
+          25,
+          17,
+          25,
+          13
+        ],
+        [
+          22,
+          16,
+          16,
+          25,
+          21
+        ],
+        [
+          19,
+          25,
+          14,
+          25,
+          17
+        ]
+      ],
+      "expectedRank": 47,
+      "expectedScoreHalf": 420,
+      "expectedZones": 955,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 46,
+      "wallet": "W44",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5044,
+      "battles": [
+        [
+          22,
+          16,
+          22,
+          15,
+          25
+        ],
+        [
+          25,
+          15,
+          14,
+          21,
+          25
+        ],
+        [
+          21,
+          25,
+          18,
+          11,
+          25
+        ],
+        [
+          25,
+          11,
+          25,
+          25,
+          14
+        ],
+        [
+          25,
+          25,
+          9,
+          25,
+          16
+        ],
+        [
+          25,
+          25,
+          13,
+          19,
+          18
+        ],
+        [
+          23,
+          20,
+          7,
+          25,
+          25
+        ]
+      ],
+      "expectedRank": 6,
+      "expectedScoreHalf": 491,
+      "expectedZones": 984,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 47,
+      "wallet": "W45",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5045,
+      "battles": [
+        [
+          16,
+          22,
+          21,
+          22,
+          19
+        ],
+        [
+          21,
+          25,
+          25,
+          20,
+          9
+        ],
+        [
+          20,
+          19,
+          16,
+          25,
+          20
+        ],
+        [
+          20,
+          19,
+          16,
+          25,
+          20
+        ],
+        [
+          25,
+          25,
+          19,
+          15,
+          16
+        ],
+        [
+          25,
+          14,
+          21,
+          25,
+          15
+        ],
+        [
+          24,
+          10,
+          16,
+          25,
+          25
+        ]
+      ],
+      "expectedRank": 56,
+      "expectedScoreHalf": 401,
+      "expectedZones": 941,
+      "expectedLamports": "0",
+      "distinctShapes": 6
+    },
+    {
+      "seat": null,
+      "plannedSeat": 48,
+      "wallet": "W46",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5046,
+      "battles": [
+        [
+          18,
+          25,
+          25,
+          7,
+          25
+        ],
+        [
+          25,
+          11,
+          25,
+          19,
+          20
+        ],
+        [
+          25,
+          23,
+          16,
+          11,
+          25
+        ],
+        [
+          23,
+          10,
+          24,
+          18,
+          25
+        ],
+        [
+          17,
+          25,
+          20,
+          25,
+          13
+        ],
+        [
+          25,
+          25,
+          19,
+          14,
+          17
+        ],
+        [
+          13,
+          20,
+          25,
+          19,
+          23
+        ]
+      ],
+      "expectedRank": 9,
+      "expectedScoreHalf": 484,
+      "expectedZones": 980,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 49,
+      "wallet": "W47",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5047,
+      "battles": [
+        [
+          16,
+          24,
+          10,
+          25,
+          25
+        ],
+        [
+          25,
+          25,
+          10,
+          24,
+          16
+        ],
+        [
+          20,
+          21,
+          25,
+          10,
+          24
+        ],
+        [
+          18,
+          25,
+          7,
+          25,
+          25
+        ],
+        [
+          25,
+          10,
+          21,
+          19,
+          25
+        ],
+        [
+          13,
+          25,
+          16,
+          21,
+          25
+        ],
+        [
+          13,
+          25,
+          25,
+          24,
+          13
+        ]
+      ],
+      "expectedRank": 4,
+      "expectedScoreHalf": 499,
+      "expectedZones": 992,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 50,
+      "wallet": "W48",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5048,
+      "battles": [
+        [
+          19,
+          13,
+          25,
+          25,
+          18
+        ],
+        [
+          22,
+          25,
+          25,
+          14,
+          14
+        ],
+        [
+          21,
+          15,
+          25,
+          25,
+          14
+        ],
+        [
+          25,
+          15,
+          22,
+          13,
+          25
+        ],
+        [
+          25,
+          19,
+          17,
+          18,
+          21
+        ],
+        [
+          25,
+          23,
+          24,
+          17,
+          11
+        ],
+        [
+          25,
+          24,
+          11,
+          16,
+          24
+        ]
+      ],
+      "expectedRank": 49,
+      "expectedScoreHalf": 417,
+      "expectedZones": 933,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 51,
+      "wallet": "W49",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5049,
+      "battles": [
+        [
+          25,
+          19,
+          20,
+          24,
+          12
+        ],
+        [
+          25,
+          25,
+          19,
+          14,
+          17
+        ],
+        [
+          24,
+          13,
+          25,
+          19,
+          19
+        ],
+        [
+          11,
+          14,
+          25,
+          25,
+          25
+        ],
+        [
+          15,
+          25,
+          19,
+          25,
+          16
+        ],
+        [
+          19,
+          22,
+          25,
+          10,
+          24
+        ],
+        [
+          17,
+          23,
+          12,
+          23,
+          25
+        ]
+      ],
+      "expectedRank": 30,
+      "expectedScoreHalf": 444,
+      "expectedZones": 949,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 52,
+      "wallet": "W50",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5050,
+      "battles": [
+        [
+          25,
+          23,
+          12,
+          25,
+          15
+        ],
+        [
+          16,
+          25,
+          13,
+          21,
+          25
+        ],
+        [
+          25,
+          16,
+          17,
+          23,
+          19
+        ],
+        [
+          25,
+          16,
+          25,
+          18,
+          16
+        ],
+        [
+          25,
+          13,
+          13,
+          24,
+          25
+        ],
+        [
+          24,
+          19,
+          19,
+          19,
+          19
+        ],
+        [
+          14,
+          25,
+          17,
+          25,
+          19
+        ]
+      ],
+      "expectedRank": 53,
+      "expectedScoreHalf": 408,
+      "expectedZones": 939,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 53,
+      "wallet": "W51",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5051,
+      "battles": [
+        [
+          22,
+          10,
+          22,
+          21,
+          25
+        ],
+        [
+          23,
+          14,
+          13,
+          25,
+          25
+        ],
+        [
+          21,
+          20,
+          17,
+          17,
+          25
+        ],
+        [
+          25,
+          25,
+          15,
+          13,
+          22
+        ],
+        [
+          25,
+          25,
+          25,
+          20,
+          5
+        ],
+        [
+          22,
+          24,
+          16,
+          25,
+          13
+        ],
+        [
+          25,
+          17,
+          25,
+          21,
+          12
+        ]
+      ],
+      "expectedRank": 27,
+      "expectedScoreHalf": 453,
+      "expectedZones": 976,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 54,
+      "wallet": "W52",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5052,
+      "battles": [
+        [
+          11,
+          25,
+          25,
+          14,
+          25
+        ],
+        [
+          13,
+          22,
+          21,
+          19,
+          25
+        ],
+        [
+          21,
+          22,
+          22,
+          13,
+          22
+        ],
+        [
+          24,
+          13,
+          25,
+          22,
+          16
+        ],
+        [
+          21,
+          25,
+          22,
+          22,
+          10
+        ],
+        [
+          25,
+          23,
+          11,
+          25,
+          16
+        ],
+        [
+          25,
+          25,
+          22,
+          21,
+          7
+        ]
+      ],
+      "expectedRank": 17,
+      "expectedScoreHalf": 470,
+      "expectedZones": 992,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 55,
+      "wallet": "W53",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5053,
+      "battles": [
+        [
+          25,
+          16,
+          24,
+          22,
+          13
+        ],
+        [
+          14,
+          25,
+          20,
+          16,
+          25
+        ],
+        [
+          25,
+          15,
+          22,
+          22,
+          16
+        ],
+        [
+          13,
+          13,
+          24,
+          25,
+          25
+        ],
+        [
+          25,
+          23,
+          16,
+          23,
+          13
+        ],
+        [
+          19,
+          25,
+          19,
+          21,
+          16
+        ],
+        [
+          17,
+          20,
+          25,
+          16,
+          22
+        ]
+      ],
+      "expectedRank": 60,
+      "expectedScoreHalf": 392,
+      "expectedZones": 926,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 56,
+      "wallet": "W54",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5054,
+      "battles": [
+        [
+          16,
+          13,
+          22,
+          25,
+          24
+        ],
+        [
+          25,
+          11,
+          16,
+          25,
+          23
+        ],
+        [
+          18,
+          16,
+          25,
+          16,
+          25
+        ],
+        [
+          19,
+          13,
+          22,
+          24,
+          22
+        ],
+        [
+          25,
+          17,
+          21,
+          12,
+          25
+        ],
+        [
+          19,
+          22,
+          25,
+          10,
+          24
+        ],
+        [
+          23,
+          19,
+          11,
+          25,
+          22
+        ]
+      ],
+      "expectedRank": 55,
+      "expectedScoreHalf": 404,
+      "expectedZones": 939,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 57,
+      "wallet": "W55",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5055,
+      "battles": [
+        [
+          15,
+          14,
+          25,
+          21,
+          25
+        ],
+        [
+          20,
+          23,
+          13,
+          19,
+          25
+        ],
+        [
+          25,
+          19,
+          25,
+          10,
+          21
+        ],
+        [
+          16,
+          13,
+          21,
+          25,
+          25
+        ],
+        [
+          17,
+          20,
+          13,
+          25,
+          25
+        ],
+        [
+          25,
+          22,
+          17,
+          17,
+          19
+        ],
+        [
+          15,
+          20,
+          21,
+          25,
+          19
+        ]
+      ],
+      "expectedRank": 59,
+      "expectedScoreHalf": 394,
+      "expectedZones": 935,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 58,
+      "wallet": "W56",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5056,
+      "battles": [
+        [
+          25,
+          25,
+          25,
+          16,
+          9
+        ],
+        [
+          25,
+          25,
+          25,
+          8,
+          17
+        ],
+        [
+          23,
+          5,
+          22,
+          25,
+          25
+        ],
+        [
+          25,
+          18,
+          19,
+          25,
+          13
+        ],
+        [
+          23,
+          21,
+          25,
+          12,
+          19
+        ],
+        [
+          17,
+          10,
+          25,
+          23,
+          25
+        ],
+        [
+          15,
+          15,
+          20,
+          25,
+          25
+        ]
+      ],
+      "expectedRank": 5,
+      "expectedScoreHalf": 495,
+      "expectedZones": 984,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 59,
+      "wallet": "W57",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5057,
+      "battles": [
+        [
+          10,
+          23,
+          25,
+          19,
+          23
+        ],
+        [
+          19,
+          12,
+          19,
+          25,
+          25
+        ],
+        [
+          21,
+          21,
+          25,
+          19,
+          14
+        ],
+        [
+          17,
+          22,
+          14,
+          25,
+          22
+        ],
+        [
+          13,
+          21,
+          19,
+          22,
+          25
+        ],
+        [
+          25,
+          14,
+          18,
+          18,
+          25
+        ],
+        [
+          16,
+          11,
+          25,
+          23,
+          25
+        ]
+      ],
+      "expectedRank": 48,
+      "expectedScoreHalf": 417,
+      "expectedZones": 947,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 60,
+      "wallet": "W58",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5058,
+      "battles": [
+        [
+          19,
+          14,
+          25,
+          17,
+          25
+        ],
+        [
+          25,
+          20,
+          22,
+          17,
+          16
+        ],
+        [
+          25,
+          16,
+          25,
+          16,
+          18
+        ],
+        [
+          13,
+          22,
+          25,
+          15,
+          25
+        ],
+        [
+          12,
+          21,
+          25,
+          17,
+          25
+        ],
+        [
+          19,
+          20,
+          25,
+          11,
+          25
+        ],
+        [
+          25,
+          25,
+          9,
+          21,
+          20
+        ]
+      ],
+      "expectedRank": 44,
+      "expectedScoreHalf": 424,
+      "expectedZones": 936,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 61,
+      "wallet": "W59",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5059,
+      "battles": [
+        [
+          25,
+          25,
+          25,
+          9,
+          16
+        ],
+        [
+          13,
+          25,
+          23,
+          25,
+          14
+        ],
+        [
+          25,
+          16,
+          25,
+          13,
+          21
+        ],
+        [
+          21,
+          25,
+          20,
+          13,
+          21
+        ],
+        [
+          25,
+          25,
+          25,
+          7,
+          18
+        ],
+        [
+          23,
+          10,
+          25,
+          19,
+          23
+        ],
+        [
+          25,
+          22,
+          25,
+          12,
+          16
+        ]
+      ],
+      "expectedRank": 13,
+      "expectedScoreHalf": 473,
+      "expectedZones": 972,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 62,
+      "wallet": "W60",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5060,
+      "battles": [
+        [
+          14,
+          20,
+          19,
+          25,
+          22
+        ],
+        [
+          22,
+          25,
+          17,
+          16,
+          20
+        ],
+        [
+          22,
+          22,
+          21,
+          25,
+          10
+        ],
+        [
+          25,
+          22,
+          25,
+          20,
+          8
+        ],
+        [
+          13,
+          25,
+          15,
+          25,
+          22
+        ],
+        [
+          25,
+          18,
+          16,
+          23,
+          18
+        ],
+        [
+          25,
+          23,
+          14,
+          16,
+          22
+        ]
+      ],
+      "expectedRank": 41,
+      "expectedScoreHalf": 429,
+      "expectedZones": 970,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 63,
+      "wallet": "W61",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 5061,
+      "battles": [
+        [
+          23,
+          22,
+          25,
+          20,
+          10
+        ],
+        [
+          14,
+          25,
+          14,
+          25,
+          22
+        ],
+        [
+          22,
+          16,
+          22,
+          25,
+          15
+        ],
+        [
+          16,
+          25,
+          22,
+          14,
+          23
+        ],
+        [
+          21,
+          22,
+          22,
+          25,
+          10
+        ],
+        [
+          24,
+          25,
+          14,
+          14,
+          23
+        ],
+        [
+          19,
+          16,
+          20,
+          20,
+          25
+        ]
+      ],
+      "expectedRank": 54,
+      "expectedScoreHalf": 405,
+      "expectedZones": 970,
+      "expectedLamports": "0",
+      "distinctShapes": 7
+    }
+  ],
+  "seatNote": "`seat` is null until the pool runs. `plannedSeat` is the index this plan assumes; only the root and the leaf order depend on it.",
+  "contingency": [
+    "If a headless seat seals and then fails to register it is barred from the pool for good (DRIFT §H6) and enter.ts stops the run (§H8). Replace it from the spare roster with --substitute, which makes the spare play THAT SEAT'S frozen allocation, so the scored field stays the planned field. If the seat that burns is W00, the WINNER changes wallet but not allocation — record it and say so plainly.",
+    "If the founder plays an allocation inside 1..25 that is not the recipe, the unconditional expectations hold and the two UI seats reconcile as INPUT_DRIFT — as they did in T4.",
+    "If a founder seat takes a stat ABOVE 25, it is no longer a field seat and could beat W00. That would be a genuine FAIL of the test as designed, not of the product, and the rerun is on the next pool.",
+    "If fewer than 64 land before the deadline, the pool seals at whatever it holds provided that is at least 40, and still plays and pays. The engineered roles are unaffected."
+  ],
+  "passCriteria": [
+    "The pool reaches Paid with 64 entrants.",
+    "Exactly one seat is paid; it is **W00**, a headless wallet, and the amount is the whole 4000000000 lamport pot.",
+    "W01 is ranked last.",
+    "NEITHER founder wallet is paid, and both finish between rank 2 and rank 63.",
+    "Every revealed allocation reproduces the battles_hash the chain recorded at entry.",
+    "The recomputed results root equals the on-chain results_root.",
+    "The vault ends at 650240 lamports.",
+    "No seat is flagged and no sanctions hold is placed."
+  ]
+}

@@ -6,8 +6,8 @@
  *     → canonical sealed payload (batteries from @blotto/sealing — the SAME
  *       encoding the crank decodes)
  *     → sealed-box encrypt to the pool's published key
- *     → POST the ciphertext to the entry service
  *     → obtain the entry packet (Ed25519-signed by the packet service — 4.1)
+ *     → POST the ciphertext to the entry service
  *     → `register` transaction carrying sha256(battles ‖ salt)
  *
  * THE CLIENT INVARIANT lives at this boundary: `encodePayload` validates
@@ -32,7 +32,9 @@ import type { IssuedPacketBytes } from './register-tx';
 export interface EntryServices {
   /** Store the sealed ciphertext (backend/sealing store). Must succeed BEFORE
    * the transaction: a paid entry whose ciphertext never landed is the lost-
-   * ciphertext failure mode, so the order is ciphertext first, pay second. */
+   * ciphertext failure mode, so the order is ciphertext first, pay second.
+   *
+   * It is now also AFTER `requestPacket` — see the call order below. */
   putCiphertext(pool: string, player: string, ciphertext: Uint8Array): Promise<void>;
   /** Obtain the service-issued entry packet — message, signature and signer
    * key (the packet service, 4.1). All three feed the Ed25519 instruction. */
@@ -95,9 +97,32 @@ export async function submitEntry(
   const ciphertext = seal(payloadBytes, unhex(input.sealingPubkeyHex));
   const battlesHash = payloadBattlesHash(payload);
 
-  // Ciphertext BEFORE money — see the interface doc.
-  await services.putCiphertext(input.pool, input.player, ciphertext);
+  /*
+   * PERMISSION FIRST, THEN THE SEAL, THEN MONEY.
+   *
+   * The two invariants sit either side of the ciphertext write and both
+   * hold here: the packet is only a permission — nothing is signed and
+   * nothing is charged by requesting one — and the ciphertext still lands
+   * BEFORE the transaction, so the lost-ciphertext failure mode is closed
+   * exactly as it was.
+   *
+   * What the swap closes (2026-09-18): asking for permission AFTER sealing
+   * meant every refusal arrived one step too late. The ciphertext was
+   * already stored, and until the same day's backend fix a stored
+   * ciphertext with no seat barred that wallet from the pool for good. The
+   * signing quota that struck on 2026-09-16 is one cause of a refusal here;
+   * a blocked territory, a stale terms version and an unreachable service
+   * are others, and every one of them used to cost the player the pool.
+   *
+   * This does NOT close the window between the ciphertext write and the
+   * register — a wallet prompt dismissed at that point still leaves a
+   * stored ciphertext with no seat. That window is why the backend gate
+   * asks whether the SEAT is registered rather than whether a ciphertext
+   * exists (backend/packet/src/seats.ts). This is the narrowing; that is
+   * the fix.
+   */
   const packet = await services.requestPacket(input.pool, input.player);
+  await services.putCiphertext(input.pool, input.player, ciphertext);
   const signature = await services.sendRegister(input.pool, battlesHash, packet);
   return { signature, battlesHashHex: hex(battlesHash) };
 }

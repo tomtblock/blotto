@@ -1,0 +1,401 @@
+{
+  "schema": "blotto-rehearsal-plan/1",
+  "test": "T2R",
+  "title": "Refund at the boundary, retried \u2014 39 seats, frozen before the pool exists",
+  "cluster": "devnet",
+  "programId": "5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17",
+  "tier": 0,
+  "poolId": null,
+  "poolPda": null,
+  "whyThisExists": "T2 ran on pool 20 and was SPOILED, not disproved. It held its 39 seats until 19:07:24Z, when a 40th wallet registered and crossed the fork \u2014 the pool sealed instead of refunding. The 40th was funded by 1 SOL the architect sent at the founder's request without checking it against the live test; the miss is recorded in DRIFT.md. T2's own contingency section anticipated exactly this and says the boundary claim is RETRIED on a later pool rather than restated at a different number. This is that retry. T2.plan.json is untouched and stays as it was frozen.",
+  "strongerThanT2InOneRespect": "T2's freeze merged at 14:42:47Z against a pool that had already opened at 13:15:58Z, so it preceded every entry but not the pool. This plan is frozen BEFORE THE POOL IT WILL RUN ON EXISTS \u2014 pool 20 is still Open as this is written, and the next pool opens about five minutes after it closes. That is T4's standard, the strongest this test has, and it is available here only because the retry was forced.",
+  "entryLamports": "100000000",
+  "potLamports": "4000000000",
+  "minSeats": 40,
+  "fillDeadlineSeconds": 43200,
+  "frozenAt": null,
+  "gitCommit": null,
+  "hypothesis": "The fork between refunding and playing is at exactly 40 seats, and 39 is on the refunding side of it. A pool holding 39 entries at its fill deadline cannot seal: seal_at_deadline reverts with FieldBelowMinimum and trigger_refund flips the pool to Refunding, returns the untouched 4 SOL pot from the prize vault to the platform treasury, and refund pays each of the 39 entrants their full entry price back out of the treasury. No ranking, no scoring, no prize and no reviewer is involved. T1 proved this at 12 seats, far from the boundary; this proves it one seat below the boundary, which is where an off-by-one in the comparison would hide.",
+  "expectations": {
+    "terminalState": "Closed",
+    "entrants": 39,
+    "sealsAtDeadline": false,
+    "settlementInstruction": "trigger_refund",
+    "refusedInstruction": "seal_at_deadline would revert with FieldBelowMinimum (6051)",
+    "settlementIsPermissionless": "Both trigger_refund and refund are permissionless (refund.rs): any signer may settle a pool that missed its deadline below MIN_SEATS, so a vanished operator cannot strand entries. This test needs no admin key and no founder action after the entries land.",
+    "potReturnedToTreasury": "4000000000",
+    "vaultAfter": "650240",
+    "vaultAfterNote": "the rent cushion, never recovered \u2014 this is not zero, and a zero here would be the surprise",
+    "perSeatRefundLamports": "100000000",
+    "perSeatSunkLamports": "4441080",
+    "perSeatSunkNote": "MEASURED, NOT ESTIMATED. Three settled pools have each produced this figure to the lamport: T1 (pool 14, refunded), T4 (pool 16, scored), T5 (pool 18, scored). Predicted here EXACTLY for every one of the 39 seats \u2014 a single lamport of drift on any seat is a failure, not rounding.",
+    "expectedBalanceDeltaPerSeat": "-4441080"
+  },
+  "noFounderSeats": "DELIBERATE, AND IT COSTS ONE SUB-CLAIM. T2's original field carried UI-A and UI-B so that 'both founder wallets are refunded on identical terms to the headless seats' could be shown \u2014 a route-equivalence claim about the browser path versus the direct path. This retry runs fully headless so it can execute overnight with no founder session, and that claim is NOT made here. It was never proven either, because T2 never settled, so nothing already held is lost. It is owed on a later pool.",
+  "seats": [
+    {
+      "seat": null,
+      "wallet": "W00",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3000,
+      "expectedRefundLamports": "100000000"
+    },
+    {
+      "seat": null,
+      "wallet": "W01",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3001,
+      "expectedRefundLamports": "100000000"
+    },
+    {
+      "seat": null,
+      "wallet": "W02",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3002,
+      "expectedRefundLamports": "100000000"
+    },
+    {
+      "seat": null,
+      "wallet": "W03",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3003,
+      "expectedRefundLamports": "100000000"
+    },
+    {
+      "seat": null,
+      "wallet": "W04",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3004,
+      "expectedRefundLamports": "100000000"
+    },
+    {
+      "seat": null,
+      "wallet": "W05",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3005,
+      "expectedRefundLamports": "100000000"
+    },
+    {
+      "seat": null,
+      "wallet": "W06",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3006,
+      "expectedRefundLamports": "100000000"
+    },
+    {
+      "seat": null,
+      "wallet": "W07",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3007,
+      "expectedRefundLamports": "100000000"
+    },
+    {
+      "seat": null,
+      "wallet": "W08",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3008,
+      "expectedRefundLamports": "100000000"
+    },
+    {
+      "seat": null,
+      "wallet": "W09",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3009,
+      "expectedRefundLamports": "100000000"
+    },
+    {
+      "seat": null,
+      "wallet": "W10",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3010,
+      "expectedRefundLamports": "100000000"
+    },
+    {
+      "seat": null,
+      "wallet": "W11",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3011,
+      "expectedRefundLamports": "100000000"
+    },
+    {
+      "seat": null,
+      "wallet": "W12",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3012,
+      "expectedRefundLamports": "100000000"
+    },
+    {
+      "seat": null,
+      "wallet": "W13",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3013,
+      "expectedRefundLamports": "100000000"
+    },
+    {
+      "seat": null,
+      "wallet": "W14",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3014,
+      "expectedRefundLamports": "100000000"
+    },
+    {
+      "seat": null,
+      "wallet": "W15",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3015,
+      "expectedRefundLamports": "100000000"
+    },
+    {
+      "seat": null,
+      "wallet": "W16",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3016,
+      "expectedRefundLamports": "100000000"
+    },
+    {
+      "seat": null,
+      "wallet": "W17",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3017,
+      "expectedRefundLamports": "100000000"
+    },
+    {
+      "seat": null,
+      "wallet": "W18",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3018,
+      "expectedRefundLamports": "100000000"
+    },
+    {
+      "seat": null,
+      "wallet": "W19",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3019,
+      "expectedRefundLamports": "100000000"
+    },
+    {
+      "seat": null,
+      "wallet": "W20",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3020,
+      "expectedRefundLamports": "100000000"
+    },
+    {
+      "seat": null,
+      "wallet": "W21",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3021,
+      "expectedRefundLamports": "100000000"
+    },
+    {
+      "seat": null,
+      "wallet": "W22",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3022,
+      "expectedRefundLamports": "100000000"
+    },
+    {
+      "seat": null,
+      "wallet": "W23",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3023,
+      "expectedRefundLamports": "100000000"
+    },
+    {
+      "seat": null,
+      "wallet": "W24",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3024,
+      "expectedRefundLamports": "100000000"
+    },
+    {
+      "seat": null,
+      "wallet": "W25",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3025,
+      "expectedRefundLamports": "100000000"
+    },
+    {
+      "seat": null,
+      "wallet": "W26",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3026,
+      "expectedRefundLamports": "100000000"
+    },
+    {
+      "seat": null,
+      "wallet": "W27",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3027,
+      "expectedRefundLamports": "100000000"
+    },
+    {
+      "seat": null,
+      "wallet": "W28",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3028,
+      "expectedRefundLamports": "100000000"
+    },
+    {
+      "seat": null,
+      "wallet": "W29",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3029,
+      "expectedRefundLamports": "100000000"
+    },
+    {
+      "seat": null,
+      "wallet": "W30",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3030,
+      "expectedRefundLamports": "100000000"
+    },
+    {
+      "seat": null,
+      "wallet": "W31",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3031,
+      "expectedRefundLamports": "100000000"
+    },
+    {
+      "seat": null,
+      "wallet": "W32",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3032,
+      "expectedRefundLamports": "100000000"
+    },
+    {
+      "seat": null,
+      "wallet": "W33",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3033,
+      "expectedRefundLamports": "100000000"
+    },
+    {
+      "seat": null,
+      "wallet": "W34",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3034,
+      "expectedRefundLamports": "100000000"
+    },
+    {
+      "seat": null,
+      "wallet": "W35",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3035,
+      "expectedRefundLamports": "100000000"
+    },
+    {
+      "seat": null,
+      "wallet": "W36",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3036,
+      "expectedRefundLamports": "100000000"
+    },
+    {
+      "seat": null,
+      "wallet": "W37",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3037,
+      "expectedRefundLamports": "100000000"
+    },
+    {
+      "seat": null,
+      "wallet": "W38",
+      "route": "direct",
+      "role": "field",
+      "generator": "poolPopulation",
+      "seed": 3038,
+      "expectedRefundLamports": "100000000"
+    }
+  ],
+  "seatNote": "Seat indices are assigned by the chain in arrival order and are recorded at harvest. Battle sets are NOT predicted, for the same reason T1's and T2's were not: a refund pool is never scored, and no rank or payout depends on any allocation. This is what lets a refund plan be frozen without an oracle. The allocations are still sealed and their hashes still committed on chain, so the sealing property is exercised exactly as it is on a scored pool \u2014 what is missing is only the reveal.",
+  "contingency": "STOPPING SHORT IS NOT A FAILURE OF THE CLAIM, AND THIS PLAN IS NOT EDITED IF IT HAPPENS. Any seat that does not land reconciles as ABSENT. Every count below 40 takes the identical fork, so a pool that finishes at 37 or 38 still proves the refund property \u2014 it just stops proving the BOUNDARY, which is this test's specific reason for existing.",
+  "theWayThisBreaksAgain": "A 40th entrant. It is worth stating plainly that this pool runs on a PUBLIC devnet and nothing prevents a wallet outside this test from registering \u2014 which is what ended T2, and would have ended it just as completely had a stranger done it rather than one of ours. The guard is procedural and partial: no wallet outside the seat list is funded while this pool is open, and the entrant count is read before and after the run. If the count reaches 40 the fork is crossed, this prediction fails on its headline claim exactly as T2's did, and the boundary claim is retried again rather than restated. A test that cannot be protected from this is worth knowing about as a property of devnet, not hidden.",
+  "passCriteria": [
+    "The pool reaches Closed, not Paid.",
+    "It holds exactly 39 entrants at its fill deadline \u2014 one below the minimum field.",
+    "trigger_refund settles it; seal_at_deadline is not what closes this pool.",
+    "Every entrant's balance rises by exactly 100000000 lamports at refund.",
+    "Each entrant's net loss over the whole test is exactly 4441080 lamports \u2014 the figure three settled pools have already measured, predicted here to the lamport.",
+    "The prize vault ends holding exactly 650240 lamports.",
+    "The pot of 4000000000 lamports returns to the platform treasury untouched.",
+    "No seat is flagged, no sanctions hold is placed, and no reviewer is involved."
+  ]
+}

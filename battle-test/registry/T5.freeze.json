@@ -1,0 +1,57 @@
+{
+  "schema": "blotto-rehearsal-freeze/1",
+  "test": "T5",
+  "_why": "The plan is evidence only if it demonstrably predates the outcome. Commit dates can be set to anything; GitHub's merge timestamp cannot. This file records that timestamp and binds it to the exact bytes of the plan that was merged. It is written SEPARATELY so that T5.plan.json stays byte-identical to what was frozen — the plan is never edited after its freeze, not even to fill in its own metadata.",
+
+  "pullRequest": 144,
+  "repository": "tomtblock/blotto",
+  "mergedAt": "2026-09-17T22:51:00Z",
+  "mergedBy": "tomtblock",
+  "mergeCommit": "d807e469b0c9d5a0e18ac9998bde986faed36cee",
+  "headCommit": "02950ac8f4936b870b1fbe9621a8483a07a370ac",
+
+  "planPath": "battle-test/registry/T5.plan.json",
+  "planSha256": "a0bdb2be40dac3c53ca2dd14eb4c38ae4b612775262b6f423ddedda07bad0284",
+
+  "pool": {
+    "note": "The plan deliberately names NO pool (T5.plan.json poolId is null). It was written to be run against whichever pool was open when the freeze merged, so nothing about the pool could have shaped the prediction.",
+    "poolId": 18,
+    "poolPda": "4KDw44RCUkGjKnCvbKFUugLwZWewvNuixSxPhk1ov1Eb",
+    "tier": 0,
+    "entryLamports": "100000000",
+    "potLamports": "4000000000",
+    "fillDeadline": "1789698670",
+    "parametersMatchPlan": true,
+    "parametersMatchNote": "entryLamports, potLamports and tier were compared against the frozen plan before the first entry, not assumed."
+  },
+
+  "timeline": {
+    "poolOpenedAt": "2026-09-17T14:31:10Z",
+    "poolOpenSlot": 499857732,
+    "frozenAt": "2026-09-17T22:51:00Z",
+    "firstEntryAt": "2026-09-18T00:54:32Z",
+    "firstEntrySlot": 500083782,
+    "secondEntryAt": "2026-09-18T00:55:44Z",
+    "freezePrecedesFirstEntryBy": "2 h 3 min 32 s"
+  },
+
+  "weakerThanT4InOneRespect": {
+    "note": "Stated plainly rather than left for a reader to notice. T4's freeze preceded the EXISTENCE of the pool it ran on — pool 16 opened 9 h 43 min after the freeze. T5's does NOT: pool 18 opened at 14:31:10Z, eight hours and twenty minutes BEFORE this freeze merged at 22:51:00Z. So the T4 claim 'the prediction was fixed before the pool existed' is not available here and is not made.",
+    "whatIsStillTrue": "The freeze precedes every entry in the pool, by 2 h 3 min for the first. The plan names no pool and no pool identifier appears anywhere in it, so the pool's existence could not have shaped a single predicted rank, score or payout — those fall out of the allocations alone. An allocation cannot be changed after sealing, and the seal is committed on chain as sha256(battles ‖ salt) at entry.",
+    "howToCheckRatherThanBelieve": "Read T5.plan.json at merge commit d807e46 and confirm poolId is null; then confirm its sha256 equals planSha256 above."
+  },
+
+  "founderSeats": {
+    "note": "Both founder wallets are ORDINARY FIELD SEATS in this test. That is the claim T4 could not make: there the operator's own account won, and nothing ruled out that it was privileged.",
+    "UI-A": "7fpaNh8mAi9SDJyvu6sVFxsqqP8LE3whvBJ1K9ZFYPve",
+    "UI-B": "6wqLMAS1guarBehRDGFSAApGUBLXuuHWmy9naepzu3sa",
+    "preflight": "GO on pool 18 before either played — pool Open and register-ready, neither wallet already registered, and the entry gate issued a real packet for each. DRIFT §H6 lockouts are created by playing into a broken gate; this check is the only thing that prevents one."
+  },
+
+  "verifyIndependently": [
+    "The merge time is served by GitHub's own API for PR 144 and cannot be rewritten by this repository.",
+    "sha256 of the plan file at the merge commit must equal planSha256 above.",
+    "The pool's open time and both entry times above are block times read from devnet via getSignaturesForAddress on the pool PDA — not from this repository and not from the indexer.",
+    "reconcile.ts asserts this timestamp precedes the first register's block time, and marks the pool UNFROZEN if it does not."
+  ]
+}

@@ -83,6 +83,9 @@ const RETRYABLE_BY_KIND: Readonly<Partial<Record<TxFailureKind, boolean>>> = {
   "outcome-mismatch": false,
   // The service answered. Asking it again gets the same answer.
   "entry-refused": false,
+  // Likewise: the conflict is a settled seat or a closed pool, and neither
+  // un-settles on a retry. The pool page is the next step, not this button.
+  "seal-conflict": false,
 };
 
 /**
@@ -160,6 +163,7 @@ export const FAILURE_COPY: Record<TxFailureKind, string> = {
   "pool-closed": COPY.tx.poolClosed,
   "packet-stale": COPY.tx.packetStale,
   "entry-refused": COPY.tx.entryRefused,
+  "seal-conflict": COPY.tx.sealConflict,
   "rpc-failure":
     "The network request did not go through. Check your connection and try again.",
   // The transaction LANDED; only the read-back failed. See property 2 above.

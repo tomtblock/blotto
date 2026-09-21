@@ -73,7 +73,9 @@ Run it from the repository root before every commit:
 ./scripts/check-language.sh
 ```
 
-The script holds the pattern and the exclusion list, each exclusion with its reason. It runs as the
+The script holds the pattern and the exclusion list, each exclusion with its reason. One live
+directory is excluded: `docs/counsel-brief/`, the brief written for a lawyer, which has to name the
+statutory tests it asks counsel to apply. Nothing in it may be quoted on a player-facing surface. It runs as the
 first step of the **`standing-rules` CI lane on every PR** (roadmap §3 rule 4). Two additional
 forbidden words come from roadmap R11/§6.4: **promotional** and **sweepstake** — they denote
 free-entry sweepstakes and put the product in the wrong regulatory box.

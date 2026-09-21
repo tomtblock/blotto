@@ -91,6 +91,12 @@ export type TxFailureKind =
   // refusal by design. Distinct from "rpc-failure", which is the honest
   // "we could not reach it": a refusal is an answer, and a retry repeats it.
   | "entry-refused"
+  // 2026-09-18 (DRIFT.md §H6): the ciphertext store answered 409 — this
+  // wallet's allocation for this pool is already settled, or the pool has
+  // stopped taking entries. NOT an eligibility decision, and it used to be
+  // shown as one: the player was told they were not allowed to enter, when
+  // what happened is that an earlier attempt is the one that stands.
+  | "seal-conflict"
   | "rpc-failure"
   | "outcome-unreadable"
   | "outcome-mismatch";

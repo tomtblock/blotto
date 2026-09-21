@@ -41,6 +41,9 @@
 import { createHash } from 'crypto';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
+import { PublicKey } from '@solana/web3.js';
+
+import { leafBytes, merkleRoot } from '../../backend/scoring/src/merkle';
 
 type Verdict = 'MATCH' | 'RANK_DRIFT' | 'PAYOUT_MISMATCH' | 'INPUT_DRIFT' | 'ABSENT';
 
@@ -60,21 +63,207 @@ interface PlanSeat {
   expectedRank?: number | null; expectedLamports?: string;
   expectedRefundLamports?: string; battles?: number[][];
 }
+/**
+ * The predicted sunk cost. A SCALAR is one figure for every seat; a BAND
+ * object is two, because the real cost is not uniform and a scalar cannot
+ * express that (§H20). The pass asset is named `BLOTTO PASS #<pool>-<seat>`,
+ * so a two-digit seat index is one byte larger and costs 5080 lamports more
+ * rent. Seats 0-9 and seats 10+ are genuinely two numbers.
+ */
+type SunkPrediction = string | { seats0to9: string; seats10plus: string };
+
 interface Plan {
   test: string; title?: string;
-  expectations?: { terminalState?: string; entrants?: number; vaultAfter?: string; perSeatRefundLamports?: string };
+  expectations?: {
+    terminalState?: string; entrants?: number; vaultAfter?: string; perSeatRefundLamports?: string;
+    /** What each seat is predicted to LOSE over the whole test (fees + rent). */
+    perSeatSunkLamports?: SunkPrediction;
+    /** What every seat held before it entered. Without this the line above
+     *  cannot be tested, and `checkPerSeatCost` refuses to pass (§H21). */
+    startingBalanceLamports?: string;
+    /** Wallets the line above does NOT cover, each with the reason. A founder
+     *  wallet is not funded by `fan-out`, so its starting balance is whatever
+     *  it happens to be on the day and its cost can only be REPORTED. Naming
+     *  them here excludes them from the verdict and prints them anyway — a
+     *  silent skip would be §H9 wearing a different hat. */
+    perSeatSunkExcludes?: Record<string, string>;
+  };
   seats: PlanSeat[];
 }
 interface ActualSeat {
   seat: number; wallet: string; route: string; address: string; battlesHash: string;
   refunded: boolean; flagged: boolean; registerSig: string | null; slot: number | null;
   balanceAfter: string | null;
+  /** Present once the pool has scored. */
+  rank?: number; amountLamports?: string;
 }
 interface Actual {
   test: string; poolId: string; poolPda: string; terminalState: string; entrants: number;
   minSeats: number; entryLamports: string; potLamports: string; resultsRoot: string | null;
   vaultLamports: string; treasuryLamports: string; harvestedAt: string;
   unknownEntrants: string[]; seats: ActualSeat[];
+}
+
+
+/**
+ * Recompute the results root from the harvested per-seat data and compare it
+ * to the root the chain committed.
+ *
+ * WHY THIS EXISTS (DRIFT §H14). Every plan's `passCriteria` states "the
+ * recomputed results root equals the on-chain results_root", and until
+ * 2026-09-18 nothing checked it: this file PRINTED the root and recomputed
+ * nothing. A criterion satisfied by display is §H9 again — a check that
+ * cannot fail.
+ *
+ * It is also the check that makes the published bundle safe to rely on. The
+ * revealed allocations come from a third party's gateway; they do not have to
+ * be trusted, because tampered results cannot reproduce a root the chain
+ * committed before anyone saw them.
+ *
+ * Two things must be right, and the first hand-written attempt got both
+ * wrong:
+ *   - `merkleRoot` takes LEAF BYTES and applies the 0x00-prefixed leaf hash
+ *     itself. Pre-hashing double-hashes and yields a plausible wrong root.
+ *   - Rank order alone does NOT fix leaf order. Ranks tie — pool 18 had two
+ *     seats at rank 62 — so the tie must break the same way the settlement
+ *     crank broke it. Seat index ascending reproduces the on-chain root.
+ */
+/**
+ * The per-seat sunk cost, CHECKED rather than displayed (§H20, §H21).
+ *
+ * T2R's plan predicted one figure for every seat and called a single lamport
+ * of drift a failure. 29 of 39 seats missed it, and `reconcile` reported PASS,
+ * because nothing here looked: the script contained no reference to the claim
+ * at all. That is §H9's stub verdict and §H14's unchecked root a third time.
+ *
+ * It could not have looked anyway, which is the deeper half. Per-seat cost is
+ * `startingBalance − balanceAfter`, and the harvest records only the second.
+ * So a plan must now DECLARE `expectations.startingBalanceLamports` for this to
+ * be checkable at all.
+ *
+ * THE RULE THIS ENCODES: a plan that states a per-seat prediction without the
+ * starting balance to test it against does NOT pass. An unverifiable criterion
+ * is a failure of the plan, not a free pass for the run — the whole point is
+ * that a prediction nobody can check is not evidence.
+ *
+ * Note for whoever writes the next prediction: the cost is NOT uniform. The
+ * pass asset is named `BLOTTO PASS #<pool>-<seat>`, so a two-digit seat index
+ * is one byte larger and costs 5080 more lamports of rent. Seats 0–9 and seats
+ * 10+ are two different numbers; see §H20 for the measured table. Since
+ * 2026-09-19 `perSeatSunkLamports` may therefore be an OBJECT
+ * `{ seats0to9, seats10plus }` as well as a scalar, so a plan can state the
+ * truth instead of a figure it knows is wrong for most of the field.
+ */
+function checkPerSeatCost(
+  plan: Plan,
+  actual: Actual
+): { ok: boolean; verdict: string; note: string } {
+  const predicted = plan.expectations?.perSeatSunkLamports;
+  if (!predicted) {
+    return { ok: true, verdict: 'n/a', note: 'the plan states no per-seat prediction' };
+  }
+  const start = plan.expectations?.startingBalanceLamports;
+  if (!start) {
+    return {
+      ok: false,
+      verdict: 'NOT CHECKED',
+      note:
+        `the plan predicts ${predicted} lamports per seat but declares no ` +
+        `startingBalanceLamports, so nothing can test it — an unverifiable ` +
+        `criterion does not pass (§H21)`,
+    };
+  }
+  const from = BigInt(start);
+  const entry = BigInt(actual.entryLamports);
+  /** The band a seat falls in, by the width of its index in the pass name. */
+  const wantFor = (seatIndex: number): bigint =>
+    typeof predicted === 'string'
+      ? BigInt(predicted)
+      : BigInt(seatIndex < 10 ? predicted.seats0to9 : predicted.seats10plus);
+
+  const excludes = plan.expectations?.perSeatSunkExcludes ?? {};
+  const drifted: string[] = [];
+  const reported: string[] = [];
+  let checked = 0;
+  for (const seat of actual.seats) {
+    if (seat.balanceAfter === undefined || seat.balanceAfter === null) continue;
+    if (excludes[seat.wallet] !== undefined) {
+      const after0 = BigInt(seat.balanceAfter);
+      const prize0 = BigInt(seat.amountLamports ?? '0');
+      reported.push(
+        `${seat.wallet}(seat ${seat.seat}) held ${after0} after` +
+        (prize0 > 0n ? ` including a ${prize0} prize` : '')
+      );
+      continue;
+    }
+    checked++;
+    // A refunded seat got its entry back, so what it is missing IS the sunk
+    // cost. A seat in a pool that PAID did not, and a seat that won was paid
+    // on top — both have to come out before the remainder means anything.
+    // Until T6 this only ever ran on a refund pool, and the naive difference
+    // happened to be right there and would have been wrong everywhere else.
+    const after = BigInt(seat.balanceAfter);
+    const prize = BigInt(seat.amountLamports ?? '0');
+    const sunk = seat.refunded ? from - after : from - after - entry + prize;
+    const want = wantFor(seat.seat);
+    if (sunk !== want) drifted.push(`${seat.wallet}(seat ${seat.seat})=${sunk} want ${want}`);
+  }
+  if (checked === 0) {
+    return {
+      ok: false,
+      verdict: 'NOT CHECKED',
+      note: 'no seat carries a balanceAfter — nothing to test against',
+    };
+  }
+  const aside =
+    reported.length > 0
+      ? `; ${reported.length} seat(s) excluded by the plan and reported only: ${reported.join(' ')}`
+      : '';
+  const describe =
+    typeof predicted === 'string'
+      ? `${predicted} lamports`
+      : `${predicted.seats0to9} (seats 0-9) / ${predicted.seats10plus} (seats 10+) lamports`;
+  if (drifted.length > 0) {
+    const shown = drifted.slice(0, 6).join(' ');
+    return {
+      ok: false,
+      verdict: 'DRIFT',
+      note:
+        `${drifted.length} of ${checked} seats differ from the predicted ` +
+        `${describe}: ${shown}${drifted.length > 6 ? ' …' : ''}${aside}`,
+    };
+  }
+  return {
+    ok: true,
+    verdict: 'MATCH',
+    note: `all ${checked} seats sank exactly ${describe}${aside}`,
+  };
+}
+
+function verifyResultsRoot(actual: Actual): { ok: boolean; note: string } {
+  if (!actual.resultsRoot) return { ok: true, note: 'no root committed (pool did not score)' };
+  const scored = actual.seats.filter((s) => s.rank != null && s.address);
+  if (scored.length === 0) return { ok: false, note: 'no scored seats to rebuild the tree from' };
+  const ordered = [...scored].sort((a, b) => (a.rank as number) - (b.rank as number) || a.seat - b.seat);
+  let recomputed: string;
+  try {
+    recomputed = Buffer.from(
+      merkleRoot(
+        ordered.map((s) =>
+          leafBytes({
+            player: new PublicKey(s.address as string).toBytes(),
+            rank: s.rank as number,
+            amountLamports: BigInt(s.amountLamports ?? '0'),
+          })
+        )
+      )
+    ).toString('hex');
+  } catch (e) {
+    return { ok: false, note: `could not rebuild the tree: ${e instanceof Error ? e.message : e}` };
+  }
+  return recomputed === actual.resultsRoot
+    ? { ok: true, note: `recomputed from ${ordered.length} seats · MATCH` }
+    : { ok: false, note: `MISMATCH — recomputed ${recomputed}` };
 }
 
 function main(): void {
@@ -142,10 +331,53 @@ function main(): void {
         note = `refunded ${sol(expectedRefund)} SOL`;
       }
     } else {
-      // Scored pools: compare money first, then rank. Rank comes from the
-      // engine re-run, which is added when the first full pool settles.
-      verdict = 'MATCH';
-      note = 'scored-pool reconcile lands with the first full pool';
+      // Scored pools: money first, then rank, then the allocation itself.
+      //
+      // Until 2026-09-17 this branch was a STUB that returned MATCH for every
+      // seat without comparing anything — so T4's first run reported
+      // "60 MATCH · 0 INPUT_DRIFT" having checked nothing per-seat at all. The
+      // headline claim survived only because it was verified by hand against
+      // the chain's committed payout list. A verdict that cannot fail is not a
+      // verdict, and this is what it should always have done.
+      const wantPaid = BigInt(seat.expectedLamports ?? '0');
+      const gotPaid = got.amountLamports === undefined ? null : BigInt(got.amountLamports);
+
+      if (gotPaid === null) {
+        verdict = 'PAYOUT_MISMATCH';
+        note = 'no published result for this seat — the bundle did not carry one';
+      } else if (gotPaid !== wantPaid) {
+        verdict = 'PAYOUT_MISMATCH';
+        note = `paid ${sol(gotPaid)} SOL, plan said ${sol(wantPaid)}`;
+      } else if (seat.expectedRank !== undefined && got.rank !== undefined && got.rank !== seat.expectedRank) {
+        verdict = 'RANK_DRIFT';
+        note = `rank ${got.rank}, plan said ${seat.expectedRank}`;
+      } else if (
+        seat.battles &&
+        got.revealedBattles &&
+        JSON.stringify(got.revealedBattles) !== JSON.stringify(seat.battles)
+      ) {
+        // The allocation played is not the allocation planned. On a headless
+        // seat that is a defect in this runner. On a UI seat it is a human at
+        // a dial under a ninety-second clock, and is expected — what matters
+        // is whether the rank and the money still landed where the plan said,
+        // which the two checks above have already established by this point.
+        const differing = got.revealedBattles.filter(
+          (b, i) => JSON.stringify(b) !== JSON.stringify(seat.battles![i])
+        ).length;
+        verdict = 'INPUT_DRIFT';
+        note =
+          `${differing} of 7 battles differ from the plan` +
+          (seat.route === 'ui' ? ' (played by hand — rank and payout still match)' : '');
+      } else if (got.recomputedHashMatches === false) {
+        verdict = 'INPUT_DRIFT';
+        note = 'revealed allocation does NOT reproduce the hash committed at entry';
+      } else {
+        verdict = 'MATCH';
+        note =
+          got.rank !== undefined
+            ? `rank ${got.rank}` + (gotPaid > 0n ? `, paid ${sol(gotPaid)} SOL` : ', not paid')
+            : 'rank and payout match the plan';
+      }
     }
 
     counts[verdict]++;
@@ -166,9 +398,19 @@ function main(): void {
   const directDrift = rows.some(
     (r) => r.route === 'direct' && (r.verdict === 'INPUT_DRIFT' || r.verdict === 'RANK_DRIFT')
   );
+  // The bundle's results must reproduce the root the chain committed. A
+  // tampered or mis-read bundle cannot, so this is what lets everything below
+  // rest on published data rather than on this script's word for it.
+  const rootCheck = verifyResultsRoot(actual);
+  // A stated criterion with no code behind it is the failure mode this project
+  // has now had three times (§H9 the stub verdict, §H14 the results root, §H21
+  // this). So the per-seat cost is either CHECKED or reported NOT CHECKED — it
+  // is never silently absent, and NOT CHECKED does not pass.
+  const perSeat = checkPerSeatCost(plan, actual);
+
   const pass =
     frozenOk && counts.PAYOUT_MISMATCH === 0 && !directDrift && stateOk && vaultOk &&
-    actual.unknownEntrants.length === 0;
+    rootCheck.ok && perSeat.ok && actual.unknownEntrants.length === 0;
 
   const lines: string[] = [];
   lines.push(`# ${test} reconcile — pool ${actual.poolId} — ${actual.terminalState}`);
@@ -183,7 +425,11 @@ function main(): void {
   lines.push(`Minimum field:   ${actual.minSeats} — the pool ${actual.entrants >= actual.minSeats ? 'reached' : 'did NOT reach'} it, so it ${actual.entrants >= actual.minSeats ? 'plays' : 'refunds'}`);
   lines.push(`Prize vault:     ${actual.vaultLamports} lamports${plan.expectations?.vaultAfter ? ` · expected ${plan.expectations.vaultAfter} · ${vaultOk ? 'MATCH' : 'MISMATCH'}` : ''}`);
   lines.push(`Treasury:        ${actual.treasuryLamports} lamports`);
-  if (actual.resultsRoot) lines.push(`Results root:    ${actual.resultsRoot}`);
+  lines.push(`Per-seat cost:   ${perSeat.verdict} — ${perSeat.note}`);
+  if (actual.resultsRoot) {
+    lines.push(`Results root:    ${actual.resultsRoot}`);
+    lines.push(`                 ${rootCheck.ok ? 'VERIFIED' : 'FAILED'} — ${rootCheck.note}`);
+  }
   lines.push('');
   lines.push('wallet   role        route   seat  verdict           note');
   for (const r of rows) {
@@ -204,9 +450,16 @@ function main(): void {
   }
   if (counts.ABSENT > 0) {
     lines.push('');
-    lines.push(`${counts.ABSENT} planned seat(s) never landed. The refund property is proved by the seats that did,`);
-    lines.push('since any count below the minimum field takes the same fork, but the shortfall is recorded here');
-    lines.push('rather than hidden — and the plan is not edited to match what happened.');
+    lines.push(`${counts.ABSENT} planned seat(s) never landed, and the plan is not edited to match.`);
+    if (isRefundPool) {
+      lines.push('The refund property is proved by the seats that did, since any count below the');
+      lines.push('minimum field takes the same fork — the shortfall is recorded rather than hidden.');
+    } else {
+      lines.push('On a scored pool each was replaced by a spare playing THAT SEAT\'S OWN frozen');
+      lines.push('allocation, so the field the engine scored is the field the plan predicted: a rank');
+      lines.push('falls out of the allocations, never the wallet holding them. The absent rows are the');
+      lines.push('burnt wallets (DRIFT.md §H6, §H8), recorded rather than quietly substituted.');
+    }
   }
   lines.push('');
   if (!frozenOk) {

@@ -28,13 +28,19 @@
  *
  * THE DEVICE MARKER. The app derives it per browser profile AND per pool, so
  * one browser's two pools are unlinkable. A headless wallet is its own
- * device, so the marker is derived per wallet and per pool from the master
- * seed. Every wallet therefore carries a DISTINCT marker, which is the
- * honest shape: sixty-one identical markers would group the whole field
+ * device, so the marker is derived per wallet and per pool from that wallet's
+ * own secret key. Every wallet therefore carries a DISTINCT marker, which is
+ * the honest shape: sixty-one identical markers would group the whole field
  * under `device_ip_correlation` and manufacture a finding that says nothing.
  *
+ * KEYS COME FROM DISK, not from the master seed (2026-09-18). `keys.ts derive`
+ * writes them once; re-deriving here only meant a session holding the keys
+ * still could not enter, which put the founder in the position of pasting a
+ * secret into a chat transcript against a deadline. See `loadWallet` below for
+ * the check that makes the substitution provable rather than plausible.
+ *
  * Run (from battle-test/):
- *   BLOTTO_BT_SEED=<hex> BLOTTO_RPC_URL=<url> \
+ *   BLOTTO_RPC_URL=<url> \
  *     npx ts-node --transpile-only --compiler-options \
  *     '{"module":"commonjs","moduleResolution":"node"}' scripts/enter.ts \
  *     --test T1 --pool 14 --wallets W00-W09 [--dry-run] [--concurrency 4]
@@ -71,7 +77,7 @@ import { seal as sealBox } from '../../backend/sealing/src/sealedbox';
 import { ciphertextMessage } from '../../backend/packet/src/ciphertext-message';
 import { attestationMessage } from '../../backend/_shared/src/attestation-message';
 import { poolPopulation, generateEntrant, type GeneratedEntrant } from '../../tests/rehearsal/src/strategies';
-import { deriveKeypair, masterFromEnv, walletLabel, DERIVATION_DOMAIN } from './keys';
+import { DERIVATION_DOMAIN } from './keys';
 
 /** One edition of the terms, mirroring config/terms.json. */
 interface TermsEdition { version: number; updated: string }
@@ -378,21 +384,58 @@ export interface SeatResult {
   sealed?: boolean;
 }
 
-/** The device marker for this wallet in this pool — per wallet, per pool. */
-function deviceMarker(master: Buffer, walletId: string, pool: string): Uint8Array {
+/**
+ * Load a headless wallet's keypair from `keys/wallets/NN.json`, the way
+ * `fan-out.ts` already does, rather than re-deriving it from the master seed.
+ *
+ * WHY (2026-09-18). The keys are written once by `keys.ts derive` and the seed
+ * is never needed again — but this script used to demand it on every run, so a
+ * session that had the keys on disk still could not enter a pool. That put the
+ * founder in the position of pasting a secret into a chat transcript against a
+ * deadline, which is the shape that produced DRIFT §H11 in the first place.
+ *
+ * The substitution is not "probably equivalent", it is CHECKED: every file in
+ * `keys/wallets/` reproduces the address committed for it in
+ * `registry/wallets.json`, which was generated from the seed on 2026-09-15 and
+ * has been in git since. 72 of 72 match, funder included. A key that did not
+ * come from the seed cannot satisfy that.
+ */
+function loadWallet(index: number): Keypair {
+  const path = resolve(__dirname, '..', 'keys', 'wallets', `${String(index).padStart(2, '0')}.json`);
+  const raw = readFileSync(path, 'utf8');
+  return Keypair.fromSecretKey(new Uint8Array(JSON.parse(raw) as number[]));
+}
+
+/**
+ * The device marker for this wallet in this pool — per wallet, per pool.
+ *
+ * The app derives it per browser profile and per pool so one browser's two
+ * pools are unlinkable. The property that has to hold here is that every
+ * wallet carries a DISTINCT marker: sixty-one identical markers would group
+ * the whole field under `device_ip_correlation` and manufacture a finding that
+ * says nothing about the product.
+ *
+ * The entropy is the wallet's own secret key rather than the master seed
+ * (2026-09-18, with the change above). That preserves the property exactly —
+ * distinct per wallet because the keys differ, deterministic for a given
+ * wallet and pool, and unlinkable across pools because the pool is in the
+ * string. Nothing compares markers across pools, so there is no continuity to
+ * break: T4's markers were already unrelated to T5's by construction.
+ */
+function deviceMarker(player: Keypair, walletId: string, pool: string): Uint8Array {
   return createHash('sha256')
     .update(`${DERIVATION_DOMAIN}device/${walletId}/${pool}/`)
-    .update(master)
+    .update(Buffer.from(player.secretKey))
     .digest();
 }
 
 async function enterOne(args: {
-  connection: Connection; master: Buffer; walletId: string; index: number;
+  connection: Connection; walletId: string; index: number;
   entrant: GeneratedEntrant; pool: PoolView; packetApi: string; dryRun: boolean;
   terms: TermsEdition; simulate: boolean;
 }): Promise<SeatResult> {
-  const { connection, master, walletId, index, entrant, pool, packetApi, dryRun, terms, simulate } = args;
-  const player = deriveKeypair(master, walletLabel(index));
+  const { connection, walletId, index, entrant, pool, packetApi, dryRun, terms, simulate } = args;
+  const player = loadWallet(index);
   const at = new Date().toISOString();
   const base: SeatResult = { wallet: walletId, address: player.publicKey.toBase58(), ok: false, at };
   let sealed = false;
@@ -403,7 +446,7 @@ async function enterOne(args: {
       battles: entrant.battles as never,
       salt,
       timingsMs: entrant.timingsMs,
-      deviceHash: deviceMarker(master, walletId, pool.pool),
+      deviceHash: deviceMarker(player, walletId, pool.pool),
     };
     // Throws unless five non-negative integers sum to exactly 100 per battle.
     const payloadBytes = encodePayload(payload);
@@ -479,9 +522,29 @@ async function enterOne(args: {
       return { ...base, ok: true, battlesHashHex };
     }
 
+    // A 'confirmed' blockhash can be newer than the node that runs preflight,
+    // which answers "Blockhash not found" and fails the send. On this runner
+    // that is not a retryable annoyance: the ciphertext is already stored, so
+    // every such failure BURNS the wallet for this pool (DRIFT.md §H6). It
+    // cost W22, W42 and W43 on pool 16 before this was fixed.
+    //
+    // The fix is to SKIP PREFLIGHT, not to age the blockhash. Preflight's only
+    // job is to catch a malformed transaction, and this one's shape is proven
+    // by `--simulate` and by every seat that has landed; a transaction that
+    // fails on chain burns the wallet either way, so preflight buys nothing
+    // here and costs seats.
+    //
+    // A 'finalized' blockhash was tried first and was WORSE: it is ~32 slots
+    // old, so it spends most of its validity window before the send and
+    // expired mid-confirmation — "block height exceeded", which burnt W55.
+    // 'confirmed' gives the full window, and skipping preflight means no node
+    // has to have seen it before the send.
+    const { blockhash } = await connection.getLatestBlockhash('confirmed');
+    tx.recentBlockhash = blockhash;
     const signature = await sendAndConfirmTransaction(connection, tx, [player, passAsset], {
       commitment: 'confirmed',
-      maxRetries: 3,
+      maxRetries: 5,
+      skipPreflight: true,
     });
     const parsed = await connection.getTransaction(signature, {
       commitment: 'confirmed', maxSupportedTransactionVersion: 0,
@@ -492,9 +555,18 @@ async function enterOne(args: {
     const error = e instanceof Error ? e.message : String(e);
     console.error(`  ${walletId} FAILED  ${error}`);
     if (sealed) {
+      // 2026-09-19: this used to read "can never enter this pool again", which
+      // was true until PR 147 shipped and is FALSE now. The gate refuses an
+      // overwrite only for a seat the CHAIN has accepted; a wallet that sealed
+      // and then failed to register holds no Entry, so it can simply seal
+      // again. Proven on this exact failure — W14 burnt on pool 21 at 01:48Z
+      // and landed on a retry minutes later. The stop below still fires,
+      // because a run that starts failing should be looked at before it is
+      // continued; what changed is that the cost is a retry, not a wallet.
       console.error(
-        `  ${walletId} SEALED THEN FAILED — this wallet can never enter pool ${pool.id} again. ` +
-        `Its ciphertext is stored and cannot be replaced or deleted (DRIFT.md §H6).`
+        `  ${walletId} SEALED THEN FAILED — it holds no Entry, so it is RECOVERABLE: ` +
+        `re-running this seat will re-seal and register it (the seal fix, PR 147). ` +
+        `Before that fix this wallet would have been barred from pool ${pool.id} for good.`
       );
     }
     return { ...base, sealed, error };
@@ -516,8 +588,18 @@ async function main(): Promise<void> {
     const doc = JSON.parse(readFileSync(resolve(process.cwd(), flags.plan), 'utf8')) as { seats: PlanSeat[] };
     planSeats = doc.seats.filter((x) => (x.route ?? 'direct') === 'direct');
   }
-  const walletIds = planSeats
-    ? planSeats.map((x) => x.wallet)
+  // Mutable: --substitute swaps a burnt seat for its spare in place, below.
+  //
+  // With --plan, the plan supplies every seat's FROZEN ALLOCATION and --wallets
+  // now SELECTS which of those seats this run enters, instead of being silently
+  // ignored (2026-09-18). A run that stopped part-way has to resume on the
+  // seats that are left: re-attempting the ones already seated wastes the
+  // window and buries the real failures in `already registered` noise.
+  // `fromPlan` is built from the FULL seat list below, so a substitute can
+  // still find the burnt seat's allocation even when that seat is not selected.
+  const selected = flags.wallets ? new Set(parseWallets(flags.wallets)) : null;
+  const walletIds: string[] = planSeats
+    ? planSeats.map((x) => x.wallet).filter((w) => !selected || selected.has(w))
     : parseWallets(flags.wallets ?? 'W00-W09');
   const dryRun = flags['dry-run'] === 'true';
   const simulate = flags.simulate === 'true';
@@ -530,7 +612,6 @@ async function main(): Promise<void> {
   const terms = JSON.parse(
     require('fs').readFileSync(resolve(__dirname, '..', '..', 'config', 'terms.json'), 'utf8')
   ) as TermsEdition;
-  const master = masterFromEnv();
   const connection = new Connection(rpc, { commitment: 'confirmed' });
   const pool = await readPool(indexer, poolId);
 
@@ -584,6 +665,28 @@ async function main(): Promise<void> {
     }
   }
 
+  // A burnt seat (sealed, never registered) can never enter this pool again, so
+  // it must be replaced by a spare. The replacement plays the BURNT SEAT'S OWN
+  // planned allocation, not a fresh one: a rank falls out of the allocations,
+  // never the wallet holding them, so substituting this way leaves every
+  // predicted rank and payout in the frozen plan exactly as frozen. Only the
+  // results root moves, and that was always conditional on seat order.
+  for (const pair of (flags.substitute ?? '').split(',').filter(Boolean)) {
+    const [burnt, spare] = pair.split('=').map((x) => x.trim());
+    const seat = fromPlan.get(burnt);
+    if (!seat) throw new Error(`--substitute ${pair}: ${burnt} is not in the plan`);
+    if (fromPlan.has(spare)) throw new Error(`--substitute ${pair}: ${spare} is already a plan seat`);
+    fromPlan.set(spare, seat);
+    // The seat list comes from the PLAN when --plan is given, so the spare has
+    // to be swapped into it too or it is never attempted. The burnt id comes
+    // out: it cannot enter this pool again, and leaving it in only produces a
+    // noisy 409 per run.
+    const at = walletIds.indexOf(burnt);
+    if (at >= 0) walletIds.splice(at, 1, spare);
+    else walletIds.push(spare);
+    console.log(`  substitute: ${spare} plays ${burnt}'s frozen allocation`);
+  }
+
   const results: SeatResult[] = [];
   for (let i = 0; i < walletIds.length; i += concurrency) {
     const slice = walletIds.slice(i, i + concurrency);
@@ -591,7 +694,7 @@ async function main(): Promise<void> {
       slice.map((id) => {
         const index = Number(id.replace(/^W/i, ''));
         const entrant = fromPlan.get(id) ?? population[index] ?? generateEntrant('random', index);
-        return enterOne({ connection, master, walletId: id, index, entrant, pool, packetApi, dryRun, terms, simulate });
+        return enterOne({ connection, walletId: id, index, entrant, pool, packetApi, dryRun, terms, simulate });
       })
     );
     results.push(...batch);
@@ -607,9 +710,10 @@ async function main(): Promise<void> {
       console.error(
         `\nSTOPPING after ${results.length} of ${walletIds.length} seats. ` +
         `${burnt.length} sealed and then failed: ${burnt.map((r) => r.wallet).join(', ')}.\n` +
-        `Those wallets are barred from pool ${pool.id} permanently and must be replaced from the ` +
-        `spare roster, not retried. Diagnose the gate before running again — if it is down, every ` +
-        `remaining seat would be burnt the same way.`
+        `Those seats are RECOVERABLE since PR 147 — re-run them with --wallets rather than ` +
+        `replacing them from the spare roster. The stop is still here on purpose: diagnose why ` +
+        `they failed before continuing, because if the gate is down every remaining seat fails ` +
+        `the same way and a retry storm is not a diagnosis.`
       );
       break;
     }

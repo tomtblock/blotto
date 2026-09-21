@@ -1,0 +1,73 @@
+{
+  "schema": "blotto-rehearsal-freeze/1",
+  "test": "T2",
+  "_why": "The plan is evidence only if it demonstrably predates the outcome. Commit dates can be set to anything; GitHub's merge timestamp cannot. This file records that timestamp and binds it to the exact bytes of the plan that was merged. It is written SEPARATELY so that T2.plan.json stays byte-identical to what was frozen — the plan is never edited after its freeze, not even to fill in its own metadata.",
+
+  "pullRequest": 146,
+  "repository": "tomtblock/blotto",
+  "mergedAt": "2026-09-18T14:42:47Z",
+  "mergedBy": "tomtblock",
+  "mergeCommit": "fe5c5b420b37a6a5dde95fe0addd8058a85f5551",
+  "headCommit": "7ff5b48c97971746d7d6447e47f857d6b8a45d8e",
+
+  "planPath": "battle-test/registry/T2.plan.json",
+  "planSha256": "2638d1a121c101e46305ff7076983fe465752291786b64850697209d11dcb00c",
+
+  "pool": {
+    "note": "The plan names NO pool (T2.plan.json poolId is null). It was written to run against whichever pool was open when the freeze merged, so nothing about the pool could have shaped the prediction.",
+    "poolId": 20,
+    "poolPda": "DhtdSBapxkvzYSrkXVK63MfEEEVK6hLanEFywEKzwvqh",
+    "tier": 0,
+    "entryLamports": "100000000",
+    "potLamports": "4000000000",
+    "minSeats": 40,
+    "fillDeadline": "1789780558",
+    "parametersMatchPlan": true
+  },
+
+  "timeline": {
+    "poolOpenedAt": "2026-09-18T13:15:58Z",
+    "poolOpenSlot": 500353392,
+    "frozenAt": "2026-09-18T14:42:47Z",
+    "firstEntryAt": "2026-09-18T14:45:13Z",
+    "firstEntrySlot": 500385777,
+    "secondEntryAt": "2026-09-18T14:46:09Z",
+    "freezePrecedesFirstEntryBy": "2 min 26 s",
+    "fillDeadlineAt": "2026-09-19T01:15:58Z"
+  },
+
+  "weakerThanT4InOneRespect": {
+    "note": "Stated plainly rather than left for a reader to notice, exactly as T5's record does. T4's freeze preceded the EXISTENCE of the pool it ran on. T2's does not: pool 20 opened at 13:15:58Z, one hour and twenty-seven minutes BEFORE this freeze merged at 14:42:47Z. The T4 claim 'the prediction was fixed before the pool existed' is not available here and is not made.",
+    "whatIsStillTrue": "The freeze precedes every entry in the pool. The margin is narrow — 2 min 26 s to the first entry — and narrow is not the same as absent: the merge is timestamped by GitHub and the entry by a Solana block, and neither is written by this repository. The plan names no pool and no pool identifier appears anywhere in it.",
+    "andOnThisTestItMattersLess": "T2 predicts no ranks, no scores and no winner. Its claims are the refund fork, the entrant count and a per-seat lamport figure — none of which any property of the pool could have been tuned to."
+  },
+
+  "entrants": {
+    "target": 39,
+    "landed": 39,
+    "note": "39 is the point of the test: one seat below MIN_SEATS. The chain's own `outcome_if_deadline_now` read `refund` once the 39th landed.",
+    "founderSeats": 2,
+    "headlessSeats": 37,
+    "UI-A": "7fpaNh8mAi9SDJyvu6sVFxsqqP8LE3whvBJ1K9ZFYPve",
+    "UI-B": "6wqLMAS1guarBehRDGFSAApGUBLXuuHWmy9naepzu3sa"
+  },
+
+  "substitutions": {
+    "note": "Two seats sealed and then failed to register and are barred from pool 20 by DRIFT §H6. Each was replaced by a spare playing THE BURNT SEAT'S OWN FROZEN ALLOCATION, so the field is exactly the one the plan named. On a refund pool no rank depends on an allocation at all, so the substitution cannot affect any predicted outcome — it only keeps the seat count at 39.",
+    "W15": "W37",
+    "W31": "W38",
+    "cause": "Both failed with `block height exceeded` at --concurrency 1, with ZERO 429s in the run. This is neither §H8 (the runner's blockhash choice) nor §H12 (the runner's concurrency): it is a transaction that devnet did not include in a block before its blockhash aged out. Baseline flakiness, measured here at 2 of 32 attempts.",
+    "whyItCostsAWallet": "Only because the app stores the sealed allocation BEFORE the transaction (§H6). A transaction that fails for any reason leaves a ciphertext that can never be replaced, so the wallet is barred from that pool for good. The product fix is specified in docs/FIX-seal-lockout.md and has not shipped."
+  },
+
+  "settlement": {
+    "note": "No founder action is needed to settle this pool. Both trigger_refund and refund are permissionless (refund.rs): any signer may settle a pool that missed its deadline below MIN_SEATS, so a vanished operator cannot strand entries."
+  },
+
+  "verifyIndependently": [
+    "The merge time is served by GitHub's own API for PR 146 and cannot be rewritten by this repository.",
+    "sha256 of the plan file at the merge commit must equal planSha256 above.",
+    "The pool's open time and both founder entry times are block times read from devnet via getSignaturesForAddress on the pool PDA — not from this repository and not from the indexer.",
+    "reconcile.ts asserts this timestamp precedes the first register's block time, and marks the pool UNFROZEN if it does not."
+  ]
+}

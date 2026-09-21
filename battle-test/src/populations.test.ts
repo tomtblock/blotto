@@ -14,7 +14,7 @@
 
 import { compareBattle } from '../../backend/scoring/src/engine';
 import {
-  cappedField, wall, pole, uiWall, uiPole, distinctShapes, roundShare,
+  cappedField, wall, pole, uiWall, uiPole, uiFieldA, uiFieldB, distinctShapes, roundShare,
   BATTLES, FIELD_CAP, ALLOCATION_SUM, WALL_MIN,
 } from './populations';
 
@@ -207,6 +207,87 @@ console.log(`  allocation_entropy round-number half: pole ${Math.round(poleRound
       }
     });
     console.log('  dial recipe: all 14 founder drags reproduce uiWall and uiPole exactly, through app/ rebalance.ts');
+  } finally {
+    Module._resolveFilename = orig;
+  }
+}
+
+
+// 10. T5's founder seats. The whole test rests on two claims about them, and
+//     both must hold for ANY allocation in 1..25 — not just for the recipe,
+//     because T4 showed a human at a dial lands somewhere else (§H10).
+//     Here we prove the recipe satisfies the range, and that the range implies
+//     the claims.
+{
+  const a = uiFieldA();
+  const b = uiFieldB();
+
+  for (const [name, e] of [['uiFieldA', a], ['uiFieldB', b]] as const) {
+    if (e.battles.length !== BATTLES) fail(`${name}: ${e.battles.length} battles`);
+    for (const bt of e.battles) {
+      const sum = bt.reduce((x, y) => x + y, 0);
+      if (sum !== ALLOCATION_SUM) fail(`${name}: ${JSON.stringify(bt)} sums to ${sum}`);
+      // The two halves of the range, and each carries one of the claims.
+      if (bt.some((v) => v > FIELD_CAP)) fail(`${name}: ${JSON.stringify(bt)} exceeds the cap — it could beat the wall`);
+      if (bt.some((v) => v < 1)) fail(`${name}: ${JSON.stringify(bt)} has a zero — it could draw with the pole`);
+    }
+    const shapes = distinctShapes(e.battles);
+    if (shapes < 3) fail(`${name}: only ${shapes} distinct shapes — allocation_entropy fires strong`);
+  }
+
+  // duplicate_sets is the one allocation signal that HARD-BLOCKS. The two
+  // founder wallets must never share a seven-battle set.
+  if (JSON.stringify(a.battles) === JSON.stringify(b.battles)) {
+    fail('uiFieldA and uiFieldB share an identical set — duplicate_sets hard-blocks');
+  }
+
+  // Claim 1: a founder seat cannot win. It loses every battle to the wall.
+  // Claim 2: a founder seat cannot come last. It beats the pole every battle.
+  let lost = 0;
+  let beat = 0;
+  for (let s = 0; s < 60; s++) {
+    const w = wall(5100 + s);
+    const p = pole(5200 + s);
+    for (const [name, e] of [['uiFieldA', a], ['uiFieldB', b]] as const) {
+      for (let k = 0; k < BATTLES; k++) {
+        const vsWall = compareBattle(e.battles[k] as never, w.battles[k] as never).outcome;
+        if (vsWall !== 'loss') fail(`${name} battle ${k} did NOT lose to a wall — got ${vsWall}; it could take rank 1`);
+        lost++;
+        const vsPole = compareBattle(e.battles[k] as never, p.battles[k] as never).outcome;
+        if (vsPole !== 'win') fail(`${name} battle ${k} did NOT beat a pole — got ${vsPole}; it could come last`);
+        beat++;
+      }
+    }
+  }
+  console.log(`  T5 founder seats: lose to the wall ${lost}/${lost}, beat the pole ${beat}/${beat} — so ranks 2..63, unconditionally`);
+}
+
+// 11. The T5 recipe is the app's own dial arithmetic, re-derived, so a change
+//     to rebalance.ts breaks here rather than in a 4 SOL pool — as for T4.
+{
+  const Module = require('module');
+  const { join } = require('path');
+  const APP = join(__dirname, '..', '..', 'app', 'src');
+  const orig = Module._resolveFilename;
+  Module._resolveFilename = function (request: string, ...rest: unknown[]) {
+    return orig.call(this, request.startsWith('@/') ? join(APP, request.slice(2)) : request, ...rest);
+  };
+  try {
+    const { rebalance } = require(join(APP, 'components', 'blot', 'rebalance'));
+    const { EVEN_SPLIT } = require(join(APP, 'battle', 'allocation'));
+    const checks: [string, number[], number[][]][] = [
+      ['uiFieldA', [0, 1, 2, 3, 4, 0, 2], uiFieldA().battles],
+      ['uiFieldB', [4, 3, 2, 1, 0, 3, 1], uiFieldB().battles],
+    ];
+    for (const [name, order, want] of checks) {
+      order.forEach((k, i) => {
+        const got = [...rebalance(EVEN_SPLIT, k, 25)];
+        if (got.join(',') !== want[i].join(',')) {
+          fail(`${name} battle ${i}: the dials produce ${JSON.stringify(got)} but populations.ts says ${JSON.stringify(want[i])}`);
+        }
+      });
+    }
+    console.log('  T5 dial recipe: all 14 founder drags reproduce uiFieldA and uiFieldB exactly, through app/ rebalance.ts');
   } finally {
     Module._resolveFilename = orig;
   }

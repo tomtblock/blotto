@@ -1,0 +1,57 @@
+{
+  "schema": "blotto-rehearsal-freeze/1",
+  "test": "T6",
+  "_why": "The plan is evidence only if it demonstrably predates the outcome. Commit dates can be set to anything; GitHub's merge timestamp and a Solana block time cannot. This file binds the two and is written SEPARATELY so T6.plan.json stays byte-identical to what was frozen.",
+  "pullRequest": 156,
+  "repository": "tomtblock/blotto",
+  "mergedAt": "2026-09-19T19:11:28Z",
+  "mergedBy": "tomtblock",
+  "mergeCommit": "794fdaa228115c5b9d2fb7f213e25c92816708a9",
+  "headCommit": "90557bd8ba0a931e432066f31667d4c93e334429",
+  "planPath": "battle-test/registry/T6.plan.json",
+  "planSha256": "e6595def6642a1c6f74ad87ab2c55b48bba87d6827b9bd671c689211e3bf1297",
+  "THE CLAIM THIS RECORD EXISTS TO MAKE": {
+    "statement": "THE PREDICTION WAS FROZEN BEFORE THE POOL IT RUNS ON EXISTED.",
+    "freezeMergedAt": "2026-09-19T19:11:28Z",
+    "poolCreatedAt": "2026-09-19T19:41:23Z",
+    "corroboration": "At 19:13Z, ninety-two seconds after the merge and twenty-eight minutes before pool 23 was created, the highest pool id in the indexer's projection was 22 — Open at 1 of 64. The plan names no pool: poolId and poolPda are both null in the frozen bytes, and they still are.",
+    "whyItMatters": "T4's standard and the strongest form of freeze in this test. T6 holds it BY CONSTRUCTION rather than by accident: the fill of pool 22, which is what causes pool 23 to be created, was deliberately held until this PR merged. T2R holds the same standard only because a retry was forced (DRIFT §H16).",
+    "marginBeforeThePoolExisted": "29 min 55 s"
+  },
+  "pool": {
+    "poolId": 23,
+    "poolPda": "7imsWrt7y3CfAhMkxtV67hgEBfa4gmrgpdLrACyM9vjy",
+    "tier": 0,
+    "entryLamports": "100000000",
+    "potLamports": "4000000000",
+    "minSeats": 40,
+    "createdAt": "2026-09-19T19:41:23Z",
+    "createdTx": "5LETHnDucTqckYHzYAU26pYmLL5a36FR1Xa7UnxLjuLCECYWtJ9mxizTX9WJSMA1iWUTzukGRTNgP6UXKBe5VHM7",
+    "createdSlot": 501015564,
+    "fillDeadlineAt": "2026-09-20T07:41:23Z",
+    "parametersMatchPlan": true,
+    "parametersChecked": "tier 0, entry 100000000, pot 4000000000, min_seats 40, and a 43200-second fill window — every one as the frozen plan states it.",
+    "note": "Recorded at 20:28Z with the pool Open at 0 of 64. If pool 23 lapses unused, T6 runs on the next pool with the plan unedited and only this block changes — T4 did exactly that between pools 15 and 16."
+  },
+  "orderingHeldDeliberately": {
+    "what": "Pool 23 is created by the settlement daemon a few minutes after pool 22 seals. Pool 22 could only seal once its 64th entry landed, and that entry was ours to send.",
+    "so": "The fill was held until 19:12:26Z, seventy-eight seconds after the freeze merged. The freeze could not have followed the pool because the pool could not have existed until we acted, and we did not act until the freeze was merged.",
+    "evidence": [
+      "PR 156 merge time, from GitHub's API, which this repository cannot rewrite.",
+      "The first headless register at 19:12:26.964Z in evidence/OBS22-pool-22/headless-register.log.",
+      "The indexer's pool list at 19:13Z showing 22 as the highest id."
+    ]
+  },
+  "verifyIndependently": [
+    "The merge time is served by GitHub's own API for PR 156 and cannot be rewritten by this repository.",
+    "sha256 of the plan file at merge commit 794fdaa must equal planSha256 above. It does: e6595def6642a1c6f74ad87ab2c55b48bba87d6827b9bd671c689211e3bf1297.",
+    "The pool's creation time and every entry time are block times read from devnet via getSignaturesForAddress on the pool PDA — not from this repository and not from the indexer.",
+    "The ORDER is the whole claim: GitHub's merge timestamp precedes the Solana block that created the pool. Neither clock is ours."
+  ],
+  "timeline": {
+    "frozenAt": "2026-09-19T19:11:28Z",
+    "poolCreatedAt": "2026-09-19T19:41:23Z",
+    "firstEntryAt": null,
+    "freezePrecedesPoolCreationBy": "29 min 55 s"
+  }
+}

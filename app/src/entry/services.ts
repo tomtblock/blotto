@@ -13,7 +13,10 @@
  * id throws a plain "not configured" error before anything is signed.
  */
 
-import { ciphertextMessage } from '@blotto/packet/ciphertext-message';
+import {
+  ciphertextMessage,
+  ciphertextStatusMessage,
+} from '@blotto/packet/ciphertext-message';
 import { generateKeyPair, getAddressFromPublicKey } from '@solana/kit';
 import { executeTrade } from '@/tx/execute';
 import type { TxRpc } from '@/tx/tx-rpc';
@@ -38,19 +41,73 @@ import {
  * request went through perfectly, and the retry it offers can only be
  * refused again. A player meets that at the END of the ninety seconds.
  *
- * `status` is the HTTP status, or null when nothing answered at all. The
- * REASON is deliberately not carried: the service gives a generic refusal
- * on purpose (PID §8), and this type must not become a channel that leaks
- * one.
+ * `status` is the HTTP status, or null when nothing answered at all.
+ *
+ * `reason` is a NARROW, DELIBERATE exception to the rule that the reason is
+ * never carried, and the rule still holds everywhere else.
+ *
+ * The refusal that must stay generic is the ENTRY PACKET's (PID §8): geo,
+ * sanctions, age. Naming the failing check there would turn `/packet` into an
+ * oracle a probe could walk, so `requestPacket` passes no reason and this
+ * field stays null for every `packet`-stage error — enforced below, not left
+ * to the caller's good manners.
+ *
+ * The CIPHERTEXT route's 409s are a different kind of thing. They say either
+ * "this pool filled", "this pool is no longer taking entries" or "an entry
+ * from this wallet already stands" — two public facts about the pool, already
+ * on its own page, and one fact about the caller's own seat. None of them is
+ * a decision about the player's eligibility, and refusing to carry them meant
+ * the app had to show a sentence that hedged between unrelated causes while
+ * the accurate sentence sat unused in the copy file (battle-test pool 22,
+ * Observation 4; founder ruling 2026-09-19).
+ *
+ * Only the strings in `CIPHERTEXT_REASONS` survive. Anything else the server
+ * says — now or after some future change — is dropped to null and the app
+ * falls back to the cautious message, so this field can never become a
+ * passthrough for text nobody vetted.
  */
+export const CIPHERTEXT_REASONS = [
+  'pool filled',
+  'pool closed to entries',
+  'already sealed',
+] as const;
+
+export type CiphertextReason = (typeof CIPHERTEXT_REASONS)[number];
+
+/**
+ * The refused body's `error`, but only if it is one we know.
+ *
+ * The property must be the body's OWN. Plain member access walks the
+ * prototype chain, so with an `Object.prototype.error` planted by anything
+ * else on the page, a response with no `error` at all — or no body — would
+ * read as whatever was planted, and the closed set would be picked from by
+ * something other than the server. `JSON.parse` cannot cause that itself (it
+ * makes `__proto__` an own property rather than reassigning the prototype),
+ * but this is the allowlist and it should not depend on that staying true of
+ * every value that ever reaches it.
+ */
+export function knownCiphertextReason(body: unknown): CiphertextReason | null {
+  if (typeof body !== 'object' || body === null) return null;
+  if (!Object.prototype.hasOwnProperty.call(body, 'error')) return null;
+  const raw = (body as { error?: unknown }).error;
+  return typeof raw === 'string' && (CIPHERTEXT_REASONS as readonly string[]).includes(raw)
+    ? (raw as CiphertextReason)
+    : null;
+}
+
 export class EntryServiceError extends Error {
+  readonly reason: CiphertextReason | null;
+
   constructor(
     readonly stage: 'ciphertext' | 'packet',
     readonly status: number | null,
-    message: string
+    message: string,
+    reason: CiphertextReason | null = null
   ) {
     super(message);
     this.name = 'EntryServiceError';
+    // The packet stage NEVER carries a reason, whatever it was handed.
+    this.reason = stage === 'ciphertext' ? reason : null;
   }
 
   /** True when the service DECIDED (4xx), as opposed to being unreachable
@@ -96,6 +153,56 @@ const toB64 = (b: Uint8Array): string => {
   return btoa(bin);
 };
 
+/**
+ * "Has this wallet already sealed for this pool?" — the one question the
+ * lockout made unanswerable (DRIFT.md §H6).
+ *
+ * PHASE-N-REVIEW (2026-09-18): deliberately NOT called from `submitEntry`.
+ * Asking costs a wallet signature prompt, and putting one in front of every
+ * entry would spend a prompt on the ninety-second session to detect a state
+ * that the backend fix has just made recoverable. This is here for the
+ * surfaces that need the truth about a specific wallet — a support answer,
+ * the battle test's preflight, a "you already sealed here" panel if the
+ * founder wants one — not for the hot path. Wiring it into the flow is a UX
+ * decision, and the founder owns it.
+ *
+ * The wallet proves it is asking about ITSELF; the answer is a boolean and
+ * never the ciphertext, so nothing here reads a sealed allocation.
+ *
+ * @returns true/false, or null when the service could not answer.
+ */
+export async function checkSealed(
+  apiBase: string | undefined,
+  signer: Pick<TxSigner, 'signMessage'>,
+  pool: string,
+  player: string,
+  nowUnix: bigint = BigInt(Math.floor(Date.now() / 1000))
+): Promise<boolean | null> {
+  if (!apiBase) throw new Error('entry service not configured (NEXT_PUBLIC_ENTRY_API_URL)');
+  if (!signer.signMessage) throw new Error('this wallet cannot sign');
+  const signature = await signer.signMessage(
+    ciphertextStatusMessage(pool, player, nowUnix)
+  );
+  let res: Response;
+  try {
+    res = await fetch(`${apiBase}/ciphertexts/status`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        pool,
+        player,
+        atUnix: nowUnix.toString(),
+        signature: toB64(signature),
+      }),
+    });
+  } catch {
+    return null;
+  }
+  if (!res.ok) return null;
+  const body = (await res.json()) as { sealed?: unknown };
+  return typeof body.sealed === 'boolean' ? body.sealed : null;
+}
+
 export function makeLiveEntryServices(cfg: LiveEntryServicesConfig): EntryServices {
   const api = (): string => {
     if (!cfg.apiBase) throw new Error('entry service not configured (NEXT_PUBLIC_ENTRY_API_URL)');
@@ -132,7 +239,22 @@ export function makeLiveEntryServices(cfg: LiveEntryServicesConfig): EntryServic
         throw new EntryServiceError('ciphertext', null, `ciphertext store unreachable: ${String(error)}`);
       }
       if (!res.ok) {
-        throw new EntryServiceError('ciphertext', res.status, `ciphertext store: ${res.status}`);
+        // Read the refusal's reason where there is one. A body that is absent,
+        // unparseable or unrecognised yields null and the app shows the
+        // cautious message — a refusal must never depend on the body being
+        // well formed.
+        let reason: CiphertextReason | null = null;
+        try {
+          reason = knownCiphertextReason(await res.json());
+        } catch {
+          /* no body, not JSON, or already consumed — stay with null */
+        }
+        throw new EntryServiceError(
+          'ciphertext',
+          res.status,
+          `ciphertext store: ${res.status}`,
+          reason
+        );
       }
     },
 

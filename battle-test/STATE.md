@@ -1,24 +1,437 @@
-# STATE — 2026-09-16 16:23 local (19:23 UTC) — by Claude Code
+# STATE — 2026-09-19 20:10 UTC — by Claude Code
 
-Phase:            **T4 moves to the next pool. UI-A and UI-B are permanently barred from pool 15.**
-                  Not a wallet problem and not fixable: the app stores the sealed allocation BEFORE it
-                  asks for an entry packet, so the founder's play during the Turnkey outage stored a
-                  ciphertext that was never registered. Every retry replays with a fresh salt, so the
-                  bytes differ, so the store refuses with 409 "already sealed". No delete path exists.
-Waiting on:       **F-25 — one decision, not blocking.** Apply the seal-lockout product fix now as a
-                  separate PR (touches app/ and backend/, against this week's boundary), or ship it
-                  after the test week? Recommendation: after. Guardrails already stop it recurring here.
-After that:       pool 15 lapses 01:52:26Z (22:52 local, holds no entries) → daemon opens the next pool
-                  ~5 min later (~22:57 local, on the 23:00 cadence) → T4 runs there on the SAME frozen
-                  plan. Only poolId, poolPda and a new freeze record change; no rank or payout moves.
-Live deadlines:   pool 15 deadline 01:52:26Z. Entry gate HEALTHY since 18:56:02Z (200 for both UI wallets).
-Blocked:          nothing. Out of plan mode; enter.ts can run once the new pool is open and the founder
-                  has entered.
+Phase:            **Pool 22's finding is FIXED and in review (PR 157).** T6 is frozen and ready.
+Waiting on:       **the founder (§F-34): merge PR 157, then RUN `deploy-backend` by hand, then get
+                  the RPC URL to this session.** All three before T6 runs.
+Blocked:          T6 on §F-34 · T3 on Q6 (admin signing) · T7 on Q7 (reviewer key).
+Results so far:   T1 **PASS** · T4 **PASS** · T5 **PASS** · T2 **SPOILED** · T2R **PASS (7 of 8)**
+                  pool 22 = observation, not a test
+Money:            funder **10.339339200** · W00 **4.041117840** (pool 22's pot, back in the roster)
+                  UI-A 10.568905266 · UI-B 11.673357239 (unchanged — charged nothing at all)
 
-**STANDING RULE, adopted 19:09Z:** probe the entry gate for the exact wallets IMMEDIATELY BEFORE the
-founder plays, never after. A seal made into a broken gate cannot be undone. An explicit go-ahead
-goes out seconds before each UI entry from now on.
-Results so far:   T1 **PASS** · T2–T8 not started
+## The founder's three rulings, and what was built
+
+| ruling | answer | state |
+|---|---|---|
+| fix the refusal wiring | **yes** | built, PR 157 |
+| use the word "filled" | **yes** | built, PR 157 |
+| a devnet RPC | "already in secrets" | **correct, and unreadable — see below** |
+
+`COPY.tx.poolFull` now reaches a player. The route answers `pool filled` at capacity and
+`pool closed to entries` below it, because a pool that filled and a pool that ran out of time are
+both simply not `Open` and only the seat count separates them. **The count gates nothing** — it
+picks the wording of a refusal the state has already decided, and a test pins that an `Open` pool at
+capacity is still accepted, so it cannot quietly become a second gate turning away the 64th honest
+entrant.
+
+**The generic-refusal rule is intact, and this was the constraint to get right.** `services.ts` says
+in terms that a refusal never carries its reason (PID §8). True of `/packet` — geo, sanctions, age —
+where naming the failing check makes it an oracle a probe can walk. Not true of the ciphertext
+route's 409s, which are public pool facts plus the caller's own seat. So the carve-out is narrow and
+**enforced rather than trusted**: `EntryServiceError` drops a reason for the packet stage in the
+constructor, because a rule enforced by every call site's good manners lasts until the next call
+site. `/packet` is untouched.
+
+Two things tightened while testing it, both about the same worry — that the field could become a
+channel for text nobody vetted: a **closed allowlist** of the three strings the route sends, and an
+**own-property** requirement, because plain member access walks the prototype chain and a planted
+`Object.prototype.error` would otherwise be read out of a response carrying no error at all.
+
+app **517** tests (+8) · packet **201** (+6) · both typecheck · both gates clean.
+
+## THE RPC IS REAL, AND A GITHUB SECRET CANNOT BE READ BACK
+
+`BLOTTO_DEVNET_RPC_URL` exists as a repository secret — a Helius devnet URL, staged to Fly as
+`BLOTTO_RPC_URL`. The founder is right that it is there. **Actions secrets are one-way by design**:
+handed to a workflow while it runs, never readable through the API, masked in logs. This session
+cannot get it from there and should not try.
+
+§F-34 offers two routes: an environment variable on the session's environment (recommended — the
+URL carries an API key and should not enter the transcript), or pasting it here and rotating it
+afterwards.
+
+## §F-28'S TRAP, BEFORE IT BITES AGAIN
+
+**Merging PR 157 ships the app half only.** `deploy-backend` is `workflow_dispatch` — it runs when
+somebody presses it. On Thursday the seal fix sat merged-but-not-live for hours and was caught only
+by probing the live route.
+
+Nothing breaks in the gap, in either order: until the service deploys, the app receives the old
+single string and shows the cautious message, which stays true. But **T6 must not run until both
+halves are live**, or it tests the old behaviour and fails its copy criterion for a fault already
+fixed.
+
+---
+
+## T6 is frozen, and the freeze holds BY CONSTRUCTION
+
+PR 156 merged **19:11:28Z**. At **19:13Z** the highest pool id in existence was **22** — pool 23 did
+not exist. And it could not have: pool 23 is created minutes after pool 22 seals, pool 22 could only
+seal on an entry that was ours to send, and the fill was held until the merge landed. Seventy-eight
+seconds separate them. `registry/T6.freeze.json` carries the merge commit, the plan hash
+(`e6595def…1297`, identical at the merge commit and on disk) and the corroboration.
+
+T2R holds the same standard only because a retry was forced. T6 holds it on purpose.
+
+## Pool 22 — settled clean, and the finding is in the copy layer
+
+64 seats, `Paid`. **Nine seconds from seal to payout** (reveal 19:36:07, commit 19:36:08, pay
+19:36:10) against T6's 120-second threshold — and unlike the fill time, that number is the daemon's
+own work and is not contaminated by the RPC. W00 took rank 1 and the whole 4 SOL. Per-seat cost came
+out at exactly **4441080**, confirming §H20's lower band on a third pool and exercising the §H23
+formula on a PAID seat — the case the old subtraction got wrong.
+
+### THE FINDING — T6 would fail its copy criterion today
+
+The founder played the full 90 seconds and submitted into a pool that had already scored. They were
+refused, charged **nothing at all** (balance unchanged to the last digit — not even a network fee),
+and shown a sentence rather than a spinner. All of that is right.
+
+But the sentence **hedges between two causes the server had already told the client apart**:
+
+| layer | what happens | why it is individually reasonable |
+|---|---|---|
+| `submit.ts` | ciphertext posts BEFORE the register, so a late entrant is refused at the seal step and never reaches the chain | a paid entry with no ciphertext is the worse failure |
+| `errors.ts` | `COPY.tx.poolFull` maps from 6010 `PoolFull`, which **can never fire** — `register.rs` checks state (6000) before capacity | the gate order is correct; T6's own plan derives it |
+| `outcome.ts:110` | branches on stage + status only, never reads the 409 body — so `pool closed to entries` and `already sealed` collapse into one hedged message | both really were one case until PR 147 |
+
+**The server knew. The app owns the right sentence. The wiring loses it.** `COPY.tx.poolFull` —
+*"This pool filled before your entry reached it"* — is T6's pass criterion almost verbatim and has
+never been shown to anybody.
+
+Fix proposed in §F-33 and awaiting a ruling: it is product code, so it is the founder's call.
+
+## The RPC mistake, and what it costs
+
+The pool 22 fill took five runs — about fifteen seats per run, then `block height exceeded`, with
+pacing perfectly steady at eight slots per seat right up to each failure. A service degrading under
+load slows down first; a throttle does not. `MANUAL.md` §4.3 said to use a dedicated devnet RPC and
+that the public endpoint would mean *"measuring the RPC, not the app"*. I used the public endpoint.
+
+Cost here: nothing — four wallets sealed-then-failed and **all four retried and landed**. Cost to
+T6: its **fill-under-5-minutes criterion is unmeasurable** on this endpoint (62 seats took 5m20s).
+**T6 needs a free RPC URL from the founder before it runs.**
+
+## The seal gate refused in BOTH directions, on live traffic
+
+Unplanned, and better evidence than anything designed for it. W14, W29, W43 and W57 sealed and then
+had their register expire, held no `Entry`, were **allowed** to re-seal, and all four landed. W43
+through W56, already registered, were **refused** `409 already sealed` when a later sweep tried to
+overwrite them — fourteen paid seats protected. Only the allowing half had been shown live before.
+**W43 did both by itself**: burnt, retried, landed, then correctly refused.
+
+---
+
+## §H22 — the even split is the MIDDLE of three tiers. READ THIS INSTEAD OF §H18.
+
+The founder asked the two questions that settled it: *"I thought we proved the even split cannot
+win?"* and *"what if everyone did that?"* Both were right to ask.
+
+  → **The proof exists and reproduces.** `docs/skill-evidence/REPORT.md` publishes 0.000% rank-1 for
+    the default at 64 and 40 seats. Re-run: **0 of 400 pools.**
+  → **And its field is half the one shape the default loses to by construction** — `heuristic` and
+    `optimised` are *defined* as three-stat concentration. The 0.000% is a property of the FIELD.
+
+| the other 39 seats | default's rank-1 | median rank |
+|---|---|---|
+| the study's mixed ladder | **0.0%** | 26th of 40 |
+| three-stat concentrators only | **0.0%** | **40th — last, every pool** |
+| arbitrary allocations | **100.0%** | **1st** |
+
+  → **Deliberate beats the default totally. The default beats careless totally.** Pool 20's field
+    was the bottom tier — 38 seats on one or two stats with zeroes. The default beat unskilled play,
+    not skill.
+  → **If EVERYONE leaves the default: all 40 tie, the pot divides 40 ways, each gets exactly their
+    entry back. Nobody profits.** Add ONE three-stat player and they take the ENTIRE pot, 200 of 200.
+  → **For counsel:** not "the players who did nothing took the pot" but **"the default is a
+    break-even floor that any deliberate player beats totally."** A stronger skill story than the
+    report told — the gradient is total in both directions.
+  → **My §H18 error was framing, not fact.** Every number there is right. I took "doing nothing
+    wins" to counsel when one more measurement — the founder's question — showed it cannot win
+    against anyone who thinks and cannot profit even when it wins.
+
+**PR 154** corrects the report's interpretation and removes "the even split is the weakest
+allocation in the game" from both places it appeared in the rules copy. Four regression tests pin
+all three tiers. **Wording is an architect proposal; brand voice is yours.**
+
+---
+
+## T2R — the boundary is PROVEN, and it was frozen before its pool existed
+
+PR 151 merged **23:47:18Z**; pool 21 was created by a Solana block at **01:21:29Z**, 1 h 34 min
+later. The plan named no pool. Neither clock is ours. Strongest freeze in this test — available
+only because T2 was spoiled and the retry was forced.
+
+  **MATCH:** Closed not Paid · exactly 39 entrants · `trigger_refund` settles it (no results_root,
+  no revealed secret) · 39 of 39 refunded exactly 100000000 · vault exactly 650240 · pot of
+  4000000000 returned · nothing flagged, no hold, no reviewer.
+  **FAILED:** each seat's net loss exactly 4441080 — **29 of 39 cost 4446160.**
+
+## §H20 — "measured on three pools to the lamport" was never true
+
+The per-seat cost is not one number. The pass asset is named `BLOTTO PASS #<pool>-<seat>`, so a
+two-digit seat index is one character longer, one byte bigger, and one byte of devnet rent is
+**5080 lamports**.
+
+| seats | pass asset | per-seat sunk |
+|---|---|---|
+| 0–9 | 92 bytes | **4441080** |
+| 10–63 | 93 bytes | **4446160** |
+
+  → **It was always true and I never looked.** T1, T4 and T5 all show 92 bytes at seat 9 and 93 at
+    seat 10. On T4 and T5, **54 of 64 seats** were at the higher figure.
+  → I read early seats, generalised to whole pools, then restated it as MORE certain each time —
+    "estimated" → "measured" → "measured to the lamport" → "a single lamport of drift is a failure"
+    — with nothing new measured between restatements, and froze it.
+  → The program is correct. Rent scaling with a name is right.
+
+## §H21 — reconcile printed PASS while that criterion failed
+
+`grep` finds no occurrence of `perSeatSunk`, `sunk` or `4441080` in the script. **§H9's stub verdict
+and §H14's unchecked root a third time** — last time I fixed the one instance and never asked which
+other criteria had no code behind them. Deeper: per-seat cost needs a starting balance the harvest
+never recorded, so the claim was **unverifiable** — it could neither pass nor fail.
+  → Fixed. reconcile now checks it and **refuses to pass a plan that states the prediction without
+    a `startingBalanceLamports` to test it against.** An unverifiable criterion is a failure of the
+    plan, not a free pass for the run.
+  → Proven both ways before being believed: 4441080 catches the 29 two-digit seats, 4446160 catches
+    the 10 single-digit ones, neither passes. Frozen plan restored byte-identical.
+
+## Two burnt seats RECOVERED — the seal fix on a live failure
+
+W14 and W28 each sealed then failed with `block height exceeded` (2 of 40, matching T2's 2 of 32).
+Both retried, both landed. **No substitutions — the 39 seats are the 39 the frozen plan named.**
+W14's state was read before retrying: `{"sealed":true}` with no Entry PDA, exactly the condition
+PR 147 addresses. Before the fix both wallets were gone.
+
+---
+
+## §H18 — THE EVEN SPLIT WON. READ THIS FIRST.
+
+Pool 20 sealed at 40 and scored. Both founder wallets had timed out into `[20,20,20,20,20]` again,
+and this time **they tied at rank 1 on 426 half-points and split the entire 4 SOL pot** — 2 SOL
+each. The best seat that actually played scored 318. **The 38 players who played got nothing.**
+
+  → **Verified, not inferred.** All 40 revealed sets re-scored through the product's own
+    `backend/scoring/src/engine.ts`, independently of the daemon: **40 compared, 0 mismatches.**
+  → **Nothing is broken.** `prize_math.rs::split_group` says in terms that a tie for first splits
+    the whole pot k ways and nobody else is paid. Every component did what the spec says.
+  → **It is a property of the FIELD, not the allocation.** All 38 field seats concentrate — max
+    stat 44 to 88, every one above 25. All-vs-all rewards winning the most head-to-heads, and an
+    even split beats an allocation that dumps 67 points into one stat, four stats to one. In T5 the
+    SAME allocation came 62nd of 64, because that field was capped at 25.
+  → **THE PUBLISHED COPY IS FALSE AS WRITTEN.** Twice, including the rules: "The even split is the
+    weakest allocation in the game." Its own next sentence names the condition under which that
+    holds — concentrating on THREE stats. As written it is unconditional, and one counterexample
+    settles it. This one is on chain at 40 seats.
+  → **Why it is founder-and-counsel.** PID §8 rests on skill. "The players who did nothing beat
+    everyone who played and took the whole prize" is a direct attack on that, and it makes the
+    timeout default a strategy: a player who learns this wins by closing their laptop.
+  → **NOT established, so it is not claimed:** this field is OUR generator, not humans. Whether a
+    real field concentrates this way is unknown and is now the question worth answering.
+
+## §H19 — my own "this could not fail" was wrong on one of four
+
+§H17 listed "one seat paid exactly 4000000000" among claims that could not fail. **Two seats were
+paid.** `PAID_RANKS = 1` fixes how many RANKS are paid, not how many PLAYERS. Had that freeze been
+written it would have FAILED on its headline payout line — and caught something real. The error was
+visible in my own message: I wrote "I cannot predict who wins" and then treated the payout shape as
+independent of who wins. Not freezing was still right, for a weaker reason than I gave.
+
+## T2R — live on pool 21, and frozen to the strongest standard this test has
+
+  **Pool 21 created 01:21:29Z. The freeze merged 23:47:18Z — one hour 34 minutes earlier.**
+  The prediction was frozen **before the pool it runs on existed**. That is T4's standard; T2's own
+  freeze preceded its first entry but not its pool. Neither clock is ours: GitHub's merge timestamp
+  and a Solana block time.
+  → 39 of 39 seats landed. `outcome_if_deadline_now` reads **refund**. Deadline 13:21:29Z.
+  → **No substitutions — the field is the frozen field.** W14 and W28 each sealed then failed with
+    `block height exceeded` (2 of 40, matching T2's 2 of 32), and **both were retried and both
+    landed.**
+  → **That is the seal fix paying for itself on a live failure.** After W14 failed its state was
+    read directly: `{"sealed":true}` with no Entry PDA — sealed with no paid seat, exactly the
+    condition PR 147 addresses. Before the fix both wallets would have been barred and replaced.
+  → `enter.ts`'s own guardrail message was corrected: it still said a burnt wallet "can never enter
+    this pool again... must be replaced, not retried". True until PR 147, false now.
+
+**BOTH PRODUCT FIXES ARE LIVE (23:10Z deploy), and the seal fix was proven rather than inferred:**
+  `POST /ciphertexts/status` went **404 → 403** (route exists, rejects a bad signature), then end to
+  end with real signatures: W00 seated → `{"sealed":true}` · W45 untouched → `{"sealed":false}` ·
+  **W15 → `{"sealed":true}`**.
+  → W15 is one of the two wallets BURNT during T2's entry run. It sealed, its register died with
+    `block height exceeded`, and it was barred with no way for anyone to find out. It can now be
+    asked and it answers truthfully. §H6's invisibility half, closed and demonstrated on the exact
+    wallet that suffered it.
+  → The gate half is closed too: W15 holds no Entry, so it could re-seal and enter pool 20 right
+    now. NOT done — changing that field again is the mistake already made once today.
+  → The detection fix shipped in the same deploy, so pool 20 will be scored by the FIXED
+    duplicate_sets. If the founder wallets timed out into the even split again, that report now
+    correctly shows zero findings instead of two false `strong` ones. About two hours to spare.
+
+**§H16 — I BROKE T2 BY SENDING 1 SOL WITHOUT ASKING WHAT IT WAS FOR.**
+  19:04:05Z the transfer landed; 19:07:24Z that wallet registered into pool 20 as the 40th seat. At
+  40 = MIN_SEATS the fork flips and the pool seals instead of refunding.
+  → I checked the address, the curve, the roster and the T6 budget. I did not ask "could this affect
+    the test running right now" — having written "39 is the point of the test" myself hours earlier.
+  → T2 is SPOILED, not disproved. Nothing contradicts the boundary claim and nothing in the program
+    misbehaved. T2.plan.json is untouched, as the rule requires.
+  → Rule that follows: while a named test's pool is open, no wallet outside its seat list is funded
+    without checking the seat count first.
+
+**§H17 — I PROPOSED A PARTIAL FREEZE ON POOL 20 AND THEN REVERSED IT.**
+  Every claim it would have carried was already knowable: 40 ≥ MIN_SEATS makes the fork public, one
+  seat paid 4000000000 is a constant, vault 650240 and per-seat 4441080 were measured three times.
+  A verdict that cannot fail, dressed as a prediction — **§H9 and §H14 in a third disguise.**
+  → Pool 20 is recorded as a plain OBSERVATION and claims nothing.
+
+**T2R — the retry, and why it is STRONGER than the test it replaces:**
+  39 headless seats W00–W38, seeds 3000–3038, no UI seats. Validates clean.
+  → **Frozen before the pool it will run on EXISTS.** T2's freeze merged at 14:42:47Z against a pool
+    already open since 13:15:58Z, so it preceded every entry but not the pool. This is T4's
+    standard, the strongest this test has — available only because the retry was forced.
+  → Stated in the plan rather than hidden: running headless drops T2's route-equivalence sub-claim
+    (founder wallets refunded on identical terms). Never proven either, so nothing held is lost —
+    but it is owed on a later pool.
+  → Also stated rather than hidden: **this is a public devnet and nothing stops an outside wallet
+    registering.** That is what ended T2, and a stranger could have done it just as completely. The
+    guard is procedural and partial.
+
+**T2 — entered, frozen, and now just waiting (2026-09-18):**
+  Pool 20 `DhtdSBap…zwvqh`, 39 of 64 seats, one below MIN_SEATS. Freeze merged 14:42:47Z, first
+  entry 14:45:13Z — 2 min 26 s of margin, and the freeze record says plainly that this is weaker
+  than T4's in one respect: T4's freeze preceded the EXISTENCE of its pool and T2's does not.
+  → It predicts no ranks, no scores and no winner. Its claims are the refund fork, the entrant
+    count and a per-seat lamport figure — none of which any property of the pool could be tuned to.
+  → Two seats burnt on the way in (W15, W31) with `block height exceeded` at concurrency 1 and
+    ZERO 429s. That is neither §H8 nor §H12: baseline devnet flakiness, 2 of 32. Both replaced by
+    spares playing the burnt seats' OWN frozen allocations, so the field is the one the plan named.
+  → At settlement, verify: Closed not Paid · 39 refunds of 100000000 each · net loss exactly
+    4441080 per seat · vault 650240 · the 4 SOL pot returned to the treasury untouched.
+
+**THE SEAL LOCKOUT IS FIXED — commit 41d592d, pushed, not yet in a PR (2026-09-18):**
+  §H6 is what burnt eleven wallets across three pools: the app sealed BEFORE asking permission, and
+  the store refused any second, different allocation for a seat that already had one — so any
+  failure after the seal barred that wallet from that pool for good, having paid nothing.
+  → **The gate now asks whether the SEAT IS REGISTERED**, not whether a ciphertext exists. Those
+    are the same question only after the entry lands; before it they are opposites, and an
+    abandoned attempt can now be replaced. A registered seat is still protected, and a lookup that
+    cannot answer refuses — it fails closed.
+  → The app asks for the packet BEFORE sealing. That narrows the window; it does not close it,
+    which is why it is second and not first.
+  → `POST /ciphertexts/status` lets a wallet ask whether it has sealed. The lockout was not only
+    irreversible, it was INVISIBLE — our own preflight said GO for two wallets already barred.
+  → A 409 from the store is no longer shown as "you are not allowed to enter". New copy, marked as
+    a proposal: **user-facing language is yours, not mine.**
+  → **§H15 — my own specification had the key wrong, in the direction that fails OPEN.** It queried
+    `entries` by the numeric pool id; that column holds the base58 PDA. Zero rows would have read
+    as "not registered" and allowed every overwrite, including the one the gate exists to refuse.
+    Caught by reading the migration and both call sites before writing the code, and pinned by a
+    test that registers under the wrong key and proves the gate stays open.
+  → Proven, not asserted: 195 packet tests, 503 app tests, both packages typecheck, language gate
+    and standing-rules clean.
+
+**F-26 ANSWERED, F-27 DONE — the branches are split.**
+  **PR 147** (`claude/seal-lockout-fix`) carries the seal fix alone: `app/` and `backend/`, nothing
+  under `battle-test/`, so the boundary lane does not fire on it at all. The battle-test records
+  stay on `claude/sharp-bohr-c8aeub` and go up as a second PR AFTER 147 merges — until then that
+  branch still carries a copy of the fix commit and the check would see both. No history was
+  rewritten: main gets merged into the branch once 147 lands and its diff shrinks to battle-test.
+
+**F-28 — what T6 needs from the founder.** Merge 147 · deploy the entry service and the app · send
+  4 SOL from UI-A to the funder · settle the UI-A/UI-B role question · two browser sessions on call.
+  Full runbook and the dial table are in FOUNDER-ACTIONS.md §F-28.
+
+**Funding — the founder topped the funder up by 5 SOL at ~18:12Z:**
+  funder **9.253841480** · UI-A **8.673346435** · UI-B **9.673357239** · treasury 10.692197120.
+  The sweep F-28 asked for is no longer needed; the money is still there for a later test.
+  **The fan-out is held until after T2 refunds, on purpose:** `fund --target` tops every wallet up,
+  and 37 of them are light only because they are sitting in pool 20. One pass after settlement
+  spends ~4.2 SOL where one now would spend ~7.9. T6 cannot start before then anyway.
+  W00-W38 hold ~0.0455 each because they are IN pool 20; T2's refund returns 0.1 to each.
+  W39-W44 hold 0.15. **W45-W71 are EMPTY (27 wallets).**
+  → T6 needs 71 of the 72 headless wallets. 27 × 0.15 = 4.05 against a funder holding 4.25 leaves
+    0.2, which is too thin. Hence the 4 SOL sweep from UI-A — it is prize money that should
+    recirculate, and UI-A needs only ~0.11 to play.
+  → **The seal fix changes the wallet budget, not just the product.** Five wallets were lost in T4,
+    four in T5, two in T2, each gone for good because it could not re-seal. T6 needs 71 of 72, so
+    before the fix one burnt wallet stopped the test. After it deploys, that wallet just plays again.
+
+**T6, and the one thing in its spec that does not add up.** The manual says "UI-A and UI-B early,
+  then wait" and also requires a LATE entrant who sees the "filled before your entry reached it"
+  copy. With two accounts those cannot both hold. Reading it as UI-A early (an ordinary seat of the
+  64) and UI-B late (one of the nine refused), which is the reading that makes the pass criteria
+  testable. Founder to ratify or counter — nothing else depends on it.
+
+**T5's result, and what it actually proved (2026-09-18 01:13Z):**
+  W00 rank 1, paid **4000000000** lamports — the whole pot, to a headless wallet with no relationship
+  to the operator. W01 rank 64. UI-A and UI-B both rank 62, paid nothing. Vault 650240 exact.
+  Recomputed results root equals the on-chain root.
+  → This is the claim T4 could not make. There the operator's own account won and nothing ruled out
+    that it was privileged. Here it did not win and the pot went to a wallet that could not be.
+  → **reconcile prints FAIL on 44 RANK_DRIFT and that is MY prediction, not a pass criterion.** The
+    plan marked only 2 of 64 seats conditional; all 62 field seats were equally conditional on how
+    the founders played. §H10 in a new disguise.
+  → **§H13 — both founder wallets timed out into [20,20,20,20,20]**, all seven battles. My advance
+    reassurance ("the clock cannot break this test") was right about the rank range and silent about
+    duplicate_sets, which I had named one paragraph earlier. Two identical sets = two `strong`
+    findings, confirmed by running the product's own detection code.
+  → **§H12 — four more wallets burnt (W48-W51) by my own concurrency**, not the gate: 429s from the
+    public RPC, then expired blockhashes. Re-running the remaining 14 at concurrency 1 landed
+    14 of 14 with zero 429s. Same gate, same code, one knob.
+  → **§H14 — "recomputed root equals on-chain root" was a pass criterion nothing checked.**
+    reconcile only printed it. Now recomputed on every run and PROVEN ABLE TO FAIL (one lamport
+    moved off the winner's payout → MISMATCH; restored → byte-identical). Two traps on the way:
+    merkleRoot takes leaf BYTES and hashes them itself, and a rank tie means rank order alone does
+    not fix leaf order — **ties break by seat index ascending, and the verify page must do the same
+    or a player recomputing their own payout gets a wrong root.**
+
+**Tooling changed since T5:**
+  1. `enter.ts` no longer needs the master seed — it loads keypairs from `keys/wallets/`, proven
+     equivalent because all 72 reproduce the addresses committed in `registry/wallets.json`.
+  2. `--wallets` now SELECTS from a plan's seats instead of being silently ignored, so a part-way
+     run can be resumed on the seats that are left.
+  3. Device marker entropy moved from the master seed to each wallet's own secret key; distinctness
+     per wallet per pool is preserved, which is the only property that matters.
+  4. `reconcile.ts` rebuilds the results tree and compares it to the on-chain root, and a failing
+     root now fails the run.
+
+---
+
+# History below this line — kept for evidence, not for status
+
+**T4's result, and what it actually proved (2026-09-17 02:23Z):**
+  UI-A net +3.895554578 SOL against +3.895564000 predicted — 9422 lamports apart. Vault 650240
+  EXACTLY as predicted. The chain's own committed payout list is [{"seat":0,"amount":"4000000000"}].
+  → The plan was frozen naming pool 15 and ran UNEDITED on pool 16. A prediction frozen before its
+    pool existed is stronger evidence, not weaker.
+  → **H10 — the finding worth keeping.** The founder's hand-dialled allocations matched the plan's
+    exact numbers in 1 of 7 battles (UI-A) and 4 of 7 (UI-B). Every CONDITIONAL prediction about
+    those numbers was wrong; every UNCONDITIONAL one was exactly right, because all seven UI-A
+    battles still held three stats at 26+. The claim under test was "rank 1 holds for ANY wall
+    against a field capped at 25" — and a different wall, played by a human under a 90-second
+    clock, took rank 1 and the whole pot.
+  → **H8 — five wallets burnt, and the fault was MINE.** W22, W42, W43, W55, W65 sealed then failed
+    to register. The gate was healthy at every probe; my runner let sendAndConfirmTransaction pick
+    its own blockhash and the failure was always in PREFLIGHT. skipPreflight + a `confirmed`
+    blockhash fixed it. My first fix (a `finalized` blockhash) was WRONG and burnt W55.
+    The guardrail built hours earlier stopped each run at its first casualty — five, not sixty-two.
+    All five replaced by spares playing the burnt seats' own frozen allocations, so the scored field
+    was exactly the planned field.
+  → **H9 — reconcile's scored branch was a STUB and I reported its output as a result.** It set
+    verdict = 'MATCH' with no comparison at all, so the first T4 reconcile's "60 MATCH / 0 drift"
+    was not a measurement. Implemented and re-run: 58 MATCH · 0 RANK_DRIFT · 0 PAYOUT_MISMATCH ·
+    2 INPUT_DRIFT · 4 ABSENT — still PASS, this time measured. harvest now reads the published
+    bundle, so all 60 allocations read VERIFIED against their committed hashes.
+
+  → **H11 — the secret scanner caught me, and my first fix was half a fix.** T4.actual.json carried
+    pool 16's revealed X25519 secret. The harvester now stores a boolean instead — but that cleaned
+    only the TIP, and the lane's second step scans the branch's COMMITS, where it still sat at
+    b64d770. Resolved by rebuilding those commits without it, NOT by an ignore entry: that file is
+    at the repository root, which the boundary lane refuses, and it would leave a permanent
+    exception naming a battle-test file that gets deleted at the end. Proven before anything moved —
+    final tree byte-identical to the original tip, authors and dates preserved, value in no commit,
+    gitleaks history clean. The superseded commit IDs are in DRIFT H11 and LOG.md, so the rewrite is
+    auditable rather than silent.
 
 **GUARDRAILS BUILT 19:22Z, in boundary, proven:**
   1. scripts/preflight.ts — go/no-go before anybody plays: pool open and register-ready, no wallet
