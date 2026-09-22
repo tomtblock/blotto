@@ -970,9 +970,25 @@ jobs:
             echo "--- daemon: VRF coordinator + settlement signer ---"
             flyctl logs --app "$DAEMON_APP" --no-tail 2>/dev/null | grep -E "VRF =|settlement signer" | tail -5 || echo "(no matching line yet)"
           fi
+          # The database's TLS posture (2026-09-22). `db.ts::tlsWarning` says
+          # this ONCE at boot, on stdout, and until now nothing surfaced it on
+          # a successful run: "Boot logs for every app" is `if: failure()`, so
+          # the founder was told to read a line no green deploy ever printed.
+          # Silence here is the good case — `tlsWarning` returns null for a
+          # verified url — so the absence of a line is itself the answer, and
+          # this says so rather than leaving an empty heading to puzzle over.
+          echo "--- database TLS (silence = sslmode=verify-full, which is what we want) ---"
+          tls=$(flyctl logs --app "$INDEXER_APP" --no-tail 2>/dev/null | grep -E "pg: DATABASE_URL" | tail -3 || true)
+          if [ -n "$tls" ]; then
+            echo "$tls"
+            echo "::warning::the database url's TLS posture needs attention — see the line(s) above"
+          else
+            echo "(no warning: the url asks for verify-full, or this service has no database)"
+          fi
           echo
           echo "Expected on a credentialed run: 'entry signer = TURNKEY', NO 'GEO STUB' line,"
-          echo "and 'VRF = SWITCHBOARD On-Demand'. Anything else means a dev path is live."
+          echo "'VRF = SWITCHBOARD On-Demand', and NO database TLS line. Anything else means a"
+          echo "dev path is live or the database url wants changing."
 
       # What did this run actually ship? (audit 2026-09-11, E-05.)
       #

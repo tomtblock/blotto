@@ -39,8 +39,15 @@
  * characterisation — is founder-and-counsel-owned, which is why §"What this
  * is" asserts no legal category in either direction.
  *
- * PHASE-N-REVIEW: every string is a draft. Brand voice and all user-facing
- * language are founder-reserved.
+ * VOICE RATIFIED by the founder on 2026-09-22, after reading the rendered
+ * pages. The wording below is the published wording, not a proposal, and a
+ * change to it is a change to the agreement rather than a tidy-up: it needs
+ * the founder again, and `config/terms.json` bumped if the substance moves.
+ *
+ * WHAT IS STILL OUTSTANDING IS NOT THE VOICE. Counsel has not reviewed the
+ * liability cap, the governing-law clause, the refusal clause's enumerated
+ * grounds or the retention periods, and the operator is not named. Ratifying
+ * how it reads does not ratify that it is sound in law.
  *
  * ── THE OPERATOR IS NOT NAMED YET ────────────────────────────────────────
  *

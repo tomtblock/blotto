@@ -46,8 +46,14 @@
  *
  * DRAFT STATUS, recorded here and not on the page: drafted by people who
  * are not lawyers, and needing counsel's review before real money moves
- * (register rows R1 and R6). PHASE-N-REVIEW: every string is a draft, and
- * the retention periods are a proposal awaiting the founder's ratification.
+ * (register rows R1 and R6).
+ *
+ * VOICE AND RETENTION PERIODS RATIFIED by the founder on 2026-09-22, after
+ * reading the rendered page. The periods below are the published policy
+ * rather than a proposal — which is exactly why each one still says, in
+ * those words, that it is applied by hand and not enforced by code. What
+ * counsel has not reviewed is whether the periods are the RIGHT ones; that
+ * is a separate question from whether we publish them.
  */
 
 import { COMPLAINT_RESOLVE_DAYS } from '@blotto/detection/complaints';
