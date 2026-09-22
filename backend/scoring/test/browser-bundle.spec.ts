@@ -61,4 +61,39 @@ describe('browser bundle', () => {
       .join('');
     expect(root).to.equal(pool.root);
   });
+
+  it('the browser copy scores a pool with lost ciphertexts identically', function () {
+    this.timeout(30000);
+    // scoreWithMissing is what the verify page actually calls (app/src/verify/
+    // logic.ts) — a settled pool with a lost entry is recomputed in the
+    // browser through this path, not through scorePool. Before 2026-09-21 it
+    // lived in @blotto/reveal and was never bundled here, so the one function
+    // the page depends on was the one the two-runtimes gate did not cover.
+    const out = buildSync({
+      entryPoints: [join(ROOT, 'src', 'index.ts')],
+      bundle: true,
+      write: false,
+      platform: 'browser',
+      format: 'iife',
+      globalName: 'BlottoScoring',
+    });
+    const scoring = new Function(
+      'require',
+      'process',
+      'Buffer',
+      `${out.outputFiles[0].text}; return BlottoScoring;`
+    )(undefined, undefined, undefined);
+
+    const pool = vectors.missing_pools.find((p: any) => p.name === 'full_64_five_missing');
+    expect(pool, 'the full_64_five_missing vector').to.not.equal(undefined);
+    const results = scoring.scoreWithMissing(
+      pool.players.map((p: any, i: number) => ({ index: i, battles: p === null ? null : p.battles }))
+    );
+    for (const expected of pool.results) {
+      const got = results[expected.index];
+      expect(got.scoreHalf, `score of seat ${expected.index}`).to.equal(expected.score_half);
+      expect(got.zones, `zones of seat ${expected.index}`).to.equal(expected.zones);
+      expect(got.rank, `rank of seat ${expected.index}`).to.equal(expected.rank);
+    }
+  });
 });

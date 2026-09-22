@@ -24,9 +24,19 @@
  * Uniform by construction: every present player faces the same missing
  * opponents, so the adjustment shifts everyone's score equally and the
  * relative ranking among present players is EXACTLY `scorePool`'s.
+ *
+ * MOVED HERE 2026-09-21, from backend/reveal/src/missing.ts. It decides every
+ * real settlement — `crank.ts` and `ranking.ts` both score through it, never
+ * through `scorePool` directly — and it sat outside this package, so the
+ * Python oracle did not cover it, `check-fixtures.sh` did not reach it, and
+ * the browser-bundle gate did not bundle it. The one function on the
+ * settlement path was the one proven by nothing independent. It also carried
+ * its own copy of the D3-B ranking loop; that is now `assignRanks` in
+ * engine.ts, called by both.
  */
 
-import { BATTLES, scorePool, type BattleSet, type PlayerResult } from './deps';
+import { scorePool, assignRanks, type PlayerResult, type ScoredPlayer } from './engine';
+import { BATTLES, type BattleSet } from './allocation';
 
 export interface PoolEntryInput {
   /** Seat index, 0-based. */
@@ -47,45 +57,19 @@ export function scoreWithMissing(entries: readonly PoolEntryInput[]): PlayerResu
   // Score present players among themselves with the pure engine.
   const presentResults = scorePool(present.map((e) => e.battles as BattleSet));
 
-  const score = new Map<number, { scoreHalf: number; zones: number }>();
-  present.forEach((e, i) => {
-    score.set(e.index, {
+  const scored: ScoredPlayer[] = [
+    ...present.map((e, i) => ({
+      index: e.index,
       // + a full win per battle per missing opponent.
       scoreHalf: presentResults[i].scoreHalf + missing.length * BATTLES * 2,
       zones: presentResults[i].zones,
-    });
-  });
-  for (const e of missing) {
-    score.set(e.index, {
+    })),
+    ...missing.map((e) => ({
+      index: e.index,
       // Draws against the other missing entries only.
       scoreHalf: (missing.length - 1) * BATTLES,
       zones: 0,
-    });
-  }
-
-  const order = sorted
-    .map((e) => e.index)
-    .sort((i, j) => {
-      const a = score.get(i)!;
-      const b = score.get(j)!;
-      return b.scoreHalf - a.scoreHalf || b.zones - a.zones || i - j;
-    });
-  // Competition ranks (D3-B): equal (score, zones) shares a rank.
-  const rank = new Map<number, number>();
-  let groupStartPos = 0;
-  order.forEach((i, pos) => {
-    if (pos > 0) {
-      const a = score.get(i)!;
-      const b = score.get(order[pos - 1])!;
-      if (a.scoreHalf !== b.scoreHalf || a.zones !== b.zones) groupStartPos = pos;
-    }
-    rank.set(i, groupStartPos + 1);
-  });
-  return sorted.map((e) => ({
-    index: e.index,
-    scoreHalf: score.get(e.index)!.scoreHalf,
-    zones: score.get(e.index)!.zones,
-    rank: rank.get(e.index)!,
-    amountLamports: 0n,
-  }));
+    })),
+  ];
+  return assignRanks(scored);
 }

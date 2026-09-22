@@ -19,7 +19,7 @@ import {
   type BattleSet,
 } from '@blotto/scoring';
 import { base58Encode, base58Decode } from '@blotto/shared/blotto-events';
-import { scoreWithMissing } from '@blotto/reveal/missing';
+import { scoreWithMissing } from '@blotto/scoring';
 
 const sha = (s: string) => new Uint8Array(createHash('sha256').update(s).digest());
 const hex = (b: Uint8Array) => Buffer.from(b).toString('hex');

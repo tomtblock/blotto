@@ -282,7 +282,7 @@ allocations per player from which the five signals in 4.4 are computed. The PID'
 | Fact | Source |
 |---|---|
 | Seven battles per entry (`BATTLES`), five attributes summing to exactly 100 | `backend/scoring/src/allocation.ts`; `app/src/battle/machine.ts` |
-| The allocation invariant is enforced by the client at submission and by the scoring engine at reveal; a malformed set is scored all-losses and its status published, never halting the pool | `app/src/battle/allocation.ts`; `backend/scoring/src/allocation.ts` (`assertAllocation`); `backend/reveal/src/missing.ts` |
+| The allocation invariant is enforced by the client at submission and by the scoring engine at reveal; a malformed set is scored all-losses and its status published, never halting the pool | `app/src/battle/allocation.ts`; `backend/scoring/src/allocation.ts` (`assertAllocation`); `backend/scoring/src/missing.ts` |
 | Sealing: 127-byte payload (battles, salt, timings, device hash) encrypted on the device before payment to the pool's key; the key is export-locked in custody until the pool is sealed or past deadline | `backend/sealing/src/payload.ts`; `backend/sealing/src/custody-turnkey.ts`, `custody.ts` (`ExportPolicy`) |
 | The program receives only `sha256(battles ‖ salt)`; entry and reveal windows are provably disjoint | `instructions/register.rs` (two arguments: `pool_id`, `battles_hash`); `reveal_commit.rs` |
 

@@ -11,6 +11,7 @@ import {
   assignPrizes,
   compareBattle,
   scorePool,
+  scoreWithMissing,
   rankOrder,
   battlesHash,
   encodeBattleSet,
@@ -103,6 +104,57 @@ describe('pool vectors (20 four-player + 5 full + minimum-field + edge cases)', 
       }
     });
   }
+});
+
+describe('lost-ciphertext pools (TECH-ARCH §5, scoreWithMissing)', () => {
+  // These are the vectors that were missing until 2026-09-21. scoreWithMissing
+  // decides every real settlement — crank.ts and ranking.ts both score through
+  // it, never through scorePool — and nothing independent proved it.
+  //
+  // The oracle walks the full n x n comparison; the implementation scores the
+  // present players among themselves and shifts every one of them by a
+  // constant. Those are different computations, so agreement here is evidence
+  // that the shortcut is sound rather than a restatement of it.
+  for (const pool of vectors.missing_pools) {
+    it(pool.name, () => {
+      const entries = pool.players.map((p: any, i: number) => ({
+        index: i,
+        battles: p === null ? null : (p.battles as BattleSet),
+      }));
+      const results = scoreWithMissing(entries);
+      expect(results.length).to.equal(pool.players.length);
+      for (const expected of pool.results) {
+        const got = results[expected.index];
+        expect(got.index, 'results come back in seat order').to.equal(expected.index);
+        expect(got.scoreHalf, `score of seat ${expected.index}`).to.equal(expected.score_half);
+        expect(got.zones, `zones of seat ${expected.index}`).to.equal(expected.zones);
+        expect(got.rank, `rank of seat ${expected.index}`).to.equal(expected.rank);
+      }
+    });
+  }
+
+  it('a missing entry never scores a zone, and present players gain none from it', () => {
+    for (const pool of vectors.missing_pools) {
+      for (const seat of pool.missing_indices) {
+        expect(pool.results[seat].zones, `${pool.name} seat ${seat}`).to.equal(0);
+      }
+    }
+  });
+
+  it('with nothing missing it agrees with scorePool exactly', () => {
+    const pool = vectors.missing_pools.find((p: any) => p.name === 'none_missing_4');
+    expect(pool, 'the none_missing_4 vector').to.not.equal(undefined);
+    const players: BattleSet[] = pool.players.map((p: any) => p.battles);
+    const plain = scorePool(players);
+    const viaMissing = scoreWithMissing(players.map((b, i) => ({ index: i, battles: b })));
+    expect(viaMissing.map((r) => [r.index, r.scoreHalf, r.zones, r.rank])).to.deep.equal(
+      plain.map((r) => [r.index, r.scoreHalf, r.zones, r.rank])
+    );
+  });
+
+  it('refuses a seat list with a gap rather than scoring a pool it cannot place', () => {
+    expect(() => scoreWithMissing([{ index: 1, battles: null }])).to.throw('without gaps');
+  });
 });
 
 describe('split-pot cases (D3-B, through the same assignPrizes)', () => {

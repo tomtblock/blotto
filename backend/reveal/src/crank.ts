@@ -84,7 +84,7 @@ import {
   type PlayerResult,
   type PoolKeyCustody,
 } from './deps';
-import { scoreWithMissing } from './missing';
+import { scoreWithMissing } from './deps';
 import { buildRanking, revealEntries } from './ranking';
 import type { ScreenWinners } from './winner-screening';
 

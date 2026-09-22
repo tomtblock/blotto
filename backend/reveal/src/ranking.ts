@@ -35,7 +35,7 @@ import {
   type PlayerResult,
   type ProofStep,
 } from './deps';
-import { scoreWithMissing, type PoolEntryInput } from './missing';
+import { scoreWithMissing, type PoolEntryInput } from './deps';
 import type { ChainEntryView } from './chain';
 import type { RevealBundleEntry } from './bundle';
 
