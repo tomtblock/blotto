@@ -1304,7 +1304,16 @@ export const COPY = {
       // narrowed to what runs; it widens again when the capture lands.
       '(4) the same device behind multiple entries in one pool; ' +
       '(5) a score far outside the field’s distribution. ' +
-      'These signals are computed for every tournament and published with the review log. Nothing is flagged automatically: a flag is a decision taken by a person that an entry meets one of the criteria above, ' +
+      // NARROWED 2026-09-22. This read "computed for every tournament and
+      // published with the review log", which promised more than is served.
+      // The signals' VALUES are not published: `GET /detection` returns the
+      // report to an operator token and to nobody else (backend/detection/
+      // src/server.ts, ruling D-E9). What IS public, with no token, is
+      // `GET /decisions?pool=` — every decision on a pool with the criterion
+      // cited. PR #160's terms of service already say the narrower, true
+      // thing; this page said the broader one, so two published surfaces
+      // disagreed. The terms are right and this now matches them.
+      'These signals are computed for every tournament. Every decision and the criterion cited are recorded in a log anyone can read. Nothing is flagged automatically: a flag is a decision taken by a person that an entry meets one of the criteria above, ' +
       'and a flag never decides anything by itself \u2014 it only sends the entry to the signed review process below.',
     /*
      * C10 + the founder's addendum of 2026-09-07 (ruling 1): resolving,
