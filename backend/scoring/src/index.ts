@@ -7,5 +7,6 @@
  */
 export * from './allocation';
 export * from './engine';
+export * from './missing';
 export * from './prizes';
 export * from './merkle';

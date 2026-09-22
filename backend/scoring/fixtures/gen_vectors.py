@@ -140,6 +140,67 @@ def score_pool(players: list[list[list[int]]]) -> list[dict]:
     ]
 
 
+def score_with_missing(players: list[list[list[int]]] | list[None]) -> list[dict]:
+    """The lost-ciphertext rule (TECH-ARCH §5), computed from first principles.
+
+    `players[i]` is a battle set, or None when that entry's ciphertext is lost.
+
+    This deliberately does NOT reproduce the TypeScript's shortcut. The
+    implementation scores the present players among themselves and then adds a
+    constant (`missing * BATTLES * 2`) to every one of them, which is sound
+    only because the adjustment is uniform. Transcribing that here would make
+    the oracle agree with the implementation by construction and prove
+    nothing — the exact failure CLAUDE.md names: "a vector captured from our
+    own output proves nothing."
+
+    So this walks the FULL n x n comparison and applies the published rule at
+    each pairing:
+      - present vs present : the ordinary battle
+      - present vs missing : the present side wins every battle; no stats
+                             exist to compare, so neither side gains a zone
+      - missing vs missing : every battle is a draw, one half-point each
+    If the shortcut is right, the two agree. That agreement is the proof.
+    """
+    n = len(players)
+    score = [0] * n  # half-points
+    zones = [0] * n
+    for i in range(n):
+        for j in range(i + 1, n):
+            a, b = players[i], players[j]
+            for k in range(BATTLES):
+                if a is not None and b is not None:
+                    out, wa, wb = battle_outcome(a[k], b[k])
+                    zones[i] += wa
+                    zones[j] += wb
+                    if out == "win":
+                        score[i] += 2
+                    elif out == "loss":
+                        score[j] += 2
+                    else:
+                        score[i] += 1
+                        score[j] += 1
+                elif a is not None:      # b is missing: a wins, no zones
+                    score[i] += 2
+                elif b is not None:      # a is missing: b wins, no zones
+                    score[j] += 2
+                else:                    # both missing: a draw
+                    score[i] += 1
+                    score[j] += 1
+    order = sorted(range(n), key=lambda i: (-score[i], -zones[i], i))
+    ranks = [0] * n
+    group_start = 0
+    for pos, i in enumerate(order):
+        if pos > 0:
+            prev = order[pos - 1]
+            if (score[i], zones[i]) != (score[prev], zones[prev]):
+                group_start = pos
+        ranks[i] = group_start + 1
+    return [
+        {"index": i, "score_half": score[i], "zones": zones[i], "rank": ranks[i]}
+        for i in range(n)
+    ]
+
+
 def band_amount(pot: int, position: int) -> int:
     if 1 <= position <= PAID_RANKS:
         return pot * PRIZE_BANDS_1024[position - 1] // 1024
@@ -382,6 +443,25 @@ def split_case(name: str, group_sizes: list[int], entry_lamports: int) -> dict:
     }
 
 
+def missing_vector(name: str, players: list) -> dict:
+    """A pool where some entries' ciphertexts were lost.
+
+    `players[i]` is a battle set or None. No prizes and no tree here: the
+    money and the leaf order are already covered by the present-only pools,
+    and what these vectors exist to pin is the scoring and ranking of a field
+    that is not all there.
+    """
+    return {
+        "name": name,
+        "players": [
+            None if p is None else {"battles": p, "battles_hex": encode_battles(p).hex()}
+            for p in players
+        ],
+        "missing_indices": [i for i, p in enumerate(players) if p is None],
+        "results": score_with_missing(players),
+    }
+
+
 def main() -> None:
     pools = []
     # 20 hand-checkable 4-player pools from the deterministic stream.
@@ -421,6 +501,47 @@ def main() -> None:
     pools.append(
         pool_vector("all_tied_pairwise", [[alloc] * BATTLES] * 4, with_tree=False)
     )
+
+    # Lost-ciphertext pools (TECH-ARCH §5). scoreWithMissing decides every
+    # real settlement — crank.ts and ranking.ts both score through it — and
+    # until 2026-09-21 no oracle covered it. The Python here walks the full
+    # n x n comparison rather than the implementation's uniform-shift
+    # shortcut, so agreement is evidence and not a tautology.
+    def _p(base: int, n: int) -> list:
+        return [battles_from_counter(base + i * 100) for i in range(n)]
+
+    missing_pools = []
+    # One lost entry, at the front, in the middle, and at the back — the seat
+    # a missing entry occupies must not change anyone else's score.
+    for seat in (0, 2, 3):
+        pl = _p(2_000_000, 4)
+        pl[seat] = None
+        missing_pools.append(missing_vector(f"one_missing_seat_{seat}", pl))
+    # Two missing: they draw with each other and lose to everyone else, so
+    # they tie with each other and sit last.
+    pl = _p(2_100_000, 6)
+    pl[1] = pl[4] = None
+    missing_pools.append(missing_vector("two_missing", pl))
+    # Every entry lost. Degenerate, and it must still produce a lawful
+    # ranking rather than throw: all equal, all rank 1.
+    missing_pools.append(missing_vector("all_missing_4", [None] * 4))
+    # Exactly one entry survives — it wins everything, the rest tie behind it.
+    pl = [None] * 5
+    pl[3] = battles_from_counter(2_200_000)
+    missing_pools.append(missing_vector("one_present_of_5", pl))
+    # A realistic settlement: a full field with a handful lost.
+    pl = _p(2_300_000, CAPACITY)
+    for seat in (0, 7, 31, 62, 63):
+        pl[seat] = None
+    missing_pools.append(missing_vector("full_64_five_missing", pl))
+    # A minimum field with one lost, the shape a pool that sealed at its
+    # deadline actually takes.
+    pl = _p(2_400_000, MIN_SEATS)
+    pl[MIN_SEATS - 1] = None
+    missing_pools.append(missing_vector(f"field_{MIN_SEATS}_one_missing", pl))
+    # None missing at all: scoreWithMissing must agree with scorePool exactly,
+    # which is the claim its doc comment makes about relative ranking.
+    missing_pools.append(missing_vector("none_missing_4", _p(2_500_000, 4)))
 
     # D3-B split-pot cases under D-E2, through the same assign_prizes as the
     # pools: a two-way tie for 1st at EVERY tier (pot / 2, exact — every pot
@@ -509,6 +630,7 @@ def main() -> None:
         "prize_bands_1024": PRIZE_BANDS_1024,
         "battle_cases": hand_battle_cases(),
         "pools": pools,
+        "missing_pools": missing_pools,
         "split_cases": split_cases,
         "tier_tables": tier_tables,
         "draw_rate": {"n": n_pairs, "draws": draws, "rate": rate, "stream_base": 10_000_000},

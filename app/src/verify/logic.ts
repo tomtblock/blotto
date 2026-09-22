@@ -25,7 +25,7 @@ import {
   merkleRoot,
 } from '@blotto/scoring';
 import { base58Decode } from '@blotto/shared/blotto-events';
-import { scoreWithMissing } from '@blotto/reveal/missing';
+import { scoreWithMissing } from '@blotto/scoring';
 
 /**
  * What one check can say. THREE answers, not two (audit 2026-09-11, D-10

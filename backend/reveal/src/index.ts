@@ -6,7 +6,10 @@ export * from './crank';
 export * from './daemon';
 export * from './health';
 export * from './startup';
-export * from './missing';
+// scoreWithMissing moved to @blotto/scoring on 2026-09-21 (it is scoring, and
+// the oracle and browser-bundle gates live there). Re-exported so consumers
+// of @blotto/reveal keep working; there is still exactly one implementation.
+export { scoreWithMissing, type PoolEntryInput } from './deps';
 export * from './ranking';
 export * from './next-place';
 export * from './winner-screening';

@@ -95,25 +95,49 @@ export function scorePool(players: readonly BattleSet[]): PlayerResult[] {
       }
     }
   }
-  // Positions sorted best-first; index asc within a tie group makes the
-  // order deterministic without affecting ranks (tied players share one).
-  const order = [...Array(n).keys()].sort(
-    (i, j) => scoreHalf[j] - scoreHalf[i] || zones[j] - zones[i] || i - j
+  return assignRanks(
+    [...Array(n).keys()].map((i) => ({ index: i, scoreHalf: scoreHalf[i], zones: zones[i] }))
   );
-  const rank = new Array<number>(n).fill(0);
+}
+
+/** A scored player before ranking: the two values D3-B ranks on, and a seat. */
+export interface ScoredPlayer {
+  readonly index: number;
+  readonly scoreHalf: number;
+  readonly zones: number;
+}
+
+/**
+ * Competition ranks (D3-B) over already-computed (scoreHalf, zones), returned
+ * in seat order with `amountLamports` zeroed for `assignPrizes` to fill.
+ *
+ * Extracted 2026-09-21. `scorePool` had this inline and `scoreWithMissing`
+ * carried a second copy of it, which is the shape of bug that does not
+ * announce itself: two rankings that agree on every test anyone thought to
+ * write and disagree on the pool that pays out. There is one ranking rule and
+ * now one implementation of it, and the Python oracle checks that one.
+ *
+ * Players equal on BOTH score and zones are tied and share a rank — one plus
+ * the number of strictly-better players, so 1, 2, 2, 4. Entry index orders
+ * within a tie group so the sort is deterministic, and never breaks a rank.
+ */
+export function assignRanks(scored: readonly ScoredPlayer[]): PlayerResult[] {
+  const seats = [...scored].sort((a, b) => a.index - b.index);
+  const order = [...seats].sort(
+    (a, b) => b.scoreHalf - a.scoreHalf || b.zones - a.zones || a.index - b.index
+  );
+  const rank = new Map<number, number>();
   let groupStartPos = 0;
-  order.forEach((i, pos) => {
+  order.forEach((p, pos) => {
     const prev = order[pos - 1];
-    if (pos > 0 && (scoreHalf[i] !== scoreHalf[prev] || zones[i] !== zones[prev])) {
-      groupStartPos = pos;
-    }
-    rank[i] = groupStartPos + 1;
+    if (pos > 0 && (p.scoreHalf !== prev.scoreHalf || p.zones !== prev.zones)) groupStartPos = pos;
+    rank.set(p.index, groupStartPos + 1);
   });
-  return [...Array(n).keys()].map((i) => ({
-    index: i,
-    scoreHalf: scoreHalf[i],
-    zones: zones[i],
-    rank: rank[i],
+  return seats.map((p) => ({
+    index: p.index,
+    scoreHalf: p.scoreHalf,
+    zones: p.zones,
+    rank: rank.get(p.index)!,
     amountLamports: 0n,
   }));
 }
