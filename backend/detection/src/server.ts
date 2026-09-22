@@ -15,6 +15,12 @@
  *                    → 204 | 400 / 401 / 409 / 503 (signed for a decision or
  *                      a payment; unsigned allowed otherwise, so a player
  *                      locked out of their wallet can still reach us)
+ *   POST /complaints/status { reference, kind, note, decidedBy, decidedAt,
+ *                      signature }
+ *                    → 204 | 400 / 401 / 404 / 409 / 503 (signed by a
+ *                      REGISTRY MEMBER, like a decision: the operator's
+ *                      answer, and the only thing that moves a complaint off
+ *                      `received`)
  *   GET  /complaints?ref=<BC-XXXXXXXX>[&wallet=<wallet>]
  *                    → the complaint's derived status | 404
  *   GET  /decisions?pool=<pda>[&player=<wallet>]  → { decisions }
@@ -114,16 +120,27 @@ import {
   lodgeRow,
   type AppealSubmission,
 } from './appeals';
-import { reviewSubmissionRefusal, type ReviewerRegistry } from './auth';
+import {
+  complaintStatusSubmissionRefusal,
+  reviewSubmissionRefusal,
+  type ReviewerRegistry,
+} from './auth';
 import {
   COMPLAINT_CATEGORY_KEYS,
+  COMPLAINT_NOTE_MAX,
+  COMPLAINT_OPERATOR_KINDS,
   COMPLAINT_TEXT_MAX,
   complaintRuleRefusal,
   complaintSignatureRefusal,
   complaintStatus,
+  complaintStatusRuleRefusal,
   lodgedRow,
   mayReadComplaint,
+  answeredRow,
   type ComplaintCategory,
+  type ComplaintOperatorKind,
+  type ComplaintRow,
+  type ComplaintStatusSubmission,
   type ComplaintStore,
   type ComplaintSubmission,
 } from './complaints';
@@ -257,6 +274,35 @@ function parseAppeal(body: unknown): AppealSubmission | null {
  * well-formed, so a garbled address cannot be stored as though it were
  * proven.
  */
+function parseComplaintStatus(body: unknown): ComplaintStatusSubmission | null {
+  const b = body as Record<string, unknown>;
+  if (
+    !b ||
+    typeof b.reference !== 'string' ||
+    !COMPLAINT_REFERENCE_PATTERN.test(b.reference) ||
+    typeof b.kind !== 'string' ||
+    !(COMPLAINT_OPERATOR_KINDS as readonly string[]).includes(b.kind) ||
+    typeof b.note !== 'string' ||
+    b.note.trim().length === 0 ||
+    b.note.length > COMPLAINT_NOTE_MAX ||
+    typeof b.decidedBy !== 'string' ||
+    !B58.test(b.decidedBy) ||
+    typeof b.decidedAt !== 'string' ||
+    typeof b.signature !== 'string' ||
+    b.signature.length === 0
+  ) {
+    return null;
+  }
+  return {
+    reference: b.reference,
+    kind: b.kind as ComplaintOperatorKind,
+    note: b.note,
+    decidedBy: b.decidedBy,
+    decidedAt: b.decidedAt,
+    signature: b.signature,
+  };
+}
+
 function parseComplaint(body: unknown): ComplaintSubmission | null {
   const b = body as Record<string, unknown>;
   if (
@@ -574,6 +620,77 @@ export async function handleReviewRoute(
         signed: complaint.signature !== null && complaint.signature !== undefined,
       }
     );
+  }
+
+  // The operator's answer (2026-09-22). PR #160 shipped the store, the row
+  // shape and the status derivation and nothing that could WRITE an operator
+  // row, so a complaint read `received` however promptly a person answered.
+  // This is the missing half: one authenticated append per kind.
+  //
+  // Authenticated as a review decision is — a registry member's signature
+  // over a canonical message, recorded with the row — for the same reason:
+  // the authorization stays re-checkable by anyone holding the thread, with
+  // no session and no shared password. It is NOT the operator token, which
+  // is a bearer secret and would put every answer under one undifferentiated
+  // identity; `decidedBy` has to name a person for the terms' "answered by
+  // someone other than whoever made the original one" to be checkable at all.
+  if (route === '/complaints/status' && method === 'POST') {
+    if (!deps.complaints) return line({ status: 503, body: { error: 'not_configured' } });
+    const submission = parseComplaintStatus(body);
+    if (!submission) return line({ status: 400, body: { error: 'malformed' } });
+    const now = deps.now ?? Date.now;
+    const where = {
+      reference: submission.reference,
+      kind: submission.kind,
+      reviewer: short(submission.decidedBy),
+    };
+
+    const authRefusal = complaintStatusSubmissionRefusal(deps.registry, submission, now());
+    if (authRefusal !== null) {
+      // Uniform to the caller, named in the log — the decision route's rule
+      // (B-35), and for the same reason: an endpoint that distinguishes
+      // "not a member" from "bad signature" is a member-list oracle.
+      deps.monitor?.recordEvent(METRIC.review.decisionRefused, { reason: 'unauthorized' });
+      return line(
+        { status: 401, body: { error: 'unauthorized' } },
+        { ...where, refusal: authRefusal }
+      );
+    }
+
+    const existing = await deps.complaints.listFor(submission.reference);
+    const ruleRefusal = complaintStatusRuleRefusal(submission, existing);
+    if (ruleRefusal !== null) {
+      // 404 for an unknown reference rather than the uniform 404 the player's
+      // GET uses: the caller here has already proved they hold a registry
+      // key, so there is nobody to keep the reference space secret from, and
+      // an operator who mistypes a reference needs to be told.
+      const status = ruleRefusal === 'not_found' ? 404 : 409;
+      deps.monitor?.recordEvent(METRIC.review.decisionRefused, { reason: ruleRefusal });
+      return line({ status, body: { error: ruleRefusal } }, { ...where, refusal: ruleRefusal });
+    }
+
+    // The category comes from the thread's own lodged row, never from the
+    // submission, so answering a complaint cannot recategorise it.
+    const lodged = existing.find((r) => r.kind === 'lodged') as ComplaintRow;
+    await deps.complaints.append(
+      answeredRow(
+        submission.reference,
+        submission.kind,
+        {
+          decidedBy: submission.decidedBy,
+          note: submission.note,
+          category: lodged.category,
+          signature: submission.signature,
+          signedAt: submission.decidedAt,
+        },
+        new Date(now()).toISOString()
+      )
+    );
+    // The note is the operator's own words and goes to the player, so it is
+    // not secret — but it is not logged either. A log line exists to say what
+    // happened, and "who answered which complaint, how" is that; the words
+    // are in the record the player can read.
+    return line({ status: 204, body: null }, where);
   }
 
   if (route === '/decisions' && method === 'POST') {

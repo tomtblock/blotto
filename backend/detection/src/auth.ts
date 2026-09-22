@@ -39,6 +39,8 @@ import nacl from 'tweetnacl';
 import { base58Decode } from '../../_shared/src/blotto-events';
 import type { Decision } from './review';
 import { canonicalReviewMessage } from './review-message';
+import { canonicalComplaintStatusMessage } from './complaint-message';
+import type { ComplaintStatusSubmission } from './complaints';
 
 export { canonicalReviewMessage } from './review-message';
 
@@ -130,6 +132,48 @@ export function reviewSubmissionRefusal(
       signedAt: decision.decidedAt,
     });
     return nacl.sign.detached.verify(message, signature, base58Decode(decision.decidedBy))
+      ? null
+      : 'bad_signature';
+  } catch {
+    return 'bad_signature';
+  }
+}
+
+/**
+ * Verify one operator status append on a complaint (2026-09-22): member,
+ * timestamp spelling, freshness, signature — the same order and the same
+ * four reasons as `reviewSubmissionRefusal`, because it is the same posture.
+ * A registry member's wallet signature over the canonical message IS the
+ * login, and it goes into the record, so the authorization is re-checkable
+ * by anyone holding the thread.
+ *
+ * It verifies against `canonicalComplaintStatusMessage`, whose header
+ * differs from both the review decision's and the player's complaint. That
+ * separation is load-bearing rather than cosmetic: the complaint route
+ * publishes nothing, but `GET /complaints` returns a thread to the wallet
+ * that signed it, and a signature that could verify under two headers would
+ * let bytes captured in one context be replayed in the other.
+ */
+export function complaintStatusSubmissionRefusal(
+  registry: ReviewerRegistry,
+  submission: ComplaintStatusSubmission,
+  nowMs: number,
+  windowMs: number = REVIEW_SIGNATURE_WINDOW_MS
+): SubmissionRefusal | null {
+  try {
+    if (!registry.members.includes(submission.decidedBy)) return 'not_member';
+    if (!isCanonicalIsoInstant(submission.decidedAt)) return 'bad_timestamp';
+    const at = Date.parse(submission.decidedAt);
+    if (Math.abs(nowMs - at) > windowMs) return 'clock_skew';
+    const signature = Uint8Array.from(Buffer.from(submission.signature, 'base64'));
+    if (signature.length !== 64) return 'bad_signature';
+    const message = canonicalComplaintStatusMessage({
+      reference: submission.reference,
+      status: submission.kind,
+      note: submission.note,
+      signedAt: submission.decidedAt,
+    });
+    return nacl.sign.detached.verify(message, signature, base58Decode(submission.decidedBy))
       ? null
       : 'bad_signature';
   } catch {

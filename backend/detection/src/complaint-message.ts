@@ -44,3 +44,33 @@ export function canonicalComplaintMessage(c: {
       `at: ${c.signedAt}\n`
   );
 }
+
+/**
+ * The exact bytes an OPERATOR signs to move a complaint's status on
+ * (2026-09-22). Distinct header again, and for the same reason the player's
+ * message has one: a wallet displays this text, and a captured complaint
+ * signature must never verify as a status update — nor a status update as a
+ * review decision. Three headers, three non-interchangeable signatures.
+ *
+ * The NOTE is inside the signed bytes because the player is shown it. A note
+ * that sat outside the signature could be changed by anyone who could write
+ * to the store, and the row would still verify — which would make
+ * `decidedBy` a claim about who wrote *something*, not about who wrote
+ * *this*.
+ */
+export function canonicalComplaintStatusMessage(c: {
+  reference: string;
+  /** `acknowledged` or `resolved` — the kind of row being appended. */
+  status: string;
+  /** The operator's note to the player. */
+  note: string;
+  signedAt: string;
+}): Uint8Array {
+  return new TextEncoder().encode(
+    `Blotto Cup complaint status\n` +
+      `reference: ${c.reference}\n` +
+      `status: ${c.status}\n` +
+      `note: ${c.note}\n` +
+      `at: ${c.signedAt}\n`
+  );
+}

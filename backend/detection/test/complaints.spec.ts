@@ -24,7 +24,11 @@
 import { expect } from 'chai';
 import nacl from 'tweetnacl';
 import { base58Encode } from '../../packet/src/shared';
-import { canonicalComplaintMessage, COMPLAINT_REFERENCE_PATTERN } from '../src/complaint-message';
+import {
+  canonicalComplaintMessage,
+  canonicalComplaintStatusMessage,
+  COMPLAINT_REFERENCE_PATTERN,
+} from '../src/complaint-message';
 import {
   COMPLAINT_ACKNOWLEDGE_WORKING_DAYS,
   COMPLAINT_CATEGORY_KEYS,
@@ -426,6 +430,265 @@ describe('the canonical complaint message', () => {
     expect(COMPLAINT_REFERENCE_PATTERN.test('BC-7K2M4QPT')).to.equal(true);
     for (const bad of ['BC-0K2M4QPT', 'BC-OK2M4QPT', 'BC-1K2M4QPT', 'BC-IK2M4QPT', 'BC-SHORT', 'bc-7k2m4qpt']) {
       expect(COMPLAINT_REFERENCE_PATTERN.test(bad), bad).to.equal(false);
+    }
+  });
+});
+
+/**
+ * The operator's answer (2026-09-22) — the half PR #160 left out.
+ *
+ * It shipped the store, the row shape and the status derivation, and nothing
+ * that could WRITE an operator row, so a complaint read `received` however
+ * promptly a person answered and the page a player checks never moved.
+ *
+ * What is proven here:
+ *
+ *   1. A REGISTRY MEMBER'S SIGNATURE IS THE LOGIN, and it goes into the row,
+ *      so the authorization is re-checkable by anyone holding the thread.
+ *   2. THE NOTE IS INSIDE THE SIGNED BYTES. Change one character of the note
+ *      the player will be shown and the signature stops verifying.
+ *   3. A PLAYER'S COMPLAINT SIGNATURE CANNOT BE REPLAYED AS AN OPERATOR'S
+ *      ANSWER — and the header separation is pinned SEPARATELY, because the
+ *      cross-signature test alone does not prove it. Merging the two headers
+ *      by hand leaves that test green: the messages also differ in their
+ *      field layout, so the signature fails to verify for a second reason.
+ *      Two assertions, one per property, rather than one that appears to
+ *      cover both.
+ *   4. THE REFUSAL IS UNIFORM to the caller — unknown signer and bad
+ *      signature look alike, so the endpoint is not a member-list oracle.
+ *   5. ANSWERING CANNOT RECATEGORISE. The category is taken from the thread's
+ *      lodged row, never from the submission.
+ */
+describe("the operator's answer to a complaint", () => {
+  const desk = nacl.sign.keyPair();
+  const DESK_KEY = base58Encode(desk.publicKey);
+  const intruder = nacl.sign.keyPair();
+
+  function memberDeps(store = new MemoryComplaintStore()) {
+    const d = {
+      registry: { version: 1, members: [DESK_KEY], updated: '2026-09-22' },
+      actions: {} as never,
+      log: {} as never,
+      complaints: store,
+      now: () => NOW,
+    } as unknown as ReviewServerDeps;
+    return { deps: d, store };
+  }
+
+  /** A status submission, signed by `key`, with any field overridden. */
+  function statusBody(
+    over: {
+      reference?: string;
+      kind?: 'acknowledged' | 'resolved';
+      note?: string;
+      decidedAt?: string;
+      key?: nacl.SignKeyPair;
+      /** Sign these bytes instead — for the cross-message test. */
+      bytes?: Uint8Array;
+    } = {}
+  ) {
+    const reference = over.reference ?? REFERENCE;
+    const kind = over.kind ?? 'acknowledged';
+    const note = over.note ?? 'Looked at it; a person is on it.';
+    const decidedAt = over.decidedAt ?? AT;
+    const key = over.key ?? desk;
+    const bytes =
+      over.bytes ?? canonicalComplaintStatusMessage({ reference, status: kind, note, signedAt: decidedAt });
+    return {
+      reference,
+      kind,
+      note,
+      decidedBy: base58Encode(key.publicKey),
+      decidedAt,
+      signature: Buffer.from(nacl.sign.detached(bytes, key.secretKey)).toString('base64'),
+    };
+  }
+
+  const postStatus = (d: ReviewServerDeps, body: unknown) =>
+    handleReviewRoute(d, 'POST', '/complaints/status', body, {});
+
+  /** A lodged complaint to answer. */
+  async function lodge(store: MemoryComplaintStore, category: ComplaintCategory = 'site') {
+    await store.append(
+      lodgedRow(
+        { reference: REFERENCE, category, text: 'The page would not load.', wallet: null, pool: null },
+        AT
+      )
+    );
+  }
+
+  it('moves a complaint from received to acknowledged, and the player sees the note', async () => {
+    const { deps: d, store } = memberDeps();
+    await lodge(store);
+    expect(complaintStatus(await store.listFor(REFERENCE))?.status).to.equal('received');
+
+    const res = await postStatus(d, statusBody());
+    expect(res.status).to.equal(204);
+
+    const after = complaintStatus(await store.listFor(REFERENCE));
+    expect(after?.status).to.equal('acknowledged');
+    expect(after?.note).to.equal('Looked at it; a person is on it.');
+    // The player's own words are untouched by the answer.
+    expect(after?.text).to.equal('The page would not load.');
+  });
+
+  it('records WHO answered and the signature, so the row is re-checkable', async () => {
+    const { deps: d, store } = memberDeps();
+    await lodge(store);
+    const body = statusBody({ kind: 'resolved', note: 'Fixed and deployed.' });
+    expect((await postStatus(d, body)).status).to.equal(204);
+
+    const rows = await store.listFor(REFERENCE);
+    const answer = rows.find((r) => r.kind === 'resolved');
+    expect(answer?.decidedBy).to.equal(DESK_KEY);
+    expect(answer?.signature).to.equal(body.signature);
+    expect(answer?.signedAt).to.equal(AT);
+    // Re-check it the way anyone holding the thread would.
+    const ok = nacl.sign.detached.verify(
+      canonicalComplaintStatusMessage({
+        reference: REFERENCE,
+        status: 'resolved',
+        note: 'Fixed and deployed.',
+        signedAt: AT,
+      }),
+      Uint8Array.from(Buffer.from(answer!.signature as string, 'base64')),
+      desk.publicKey
+    );
+    expect(ok, 'the recorded signature verifies from the row alone').to.equal(true);
+    expect(complaintStatus(rows)?.status).to.equal('resolved');
+  });
+
+  it('refuses a signer who is not in the registry', async () => {
+    const { deps: d, store } = memberDeps();
+    await lodge(store);
+    const res = await postStatus(d, statusBody({ key: intruder }));
+    expect(res.status).to.equal(401);
+    expect((res.body as { error: string }).error).to.equal('unauthorized');
+    // Uniform: no reason is handed back, so this is not a member-list oracle.
+    expect(Object.keys(res.body as object)).to.deep.equal(['error']);
+    expect((await store.listFor(REFERENCE)).length, 'nothing was appended').to.equal(1);
+  });
+
+  it('refuses a note changed after signing — the note is inside the signed bytes', async () => {
+    const { deps: d, store } = memberDeps();
+    await lodge(store);
+    const body = statusBody({ note: 'We will look into it.' });
+    const tampered = { ...body, note: 'We have refunded you in full.' };
+    const res = await postStatus(d, tampered);
+    expect(res.status).to.equal(401);
+    expect((await store.listFor(REFERENCE)).length).to.equal(1);
+  });
+
+  it('signs under a header no other Blotto Cup message uses', () => {
+    // Pinned on its own because the cross-signature test below does NOT
+    // prove it: merging the two headers leaves that test green, since the
+    // messages also differ in their field layout. Verified by making the
+    // change and watching the suite stay at 107 — so the header needs an
+    // assertion of its own or it is protected by nothing but coincidence.
+    const head = (b: Uint8Array) => new TextDecoder().decode(b).split('\n')[0];
+    const status = canonicalComplaintStatusMessage({
+      reference: REFERENCE,
+      status: 'acknowledged',
+      note: 'n',
+      signedAt: AT,
+    });
+    const player = canonicalComplaintMessage({
+      reference: REFERENCE,
+      wallet: DESK_KEY,
+      category: 'site',
+      pool: null,
+      text: 'n',
+      signedAt: AT,
+    });
+    expect(head(status)).to.equal('Blotto Cup complaint status');
+    expect(head(player)).to.equal('Blotto Cup complaint');
+    expect(head(status)).to.not.equal(head(player));
+  });
+
+  it("refuses a player's own complaint signature replayed as an answer", async () => {
+    // A signed complaint is handed back to the wallet that lodged it, so it
+    // is material the player holds. It must not answer their own complaint.
+    const { deps: d, store } = memberDeps();
+    await lodge(store);
+    const playerBytes = canonicalComplaintMessage({
+      reference: REFERENCE,
+      wallet: DESK_KEY,
+      category: 'site',
+      pool: null,
+      text: 'The page would not load.',
+      signedAt: AT,
+    });
+    const res = await postStatus(d, statusBody({ bytes: playerBytes }));
+    expect(res.status).to.equal(401);
+    expect((await store.listFor(REFERENCE)).length).to.equal(1);
+  });
+
+  it('refuses a stale signature', async () => {
+    const { deps: d, store } = memberDeps();
+    await lodge(store);
+    const old = new Date(NOW - 60 * 60 * 1000).toISOString();
+    const res = await postStatus(d, statusBody({ decidedAt: old }));
+    expect(res.status).to.equal(401);
+  });
+
+  it('404s a reference nothing was ever lodged under', async () => {
+    const { deps: d, store } = memberDeps();
+    const res = await postStatus(d, statusBody());
+    expect(res.status).to.equal(404);
+    expect((res.body as { error: string }).error).to.equal('not_found');
+    expect((await store.listFor(REFERENCE)).length).to.equal(0);
+  });
+
+  it('refuses the same signature twice — the signature is the nonce', async () => {
+    const { deps: d, store } = memberDeps();
+    await lodge(store);
+    const body = statusBody();
+    expect((await postStatus(d, body)).status).to.equal(204);
+    const replay = await postStatus(d, body);
+    expect(replay.status).to.equal(409);
+    expect((replay.body as { error: string }).error).to.equal('already_recorded');
+    expect((await store.listFor(REFERENCE)).length, 'one answer, not two').to.equal(2);
+  });
+
+  it('lets an honest operator answer again, because a new note is a new signature', async () => {
+    const { deps: d, store } = memberDeps();
+    await lodge(store);
+    expect((await postStatus(d, statusBody({ note: 'Acknowledged.' }))).status).to.equal(204);
+    const second = statusBody({ kind: 'resolved', note: 'Resolved: the cache was stale.' });
+    expect((await postStatus(d, second)).status).to.equal(204);
+    expect(complaintStatus(await store.listFor(REFERENCE))?.status).to.equal('resolved');
+  });
+
+  it('cannot recategorise a complaint by answering it', async () => {
+    const { deps: d, store } = memberDeps();
+    await lodge(store, 'decision');
+    await postStatus(d, statusBody());
+    const rows = await store.listFor(REFERENCE);
+    for (const r of rows) expect(r.category, r.kind).to.equal('decision');
+  });
+
+  it('is not_configured rather than a refusal when no store is wired', async () => {
+    const d = {
+      registry: { version: 1, members: [DESK_KEY], updated: '2026-09-22' },
+      actions: {} as never,
+      log: {} as never,
+      now: () => NOW,
+    } as unknown as ReviewServerDeps;
+    const res = await postStatus(d, statusBody());
+    expect(res.status).to.equal(503);
+    expect((res.body as { error: string }).error).to.equal('not_configured');
+  });
+
+  it('rejects a malformed body before any signature work', async () => {
+    const { deps: d } = memberDeps();
+    for (const bad of [
+      {},
+      { ...statusBody(), kind: 'lodged' },
+      { ...statusBody(), note: '' },
+      { ...statusBody(), reference: 'nope' },
+    ]) {
+      const res = await postStatus(d, bad);
+      expect(res.status, JSON.stringify(bad).slice(0, 40)).to.equal(400);
     }
   });
 });

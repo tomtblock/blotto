@@ -201,6 +201,69 @@ export function complaintStatus(thread: readonly ComplaintRow[]): ComplaintStatu
  * type. `already_lodged` protects the reference: a client generates it, so a
  * collision — or a replayed submission — must not overwrite a record.
  */
+/**
+ * The operator's note to the player. Shorter than the player's own text on
+ * purpose: this is an answer, not a statement of a case.
+ */
+export const COMPLAINT_NOTE_MAX = 2000;
+
+/** The kinds of row an operator may append. `lodged` is the player's alone. */
+export const COMPLAINT_OPERATOR_KINDS = ['acknowledged', 'resolved'] as const;
+export type ComplaintOperatorKind = (typeof COMPLAINT_OPERATOR_KINDS)[number];
+
+/**
+ * An operator moving a complaint's status on (2026-09-22).
+ *
+ * WHY THIS EXISTS. PR #160 shipped the store, the row shape and the status
+ * derivation, and nothing that could write an operator row — so a complaint's
+ * status read `received` however promptly a person answered, and the page a
+ * player checks never moved. The undertaking is that a human answers; this is
+ * what lets the record say one did.
+ *
+ * Authenticated exactly as a review decision is: signed by a member of the
+ * founder-owned registry, over a canonical message, with the signature going
+ * into the record so the authorization is re-checkable by anyone holding it.
+ * There is no session and no password here either.
+ */
+export interface ComplaintStatusSubmission {
+  reference: string;
+  kind: ComplaintOperatorKind;
+  /** The operator's note, shown to the player. Inside the signed bytes. */
+  note: string;
+  /** The registry member answering, base58. */
+  decidedBy: string;
+  /** Canonical ISO instant, inside the signed bytes. */
+  decidedAt: string;
+  /** Base64 ed25519 over `canonicalComplaintStatusMessage`. */
+  signature: string;
+}
+
+/** Why a status append cannot be recorded as a matter of RULE, or null. */
+export type ComplaintStatusRefusal = 'not_found' | 'already_recorded';
+
+/**
+ * `not_found` — nothing was ever lodged under that reference, so there is no
+ * complaint to answer and an operator row would create a thread with no
+ * player in it.
+ *
+ * `already_recorded` — this exact signature is already on the thread. Same
+ * reasoning as the decision route's replay guard (B-23): ed25519 is
+ * deterministic, so the signature IS the nonce, and a second arrival of the
+ * same 64 bytes is a replay by definition. It matters here for a reason the
+ * decision route does not have: a resolved complaint that is legitimately
+ * re-opened and re-resolved produces a NEW signature, because the timestamp
+ * differs — so refusing the repeat costs an honest operator nothing.
+ */
+export function complaintStatusRuleRefusal(
+  submission: ComplaintStatusSubmission,
+  existing: readonly ComplaintRow[]
+): ComplaintStatusRefusal | null {
+  if (!existing.some((r) => r.kind === 'lodged')) return 'not_found';
+  if (existing.some((r) => r.signature === submission.signature)) return 'already_recorded';
+  return null;
+}
+
+
 export type ComplaintRefusal = 'malformed' | 'signature_required' | 'already_lodged';
 
 export function complaintRuleRefusal(
@@ -301,8 +364,24 @@ export function lodgedRow(submission: ComplaintSubmission, receivedAt: string): 
  */
 export function answeredRow(
   reference: string,
-  kind: 'acknowledged' | 'resolved',
-  answer: { decidedBy: string; note: string; category: ComplaintCategory; pool?: string | null },
+  kind: ComplaintOperatorKind,
+  answer: {
+    decidedBy: string;
+    note: string;
+    category: ComplaintCategory;
+    pool?: string | null;
+    /**
+     * The operator's signature over `canonicalComplaintStatusMessage`, and
+     * the instant inside those bytes (2026-09-22). Optional because this
+     * builder predates the signed route and its callers may have none — a
+     * row written by a future operator tool that authenticates some other
+     * way is still a lawful row. When they ARE present the row is
+     * re-checkable by anyone holding the thread, which is the whole point
+     * of putting the authorization in the record.
+     */
+    signature?: string | null;
+    signedAt?: string | null;
+  },
   receivedAt: string
 ): ComplaintRow {
   return {
@@ -315,8 +394,8 @@ export function answeredRow(
     category: answer.category,
     pool: answer.pool ?? null,
     body: answer.note,
-    signature: null,
-    signedAt: null,
+    signature: answer.signature ?? null,
+    signedAt: answer.signedAt ?? null,
     decidedBy: answer.decidedBy,
     receivedAt,
   };
