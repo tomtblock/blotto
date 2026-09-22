@@ -38,6 +38,7 @@ import nacl from 'tweetnacl';
 import { base58Decode } from '../../_shared/src/blotto-events';
 import {
   COMPLAINT_REFERENCE_PATTERN,
+  canonicalComplaintAnswerMessage,
   canonicalComplaintMessage,
 } from './complaint-message';
 import { REVIEW_SIGNATURE_WINDOW_MS, isCanonicalIsoInstant, type SubmissionRefusal } from './auth';
@@ -111,7 +112,20 @@ export interface ComplaintRow {
   pool: string | null;
   /** The player's own words on `lodged`; the operator's note otherwise. */
   body: string;
+  /**
+   * The signature of whoever AUTHORED this row, base64 Ed25519 — the
+   * player's on a signed `lodged`, the desk's registry key on an
+   * `acknowledged` or `resolved`, and NULL only on an unsigned lodge.
+   *
+   * One column with one meaning, rather than a second for the operator's:
+   * every row is signed by its own author, and the two canonical messages
+   * are domain-separated (`complaint-message.ts`) so neither signature can
+   * ever verify as the other. The player-facing `signed` flag reads the
+   * LODGE row alone (`complaintStatus`), so a signed answer never makes an
+   * unsigned complaint look signed.
+   */
   signature: string | null;
+  /** The instant that author's signature covers, verbatim. */
   signedAt: string | null;
   /**
    * Whose registry key answered — base58, and NULL on `lodged`, which is the
@@ -156,6 +170,15 @@ export interface ComplaintStore {
   append(row: ComplaintRow): Promise<void>;
   /** Every row for one reference, oldest first. */
   listFor(reference: string): Promise<ComplaintRow[]>;
+  /**
+   * The desk's queue: the LODGE of every complaint that has not been
+   * resolved, newest first.
+   *
+   * Only the lodge row, because that is the complaint; the thread is read
+   * per reference when somebody opens one. A resolved complaint is not the
+   * desk's problem, which is what `complaints_open` indexes on.
+   */
+  listOpen(limit: number): Promise<ComplaintRow[]>;
 }
 
 /** An in-memory store for tests and for a service with no database. */
@@ -168,6 +191,14 @@ export class MemoryComplaintStore implements ComplaintStore {
 
   async listFor(reference: string): Promise<ComplaintRow[]> {
     return this.rows.filter((r) => r.reference === reference);
+  }
+
+  async listOpen(limit: number): Promise<ComplaintRow[]> {
+    const resolved = new Set(this.rows.filter((r) => r.kind === 'resolved').map((r) => r.reference));
+    return this.rows
+      .filter((r) => r.kind === 'lodged' && !resolved.has(r.reference))
+      .sort((a, b) => b.receivedAt.localeCompare(a.receivedAt))
+      .slice(0, limit);
   }
 }
 
@@ -264,6 +295,112 @@ export function complaintSignatureRefusal(
   }
 }
 
+/**
+ * An operator's answer to a complaint, as it arrives on the wire.
+ *
+ * `decidedBy` is not a claim the caller makes about themselves — it is the
+ * key the signature must verify against, and it must be in the founder-owned
+ * registry. That is what turns the stored `decided_by` into evidence.
+ */
+export interface ComplaintAnswerSubmission {
+  reference: string;
+  kind: 'acknowledged' | 'resolved';
+  /** The registry key answering — base58. */
+  decidedBy: string;
+  /** What the player is told. Inside the signed bytes. */
+  note: string;
+  /** Canonical ISO instant, inside the signed bytes. */
+  decidedAt: string;
+  /** base64 Ed25519 over `canonicalComplaintAnswerMessage`. */
+  signature: string;
+}
+
+/** The longest answer the desk can record. Generous; a bound, not a style. */
+export const COMPLAINT_NOTE_MAX = 2000;
+
+/**
+ * How many open complaints the queue serves at once.
+ *
+ * Bounded because the queue route returns players' own words: an unbounded
+ * `limit` would let one authorised request return the entire table in a
+ * single response, which is a worse thing to leak, to log, or to leave in a
+ * proxy cache than a page of it.
+ */
+export const COMPLAINT_QUEUE_DEFAULT = 50;
+export const COMPLAINT_QUEUE_MAX = 200;
+
+/**
+ * May this answer be recorded?
+ *
+ * Mirrors `auth.ts::reviewSubmissionRefusal` limb for limb, deliberately: an
+ * operator write to the complaints record is the same KIND of act as one to
+ * the decision log, and two slightly different auth rules over two
+ * append-only operator tables is the drift that produces a hole in one of
+ * them. Registry membership, a canonical instant, freshness, then the
+ * signature over the shared canonical bytes.
+ *
+ * The CALLER is told one undifferentiated `unauthorized`; the reason is
+ * named in the log, which the caller cannot reach (B-35). Otherwise the
+ * route is a membership oracle for the founder-owned registry.
+ *
+ * PHASE-N-REVIEW (2026-09-22): NO PER-KEY BUDGET here, unlike `/decisions`,
+ * and the asymmetry is deliberate rather than overlooked. A decision moves a
+ * share; an answer records a sentence against a reference that must already
+ * exist, and a duplicate signature is refused as a replay. Adding a budget
+ * means a `countBy` on this store, and I would rather this route stay small
+ * enough to read than gain a counter nothing has yet needed. What would
+ * change it: a second desk key, or any sign of a flood. It is recorded in
+ * the change report rather than left in a diff.
+ */
+export function complaintAnswerRefusal(
+  registry: { members: readonly string[] },
+  answer: ComplaintAnswerSubmission,
+  nowMs: number,
+  windowMs: number = REVIEW_SIGNATURE_WINDOW_MS
+): SubmissionRefusal | null {
+  try {
+    if (!registry.members.includes(answer.decidedBy)) return 'not_member';
+    if (!isCanonicalIsoInstant(answer.decidedAt)) return 'bad_timestamp';
+    const at = Date.parse(answer.decidedAt);
+    if (Math.abs(nowMs - at) > windowMs) return 'clock_skew';
+    const signature = Uint8Array.from(Buffer.from(answer.signature, 'base64'));
+    if (signature.length !== 64) return 'bad_signature';
+    return nacl.sign.detached.verify(
+      canonicalComplaintAnswerMessage({
+        reference: answer.reference,
+        kind: answer.kind,
+        decidedBy: answer.decidedBy,
+        note: answer.note,
+        signedAt: answer.decidedAt,
+      }),
+      signature,
+      base58Decode(answer.decidedBy)
+    )
+      ? null
+      : 'bad_signature';
+  } catch {
+    return 'bad_signature';
+  }
+}
+
+/**
+ * Has this exact answer already been recorded?
+ *
+ * The same guard the decision log has (B-23), and honest for the accidental
+ * case too: an operator whose response was lost and who retries is told the
+ * answer is on the record, which is the truth and what they needed.
+ */
+export function isAnswerReplay(
+  thread: readonly ComplaintRow[],
+  signature: string
+): boolean {
+  // Scoped to the operator's rows. The two canonical messages are
+  // domain-separated, so a player's lodge signature could never verify as an
+  // answer in the first place — but a replay check that can only ever look
+  // at answers cannot be confused by one.
+  return thread.some((r) => r.kind !== 'lodged' && r.signature === signature);
+}
+
 /** The submission as the row it becomes. */
 export function lodgedRow(submission: ComplaintSubmission, receivedAt: string): ComplaintRow {
   const signed = Boolean(submission.signature && submission.signedAt && submission.wallet);
@@ -302,7 +439,16 @@ export function lodgedRow(submission: ComplaintSubmission, receivedAt: string): 
 export function answeredRow(
   reference: string,
   kind: 'acknowledged' | 'resolved',
-  answer: { decidedBy: string; note: string; category: ComplaintCategory; pool?: string | null },
+  answer: {
+    decidedBy: string;
+    note: string;
+    category: ComplaintCategory;
+    pool?: string | null;
+    /** The desk's signature over the canonical answer message, when signed. */
+    signature?: string | null;
+    /** The instant that signature covers, verbatim. */
+    signedAt?: string | null;
+  },
   receivedAt: string
 ): ComplaintRow {
   return {
@@ -315,8 +461,8 @@ export function answeredRow(
     category: answer.category,
     pool: answer.pool ?? null,
     body: answer.note,
-    signature: null,
-    signedAt: null,
+    signature: answer.signature ?? null,
+    signedAt: answer.signedAt ?? null,
     decidedBy: answer.decidedBy,
     receivedAt,
   };
