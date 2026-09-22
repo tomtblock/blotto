@@ -12,6 +12,7 @@ import { CachingGeoLookup } from '../src/geo-cache';
 import { assertRegionCapability, geoVerdict } from '../src/service';
 import type { GeoLookup } from '../src/service';
 import { loadTerritorySchedule } from '../src/territories';
+import { DEFAULT_WALLET_BLOCKLIST } from '../src/blocked-wallets';
 import { resolve } from 'path';
 
 const TERRITORIES = loadTerritorySchedule(
@@ -311,7 +312,7 @@ describe('the geo decision is named in the log, never in the answer', () => {
   const deps = (lookup: () => Promise<{ country: string; vpnOrProxy: boolean }>) =>
     ({
       geo: { lookup },
-      config: { territories: TERRITORIES, termsVersion: 1, termsUpdated: '2026-09-06', kycTier: 0 },
+      config: { blockedWallets: DEFAULT_WALLET_BLOCKLIST, territories: TERRITORIES, termsVersion: 1, termsUpdated: '2026-09-06', kycTier: 0 },
     }) as never;
 
   it('names a LOOKUP FAILURE distinctly from a territory decision', async () => {
@@ -430,7 +431,7 @@ describe('sub-national rules are enforceable or refused, never inert (C-30)', ()
       ({
         geo: noRegion,
         preflightGeo: noRegion,
-        config: { territories, kycTier: 0, termsVersion: 1, termsUpdated: '2026-09-06' },
+        config: { blockedWallets: DEFAULT_WALLET_BLOCKLIST, territories, kycTier: 0, termsVersion: 1, termsUpdated: '2026-09-06' },
       }) as unknown as Parameters<typeof geoVerdict>[0];
 
     assert.equal(

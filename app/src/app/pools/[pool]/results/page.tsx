@@ -28,7 +28,7 @@ import { WhatBeatYouPanel } from './what-beat-you-panel';
 import { ShareResult } from './share-result';
 import { ShareSeven } from './share-seven';
 import { PaidConfetti } from './paid-confetti';
-import { AppealClient } from './appeal-client';
+import { ChallengeClient } from './challenge-client';
 
 export default async function ResultsPage({ params }: { params: Promise<{ pool: string }> }) {
   const { pool: poolId } = await params;
@@ -149,9 +149,13 @@ export default async function ResultsPage({ params }: { params: Promise<{ pool: 
                 .map((r) => entryBySeat.get(r.seat)?.player ?? '')
                 .filter(Boolean)}
             />
-            {/* Stage E: the appeal form, for the signed-in wallet whose own
-                share was forfeited on this pool — nobody else sees it. */}
-            <AppealClient
+            {/* The way to contest a decision on this pool, for the
+                signed-in wallet whose own share was forfeited — nobody else
+                sees it. It was the appeal panel until 2026-09-19, when the
+                named-reviewer apparatus came out of the product: a challenge
+                now goes through the complaints route, which a person reads
+                and answers within the published windows. */}
+            <ChallengeClient
               pool={pool.pool}
               forfeitedPlayers={entries
                 .filter((e) => e.escrow_settled === 'forfeited')

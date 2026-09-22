@@ -32,6 +32,7 @@ import {
   type PacketServiceDeps,
 } from '../src/service';
 import { loadTerritorySchedule } from '../src/territories';
+import { DEFAULT_WALLET_BLOCKLIST } from '../src/blocked-wallets';
 import { resolve } from 'path';
 
 const TERRITORIES = loadTerritorySchedule(
@@ -303,7 +304,7 @@ describe('the service seam — two faces, and fail-closed is unchanged', () => {
         get: async () => ({ attested18: true, termsVersion: 1, wallet: 'w' }) as never,
         put: async () => undefined,
       } as never,
-      config: { territories: TERRITORIES, kycTier: 0, termsVersion: 1, termsUpdated: '2026-01-01' },
+      config: { blockedWallets: DEFAULT_WALLET_BLOCKLIST, territories: TERRITORIES, kycTier: 0, termsVersion: 1, termsUpdated: '2026-01-01' },
       now: () => 0n,
       nonce: () => 0n,
     };

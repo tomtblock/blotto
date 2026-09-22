@@ -1,8 +1,9 @@
 {
-  "version": 2,
-  "updated": "2026-09-06",
+  "version": 3,
+  "updated": "2026-09-19",
   "editions": [
     { "version": 1, "updated": "2026-08-27" },
-    { "version": 2, "updated": "2026-09-06" }
+    { "version": 2, "updated": "2026-09-06" },
+    { "version": 3, "updated": "2026-09-19" }
   ]
 }

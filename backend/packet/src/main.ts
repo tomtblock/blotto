@@ -13,6 +13,7 @@
  *                               pool-page link's origin (default www.blotto.gg);
  *                               NOTIFY_DISPATCH_INTERVAL_MS the pass interval.
  *   BLOTTO_TERRITORIES_PATH     default config/territories.json
+ *   BLOTTO_BLOCKED_WALLETS_PATH default config/blocked-wallets.json
  *   BLOTTO_TERMS_PATH           default config/terms.json
  *   BLOTTO_TRUST_PROXY          "1" ONLY behind our own proxy (Fly/compose)
  *
@@ -72,6 +73,7 @@ import { intEnv, optionalIntEnv, portEnv } from '../../_shared/src/env-number';
 import { startMetricsListener } from '../../_shared/src/metrics-listener';
 import { loadTerms } from './attestations';
 import { loadTerritorySchedule } from './territories';
+import { loadWalletBlocklist } from './blocked-wallets';
 import { PgAttestationStore, PgNotifyPreferenceStore, PgPoolNotifyStore, PgPoolStateReader } from './stores-pg';
 import { HttpEmailSender } from './email-sender';
 import { runNotifyDispatch } from './notify-pool';
@@ -219,6 +221,13 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
   const territories = loadTerritorySchedule(
     env.BLOTTO_TERRITORIES_PATH ?? resolve(REPO_ROOT, 'config', 'territories.json')
   );
+  // The founder-owned wallet blocklist (2026-09-19). Loaded and validated
+  // before the listener opens, like the territory schedule: a malformed file
+  // throws and there is no service, because carrying on with an empty list
+  // would admit every address the founder had listed.
+  const blockedWallets = loadWalletBlocklist(
+    env.BLOTTO_BLOCKED_WALLETS_PATH ?? resolve(REPO_ROOT, 'config', 'blocked-wallets.json')
+  );
   const terms = loadTerms(env.BLOTTO_TERMS_PATH ?? resolve(REPO_ROOT, 'config', 'terms.json'));
   const termsVersion = terms.version;
   // Selected, loaded and scheduled BEFORE the listener opens: no request is
@@ -298,7 +307,13 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
         sanctions: sanctions.list,
         signer: buildSigner(env),
         attestations: new PgAttestationStore(db),
-        config: { territories, kycTier: 0, termsVersion, termsUpdated: terms.updated },
+        config: {
+          territories,
+          blockedWallets,
+          kycTier: 0,
+          termsVersion,
+          termsUpdated: terms.updated,
+        },
         now: () => BigInt(Math.floor(Date.now() / 1000)),
         nonce: () => BigInt('0x' + randomBytes(8).toString('hex')),
         monitor,
@@ -330,7 +345,10 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
     },
     port
   );
-  console.log(`${SERVICE}: listening on :${port} (terms v${termsVersion})`);
+  console.log(
+    `${SERVICE}: listening on :${port} (terms v${termsVersion}, ` +
+      `${blockedWallets.wallets.length} blocked wallet(s))`
+  );
 }
 
 if (require.main === module) {

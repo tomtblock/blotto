@@ -137,14 +137,19 @@ describe('submitAttestation (fail-closed)', () => {
     expect(hasLocalAttestation(WALLET, 999)).toBe(false);
   });
 
-  it('a wallet that accepted version 1 is re-prompted at version 2 (the D-E2 terms bump)', () => {
+  it('a wallet that accepted the PREVIOUS edition is re-prompted at the current one', () => {
+    // First written for the D-E2 bump from 1 to 2, and rewritten at the bump
+    // to 3 (the terms of service of 2026-09-19) to assert the PROPERTY rather
+    // than the number. A test that pins the literal has to be edited at every
+    // bump, and the edit that satisfies it fastest — raise the literal — is
+    // the one that would hide a gate that had stopped re-prompting.
     const wallet = 'Bump1111111111111111111111111111111111111111';
-    rememberLocalAttestation(wallet, 1);
-    expect(hasLocalAttestation(wallet, 1)).toBe(true);
-    expect(hasLocalAttestation(wallet, 2)).toBe(false);
+    expect(TERMS_VERSION).toBeGreaterThan(1);
+    rememberLocalAttestation(wallet, TERMS_VERSION - 1);
+    expect(hasLocalAttestation(wallet, TERMS_VERSION - 1)).toBe(true);
     // The gate reads the CURRENT version from config/terms.json; the record
     // written under the old version never satisfies it.
-    expect(TERMS_VERSION).toBe(2);
+    expect(hasLocalAttestation(wallet, TERMS_VERSION)).toBe(false);
     expect(hasLocalAttestation(wallet)).toBe(false);
   });
 });
