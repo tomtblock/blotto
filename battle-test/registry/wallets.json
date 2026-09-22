@@ -46,6 +46,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "2",
+          "role": "wall",
+          "verdict": "MATCH",
+          "note": "rank 1, paid 4.000000000 SOL"
         }
       ]
     },
@@ -87,6 +95,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "3",
+          "role": "pole",
+          "verdict": "MATCH",
+          "note": "rank 64, not paid"
         }
       ]
     },
@@ -128,6 +144,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "4",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 44, plan said 40"
         }
       ]
     },
@@ -169,6 +193,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "5",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 30, plan said 35"
         }
       ]
     },
@@ -210,6 +242,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "6",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 29, not paid"
         }
       ]
     },
@@ -251,6 +291,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "7",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 37, plan said 38"
         }
       ]
     },
@@ -292,6 +340,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "8",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 9, plan said 7"
         }
       ]
     },
@@ -333,6 +389,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "9",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 61, plan said 63"
         }
       ]
     },
@@ -374,6 +438,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "10",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 26, plan said 30"
         }
       ]
     },
@@ -415,6 +487,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "11",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 48, plan said 49"
         }
       ]
     },
@@ -448,6 +528,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "12",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 42, plan said 43"
         }
       ]
     },
@@ -481,6 +569,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "13",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 51, plan said 53"
         }
       ]
     },
@@ -514,6 +610,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "14",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 6, plan said 5"
         }
       ]
     },
@@ -547,6 +651,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "15",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 23, plan said 27"
         }
       ]
     },
@@ -580,6 +692,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "16",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 32, plan said 36"
         }
       ]
     },
@@ -613,6 +733,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "17",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 55, plan said 57"
         }
       ]
     },
@@ -646,6 +774,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "18",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 18, plan said 23"
         }
       ]
     },
@@ -679,6 +815,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "19",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 24, plan said 25"
         }
       ]
     },
@@ -712,6 +856,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "20",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 33, not paid"
         }
       ]
     },
@@ -745,6 +897,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "21",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 11, plan said 12"
         }
       ]
     },
@@ -778,6 +938,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "22",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 17, plan said 19"
         }
       ]
     },
@@ -811,6 +979,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "23",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 22, not paid"
         }
       ]
     },
@@ -844,6 +1020,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "24",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 25, plan said 26"
         }
       ]
     },
@@ -877,6 +1061,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "25",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 49, plan said 51"
         }
       ]
     },
@@ -910,6 +1102,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "26",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 59, not paid"
         }
       ]
     },
@@ -943,6 +1143,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "27",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 21, plan said 20"
         }
       ]
     },
@@ -976,6 +1184,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "28",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 10, plan said 9"
         }
       ]
     },
@@ -1009,6 +1225,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "29",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 57, plan said 56"
         }
       ]
     },
@@ -1042,6 +1266,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "30",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 27, plan said 28"
         }
       ]
     },
@@ -1075,6 +1307,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "31",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 2, not paid"
         }
       ]
     },
@@ -1108,6 +1348,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "32",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 47, plan said 48"
         }
       ]
     },
@@ -1141,6 +1389,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "33",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 40, plan said 39"
         }
       ]
     },
@@ -1174,6 +1430,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "34",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 7, plan said 8"
         }
       ]
     },
@@ -1207,6 +1471,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "35",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 54, plan said 55"
         }
       ]
     },
@@ -1240,6 +1512,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "36",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 4, not paid"
         }
       ]
     },
@@ -1273,6 +1553,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "37",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 53, plan said 54"
         }
       ]
     },
@@ -1306,6 +1594,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "38",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 19, plan said 17"
         }
       ]
     },
@@ -1339,6 +1635,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "39",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 3, not paid"
         }
       ]
     },
@@ -1372,6 +1676,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "40",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 31, not paid"
         }
       ]
     },
@@ -1397,6 +1709,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 39, not paid"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "41",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 45, plan said 46"
         }
       ]
     },
@@ -1422,6 +1742,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 19, not paid"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "42",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 13, plan said 14"
         }
       ]
     },
@@ -1447,6 +1775,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 18, not paid"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "43",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 58, plan said 60"
         }
       ]
     },
@@ -1472,6 +1808,14 @@
           "role": "field",
           "verdict": "ABSENT",
           "note": "planned seat never landed"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "44",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 52, not paid"
         }
       ]
     },
@@ -1497,6 +1841,14 @@
           "role": "field",
           "verdict": "ABSENT",
           "note": "planned seat never landed"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "45",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 15, plan said 18"
         }
       ]
     },
@@ -1522,6 +1874,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 44, not paid"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "46",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 39, plan said 42"
         }
       ]
     },
@@ -1547,6 +1907,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 2, not paid"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "47",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 14, plan said 15"
         }
       ]
     },
@@ -1572,6 +1940,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 4, not paid"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "48",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 38, plan said 41"
         }
       ]
     },
@@ -1597,6 +1973,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 62, not paid"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "49",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 43, plan said 45"
         }
       ]
     },
@@ -1622,6 +2006,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 8, not paid"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "50",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 36, plan said 32"
         }
       ]
     },
@@ -1647,6 +2039,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 37, not paid"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "51",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 41, plan said 44"
         }
       ]
     },
@@ -1672,6 +2072,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 36, not paid"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "52",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 5, plan said 6"
         }
       ]
     },
@@ -1697,6 +2105,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 57, not paid"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "53",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 16, not paid"
         }
       ]
     },
@@ -1722,6 +2138,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 17, not paid"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "54",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 12, plan said 13"
         }
       ]
     },
@@ -1747,6 +2171,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 48, not paid"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "55",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 8, plan said 11"
         }
       ]
     },
@@ -1772,6 +2204,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 12, not paid"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "56",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 60, plan said 61"
         }
       ]
     },
@@ -1797,6 +2237,14 @@
           "role": "field",
           "verdict": "ABSENT",
           "note": "planned seat never landed"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "57",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 56, plan said 58"
         }
       ]
     },
@@ -1822,6 +2270,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 7, not paid"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "58",
+          "role": "field",
+          "verdict": "MATCH",
+          "note": "rank 50, not paid"
         }
       ]
     },
@@ -1847,6 +2303,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 11, not paid"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "59",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 28, plan said 24"
         }
       ]
     },
@@ -1872,6 +2336,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 50, not paid"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "60",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 46, plan said 47"
         }
       ]
     },
@@ -1897,6 +2369,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 33, not paid"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "61",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 35, plan said 34"
         }
       ]
     },
@@ -1922,6 +2402,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 26, not paid"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "62",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 20, plan said 21"
         }
       ]
     },
@@ -1947,6 +2435,14 @@
           "role": "field",
           "verdict": "MATCH",
           "note": "rank 30, not paid"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "63",
+          "role": "field",
+          "verdict": "RANK_DRIFT",
+          "note": "rank 34, plan said 37"
         }
       ]
     },
@@ -1956,7 +2452,16 @@
       "keypair": "battle-test/keys/wallets/62.json",
       "address": "CBhA7Hb1RvTstwWbbqvx2RWbDhEB74Y6fJ5SkefmMd52",
       "notes": "",
-      "history": []
+      "history": [
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "—",
+          "role": "field",
+          "verdict": "ABSENT",
+          "note": "planned seat never landed"
+        }
+      ]
     },
     {
       "id": "W63",
@@ -2061,6 +2566,14 @@
           "role": "natural",
           "verdict": "MATCH",
           "note": "refunded 0.100000000 SOL"
+        },
+        {
+          "pool": "T6",
+          "poolId": "27",
+          "seat": "0",
+          "role": "field",
+          "verdict": "INPUT_DRIFT",
+          "note": "7 of 7 battles differ from the plan (played by hand — rank and payout still match)"
         }
       ]
     },

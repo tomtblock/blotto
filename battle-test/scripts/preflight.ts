@@ -23,12 +23,28 @@
  *   2. no named wallet is ALREADY registered in this pool (an Entry PDA read
  *      straight from the chain, not the indexer);
  *   3. the entry gate issues a real packet for EACH named wallet against THIS
- *      pool — the exact call the browser is about to make.
+ *      pool — the exact SEQUENCE the browser is about to run: the clickwrap
+ *      attestation, and only then the packet request.
  *
  * (3) is the one that matters most and the one that cannot be inferred: a
  * packet issued for wallet A proves nothing about wallet B, because the gate
- * decides per wallet. It requests packets and nothing else — no allocation is
- * sealed, no ciphertext is stored, nothing is registered, nothing is spent.
+ * decides per wallet. It attests and requests packets, and nothing else — no
+ * allocation is sealed, no ciphertext is stored, nothing is registered,
+ * nothing is spent.
+ *
+ * WHY IT ATTESTS FIRST (DRIFT.md §H27, 2026-09-22). `service.ts` will not
+ * issue a packet to a wallet with no stored attestation at the current terms
+ * version, and `enter.ts` makes that attestation immediately before asking —
+ * the headless equivalent of the two-tile clickwrap. This script used to skip
+ * it, so it tested a sequence no entrant ever performs and STOPPED every
+ * wallet that had simply never played: W67–W71 were all condemned with
+ * `Do NOT let this wallet play` on pool 27, and all five went
+ * `packet 403 → attestation 204 → packet 200` the moment they were asked
+ * properly. The gate's refusal is deliberately generic so that it cannot be
+ * walked by a prober (PID §8), so the response cannot be parsed to tell
+ * "unattested" from "refused" — running the real sequence is the only fix.
+ * The attestation is off-chain, idempotent and re-attestable, so making it
+ * here costs the wallet nothing and commits it to nothing.
  *
  *   4. whether the SEAL FIX IS LIVE on this entry service, and — for a wallet
  *      whose key we hold — whether that wallet has already sealed here.
@@ -78,6 +94,7 @@ import { Connection, Keypair, PublicKey } from '@solana/web3.js';
 import nacl from 'tweetnacl';
 
 import { ciphertextStatusMessage } from '../../backend/packet/src/ciphertext-message';
+import { attestationMessage } from '../../backend/_shared/src/attestation-message';
 
 const PROGRAM_ID = new PublicKey('5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17');
 const DEFAULT_INDEXER = 'https://blotto-indexer.fly.dev';
@@ -99,6 +116,17 @@ const flag = (name: string): string | undefined => {
 const problems: string[] = [];
 const note = (ok: boolean, line: string) => console.log(`  ${ok ? 'ok  ' : 'STOP'}  ${line}`);
 const fail = (line: string) => { problems.push(line); note(false, line); };
+/**
+ * Something this script cannot settle from outside. It is neither `ok` nor a
+ * STOP, and collapsing it into either is how §H27 happened: a wallet whose key
+ * we do not hold cannot be attested for, so its refusal is genuinely ambiguous
+ * and must be reported as ambiguous. WARN does not add to `problems`, so it
+ * does not block a run, and it does not print `ok`, so it cannot be read as one.
+ */
+const warn = (line: string) => console.log(`  WARN  ${line}`);
+
+/** One edition of the terms, mirroring config/terms.json. */
+interface TermsEdition { version: number; updated: string }
 
 /** Roster id → address, from registry/wallets.json. */
 function roster(): Map<string, string> {
@@ -173,6 +201,11 @@ async function main(): Promise<void> {
   const indexer = flag('indexer') ?? process.env.BLOTTO_INDEXER_URL ?? DEFAULT_INDEXER;
   const packetApi = flag('packet') ?? process.env.BLOTTO_PACKET_URL ?? DEFAULT_PACKET;
   const rpc = flag('rpc') ?? process.env.BLOTTO_RPC_URL ?? process.env.RPC_URL;
+  // The clickwrap is version-pinned: the gate wants an attestation at the
+  // CURRENT terms version, and an older one re-prompts rather than passing.
+  const terms = JSON.parse(
+    readFileSync(resolve(__dirname, '..', '..', 'config', 'terms.json'), 'utf8')
+  ) as TermsEdition;
   if (!rpc) throw new Error('set BLOTTO_RPC_URL (or pass --rpc)');
 
   const ids = walletArg.split(',').map((s) => s.trim()).filter(Boolean);
@@ -242,8 +275,32 @@ async function main(): Promise<void> {
       note(true, `${id} is not yet registered in this pool`);
     }
 
-    // The exact call the browser is about to make. Per wallet, because the
-    // gate decides per wallet: a packet for one proves nothing about another.
+    // The clickwrap FIRST, then the packet — the sequence an entrant actually
+    // runs, and the sequence `enter.ts` runs (§H27). Off-chain, idempotent,
+    // and it commits the wallet to nothing: re-attesting replaces the record.
+    const kp = keypairFor(id);
+    let attestation: number | null = null;
+    if (kp) {
+      const att = await fetch(`${packetApi}/attestation`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          wallet: address,
+          termsVersion: terms.version,
+          signature: Buffer.from(
+            nacl.sign.detached(attestationMessage(address, terms), kp.secretKey)
+          ).toString('base64')
+        }),
+      });
+      attestation = att.status;
+      // 204 is the route's only success; anything else and the packet request
+      // below is expected to refuse, which is then a real finding rather than
+      // an artefact of never having clicked.
+      note(att.status === 204, `${id} clickwrap accepted at terms v${terms.version} (${att.status})`);
+    }
+
+    // Per wallet, because the gate decides per wallet: a packet for one proves
+    // nothing about another.
     const res = await fetch(`${packetApi}/packet`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -251,10 +308,23 @@ async function main(): Promise<void> {
     });
     if (res.status === 200) {
       note(true, `${id} the entry gate issued a packet (${res.status})`);
+    } else if (kp === null) {
+      // We hold no key for this wallet, so no clickwrap could be made for it.
+      // A browser wallet that has not accepted the CURRENT terms is refused
+      // here and is perfectly fine the moment its owner accepts them — and
+      // from outside, that is indistinguishable from a real refusal, because
+      // the gate answers one generic status for every reason it has (PID §8).
+      warn(
+        `${id} the entry gate REFUSED (${res.status}), and we hold no key for it, so the ` +
+        `clickwrap could not be made first. This may mean nothing worse than "has not yet ` +
+        `accepted terms v${terms.version}" — it cannot be told apart from outside. Have the ` +
+        `wallet's owner load the play page and accept, then re-run.`
+      );
     } else {
       fail(
-        `${id} the entry gate REFUSED (${res.status}). Do NOT let this wallet play: ` +
-        `it would seal, fail, and be barred from pool ${pool.id} for good.`
+        `${id} the entry gate REFUSED (${res.status}) even after the clickwrap was accepted ` +
+        `(attestation ${attestation}). Do NOT let this wallet play: it would seal, fail, and ` +
+        `be barred from pool ${pool.id} for good.`
       );
     }
 
