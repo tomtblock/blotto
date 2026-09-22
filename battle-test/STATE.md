@@ -1,50 +1,80 @@
-# STATE — 2026-09-21 23:59 UTC — by Claude Code
+# STATE — 2026-09-22 00:15 UTC — by Claude Code
 
-Phase:            **T6 is one ruling away. Pool 27 has BOTH founder wallets seated, and UI-B was
-                  supposed to be the one standing outside being refused.**
-Waiting on:       **the founder: (a), (b) or (c) in §F-36.** My recommendation is **(b)** — let
-                  pool 27 lapse, both entries refund, re-run clean on pool 28 with the plan unedited.
-Blocked:          T6 on that ruling · T3 on Q6 (admin signing) · T7 on Q7 (reviewer key).
+Phase:            **T6 RUNS NOW on pool 27, option (a).** The founder ruled. UI-B stays in as a
+                  scored seat; the deviation is frozen in writing before a lamport moves.
+Waiting on:       nothing. Filling 62 seats, then nine refusals, then settlement.
+Blocked:          T3 on Q6 (admin signing) · T7 on Q7 (reviewer key).
 Results so far:   T1 **PASS** · T4 **PASS** · T5 **PASS** · T2 **SPOILED** · T2R **PASS (7 of 8)**
                   pool 22 = observation, not a test
 Money:            funder **10.339339200** · W00 **4.041117840** · UI-A 10.464464021 · UI-B 11.568915997
-                  UI-A and UI-B are each one entry down in pool 27; **both refund when it lapses**.
-Open PR:          **PR 159** — the battle-test record. Green, and the only PR open. (Plain, not a
-                  link: the §8.7 gate scans every file in the tree and a GitHub PR URL trips it.)
+Open PR:          **PR 159** — the battle-test record. (Plain, not a link: the §8.7 gate scans every
+                  file in the tree and a GitHub PR URL trips it.)
 
-## UI-B IS SEATED IN POOL 27. READ THIS FIRST.
+## I WAS WRONG IN §F-36, AND THE CORRECTION CUTS BOTH WAYS
 
-Verified against the indexer's `/entries`, not taken on trust:
+§F-36 told the founder a field seat could overtake W00: floor 875 sliding under a field ceiling of
+868. **That is wrong.** 868 is the *theoretical* ceiling — one seat winning every battle against
+every other seat. No actual seat is near it. Computed from the engine, on this exact field:
 
 ```
-pool 27  3kkWSsX5BgpyVirejCRMAFXrdhoSnEdrHRQz4TQ4rvh9   Open — 2 of 64
-  idx 0  UI-A  7fpaNh8m…YPve   battles_hash 812619c8…  refunded false
-  idx 1  UI-B  6wqLMAS1…u3sa   battles_hash 338f24d3…  refunded false
-  deadline 2026-09-22T08:02:43Z   outcome_if_deadline_now: refund   min_seats 40
+best non-W00 seat   W29   528   ceiling 542
+W00                       863   floor   863
+margin                          321 half-points, not 7
 ```
 
-**The cause is my instruction, not the founder's reading of it.** §F-35 put "enter as UI-A" and
-"call GO for UI-B" at steps 2 and 4 of one numbered list, written two days before it was acted on.
+So the risk I named does not exist. **The risk that does exist is UI-B itself, and it is not
+remote:**
 
-Two things are lost if T6 runs on this pool as it stands:
+```
+UI-B plays                        UI-B      W00
+the UI-A recipe (one stat 25)     61st      1st  877
+even split, 20 on each            63rd      1st  877
+three stats at 26/26/48            2nd      1st  872
+three stats at 34/33/33            1st      2nd  869   <-- W00 LOSES
+```
 
-1. **The ninth refusal.** T6's claim is *64 land, 9 are refused, and the refused ones are told why*.
-   Eight of the nine are headless and prove the program refuses them. **Only UI-B proves a person is
-   told what happened** — the entire point of the copy fix in PRs 157/158. Seated, it proves nothing.
-2. **The headline claim stops being unconditional.** `unconditionalDerivation.winnerIsHeadless`
-   holds because no field seat exceeds 25. UI-A was instructed inside 1–25 and complied; **UI-B was
-   told to play as it liked**, for an attempt that was never meant to be scored. W00's wall carries
-   two zero-stats per battle, so a 26+ stat can take battles off it: W00's floor of 875 falls toward
-   861, under the field ceiling of 868. **And the allocation cannot be inspected** — it is sealed
-   until reveal. The risk is unmeasurable in advance *by design*.
+Three stats at 26+ beats every capped field seat on three of five stats (the field caps at 25 and
+26×3 = 78 ≤ 100). A 34/33/33 concentration is an ordinary strong shape — the skill-evidence study
+calls it `heuristic`/`optimised`. **Whether the founder played one is sealed until reveal.**
 
-**Recommendation (b).** Pool 27 holds 2 entrants against a 40-seat minimum, so it refunds at
-08:02:43Z with no action from anyone. Sunk: two pass rents at 4441080 each plus the 650240 cushion
-— **0.0095 SOL**. `T6.plan.json` names no pool, so it moves to pool 28 byte-identical, as T4 moved
-from pool 15 to pool 16. Only `T6.freeze.json`'s `pool` block changes, and the 19:11:28Z merge
-stands against a pool created two days later rather than thirty minutes.
+## The run is still a real test, because the prediction was re-frozen before it
 
-Nothing is spent until the founder rules. The fill has not started.
+`registry/T6.deviation.json`, frozen before the fill. **`T6.plan.json` is untouched** — sha256
+still `e6595def…`, and it must never be edited now that its pool has entries. Four claims survive
+the deviation *unconditionally*, each a floor-versus-ceiling comparison over the 63 known seats:
+
+1. **Rank 1 is W00 or UI-B, and no other seat.** (863 > 542)
+2. **W01, the pole, is 63rd or 64th.** (19 < 323)
+3. **UI-A cannot take rank 1.** (353 < 863)
+4. **UI-A cannot finish 64th.** (339 > 19)
+
+Claim 1 is the one this run can actually falsify, and it is not trivial: it says 62 of the 64 seats
+are excluded from the prize whatever the two sealed founder allocations turn out to be.
+
+## The ninth refusal is recoverable after all — at zero cost
+
+`backend/packet/src/ciphertexts.ts` runs the **pool-state gate first**, before the signature and
+before the overwrite check. So a wallet that already sealed for pool 27 and tries again *after* it
+fills is refused with `pool filled` — not `already sealed`. **UI-A or UI-B can read the real copy
+after the seal**, which is the half option (a) looked like it gave up. No transaction is built, and
+gate 1 returns before any write, so the paid seat is untouched either way.
+
+That instruction goes in its own message after the seal, never bundled with another (§H26).
+
+## The field, exactly
+
+`t6Field()` minus W62 — `cappedField` keys off the seat index, so W02..W61 are byte-identical to
+the frozen plan. Seats shift one later from W00 on, which moves the rent band boundary:
+
+```
+seat 0  UI-A   seated     seat 2  W00    seat 9   W07   4441080
+seat 1  UI-B   seated     seat 3  W01    seat 10  W08   4446160
+                          seats 4-63  W02..W61
+```
+
+Ninth headless late attempt is **W71**, a funded spare. **Not W62** — it holds 0.045553840, under
+an entry, so its revert could be an insufficient-funds revert wearing the right error code, which
+is the exact confound `refusedSeatsPayNothing` exists to exclude.
 
 ## §H20 confirmed on a fourth pool, by accident
 
