@@ -180,13 +180,18 @@ describe('availability', () => {
 
 describe('blockedTerritoryPhrase', () => {
   // The block screen names the whole list; an entry surface has no room for
-  // fourteen, so the same source produces a capped form rather than a second
+  // fifteen, so the same source produces a capped form rather than a second
   // hand-typed one.
   it('names every territory when uncapped, and ends with "and"', () => {
     const phrase = blockedTerritoryPhrase();
+    const names = availability().blocked;
     expect(phrase).to.include('India');
-    expect(phrase).to.include('and Singapore');
-    for (const name of availability().blocked) expect(phrase, name).to.include(name);
+    // The join, not today's schedule. This read `and Singapore` until `US` was
+    // added on 2026-09-21 and pushed Singapore off the end — the assertion was
+    // about the "and", and pinning it to whichever territory happened to sort
+    // last made a founder-owned config edit look like a code failure.
+    expect(phrase).to.include(`and ${names[names.length - 1]}`);
+    for (const name of names) expect(phrase, name).to.include(name);
   });
 
   it('caps at n and counts the rest', () => {

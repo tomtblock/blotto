@@ -22,9 +22,10 @@ four layers above it.
 
 ---
 
-## Live — schedule version 3 (2026-09-12)
+## Live — schedule version 4 (2026-09-21)
 
-Fourteen country codes, from the rows of PID §9 marked confirmed.
+Fifteen country codes, from the rows of PID §9 marked confirmed, plus the United States at
+country level (founder instruction 2026-09-21 — see the row and the note below it).
 
 | Code | Territory | PID §9 line | Status |
 |---|---|---|---|
@@ -42,6 +43,14 @@ Fourteen country codes, from the rows of PID §9 marked confirmed.
 | `SG` | Singapore | "Singapore" | Confirmed |
 | `MY` | Malaysia | "Malaysia" | Confirmed |
 | `ID` | Indonesia | "Indonesia" | Confirmed |
+| `US` | United States | §9 names twelve **states**, not the country; §11 D9 | Confirmed as a **country-level** block, founder instruction 2026-09-21 |
+
+**The US row is wider than PID §9 asks for, deliberately.** §9 blocks twelve states. Blocking
+those twelve is not possible today — see *The US states* below — and the choice was between a
+schedule that names them and silently admits every one, and a country-level block that is
+enforceable now. The founder took the second on 2026-09-21 (register row D-B3-3). It is the
+stricter of the two and can be narrowed to the twelve the day a region-capable source is
+contracted; nothing about it is irreversible.
 
 "GCC" is the Gulf Cooperation Council, whose membership is those six states.
 
@@ -62,6 +71,11 @@ The entry service therefore **refuses to start** with any of these in the schedu
 (`assertRegionCapability`, `backend/packet/src/service.ts`). That is deliberate, and it is the right
 behaviour: a rule that cannot be applied must not look like one that is. The alternative is a
 schedule that names twelve states and admits every one of them silently.
+
+**Since 2026-09-21 this holds nothing open.** `US` is blocked at country level, so every one of
+the twelve is refused along with the other thirty-eight states. What is still held is the
+*narrowing*: replacing the country block with the twelve states, so the rest of the US can be
+served. That is what the two items below buy, and until they are bought the country block stands.
 
 Two things must happen before these can be added:
 

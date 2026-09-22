@@ -143,9 +143,17 @@ export function territoryAllowed(
  * together.
  */
 export const DEFAULT_TERRITORY_SCHEDULE: TerritorySchedule = {
-  version: 3,
+  version: 4,
   posture: 'block-list',
   allowed: [],
-  blocked: ['AE', 'AU', 'BE', 'BH', 'CN', 'HK', 'ID', 'IN', 'KW', 'MY', 'OM', 'QA', 'SA', 'SG'],
-  updated: '2026-09-12',
+  blocked: [
+    'AE', 'AU', 'BE', 'BH', 'CN', 'HK', 'ID', 'IN', 'KW', 'MY', 'OM', 'QA', 'SA', 'SG',
+    // Country level, and wider than PID §9's twelve states on purpose: the
+    // geo source of record returns a subdivision NAME and never an ISO
+    // 3166-2 code, so `assertRegionCapability` refuses to start on a `US-SS`
+    // row. Founder instruction 2026-09-21, register row D-B3-3. Narrows to
+    // the twelve the day a region-capable source is contracted.
+    'US',
+  ],
+  updated: '2026-09-21',
 };

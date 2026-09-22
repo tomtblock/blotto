@@ -36,6 +36,7 @@ const COUNTRY_NAMES: Record<string, string> = {
   CN: 'China',
   HK: 'Hong Kong',
   ID: 'Indonesia',
+  US: 'United States',
   IN: 'India',
   KW: 'Kuwait',
   MY: 'Malaysia',
