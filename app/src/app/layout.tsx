@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Big_Shoulders, JetBrains_Mono, Space_Grotesk } from "next/font/google";
+import localFont from "next/font/local";
 import { COPY } from "@/copy";
 import { AuthProvider } from "@/wallet/auth-provider";
 import { QueryProvider } from "@/query/query-provider";
@@ -9,27 +9,50 @@ import { SiteAntics } from '@/components/blott/SiteAntics';
 import { SkipLink } from '@/components/shell/skip-link';
 import { RouteFocus } from '@/components/shell/route-focus';
 
+// SELF-HOSTED, NOT FETCHED (2026-09-22). These three were `next/font/google`,
+// which downloads the font files from Google at BUILD TIME. That made every
+// build depend on a third-party fetch succeeding, and it failed in the way
+// network dependencies fail — intermittently, and never reproducibly: PR 159
+// saw `cea3128` build clean and `0c77466` die eleven minutes later on
+// identical app code, with `next/font/google queries have exactly one entry`.
+// The same flake red-failed `app-lighthouse` on main. A build that can break
+// because a CDN was slow eventually breaks a DEPLOY, not just a check.
+//
+// The files in ../fonts are the latin-subset VARIABLE woff2 Google itself
+// serves, downloaded once and committed (~99 KB total). Each ships with its
+// SIL Open Font License 1.1 text alongside, which is what self-hosting
+// requires; see ../fonts/README.md for the exact source URL of each.
+//
+// The rendered result is unchanged: same families, same weights, same CSS
+// variable names, so no consumer of --font-* needs to know.
+
 // The display face (D1): Big Shoulders — a condensed athletic family built
 // for scoreboards and stadium signage, which is exactly what prize amounts,
 // ranks and countdowns are. Weighted heavy; used with restraint.
-const bigShoulders = Big_Shoulders({
+const bigShoulders = localFont({
+  src: "../fonts/big-shoulders-latin-var.woff2",
   variable: "--font-big-shoulders",
-  subsets: ["latin"],
-  weight: ["600", "700", "800"],
-  // next/font has no fallback metrics for this family (build warns and skips
-  // the generated fallback), so pin an explicit condensed-ish stack instead.
+  display: "swap",
+  // The variable axis this file carries; the design uses 600-800 of it.
+  weight: "600 800",
+  // No fallback metrics exist for this family, so pin an explicit
+  // condensed-ish stack rather than let a generated one be skipped.
   adjustFontFallback: false,
   fallback: ["Arial Narrow", "Arial", "sans-serif"],
 });
 
-const spaceGrotesk = Space_Grotesk({
+const spaceGrotesk = localFont({
+  src: "../fonts/space-grotesk-latin-var.woff2",
   variable: "--font-space-grotesk",
-  subsets: ["latin"],
+  display: "swap",
+  weight: "300 700",
 });
 
-const jetbrainsMono = JetBrains_Mono({
+const jetbrainsMono = localFont({
+  src: "../fonts/jetbrains-mono-latin-var.woff2",
   variable: "--font-jetbrains-mono",
-  subsets: ["latin"],
+  display: "swap",
+  weight: "100 800",
 });
 
 // The page title and description are the FIRST user-facing strings a search

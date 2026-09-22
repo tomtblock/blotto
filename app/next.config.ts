@@ -158,8 +158,9 @@ const nextConfig: NextConfig = {
     const csp = [
       "default-src 'self'",
       `script-src 'self' 'unsafe-inline'${dev ? " 'unsafe-eval'" : ""}`,
-      // next/font/google self-hosts at build time, so no font origin is
-      // contacted at runtime; the inline styles are Tailwind's and Next's.
+      // The three faces are next/font/local over woff2 committed in
+      // src/fonts, so no font origin is contacted at build time OR at
+      // runtime; the inline styles are Tailwind's and Next's.
       "style-src 'self' 'unsafe-inline'",
       "font-src 'self' data:",
       "img-src 'self' data: blob: https:",
