@@ -96,7 +96,7 @@ this table, it does not close it. The ✓ column says which rows it covers.
 | | §5 | Prose implies entry order can affect ranking | Entry order decides only the indivisible remainder and the published leaf order. Rank comes from battles won then stats won (D3-B) |
 | | §4.5 evidence table (cited by §8.3) | "Paid 16 who are genuinely top-16" | One paid place. The skill evidence needs restating as a rank-1 rate |
 | | §8.1, §8.5 | "the operator retains 20%" — §8.5 is headed "The 20%" | Margin is entries minus the fixed pot: `1 − 40/seats` of intake, nil at the 40-seat floor and 37.5% at a full 64. **This is the section counsel reads** |
-| | §9 | A blocked list including the US states and sanctioned jurisdictions | `config/territories.json` carries fourteen country codes; the US states and the sanctions row are not enforceable yet, for the two different reasons in `config/territories.README.md` |
+| | §9 | A blocked list including the US states and sanctioned jurisdictions | `config/territories.json` carries fifteen country codes. **`US` is blocked at country level** (D-B3-3, 2026-09-21) — wider than §9’s twelve states, because the twelve are not enforceable; the sanctions row is still held, for the separate reason in `config/territories.README.md` |
 | | §10 C5, C8; §11 D4 | "Merkle claim", "KYC at claim", "claim window (30d)" | No claim step exists, so none of the three has a referent. The KYC switch is off at launch |
 | | §10 C9 | "staffed 24h review" | The published window is **12 hours**; the program's permissionless safeguard is **7 days** and is never published as the deadline |
 

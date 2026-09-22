@@ -78,12 +78,19 @@ describe('the committed territory schedule', () => {
     expect(committed.version).to.be.at.least(1);
   });
 
-  it('carries the fourteen confirmed PID §9 countries and nothing else', () => {
+  // Schedule version 4 (founder instruction 2026-09-21, register row
+  // D-B3-3) adds `US`. It is the one code here that is NOT a confirmed PID §9
+  // country row — §9 names twelve US states, which cannot be enforced while
+  // the geo source resolves no region, so the country stands in for them and
+  // is deliberately wider. Pinned by hand, like the rest, because the
+  // schedule is founder-owned and a silent edit to it is the thing this test
+  // exists to refuse.
+  it('carries the fourteen confirmed PID §9 countries, plus US at country level, and nothing else', () => {
     const committed = parseTerritorySchedule(
       readFileSync(join(__dirname, '..', '..', '..', 'config', 'territories.json'), 'utf8')
     );
     expect(committed.blocked).to.deep.equal([
-      'AE', 'AU', 'BE', 'BH', 'CN', 'HK', 'ID', 'IN', 'KW', 'MY', 'OM', 'QA', 'SA', 'SG',
+      'AE', 'AU', 'BE', 'BH', 'CN', 'HK', 'ID', 'IN', 'KW', 'MY', 'OM', 'QA', 'SA', 'SG', 'US',
     ]);
     // A block-list with a populated allow-list misstates the policy; the
     // parser refuses it, and this says so at the committed file too.
@@ -171,7 +178,12 @@ describe('territoryAllowed (block-list posture — the 2026-08-28 launch policy)
   const cases: Array<[string | undefined | null, string | undefined, boolean, string]> = [
     ['AR', undefined, true, 'an unlisted country is allowed'],
     ['GB', undefined, true, 'a formerly-allowlisted country stays allowed'],
-    ['US', 'NY', true, 'unlisted country with a region is allowed'],
+    ['AR', 'B', true, 'unlisted country with a region is allowed'],
+    // Was ['US','NY',true] until 2026-09-21: US was this file's example of an
+    // UNLISTED country, and D-B3-3 listed it. The case it demonstrated is real
+    // and still needs a country, so it moved; the inverse is now pinned below it.
+    ['US', 'NY', false, 'the United States is blocked at country level, whatever the state (D-B3-3)'],
+    ['US', undefined, false, 'the United States is blocked with no region resolved at all'],
     ['BE', undefined, false, 'Belgium is blocked'],
     ['AU', undefined, false, 'Australia is blocked'],
     ['AU', 'NSW', false, 'a blocked country stays blocked whatever the region'],

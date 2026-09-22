@@ -54,7 +54,7 @@ entrants who think about it place first at roughly three to five times the every
 | 2 | Everyone plays everyone | No pairing, no bracket, no draw of opponents | Removes the one place chance usually enters a tournament: who you are matched against |
 | 3 | Seven sealed decisions per entry | Seven independent allocations, each scored against the field; seven timing samples for integrity review | Repeated decisions separate skill from guessing; the sample supports detection |
 | 4 | Integrity review and sanction | Five published signals, a named human reviewer, a signed append-only log, a hold on the prize, an appeal to a different reviewer; a forfeited prize passes to the next eligible player, never to the operator | A competition of skill must be able to show its results are genuine |
-| 5 | Territory block-list | Fourteen countries refused at entry; unresolvable locations refused; the service refuses to start if it cannot enforce its own list | The client does not offer the service where it believes it cannot lawfully do so |
+| 5 | Territory block-list | Fifteen countries refused at entry, the United States among them; unresolvable locations refused; the service refuses to start if it cannot enforce its own list | The client does not offer the service where it believes it cannot lawfully do so |
 | 6 | 18+ attestation | A wallet-signed, versioned statement recorded before any payment; entry refused without it | Age policy before money moves |
 | 7 | Pre-funded fixed prize | The prize is a constant per tier, moved into the pool's account before entries open, the same whatever the field size; entries are paid to the operator, not into the prize | The operator is not a stakeholder between players; no player's money is at risk to another player; no percentage is taken from a pot |
 | 8 | Sanctions screening before payment | Every wallet is screened against the OFAC SDN list at entry and again before any prize is paid; a match or an unanswerable screening places an on-chain hold | Strict-liability sanctions compliance; nothing is paid unscreened |
@@ -317,7 +317,7 @@ verification at payout, which is off.
 
 | Fact | Source |
 |---|---|
-| Posture is a block-list: available everywhere except fourteen country codes: AE, AU, BE, BH, CN, HK, ID, IN, KW, MY, OM, QA, SA, SG (schedule version 3, 2026-09-12) | `config/territories.json`; one row per code with its reason in `config/territories.README.md` |
+| Posture is a block-list: available everywhere except fifteen country codes: AE, AU, BE, BH, CN, HK, ID, IN, KW, MY, OM, QA, SA, SG, US (schedule version 4, 2026-09-21). `US` is a country-level block standing in for the twelve states of PID §9, which cannot be enforced while the geo source resolves no region — D-B3-3 | `config/territories.json`; one row per code with its reason in `config/territories.README.md` |
 | Fail-closed at every layer: an unresolvable, malformed or ambiguous location is refused; no configured geo source refuses; the client withholds the whole play flow (attestation included) until an explicit "allowed" | `backend/packet/src/territories.ts` (`territoryAllowed`); `app/src/entry/geo-gate.ts` |
 | The entry service refuses to start if the schedule carries a sub-national code the location vendor cannot resolve, so a rule that cannot be applied never looks like one that is | `backend/packet/src/service.ts` (`assertRegionCapability`); `scripts/check-territories.ts` fails CI on the same condition |
 | Enforcement is at entry, never at payment: a lawful entrant who later travels is still paid or refunded | `HOW-IT-WORKS.md`; the payout path carries no location check |
@@ -555,7 +555,7 @@ would regard a single-winner, paid-entry, multi-entrant format as a lottery with
 
 ### 6.3 European Union and other markets the schedule leaves open
 
-The schedule blocks fourteen countries and opens everywhere else. The product document lists the
+The schedule blocks fifteen countries and opens everywhere else. The product document lists the
 UK, the remaining US states, Germany, France, the Nordics, Ireland, the Netherlands, Spain, Italy,
 Canada ex-Ontario, Brazil, Mexico, Colombia, Chile, Japan and South Korea as "open subject to
 counsel confirmation". That confirmation has not been given, and a lay reading suggests several of
@@ -764,7 +764,7 @@ Stated so that counsel advises on the product that exists. Sources: `docs/COMPLI
 | External legal opinion | None obtained. Register row R1 (ratified 2026-08-26, reaffirmed 2026-09-16 as R1-b) records the decision to proceed at the 0.1 SOL tier on the client's own analysis with opinions pursued in parallel; one written opinion is a hard gate for the 0.5 SOL tier and above (R6). The architect recommended the opposite and it is recorded |
 | Operating entity | Not formed |
 | Terms of service, privacy notice, DPIA, support channel, complaints route, governing-law clause | None exist as documents. `config/terms.json` is a version ledger; the clickwrap's "the terms" links to the rules page |
-| The United States | Entirely open in the software. The location vendor cannot resolve a state, the service refuses to start with a state code in the schedule, and no US state has an opinion. Options: block at country level now (one line), or contract a region-capable vendor |
+| The United States | **Blocked at country level** since schedule version 4 (founder instruction 2026-09-21, register row D-B3-3). This is wider than PID §9, which names twelve states: the location vendor of record returns a subdivision *name* and never an ISO 3166-2 code, so the entry service refuses to start with any state code in the schedule, and the live choice was a schedule naming twelve states that admits all twelve or a country block that works. No US state has an opinion. The block can be narrowed to the twelve once a region-capable vendor is contracted; counsel question 6 asks whether it should be |
 | Spain, Italy, France and other "open subject to confirmation" markets | Open in the software; see Part 6.3 |
 | Sanctioned jurisdictions as country codes | Held by founder ruling pending counsel; wallets are screened against live lists regardless |
 | Identity verification | Switch exists and is off (threshold 0). Under one paid place, any threshold below the smallest prize would hold every payout at every tier, and the seven-day permissionless release presents no identity, so switching it on needs design work first |
@@ -772,7 +772,7 @@ Stated so that counsel advises on the product that exists. Sources: `docs/COMPLI
 | Location vendor of record; second screening vendor | Not contracted (register row D-E14 makes both a precondition of the first pool with strangers in it) |
 | Mainnet | Never run; no real money has entered the program. Independent security review is scheduled after ten settled pools; the entry price is capped at 0.1 SOL until then |
 | Lost-ciphertext refund | Published as a rule; executed by a manual admin transaction, not by code |
-| Post-seal liveness | Refunds are permissionless only until a pool seals; if the settlement key were permanently lost after seal, that pool's prize and entries have no on-chain route to anyone |
+| Post-seal liveness | **Corrected 2026-09-21; version 1 named the wrong key.** The *settlement* signer is recoverable — `set_settlement_signer` rotates it under the admin authority (`lib.rs:147`, `instructions/admin.rs:154`), so losing it strands nothing. The key with no recovery is the **pool sealing key**: entries are encrypted to it on the player's own device, no instruction can rotate or replace it, and `trigger_refund` requires `PoolState::Open` (`instructions/refund.rs:70`). So a pool whose sealing key is lost *after* it seals can never be revealed, settled or refunded, and its prize and entries have no on-chain route to anyone. Refunds remain permissionless only while a pool is Open |
 | PID v0.5 | Materially behind the build (it still describes sixteen paid places and an 80/20 split); a v0.6 draft exists. `01_PRODUCT_FACTS` and `AS-BUILT.md` describe the build; this brief is written from those and the code |
 
 ---
