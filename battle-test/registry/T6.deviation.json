@@ -1,0 +1,610 @@
+{
+  "schema": "blotto-rehearsal-deviation/1",
+  "test": "T6",
+  "kind": "deviation addendum - frozen BEFORE the run, alongside an UNEDITED plan",
+  "amends": "registry/T6.plan.json",
+  "amendsSha256": "e6595def6642a1c6f74ad87ab2c55b48bba87d6827b9bd671c689211e3bf1297",
+  "planUnedited": "T6.plan.json is byte-identical to the version merged in PR 156 at 2026-09-19T19:11:28Z. It is NOT edited here and must never be: its pool has entries. This file records what the run will actually be, and what can still be claimed about it, and is itself frozen before the fill.",
+  "frozenAt": "2026-09-22T00:10:03.073Z",
+  "pool": {
+    "id": 27,
+    "pda": "3kkWSsX5BgpyVirejCRMAFXrdhoSnEdrHRQz4TQ4rvh9"
+  },
+  "deviation": {
+    "what": "UI-B registered as seat 1 instead of arriving late and being refused.",
+    "why": "F-35 carried two founder actions in one numbered list (DRIFT.md H26). The founder entered both wallets.",
+    "ruling": "The founder chose option (a) of F-36 on 2026-09-22: run on pool 27 with UI-B as a seat.",
+    "consequences": [
+      "W62 is dropped from the field - 64 seats, and UI-B occupies one of them.",
+      "Every wallet from W00 onward shifts one seat later, so the per-seat rent band boundary moves: W07 is now the last seat at 4441080 and W08 the first at 4446160.",
+      "UI-B allocation is UNKNOWN and unknowable before reveal - it is sealed. The founder was told to play as they liked, because a refused attempt is never scored.",
+      "Every expectedRank, expectedScoreHalf and expectedLamports in T6.plan.json is therefore void, as is its resultsRoot. They are superseded by the bounds below.",
+      "The ninth late attempt is now W71, a funded spare, in place of UI-B - so nine attempts are still refused, but all nine are headless and NO HUMAN READS THE REFUSAL. That is the cost of option (a) and it is not recovered here."
+    ]
+  },
+  "correctionToF36": {
+    "claimed": "F-36 said the W00 floor of 875 could fall toward 861, under a field ceiling of 868, so a field seat might overtake it. That is wrong.",
+    "actual": "868 is the THEORETICAL ceiling - a seat that wins every battle against every other seat. No actual seat is near it: the best non-W00 seat in this field scores 528 (W29), ceiling 542. The W00 floor is 863. The margin is 321 half-points, not 7.",
+    "soTheRealRisk": "is not a field seat overtaking W00. It is UI-B itself. A three-stat concentration at 34/33/33 scores 871 and TAKES RANK 1 - and that is an ordinary strong shape, not a contrived one."
+  },
+  "unknown": {
+    "seat": 1,
+    "wallet": "UI-B",
+    "scoreHalfRange": [
+      0,
+      882
+    ],
+    "effectOnEverySeatElse": "+0 to +14 half-points, being one 7-battle series at 2 half-points a win",
+    "whyUnknowable": "The allocation is sealed until the pool reveals. No probe, query or admin path reads it early. That is the product working as specified, so this risk is unmeasurable in advance BY DESIGN."
+  },
+  "unconditional": {
+    "_": "True whatever UI-B allocated. Each is a floor-vs-ceiling comparison over the 63 known seats.",
+    "rank1IsW00orUIB": {
+      "claim": "Rank 1 goes to W00 or to UI-B. No other seat can take it.",
+      "derivation": "W00 floor 863 > best other ceiling 542 (W29 528 + 14)",
+      "holds": true
+    },
+    "poleIsLastOrSecondLast": {
+      "claim": "W01, the pole, finishes 63rd or 64th.",
+      "derivation": "W01 ceiling 19 < next-worst floor 323 (W07)",
+      "holds": true
+    },
+    "uiACannotWin": {
+      "claim": "UI-A cannot take rank 1.",
+      "derivation": "UI-A ceiling 353 < W00 floor 863",
+      "holds": true
+    },
+    "uiACannotComeLast": {
+      "claim": "UI-A cannot finish 64th.",
+      "derivation": "UI-A floor 339 > W01 ceiling 19",
+      "holds": true
+    }
+  },
+  "conditional": {
+    "w00Wins": "W00 takes rank 1 and the whole 4000000000 unless UI-B scores above it. W00 lands in [863, 877].",
+    "uiBMustClear": "UI-B must clear 863 of a possible 882 half-points to beat the W00 floor.",
+    "thresholdShape": "Three stats at 26 or above beats every capped field seat on three of five stats, since the field caps at 25 and 26*3 = 78 <= 100. So the question is simply whether UI-B concentrated.",
+    "shapeTable": [
+      {
+        "shape": "the UI-A recipe (one stat to 25)",
+        "uiBRank": 61,
+        "uiBScoreHalf": 346,
+        "w00Rank": 1,
+        "w00ScoreHalf": 877
+      },
+      {
+        "shape": "even split, 20 on each",
+        "uiBRank": 63,
+        "uiBScoreHalf": 310,
+        "w00Rank": 1,
+        "w00ScoreHalf": 877
+      },
+      {
+        "shape": "two stats at 50",
+        "uiBRank": 63,
+        "uiBScoreHalf": 14,
+        "w00Rank": 1,
+        "w00ScoreHalf": 870
+      },
+      {
+        "shape": "three stats at 34/33/33",
+        "uiBRank": 1,
+        "uiBScoreHalf": 871,
+        "w00Rank": 2,
+        "w00ScoreHalf": 869
+      },
+      {
+        "shape": "three stats at 26/26/48",
+        "uiBRank": 2,
+        "uiBScoreHalf": 868,
+        "w00Rank": 1,
+        "w00ScoreHalf": 872
+      },
+      {
+        "shape": "everything on one stat",
+        "uiBRank": 64,
+        "uiBScoreHalf": 11,
+        "w00Rank": 1,
+        "w00ScoreHalf": 873
+      }
+    ]
+  },
+  "scoresAmongThe63KnownSeats": {
+    "_": "Computed now, before the run, from the same TypeScript engine the crank uses.",
+    "W00": 863,
+    "UI-A": 339,
+    "W01": 5,
+    "bestOther": {
+      "wallet": "W29",
+      "scoreHalf": 528
+    },
+    "worstOther": {
+      "wallet": "W07",
+      "scoreHalf": 323
+    }
+  },
+  "seatMap": [
+    {
+      "seat": 0,
+      "wallet": "UI-A",
+      "route": "ui",
+      "role": "field",
+      "status": "already registered"
+    },
+    {
+      "seat": 1,
+      "wallet": "UI-B",
+      "route": "ui",
+      "role": "field - UNPLANNED",
+      "status": "already registered"
+    },
+    {
+      "seat": 2,
+      "wallet": "W00",
+      "route": "direct",
+      "role": "wall",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 3,
+      "wallet": "W01",
+      "route": "direct",
+      "role": "pole",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 4,
+      "wallet": "W02",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 5,
+      "wallet": "W03",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 6,
+      "wallet": "W04",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 7,
+      "wallet": "W05",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 8,
+      "wallet": "W06",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 9,
+      "wallet": "W07",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 10,
+      "wallet": "W08",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 11,
+      "wallet": "W09",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 12,
+      "wallet": "W10",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 13,
+      "wallet": "W11",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 14,
+      "wallet": "W12",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 15,
+      "wallet": "W13",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 16,
+      "wallet": "W14",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 17,
+      "wallet": "W15",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 18,
+      "wallet": "W16",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 19,
+      "wallet": "W17",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 20,
+      "wallet": "W18",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 21,
+      "wallet": "W19",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 22,
+      "wallet": "W20",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 23,
+      "wallet": "W21",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 24,
+      "wallet": "W22",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 25,
+      "wallet": "W23",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 26,
+      "wallet": "W24",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 27,
+      "wallet": "W25",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 28,
+      "wallet": "W26",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 29,
+      "wallet": "W27",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 30,
+      "wallet": "W28",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 31,
+      "wallet": "W29",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 32,
+      "wallet": "W30",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 33,
+      "wallet": "W31",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 34,
+      "wallet": "W32",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 35,
+      "wallet": "W33",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 36,
+      "wallet": "W34",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 37,
+      "wallet": "W35",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 38,
+      "wallet": "W36",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 39,
+      "wallet": "W37",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 40,
+      "wallet": "W38",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 41,
+      "wallet": "W39",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 42,
+      "wallet": "W40",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 43,
+      "wallet": "W41",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 44,
+      "wallet": "W42",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 45,
+      "wallet": "W43",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 46,
+      "wallet": "W44",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 47,
+      "wallet": "W45",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 48,
+      "wallet": "W46",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 49,
+      "wallet": "W47",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 50,
+      "wallet": "W48",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 51,
+      "wallet": "W49",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 52,
+      "wallet": "W50",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 53,
+      "wallet": "W51",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 54,
+      "wallet": "W52",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 55,
+      "wallet": "W53",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 56,
+      "wallet": "W54",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 57,
+      "wallet": "W55",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 58,
+      "wallet": "W56",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 59,
+      "wallet": "W57",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 60,
+      "wallet": "W58",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 61,
+      "wallet": "W59",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 62,
+      "wallet": "W60",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    },
+    {
+      "seat": 63,
+      "wallet": "W61",
+      "route": "direct",
+      "role": "field",
+      "status": "to be filled by enter.ts"
+    }
+  ],
+  "perSeatSunkLamports": {
+    "seats0to9": "4441080",
+    "seats10plus": "4446160"
+  },
+  "perSeatSunkNote": "Seat 0 is UI-A and seat 1 is UI-B; both are MEASURED at 4441080 already (UI-A 10.568905266 -> 10.464464021, UI-B 11.673357239 -> 11.568915997, each less 100000000 entry and a small fee). The band boundary sits between W07 (seat 9) and W08 (seat 10).",
+  "lateAttempts": {
+    "count": 9,
+    "wallets": [
+      "W63",
+      "W64",
+      "W65",
+      "W66",
+      "W67",
+      "W68",
+      "W69",
+      "W70",
+      "W71"
+    ],
+    "substitution": "W71 replaces UI-B as the ninth. It is a funded spare, in neither the field nor the original late list.",
+    "expectedError": "PoolNotOpen",
+    "expectedErrorCode": 6000,
+    "expectedLamportsSpent": "the transaction fee only - no entry, no pass, no rent",
+    "notW62": "W62 holds 0.045553840 SOL, below an entry, so a revert from it could be an insufficient-funds revert wearing the right error code. W71 holds 0.15 and cannot be confused that way."
+  },
+  "passCriteria": [
+    "Pool 27 reaches Paid with exactly 64 entrants.",
+    "All nine late attempts revert with PoolNotOpen (6000), not PoolFull (6010), and each spends a transaction fee and nothing else.",
+    "Exactly one seat is paid, and it is paid the whole 4000000000.",
+    "The paid seat is W00 or UI-B - the unconditional claim above, and the one this run can actually falsify.",
+    "W01 finishes 63rd or 64th; UI-A finishes neither 1st nor 64th.",
+    "The recomputed results root equals the on-chain results_root.",
+    "Per-seat sunk cost matches the two bands; the vault ends at 650240; money conserves.",
+    "NOT a criterion any more: that a human reads the refusal copy. Option (a) gives that up, and no headless wallet can stand in for it."
+  ]
+}

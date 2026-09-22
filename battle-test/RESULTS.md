@@ -10,7 +10,7 @@ open item in the report; CI refuses the default branch otherwise.
 | T3 | Seal at the minimum field (40) + pause | — | not started | — | — | — | — |
 | T4 | Full pool — UI wallet wins | 16 | Paid | 64 | PR 133, 2026-09-16T16:22:00Z | 2026-09-17T02:23Z | **PASS** |
 | T5 | Full pool — headless wallet wins | 18 | Paid | 64 | 144, 2026-09-17T22:51:00Z | 2026-09-18T01:38Z | **PASS** |
-| T6 | Oversubscribed + load | 23 (not yet open) | frozen, not started | — | PR pending, 2026-09-19 | — | — |
+| T6 | Oversubscribed + load | 27 | Paid | 64 | PR 156, 2026-09-19T19:11:28Z | 2026-09-22T00:27Z | **PASS\*** |
 | T7 | Same device → review | — | not started | — | — | — | — |
 | T8 | Verify page + non-founder recompute | — | not started | — | — | — | — |
 
@@ -122,6 +122,55 @@ manufactures the strongest detection signal — **for the founder and counsel**)
 criterion no tool checked; checked by hand, it passes).
 
 ---
+
+## T6 — pool 27 — oversubscribed, and the field was not the one that was frozen
+
+**PASS\*** — every criterion the run could carry, with one knowingly surrendered. Judged against
+`registry/T6.deviation.json`, frozen at commit `0c77466` before a lamport moved, **not** against
+`T6.plan.json`. The plan is unedited (`e6595def…`) and predicts a field that did not run, so
+`T6.reconcile.md` reports FAIL against it and is right to. `registry/T6.verdict.md` is the verdict.
+
+**What deviated.** UI-B registered as seat 1 instead of arriving late and being refused — my
+instruction carried two founder actions in one numbered list (§H26). The founder ruled option (a):
+run anyway. W62 was dropped, every wallet from W00 on shifted one seat later, and UI-B's allocation
+was unreadable until reveal.
+
+**The four claims frozen before the run, all held:**
+
+| claim | outcome |
+|---|---|
+| Rank 1 is W00 or UI-B, no other seat (863 floor > 542 ceiling) | **HELD** — W00 |
+| W01, the pole, is 63rd or 64th (19 < 323) | **HELD** — 64th |
+| UI-A cannot take rank 1 (353 < 863) | **HELD** — 62nd |
+| UI-A cannot finish 64th (339 > 19) | **HELD** — 62nd |
+
+**What was measured**
+
+- Paid at 64 entrants, 0 flagged, 0 refunded. W00 took rank 1 on 877 and the whole 4000000000.
+- **Nine late attempts, nine refusals, all `PoolNotOpen` (6000) — never `PoolFull` (6010)**, which
+  confirms the gate-order derivation: the 64th entry seals the pool, so a 65th dies at the state
+  gate and can never reach the capacity gate. Each spent **15000 lamports** — a fee, no entry, no
+  pass, no rent.
+- Every one of the nine was told `pool filled` by the ciphertext route.
+- **Results root VERIFIED — recomputed from 64 seats, MATCH.**
+- Per-seat cost: 7 seats at 4441080, 54 at 4446160, with UI-A, UI-B and W00 completing the low
+  band. **The addendum predicted the boundary would move to W07/W08 because UI-B took a seat, and
+  it did.** §H20's bands now hold on a fifth pool.
+- Treasury 9387645440 (00:05Z, pre-fill) → 15587645440 (00:27Z, harvest), a difference of
+  6200000000 = 62 × 100000000, exactly the entries this run added. Vault ends at its 650240
+  cushion. It reads 11586995200 by 00:33Z because pool 28 opened and drew 4000650240 to seed its
+  own pot and cushion.
+
+**The asterisk.** A person reading the refusal was not tested and no headless wallet can stand in
+for it. It is still reachable on pool 27 — the state gate runs before the signature, so a wallet
+that already sealed there and tries again reads `pool filled` — and that is outstanding with the
+founder.
+
+**And the risk that did not land.** W00 scored 877, the top of its predicted `[863, 877]`, which
+happens only if UI-B lost all seven battles to it. The founder did not concentrate. Had they played
+three stats at 34/33/33 — an ordinary strong shape — UI-B would have scored 871 and taken rank 1.
+The claim would still have held, but 4 SOL would have gone to a seat that was never meant to be in
+the field. That is luck, and the record says so.
 
 ## T2R — pool 21 — the boundary claim, retried and PROVEN. One criterion failed, and it was mine.
 

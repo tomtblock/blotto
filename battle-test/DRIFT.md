@@ -1542,3 +1542,178 @@ and the plan on disk hashes to the merged bytes. The committed reconcile said th
 own strongest freeze. It is regenerated here from the untouched plan and now reads `Freeze: OK`.
 The lesson is narrow and worth stating: **a probe that edits an input must regenerate every output
 it touched, not just the one being examined.**
+
+---
+
+### §H24 — a probe I wrote tonight reported the opposite of what it measured
+
+Characterising the new Helius endpoint, I wrote a 320-call throughput probe. It printed:
+
+```
+  ok 320  failed 0
+  no throttling at this rate
+```
+
+while **fifty-four HTTP 429s scrolled past above it.** `@solana/web3.js` retries a 429 internally with
+500–2000 ms of backoff, so a throttled call still resolves; my probe counted only calls that
+exhausted those retries, and called everything else clean. The verdict line was computed from
+`failed === 0`, which is a quantity that cannot see throttling.
+
+**This is §H9's family for the fourth time** (§H9 stub verdict, §H14 unchecked root, §H21 unchecked
+per-seat cost, now this): a check whose pass condition is not connected to the thing it claims to
+measure. It cost nothing because the 429s were printed by the library and I read them, but had
+the library been quieter I would have recorded "no throttling" as a measured fact.
+
+**Re-measured with raw `fetch`, no client retry in the way**, at two paces:
+
+| pace | calls | 200 | 429 |
+|---|---|---|---|
+| flat out — 17.5/sec | 120 | 66 | **54** |
+| the fill's real pace — ~1.6/sec | 120 | **119** | 1 |
+
+So the endpoint is heavily rate-limited and **that is fine for what we need it for.** The pool 22
+fill ran at about 3.2 s per seat at `--concurrency 1`, roughly two RPC calls a second, which sits
+well inside the clean band. It would NOT be fine at high concurrency, and T6 must stay at
+`--concurrency 1` for that reason rather than out of caution.
+
+What this does not do is make the public endpoint's failure the same thing. There, the failure was
+HARD — `block height exceeded`, a burnt transaction. Here a throttled call is retried and lands.
+Different failure modes, and only one of them costs a seat.
+
+---
+
+### §H25 — the deploy trap fired, and there is now a one-command check for it
+
+PR 157 and PR 158 merged. The web app redeployed itself. **The entry service did not**, exactly as
+`deploy-backend`'s `workflow_dispatch` trigger says it will not, and exactly as it did not after the
+seal fix on 2026-09-18.
+
+The check that proves it is a **differential probe**, and it is better than anything `/health`
+offers because it can fail:
+
+```
+POST /ciphertexts  {pool: <a pool at capacity>, …}   →  {"error":"pool filled"}             deployed
+POST /ciphertexts  {pool: <a pool closed below 64>, …} →  {"error":"pool closed to entries"} both
+```
+
+Gate 1 (the pool's state) runs BEFORE the signature check, so a junk body is enough to read which
+message the running service holds — nothing is written and no signature is needed. Run against the
+live service at 23:00Z:
+
+```
+pool 22 (Paid, 64 seats — it FILLED)  → {"error":"pool closed to entries"}   ← old code
+pool 21 (Closed, 39 seats)            → {"error":"pool closed to entries"}
+```
+
+Both the same, so the service is pre-157. After the deploy, pool 22 must answer `pool filled` and
+pool 21 must not.
+
+**F-2 for the third recorded time.** `/health` answered `ok: true` throughout, with its screening
+sources listed, while running code two commits old. It has no signal for the build it is running,
+which is the same gap that hid a sixteen-hour entry outage (§F-28) and the seal fix's
+merged-but-not-live window. A `BLOTTO_BUILD_COMMIT` is baked into the image by
+`Dockerfile.packet` and `/health` does not report it — the value exists and is simply not surfaced.
+
+### §H26 — a numbered list with two founder actions in it is one instruction, not two
+
+**What happened.** §F-35 set out what T6 needed from the founder as a four-step list: step 2 "enter
+pool 23 as UI-A", step 4 "call GO for UI-B to arrive late and be refused". Steps 1 and 3 were mine.
+Two days later the founder sat down, read the list, and entered **both** wallets. Pool 27 now holds
+UI-A at idx 0 and UI-B at idx 1, and T6's ninth refusal — the only one a human being reads — has
+nowhere to happen.
+
+**Why it is a finding and not an accident.** The list was correct. Every word in it was true, and
+the GO call was named. It still read as one instruction, because **it was delivered as one
+message**, and the thing separating step 2 from step 4 was a sentence rather than a turn. Sequencing
+that a document asserts is not sequencing; sequencing that the medium enforces is. Every other
+founder hand-off this week that had to happen *in order* — the three merges of §F-32, the deploy of
+§F-34 — survived precisely because each one was the only thing asked for in its message.
+
+**The cost, had it not been caught.** Not the seat. The test's headline claim is unconditional —
+W00 takes rank 1 whatever anyone else does — and it is unconditional *because* every field seat
+stays at or below 25. UI-A was instructed inside that range and complied. UI-B was told to play as
+it liked, because a refused attempt is never scored. **So a stat the founder was explicitly told
+they were free to choose is now an input to a claim that says no choice can affect it.** The wall's
+zero-stats are the mechanism: a 26+ stat wins the contested one and the two zeros, three of five,
+and W00's floor of 875 slides toward 861 against a field ceiling of 868.
+
+**And it is not checkable.** The allocation is sealed until the pool reveals. There is no probe, no
+query and no admin path that reads it early — that is the product's central property working
+exactly as specified. This is the first time in the test week that a risk has been *unmeasurable by
+design* rather than merely unmeasured, and it is worth saying plainly that the correct response to
+an unmeasurable risk is not to run the measurement anyway.
+
+**The rule going forward.** One founder action per message. A hand-off that depends on my work
+landing between two of the founder's steps gets the second step in its own message, sent after the
+work lands, containing nothing else. §F-36 writes T6's re-run that way.
+
+**Related:** §F-28 (a step believed done because a document said so), §H21 (a check that printed
+PASS over a criterion it never evaluated). The family resemblance is a record asserting a state of
+the world instead of the world being made to hold it.
+
+### §H27 — preflight's STOP is wrong for any wallet that has never played
+
+**What happened.** Preflighting pool 27, five wallets came back
+`the entry gate REFUSED (403). Do NOT let this wallet play: it would seal, fail, and be barred
+from pool 27 for good.` — W67, W68, W69, W70, W71. Refused again when probed one at a time, so not
+rate limiting. Wallet-specific, persistent, and on the check whose entire job is to stop a wallet
+being barred.
+
+**It was wrong about all five.** `service.ts:330` will not issue a packet without a stored
+age/terms attestation at the current version. `enter.ts:471` attests immediately before asking for
+a packet — the headless equivalent of the clickwrap. **Preflight does not.** So preflight tests a
+sequence no entrant ever performs, and condemns every wallet that has simply never played.
+
+Measured, one call each, nothing registered:
+
+```
+W67  packet before 403  ->  attestation 204  ->  packet after 200
+W68  packet before 403  ->  attestation 204  ->  packet after 200
+W69  packet before 403  ->  attestation 204  ->  packet after 200
+W70  packet before 403  ->  attestation 204  ->  packet after 200
+W71  packet before 403  ->  attestation 204  ->  packet after 200
+```
+
+**Why it survived this long.** It fails SAFE — it says STOP when things are fine — so it has never
+cost a wallet or a lamport, and every wallet it has ever approved had already played and so was
+already attested. A check that is only ever wrong in the cautious direction produces no incident to
+investigate.
+
+**What it nearly cost here.** Five working wallets written off, and the ninth late attempt
+engineered around a wallet that did not need engineering around. The 403 is deliberately generic so
+that the gate is not an oracle a prober can walk (PID §8) — correct design, and it means preflight
+cannot distinguish "unattested" from "refused" by reading the response. The fix is not to parse the
+refusal; it is to run the same sequence `enter.ts` runs.
+
+**And it casts doubt on an earlier reading.** During T4 a W63 refusal was logged as
+`geo BLOCK … attestation-missing-or-stale` and read as a control working as designed. It may
+simply have been an unattested wallet. I am not asserting that it was — the log line names the
+attestation explicitly — but the reading was made without knowing preflight skips the step.
+
+**§H9's family for the FIFTH time** (§H9, §H14, §H21, §H23, §H24, §H27): a check reporting on
+something other than the thing it claims to measure. This one is the first where the check in
+question is itself a safety interlock.
+
+**Fix:** preflight should attest before requesting the packet, exactly as `enter.ts` does, and say
+in its output that it did. Queued after the pool 27 run rather than before it — changing a safety
+interlock while 6.2 SOL is about to move through it is the wrong order.
+
+**FIXED 2026-09-22, and the fix is the sequence rather than the parsing.** `preflight.ts` now makes
+the clickwrap attestation immediately before requesting the packet, exactly as `enter.ts` does, so
+it tests the sequence an entrant actually runs. Verified live on pool 28:
+
+```
+ok    W00 clickwrap accepted at terms v2 (204)
+ok    W00 the entry gate issued a packet (200)
+```
+
+Two details worth keeping:
+
+- **It did not try to parse the refusal.** The gate answers one generic status for every reason it
+  has, deliberately, so that it cannot be walked by a prober (PID §8). Reading the 403 to guess
+  "unattested" would have been a fix that quietly depends on the gate staying leaky.
+- **A third verdict, `WARN`, exists now.** UI-A and UI-B are Privy wallets whose keys are not on
+  this disk, so no clickwrap can be made for them and their refusal is genuinely ambiguous — it may
+  mean nothing worse than "has not accepted the current terms yet". Collapsing that into `ok` or
+  into `STOP` is how §H27 happened in the first place. `WARN` prints, does not claim the wallet is
+  clean, and does not block the run.

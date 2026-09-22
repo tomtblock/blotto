@@ -961,3 +961,199 @@ in about thirty seconds. Your call.
 Frozen, waiting, and needing nothing else from you once the above is done. I will fill the pool, call
 GO for UI-A early and UI-B late, and report against the prediction.
 
+
+---
+
+## F-35 — ▶ ONE BUTTON. That is all that stands between here and T6.
+
+Both PRs are merged and the RPC works. **One thing is left, and it is the same button that caught us
+on Thursday.**
+
+### ▶ GitHub → Actions → "deploy backend" → Run workflow, on `main`, both boxes unticked
+
+**I have confirmed it has not happened, rather than assuming.** I asked the live entry service what
+it would say to a late entrant on a pool that filled:
+
+```
+pool 22  (it FILLED — 64 of 64)   →  "pool closed to entries"     ← the OLD message
+pool 21  (ran out of time at 39)  →  "pool closed to entries"
+```
+
+Both identical, so the service is still running the code from before your merge. Once it deploys,
+pool 22 must answer **"pool filled"** and pool 21 must not. I will check it that way rather than
+trusting the workflow's green tick.
+
+Worth saying plainly: **`/health` has been answering `ok: true` this whole time** while running
+two-commit-old code. That is the same blind spot that hid a sixteen-hour entry outage last week. The
+image already knows which commit it was built from — the health check just does not say. Not urgent,
+but it is why I probe instead of asking it.
+
+### The RPC is in and measured
+
+It is a Helius devnet endpoint, and I checked it is really devnet by its genesis hash rather than by
+the word "devnet" in the URL.
+
+**It is rate-limited, and that turns out to be fine.** Hammered flat out, 45% of calls come back
+refused. At the pace the fill actually runs — roughly two calls a second — 119 of 120 sail through.
+The pool 22 fill spent about three seconds a seat, so it sits comfortably inside that. T6 will run
+one entry at a time for that reason.
+
+That is a real improvement on the free public endpoint, and not only because it is faster: when that
+one refused a call it failed **hard**, killing the transaction and burning the seat. This one just
+waits a moment and goes through.
+
+**▶ One housekeeping item, at your convenience:** you pasted the key into the chat, so rotate it in
+Helius once the test week is done. It takes about thirty seconds. Nothing is pressing about it —
+devnet keys are low-value — but it should not stay live indefinitely. I have kept it out of every
+file in the repository; it lives only in this session's scratch space.
+
+### Then T6 runs, and it needs nothing else from you until I call GO
+
+Pool 23 is open with about eight and a half hours left. When the deploy lands I will:
+
+1. Re-run the probe above and confirm the service answers **"pool filled"**.
+2. Tell you to enter pool 23 as **UI-A**, early — one stat to 25 per battle, and **keep every stat
+   between 1 and 25**, because the frozen plan says a test wallet wins outright and that claim holds
+   for any allocation inside that range.
+3. Fill the other 63 seats.
+4. Call **GO** for **UI-B** to arrive late and be refused — and this time the sentence it reads
+   should be the right one.
+
+If pool 23 lapses before the deploy, nothing is lost: T6 runs on the next pool with the plan
+unedited, exactly as T4 moved from pool 15 to pool 16. It costs one rent cushion, 0.00065 SOL.
+
+
+## F-36 — ▶ FOUNDER ACTION: UI-B is sitting inside pool 27, and T6 needs it standing outside
+
+Both entries landed cleanly. That is the problem: **only one of them was supposed to.**
+
+```
+pool 27  3kkWSsX5BgpyVirejCRMAFXrdhoSnEdrHRQz4TQ4rvh9   Open — 2 of 64
+  idx 0   UI-A    7fpaNh8m…YPve    entry paid, pass minted
+  idx 1   UI-B    6wqLMAS1…u3sa    entry paid, pass minted
+  deadline 2026-09-22T08:02:43Z  ·  outcome if the deadline passed now: refund
+```
+
+**This is my fault, and the shape of it is worth naming.** §F-35 listed "enter as UI-A" and "call GO
+for UI-B" as steps 2 and 4 of a single numbered list, written two days before you sat down to it.
+Read in one sitting it is one instruction with two wallets in it. It should have been two messages,
+separated by a GO call.
+
+### Why it matters more than one seat out of place
+
+T6 is the oversubscription test: **64 land, 9 are refused, and the refused ones are told why.** UI-B
+is the ninth refusal — the only one a person actually reads. Eight headless wallets can prove the
+program refuses them; **no headless wallet can prove a human is told what happened**, which is the
+whole point of the copy fix you merged and deployed on Saturday. With UI-B seated, that half of the
+test has nothing to measure.
+
+There is a second, larger problem. T6's headline claim is unconditional:
+
+> W00 takes rank 1 and the whole 4 SOL **whatever anyone else does**.
+
+That holds because every seat in the field keeps its stats at 25 or below. You held UI-A inside
+1–25 as instructed, and it does. **UI-B was told to play however it liked** — because it was never
+meant to be scored. A single stat at 26 or above, against the zero-stats in W00's wall, can take
+battles off the winner, and the arithmetic no longer closes.
+
+**I cannot check whether it does.** UI-B's allocation is sealed until the pool reveals. That is the
+product working exactly as designed, and it means the risk is unmeasurable in advance rather than
+merely unmeasured.
+
+### Three ways forward
+
+| | field matches the frozen plan | 9 refusals | a person reads the copy | net cost | when |
+|---|---|---|---|---|---|
+| **(a)** run now, UI-B as a 64th seat | **no** — UI-B unplanned, one wallet dropped | 8 of 9 | **no** | ~2.6 SOL | now |
+| **(b)** let pool 27 lapse, re-run clean on pool 28 | **yes** | 9 of 9 | yes | **~0.01 SOL** | ~8 h |
+| **(c)** run now, a new UI-C arrives late | no — same deviation as (a) | 9 of 9 | yes | ~2.6 SOL | now + ~10 min |
+
+### ▶ My recommendation: (b)
+
+**Do nothing, and let pool 27 run out of time at 08:02:43Z tomorrow.** It has 2 entrants against a
+40-seat minimum, so it refunds — both entries come straight back. The only money that does not is
+the rent on the two character passes and the vault cushion: **about 0.0095 SOL between them.**
+
+Then T6 runs on pool 28 with `T6.plan.json` **unedited** — it names no pool, which is exactly why
+this costs nothing. That is the same move T4 made between pools 15 and 16, and the freeze claim
+came out stronger, not weaker: a prediction merged 19:11:28Z on the 19th, against a pool created
+two days later.
+
+It needs you twice more, and this time they will be separate messages:
+
+1. **Tomorrow, when I tell you pool 28 is open:** enter as **UI-A only**. One stat to 25 per battle,
+   every stat between 1 and 25, nothing at 0 and nothing at 26.
+2. **Then stop.** I fill 62 seats, which takes about four minutes. **I will then send one message
+   that says GO and nothing else.** Only at that point do you enter as UI-B — and it should be
+   refused, with a sentence that tells you the pool filled.
+
+### Why not (a)
+
+It spends ~2.6 SOL on a run whose headline criterion cannot be stated in advance and whose central
+observation — a person reading the refusal — does not happen at all. A test that spends real money
+to produce an ambiguous answer is worse than no test, because the ambiguous answer goes in the
+report.
+
+### Why not (c), unless you need it
+
+(c) works, and a third UI wallet is what the manual originally specified, so it is the designed
+configuration rather than a workaround. It buys back the human refusal and all nine attempts.
+But it does **not** buy back the unconditional claim: UI-B is still in the scored field with an
+allocation nobody chose. So the report would have to say "W00 won, and we believe it had to, subject
+to one seat we could not inspect". That sentence is worth avoiding for the price of eight hours.
+
+**Take (c) only if you will not be at a keyboard tomorrow morning.** If you choose it, say so and
+I will tell you how to make the third wallet; it takes a couple of minutes and I fund it.
+
+### ▶ What I need from you
+
+One word: **(a)**, **(b)** or **(c)**. Nothing is spent until you answer — I have not started the
+fill and will not. If you say nothing at all, pool 27 lapses on its own and (b) happens by default,
+which is the one safe way for this to resolve without you.
+
+## F-37 — ▶ FOUNDER ACTION: one entry attempt, ~60 seconds, and T6 is complete
+
+**T6 ran and passed.** Pool 27 filled to 64, W00 took rank 1 and the whole 4 SOL, nine late
+attempts were all refused by the program, and the results root recomputes. `registry/T6.verdict.md`
+has the detail.
+
+One criterion was left open, and you can close it in about a minute.
+
+### What to do
+
+1. Go to blotto.gg and connect as **UI-A** *or* **UI-B** — either is fine.
+2. Try to enter **pool 27**. It has already filled and paid, so there is nothing to win and nothing
+   to lose; this is only about what the screen says.
+3. **Screenshot whatever you see** and send it.
+
+### What I expect, and what would be a finding either way
+
+The server is holding the right sentence. I asked it directly, a minute ago:
+
+```
+pool 27 (filled at 64)        ->  "pool filled"
+pool 22 (filled at 64)        ->  "pool filled"
+pool 21 (ran out of time, 39) ->  "pool closed to entries"
+```
+
+So the entry service now tells the two cases apart, live, which is the fix you merged and deployed
+on Saturday. **What I cannot test is whether the app shows it to you.** Both your wallets are
+already seated in pool 27, and the app may well stop you before it ever asks the server — a
+"you're already in this pool" screen, or a pool page that offers no entry button at all.
+
+- If you see a sentence saying **the pool filled** — the criterion passes and T6 is complete.
+- If you see a **generic error, a spinner, or nothing happens** — that is a real finding and worth
+  more than the criterion was.
+- If the app **won't let you try at all** — also a finding, and a reasonable one: it is correct
+  behaviour that happens to make this untestable from a seated wallet.
+
+All three outcomes are useful. There is no wrong answer here and nothing can be broken by trying.
+
+### Nothing else is waiting on you
+
+Two things on my side, neither needing you: preflight has a bug that wrongly condemns wallets which
+have never played (§H27), which I am fixing now; and **PR 159** is green and carries the whole
+battle-test record.
+
+**▶ One housekeeping item, still open from §F-35:** rotate the Helius key when the test week ends,
+since it passed through the chat. About thirty seconds in the Helius dashboard.
