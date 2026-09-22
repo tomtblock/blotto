@@ -410,6 +410,44 @@ describe('the rules, as pure functions', () => {
 });
 
 describe('the canonical complaint message', () => {
+  it("pins the ANSWER header too, because the cross-signature test does not", () => {
+    // The test in POST /complaints/answer says a lodge signature cannot be
+    // forged into an answer, and its comment credits the different headers.
+    // The test is right; the credit is not. Merging the two headers by hand
+    // leaves it green and the whole suite at 111 passing — the messages also
+    // differ in field layout (wallet/category/pool/text against
+    // kind/decidedBy/note), so a crossed signature fails to verify for a
+    // second reason and the header is protected by nothing but coincidence.
+    // Confirmed by making that edit and re-running, not by reading it.
+    //
+    // Worth pinning precisely here: `Blotto Cup complaint` is a PREFIX of
+    // `Blotto Cup complaint answer`. Only the newline separates them, so the
+    // two domains are one careless edit from collapsing into one.
+    const firstLine = (b: Uint8Array) => new TextDecoder().decode(b).split('\n')[0];
+    const lodge = firstLine(
+      canonicalComplaintMessage({
+        reference: REFERENCE,
+        wallet: WALLET,
+        category: 'decision',
+        pool: null,
+        text: 'hello',
+        signedAt: AT,
+      })
+    );
+    const answered = firstLine(
+      canonicalComplaintAnswerMessage({
+        reference: REFERENCE,
+        kind: 'acknowledged',
+        decidedBy: WALLET,
+        note: 'hello',
+        signedAt: AT,
+      })
+    );
+    expect(lodge).to.equal('Blotto Cup complaint');
+    expect(answered).to.equal('Blotto Cup complaint answer');
+    expect(answered, 'the two domains must not share a header line').to.not.equal(lodge);
+  });
+
   it('is distinct from an appeal or a decision, so no signature can cross over', () => {
     const text = new TextDecoder().decode(
       canonicalComplaintMessage({
@@ -568,8 +606,12 @@ describe('POST /complaints/answer', () => {
   });
 
   it('cannot be forged from a LODGE signature, and vice versa', async () => {
-    // Domain separation, asserted rather than assumed. The two messages have
-    // different headers, so neither signature verifies as the other.
+    // Domain separation. Neither signature verifies as the other — though
+    // NOT only because of the headers, which is what this comment used to
+    // say: the messages also differ in field layout, and merging the headers
+    // leaves this test green. The header now has its own assertion in
+    // 'the canonical complaint message', which does fail when they are
+    // merged. This test covers the property; that one covers the mechanism.
     const { deps: d } = desk();
     await post(d, sign({}));
     const lodge = sign({});
