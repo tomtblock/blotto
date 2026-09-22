@@ -180,8 +180,8 @@ pool's published minimum at the deadline means everyone is refunded
 automatically — 40 for pools opened from now on, and 52 for pool 1, which
 opened under the older rule and keeps the figure its players entered under.
 
-Location is checked by IP against `config/territories.json` (fourteen
-countries blocked as of schedule version 3 — `config/territories.README.md`
+Location is checked by IP against `config/territories.json` (eighteen
+countries blocked as of schedule version 5 — `config/territories.README.md`
 lists them with the reason for each); a VPN can be refused. The age/terms screen is signed once
 per wallet per terms version.
 

@@ -360,7 +360,7 @@ UAE. *(Unchanged from v0.5 — founder-owned, undecided.)*
 ### Enforced today
 
 The schedule in `config/territories.json` is a **block-list**: the service is available everywhere
-except the codes in it. Fifteen countries are blocked as of schedule version 4 (founder instruction
+except the codes in it. Eighteen countries are blocked as of schedule version 5 (founder instruction
 2026-09-12): **India · Belgium · Australia · the six GCC states (UAE, Saudi Arabia, Qatar, Kuwait,
 Bahrain, Oman) · China · Hong Kong · Singapore · Malaysia · Indonesia.**
 

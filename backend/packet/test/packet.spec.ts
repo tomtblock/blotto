@@ -150,11 +150,14 @@ describe('packet issuance', () => {
   // 2026-09-21 (D-B3-3): `US` joins them at country level. It is not a §9
   // country row — §9 names twelve states — so the title says so rather than
   // quietly folding it into the count.
-  it('the schedule blocks all fourteen PID §9 countries plus US — and only those', async () => {
+  it('the schedule blocks all fourteen PID §9 countries plus ES/FR/IT and US — and only those', async () => {
     expect(DEFAULT_TERRITORY_SCHEDULE.posture).to.equal('block-list');
     expect(DEFAULT_TERRITORY_SCHEDULE.allowed).to.deep.equal([]);
 
-    const blocked = ['AE', 'AU', 'BE', 'BH', 'CN', 'HK', 'ID', 'IN', 'KW', 'MY', 'OM', 'QA', 'SA', 'SG', 'US'];
+    const blocked = [
+      'AE', 'AU', 'BE', 'BH', 'CN', 'ES', 'FR', 'HK', 'ID',
+      'IN', 'IT', 'KW', 'MY', 'OM', 'QA', 'SA', 'SG', 'US',
+    ];
     expect(DEFAULT_TERRITORY_SCHEDULE.blocked).to.deep.equal(blocked);
     for (const country of blocked) {
       const r = await issuePacket(deps({ country }), request);
@@ -167,10 +170,18 @@ describe('packet issuance', () => {
     // US was in this list until 2026-09-21, with a note that it was admitted
     // because the state-level rows are held and "blocking it would be a
     // decision nobody has taken". The founder has now taken it (D-B3-3), so
-    // US moves to the blocked walk above. FR stays here: Part 6.3 of the
-    // counsel brief has France open subject to confirmation, and that IS
-    // still a decision nobody has taken.
-    for (const country of ['GB', 'IE', 'DE', 'FR', 'AR', 'CA', 'BR', 'JP', 'KR']) {
+    // US moves to the blocked walk above.
+    //
+    // CORRECTION (2026-09-22). The 2026-09-21 version of this comment went on
+    // to say "FR stays here: Part 6.3 of the counsel brief has France open
+    // subject to confirmation, and that IS still a decision nobody has taken."
+    // That was false when it was written. The founder instructed on
+    // 2026-09-18 that Spain, France and Italy be blocked; the change was built
+    // that day and never opened as a PR, so it sat on a branch while this file
+    // was edited three days later as though the instruction did not exist.
+    // FR joins ES and IT in the blocked walk above (D-B3-4). NL takes its
+    // place here — the Netherlands IS still open subject to confirmation.
+    for (const country of ['GB', 'IE', 'DE', 'NL', 'AR', 'CA', 'BR', 'JP', 'KR']) {
       const r = await issuePacket(deps({ country }), request);
       expect(r.ok, country).to.equal(true);
     }

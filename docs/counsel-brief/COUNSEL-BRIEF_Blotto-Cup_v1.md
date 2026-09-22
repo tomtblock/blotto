@@ -54,16 +54,17 @@ entrants who think about it place first at roughly three to five times the every
 | 2 | Everyone plays everyone | No pairing, no bracket, no draw of opponents | Removes the one place chance usually enters a tournament: who you are matched against |
 | 3 | Seven sealed decisions per entry | Seven independent allocations, each scored against the field; seven timing samples for integrity review | Repeated decisions separate skill from guessing; the sample supports detection |
 | 4 | Integrity review and sanction | Five published signals, a named human reviewer, a signed append-only log, a hold on the prize, an appeal to a different reviewer; a forfeited prize passes to the next eligible player, never to the operator | A competition of skill must be able to show its results are genuine |
-| 5 | Territory block-list | Fifteen countries refused at entry, the United States among them; unresolvable locations refused; the service refuses to start if it cannot enforce its own list | The client does not offer the service where it believes it cannot lawfully do so |
+| 5 | Territory block-list | Eighteen countries refused at entry, the United States, Spain, France and Italy among them; unresolvable locations refused; the service refuses to start if it cannot enforce its own list | The client does not offer the service where it believes it cannot lawfully do so |
 | 6 | 18+ attestation | A wallet-signed, versioned statement recorded before any payment; entry refused without it | Age policy before money moves |
 | 7 | Pre-funded fixed prize | The prize is a constant per tier, moved into the pool's account before entries open, the same whatever the field size; entries are paid to the operator, not into the prize | The operator is not a stakeholder between players; no player's money is at risk to another player; no percentage is taken from a pot |
 | 8 | Sanctions screening before payment | Every wallet is screened against the OFAC SDN list at entry and again before any prize is paid; a match or an unanswerable screening places an on-chain hold | Strict-liability sanctions compliance; nothing is paid unscreened |
 
 **What is not in place.** No external legal opinion has yet been obtained (a recorded decision,
 Part 10). There is no operating entity, no terms-of-service document, no privacy notice and no
-support channel. The United States is entirely open in the software because the location vendor
-cannot resolve US states, and several European markets the schedule leaves open appear on a lay
-reading to regulate paid skill competitions (Part 6.3). Identity verification is switched off. These
+support channel. The United States is blocked at country level (2026-09-21) because the location
+vendor cannot resolve US states, so the twelve states of §9 could not be blocked individually;
+Spain, France and Italy were blocked on the Part 6.3 reading (instruction 2026-09-18, in the
+software 2026-09-22). Identity verification is switched off. These
 are stated plainly in Part 10 so that counsel is not advising on a product other than the one built.
 
 **What we are asking.** Part 11 lists the questions. The first three are: is the competition
@@ -317,7 +318,7 @@ verification at payout, which is off.
 
 | Fact | Source |
 |---|---|
-| Posture is a block-list: available everywhere except fifteen country codes: AE, AU, BE, BH, CN, HK, ID, IN, KW, MY, OM, QA, SA, SG, US (schedule version 4, 2026-09-21). `US` is a country-level block standing in for the twelve states of PID §9, which cannot be enforced while the geo source resolves no region — D-B3-3 | `config/territories.json`; one row per code with its reason in `config/territories.README.md` |
+| Posture is a block-list: available everywhere except eighteen country codes: AE, AU, BE, BH, CN, ES, FR, HK, ID, IN, IT, KW, MY, OM, QA, SA, SG, US (schedule version 5, 2026-09-22). `US` is a country-level block standing in for the twelve states of PID §9, which cannot be enforced while the geo source resolves no region — D-B3-3. `ES`, `FR` and `IT` implement Part 6.3 of this brief, adopted by founder instruction 2026-09-18 — D-B3-4 | `config/territories.json`; one row per code with its reason in `config/territories.README.md` |
 | Fail-closed at every layer: an unresolvable, malformed or ambiguous location is refused; no configured geo source refuses; the client withholds the whole play flow (attestation included) until an explicit "allowed" | `backend/packet/src/territories.ts` (`territoryAllowed`); `app/src/entry/geo-gate.ts` |
 | The entry service refuses to start if the schedule carries a sub-national code the location vendor cannot resolve, so a rule that cannot be applied never looks like one that is | `backend/packet/src/service.ts` (`assertRegionCapability`); `scripts/check-territories.ts` fails CI on the same condition |
 | Enforcement is at entry, never at payment: a lawful entrant who later travels is still paid or refunded | `HOW-IT-WORKS.md`; the payout path carries no location check |
@@ -326,10 +327,12 @@ verification at payout, which is off.
 Why each country is there: India (the 2025 online money-games prohibition); Belgium (any chance
 element); Australia ("mixed chance and skill", blocked until a specific opinion); the six Gulf
 states, China, Hong Kong, Singapore, Malaysia and Indonesia (prohibition regimes in the desk
-studies' Tier 0). Two rows from the product document are *not* in the schedule, for stated
-reasons: the twelve US states (the vendor cannot resolve a state, see Part 10) and the sanctioned
-jurisdictions (held by the founder pending counsel; wallet screening covers the individuals, which
-a country code cannot).
+studies' Tier 0); Spain, France and Italy (added on the reading in Part 6.3, pending a written
+opinion); the United States (added at COUNTRY level, which is wider than the product document's
+twelve states and is why — the vendor cannot resolve a state, so the choice was a schedule naming
+twelve states that admits all twelve, or a country block that works). One row from the product
+document is *not* in the schedule: the sanctioned jurisdictions, held by the founder pending
+counsel, where wallet screening covers the individuals a country code cannot.
 
 Screening is IP-based and per-request. A route the vendor has not catalogued (some VPNs) defeats
 it, and nothing binds the screened address to the wallet that later enters. The location vendor of
@@ -555,7 +558,7 @@ would regard a single-winner, paid-entry, multi-entrant format as a lottery with
 
 ### 6.3 European Union and other markets the schedule leaves open
 
-The schedule blocks fifteen countries and opens everywhere else. The product document lists the
+The schedule blocks eighteen countries and opens everywhere else. The product document lists the
 UK, the remaining US states, Germany, France, the Nordics, Ireland, the Netherlands, Spain, Italy,
 Canada ex-Ontario, Brazil, Mexico, Colombia, Chile, Japan and South Korea as "open subject to
 counsel confirmation". That confirmation has not been given, and a lay reading suggests several of
@@ -580,9 +583,11 @@ those markets regulate paid skill competitions with cash prizes irrespective of 
 - **Japan and South Korea.** Marked "verify" in the product document; South Korea's game
   legislation restricts cash-prize games broadly. (Caution.)
 
-The recommendation to the founder, recorded here so counsel sees it, is to move Spain, Italy and
-France to the block-list now and to reopen any of them only on a written opinion. The schedule is a
-one-line configuration change and the block is enforceable today.
+The architect recommended moving Spain, Italy and France to the block-list and reopening any of
+them only on a written opinion. **The founder adopted it on 2026-09-18.** The change reached the
+software on 2026-09-22 as schedule version 5 (register row D-B3-4); the four-day gap is recorded
+there and was a process failure, not a change of mind. Counsel is asked to confirm or reverse each
+of the three, and to say which of the remaining open markets above should follow.
 
 ### 6.4 Belgium and Australia
 
@@ -703,6 +708,21 @@ which is what a regulator asking "is class really cosmetic?" will want to see.
 
 A Delaware LLC, wholly separate from T Block Labs FZCO (Dubai), to operate Blotto Cup.
 
+**Confirmed by the founder on 2026-09-22, and counsel should know what it sits beside.** §9.2 below
+makes the Delaware choice conditional: defensible *if and only if* the United States is a market the
+client intends to serve and can block state by state. On 2026-09-21 the founder blocked the United
+States at country level (register row D-B3-3), and on 2026-09-22 confirmed Delaware anyway. The
+architect's recommendation, put to the founder and not accepted, was a UK company; it is recorded
+here rather than re-argued.
+
+The two are reconcilable only on the reading that the US block is temporary — that a region-capable
+location vendor will be contracted, the block narrowed to the twelve states of §9, and the rest of
+the United States served. **That intention is not recorded anywhere else and the founder has not
+stated it.** If it is the intention, the vendor is on the critical path for the entity as well as
+for the schedule. If it is not, §9.2's reasoning applies and counsel should say so plainly: a
+Delaware entity would then carry US federal and state jurisdiction for a product that serves no
+US player.
+
 ### 9.2 Recommendation
 
 A Delaware entity is a defensible choice **if and only if the United States is a market the client
@@ -765,7 +785,8 @@ Stated so that counsel advises on the product that exists. Sources: `docs/COMPLI
 | Operating entity | Not formed |
 | Terms of service, privacy notice, DPIA, support channel, complaints route, governing-law clause | None exist as documents. `config/terms.json` is a version ledger; the clickwrap's "the terms" links to the rules page |
 | The United States | **Blocked at country level** since schedule version 4 (founder instruction 2026-09-21, register row D-B3-3). This is wider than PID §9, which names twelve states: the location vendor of record returns a subdivision *name* and never an ISO 3166-2 code, so the entry service refuses to start with any state code in the schedule, and the live choice was a schedule naming twelve states that admits all twelve or a country block that works. No US state has an opinion. The block can be narrowed to the twelve once a region-capable vendor is contracted; counsel question 6 asks whether it should be |
-| Spain, Italy, France and other "open subject to confirmation" markets | Open in the software; see Part 6.3 |
+| Spain, Italy, France | **Blocked** since schedule version 5 (founder instruction 2026-09-18, in the software 2026-09-22, register row D-B3-4), on the Part 6.3 reading. Pending a written opinion, which reopens them |
+| Other "open subject to confirmation" markets — the UK, Germany, the Nordics, Ireland, the Netherlands, Canada ex-Ontario, Brazil, Mexico, Colombia, Chile, Japan, South Korea | Open in the software; see Part 6.3 |
 | Sanctioned jurisdictions as country codes | Held by founder ruling pending counsel; wallets are screened against live lists regardless |
 | Identity verification | Switch exists and is off (threshold 0). Under one paid place, any threshold below the smallest prize would hold every payout at every tier, and the seven-day permissionless release presents no identity, so switching it on needs design work first |
 | Second reviewer | The registry holds one member; no appeal can be decided; no separation of duties |

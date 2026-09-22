@@ -345,7 +345,7 @@ Stated plainly, because these were once published as though they were built.
    `config/reviewers.json` holds one member, so an appeal can be lodged but
    none can be decided, and the service says so at boot (audit O24).
 4. **Two rows of the founder's territory list are still not enforceable.**
-   `config/territories.json` carries fifteen country codes as of schedule
+   `config/territories.json` carries eighteen country codes as of schedule
    version 3 (2026-09-12) — India, Belgium, Australia, the six GCC states,
    China, Hong Kong, Singapore, Malaysia, Indonesia. The **US states** are
    held on a technical constraint, not a decision: the geo source of record

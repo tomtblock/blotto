@@ -143,17 +143,28 @@ export function territoryAllowed(
  * together.
  */
 export const DEFAULT_TERRITORY_SCHEDULE: TerritorySchedule = {
-  version: 4,
+  version: 5,
   posture: 'block-list',
   allowed: [],
+  // Sorted, because this must deep-equal config/territories.json and that
+  // file is written sorted. Provenance is in the note below rather than in
+  // the layout: grouping by version here is what broke the mirror test.
+  //
+  //   version 3 (2026-09-12) — the fourteen PID §9 rows marked confirmed
+  //   version 4 (2026-09-21, D-B3-3) — US, at COUNTRY level and wider than
+  //     §9's twelve states on purpose: the geo source of record returns a
+  //     subdivision NAME and never an ISO 3166-2 code, so
+  //     `assertRegionCapability` refuses to start on a `US-SS` row. Narrows
+  //     to the twelve the day a region-capable source is contracted.
+  //   version 5 (founder instruction 2026-09-18, landed 2026-09-22 as
+  //     D-B3-4) — ES, FR, IT. §9 had these "open subject to counsel
+  //     confirmation"; the instruction supersedes that pending a written
+  //     opinion, on the counsel brief Part 6.3 reading that all three need a
+  //     state authorisation for paid skill competitions with cash prizes
+  //     whatever the answer on chance.
   blocked: [
-    'AE', 'AU', 'BE', 'BH', 'CN', 'HK', 'ID', 'IN', 'KW', 'MY', 'OM', 'QA', 'SA', 'SG',
-    // Country level, and wider than PID §9's twelve states on purpose: the
-    // geo source of record returns a subdivision NAME and never an ISO
-    // 3166-2 code, so `assertRegionCapability` refuses to start on a `US-SS`
-    // row. Founder instruction 2026-09-21, register row D-B3-3. Narrows to
-    // the twelve the day a region-capable source is contracted.
-    'US',
+    'AE', 'AU', 'BE', 'BH', 'CN', 'ES', 'FR', 'HK', 'ID',
+    'IN', 'IT', 'KW', 'MY', 'OM', 'QA', 'SA', 'SG', 'US',
   ],
-  updated: '2026-09-21',
+  updated: '2026-09-22',
 };

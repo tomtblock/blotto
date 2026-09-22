@@ -22,10 +22,13 @@ four layers above it.
 
 ---
 
-## Live — schedule version 4 (2026-09-21)
+## Live — schedule version 5 (2026-09-22)
 
-Fifteen country codes, from the rows of PID §9 marked confirmed, plus the United States at
-country level (founder instruction 2026-09-21 — see the row and the note below it).
+Eighteen country codes: the fourteen rows of PID §9 marked confirmed (version 3, founder
+instruction 2026-09-12); the United States at country level (version 4, founder instruction
+2026-09-21 — see the note under the table); and Spain, France and Italy (version 5, founder
+instruction **2026-09-18**, landed 2026-09-22 — see D-B3-4 in the register for why the date of the
+instruction is earlier than the version that carries it).
 
 | Code | Territory | PID §9 line | Status |
 |---|---|---|---|
@@ -44,6 +47,9 @@ country level (founder instruction 2026-09-21 — see the row and the note below
 | `MY` | Malaysia | "Malaysia" | Confirmed |
 | `ID` | Indonesia | "Indonesia" | Confirmed |
 | `US` | United States | §9 names twelve **states**, not the country; §11 D9 | Confirmed as a **country-level** block, founder instruction 2026-09-21 |
+| `ES` | Spain | §9 lists Spain as "open subject to counsel confirmation"; superseded by founder instruction 2026-09-18 | Blocked pending a written opinion. Counsel brief Part 6.3: on a lay reading, paid competitions of skill with cash prizes need a state authorisation there whatever the answer on chance. Reopens only on counsel's written confirmation |
+| `FR` | France | §9 lists France as "open subject to counsel confirmation"; superseded by founder instruction 2026-09-18 | As `ES` |
+| `IT` | Italy | §9 lists Italy as "open subject to counsel confirmation"; superseded by founder instruction 2026-09-18 | As `ES` |
 
 **The US row is wider than PID §9 asks for, deliberately.** §9 blocks twelve states. Blocking
 those twelve is not possible today — see *The US states* below — and the choice was between a
@@ -104,10 +110,17 @@ above.
 
 ### Not blocked, and deliberately so
 
-PID §9's "open subject to counsel confirmation" list — the UK, the remaining ~39 US states, Germany,
-France, the Nordics, Ireland, the Netherlands, Spain, Italy, Canada ex-Ontario, Brazil, Mexico,
-Colombia, Chile, Japan, South Korea — is **not** a block list and nothing from it belongs in this
-file.
+PID §9's "open subject to counsel confirmation" list — the UK, Germany, the Nordics, Ireland, the
+Netherlands, Canada ex-Ontario, Brazil, Mexico, Colombia, Chile, Japan, South Korea — is **not** a
+block list and nothing from it belongs in this file.
+
+Two parts of that list have since moved and are no longer open:
+
+- **Spain, France and Italy** are in the Live table by founder instruction 2026-09-18, for the
+  reason on their rows. The rest of the list stays open until counsel says otherwise.
+- **The remaining ~39 US states** were on it. They are now refused too, along with the twelve §9
+  names, because `US` is blocked at country level (2026-09-21). They are not open, and this list no
+  longer implies they are.
 
 ---
 
