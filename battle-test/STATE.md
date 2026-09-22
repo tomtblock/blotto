@@ -4,7 +4,9 @@ Phase:            **T6 RAN AND PASSED on pool 27** — every criterion the devia
                   One was knowingly surrendered and is still open with the founder.
 Waiting on:       **the founder: §F-37, the copy test.** One attempt from UI-A or UI-B, ~60 seconds.
                   Nothing else is blocked on it.
-Blocked:          T3 on Q6 (admin signing) · T7 on Q7 (reviewer key).
+Blocked:          **NOTHING.** T3 and T7 are both live — the founder confirmed 2026-09-22 that
+                  `4ydb…wcL1` is in their Phantom at 24.65 SOL, matching the chain's
+                  24.658749732 to the lamport. Q6 and Q7 were the same key and are closed.
 Results so far:   T1 **PASS** · T4 **PASS** · T5 **PASS** · **T6 PASS\*** · T2 **SPOILED** ·
                   T2R **PASS (7 of 8)** · pool 22 = observation, not a test
 Money:            funder **6.298769560** · W00 **7.936676760** (it won again) ·
