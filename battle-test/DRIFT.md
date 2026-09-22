@@ -1613,3 +1613,40 @@ sources listed, while running code two commits old. It has no signal for the bui
 which is the same gap that hid a sixteen-hour entry outage (§F-28) and the seal fix's
 merged-but-not-live window. A `BLOTTO_BUILD_COMMIT` is baked into the image by
 `Dockerfile.packet` and `/health` does not report it — the value exists and is simply not surfaced.
+
+### §H26 — a numbered list with two founder actions in it is one instruction, not two
+
+**What happened.** §F-35 set out what T6 needed from the founder as a four-step list: step 2 "enter
+pool 23 as UI-A", step 4 "call GO for UI-B to arrive late and be refused". Steps 1 and 3 were mine.
+Two days later the founder sat down, read the list, and entered **both** wallets. Pool 27 now holds
+UI-A at idx 0 and UI-B at idx 1, and T6's ninth refusal — the only one a human being reads — has
+nowhere to happen.
+
+**Why it is a finding and not an accident.** The list was correct. Every word in it was true, and
+the GO call was named. It still read as one instruction, because **it was delivered as one
+message**, and the thing separating step 2 from step 4 was a sentence rather than a turn. Sequencing
+that a document asserts is not sequencing; sequencing that the medium enforces is. Every other
+founder hand-off this week that had to happen *in order* — the three merges of §F-32, the deploy of
+§F-34 — survived precisely because each one was the only thing asked for in its message.
+
+**The cost, had it not been caught.** Not the seat. The test's headline claim is unconditional —
+W00 takes rank 1 whatever anyone else does — and it is unconditional *because* every field seat
+stays at or below 25. UI-A was instructed inside that range and complied. UI-B was told to play as
+it liked, because a refused attempt is never scored. **So a stat the founder was explicitly told
+they were free to choose is now an input to a claim that says no choice can affect it.** The wall's
+zero-stats are the mechanism: a 26+ stat wins the contested one and the two zeros, three of five,
+and W00's floor of 875 slides toward 861 against a field ceiling of 868.
+
+**And it is not checkable.** The allocation is sealed until the pool reveals. There is no probe, no
+query and no admin path that reads it early — that is the product's central property working
+exactly as specified. This is the first time in the test week that a risk has been *unmeasurable by
+design* rather than merely unmeasured, and it is worth saying plainly that the correct response to
+an unmeasurable risk is not to run the measurement anyway.
+
+**The rule going forward.** One founder action per message. A hand-off that depends on my work
+landing between two of the founder's steps gets the second step in its own message, sent after the
+work lands, containing nothing else. §F-36 writes T6's re-run that way.
+
+**Related:** §F-28 (a step believed done because a document said so), §H21 (a check that printed
+PASS over a criterion it never evaluated). The family resemblance is a record asserting a state of
+the world instead of the world being made to hold it.

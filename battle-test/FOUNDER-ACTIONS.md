@@ -1022,3 +1022,91 @@ Pool 23 is open with about eight and a half hours left. When the deploy lands I 
 If pool 23 lapses before the deploy, nothing is lost: T6 runs on the next pool with the plan
 unedited, exactly as T4 moved from pool 15 to pool 16. It costs one rent cushion, 0.00065 SOL.
 
+
+## F-36 — ▶ FOUNDER ACTION: UI-B is sitting inside pool 27, and T6 needs it standing outside
+
+Both entries landed cleanly. That is the problem: **only one of them was supposed to.**
+
+```
+pool 27  3kkWSsX5BgpyVirejCRMAFXrdhoSnEdrHRQz4TQ4rvh9   Open — 2 of 64
+  idx 0   UI-A    7fpaNh8m…YPve    entry paid, pass minted
+  idx 1   UI-B    6wqLMAS1…u3sa    entry paid, pass minted
+  deadline 2026-09-22T08:02:43Z  ·  outcome if the deadline passed now: refund
+```
+
+**This is my fault, and the shape of it is worth naming.** §F-35 listed "enter as UI-A" and "call GO
+for UI-B" as steps 2 and 4 of a single numbered list, written two days before you sat down to it.
+Read in one sitting it is one instruction with two wallets in it. It should have been two messages,
+separated by a GO call.
+
+### Why it matters more than one seat out of place
+
+T6 is the oversubscription test: **64 land, 9 are refused, and the refused ones are told why.** UI-B
+is the ninth refusal — the only one a person actually reads. Eight headless wallets can prove the
+program refuses them; **no headless wallet can prove a human is told what happened**, which is the
+whole point of the copy fix you merged and deployed on Saturday. With UI-B seated, that half of the
+test has nothing to measure.
+
+There is a second, larger problem. T6's headline claim is unconditional:
+
+> W00 takes rank 1 and the whole 4 SOL **whatever anyone else does**.
+
+That holds because every seat in the field keeps its stats at 25 or below. You held UI-A inside
+1–25 as instructed, and it does. **UI-B was told to play however it liked** — because it was never
+meant to be scored. A single stat at 26 or above, against the zero-stats in W00's wall, can take
+battles off the winner, and the arithmetic no longer closes.
+
+**I cannot check whether it does.** UI-B's allocation is sealed until the pool reveals. That is the
+product working exactly as designed, and it means the risk is unmeasurable in advance rather than
+merely unmeasured.
+
+### Three ways forward
+
+| | field matches the frozen plan | 9 refusals | a person reads the copy | net cost | when |
+|---|---|---|---|---|---|
+| **(a)** run now, UI-B as a 64th seat | **no** — UI-B unplanned, one wallet dropped | 8 of 9 | **no** | ~2.6 SOL | now |
+| **(b)** let pool 27 lapse, re-run clean on pool 28 | **yes** | 9 of 9 | yes | **~0.01 SOL** | ~8 h |
+| **(c)** run now, a new UI-C arrives late | no — same deviation as (a) | 9 of 9 | yes | ~2.6 SOL | now + ~10 min |
+
+### ▶ My recommendation: (b)
+
+**Do nothing, and let pool 27 run out of time at 08:02:43Z tomorrow.** It has 2 entrants against a
+40-seat minimum, so it refunds — both entries come straight back. The only money that does not is
+the rent on the two character passes and the vault cushion: **about 0.0095 SOL between them.**
+
+Then T6 runs on pool 28 with `T6.plan.json` **unedited** — it names no pool, which is exactly why
+this costs nothing. That is the same move T4 made between pools 15 and 16, and the freeze claim
+came out stronger, not weaker: a prediction merged 19:11:28Z on the 19th, against a pool created
+two days later.
+
+It needs you twice more, and this time they will be separate messages:
+
+1. **Tomorrow, when I tell you pool 28 is open:** enter as **UI-A only**. One stat to 25 per battle,
+   every stat between 1 and 25, nothing at 0 and nothing at 26.
+2. **Then stop.** I fill 62 seats, which takes about four minutes. **I will then send one message
+   that says GO and nothing else.** Only at that point do you enter as UI-B — and it should be
+   refused, with a sentence that tells you the pool filled.
+
+### Why not (a)
+
+It spends ~2.6 SOL on a run whose headline criterion cannot be stated in advance and whose central
+observation — a person reading the refusal — does not happen at all. A test that spends real money
+to produce an ambiguous answer is worse than no test, because the ambiguous answer goes in the
+report.
+
+### Why not (c), unless you need it
+
+(c) works, and a third UI wallet is what the manual originally specified, so it is the designed
+configuration rather than a workaround. It buys back the human refusal and all nine attempts.
+But it does **not** buy back the unconditional claim: UI-B is still in the scored field with an
+allocation nobody chose. So the report would have to say "W00 won, and we believe it had to, subject
+to one seat we could not inspect". That sentence is worth avoiding for the price of eight hours.
+
+**Take (c) only if you will not be at a keyboard tomorrow morning.** If you choose it, say so and
+I will tell you how to make the third wallet; it takes a couple of minutes and I fund it.
+
+### ▶ What I need from you
+
+One word: **(a)**, **(b)** or **(c)**. Nothing is spent until you answer — I have not started the
+fill and will not. If you say nothing at all, pool 27 lapses on its own and (b) happens by default,
+which is the one safe way for this to resolve without you.

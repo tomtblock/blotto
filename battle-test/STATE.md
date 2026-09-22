@@ -1,62 +1,64 @@
-# STATE — 2026-09-19 23:10 UTC — by Claude Code
+# STATE — 2026-09-21 23:59 UTC — by Claude Code
 
-Phase:            **Everything is ready for T6 except one button.** PRs 157 and 158 merged, the RPC
-                  is in hand and measured, pool 23 is open, the freeze is timestamped.
-Waiting on:       **the founder: enter pool 23 (or its successor) as UI-A.** Everything else is
-                  done — the deploy landed 00:08Z and is verified live in both directions.
-Blocked:          T6 on that one deploy · T3 on Q6 (admin signing) · T7 on Q7 (reviewer key).
+Phase:            **T6 is one ruling away. Pool 27 has BOTH founder wallets seated, and UI-B was
+                  supposed to be the one standing outside being refused.**
+Waiting on:       **the founder: (a), (b) or (c) in §F-36.** My recommendation is **(b)** — let
+                  pool 27 lapse, both entries refund, re-run clean on pool 28 with the plan unedited.
+Blocked:          T6 on that ruling · T3 on Q6 (admin signing) · T7 on Q7 (reviewer key).
 Results so far:   T1 **PASS** · T4 **PASS** · T5 **PASS** · T2 **SPOILED** · T2R **PASS (7 of 8)**
                   pool 22 = observation, not a test
-Money:            funder **10.339339200** · W00 **4.041117840** · UI-A 10.568905266 · UI-B 11.673357239
+Money:            funder **10.339339200** · W00 **4.041117840** · UI-A 10.464464021 · UI-B 11.568915997
+                  UI-A and UI-B are each one entry down in pool 27; **both refund when it lapses**.
+Open PR:          **PR 159** — the battle-test record. Green, and the only PR open. (Plain, not a
+                  link: the §8.7 gate scans every file in the tree and a GitHub PR URL trips it.)
 
-## The one thing left, and it is CONFIRMED not done rather than assumed
+## UI-B IS SEATED IN POOL 27. READ THIS FIRST.
 
-PR 157 and 158 merged. The web app redeployed itself. **The entry service did not** — §F-28's trap,
-third occurrence. Proven by a differential probe rather than by reading `/health`:
+Verified against the indexer's `/entries`, not taken on trust:
 
 ```
-pool 22  (Paid, 64 seats — it FILLED)   →  {"error":"pool closed to entries"}    ← old code
-pool 21  (Closed, 39 seats)             →  {"error":"pool closed to entries"}
+pool 27  3kkWSsX5BgpyVirejCRMAFXrdhoSnEdrHRQz4TQ4rvh9   Open — 2 of 64
+  idx 0  UI-A  7fpaNh8m…YPve   battles_hash 812619c8…  refunded false
+  idx 1  UI-B  6wqLMAS1…u3sa   battles_hash 338f24d3…  refunded false
+  deadline 2026-09-22T08:02:43Z   outcome_if_deadline_now: refund   min_seats 40
 ```
 
-Identical, so the service is pre-157. **After the deploy, pool 22 must answer `pool filled` and
-pool 21 must not.** Gate 1 (pool state) runs before the signature check, so a junk body is enough to
-ask — nothing is written, no key is needed. That is a check that can FAIL, which is more than
-`/health` offers: it answered `ok: true` throughout while running two-commit-old code (F-2, third
-recorded instance). `Dockerfile.packet` bakes `BLOTTO_BUILD_COMMIT` into the image and `/health`
-simply does not report it.
+**The cause is my instruction, not the founder's reading of it.** §F-35 put "enter as UI-A" and
+"call GO for UI-B" at steps 2 and 4 of one numbered list, written two days before it was acted on.
 
-## The RPC is in, and measured rather than trusted
+Two things are lost if T6 runs on this pool as it stands:
 
-A Helius devnet endpoint, supplied by paste (§F-34 option b). **Confirmed devnet by genesis hash**
-`EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG`, not by the word "devnet" in the URL. Held only in
-this session's scratch space, never in a repository file. **The founder should rotate it after the
-test week** — it went through the transcript.
+1. **The ninth refusal.** T6's claim is *64 land, 9 are refused, and the refused ones are told why*.
+   Eight of the nine are headless and prove the program refuses them. **Only UI-B proves a person is
+   told what happened** — the entire point of the copy fix in PRs 157/158. Seated, it proves nothing.
+2. **The headline claim stops being unconditional.** `unconditionalDerivation.winnerIsHeadless`
+   holds because no field seat exceeds 25. UI-A was instructed inside 1–25 and complied; **UI-B was
+   told to play as it liked**, for an attempt that was never meant to be scored. W00's wall carries
+   two zero-stats per battle, so a 26+ stat can take battles off it: W00's floor of 875 falls toward
+   861, under the field ceiling of 868. **And the allocation cannot be inspected** — it is sealed
+   until reveal. The risk is unmeasurable in advance *by design*.
 
-| pace | calls | 200 | 429 |
-|---|---|---|---|
-| flat out — 17.5/sec | 120 | 66 | **54** |
-| the fill's real pace — ~1.6/sec | 120 | **119** | 1 |
+**Recommendation (b).** Pool 27 holds 2 entrants against a 40-seat minimum, so it refunds at
+08:02:43Z with no action from anyone. Sunk: two pass rents at 4441080 each plus the 650240 cushion
+— **0.0095 SOL**. `T6.plan.json` names no pool, so it moves to pool 28 byte-identical, as T4 moved
+from pool 15 to pool 16. Only `T6.freeze.json`'s `pool` block changes, and the 19:11:28Z merge
+stands against a pool created two days later rather than thirty minutes.
 
-Rate-limited, and fine for this job: pool 22's fill ran ~3.2 s a seat, about two calls a second,
-well inside the clean band. **T6 stays at `--concurrency 1` for that reason, not out of caution.**
-And the two endpoints do not fail the same way — the public one failed HARD with `block height
-exceeded`, burning a transaction; a Helius 429 is retried and lands.
+Nothing is spent until the founder rules. The fill has not started.
 
-## §H24 — a probe I wrote tonight reported the opposite of what it measured
+## §H20 confirmed on a fourth pool, by accident
 
-The first throughput probe printed `ok 320, failed 0 — no throttling at this rate` while **54 HTTP
-429s scrolled past above it**. `@solana/web3.js` retries a 429 internally, so a throttled call still
-resolves; the verdict was computed from `failed === 0`, a quantity that cannot see throttling.
-**§H9's family for the fourth time** (§H9, §H14, §H21, §H24). It cost nothing only because the
-library printed the 429s and I read them.
+UI-A 10.568905266 → 10.464464021 and UI-B 11.673357239 → 11.568915997. Each is
+−100000000 entry −4441080 pass rent −~165 fee. Both are seats below 10, both land on the
+**4441080** band exactly — and pool 27 is a two-digit pool id, which the asset name carries, so the
+band survives that too.
 
-## T6 — frozen, funded, and waiting
+## T6 — frozen, funded, and unspent
 
-`registry/T6.plan.json`, merged 19:11:28Z. Pool 23 created 19:41:23Z — **29 min 55 s later**, and
-the plan names no pool. Pool 23 is Open at 0 of 64 with about 8.5 h left. If it lapses first, T6
-runs on the next pool with the plan unedited, as T4 did between pools 15 and 16; the cost is one
-rent cushion, 0.00065 SOL.
+`registry/T6.plan.json` merged in PR 156 at 19:11:28Z on the 19th; `poolId` and `poolPda` are
+**null** in the frozen bytes. Pool 23 lapsed unused at 0 of 64 (0.00065 SOL, one rent cushion).
+Pools 24, 25 and 26 came and went at 0 of 64. **Pool 27 is the fifth pool the plan has seen without
+a byte of it changing.**
 
 ---
 
