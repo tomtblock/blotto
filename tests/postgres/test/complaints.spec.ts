@@ -128,6 +128,57 @@ const DESK = base58Encode(new Uint8Array(32).fill(5));
     expect(thread.map((r) => r.decidedBy)).to.deep.equal([null, DESK, DESK]);
   });
 
+  it('the desk queue drops a RESOLVED complaint and keeps the rest', async () => {
+    // The partial index `complaints_open` (migration 0024) is what this
+    // reads, and "open" is DERIVED from the presence of rows exactly as the
+    // player-facing status is — never from a column somebody updates.
+    const store = new PgComplaintStore(pool);
+    const second = 'BC-3XYZ4567';
+    await store.append(lodged);
+    await store.append({ ...lodged, reference: second, receivedAt: '2026-09-19T13:00:00.000Z' });
+
+    const both = await store.listOpen(50);
+    expect(both.map((r) => r.reference), 'newest first').to.deep.equal([second, lodged.reference]);
+    expect(both.every((r) => r.kind === 'lodged'), 'the lodge only').to.equal(true);
+
+    // Acknowledged is still the desk's problem; resolved is not.
+    await store.append(
+      answeredRow(
+        second,
+        'acknowledged',
+        { decidedBy: DESK, note: 'Looking at this.', category: 'decision' },
+        '2026-09-20T09:00:00.000Z'
+      )
+    );
+    expect((await store.listOpen(50)).map((r) => r.reference)).to.deep.equal([
+      second,
+      lodged.reference,
+    ]);
+
+    await store.append(
+      answeredRow(
+        second,
+        'resolved',
+        { decidedBy: DESK, note: 'Answered in full.', category: 'decision' },
+        '2026-09-25T09:00:00.000Z'
+      )
+    );
+    expect((await store.listOpen(50)).map((r) => r.reference)).to.deep.equal([lodged.reference]);
+  });
+
+  it('honours the limit, because the rows are personal data', async () => {
+    const store = new PgComplaintStore(pool);
+    for (let i = 0; i < 3; i++) {
+      await store.append({
+        ...lodged,
+        reference: `BC-4444444${i}`,
+        receivedAt: `2026-09-19T1${i}:00:00.000Z`,
+      });
+    }
+    expect(await store.listOpen(2)).to.have.lengthOf(2);
+    expect(await store.listOpen(50)).to.have.lengthOf(3);
+  });
+
   it('serves one reference and not another', async () => {
     const store = new PgComplaintStore(pool);
     await store.append(lodged);

@@ -24,6 +24,47 @@ export const COMPLAINT_REFERENCE_PATTERN = /^BC-[2-9A-HJ-NP-Z]{8}$/;
 /** The alphabet a reference is drawn from — no 0/O/1/I, so it can be read aloud. */
 export const COMPLAINT_REFERENCE_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
 
+/**
+ * The exact bytes the OPERATOR signs to answer a complaint (2026-09-22).
+ *
+ * A distinct header again, for the same reason and one more: this is the
+ * only signature in the system that a player never makes, and it must not
+ * be producible by replaying anything a player did sign. A captured lodge
+ * signature cannot verify as an answer, and an answer cannot verify as a
+ * lodge, a decision or an appeal.
+ *
+ * WHY THE ANSWER IS SIGNED AT ALL. The terms undertake that a challenge is
+ * answered "by someone other than whoever made the original one wherever
+ * that is possible". Nothing enforces the difference — the predecessor rule
+ * did, and a one-member registry made the right it protected unexercisable
+ * (audit O24) — so the record IS the mechanism, and a record is only worth
+ * something if the name on it was proved rather than typed. The signature is
+ * what makes `decided_by` evidence instead of an assertion.
+ *
+ * The note is inside the signed bytes because it is what the player is
+ * shown. An operator who could change the note after signing could answer
+ * one thing and publish another.
+ */
+export function canonicalComplaintAnswerMessage(a: {
+  reference: string;
+  /** `acknowledged` or `resolved`. */
+  kind: string;
+  /** The registry key answering — base58. */
+  decidedBy: string;
+  /** What the player is told. */
+  note: string;
+  signedAt: string;
+}): Uint8Array {
+  return new TextEncoder().encode(
+    `Blotto Cup complaint answer\n` +
+      `reference: ${a.reference}\n` +
+      `kind: ${a.kind}\n` +
+      `by: ${a.decidedBy}\n` +
+      `note: ${a.note}\n` +
+      `at: ${a.signedAt}\n`
+  );
+}
+
 /** The exact bytes a complainant signs — human-readable, wallet-displayable. */
 export function canonicalComplaintMessage(c: {
   reference: string;

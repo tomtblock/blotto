@@ -24,13 +24,19 @@
 import { expect } from 'chai';
 import nacl from 'tweetnacl';
 import { base58Encode } from '../../packet/src/shared';
-import { canonicalComplaintMessage, COMPLAINT_REFERENCE_PATTERN } from '../src/complaint-message';
+import {
+  canonicalComplaintAnswerMessage,
+  canonicalComplaintMessage,
+  COMPLAINT_REFERENCE_PATTERN,
+} from '../src/complaint-message';
 import {
   COMPLAINT_ACKNOWLEDGE_WORKING_DAYS,
   COMPLAINT_CATEGORY_KEYS,
   COMPLAINT_RESOLVE_DAYS,
   COMPLAINT_TEXT_MAX,
   MemoryComplaintStore,
+  COMPLAINT_NOTE_MAX,
+  COMPLAINT_QUEUE_MAX,
   answeredRow,
   complaintRuleRefusal,
   complaintSignatureRefusal,
@@ -427,5 +433,260 @@ describe('the canonical complaint message', () => {
     for (const bad of ['BC-0K2M4QPT', 'BC-OK2M4QPT', 'BC-1K2M4QPT', 'BC-IK2M4QPT', 'BC-SHORT', 'bc-7k2m4qpt']) {
       expect(COMPLAINT_REFERENCE_PATTERN.test(bad), bad).to.equal(false);
     }
+  });
+});
+
+/*
+ * ── THE OPERATOR'S HALF (2026-09-22) ──────────────────────────────────────
+ *
+ * Until this, nothing in the repository could append an `acknowledged` or a
+ * `resolved` row: the store and the row shape existed and no code wrote
+ * them, so a player's status read *received* however promptly a person had
+ * actually answered — which made the published five-working-day and
+ * thirty-day windows look unkept when they were not. Recorded in
+ * PRODUCT-FACTS §9 at the time rather than left to be discovered; this
+ * closes it.
+ *
+ * What is proven here:
+ *
+ *   1. AN ANSWER IS SIGNED BY A REGISTRY KEY, and the refusal is uniform, so
+ *      the route is not a membership oracle for a founder-owned list.
+ *   2. THE SIGNATURE IS WHAT MAKES `decidedBy` EVIDENCE. A caller cannot
+ *      name a key they cannot sign for.
+ *   3. THE TWO CANONICAL MESSAGES CANNOT CROSS OVER — a lodge signature is
+ *      not an answer, and an answer is not a lodge.
+ *   4. AN ANSWER CANNOT CONJURE A THREAD. A reference with no lodge is a
+ *      404, not a row nobody can read.
+ *   5. THE QUEUE IS OPERATOR-TOKEN ONLY AND FAIL-CLOSED. It returns players'
+ *      own words, so an unset token is a 503 and never an open route.
+ */
+
+const DESK = base58Encode(keys.publicKey);
+
+/** An answer, signed by `keys` unless told otherwise. */
+function answer(a: {
+  reference?: string;
+  kind?: 'acknowledged' | 'resolved';
+  decidedBy?: string;
+  note?: string;
+  decidedAt?: string;
+  signer?: nacl.SignKeyPair;
+}) {
+  const body = {
+    reference: a.reference ?? REFERENCE,
+    kind: a.kind ?? ('acknowledged' as const),
+    decidedBy: a.decidedBy ?? DESK,
+    note: a.note ?? 'A person has this and will answer it.',
+    decidedAt: a.decidedAt ?? AT,
+  };
+  const signature = nacl.sign.detached(
+    canonicalComplaintAnswerMessage({ ...body, signedAt: body.decidedAt }),
+    (a.signer ?? keys).secretKey
+  );
+  return { ...body, signature: Buffer.from(signature).toString('base64') };
+}
+
+/** Deps whose registry holds the desk key, and an operator token. */
+const TOKEN = 'operator-token-for-the-complaints-queue';
+function desk(store = new MemoryComplaintStore()) {
+  const d = {
+    registry: { version: 1, members: [DESK], updated: '2026-09-22' },
+    actions: {} as never,
+    log: {} as never,
+    complaints: store,
+    operatorToken: TOKEN,
+    now: () => NOW,
+  } as unknown as ReviewServerDeps;
+  return { deps: d, store };
+}
+
+const answerPost = (d: ReviewServerDeps, body: unknown) =>
+  handleReviewRoute(d, 'POST', '/complaints/answer', body, {});
+const queue = (d: ReviewServerDeps, query = '', authorization?: string) =>
+  handleReviewRoute(d, 'GET', `/complaints/open${query}`, null, { authorization });
+
+describe('POST /complaints/answer', () => {
+  it('records an acknowledgement, and the player status follows it', async () => {
+    const { deps: d, store } = desk();
+    await post(d, sign({}));
+    expect((await answerPost(d, answer({}))).status).to.equal(204);
+    const thread = await store.listFor(REFERENCE);
+    expect(thread.map((r) => r.kind)).to.deep.equal(['lodged', 'acknowledged']);
+    expect(complaintStatus(thread)?.status).to.equal('acknowledged');
+    expect(complaintStatus(thread)?.note).to.equal('A person has this and will answer it.');
+  });
+
+  it('names WHOSE key answered, and proves it with a signature', async () => {
+    // The point of the whole route: `decidedBy` has to be evidence for the
+    // terms' "answered by someone other than whoever made the original one"
+    // to be checkable against the decision log at all.
+    const { deps: d, store } = desk();
+    await post(d, sign({}));
+    await answerPost(d, answer({ kind: 'resolved', note: 'Upheld; paid in full.' }));
+    const [, row] = await store.listFor(REFERENCE);
+    expect(row.decidedBy).to.equal(DESK);
+    expect(row.signature).to.be.a('string');
+    expect(row.signedAt).to.equal(AT);
+    // The lodge's own category and pool are carried, never taken from the
+    // caller — who could otherwise mislabel somebody else's complaint.
+    expect(row.category).to.equal('decision');
+    // And no player address is repeated onto the operator's row.
+    expect(row.wallet).to.equal(null);
+  });
+
+  it('refuses a key that is not in the registry, and says nothing about why', async () => {
+    const { deps: d, store } = desk();
+    await post(d, sign({}));
+    const stranger = nacl.sign.keyPair();
+    const res = await answerPost(
+      d,
+      answer({ decidedBy: base58Encode(stranger.publicKey), signer: stranger })
+    );
+    expect(res.status).to.equal(401);
+    // Identical to a bad signature and to a stale one: not an oracle for the
+    // founder-owned member list.
+    expect(res.body).to.deep.equal({ error: 'unauthorized' });
+    expect(await store.listFor(REFERENCE)).to.have.lengthOf(1);
+  });
+
+  it('refuses a caller who NAMES a registry key they cannot sign for', async () => {
+    const { deps: d } = desk();
+    await post(d, sign({}));
+    const impostor = nacl.sign.keyPair();
+    const res = await answerPost(d, answer({ decidedBy: DESK, signer: impostor }));
+    expect(res.status).to.equal(401);
+    expect(res.body).to.deep.equal({ error: 'unauthorized' });
+  });
+
+  it('refuses a stale answer, uniformly with the rest', async () => {
+    const { deps: d } = desk();
+    await post(d, sign({}));
+    const stale = new Date(NOW - 60 * 60 * 1000).toISOString();
+    const res = await answerPost(d, answer({ decidedAt: stale }));
+    expect(res.status).to.equal(401);
+    expect(res.body).to.deep.equal({ error: 'unauthorized' });
+  });
+
+  it('cannot be forged from a LODGE signature, and vice versa', async () => {
+    // Domain separation, asserted rather than assumed. The two messages have
+    // different headers, so neither signature verifies as the other.
+    const { deps: d } = desk();
+    await post(d, sign({}));
+    const lodge = sign({});
+    const crossed = await answerPost(d, {
+      ...answer({}),
+      signature: lodge.signature,
+    });
+    expect(crossed.status).to.equal(401);
+
+    const a = answer({});
+    const crossedBack = await post(d, { ...sign({}), signature: a.signature });
+    expect(crossedBack.status).to.equal(401);
+  });
+
+  it('cannot conjure a thread: a reference with no lodge is a 404', async () => {
+    const { deps: d, store } = desk();
+    const res = await answerPost(d, answer({}));
+    expect(res.status).to.equal(404);
+    expect(res.body).to.deep.equal({ error: 'not_found' });
+    // Nothing written. An answer with no lodge would be a row whose status
+    // `complaintStatus` reports as null — unreadable by anybody.
+    expect(await store.listFor(REFERENCE)).to.have.lengthOf(0);
+  });
+
+  it('refuses a replayed answer, and tells the truth about why', async () => {
+    const { deps: d, store } = desk();
+    await post(d, sign({}));
+    const a = answer({});
+    expect((await answerPost(d, a)).status).to.equal(204);
+    const again = await answerPost(d, a);
+    expect(again.status).to.equal(409);
+    expect(again.body).to.deep.equal({ error: 'already_recorded' });
+    expect(await store.listFor(REFERENCE)).to.have.lengthOf(2);
+  });
+
+  it('refuses a malformed answer with a 400, before any signature work', async () => {
+    const { deps: d } = desk();
+    await post(d, sign({}));
+    const good = answer({});
+    for (const body of [
+      { ...good, reference: 'nope' },
+      { ...good, kind: 'closed' },
+      { ...good, decidedBy: 'not-base58-!' },
+      { ...good, note: '' },
+      { ...good, note: 'x'.repeat(COMPLAINT_NOTE_MAX + 1) },
+      { ...good, decidedAt: 42 },
+      { ...good, signature: 7 },
+      {},
+    ]) {
+      expect((await answerPost(d, body)).status, JSON.stringify(body).slice(0, 40)).to.equal(400);
+    }
+  });
+
+  it('answers 503 with no store, never a refusal', async () => {
+    const d = { registry: { version: 1, members: [DESK], updated: 'x' } } as unknown as ReviewServerDeps;
+    expect((await answerPost(d, answer({}))).status).to.equal(503);
+  });
+
+  it('is 405 on a method it does not serve', async () => {
+    const { deps: d } = desk();
+    expect((await handleReviewRoute(d, 'GET', '/complaints/answer', null, {})).status).to.equal(405);
+  });
+});
+
+describe('GET /complaints/open — the desk queue', () => {
+  it('serves the open queue to the operator token and to nobody else', async () => {
+    const { deps: d } = desk();
+    await post(d, sign({}));
+    expect((await queue(d)).status, 'no token').to.equal(401);
+    expect((await queue(d, '', 'not-the-token')).status, 'wrong token').to.equal(401);
+    const res = await queue(d, '', TOKEN);
+    expect(res.status).to.equal(200);
+    const body = res.body as { open: Array<Record<string, unknown>>; resolveDays: number };
+    expect(body.open).to.have.lengthOf(1);
+    expect(body.open[0].reference).to.equal(REFERENCE);
+    expect(body.open[0].signed).to.equal(true);
+    expect(body.open[0].text).to.contain('withheld');
+    // The published windows travel with the queue, so the desk page never
+    // types a figure either.
+    expect(body.resolveDays).to.equal(COMPLAINT_RESOLVE_DAYS);
+  });
+
+  it('is FAIL-CLOSED: an unset token is a 503, never an open route', async () => {
+    // This queue is the most sensitive text the product holds — players'
+    // own words about their own problems. It must never be readable by an
+    // unauthenticated probe because somebody forgot to set a variable.
+    const { deps: d } = desk();
+    await post(d, sign({}));
+    const res = await queue({ ...d, operatorToken: undefined } as ReviewServerDeps, '', TOKEN);
+    expect(res.status).to.equal(503);
+    expect(res.body).to.deep.equal({ error: 'not_configured' });
+  });
+
+  it('drops a complaint once it is RESOLVED, and keeps an acknowledged one', async () => {
+    const { deps: d } = desk();
+    await post(d, sign({}));
+    await answerPost(d, answer({ kind: 'acknowledged' }));
+    const still = (await queue(d, '', TOKEN)).body as { open: unknown[] };
+    expect(still.open, 'acknowledged is still the desk problem').to.have.lengthOf(1);
+
+    await answerPost(d, answer({ kind: 'resolved', note: 'Answered in full.' }));
+    const gone = (await queue(d, '', TOKEN)).body as { open: unknown[] };
+    expect(gone.open, 'resolved is not').to.have.lengthOf(0);
+  });
+
+  it('bounds the limit, because the rows are personal data', async () => {
+    const { deps: d } = desk();
+    for (const q of ['?limit=0', `?limit=${COMPLAINT_QUEUE_MAX + 1}`, '?limit=all', '?limit=1.5']) {
+      expect((await queue(d, q, TOKEN)).status, q).to.equal(400);
+    }
+    expect((await queue(d, `?limit=${COMPLAINT_QUEUE_MAX}`, TOKEN)).status).to.equal(200);
+  });
+
+  it('is 405 on a method it does not serve', async () => {
+    const { deps: d } = desk();
+    expect(
+      (await handleReviewRoute(d, 'POST', '/complaints/open', {}, { authorization: TOKEN })).status
+    ).to.equal(405);
   });
 });

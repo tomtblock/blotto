@@ -71,4 +71,35 @@ export class PgComplaintStore implements ComplaintStore {
     );
     return res.rows.map(toRow);
   }
+
+  /**
+   * The desk's queue. The LODGE of every complaint with no `resolved` row,
+   * newest first — which is what migration 0024's partial index
+   * `complaints_open` exists for on the outer scan, and what
+   * `complaints_reference` serves on the NOT EXISTS.
+   *
+   * "Open" is derived here exactly as the player-facing status is derived in
+   * `complaints.ts::complaintStatus`: from the presence of rows, never from a
+   * column anybody updates. A resolved complaint that is re-opened is a new
+   * row, and this query would not show it — which is correct, because the
+   * thread's latest row is what `complaintStatus` reports and re-opening
+   * appends an `acknowledged` after the `resolved`. PHASE-N-REVIEW: if
+   * re-opening ever becomes a real workflow rather than a possibility the
+   * schema allows, this needs to read the LATEST row per reference instead.
+   */
+  async listOpen(limit: number): Promise<ComplaintRow[]> {
+    const res = await this.db.query(
+      `SELECT ${ROW_COLUMNS}
+         FROM complaints c
+        WHERE c.kind = 'lodged'
+          AND NOT EXISTS (
+                SELECT 1 FROM complaints r
+                 WHERE r.reference = c.reference AND r.kind = 'resolved'
+              )
+        ORDER BY c.received_at DESC
+        LIMIT $1`,
+      [limit]
+    );
+    return res.rows.map(toRow);
+  }
 }
