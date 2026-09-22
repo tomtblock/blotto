@@ -40,6 +40,7 @@ const FILES = readdirSync(MIGRATIONS_DIR)
 const EXPECTED_TABLES = [
   'attestations',
   'bundles',
+  'complaints',
   'detection_reports',
   'events',
   'notify_optin',

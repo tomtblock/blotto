@@ -7,8 +7,9 @@
  *   BLOTTO_API_CORS_ORIGINS etc. BR-005 hygiene (_shared/http-hygiene.ts);
  *                                the app's origin MUST be allowlisted or the
  *                                browser's POSTs are refused at preflight
- *   BLOTTO_DATABASE_URL          Postgres (the append-only decision log AND
- *                                the detection report store, migration 0021)
+ *   BLOTTO_DATABASE_URL          Postgres (the append-only decision log, the
+ *                                detection report store (migration 0021) AND
+ *                                the complaints record (migration 0024))
  *   BLOTTO_REVIEWERS_PATH        default config/reviewers.json (founder-owned)
  *   BLOTTO_RPC_URL               default devnet
  *   BLOTTO_PROGRAM_ID            default the declared id
@@ -59,6 +60,7 @@ import { serveReviewApi } from './server';
 import { parseReviewerRegistry } from './auth';
 import { BUDGET_ENV, DEFAULT_REVIEWER_BUDGET, type ReviewerBudget } from './budget';
 import { PgDecisionLog } from './log-pg';
+import { PgComplaintStore } from './complaints-pg';
 import { PgDetectionReportStore } from './reports-pg';
 import { reviewActionsFromChain } from './actions-chain';
 
@@ -136,6 +138,11 @@ export function main(env: NodeJS.ProcessEnv = process.env): void {
       actions: reviewActionsFromChain(chain, resolvePoolId),
       log: new PgDecisionLog(db),
       reports: new PgDetectionReportStore(db),
+      // The complaints record (2026-09-19). Always on where a database is:
+      // the route the terms and the privacy notice both point at must not
+      // depend on a second deployment decision, and the shared database has
+      // the table (migration 0024).
+      complaints: new PgComplaintStore(db),
       operatorToken: operatorToken === '' ? undefined : operatorToken,
       monitor,
       budget,

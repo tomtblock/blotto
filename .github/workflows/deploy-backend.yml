@@ -145,6 +145,25 @@ jobs:
           GATE_ALLOW_RED: ${{ inputs.deploy_despite_red_ci }}
         run: ./scripts/ci-gate.sh
 
+      # The operator identity behind the terms and the privacy notice
+      # (2026-09-19). Both documents render "not yet set" for the operating
+      # entity, its addresses, the governing law and the supervisory
+      # authority, because no company exists yet — the honest state, and
+      # deliberately visible. What must not happen is real money moving
+      # under terms with no counterparty in them, so this REFUSES a mainnet
+      # deploy while any value is null. This workflow stages
+      # BLOTTO_CLUSTER=devnet and refuses a mainnet-looking RPC outright, so
+      # today the step reports what is unset and passes; it becomes a
+      # blocker on the day the staged cluster changes.
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v4.4.0
+        with:
+          node-version: 20
+
+      - name: Operator identity is set for this cluster
+        env:
+          BLOTTO_CLUSTER: devnet
+        run: npx --yes tsx@4.20.3 scripts/check-operator-identity.ts
+
   deploy:
     needs: gate
     runs-on: ubuntu-latest

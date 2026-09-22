@@ -15,6 +15,7 @@ import { strict as assert } from 'assert';
 import { buildSigner } from '../src/signer-select';
 import { issuePacket } from '../src/service';
 import { loadTerritorySchedule } from '../src/territories';
+import { DEFAULT_WALLET_BLOCKLIST } from '../src/blocked-wallets';
 import { resolve } from 'path';
 
 const TERRITORIES = loadTerritorySchedule(
@@ -115,7 +116,7 @@ describe('a failed issuance is generic to the caller, diagnosable by the operato
             }),
             put: async () => undefined,
           },
-          config: { territories: TERRITORIES, termsVersion: 1, termsUpdated: '2026-09-06', kycTier: 0 },
+          config: { blockedWallets: DEFAULT_WALLET_BLOCKLIST, territories: TERRITORIES, termsVersion: 1, termsUpdated: '2026-09-06', kycTier: 0 },
           now: () => 0n,
           nonce: () => 0n,
           signer: {

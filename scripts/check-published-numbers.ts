@@ -312,6 +312,14 @@ function selfTest(): boolean {
  */
 const SURFACES = [
   'app/src/copy/index.ts',
+  // The terms of service and the privacy notice (2026-09-19). Both are
+  // dense with numbers a player relies on — the minimum field, the fill
+  // deadline, the review window, the permissionless release — and the
+  // terms are the AGREEMENT, so a superseded figure there is worse than
+  // one in a description. Every figure in both is a function of the shared
+  // constant; these two entries are the net beneath that.
+  'app/src/copy/terms.ts',
+  'app/src/copy/privacy.ts',
   'app/src/app/rules/rules.config.ts',
   'app/src/app/fair-play/fair-play.config.ts',
 ];
