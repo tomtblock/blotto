@@ -86,12 +86,13 @@ describe('the committed territory schedule', () => {
   // is deliberately wider. Pinned by hand, like the rest, because the
   // schedule is founder-owned and a silent edit to it is the thing this test
   // exists to refuse.
-  it('carries the fourteen confirmed PID §9 countries, plus US at country level, and nothing else', () => {
+  it('carries the fourteen confirmed PID §9 countries, plus ES/FR/IT and US, and nothing else', () => {
     const committed = parseTerritorySchedule(
       readFileSync(join(__dirname, '..', '..', '..', 'config', 'territories.json'), 'utf8')
     );
     expect(committed.blocked).to.deep.equal([
-      'AE', 'AU', 'BE', 'BH', 'CN', 'HK', 'ID', 'IN', 'KW', 'MY', 'OM', 'QA', 'SA', 'SG', 'US',
+      'AE', 'AU', 'BE', 'BH', 'CN', 'ES', 'FR', 'HK', 'ID', 'IN', 'IT',
+      'KW', 'MY', 'OM', 'QA', 'SA', 'SG', 'US',
     ]);
     // A block-list with a populated allow-list misstates the policy; the
     // parser refuses it, and this says so at the committed file too.

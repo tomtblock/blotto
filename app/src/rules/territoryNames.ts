@@ -28,7 +28,8 @@
 
 /** Country names, ISO 3166-1 alpha-2. */
 const COUNTRY_NAMES: Record<string, string> = {
-  // — Live in the schedule since version 3 (PID §9, the confirmed rows).
+  // — Version 3 (founder instruction 2026-09-12): the PID §9 rows marked
+  //   confirmed.
   AE: 'United Arab Emirates',
   AU: 'Australia',
   BE: 'Belgium',
@@ -36,7 +37,6 @@ const COUNTRY_NAMES: Record<string, string> = {
   CN: 'China',
   HK: 'Hong Kong',
   ID: 'Indonesia',
-  US: 'United States',
   IN: 'India',
   KW: 'Kuwait',
   MY: 'Malaysia',
@@ -44,6 +44,18 @@ const COUNTRY_NAMES: Record<string, string> = {
   QA: 'Qatar',
   SA: 'Saudi Arabia',
   SG: 'Singapore',
+
+  // — Version 4 (founder instruction 2026-09-21, D-B3-3). NOT a §9 country
+  //   row: §9 names twelve US states, which cannot be enforced while the geo
+  //   source resolves no region, so the country stands in for them.
+  US: 'United States',
+
+  // — Version 5 (founder instruction 2026-09-18, landed 2026-09-22 as
+  //   D-B3-4). §9 had these three "open subject to counsel confirmation";
+  //   the instruction supersedes that pending a written opinion.
+  ES: 'Spain',
+  FR: 'France',
+  IT: 'Italy',
 
   // — Held pending counsel's exact sanctions set. Named here so the day it
   //   is settled is a one-line change to the JSON. These countries are
