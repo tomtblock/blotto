@@ -522,7 +522,7 @@ def main() -> None:
     pl = _p(2_100_000, 6)
     pl[1] = pl[4] = None
     missing_pools.append(missing_vector("two_missing", pl))
-    # Every entry lost. Degenerate, and it must still produce a lawful
+    # Every entry lost. An extreme case, and it must still produce a lawful
     # ranking rather than throw: all equal, all rank 1.
     missing_pools.append(missing_vector("all_missing_4", [None] * 4))
     # Exactly one entry survives — it wins everything, the rest tie behind it.
