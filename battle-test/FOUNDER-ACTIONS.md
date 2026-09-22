@@ -1110,3 +1110,50 @@ I will tell you how to make the third wallet; it takes a couple of minutes and I
 One word: **(a)**, **(b)** or **(c)**. Nothing is spent until you answer — I have not started the
 fill and will not. If you say nothing at all, pool 27 lapses on its own and (b) happens by default,
 which is the one safe way for this to resolve without you.
+
+## F-37 — ▶ FOUNDER ACTION: one entry attempt, ~60 seconds, and T6 is complete
+
+**T6 ran and passed.** Pool 27 filled to 64, W00 took rank 1 and the whole 4 SOL, nine late
+attempts were all refused by the program, and the results root recomputes. `registry/T6.verdict.md`
+has the detail.
+
+One criterion was left open, and you can close it in about a minute.
+
+### What to do
+
+1. Go to blotto.gg and connect as **UI-A** *or* **UI-B** — either is fine.
+2. Try to enter **pool 27**. It has already filled and paid, so there is nothing to win and nothing
+   to lose; this is only about what the screen says.
+3. **Screenshot whatever you see** and send it.
+
+### What I expect, and what would be a finding either way
+
+The server is holding the right sentence. I asked it directly, a minute ago:
+
+```
+pool 27 (filled at 64)        ->  "pool filled"
+pool 22 (filled at 64)        ->  "pool filled"
+pool 21 (ran out of time, 39) ->  "pool closed to entries"
+```
+
+So the entry service now tells the two cases apart, live, which is the fix you merged and deployed
+on Saturday. **What I cannot test is whether the app shows it to you.** Both your wallets are
+already seated in pool 27, and the app may well stop you before it ever asks the server — a
+"you're already in this pool" screen, or a pool page that offers no entry button at all.
+
+- If you see a sentence saying **the pool filled** — the criterion passes and T6 is complete.
+- If you see a **generic error, a spinner, or nothing happens** — that is a real finding and worth
+  more than the criterion was.
+- If the app **won't let you try at all** — also a finding, and a reasonable one: it is correct
+  behaviour that happens to make this untestable from a seated wallet.
+
+All three outcomes are useful. There is no wrong answer here and nothing can be broken by trying.
+
+### Nothing else is waiting on you
+
+Two things on my side, neither needing you: preflight has a bug that wrongly condemns wallets which
+have never played (§H27), which I am fixing now; and **PR 159** is green and carries the whole
+battle-test record.
+
+**▶ One housekeeping item, still open from §F-35:** rotate the Helius key when the test week ends,
+since it passed through the chat. About thirty seconds in the Helius dashboard.

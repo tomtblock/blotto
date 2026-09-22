@@ -1650,3 +1650,50 @@ work lands, containing nothing else. §F-36 writes T6's re-run that way.
 **Related:** §F-28 (a step believed done because a document said so), §H21 (a check that printed
 PASS over a criterion it never evaluated). The family resemblance is a record asserting a state of
 the world instead of the world being made to hold it.
+
+### §H27 — preflight's STOP is wrong for any wallet that has never played
+
+**What happened.** Preflighting pool 27, five wallets came back
+`the entry gate REFUSED (403). Do NOT let this wallet play: it would seal, fail, and be barred
+from pool 27 for good.` — W67, W68, W69, W70, W71. Refused again when probed one at a time, so not
+rate limiting. Wallet-specific, persistent, and on the check whose entire job is to stop a wallet
+being barred.
+
+**It was wrong about all five.** `service.ts:330` will not issue a packet without a stored
+age/terms attestation at the current version. `enter.ts:471` attests immediately before asking for
+a packet — the headless equivalent of the clickwrap. **Preflight does not.** So preflight tests a
+sequence no entrant ever performs, and condemns every wallet that has simply never played.
+
+Measured, one call each, nothing registered:
+
+```
+W67  packet before 403  ->  attestation 204  ->  packet after 200
+W68  packet before 403  ->  attestation 204  ->  packet after 200
+W69  packet before 403  ->  attestation 204  ->  packet after 200
+W70  packet before 403  ->  attestation 204  ->  packet after 200
+W71  packet before 403  ->  attestation 204  ->  packet after 200
+```
+
+**Why it survived this long.** It fails SAFE — it says STOP when things are fine — so it has never
+cost a wallet or a lamport, and every wallet it has ever approved had already played and so was
+already attested. A check that is only ever wrong in the cautious direction produces no incident to
+investigate.
+
+**What it nearly cost here.** Five working wallets written off, and the ninth late attempt
+engineered around a wallet that did not need engineering around. The 403 is deliberately generic so
+that the gate is not an oracle a prober can walk (PID §8) — correct design, and it means preflight
+cannot distinguish "unattested" from "refused" by reading the response. The fix is not to parse the
+refusal; it is to run the same sequence `enter.ts` runs.
+
+**And it casts doubt on an earlier reading.** During T4 a W63 refusal was logged as
+`geo BLOCK … attestation-missing-or-stale` and read as a control working as designed. It may
+simply have been an unattested wallet. I am not asserting that it was — the log line names the
+attestation explicitly — but the reading was made without knowing preflight skips the step.
+
+**§H9's family for the FIFTH time** (§H9, §H14, §H21, §H23, §H24, §H27): a check reporting on
+something other than the thing it claims to measure. This one is the first where the check in
+question is itself a safety interlock.
+
+**Fix:** preflight should attest before requesting the packet, exactly as `enter.ts` does, and say
+in its output that it did. Queued after the pool 27 run rather than before it — changing a safety
+interlock while 6.2 SOL is about to move through it is the wrong order.
