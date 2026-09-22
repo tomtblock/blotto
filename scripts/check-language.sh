@@ -143,6 +143,16 @@ hits="$(
     `# The verbatim Apache-2.0 text ("Licensed under..."). Legal boilerplate` \
     `# nobody here authored; software licensing, not a gaming-licence claim.` \
     --exclude=LICENSE \
+    `# The same category, added 2026-09-22: the SIL Open Font License 1.1 text` \
+    `# shipped beside each self-hosted font in app/src/fonts. It trips \`licensed\`` \
+    `# on its own third line -- "This Font Software is licensed under the SIL` \
+    `# Open Font License". We are not merely allowed to ship this text, the OFL` \
+    `# REQUIRES it, verbatim, with every copy of the font; rewording it to pass` \
+    `# a grep would breach the licence the file exists to satisfy. Nobody here` \
+    `# authored a word of it, and like LICENSE above it is software licensing,` \
+    `# not a claim that this operator holds a gaming licence. Scoped to the` \
+    `# suffix so it covers only these vendored texts and nothing we write.` \
+    --exclude='*.OFL.txt' \
     `# Lockfiles are dependency metadata, not authored prose. Package names like` \
     `# "pump", "escape-string-regexp" and "solana-program-pack" are not ours to` \
     `# rename, and a lockfile is machine-generated.` \
