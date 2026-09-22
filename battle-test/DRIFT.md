@@ -1697,3 +1697,23 @@ question is itself a safety interlock.
 **Fix:** preflight should attest before requesting the packet, exactly as `enter.ts` does, and say
 in its output that it did. Queued after the pool 27 run rather than before it — changing a safety
 interlock while 6.2 SOL is about to move through it is the wrong order.
+
+**FIXED 2026-09-22, and the fix is the sequence rather than the parsing.** `preflight.ts` now makes
+the clickwrap attestation immediately before requesting the packet, exactly as `enter.ts` does, so
+it tests the sequence an entrant actually runs. Verified live on pool 28:
+
+```
+ok    W00 clickwrap accepted at terms v2 (204)
+ok    W00 the entry gate issued a packet (200)
+```
+
+Two details worth keeping:
+
+- **It did not try to parse the refusal.** The gate answers one generic status for every reason it
+  has, deliberately, so that it cannot be walked by a prober (PID §8). Reading the 403 to guess
+  "unattested" would have been a fix that quietly depends on the gate staying leaky.
+- **A third verdict, `WARN`, exists now.** UI-A and UI-B are Privy wallets whose keys are not on
+  this disk, so no clickwrap can be made for them and their refusal is genuinely ambiguous — it may
+  mean nothing worse than "has not accepted the current terms yet". Collapsing that into `ok` or
+  into `STOP` is how §H27 happened in the first place. `WARN` prints, does not claim the wallet is
+  clean, and does not block the run.
