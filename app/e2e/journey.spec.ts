@@ -35,7 +35,41 @@ test('landing: montage hero, the enter control, the 18+ line above the fold', as
   await shot(page, 'landing', info.project.name);
 });
 
+test('landing: the board demo pours points and locks a field (founder 2026-09-24)', async ({ page }) => {
+  // Only when the app was BUILT with the board switch on; otherwise the
+  // practice machine below is what renders, and that test covers it.
+  test.skip(process.env.NEXT_PUBLIC_BATTLE_BOARD !== '1', 'board switch off');
+  await page.addInitScript(() => localStorage.setItem('blotto.preloader.seen', 'v2'));
+  await page.goto('/');
+  const demo = page.getByTestId('board-demo');
+  // Centre the board: flush to the top it sits under the sticky header,
+  // exactly as any anchor target would (the #demo section has scroll-mt for
+  // the real link; a test's scrollIntoView does not use it).
+  await demo.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+  await demo.getByTestId('board-begin').click();
+  // Pick Wit, then press and hold on Field 1's grass: the deploy curve sends
+  // points one after another (the arena reads real pointer coordinates).
+  await demo.getByTestId('troop-3').click();
+  const grass = demo.locator('.bba-field-hit[data-field="0"]');
+  const box = await grass.boundingBox();
+  if (!box) throw new Error('Field 1 has no box');
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.waitForTimeout(900);
+  await page.mouse.up();
+  await expect(demo.locator('.bba-crowd-chip[data-field="0"][data-stat="3"]')).toBeVisible();
+  // The plaque opens the stepper; +5 lands; Fill makes it Full; Lock in works only then.
+  await demo.locator('.bba-plaque[data-field="0"]').click();
+  await demo.getByRole('button', { name: 'Add 5 Wit to Field 1' }).click();
+  await demo.getByRole('button', { name: 'Fill with Wit' }).click();
+  await demo.getByRole('button', { name: 'Lock in Field 1' }).click();
+  await expect(demo.getByRole('button', { name: 'Unlock Field 1' })).toBeVisible();
+  await demo.getByRole('button', { name: 'Close' }).click();
+  await expect(demo.getByText('1 / 7 battles full · 1 locked in')).toBeVisible();
+});
+
 test('landing: the practice machine can hold a stat (founder 2026-09-16)', async ({ page }) => {
+  test.skip(process.env.NEXT_PUBLIC_BATTLE_BOARD === '1', 'board switch on');
   // The first-visit curtain is a root-route overlay; mark it seen so the
   // dials are reachable (preloader-model.ts holds the key and value).
   await page.addInitScript(() => localStorage.setItem('blotto.preloader.seen', 'v2'));

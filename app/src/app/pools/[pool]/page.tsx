@@ -15,6 +15,7 @@ import {
   TIER_POT_LAMPORTS,
 } from '@blotto/scoring';
 import { COPY } from '@/copy';
+import { BOARD_CLOCK_BUDGET_MS } from '@/battle/board/mode';
 import { indexerApi, live } from '@/data/api';
 import { lamportsToSol } from '@/data/format';
 import { AppHeader } from '@/components/shell/app-header';
@@ -50,6 +51,7 @@ const STRIP_POSTER = '/motion/pool/strip.jpg';
 const MIN_SEATS_N = Number(MIN_SEATS);
 const FILL_HOURS = Number(DEFAULT_FILL_DEADLINE_SECS / 3600n);
 const REVIEW_HOURS = Number(REVIEW_WINDOW_SECS / 3600n);
+const BOARD_MINUTES = BOARD_CLOCK_BUDGET_MS / 60_000;
 
 export default async function PoolPage({ params }: { params: Promise<{ pool: string }> }) {
   const { pool: poolId } = await params;
@@ -99,6 +101,9 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
         <header className="mb-6 flex flex-wrap items-center gap-3">
           <MarqueeHeading as="h1">{COPY.reveal.passPool(pool.id)}</MarqueeHeading>
           <Pill tone="field">{poolStateLabel(pool)}</Pill>
+          {/* The mode this pool plays (founder 2026-09-24). Phase A: every
+              pool is easy; Phase B reads it from the pool record. */}
+          <Pill tone="ink">{COPY.board.modeEasy}</Pill>
           {/* Founder 2026-09-16 (D5): the Verify page recomputes a RESULT from
               the published bundle and the on-chain record, and an open pool
               has neither yet — the link led to "nothing to check". It appears
@@ -192,6 +197,17 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
               {COPY.fairPlay.title}
             </Link>
           </p>
+        </NeonSection>
+
+        {/* "How this pool plays" (founder 2026-09-24): the rule of THIS pool,
+            read before paying. Config-driven (D-B6): the minutes come from
+            the board's clock constant, never typed here. */}
+        <NeonSection heading={COPY.pool.howItPlaysHeading} className="mb-8">
+          <ul className="flex list-disc flex-col gap-3 pl-5 text-[17px] leading-[26px] text-ink marker:text-brand">
+            {COPY.pool.howItPlays('easy', BOARD_MINUTES).map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
         </NeonSection>
 
         {open ? (

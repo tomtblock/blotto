@@ -181,7 +181,7 @@ export default async function LandingPage() {
                 href="#demo"
                 className="rounded-full border-2 border-brand-cream px-6 py-3 font-mono text-[13px] uppercase tracking-wide text-brand-cream hover:bg-brand-cream/10"
               >
-                {COPY.landing.tryDials}
+                {process.env.NEXT_PUBLIC_BATTLE_BOARD === '1' ? COPY.landing.tryBoard : COPY.landing.tryDials}
               </a>
             </div>
             {/* v3 D2: visible without scrolling on mobile (the hero is content-height there). */}

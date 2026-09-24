@@ -357,6 +357,26 @@ export const COPY = {
     // the key our systems hold locked until the pool closes, the fill clock,
     // the field, the refund. Numbers come from the shared constants via the
     // caller. Proposal until ratified.
+    /*
+     * "How this pool plays" (founder 2026-09-24): the mode boundary a player
+     * reads BEFORE paying — the rule of THIS pool, config-driven (D-B6).
+     * Phase A: every pool is easy. PHASE-N-REVIEW: drafts; founder-owned.
+     */
+    howItPlaysHeading: 'How this pool plays',
+    howItPlays: (mode: 'easy' | 'hard', minutes: number): readonly string[] =>
+      mode === 'easy'
+        ? [
+            'Seven battles. In each one you split 100 points across Strength, Speed, Heart, Wit and Durability.',
+            `${minutes} minutes on one clock for all seven. It starts when you place your first point.`,
+            'At the buzzer whatever is on the board is your entry. Points you have not placed in a battle are spread evenly across its five stats, unless you locked that battle in.',
+            'A battle is won by taking three of the five stats against an opponent. Every player faces every other player.',
+          ]
+        : [
+            'Seven battles and 700 points. Place them anywhere — all in one battle, spread across all seven, or anything between.',
+            `${minutes} minutes on one clock. It starts when you place your first point.`,
+            'At the buzzer whatever is on the board is your entry. Points you have not placed are spread evenly across every stat of every battle you have not locked in.',
+            'A battle is won by taking three of the five stats against an opponent. Every player faces every other player.',
+          ],
     aboutPoints: (minSeats: number, fillHours: number): readonly string[] => [
       'The player ranked first takes the whole prize pool. A tie for first splits it equally.',
       'Your battles are encrypted on your device; the key stays locked in our systems until the pool closes. Only their hash goes on-chain at entry.',
@@ -436,6 +456,11 @@ export const COPY = {
     // already ratified elsewhere in this file.
     heroTitle: 'Make your Blott',
     tryDials: 'Try the dials',
+    // The board (founder 2026-09-24): the landing's toy is the board when
+    // NEXT_PUBLIC_BATTLE_BOARD=1. PHASE-N-REVIEW: drafts; founder-owned.
+    tryBoard: 'Try the board',
+    demoBoardHint:
+      'Tap a troop, press and hold a field. Nothing to sign, nothing to pay: this one is just to feel it. A real entry plays the same board with a three-minute clock.',
     // PHASE-N-REVIEW (founder 2026-09-16, CHANGE-2026-09-16_ui-uplift.md §A11):
     // the practice machine now carries the padlocks the run has; one
     // sentence says what they do. Proposal until ratified.
@@ -689,6 +714,102 @@ export const COPY = {
    * is unchanged — what this is, that results are recomputable, and what to
    * do next. No promise this product cannot keep.
    */
+  /*
+   * THE BATTLE BOARD (founder brief 2026-09-24): the map that replaces the
+   * dials — seven fields, five troops, press-and-hold to send points, a
+   * stepper for steps, lock-in per field, one three-minute clock. Two modes:
+   * easy (100 points in each battle — the rule the platform has always
+   * played) and hard (700 points anywhere across the seven; its pool lands
+   * in Phase B). PHASE-N-REVIEW: every line here is a draft; the founder
+   * owns the words. Vocabulary ruled 2026-09-24 (5.4): troop, crowd,
+   * field, points.
+   *
+   * PID §4.2 said the player never sees a points-remaining counter, and
+   * audit A-29 removed one on that basis (see the note in `battle` above).
+   * The founder's ruling of 2026-09-24 (5.3) asks for exactly that readout
+   * in both modes — per field in easy, one total in hard. PHASE-N-REVIEW:
+   * the ruling supersedes §4.2's sentence; recorded in
+   * docs/CHANGE-2026-09-24_battle-board.md for the PID reissue.
+   */
+  board: {
+    modeEasy: 'Easy · 100 per battle',
+    modeHard: 'Hard · 700 anywhere',
+    mapLabel: 'The battle board: seven fields around a castle',
+    field: (n: number) => `Field ${n}`,
+    chipEasy: (placed: number, left: number) => `${placed} placed · ${left} left`,
+    chipHard: (placed: number) => `${placed} placed`,
+    chipFull: '100 · Full',
+    chipLocked: (placed: number) => `Locked · ${placed}`,
+    chipAria: (n: number, line: string, locked: boolean) =>
+      `Field ${n}: ${line}${locked ? ', locked in' : ''}. Opens the stepper.`,
+    fieldAria: (n: number, troop: string | null, locked: boolean) =>
+      locked
+        ? `Field ${n} is locked in`
+        : troop
+          ? `Field ${n}. Press and hold, or press Enter, to send ${troop} here`
+          : `Field ${n}. Pick a troop first`,
+    trayLabel: 'Troops. Tap a card, then press and hold on a field.',
+    troopPlaced: (n: number) => `${n} placed`,
+    // Plaques (the mockup's field signs): name, the big line, the small line.
+    plaqueFull: 'Full',
+    plaqueLeft: (n: number) => `${n} left`,
+    plaquePlaced: (n: number) => `${n} placed`,
+    plaqueLocked: 'Locked in',
+    toastFull: (n: number) => `Field ${n} is full`,
+    toastPick: 'Pick a troop from the tray first',
+    zoomLabel: 'Zoom',
+    zoomReset: 'Reset zoom to 100%',
+    // The hint line: always the NEXT action, in one sentence (the mockup's words).
+    hintPick: 'Tap a troop, then press and hold on a field',
+    hintHold: (troop: string) => `Press and hold on a field to send ${troop} there. Hold longer for more. Tap a plaque or a crowd’s number for steps.`,
+    hintHoldHard: (troop: string, left: number) => `Press and hold on a field to send ${troop} there. ${left} points left to place.`,
+    hintDeploying: (troop: string, n: number) => `Deploying ${troop} on Field ${n}…`,
+    hintLastSeconds: 'Ten seconds. Anything unplaced spreads evenly across the fields you have not locked in.',
+    // The clock (founder 2.3): the rule is said before the first touch.
+    timerHeld: 'Starts on your first point',
+    timerHeldAria: 'The clock starts when you place your first point',
+    timeLeft: 'Time left',
+    timerAria: (clock: string) => `${clock} remaining`,
+    bannerTitle: 'The clock starts when you place your first point',
+    bannerEasy: 'Three minutes for all seven battles. Each battle takes 100 points, split across your five troops however you like.',
+    bannerHard: 'Three minutes. 700 points to place anywhere across the seven battles — all in one, spread across all seven, or anything between.',
+    bannerLooking: 'Look around, pick a troop, zoom in — none of that starts it.',
+    bannerGo: 'Take the field',
+    readoutEasy: (full: number, locked: number) => `${full} / 7 battles full${locked ? ` · ${locked} locked in` : ''}`,
+    readoutHard: (left: number, locked: number) => `Left to place  ${left} / 700${locked ? ` · ${locked} locked in` : ''}`,
+    leave: '← Leave',
+    zoomIn: 'Zoom in',
+    zoomOut: 'Zoom out',
+    fit: 'Fit',
+    // The stepper.
+    stepperTitle: (troop: string, n: number) => `${troop} on Field ${n}`,
+    pickTroopTitle: (n: number) => `Which troop for Field ${n}?`,
+    leftHere: (n: number) => `${n} left on this field`,
+    leftToPlace: (n: number) => `${n} left to place`,
+    stepAria: (delta: number, troop: string, n: number) =>
+      `${delta > 0 ? 'Add' : 'Take back'} ${Math.abs(delta)} ${troop} ${delta > 0 ? 'to' : 'from'} Field ${n}`,
+    fillField: (troop: string) => `Fill with ${troop}`,
+    sendBack: (troop: string) => `Send ${troop} back`,
+    lock: (n: number) => `Lock in Field ${n}`,
+    unlock: (n: number) => `Unlock Field ${n}`,
+    lockedHint: (n: number) => `Field ${n} is locked in. It will not change, and the buzzer will not touch it.`,
+    lockNeedsFull: 'A field locks in once it is full.',
+    lockNeedsPlaced: (left: number) => `Place your remaining ${left} points first — this is the last open field.`,
+    close: 'Close',
+    submitEarly: 'Submit now',
+    submitComplete: 'Submit my board',
+    // Review.
+    reviewTitle: 'Your entry',
+    reviewSubmitted: (clock: string) => `Submitted with ${clock} left. Decisions are final once sealed.`,
+    reviewExpired: 'Time ran out. Whatever was on the board is your entry; anything unplaced was spread evenly across the fields you had not locked in.',
+    checkEasy: (per: number) => `7 battles · every battle sums to exactly ${per}`,
+    checkHard: (total: number) => `7 battles · ${total} points placed`,
+    reviewTableLabel: 'Your seven battles, five stats each',
+    reviewBattle: 'Battle',
+    reviewTotal: 'Total',
+    backToBoard: 'Back to board',
+    demoAgain: 'Try again',
+  },
   welcome: {
     teamName: 'The Blotto Cup team',
     greeting: 'Welcome to Blotto Cup.',
