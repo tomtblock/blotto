@@ -225,3 +225,16 @@ character pass card is a canvas blob. The pass card's own share is untouched.
 **Published claims:** the privacy notice never described the stills, so nothing in it changes.
 It does say it keeps "the time you spent on each screen"; under the board that is each field's
 last-change time (§2, "Timings for detection"). Founder-and-counsel text, flagged, not edited.
+
+## 10. A standing gate against the next dead file (2026-09-24, evening)
+
+The plan's third change. `scripts/check-dead-files.ts`, run in the `standing-rules` lane of
+`ci-fast`, fails a build when an app source file is reachable from no route Next serves
+(production or `page.dev.tsx`) and is not declared in the script with a reason. A file only its
+own test imports counts as dead. One declaration today: `reveal/fixtures.ts`, test support.
+
+It self-tests before reporting, reads `app/src` as text so the lane installs nothing, and
+reports unresolvable imports and stale declarations too, so it cannot go quietly blind. Run
+against the tree between §8 and §9 it named exactly the three orphans §9 removed
+(`BlottRaster.tsx`, `render-still.ts`, `warp.ts`). It does not judge unused exports, copy keys or
+public assets, which are often named by template strings; those stay with the next audit.
