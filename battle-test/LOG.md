@@ -462,3 +462,18 @@
   `claude/battle-modes` under a founder-assigned feature task. Wrote the handover as a file for the
   founder to paste, scoped so it cuts its own short branch off `main` rather than stacking a
   security fix on a half-finished feature branch. The note carries no live key.
+- **17:10Z** **§H29 solved, and it was precedence not delivery.** The packet machine events the
+  founder sent showed a `launch` event at 15:27:10Z — a fresh machine, so the staged secrets DID
+  arrive. `buildGeo` (`backend/packet/src/main.ts:138`) prefers the vendor whenever both its
+  variables are present, and the workflow's dev branch only staged the stub without clearing the
+  vendor from the app. Deleting the repository secrets empties them in the runner, not on Fly.
+  Founder asked for the fix here rather than in the program-dev session, which is mid-feature.
+  **PR 174** on `step/geo-dev-path-and-log-redaction`, cut from `main` at `c65aef0` so the
+  battle-test records stay out of it (the PR 163 lesson). Four hunks: the geo dev branch clears the
+  vendor; the signer dev branch clears Turnkey (same latent bug); the `/geo` smoke check reads its
+  answer; the dev-path grep matches `geo = ` instead of a string nothing emits. Plus §H30's
+  redaction — new `urlForLog` in `_shared/src/short.ts`, five tests. `_shared` 108, detection 112,
+  packet 223, all ten gates exit 0.
+- **17:10Z** **Path back to T3:** merge PR 174, re-run `deploy-backend` with
+  `allow_dev_credentials` **ticked**. That run clears the vendor from Fly, the stub takes effect,
+  `/geo` answers `allowed:true`, and T3 fills. Pool 29's deadline is 01:24:50Z.

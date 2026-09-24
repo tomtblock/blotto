@@ -1876,3 +1876,26 @@ rotation from "after the test week" to today.
 about. This is its twin: a **diagnostic** that silently published a secret nobody was thinking
 about. Both were reasoned about by what they were *for* rather than by what they *touch*. A command
 that prints logs is a command that prints whatever is in them.
+
+**§H29 RESOLVED, 2026-09-24 17:10Z — PR 174.** The cause was not that the staged secrets failed to
+apply. They applied. `buildGeo` (`backend/packet/src/main.ts:138`) **prefers the vendor** whenever
+`GEO_VENDOR_URL` and `GEO_VENDOR_API_KEY` are both present, and the workflow's dev branch only ever
+*staged* the stub — it never cleared the vendor from the app.
+
+Deleting the repository secrets emptied them in the **runner**, which is what `geo_mode` reads,
+while Fly kept whatever was staged to it last. The workflow believed it was on the dev path; the
+service was still on the vendor. Both were internally consistent, which is why the run was green.
+
+The block was already asymmetric and its own comment names the mirror-image hazard — *"A lingering
+stub goes live the moment either vendor variable empties — the exact silent failure this workflow
+exists to stop."* A lingering **vendor** was never considered.
+
+**The same asymmetry exists for the entry signer** and is latent only because nobody has removed the
+Turnkey secrets and ticked the box in one run. Fixed in the same PR.
+
+**I was wrong in this entry's first draft**, and the correction is worth keeping. I wrote that the
+staged secrets "are not what the running process is using, even though the machine restarted" and
+called the mechanism unknown. The mechanism was knowable from `main.ts` alone: precedence, not
+delivery. I had read `buildGeo`'s stub branch and reasoned about its four refusal reasons without
+reading the branch **above** it. Stopping to ask for the boot log was right; concluding that the
+secrets had not arrived was a guess I did not need to make and should not have written down.
