@@ -20,6 +20,7 @@ import { blockedTerritoryPhrase } from '@/rules/territories';
 import { Button } from '@/components/ui/button';
 import { BattleFlow } from '@/battle/components/battle-flow';
 import { BoardFlow } from '@/battle/components/board/BoardFlow';
+import { BATTLE_BOARD } from '@/battle/board/switch';
 import type { Allocation } from '@/battle/allocation';
 import { indexerApi } from '@/data/api';
 import { lamportsToSol } from '@/data/format';
@@ -68,8 +69,6 @@ const SEAL_KEY_TONE: SealKeyTone = 'action';
 
 /** D-C: the top-up prompt ships behind a flag, OFF by default. */
 const TOPUP_ENABLED = process.env.NEXT_PUBLIC_TOPUP_ENABLED === '1';
-/** The battle board in place of the dials (2026-09-24). Off = the dial run, unchanged. */
-const BATTLE_BOARD = process.env.NEXT_PUBLIC_BATTLE_BOARD === '1';
 /** Devnet only — a faucet link where a real player hits the balance wall. */
 const FAUCET_ENABLED = process.env.NEXT_PUBLIC_DEVNET_FAUCET === '1';
 const FAUCET_URL = 'https://faucet.solana.com/';

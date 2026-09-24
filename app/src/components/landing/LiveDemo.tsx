@@ -3,10 +3,10 @@
 /*
  * The landing's live demo (master prompt D): fully working, no wallet, no
  * stakes — the toy IS the pitch. Founder 2026-09-24: the toy is the BOARD
- * when NEXT_PUBLIC_BATTLE_BOARD=1 — the same map, troops, stepper and
- * clock the run uses, so the landing teaches the exact object a player
- * plays on. Unset, the practice machine (the cabinet with its dials) stays
- * exactly as it was (founder 2026-09-09 / 2026-09-16).
+ * — the same map, troops, stepper and clock the run uses, so the landing
+ * teaches the exact object a player plays on. Only NEXT_PUBLIC_BATTLE_BOARD=0
+ * (battle/board/switch.ts) brings back the practice machine (the cabinet
+ * with its dials) exactly as it was (founder 2026-09-09 / 2026-09-16).
  *
  * The demo state is local and thrown away — nothing a visitor does here
  * touches storage or the network. In demo mode the BoardFlow draws no
@@ -22,8 +22,7 @@ import { StatDials } from '@/components/blot/StatDials';
 import { NO_LOCKS, rebalanceLocked, type Locks } from '@/components/blot/rebalance';
 import { useBlotSprings, usePrefersReducedMotion } from '@/components/blot/springs';
 import { BoardFlow } from '@/battle/components/board/BoardFlow';
-
-const BATTLE_BOARD = process.env.NEXT_PUBLIC_BATTLE_BOARD === '1';
+import { BATTLE_BOARD } from '@/battle/board/switch';
 
 export function LiveDemo() {
   return BATTLE_BOARD ? <BoardDemo /> : <DialDemo />;
