@@ -8,6 +8,7 @@ import "./globals.css";
 import { SiteAntics } from '@/components/blott/SiteAntics';
 import { SkipLink } from '@/components/shell/skip-link';
 import { RouteFocus } from '@/components/shell/route-focus';
+import { ForgetBlottStills } from '@/storage/ForgetBlottStills';
 
 // SELF-HOSTED, NOT FETCHED (2026-09-22). These three were `next/font/google`,
 // which downloads the font files from Google at BUILD TIME. That made every
@@ -91,6 +92,7 @@ export default function RootLayout({
               {children}
               <SiteAntics />
               <RouteFocus />
+              <ForgetBlottStills />
             </ToastProvider>
           </QueryProvider>
         </AuthProvider>

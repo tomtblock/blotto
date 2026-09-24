@@ -47,7 +47,6 @@ import { signInHref } from '@/app/signin/return-to';
 import { runInterruption } from './run-guard';
 import { RevealHost } from './reveal-host';
 import { PendingPanel } from '@/components/ui/pending-panel';
-import { sweepStills } from '@/battle/stills-sweep';
 import { SealedPanel } from './sealed-panel';
 import { SealStage, type ReviewSealApi, type SealKeyTone } from './seal-stage';
 import { INITIAL_SEAL_STAGE, reduceSealStage } from './seal-stage-machine';
@@ -299,12 +298,6 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
     battles: readonly Allocation[];
     timingsMs: readonly number[];
   } | null>(null);
-
-  // Forget the stills of pools whose allocation will never be published
-  // (2026-09-16, data minimisation) — once, when the play page mounts.
-  useEffect(() => {
-    void sweepStills(indexerApi());
-  }, []);
 
   /*
    * C-17 / D-13 (audit 2026-09-11). THE RUN IS THE PLAYER'S WORK, and until

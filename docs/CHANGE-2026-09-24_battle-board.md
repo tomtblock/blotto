@@ -117,6 +117,10 @@ terms version bump (plan A7, founder to confirm); the docs sweep (`AS-BUILT`, `P
 `HOW-IT-WORKS`, TECH-ARCH appendix, the register rows). The program upgrade needs a drain window
 agreed with the battle-test session — the upgrade pre-flight refuses while any pool is Open.
 
+Also for later, not scheduled: a **board-native "share your seven"** — a picture of the seven
+fields, offered only once a pool has closed, to replace the Blott-stills share retired in §9.
+It needs a design decision first on what the picture shows.
+
 ## 6. Verified
 
 `npm test` (598), `npm run lint`, `npm run typecheck`, `check-language.sh`,
@@ -189,5 +193,35 @@ because they are the founder's character art and a future screen may want them.
 - **Detection's timing note** (§2, "Timings for detection") is owed in
   `backend/detection/src/signals.ts`, including its comment that `run-clock.ts` applies the even
   split — the board's buzzer spread does that now.
-- **The Blott stills are dark for new entries** (nothing writes them since the board). Their
-  retirement is the plan's second PR.
+- **The Blott stills are dark for new entries** (nothing writes them since the board). Retired
+  in §9.
+
+## 9. Retiring the Blott stills (2026-09-24, evening)
+
+The plan's second change, on the founder's approval ("go ahead as planned", which carried the
+plan's recommendation (a): retire). The dial run drew each locked battle as a 1024² picture of the
+Blott and kept it in the browser's IndexedDB (`blotto-blots`); the profile's "My Blotts" grid and
+the results page's "Share your seven" read those pictures. The board draws none, so both had gone
+dark for every new entry. Both are removed, and so is everything only they used.
+
+| Removed | What it was |
+|---|---|
+| `components/blott/BlottRaster.tsx`, `render-still.ts`, `warp.ts` (+ test) | the WebGL-warped Blott and the still renderer |
+| `battle/stills.ts`, `stills-sweep.ts` (+ test) | the IndexedDB store and its data-minimisation sweep |
+| `battle/montage.ts` (+ test) | the seven-still share image |
+| `app/profile/my-blots.tsx`, `app/pools/[pool]/results/share-seven.tsx` | the two features, unmounted from the profile and the results page |
+| 13 copy keys (`profile.myBlots`, `myBlotsNote`; `results.sevenHeadline`, `sevenAlt`, `shareSeven*`; `battle.montageFooter`, `share`, `shareFallbackCopied`, `shareX`, `shareXNote`, `blottAria`) | read by nothing once the above left |
+| the raster's rules in `blott.css` | `.blott-frame`, `.blott-canvas`, `.blott-fallback` |
+
+**Added:** `storage/forget-blott-stills.ts` (+ test) and a render-nothing `<ForgetBlottStills />`
+in the root layout. On each visit it asks the browser to delete the `blotto-blots` database, so
+devices that played under the dials forget their pictures, in line with the 2026-09-15
+data-minimisation ruling. It is best-effort and idempotent, never throws, and touches no
+network. It can come out once returning devices have had time to visit.
+
+**Unchanged on purpose:** the content security policy still allows `blob:` images, because the
+character pass card is a canvas blob. The pass card's own share is untouched.
+
+**Published claims:** the privacy notice never described the stills, so nothing in it changes.
+It does say it keeps "the time you spent on each screen"; under the board that is each field's
+last-change time (§2, "Timings for detection"). Founder-and-counsel text, flagged, not edited.
