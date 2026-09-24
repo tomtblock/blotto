@@ -456,3 +456,9 @@
   15:14:20Z was a real outage (it is what failed deploy runs 37 and 38, and what PR 172 was written
   for), and `review: listening on :8083 (2 reviewer(s))` — the second reviewer key is live, so T7's
   review path has both members whenever it runs.
+- **16:50Z** Founder ruled on §H30: the redaction goes to the program-dev session, and the key
+  rotation waits until the battle test finishes. **Could not hand it over directly** — that session
+  is a cloud session and not reachable by peer messaging from here, and it has moved on to
+  `claude/battle-modes` under a founder-assigned feature task. Wrote the handover as a file for the
+  founder to paste, scoped so it cuts its own short branch off `main` rather than stacking a
+  security fix on a half-finished feature branch. The note carries no live key.

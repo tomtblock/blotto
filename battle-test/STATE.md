@@ -65,7 +65,9 @@ and refunds nothing — no loss, and the daemon opens a successor.
 ## Still open, unchanged
 
 - **§F-37** — a human reading pool 27's refusal copy. 60 seconds, needs only a browser.
-- **Rotate the Helius key** after the test week.
+- **Rotate the Helius key** — founder ruling 2026-09-24: **after the battle test finishes**, and
+  only once the redaction (§H30) has shipped. Rotating first would write the new key straight into
+  the same log on the next boot.
 - **Counsel, not engineering:** privacy wording for the email opt-in (PID §8); the §H22 even-split
   copy claim; and now the US/Delaware tension PR 164 already asked counsel to resolve, which
   §H28 has made concrete rather than theoretical.
