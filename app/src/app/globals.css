@@ -23,7 +23,9 @@ body {
  * wide screen with a fine pointer. `zoom` reflows layout (CSS Viewport
  * module; Chromium 128+, Safari, Firefox 126+) where `transform: scale`
  * would not; the dials are native range inputs, so no pointer maths is
- * affected, and coarse pointers are excluded outright. */
+ * affected, and coarse pointers are excluded outright. The battle board
+ * (2026-09-24) does do pointer maths: its arena maps client pixels through
+ * the SVG's screen CTM (arena/input.ts), which carries this zoom. */
 @media (min-width: 1280px) and (pointer: fine) {
   html {
     zoom: 0.9;

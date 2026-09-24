@@ -66,6 +66,25 @@ test('landing: the board demo pours points and locks a field (founder 2026-09-24
   await expect(demo.getByRole('button', { name: 'Unlock Field 1' })).toBeVisible();
   await demo.getByRole('button', { name: 'Close' }).click();
   await expect(demo.getByText('1 / 7 battles full · 1 locked in')).toBeVisible();
+  // Grab mode (ruling 13): with Wit still in hand, the hand key makes a TAP
+  // on Field 2 open its stepper instead of sending a point; +10 lands there.
+  const grab = demo.getByTestId('board-grab');
+  await grab.click();
+  await expect(grab).toHaveAttribute('aria-pressed', 'true');
+  // The plaque tap framed Field 1; bring the whole board back so Field 2's
+  // box centre is on Field 2's grass (the fit animates for 220 ms).
+  await demo.getByRole('button', { name: 'Fit' }).click();
+  await page.waitForTimeout(400);
+  const grass2 = demo.locator('.bba-field-hit[data-field="1"]');
+  const box2 = await grass2.boundingBox();
+  if (!box2) throw new Error('Field 2 has no box');
+  await page.mouse.click(box2.x + box2.width / 2, box2.y + box2.height / 2);
+  await demo.getByRole('button', { name: 'Add 10 Wit to Field 2' }).click();
+  await expect(demo.getByText('90 left on this field')).toBeVisible();
+  await demo.getByRole('button', { name: 'Close' }).click();
+  // Picking a troop card ends grab mode.
+  await demo.getByTestId('troop-0').click();
+  await expect(grab).toHaveAttribute('aria-pressed', 'false');
 });
 
 test('landing: the practice machine can hold a stat (founder 2026-09-16)', async ({ page }) => {

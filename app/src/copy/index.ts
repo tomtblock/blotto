@@ -760,6 +760,15 @@ export const COPY = {
     zoomLabel: 'Zoom',
     zoomReset: 'Reset zoom to 100%',
     // The hint line: always the NEXT action, in one sentence (the mockup's words).
+    // Grab mode (founder 2026-09-24, second pass): the hand key. With it on
+    // the board only moves under the finger, and a tap on a field opens the
+    // stepper for the troop in hand — no disarming the tray to get at the keys.
+    grab: 'Grab',
+    grabAria: 'Grab mode: drag to move around, tap a field for its numbers',
+    hintGrab: (troop: string | null) =>
+      troop
+        ? `Grab mode. Drag to move around; tap a field to set its ${troop} in steps. Tap a troop card to deploy again.`
+        : 'Grab mode. Drag to move around; tap a field to pick a troop and set it in steps.',
     hintPick: 'Tap a troop, then press and hold on a field',
     hintHold: (troop: string) => `Press and hold on a field to send ${troop} there. Hold longer for more. Tap a plaque or a crowd’s number for steps.`,
     hintHoldHard: (troop: string, left: number) => `Press and hold on a field to send ${troop} there. ${left} points left to place.`,

@@ -58,10 +58,21 @@ export function attachInput(svg: SVGSVGElement, camera: Camera, layout: MapLayou
   let deployed = 0;
   let frame: number | null = null;
 
-  const pos = (e: PointerEvent): Point => {
-    const r = svg.getBoundingClientRect();
-    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  /* Client pixels → the SVG's own units. The two differ whenever an ancestor
+   * is zoomed or transformed — the app renders at `zoom: 0.9` on a wide
+   * screen (globals.css) — and the camera works in SVG units, so a plain
+   * `clientX − rect.left` lands the tap 10% off and on the neighbouring
+   * field near a road. The screen CTM carries zoom and transforms alike. */
+  const toLocal = (clientX: number, clientY: number): Point => {
+    const m = svg.getScreenCTM();
+    if (!m) {
+      const r = svg.getBoundingClientRect();
+      return { x: clientX - r.left, y: clientY - r.top };
+    }
+    const p = new DOMPoint(clientX, clientY).matrixTransform(m.inverse());
+    return { x: p.x, y: p.y };
   };
+  const pos = (e: PointerEvent): Point => toLocal(e.clientX, e.clientY);
   const fieldUnder = (screen: Point): number | null => fieldAt(layout, camera.toWorld(screen));
 
   const clearArm = (): void => {
@@ -217,9 +228,8 @@ export function attachInput(svg: SVGSVGElement, camera: Camera, layout: MapLayou
 
   const onWheel = (e: WheelEvent): void => {
     e.preventDefault();
-    const r = svg.getBoundingClientRect();
-    const at = { x: e.clientX - r.left, y: e.clientY - r.top };
-    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? r.height : 1;
+    const at = toLocal(e.clientX, e.clientY);
+    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? svg.clientHeight : 1;
     if (e.shiftKey && !e.ctrlKey && !e.metaKey) {
       const dx = e.deltaX !== 0 ? e.deltaX : e.deltaY;
       camera.panBy(-dx * unit, 0);
@@ -231,8 +241,7 @@ export function attachInput(svg: SVGSVGElement, camera: Camera, layout: MapLayou
   };
   const onDbl = (e: MouseEvent): void => {
     if ((e as MouseEvent & { sourceCapabilities?: { firesTouchEvents?: boolean } }).sourceCapabilities?.firesTouchEvents) return;
-    const r = svg.getBoundingClientRect();
-    toggleZoom({ x: e.clientX - r.left, y: e.clientY - r.top });
+    toggleZoom(toLocal(e.clientX, e.clientY));
   };
   const noCtx = (e: Event) => e.preventDefault();
   const noTouch = (e: Event) => e.preventDefault();

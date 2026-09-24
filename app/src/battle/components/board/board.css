@@ -377,6 +377,25 @@
   background: linear-gradient(#ffe27a, var(--gold));
   font-size: 17px;
 }
+/* the hand key (grab mode) — a square Clash key that turns gold when it is on */
+.bb-grab {
+  padding: 0 12px 0 10px;
+  font-size: 13px;
+  align-self: flex-start;
+}
+.bb-grab-icon {
+  flex: 0 0 auto;
+}
+.bb-grab--on {
+  background: linear-gradient(#ffe27a, var(--gold));
+  box-shadow: 0 0 0 3px rgba(255, 210, 31, 0.55), 0 3px 0 var(--wood-2), 0 5px 10px rgba(0, 0, 0, 0.3);
+}
+.bba--grab .bba-stage {
+  cursor: grab;
+}
+.bba--grab .bba-stage:active {
+  cursor: grabbing;
+}
 .bb-pill {
   display: inline-flex;
   align-items: center;

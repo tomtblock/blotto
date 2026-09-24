@@ -27,6 +27,7 @@ number appears here it is the founder's; where a judgement was made it is marked
 | 10 | **The homepage's dial toy becomes a board demo.** | `LiveDemo.tsx` under the switch |
 | 11 | **Words:** troop, crowd, field, points; rival only on a demo replay. | `COPY.board` |
 | 12 | The replay in the prototype is a visualisation of one 1-v-1 and stays as that — running the real engine. Not in Phase A. | plan §2 |
+| 13 | **A hand key for grab mode** (second pass, after the founder's first look): pressing it disarms the troop in hand, so a drag only moves the view and a tap on a field opens that field's stepper for the troop — the ±5/±10/±20 keys without disarming the tray first. Tapping a troop card leaves grab mode. On the play page and the homepage demo alike (both are `BoardFlow`). | `GrabKey` in `hud.tsx`, `grab` on `Arena` |
 
 ## 2. What Phase A is
 
@@ -42,7 +43,7 @@ always played, expressed through a board instead of dials.
 | Tests | `machine.test.ts`, `spread.test.ts`, `arena/map.test.ts`, `arena/deploy.test.ts` | 46 tests. Two `fast-check` properties run **10,000 random event sequences per mode** and assert every in-play state legal, every entry legal, locked fields untouched by the spread, and the clock started only by a placement. The geometry and the deploy curve are pinned to the mockup's own numbers. |
 | The arena | `components/board/arena/{map,camera,render,input,figures,deploy}.ts`, `Arena.tsx` | **The founder's mockup, carried over** (`timdontplay/blotto-game` at `9d3821f`, its `src/model/map.ts`, `canvas/{camera,render,input,figures}.ts`, `model/deploy.ts`): the 2048-unit painted world, sprite crowds on a sunflower spiral that wander on a deterministic loop, the pan/zoom/pinch camera with animated fits, the press-and-hold deploy curve (6 → 40 troops per second over two seconds, 120 ms arm timer, a quick tap sends one), plaques on the rim. Geometry unchanged so the painting lines up. What the port adds: a LOCKED look for a field, the plaque's second line saying what is left, and every deposit going through the reducer. The replay layer is not carried yet (results page, later). |
 | Art and fonts | `public/board-art/*.webp`, `public/fonts/board/unbounded.woff2` | The mockup's painted map, forest tile and ten sprites (generated once there, committed here; the app never generates art). Unbounded is the mockup's display face, self-hosted for the board alone; body and numbers use the faces the app already ships. |
-| Tray, stepper, HUD, review | `TroopTray.tsx`, `Stepper.tsx`, `hud.tsx`, `ReviewPanel.tsx`, `board.css` | The mockup's chrome — cream plaques, wood outlines, gold keys, one colour per stat — scoped under `.bb`/`.bba`. Every step button disables when it would overshoot. |
+| Tray, stepper, HUD, review | `TroopTray.tsx`, `Stepper.tsx`, `hud.tsx`, `ReviewPanel.tsx`, `board.css` | The mockup's chrome — cream plaques, wood outlines, gold keys, one colour per stat — scoped under `.bb`/`.bba`. Every step button disables when it would overshoot. The hand key (ruling 13) sits under the mode badge and turns gold while grab mode is on; the hint line says what a tap does in that mode. |
 | Host | `components/board/BoardFlow.tsx` | Same contract as `BattleFlow`: hosted review in the seal stage's slot, `onConfirm` with seven allocations and seven timings. |
 | Switch | `app/src/app/play/play-client.tsx`, `.env.example` | `NEXT_PUBLIC_BATTLE_BOARD=1` selects the board; unset, the dials render exactly as before. |
 | Pool page | `app/src/app/pools/[pool]/page.tsx` | Mode badge; "How this pool plays" card, config-driven (the minutes come from the clock constant). |
@@ -94,6 +95,14 @@ affected.**
   reducer's refusal is what keeps the throw unreachable — pinned by the property test.
 - **The board is scoped CSS (`bb-*`)** inside the existing game layer rather than new tokens;
   the prototype's HTML, when it arrives, maps onto those variables.
+- **Pointer positions go through the SVG's screen CTM, not the client rect** (found by the
+  grab-mode journey at 1280: a tap on Field 2 opened Field 1). The app renders at `zoom: 0.9` on
+  a wide screen with a fine pointer (`globals.css`), and under a zoom the client rect and the
+  SVG's own units differ by 10% — the mockup's `clientX − rect.left` maths, which it can afford
+  because nothing zooms it, put every tap and hold 10% off there, landing on the neighbouring
+  field near a road. `arena/input.ts` now maps through `getScreenCTM()`, which carries zoom and
+  transforms alike, and the camera's viewport is the stage's layout size. Phones, which are never
+  zoomed, are unchanged.
 
 ## 5. Not built (Phase B, in the plan's order)
 

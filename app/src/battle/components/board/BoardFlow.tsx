@@ -38,7 +38,7 @@ import { type BoardMode, EASY_PER_FIELD } from '@/battle/board/mode';
 import { sampleTick } from '@/battle/run-clock';
 import type { ReviewSealApi } from '../battle-flow';
 import { Arena } from './arena/Arena';
-import { HintLine, ModeBadge, ProgressReadout, ReadyBanner, TimerCard } from './hud';
+import { GrabKey, HintLine, ModeBadge, ProgressReadout, ReadyBanner, TimerCard } from './hud';
 import { ReviewPanel } from './ReviewPanel';
 import { Stepper } from './Stepper';
 import { TroopTray } from './TroopTray';
@@ -72,6 +72,9 @@ export function BoardFlow({ mode, onConfirm, onReviewApi, reviewHost = null, onR
   const [state, dispatch] = useReducer(reduceBoard, mode, (m) => initialBoardState(m));
   const [openField, setOpenField] = useState<number | null>(null);
   const [holdField, setHoldField] = useState<number | null>(null);
+  /* Grab mode (the hand key): the troop stays in hand, the gesture is
+   * disarmed, a tap on a field opens its stepper. Picking a card ends it. */
+  const [grab, setGrab] = useState(false);
   const [leaveSheet, setLeaveSheet] = useState(false);
   const [sealArmed, setSealArmed] = useState(false);
   const confirmed = useRef(false);
@@ -149,6 +152,10 @@ export function BoardFlow({ mode, onConfirm, onReviewApi, reviewHost = null, onR
     setOpenField(field);
   }, []);
   const onTapEmpty = useCallback(() => setOpenField(null), []);
+  const selectTroop = useCallback((stat: number | null) => {
+    if (stat !== null) setGrab(false);
+    dispatch({ type: 'select', stat });
+  }, []);
 
   /* ——— Ready: the banner over an idle arena. ——— */
   if (state.phase === 'ready') {
@@ -179,19 +186,22 @@ export function BoardFlow({ mode, onConfirm, onReviewApi, reviewHost = null, onR
     const complete = boardComplete(play);
     const hint = lastSeconds
       ? COPY.board.hintLastSeconds
-      : holdField !== null && selectedName !== null
-        ? COPY.board.hintDeploying(selectedName, holdField + 1)
-        : selectedName === null
-          ? COPY.board.hintPick
-          : play.mode === 'hard'
-            ? COPY.board.hintHoldHard(selectedName, left)
-            : COPY.board.hintHold(selectedName);
+      : grab
+        ? COPY.board.hintGrab(selectedName)
+        : holdField !== null && selectedName !== null
+          ? COPY.board.hintDeploying(selectedName, holdField + 1)
+          : selectedName === null
+            ? COPY.board.hintPick
+            : play.mode === 'hard'
+              ? COPY.board.hintHoldHard(selectedName, left)
+              : COPY.board.hintHold(selectedName);
     return (
       <section className="bb">
         <div style={{ position: 'relative' }}>
           <Arena
             state={play}
             interactive={stepperField === null}
+            grab={grab}
             onDeposit={onDeposit}
             onOpenStepper={onOpenStepper}
             onTapEmpty={onTapEmpty}
@@ -205,6 +215,7 @@ export function BoardFlow({ mode, onConfirm, onReviewApi, reviewHost = null, onR
             </div>
             <div className="bb-hud-left">
               <ModeBadge mode={play.mode} />
+              <GrabKey on={grab} onToggle={() => setGrab((g) => !g)} />
               {!demo && (
                 <button type="button" className="bb-btn" onClick={() => setLeaveSheet(true)}>
                   {COPY.board.leave}
@@ -227,7 +238,7 @@ export function BoardFlow({ mode, onConfirm, onReviewApi, reviewHost = null, onR
           )}
         </div>
         <HintLine text={hint} />
-        <TroopTray state={play} onSelect={(stat) => send({ type: 'select', stat })} />
+        <TroopTray state={play} onSelect={selectTroop} />
         {play.clockStarted && (
           <button
             type="button"

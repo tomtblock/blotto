@@ -13,6 +13,11 @@
  *   tap a plaque      → frame the field and `onOpenStepper(field, armed)`
  *   tap empty ground  → `onTapEmpty()` (closes the stepper)
  *
+ * GRAB MODE (`grab`, the hand key — founder 2026-09-24, second pass): the
+ * troop in hand stays selected but the gesture is disarmed, so a drag only
+ * pans and a tap on a field opens the stepper for that troop there. It is
+ * the way to the ±5/±10/±20 keys without disarming the tray first.
+ *
  * Nothing here computes a value the reducer does not check again.
  */
 
@@ -29,6 +34,8 @@ export interface ArenaProps {
   state: BoardPlayState;
   /** Whether gestures are live. */
   interactive: boolean;
+  /** Grab mode: drag pans, a tap on a field opens its stepper; nothing deploys. */
+  grab?: boolean;
   /** `n` points of `stat` to `field`; returns how many the reducer will take. */
   onDeposit: (field: number, stat: number, n: number) => number;
   onOpenStepper: (field: number, stat: number | null) => void;
@@ -45,7 +52,7 @@ export interface ArenaHandle {
 
 const HUD_TOP_PX = 118;
 
-export function Arena({ state, interactive, onDeposit, onOpenStepper, onTapEmpty, onHold, demo = false }: ArenaProps) {
+export function Arena({ state, interactive, grab = false, onDeposit, onOpenStepper, onTapEmpty, onHold, demo = false }: ArenaProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   const layoutRef = useRef<MapLayout | null>(null);
   const cameraRef = useRef<Camera | null>(null);
@@ -57,10 +64,10 @@ export function Arena({ state, interactive, onDeposit, onOpenStepper, onTapEmpty
 
   // Latest props for the vanilla listeners, which are attached once.
   const stateRef = useRef(state);
-  const propsRef = useRef({ interactive, onDeposit, onOpenStepper, onTapEmpty, onHold });
+  const propsRef = useRef({ interactive, grab, onDeposit, onOpenStepper, onTapEmpty, onHold });
   useEffect(() => {
     stateRef.current = state;
-    propsRef.current = { interactive, onDeposit, onOpenStepper, onTapEmpty, onHold };
+    propsRef.current = { interactive, grab, onDeposit, onOpenStepper, onTapEmpty, onHold };
   });
 
   const showToast = useCallback((msg: string) => {
@@ -101,9 +108,16 @@ export function Arena({ state, interactive, onDeposit, onOpenStepper, onTapEmpty
     rendererRef.current = renderer;
     const unsub = camera.subscribe(() => setPct(Math.round(camera.s * 100)));
 
+    // In grab mode the stepper may already be open (interactive is false) and
+    // a tap on another field simply moves it there.
+    const openFor = (field: number, stat: number | null) => {
+      if (!propsRef.current.interactive && !propsRef.current.grab) return;
+      propsRef.current.onOpenStepper(field, stat);
+    };
+
     const detach = attachInput(renderer.svg, camera, layout, DEPLOY, {
-      armedStat: () => (propsRef.current.interactive ? stateRef.current.selected : null),
-      canDeposit: (field) => propsRef.current.interactive && !stateRef.current.locked[field],
+      armedStat: () => (propsRef.current.interactive && !propsRef.current.grab ? stateRef.current.selected : null),
+      canDeposit: (field) => propsRef.current.interactive && !propsRef.current.grab && !stateRef.current.locked[field],
       onHoldStart(field) {
         renderer.setHover(field);
         propsRef.current.onHold(field);
@@ -127,17 +141,17 @@ export function Arena({ state, interactive, onDeposit, onOpenStepper, onTapEmpty
         const placed = propsRef.current.onDeposit(field, stat, 1);
         if (placed === 0) showToast(COPY.board.toastFull(field + 1));
       },
-      onTapFieldUnarmed() {
-        if (propsRef.current.interactive) showToast(COPY.board.toastPick);
+      onTapFieldUnarmed(field) {
+        if (propsRef.current.grab) openFor(field, stateRef.current.selected);
+        else if (propsRef.current.interactive) showToast(COPY.board.toastPick);
       },
       onTapCrowd(field, stat) {
-        if (!propsRef.current.interactive) return;
-        propsRef.current.onOpenStepper(field, stat);
+        openFor(field, stat);
       },
       onTapPlaque(field) {
-        if (!propsRef.current.interactive) return;
+        if (!propsRef.current.interactive && !propsRef.current.grab) return;
         fitField(field);
-        propsRef.current.onOpenStepper(field, stateRef.current.selected);
+        openFor(field, stateRef.current.selected);
       },
       onTapEmpty: () => propsRef.current.onTapEmpty(),
       isFitAll() {
@@ -148,9 +162,12 @@ export function Arena({ state, interactive, onDeposit, onOpenStepper, onTapEmpty
     });
 
     const resize = () => {
-      const r = stage.getBoundingClientRect();
-      if (r.width < 1 || r.height < 1) return;
-      camera.setViewport(r.width, r.height);
+      // Layout pixels, which are the SVG's units — not the client rect, which
+      // an ancestor zoom (globals.css, wide screens) scales by 0.9.
+      const w = stage.clientWidth;
+      const hgt = stage.clientHeight;
+      if (w < 1 || hgt < 1) return;
+      camera.setViewport(w, hgt);
       camera.insets = insets();
       // Never zoom out past 60% of the whole-arena view (the mockup's rule).
       camera.minScale = camera.viewFor(layout.bounds, 0).s * 0.6;
@@ -178,10 +195,10 @@ export function Arena({ state, interactive, onDeposit, onOpenStepper, onTapEmpty
     if (!renderer) return;
     renderer.spawnFrom = pendingSpawn.current;
     pendingSpawn.current = null;
-    renderer.setArmed(interactive && state.selected !== null);
+    renderer.setArmed(interactive && !grab && state.selected !== null);
     renderer.update(state.grid, state.locked, state.mode, (field) => plaqueLine(state, field));
     renderer.spawnFrom = null;
-  }, [state, interactive]);
+  }, [state, interactive, grab]);
 
   const zoom = (factor: number) => {
     const cam = cameraRef.current;
@@ -189,7 +206,7 @@ export function Arena({ state, interactive, onDeposit, onOpenStepper, onTapEmpty
   };
 
   return (
-    <div className={'bba' + (demo ? ' bba--demo' : '')} data-testid="arena">
+    <div className={'bba' + (demo ? ' bba--demo' : '') + (grab ? ' bba--grab' : '')} data-testid="arena" data-grab={grab ? '1' : undefined}>
       <div ref={stageRef} className="bba-stage" />
       <div className="bba-zoom" role="group" aria-label={COPY.board.zoomLabel}>
         <button type="button" className="bba-zbtn" aria-label={COPY.board.zoomOut} onClick={() => zoom(1 / 1.25)}>
