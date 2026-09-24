@@ -1,0 +1,673 @@
+/*
+ * The battle board's skin — the founder's mockup (timdontplay/blotto-game,
+ * src/styles/{tokens,app}.css) carried over and scoped under `.bb` / `.bba`
+ * so the game-layer plum and the brand pink around it are untouched.
+ * Terrain colours come from the painted map; the chrome is Clash-style
+ * plaques: cream faces, dark wood outlines, gold primary keys, the brand
+ * purple for live numbers. One colour per stat, in the fixed order.
+ *
+ * Fonts: the app already ships Space Grotesk (body) and JetBrains Mono
+ * (numbers) as `--font-body` / `--font-mono`; Unbounded is the mockup's
+ * display face and is self-hosted for the board alone.
+ */
+@font-face {
+  font-family: 'Unbounded';
+  font-style: normal;
+  font-weight: 200 900;
+  font-display: swap;
+  src: url('/fonts/board/unbounded.woff2') format('woff2');
+}
+
+.bb {
+  --forest: #17301a;
+  --wood: #3b2412;
+  --wood-2: #5a3a1e;
+  --cream: #fff4dc;
+  --cream-2: #f4e2b8;
+  --pink: #f3a3cc;
+  --brand-purple: #b026ff;
+  --gold: #ffd21f;
+  --gold-deep: #d9a400;
+  --bb-ink: #2a1a10;
+  --bb-ink-muted: rgba(42, 26, 16, 0.62);
+  --ok: #2e9d4a;
+  --stat-0: #ff4d4d;
+  --stat-1: #2bd3ff;
+  --stat-2: #ff2f8e;
+  --stat-3: #b026ff;
+  --stat-4: #27d17f;
+  --bb-display: 'Unbounded', var(--font-display, system-ui), sans-serif;
+  --outline: 3px;
+  --tap: 48px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--bb-ink);
+}
+
+/* ---- arena ---- */
+.bba {
+  position: relative;
+  border-radius: 24px;
+  overflow: hidden;
+  border: var(--outline) solid var(--wood);
+  box-shadow: 0 4px 0 var(--wood-2), 0 10px 24px rgba(0, 0, 0, 0.35);
+  background: var(--forest);
+}
+.bba-stage {
+  position: relative;
+  height: clamp(420px, 66vh, 720px);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.bba--demo .bba-stage {
+  height: clamp(360px, 56vh, 560px);
+}
+.bba-map {
+  display: block;
+  touch-action: none;
+  background: var(--forest);
+  cursor: grab;
+}
+.bba-map:active {
+  cursor: grabbing;
+}
+.bba-map.bba-holding {
+  cursor: crosshair;
+}
+
+/* fields: invisible until a troop card is armed, then a soft glow the player can aim at */
+.bba-field-hit {
+  fill: #fff;
+  fill-opacity: 0;
+  stroke: var(--gold);
+  stroke-width: 0;
+  stroke-opacity: 0;
+  transition: fill-opacity 160ms, stroke-opacity 160ms, stroke-width 160ms;
+  cursor: pointer;
+}
+.bba-map.bba-armed .bba-field-hit {
+  fill-opacity: 0.14;
+  stroke-width: 10;
+  stroke-opacity: 0.6;
+  stroke-dasharray: 26 18;
+}
+.bba-map.bba-armed .bba-field-hit.bba-hover {
+  fill: var(--gold);
+  fill-opacity: 0.28;
+  stroke-opacity: 0.95;
+  stroke-dasharray: none;
+}
+/* a locked field: no glow, a quiet shade over the grass, crowds dimmed */
+.bba-map .bba-field-hit.bba-locked,
+.bba-map.bba-armed .bba-field-hit.bba-locked {
+  fill: var(--wood);
+  fill-opacity: 0.22;
+  stroke-opacity: 0;
+  cursor: default;
+}
+.bba-crowd-field.bba-locked {
+  opacity: 0.7;
+}
+
+/* troops: the outer <g> sits at the ground slot (and hops in); the inner <use> wanders around it */
+.bba-troop {
+  pointer-events: none;
+  transform-box: view-box;
+}
+.bba-troop.bba-hop {
+  transition: transform 220ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+.bba-troop-body {
+  transform-box: view-box;
+  animation: bba-wander var(--wander-s, 6s) ease-in-out infinite;
+  animation-delay: var(--wander-delay, 0s);
+}
+@keyframes bba-wander {
+  0% { transform: translate(0, 0); }
+  18% { transform: translate(11px, -4px); }
+  36% { transform: translate(5px, 6px); }
+  55% { transform: translate(-9px, 3px); }
+  76% { transform: translate(-12px, -5px); }
+  100% { transform: translate(0, 0); }
+}
+.bba-crowd-hit {
+  fill: #fff;
+  fill-opacity: 0;
+  pointer-events: visible;
+  cursor: pointer;
+}
+.bba-crowd-chip {
+  pointer-events: visible;
+  cursor: pointer;
+}
+.bba-crowd-chip-shadow {
+  fill: var(--wood-2);
+}
+.bba-crowd-chip-bg {
+  stroke: var(--wood);
+  stroke-width: 3;
+}
+.bba-crowd-count {
+  font: 800 22px var(--font-mono, ui-monospace, monospace);
+  fill: #fff;
+  paint-order: stroke;
+  stroke: var(--wood);
+  stroke-width: 2px;
+  pointer-events: none;
+}
+
+/* field plaques (SVG, in the world) */
+.bba-plaque {
+  cursor: pointer;
+}
+.bba-plaque-hit {
+  fill: #000;
+  fill-opacity: 0;
+  pointer-events: all;
+}
+.bba-plaque-bg {
+  fill: var(--cream);
+  stroke: var(--wood);
+  stroke-width: 6;
+}
+.bba-plaque.bba-complete .bba-plaque-bg {
+  fill: var(--gold);
+}
+.bba-plaque.bba-locked .bba-plaque-bg {
+  fill: var(--wood);
+}
+.bba-plaque-name {
+  font: 800 30px var(--bb-display);
+  fill: var(--bb-ink);
+  letter-spacing: 0.5px;
+}
+.bba-plaque-score {
+  font: 700 30px var(--font-mono, ui-monospace, monospace);
+  fill: var(--brand-purple);
+}
+.bba-plaque-sub {
+  font: 600 20px var(--font-mono, ui-monospace, monospace);
+  fill: var(--bb-ink-muted);
+}
+.bba-plaque.bba-complete .bba-plaque-score,
+.bba-plaque.bba-complete .bba-plaque-sub {
+  fill: var(--bb-ink);
+}
+.bba-plaque.bba-locked .bba-plaque-name,
+.bba-plaque.bba-locked .bba-plaque-score,
+.bba-plaque.bba-locked .bba-plaque-sub {
+  fill: var(--cream);
+}
+
+/* zoom widget (phones pinch; only Fit is shown on the small screen) */
+.bba-zoom {
+  position: absolute;
+  right: 10px;
+  bottom: 12px;
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  background: rgba(23, 48, 26, 0.75);
+  border: 2px solid var(--wood);
+  border-radius: 12px;
+}
+.bba-zbtn {
+  min-height: 30px;
+  min-width: 30px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 10px;
+  background: var(--cream);
+  color: var(--bb-ink);
+  font: 700 14px var(--font-body, system-ui);
+  cursor: pointer;
+}
+.bba-zpct {
+  font: 700 11px var(--font-mono, ui-monospace, monospace);
+}
+@media (max-width: 640px) {
+  .bba-zbtn:not(:last-child) {
+    display: none;
+  }
+}
+
+/* toast */
+.bba-toast {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  transform: translate(-50%, -50%);
+  background: var(--cream);
+  color: var(--bb-ink);
+  border: var(--outline) solid var(--wood);
+  padding: 10px 16px;
+  border-radius: 14px;
+  font-weight: 700;
+  opacity: 0;
+  transition: opacity 160ms;
+  pointer-events: none;
+  max-width: 88%;
+  text-align: center;
+  z-index: 30;
+  box-shadow: 0 3px 0 var(--wood-2);
+}
+.bba-toast.bba-show {
+  opacity: 1;
+}
+
+/* ---- HUD over the stage: clock plaque, progress, mode, leave ---- */
+.bb-hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.bb-hud > * {
+  pointer-events: auto;
+}
+.bb-hud-top {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.bb-hud-left {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bb-card {
+  background: var(--cream);
+  border: var(--outline) solid var(--wood);
+  border-radius: 16px;
+  box-shadow: 0 3px 0 var(--wood-2), 0 6px 14px rgba(0, 0, 0, 0.35);
+  padding: 6px 16px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  min-width: 132px;
+  color: var(--bb-ink);
+}
+.bb-card-label {
+  font: 600 10px var(--font-body, system-ui);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--bb-ink-muted);
+  text-align: center;
+}
+.bb-timer {
+  font: 800 28px var(--font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1px;
+  line-height: 1;
+}
+.bb-timer--held {
+  color: var(--bb-ink-muted);
+}
+.bb-readout {
+  margin: 0;
+  font: 700 12px var(--font-body, system-ui);
+  color: #fff;
+  text-shadow: 0 1px 0 var(--wood), 0 0 6px rgba(0, 0, 0, 0.6);
+  letter-spacing: 0.3px;
+  text-align: center;
+}
+.bb-bar {
+  width: 220px;
+  max-width: 60vw;
+  height: 10px;
+  border-radius: 6px;
+  background: rgba(42, 26, 16, 0.15);
+  overflow: hidden;
+}
+.bb-bar > i {
+  display: block;
+  height: 100%;
+  background: var(--brand-purple);
+  transition: width 120ms linear;
+}
+
+/* Clash-style buttons and pills */
+.bb-btn {
+  min-height: var(--tap);
+  min-width: var(--tap);
+  padding: 0 16px;
+  border-radius: 14px;
+  border: var(--outline) solid var(--wood);
+  background: linear-gradient(var(--cream), var(--cream-2));
+  color: var(--bb-ink);
+  font: 700 15px var(--font-body, system-ui);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-shadow: 0 3px 0 var(--wood-2), 0 5px 10px rgba(0, 0, 0, 0.3);
+  transition: transform 80ms, box-shadow 80ms;
+}
+.bb-btn:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 var(--wood-2), 0 3px 6px rgba(0, 0, 0, 0.3);
+}
+.bb-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+  transform: none;
+}
+.bb-btn:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 2px;
+}
+.bb-btn--primary {
+  background: linear-gradient(#ffe27a, var(--gold));
+  font-size: 17px;
+}
+.bb-btn--commit {
+  background: linear-gradient(#ffe27a, var(--gold));
+  font-size: 17px;
+}
+/* the hand key (grab mode) — a square Clash key that turns gold when it is on */
+.bb-grab {
+  padding: 0 12px 0 10px;
+  font-size: 13px;
+  align-self: flex-start;
+}
+.bb-grab-icon {
+  flex: 0 0 auto;
+}
+.bb-grab--on {
+  background: linear-gradient(#ffe27a, var(--gold));
+  box-shadow: 0 0 0 3px rgba(255, 210, 31, 0.55), 0 3px 0 var(--wood-2), 0 5px 10px rgba(0, 0, 0, 0.3);
+}
+.bba--grab .bba-stage {
+  cursor: grab;
+}
+.bba--grab .bba-stage:active {
+  cursor: grabbing;
+}
+.bb-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 2px solid var(--wood);
+  font: 800 10px var(--bb-display);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #fff;
+  background: var(--brand-purple);
+  box-shadow: 0 2px 0 var(--wood-2);
+}
+.bb-pill--easy {
+  background: #2c7bd6;
+}
+.bb-pill--hard {
+  background: #d9651e;
+}
+
+/* the hint line under the stage */
+.bb-hint {
+  margin: 0;
+  min-height: 22px;
+  font: 700 13px var(--font-body, system-ui);
+  color: #fff;
+  text-align: center;
+  text-shadow: 0 1px 0 var(--wood), 0 0 8px rgba(0, 0, 0, 0.7);
+  padding: 2px 10px;
+}
+
+/* ---- the troop tray ---- */
+.bb-tray {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+  max-width: 620px;
+  margin: 0 auto;
+  padding: 8px;
+  background: rgba(23, 48, 26, 0.72);
+  border: var(--outline) solid var(--wood);
+  border-radius: 22px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+.bb-troop {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 112px;
+  padding: 6px 2px 6px;
+  border-radius: 16px;
+  border: var(--outline) solid var(--wood);
+  background: linear-gradient(var(--cream), var(--cream-2));
+  color: var(--bb-ink);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  cursor: pointer;
+  position: relative;
+  box-shadow: 0 3px 0 var(--wood-2);
+  transition: transform 120ms, box-shadow 120ms;
+}
+.bb-troop:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 2px;
+}
+.bb-troop-art {
+  width: 72px;
+  height: 72px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.bb-troop-art img {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+  filter: drop-shadow(0 3px 2px rgba(0, 0, 0, 0.35));
+  transition: transform 120ms;
+}
+.bb-troop-name {
+  font: 800 10px var(--bb-display);
+  color: var(--bb-ink);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bb-troop small {
+  font: 600 10px var(--font-mono, ui-monospace, monospace);
+  color: var(--bb-ink-muted);
+}
+@media (max-width: 420px) {
+  .bb-troop-name { font-size: 8.5px; }
+  .bb-troop-art, .bb-troop-art img { width: 64px; height: 64px; }
+  .bb-troop { min-height: 104px; }
+}
+.bb-troop--selected {
+  transform: translateY(-10px) scale(1.06);
+  background: linear-gradient(#fff, var(--cream));
+  border-color: var(--troop);
+  box-shadow: 0 0 0 3px var(--troop), 0 6px 0 var(--wood-2), 0 10px 20px rgba(0, 0, 0, 0.35);
+}
+.bb-troop--selected img {
+  transform: scale(1.1);
+}
+.bb-tray--armed .bb-troop:not(.bb-troop--selected) {
+  opacity: 0.8;
+}
+.bb-tray:disabled .bb-troop,
+.bb-troop:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* ---- the stepper (a Clash building menu, docked to the stage's bottom edge) ---- */
+.bb-stepper {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: var(--cream);
+  border: var(--outline) solid var(--wood);
+  border-radius: 18px;
+  box-shadow: 0 4px 0 var(--wood-2), 0 10px 24px rgba(0, 0, 0, 0.45);
+  color: var(--bb-ink);
+}
+@media (min-width: 720px) {
+  .bb-stepper {
+    left: auto;
+    right: 14px;
+    bottom: 60px;
+    width: 500px;
+  }
+}
+.bb-stepper-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.bb-stepper-head img {
+  width: 56px;
+  height: 56px;
+  display: block;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.3));
+}
+.bb-stepper-text {
+  flex: 1;
+  min-width: 0;
+}
+.bb-stepper-head h3 {
+  margin: 0;
+  font: 800 14px var(--bb-display);
+  color: var(--bb-ink);
+}
+.bb-stepper-sub {
+  font: 500 12px var(--font-body, system-ui);
+  color: var(--bb-ink-muted);
+}
+.bb-stepper-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.bb-stepper-row .bb-btn {
+  flex: 0 0 auto;
+  min-width: 50px;
+  padding: 0 8px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+.bb-stepper-num {
+  min-width: 64px;
+  text-align: center;
+  font: 800 30px var(--font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  color: var(--troop, var(--bb-ink));
+  line-height: 1;
+}
+.bb-stepper-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.bb-stepper-actions .bb-btn {
+  flex: 1 1 auto;
+  font-size: 13px;
+  padding: 0 10px;
+}
+.bb-picker {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.bb-btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+/* ---- the ready banner over the stage ---- */
+.bb-banner-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 26;
+  display: grid;
+  place-items: center;
+  background: rgba(12, 26, 14, 0.6);
+  padding: 16px;
+}
+.bb-banner {
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+  padding: 18px 20px;
+  border-radius: 20px;
+  border: var(--outline) solid var(--wood);
+  background: var(--cream);
+  box-shadow: 0 5px 0 var(--wood-2), 0 16px 40px rgba(0, 0, 0, 0.5);
+  color: var(--bb-ink);
+}
+.bb-banner p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--bb-ink-muted);
+}
+
+/* ---- review table ---- */
+.bb-review-table {
+  width: 100%;
+  border-collapse: collapse;
+  font: 500 13px var(--font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+}
+.bb-review-table th {
+  font: 700 11px var(--font-body, system-ui);
+  color: var(--color-ink-muted, #ffc7e3);
+  text-align: right;
+  padding: 4px 6px;
+  letter-spacing: 1px;
+}
+.bb-review-table th:first-child,
+.bb-review-table td:first-child {
+  text-align: left;
+}
+.bb-review-table td {
+  text-align: right;
+  padding: 4px 6px;
+  border-top: 1px solid rgba(255, 246, 236, 0.15);
+}
+.bb-review-table tr.bb-row--locked td:first-child::after {
+  content: ' · locked';
+  opacity: 0.7;
+  font-weight: 400;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bba-troop-body { animation: none; }
+  .bba-troop.bba-hop { transition: none; }
+  .bb-bar > i, .bb-troop { transition: none; }
+  .bb-troop--selected { transform: none; }
+}
