@@ -516,3 +516,19 @@
   run produced it.
 - **18:50Z** **Waiting on the founder: F-45.** The UI attempt as UI-B while the pause is on — the
   criterion T6 surrendered — then the unpause.
+- **18:55Z** **The UI refusal copy: PASS — the criterion T6 surrendered is recovered.** UI-B, which
+  deliberately held no seat at that moment, was refused with a sentence a person can read:
+
+  > *"Entries are paused right now, so this one was not accepted and nothing settled. Try again a
+  > little later."*
+
+  It names the real reason, states the outcome, does not imply the pool is finished or that funds
+  are at risk, and gives a next step. No §8.7 vocabulary, no urgency language. Recorded in
+  `evidence/T3-pool-29/paused-attempt.json`. **Not the same refusal path as T6** (a pause, not a
+  sealed pool), so it is the same CLASS of evidence rather than the same evidence.
+
+  **One observation passed to the founder and counsel, not an engineering defect:** "nothing
+  settled" is precise — it avoids claiming the player was charged nothing, which would be false,
+  since a refused attempt costs a network fee (15000 lamports, measured on the headless attempt in
+  the same window). Whether a non-crypto-native player reads "settled" that way is user-facing
+  language, which is founder-owned. Recorded, not changed.

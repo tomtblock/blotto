@@ -31,5 +31,23 @@
       "verdict": "refused by the program at the PAUSE gate (Paused, 6005) \u2014 register's first check"
     }
   ],
-  "note": "Fired into T3's paused window on pool 29. The pool was Open and Config.paused read TRUE from chain, so the refusal can only be the pause gate \u2014 which register checks before the state gate, the deadline and capacity."
+  "note": "Fired into T3's paused window on pool 29. The pool was Open and Config.paused read TRUE from chain, so the refusal can only be the pause gate \u2014 which register checks before the state gate, the deadline and capacity.",
+  "uiAttempt": {
+    "wallet": "UI-B",
+    "address": "6wqLMAS1guarBehRDGFSAApGUBLXuuHWmy9naepzu3sa",
+    "heldNoSeatAtThisPoint": true,
+    "whyThatMatters": "UI-B deliberately had no seat when this was fired, so the refusal has exactly one possible cause. A wallet already holding a seat would fail for two reasons at once and demonstrate neither.",
+    "copyShown": "Entries are paused right now, so this one was not accepted and nothing settled. Try again a little later.",
+    "verdict": "PASS",
+    "assessment": [
+      "A sentence a player can read \u2014 not a spinner, not a raw error code.",
+      "Names the actual reason: entries are paused.",
+      "States the outcome plainly: this entry was not accepted.",
+      "Does not imply the pool is finished, or that funds are at risk.",
+      "Gives the player a next step rather than leaving them stuck.",
+      "Carries no PID \u00a78.7 forbidden vocabulary and no urgency language (D3)."
+    ],
+    "oneObservationForTheFounder": "\"nothing settled\" is precise but may not be plain: it correctly avoids claiming the player was charged NOTHING, since a refused attempt still costs a network fee (15000 lamports measured on the headless attempt in the same window). Whether a lay player reads \"settled\" that way is founder-and-counsel territory, not an engineering defect, and it is recorded rather than changed.",
+    "recovers": "The criterion T6 surrendered under \u00a7F-36 option (a) \u2014 a human reading a refusal in words. Not the same refusal path as T6 (pause, not a sealed pool), so it is the same CLASS of evidence rather than the same evidence."
+  }
 }
