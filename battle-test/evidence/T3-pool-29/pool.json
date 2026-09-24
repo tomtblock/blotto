@@ -7,7 +7,7 @@
   "fill_deadline": "1790299490",
   "timer_seconds": 15,
   "state": "Open",
-  "entrants": 24,
+  "entrants": 31,
   "sealing_pubkey": "44bef4f4254f5abcbca69fd88a1a625da05b58ee1b7fd5e9a842cd288ce53b4e",
   "results_root": null,
   "secret": null,
@@ -16,5 +16,5 @@
   "resolving_until": null,
   "min_seats": 40,
   "outcome_if_deadline_now": "refund",
-  "server_time": "1790270932"
+  "server_time": "1790276475"
 }

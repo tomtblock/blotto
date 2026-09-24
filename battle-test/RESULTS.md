@@ -7,7 +7,7 @@ open item in the report; CI refuses the default branch otherwise.
 |---|---|---|---|---|---|---|---|
 | T1 | Refund, sparse — below the minimum field | 14 | Closed | 12 | PR 132, 2026-09-16T00:07:24Z | 2026-09-16T14:04Z | **PASS** |
 | T2 | Refund at the boundary (39) | — | not started | — | — | — | — |
-| T3 | Seal at the minimum field (40) + pause | — | not started | — | — | — | — |
+| T3 | Seal at the minimum field (40) + pause | 29 | **Open, 40** | 40 | PR 171, 2026-09-24T15:55:04Z | pending the deadline | **IN FLIGHT** |
 | T4 | Full pool — UI wallet wins | 16 | Paid | 64 | PR 133, 2026-09-16T16:22:00Z | 2026-09-17T02:23Z | **PASS** |
 | T5 | Full pool — headless wallet wins | 18 | Paid | 64 | 144, 2026-09-17T22:51:00Z | 2026-09-18T01:38Z | **PASS** |
 | T6 | Oversubscribed + load | 27 | Paid | 64 | PR 156, 2026-09-19T19:11:28Z | 2026-09-22T00:27Z | **PASS\*** |
@@ -219,3 +219,79 @@ substitutions: the 39 seats are the 39 the frozen plan named.** W14's state was 
 retrying — `{"sealed":true}` with no Entry PDA, exactly the condition the fix addresses.
 
 **Verdict: the boundary property is proven. The cost model was wrong and is now measured.**
+
+---
+
+## T3 — pool 29 — IN FLIGHT. The pause half is complete and passed; the seal fires at 01:24:50Z.
+
+**Frozen before the pool was filled.** PR 171 merged **2026-09-24T15:55:04Z**; the first entry landed
+at **17:28:01Z**, one hour and 33 minutes later. The plan names no pool — `poolId` and `poolPda` are
+both null in the frozen bytes.
+
+### The boundary, observed crossing
+
+The indexer publishes `outcome_if_deadline_now` for every pool. It was read at both counts:
+
+| entrants | `outcome_if_deadline_now` |
+|---|---|
+| 39 | `refund` |
+| **40** | **`seal`** |
+
+That is the fork T2R proved from the refunding side, now watched from the other. **40 is the first
+count that plays.**
+
+### The pause — all three criteria passed, each from chain
+
+`set_paused` had never been exercised. It is the kill switch (roadmap R1.1), one of only two admin
+writes in the whole test week, and **the first Squads-routed admin write this project has made**.
+`Config.admin` is off the ed25519 curve, so no private key for it exists anywhere and it can only
+sign by CPI (Q6).
+
+| criterion | evidence |
+|---|---|
+| the bit actually moved | `Config.paused` read **`true`** from chain, `Instruction: SetPaused`, 6974 CU — matching an off-chain simulation of the same instruction exactly |
+| a headless attempt is refused at the **pause** gate | **`6005`**, not 6000 and not 6010 — `AnchorError thrown in programs/blotto_cup/src/instructions/register.rs:138. Error Code: Paused.` |
+| the refusal costs a fee and nothing else | **15000 lamports**, no entry, no pass, no rent — the same figure as T6's nine refusals |
+| a person reads a true sentence | **PASS** — *"Entries are paused right now, so this one was not accepted and nothing settled. Try again a little later."* |
+| the pause lifts cleanly | `Config.paused` read **`false`** from chain; UI-B then entered successfully as seat 31 |
+
+**`register` checks the pause FIRST**, before the state gate, the deadline and capacity — confirmed
+on live traffic, not inferred from the source.
+
+**The sharpest pairing in the test:** UI-B was refused during the window and accepted eight minutes
+later, same wallet, same device, same pool, with the pause bit the only thing that changed.
+
+### On-chain record
+
+| what | time | signature | result |
+|---|---|---|---|
+| `set_paused(true)` — first attempt | 18:37:34Z | `4eRVDAkv…SfrTR` | **FAILED**, `Custom 101` |
+| `set_paused(true)` | 18:46:37Z | `5n7yXQPc…tDBrG` | ok |
+| W38 register into the paused window | 18:49:00Z | `5zrmNPyJ…k87bK` | **`6005` Paused** |
+| `set_paused(false)` | 18:58:06Z | `5hChrEey…6bQHF` | ok |
+
+**The first failure was the operator's, not the product's.** Squads' TX Builder Data field is
+**base58**; the base64 our `admin.ts --emit-proposal` prints was supplied instead — the field is
+literally named `dataBase64`, and an "Export as base58" button sat on the same screen. Squads read
+`Wzx9wLDhptoB` as base58, produced `28a27ca8a2a7a73bba`, and the program threw
+`InstructionFallbackNotFound`. Correct values: `2AMgDu5cpQDDr` to pause, `2AMgDu5cpQDDq` to unpause —
+**one character apart**. Cost: one transaction fee. A program cleanly rejecting a malformed admin
+instruction is itself worth having seen.
+
+### One recorded observation, and its correction
+
+The refusal copy says *"nothing settled"*. It was first recorded here as precise-but-possibly-unclear,
+on the grounds that a refused attempt costs a network fee. **That was wrong for the path a player
+takes, and is corrected.** UI-B's refusal produced **no transaction on chain at all** — its only
+transaction that day is the successful entry. The app preflights, the simulation returns 6005, and
+the client refuses before anything is submitted. **The player pays nothing.** The 15000 lamports is
+an artefact of `late-attempt.ts` setting `skipPreflight: true` deliberately, so that a refusal lands
+and its cost can be measured. The copy is simply accurate, and there is nothing here for counsel.
+
+### Still to come
+
+`seal_at_deadline` fires at **2026-09-25T01:24:50Z**. Unattended — no founder involvement remains.
+The predictions it will be judged against are point values, not ranges: **W00 scores exactly 542 and
+W01 exactly 4**, because premise P1 fixes both of the wall's founder battles.
+`scripts/t3-bounds.ts` re-derives all four unconditional claims and exits non-zero if any stops
+holding.
