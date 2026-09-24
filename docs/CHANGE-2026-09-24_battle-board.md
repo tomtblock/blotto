@@ -1,8 +1,8 @@
 # CHANGE — 2026-09-24: the battle board (Phase A), and the two modes it prepares for
 
-**Status: Phase A merged to `main` (PR #176, 2026-09-24) and the board is the default — the
-founder's same-day ruling, "everything shows the board". `NEXT_PUBLIC_BATTLE_BOARD=0` is the
-rollback (`app/src/battle/board/switch.ts`).**
+**Status: Phase A merged to `main` (PR #176, 2026-09-24); the board is the only run. The switch
+that made it the default (PR #177) and the dial run it guarded were removed the same evening
+(§8); a rollback is now a revert of that removal, not a setting.**
 Phase B (the hard-mode pool) is planned and not started. The plan the founder approved is
 `https://claude.ai/artifact/RufrDt16swq46bCkNkdyGP`; the wireframes are
 `https://www.figma.com/design/cIzgzj8m77Oeo0JMOK2zZ4`.
@@ -26,11 +26,11 @@ number appears here it is the founder's; where a judgement was made it is marked
 | 7 | **Lock-in stays, per field, in both modes.** A locked field is frozen and left out of the buzzer spread. | `machine.ts` `lock` / `unlock`, `spread.ts` |
 | 8 | **Buzzer:** unplaced points spread evenly across every cell of the fields not locked in, remainder in fixed order. Applies on Submit as on expiry. | `spread.ts`, pinned by `spread.test.ts` |
 | 9 | **What is left is always visible**: per field in easy ("41 placed · 59 left"), one total in hard ("Left to place 312 / 700"). | `chipLine`, `ProgressReadout` |
-| 10 | **The homepage's dial toy becomes a board demo.** | `LiveDemo.tsx` under the switch |
+| 10 | **The homepage's dial toy becomes a board demo.** | `LiveDemo.tsx` |
 | 11 | **Words:** troop, crowd, field, points; rival only on a demo replay. | `COPY.board` |
 | 12 | The replay in the prototype is a visualisation of one 1-v-1 and stays as that — running the real engine. Not in Phase A. | plan §2 |
 | 13 | **A hand key for grab mode** (second pass, after the founder's first look): pressing it disarms the troop in hand, so a drag only moves the view and a tap on a field opens that field's stepper for the troop — the ±5/±10/±20 keys without disarming the tray first. Tapping a troop card leaves grab mode. On the play page and the homepage demo alike (both are `BoardFlow`). | `GrabKey` in `hud.tsx`, `grab` on `Arena` |
-| 14 | **Everything shows the board** (on the day Phase A merged). The switch is opt-OUT: unset, the board; exactly `0`, the dials and the practice machine as they were. No deployment setting is needed for the board to be live. | `app/src/battle/board/switch.ts` |
+| 14 | **Everything shows the board** (on the day Phase A merged). First as an opt-out switch (PR #177); then, on the founder's approval of the dead-code plan, the dial run and the switch were removed outright (§8). | §8 |
 
 ## 2. What Phase A is
 
@@ -48,20 +48,20 @@ always played, expressed through a board instead of dials.
 | Art and fonts | `public/board-art/*.webp`, `public/fonts/board/unbounded.woff2` | The mockup's painted map, forest tile and ten sprites (generated once there, committed here; the app never generates art). Unbounded is the mockup's display face, self-hosted for the board alone; body and numbers use the faces the app already ships. |
 | Tray, stepper, HUD, review | `TroopTray.tsx`, `Stepper.tsx`, `hud.tsx`, `ReviewPanel.tsx`, `board.css` | The mockup's chrome — cream plaques, wood outlines, gold keys, one colour per stat — scoped under `.bb`/`.bba`. Every step button disables when it would overshoot. The hand key (ruling 13) sits under the mode badge and turns gold while grab mode is on; the hint line says what a tap does in that mode. |
 | Host | `components/board/BoardFlow.tsx` | Same contract as `BattleFlow`: hosted review in the seal stage's slot, `onConfirm` with seven allocations and seven timings. |
-| Switch | `app/src/battle/board/switch.ts`, `.env.example` | One constant, read by the play page, the landing toy and the hero control. The board unless `NEXT_PUBLIC_BATTLE_BOARD=0`, which renders the dials exactly as before (ruling 14; until that ruling the switch was opt-in, `=1`). |
+| Switch | — (removed, §8) | Was `NEXT_PUBLIC_BATTLE_BOARD`: opt-in (`=1`) in PR #176, opt-out (`=0`) in PR #177, removed with the dial run. |
 | Pool page | `app/src/app/pools/[pool]/page.tsx` | Mode badge; "How this pool plays" card, config-driven (the minutes come from the clock constant). |
-| Homepage | `components/landing/LiveDemo.tsx`, `page.tsx` | Board demo under the switch; "Try the board". |
+| Homepage | `components/landing/LiveDemo.tsx`, `page.tsx` | Board demo; "Try the board". |
 | Copy | `app/src/copy/index.ts` `board`, `pool.howItPlays`, `landing.tryBoard` | Every line a `PHASE-N-REVIEW` draft; the founder owns the words. Language gate clean. |
-| Journey | `app/e2e/journey.spec.ts` | A board-demo test that runs when the app was built with the switch on; the practice-machine test runs when it was not. |
+| Journey | `app/e2e/journey.spec.ts` | The board-demo test, at 375 and 1280 (the practice-machine test left with the dials, §8). |
 
 ### Timings for detection
 
 The sealed payload's seven `u32` slots are unchanged in format. Under the board each carries the
 run millisecond of that field's **last change** (0 if never touched) instead of time-on-screen,
 because there are no screens. The detection signals that read them are the timing-profile
-signals in `backend/detection/src/signals.ts`; their meaning shifts with this and is noted there
-when the switch comes out. **The format is the same bytes, so nothing sealed under the dials is
-affected.**
+signals in `backend/detection/src/signals.ts`; their meaning shifts with this. The note there is
+**still owed** now that the switch is gone (§8, open item). **The format is the same bytes, so
+nothing sealed under the dials is affected.**
 
 ## 3. Two overrides of earlier documents — recorded, not buried
 
@@ -147,3 +147,47 @@ NEXT_PUBLIC_BATTLE_BOARD=1 npm run build`, `next start`), the way CI runs the jo
   the page is scrolled so the stage's top edge sits under it, as any sticky header does with
   anything beneath it. The `#demo` anchor uses `scroll-mt` so the link lands clear; the journey
   test centres the board for the same reason.
+
+## 8. Retiring the dial run (2026-09-24, evening)
+
+The founder approved the dead-code plan (`https://claude.ai/artifact/365wm7k97EiDPFGWARAu6G`)
+the day the board went live for everyone. This is its first change (PR): the dial run and the
+switch that guarded it are gone, and a rollback to the dials is a `git revert` of this change.
+The board, the seal stage, the payload format, the program and the engine are untouched.
+
+| Removed | What it was |
+|---|---|
+| `battle/components/battle-flow.tsx`, `battle/machine.ts` (+ test) | the seven-screen dial host and its reducer |
+| `battle/components/seven-tiles.tsx` + `.css` | the rack of seven under the machine |
+| `components/blot/StatDials.tsx`, `Cabinet.tsx` + `cabinet.css`, `Timer.tsx` | the dials, the cabinet frame, the slate ring clock |
+| `components/blot/dial-thermals.ts`, `rebalance.ts` (+ tests) | dial warmth and the dial-coupling rule |
+| `battle/board/switch.ts`, its `.env.example` entry | the switch |
+| `components/ui/prize-table.tsx`, `rank-badge.tsx` | per-position prize UI, unused since D-E2 (one paid place) |
+| `components/blott/Antics.tsx` `Playground`, its `blott.css` rules | the dancing band under the dial rack |
+| `public/candy/lock.webp` | the padlock beside the dial seal |
+| 22 copy keys (`battle.screenOf` … `battle.sealAfter`, `landing.tryDials`, `demoHint`, `demoStatus`) | read by nothing once the above left |
+| the dial and lock-in rules in `blot.css`; the RunClock value type and the 90 s budget in `run-clock.ts` | only the dial run and the dev gallery used them |
+| the journey's practice-machine test; the gallery's dials, prize-table and rank-badge sections | their subjects are gone |
+
+**Moved first, so no import broke:** `ReviewSealApi` now lives in `app/play/seal-stage.tsx`,
+whose widget slot it describes. The dev seal-stage preview portals the board's own
+`ReviewPanel` into that slot instead of the dial rack.
+
+**Kept on purpose:** `usePrefersReducedMotion` in `components/blot/springs.ts` (used across the
+site); `BlotMorph` and its geometry (the pool page's Blot); the Runner and Peeker antics; all
+twelve Blott pose images, including the three nothing requests today (dance, sleep, strain),
+because they are the founder's character art and a future screen may want them.
+
+**Judgement call:** the `trophy` bounce on the sealed panel reused the Playground's
+`blott-bounce` keyframes; they were kept, moved beside `.blott-sealed`, byte-for-byte.
+
+**Open items this surfaced, not changed here:**
+- **Player-facing copy still states the dial clock.** The landing's "Set seven battles" step
+  (`landing.steps`) says "about ninety seconds for all seven", and the rules text
+  (`copy/index.ts` near the "You then set seven battles" line) says "about ninety seconds in
+  total". The board runs three minutes. Founder-owned words, so flagged rather than edited.
+- **Detection's timing note** (§2, "Timings for detection") is owed in
+  `backend/detection/src/signals.ts`, including its comment that `run-clock.ts` applies the even
+  split — the board's buzzer spread does that now.
+- **The Blott stills are dark for new entries** (nothing writes them since the board). Their
+  retirement is the plan's second PR.

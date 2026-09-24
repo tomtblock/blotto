@@ -467,19 +467,11 @@ export const COPY = {
     // is founder-reserved); everything else on the landing reuses lines
     // already ratified elsewhere in this file.
     heroTitle: 'Make your Blott',
-    tryDials: 'Try the dials',
-    // The board (founder 2026-09-24): the landing's toy is the board unless
-    // NEXT_PUBLIC_BATTLE_BOARD=0. PHASE-N-REVIEW: drafts; founder-owned.
+    // The board (founder 2026-09-24): the landing's toy is the board.
+    // PHASE-N-REVIEW: drafts; founder-owned.
     tryBoard: 'Try the board',
     demoBoardHint:
       'Tap a troop, press and hold a field. Nothing to sign, nothing to pay: this one is just to feel it. A real entry plays the same board with a three-minute clock.',
-    // PHASE-N-REVIEW (founder 2026-09-16, CHANGE-2026-09-16_ui-uplift.md §A11):
-    // the practice machine now carries the padlocks the run has; one
-    // sentence says what they do. Proposal until ratified.
-    demoHint:
-      'Drag a dial — the other four give way. Press a padlock to hold a stat where it is. Nothing to sign, nothing to pay: this one is just to feel it.',
-    // PHASE-N-REVIEW (2026-09-09): the marquee line on the landing machine.
-    demoStatus: 'Practice machine',
     openPoolTitle: 'Open now',
   },
 
@@ -638,47 +630,19 @@ export const COPY = {
       'This attempt did not go through, and nothing was signed or charged this time. It was not a decision about you: either an earlier attempt from this wallet at this pool is the one that stands, or the pool stopped taking entries first. The pool page shows whether a seat was taken, and you can ask us about your own entry through /complaints.',
   },
   battle: {
-    screenOf: (k: number) => `Battle ${k} of 7`,
-    evenSplit: 'Even split',
-    // The effect of the default, stated as how the allocation PERFORMS —
-    // never as a chance of anything (the addendum's note for this line).
-    timerEffect:
-      'Against any allocation that concentrates points on three stats, an even split loses that battle three stats to two, every time — so it never beats a player who is thinking. Nothing is decided at random: the even split is simply the shape your entry starts from, and leaving it there is a decision like any other.',
     // The two-step seal (v3 D2): arm, then confirm. §8.6 renders above step 2.
     seal: 'Seal my allocation',
     sealConfirm: 'Confirm — seal and submit',
     sealCancel: 'Go back',
     sealing: 'Sealing your battles…',
     /*
-     * NOT HERE, DELIBERATELY (audit 2026-09-11, A-29): a points-remaining
-     * counter. This block carried `remainingPoints: 'Points to place'`,
-     * unrendered. PID §4.2 is explicit — "the player never does arithmetic
-     * and never sees a 'points remaining' counter" — because the counter is
-     * what turns a shape into a budgeting puzzle with round targets, and
-     * §4.3 quantifies what round targets do to the draw rate. A key that
-     * exists is a key someone renders. Also gone: a second copy of the stat
-     * names, which are `STAT_NAMES` in `battle/allocation.ts` and must have
-     * exactly one definition on the client — they are the fixed stat order
-     * the encoding depends on, not decoration.
+     * The stat names are NOT here: they are `STAT_NAMES` in
+     * `battle/allocation.ts` and have exactly one definition on the client —
+     * the fixed stat order the encoding depends on, not decoration. (This
+     * block once also refused a points-remaining counter under PID §4.2,
+     * audit A-29; the board shows what is left by the founder's ruling of
+     * 2026-09-24, register D-E17, and that override is recorded there.)
      */
-
-    /* v4 run (founder brief 2026-09-06), the timer sentence amended by the
-     * founder's addendum of 2026-09-07 (R9-b): an unlocked battle is
-     * entered as the even split, the one on screen included. */
-    approvedTitle: "You're in.",
-    begin: 'Make my first Blott',
-    ruleNinety:
-      'Ninety seconds for all seven battles. Any battle you have not locked when the timer ends \u2014 including the one on your screen \u2014 is entered as an even split of 20 points in each of the five stats.',
-    lockBattle: (n: number) => `Lock in battle ${n}`,
-    /* Dial locks (founder 2026-09-13): a locked stat keeps its value while
-     * the other dials move, and the others share what remains — shown as
-     * the dials' RANGE, never as a number (PID §4.2: no points-remaining
-     * counter). PHASE-N-REVIEW: drafts; the founder owns the words. */
-    lockStat: (name: string, value: number) => `Lock ${name} at ${value}`,
-    unlockStat: (name: string) => `Unlock ${name}`,
-    lockedStat: (name: string) => `${name} is locked`,
-    locksHint: 'A locked stat holds its value. The other dials share what is left.',
-    expiredNote: 'Time ran out \u2014 every battle you had not locked was entered as the even split.',
     montageFooter: 'BLOTTO CUP \u00b7 blotto.gg \u00b7 18+ only \u00b7 not available in some territories',
     share: 'Share',
     shareFallbackCopied: 'Share line copied — the image downloaded to your device.',
@@ -688,29 +652,13 @@ export const COPY = {
     backSheetLine: 'Leaving locks nothing and loses nothing — your clock keeps running.',
     backStay: 'Stay',
     backLeave: 'Leave',
-
-    /* The machine (founder 2026-09-09): a locked Blot drops out of the
-     * chute, its still and its five numbers fill one of seven tiles under
-     * the machine, and the seventh lock is the crescendo. PHASE-N-REVIEW:
-     * drafts; the founder owns the words. */
     // The rendered Blott's accessible one-liner (BlottRaster).
     blottAria: (stats: string) => `Your Blott: ${stats}`,
-    tilesLabel: 'Your seven Blotts',
-    tileLocked: (n: number, stats: string) => `Battle ${n} locked: ${stats}`,
-    tileEmpty: (n: number) => `Battle ${n} — not yet made`,
     // PHASE-N-REVIEW (founder 2026-09-16, CHANGE-2026-09-16_ui-uplift.md §A11):
     // the seal stage's description for assistive tech — the scene is decorative,
     // the sentence says what it shows. Proposal until ratified.
     sealStageAria:
       'Seven Blotts on a conveyor dropping into a blender; the blender runs once your entry is signed.',
-    crescendo: 'All seven made.',
-    crescendoLine: 'Your Blotts are in the machine. Seal them to enter the pool.',
-    // 2026-09-13: what the seal IS, one line, beside the lock. The share
-    // that used to sit here moved to the character pass, after the seal is
-    // confirmed — see reveal.passShareLine for why.
-    sealWhat:
-      'Sealing encrypts your seven battles on this device and records their hash on-chain with your entry. Your wallet will ask you to sign once.',
-    sealAfter: 'Once sealed, you draw your character pass and can share it.',
   },
   /*
    * The welcome note (2026-09-13; re-voiced 2026-09-14): a short note in the

@@ -36,10 +36,6 @@ test('landing: montage hero, the enter control, the 18+ line above the fold', as
 });
 
 test('landing: the board demo pours points and locks a field (founder 2026-09-24)', async ({ page }) => {
-  // The board is the default (battle/board/switch.ts); only an app BUILT
-  // with the switch at "0" renders the practice machine, which the test
-  // below covers instead.
-  test.skip(process.env.NEXT_PUBLIC_BATTLE_BOARD === '0', 'board switch off');
   await page.addInitScript(() => localStorage.setItem('blotto.preloader.seen', 'v2'));
   await page.goto('/');
   const demo = page.getByTestId('board-demo');
@@ -86,26 +82,6 @@ test('landing: the board demo pours points and locks a field (founder 2026-09-24
   // Picking a troop card ends grab mode.
   await demo.getByTestId('troop-0').click();
   await expect(grab).toHaveAttribute('aria-pressed', 'false');
-});
-
-test('landing: the practice machine can hold a stat (founder 2026-09-16)', async ({ page }) => {
-  test.skip(process.env.NEXT_PUBLIC_BATTLE_BOARD !== '0', 'board is the default; dials only at "0"');
-  // The first-visit curtain is a root-route overlay; mark it seen so the
-  // dials are reachable (preloader-model.ts holds the key and value).
-  await page.addInitScript(() => localStorage.setItem('blotto.preloader.seen', 'v2'));
-  await page.goto('/');
-  const lock = page.getByTestId('lock-0');
-  await lock.scrollIntoViewIfNeeded();
-  await expect(lock).toBeVisible();
-  const strength = page.getByRole('slider', { name: 'Strength' });
-  await expect(strength).toBeEnabled();
-  // A locked stat holds its value: the dial is disabled and says so.
-  await lock.click();
-  await expect(strength).toBeDisabled();
-  await expect(strength).toHaveAttribute('aria-valuetext', 'Strength is locked');
-  // Even split clears the locks with the shape (CHANGE-2026-09-13 §4, rule 4).
-  await page.getByRole('button', { name: 'Even split' }).click();
-  await expect(strength).toBeEnabled();
 });
 
 test('pool page: the fixed pot as one Stat, §8.6 above the enter control', async ({

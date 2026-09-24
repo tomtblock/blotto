@@ -4,11 +4,12 @@
  * The board's HUD pieces in the mockup's chrome: the clock plaque, the
  * progress readout, the mode badge, the hint line and the ready banner.
  *
- * THE TIMER IS CALM. The dial run's <Timer /> (components/blot/Timer.tsx)
- * is never red and never pulses, and states why: the absence of an urgency
- * cue is part of the §8.7 posture, not a styling gap. The board's plaque
- * keeps that rule — the mockup's red "warn" state is NOT carried over. The
- * last ten seconds are marked by the hint line's sentence, not by colour.
+ * THE TIMER IS CALM. The clock plaque is never red, never pulses and takes
+ * no colour props: the absence of an urgency cue is part of the §8.7
+ * posture, not a styling gap (the rule the dial run's <Timer /> stated,
+ * carried over when that component was removed on 2026-09-24). The
+ * mockup's red "warn" state is NOT carried over. The last ten seconds are
+ * marked by the hint line's sentence, not by colour.
  */
 
 import { formatClock } from '@/battle/run-clock';

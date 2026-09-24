@@ -1,11 +1,12 @@
 'use client';
 
 /*
- * The BOARD run (founder brief 2026-09-24) — the host that the play page
- * mounts in place of <BattleFlow /> unless NEXT_PUBLIC_BATTLE_BOARD=0. Same
- * contract as BattleFlow: it never sees a wallet, sealing happens outside
- * via `onConfirm`, and when the page hosts the seal stage the review is
- * drawn into the stage's widget slot and the seal keys are the page's.
+ * The BOARD run (founder brief 2026-09-24) — the entry session the play
+ * page mounts, and the landing page's demo. It never sees a wallet: sealing
+ * happens outside via `onConfirm`, and when the page hosts the seal stage
+ * the review is drawn into the stage's widget slot and the seal keys are
+ * the page's (`ReviewSealApi`, app/play/seal-stage.tsx). The seven-screen
+ * dial run it replaced was removed on 2026-09-24.
  *
  * Ready → board (the machine, src/battle/board/machine.ts) → review →
  * confirmed. The reducer owns every rule; this component feeds ticks and
@@ -13,9 +14,9 @@
  * founder's mockup — painted map, sprite crowds, camera, deploy curve —
  * carried over and wired to the reducer.
  *
- * The run clock is sampled against performance.now() exactly as the dial
- * run's is (audit 2026-09-11 F-04): elapsed time, not timer firings, integer
- * milliseconds with the remainder carried.
+ * The run clock is sampled against performance.now() (audit 2026-09-11
+ * F-04): elapsed time, not timer firings, integer milliseconds with the
+ * remainder carried.
  */
 
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
@@ -36,7 +37,7 @@ import {
 } from '@/battle/board/machine';
 import { type BoardMode, EASY_PER_FIELD } from '@/battle/board/mode';
 import { sampleTick } from '@/battle/run-clock';
-import type { ReviewSealApi } from '../battle-flow';
+import type { ReviewSealApi } from '@/app/play/seal-stage';
 import { Arena } from './arena/Arena';
 import { GrabKey, HintLine, ModeBadge, ProgressReadout, ReadyBanner, TimerCard } from './hud';
 import { ReviewPanel } from './ReviewPanel';
@@ -88,7 +89,7 @@ export function BoardFlow({ mode, onConfirm, onReviewApi, reviewHost = null, onR
     playRef.current = play;
   }, [play]);
 
-  /* The seal stage's handle on the confirm, exactly as BattleFlow. */
+  /* The seal stage's handle on the confirm. */
   useEffect(() => {
     if (!review || !onReviewApi || demo) return;
     onReviewApi({ confirm: () => dispatch({ type: 'confirm' }) });
