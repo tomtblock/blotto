@@ -643,17 +643,9 @@ export const COPY = {
      * audit A-29; the board shows what is left by the founder's ruling of
      * 2026-09-24, register D-E17, and that override is recorded there.)
      */
-    montageFooter: 'BLOTTO CUP \u00b7 blotto.gg \u00b7 18+ only \u00b7 not available in some territories',
-    share: 'Share',
-    shareFallbackCopied: 'Share line copied — the image downloaded to your device.',
-    // Founder 2026-09-09: "users should be able to share this to X".
-    shareX: 'Post on X',
-    shareXNote: 'X opened with your line. The image downloaded to your device — attach it to the post.',
     backSheetLine: 'Leaving locks nothing and loses nothing — your clock keeps running.',
     backStay: 'Stay',
     backLeave: 'Leave',
-    // The rendered Blott's accessible one-liner (BlottRaster).
-    blottAria: (stats: string) => `Your Blott: ${stats}`,
     // PHASE-N-REVIEW (founder 2026-09-16, CHANGE-2026-09-16_ui-uplift.md §A11):
     // the seal stage's description for assistive tech — the scene is decorative,
     // the sentence says what it shows. Proposal until ratified.
@@ -871,15 +863,6 @@ export const COPY = {
     // like the pool page — "Pool #N" on the marquee, this word on the chip
     // beside it and on the box the payout list sits in.
     title: 'Results',
-    // Share my seven (2026-09-13): the seven-Blott montage, offered only on
-    // a closed pool's results page — see results/share-seven.tsx for why it
-    // left the review screen. PHASE-N-REVIEW: drafts; the founder owns the words.
-    sevenHeadline: 'My seven battles.',
-    sevenAlt: 'Your seven Blotts, shapes only',
-    shareSevenTitle: 'Share your seven',
-    shareSevenLine:
-      'This pool has closed, so your seven Blotts can be shown. Every battle in it is on the Verify page, recomputable by anyone.',
-    shareSevenText: 'My seven Blotts from Blotto Cup — every result recomputable from published data. blotto.gg',
     paidAutomatically:
       'Prizes are paid automatically when results are committed. No claim step.',
     // Founder addendum 2026-09-07, ruling 1: the published rule is 12 hours.
@@ -1143,12 +1126,6 @@ export const COPY = {
       "Rarity is decorative. It changes nothing: not your battles, not your score, not your ranking, and no prize. A Mythic's Strength is worth exactly a Common's.",
     // Moved here from profile-client.tsx on 2026-09-17 (same words).
     collection: 'Character collection',
-    myBlots: 'My Blotts',
-    // 2026-09-13: this line said "Shapes, never numbers" — but a Blott's
-    // shape IS its numbers (components/blott/warp.ts), which is why the
-    // grid no longer offers a share. It says what is true instead.
-    myBlotsNote:
-      'Every battle you have locked, as its Blott — kept on this device only. Once a pool has closed, its results page lets you share the seven.',
   },
   custody: {
     // C13: the disclosure page. Everything here describes MECHANICS —
@@ -1268,7 +1245,7 @@ export const COPY = {
      * The pass as a SHAREABLE card (2026-09-13). This replaces the share
      * that used to sit on the review screen BEFORE sealing: that one handed
      * the player a picture of their seven Blotts, and a Blott's silhouette is
-     * a deterministic function of its five stats (components/blott/warp.ts)
+     * a deterministic function of its five stats (components/blot/blotGeometry.ts)
      * — so the image was the sealed allocation, readable, offered for
      * publication while the pool was still open. The pass carries the seat
      * and the pool number: public, nothing sealed — and since 2026-09-15 not

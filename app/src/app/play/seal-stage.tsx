@@ -10,7 +10,7 @@
  * the idle loop and the one-shot run, both cut from the same still, so the
  * switch is a crossfade onto a matching frame. The generic Blotts in the
  * scene are the prompt's, never the player's seven — a Blott's silhouette
- * is its allocation (components/blott/warp.ts), and this stage reads no
+ * is its allocation (components/blot/blotGeometry.ts), and this stage reads no
  * allocation at all.
  *
  * Round four (founder 2026-09-17, CHANGE-2026-09-16_ui-uplift.md §E): two

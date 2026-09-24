@@ -25,7 +25,6 @@ import type { CareerRow, ProfileRow } from '@/data/types';
 import { NeonSection } from '@/components/ui/neon-section';
 import { LiveDataUnavailable } from '@/components/shell/live-unavailable';
 import { Stat } from '@/components/ui/stat';
-import { MyBlots } from './my-blots';
 
 function PrizeRecordChart({ career }: { career: CareerRow[] }) {
   if (career.length < 2) return null;
@@ -172,7 +171,6 @@ export function ProfileClient() {
           />
         </div>
       </NeonSection>
-      <MyBlots />
       <PrizeRecordChart career={result?.career ?? []} />
       <NeonSection heading={COPY.profile.collection}>
         {/* The ONE player-facing surface that names the drawn rarity

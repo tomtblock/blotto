@@ -26,7 +26,6 @@ import { ArchiveStandings } from './archive-standings';
 import { AllBattles } from './all-battles';
 import { WhatBeatYouPanel } from './what-beat-you-panel';
 import { ShareResult } from './share-result';
-import { ShareSeven } from './share-seven';
 import { PaidConfetti } from './paid-confetti';
 import { ChallengeClient } from './challenge-client';
 
@@ -161,8 +160,6 @@ export default async function ResultsPage({ params }: { params: Promise<{ pool: 
                 .filter((e) => e.escrow_settled === 'forfeited')
                 .map((e) => e.player)}
             />
-            {/* The player's own seven, shareable now the pool has closed (2026-09-13). */}
-            <ShareSeven poolAddress={pool.pool} state={pool.state} />
             {archive && <ArchiveStandings archive={archive} />}
             {/* Founder 2026-09-09: every battle of every player, from the
                 same verified bundle, after the reveal. */}

@@ -1,22 +1,7 @@
-/* The rendered Blott: the machine's window (BlottRaster), the poses
-   (BlottSprite) and the antics (Antics). Every colour is a token; motion is
-   transform/opacity only and stops under prefers-reduced-motion. */
-
-.blott-frame {
-  position: relative;
-  display: inline-block;
-  overflow: visible;
-}
-.blott-canvas {
-  display: block;
-  transition: opacity 240ms ease-out;
-}
-.blott-fallback {
-  position: absolute;
-  inset: 0;
-  transform-origin: 50% 60%;
-  transition: transform 180ms ease-out;
-}
+/* The Blott's poses (BlottSprite) and the antics (Antics). Every colour is
+   a token; motion is transform/opacity only and stops under
+   prefers-reduced-motion. (The warped, allocation-drawn Blott of the dial
+   run, BlottRaster, was retired on 2026-09-24.) */
 
 .blott-sprite {
   display: block;
