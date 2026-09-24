@@ -21,7 +21,7 @@
  *     '{"module":"commonjs","moduleResolution":"node"}' scripts/oracle.ts --test T4
  *
  * Flags:
- *   --test <id>    which test's field to predict — T4, T5 or T6
+ *   --test <id>    which test's field to predict — T3, T4, T5 or T6
  *   --check-only   run the vector self-check and stop
  *   --emit <path>  write the prediction as JSON for the plan builder
  */
@@ -293,6 +293,76 @@ export function t6Field(): PlannedSeat[] {
     const seed = T6_FIELD_SEED_BASE + i;
     add(`W${String(i).padStart(2, '0')}`, 'direct', 'field', cappedField(seed), { seed });
   }
+  return seats;
+}
+
+/** T3's seeds, fixed here and never moved once the plan is frozen. */
+const T3_WALL_SEED = 3100;
+const T3_POLE_SEED = 3200;
+const T3_FIELD_SEED_BASE = 3300;
+
+/**
+ * T3's 40 seats — the minimum field, and the first count that plays.
+ *
+ * T2R proved 39 refunds. 40 is the other side of that fork: the pool reaches
+ * its deadline at exactly `MIN_SEATS`, `seal_at_deadline` seals it rather than
+ * `trigger_refund` refunding it, the crank scores it and rank 1 takes the whole
+ * pot. Every previous scored pool (T4, T5, T6) sealed on CAPACITY, when the
+ * 64th `register` sealed it immediately. **No pool has yet sealed on its
+ * deadline**, so the settlement path T3 exercises has never run on this
+ * cluster — which is the reason to run it at the boundary rather than at 50.
+ *
+ * Roles are T5's and T6's, deliberately: W00 the wall, W01 the pole, everyone
+ * else capped field. Reusing them buys a third independent confirmation of the
+ * claim those two pools established — the winner is decided by the allocations
+ * and nothing else — on a pool whose size, seal reason and settlement trigger
+ * are all different.
+ *
+ * THE SEAT ORDER IS LOAD-BEARING HERE, which it was not in T4-T6. T3 pauses
+ * entries at 30, so the plan must say which 30. UI-A enters early and UI-B
+ * deliberately does not: UI-B's first attempt is fired INTO the paused window,
+ * where it must be refused, and it takes its seat only after the unpause. A
+ * founder wallet that already held a seat could not produce an honest paused
+ * refusal — a duplicate attempt has a second reason to fail, and a test with
+ * two possible causes proves neither.
+ */
+export function t3Field(): PlannedSeat[] {
+  const seats: PlannedSeat[] = [];
+  const add = (
+    wallet: string,
+    route: 'ui' | 'direct',
+    role: PlannedSeat['role'],
+    e: Entrant,
+    extra: { seed?: number; recipe?: string }
+  ) =>
+    seats.push({ wallet, route, role, generator: e.generator, battles: e.battles, timingsMs: e.timingsMs, ...extra });
+
+  // ---- seats 0..29: everything that enters BEFORE the pause ---------------
+  add('UI-A', 'ui', 'field', uiFieldA(), {
+    recipe:
+      'each battle, drag ONE stat to 25 and leave the rest — in order: Strength, Speed, Heart, ' +
+      'Wit, Durability, Strength, Heart. Never take a stat above 25 or down to 0.',
+  });
+  add('W00', 'direct', 'wall', wall(T3_WALL_SEED), { seed: T3_WALL_SEED });
+  add('W01', 'direct', 'pole', pole(T3_POLE_SEED), { seed: T3_POLE_SEED });
+  for (let i = 2; i <= 28; i++) {
+    const seed = T3_FIELD_SEED_BASE + i;
+    add(`W${String(i).padStart(2, '0')}`, 'direct', 'field', cappedField(seed), { seed });
+  }
+
+  // ---- the pause window sits here, at exactly 30 entrants -----------------
+
+  // ---- seats 30..39: everything that enters AFTER the unpause -------------
+  add('UI-B', 'ui', 'field', uiFieldB(), {
+    recipe:
+      'each battle, drag ONE stat to 25 and leave the rest — in order: Durability, Wit, Heart, ' +
+      'Speed, Strength, Wit, Speed. Never take a stat above 25 or down to 0.',
+  });
+  for (let i = 29; i <= 37; i++) {
+    const seed = T3_FIELD_SEED_BASE + i;
+    add(`W${String(i).padStart(2, '0')}`, 'direct', 'field', cappedField(seed), { seed });
+  }
+
   return seats;
 }
 
@@ -1017,6 +1087,340 @@ function t6Plan(p: Prediction): Record<string, unknown> {
   };
 }
 
+/**
+ * The attempts T3 expects to FAIL, and why each is here.
+ *
+ * Both are fired into the window where the founder has paused entries. One is
+ * a headless wallet, which proves the PROGRAM gate: `register`'s first check is
+ * the pause, so the revert must carry `Paused` (6005) and not one of the four
+ * gates behind it. One is the founder in the live browser, which proves the
+ * SENTENCE a player reads — the half no headless wallet can stand in for, and
+ * the half T6 knowingly surrendered.
+ *
+ * UI-B is used deliberately, and has no seat at this point in the fill. A
+ * wallet that already held one would fail for two reasons at once — the pause
+ * and the pass PDA already existing — and a refusal with two possible causes
+ * demonstrates neither.
+ */
+function t3PausedAttempts(): Record<string, unknown>[] {
+  return [
+    {
+      wallet: 'W38',
+      route: 'direct',
+      firedWhen: 'after set_paused(true) confirms on chain and before set_paused(false)',
+      expectedOutcome: 'register reverts',
+      expectedError: 'Paused',
+      expectedErrorCode: 6005,
+      expectedLamportsSpent: 'the transaction fee only — no entry, no pass, no rent',
+      whyNotAnotherCode:
+        'The pause is the FIRST gate in register (paused, then the service-key bar, then ' +
+        'pool.state == Open, then the deadline, then capacity). The pool is Open, inside its ' +
+        'deadline and holds 30 of 64, so every gate behind the pause would pass. A revert ' +
+        'carrying 6000 or 6010 here would mean the ordering is not what the source says.',
+    },
+    {
+      wallet: 'UI-B',
+      route: 'ui',
+      firedWhen: 'the founder attempts one entry in the live site while the pause is on',
+      expectedOutcome: 'the entry is refused and the browser says so in words',
+      expectedError: 'Paused',
+      expectedErrorCode: 6005,
+      expectedLamportsSpent: 'the transaction fee only — no entry, no pass, no rent',
+      expectedCopy:
+        'A legible sentence saying entries are paused, not a spinner, not a raw error code, and ' +
+        'not language that suggests the pool is finished or that the money is at risk. The exact ' +
+        'wording is the founder\'s to judge against §8.7; what is being tested is that a sentence ' +
+        'appears at all and that it is true.',
+      thisIsTheRecoveredCriterion:
+        'T6 surrendered exactly this — a human reading a refusal — when option (a) seated UI-B ' +
+        'instead of arriving late. T3 recovers it on a different refusal path, which is not the ' +
+        'same evidence but is the same class of evidence.',
+      afterwards:
+        'UI-B takes seat 30 once the unpause confirms. The same wallet is refused and then ' +
+        'accepted, which is the sharpest available demonstration that the pause blocked the entry ' +
+        'and nothing about the wallet did.',
+    },
+  ];
+}
+
+/**
+ * `registry/T3.plan.json`. The two-tier split is T4's and T5's: what follows
+ * from the SHAPES is unconditional, what depends on exact numbers is not.
+ *
+ * T3 states its unconditional tier more sharply than T5 could, and the reason
+ * is worth recording. 38 of the 40 seats are seed-generated, so every battle
+ * between two of them is fixed by this file. The founder's two seats are free,
+ * but bounded: a capped seat cannot beat the wall (it holds three stats at 26+
+ * and they hold none above 25) and cannot lose to the pole (five non-zero stats
+ * beat a single spike four stats to one). Those two facts fix BOTH of W00's
+ * founder battles, so **W00's score is not a range at all — it is 542**, and
+ * W01's is 4. `scripts/t3-bounds.ts` recomputes all of it and exits non-zero if
+ * any claim stops holding.
+ *
+ * What is genuinely new here is not who wins. It is the SEAL. T4, T5 and T6 all
+ * sealed on capacity, when the 64th register sealed the pool in the same
+ * instruction. No pool on this cluster has ever sealed on its DEADLINE, and
+ * `seal_at_deadline` is a different instruction, fired by a different actor —
+ * the settlement daemon, permissionlessly, against a clock. T3 is the first run
+ * of that path, at the exact seat count where the refund fork turns into the
+ * play fork.
+ */
+function t3Plan(p: Prediction): Record<string, unknown> {
+  const N = 40;
+  const B = 7;
+  const winner = p.seats.find((s) => s.role === 'wall')!;
+  const loser = p.seats.find((s) => s.role === 'pole')!;
+  const uiSeats = p.seats.filter((s) => s.route === 'ui');
+
+  return {
+    schema: 'blotto-rehearsal-plan/1',
+    test: 'T3',
+    title: 'Seal at the minimum field — 40 seats, a deadline seal, and a pause mid-fill',
+    cluster: 'devnet',
+    programId: '5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17',
+    tier: 0,
+    poolId: null,
+    poolPda: null,
+    poolIdNote:
+      'Deliberately unnamed, as T4, T5 and T6 were. The pool this runs on is recorded in ' +
+      'T3.freeze.json when the first entry lands. A plan frozen before its pool exists is ' +
+      'stronger evidence than one frozen after, not weaker — T4 proved the point by losing ' +
+      'pool 15 to the seal-lockout (DRIFT §H6) and running unedited on pool 16.',
+    entryLamports: p.entryLamports,
+    potLamports: p.potLamports,
+    minSeats: N,
+    fillDeadlineSeconds: 43200,
+    frozenAt: null,
+    gitCommit: null,
+    hypothesis:
+      'At exactly MIN_SEATS the pool plays rather than refunds, and it does so on a path no pool ' +
+      'on this cluster has taken. T2R showed 39 seats refunding at the deadline. T3 shows 40 ' +
+      'seats SEALING at the deadline: seal_at_deadline fires instead of trigger_refund, the crank ' +
+      'scores the pool, and rank 1 is paid the whole pot. Separately, a pause applied mid-fill ' +
+      'refuses entries with Paused (6005) and costs a would-be entrant a transaction fee and ' +
+      'nothing else, and entries resume unharmed when it is lifted.',
+    whyThisIsNotJustAnotherScoredPool: [
+      'THE SEAL REASON IS NEW. T4, T5 and T6 all sealed on CAPACITY — the 64th register seals the ' +
+        'pool inside the same instruction, so the seal had no separate actor and no clock. ' +
+        'seal_at_deadline is a different instruction fired by the settlement daemon against the ' +
+        'fill deadline. It has never run on this cluster.',
+      'THE COUNT IS THE BOUNDARY. 39 refunds (T2R, observed) and 40 plays. Testing 50 would ' +
+        'exercise the same code and prove nothing about where the fork sits.',
+      'THE PAUSE HAS NEVER BEEN EXERCISED. set_paused is the kill switch (roadmap R1.1) and this ' +
+        'is the only test in the week that fires it. It is also one of only two admin writes in ' +
+        'the entire week, and the first Squads-routed write this project has made.',
+      'IT IS A THIRD CONFIRMATION of the claim T5 and T6 established — the winner is decided by ' +
+        'the allocations and nothing else — on a pool of a different size, sealed a different way.',
+    ],
+    unconditionalDerivation: {
+      _:
+        'What follows from the shapes alone. 38 of the 40 seats are seed-generated, so every ' +
+        'battle between two of them is fixed by this file; only UI-A and UI-B are free. ' +
+        'Recompute all of it with scripts/t3-bounds.ts, which exits non-zero if any claim fails.',
+      scoringRule:
+        'A stat goes to the larger number. A battle goes to whoever wins at least 3 of 5 stats, ' +
+        `otherwise it is a draw. Score is 2 half-points a win and 1 a draw, across ${B} battles ` +
+        `against each of the other ${N - 1} entrants.`,
+      maxScore: `${(N - 1) * B * 2}`,
+      premiseP1:
+        'The wall holds three stats at 26 or above in EVERY battle and no capped seat holds any ' +
+        'stat above 25, so the wall wins at least 3 of 5 stats against any capped seat and takes ' +
+        `all ${B} battles. Checked against all ${N - 2} generated shapes by t3-bounds.ts, not assumed.`,
+      premiseP2:
+        'A capped seat holds five non-zero stats and the pole holds one, so the capped seat wins ' +
+        `the other four stats and takes all ${B} battles. Also checked, not assumed.`,
+      wallScoreIsFixedNotARange:
+        'P1 fixes BOTH of the wall\'s founder battles at 14 half-points each, and its remaining ' +
+        '37 opponents are seed-generated. So W00 does not have a predicted range the way it did ' +
+        'in T5 and T6 — **its score is exactly 542**, and any other number is a failure to ' +
+        'explain, not noise. 514 of that is determined among the headless seats and 28 comes from ' +
+        'the two founder seats by P1.',
+      winnerIsHeadless:
+        '**W00 takes rank 1 whatever the founder plays.** Its fixed 542 against the best score ' +
+        `any other seat can reach, 532 — which is what a founder seat scores if it wins all ${B} ` +
+        `battles against all ${N - 2} seats that are not the wall, since P1 says it cannot beat ` +
+        'the wall. The best seed-generated rival tops out at 369, 173 below W00.',
+      poleIsLast:
+        '**W01 takes rank 40 whatever the founder plays.** P2 gives it 0 from both founder seats, ' +
+        'so its 4 half-points among the headless field is its ceiling as well as its floor. The ' +
+        `worst any other seat can do is 14 — a founder seat that loses everything still beats the ` +
+        'pole in all 7 battles by P2.',
+      founderSeatsCannotWin:
+        'UI-A and UI-B hold every stat between 1 and 25, so P1 applies to them: they lose all 7 ' +
+        'battles to W00 and cap at 532, below its fixed 542. This holds for ANY allocation inside ' +
+        'that range and does not depend on either recipe being reproduced.',
+      founderSeatsCannotComeLast:
+        'By P2 each founder seat beats the pole in all 7 battles, so neither can score below 14, ' +
+        'and the pole cannot score above 4. **Both founder seats finish in ranks 2..39.**',
+    },
+    expectations: {
+      terminalState: 'Paid',
+      terminalStateNote:
+        'Paid, NOT Closed. At exactly MIN_SEATS the pool is on the playing side of the fork. A ' +
+        'Closed pool here would mean the fork sits at 41 rather than 40 and the site advertises ' +
+        'the wrong number on every pool page.',
+      entrants: N,
+      sealsAtDeadline: true,
+      sealReason:
+        'The deadline. The pool holds 40 of 64 when the fill deadline passes, and 40 >= MIN_SEATS, ' +
+        'so the daemon calls seal_at_deadline rather than trigger_refund.',
+      settlementSequence: ['seal_at_deadline', 'reveal_pool_secret', 'commit_results', 'pay_prizes'],
+      settlementInstruction: 'seal_at_deadline',
+      refusedInstruction:
+        'trigger_refund — it must NOT appear in this pool\'s history. If it does, the fork is in ' +
+        'the wrong place and that is the finding.',
+      settlementIsPermissionless:
+        'seal_at_deadline carries no admin signer. Anyone can fire it once the deadline passes; ' +
+        'the daemon does so because it is watching, not because it is privileged.',
+      paidSeatCount: 1,
+      winner: 'W00',
+      winnerIsHeadless: true,
+      winnerLamports: p.potLamports,
+      potLamports: p.potLamports,
+      winnerScoreHalfExact: winner.scoreHalf,
+      winnerScoreIsExactNotARange:
+        'Unlike T5 and T6, where the founder could swing the winner\'s score, P1 fixes both of ' +
+        'W00\'s founder battles. 542 is a point prediction.',
+      lastPlace: 'W01',
+      lastPlaceScoreHalfExact: loser.scoreHalf,
+      founderSeatsPaid: '0',
+      founderRankRange: [2, N - 1],
+      founderRankNote:
+        'A RANGE, not a number. UI-A and UI-B play by hand against a 90-second clock and T4 ' +
+        'showed that does not reproduce a recipe (§H10). Their exact ranks among 36 other field ' +
+        'seats are COMPUTED AT REVEAL. The nominal allocations below are the conditional case.',
+      vaultAfter: '650240',
+      vaultAfterNote: 'the rent cushion, never recovered',
+      perSeatSunkLamportsLowBand: '4441080',
+      perSeatSunkLamportsHighBand: '4446160',
+      perSeatSunkNote:
+        'The two bands measured across five pools (DRIFT §H20): seats 0..9 sink 4441080 in pass ' +
+        'rent and seats 10+ sink 4446160, the difference being one byte of devnet rent at 5080 ' +
+        'lamports. At 40 seats that is **10 seats in the low band and 30 in the high band**. T6 ' +
+        'predicted the boundary MOVING and observed it move; T3 predicts it sitting still at a ' +
+        'pool size two thirds smaller, which is the other half of the same claim.',
+      treasuryDeltaFromEntries: '4000000000',
+      treasuryDeltaNote: `${N} entries at ${p.entryLamports} lamports. Read the treasury twice, both timestamped — T6 showed a conservation figure quoted without its clock looks wrong the moment the next pool opens and draws its pot.`,
+      winnerNetLamports: '3895558920',
+      winnerNetNote:
+        'The pot less this seat\'s own entry and its pass rent: 4000000000 - 100000000 - 4441080. ' +
+        'W00 is plannedSeat 1, inside the low band.',
+      resultsRootConditional: p.resultsRoot,
+      leafOrderConditional: p.leafOrder.join(','),
+      conditionalNote:
+        'The root, the leaf order, every exact score and every field rank assume the exact ' +
+        'allocations below AND the planned seat order. A founder allocation inside 1..25 that is ' +
+        'not the recipe breaks these and none of the unconditional claims above.',
+      hardBlocks: [],
+      detectionNotes: [
+        'Detection computes and persists a report but flags nobody, under the manual-only policy ' +
+          'ruling D-E9. No flag, no escrow, no delay to the payout.',
+        'population_score is predicted to fire on W00, as it did on the wall in T4, T5 and T6. ' +
+          'Finding it there is a detection PASS, not a fault.',
+        'allocation_entropy raises its round-number note on W01: a pole is all zeroes and a ' +
+          'hundred, so 100% of its stat values are multiples of ten.',
+        'allocation_entropy must NOT fire "strong" on anyone: every seat carries at least 3 ' +
+          'distinct shapes.',
+        'duplicate_sets must not fire. It is the one allocation signal that hard-blocks, and a ' +
+          'plan predicting one would be predicting its own failure.',
+        'A pool of 40 is a SMALLER population than any scored pool so far, so population_score\'s ' +
+          'sigma is computed over 40 samples rather than 64. Predict a wider spread and do not ' +
+          'read a louder signal on the wall as a regression.',
+      ],
+    },
+    pauseWindow: {
+      _:
+        'The one part of T3 that is not about scoring. It sits at exactly 30 entrants, which is ' +
+        'far enough into the fill that the pool is unambiguously live and far enough from 40 that ' +
+        'the remaining entries prove the pause was lifted cleanly rather than merely expired.',
+      appliedAtEntrants: 30,
+      instruction: 'set_paused',
+      route:
+        'A Squads proposal. Config.admin is a PDA — it is off the ed25519 curve, so no private ' +
+        'key exists for it anywhere and it can only ever sign by CPI (DRIFT Q6, answered from ' +
+        'chain). The instruction is generated with `scripts/admin.ts set-paused --emit-proposal ' +
+        '--admin <vault>` and approved by the single member of a 1-of-1 multisig (Q7).',
+      blocksOnly:
+        'register. A pause must never strand funds: settlement, reveal, payout and refund are all ' +
+        'unaffected, which is why it is safe to fire at all.',
+      attempts: t3PausedAttempts(),
+      verifyFromChain:
+        'Read Config.paused directly between the two writes — `scripts/admin.ts` prints it. The ' +
+        'Squads UI reporting success is not the same claim as the bit having moved, and §F-28 has ' +
+        'fired three times this month on exactly that distinction.',
+    },
+    seats: p.seats.map((s) => ({
+      seat: null,
+      plannedSeat: s.plannedSeat,
+      entersBeforePause: s.plannedSeat < 30,
+      wallet: s.wallet,
+      route: s.route,
+      role: s.role,
+      generator: s.generator,
+      ...(s.seed !== undefined ? { seed: s.seed } : {}),
+      ...(s.recipe ? { recipe: s.recipe } : {}),
+      battles: s.battles,
+      expectedRank: s.rank,
+      expectedScoreHalf: s.scoreHalf,
+      expectedZones: s.zones,
+      expectedLamports: s.amountLamports,
+      distinctShapes: s.distinctShapes,
+      ...(s.route === 'ui'
+        ? { rankIsConditional: true, unconditionalRankRange: [2, N - 1] }
+        : {}),
+    })),
+    seatNote:
+      '`seat` is null until the pool runs. `plannedSeat` is the index this plan assumes; the root ' +
+      'and the leaf order depend on it, and so does `entersBeforePause`, which is load-bearing ' +
+      'here in a way it was not in T4-T6: UI-B must NOT hold a seat when the pause goes on.',
+    contingency: [
+      'STOP AT 40. A 41st entry harms nothing on chain but it moves the pool off the boundary, ' +
+        'which is the only reason this test exists at that count.',
+      'If a headless seat seals and then fails to register it is barred from that pool for good ' +
+        '(DRIFT §H6) and enter.ts stops the run (§H8). Substitute from the spare roster with ' +
+        '--substitute so the spare plays THAT SEAT\'S frozen allocation and the scored field stays ' +
+        'the planned field. If the seat that burns is W00 the winner changes wallet but not ' +
+        'allocation; say so plainly rather than quietly re-deriving.',
+      'If the pool reaches its deadline holding 39 because an entry was lost, it REFUNDS and T3 ' +
+        'is not a scored test — it becomes a second observation of T2R. That is a spoiled run, ' +
+        'not a product failure. Fill with a margin of time, not a margin of seats.',
+      'If the founder plays an allocation inside 1..25 that is not the recipe, every unconditional ' +
+        'expectation holds and the two UI seats reconcile as INPUT_DRIFT, as they did in T4.',
+      'If a founder seat takes a stat ABOVE 25 it is no longer a capped seat, P1 stops applying to ' +
+        'it, and it could beat W00. That is a genuine FAIL of the test as designed, not of the ' +
+        'product, and the rerun is on the next pool.',
+      'If the headless paused attempt reverts with 6000 or 6010 rather than 6005, record the raw ' +
+        'code and STOP. That would mean register\'s gate ordering is not what the source says, ' +
+        'which is a finding worth more than finishing the fill.',
+      'If the founder\'s paused UI attempt shows a spinner or a raw code rather than a sentence, ' +
+        'the pool test still passes and the COPY criterion fails. Record them separately — T6 ' +
+        'showed how easily one verdict swallows the other.',
+    ],
+    passCriteria: [
+      'The pool reaches **Paid** with exactly 40 entrants — not Closed, and not 41.',
+      '**seal_at_deadline** appears in the pool\'s transaction history and **trigger_refund** does not.',
+      'Exactly one seat is paid; it is **W00**, a headless wallet, and the amount is the whole ' +
+        '4000000000 lamport pot.',
+      'W00 scores exactly **542** half-points and W01 exactly **4**. These are point predictions, ' +
+        'not ranges.',
+      'W01 is ranked 40th.',
+      'NEITHER founder wallet is paid, and both finish between rank 2 and rank 39.',
+      'The headless attempt fired during the pause reverts with **Paused (6005)**, and spends a ' +
+        'transaction fee and nothing else.',
+      'The founder\'s UI attempt during the pause is refused **in a sentence a player can read**, ' +
+        'and spends a transaction fee and nothing else.',
+      'UI-B, refused during the pause, enters successfully after the unpause — the same wallet, ' +
+        'the same device, the only difference being the pause bit.',
+      'Config.paused reads true between the two admin writes and false after, **read from chain**.',
+      'Every revealed allocation reproduces the battles_hash the chain recorded at entry.',
+      'The recomputed results root equals the on-chain results_root.',
+      'Ten seats sink 4441080 lamports and thirty sink 4446160.',
+      'The vault ends at 650240 lamports.',
+      'No seat is flagged and no sanctions hold is placed.',
+    ],
+  };
+}
+
 // ---------------------------------------------------------------------------
 // 4. CLI
 // ---------------------------------------------------------------------------
@@ -1035,9 +1439,9 @@ function main(): void {
   );
   if (process.argv.includes('--check-only')) return;
 
-  const FIELDS: Record<string, () => PlannedSeat[]> = { T4: t4Field, T5: t5Field, T6: t6Field };
+  const FIELDS: Record<string, () => PlannedSeat[]> = { T3: t3Field, T4: t4Field, T5: t5Field, T6: t6Field };
   const PLANS: Record<string, (p: Prediction) => Record<string, unknown>> = {
-    T4: t4Plan, T5: t5Plan, T6: t6Plan,
+    T3: t3Plan, T4: t4Plan, T5: t5Plan, T6: t6Plan,
   };
   const known = Object.keys(FIELDS).join('|');
 
