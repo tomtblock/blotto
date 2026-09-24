@@ -2,7 +2,7 @@
 
 /*
  * The BOARD run (founder brief 2026-09-24) — the host that the play page
- * mounts in place of <BattleFlow /> when NEXT_PUBLIC_BATTLE_BOARD=1. Same
+ * mounts in place of <BattleFlow /> unless NEXT_PUBLIC_BATTLE_BOARD=0. Same
  * contract as BattleFlow: it never sees a wallet, sealing happens outside
  * via `onConfirm`, and when the page hosts the seal stage the review is
  * drawn into the stage's widget slot and the seal keys are the page's.

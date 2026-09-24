@@ -468,8 +468,8 @@ export const COPY = {
     // already ratified elsewhere in this file.
     heroTitle: 'Make your Blott',
     tryDials: 'Try the dials',
-    // The board (founder 2026-09-24): the landing's toy is the board when
-    // NEXT_PUBLIC_BATTLE_BOARD=1. PHASE-N-REVIEW: drafts; founder-owned.
+    // The board (founder 2026-09-24): the landing's toy is the board unless
+    // NEXT_PUBLIC_BATTLE_BOARD=0. PHASE-N-REVIEW: drafts; founder-owned.
     tryBoard: 'Try the board',
     demoBoardHint:
       'Tap a troop, press and hold a field. Nothing to sign, nothing to pay: this one is just to feel it. A real entry plays the same board with a three-minute clock.',

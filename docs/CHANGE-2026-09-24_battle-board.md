@@ -1,6 +1,8 @@
 # CHANGE — 2026-09-24: the battle board (Phase A), and the two modes it prepares for
 
-**Status: Phase A built on `claude/battle-modes`, behind `NEXT_PUBLIC_BATTLE_BOARD`.**
+**Status: Phase A merged to `main` (PR #176, 2026-09-24) and the board is the default — the
+founder's same-day ruling, "everything shows the board". `NEXT_PUBLIC_BATTLE_BOARD=0` is the
+rollback (`app/src/battle/board/switch.ts`).**
 Phase B (the hard-mode pool) is planned and not started. The plan the founder approved is
 `https://claude.ai/artifact/RufrDt16swq46bCkNkdyGP`; the wireframes are
 `https://www.figma.com/design/cIzgzj8m77Oeo0JMOK2zZ4`.
@@ -28,6 +30,7 @@ number appears here it is the founder's; where a judgement was made it is marked
 | 11 | **Words:** troop, crowd, field, points; rival only on a demo replay. | `COPY.board` |
 | 12 | The replay in the prototype is a visualisation of one 1-v-1 and stays as that — running the real engine. Not in Phase A. | plan §2 |
 | 13 | **A hand key for grab mode** (second pass, after the founder's first look): pressing it disarms the troop in hand, so a drag only moves the view and a tap on a field opens that field's stepper for the troop — the ±5/±10/±20 keys without disarming the tray first. Tapping a troop card leaves grab mode. On the play page and the homepage demo alike (both are `BoardFlow`). | `GrabKey` in `hud.tsx`, `grab` on `Arena` |
+| 14 | **Everything shows the board** (on the day Phase A merged). The switch is opt-OUT: unset, the board; exactly `0`, the dials and the practice machine as they were. No deployment setting is needed for the board to be live. | `app/src/battle/board/switch.ts` |
 
 ## 2. What Phase A is
 
@@ -45,7 +48,7 @@ always played, expressed through a board instead of dials.
 | Art and fonts | `public/board-art/*.webp`, `public/fonts/board/unbounded.woff2` | The mockup's painted map, forest tile and ten sprites (generated once there, committed here; the app never generates art). Unbounded is the mockup's display face, self-hosted for the board alone; body and numbers use the faces the app already ships. |
 | Tray, stepper, HUD, review | `TroopTray.tsx`, `Stepper.tsx`, `hud.tsx`, `ReviewPanel.tsx`, `board.css` | The mockup's chrome — cream plaques, wood outlines, gold keys, one colour per stat — scoped under `.bb`/`.bba`. Every step button disables when it would overshoot. The hand key (ruling 13) sits under the mode badge and turns gold while grab mode is on; the hint line says what a tap does in that mode. |
 | Host | `components/board/BoardFlow.tsx` | Same contract as `BattleFlow`: hosted review in the seal stage's slot, `onConfirm` with seven allocations and seven timings. |
-| Switch | `app/src/app/play/play-client.tsx`, `.env.example` | `NEXT_PUBLIC_BATTLE_BOARD=1` selects the board; unset, the dials render exactly as before. |
+| Switch | `app/src/battle/board/switch.ts`, `.env.example` | One constant, read by the play page, the landing toy and the hero control. The board unless `NEXT_PUBLIC_BATTLE_BOARD=0`, which renders the dials exactly as before (ruling 14; until that ruling the switch was opt-in, `=1`). |
 | Pool page | `app/src/app/pools/[pool]/page.tsx` | Mode badge; "How this pool plays" card, config-driven (the minutes come from the clock constant). |
 | Homepage | `components/landing/LiveDemo.tsx`, `page.tsx` | Board demo under the switch; "Try the board". |
 | Copy | `app/src/copy/index.ts` `board`, `pool.howItPlays`, `landing.tryBoard` | Every line a `PHASE-N-REVIEW` draft; the founder owns the words. Language gate clean. |

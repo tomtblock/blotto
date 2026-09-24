@@ -36,9 +36,10 @@ test('landing: montage hero, the enter control, the 18+ line above the fold', as
 });
 
 test('landing: the board demo pours points and locks a field (founder 2026-09-24)', async ({ page }) => {
-  // Only when the app was BUILT with the board switch on; otherwise the
-  // practice machine below is what renders, and that test covers it.
-  test.skip(process.env.NEXT_PUBLIC_BATTLE_BOARD !== '1', 'board switch off');
+  // The board is the default (battle/board/switch.ts); only an app BUILT
+  // with the switch at "0" renders the practice machine, which the test
+  // below covers instead.
+  test.skip(process.env.NEXT_PUBLIC_BATTLE_BOARD === '0', 'board switch off');
   await page.addInitScript(() => localStorage.setItem('blotto.preloader.seen', 'v2'));
   await page.goto('/');
   const demo = page.getByTestId('board-demo');
@@ -88,7 +89,7 @@ test('landing: the board demo pours points and locks a field (founder 2026-09-24
 });
 
 test('landing: the practice machine can hold a stat (founder 2026-09-16)', async ({ page }) => {
-  test.skip(process.env.NEXT_PUBLIC_BATTLE_BOARD === '1', 'board switch on');
+  test.skip(process.env.NEXT_PUBLIC_BATTLE_BOARD !== '0', 'board is the default; dials only at "0"');
   // The first-visit curtain is a root-route overlay; mark it seen so the
   // dials are reachable (preloader-model.ts holds the key and value).
   await page.addInitScript(() => localStorage.setItem('blotto.preloader.seen', 'v2'));
