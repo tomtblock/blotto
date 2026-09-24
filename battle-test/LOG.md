@@ -492,3 +492,27 @@
   it at seat 0 and no headless wallet can stand in for a founder seat. **I under-stated their
   involvement earlier** — I said the pause was their only part; entering UI-A comes first. Then the
   pause sequence. Nothing goes past 30 until the pause is on: the boundary is the point of the test.
+- **18:46Z** **The kill switch fired for the first time.** Founder executed `set_paused(true)`
+  through Squads. **`Config.paused = true`, read from chain**, with
+  `Program log: Instruction: SetPaused` and 6974 CU — matching my off-chain simulation exactly.
+  **It took two attempts, and the first failure was mine:** Squads' TX Builder Data field is
+  **base58**, and I handed over the base64 our `admin.ts --emit-proposal` prints (the field is
+  literally named `dataBase64`). Squads read `Wzx9wLDhptoB` as base58 → `28a27ca8a2a7a73bba`, which
+  matches no discriminator, and the program threw `InstructionFallbackNotFound` (101). An
+  **"Export as base58" button was on the same screen** and I did not register what it was telling
+  me. Correct value is `2AMgDu5cpQDDr`; unpause is `2AMgDu5cpQDDq`, differing only in the last
+  character. Cost: one transaction fee. The program rejecting a malformed admin instruction
+  cleanly is itself a small piece of evidence.
+- **18:49Z** **Headless paused attempt: `6005`.** W38 refused at the **pause gate** — not 6000, not
+  6010 — spending **15000 lamports**, a transaction fee and nothing else, and taking no seat. Same
+  figure as T6's nine refusals. This confirms on live traffic that `register` checks the pause
+  BEFORE the state gate, the deadline and capacity.
+- **18:49Z** Two fixes to `scripts/late-attempt.ts`, both because it was written for T6 and T3
+  needs the other answer: the expected code is now `--expect` rather than hardcoded 6000, and the
+  Open-pool safety guard now **reads `Config.paused` from chain** and stands down only when the
+  chain says no attempt can take a seat. A flag asserting "it's paused" would have been the caller
+  marking their own homework. The written evidence's `expected` block was corrected from
+  PoolNotOpen/6000 to Paused/6005 — **a label, not a measurement**; every measured field is as the
+  run produced it.
+- **18:50Z** **Waiting on the founder: F-45.** The UI attempt as UI-B while the pause is on — the
+  criterion T6 surrendered — then the unpause.

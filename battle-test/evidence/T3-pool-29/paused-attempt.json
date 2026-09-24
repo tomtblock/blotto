@@ -1,0 +1,35 @@
+{
+  "pool": {
+    "id": "29",
+    "pda": "3KekiNcocdfB4vEB99HA2mf6eZ2cTFAgrnE9jreisnmv",
+    "state": "Open",
+    "entrants": 30
+  },
+  "capturedAt": "2026-09-24T18:49:01.465Z",
+  "expected": {
+    "error": "Paused",
+    "code": 6005,
+    "notCode": [
+      6000,
+      6010
+    ]
+  },
+  "attempts": [
+    {
+      "wallet": "W38",
+      "address": "CkhWcpxE8x465NvkZCa2L4TfcqPoQJh85KkgcLciMwQT",
+      "balanceBefore": "108000000",
+      "balanceAfter": "107985000",
+      "lamportsSpent": "15000",
+      "attestation": 204,
+      "packet": 200,
+      "ciphertextStatus": 204,
+      "ciphertextBody": "",
+      "signature": null,
+      "registerError": "Transaction 5zrmNPyJoMu37u8mSa63kxJpm2qJEjUZ3oVuVJVzgZ4AxnpLVwfCEoo1hgPnxY1hzEjo6Rpscqru81GGAPik87bK resulted in an error. \nStatus: ({\"err\":{\"InstructionError\":[1,{\"Custom\":6005}]}}). \nCatch the `SendTransactionError` and call `getLogs()` on it for full details.",
+      "customErrorCode": 6005,
+      "verdict": "refused by the program at the PAUSE gate (Paused, 6005) \u2014 register's first check"
+    }
+  ],
+  "note": "Fired into T3's paused window on pool 29. The pool was Open and Config.paused read TRUE from chain, so the refusal can only be the pause gate \u2014 which register checks before the state gate, the deadline and capacity."
+}
