@@ -178,71 +178,9 @@
   100% { transform: translateX(-110%) rotate(0deg); }
 }
 
-/* ---------- the playground ---------- */
-.blott-playground {
-  position: relative;
-  height: 120px;
-  overflow: hidden;
-  border-radius: var(--radius-lg, 16px);
-  background:
-    radial-gradient(60% 40% at 50% 100%, rgb(255 255 255 / 0.08), transparent 70%),
-    var(--color-raised);
-}
-.blott-actor {
-  position: absolute;
-  bottom: 8px;
-  transform: translateX(-50%);
-  will-change: transform;
-}
-.blott-actor.is-bounce { animation: blott-bounce 1.1s cubic-bezier(0.3, 0, 0.2, 1) infinite; }
-.blott-actor.is-dance { animation: blott-dance 0.9s ease-in-out infinite alternate; }
-.blott-actor.is-wave { animation: blott-wiggle 1.6s ease-in-out infinite; }
-.blott-actor.is-nap { animation: blott-snore 3.2s ease-in-out infinite; }
-.blott-actor.is-tumble { animation: blott-actor-somersault 2.4s linear infinite; }
-.blott-actor.is-leap { animation: blott-leap-loop 1.9s cubic-bezier(0.3, 0, 0.2, 1) infinite; }
-.blott-actor.is-dash { animation: blott-dash 5.5s ease-in-out infinite; }
-@keyframes blott-bounce {
-  0%, 100% { transform: translate(-50%, 0) scale(1, 1); }
-  20% { transform: translate(-50%, 0) scale(1.08, 0.92); }
-  55% { transform: translate(-50%, -34px) scale(0.96, 1.06); }
-}
-@keyframes blott-dance {
-  from { transform: translate(-50%, 0) rotate(-9deg); }
-  to { transform: translate(-50%, -6px) rotate(9deg); }
-}
-@keyframes blott-wiggle {
-  0%, 100% { transform: translate(-50%, 0) rotate(0deg); }
-  30% { transform: translate(-50%, -4px) rotate(-8deg); }
-  60% { transform: translate(-50%, 0) rotate(6deg); }
-}
-@keyframes blott-snore {
-  0%, 100% { transform: translate(-50%, 0) scale(1, 1); }
-  50% { transform: translate(-50%, 0) scale(1.05, 0.96); }
-}
-@keyframes blott-actor-somersault {
-  0% { transform: translate(-50%, 0) rotate(0deg); }
-  40% { transform: translate(-50%, -18px) rotate(180deg); }
-  100% { transform: translate(-50%, 0) rotate(360deg); }
-}
-@keyframes blott-leap-loop {
-  0%, 100% { transform: translate(-50%, 0); }
-  45% { transform: translate(-50%, -52px) rotate(-8deg); }
-}
-@keyframes blott-dash {
-  0% { transform: translate(-50%, 0) scaleX(1); }
-  45% { transform: translate(calc(-50% + 140px), 0) scaleX(1); }
-  50% { transform: translate(calc(-50% + 140px), 0) scaleX(-1); }
-  95% { transform: translate(-50%, 0) scaleX(-1); }
-  100% { transform: translate(-50%, 0) scaleX(1); }
-}
-.blott-playground.is-still .blott-actor {
-  animation: none;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .blott-runner,
   .blott-peeker,
-  .blott-actor,
   .blott-gait .blott-sprite {
     animation: none !important;
   }
@@ -257,6 +195,11 @@
 }
 
 /* The sealed panel's trophy Blott: one proud bounce on arrival. */
+@keyframes blott-bounce {
+  0%, 100% { transform: translate(-50%, 0) scale(1, 1); }
+  20% { transform: translate(-50%, 0) scale(1.08, 0.92); }
+  55% { transform: translate(-50%, -34px) scale(0.96, 1.06); }
+}
 .blott-sealed {
   animation: blott-bounce 1.1s cubic-bezier(0.3, 0, 0.2, 1) 2;
 }

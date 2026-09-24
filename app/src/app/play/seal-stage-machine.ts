@@ -4,10 +4,11 @@
  * page feeds it.
  *
  * It models ONLY THE SCENE — the belt, the lid, the blender — never the
- * entry. The entry path (src/entry) and the run machine (src/battle/machine)
- * are untouched; nothing here can sign, send or settle anything. Every event
- * is a fact the page already has: the player armed or confirmed the seal
- * (battle-flow.tsx), the wallet finished a signature (observed-signer.ts),
+ * entry. The entry path (src/entry) and the board's reducer
+ * (src/battle/board/machine.ts) are untouched; nothing here can sign, send
+ * or settle anything. Every event is a fact the page already has: the
+ * player armed or confirmed the seal (the seal keys play-client.tsx draws
+ * under the stage), the wallet finished a signature (observed-signer.ts),
  * the reveal machine reached a terminal beat (reveal-host.tsx).
  *
  * Honest states: the blender runs only once the TRANSACTION is signed (the
@@ -54,7 +55,7 @@ export function reduceSealStage(phase: SealStagePhase, event: SealStageEvent): S
     case 'disarm':
       return phase === 'armed' ? 'made' : phase;
     case 'confirm':
-      // The confirm control exists only once armed (battle-flow.tsx); a
+      // The confirm control exists only once armed (play-client.tsx); a
       // confirm from `made` is tolerated so a retry path that re-submits
       // without re-arming still reads as in flight.
       return phase === 'armed' || phase === 'made' ? 'signing' : phase;

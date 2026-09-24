@@ -5,7 +5,7 @@
  * jumping around the page. They are akin to minions … running all over the
  * site being cheeky and entertaining."
  *
- * Three decorative performers, all pointer-events: none, all aria-hidden,
+ * Two decorative performers, all pointer-events: none, all aria-hidden,
  * all still under prefers-reduced-motion (a single resting pose, no
  * travel), none on the play route (nothing may compete with the timer):
  *
@@ -14,8 +14,9 @@
  *                  tumble halfway, sometimes leaping.
  *   <Peeker />   — a Blott leans in from a viewport edge, looks, and slips
  *                  back out.
- *   <Playground/>— a band of Blotts doing their own thing (bounce, dance,
- *                  wave, nap), used under the seven-made montage.
+ *
+ * (A third, <Playground />, danced under the dial run's seven-made rack and
+ * left with it on 2026-09-24.)
  *
  * Timing is deliberately sparse: a runner roughly every 40 s, a peek every
  * 30 s or so, offset by a per-mount phase so pages never sync up.
@@ -95,51 +96,6 @@ export function Peeker({ side = 'right', periodMs = 30_000 }: { side?: 'left' | 
   return (
     <div className={`blott-peeker is-${side}`} aria-hidden="true" key={key}>
       <BlottSprite pose={pose} size={96} flip={side === 'right'} />
-    </div>
-  );
-}
-
-const PLAYGROUND_ACTS = ['bounce', 'dash', 'dance', 'wave', 'nap', 'tumble', 'leap'] as const;
-type PlaygroundAct = (typeof PLAYGROUND_ACTS)[number];
-const POSE_FOR: Record<PlaygroundAct, BlottPose> = {
-  bounce: 'cheer',
-  dash: 'run-a',
-  dance: 'dance',
-  wave: 'wave',
-  nap: 'sleep',
-  tumble: 'tumble',
-  leap: 'jump',
-};
-
-/**
- * A band of `count` Blotts each doing something. `seeds` (e.g. the seven
- * battles' first stat) spreads the acts so two runs never look identical;
- * purely decorative, nothing here reads the allocation for anything else.
- */
-export function Playground({ count, seeds = [], size = 64 }: { count: number; seeds?: readonly number[]; size?: number }) {
-  const reduced = usePrefersReducedMotion();
-  return (
-    <div className={`blott-playground${reduced ? ' is-still' : ''}`} aria-hidden="true" data-testid="blott-playground">
-      {Array.from({ length: count }, (_, i) => {
-        const act = pick(PLAYGROUND_ACTS, (seeds[i] ?? 0) + i * 3);
-        const delay = (i * 0.7) % 3.1;
-        return (
-          <span
-            key={i}
-            className={`blott-actor is-${act}`}
-            style={{ animationDelay: `${delay.toFixed(2)}s`, left: `${((i + 0.5) / count) * 100}%` }}
-          >
-            {act === 'dash' ? (
-              <span className="blott-gait">
-                <BlottSprite pose="run-a" size={size} className="gait-a" />
-                <BlottSprite pose="run-b" size={size} className="gait-b" />
-              </span>
-            ) : (
-              <BlottSprite pose={POSE_FOR[act]} size={size} />
-            )}
-          </span>
-        );
-      })}
     </div>
   );
 }

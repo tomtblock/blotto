@@ -6,39 +6,44 @@
  * (next.config.ts pageExtensions), so this compiles to nothing on a deploy.
  * The controls are dummies; nothing here signs, sends or reads an allocation.
  * Round three (§D): a stand-in review is portalled into the stage's widget
- * the way BattleFlow does it, so the layout can be seen without a run.
+ * the way the board (BoardFlow) does it, so the layout can be seen without a
+ * run. The stand-in is the board's own ReviewPanel over an even easy entry.
  */
 
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { COPY } from '@/copy';
 import { Button } from '@/components/ui/button';
-import { SevenTiles } from '@/battle/components/seven-tiles';
 import { EVEN_SPLIT } from '@/battle/allocation';
+import type { BoardReviewState } from '@/battle/board/machine';
+import { BOARD_CLOCK_BUDGET_MS, FIELDS } from '@/battle/board/mode';
+import { ReviewPanel } from '@/battle/components/board/ReviewPanel';
+import '@/battle/components/board/board.css';
 import { SealStage, type SealKeyTone } from '../../play/seal-stage';
 import { EnteredPanel } from '../../play/entered-panel';
 import type { SealStagePhase } from '../../play/seal-stage-machine';
 
 const PHASES: SealStagePhase[] = ['made', 'armed', 'signing', 'locked', 'blending', 'done', 'failed'];
-const DEMO_TILES = Array.from({ length: 7 }, () => ({ allocation: EVEN_SPLIT, stillUrl: null }));
+const EVEN_BOARD = Array.from({ length: FIELDS }, () => [...EVEN_SPLIT]);
+
+function demoReview(expired: boolean): BoardReviewState {
+  return {
+    phase: 'review',
+    mode: 'easy',
+    battles: EVEN_BOARD,
+    placed: EVEN_BOARD,
+    budgetMs: BOARD_CLOCK_BUDGET_MS,
+    timingsMs: Array.from({ length: FIELDS }, () => 0),
+    locked: Array.from({ length: FIELDS }, () => false),
+    expired,
+    remainingMs: expired ? 0 : 42_000,
+  };
+}
 
 function DemoReview({ expired }: { expired: boolean }) {
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <h2 className="font-display text-[30px] leading-[32px] font-extrabold text-ink">{COPY.battle.crescendo}</h2>
-        <p className="text-[15px] leading-6 text-ink-muted">{COPY.battle.crescendoLine}</p>
-      </div>
-      {expired && <p className="text-[14px] leading-5 text-ink-muted">{COPY.battle.expiredNote}</p>}
-      <SevenTiles locked={DEMO_TILES} />
-      <div className="flex items-center gap-3">
-        {/* eslint-disable-next-line @next/next/no-img-element -- a static asset at a fixed size */}
-        <img src="/candy/lock.webp" alt="" aria-hidden width={64} height={64} className="h-16 w-16 shrink-0" />
-        <div className="flex min-w-0 flex-col gap-1">
-          <p className="text-[14px] leading-5 text-ink">{COPY.battle.sealWhat}</p>
-          <p className="text-[13px] leading-5 text-ink-muted">{COPY.battle.sealAfter}</p>
-        </div>
-      </div>
+    <div className="bb flex flex-col gap-4">
+      <ReviewPanel review={demoReview(expired)} compact />
     </div>
   );
 }

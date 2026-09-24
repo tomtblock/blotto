@@ -14,28 +14,14 @@ import { Card } from "@/components/ui/card";
 import { Stat } from "@/components/ui/stat";
 import { Countdown } from "@/components/ui/countdown";
 import { ProgressRing } from "@/components/ui/progress-ring";
-import { RankBadge } from "@/components/ui/rank-badge";
-import { PrizeTable } from "@/components/ui/prize-table";
 import { ToastProvider, useToast } from "@/components/ui/toast";
 import { Sheet } from "@/components/ui/sheet";
 import { NeonSection } from "@/components/ui/neon-section";
 import { NotificationsPanel, itemFor } from "@/components/shell/notifications";
 import { FIXTURE_CAREER } from "@/data/scenarios";
 import { BlotMorph } from "@/components/blot/BlotMorph";
-import { StatDials } from "@/components/blot/StatDials";
-import { Timer } from "@/components/blot/Timer";
 import { SHAPE_REFERENCES } from "@/components/blot/blotGeometry";
-import { rebalance } from "@/components/blot/rebalance";
-import { useBlotSprings, usePrefersReducedMotion } from "@/components/blot/springs";
 import { EVEN_SPLIT, type Allocation } from "@/battle/allocation";
-import {
-  RUN_CLOCK_BUDGET_MS,
-  clockStarted,
-  newRunClock,
-  remainingMs,
-  startClock,
-} from "@/battle/run-clock";
-import { useEffect } from "react";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -89,25 +75,6 @@ function MotionDemo({ name, animateClass }: { name: string; animateClass: string
  * gallery cannot drift from the founder’s numbers. Renders as "4". */
 const DEMO_POT_SOL = lamportsToSol(TIER_POT_LAMPORTS[0].toString());
 
-/* Half the pot, in integer lamports — what each of two players tied for first
- * is paid. Renders as "2". */
-const DEMO_TIE_SHARE_SOL = lamportsToSol((TIER_POT_LAMPORTS[0] / 2n).toString());
-
-/* Static example rows for the PrizeTable demo — amounts are display strings
- * by design (the component does no arithmetic; see prize-table.tsx). There is
- * ONE paid place: the player ranked first takes the whole prize pool, so the
- * ordinary table is a single row. */
-const DEMO_PRIZE_ROWS = [{ position: "1st", amountSol: DEMO_POT_SOL, rank: 1 }];
-
-/* The case worth looking at: a tie for first. Tied players all share rank 1 and
- * split the pool equally in integer lamports; any indivisible remainder goes to
- * the tied player with the lowest entry number, which is why the rows name one.
- * Two tied at tier 0 is 2 SOL each, exactly. */
-const DEMO_TIE_PRIZE_ROWS = [
-  { position: "1st (tied, entry 7)", amountSol: DEMO_TIE_SHARE_SOL, rank: 1 },
-  { position: "1st (tied, entry 31)", amountSol: DEMO_TIE_SHARE_SOL, rank: 1 },
-];
-
 function ToastDemoButtons() {
   const toast = useToast();
   return (
@@ -118,65 +85,6 @@ function ToastDemoButtons() {
       <Button intent="quiet" onClick={() => toast.show("Prize paid to your wallet", "prize")}>
         Show prize toast
       </Button>
-    </div>
-  );
-}
-
-
-/*
- * The live dial playground — the battle screen's core loop in miniature:
- * one shape, five dials, zero seams. The Blot on the pink field, the
- * dials and clock on the plum card (two-layer rule), springs shared
- * between the body and the resting knobs so the budget visibly flows.
- * The clock starts on the FIRST dial change, exactly as in a real run.
- */
-function BlotPlayground() {
-  const [target, setTarget] = useState<Allocation>(EVEN_SPLIT);
-  const [dragStat, setDragStat] = useState<number | null>(null);
-  const [clock, setClock] = useState(() => newRunClock());
-  const [now, setNow] = useState(() => Date.now());
-  const reduced = usePrefersReducedMotion();
-  const { display, velocity } = useBlotSprings(target, reduced);
-
-  useEffect(() => {
-    if (!clockStarted(clock)) return;
-    const id = setInterval(() => setNow(Date.now()), 250);
-    return () => clearInterval(id);
-  }, [clock]);
-
-  return (
-    <div className="overflow-hidden rounded-2xl border border-line">
-      <div className="flex items-center justify-center bg-brand-pink py-6">
-        <BlotMorph
-          allocation={target}
-          display={display}
-          velocity={velocity}
-          dragStat={dragStat}
-          mood="focused"
-          size={240}
-        />
-      </div>
-      <div className="flex flex-col gap-5 bg-game-base p-5 sm:flex-row sm:items-start">
-        <div className="min-w-0 flex-1">
-          <StatDials
-            target={target}
-            display={display}
-            dragStat={dragStat}
-            onDrag={(k, t) => {
-              setClock((c) => startClock(c, Date.now()));
-              setTarget((a) => rebalance(a, k, t));
-            }}
-            onDragStart={setDragStat}
-            onDragEnd={() => setDragStat(null)}
-            onEvenSplit={() => setTarget(EVEN_SPLIT)}
-          />
-        </div>
-        <Timer
-          remainingMs={remainingMs(clock, now)}
-          budgetMs={RUN_CLOCK_BUDGET_MS}
-          started={clockStarted(clock)}
-        />
-      </div>
     </div>
   );
 }
@@ -296,42 +204,6 @@ export function Gallery() {
           </div>
         </Section>
 
-        <Section title="RankBadge">
-          <div className="flex flex-wrap items-center gap-4">
-            {/* Only rank 1 may wear the prize accent — there is one paid place, and
-                players tied for first all share rank 1, so no rank below first is
-                ever in the paid set. */}
-            <RankBadge rank={1} paid />
-            <RankBadge rank={2} />
-            <RankBadge rank={3} />
-            <RankBadge rank={16} />
-            <RankBadge rank={22} />
-            <RankBadge rank={41} />
-            <RankBadge rank={1} paid size="moment" />
-          </div>
-        </Section>
-
-        <Section title="PrizeTable">
-          <div className="grid gap-5 sm:grid-cols-2">
-            <Card className="p-5">
-              <PrizeTable
-                rows={DEMO_PRIZE_ROWS}
-                highlightRank={1}
-                caption="The one paid place — the winner takes the whole prize pool, your row highlighted"
-              />
-            </Card>
-            <Card className="p-5">
-              {/* No highlightRank here: the highlight matches on rank, and every
-                  player tied for first is rank 1, so setting it would light both
-                  rows rather than one player’s. */}
-              <PrizeTable
-                rows={DEMO_TIE_PRIZE_ROWS}
-                caption="A tie for first — the tied players share rank 1 and split the prize pool equally"
-              />
-            </Card>
-          </div>
-        </Section>
-
         <Section title="Toast">
           <ToastDemoButtons />
         </Section>
@@ -400,10 +272,6 @@ export function Gallery() {
               </div>
             ))}
           </div>
-        </Section>
-
-        <Section title="BlotMorph + StatDials + Timer — live">
-          <BlotPlayground />
         </Section>
 
         <Section title="Blot moods">
