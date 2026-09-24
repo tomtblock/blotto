@@ -25,7 +25,7 @@ import Link from "next/link";
 import { COPY } from "@/copy";
 import { useAuth } from "@/wallet/auth-context";
 import type { SocialProvider } from "@/wallet/types";
-import { AppleMark, GoogleMark, WalletGlyph, XMark } from "@/wallet/wallet-icons";
+import { GoogleMark, WalletGlyph, XMark } from "@/wallet/wallet-icons";
 import { CopyableAddressPill } from "@/components/copyable-address";
 import { signInDestination } from "./return-to";
 
@@ -36,11 +36,45 @@ import { signInDestination } from "./return-to";
  * string, so a malformed ID rendered live buttons that did nothing).
  */
 
-/** Apple's button is removed here, and only here, if the founder drops it. */
-const ICON_SOCIALS: Array<{ provider: SocialProvider; label: string; Mark: typeof AppleMark }> = [
-  { provider: "apple", label: COPY.signin.apple, Mark: AppleMark },
+/**
+ * The socials that sit under the Google hero.
+ *
+ * APPLE WAS REMOVED HERE on 2026-09-24 (founder), and from `SocialProvider`
+ * so it cannot be offered from another surface by accident. The review that
+ * prompted it drove this page in a browser: Privy's own API refuses Apple
+ * with `403 disallowed_login_method`, and the failure reached the player as
+ * nothing at all — the modal simply sat there.
+ *
+ * The grid is single-column because one tile in a two-column grid renders at
+ * half width. If a second social ever returns, take it back to two.
+ */
+const ICON_SOCIALS: Array<{ provider: SocialProvider; label: string; Mark: typeof XMark }> = [
   { provider: "twitter", label: COPY.signin.twitter, Mark: XMark },
 ];
+
+/**
+ * EXTERNAL WALLET SIGN-IN IS HIDDEN (founder, 2026-09-24). Hidden, not
+ * removed: this is a vendor outage, not a product decision, and the day it
+ * lifts we want the buttons back without rebuilding them.
+ *
+ * WHY. Privy's sign-in-with-Solana always states `Chain ID: mainnet`, for an
+ * application that is devnet end to end. Phantom compares that line and
+ * refuses to display the request — "the chain ID does not match the provided
+ * chain ID for verification" — and Privy's own login modal fails the same
+ * way, so both routes are shut. Privy support have confirmed it in writing:
+ * `generateSiwsMessage` takes only an address, and SIWS "messages default to
+ * mainnet regardless of your RPC configuration".
+ *
+ * Nothing in this repository can correct it; the full diagnosis, the captured
+ * message and the costed alternatives are in
+ * `docs/CHANGE-2026-09-24_signin-review.md`.
+ *
+ * TO RESTORE: set this to true. The handlers, the detection and the whole
+ * `siwsSignIn` sequence are untouched and still under test — only the buttons
+ * are withheld. Restore it once Privy emits a devnet chain id, and re-run the
+ * sign-in review before saying it works.
+ */
+const EXTERNAL_WALLET_SIGNIN_ENABLED = false;
 
 const ROW =
   "flex h-14 w-full items-center gap-3 rounded-xl border border-line bg-raised px-4 text-left " +
@@ -170,7 +204,7 @@ export function SignInClient() {
         {COPY.signin.google}
       </button>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3">
         {ICON_SOCIALS.map(({ provider, label, Mark }) => (
           <button
             key={provider}
@@ -194,58 +228,62 @@ export function SignInClient() {
         ))}
       </div>
 
-      <div className="my-2 flex items-center gap-3" aria-hidden>
-        <span className="h-px flex-1 bg-line" />
-        <span className="text-[12px] uppercase tracking-[0.14em] text-ink-muted">
-          {COPY.signin.walletDivider}
-        </span>
-        <span className="h-px flex-1 bg-line" />
-      </div>
+      {EXTERNAL_WALLET_SIGNIN_ENABLED ? (
+        <>
+        <div className="my-2 flex items-center gap-3" aria-hidden>
+          <span className="h-px flex-1 bg-line" />
+          <span className="text-[12px] uppercase tracking-[0.14em] text-ink-muted">
+            {COPY.signin.walletDivider}
+          </span>
+          <span className="h-px flex-1 bg-line" />
+        </div>
 
-      <ul className="flex flex-col gap-2" data-testid="detected-wallets">
-        {detectedWallets.map((w) => (
-          <li key={w.id}>
+        <ul className="flex flex-col gap-2" data-testid="detected-wallets">
+          {detectedWallets.map((w) => (
+            <li key={w.id}>
+              <button
+                type="button"
+                disabled={disabled || busyWallet !== null}
+                onClick={() => void onWallet(w.id)}
+                data-testid={`wallet-${w.id}`}
+                className={ROW}
+              >
+                {/* The wallet's own icon, a data URI it registered itself. */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={w.icon} alt="" width={28} height={28} className="rounded-lg" />
+                <span className="font-medium">{w.name}</span>
+                <span className="ml-auto rounded-full border border-(--color-ok)/40 bg-(--color-ok)/10 px-2 py-0.5 font-mono text-[10px] tracking-[0.12em] text-(--color-ok) uppercase">
+                  {busyWallet === w.id ? "…" : COPY.signin.detected}
+                </span>
+              </button>
+            </li>
+          ))}
+          <li>
             <button
               type="button"
-              disabled={disabled || busyWallet !== null}
-              onClick={() => void onWallet(w.id)}
-              data-testid={`wallet-${w.id}`}
+              disabled={disabled}
+              onClick={() => {
+                clearError();
+                connectWallet();
+              }}
+              data-testid="wallet-more"
               className={ROW}
             >
-              {/* The wallet's own icon, a data URI it registered itself. */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={w.icon} alt="" width={28} height={28} className="rounded-lg" />
-              <span className="font-medium">{w.name}</span>
-              <span className="ml-auto rounded-full border border-(--color-ok)/40 bg-(--color-ok)/10 px-2 py-0.5 font-mono text-[10px] tracking-[0.12em] text-(--color-ok) uppercase">
-                {busyWallet === w.id ? "…" : COPY.signin.detected}
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-overlay text-ink-muted">
+                <WalletGlyph size={18} />
+              </span>
+              <span className="flex flex-col">
+                <span className="font-medium">{COPY.signin.moreWallets}</span>
+                <span className="text-[12px] text-ink-muted">{COPY.signin.moreWalletsNote}</span>
+              </span>
+              <span className="ml-auto text-ink-muted" aria-hidden>
+                ›
               </span>
             </button>
           </li>
-        ))}
-        <li>
-          <button
-            type="button"
-            disabled={disabled}
-            onClick={() => {
-              clearError();
-              connectWallet();
-            }}
-            data-testid="wallet-more"
-            className={ROW}
-          >
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-overlay text-ink-muted">
-              <WalletGlyph size={18} />
-            </span>
-            <span className="flex flex-col">
-              <span className="font-medium">{COPY.signin.moreWallets}</span>
-              <span className="text-[12px] text-ink-muted">{COPY.signin.moreWalletsNote}</span>
-            </span>
-            <span className="ml-auto text-ink-muted" aria-hidden>
-              ›
-            </span>
-          </button>
-        </li>
-      </ul>
+        </ul>
+        </>
+      ) : null}
 
       <p className="mt-3 text-[12px] leading-5 text-ink-muted">{COPY.pool.ageTerritoryNote}</p>
     </div>

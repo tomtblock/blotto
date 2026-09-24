@@ -12,7 +12,7 @@
  * signing prompts) portals to document.body, so wrapping the page tree is
  * not required — only the SDK hooks below must live under the provider.
  *
- * Wiring per D-08: social login (Google/Apple/X) backed by an embedded
+ * Wiring per D-08: social login (Google/X — Apple dropped 2026-09-24) backed by an embedded
  * Solana wallet is one path; a wallet the player already has is the other.
  * Since 2026-09-08 the wallet path has TWO doors: a one-tap sign-in with a
  * wallet DETECTED in the browser (wallet-standard connect → the provider's
@@ -364,10 +364,13 @@ function PrivyAdapter({ onAuth }: { onAuth: (auth: Auth) => void }) {
     const hasEmbedded = signers.some((s) => s.kind === "embedded");
 
     // The address the provider holds for a social sign-in, if any (round
-    // four, 2026-09-17): a Google or Apple account carries one; an X or
-    // wallet sign-in does not. Read only — nothing here sends it.
-    const email =
-      user?.email?.address ?? user?.google?.email ?? user?.apple?.email ?? null;
+    // four, 2026-09-17): a Google account carries one; an X or wallet sign-in
+    // does not. Read only — nothing here sends it.
+    //
+    // The Apple fallback that stood here went with Apple on 2026-09-24. It was
+    // provably dead rather than merely unused: the provider refused every
+    // Apple sign-in, so no account in this application can carry one.
+    const email = user?.email?.address ?? user?.google?.email ?? null;
 
     return {
       status: !ready
@@ -482,9 +485,19 @@ export default function PrivyBridge({
       clientId={process.env.NEXT_PUBLIC_PRIVY_CLIENT_ID}
       config={{
         // D-08 methods: socials as hero, classic wallet connect alongside.
-        // Apple stays listed while the founder's dashboard decision is open;
-        // the sign-in page's SOCIALS array is where its button is removed.
-        loginMethods: ["google", "apple", "twitter", "wallet"],
+        //
+        // APPLE REMOVED 2026-09-24 (founder), and removed HERE as well as from
+        // the page's button. The two are not the same removal: this list is
+        // what the PROVIDER'S OWN MODAL offers, so a page that merely stopped
+        // drawing the button would still have handed a player an Apple row the
+        // moment any other path opened that modal. D-08 named three socials;
+        // this is a divergence from it, recorded in the change report.
+        //
+        // The founder's choice was between enabling Apple in the Privy
+        // dashboard and dropping it. It had never worked — the dashboard
+        // refuses it with `403 disallowed_login_method` — and the refusal
+        // reached the player as silence, which is the worse half.
+        loginMethods: ["google", "twitter", "wallet"],
         appearance: {
           // Literals required here (provider-modal config consumed by the
           // Privy SDK, not component styling) — keep in sync with
