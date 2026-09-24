@@ -477,3 +477,18 @@
 - **17:10Z** **Path back to T3:** merge PR 174, re-run `deploy-backend` with
   `allow_dev_credentials` **ticked**. That run clears the vendor from Fly, the stub takes effect,
   `/geo` answers `allowed:true`, and T3 fills. Pool 29's deadline is 01:24:50Z.
+- **17:26Z** **GATE OPEN.** Founder ran `deploy-backend` run 40 on `250890b` with
+  `allow_dev_credentials` ticked. `/geo` now answers **`{"allowed":true}`** from this container —
+  decisive proof the GB stub is live, since the vendor would refuse this US address. PR 174's fix
+  worked.
+- **17:27Z** **Preflight on pool 29: EXIT 0.** All 39 headless wallets clear. UI-A and UI-B carry
+  the known `WARN`/`STOP` pair — their Privy keys are not on this disk so no clickwrap can be made
+  for them and their 403 is unreadable from outside (§H27's third verdict working as designed).
+  The chain-read confirms neither is registered. Funding re-checked: shortfall zero.
+- **17:28Z** **Filled to 29 headless, 29 of 29 landed, no failures.** Windows of 8:
+  8/8 → 8/8 → 8/8 → 5/5. W00 the wall, W01 the pole, W02–W28 the field — every seat playing its
+  frozen allocation from `registry/T3.plan.json`. Pool 29 reads **29 entrants**, 7.9 h to deadline.
+- **17:29Z** **Waiting on the founder: F-43.** UI-A must enter to reach 30, because the plan puts
+  it at seat 0 and no headless wallet can stand in for a founder seat. **I under-stated their
+  involvement earlier** — I said the pause was their only part; entering UI-A comes first. Then the
+  pause sequence. Nothing goes past 30 until the pause is on: the boundary is the point of the test.
