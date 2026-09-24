@@ -25,7 +25,7 @@ import Link from "next/link";
 import { COPY } from "@/copy";
 import { useAuth } from "@/wallet/auth-context";
 import type { SocialProvider } from "@/wallet/types";
-import { AppleMark, GoogleMark, WalletGlyph, XMark } from "@/wallet/wallet-icons";
+import { GoogleMark, WalletGlyph, XMark } from "@/wallet/wallet-icons";
 import { CopyableAddressPill } from "@/components/copyable-address";
 import { signInDestination } from "./return-to";
 
@@ -36,9 +36,19 @@ import { signInDestination } from "./return-to";
  * string, so a malformed ID rendered live buttons that did nothing).
  */
 
-/** Apple's button is removed here, and only here, if the founder drops it. */
-const ICON_SOCIALS: Array<{ provider: SocialProvider; label: string; Mark: typeof AppleMark }> = [
-  { provider: "apple", label: COPY.signin.apple, Mark: AppleMark },
+/**
+ * The socials that sit under the Google hero.
+ *
+ * APPLE WAS REMOVED HERE on 2026-09-24 (founder), and from `SocialProvider`
+ * so it cannot be offered from another surface by accident. The review that
+ * prompted it drove this page in a browser: Privy's own API refuses Apple
+ * with `403 disallowed_login_method`, and the failure reached the player as
+ * nothing at all — the modal simply sat there.
+ *
+ * The grid is single-column because one tile in a two-column grid renders at
+ * half width. If a second social ever returns, take it back to two.
+ */
+const ICON_SOCIALS: Array<{ provider: SocialProvider; label: string; Mark: typeof XMark }> = [
   { provider: "twitter", label: COPY.signin.twitter, Mark: XMark },
 ];
 
@@ -170,7 +180,7 @@ export function SignInClient() {
         {COPY.signin.google}
       </button>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3">
         {ICON_SOCIALS.map(({ provider, label, Mark }) => (
           <button
             key={provider}

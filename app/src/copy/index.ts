@@ -57,7 +57,8 @@ export const COPY = {
     subtitle:
       'Sign in with an account and a wallet is made for you, or use a Solana wallet you already have.',
     google: 'Continue with Google',
-    apple: 'Continue with Apple',
+    // Apple removed 2026-09-24 (founder): the provider was never enabled and the
+    // button did nothing. See wallet/types.ts.
     twitter: 'Continue with X',
     // The provider modal's own subtitle (capped at 100 characters by the SDK).
     modalMessage: 'Seven sealed battles. The winner takes the prize pool.',
