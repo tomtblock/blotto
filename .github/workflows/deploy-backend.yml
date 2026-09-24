@@ -654,6 +654,17 @@ jobs:
             # Turnkey deployment (devnet incident, 2026-08-29). Set it only on
             # the deliberate development path.
             flyctl secrets set --app "$PACKET_APP" --stage ALLOW_DEV_ENTRY_SIGNER="1"
+            # Clear Turnkey, for the same reason the geo branch below clears
+            # the vendor: `buildSigner` prefers Turnkey whenever
+            # ENTRY_SIGNER_KEY_ID and its four companions are present, so
+            # Turnkey lingering on the app makes the seed staged just above
+            # inert. This has not bitten yet only because nobody has removed
+            # the Turnkey secrets and ticked the box in the same run — the
+            # geo half of exactly this bug did, on 2026-09-24.
+            for n in TURNKEY_API_BASE_URL TURNKEY_API_PUBLIC_KEY TURNKEY_API_PRIVATE_KEY \
+                     TURNKEY_ORGANIZATION_ID ENTRY_SIGNER_KEY_ID ENTRY_SIGNER_PUBLIC_KEY_HEX; do
+              flyctl secrets unset --app "$PACKET_APP" --stage "$n" || true
+            done
           fi
 
           # Geo lookup — independent of the signer.
@@ -678,6 +689,21 @@ jobs:
             flyctl secrets set --app "$PACKET_APP" --stage \
               GEO_STUB_COUNTRY="GB" \
               ALLOW_STUB_GEO="1"
+            # And clear the VENDOR, which is the half this block used to miss
+            # (devnet, 2026-09-24). `buildGeo` prefers the vendor whenever
+            # both of its variables are present, so a vendor lingering on the
+            # app makes the stub staged just above INERT — the deploy reports
+            # success, the machine restarts, and the gate is unchanged.
+            #
+            # Deleting the repository secrets is NOT enough and is the trap:
+            # that empties them in the RUNNER, which is what `geo_mode`
+            # reads, while the app keeps whatever was staged to it last. The
+            # branch above already clears the stub for the mirror-image
+            # reason; this is the same rule applied in the other direction.
+            flyctl secrets unset --app "$PACKET_APP" --stage GEO_VENDOR_URL || true
+            flyctl secrets unset --app "$PACKET_APP" --stage GEO_VENDOR_API_KEY || true
+            flyctl secrets unset --app "$PACKET_APP" --stage GEO_VENDOR_2_URL || true
+            flyctl secrets unset --app "$PACKET_APP" --stage GEO_VENDOR_2_API_KEY || true
           fi
 
           # Sanctions screening (Phase 2 Stage B). The OFAC SDN mirror is a
@@ -894,19 +920,49 @@ jobs:
         run: |
           sleep 10
           fail=0
-          urls="https://$INDEXER_APP.fly.dev/health https://$PACKET_APP.fly.dev/health https://$PACKET_APP.fly.dev/geo"
+          urls="https://$INDEXER_APP.fly.dev/health https://$PACKET_APP.fly.dev/health"
           # The daemon is deliberately NOT here: "Assert the daemon reached
           # ready" above checks it properly, and a bare curl against a daemon
           # that is unready hangs rather than answering.
           if [ "${{ steps.pre.outputs.deploy_review }}" = "true" ]; then urls="$urls https://$REVIEW_APP.fly.dev/health"; fi
           for url in $urls; do
             echo "GET $url"
-            if ! curl --fail --silent --show-error --max-time 20 "$url"; then
+            if ! body=$(curl --fail --silent --show-error --max-time 20 "$url"); then
               echo "::error::smoke check failed: $url"
               fail=1
+              echo
+              continue
             fi
+            echo "$body"
             echo
           done
+
+          # /geo needs its ANSWER read, not just its status code (devnet,
+          # 2026-09-24). `curl --fail` passes on any 200, so a gate refusing
+          # every entrant on Earth shipped green: the run printed
+          # {"allowed":false} and reported success, and the territory gate
+          # stayed broken for another two hours because the tick was believed.
+          #
+          # It deliberately does NOT fail on `false`. This runner is itself in
+          # a territory the schedule blocks, so on a correctly configured
+          # production deploy `false` is the RIGHT answer and failing on it
+          # would make every credentialed deploy red. What is asserted is that
+          # the endpoint answers the shape it promises; what is reported is the
+          # verdict, loudly, so nobody reads a green tick as an open gate.
+          echo "GET https://$PACKET_APP.fly.dev/geo  (verdict for THIS runner's address)"
+          geo=$(curl --fail --silent --show-error --max-time 20 "https://$PACKET_APP.fly.dev/geo" || echo '')
+          echo "${geo:-(no answer)}"
+          case "$geo" in
+            *'"allowed":true'*)
+              echo "the territory gate admits this runner's address" ;;
+            *'"allowed":false'*)
+              echo "::warning::/geo REFUSES this runner's address. Expected when the runner sits in a blocked territory and a real vendor is live. NOT expected on a dev-stub deploy, where every address resolves to the stub country — if you ticked allow_dev_credentials, read the 'packet: geo =' line below: a vendor still staged on the app beats the stub, whatever the repository secrets say." ;;
+            *)
+              echo "::error::/geo did not answer {\"allowed\":<bool>} — the endpoint is broken, which is a different fault from a refusal"
+              fail=1 ;;
+          esac
+          echo
+
           exit $fail
 
       # Does ingest actually work? (audit 2026-09-11, E-19.)
@@ -1008,7 +1064,15 @@ jobs:
         timeout-minutes: 5
         run: |
           echo "--- packet: entry signer + geo ---"
-          flyctl logs --app "$PACKET_APP" --no-tail 2>/dev/null | grep -E "entry signer|GEO STUB" | tail -5 || echo "(no matching line yet)"
+          # `geo = ` and not `GEO STUB` (devnet, 2026-09-24). main.ts emits
+          # "packet: geo = STUB (dev only) — country=GB" for the stub and
+          # "packet: geo = N source(s), ..." for a vendor, so the old pattern
+          # could never match EITHER. Its silence was read as "no stub is
+          # live" when it in fact carried no information at all, and that is
+          # how a deploy that staged the stub and a deploy that did not came
+          # to look identical. Match the prefix both forms share and print the
+          # whole line, so the run STATES which lookup is live.
+          flyctl logs --app "$PACKET_APP" --no-tail 2>/dev/null | grep -E "entry signer|geo = " | tail -5 || echo "(no matching line yet)"
           if [ "${{ steps.pre.outputs.deploy_daemon }}" = "true" ]; then
             echo "--- daemon: VRF coordinator + settlement signer ---"
             flyctl logs --app "$DAEMON_APP" --no-tail 2>/dev/null | grep -E "VRF =|settlement signer" | tail -5 || echo "(no matching line yet)"
@@ -1029,9 +1093,14 @@ jobs:
             echo "(no warning: the url asks for verify-full, or this service has no database)"
           fi
           echo
-          echo "Expected on a credentialed run: 'entry signer = TURNKEY', NO 'GEO STUB' line,"
+          echo "Expected on a credentialed run: 'entry signer = TURNKEY', a 'geo = N source(s)' line,"
           echo "'VRF = SWITCHBOARD On-Demand', and NO database TLS line. Anything else means a"
           echo "dev path is live or the database url wants changing."
+          echo
+          echo "On an allow_dev_credentials run expect 'geo = STUB (dev only)' instead. If that line"
+          echo "says a vendor while you meant the stub, a vendor secret is still staged ON THE APP:"
+          echo "clearing the repository secret only empties it in this runner. This block now clears"
+          echo "both directions, so a re-run fixes it."
 
       # What did this run actually ship? (audit 2026-09-11, E-05.)
       #
