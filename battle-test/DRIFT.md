@@ -1841,3 +1841,38 @@ reported as a pass.
 a missing reading. The decisive line — `packet: geo = …` — is one click away in `backend-status`,
 which is `workflow_dispatch`, `permissions: {}`, checks out nothing and deploys nothing. Read it
 before changing anything else.
+
+---
+
+### §H30 — the review service prints the RPC key in the clear, on every boot
+
+**What happened.** The founder ran `backend-status` to fetch the line §H29 turns on. The packet
+section was not in what came back. A live credential was:
+
+```
+review: chain = https://devnet.helius-rpc.com/?api-key=<the live key> program 5aaw…XH17
+```
+
+It is the **same key this session has been using**, confirmed by comparison against the held copy
+rather than assumed — not a second one, not a stale one.
+
+**One line, and only one.** `backend/detection/src/main.ts:193` interpolates `rpcUrl` raw
+(`SERVICE = 'review'` there, which is why it surfaces under `blotto-review`). Nothing else in the
+tree logs an RPC URL: the daemon masks its queue, and the packet service already redacts comparable
+values through `redact()` in `backend/packet/src/signer-select.ts:24`. `backend/sanctions/src/select.ts`
+uses the same helper. The tooling to do this right already exists and this one call site missed it.
+
+**Why it is worse than a stray paste.** The line runs on every boot, so the key sits in
+`blotto-review`'s Fly log ring indefinitely — and `backend-status` dumps 400 log lines per app into
+a **GitHub Actions log**, readable by anyone with repository read access and retained by GitHub.
+Every future `backend-status` run re-publishes it. The workflow is founder-facing, read-only and
+safe by design in every other respect, which is exactly why nobody looked at what it prints.
+
+**The order of the fix is the opposite of the obvious one.** Rotating first puts the NEW key into
+the same log on the next boot. So: redact the line, deploy it, and only then rotate. This moves the
+rotation from "after the test week" to today.
+
+**The lesson.** §H28 was a deploy instruction that silently changed a gate nobody was thinking
+about. This is its twin: a **diagnostic** that silently published a secret nobody was thinking
+about. Both were reasoned about by what they were *for* rather than by what they *touch*. A command
+that prints logs is a command that prints whatever is in them.

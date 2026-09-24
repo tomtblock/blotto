@@ -443,3 +443,16 @@
   deploy's own dev-path grep searches for `GEO STUB` while the service prints `geo = STUB`, so the
   run gave no signal either way. Next: founder runs `backend-status` (read-only, deploys nothing)
   and I read `packet: geo = …` and the `geo BLOCK …` reason from the packet log.
+- **16:41Z** Founder ran `backend-status` for §H29. **The packet section was not in what came back,
+  so §H29 is still open** — but the output carried a live credential. **DRIFT §H30:**
+  `backend/detection/src/main.ts:193` logs the Helius RPC URL, API key and all, on every boot
+  (`SERVICE = 'review'`). Same key this session holds, confirmed by comparison not assumption. It
+  is the only such line in the tree; `redact()` already exists in
+  `backend/packet/src/signer-select.ts:24` and is used by two other services. Because
+  `backend-status` copies 400 log lines per app into a **GitHub Actions log**, every run
+  re-publishes it. **Redact before rotating** — rotating first would leak the new key on the next
+  boot. Verified the key appears nowhere in the working tree or in git history.
+- **16:41Z** Same output also confirmed, neither blocking: the `neondb_owner` password failure at
+  15:14:20Z was a real outage (it is what failed deploy runs 37 and 38, and what PR 172 was written
+  for), and `review: listening on :8083 (2 reviewer(s))` — the second reviewer key is live, so T7's
+  review path has both members whenever it runs.
