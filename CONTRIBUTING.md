@@ -80,7 +80,7 @@ first step of the **`standing-rules` CI lane on every PR** (roadmap §3 rule 4).
 forbidden words come from roadmap R11/§6.4: **promotional** and **sweepstake** — they denote
 free-entry sweepstakes and put the product in the wrong regulatory box.
 
-That lane runs **twelve** checks, not one, and any of them can fail your change. In its order:
+That lane runs **thirteen** checks tabled here, not one, and any of them can fail your change. In its order:
 
 | Check | What it refuses to let through |
 |---|---|
@@ -88,6 +88,7 @@ That lane runs **twelve** checks, not one, and any of them can fail your change.
 | `check-standing-rules.sh` | Roadmap rules 5 (no `class` in the scoring path) and 6 (the vault's exits are exactly the enumerated set) |
 | `check-territories.ts` | A founder territory schedule the entry service could not actually enforce |
 | `check-published-numbers.ts` | A number in player-facing copy that a shared constant has since moved. Reads the program's own `constants.rs`, and catches the value spelled out as well as in digits — R7-b moved `MIN_SEATS` 52 → 40 and the landing page kept "fifty-two", where a digit sweep would have passed it. History in a comment beside the string is fine and is the convention; it is the rendered text that must be current |
+| `check-dead-files.ts` | An app source file that no route reaches any more — production or `page.dev.tsx` — and that is not declared in the script with a reason. A file only its own test imports counts as dead. Added 2026-09-24 when the dial run left behind ~4,000 unreachable lines no gate noticed (change report §8–9) |
 | `sim/fill-replay.ts --self-test` | A fill simulation that has drifted from the program's seal/refund boundary |
 | `drain-verdict.ts --self-test` | An upgrade pre-flight that has quietly stopped refusing while a pool is taking entries. It imports nothing, so this lane can run it without installing a workspace; operators reach the same fixtures via `admin.ts pools --self-test` |
 | `check-env-examples.sh` | An environment variable a service reads and no example documents |
@@ -210,7 +211,7 @@ deleting them. Someone with normal repository rights has to run it.
 ## CI
 
 `ci-fast` runs on every pull request and every push to the default branch. Six jobs: `rust`,
-`node`, `postgres`, `journey`, `gitleaks`, and `standing-rules` (the eleven checks tabled above).
+`node`, `postgres`, `journey`, `gitleaks`, and `standing-rules` (the checks tabled above).
 `postgres` needs a scratch database and **fails the lane if any case came back pending** rather
 than passing them by; `journey` drives the browser against a fixture build.
 
