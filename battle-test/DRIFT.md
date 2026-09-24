@@ -1717,3 +1717,59 @@ Two details worth keeping:
   mean nothing worse than "has not accepted the current terms yet". Collapsing that into `ok` or
   into `STOP` is how §H27 happened in the first place. `WARN` prints, does not claim the wallet is
   clean, and does not block the run.
+
+---
+
+### §H28 — the entry gate now refuses this whole container, and it is right to
+
+**What happened.** Preflighting pool 29 for T3, **every wallet was refused** — all 39 headless and
+both UI accounts. Not a subset, not rate limiting. W00, which has played five pools and won two,
+was refused alongside wallets that have never played. Each headless wallet's clickwrap returned
+`204` immediately before, so §H27's cause is excluded.
+
+**It is not a defect. The territory gate is working.** Three independent readings agree:
+
+```
+GET  /geo                                    -> {"allowed":false}
+POST /packet  (W00, pool 29)                 -> 403 {"ok":false,"error":"entry_unavailable"}
+this container's egress IP                   -> 160.79.106.137, Columbus, Ohio, US (AS396982)
+config/territories.json version 5            -> [AE AU BE BH CN ES FR HK ID IN IT KW MY OM QA SA SG US]
+```
+
+**`US` is on the block-list, and this container is in Ohio.** The gate is refusing the battle
+test's traffic for exactly the reason the founder instructed it to refuse traffic.
+
+**Why it worked two days ago, to the minute.** `e578b50` — *"territories: block the United States
+at country level (founder instruction, D-B3-3)"* — was committed at **2026-09-22T00:13:27Z**. T6's
+fill of pool 27 ran **00:05Z → 00:27Z on the same morning**. The block was committed while the
+pool was filling and was not yet deployed; `deploy-backend` is `workflow_dispatch` only, so a
+merged block is not a live one. **T6 went through with eight minutes to spare.**
+
+It went live on the next deploy — the one run for the Resend wiring. That deploy was run with both
+boxes unticked, which is the credentialed path, and `deploy-backend.yml:344` sets `geo_mode=vendor`
+whenever both `GEO_VENDOR_URL` and `GEO_VENDOR_API_KEY` are present. Lines 626–627 then
+**unset** `GEO_STUB_COUNTRY` and `ALLOW_STUB_GEO`. Before that deploy the service answered every
+address `GB` from the stub, which is not on the block-list; after it, the real vendor resolved this
+container to `US`, which is.
+
+**I told the founder to untick those boxes.** The instruction was right on its own terms — the
+credentialed path is the correct default and staging a real geo vendor is an improvement — but I
+did not notice it would take the battle test's own egress offline, and I should have. The
+territory schedule and the test rig's location are facts that were both already on record.
+
+**What it costs.** Every remaining test needs headless seats entered from this container. T3 needs
+38 and T7 needs 62. Neither can run from here while `US` is blocked at country level. The
+founder's own UI entries are unaffected if they are not themselves in a blocked territory — but no
+founder can hand-enter 38 seats.
+
+**Why the obvious fix is not obvious.** `allow_dev_credentials` does **not** restore the stub:
+`deploy-backend.yml:346` reaches the dev branch only when a vendor variable is *missing*, and the
+workflow's own header says the switch is applied per credential "only where the production one is
+absent — so it can never downgrade a signer or a geo lookup that is already real." Restoring the
+GB stub means **deleting** `GEO_VENDOR_URL` and `GEO_VENDOR_API_KEY`, and GitHub secrets cannot be
+read back, so they can only be re-provisioned from the vendor.
+
+**The lesson, and it is not the same as §H9's family.** This one is: *a deploy instruction is a
+configuration change to every gate the deploy stages, not only to the one being fixed.* The Resend
+deploy was reasoned about as an email change. It was also a screening change, and nothing in the
+instruction said so.

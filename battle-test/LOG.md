@@ -400,3 +400,32 @@
 2026-09-22 01:31 UTC | cc      | T7     | now runnable at all — it was NOT TESTABLE without that key. Needs both UI accounts in ONE browser profile so they share a device marker, a reviewer decision per seat, then the forfeit landed by the admin key as a separate transaction. The appeal path stays untestable: the registry holds one member | MANUAL 848
 2026-09-22 01:36 UTC | founder | 163    | **PR 163 merged** — the fonts are self-hosted on main, so the app build no longer depends on a Google Fonts fetch at build time | github
 2026-09-22 01:37 UTC | cc      | H26    | the boundary lane caught me mixing a product change and battle-test records on one branch, exactly as designed. Reverted off PR 163 rather than force-pushing, then re-applied here once 163 merged. **Records follow the product change; they never ride with it** | .github/workflows/rehearsal.yml
+
+## 2026-09-24
+
+- **13:45Z** Settlement daemon funding verified from chain: `EaDfwM…jrSD` **9.989225364 SOL**
+  (was 0.001397844). `/health` reports `errors: 0` for the first time in 49 hours. Pool 29 opened
+  at **13:24:50Z**, deadline **2026-09-25T01:24:50Z**. F-2 cleared.
+- **13:53Z** Spawned a second session for program development —
+  `session_01CosZsm5MB312HdbJH6y2zJ`, branch `claude/program-dev`, cut from `main` at `50383cb`.
+  **Founder authorised the separate branch explicitly**, which is the permission the standing
+  "never push to a different branch" rule requires. Lane boundary stated in its prompt:
+  `battle-test/` and `rehearsal.yml` stay with this session; product code goes there.
+- **14:00Z** T3 frozen. `registry/T3.plan.json` — 40 seats, deadline seal at the minimum field,
+  pause at 30. `scripts/t3-bounds.ts` added: checks premises P1/P2 against the generated shapes and
+  exits non-zero if any of the four unconditional claims stops holding. W00 is a **point**
+  prediction at 542, not a range, because P1 fixes both of its founder battles. PR **171** opened.
+  T4, T5 and T6 roots all still reproduce byte-for-byte.
+- **14:10Z** Funded 38 headless wallets (W01–W38) to 0.108 SOL each — 3.968918520 SOL from the
+  funder, which is left holding 2.329831040. Shortfall zero, verified.
+- **14:15Z** Generated both Squads payloads for `set_paused` and **verified them independently**:
+  the account is the real Config PDA derived from seeds `["config"]`, the discriminator matches
+  `sha256("global:set_paused")[0..8]`, and the data is 9 bytes with one payload byte — `0x01` for
+  on, `0x00` for off. Chain baseline read: `Config.paused = false`.
+- **14:20Z** **BLOCKED — see DRIFT §H28.** Preflight on pool 29 refused every wallet. The entry
+  gate is screening this container as **US**, which the founder blocked at country level in
+  `e578b50` (committed 00:13Z on 09-22, *during* T6's fill, and deployed later that morning).
+  `GET /geo` returns `{"allowed":false}`; the egress IP is in Columbus, Ohio. **Not a defect — the
+  gate doing its job.** No entry was attempted, nothing was sealed, nothing was lost. T3 and T7
+  cannot run from this container while the country-level block stands. Put to the founder as a
+  decision: this is the blocked-territory list, which is founder-and-counsel-owned.
