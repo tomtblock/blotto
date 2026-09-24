@@ -57,6 +57,11 @@ export interface ChainPoolView {
   /** Seat-sorted committed payout list; empty until committed. */
   payouts: CommittedPayout[];
   entrants: number;
+  /** `Pool.mode` (Phase B, 2026-09-24): 0 easy, 1 hard — the placing rule
+   * the pool was opened under. The program records it and reads it for
+   * nothing; the engine that settles the pool is what it is for. A pool
+   * from before the field (a pre-Phase-B account) reads 0. */
+  mode: number;
 }
 
 /** What the daemon reads from `Config` each tick. */
@@ -913,6 +918,9 @@ export class FakeChain implements KeeperChain {
       paidMask: 0n,
       payouts: [],
       entrants: 0,
+      // The fake opens easy pools only until the keeper learns the hard
+      // ladder (Phase B, backend change).
+      mode: 0,
     });
     this.entries.set(poolId.toString(), []);
     this.openedWith.set(poolId.toString(), {

@@ -312,11 +312,12 @@ pub fn set_pool_timing_ix(
     admin_ix(admin, "set_pool_timing", &args)
 }
 
-/// `migrate_config(keeper)` — the one-shot 2026-09-07 layout migration.
-/// The admin pays the rent top-up (hence `mut`).
-pub fn migrate_config_ix(admin: &Pubkey, keeper: &Pubkey) -> Instruction {
-    let mut data = disc("migrate_config").to_vec();
-    data.extend_from_slice(keeper.as_ref());
+/// `migrate_config()` — the one-shot Phase B (2026-09-24) layout migration,
+/// V2 → V3: appends the hard ladder to a 484-byte Config. No arguments since
+/// Phase B (the 2026-09-07 V1 → V2 path took the keeper; it is retired). The
+/// admin pays the rent top-up (hence `mut`).
+pub fn migrate_config_ix(admin: &Pubkey) -> Instruction {
+    let data = disc("migrate_config").to_vec();
     Instruction {
         program_id: program_id(),
         accounts: vec![
@@ -342,10 +343,18 @@ pub fn admin_ix(admin: &Pubkey, name: &str, arg_bytes: &[u8]) -> Instruction {
     }
 }
 
+/// The two board modes (constants.rs::MODE_EASY / MODE_HARD, Phase B).
+/// `open_pool`'s appended `mode` argument and `Pool.mode`'s values.
+pub const MODE_EASY: u8 = 0;
+pub const MODE_HARD: u8 = 1;
+
 /// `open_pool` — keeper-gated (prompt v2 §A): `opener` must be
 /// `Config.keeper` and nobody else. The 24-hour liveness fallback that once
 /// let any signer open an idle tier was removed by the founder ruling of
 /// 2026-09-07 (audit O9b). Pays the Pool's rent.
+///
+/// Opens an EASY pool — the shape every pre-Phase-B test was written
+/// against; `open_pool_mode_ix` takes the mode explicitly.
 pub fn open_pool_ix(
     opener: &Pubkey,
     pool_id: u64,
@@ -353,11 +362,32 @@ pub fn open_pool_ix(
     sealing_pubkey: [u8; 32],
     sealing_secret_hash: [u8; 32],
 ) -> Instruction {
+    open_pool_mode_ix(
+        opener,
+        pool_id,
+        tier,
+        sealing_pubkey,
+        sealing_secret_hash,
+        MODE_EASY,
+    )
+}
+
+/// `open_pool(pool_id, tier, sealing_pubkey, sealing_secret_hash, mode)` —
+/// `mode` is the argument Phase B appended (0 easy, 1 hard).
+pub fn open_pool_mode_ix(
+    opener: &Pubkey,
+    pool_id: u64,
+    tier: u8,
+    sealing_pubkey: [u8; 32],
+    sealing_secret_hash: [u8; 32],
+    mode: u8,
+) -> Instruction {
     let mut data = disc("open_pool").to_vec();
     data.extend_from_slice(&pool_id.to_le_bytes());
     data.push(tier);
     data.extend_from_slice(&sealing_pubkey);
     data.extend_from_slice(&sealing_secret_hash);
+    data.push(mode);
     Instruction {
         program_id: program_id(),
         accounts: vec![
@@ -481,8 +511,17 @@ pub fn seal_at_deadline_ix(signer: &Pubkey, pool_id: u64) -> Instruction {
     }
 }
 
-/// `migrate_pool(pool_id)` — permissionless; grows a pre-R7-b pool account
-/// and writes the floor its players entered under.
+/// `set_hard_open_tiers(open_tiers)` — the hard ladder's enablement switch
+/// (Phase B); `set_open_tiers` is untouched by it.
+pub fn set_hard_open_tiers_ix(admin: &Pubkey, open_tiers: [bool; 7]) -> Instruction {
+    let args: Vec<u8> = open_tiers.iter().map(|&b| u8::from(b)).collect();
+    admin_ix(admin, "set_hard_open_tiers", &args)
+}
+
+/// `migrate_pool(pool_id)` — permissionless; grows a pre-R7-b (847-byte)
+/// or pre-Phase-B (849-byte) pool account to the current layout, writing
+/// the floor its players entered under where it is missing and `mode`
+/// (always easy) in either case.
 pub fn migrate_pool_ix(payer: &Pubkey, pool_id: u64) -> Instruction {
     let mut data = disc("migrate_pool").to_vec();
     data.extend_from_slice(&pool_id.to_le_bytes());
@@ -497,21 +536,43 @@ pub fn migrate_pool_ix(payer: &Pubkey, pool_id: u64) -> Instruction {
     }
 }
 
-/// Shrink a pool account back to its PRE-R7-B size, as the pools on
-/// devnet actually are.
+/// Pool's account sizes: the current layout (`Pool::SPACE`, 850 since Phase
+/// B appended `mode`), the pre-Phase-B one (`Pool::SPACE_V2`, 849 — R7-b's
+/// `min_seats` present) and the pre-R7-b one (`Pool::SPACE_V1`, 847).
+pub const POOL_SPACE: usize = 850;
+pub const POOL_SPACE_V2: usize = 849;
+pub const POOL_SPACE_V1: usize = 847;
+
+/// Shrink a pool account back to its PRE-R7-B size (847), as the oldest
+/// pools on devnet are.
 ///
 /// There is no way to allocate one at the old size with the current program
 /// — `open_pool` allocates `Pool::SPACE` — so the only way to exercise
-/// `migrate_pool` against a real account is to open one and take the two
+/// `migrate_pool` against a real account is to open one and take the
 /// appended bytes off again. The lamports are left alone deliberately: a
-/// pool allocated at 847 bytes is rent-exempt for 847 and NOT for 849, which
+/// pool allocated at 847 bytes is rent-exempt for 847 and NOT for 850, which
 /// is the top-up the migration has to pay, and a test that funded it first
 /// would skip the part most likely to be wrong.
 pub fn shrink_pool_to_v1(svm: &mut LiteSVM, pool: &Pubkey) {
+    shrink_pool_to(svm, pool, POOL_SPACE_V1);
+}
+
+/// Shrink a pool account back to its PRE-PHASE-B size (849): `min_seats`
+/// present, `mode` absent — every pool devnet opened between R7-b and the
+/// Phase B upgrade.
+pub fn shrink_pool_to_v2(svm: &mut LiteSVM, pool: &Pubkey) {
+    shrink_pool_to(svm, pool, POOL_SPACE_V2);
+}
+
+fn shrink_pool_to(svm: &mut LiteSVM, pool: &Pubkey, size: usize) {
     let mut acct = svm.get_account(pool).expect("pool account");
-    assert_eq!(acct.data.len(), 849, "expected a current-layout pool");
-    acct.data.truncate(847);
-    acct.lamports = svm.minimum_balance_for_rent_exemption(847);
+    assert_eq!(
+        acct.data.len(),
+        POOL_SPACE,
+        "expected a current-layout pool"
+    );
+    acct.data.truncate(size);
+    acct.lamports = svm.minimum_balance_for_rent_exemption(size);
     svm.set_account(*pool, acct).unwrap();
 }
 
@@ -814,6 +875,8 @@ pub struct PoolView {
     pub payouts: Vec<(u16, u64)>,
     pub paid_mask: u64,
     pub refunded_count: u16,
+    /// Phase B: 0 easy, 1 hard — the last byte of the account.
+    pub mode: u8,
 }
 
 pub fn read_pool(svm: &LiteSVM, pool: &Pubkey) -> PoolView {
@@ -821,14 +884,15 @@ pub fn read_pool(svm: &LiteSVM, pool: &Pubkey) -> PoolView {
     // Layout since D-A1 v2 (`pot_lamports` u64 inserted after
     // entry_lamports@17): pot@25, entrants@33, fill_deadline@43, state@51,
     // vrf_seed@116, class_counters@148, payouts_len@192, payouts@194,
-    // paid_mask@834, refunded_count@842, min_seats@847. Every offset above
-    // is unchanged by D-E4, by the 2026-09-07 upgrade (Config and Entry
-    // grew; Pool did not) and by R7-b, which APPENDED `min_seats` after
-    // `vault_bump` — `Pool::LEN` is pinned at 841 in state.rs (839 before
-    // R7-b, and never the proposal's 834).
+    // paid_mask@834, refunded_count@842, min_seats@847, mode@849. Every
+    // offset above is unchanged by D-E4, by the 2026-09-07 upgrade (Config
+    // and Entry grew; Pool did not), by R7-b, which APPENDED `min_seats`
+    // after `vault_bump`, and by Phase B, which appended `mode` after that
+    // — `Pool::LEN` is pinned at 842 in state.rs (841 before Phase B, 839
+    // before R7-b, and never the proposal's 834).
     assert_eq!(
         data.len(),
-        849,
+        POOL_SPACE,
         "Pool account size drifted from the pinned layout"
     );
     let counters: [u16; 5] =
@@ -852,14 +916,20 @@ pub fn read_pool(svm: &LiteSVM, pool: &Pubkey) -> PoolView {
         payouts,
         paid_mask: u64::from_le_bytes(data[834..842].try_into().unwrap()),
         refunded_count: u16::from_le_bytes([data[842], data[843]]),
+        mode: data[849],
     }
 }
 
-/// Config's pre-migration account size (`Config::SPACE_V1`) — what devnet
-/// holds until `migrate_config` runs.
+/// Config's original account size (`Config::SPACE_V1`) — the 2026-09-07
+/// migration grew it; the Phase B `migrate_config` REFUSES it (that path is
+/// retired).
 pub const CONFIG_SPACE_V1: usize = 380;
-/// Config's account size since 2026-09-07 (`Config::SPACE`).
-pub const CONFIG_SPACE: usize = 484;
+/// Config's account size between 2026-09-07 and Phase B (`Config::SPACE_V2`)
+/// — what devnet holds until the Phase B `migrate_config` runs.
+pub const CONFIG_SPACE_V2: usize = 484;
+/// Config's account size since Phase B (`Config::SPACE`): the hard ladder
+/// appended.
+pub const CONFIG_SPACE: usize = 603;
 /// Entry's account size since 2026-09-07 (`Entry::SPACE`).
 pub const ENTRY_SPACE: usize = 228;
 
@@ -875,6 +945,10 @@ pub struct ConfigView {
     pub fill_deadline_seconds: i64,
     pub cooldown_seconds: i64,
     pub tier_next_open_at: [i64; 7],
+    /// The Phase B hard ladder (appended after `tier_next_open_at`).
+    pub hard_open_tiers: [bool; 7],
+    pub hard_active_pool_by_tier: [u64; 7],
+    pub hard_tier_next_open_at: [i64; 7],
 }
 
 pub fn read_config(svm: &LiteSVM) -> ConfigView {
@@ -886,7 +960,9 @@ pub fn read_config(svm: &LiteSVM) -> ConfigView {
     // detection@314, next_pool_id@315, active_pool_by_tier@323, bump@379;
     // the 2026-09-07 tail, appended AFTER bump: keeper@380,
     // fill_deadline_seconds@412, cooldown_seconds@420,
-    // tier_next_open_at@428 — 484 in all (`Config::SPACE`).
+    // tier_next_open_at@428 (484 = `Config::SPACE_V2`); the Phase B tail
+    // after that: hard_open_tiers@484, hard_active_pool_by_tier@491,
+    // hard_tier_next_open_at@547 — 603 in all (`Config::SPACE`).
     assert_eq!(
         data.len(),
         CONFIG_SPACE,
@@ -905,6 +981,13 @@ pub fn read_config(svm: &LiteSVM) -> ConfigView {
         cooldown_seconds: i64::from_le_bytes(data[420..428].try_into().unwrap()),
         tier_next_open_at: core::array::from_fn(|i| {
             i64::from_le_bytes(data[428 + 8 * i..436 + 8 * i].try_into().unwrap())
+        }),
+        hard_open_tiers: core::array::from_fn(|i| data[484 + i] != 0),
+        hard_active_pool_by_tier: core::array::from_fn(|i| {
+            u64::from_le_bytes(data[491 + 8 * i..499 + 8 * i].try_into().unwrap())
+        }),
+        hard_tier_next_open_at: core::array::from_fn(|i| {
+            i64::from_le_bytes(data[547 + 8 * i..555 + 8 * i].try_into().unwrap())
         }),
     }
 }
@@ -958,14 +1041,26 @@ pub fn read_entry(svm: &LiteSVM, entry: &Pubkey) -> EntryView {
     }
 }
 
-/// Rewrite the Config account as the PRE-migration layout: the first 380
-/// bytes, rent-exempt for 380. Stands in for the account devnet holds
-/// between the upgrade and `migrate_config` (the tail is simply absent —
-/// the old program never wrote one).
+/// Rewrite the Config account as the PRE-PHASE-B layout: the first 484
+/// bytes, rent-exempt for 484. Stands in for the account devnet holds
+/// between the Phase B upgrade and `migrate_config` (the hard tail is simply
+/// absent — the previous program never wrote one).
+pub fn downgrade_config_to_v2(svm: &mut LiteSVM) {
+    downgrade_config_to(svm, CONFIG_SPACE_V2);
+}
+
+/// Rewrite the Config account as the ORIGINAL 380-byte layout — the shape
+/// the retired 2026-09-07 migration grew. Exists so a test can prove the
+/// Phase B `migrate_config` refuses it rather than growing it with a zeroed
+/// keeper.
 pub fn downgrade_config_to_v1(svm: &mut LiteSVM) {
+    downgrade_config_to(svm, CONFIG_SPACE_V1);
+}
+
+fn downgrade_config_to(svm: &mut LiteSVM, size: usize) {
     let mut acct = svm.get_account(&config_pda()).expect("config account");
-    acct.data.truncate(CONFIG_SPACE_V1);
-    acct.lamports = svm.minimum_balance_for_rent_exemption(CONFIG_SPACE_V1);
+    acct.data.truncate(size);
+    acct.lamports = svm.minimum_balance_for_rent_exemption(size);
     svm.set_account(config_pda(), acct).unwrap();
 }
 
@@ -1141,14 +1236,27 @@ impl Env {
     /// window); the collection is still created by the settlement signer,
     /// which is only its payer.
     pub fn open_ready_pool_as(&mut self, opener: &Keypair, pool_id: u64, tier: u8) {
-        let bootstrap = TIER_POTS[tier as usize] + TIER_POTS.iter().sum::<u64>();
+        self.open_ready_pool_mode_as(opener, pool_id, tier, MODE_EASY);
+    }
+
+    /// `open_ready_pool` for either mode (Phase B). The treasury top-up
+    /// covers two further pots of every tier — enough for both ladders'
+    /// idle reserves whatever a test has enabled.
+    pub fn open_ready_pool_mode(&mut self, pool_id: u64, tier: u8, mode: u8) {
+        let settlement = self.settlement.insecure_clone();
+        self.open_ready_pool_mode_as(&settlement, pool_id, tier, mode);
+    }
+
+    pub fn open_ready_pool_mode_as(&mut self, opener: &Keypair, pool_id: u64, tier: u8, mode: u8) {
+        let bootstrap = TIER_POTS[tier as usize] + 2 * TIER_POTS.iter().sum::<u64>();
         self.fund_platform(bootstrap);
-        let ix = open_pool_ix(
+        let ix = open_pool_mode_ix(
             &opener.pubkey(),
             pool_id,
             tier,
             [9u8; 32],
             self.sealing_secret_hash,
+            mode,
         );
         self.send(&[ix], &[opener]).expect("open_pool");
         let settlement = self.settlement.insecure_clone();

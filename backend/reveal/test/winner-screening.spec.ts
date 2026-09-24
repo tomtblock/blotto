@@ -78,6 +78,7 @@ async function sealedPool() {
     paidMask: 0n,
     payouts: [],
     entrants: 64,
+    mode: 0,
   });
   chain.entries.set('1', entries);
   return { chain, custody, store, publisher, players };

@@ -56,6 +56,20 @@ function eventsOf(txIndex: number): DecodedEvent[] {
 }
 
 /**
+ * The index of the first fixture transaction carrying exactly `name` — looked
+ * up rather than hard-coded, so a regenerated fixture (one whose lifecycle
+ * gained a transaction, as Phase B's did) moves nothing here.
+ */
+function txWith(name: string): number {
+  const i = fixture.transactions.findIndex((logs) => {
+    const names = [...decodeEventsFromLogs(logs, () => {})].map((d) => d.event.event);
+    return names.length === 1 && names[0] === name;
+  });
+  expect(i, `the fixture holds no transaction emitting only ${name}`).to.not.equal(-1);
+  return i;
+}
+
+/**
  * A `pg.Pool` stand-in that records the SQL it is handed and answers every
  * query with no rows. Enough for `PgEventStore.rederive`, whose contract here
  * is the ORDER BY clause it sends, not what comes back.
@@ -90,12 +104,12 @@ describe('ledger replay order (audit F-19)', () => {
     await ingestTransaction(store, SILENT_MONITOR, CTX, {
       signature: deliveredFirst,
       slot: 100n,
-      logs: fixture.transactions[86], // PoolVrfSeeded
+      logs: fixture.transactions[txWith('PoolVrfSeeded')],
     });
     await ingestTransaction(store, SILENT_MONITOR, CTX, {
       signature: deliveredSecond,
       slot: 100n,
-      logs: fixture.transactions[1], // PoolOpened
+      logs: fixture.transactions[txWith('PoolOpened')],
     });
     const live = [...projection.seen];
     expect(live, 'the fixture rows must be distinguishable for this to mean anything').to.deep.equal(
@@ -118,12 +132,12 @@ describe('ledger replay order (audit F-19)', () => {
     await ingestTransaction(store, SILENT_MONITOR, CTX, {
       signature: 'SIGslot200',
       slot: 200n,
-      logs: fixture.transactions[86], // PoolVrfSeeded
+      logs: fixture.transactions[txWith('PoolVrfSeeded')],
     });
     await ingestTransaction(store, SILENT_MONITOR, CTX, {
       signature: 'SIGslot100',
       slot: 100n,
-      logs: fixture.transactions[1], // PoolOpened
+      logs: fixture.transactions[txWith('PoolOpened')],
     });
     expect(projection.seen).to.deep.equal(['PoolVrfSeeded', 'PoolOpened']);
 

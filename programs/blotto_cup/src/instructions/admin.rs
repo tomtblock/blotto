@@ -15,7 +15,7 @@ use crate::constants::{
     TIER_POT_LAMPORTS,
 };
 use crate::error::ErrorCode;
-use crate::events::{KeeperSet, PoolTimingSet, TiersOpened};
+use crate::events::{HardTiersOpened, KeeperSet, PoolTimingSet, TiersOpened};
 use crate::state::{Config, CONFIG_SEED, PLATFORM_SEED};
 
 // ---------------------------------------------------------------------------
@@ -113,6 +113,13 @@ pub fn handle_init_config(
     // Pool ids start at 1: 0 is `active_pool_by_tier`'s "none" sentinel.
     config.next_pool_id = 1;
     config.active_pool_by_tier = [0; N_TIERS];
+    // Phase B (2026-09-24): the hard ladder starts fully disabled — a hard
+    // tier opens only by an explicit `set_hard_open_tiers`, after the
+    // offline evidence run the founder gated it on. Its clocks start now for
+    // the same reason the easy ones do.
+    config.hard_open_tiers = [false; N_TIERS];
+    config.hard_active_pool_by_tier = [0; N_TIERS];
+    config.hard_tier_next_open_at = [now; N_TIERS];
     config.bump = ctx.bumps.config;
     config.platform_bump = ctx.bumps.platform;
     Ok(())
@@ -231,6 +238,33 @@ pub fn handle_set_open_tiers(ctx: Context<AdminOnly>, open_tiers: [bool; N_TIERS
     }
     config.open_tiers = open_tiers;
     emit!(TiersOpened { open_tiers });
+    Ok(())
+}
+
+/// Which tiers may open HARD pools (Phase B, 2026-09-24) — the hard twin of
+/// `set_open_tiers`, with the same restamp rule on the disabled→enabled edge
+/// and its own event. A separate instruction rather than a second argument
+/// on `set_open_tiers` so that every Squads proposal already drafted against
+/// the easy setter keeps its exact payload, and so a hard-ladder change can
+/// never ride in on an easy-ladder one by mistake.
+///
+/// Enablement is per (mode, tier): the easy and hard ladders share a tier's
+/// price, pot and ceiling but nothing else — each has its own live slot,
+/// its own cooldown clock and its own switch.
+pub fn handle_set_hard_open_tiers(
+    ctx: Context<AdminOnly>,
+    open_tiers: [bool; N_TIERS],
+) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+    let config = &mut ctx.accounts.config;
+    for (tier, &enabled) in open_tiers.iter().enumerate() {
+        let was_enabled = config.hard_open_tiers[tier];
+        if enabled && !was_enabled {
+            config.hard_tier_next_open_at[tier] = config.hard_tier_next_open_at[tier].max(now);
+        }
+    }
+    config.hard_open_tiers = open_tiers;
+    emit!(HardTiersOpened { open_tiers });
     Ok(())
 }
 
