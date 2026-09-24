@@ -54,8 +54,19 @@ export const COPY = {
   },
   signin: {
     title: 'Sign in',
-    subtitle:
-      'Sign in with an account and a wallet is made for you, or use a Solana wallet you already have.',
+    /*
+     * The second clause — "or use a Solana wallet you already have" — was
+     * removed on 2026-09-24 with the external-wallet buttons. It had to go
+     * with them: a page that offers no wallet route must not open by
+     * promising one, and a player reading it would look for a control that
+     * is not there.
+     *
+     * PHASE-N-REVIEW: the shortened line is the architect's, cut to the
+     * minimum true statement rather than re-voiced. The founder owns the
+     * wording. Put the clause back when `EXTERNAL_WALLET_SIGNIN_ENABLED`
+     * goes back to true (app/src/app/signin/signin-client.tsx).
+     */
+    subtitle: 'Sign in with an account and a wallet is made for you.',
     google: 'Continue with Google',
     // Apple removed 2026-09-24 (founder): the provider was never enabled and the
     // button did nothing. See wallet/types.ts.
