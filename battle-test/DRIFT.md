@@ -386,8 +386,8 @@ cold. `FOUNDER-ACTIONS.md` carries the founder-facing rewrite. Every row above i
 
 | # | Question | Blocks | Recommendation |
 |---|---|---|---|
-| Q6 | Is the live `Config.admin` signed **directly** by a keypair you hold, or through the **Squads vault** with a proposal and approval round? | T3's pause (F-23), T7's forfeit (F-29) | Answer from how you have run admin commands before. If it is the vault, those two founder blocks need 20 minutes each, not 5. |
-| Q7 | Who holds the reviewer key `4ydb…wcL1`, the only member of `config/reviewers.json`? | T7 entirely | If it is not you, T7 needs that person or T7 is NOT TESTABLE and goes in report §9. |
+| Q6 | ~~Is the live `Config.admin` signed directly, or through the Squads vault?~~ **ANSWERED FROM THE CHAIN 2026-09-22 — the vault, and it could never have been anything else.** | T3's pause (F-23), T7's forfeit (F-29) | `Config.admin` = `9EEW…e34Z`, matching `custody.json`. It is **off the ed25519 curve**, so it is a PDA and **no private key exists for it anywhere** — it can only sign by CPI. Not a policy question: arithmetic. But the multisig is **1-of-1**, so the "approval round" is one signer, not a committee. |
+| Q7 | ~~Who holds the reviewer key `4ydb…wcL1`?~~ **ANSWERED 2026-09-22 — it is the Bank wallet, and it is the SAME key as Q6's approver.** | T7 entirely | Decoded the multisig account (90 bytes): a borsh vec length of **1** at offset 54 followed by one 32-byte on-curve key ending at the tail — `4ydb…wcL1`. So the sole reviewer IS the sole multisig member. `docs/devnet-rehearsal-runbook.md` calls it the **Bank wallet** ("funds entrants; Squads member") and C0.1 has the founder connect it to Squads **through Phantom on devnet**. Holds 24.658749732 SOL, 10 transactions, last 2026-09-11. |
 | Q8 | Is the packet service running the **geo stub** or a **vendor**? | every headless entry | I will test this myself with one packet request rather than ask you to find out. Recorded here because a vendor refusal would explain a mass failure. |
 | Q9 | The Playwright route needs a **self-built app** with the test-signer flag, and the spec must be written from scratch. Build it, or record quota 0 against roadmap 5.1? | WP4 scope | Recommend **quota 0** and a recorded reduction. The direct route proves the chain path; the Playwright route proves the browser path, and building it would cost more than the week has. Your call. |
 | Q10 | Tier 1 to 6 carry superseded economics on chain. Fix them, or leave them? | nothing in this test | Recommend **leave them** and log it as a product follow-up. Changing them is a founder-owned economics action with no bearing on a tier-0 week. |
@@ -1717,3 +1717,59 @@ Two details worth keeping:
   mean nothing worse than "has not accepted the current terms yet". Collapsing that into `ok` or
   into `STOP` is how §H27 happened in the first place. `WARN` prints, does not claim the wallet is
   clean, and does not block the run.
+
+---
+
+### §H28 — the entry gate now refuses this whole container, and it is right to
+
+**What happened.** Preflighting pool 29 for T3, **every wallet was refused** — all 39 headless and
+both UI accounts. Not a subset, not rate limiting. W00, which has played five pools and won two,
+was refused alongside wallets that have never played. Each headless wallet's clickwrap returned
+`204` immediately before, so §H27's cause is excluded.
+
+**It is not a defect. The territory gate is working.** Three independent readings agree:
+
+```
+GET  /geo                                    -> {"allowed":false}
+POST /packet  (W00, pool 29)                 -> 403 {"ok":false,"error":"entry_unavailable"}
+this container's egress IP                   -> 160.79.106.137, Columbus, Ohio, US (AS396982)
+config/territories.json version 5            -> [AE AU BE BH CN ES FR HK ID IN IT KW MY OM QA SA SG US]
+```
+
+**`US` is on the block-list, and this container is in Ohio.** The gate is refusing the battle
+test's traffic for exactly the reason the founder instructed it to refuse traffic.
+
+**Why it worked two days ago, to the minute.** `e578b50` — *"territories: block the United States
+at country level (founder instruction, D-B3-3)"* — was committed at **2026-09-22T00:13:27Z**. T6's
+fill of pool 27 ran **00:05Z → 00:27Z on the same morning**. The block was committed while the
+pool was filling and was not yet deployed; `deploy-backend` is `workflow_dispatch` only, so a
+merged block is not a live one. **T6 went through with eight minutes to spare.**
+
+It went live on the next deploy — the one run for the Resend wiring. That deploy was run with both
+boxes unticked, which is the credentialed path, and `deploy-backend.yml:344` sets `geo_mode=vendor`
+whenever both `GEO_VENDOR_URL` and `GEO_VENDOR_API_KEY` are present. Lines 626–627 then
+**unset** `GEO_STUB_COUNTRY` and `ALLOW_STUB_GEO`. Before that deploy the service answered every
+address `GB` from the stub, which is not on the block-list; after it, the real vendor resolved this
+container to `US`, which is.
+
+**I told the founder to untick those boxes.** The instruction was right on its own terms — the
+credentialed path is the correct default and staging a real geo vendor is an improvement — but I
+did not notice it would take the battle test's own egress offline, and I should have. The
+territory schedule and the test rig's location are facts that were both already on record.
+
+**What it costs.** Every remaining test needs headless seats entered from this container. T3 needs
+38 and T7 needs 62. Neither can run from here while `US` is blocked at country level. The
+founder's own UI entries are unaffected if they are not themselves in a blocked territory — but no
+founder can hand-enter 38 seats.
+
+**Why the obvious fix is not obvious.** `allow_dev_credentials` does **not** restore the stub:
+`deploy-backend.yml:346` reaches the dev branch only when a vendor variable is *missing*, and the
+workflow's own header says the switch is applied per credential "only where the production one is
+absent — so it can never downgrade a signer or a geo lookup that is already real." Restoring the
+GB stub means **deleting** `GEO_VENDOR_URL` and `GEO_VENDOR_API_KEY`, and GitHub secrets cannot be
+read back, so they can only be re-provisioned from the vendor.
+
+**The lesson, and it is not the same as §H9's family.** This one is: *a deploy instruction is a
+configuration change to every gate the deploy stages, not only to the one being fixed.* The Resend
+deploy was reasoned about as an email change. It was also a screening change, and nothing in the
+instruction said so.

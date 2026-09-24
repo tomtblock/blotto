@@ -389,3 +389,43 @@
 2026-09-22 00:40 UTC | cc      | H27  | deliberately did NOT parse the 403 to guess "unattested": the gate answers one generic status for every reason by design (PID §8), and a fix that reads it would depend on the gate staying leaky. Added a third verdict **WARN** for UI-A/UI-B, whose Privy keys are not on this disk — their refusal is genuinely ambiguous and must not read as clean OR as a stop | scripts/preflight.ts
 2026-09-22 00:41 UTC | cc      | 159  | **the `node` check failed on 0c77466 — and it is NOT this PR's.** The failure is a Next.js font fetch in app/src/app/layout.tsx; my entire branch diff against main touches **only battle-test/**, and the `boundary — battle-test changes nothing else` lane passes | github
 2026-09-22 00:41 UTC | cc      | 159  | corroborated rather than asserted: **main's own `app-lighthouse` run failed today at 12:49Z** on head d60191d5 with an app build error, and layout.tsx has not changed since commit 708bddf. The app build is red on the base branch independently of this PR | github
+2026-09-22 01:05 UTC | cc      | Q6     | **answered from the chain, not from memory.** `Config.admin` = 9EEWtzyu72a3DKJVUkCaeYX4HuBKD59xXCcENnDVe34Z, matching custody.json exactly. **It is OFF the ed25519 curve** — a PDA, so no private key exists for it anywhere in the world and it can only ever sign by CPI. Direct signing was never an option; this is arithmetic, not policy | chain
+2026-09-22 01:06 UTC | cc      | Q7     | **answered, and it collapses Q6 and Q7 into ONE question.** Decoded the 90-byte Squads multisig: borsh vec length **1** at offset 54, one 32-byte on-curve key ending exactly at the tail = **4ydb…wcL1**, the reviewer. So the sole reviewer IS the sole multisig approver | chain
+2026-09-22 01:06 UTC | cc      | Q7     | the runbook names it: `docs/devnet-rehearsal-runbook.md` KEY REGISTER calls 4ydb…wcL1 the **Bank wallet** — "funds entrants; Squads member" — and C0.1 instructs the founder to connect it to app.squads.so **via Phantom on devnet**. So the expected answer is that the founder holds it, and the check is one look in Phantom | docs/devnet-rehearsal-runbook.md
+2026-09-22 01:07 UTC | cc      | T3/T7  | **both unblock on a single confirmation**: does the founder control 4ydb…wcL1 in Phantom? Yes → T3 and T7 both run, with each admin write a 1-of-1 Squads proposal (three wallet popups per the runbook), not a coordination exercise. No → both are blocked on whoever does hold it, and T7 goes in report §9 as NOT TESTABLE | chain
+2026-09-22 01:08 UTC | cc      | notify | Resend is **built, wired and deployed** — it is configuration, not code. Proven unconfigured rather than assumed: /health adds `notify: "v2"` only when a sender exists (server.ts:178) and the live service omits it. EMAIL_API_URL and EMAIL_API_KEY are **GitHub Actions secrets**, EMAIL_FROM is a **Variable**, then deploy-backend | docs/CHANGE-2026-09-16_ui-uplift.md F3
+2026-09-22 01:08 UTC | cc      | notify | and step 4 of that list is **not** configuration: collecting an address is personal data, PID §8, **founder and counsel**. Turning the dispatcher on without the privacy wording would collect addresses under terms that do not mention them | docs/CHANGE-2026-09-16_ui-uplift.md F3
+2026-09-22 01:30 UTC | founder | Q6/Q7  | **"4ydb is in my Phantom, 24.65 SOL"** — matching the chain reading of 24.658749732 to the lamport. **Both questions closed, and both T3 and T7 unblock.** The founder is the sole 1-of-1 Squads approver AND the sole reviewer | chat
+2026-09-22 01:30 UTC | cc      | T3     | now runnable: fill to ~30, founder pauses (Squads proposal 1), one headless attempt must revert **Paused (6005)** and one UI attempt must show the paused copy, founder unpauses (proposal 2), fill to exactly 40, then **wait for the deadline** so `seal_at_deadline` fires at the floor rather than `trigger_refund`. A two-sitting test: pool deadlines are 12 h | MANUAL 819
+2026-09-22 01:31 UTC | cc      | T7     | now runnable at all — it was NOT TESTABLE without that key. Needs both UI accounts in ONE browser profile so they share a device marker, a reviewer decision per seat, then the forfeit landed by the admin key as a separate transaction. The appeal path stays untestable: the registry holds one member | MANUAL 848
+2026-09-22 01:36 UTC | founder | 163    | **PR 163 merged** — the fonts are self-hosted on main, so the app build no longer depends on a Google Fonts fetch at build time | github
+2026-09-22 01:37 UTC | cc      | H26    | the boundary lane caught me mixing a product change and battle-test records on one branch, exactly as designed. Reverted off PR 163 rather than force-pushing, then re-applied here once 163 merged. **Records follow the product change; they never ride with it** | .github/workflows/rehearsal.yml
+
+## 2026-09-24
+
+- **13:45Z** Settlement daemon funding verified from chain: `EaDfwM…jrSD` **9.989225364 SOL**
+  (was 0.001397844). `/health` reports `errors: 0` for the first time in 49 hours. Pool 29 opened
+  at **13:24:50Z**, deadline **2026-09-25T01:24:50Z**. F-2 cleared.
+- **13:53Z** Spawned a second session for program development —
+  `session_01CosZsm5MB312HdbJH6y2zJ`, branch `claude/program-dev`, cut from `main` at `50383cb`.
+  **Founder authorised the separate branch explicitly**, which is the permission the standing
+  "never push to a different branch" rule requires. Lane boundary stated in its prompt:
+  `battle-test/` and `rehearsal.yml` stay with this session; product code goes there.
+- **14:00Z** T3 frozen. `registry/T3.plan.json` — 40 seats, deadline seal at the minimum field,
+  pause at 30. `scripts/t3-bounds.ts` added: checks premises P1/P2 against the generated shapes and
+  exits non-zero if any of the four unconditional claims stops holding. W00 is a **point**
+  prediction at 542, not a range, because P1 fixes both of its founder battles. PR **171** opened.
+  T4, T5 and T6 roots all still reproduce byte-for-byte.
+- **14:10Z** Funded 38 headless wallets (W01–W38) to 0.108 SOL each — 3.968918520 SOL from the
+  funder, which is left holding 2.329831040. Shortfall zero, verified.
+- **14:15Z** Generated both Squads payloads for `set_paused` and **verified them independently**:
+  the account is the real Config PDA derived from seeds `["config"]`, the discriminator matches
+  `sha256("global:set_paused")[0..8]`, and the data is 9 bytes with one payload byte — `0x01` for
+  on, `0x00` for off. Chain baseline read: `Config.paused = false`.
+- **14:20Z** **BLOCKED — see DRIFT §H28.** Preflight on pool 29 refused every wallet. The entry
+  gate is screening this container as **US**, which the founder blocked at country level in
+  `e578b50` (committed 00:13Z on 09-22, *during* T6's fill, and deployed later that morning).
+  `GET /geo` returns `{"allowed":false}`; the egress IP is in Columbus, Ohio. **Not a defect — the
+  gate doing its job.** No entry was attempted, nothing was sealed, nothing was lost. T3 and T7
+  cannot run from this container while the country-level block stands. Put to the founder as a
+  decision: this is the blocked-territory list, which is founder-and-counsel-owned.
