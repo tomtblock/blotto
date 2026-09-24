@@ -429,3 +429,17 @@
   gate doing its job.** No entry was attempted, nothing was sealed, nothing was lost. T3 and T7
   cannot run from this container while the country-level block stands. Put to the founder as a
   decision: this is the blocked-territory list, which is founder-and-counsel-owned.
+- **15:25Z** Founder deleted both geo-vendor secrets and re-ran `deploy-backend` with
+  `allow_dev_credentials` ticked. Runs 37 and 38 failed first (the database-url incident PR 172
+  addresses); **run 39 succeeded**.
+- **16:05Z** **Still blocked — DRIFT §H29.** `/geo` unchanged at `{"allowed":false}`, `/packet`
+  still 403. The founder's steps were correct: run 39's own environment shows both vendor secrets
+  **empty** and `DEV_CREDS: true`, so the GB stub was staged and the packet machine rebooted at
+  15:27:35Z inside the deploy window. But the same run's smoke check **printed
+  `GET /geo → {"allowed":false}` at 15:29:03Z and reported success** — `curl --fail` passes on any
+  200 regardless of body. Proved from code that the stub is not in effect: a live GB stub allows
+  every address, since GB is not on the schedule and `regionRuleUnenforceable` is per-country with
+  no sub-national code in version 5. **Not diagnosing further without the boot line** — the
+  deploy's own dev-path grep searches for `GEO STUB` while the service prints `geo = STUB`, so the
+  run gave no signal either way. Next: founder runs `backend-status` (read-only, deploys nothing)
+  and I read `packet: geo = …` and the `geo BLOCK …` reason from the packet log.

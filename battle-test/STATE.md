@@ -1,43 +1,54 @@
-# STATE — 2026-09-24 14:25 UTC — by Claude Code
+# STATE — 2026-09-24 16:10 UTC — by Claude Code
 
-Phase:            **T3 is frozen, funded and ready — and BLOCKED at the entry gate.**
-                  Everything on my side is done. Nothing can enter pool 29 from this container.
-Waiting on:       **the founder: F-38, a decision on the country-level US block.** It is the only
-                  thing standing between here and a finished battle test.
-Blocked:          **T3 and T7, both, on DRIFT §H28.** The entry gate screens this container as
-                  `US`; version 5 of the territory schedule blocks `US` at country level. The gate
-                  is working correctly. No wallet was risked and nothing was sealed.
+Phase:            **T3 is frozen, funded and ready — and still BLOCKED at the entry gate.**
+                  Everything on my side is finished. Nothing can enter pool 29 from this container.
+Waiting on:       **the founder: F-39 — one click on `backend-status`.** Read-only, checks out
+                  nothing, deploys nothing. It prints the one log line that settles this.
+Blocked:          **T3 and T7, on DRIFT §H28 and now §H29.** The founder deleted the vendor secrets
+                  and re-deployed with the dev box ticked — correctly, and run 39's own environment
+                  proves it — but the gate is unchanged. **The deploy printed
+                  `/geo -> allowed:false` and reported success.** No wallet was risked, nothing
+                  sealed, no lamport moved.
 Results so far:   T1 **PASS** · T4 **PASS** · T5 **PASS** · **T6 PASS\*** · T2 **SPOILED** ·
                   T2R **PASS (7 of 8)** · pool 22 = observation, not a test
 Money:            funder **2.329831040** (after funding 38 seats) · W00 **7.936676760** ·
                   settlement signer **9.989225364** · treasury 11.586344960
-Open PR:          **171** — the T3 freeze. Safe to merge either way; a frozen plan that does not
-                  run is a plan that did not run, not a wrong one.
+Open PR:          none — **171 merged**. A frozen plan that does not run is a plan that did not
+                  run, not a wrong one; it names no pool, so it does not expire.
 Parallel session: **program development** — `session_01CosZsm5MB312HdbJH6y2zJ`, branch
-                  `claude/program-dev`, cut from `main` at `50383cb`. Separate lane, no overlap.
+                  `claude/program-dev`. Separate lane, no overlap.
 
-## The blocker, in one paragraph
+## Where this actually stands
 
-Preflighting pool 29 refused **every** wallet — all 39 headless and both UI accounts — with
-`403 entry_unavailable`, after each headless wallet's clickwrap returned `204`. That rules out
-§H27. `GET /geo` answers `{"allowed":false}`, this container's egress IP resolves to **Columbus,
-Ohio, US**, and `config/territories.json` version 5 carries `US`. The gate is refusing the battle
-test for exactly the reason the founder instructed it to refuse traffic.
+Two separate things went wrong today and only the first is understood.
 
-It worked two days ago because the block was committed at **00:13Z on 09-22 — during T6's fill**
-— and `deploy-backend` is manual, so it only went live on the next deploy, the one run for Resend.
-**I wrote that deploy instruction and did not notice it would stage a screening change too.**
+**§H28 — why the gate refuses us.** This container egresses from Columbus, Ohio; version 5 of the
+territory schedule blocks `US` at country level. The gate is working exactly as instructed. T6 got
+through on 09-22 only because the block was committed at 00:13Z *during* its fill and deploys are
+manual, so it went live later that morning — on the deploy I wrote the instruction for.
 
-## What the founder has to decide (F-38)
+**§H29 — why the agreed fix did not take, and this one is open.** Run 39's printed environment
+shows both vendor secrets empty and `DEV_CREDS: true`, so the GB stub was staged and the packet
+machine rebooted mid-deploy at 15:27:35Z. The stub still is not in effect: a live GB stub allows
+**every** address, because GB is not on the schedule, `regionRuleUnenforceable` is per-country and
+version 5 carries no sub-national code, and `vpnOrProxy` needs a variable that was never staged.
 
-Restoring the old behaviour is **not** a matter of ticking `allow_dev_credentials`:
-`deploy-backend.yml:346` reaches the dev branch only when a vendor variable is *missing*, so the
-GB stub comes back only if `GEO_VENDOR_URL` and `GEO_VENDOR_API_KEY` are **deleted** — and GitHub
-secrets cannot be read back afterwards.
+**Two checks in that workflow cannot fail, which is why nobody saw it.** The smoke check runs
+`curl --fail .../geo` and ignores the body, so `{"allowed":false}` ships green. The dev-path check
+greps the boot log for `GEO STUB` while the service prints `geo = STUB (dev only)`, so it is
+silent whether the dev path is live or dead. Both are in `.github/workflows/deploy-backend.yml`, outside this
+session's lane — recommended to the founder, not written by me.
 
-The four options, with what each costs, are in the message accompanying this file. The
-blocked-territory list is founder-and-counsel-owned without exception (PID §8/§9), so I have
-changed nothing and will not.
+## F-39 — the one read that settles it
+
+**Actions -> `backend-status` -> Run workflow.** In the `blotto-packet` section, two lines:
+
+- **`packet: geo = ...`** — names the live lookup outright.
+- **`geo BLOCK ...`** — `geoVerdict` logs a distinct sentence per reason, so it says which of its
+  four refusals fired.
+
+I am deliberately not diagnosing past this. Three wrong readings today came from reasoning around
+a measurement I could have taken.
 
 ## What is ready the moment it clears
 

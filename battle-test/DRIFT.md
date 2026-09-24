@@ -1773,3 +1773,71 @@ read back, so they can only be re-provisioned from the vendor.
 configuration change to every gate the deploy stages, not only to the one being fixed.* The Resend
 deploy was reasoned about as an email change. It was also a screening change, and nothing in the
 instruction said so.
+
+---
+
+### §H29 — the deploy staged the fix, printed the failure, and went green
+
+**What happened.** The founder deleted both geo-vendor secrets and re-ran `deploy-backend` with
+`allow_dev_credentials` ticked, exactly as asked. Run 39 (`36020082376`, 15:25–15:29Z) succeeded on
+every step. The gate did not change: `/geo` still answers `{"allowed":false}` and `/packet` still
+answers `403 entry_unavailable`.
+
+**They did it right, and the run's own printed environment proves it:**
+
+```
+GEO_VENDOR_URL:                    <- empty: deleted
+GEO_VENDOR_API_KEY:                <- empty: deleted
+DEV_CREDS: true                    <- the box was ticked
+```
+
+So `deploy-backend.yml:344-347` took the `elif`, `geo_mode=dev`, and lines 636-637 staged
+`GEO_STUB_COUNTRY="GB"` with `ALLOW_STUB_GEO="1"`. The packet machine rebooted inside the deploy
+window — its boot line is stamped 15:27:35Z, mid-deploy.
+
+**Three minutes later, in the same green run:**
+
+```
+GET https://blotto-packet.fly.dev/geo
+{"allowed":false}
+```
+
+**The deploy printed its own failure and reported success.** The smoke check is
+`curl --fail "$url"`, which passes on any 200 whatever the body says. This is the precise failure
+the workflow's own header says it exists to stop: *"a green tick and a working system were not the
+same thing, and nothing in the run said so."*
+
+**The stub is not in effect, and that is provable rather than guessed.** `geoVerdict`
+(`service.ts`) refuses for exactly four reasons. Against `StubGeoLookup` answering `GB`:
+
+| check | with the stub live |
+|---|---|
+| `territoryAllowed(GB)` | passes — GB is not among version 5's eighteen |
+| `regionRuleUnenforceable(GB)` | passes — it is **per country** (`code.startsWith("GB-")`) and the schedule carries no sub-national code at all |
+| `geo.vpnOrProxy` | false — needs `GEO_STUB_VPN=1`, never staged |
+| the lookup throws | n/a |
+
+A live stub answers `true` from **every** address. It answers `false`. So the staged secrets are
+not what the running process is using, even though the machine restarted.
+
+**Why this was invisible, which is a second defect.** `main.ts:186` logs the stub as:
+
+```
+packet: geo = STUB (dev only) — country=GB
+```
+
+`deploy-backend.yml`'s verification step greps the boot log for **`GEO STUB`** — uppercase, one
+space. That pattern **cannot match** the string the service emits. So the run's closing line,
+*"Expected on a credentialed run: … NO 'GEO STUB' line"*, is satisfied identically whether the dev
+path is live or dead. A run that staged the stub and a run that did not are indistinguishable in
+the log.
+
+**The lesson.** §H9's family again, at one remove: not a check whose exit code was swallowed, but
+**two checks that cannot fail** — one that curls an endpoint and ignores the answer, one that greps
+for a string nothing prints. A check that cannot fail is worse than no check, because it is
+reported as a pass.
+
+**Not diagnosed further here, deliberately.** Three wrong diagnoses today came from reasoning past
+a missing reading. The decisive line — `packet: geo = …` — is one click away in `backend-status`,
+which is `workflow_dispatch`, `permissions: {}`, checks out nothing and deploys nothing. Read it
+before changing anything else.
