@@ -439,6 +439,49 @@ jobs:
           echo "rpc host: ${DEVNET_RPC%%\?*} | origins: $APP_ORIGIN"
           if [ -n "$HELIUS_WEBHOOK_SECRET" ]; then echo "webhook secret: from repository secret"; else echo "webhook secret: generated once, kept"; fi
 
+      # Does the database url actually WORK? (incident 2026-09-24.)
+      #
+      # The step above proves each credential is PRESENT. On 2026-09-24 the
+      # database password was reset at the provider while a deploy was in
+      # flight; BLOTTO_DATABASE_URL still held the old one, and every check
+      # in this workflow was satisfied by a string being non-empty. The run
+      # replaced the indexer's machine, the indexer migrates before it
+      # serves, nothing answered /health, and `min_machines_running = 1`
+      # with no healthy machine is no service at all. Two failed runs and
+      # sixty-five minutes of outage for one Postgres error code, 28P01.
+      #
+      # So: open one session and run SELECT 1, HERE — before the first
+      # machine is touched, while the fix is still one secret edit and no
+      # downtime. Refusing costs three seconds; not refusing cost an hour.
+      #
+      # It runs in the deploy job and not in `gate` deliberately. `gate` is
+      # separate precisely so its `actions: read` scope never sits beside a
+      # credential, and this needs the database url — which this job already
+      # holds. The property that mattered ("before a machine is replaced")
+      # is kept either way.
+      #
+      # Node 22 because that is what the service images run (node:22-slim):
+      # a TLS or driver difference between the runner and the deployment is
+      # exactly what this must not hide. Only `pg` is installed — the check
+      # dials with the same client the services use, because a libpq probe
+      # (psql, already on the runner and free) reads sslmode differently and
+      # would miss a certificate node refuses.
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v4.4.0
+        with:
+          node-version: 22
+
+      - name: Preflight — the database url actually connects
+        env:
+          BLOTTO_CLUSTER: devnet
+        run: |
+          npm ci --omit=dev --prefix backend/_shared --no-audit --no-fund
+          # The summary path is an ARGUMENT, not an environment read:
+          # check-env-examples.sh requires every variable the backend reads to
+          # be on backend/.env.example, and a path the runner hands us is not
+          # something an operator sets.
+          npx --yes tsx@4.20.3 backend/_shared/src/check-database-url.ts \
+            --summary="$GITHUB_STEP_SUMMARY"
+
       - name: Create the Fly apps (first run only)
         run: |
           apps="$INDEXER_APP $PACKET_APP"
