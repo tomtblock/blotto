@@ -89,17 +89,19 @@ export function isLocalUrl(url: string): boolean {
  * say. Separated from the logging so a test asserts the judgement rather
  * than a console.
  *
- * PHASE-N-REVIEW (2026-09-22): this WARNS where it could refuse, and the
- * choice is deliberate rather than timid. A refusal is the right end state
- * — this repository's habit is fail-closed, and a plaintext connection to a
- * remote database deserves a refusal — but the URL lives in a deploy secret
- * this session cannot read, a battle test is live on that deployment
- * tonight, and a code change that stops the backend booting over a
- * condition I cannot inspect first is a worse outcome than a loud line in
- * the boot log. The founder action is one edit to `DATABASE_URL`
- * (`sslmode=verify-full`); once that is confirmed, this should become a
- * refusal and the check should move into `deploy-backend`'s gate job, where
- * it can be asserted before a machine is replaced rather than after.
+ * PHASE-N-REVIEW (2026-09-22), CLOSED 2026-09-24: this WARNS where it could
+ * refuse, and that was deliberate rather than timid — the URL lived in a
+ * deploy secret the session could not read, a battle test was live that
+ * night, and a code change that stops the backend booting over a condition
+ * nobody had inspected is worse than a loud line in a boot log. The note
+ * said the refusal should exist once the posture was confirmed.
+ *
+ * It now does, in `db-preflight.ts`, run by `check-database-url.ts` at the
+ * head of `deploy-backend`'s deploy job — before a machine is replaced
+ * rather than after, which was the point. THIS function stays a warning and
+ * stays here: a boot line is the only thing that speaks for a machine
+ * restarted by the platform rather than by a deploy, and the refusal upstream
+ * cannot see that restart happen.
  */
 export function tlsWarning(url: string): string | null {
   if (isLocalUrl(url)) return null;
