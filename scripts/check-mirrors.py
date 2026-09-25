@@ -126,6 +126,10 @@ TYPE_FOR_READER = {
     "bool": "bool",
     "bytes32hex": "[u8;32]",
     "string": "String",
+    # An APPENDED u8 read only when the byte is present (null on the
+    # pre-append shape of the event) — Phase B's `mode`. The Rust type is
+    # still a plain u8; only the decoder tolerates its absence.
+    "tailU8": "u8",
 }
 
 

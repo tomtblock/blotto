@@ -94,6 +94,21 @@ pub const TIMER_SECONDS: u8 = 15;
 /// rest with `set_open_tiers` when R6's conditions are met.
 pub const N_TIERS: usize = 7;
 
+/// The two placing rules a pool can play by (founder rulings 2026-09-24,
+/// register D-E17). The program never sees an allocation, so it does not
+/// enforce either rule; it RECORDS which one a pool plays by (`Pool.mode`)
+/// so the crank scores with it and a player can recompute. Each mode has
+/// its own per-tier slot, enable switch and cooldown on `Config`, and the
+/// same price, pot and ceiling per tier (the founder's "same ladder").
+///
+/// Easy: seven battles of 100 points each — the rule every pool played
+/// before 2026-09-24, so every pool that predates the field is mode 0.
+pub const MODE_EASY: u8 = 0;
+/// Hard: 700 points placed anywhere across the thirty-five cells.
+pub const MODE_HARD: u8 = 1;
+/// The number of modes; `open_pool` refuses anything at or above it.
+pub const N_MODES: u8 = 2;
+
 /// Configured tiers' INITIAL entry prices (roadmap R6 as amended by D1,
 /// 2026-08-27): 0.1 / 0.5 / 0.75 / 1 / 2.5 / 5 / 7.5 SOL. Index = tier.
 /// Since D-A1 (revised, master prompt v2 2026-08-27) prices live on `Config`

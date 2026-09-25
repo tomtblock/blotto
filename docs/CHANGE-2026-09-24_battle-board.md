@@ -3,9 +3,11 @@
 **Status: Phase A merged to `main` (PR #176, 2026-09-24); the board is the only run. The switch
 that made it the default (PR #177) and the dial run it guarded were removed the same evening
 (§8); a rollback is now a revert of that removal, not a setting.**
-Phase B (the hard-mode pool) is planned and not started. The plan the founder approved is
-`https://claude.ai/artifact/RufrDt16swq46bCkNkdyGP`; the wireframes are
-`https://www.figma.com/design/cIzgzj8m77Oeo0JMOK2zZ4`.
+Phase B (the hard-mode pool) is in progress: the program change is §11; the backend, the app
+and the upgrade window follow in that order. The Phase A plan the founder approved is
+`https://claude.ai/artifact/RufrDt16swq46bCkNkdyGP`; the Phase B plan (approved 2026-09-24,
+"go with all recommendations") is `https://claude.ai/artifact/UWMVuKAWrbvsLENSnDiNUT`; the
+wireframes are `https://www.figma.com/design/cIzgzj8m77Oeo0JMOK2zZ4`.
 
 This report is the record of the founder's rulings of 2026-09-24, what was built to them, the
 two places they override an earlier document, and what is deliberately not built yet. Where a
@@ -109,13 +111,14 @@ nothing sealed under the dials is affected.**
 
 ## 5. Not built (Phase B, in the plan's order)
 
-`Pool.mode` and the appended hard ladder on `Config` with their migrations; `open_pool(tier, mode)`;
-`PoolOpened.mode`; the mode-aware invariant and the `u16` encoding for hard battle sets; bundle
-version 3; the crank reading the pool's mode; the verify page's mode; indexer migration `0025`;
-the keeper per (tier, mode); `admin.ts set-open-tiers --mode`; the hard-mode evidence run; the
-terms version bump (plan A7, founder to confirm); the docs sweep (`AS-BUILT`, `PRODUCT-FACTS`,
-`HOW-IT-WORKS`, TECH-ARCH appendix, the register rows). The program upgrade needs a drain window
-agreed with the battle-test session — the upgrade pre-flight refuses while any pool is Open.
+Built since (§11): `Pool.mode` and the appended hard ladder on `Config` with their migrations;
+`open_pool(…, mode)`; `PoolOpened.mode`. Still to build: the mode-aware invariant and the `u16`
+encoding for hard battle sets; bundle version 3; the crank reading the pool's mode; the verify
+page's mode; indexer migration `0025`; the keeper per (tier, mode); `admin.ts set-open-tiers
+--mode`; the hard-mode evidence run; the terms version bump (plan A7, founder to confirm); the
+docs sweep (`AS-BUILT`, `PRODUCT-FACTS`, `HOW-IT-WORKS`, TECH-ARCH appendix, the register rows).
+The program upgrade needs a drain window agreed with the battle-test session — the upgrade
+pre-flight refuses while any pool is Open.
 
 Also for later, not scheduled: a **board-native "share your seven"** — a picture of the seven
 fields, offered only once a pool has closed, to replace the Blott-stills share retired in §9.
@@ -238,3 +241,63 @@ reports unresolvable imports and stale declarations too, so it cannot go quietly
 against the tree between §8 and §9 it named exactly the three orphans §9 removed
 (`BlottRaster.tsx`, `render-still.ts`, `warp.ts`). It does not judge unused exports, copy keys or
 public assets, which are often named by template strings; those stay with the next audit.
+
+## 11. Phase B, the program change (2026-09-24, night)
+
+The first of the Phase B changes: one program, two ladders. Nothing here is deployed — the
+upgrade waits for the drain window the founder sets once the current test pool resolves (Phase B
+plan, decision 1). Merging it changes no account on devnet and no running service.
+
+**What the program now holds.** Every tier has an easy slot and a hard slot. `Config` gains an
+appended tail — `hard_open_tiers`, `hard_active_pool_by_tier`, `hard_tier_next_open_at`
+(`HARD_TAIL_LEN` 119; `Config::LEN` 595, `SPACE` 603, both pinned) — read through
+`open_tiers_for(mode)`, `active_pool(mode, tier)` and `next_open_at(mode, tier)`, so every gate
+in `open_pool`, `free_tier_slot` and the treasury reserve is per (mode, tier) by construction
+rather than by a second copy of the code. `Pool` gains `mode: u8` after `min_seats`
+(`Pool::LEN` 842, `SPACE` 850). `open_pool` takes `mode` as an appended argument, refuses
+anything but 0 and 1 (`UnknownMode`, 6074 — appended, so no earlier code moved), and records it;
+nothing after the open reads it on-chain. `set_hard_open_tiers` is a new instruction with the
+same restamp rule as `set_open_tiers`, kept separate so a Squads proposal drafted against the
+easy setter keeps its payload and an easy change can never flip a hard tier. Prices, pots and
+ceilings stay per tier, shared by both ladders. An idle enabled hard tier reserves a pot exactly
+as an idle enabled easy tier does.
+
+**Events.** `mode` appended to `PoolOpened`, `TierSlotFreed` and `PoolMigrated`; two new events,
+`HardLadderAdded { migrated_at }` and `HardTiersOpened { open_tiers }`. The shared decoder reads
+the appended byte only when it is there (`Reader.tailU8`, `null` on a pre-Phase-B event, which
+a consumer treats as easy), so a backfill over the devnet ledger keeps decoding every event it
+already holds. `check-mirrors.py` learned that reader.
+
+**Migrations.** `migrate_config` is now the V2 → V3 migration (484 → 603 bytes; hard ladder all
+disabled, hard clocks stamped at the migration) and takes no argument. `migrate_pool` accepts
+both old sizes: a pre-R7-b pool (847) gets `MIN_SEATS_V1` and `mode`; a pre-Phase-B pool (849)
+gets `mode` alone, its floor kept. Both write `MODE_EASY` — hard did not exist when those pools
+opened. Permissionless, as before.
+
+**Judgement calls (architect-owned, one line each).**
+
+- *The V1 → V2 Config migration is retired, not kept beside the new one.* Its stated retirement
+  condition (every deployment at `SPACE_V2`) was met on 2026-09-13; a 380-byte account is now
+  refused (`ConfigNotMigratable`) rather than grown with a zeroed keeper. `ConfigMigrated` stays
+  in the decoder for the one event the devnet ledger holds.
+- *Two off-chain readers moved into this change rather than the backend one.* The settlement
+  client's pool reader (`backend/reveal/src/chain-web3.ts`) is pinned by its own test against
+  `Pool::SPACE` in the Rust source, so it had to learn 850 here; it also accepts 849 (the
+  pre-migration pools it will keep settling in the window) and reports their mode as easy. The
+  shared `Config` decoder likewise accepts 603 and 484 and reports whether the hard ladder is
+  present. The keeper's `open_pool` encoding and `admin.ts` are NOT changed here — they are the
+  backend change's — which is one more reason nothing may deploy before it lands.
+- *The event fixture is regenerated without a hard pool in it.* The indexer's projection does not
+  yet know `mode` (migration `0025` is the backend change), and a fourth pool would have moved
+  every count its suite pins for no gain until it does. The fixture does carry both new events
+  and both `migrate_pool` shapes.
+
+**Verified.** Program unit tests (the layout pins updated); the whole LiteSVM suite against the
+built artifact, with a new `hard_mode.rs` (the hard ladder starts disabled and has its own
+switch; easy and hard pools run side by side on one tier with separate slots and cooldowns; an
+idle enabled hard tier reserves a pot, at the open gate and the withdraw floor, to the lamport;
+a full hard pool settles to Paid and frees the hard slot; the 849-byte `migrate_pool` path keeps
+the floor and marks the pool easy) and the config-migration test rewritten for V2 → V3; the
+shared, reveal, indexer and app suites and typechecks; every `ci-fast` gate. Two indexer specs
+that addressed the fixture by transaction index, and one that took "the first seat 0" from a
+map ordered by random player keys, were made to find their rows instead.

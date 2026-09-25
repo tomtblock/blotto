@@ -95,23 +95,27 @@ pub mod blotto_cup {
         )
     }
 
-    /// One-shot growth of a pre-2026-09-07 Config account to the current
-    /// layout (admin-signed; refused once migrated). Runs immediately after
-    /// that upgrade — until it has, every instruction that reads Config
-    /// fails on the short account. A deployment initialised by the current
-    /// `init_config` is already at the new layout and never calls this.
-    pub fn migrate_config(ctx: Context<MigrateConfig>, keeper: Pubkey) -> Result<()> {
-        instructions::handle_migrate_config(ctx, keeper)
+    /// One-shot growth of a pre-Phase-B (2026-09-24) Config account to the
+    /// current layout — the hard ladder appended, every hard tier disabled
+    /// (admin-signed; refused once migrated, and refused for the 380-byte
+    /// pre-2026-09-07 layout whose migration this replaced). Runs
+    /// immediately after that upgrade — until it has, every instruction that
+    /// reads Config fails on the short account. A deployment initialised by
+    /// the current `init_config` is already at the new layout and never
+    /// calls this.
+    pub fn migrate_config(ctx: Context<MigrateConfig>) -> Result<()> {
+        instructions::handle_migrate_config(ctx)
     }
 
-    /// One-shot growth of a pre-R7-b Pool account to the current layout
-    /// (permissionless; refused once migrated). Runs once per existing pool
-    /// right after the 2026-09-13 upgrade — until it has, every instruction
-    /// touching that pool fails on the short account, `pay_next_place` and
-    /// `release_escrow` among them. Writes `MIN_SEATS_V1`, the floor that
-    /// pool's players entered under, never the new constant. A pool opened by
-    /// the current `open_pool` is already at the new layout and never calls
-    /// this.
+    /// One-shot growth of an older Pool account to the current layout
+    /// (permissionless; refused once migrated). Accepts both old sizes: a
+    /// pre-R7-b pool gets `MIN_SEATS_V1` (the floor its players entered
+    /// under, never the new constant) and then `mode`; a pre-Phase-B pool
+    /// gets `mode` alone. `mode` is always easy — hard did not exist when
+    /// these pools opened. Until it has run, every instruction touching that
+    /// pool fails on the short account, `pay_next_place` and `release_escrow`
+    /// among them. A pool opened by the current `open_pool` is already at
+    /// the new layout and never calls this.
     pub fn migrate_pool(ctx: Context<MigratePool>, pool_id: u64) -> Result<()> {
         instructions::handle_migrate_pool(ctx, pool_id)
     }
@@ -153,6 +157,14 @@ pub mod blotto_cup {
     /// stale stamp cannot advertise a "next pool" instant months past.
     pub fn set_open_tiers(ctx: Context<AdminOnly>, open_tiers: [bool; N_TIERS]) -> Result<()> {
         instructions::handle_set_open_tiers(ctx, open_tiers)
+    }
+
+    /// Which tiers may open HARD pools (Phase B, 2026-09-24) — the hard
+    /// ladder's own switch, so a proposal drafted against `set_open_tiers`
+    /// keeps its payload and an easy change can never flip a hard tier. Same
+    /// restamp rule as `set_open_tiers` on the disabled→enabled edge.
+    pub fn set_hard_open_tiers(ctx: Context<AdminOnly>, open_tiers: [bool; N_TIERS]) -> Result<()> {
+        instructions::handle_set_hard_open_tiers(ctx, open_tiers)
     }
 
     /// Per-tier ceiling on a pool's gross pass sales (D2), one tier per
@@ -230,15 +242,26 @@ pub mod blotto_cup {
     /// be revealed, therefore never settled. The gates are the tier's
     /// enablement, the SEQUENTIAL rule plus its cooldown, and the treasury
     /// policy; the pot — plus the prize vault's rent cushion — moves from
-    /// the treasury into the new vault before any entry.
+    /// the treasury into the new vault before any entry. `mode` (Phase B,
+    /// appended) picks the ladder: 0 easy, 1 hard — each (mode, tier) has
+    /// its own enablement switch, live slot and cooldown clock, and shares
+    /// the tier's price, pot and ceiling.
     pub fn open_pool(
         ctx: Context<OpenPool>,
         pool_id: u64,
         tier: u8,
         sealing_pubkey: [u8; 32],
         sealing_secret_hash: [u8; 32],
+        mode: u8,
     ) -> Result<()> {
-        instructions::handle_open_pool(ctx, pool_id, tier, sealing_pubkey, sealing_secret_hash)
+        instructions::handle_open_pool(
+            ctx,
+            pool_id,
+            tier,
+            sealing_pubkey,
+            sealing_secret_hash,
+            mode,
+        )
     }
 
     /// Commit the pool's Switchboard On-Demand VRF seed. Write-once, Open

@@ -482,20 +482,23 @@ fn migrate_pool_writes_the_floor_those_players_entered_under() {
 
     assert_eq!(
         env.svm.get_account(&pool).unwrap().data.len(),
-        849,
-        "the account grew"
+        POOL_SPACE,
+        "the account grew to the current layout"
     );
     assert_eq!(
         read_min_seats(&env.svm, &pool),
         52,
         "a migrated pool keeps the floor its players entered under, not the new constant"
     );
-    // And every field ahead of the appended one is untouched — the whole
-    // reason the field was appended rather than inserted.
+    // And every field ahead of the appended ones is untouched — the whole
+    // reason the fields were appended rather than inserted.
     let pv = read_pool(&env.svm, &pool);
     assert_eq!(pv.state, 0, "still Open");
     assert_eq!(pv.entrants, 0);
     assert_eq!(pv.pot_lamports, POT);
+    // Phase B: a pool from before either field played easy (hard did not
+    // exist). `hard_mode.rs` covers the 849-byte pre-Phase-B shape.
+    assert_eq!(pv.mode, MODE_EASY);
 }
 
 /// Run twice, and the second is a clean refusal rather than a second write.

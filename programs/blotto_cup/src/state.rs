@@ -147,9 +147,64 @@ pub struct Config {
     /// (the cooldown gate) and by the app's
     /// "next pool in" countdown via `TierSlotFreed`.
     pub tier_next_open_at: [i64; N_TIERS],
+    // ---- Fields appended by the Phase B upgrade (founder rulings 2026-09-24,
+    // register D-E17): the HARD ladder. Same rule as the tail above: appended
+    // after everything, so no offset any off-chain reader hard-codes moves;
+    // `migrate_config` grows the live account once and writes this tail.
+    // Prices, pots and ceilings are NOT duplicated — hard tier `t` costs and
+    // pays exactly what easy tier `t` does (the founder's "same ladder"); only
+    // the slot, the enable switch and the cooldown are per mode, because a
+    // hard pool and an easy pool at one tier are two different pools that
+    // must both be able to be Open at once.
+    /// Which tiers may open HARD pools (`set_hard_open_tiers`). All false at
+    /// migration and at init: the founder enables hard tier 0 by proposal.
+    pub hard_open_tiers: [bool; N_TIERS],
+    /// The tier's live HARD pool id, 0 if none — the hard twin of
+    /// `active_pool_by_tier`, with the same sequential rule.
+    pub hard_active_pool_by_tier: [u64; N_TIERS],
+    /// The hard twin of `tier_next_open_at`.
+    pub hard_tier_next_open_at: [i64; N_TIERS],
 }
 
 impl Config {
+    /// Which tiers may open pools of `mode`. Callers validate `mode` first
+    /// (`open_pool` refuses `>= N_MODES`); anything not hard reads as easy.
+    pub fn open_tiers_for(&self, mode: u8) -> &[bool; N_TIERS] {
+        if mode == crate::constants::MODE_HARD {
+            &self.hard_open_tiers
+        } else {
+            &self.open_tiers
+        }
+    }
+    pub fn active_pool(&self, mode: u8, tier: usize) -> u64 {
+        if mode == crate::constants::MODE_HARD {
+            self.hard_active_pool_by_tier[tier]
+        } else {
+            self.active_pool_by_tier[tier]
+        }
+    }
+    pub fn set_active_pool(&mut self, mode: u8, tier: usize, pool_id: u64) {
+        if mode == crate::constants::MODE_HARD {
+            self.hard_active_pool_by_tier[tier] = pool_id;
+        } else {
+            self.active_pool_by_tier[tier] = pool_id;
+        }
+    }
+    pub fn next_open_at(&self, mode: u8, tier: usize) -> i64 {
+        if mode == crate::constants::MODE_HARD {
+            self.hard_tier_next_open_at[tier]
+        } else {
+            self.tier_next_open_at[tier]
+        }
+    }
+    pub fn set_next_open_at(&mut self, mode: u8, tier: usize, at: i64) {
+        if mode == crate::constants::MODE_HARD {
+            self.hard_tier_next_open_at[tier] = at;
+        } else {
+            self.tier_next_open_at[tier] = at;
+        }
+    }
+
     /// The pre-2026-09-07 layout, in bytes after the discriminator: 3 pubkeys
     /// (96), paused (1), open_tiers (N_TIERS), ceilings (8·N_TIERS),
     /// prices (8·N_TIERS), pots (8·N_TIERS), reserve_pots (1),
@@ -160,10 +215,19 @@ impl Config {
     pub const LEN_V1: usize =
         32 * 3 + 1 + N_TIERS + 8 * N_TIERS * 4 + 1 + 8 + 8 + 8 + 1 + 8 + 1 + 8 + 1;
     pub const SPACE_V1: usize = 8 + Self::LEN_V1;
-    /// The appended tail: keeper (32) + fill_deadline_seconds (8) +
+    /// The 2026-09-07 tail: keeper (32) + fill_deadline_seconds (8) +
     /// cooldown_seconds (8) + tier_next_open_at (8·N_TIERS).
     pub const TAIL_LEN: usize = 32 + 8 + 8 + 8 * N_TIERS;
-    pub const LEN: usize = Self::LEN_V1 + Self::TAIL_LEN;
+    /// The layout from 2026-09-07 until Phase B (476 bytes, 484 with the
+    /// discriminator) — what devnet holds until this upgrade's
+    /// `migrate_config` runs. History; never change.
+    pub const LEN_V2: usize = Self::LEN_V1 + Self::TAIL_LEN;
+    pub const SPACE_V2: usize = 8 + Self::LEN_V2;
+    /// The Phase B tail: hard_open_tiers (N_TIERS) +
+    /// hard_active_pool_by_tier (8·N_TIERS) + hard_tier_next_open_at
+    /// (8·N_TIERS).
+    pub const HARD_TAIL_LEN: usize = N_TIERS + 8 * N_TIERS + 8 * N_TIERS;
+    pub const LEN: usize = Self::LEN_V2 + Self::HARD_TAIL_LEN;
     pub const SPACE: usize = 8 + Self::LEN;
 }
 
@@ -291,6 +355,14 @@ pub struct Pool {
     /// Pools opened before the field existed are given 52 by `migrate_pool`
     /// — the number their players actually entered under.
     pub min_seats: u16,
+    /// The placing rule this pool plays by (`MODE_EASY` / `MODE_HARD`,
+    /// founder rulings 2026-09-24). Copied from the `open_pool` argument and
+    /// never rewritten, for the same reason as `min_seats`: a published rule
+    /// must not move under a player who already entered. The program never
+    /// reads it in a money path — it is the RECORD the crank scores by and
+    /// the verify page checks against. Every pool that predates the field
+    /// played easy, and `migrate_pool` writes 0.
+    pub mode: u8,
 }
 
 impl Pool {
@@ -315,14 +387,21 @@ impl Pool {
         + 2 // refunded_count
         + 1 // timer_seconds
         + 1 + 1 // bumps
-        + 2; // min_seats (R7-b, appended 2026-09-12)
+        + 2 // min_seats (R7-b, appended 2026-09-12)
+        + 1; // mode (Phase B, appended 2026-09-24)
     pub const SPACE: usize = 8 + Self::LEN;
 
     /// The layout before R7-b appended `min_seats` (2026-09-13). Pools
-    /// allocated at this size exist on devnet and `migrate_pool` grows them;
-    /// like `Config::LEN_V1` this is history and must never change.
-    pub const LEN_V1: usize = Self::LEN - 2;
+    /// allocated at this size may still exist on devnet and `migrate_pool`
+    /// grows them; like `Config::LEN_V1` this is history and must never
+    /// change.
+    pub const LEN_V1: usize = Self::LEN - 3;
     pub const SPACE_V1: usize = 8 + Self::LEN_V1;
+    /// The layout from R7-b until Phase B appended `mode` (2026-09-24) —
+    /// what every pool opened between those dates was allocated at.
+    /// `migrate_pool` grows these too. History; never change.
+    pub const LEN_V2: usize = Self::LEN - 1;
+    pub const SPACE_V2: usize = 8 + Self::LEN_V2;
 }
 
 // ---------------------------------------------------------------------------
@@ -497,18 +576,32 @@ mod tests {
             fill_deadline_seconds: i64::MAX,
             cooldown_seconds: i64::MAX,
             tier_next_open_at: [i64::MAX; N_TIERS],
+            hard_open_tiers: [false, true, false, false, false, false, false],
+            hard_active_pool_by_tier: [u64::MAX; N_TIERS],
+            hard_tier_next_open_at: [i64::MAX; N_TIERS],
         };
         let mut buf = Vec::new();
         c.serialize(&mut buf).unwrap();
         assert_eq!(buf.len(), Config::LEN, "Config::LEN is stale");
-        // The tail is exactly the appended fields, in order, after the V1
-        // bytes — what `migrate_config` writes by hand.
-        assert_eq!(buf.len(), Config::LEN_V1 + Config::TAIL_LEN);
+        // Each tail is exactly its appended fields, in order, after the
+        // previous layout's bytes — what the migrations write by hand.
+        assert_eq!(
+            buf.len(),
+            Config::LEN_V1 + Config::TAIL_LEN + Config::HARD_TAIL_LEN
+        );
         assert_eq!(&buf[Config::LEN_V1..Config::LEN_V1 + 32], c.keeper.as_ref());
         assert_eq!(
             &buf[Config::LEN_V1 + 32..Config::LEN_V1 + 40],
             &i64::MAX.to_le_bytes()
         );
+        // The Phase B tail: seven bools, then 7 u64, then 7 i64.
+        let hard = Config::LEN_V2;
+        assert_eq!(&buf[hard..hard + N_TIERS], &[0, 1, 0, 0, 0, 0, 0]);
+        assert_eq!(
+            &buf[hard + N_TIERS..hard + N_TIERS + 8],
+            &u64::MAX.to_le_bytes()
+        );
+        assert_eq!(&buf[Config::LEN - 8..Config::LEN], &i64::MAX.to_le_bytes());
     }
 
     #[test]
@@ -540,10 +633,16 @@ mod tests {
             bump: 255,
             vault_bump: 254,
             min_seats: 40,
+            mode: 1,
         };
         let mut buf = Vec::new();
         p.serialize(&mut buf).unwrap();
         assert_eq!(buf.len(), Pool::LEN, "Pool::LEN is stale");
+        // `mode` is the last byte — what `migrate_pool` writes by hand.
+        assert_eq!(buf[Pool::LEN - 1], 1);
+        // `min_seats` is the two bytes before it — what the V1 path of
+        // `migrate_pool` writes by hand.
+        assert_eq!(&buf[Pool::LEN_V1..Pool::LEN_V2], &40u16.to_le_bytes());
     }
 
     /// The account layouts are load-bearing beyond this crate: the LiteSVM
@@ -555,10 +654,11 @@ mod tests {
     /// exit). The rule since the 2026-09-07 upgrade: new fields are APPENDED
     /// after `bump`, the readers learn the tail, and an account that must
     /// grow gets a migration instruction in the same upgrade
-    /// (`migrate_config`). `Pool::LEN` was 839 until 2026-09-13 and is now
-    /// 841: R7-b appended `min_seats: u16` after `vault_bump`, and
-    /// `migrate_pool` grows every pool that predates it. 839 is also not
-    /// the 834 the proposal and prompt v2 repeat (that number is
+    /// (`migrate_config`). `Pool::LEN` was 839 until 2026-09-13, 841 until
+    /// Phase B (R7-b appended `min_seats: u16` after `vault_bump`) and is
+    /// now 842: Phase B appended `mode: u8` (founder rulings 2026-09-24),
+    /// and `migrate_pool` grows every pool that predates either field. 839
+    /// is also not the 834 the proposal and prompt v2 repeat (that number is
     /// `paid_mask`'s byte offset, D1/D14; the founder's note against it is in
     /// the decision register). These pins turn a layout change into a
     /// deliberate, reviewed act.
@@ -569,8 +669,10 @@ mod tests {
     /// point of appending.
     #[test]
     fn account_layouts_are_pinned() {
-        assert_eq!(Pool::LEN, 841, "Pool layout changed — read the note above");
-        assert_eq!(Pool::SPACE, 849);
+        assert_eq!(Pool::LEN, 842, "Pool layout changed — read the note above");
+        assert_eq!(Pool::SPACE, 850);
+        assert_eq!(Pool::SPACE_V1, 847, "history — never change");
+        assert_eq!(Pool::SPACE_V2, 849, "history — never change");
         assert_eq!(
             Config::LEN_V1,
             372,
@@ -578,12 +680,15 @@ mod tests {
         );
         assert_eq!(Config::SPACE_V1, 380);
         assert_eq!(Config::TAIL_LEN, 104);
+        assert_eq!(Config::LEN_V2, 476, "history — never change");
+        assert_eq!(Config::SPACE_V2, 484);
+        assert_eq!(Config::HARD_TAIL_LEN, 119);
         assert_eq!(
             Config::LEN,
-            476,
+            595,
             "Config layout changed — append after the tail and ship a migration"
         );
-        assert_eq!(Config::SPACE, 484);
+        assert_eq!(Config::SPACE, 603);
         assert_eq!(Entry::LEN_V1, 183);
         assert_eq!(Entry::TAIL_LEN, 37);
         assert_eq!(Entry::LEN, 220);

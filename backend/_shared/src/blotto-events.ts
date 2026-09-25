@@ -131,6 +131,18 @@ class Reader {
   remaining(): number {
     return this.b.length - this.o;
   }
+  /** An APPENDED u8 — a field added to an event after a ledger already held
+   * that event at the shorter shape. Read when the byte is there, `null`
+   * when the body ended before it (the pre-append shape), so a backfill
+   * over the old events keeps decoding them. Phase B (2026-09-24) appended
+   * `mode` to `PoolOpened`, `TierSlotFreed` and `PoolMigrated`, and every
+   * pool devnet opened before that upgrade emitted them one byte shorter.
+   * A consumer treats `null` as easy: hard did not exist when that event
+   * was written. Only ever the LAST field of a layout — `end()` still
+   * refuses any remainder after it. */
+  tailU8(): number | null {
+    return this.remaining() > 0 ? this.u8() : null;
+  }
   /** Every byte must be consumed — a trailing remainder is a layout drift. */
   end(): void {
     if (this.o !== this.b.length) {
@@ -185,6 +197,9 @@ export function registerBlottoEventLayouts(): void {
     timer_seconds: r.u8(),
     sealing_pubkey: r.bytes32hex(),
     sealing_secret_hash: r.bytes32hex(),
+    // Phase B (appended): 0 easy, 1 hard; null on a pre-Phase-B event,
+    // which was an easy pool by construction.
+    mode: r.tailU8(),
   }));
 
   // vrf.rs
@@ -256,12 +271,15 @@ export function registerBlottoEventLayouts(): void {
     };
   });
 
-  // One pool grown to carry `min_seats` (R7-b). Emitted once per pre-R7-b
-  // pool by `migrate_pool`; the value is always the floor that pool's
-  // players entered under.
+  // One pool grown to the current layout by `migrate_pool`. `min_seats` is
+  // the floor written (R7-b's 52, for a pre-R7-b pool) or the floor the
+  // pool already carried when only `mode` was missing (Phase B); `mode` is
+  // always easy — a pool that predates the field played easy — and null on
+  // the 2026-09-13 migrations' events, which predate the field themselves.
   layout('PoolMigrated', (r) => ({
     pool: r.pubkey(),
     min_seats: r.u16(),
+    mode: r.tailU8(),
   }));
 
   // (`GoTimerStarted` — the first cut's option-B go-timer — was removed by
@@ -275,6 +293,10 @@ export function registerBlottoEventLayouts(): void {
     tier: r.u8(),
     pool_id: r.u64(),
     next_open_at: r.i64(),
+    // Phase B (appended): WHICH ladder's slot freed — the easy and hard
+    // ladders keep separate slots and cooldown clocks per tier. Null on a
+    // pre-Phase-B event: the easy ladder, the only one there was.
+    mode: r.tailU8(),
   }));
 
   layout('PoolSecretRevealed', (r) => ({
@@ -431,9 +453,28 @@ export function registerBlottoEventLayouts(): void {
     cooldown_seconds: r.i64(),
   }));
 
+  // Emitted by the retired 2026-09-07 `migrate_config` (V1 → V2). The
+  // devnet ledger holds one; the current `migrate_config` emits
+  // `HardLadderAdded` instead. The layout stays so a backfill decodes it.
   layout('ConfigMigrated', (r) => ({
     keeper: r.pubkey(),
     fill_deadline_seconds: r.i64(),
     cooldown_seconds: r.i64(),
+  }));
+
+  // ---- Phase B (2026-09-24): the hard ladder ----
+
+  // The V2 → V3 `migrate_config`: Config grew to carry the hard ladder,
+  // every hard tier disabled, every hard cooldown clock stamped at
+  // `migrated_at`.
+  layout('HardLadderAdded', (r) => ({
+    migrated_at: r.i64(),
+  }));
+
+  // Hard-tier enablement (`set_hard_open_tiers`) — `TiersOpened`'s twin for
+  // the hard ladder, and for the same reason: the ledger must be able to
+  // tell an enabled-idle hard tier (a reserved pot) from a disabled one.
+  layout('HardTiersOpened', (r) => ({
+    open_tiers: Array.from({ length: 7 }, () => r.bool()),
   }));
 }

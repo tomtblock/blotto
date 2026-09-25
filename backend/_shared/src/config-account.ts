@@ -27,17 +27,30 @@ import { base58Encode } from './blotto-events';
 export const N_TIERS = 7;
 
 /**
- * `Config::SPACE` since the 2026-09-07 upgrade (`state.rs`): 8 discriminator
- * + `LEN_V1` 372 + `TAIL_LEN` 104.
+ * `Config::SPACE` since the Phase B upgrade (2026-09-24, `state.rs`): 8
+ * discriminator + `LEN_V1` 372 + `TAIL_LEN` 104 + `HARD_TAIL_LEN` 119.
  */
-export const CONFIG_SPACE = 484;
+export const CONFIG_SPACE = 603;
 
 /**
- * `Config::SPACE_V1` — the PRE-MIGRATION size (8 + 372). An account still at
- * this length has not been through `migrate_config`, so the appended tail
- * (keeper, the two timing fields, `tier_next_open_at`) is not there to read.
- * Refused BY NAME rather than decoded partially, so an operator is told to
- * run `admin.ts migrate-config` instead of being handed silent zeroes.
+ * `Config::SPACE_V2` — the size between the 2026-09-07 upgrade and Phase B
+ * (8 + 372 + 104). The live devnet account is this size until the Phase B
+ * `migrate_config` runs, and every service keeps reading it meanwhile: the
+ * hard ladder is simply not there, and `decodeConfigAccount` reports it as
+ * absent (`hardLadderPresent: false`, every hard tier disabled) rather than
+ * refusing — a treasury floor and a keeper tick must not stop because a
+ * migration that changes nothing they read has not landed yet.
+ */
+export const CONFIG_SPACE_V2 = 484;
+
+/**
+ * `Config::SPACE_V1` — the ORIGINAL size (8 + 372). An account still at this
+ * length never went through the 2026-09-07 migration, so the tail (keeper,
+ * the two timing fields, `tier_next_open_at`) is not there to read. Refused
+ * BY NAME rather than decoded partially, so an operator is told what the
+ * account is instead of being handed silent zeroes. (No deployment holds one:
+ * devnet migrated on 2026-09-13, and the Phase B program refuses to grow
+ * one — the path is retired.)
  */
 export const CONFIG_SPACE_V1 = 380;
 
@@ -73,6 +86,19 @@ export interface ConfigAccountView {
   /** Per tier: the earliest unix second its next pool may open; 0n = never
    * settled a pool. */
   tierNextOpenAt: bigint[];
+  /**
+   * Phase B (2026-09-24): the HARD ladder — `set_hard_open_tiers`'s switch,
+   * the hard slot per tier and its cooldown clock. The easy ladder is the
+   * three fields above; the two share a tier's price, pot and ceiling and
+   * nothing else. `hardLadderPresent` is false on a pre-Phase-B account
+   * (484 bytes — the Phase B `migrate_config` has not run), and the three
+   * arrays are then all-false / all-zero: no hard tier can be open on a
+   * program that has no hard ladder, so that reading is exact, not a guess.
+   */
+  hardLadderPresent: boolean;
+  hardOpenTiers: boolean[];
+  hardActivePoolByTier: bigint[];
+  hardTierNextOpenAt: bigint[];
 }
 
 /**
@@ -89,7 +115,10 @@ export interface ConfigAccountView {
  *   next_pool_id 8 (315) | active_pool_by_tier 7x8 (323) | bump 1 (379) |
  *   — the 2026-09-07 tail, appended AFTER bump so no offset above moved:
  *   keeper 32 (380) | fill_deadline_seconds 8 (412) |
- *   cooldown_seconds 8 (420) | tier_next_open_at 7x8 (428) — 484 in all.
+ *   cooldown_seconds 8 (420) | tier_next_open_at 7x8 (428) — 484 so far |
+ *   — the Phase B tail, appended after that: hard_open_tiers 7 (484) |
+ *   hard_active_pool_by_tier 7x8 (491) | hard_tier_next_open_at 7x8 (547)
+ *   — 603 in all.
  *
  * A wrong offset here does not throw: it reads a neighbouring field as if it
  * were the one asked for. `backend/indexer/test/treasury-report.spec.ts`
@@ -111,26 +140,34 @@ const OFF = {
   fillDeadlineSeconds: 412,
   cooldownSeconds: 420,
   tierNextOpenAt: 428,
+  hardOpenTiers: 484,
+  hardActivePoolByTier: 491,
+  hardTierNextOpenAt: 547,
 } as const;
 
 /**
  * Decode a fetched `Config` account.
  *
- * Throws — never returns a partial view — when the account is the
- * pre-migration size or any size other than `CONFIG_SPACE`. A treasury floor
- * read out of the wrong bytes is worse than no floor at all, because the
- * caller cannot tell it apart from a real one.
+ * Accepts the current size and the pre-Phase-B size (the hard ladder read as
+ * absent). Throws — never returns a partial view — on the original
+ * pre-2026-09-07 size or any other: a treasury floor read out of the wrong
+ * bytes is worse than no floor at all, because the caller cannot tell it
+ * apart from a real one.
  */
 export function decodeConfigAccount(data: Uint8Array): ConfigAccountView {
   if (data.length === CONFIG_SPACE_V1) {
     throw new Error(
-      'Config is the pre-migration layout (380 bytes): run `admin.ts migrate-config` ' +
-        'before anything else (runbook step 3b)'
+      'Config is the pre-migration layout (380 bytes): the 2026-09-07 migration never ran ' +
+        'on this deployment, and the current program has no path to grow it'
     );
   }
-  if (data.length !== CONFIG_SPACE) {
-    throw new Error(`Config account is ${data.length} bytes; source says ${CONFIG_SPACE}`);
+  if (data.length !== CONFIG_SPACE && data.length !== CONFIG_SPACE_V2) {
+    throw new Error(
+      `Config account is ${data.length} bytes; source says ${CONFIG_SPACE} ` +
+        `(or ${CONFIG_SPACE_V2} before Phase B)`
+    );
   }
+  const hardLadderPresent = data.length === CONFIG_SPACE;
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const u64 = (offset: number): bigint => view.getBigUint64(offset, true);
   const i64 = (offset: number): bigint => view.getBigInt64(offset, true);
@@ -140,12 +177,18 @@ export function decodeConfigAccount(data: Uint8Array): ConfigAccountView {
   const tierPotLamports: bigint[] = [];
   const activePoolByTier: bigint[] = [];
   const tierNextOpenAt: bigint[] = [];
+  const hardOpenTiers: boolean[] = [];
+  const hardActivePoolByTier: bigint[] = [];
+  const hardTierNextOpenAt: bigint[] = [];
   for (let t = 0; t < N_TIERS; t++) {
     openTiers.push(data[OFF.openTiers + t] !== 0);
     tierPriceLamports.push(u64(OFF.tierPrice + 8 * t));
     tierPotLamports.push(u64(OFF.tierPot + 8 * t));
     activePoolByTier.push(u64(OFF.activePoolByTier + 8 * t));
     tierNextOpenAt.push(i64(OFF.tierNextOpenAt + 8 * t));
+    hardOpenTiers.push(hardLadderPresent && data[OFF.hardOpenTiers + t] !== 0);
+    hardActivePoolByTier.push(hardLadderPresent ? u64(OFF.hardActivePoolByTier + 8 * t) : 0n);
+    hardTierNextOpenAt.push(hardLadderPresent ? i64(OFF.hardTierNextOpenAt + 8 * t) : 0n);
   }
 
   return {
@@ -163,6 +206,10 @@ export function decodeConfigAccount(data: Uint8Array): ConfigAccountView {
     fillDeadlineSeconds: i64(OFF.fillDeadlineSeconds),
     cooldownSeconds: i64(OFF.cooldownSeconds),
     tierNextOpenAt,
+    hardLadderPresent,
+    hardOpenTiers,
+    hardActivePoolByTier,
+    hardTierNextOpenAt,
   };
 }
 

@@ -55,7 +55,7 @@ import {
   SystemProgram,
   Transaction,
 } from '@solana/web3.js';
-import { ENTRY_LAYOUT, ENTRY_SPACE, POOL_SPACE, Web3Chain } from '../src/chain-web3';
+import { ENTRY_LAYOUT, ENTRY_SPACE, POOL_SPACE, POOL_SPACE_V2, Web3Chain } from '../src/chain-web3';
 
 const STATE_RS = join(__dirname, '../../../programs/blotto_cup/src/state.rs');
 const CONSTANTS_RS = join(__dirname, '../../../programs/blotto_cup/src/constants.rs');
@@ -361,6 +361,7 @@ describe('the Pool account layout the settlement client decodes (G-06)', () => {
     expect(view.entrants, 'entrants').to.equal(FIXTURE.entrants);
     expect(view.fillDeadline, 'fill_deadline').to.equal(FIXTURE.fill_deadline);
     expect(view.state, 'state').to.equal('Scored');
+    expect(view.mode, 'mode (the fixture leaves the byte zero: easy)').to.equal(0);
     expect(view.secretRevealed, 'secret_revealed').to.equal(true);
     expect(view.vrfCommitted, 'a non-zero vrf_seed is committed').to.equal(true);
     expect(view.resultsCommitted, 'results_committed').to.equal(true);
@@ -384,6 +385,34 @@ describe('the Pool account layout the settlement client decodes (G-06)', () => {
     const edge = poolAccount({ vrf_seed: lastByte });
     const c2 = fakeCluster({ [POOL_PDA.toBase58()]: edge.data });
     expect((await chain(c2.connection).getPool(POOL_ID)).vrfCommitted).to.equal(true);
+  });
+
+  it('reads `mode` from the last byte, and a pre-Phase-B account (849) as easy', async () => {
+    // Phase B appended `mode` (2026-09-24). A hard pool carries 1 there.
+    const hard = poolAccount();
+    hard.data.writeUInt8(1, hard.offsets.mode);
+    const c1 = fakeCluster({ [POOL_PDA.toBase58()]: hard.data });
+    expect((await chain(c1.connection).getPool(POOL_ID)).mode).to.equal(1);
+
+    // Every pool devnet opened before the upgrade is one byte shorter
+    // until `migrate_pool` grows it, and the settlement client keeps
+    // reading it meanwhile — as an easy pool, which it is.
+    const old = poolAccount().data.subarray(0, POOL_SPACE_V2);
+    expect(old.length).to.equal(849);
+    const c2 = fakeCluster({ [POOL_PDA.toBase58()]: Buffer.from(old) });
+    const view = await chain(c2.connection).getPool(POOL_ID);
+    expect(view.mode).to.equal(0);
+    expect(view.state).to.equal('Scored');
+    expect(view.paidMask).to.equal(FIXTURE.paid_mask);
+
+    // The pre-R7-b 847 is still refused: a size this reader never met.
+    const older = poolAccount().data.subarray(0, 847);
+    const c3 = fakeCluster({ [POOL_PDA.toBase58()]: Buffer.from(older) });
+    let message = '';
+    await chain(c3.connection)
+      .getPool(POOL_ID)
+      .catch((e: Error) => (message = e.message));
+    expect(message).to.match(/847 bytes; Pool::SPACE is 850/);
   });
 
   it('an uncommitted pool reports no root and no payouts, whatever the bytes hold', async () => {

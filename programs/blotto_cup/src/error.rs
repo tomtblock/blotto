@@ -204,6 +204,9 @@ pub enum ErrorCode {
     PoolAlreadyMigrated,
     #[msg("Account is not an un-migrated pool of this program")]
     PoolNotMigratable,
+    // 6074 — Phase B (founder rulings 2026-09-24): the placing mode.
+    #[msg("Unknown pool mode")]
+    UnknownMode,
 }
 
 #[cfg(test)]
@@ -234,6 +237,7 @@ mod error_numbers {
             (ErrorCode::WouldStrandRentBalance, 6071),
             (ErrorCode::PoolAlreadyMigrated, 6072),
             (ErrorCode::PoolNotMigratable, 6073),
+            (ErrorCode::UnknownMode, 6074),
         ] {
             assert_eq!(u32::from(code), expected, "{code:?}");
         }

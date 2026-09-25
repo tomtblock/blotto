@@ -1,13 +1,26 @@
-//! `migrate_config` — the one-shot account migration for the 2026-09-07
-//! upgrade (prompt v2 §G "Config layout warning", founder rulings).
+//! `migrate_config` — the one-shot Config growth for the Phase B upgrade
+//! (hard mode, 2026-09-24): the V2 → V3 migration.
 //!
-//! Config gains `keeper`, `fill_deadline_seconds`, `cooldown_seconds` and
-//! `tier_next_open_at` — 104 bytes appended AFTER `bump` (`state.rs`). The
-//! live account was allocated at the old 380 bytes, and Anchor's
-//! `Account<Config>` refuses to deserialise a short account, so between the
-//! program upgrade and this transaction EVERY instruction that touches
-//! Config fails — including `set_paused(false)`. The runbook therefore runs
-//! this immediately after `deploy-devnet.sh`, before anything else.
+//! Config gains the hard ladder — `hard_open_tiers`, `hard_active_pool_by_tier`
+//! and `hard_tier_next_open_at`, `Config::HARD_TAIL_LEN` bytes appended AFTER
+//! `tier_next_open_at` (`state.rs`). The live devnet account sits at
+//! `Config::SPACE_V2` (484 bytes, where the 2026-09-07 migration left it), and
+//! Anchor's `Account<Config>` refuses to deserialise a short account, so
+//! between the program upgrade and this transaction EVERY instruction that
+//! touches Config fails — including `set_paused(false)`. The runbook
+//! therefore runs this immediately after `deploy-devnet.sh`, before anything
+//! else.
+//!
+//! # History: the V1 → V2 path this replaces
+//!
+//! Until 2026-09-24 this instruction grew a 380-byte Config to 484, writing
+//! `keeper`, the two timing fields and `tier_next_open_at` (the 2026-09-07
+//! upgrade — prompt v2 §G). Its stated retirement condition — every
+//! deployment's Config at `SPACE_V2` — was met on devnet on 2026-09-13, and
+//! mainnet is initialised at the current layout, so that path is gone: an
+//! account at `SPACE_V1` is now refused (`ConfigNotMigratable`) rather than
+//! grown. The `keeper` argument left with it; nothing this migration writes
+//! is deployment-specific.
 //!
 //! Why by hand: the account cannot be an `Account<Config>` here (it is the
 //! old layout), so it arrives as an `UncheckedAccount` whose address is
@@ -24,28 +37,31 @@
 //! # Why this is here at all, when nothing reaches it
 //!
 //! It is UNREACHABLE ON A FRESH DEPLOYMENT, by construction: `init_config`
-//! allocates `Config::SPACE`, and the length check above refuses anything
-//! that size. Every test fixture and every local validator therefore starts
-//! past it, and reachability analysis reads it as dead code (audit
+//! allocates `Config::SPACE`, and the length check refuses anything that
+//! size. Every test fixture and every local validator therefore starts past
+//! it (the LiteSVM harness shrinks a fresh Config back to `SPACE_V2` to
+//! exercise it), and reachability analysis reads it as dead code (audit
 //! 2026-09-11, A-15 — recorded KEEP). It is not dead: the DEPLOYED devnet
-//! Config was allocated at `Config::SPACE_V1` and this is the only
-//! instruction that can grow it. Deleting it would strand that account —
-//! every instruction touching Config would keep failing to deserialise, with
-//! no path back, and `set_paused(false)` among them.
+//! Config is at `Config::SPACE_V2` and this is the only instruction that can
+//! grow it. Deleting it would strand that account — every instruction
+//! touching Config would keep failing to deserialise, with no path back, and
+//! `set_paused(false)` among them.
 //!
 //! RETIREMENT CONDITION, so this does not sit here forever: once every
 //! deployment's Config account is at `Config::SPACE` (the devnet one after
-//! the runbook's post-upgrade transaction; mainnet is initialised at the new
-//! layout and never needs it), this instruction and `ConfigNotMigratable` /
-//! `ConfigAlreadyMigrated` can go together. Removing the error variants
-//! renumbers every later code — see the header of `error.rs`.
+//! the Phase B runbook's post-upgrade transaction; mainnet is initialised at
+//! the new layout and never needs it), this instruction can go, or be
+//! replaced by the next layout's migration the way this one replaced the
+//! last. `ConfigNotMigratable` / `ConfigAlreadyMigrated` stay either way —
+//! removing an error variant renumbers every later code (header of
+//! `error.rs`).
 
 use anchor_lang::prelude::*;
 use anchor_lang::Discriminator;
 
-use crate::constants::{DEFAULT_COOLDOWN_SECS, DEFAULT_FILL_DEADLINE_SECS, N_TIERS};
+use crate::constants::N_TIERS;
 use crate::error::ErrorCode;
-use crate::events::ConfigMigrated;
+use crate::events::HardLadderAdded;
 use crate::state::{Config, CONFIG_SEED};
 
 #[derive(Accounts)]
@@ -66,14 +82,10 @@ pub struct MigrateConfig<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn handle_migrate_config(ctx: Context<MigrateConfig>, keeper: Pubkey) -> Result<()> {
-    // The zero key is refused here too (audit A7): this instruction runs
-    // once, against a live deployment, and writes the keeper into raw bytes
-    // — a typo would leave every tier unopenable with no self-heal behind it.
-    require!(keeper != Pubkey::default(), ErrorCode::KeeperMustNotBeZero);
+pub fn handle_migrate_config(ctx: Context<MigrateConfig>) -> Result<()> {
     let config_info = ctx.accounts.config.to_account_info();
 
-    // ---- 1. Prove this is the old Config and the caller is its admin -----
+    // ---- 1. Prove this is the V2 Config and the caller is its admin ------
     require_keys_eq!(
         *config_info.owner,
         crate::ID,
@@ -84,8 +96,12 @@ pub fn handle_migrate_config(ctx: Context<MigrateConfig>, keeper: Pubkey) -> Res
         if data.len() >= Config::SPACE {
             return Err(ErrorCode::ConfigAlreadyMigrated.into());
         }
+        // Exactly V2: a V1 account (380 bytes) has no path any more — see
+        // the module header. Refusing it is the safe failure; growing it
+        // would leave the V2 tail zeroed, and a zero keeper is the outage
+        // audit A7 refuses elsewhere.
         require!(
-            data.len() == Config::SPACE_V1,
+            data.len() == Config::SPACE_V2,
             ErrorCode::ConfigNotMigratable
         );
         require!(
@@ -120,22 +136,31 @@ pub fn handle_migrate_config(ctx: Context<MigrateConfig>, keeper: Pubkey) -> Res
     // PHASE-E1-REVIEW: Solana 3.x names the in-place grow `resize`
     // (`realloc` is the deprecated spelling); the new bytes are zeroed.
     config_info.resize(Config::SPACE)?;
-    // Every tier's cooldown stamp starts at the migration, not at the epoch:
-    // `open_pool` requires `now >= tier_next_open_at`, and a zero would let
-    // the keeper open every tier the instant the upgrade landed rather than
-    // after its cooldown. (Before 2026-09-07 this field was also the origin
-    // of a liveness fallback, and a zero there was the far worse bug — see
-    // `open_pool.rs` for why that fallback no longer exists.)
+    // `hard_open_tiers` all false and `hard_active_pool_by_tier` all zero
+    // ARE the zeroed bytes `resize` leaves, and both are the values wanted:
+    // no hard tier is enabled until `set_hard_open_tiers` says so, and none
+    // has a live pool. Only the cooldown clocks need a write — every hard
+    // tier's stamp starts at the migration, not at the epoch, for the same
+    // reason the easy ones did in 2026-09-07's migration: `open_pool`
+    // requires `now >= next_open_at`, and while a zero would be harmless
+    // today (the tier is disabled, and enabling it restamps), the field's
+    // meaning is "the earliest this tier may open" and the epoch is not that.
     let now = Clock::get()?.unix_timestamp;
     {
         let mut data = config_info.try_borrow_mut_data()?;
-        let mut off = Config::SPACE_V1;
-        data[off..off + 32].copy_from_slice(keeper.as_ref());
-        off += 32;
-        data[off..off + 8].copy_from_slice(&DEFAULT_FILL_DEADLINE_SECS.to_le_bytes());
-        off += 8;
-        data[off..off + 8].copy_from_slice(&DEFAULT_COOLDOWN_SECS.to_le_bytes());
-        off += 8;
+        let mut off = Config::SPACE_V2;
+        // hard_open_tiers: N_TIERS × false (already zero — written anyway so
+        // the offsets below are explicit rather than assumed).
+        for _ in 0..N_TIERS {
+            data[off] = 0;
+            off += 1;
+        }
+        // hard_active_pool_by_tier: N_TIERS × 0u64.
+        for _ in 0..N_TIERS {
+            data[off..off + 8].copy_from_slice(&0u64.to_le_bytes());
+            off += 8;
+        }
+        // hard_tier_next_open_at: N_TIERS × now.
         for _ in 0..N_TIERS {
             data[off..off + 8].copy_from_slice(&now.to_le_bytes());
             off += 8;
@@ -143,25 +168,32 @@ pub fn handle_migrate_config(ctx: Context<MigrateConfig>, keeper: Pubkey) -> Res
         debug_assert_eq!(off, Config::SPACE);
     }
 
-    emit!(ConfigMigrated {
-        keeper,
-        fill_deadline_seconds: DEFAULT_FILL_DEADLINE_SECS,
-        cooldown_seconds: DEFAULT_COOLDOWN_SECS,
-    });
+    emit!(HardLadderAdded { migrated_at: now });
     Ok(())
 }
 
 // ---------------------------------------------------------------------------
-// `migrate_pool` — the R7-b account migration (founder instruction
-// 2026-09-12).
+// `migrate_pool` — the Pool account migration, now covering two old layouts.
 // ---------------------------------------------------------------------------
 //
-// `Pool` gains `min_seats: u16`, two bytes appended AFTER `vault_bump`
-// (`state.rs`). Nine pools on devnet were allocated at the old 847 bytes, and
+// Two appended fields have grown `Pool` since launch, and a devnet pool can
+// be at either old size:
+//
+//  - `Pool::SPACE_V1` (847): pre-R7-b, before `min_seats: u16` (2026-09-13).
+//    Grown to the current size and written `MIN_SEATS_V1` (52) — the floor
+//    its players actually entered under, never the new 40 — then `mode`.
+//  - `Pool::SPACE_V2` (849): post-R7-b, before `mode: u8` (Phase B,
+//    2026-09-24). Grown by one byte and written `mode`; its `min_seats` is
+//    left exactly as it is.
+//
+// `mode` is always `MODE_EASY`: every pool that predates the field played
+// easy, because hard did not exist. (It is also the zero `resize` leaves, so
+// the write is belt-and-braces; the debug assertion pins the offset.)
+//
 // Anchor's `Account<Pool>` refuses a short account, so between the program
-// upgrade and this transaction every instruction touching one of them fails —
-// including `pay_next_place` and `release_escrow`, which run on pools that
-// are already `Paid`.
+// upgrade and this transaction every instruction touching an old pool fails
+// — including `pay_next_place` and `release_escrow`, which run on pools that
+// are already `Paid`. The runbook runs it for every pool on the deployment.
 //
 // Same shape as `migrate_config` above, and the same reasons for each part:
 // the account arrives as an `UncheckedAccount` whose address is PDA-checked
@@ -170,33 +202,26 @@ pub fn handle_migrate_config(ctx: Context<MigrateConfig>, keeper: Pubkey) -> Res
 // never touched; and an account already at the new size is refused, so a
 // repeated transaction is a clean no-op failure rather than a second write.
 //
-// WHAT IT WRITES, and why it is not `MIN_SEATS`: every migrated pool gets
-// `MIN_SEATS_V1` (52), the floor its players actually entered under. Writing
-// the new 40 would move the rule beneath people already seated, which is the
-// exact thing the field was added to prevent — a migration that defeated its
-// own field would be worse than no field at all.
-//
-// PERMISSIONLESS, unlike `migrate_config`. It writes one known constant into
-// one PDA-checked account and refuses every account that is not an
-// un-migrated pool, so there is nothing for an admin signature to protect;
-// and there are nine of these to run against live pools some of which hold
-// money, so a path that does not depend on the multisig being available is
-// the safer one. The admin pays nothing either — rent comes from whoever
-// sends it.
+// PERMISSIONLESS, unlike `migrate_config`. It writes known constants into one
+// PDA-checked account and refuses every account that is not an un-migrated
+// pool, so there is nothing for an admin signature to protect; and there are
+// dozens of these to run against live pools some of which hold money, so a
+// path that does not depend on the multisig being available is the safer
+// one. The admin pays nothing either — rent comes from whoever sends it.
 //
 // RETIREMENT CONDITION: once every deployment's pools are at `Pool::SPACE`,
-// this instruction, `MIN_SEATS_V1`, `Pool::LEN_V1` and the two error variants
-// can go together. Removing the error variants renumbers every later code —
-// see the header of `error.rs`.
+// this instruction, `MIN_SEATS_V1`, `Pool::LEN_V1`, `Pool::LEN_V2` and the
+// two error variants can go together. Removing the error variants renumbers
+// every later code — see the header of `error.rs`.
 
-use crate::constants::MIN_SEATS_V1;
+use crate::constants::{MIN_SEATS_V1, MODE_EASY};
 use crate::events::PoolMigrated;
 use crate::state::{Pool, POOL_SEED};
 
 #[derive(Accounts)]
 #[instruction(pool_id: u64)]
 pub struct MigratePool<'info> {
-    /// Permissionless — pays the rent top-up for the two extra bytes.
+    /// Permissionless — pays the rent top-up for the extra bytes.
     #[account(mut)]
     pub payer: Signer<'info>,
 
@@ -215,12 +240,16 @@ pub fn handle_migrate_pool(ctx: Context<MigratePool>, pool_id: u64) -> Result<()
 
     // ---- 1. Prove this is an un-migrated pool of ours ---------------------
     require_keys_eq!(*pool_info.owner, crate::ID, ErrorCode::PoolNotMigratable);
-    {
+    let from_v1 = {
         let data = pool_info.try_borrow_data()?;
         if data.len() >= Pool::SPACE {
             return Err(ErrorCode::PoolAlreadyMigrated.into());
         }
-        require!(data.len() == Pool::SPACE_V1, ErrorCode::PoolNotMigratable);
+        let from_v1 = match data.len() {
+            Pool::SPACE_V1 => true,
+            Pool::SPACE_V2 => false,
+            _ => return Err(ErrorCode::PoolNotMigratable.into()),
+        };
         require!(
             data[..8] == *Pool::DISCRIMINATOR,
             ErrorCode::PoolNotMigratable
@@ -234,7 +263,8 @@ pub fn handle_migrate_pool(ctx: Context<MigratePool>, pool_id: u64) -> Result<()
                 .map_err(|_| ErrorCode::PoolNotMigratable)?,
         );
         require!(stored_id == pool_id, ErrorCode::PoolNotMigratable);
-    }
+        from_v1
+    };
 
     // ---- 2. Rent for the larger account ----------------------------------
     // Through the vault chokepoint like every other credit (standing rule 6).
@@ -249,21 +279,36 @@ pub fn handle_migrate_pool(ctx: Context<MigratePool>, pool_id: u64) -> Result<()
         )?;
     }
 
-    // ---- 3. Grow, then write the tail at the pinned offset ----------------
+    // ---- 3. Grow, then write the tail at the pinned offsets ---------------
     // The new bytes are zeroed by `resize`, and a zero `min_seats` would let
-    // ANY field seal — so this write is not optional and the debug assertion
-    // below pins that the offset is the end of the account.
+    // ANY field seal — so the V1 write is not optional, and the debug
+    // assertion pins that the last byte written is the end of the account.
     pool_info.resize(Pool::SPACE)?;
-    {
+    let min_seats = {
         let mut data = pool_info.try_borrow_mut_data()?;
-        let off = Pool::SPACE_V1;
-        data[off..off + 2].copy_from_slice(&MIN_SEATS_V1.to_le_bytes());
-        debug_assert_eq!(off + 2, Pool::SPACE);
-    }
+        let min_seats = if from_v1 {
+            let off = Pool::SPACE_V1;
+            data[off..off + 2].copy_from_slice(&MIN_SEATS_V1.to_le_bytes());
+            MIN_SEATS_V1
+        } else {
+            // Report the floor the pool already carries, so the event reads
+            // the same for both paths.
+            u16::from_le_bytes(
+                data[Pool::SPACE_V1..Pool::SPACE_V1 + 2]
+                    .try_into()
+                    .map_err(|_| ErrorCode::PoolNotMigratable)?,
+            )
+        };
+        let off = Pool::SPACE_V2;
+        data[off] = MODE_EASY;
+        debug_assert_eq!(off + 1, Pool::SPACE);
+        min_seats
+    };
 
     emit!(PoolMigrated {
         pool: pool_info.key(),
-        min_seats: MIN_SEATS_V1,
+        min_seats,
+        mode: MODE_EASY,
     });
     Ok(())
 }
