@@ -8,6 +8,27 @@ Nothing in this runbook has been run.** The plan it executes is
 `CHANGE-2026-09-24_battle-board.md` §11–§13 (the three merged changes); the decision is register
 row D-E17.
 
+> **RUN 2026-09-25, 01:52–02:41 UTC, by the founder — every step completed.** Program upgraded
+> (slot 503758620), `migrate_config` executed from Squads, all 30 pools migrated, backend
+> redeployed (runs #42 and, after the terms bump, the one at `03417e7`), hard tier 0 switched on
+> from Squads, hard pool **31** opened by the daemon and took its first entry within minutes, terms
+> at version 4 (PR #186). Four things the day taught, now folded into the steps below:
+>
+> 1. **An open pool with no entrants does not block the window.** `migrate_pool` has no state
+>    precondition and an empty pool has no seated floor to disagree about, so `pools` reading
+>    `drain: CLEAR` is enough; `--upgrade-preflight` (which also refuses any Open pool) is for the
+>    R7-b case and was not needed. A pool cannot be closed before its deadline anyway.
+> 2. **`migrate-pool --all` can stop on devnet's "Blockhash not found".** Nothing is sent for
+>    that pool; run the command again and it resumes. Run it once more at the end: "0 migrated,
+>    N already current" is the proof it finished — `pools` alone is not, because the reader
+>    shows an old-size pool as easy too.
+> 3. **The Squads custom-instruction form takes the data in base58.** `migrate_config` is
+>    `GUVKKPj96kp`; `set_hard_open_tiers` with tier 0 on is `3F1eabn7Zd8QFQMq5QCPZ`.
+> 4. **`deploy-backend` refuses with the geo-vendor secrets absent** (the posture F-38 left in
+>    place). Re-running with `allow_dev_credentials` ticked keeps the live gate exactly as it was
+>    — the GB stub — and every other credential real. That is a founder-owned territory
+>    posture, not a Phase B setting.
+
 **Who does what.** Every step is yours to run; the architect prepared the commands and the two
 proposal payloads and cannot sign anything. The upgrade authority on devnet is still the single
 deploy key (`config/custody.json`: `GXKX…agXY`), so the program upgrade is one script. The admin is
@@ -79,7 +100,7 @@ fly scale count 0 -a blotto-daemon
 Nothing can open a pool while it is down. Then confirm the drain:
 
 ```
-npm run admin -- pools --upgrade-preflight
+npm run admin -- pools
 ```
 
 It must read **CLEAR**. If it names a pool, wait for that pool; do not go on.
@@ -172,7 +193,7 @@ argument is retired). The vault is signer **and writable** because it pays the r
 
 **In Squads (devnet, the `9EL1…mFyN` multisig, the `9EEW…e34Z` vault):** create a transaction →
 custom instruction → program id `5aaw…XH17`, the three accounts in that order with those signer
-and writable flags, the data as base64 → approve from the Bank wallet → execute. Three wallet
+and writable flags, the data as base58 `GUVKKPj96kp` (base64 `XIM6adKa4ME=` if the form asks for it) → approve from the Bank wallet → execute. Three wallet
 pop-ups. A second send fails cleanly (the account is already 603 bytes), so a double-execute
 cannot hurt.
 

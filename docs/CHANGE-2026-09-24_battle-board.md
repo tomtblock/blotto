@@ -454,3 +454,17 @@ conceded battles meeting. Homogeneous fields sit at the baseline exactly, as in 
 conceded / five stacked shape, a four-pool hard study conserving the pot); the easy study's CSV and
 JSON reproduce byte for byte after the change; the language gate.
 
+## 15. Phase B deployed on devnet (2026-09-25, 01:52–02:41 UTC)
+
+The founder ran `docs/RUNBOOK_phase-b-window.md` end to end. The program upgrade landed at slot
+503758620 (programdata extended by 10,240 bytes); `migrate_config` executed from Squads (Config 484
+→ 603); all 30 pools migrated to 850 bytes; `deploy-backend` shipped all four services; hard tier 0
+was switched on from Squads; the daemon opened **hard pool 31** beside **easy pool 30**, each on
+its own twelve-hour clock, and pool 31 took its first entry within minutes — the hard board sealed
+in the browser, accepted by the packet service at 162 + 48 bytes, registered on chain. The
+treasury moved 11.59 → 7.59 SOL and `reserved` 4 → 8 SOL, the two pots. Terms are at version 4
+(PR #186) and the backend was redeployed after it.
+
+The run's four corrections (the empty open pool, the blockhash retry, base58 in the Squads form,
+the geo secrets under the F-38 posture) are at the head of the runbook rather than here.
+
