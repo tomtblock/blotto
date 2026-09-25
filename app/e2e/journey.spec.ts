@@ -13,6 +13,8 @@
 import { test, expect, type Page } from '@playwright/test';
 
 const POOL = 'F1XTUREPoo1111111111111111111111111111111111';
+/** The open HARD pool in the fixture catalogue (scenarios.ts, `hard-open`). */
+const HARD_POOL = 'F1XTUREhard111111111111111111111111111111111';
 const SHOTS = '../docs/phase-reports/screenshots/step-ui-arena';
 
 const shot = (page: Page, name: string, project: string) =>
@@ -33,6 +35,36 @@ test('landing: montage hero, the enter control, the 18+ line above the fold', as
   const note = page.getByText('18+ only · not available in some territories').first();
   await expect(note).toBeInViewport();
   await shot(page, 'landing', info.project.name);
+});
+
+test('landing: one long card per open pool, easy beside hard, each down its own path (Phase B)', async ({
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.setItem('blotto.preloader.seen', 'v2'));
+  await page.goto('/');
+  // The fixture catalogue holds one open easy pool and one open hard pool in
+  // tier 0: two cards, each wearing its mode, each with its own clock.
+  const cards = page.getByTestId('pool-cards');
+  const easy = cards.getByTestId('pool-card-easy');
+  const hard = cards.getByTestId('pool-card-hard');
+  await expect(easy).toBeVisible();
+  await expect(hard).toBeVisible();
+  await expect(easy.getByLabel('Easy pool')).toHaveText('Easy · 100 per battle');
+  await expect(hard.getByLabel('Hard pool')).toHaveText('Hard · 700 anywhere');
+  await expect(easy.getByText('Pool closes for entries in')).toBeVisible();
+  await expect(hard.getByText('Pool closes for entries in')).toBeVisible();
+  // No "Opens soon" placeholder while a hard pool is actually open.
+  await expect(page.getByTestId('pool-card-hard-soon')).toHaveCount(0);
+  // Clicking the hard card's control lands on THAT pool, which says so.
+  await hard.getByRole('link', { name: 'Enter this tournament' }).click();
+  await expect(page).toHaveURL(new RegExp(`/pools/${HARD_POOL}$`));
+  await expect(page.getByTestId('pool-mode')).toHaveText('Hard · 700 anywhere');
+  await expect(page.getByText('Seven battles and 700 points. Place them anywhere', { exact: false })).toBeVisible();
+  // And the easy one lands on the easy pool.
+  await page.goto('/');
+  await page.getByTestId('pool-card-easy').getByRole('link', { name: 'Enter this tournament' }).click();
+  await expect(page).toHaveURL(new RegExp(`/pools/${POOL}$`));
+  await expect(page.getByTestId('pool-mode')).toHaveText('Easy · 100 per battle');
 });
 
 test('landing: the board demo pours points and locks a field (founder 2026-09-24)', async ({ page }) => {

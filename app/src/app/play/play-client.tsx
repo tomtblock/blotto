@@ -21,7 +21,7 @@ import { Button } from '@/components/ui/button';
 import { BoardFlow } from '@/battle/components/board/BoardFlow';
 import type { Allocation } from '@/battle/allocation';
 import { indexerApi } from '@/data/api';
-import { lamportsToSol } from '@/data/format';
+import { lamportsToSol, poolMode } from '@/data/format';
 import type { PoolSummary } from '@/data/types';
 import { rpcUrl } from '@/chain/rpc';
 import { makeTxRpc } from '@/tx/tx-rpc';
@@ -286,6 +286,8 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
         player: auth.walletAddress,
         battles,
         timingsMs,
+        // The POOL's rule, from its record (Phase B) — never the board's guess.
+        mode: poolMode(pool),
       });
     },
     [pool, auth, rpc]
@@ -751,9 +753,10 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
         addFunds={auth.addFunds}
         onRecheck={() => setBalanceRun((n) => n + 1)}
       >
-        {/* The board (founder brief 2026-09-24). Phase A: every pool plays EASY. */}
+        {/* The board (founder brief 2026-09-24), under the rule the pool was
+            opened with (Phase B): easy or hard, read from the pool record. */}
         <BoardFlow
-          mode="easy"
+          mode={poolMode(pool)}
           onConfirm={onConfirm}
           onRunStarted={() => setRunWallet(flowWallet)}
           onReviewApi={onReviewApi}

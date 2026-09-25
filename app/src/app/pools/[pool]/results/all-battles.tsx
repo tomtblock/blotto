@@ -22,7 +22,7 @@
 import { useEffect, useState } from 'react';
 import { decodeBattleSet } from '@blotto/scoring';
 import { COPY } from '@/copy';
-import type { PublishedBundle } from '@/verify/logic';
+import { bundleMode, type PublishedBundle } from '@/verify/logic';
 import { NeonSection } from '@/components/ui/neon-section';
 
 const unhex = (s: string) => {
@@ -51,13 +51,15 @@ export function AllBattles({ uri }: { uri: string }) {
         const res = await fetch(uri, { cache: 'no-store' });
         if (!res.ok) throw new Error(String(res.status));
         const bundle = (await res.json()) as PublishedBundle;
+        // Phase B: decode under the bundle's own rule (70 bytes in hard).
+        const mode = bundleMode(bundle);
         const next: Row[] = [...bundle.entries]
           .sort((a, b) => a.index - b.index)
           .map((e) => {
             let battles: Row['battles'] = null;
             if (e.battles !== null) {
               try {
-                battles = decodeBattleSet(unhex(e.battles));
+                battles = decodeBattleSet(unhex(e.battles), mode);
               } catch {
                 battles = null;
               }

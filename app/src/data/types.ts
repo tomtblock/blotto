@@ -46,6 +46,22 @@ export interface PoolSummary {
    * Every countdown derives "now" from THIS plus an offset captured once,
    * never from the device's clock. */
   server_time: string;
+  /**
+   * Phase B (2026-09-24): the placing rule this pool was opened under —
+   * `Pool.mode` on chain, `pools.mode` in the indexer. OPTIONAL because the
+   * app must stay safe against a read API from before the backend change:
+   * absent means easy, which is what every pool before Phase B played.
+   * Read it through `poolMode()` (data/format.ts), never by hand.
+   */
+  mode?: 'easy' | 'hard';
+}
+
+/** The hard ladder's row at one tier (Phase B): its own switch and stamp. */
+export interface HardTierStatus {
+  enabled: boolean;
+  status: 'open' | 'closed';
+  next_open_at: string;
+  last_pool_id: string | null;
 }
 
 /** One tier's enablement and cooldown stamp, from GET /tiers. One row per
@@ -61,6 +77,14 @@ export interface TierStatusRow {
    * '0' for a tier that has never settled a pool. */
   next_open_at: string;
   last_pool_id: string | null;
+  /**
+   * Phase B: the HARD ladder at this tier. Optional for the same reason as
+   * `PoolSummary.mode` — a read API from before the backend change serves
+   * no `hard`, and that reads as "no hard tier is open", which is true of
+   * it. The landing decides from `hard.enabled` alone whether a hard card
+   * exists (Phase B plan, decision 3): there is no switch in the app.
+   */
+  hard?: HardTierStatus;
 }
 
 export interface TiersResponse {
@@ -69,6 +93,8 @@ export interface TiersResponse {
    * or `init_config`'s seeded posture when the founder has never sent
    * `set_open_tiers`. Published so a stale answer is visible. */
   enablement_source: 'chain' | 'ledger' | 'launch_default';
+  /** The hard ladder's source, by the same three-way rule (Phase B). */
+  hard_enablement_source?: 'chain' | 'ledger' | 'launch_default';
   tiers: TierStatusRow[];
 }
 

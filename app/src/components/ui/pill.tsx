@@ -24,13 +24,17 @@ export function Pill({
   tone = "muted",
   children,
   className = "",
+  "data-testid": testId,
 }: {
   tone?: Tone;
   children: ReactNode;
   className?: string;
+  /** A test hook, passed through so a journey can read the chip's state. */
+  "data-testid"?: string;
 }) {
   return (
     <span
+      data-testid={testId}
       className={
         "inline-flex items-center rounded-full border px-2.5 py-0.5 font-mono text-[11px] " +
         "uppercase tracking-[0.1em] shadow-[inset_0_1px_0_rgba(255,246,236,0.14)] " +

@@ -27,6 +27,7 @@ import {
   payloadBattlesHash,
 } from '@blotto/sealing';
 import type { Allocation } from '@/battle/allocation';
+import type { BoardMode } from '@/battle/board/mode';
 import type { IssuedPacketBytes } from './register-tx';
 
 export interface EntryServices {
@@ -67,6 +68,9 @@ export interface SubmitInput {
   player: string;
   battles: readonly Allocation[];
   timingsMs: readonly number[];
+  /** The POOL's placing rule (Phase B): decides the payload's encoding (127
+   * bytes easy, 162 hard) and the commitment over it. Absent = easy. */
+  mode?: BoardMode;
 }
 
 export interface SubmitOutcome {
@@ -93,9 +97,12 @@ export async function submitEntry(
     deviceHash: await services.deviceHash(input.pool),
   };
   // Throws unless the invariant holds — the last line of client defense.
-  const payloadBytes = encodePayload(payload);
+  // The rule checked is the POOL's (Phase B): a hard board sealed into an
+  // easy pool throws here, before any ciphertext or hash exists.
+  const mode = input.mode ?? 'easy';
+  const payloadBytes = encodePayload(payload, mode);
   const ciphertext = seal(payloadBytes, unhex(input.sealingPubkeyHex));
-  const battlesHash = payloadBattlesHash(payload);
+  const battlesHash = payloadBattlesHash(payload, mode);
 
   /*
    * PERMISSION FIRST, THEN THE SEAL, THEN MONEY.

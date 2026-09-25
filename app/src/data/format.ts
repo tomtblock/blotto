@@ -1,4 +1,7 @@
 /* Lamports → SOL display, without ever passing through a float. */
+import type { BoardMode } from '@/battle/board/mode';
+import type { PoolSummary } from './types';
+
 export function lamportsToSol(lamports: string): string {
   const v = BigInt(lamports);
   const whole = v / 1_000_000_000n;
@@ -31,4 +34,15 @@ export function formatSolShort(lamports: bigint, decimals = 3): string {
   const frac = lamports % 1_000_000_000n;
   const digits = frac.toString().padStart(9, '0').slice(0, decimals);
   return decimals === 0 ? whole.toString() : `${whole}.${digits}`;
+}
+
+/**
+ * The placing rule a pool plays by (Phase B, founder rulings 2026-09-24).
+ * ONE place reads `PoolSummary.mode`, because the field is optional on the
+ * wire — a read API from before the backend change serves none — and the
+ * default has to be the same everywhere: easy, the rule every pool before
+ * Phase B played. Never inferred from the tier, the pot or the id.
+ */
+export function poolMode(pool: Pick<PoolSummary, 'mode'>): BoardMode {
+  return pool.mode === 'hard' ? 'hard' : 'easy';
 }
