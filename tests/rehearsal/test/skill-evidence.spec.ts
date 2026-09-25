@@ -43,6 +43,43 @@ describe('the skill-evidence strategy ladder', () => {
     }
   });
 
+  it('the hard ladder emits only valid 700-point boards, deterministically (Phase B)', () => {
+    for (const cls of LADDER) {
+      const a = generateLadderEntrant(cls, 424242, 0, 'hard');
+      const b = generateLadderEntrant(cls, 424242, 0, 'hard');
+      expect(a).to.deep.equal(b, `hard ${cls} must be deterministic per seed`);
+      expect(a.battles.length).to.equal(7);
+      let total = 0;
+      for (const battle of a.battles) {
+        expect(battle.length).to.equal(5);
+        for (const v of battle) {
+          expect(Number.isInteger(v)).to.equal(true);
+          expect(v).to.be.at.least(0);
+          expect(v).to.be.at.most(700);
+        }
+        total += battle.reduce((x, y) => x + y, 0);
+      }
+      expect(total, `hard ${cls} board total`).to.equal(700);
+    }
+    // Uniform is the hard board's own buzzer default: 700 / 35 = 20 a stat.
+    for (const battle of generateLadderEntrant('uniform', 7, 0, 'hard').battles) {
+      expect(battle).to.deep.equal([20, 20, 20, 20, 20]);
+    }
+    // The stacked classes concede exactly two battles and hold 140 in each
+    // of the other five — the shape the README documents.
+    for (const cls of ['heuristic', 'optimised'] as const) {
+      const e = generateLadderEntrant(cls, 31337, 0, 'hard');
+      const sums = e.battles.map((b) => b.reduce((x, y) => x + y, 0));
+      expect(sums.filter((v) => v === 0).length, `${cls} concedes two`).to.equal(2);
+      expect(sums.filter((v) => v === 140).length, `${cls} stacks five`).to.equal(5);
+    }
+    // The easy ladder is untouched by the hard one: same seed, same bytes as
+    // before Phase B (the nightly diff of the easy artifacts pins the rest).
+    expect(generateLadderEntrant('random', 424242)).to.deep.equal(
+      generateLadderEntrant('random', 424242, 0, 'easy')
+    );
+  });
+
   it('a study pool holds 16 of each class with class uncorrelated to seat', () => {
     const population = ladderPopulation(9001);
     expect(population.length).to.equal(64);
@@ -99,6 +136,30 @@ describe('the skill-evidence study', () => {
       expect(r.entrants).to.equal(64 * params.pools);
       // Everyone in the pool is the class, so the class total IS the pot.
       expect(r.paidLamports).to.equal(TIER0_POT * BigInt(params.pools));
+    }
+  });
+
+  it('runs the hard board through the same crank: conserves the pot, stacking beats the default', async function () {
+    this.timeout(120_000);
+    const params = { pools: 4, baseSeed: 556000, mode: 'hard' as const };
+    const a = await runSkillEvidence(params);
+    const b = await runSkillEvidence(params);
+    expect(a.csv).to.equal(b.csv, 'the hard study must reproduce byte for byte');
+    expect(a.report).to.include('(hard board)');
+    expect(a.report).to.include('## Draw rate under the hard rule');
+    let total = 0n;
+    for (const r of a.rows) total += r.paidLamports;
+    expect(total).to.equal(TIER0_POT * BigInt(params.pools));
+    const byClass = new Map(a.rows.map((r) => [r.cls, r]));
+    // A conceded battle loses 5–0 to the even split, but the five stacked
+    // battles beat it 3–2 each: five wins to two, every time.
+    expect(byClass.get('optimised')!.paidSeats).to.be.greaterThan(byClass.get('uniform')!.paidSeats);
+    // Every run carries its draw tally, and the mixed run has some draws (the
+    // uniform quarter draws every battle against itself).
+    for (const f of a.fields) {
+      expect(f.draws.map((d) => d.run)).to.deep.equal(['mixed', 'random', 'heuristic', 'optimised']);
+      for (const d of f.draws) expect(d.comparisons > 0n).to.equal(true);
+      expect(f.draws[0].draws > 0n).to.equal(true);
     }
   });
 

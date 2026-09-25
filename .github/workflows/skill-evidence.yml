@@ -40,3 +40,5 @@ jobs:
           (cd tests/rehearsal && npm ci)
       - name: Reproduce the committed evidence (200 pools)
         run: cd tests/rehearsal && SKILL_EVIDENCE_CHECK=1 npm run skill-evidence
+      - name: Reproduce the committed HARD-board evidence (Phase B, 200 pools)
+        run: cd tests/rehearsal && SKILL_EVIDENCE_CHECK=1 SKILL_EVIDENCE_MODE=hard npm run skill-evidence

@@ -410,3 +410,47 @@ hold in both modes (a hard board also opens at seven even splits, 7 × 100 = 700
 
 **Verified.** App typecheck, 552 unit tests, lint, the fixture-mode production build and the
 journey suite (18 of 18, both viewports); the language, dead-files and published-numbers gates.
+
+## 14. Phase B, the evidence run and the window (2026-09-25)
+
+**Merged.** #181 (program), #182 (backend) and #183 (app) are on `main`, in that order, each with
+its lane green. Merging deployed nothing on chain or on Fly (`deploy-backend` runs only when the
+founder clicks it); the app deployed on merge and renders as before until the read API serves a
+mode. The window that deploys the rest is `docs/RUNBOOK_phase-b-window.md`: ten steps, the two
+Squads proposal payloads emitted against the live account (`migrate_config`: `XIM6adKa4ME=`;
+`set_hard_open_tiers` tier 0: `UB9Khs8AtqgBAAAAAAAA`), and the terms bump as its last step.
+
+**The hard-board evidence** (`docs/skill-evidence/hard/REPORT.md`, plan decision 6). The
+rehearsal's ladder learned the hard rule (`tests/rehearsal/src/ladder.ts`, "THE HARD LADDER"):
+uniform is still 20 a stat (the hard board's buzzer default, 700 / 35); random is 700 over 35
+cells; heuristic concedes two battles and stacks five at 140 across a trio; optimised is that
+family tuned. `runOfflinePool` takes a `mode` and the study runs under it through the same crank.
+Two hundred pools per run at 64 and 40 seats, deterministic from the base seed, checked nightly
+beside the easy study. What it reports: **optimised takes 6.09% of seats' pots at 64 (baseline
+1.56%) and 9.25% at 40 (baseline 2.50%); heuristic 0.16% / 0.80%; random and the default 0.00%**
+— the spread between considered and unconsidered play is wider under the hard rule than the easy
+one, because conceding a battle is a decision the easy rule cannot express. The **draw rate** of
+free-integer boards against each other is **4.65%** at 64 seats (the easy study's construction
+sits near 7%); stacked classes draw 37% of their battles against each other, almost all of them two
+conceded battles meeting. Homogeneous fields sit at the baseline exactly, as in easy.
+
+**Judgement calls (architect-owned).**
+
+- *The stacked-five shape is this architect's reading of the rule, not a measured optimum*
+  (`PHASE-N-REVIEW` in `ladder.ts`). The report claims what it measured against the other rungs
+  and no more.
+- *The hard report's reading of the default rows carries the 2026-09-19 correction* (structural
+  versus population) rather than the superlative the renderer still prints for easy. The easy
+  `REPORT.md` was corrected by hand on 2026-09-19 and its renderer was not, so **the nightly
+  skill-evidence lane has been red since 2026-09-20** (runs 24–28); the CSV and JSON reproduce,
+  only the report's prose differs. Not fixed here — the correction's table was measured by a run
+  that is not in the repository, and porting numbers into a generator by hand is the thing the
+  generator exists to prevent. Recorded in `docs/INDEX.md`'s skill-evidence row for the founder.
+- *No `PRODUCT-FACTS` edit*: `../01_PRODUCT_FACTS/` is outside this repository. Its "each battle
+  100 points" facts need the same sentence `AS-BUILT.md` §1 now carries, in the same change set
+  as the window.
+
+**Verified.** Rehearsal typecheck and suite (the hard ladder's validity, determinism, the two
+conceded / five stacked shape, a four-pool hard study conserving the pot); the easy study's CSV and
+JSON reproduce byte for byte after the change; the language gate.
+
