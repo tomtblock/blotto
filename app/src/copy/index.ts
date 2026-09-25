@@ -26,7 +26,7 @@ export const COPY = {
     // §2.5's copy constraint).
     tagline: 'Sixty-four seats. Seven battles. The winner takes the prize pool.',
     metaDescription:
-      'Up to sixty-four players enter, each sets seven sealed battles of five stats summing to 100. ' +
+      'Up to sixty-four players enter, each sets seven sealed battles of five stats — 100 points a battle, or 700 placed anywhere in a hard pool. ' +
       'The player ranked first takes a fixed prize pool, and every result is recomputable from published data.',
     tabs: { play: 'Play', pools: 'Pools', profile: 'Profile' },
     // The honest degraded state: the data service is unreachable, which is
@@ -473,6 +473,17 @@ export const COPY = {
     demoBoardHint:
       'Tap a troop, press and hold a field. Nothing to sign, nothing to pay: this one is just to feel it. A real entry plays the same board with a three-minute clock.',
     openPoolTitle: 'Open now',
+    /*
+     * Phase B (founder 2026-09-24): the two cards, side by side — one per
+     * open pool, each wearing its mode. The hard card shows "Opens soon"
+     * ONLY when the founder has enabled the hard ladder on chain and no hard
+     * pool is open yet (the tiers API says so; nothing in the app decides
+     * it). PHASE-N-REVIEW: drafts; founder-owned.
+     */
+    hardOpensSoonTitle: 'Opens soon',
+    hardOpensSoonBody:
+      'The hard board — 700 points to place anywhere across the seven battles — is switched on. Its first pool opens shortly; the easy pool is open now.',
+    cardModeAria: (mode: 'easy' | 'hard') => (mode === 'easy' ? 'Easy pool' : 'Hard pool'),
   },
 
   howItWorks: {
@@ -497,7 +508,7 @@ export const COPY = {
           // PHASE-N-REVIEW: said "fifteen seconds per screen" (R9); the client
           // runs one ninety-second budget for all seven (R9-b, run-clock.ts),
           // and two other strings already say so. Founder may veto.
-          'For each battle, split exactly 100 points across Strength, Speed, Heart, Wit and Durability — about ninety seconds for all seven. Your battles are encrypted on your device before you pay; nobody can read them until the pool closes.',
+          'For each battle, split exactly 100 points across Strength, Speed, Heart, Wit and Durability — or, in a hard pool, place 700 points anywhere across the seven. Three minutes on one clock. Your battles are encrypted on your device before you pay; nobody can read them until the pool closes.',
       },
       {
         title: 'Everyone fights everyone',
@@ -1285,7 +1296,7 @@ export const COPY = {
     // constants (rules.config passes MIN_SEATS and the go-timer) — the D-B6
     // rule that no figure on this page is hand-typed.
     howToEnter: (minSeats: number) =>
-      `Sign in, pick an open pool, and confirm the 18+ and terms statements — your wallet signs that confirmation once per terms version. Pay the entry price for the tier. Before an entry is accepted, your wallet is checked against published sanctions lists; every winning wallet is checked again before payment. You then set seven battles, about ninety seconds in total: each battle splits 100 points across five stats. Your battles are encrypted on your device before any payment moves. One entry per wallet per pool; there is no limit across pools. The keys that run the service — the admin, the keeper, the entry signer and the settlement signer — can never enter. A pool has 64 seats and runs with at least ${minSeats} players (see the field-size rule). Decisions are final: a submitted entry cannot be changed or withdrawn (see the refund rule for pools that never reach their minimum field).`,
+      `Sign in, pick an open pool, and confirm the 18+ and terms statements — your wallet signs that confirmation once per terms version. Pay the entry price for the tier. Before an entry is accepted, your wallet is checked against published sanctions lists; every winning wallet is checked again before payment. You then set seven battles, about ninety seconds in total: in an easy pool each battle splits 100 points across five stats; in a hard pool you place 700 points anywhere across the seven battles, every stat between 0 and 700, and the pool's page says which rule it plays. Your battles are encrypted on your device before any payment moves. One entry per wallet per pool; there is no limit across pools. The keys that run the service — the admin, the keeper, the entry signer and the settlement signer — can never enter. A pool has 64 seats and runs with at least ${minSeats} players (see the field-size rule). Decisions are final: a submitted entry cannot be changed or withdrawn (see the refund rule for pools that never reach their minimum field).`,
     priceIntro: (cooldownMinutes: number) =>
       `Seven tiers are configured, each with a fixed prize pool. A tier must be switched on by the operator before pools open in it; at launch only the smallest tier is on. One pool per tier is open at a time, and a new pool of that tier opens ${cooldownMinutes} minutes after the previous one has paid out or closed.`,
     // D-E2 (ratified 2026-09-06): one paid place. No percentage, no multiple.
@@ -1299,6 +1310,11 @@ export const COPY = {
     // R9-b (founder addendum 2026-09-07): the battle timer, the founder's
     // wording verbatim — the rule, then its effect stated as how the
     // allocation performs, never as a chance of anything.
+    // PHASE-N-REVIEW (Phase B, 2026-09-24): the even-split default and its
+    // three-to-two loss hold in both modes — a hard board also opens at seven
+    // even splits of 20 (7 × 100 = 700), so this paragraph needs no mode
+    // clause. howToEnter above names the hard rule; founder and counsel own
+    // the wording.
     battleTimer:
       'Lock each battle before its timer ends. Any battle you have not locked when the timer ends \u2014 including the one on your screen \u2014 is entered as an even split of 20 points in each of the five stats. Against any allocation that concentrates points on three stats, an even split loses that battle three stats to two, every time — so it never beats a player who is thinking. Nothing is decided at random: the even split is simply the shape your entry starts from, and leaving it there is a decision like any other.',
     // SUBSTANCE FIXED (D3-B; D-E2; the founder's addendum of 2026-09-07,

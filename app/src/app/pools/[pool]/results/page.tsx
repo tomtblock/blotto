@@ -12,7 +12,7 @@
 import { notFound } from 'next/navigation';
 import { COPY } from '@/copy';
 import { indexerApi, live } from '@/data/api';
-import { lamportsToSol } from '@/data/format';
+import { lamportsToSol, poolMode } from '@/data/format';
 import { AppHeader } from '@/components/shell/app-header';
 import { TabBar } from '@/components/shell/tab-bar';
 import { BackLink } from '@/components/ui/back-link';
@@ -96,6 +96,8 @@ export default async function ResultsPage({ params }: { params: Promise<{ pool: 
         <header className="mb-6 flex flex-wrap items-center gap-3">
           <MarqueeHeading as="h1">{COPY.reveal.passPool(pool.id)}</MarqueeHeading>
           <Pill tone="field">{COPY.results.title}</Pill>
+          {/* Phase B: which rule this pool played. */}
+          <Pill tone="ink">{poolMode(pool) === 'hard' ? COPY.board.modeHard : COPY.board.modeEasy}</Pill>
         </header>
         {pool.state === 'Paid' && (
           <p className="-mt-2 mb-6 max-w-prose text-[15px] leading-6 font-medium text-brand-berry">

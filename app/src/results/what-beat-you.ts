@@ -26,7 +26,7 @@
 
 import { battlesCommitment } from '@blotto/sealing';
 import { compareBattle, decodeBattleSet, type BattleComparison, type BattleSet } from '@blotto/scoring';
-import type { PublishedBundle } from '@/verify/logic';
+import { bundleMode, type PublishedBundle } from '@/verify/logic';
 
 const unhex = (s: string): Uint8Array => {
   const out = new Uint8Array(s.length / 2);
@@ -42,14 +42,18 @@ const hex = (b: Uint8Array): string => Array.from(b, (x) => x.toString(16).padSt
  * or a hash that does not match is skipped, never guessed: the verify page is
  * the full-integrity story, and this view renders what checks out.
  */
-export function battlesFromBundle(bundle: Pick<PublishedBundle, 'entries'>): Map<number, BattleSet> {
+export function battlesFromBundle(
+  bundle: Pick<PublishedBundle, 'entries' | 'version' | 'mode'>
+): Map<number, BattleSet> {
   const out = new Map<number, BattleSet>();
+  // Phase B: the bundle's own rule (version 3 names it; version 2 is easy).
+  const mode = bundleMode(bundle);
   for (const entry of bundle.entries) {
     if (entry.battles === null || entry.salt === null) continue;
     try {
-      const battles = decodeBattleSet(unhex(entry.battles));
+      const battles = decodeBattleSet(unhex(entry.battles), mode);
       const committed = entry.battles_hash.toLowerCase();
-      if (hex(battlesCommitment(battles, unhex(entry.salt))) !== committed) continue;
+      if (hex(battlesCommitment(battles, unhex(entry.salt), mode)) !== committed) continue;
       out.set(entry.index, battles);
     } catch {
       // Undecodable entry — skip; never guess.

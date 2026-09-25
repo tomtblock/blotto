@@ -35,7 +35,7 @@ import {
   initialBoardState,
   reduceBoard,
 } from '@/battle/board/machine';
-import { type BoardMode, EASY_PER_FIELD } from '@/battle/board/mode';
+import { type BoardMode, EASY_PER_FIELD, HARD_TOTAL } from '@/battle/board/mode';
 import { sampleTick } from '@/battle/run-clock';
 import type { ReviewSealApi } from '@/app/play/seal-stage';
 import { Arena } from './arena/Arena';
@@ -58,14 +58,28 @@ export interface BoardFlowProps {
   demo?: boolean;
 }
 
-/** Easy-mode rows are Allocations by construction; say so to the type system, checked. */
-function toAllocations(battles: readonly (readonly number[])[]): Allocation[] {
-  return battles.map((row) => {
-    if (row.length !== 5 || row.reduce((a, b) => a + b, 0) !== EASY_PER_FIELD) {
+/**
+ * The board's rows are Allocations by construction; say so to the type
+ * system, checked against the MODE's rule (Phase B): every easy field sums to
+ * 100; a hard board sums to 700 across its thirty-five cells. The sealing
+ * package checks the same rule again at the encoder — this is the earlier,
+ * louder failure.
+ */
+function toAllocations(battles: readonly (readonly number[])[], mode: BoardMode): Allocation[] {
+  let total = 0;
+  const rows = battles.map((row) => {
+    if (row.length !== 5) throw new Error('board produced a battle without five stats');
+    const sum = row.reduce((a, b) => a + b, 0);
+    if (mode === 'easy' && sum !== EASY_PER_FIELD) {
       throw new Error('board produced a battle that is not an easy-mode allocation');
     }
+    total += sum;
     return [row[0] as number, row[1] as number, row[2] as number, row[3] as number, row[4] as number] as const;
   });
+  if (mode === 'hard' && total !== HARD_TOTAL) {
+    throw new Error('board produced a hard board that does not place exactly 700');
+  }
+  return rows;
 }
 
 export function BoardFlow({ mode, onConfirm, onReviewApi, reviewHost = null, onRunStarted, demo = false }: BoardFlowProps) {
@@ -116,12 +130,12 @@ export function BoardFlow({ mode, onConfirm, onReviewApi, reviewHost = null, onR
     return () => clearInterval(id);
   }, [ticking]);
 
-  /* Confirmed: hand the entry out once (easy mode only in Phase A). */
+  /* Confirmed: hand the entry out once, under the board's own mode. */
   useEffect(() => {
     if (state.phase !== 'confirmed' || confirmed.current || demo) return;
     confirmed.current = true;
-    onConfirm(toAllocations(state.battles), state.timingsMs);
-  }, [state, onConfirm, demo]);
+    onConfirm(toAllocations(state.battles, mode), state.timingsMs);
+  }, [state, onConfirm, demo, mode]);
 
   /* The stepper exists only while the board is live. */
   const stepperField = play !== null ? openField : null;
