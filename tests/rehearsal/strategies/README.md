@@ -59,6 +59,35 @@ beats all others, and "optimised" here means tuned against this study's
 field, not universally dominant. The published report makes no stronger
 claim than its own measured table.
 
+## The hard ladder (Phase B, 2026-09-25)
+
+The hard board places **700 points anywhere** across the seven battles
+(`backend/scoring/src/allocation.ts`, `HARD_TOTAL`); a battle may hold
+nothing. `generateLadderEntrant(cls, seed, salt, 'hard')` emits the same four
+rungs under that rule, and the study run with `SKILL_EVIDENCE_MODE=hard`
+writes `docs/skill-evidence/hard/`. The easy artifacts do not move.
+
+- **`uniform`** — 20 in every stat of every battle. Still the product's own
+  default: the hard board's unplaced points are spread evenly across every
+  stat of every unlocked battle at the buzzer, and 700 / 35 = 20.
+- **`random`** — 700 over the 35 cells by 34 sorted dividers, the Python
+  oracle's hard stream construction.
+- **`heuristic`** — the format's hard-mode insight. A battle holding nothing
+  loses 5–0 to any battle holding anything, and a battle is won by three
+  stats; so the class **concedes two battles outright** (seeded per entrant)
+  and stacks the other five at 140 each, split steeply across a per-battle
+  trio (`53 / 44 / 31`) with small nonzero off-stats (`7 / 5`).
+- **`optimised`** — the same family, tuned as the easy class is: one-upped
+  trio values funded from the off-stats (`55 / 46 / 33` over `4 / 2`), a
+  per-entrant rotation over the ten trios, wider jitter (±3).
+
+The stacked-five shape is the architect's reading of the rule, not a measured
+optimum (PHASE-N-REVIEW in `ladder.ts`); the hard report measures what it
+does against the other rungs and claims no more. The hard report also prints
+the **draw rate** per run — the number the free-integer space buys, and the
+one most likely to move under a rule where two conceded battles meeting is a
+draw and a stacked battle meeting a conceded one never is.
+
 ## Population mix and fairness of the measurement
 
 Each study pool holds 16 entrants of each class, and the seat order is
@@ -108,4 +137,6 @@ cd tests/rehearsal && npm ci && npm run skill-evidence
 The nightly CI job re-runs the full study with `SKILL_EVIDENCE_CHECK=1` and
 fails if a fresh run no longer reproduces the committed
 `docs/skill-evidence/results.csv` + `REPORT.md` — an engine change that
-shifts outcomes must land together with regenerated evidence.
+shifts outcomes must land together with regenerated evidence. The hard study
+is checked the same way (`SKILL_EVIDENCE_MODE=hard`), against
+`docs/skill-evidence/hard/`.

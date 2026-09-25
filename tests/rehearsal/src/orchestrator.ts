@@ -25,7 +25,7 @@ import {
   encodePayload,
   seal,
 } from '../../../backend/sealing/src';
-import { battlesHash, potForTier } from '../../../backend/scoring/src';
+import { battlesHash, boardModeByte, potForTier, type BoardMode } from '../../../backend/scoring/src';
 import { base58Encode } from '../../../backend/_shared/src/blotto-events';
 import {
   FakeChain,
@@ -75,6 +75,12 @@ export interface OfflinePoolOptions {
    * computed and returned.
    */
   detect?: boolean;
+  /**
+   * The placing rule the pool plays (Phase B). Default easy. The population
+   * must be valid under it — the hard ladder for hard — because the crank
+   * scores a malformed set as all-losses rather than refusing the pool.
+   */
+  mode?: BoardMode;
 }
 
 /** Build, fill and settle one offline pool end to end. */
@@ -90,6 +96,7 @@ export async function runOfflinePool(
 
   const { publicKey } = await custody.createPoolKey(poolId);
   const population = options.population ?? poolPopulation(poolSeed);
+  const mode: BoardMode = options.mode ?? 'easy';
   const players: string[] = [];
   const entries: FakeEntry[] = [];
 
@@ -105,13 +112,13 @@ export async function runOfflinePool(
     entries.push({
       player,
       index: i,
-      battlesHash: Buffer.from(battlesHash(payload.battles, payload.salt)).toString('hex'),
+      battlesHash: Buffer.from(battlesHash(payload.battles, payload.salt, mode)).toString('hex'),
       flagged: false,
       refunded: false,
       settled: false,
       forfeited: false,
     });
-    void store.put(poolId, player, seal(encodePayload(payload), publicKey));
+    void store.put(poolId, player, seal(encodePayload(payload, mode), publicKey));
   });
 
   chain.pools.set(poolId.toString(), {
@@ -127,8 +134,8 @@ export async function runOfflinePool(
     resultsCommitted: false,
     paidMask: 0n,
     payouts: [],
-    // The rehearsal plays easy until the hard strategies land (Phase B).
-    mode: 0,
+    // The rule the pool was opened under (Phase B); the crank reads it here.
+    mode: boardModeByte(mode),
     // The real field size: a pool seals at 64, or at its floor..63 when its
     // deadline passes (D-E4). The crank commits over `entrants`, so a
     // population smaller than 64 rehearses the minimum-field path.

@@ -15,7 +15,7 @@
  * evidence pipeline as well).
  */
 
-import { potForTier } from '../../../backend/scoring/src';
+import { compareBattle, potForTier, type BoardMode } from '../../../backend/scoring/src';
 import {
   LADDER,
   homogeneousPopulation,
@@ -46,6 +46,13 @@ export interface StudyParams {
    * The floor is `MIN_FIELD`, which tracks the program's `MIN_SEATS`.
    */
   fields?: readonly number[];
+  /**
+   * The placing rule the pools play (Phase B, 2026-09-25). Default easy —
+   * the study as published since D-A2, byte for byte. `hard` runs the hard
+   * ladder (`ladder.ts`) through the same crank under the 700-anywhere rule
+   * and writes to its own directory; the easy artifacts never move.
+   */
+  mode?: BoardMode;
 }
 
 export interface ClassRow {
@@ -59,6 +66,19 @@ export interface ClassRow {
   paidLamports: bigint;
 }
 
+/**
+ * Drawn battles over one run: every pairwise battle comparison the crank
+ * scored, and how many of them neither side won. The draw rate is the
+ * number the free-integer space buys (CLAUDE.md tradeoff 4); under the hard
+ * rule a conceded battle draws only against another conceded battle, so the
+ * rate is expected to move, and the hard report prints it.
+ */
+export interface DrawTally {
+  run: 'mixed' | LadderClass;
+  draws: bigint;
+  comparisons: bigint;
+}
+
 /** One field size's complete results. */
 export interface FieldResult {
   /** Seats per pool in this run. */
@@ -67,6 +87,8 @@ export interface FieldResult {
   rows: ClassRow[];
   /** The homogeneous runs (every seat one class), by class. */
   homogeneous: ClassRow[];
+  /** Draw rates per run: the mixed run first, then each homogeneous class. */
+  draws: DrawTally[];
 }
 
 export interface StudyResult {
@@ -100,20 +122,39 @@ function pct(numerator: bigint, denominator: bigint, decimals: number): string {
   return decimals > 0 ? `${whole}.${frac}` : `${whole}`;
 }
 
+/** Count the drawn battles across every pair in a population. */
+function tallyDraws(population: GeneratedEntrant[], tally: DrawTally): void {
+  for (let i = 0; i < population.length; i++) {
+    for (let j = i + 1; j < population.length; j++) {
+      for (let k = 0; k < 7; k++) {
+        tally.comparisons += 1n;
+        const c = compareBattle(
+          population[i].battles[k] as never,
+          population[j].battles[k] as never
+        );
+        if (c.outcome === 'draw') tally.draws += 1n;
+      }
+    }
+  }
+}
+
 /** Run `pools` pools with `populationFor(poolSeed)` and tally per class. */
 async function runSeries(
   pools: number,
   seedOf: (p: number) => number,
   populationFor: (poolSeed: number) => GeneratedEntrant[],
   byClass: Map<LadderClass, ClassRow>,
-  pot: bigint
+  pot: bigint,
+  mode: BoardMode,
+  draws: DrawTally
 ): Promise<void> {
   for (let p = 1; p <= pools; p++) {
     const poolSeed = seedOf(p);
     const population = populationFor(poolSeed);
+    tallyDraws(population, draws);
     // Detection off: near-identical sets inside a class are the study's own
     // construction, not collusion (see OfflinePoolOptions.detect).
-    const run = await runOfflinePool(poolSeed, { population, detect: false });
+    const run = await runOfflinePool(poolSeed, { population, detect: false, mode });
     if (run.outcome.finalState !== 'Paid') {
       throw new Error(`pool ${poolSeed} ended ${run.outcome.finalState}, expected Paid`);
     }
@@ -166,20 +207,26 @@ async function runFieldStudy(
   pot: bigint
 ): Promise<FieldResult> {
   const offset = fieldSeedOffset(fieldIndex);
+  const mode: BoardMode = params.mode ?? 'easy';
   const newRows = () =>
     new Map<LadderClass, ClassRow>(
       LADDER.map((cls) => [cls, { cls, entrants: 0, rankOne: 0, paidSeats: 0, paidLamports: 0n }])
     );
+  const draws: DrawTally[] = [];
 
   // ---- The mixed-field run (the original D-A2 study) ---------------------
   const mixed = newRows();
+  const mixedDraws: DrawTally = { run: 'mixed', draws: 0n, comparisons: 0n };
   await runSeries(
     params.pools,
     (p) => params.baseSeed + offset + p,
-    (seed) => ladderPopulation(seed, seats),
+    (seed) => ladderPopulation(seed, seats, mode),
     mixed,
-    pot
+    pot,
+    mode,
+    mixedDraws
   );
+  draws.push(mixedDraws);
   const rows = LADDER.map((cls) => mixed.get(cls)!);
 
   // ---- The homogeneous-field runs (v2 amendment): one class fills every
@@ -189,17 +236,21 @@ async function runFieldStudy(
   const homogeneous: ClassRow[] = [];
   for (const [i, cls] of HOMOGENEOUS.entries()) {
     const tally = newRows();
+    const classDraws: DrawTally = { run: cls, draws: 0n, comparisons: 0n };
     await runSeries(
       params.pools,
       (p) => params.baseSeed + offset + (i + 1) * 1_000_000 + p,
-      (seed) => homogeneousPopulation(cls, seed, seats),
+      (seed) => homogeneousPopulation(cls, seed, seats, mode),
       tally,
-      pot
+      pot,
+      mode,
+      classDraws
     );
     homogeneous.push(tally.get(cls)!);
+    draws.push(classDraws);
   }
 
-  return { seats, rows, homogeneous };
+  return { seats, rows, homogeneous, draws };
 }
 
 export async function runSkillEvidence(params: StudyParams): Promise<StudyResult> {
@@ -281,7 +332,81 @@ function baselinePct(seats: number): string {
 
 const SKILL_CLASSES = ['random', 'heuristic', 'optimised'] as const;
 
+/** The easy report's reading of the default rows — the text as published. */
+const EASY_DEFAULT_READING = `**The claim here is stronger than a statistical one, and it should be read
+as the stronger claim.** A battle is won by taking three of the five stats.
+Against any opponent who concentrates on three, the flat split loses those
+three and takes only the two the opponent starved — so it loses that battle
+3–2 by construction, not on average. A player who leaves the default does
+not merely do worse than one who thinks: across every pool in this study, at
+both field sizes, they never place first and never take a lamport.
+
+That is also precisely why these rows are kept OUT of the headline
+comparison above. Measuring "skill" against a shape that cannot win a battle
+would overstate the effect — the honest measure of skill is the spread
+between entrants who are all genuinely competing, which is what the headline
+table reports.
+`;
+
+/**
+ * The hard report's reading of the same rows. Written with the correction
+ * the easy report carries since 2026-09-19 (the default is the MIDDLE of
+ * three tiers, not the bottom): what is structural is separated from what
+ * is a property of this study's population.
+ */
+const HARD_DEFAULT_READING = `**The part of this that is structural.** Under the hard rule the default is
+20 in every stat of every battle. Against a stacked battle (140 across a
+trio with nonzero off-stats) it loses that battle 3–2 by construction; against
+a conceded battle (nothing placed) it wins 5–0. So against either stacked
+class it wins exactly the two conceded battles and loses the other five —
+every time, not on average.
+
+**The part of this that is about THIS population.** Half of every mixed
+field here is the two stacked classes, so the rows above say the default
+never places first and never takes a lamport *in this study*. Against a
+field of free-integer boards (the \`random\` class, about 20 a stat with
+spread) the default is an even contest stat for stat, and against careless
+concentration it can rank well — as the easy study measured on 2026-09-19.
+The 0.000% is real and reproducible; it is a property of a field that is
+half deliberate play, not a property of the allocation. These rows are kept
+OUT of the headline comparison above for the same reason as in the easy
+report: the honest measure of skill is the spread between entrants who are
+all genuinely competing.
+`;
+
+/** The hard report's extra sections; empty for easy so its bytes never move. */
+function renderHardSections(params: StudyParams, fields: FieldResult[]): string {
+  if ((params.mode ?? 'easy') !== 'hard') return '';
+  const drawRows = fields
+    .flatMap((f) =>
+      f.draws.map(
+        (d) =>
+          `| ${f.seats} | ${d.run} | ${d.comparisons} | ${d.draws} | ${pct(d.draws, d.comparisons, 3)}% |`
+      )
+    )
+    .join('\n');
+  return `
+## Draw rate under the hard rule
+
+A drawn battle is one where neither side takes three stats. Under the hard
+rule a battle may hold nothing, and a battle holding nothing loses 5–0 to
+any battle holding anything — so draws come from two conceded battles
+meeting, from two boards that happen to split a battle 2–2 with a tied
+stat, and from the uniform class meeting itself. The table counts every
+pairwise battle comparison the crank scored in each run:
+
+| Seats | Run | Battle comparisons | Drawn | Draw rate |
+|---|---|---|---|---|
+${drawRows}
+
+The \`mixed\` row includes the uniform quarter of the field, which draws
+every battle against itself by construction; the \`random\` row is the
+free-integer draw rate of the hard board on its own.
+`;
+}
+
 function renderReport(params: StudyParams, fields: FieldResult[], pot: bigint): string {
+  const hard = (params.mode ?? 'easy') === 'hard';
   const headline = fields
     .flatMap((f) => {
       const byCls = new Map(f.rows.map((r) => [r.cls, r]));
@@ -311,13 +436,26 @@ function renderReport(params: StudyParams, fields: FieldResult[], pot: bigint): 
     .map((f) => `${f.seats / LADDER.length} per class at ${f.seats} seats`)
     .join(', ');
 
-  return `# Skill evidence — outcome statistics by strategy class
+  const modeNote = hard
+    ? `
+**THE HARD BOARD (Phase B, 2026-09-25).** Every pool in this file was
+opened under the hard rule: 700 points placed anywhere across the seven
+battles, a battle free to hold nothing. The four classes are the hard
+ladder (\`tests/rehearsal/src/ladder.ts\`, "THE HARD LADDER"): uniform is
+still 20 in every stat (the hard board's own buzzer default, 700 / 35);
+random is 700 over the 35 cells; heuristic concedes two battles and stacks
+the other five at 140 each across a trio; optimised is that family tuned.
+The easy study is \`../REPORT.md\` and is unchanged by this one.
+`
+    : '';
+
+  return `# Skill evidence — outcome statistics by strategy class${hard ? ' (hard board)' : ''}
 
 *Generated by \`npm run skill-evidence\` in \`tests/rehearsal\` — do not edit
 by hand. Deterministic: the same parameters reproduce this file byte for
 byte, and the nightly CI job re-runs the study and diffs it against this
 committed copy.*
-
+${modeNote}
 Every run below is measured at **two field sizes**: ${sizes} seats.
 ${FULL_FIELD} is a full pool; ${MIN_FIELD} is the smallest field the rules
 allow a pool to play at — a pool whose deadline passes holding
@@ -357,20 +495,7 @@ opens the flow, touches nothing, and locks in all seven battles.
 |---|---|---|---|---|---|---|
 ${defaultRows}
 
-**The claim here is stronger than a statistical one, and it should be read
-as the stronger claim.** A battle is won by taking three of the five stats.
-Against any opponent who concentrates on three, the flat split loses those
-three and takes only the two the opponent starved — so it loses that battle
-3–2 by construction, not on average. A player who leaves the default does
-not merely do worse than one who thinks: across every pool in this study, at
-both field sizes, they never place first and never take a lamport.
-
-That is also precisely why these rows are kept OUT of the headline
-comparison above. Measuring "skill" against a shape that cannot win a battle
-would overstate the effect — the honest measure of skill is the spread
-between entrants who are all genuinely competing, which is what the headline
-table reports.
-
+${hard ? HARD_DEFAULT_READING : EASY_DEFAULT_READING}
 ## Fields of equally-skilled entrants
 
 The v2 amendment's control runs: **${params.pools} pools per class, per field
@@ -392,6 +517,7 @@ the baseline for every class, at both field sizes. Skill differentiates
 BETWEEN classes (the headline table); within a class it cannot, which is
 exactly the shape a skill competition's outcomes should have.
 
+${renderHardSections(params, fields)}
 ## Methodology
 
 - **Runs**: at EACH field size (${sizes} seats), one mixed-field run
@@ -438,7 +564,7 @@ exactly the shape a skill competition's outcomes should have.
 - **Reproduce**:
 
   \`\`\`bash
-  cd tests/rehearsal && npm ci && npm run skill-evidence
+  cd tests/rehearsal && npm ci && ${hard ? 'SKILL_EVIDENCE_MODE=hard ' : ''}npm run skill-evidence
   \`\`\`
 
 ## Strategy classes
