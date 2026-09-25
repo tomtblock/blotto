@@ -174,3 +174,67 @@ describe('the entry seam: browser write → HTTP route → crank read', () => {
     expect(await deps.ciphertexts.listForPool(POOL_ID)).to.have.length(0);
   });
 });
+
+/**
+ * HARD pools (Phase B, founder rulings 2026-09-24): a hard pool's sealed box
+ * is 210 bytes (a 162-byte payload), an easy pool's 175. The route accepts
+ * both lengths up front and then holds the box to the POOL's mode, so a
+ * board placed under the wrong rule is refused before the player pays.
+ */
+describe('the entry seam under the two modes', () => {
+  const HARD_PDA = 'GsbwXfJraMomNibNoRMCJdPhqRYjXMHqzJ8oJpMKB6Jf';
+  const HARD_ID = 8n;
+  const hardBattles = [[700, 0, 0, 0, 0], ...Array.from({ length: 6 }, () => [0, 0, 0, 0, 0])];
+
+  function twoPoolDeps(): EntryServerDeps {
+    const deps = serverDeps();
+    (deps.poolIds as MemoryPoolIdResolver).set(HARD_PDA, HARD_ID, 'Open', 0, 1);
+    return deps;
+  }
+
+  async function post(deps: EntryServerDeps, poolPda: string, sealed: Uint8Array) {
+    const player = wallet();
+    return handleEntryRoute(
+      deps,
+      'POST',
+      '/ciphertexts',
+      {
+        pool: poolPda,
+        player: player.address,
+        ciphertext: Buffer.from(sealed).toString('base64'),
+        signature: player.sign(poolPda, sealed),
+      },
+      'ip'
+    );
+  }
+
+  it('a hard box lands in the hard pool and the crank reads it back under the hard rule', async () => {
+    const deps = twoPoolDeps();
+    const pool = generateKeypair();
+    const payload = { ...payloadFor(0), battles: hardBattles as never };
+    const sealed = seal(encodePayload(payload, 'hard'), pool.publicKey);
+    expect(sealed.length).to.equal(210);
+    const res = await post(deps, HARD_PDA, sealed);
+    expect(res.status).to.equal(204);
+    const stored = await deps.ciphertexts.get(HARD_ID, (await deps.ciphertexts.listForPool(HARD_ID))[0].player);
+    expect(stored?.ciphertext.length).to.equal(210);
+  });
+
+  it('a hard box is refused by an easy pool, and an easy box by a hard pool', async () => {
+    const deps = twoPoolDeps();
+    const pool = generateKeypair();
+    const hardPayload = { ...payloadFor(0), battles: hardBattles as never };
+    const hardBox = seal(encodePayload(hardPayload, 'hard'), pool.publicKey);
+    const easyBox = seal(encodePayload(payloadFor(1)), pool.publicKey);
+    expect((await post(deps, POOL_PDA, hardBox)).status, 'hard box → easy pool').to.equal(400);
+    expect((await post(deps, HARD_PDA, easyBox)).status, 'easy box → hard pool').to.equal(400);
+    expect((await post(deps, POOL_PDA, easyBox)).status, 'easy box → easy pool').to.equal(204);
+    expect((await post(deps, HARD_PDA, hardBox)).status, 'hard box → hard pool').to.equal(204);
+  });
+
+  it('any other length is refused before the pool is even looked up', async () => {
+    const deps = twoPoolDeps();
+    const res = await post(deps, HARD_PDA, new Uint8Array(200));
+    expect(res.status).to.equal(400);
+  });
+});

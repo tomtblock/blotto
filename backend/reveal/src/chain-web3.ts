@@ -349,8 +349,10 @@ export class Web3Chain implements KeeperChain {
     poolId: bigint,
     tier: number,
     sealingPubkey: Uint8Array,
-    sealingSecretHash: Uint8Array
+    sealingSecretHash: Uint8Array,
+    mode: number
   ): Promise<void> {
+    if (mode !== 0 && mode !== 1) throw new Error(`unknown board mode ${mode}`);
     const le = Buffer.alloc(8);
     le.writeBigUInt64LE(poolId);
     const keeper = this.keeper();
@@ -375,6 +377,8 @@ export class Web3Chain implements KeeperChain {
             Buffer.from([tier]),
             Buffer.from(sealingPubkey),
             Buffer.from(sealingSecretHash),
+            // Phase B: the appended `mode` argument (0 easy, 1 hard).
+            Buffer.from([mode]),
           ]),
         }),
       ],

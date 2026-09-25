@@ -25,12 +25,23 @@
  * The detection pipeline still receives both, through the non-published
  * channel `revealEntries(...).forDetection` in `ranking.ts`, which the
  * crank hands straight to the detection hook and to nothing else.
+ *
+ * VERSION 3 (Phase B, founder rulings 2026-09-24): the bundle names the
+ * pool's `mode` — the placing rule its boards were scored by — and an
+ * entry's `battles` is the mode's canonical encoding: 35 bytes (one per
+ * stat) in easy, 70 bytes (two per stat, little-endian) in hard. A reader
+ * that ignored `mode` would decode a hard board as a malformed easy one, so
+ * the version moved rather than the field being slipped in. Version 2
+ * bundles (every pool settled before the upgrade) read as easy.
  */
+
+import type { BoardMode } from './deps';
 
 export interface RevealBundleEntry {
   player: string; // base58
   index: number;
-  /** Hex, 35 bytes — null when the ciphertext was lost or failed to verify. */
+  /** Hex — the pool's mode's canonical battle set (35 bytes easy, 70 hard);
+   * null when the ciphertext was lost or failed to verify. */
   battles: string | null;
   salt: string | null; // hex 32
   battles_hash: string; // hex 32 — the on-chain commitment
@@ -57,8 +68,10 @@ export interface RevealBundlePayout {
 }
 
 export interface RevealBundle {
-  /** 2 since 2026-09-12 (B-31) — see the header for what left with v1. */
-  version: 2;
+  /** 3 since Phase B (`mode` added) — see the header for what left with v1. */
+  version: 3;
+  /** The placing rule this pool's boards were scored by (Phase B). */
+  mode: BoardMode;
   pool_id: string;
   secret: string; // hex 32 — also on-chain
   entry_lamports: string;

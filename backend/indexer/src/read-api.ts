@@ -69,7 +69,7 @@ import {
 } from '../../_shared/src/http-hygiene';
 import { MIN_SEATS, REVIEW_WINDOW_SECS } from '../../scoring/src/prizes';
 import type { Queryable } from './shared';
-import { tierEnablement, treasuryReport } from './treasury-report';
+import { hardTierEnablement, tierEnablement, treasuryReport } from './treasury-report';
 import {
   defaultTreasuryChainReader,
   type TreasuryChainReader,
@@ -156,6 +156,9 @@ function poolRow(r: Record<string, unknown>, now: Now): Json {
     fill_deadline: r.fill_deadline === null ? null : String(r.fill_deadline),
     timer_seconds: r.timer_seconds,
     state: r.state,
+    // Phase B: the placing rule the pool was opened under ('easy' | 'hard'),
+    // from `pools.mode` (0025). A row from before the column is easy.
+    mode: Number(r.mode) === 1 ? 'hard' : 'easy',
     entrants: Number(r.entrants),
     sealing_pubkey: r.sealing_pubkey,
     results_root: r.results_root ?? null,
@@ -245,23 +248,52 @@ export async function handleRead(
     // A row per CONFIGURED tier, not per settled one: a tier that has never
     // run a pool has no `tier_status` row, and the app needs to know it
     // exists and is closed rather than infer it from an absence.
-    const res = await db.query('SELECT tier, next_open_at, last_pool_id FROM tier_status ORDER BY tier ASC');
-    const rows = res.rows as Array<{ tier: number; next_open_at: unknown; last_pool_id: unknown }>;
-    const byTier = new Map(rows.map((t) => [Number(t.tier), t]));
+    //
+    // TWO LADDERS since Phase B (2026-09-24): each tier row carries the
+    // easy ladder's fields at the top level, exactly as before, and the
+    // hard ladder's under `hard` — its own switch (`set_hard_open_tiers`,
+    // read the same three-way way: chain, then the `HardTiersOpened`
+    // ledger, then all-closed) and its own cooldown stamp (`tier_status`
+    // rows with mode 1, migration 0025). The app decides from `hard.enabled`
+    // alone whether a hard card exists at all — there is no switch in the
+    // app for it (Phase B plan, decision 3).
+    const res = await db.query(
+      'SELECT tier, mode, next_open_at, last_pool_id FROM tier_status ORDER BY tier ASC, mode ASC'
+    );
+    const rows = res.rows as Array<{
+      tier: number;
+      mode?: unknown;
+      next_open_at: unknown;
+      last_pool_id: unknown;
+    }>;
+    // A row from before 0025 carries no mode: the easy ladder's.
+    const modeOf = (t: { mode?: unknown }) => (Number(t.mode) === 1 ? 1 : 0);
+    const byTier = new Map(rows.filter((t) => modeOf(t) === 0).map((t) => [Number(t.tier), t]));
+    const hardByTier = new Map(rows.filter((t) => modeOf(t) === 1).map((t) => [Number(t.tier), t]));
     const { enabled, source } = await tierEnablement(db, chain);
+    const hard = await hardTierEnablement(db, chain);
+    const stamp = (t: { next_open_at: unknown; last_pool_id: unknown } | undefined) => ({
+      next_open_at: t === undefined ? '0' : String(t.next_open_at),
+      last_pool_id: t === undefined || t.last_pool_id === null ? null : String(t.last_pool_id),
+    });
     return {
       status: 200,
       body: {
         server_time: String(now()),
         enablement_source: source,
+        hard_enablement_source: hard.source,
         tiers: enabled.map((isOpen, tier) => {
-          const t = byTier.get(tier);
+          const hardOpen = hard.enabled[tier] === true;
           return {
             tier,
             enabled: isOpen,
             status: isOpen ? 'open' : 'closed',
-            next_open_at: t === undefined ? '0' : String(t.next_open_at),
-            last_pool_id: t === undefined || t.last_pool_id === null ? null : String(t.last_pool_id),
+            ...stamp(byTier.get(tier)),
+            hard: {
+              enabled: hardOpen,
+              status: hardOpen ? 'open' : 'closed',
+              ...stamp(hardByTier.get(tier)),
+            },
           };
         }),
       },
@@ -412,6 +444,13 @@ async function poolsList(db: Queryable, query: URLSearchParams, now: Now): Promi
     if (!/^[0-6]$/.test(tier)) return { status: 400, body: { error: 'bad tier filter' } };
     params.push(Number(tier));
     where.push(`tier = $${params.length}`);
+  }
+  // Phase B: ?mode=easy|hard — the two ladders' pools, apart.
+  const mode = query.get('mode');
+  if (mode !== null) {
+    if (mode !== 'easy' && mode !== 'hard') return { status: 400, body: { error: 'bad mode filter' } };
+    params.push(mode === 'hard' ? 1 : 0);
+    where.push(`mode = $${params.length}`);
   }
   const before = query.get('before');
   if (before !== null) {

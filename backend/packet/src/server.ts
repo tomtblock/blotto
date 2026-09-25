@@ -48,7 +48,7 @@ import { acceptNotifyPreference, type NotifyPreferenceStore } from './notify';
 import { acceptPoolNotify, type PoolNotifyStore } from './notify-pool';
 import type { PoolIdResolver } from './pool-ids';
 import type { SeatResolver } from './seats';
-import { acceptCiphertext, ciphertextStatus } from './ciphertexts';
+import { CIPHERTEXT_LENGTHS, acceptCiphertext, ciphertextStatus } from './ciphertexts';
 
 export interface EntryServerDeps {
   packet: PacketServiceDeps;
@@ -144,8 +144,10 @@ export interface RouteResult {
   body: unknown;
 }
 
-/** Sealed boxes are 48 bytes of overhead + the 127-byte payload. */
-const CIPHERTEXT_LEN = 48 + 127;
+/** Sealed boxes are 48 bytes of overhead + the payload: 127 bytes for an
+ * easy pool (175), 162 for a hard one (210) — Phase B. The route accepts
+ * either here and `acceptCiphertext` then holds the box to the POOL's mode. */
+const CIPHERTEXT_LENS = new Set(CIPHERTEXT_LENGTHS);
 const B58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 export async function handleEntryRoute(
@@ -317,7 +319,7 @@ export async function handleEntryRoute(
     } catch {
       return { status: 400, body: { error: 'bad request' } };
     }
-    if (bytes.length !== CIPHERTEXT_LEN) {
+    if (!CIPHERTEXT_LENS.has(bytes.length)) {
       return { status: 400, body: { error: 'bad request' } };
     }
     return acceptCiphertext(deps.poolIds, deps.seats, deps.ciphertexts, {

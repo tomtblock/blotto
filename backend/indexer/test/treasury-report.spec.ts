@@ -216,6 +216,7 @@ function liveConfigView(over: Partial<TreasuryChainView> = {}): TreasuryChainVie
       384_000_000_000n,
     ],
     openTiers: [true, true, false, false, false, false, false],
+        hardOpenTiers: [false, false, false, false, false, false, false],
     platformRefundableLamports: 300_000_000n,
     platformBalanceLamports: 6_300_000_000n,
     vaultCushionLamports: CUSHION,

@@ -36,7 +36,7 @@
  */
 
 import { scorePool, assignRanks, type PlayerResult, type ScoredPlayer } from './engine';
-import { BATTLES, type BattleSet } from './allocation';
+import { BATTLES, type BattleSet, type BoardMode } from './allocation';
 
 export interface PoolEntryInput {
   /** Seat index, 0-based. */
@@ -45,8 +45,13 @@ export interface PoolEntryInput {
   battles: BattleSet | null;
 }
 
-/** Score a pool where some entries may be missing. Results in seat order. */
-export function scoreWithMissing(entries: readonly PoolEntryInput[]): PlayerResult[] {
+/** Score a pool where some entries may be missing. Results in seat order.
+ * `mode` is the pool's placing rule (Phase B); the missing-entry rule is the
+ * same in both. */
+export function scoreWithMissing(
+  entries: readonly PoolEntryInput[],
+  mode: BoardMode = 'easy'
+): PlayerResult[] {
   const sorted = [...entries].sort((a, b) => a.index - b.index);
   sorted.forEach((e, i) => {
     if (e.index !== i) throw new Error(`seat indices must be 0..n-1 without gaps (saw ${e.index} at ${i})`);
@@ -55,7 +60,10 @@ export function scoreWithMissing(entries: readonly PoolEntryInput[]): PlayerResu
   const missing = sorted.filter((e) => e.battles === null);
 
   // Score present players among themselves with the pure engine.
-  const presentResults = scorePool(present.map((e) => e.battles as BattleSet));
+  const presentResults = scorePool(
+    present.map((e) => e.battles as BattleSet),
+    mode
+  );
 
   const scored: ScoredPlayer[] = [
     ...present.map((e, i) => ({

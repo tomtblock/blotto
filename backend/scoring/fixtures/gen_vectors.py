@@ -40,6 +40,17 @@ Deterministic allocation stream (also implemented in TS, byte-identical):
   parts = [d0, d1-d0, d2-d1, d3-d2, 100-d3]
 Adequate as a spread sanity stream; not a uniformity proof.
 
+THE HARD MODE (Phase B, founder rulings 2026-09-24). The same seven battles
+of five stats and the same comparison rule; what moves is where the total is
+pinned. Easy: each battle sums to exactly 100. Hard: the whole board — all
+thirty-five stats — sums to exactly 700, placed anywhere, so a battle may
+hold all of it or nothing and a 5-0 sweep becomes possible. A hard stat can
+reach 700, so the canonical encoding is two bytes little-endian per stat (70
+bytes), and the commitment is sha256 over THOSE bytes plus the salt. The
+hard stream below spreads 700 over 35 cells with 34 sorted dividers drawn
+from sha256("hard:" + str(i) + ":" + str(k)) for k in 0..2, each u16 mod
+701.
+
 Regenerate with:  python3 fixtures/gen_vectors.py --write  (from backend/scoring/)
 """
 
@@ -91,6 +102,24 @@ def alloc_from_counter(i: int) -> list[int]:
 
 def battles_from_counter(base: int) -> list[list[int]]:
     return [alloc_from_counter(base + k) for k in range(BATTLES)]
+
+
+HARD_TOTAL = BATTLES * 100  # 700: the whole board's total in hard mode
+CELLS = BATTLES * STATS  # 35
+
+
+def hard_battles_from_counter(i: int) -> list[list[int]]:
+    """A hard board from the stream: 700 spread over 35 cells by 34 sorted
+    dividers, each a u16 (mod 701) from three sha256 blocks."""
+    stream = b"".join(sha256(f"hard:{i}:{k}".encode()) for k in range(3))
+    dividers = sorted(
+        int.from_bytes(stream[j * 2 : j * 2 + 2], "little") % (HARD_TOTAL + 1)
+        for j in range(CELLS - 1)
+    )
+    edges = [0] + dividers + [HARD_TOTAL]
+    cells = [edges[j + 1] - edges[j] for j in range(CELLS)]
+    assert sum(cells) == HARD_TOTAL and all(0 <= c <= HARD_TOTAL for c in cells)
+    return [cells[k * STATS : (k + 1) * STATS] for k in range(BATTLES)]
 
 
 # ---------------------------------------------------------------------------
@@ -231,12 +260,17 @@ def assign_prizes(results: list[dict], pot: int) -> dict[int, int]:
 # Encoding + Merkle
 # ---------------------------------------------------------------------------
 
-def encode_battles(battles: list[list[int]]) -> bytes:
+def encode_battles(battles: list[list[int]], mode: str = "easy") -> bytes:
+    """Easy: one byte per stat (35). Hard: two bytes LE per stat (70)."""
+    if mode == "hard":
+        assert sum(v for b in battles for v in b) == HARD_TOTAL
+        return b"".join(v.to_bytes(2, "little") for b in battles for v in b)
+    assert all(sum(b) == 100 for b in battles)
     return bytes(v for b in battles for v in b)
 
 
-def battles_hash(battles: list[list[int]], salt: bytes) -> bytes:
-    return sha256(encode_battles(battles) + salt)
+def battles_hash(battles: list[list[int]], salt: bytes, mode: str = "easy") -> bytes:
+    return sha256(encode_battles(battles, mode) + salt)
 
 
 def leaf_bytes(player: bytes, rank: int, amount: int) -> bytes:
@@ -371,11 +405,34 @@ def hand_battle_cases() -> list[dict]:
     return out
 
 
+def hard_hand_battle_cases() -> list[dict]:
+    """Hand-checked HARD comparisons. Same rule as easy; what these pin is
+    the shapes easy cannot produce — a battle holding nothing, a battle
+    holding everything, and the 5-0 sweep that follows from them."""
+    cases = [
+        ("sweep_5_0", [140, 140, 140, 140, 140], [0, 0, 0, 0, 0], "win"),
+        ("all_in_one_loses_4_1", [700, 0, 0, 0, 0], [0, 175, 175, 175, 175], "loss"),
+        ("draw_2_2_with_a_tie", [300, 200, 100, 50, 50], [100, 100, 100, 100, 300], "draw"),
+        ("win_3_2", [200, 200, 200, 50, 50], [100, 100, 100, 200, 200], "win"),
+        ("empty_vs_empty", [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], "draw"),
+        ("one_point_beats_nothing", [1, 1, 1, 0, 0], [0, 0, 0, 0, 0], "win"),
+    ]
+    out = []
+    for name, a, b, expected in cases:
+        got, wa, wb = battle_outcome(a, b)
+        assert got == expected, f"hard {name}: hand expectation wrong ({got} != {expected})"
+        out.append(
+            {"name": name, "a": a, "b": b, "stats_a": wa, "stats_b": wb, "outcome": got}
+        )
+    return out
+
+
 def pool_vector(
     name: str,
     players: list[list[list[int]]],
     with_tree: bool,
     entry_lamports: int = ENTRY_LAMPORTS,
+    mode: str = "easy",
 ) -> dict:
     results = score_pool(players)
     pot = pot_for_entry(entry_lamports)
@@ -388,7 +445,7 @@ def pool_vector(
         "name": name,
         "entry_lamports": str(entry_lamports),
         "players": [
-            {"battles": p, "battles_hex": encode_battles(p).hex()} for p in players
+            {"battles": p, "battles_hex": encode_battles(p, mode).hex()} for p in players
         ],
         "results": results,
         # Comma-joined rather than a JSON array: a bare 64-integer array is
@@ -605,6 +662,70 @@ def main() -> None:
             }
         )
 
+    # ---- HARD mode (Phase B) --------------------------------------------
+    # The same scoring and ranking over boards placed under the hard rule,
+    # through the same score_pool / assign_prizes / merkle as easy: five
+    # four-player pools, one full field with the tree, the minimum field, a
+    # whole-board-in-one-battle edge case (every battle but one is 0-0 —
+    # draws — and the one decides), and a lost-ciphertext pool.
+    hard_pools = []
+    for p in range(5):
+        players = [hard_battles_from_counter(p * 100 + i) for i in range(4)]
+        hard_pools.append(pool_vector(f"hard_four_{p}", players, with_tree=False, mode="hard"))
+    players = [hard_battles_from_counter(10_000 + i) for i in range(CAPACITY)]
+    hard_pools.append(pool_vector("hard_full_0", players, with_tree=True, mode="hard"))
+    players = [hard_battles_from_counter(20_000 + i) for i in range(MIN_SEATS)]
+    hard_pools.append(
+        pool_vector(f"hard_field_{MIN_SEATS}", players, with_tree=True, mode="hard")
+    )
+    empty = [0, 0, 0, 0, 0]
+    stacked = [
+        [[700, 0, 0, 0, 0]] + [empty] * (BATTLES - 1),
+        [[0, 350, 350, 0, 0]] + [empty] * (BATTLES - 1),
+        [empty] * (BATTLES - 1) + [[140, 140, 140, 140, 140]],
+        [[100] * 5] * BATTLES and [[20, 20, 20, 20, 20]] * BATTLES,
+    ]
+    hard_pools.append(pool_vector("hard_stacked_edges", stacked, with_tree=False, mode="hard"))
+    hard_missing = []
+    pl = [hard_battles_from_counter(30_000 + i) for i in range(6)]
+    pl[2] = None
+    hard_missing.append(
+        {
+            "name": "hard_one_missing_seat_2",
+            "players": [
+                None if p is None else {"battles": p, "battles_hex": encode_battles(p, "hard").hex()}
+                for p in pl
+            ],
+            "missing_indices": [2],
+            "results": score_with_missing(pl),
+        }
+    )
+    hard_hash_cases = []
+    for i in range(3):
+        battles = hard_battles_from_counter(40_000 + i)
+        salt = sha256(f"hard-salt:{i}".encode())
+        hard_hash_cases.append(
+            {
+                "battles": battles,
+                "salt": salt.hex(),
+                "expected": battles_hash(battles, salt, "hard").hex(),
+            }
+        )
+    # A hard board's 70-byte encoding and an easy board's 35-byte one commit
+    # differently even when every number is the same: the mode is part of the
+    # commitment. Pinned so nothing can quietly hash one as the other.
+    same_numbers = [[20, 20, 20, 20, 20]] * BATTLES
+    same_salt = sha256(b"mode-salt")
+    hard_hash_cases.append(
+        {
+            "battles": same_numbers,
+            "salt": same_salt.hex(),
+            "expected": battles_hash(same_numbers, same_salt, "hard").hex(),
+            "easy_expected": battles_hash(same_numbers, same_salt, "easy").hex(),
+        }
+    )
+    assert hard_hash_cases[-1]["expected"] != hard_hash_cases[-1]["easy_expected"]
+
     vectors = {
         "_comment": (
             "GENERATED FILE - do not edit by hand. Regenerate with "
@@ -621,8 +742,12 @@ def main() -> None:
             "pot) evenly, remainder to the lowest seat; a pool runs with 52..64 "
             "players (D-E4); "
             "leaf sha256(0x00||player||rank_u8||amount_u64le), node "
-            "sha256(0x01||l||r), odd node promoted, leaves (rank asc, seat asc)"
+            "sha256(0x01||l||r), odd node promoted, leaves (rank asc, seat asc); "
+            "HARD mode (Phase B): the board's 35 stats sum to exactly 700 (no "
+            "per-battle rule), two bytes LE per stat (70), same comparison and "
+            "ranking"
         ),
+        "hard_total": HARD_TOTAL,
         "entry_lamports": str(ENTRY_LAMPORTS),
         "pot_lamports": str(POT),
         "paid_ranks": PAID_RANKS,
@@ -635,6 +760,10 @@ def main() -> None:
         "tier_tables": tier_tables,
         "draw_rate": {"n": n_pairs, "draws": draws, "rate": rate, "stream_base": 10_000_000},
         "hash_cases": hash_cases,
+        "hard_battle_cases": hard_hand_battle_cases(),
+        "hard_pools": hard_pools,
+        "hard_missing_pools": hard_missing,
+        "hard_hash_cases": hard_hash_cases,
     }
 
     out = json.dumps(vectors, indent=1)

@@ -56,9 +56,9 @@
  */
 
 import nacl from 'tweetnacl';
-import type { CiphertextStore } from '../../sealing/src';
+import { payloadBytes, type CiphertextStore } from '../../sealing/src';
 import { ciphertextMessage, ciphertextStatusMessage } from './ciphertext-message';
-import { CAPACITY } from '../../scoring/src/prizes';
+import { CAPACITY, boardModeOf } from '../../scoring/src';
 import type { PoolIdResolver } from './pool-ids';
 import type { SeatResolver } from './seats';
 import { base58Decode } from './shared';
@@ -102,6 +102,20 @@ const OPEN = 'Open';
 const CLOSED_BECAUSE_FULL = 'pool filled';
 const CLOSED_TO_ENTRIES = 'pool closed to entries';
 
+/** A sealed box is 48 bytes of overhead over the payload (`sealedbox.ts`). */
+export const SEALED_BOX_OVERHEAD = 48;
+
+/**
+ * The ciphertext length a pool accepts: the sealed box over ITS mode's
+ * payload (Phase B) — 175 bytes for an easy pool, 210 for a hard one.
+ */
+export function ciphertextLengthFor(mode: number | undefined): number {
+  return SEALED_BOX_OVERHEAD + payloadBytes(boardModeOf(mode));
+}
+
+/** Every length the route accepts before it knows the pool: one per mode. */
+export const CIPHERTEXT_LENGTHS: readonly number[] = [ciphertextLengthFor(0), ciphertextLengthFor(1)];
+
 function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
   if (a.length !== b.length) return false;
   let diff = 0;
@@ -133,6 +147,14 @@ export async function acceptCiphertext(
       status: 409,
       body: { error: filled ? CLOSED_BECAUSE_FULL : CLOSED_TO_ENTRIES },
     };
+  }
+  // ---- 1b. the pool's mode (Phase B) ------------------------------------
+  // The box must be the length of THIS pool's payload. The route already
+  // refused every length but the two modes'; here the other mode's is
+  // refused too, so a board placed under the wrong rule is turned back
+  // before the player pays rather than scored all-losses after.
+  if (submission.ciphertext.length !== ciphertextLengthFor(pool.mode)) {
+    return { status: 400, body: { error: 'bad request' } };
   }
 
   // ---- 2. the signature -------------------------------------------------

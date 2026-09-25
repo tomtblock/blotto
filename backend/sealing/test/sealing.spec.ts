@@ -130,3 +130,52 @@ describe('ciphertext store', () => {
     expect(await store.get(1n, 'dave')).to.equal(null);
   });
 });
+
+/**
+ * HARD payloads (Phase B, founder rulings 2026-09-24): the same four fields
+ * with a 70-byte board, 162 bytes in all. The mode is the pool's, never
+ * inferred from the bytes — the wrong mode's length fails to decode, which
+ * the crank scores as a lost ciphertext.
+ */
+describe('hard sealed payload', () => {
+  const { payloadBytes, battlesCommitment } = require('../src');
+  const hardBattles = [[700, 0, 0, 0, 0], ...Array.from({ length: 6 }, () => [0, 0, 0, 0, 0])];
+  // Fresh boards per call: the spec above mutates the shared `battles`
+  // array in place, so `payload()` cannot be trusted to be well-formed here.
+  const easyBattles = () => Array.from({ length: 7 }, () => [20, 20, 20, 20, 20]);
+  const easy = (): SealedPayload => ({ ...payload(), battles: easyBattles() as never });
+  const hard = (): SealedPayload => ({ ...payload(), battles: hardBattles as never });
+
+  it('is 162 bytes and round-trips through the pool key', () => {
+    const pool = generateKeypair();
+    const bytes = encodePayload(hard(), 'hard');
+    expect(bytes.length).to.equal(162);
+    expect(payloadBytes('hard')).to.equal(162);
+    expect(payloadBytes('easy')).to.equal(PAYLOAD_BYTES);
+    const opened = sealOpen(seal(bytes, pool.publicKey), pool);
+    const decoded = decodePayload(opened!, 'hard');
+    expect(decoded.battles).to.deep.equal(hardBattles);
+    expect(decoded.timingsMs).to.deep.equal(payload().timingsMs);
+    expect(Buffer.from(decoded.deviceHash)).to.deep.equal(Buffer.from(payload().deviceHash));
+  });
+  it('an easy payload does not decode as hard, nor a hard one as easy', () => {
+    expect(() => decodePayload(encodePayload(easy()), 'hard')).to.throw('162 bytes');
+    expect(() => decodePayload(encodePayload(hard(), 'hard'), 'easy')).to.throw('127 bytes');
+  });
+  it('a hard board refuses the easy encoder, and an easy board the hard one', () => {
+    expect(() => encodePayload(hard())).to.throw(/sum to exactly 100|integers in \[0, 100\]/);
+    const easyAsHard = easy();
+    (easyAsHard.battles as unknown as number[][])[0] = [21, 20, 20, 20, 20]; // board sums to 701
+    expect(() => encodePayload(easyAsHard, 'hard')).to.throw('sum to exactly 700');
+  });
+  it('commits over the 70-byte encoding', () => {
+    const p = hard();
+    expect(Buffer.from(payloadBattlesHash(p, 'hard'))).to.deep.equal(
+      Buffer.from(battlesCommitment(p.battles, p.salt, 'hard'))
+    );
+    const { battlesHash } = require('../src/scoring');
+    expect(Buffer.from(payloadBattlesHash(p, 'hard'))).to.deep.equal(
+      Buffer.from(battlesHash(p.battles, p.salt, 'hard'))
+    );
+  });
+});

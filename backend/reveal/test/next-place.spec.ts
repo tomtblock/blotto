@@ -250,7 +250,7 @@ describe('payNextPlacePortions — the program judges the arguments', () => {
       treasuryMinPlatformLamports: 0n,
     });
     chain.fundPlatform(POT * 4n);
-    await chain.openPool(1n, 0, sha('pk'), sha('hash'));
+    await chain.openPool(1n, 0, sha('pk'), sha('hash'), 0);
     const seats = Array.from({ length: seatCount }, (_, i) => i);
     const entries = seats.map((s) => ({
       player: player(s),
