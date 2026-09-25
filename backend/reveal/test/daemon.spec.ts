@@ -136,7 +136,7 @@ describe('the daemon (C8): keeper', () => {
     const w = await makeWorld();
     const r1 = await w.daemon.tick();
     expect(r1.errors).to.deep.equal([]);
-    expect(r1.opened).to.deep.equal([{ poolId: 1n, tier: 0 }]);
+    expect(r1.opened).to.deep.equal([{ poolId: 1n, tier: 0, mode: 0 }]);
     expect(r1.completed).to.deep.equal([
       { poolId: 1n, step: 'vrf' },
       { poolId: 1n, step: 'pass_collection' },
@@ -160,9 +160,9 @@ describe('the daemon (C8): keeper', () => {
     const r = await w.daemon.tick();
     expect(r.errors).to.deep.equal([]);
     expect(r.opened).to.deep.equal([
-      { poolId: 1n, tier: 0 },
-      { poolId: 2n, tier: 1 },
-      { poolId: 3n, tier: 2 },
+      { poolId: 1n, tier: 0, mode: 0 },
+      { poolId: 2n, tier: 1, mode: 0 },
+      { poolId: 3n, tier: 2, mode: 0 },
     ]);
     // D1: each pool carries its own tier's entry price.
     expect((await w.chain.getPool(2n)).entryLamports).to.equal(TIER_ENTRY_LAMPORTS[1]);
@@ -182,7 +182,7 @@ describe('the daemon (C8): keeper', () => {
     w.chain.config!.openTiers = [true, false, false, false, false, false, false];
 
     const first = await w.daemon.tick();
-    expect(first.opened).to.deep.equal([{ poolId: 1n, tier: 0 }]);
+    expect(first.opened).to.deep.equal([{ poolId: 1n, tier: 0, mode: 0 }]);
 
     // Fill it, run it to Paid.
     await enterPlayers(w, 1n, 52);
@@ -197,7 +197,7 @@ describe('the daemon (C8): keeper', () => {
     // however much the treasury holds.
     const next = await tickAfterCooldown(w);
     expect(next.errors).to.deep.equal([]);
-    expect(next.opened).to.deep.equal([{ poolId: 2n, tier: 0 }]);
+    expect(next.opened).to.deep.equal([{ poolId: 2n, tier: 0, mode: 0 }]);
     expect((await w.chain.getConfig()).nextPoolId).to.equal(3n);
     expect((await w.chain.getPool(2n)).tier).to.equal(0);
   });
@@ -209,7 +209,7 @@ describe('the daemon (C8): keeper', () => {
     expect(r.opened).to.deep.equal([]);
     expect(r.errors).to.deep.equal([]);
     w.chain.config!.paused = false;
-    expect((await w.daemon.tick()).opened).to.deep.equal([{ poolId: 1n, tier: 0 }]);
+    expect((await w.daemon.tick()).opened).to.deep.equal([{ poolId: 1n, tier: 0, mode: 0 }]);
   });
 });
 
@@ -229,7 +229,7 @@ describe('the daemon (C8): the product loop', () => {
     expect(cfg.activePoolByTier[0]).to.equal(0n);
     expect(cfg.tierNextOpenAt[0]).to.equal(w.clock.t + cfg.cooldownSeconds);
     const r2 = await tickAfterCooldown(w);
-    expect(r2.opened).to.deep.equal([{ poolId: 2n, tier: 0 }]);
+    expect(r2.opened).to.deep.equal([{ poolId: 2n, tier: 0, mode: 0 }]);
 
     // Conservation: the paid set carries exactly the pot.
     const pot = potForTier(0);
@@ -258,7 +258,7 @@ describe('the daemon (C8): the product loop', () => {
     for (const p of players) {
       expect(w.chain.paid.get(p)).to.equal(TIER_ENTRY_LAMPORTS[0]); // 100% back (R7)
     }
-    expect((await tickAfterCooldown(w)).opened).to.deep.equal([{ poolId: 2n, tier: 0 }]);
+    expect((await tickAfterCooldown(w)).opened).to.deep.equal([{ poolId: 2n, tier: 0, mode: 0 }]);
   });
 
   it('an empty pool past its deadline closes and is replaced', async () => {
@@ -270,7 +270,7 @@ describe('the daemon (C8): the product loop', () => {
     expect(r.refundsTriggered).to.deep.equal([1n]);
     expect((await w.chain.getPool(1n)).state).to.equal('Closed');
     expect(r.opened).to.deep.equal([]);
-    expect((await tickAfterCooldown(w)).opened).to.deep.equal([{ poolId: 2n, tier: 0 }]);
+    expect((await tickAfterCooldown(w)).opened).to.deep.equal([{ poolId: 2n, tier: 0, mode: 0 }]);
   });
 
   it('the cooldown holds the keeper to the second, then the tier reopens', async () => {
@@ -287,7 +287,7 @@ describe('the daemon (C8): the product loop', () => {
     expect(held.opened).to.deep.equal([]);
     expect(held.errors).to.deep.equal([], 'a hold is a verdict, not a failed transaction');
     w.clock.t = nextOpenAt;
-    expect((await w.daemon.tick()).opened).to.deep.equal([{ poolId: 2n, tier: 0 }]);
+    expect((await w.daemon.tick()).opened).to.deep.equal([{ poolId: 2n, tier: 0, mode: 0 }]);
   });
 
   it('the keeper gate: a stranger never opens a tier, however long it idles (O9b)', async () => {
@@ -307,7 +307,7 @@ describe('the daemon (C8): the product loop', () => {
     }
     // The keeper opens immediately, whenever it likes.
     w.chain.opener = 'settle';
-    expect((await w.daemon.tick()).opened).to.deep.equal([{ poolId: 1n, tier: 0 }]);
+    expect((await w.daemon.tick()).opened).to.deep.equal([{ poolId: 1n, tier: 0, mode: 0 }]);
     // And the cooldown still governs the keeper, exactly as before.
     w.clock.t = (await w.chain.getPool(1n)).fillDeadline + 1n;
     await w.daemon.tick(); // closes pool 1; the cooldown is stamped
@@ -315,7 +315,7 @@ describe('the daemon (C8): the product loop', () => {
     w.clock.t = nextOpenAt - 1n;
     expect((await w.daemon.tick()).opened).to.deep.equal([], 'one second early');
     w.clock.t = nextOpenAt;
-    expect((await w.daemon.tick()).opened).to.deep.equal([{ poolId: 2n, tier: 0 }]);
+    expect((await w.daemon.tick()).opened).to.deep.equal([{ poolId: 2n, tier: 0, mode: 0 }]);
   });
 
   it('nothing happens AT the deadline — both instructions compare strictly', async () => {
@@ -358,7 +358,7 @@ describe('the daemon (C8): the minimum field (D-E4)', () => {
     expect((await w.chain.getPool(1n)).fillDeadline).to.equal(opened, 'players entered under 12 h');
     w.chain.config!.openTiers = [true, true, false, false, false, false, false];
     const r = await w.daemon.tick();
-    expect(r.opened).to.deep.equal([{ poolId: 2n, tier: 1 }]);
+    expect(r.opened).to.deep.equal([{ poolId: 2n, tier: 1, mode: 0 }]);
     expect((await w.chain.getPool(2n)).fillDeadline).to.equal(w.clock.t + 3600n);
     await expectRejects(async () => w.chain.setPoolTiming(0n, 60n), 'InvalidTiming');
   });
@@ -382,7 +382,7 @@ describe('the daemon (C8): the minimum field (D-E4)', () => {
     expect(r.refundsTriggered).to.deep.equal([]);
     expect(r.cranked).to.deep.equal([{ poolId: 1n, finalState: 'Paid' }]);
     expect(r.opened).to.deep.equal([]);
-    expect((await tickAfterCooldown(w)).opened).to.deep.equal([{ poolId: 2n, tier: 0 }]);
+    expect((await tickAfterCooldown(w)).opened).to.deep.equal([{ poolId: 2n, tier: 0, mode: 0 }]);
 
     // Conservation over the real 52-seat field: the paid set carries
     // exactly the pot, and nobody outside rank 1 is in it (D-E2).
@@ -412,7 +412,7 @@ describe('the daemon (C8): the minimum field (D-E4)', () => {
     expect(r1.errors).to.deep.equal([]);
     expect(r1.sealedAtDeadline).to.deep.equal([1n]);
     expect(r1.cranked).to.deep.equal([{ poolId: 1n, finalState: 'Paid' }]);
-    expect((await tickAfterCooldown(w)).opened).to.deep.equal([{ poolId: 2n, tier: 0 }]);
+    expect((await tickAfterCooldown(w)).opened).to.deep.equal([{ poolId: 2n, tier: 0, mode: 0 }]);
 
     const players = await enterPlayers(w, 2n, Number(MIN_SEATS) - 1);
     w.clock.t = (await w.chain.getPool(2n)).fillDeadline + 1n;
@@ -747,7 +747,7 @@ describe('the daemon (C8): resume after a crash', () => {
 
     const r = await w.daemon.tick(); // a fresh daemon (no memory of the key)
     expect(r.errors).to.deep.equal([]);
-    expect(r.opened).to.deep.equal([{ poolId: 1n, tier: 0 }]);
+    expect(r.opened).to.deep.equal([{ poolId: 1n, tier: 0, mode: 0 }]);
     // The pool was opened with EXACTLY the pre-crash key — the hash the
     // chain now carries commits to the secret custody actually holds.
     const published = w.chain.openedWith.get('1')!;
@@ -759,7 +759,7 @@ describe('the daemon (C8): resume after a crash', () => {
     const w = await makeWorld();
     // The crash window: open_pool landed, VRF + collection never did.
     const key = await w.custody.createPoolKey(1n);
-    await w.chain.openPool(1n, 0, key.publicKey, key.secretHash);
+    await w.chain.openPool(1n, 0, key.publicKey, key.secretHash, 0);
 
     const r = await w.daemon.tick();
     expect(r.errors).to.deep.equal([]);
@@ -797,7 +797,7 @@ describe('the daemon (C8): resume after a crash', () => {
     });
 
     const r1 = await daemon.tick();
-    expect(r1.opened).to.deep.equal([{ poolId: 1n, tier: 0 }]);
+    expect(r1.opened).to.deep.equal([{ poolId: 1n, tier: 0, mode: 0 }]);
     expect(r1.errors.length).to.equal(1);
     expect(r1.errors[0].action).to.equal('keeper');
     expect((await w.chain.getPool(1n)).vrfCommitted).to.equal(false);
@@ -1062,10 +1062,11 @@ describe('the daemon (proposal E1 §5.3): the keeper-cost seam', () => {
       poolId: bigint,
       tier: number,
       sealingPubkey: Uint8Array,
-      sealingSecretHash: Uint8Array
+      sealingSecretHash: Uint8Array,
+      mode: number
     ): Promise<void> {
       this.meter();
-      return super.openPool(poolId, tier, sealingPubkey, sealingSecretHash);
+      return super.openPool(poolId, tier, sealingPubkey, sealingSecretHash, mode);
     }
     override async commitVrfSeed(poolId: bigint, randomnessAccount: string): Promise<void> {
       this.meter();
@@ -1110,7 +1111,7 @@ describe('the daemon (proposal E1 §5.3): the keeper-cost seam', () => {
 
     // The first tick opens tier 0 and completes its launch: open_pool,
     // commit_vrf_seed, create_pass_collection — three sends.
-    expect(report.opened).to.deep.equal([{ poolId: 1n, tier: 0 }]);
+    expect(report.opened).to.deep.equal([{ poolId: 1n, tier: 0, mode: 0 }]);
     expect(spent).to.equal(3n * 5_000n);
 
     // The ops_costs row shape (§5.3): the delta keys by pool and outcome,

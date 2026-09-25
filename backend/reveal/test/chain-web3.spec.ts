@@ -507,7 +507,7 @@ describe('the instruction wire format, decoded back out of the bytes sent', () =
     const { connection, sent } = fakeCluster();
     const sealingPubkey = new Uint8Array(32).fill(0x7a);
     const secretHash = new Uint8Array(32).fill(0x7b);
-    await chain(connection, { keeperSigner }).openPool(POOL_ID, 3, sealingPubkey, secretHash);
+    await chain(connection, { keeperSigner }).openPool(POOL_ID, 3, sealingPubkey, secretHash, 1);
 
     const ix = onlyIx(sent);
     expect(metas(ix)).to.deep.equal([
@@ -528,12 +528,14 @@ describe('the instruction wire format, decoded back out of the bytes sent', () =
     expect(data[16], 'tier').to.equal(3);
     expect(data.subarray(17, 49).equals(Buffer.from(sealingPubkey))).to.equal(true);
     expect(data.subarray(49, 81).equals(Buffer.from(secretHash))).to.equal(true);
-    expect(data.length, 'no trailing bytes').to.equal(81);
+    // Phase B: `mode` is the appended argument — the last byte.
+    expect(data[81], 'mode').to.equal(1);
+    expect(data.length, 'no trailing bytes').to.equal(82);
   });
 
   it('open_pool defaults the keeper to the settlement signer when no keeper key is held', async () => {
     const { connection, sent } = fakeCluster();
-    await chain(connection).openPool(POOL_ID, 0, new Uint8Array(32), new Uint8Array(32));
+    await chain(connection).openPool(POOL_ID, 0, new Uint8Array(32), new Uint8Array(32), 0);
     expect(sent[0].signers.map((s) => s.publicKey.toBase58())).to.deep.equal([
       settlementSigner.publicKey.toBase58(),
     ]);

@@ -12,7 +12,8 @@ import { IrysPublisher, irysNetworkFor, type IrysUploader } from '../src';
 import type { RevealBundle } from '../src';
 
 const bundle: RevealBundle = {
-  version: 2,
+  version: 3,
+  mode: 'easy',
   pool_id: '42',
   secret: 'aa'.repeat(32),
   entry_lamports: '100000000',
@@ -53,7 +54,7 @@ describe('IrysPublisher (C11)', () => {
     const tags = Object.fromEntries(uploads[0].opts!.tags!.map((t) => [t.name, t.value]));
     expect(tags['Content-Type']).to.equal('application/json');
     expect(tags['Blotto-Pool']).to.equal('42');
-    expect(tags['Blotto-Bundle-Version']).to.equal('2');
+    expect(tags['Blotto-Bundle-Version']).to.equal('3');
   });
 
   it('an id-less answer is an error, never a broken URI', async () => {

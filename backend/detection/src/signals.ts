@@ -181,6 +181,10 @@ export function duplicateSets(entries: RevealedEntry[]): Finding[] {
       const b = chosen.flatMap((k) => battlesB[k]);
       // The near-duplicate threshold scales with what was actually compared,
       // so a four-battle comparison is not judged on a seven-battle budget.
+      // Mode-blind on purpose (Phase B, 2026-09-24): a board's total mass is
+      // 700 in easy (7 × 100) and 700 in hard (the board's own rule), so an
+      // L1 distance over the same thirty-five values means the same thing
+      // under either — no per-mode tuning is needed or applied.
       const nearThreshold = Math.floor((10 * a.length) / 35);
       const l1 = a.reduce((acc, v, k) => acc + Math.abs(v - b[k]), 0);
       const scope =

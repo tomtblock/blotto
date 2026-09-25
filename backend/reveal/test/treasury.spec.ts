@@ -73,7 +73,7 @@ describe('nextOpenable (the treasury policy, off-chain)', () => {
     // carries a cushion of its own because opening it would fund one.
     const needed =
       TIER_POT_LAMPORTS[0] + CUSHION + 1_000_000_000n + (TIER_POT_LAMPORTS[1] + CUSHION);
-    expect(idleTierReserve(cfg, 0, CUSHION)).to.equal(TIER_POT_LAMPORTS[1] + CUSHION);
+    expect(idleTierReserve(cfg, { tier: 0, mode: 0 }, CUSHION)).to.equal(TIER_POT_LAMPORTS[1] + CUSHION);
     expect(nextOpenable(cfg, needed - 1n, NONE, undefined, CUSHION).tier).to.equal(null);
     expect(nextOpenable(cfg, needed, NONE, undefined, CUSHION).tier).to.equal(0);
   });
@@ -141,14 +141,14 @@ describe('nextOpenable ↔ FakeChain parity (the on-chain mirror)', () => {
         const cfg = await chain.getConfig();
         const verdict = nextOpenable(cfg, balance, NONE, undefined, CUSHION);
         if (verdict.tier !== null) {
-          await chain.openPool(1n, verdict.tier, sha('pk'), sha('h'));
+          await chain.openPool(1n, verdict.tier, sha('pk'), sha('h'), verdict.mode!);
           const after = await chain.getConfig();
           expect(after.activePoolByTier[verdict.tier]).to.equal(1n);
         } else {
           for (let t = 0; t < 7; t++) {
             if (!cfg.openTiers[t]) continue;
             try {
-              await chain.openPool(1n, t, sha('pk'), sha('h'));
+              await chain.openPool(1n, t, sha('pk'), sha('h'), 0);
               expect.fail(`verdict said none but tier ${t} opened at balance ${balance}`);
             } catch (e) {
               expect(String(e)).to.contain('TreasuryShortfall');
@@ -201,7 +201,7 @@ describe('the zero-slack cascade (proposal E1 §6.3)', () => {
           expect(v.reason, `mask ${mask}: loop ended short, not busy`).to.contain('live pool');
           break;
         }
-        await chain.openPool(cfg.nextPoolId, v.tier, sha('pk'), sha('h'));
+        await chain.openPool(cfg.nextPoolId, v.tier, sha('pk'), sha('h'), v.mode!);
         opened.push(v.tier);
       }
       const want: number[] = [];
@@ -245,7 +245,7 @@ describe('the keeper under the sequential rule (v2-named case)', () => {
     });
 
     const r1 = await daemon.tick();
-    expect(r1.opened).to.deep.equal([{ poolId: 1n, tier: 0 }]);
+    expect(r1.opened).to.deep.equal([{ poolId: 1n, tier: 0, mode: 0 }]);
     chain.entries.set('1', [
       {
         player: 'w1',
@@ -278,6 +278,135 @@ describe('the keeper under the sequential rule (v2-named case)', () => {
     expect(held.opened).to.deep.equal([]);
     clock.t += (await chain.getConfig()).cooldownSeconds;
     const r3 = await daemon.tick();
-    expect(r3.opened).to.deep.equal([{ poolId: 2n, tier: 0 }]);
+    expect(r3.opened).to.deep.equal([{ poolId: 2n, tier: 0, mode: 0 }]);
+  });
+});
+
+/**
+ * TWO LADDERS (Phase B, founder rulings 2026-09-24). The hard ladder has its
+ * own switch, slot and clock per tier and shares the tier's pot; the mirror
+ * and the fake must agree about it exactly as they do about the easy one.
+ */
+describe('the hard ladder: nextOpenable ↔ FakeChain (Phase B)', () => {
+  it('a hard tier is disabled at init and opens for nobody until set_hard_open_tiers', async () => {
+    const chain = await chainWith(0n);
+    chain.fundPlatform(2_000_000_000_000n);
+    const cfg = await chain.getConfig();
+    expect(cfg.hardOpenTiers).to.deep.equal([false, false, false, false, false, false, false]);
+    try {
+      await chain.openPool(1n, 0, sha('pk'), sha('h'), 1);
+      expect.fail('a disabled hard tier opened');
+    } catch (e) {
+      expect(String(e)).to.contain('TierNotOpen');
+    }
+    try {
+      await chain.openPool(1n, 0, sha('pk'), sha('h'), 2);
+      expect.fail('an unknown mode opened');
+    } catch (e) {
+      expect(String(e)).to.contain('UnknownMode');
+    }
+  });
+
+  it('an idle enabled hard tier reserves a pot, at the gate and in the mirror', async () => {
+    const chain = await chainWith(0n);
+    chain.setHardOpenTiers([true, false, false, false, false, false, false]);
+    const cfg = await chain.getConfig();
+    // Easy tier 0 now needs its own pool plus one reserved for hard tier 0.
+    const perPool = TIER_POT_LAMPORTS[0] + CUSHION;
+    expect(idleTierReserve(cfg, { tier: 0, mode: 0 }, CUSHION)).to.equal(perPool);
+    expect(idleTierReserve(cfg, { tier: 0, mode: 1 }, CUSHION)).to.equal(perPool);
+    expect(idleTierReserve(cfg, null, CUSHION)).to.equal(2n * perPool);
+    const short = nextOpenable(cfg, 2n * perPool - 1n, NONE, undefined, CUSHION);
+    expect(short.tier).to.equal(null);
+    expect(short.shortfallLamports).to.equal(1n);
+    const v = nextOpenable(cfg, 2n * perPool, NONE, undefined, CUSHION);
+    expect([v.tier, v.mode], 'easy first at one tier').to.deep.equal([0, 0]);
+    // And the chain agrees at the boundary, both sides of it.
+    chain.fundPlatform(1n);
+    chain.platform = 2n * perPool - 1n;
+    try {
+      await chain.openPool(1n, 0, sha('pk'), sha('h'), 0);
+      expect.fail('opened one lamport under the two-ladder floor');
+    } catch (e) {
+      expect(String(e)).to.contain('TreasuryShortfall');
+    }
+    chain.platform = 2n * perPool;
+    await chain.openPool(1n, 0, sha('pk'), sha('h'), 0);
+    // With easy tier 0 live, the next verdict is the HARD slot at tier 0,
+    // and the treasury holds exactly its pool.
+    const cfg2 = await chain.getConfig();
+    expect(cfg2.activePoolByTier[0]).to.equal(1n);
+    expect(cfg2.hardActivePoolByTier[0]).to.equal(0n);
+    const v2 = nextOpenable(cfg2, chain.platform, ['Open', ...NONE.slice(1)], undefined, CUSHION);
+    expect([v2.tier, v2.mode]).to.deep.equal([0, 1]);
+    await chain.openPool(2n, 0, sha('pk'), sha('h'), 1);
+    const cfg3 = await chain.getConfig();
+    expect(cfg3.hardActivePoolByTier[0]).to.equal(2n);
+    expect((await chain.getPool(2n)).mode).to.equal(1);
+    expect((await chain.getPool(1n)).mode).to.equal(0);
+    // Both slots live: nothing opens, and the reason names both ladders.
+    const v3 = nextOpenable(cfg3, 2_000_000_000_000n, ['Open', ...NONE.slice(1)], undefined, CUSHION, [
+      'Open',
+      ...NONE.slice(1),
+    ]);
+    expect(v3.tier).to.equal(null);
+    expect(v3.reason).to.contain('hard tier 0');
+    expect(v3.reason).to.contain('tier 0: Open');
+  });
+
+  it('the hard slot frees on its own ladder with its own cooldown, leaving the easy pool alone', async () => {
+    const clock = { t: 1_000n };
+    const chain = await chainWith(0n, () => clock.t);
+    chain.setHardOpenTiers([true, false, false, false, false, false, false]);
+    chain.fundPlatform(100_000_000_000n);
+    await chain.openPool(1n, 0, sha('pk'), sha('h'), 0);
+    await chain.openPool(2n, 0, sha('pk'), sha('h'), 1);
+    // The hard pool (2) refunds empty past its deadline: Closed, hard slot
+    // freed and stamped; the easy pool (1) and its clock untouched.
+    clock.t = 1_000n + 12n * 3600n + 1n;
+    await chain.triggerRefund(2n);
+    const cfg = await chain.getConfig();
+    expect((await chain.getPool(2n)).state).to.equal('Closed');
+    expect(cfg.hardActivePoolByTier[0]).to.equal(0n);
+    expect(cfg.hardTierNextOpenAt[0]).to.equal(clock.t + cfg.cooldownSeconds);
+    expect(cfg.activePoolByTier[0]).to.equal(1n);
+    expect(cfg.tierNextOpenAt[0]).to.equal(0n);
+    // Inside the hard cooldown: the hard slot is free but the clock holds it.
+    const v = nextOpenable(cfg, chain.platform, ['Open', ...NONE.slice(1)], clock.t, CUSHION);
+    expect(v.tier).to.equal(null);
+    expect(v.reason).to.contain('hard tier 0: cooling down');
+    clock.t += cfg.cooldownSeconds;
+    const v2 = nextOpenable(await chain.getConfig(), chain.platform, ['Open', ...NONE.slice(1)], clock.t, CUSHION);
+    expect([v2.tier, v2.mode]).to.deep.equal([0, 1]);
+  });
+
+  it('the daemon opens the hard pool beside the easy one and completes its launch', async () => {
+    const clock = { t: 1_000n };
+    const chain = await chainWith(0n, () => clock.t);
+    chain.setHardOpenTiers([true, false, false, false, false, false, false]);
+    chain.fundPlatform(100_000_000_000n);
+    const custody = new LocalCustody(async (id) => (await chain.getPool(id)).state !== 'Open');
+    const daemon = makeDaemon({
+      chain,
+      custody,
+      ciphertexts: new MemoryCiphertextStore(),
+      vrf: new StubVrfCoordinator(chain, 'stub'),
+      crank: async (poolId) => ({ poolId, finalState: 'Open', stepsTaken: [] }),
+      now: () => clock.t,
+    });
+    const r = await daemon.tick();
+    expect(r.errors).to.deep.equal([]);
+    expect(r.opened).to.deep.equal([
+      { poolId: 1n, tier: 0, mode: 0 },
+      { poolId: 2n, tier: 0, mode: 1 },
+    ]);
+    expect(r.completed).to.deep.equal([
+      { poolId: 1n, step: 'vrf' },
+      { poolId: 1n, step: 'pass_collection' },
+      { poolId: 2n, step: 'vrf' },
+      { poolId: 2n, step: 'pass_collection' },
+    ]);
+    expect((await chain.getPool(2n)).mode).to.equal(1);
+    expect((await daemon.tick()).opened).to.deep.equal([]);
   });
 });

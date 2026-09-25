@@ -667,12 +667,14 @@ describe('detection wired into the crank (R11, roadmap 4.3)', () => {
     expect(outcome.finalState).to.equal('Paid');
 
     // The published object — after the JSON round trip MemoryPublisher
-    // performs — is version 2 and carries neither key on any entry. The
+    // performs — is version 3 (Phase B: it names the mode), still carrying
+    // neither key on any entry. The
     // bundle is permanent public storage; these two fields identify a
     // browser across pools and time a player's screens, and no verification
     // step reads either.
     const bundle = t.publisher.published.get(outcome.bundleUri!)!;
-    expect(bundle.version).to.equal(2);
+    expect(bundle.version).to.equal(3);
+    expect(bundle.mode).to.equal('easy');
     expect(bundle.entries.length).to.equal(64);
     for (const e of bundle.entries) {
       expect(e).to.not.have.property('device_hash');

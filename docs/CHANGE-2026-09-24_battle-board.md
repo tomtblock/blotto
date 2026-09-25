@@ -301,3 +301,67 @@ the floor and marks the pool easy) and the config-migration test rewritten for V
 shared, reveal, indexer and app suites and typechecks; every `ci-fast` gate. Two indexer specs
 that addressed the fixture by transaction index, and one that took "the first seat 0" from a
 map ordered by random player keys, were made to find their rows instead.
+
+## 12. Phase B, the backend change (2026-09-25)
+
+The second Phase B change: every service learns the pool's mode. Nothing here is deployed either;
+the backend deploys in the drain window, after the program upgrade (Phase B plan, decision 1), and
+this change is the reason nothing may deploy before it — the keeper's `open_pool` now carries the
+appended `mode` byte the upgraded program requires.
+
+**The hard rule, in one module.** `backend/scoring/src/allocation.ts` holds both placing rules:
+easy (each battle sums to 100, one byte per stat, 35 bytes) and hard (the thirty-five stats sum to
+700, two bytes little-endian per stat, 70 bytes). Every function takes the mode and defaults to
+easy, so every pre-Phase-B caller keeps its meaning; the comparison and the ranking are mode-blind.
+The commitment is `sha256(canonical bytes ‖ salt)` over the mode's encoding, so the same numbers
+commit differently under the two modes — the mode is part of what was committed to. The sealed
+payload follows (127 bytes easy, 162 hard; `backend/sealing/src/payload.ts`).
+
+**The Python oracle** (`backend/scoring/fixtures/gen_vectors.py`) gained a hard stream (700 over
+35 cells by 34 sorted dividers), six hand-checked hard comparisons (a 5–0 sweep, which easy cannot
+produce; a battle holding nothing; a board in one battle), five four-player pools, a full 64 with
+the tree, the minimum field, a stacked-edges pool, a lost-ciphertext pool, and hash cases including
+the same numbers hashed under both modes. `check-fixtures.sh` reproduces all of it.
+
+**The crank and the keeper.** The crank reads `Pool.mode` and decodes, hashes and scores every
+payload by it; a payload of the other mode's length fails to decode and is scored as a lost
+ciphertext, never guessed. The bundle is **version 3** and names `mode`; a version-2 bundle reads
+as easy. The keeper walks both ladders (`backend/reveal/src/treasury.ts`): lowest tier first, easy
+before hard at one tier, an idle enabled hard tier reserving a pot exactly as an idle easy one; the
+parity suite drives the mirror and `FakeChain` through the two-ladder cases. The next-place driver
+recomputes the ranking under the pool's mode.
+
+**The indexer.** Migration `0025_pool_mode.sql` adds `pools.mode` and keys `tier_status` per
+(tier, mode), with the rederive marker. `GET /pools` serves `mode` (`'easy' | 'hard'`) and takes
+`?mode=`; `GET /tiers` carries the hard ladder per tier under `hard` (its own switch, resolved
+chain → `HardTiersOpened` ledger → all closed, and its own cooldown stamp) — the app decides from
+`hard.enabled` alone whether a hard card exists. `GET /treasury` counts both ladders in the floor
+and publishes the hard slot's status per tier.
+
+**The packet service** accepts a sealed box of either mode's length up front and then holds it to
+the POOL's mode, so a board placed under the wrong rule is refused before the player pays rather
+than scored all-losses after.
+
+**Operator tools.** `admin.ts migrate-config` takes no argument (V2 → V3, 484 → 603);
+`migrate-pool --all` walks every pool and grows either old size; `set-open-tiers --mode hard`
+sends `set_hard_open_tiers` and refuses until the Config is migrated; `status` prints the hard
+ladder and `pools` a mode column. `check-deployed` expects the new layout and the new
+instruction. The runbook these messages point at (`docs/RUNBOOK_phase-b-window.md`) is written
+with the window steps in the next change.
+
+**Judgement calls (architect-owned, one line each).**
+
+- *Detection thresholds are unchanged.* The near-duplicate rule is an L1 distance over the
+  thirty-five compared values, and a board's total mass is 700 in both modes, so the same
+  threshold means the same thing; the "multiples of 10" and "identical battles" signals read the
+  same shape. Noted in `signals.ts` rather than tuned.
+- *The rehearsal harness still plays easy.* Its two hand-built pool views carry `mode: 0`; hard
+  strategies for the evidence run are the next change's.
+- *`decodePayload` takes an explicit mode rather than inferring it from the length.* Inference
+  would have let a hard box in an easy pool decode "successfully" and then fail the hash — a
+  quieter failure than the length refusal, and one the packet route now catches earlier anyway.
+
+**Verified.** Scoring 137, sealing 40, reveal 207, indexer 130, packet 226, Postgres 45 (the
+migrations from an empty database, against a local Postgres 16), rehearsal 29 and app 552 passing;
+every typecheck including the two operator scripts; every fast gate (language, standing rules,
+mirrors, fixtures, env examples, published numbers, dead files, the two self-tests).

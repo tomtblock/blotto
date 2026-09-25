@@ -45,6 +45,15 @@ export interface PoolFacts {
    * already readable, and nothing whatever about any individual entrant.
    */
   entrants: number;
+  /**
+   * The pool's placing rule (Phase B, 2026-09-24): 0 easy, 1 hard — from
+   * `pools.mode` (migration 0025). The sealed payload is a different length
+   * per mode (127 / 162 bytes), and the route checks a submission against
+   * the POOL's mode rather than accepting either: a hard board sealed into
+   * an easy pool would be scored as a lost ciphertext at settlement, after
+   * the player had paid. Absent (a projection from before 0025) means easy.
+   */
+  mode?: number;
 }
 
 export interface PoolIdResolver {
@@ -65,20 +74,26 @@ export class PgPoolIdResolver implements PoolIdResolver {
 
   async lookup(pool: string): Promise<PoolFacts | null> {
     const res = await this.db.query(
-      'SELECT id, state, entrants FROM pools WHERE pool = $1',
+      'SELECT id, state, entrants, mode FROM pools WHERE pool = $1',
       [pool]
     );
-    const row = res.rows[0] as { id: unknown; state: unknown; entrants: unknown } | undefined;
+    const row = res.rows[0] as
+      | { id: unknown; state: unknown; entrants: unknown; mode?: unknown }
+      | undefined;
     if (!row || row.id === null || row.id === undefined) return null;
     // `entrants` is NOT NULL DEFAULT 0 in the projection, but a NUMERIC comes
     // back as a string and a backfilled row can predate the column, so parse
     // defensively: an unreadable count must not become a confident claim that
     // the pool filled.
     const seats = Number(row.entrants);
+    // `mode` is SMALLINT NOT NULL DEFAULT 0 since 0025; a row from before
+    // it, or an unreadable value, is the easy ladder — the only one there was.
+    const mode = Number(row.mode);
     return {
       id: BigInt(String(row.id)),
       state: String(row.state ?? ''),
       entrants: Number.isFinite(seats) && seats >= 0 ? seats : 0,
+      mode: mode === 1 ? 1 : 0,
     };
   }
 }
@@ -87,8 +102,8 @@ export class PgPoolIdResolver implements PoolIdResolver {
 export class MemoryPoolIdResolver implements PoolIdResolver {
   private readonly pools = new Map<string, PoolFacts>();
 
-  set(pool: string, id: bigint, state = 'Open', entrants = 0): void {
-    this.pools.set(pool, { id, state, entrants });
+  set(pool: string, id: bigint, state = 'Open', entrants = 0, mode = 0): void {
+    this.pools.set(pool, { id, state, entrants, mode });
   }
 
   async lookup(pool: string): Promise<PoolFacts | null> {

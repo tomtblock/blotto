@@ -75,6 +75,8 @@ interface LivePool {
   state: 'Open' | 'Sealed' | 'Scored' | 'Refunding';
   entrants: bigint;
   refunded: bigint;
+  /** The ladder (Phase B): 0 easy, 1 hard. */
+  mode: number;
 }
 
 export interface TierStatus {
@@ -87,6 +89,13 @@ export interface TierStatus {
   status: 'open' | 'settling' | 'openable' | 'short' | 'disabled';
   live_pool_state: string | null;
   short_by_lamports: string;
+  /** The HARD ladder at this tier (Phase B): the same three fields for its
+   * own slot. Disabled until the founder's `set_hard_open_tiers`. */
+  hard: {
+    status: 'open' | 'settling' | 'openable' | 'short' | 'disabled';
+    live_pool_state: string | null;
+    short_by_lamports: string;
+  };
 }
 
 export interface TreasuryReport {
@@ -150,6 +159,10 @@ interface Policy {
   tierPrice: bigint[];
   tierPot: bigint[];
   enabled: readonly boolean[];
+  /** The hard ladder's enablement (Phase B): `hard_open_tiers`, or the
+   * ledger's latest `HardTiersOpened`, or all-closed — a hard tier the
+   * founder never enabled reserves nothing and opens nothing. */
+  hardEnabled: readonly boolean[];
   cushion: bigint;
   source: 'chain' | 'ledger';
   enablementSource: 'chain' | 'ledger' | 'launch_default';
@@ -183,11 +196,15 @@ export async function treasuryReport(
   // the ledger path; on the chain path `Config.platform_refundable` wins,
   // because that is the number the program's own floor is computed from.
   const liveByTier: (LivePool | null)[] = policy.tierPot.map(() => null);
+  // The hard ladder's live pools (Phase B): its own slot per tier, counted
+  // in the reserve exactly as the easy one, published per tier under `hard`.
+  const hardLiveByTier: (LivePool | null)[] = policy.tierPot.map(() => null);
   let reserved = 0n;
   let ledgerRefundable = 0n;
   for (const p of live) {
     if (p.tier < 0 || p.tier >= liveByTier.length) continue;
-    liveByTier[p.tier] = p;
+    if (p.mode === 1) hardLiveByTier[p.tier] = p;
+    else liveByTier[p.tier] = p;
     if (p.state !== 'Refunding') reserved += p.pot;
     if (p.state === 'Open') ledgerRefundable += p.price * p.entrants;
     if (p.state === 'Refunding') ledgerRefundable += p.price * (p.entrants - p.refunded);
@@ -217,12 +234,18 @@ export async function treasuryReport(
   //   needed = pot + cushion + min_platform
   //          + idle_tier_reserve(config, Some(tier), cushion)
   // Change one of the three and change all three.
-  const idleReserve = (excludeTier: number | null): bigint => {
+  // Both ladders since Phase B: an idle enabled HARD tier reserves a pot
+  // exactly as an idle enabled easy one (`idle_tier_reserve` walks both).
+  const idleReserve = (exclude: { tier: number; mode: number } | null): bigint => {
     let r = 0n;
     for (let t = 0; t < policy.tierPot.length; t++) {
-      if (t === excludeTier) continue;
-      if (policy.enabled[t] && !liveByTier[t]) {
-        r += (policy.tierPot[t] + policy.cushion) * policy.reservePots;
+      for (const mode of [0, 1]) {
+        if (exclude !== null && exclude.tier === t && exclude.mode === mode) continue;
+        const enabled = mode === 1 ? policy.hardEnabled[t] : policy.enabled[t];
+        const liveHere = mode === 1 ? hardLiveByTier[t] : liveByTier[t];
+        if (enabled && !liveHere) {
+          r += (policy.tierPot[t] + policy.cushion) * policy.reservePots;
+        }
       }
     }
     return r;
@@ -233,34 +256,36 @@ export async function treasuryReport(
   const available = balance - refundable;
 
   let firstShort: bigint | null = null;
-  const tiers: TierStatus[] = policy.tierPot.map((pot, t) => {
-    const row = {
-      tier: t,
-      price_lamports: policy.tierPrice[t].toString(),
-      pot_lamports: pot.toString(),
-    };
-    const livePool = liveByTier[t];
+  /** One ladder's slot at one tier, judged as `open_pool` would judge it. */
+  const slotStatus = (t: number, mode: number): TierStatus['hard'] => {
+    const livePool = mode === 1 ? hardLiveByTier[t] : liveByTier[t];
     if (livePool) {
       return {
-        ...row,
         status: livePool.state === 'Open' ? 'open' : 'settling',
         live_pool_state: livePool.state,
         short_by_lamports: '0',
       };
     }
-    if (!policy.enabled[t]) {
-      return { ...row, status: 'disabled', live_pool_state: null, short_by_lamports: '0' };
-    }
-    const needed = pot + policy.cushion + policy.minPlatform + idleReserve(t);
+    const enabled = mode === 1 ? policy.hardEnabled[t] : policy.enabled[t];
+    if (!enabled) return { status: 'disabled', live_pool_state: null, short_by_lamports: '0' };
+    const needed = policy.tierPot[t] + policy.cushion + policy.minPlatform + idleReserve({ tier: t, mode });
     const short = available >= needed ? 0n : needed - available;
     if (short > 0n && firstShort === null) firstShort = short;
     return {
-      ...row,
       status: short === 0n ? 'openable' : 'short',
       live_pool_state: null,
       short_by_lamports: short.toString(),
     };
-  });
+  };
+  const tiers: TierStatus[] = policy.tierPot.map((pot, t) => ({
+    tier: t,
+    price_lamports: policy.tierPrice[t].toString(),
+    pot_lamports: pot.toString(),
+    // Easy first, then hard: `firstShort` is the lowest tier's easy slot
+    // when both are short, matching the keeper's own order.
+    ...slotStatus(t, 0),
+    hard: slotStatus(t, 1),
+  }));
 
   // One tier-0 pool's margin: pass sales in, pot out — at a full field and
   // at the 52-seat minimum (D-E4). Shown as a range because the field a
@@ -303,6 +328,33 @@ async function enablementFromLedger(
     ? (tiersOpened.open_tiers as boolean[]).map((v) => v === true)
     : null;
   return enabled ? { enabled, source: 'ledger' } : { enabled: LAUNCH_OPEN_TIERS, source: 'launch_default' };
+}
+
+/** The hard ladder's enablement as the ledger can state it: the newest
+ * `HardTiersOpened`, else all closed — the posture `init_config` and the
+ * Phase B `migrate_config` both write, so the default is exact. */
+async function hardEnablementFromLedger(
+  db: Queryable
+): Promise<{ enabled: readonly boolean[]; source: 'ledger' | 'launch_default' }> {
+  const opened = await latestEvent(db, 'HardTiersOpened');
+  const enabled = opened ? (opened.open_tiers as boolean[]).map((v) => v === true) : null;
+  return enabled
+    ? { enabled, source: 'ledger' }
+    : { enabled: LAUNCH_OPEN_TIERS.map(() => false), source: 'launch_default' };
+}
+
+/**
+ * Which tiers may open a HARD pool (Phase B) — `tierEnablement`'s twin, by
+ * the same three-way resolution, for `GET /tiers`. The app decides from
+ * this alone whether a hard card exists (no switch of its own).
+ */
+export async function hardTierEnablement(
+  db: Queryable,
+  chain?: TreasuryChainReader | null
+): Promise<{ enabled: readonly boolean[]; source: 'chain' | 'ledger' | 'launch_default' }> {
+  const view = await tryChainRead(chain);
+  if (view) return { enabled: [...view.hardOpenTiers], source: 'chain' };
+  return hardEnablementFromLedger(db);
 }
 
 /**
@@ -352,6 +404,7 @@ function policyFromChain(view: TreasuryChainView): Policy {
     tierPrice: [...view.tierPriceLamports],
     tierPot: [...view.tierPotLamports],
     enabled: [...view.openTiers],
+    hardEnabled: [...view.hardOpenTiers],
     cushion: view.vaultCushionLamports,
     source: 'chain',
     enablementSource: 'chain',
@@ -390,6 +443,7 @@ async function policyFromLedger(db: Queryable): Promise<Policy> {
 
   const policySet = await latestEvent(db, 'TreasuryPolicySet');
   const fromLedger = await enablementFromLedger(db);
+  const hardFromLedger = await hardEnablementFromLedger(db);
 
   return {
     minPlatform: policySet ? BigInt(policySet.min_platform_lamports as string) : 0n,
@@ -397,6 +451,7 @@ async function policyFromLedger(db: Queryable): Promise<Policy> {
     tierPrice,
     tierPot,
     enabled: fromLedger.enabled,
+    hardEnabled: hardFromLedger.enabled,
     cushion: 0n,
     source: 'ledger',
     enablementSource: fromLedger.source,
@@ -421,7 +476,8 @@ async function latestEvent(
 async function livePools(db: Queryable): Promise<LivePool[]> {
   const res = await db.query(
     `SELECT tier, entry_lamports::text AS entry_lamports, pot_lamports::text AS pot_lamports,
-            state, entrants::text AS entrants, refunded_count::text AS refunded_count
+            state, entrants::text AS entrants, refunded_count::text AS refunded_count,
+            mode
        FROM pools
       WHERE state = ANY($1)`,
     [[...LIVE_STATES]]
@@ -433,6 +489,8 @@ async function livePools(db: Queryable): Promise<LivePool[]> {
     state: r.state as LivePool['state'],
     entrants: BigInt((r.entrants as string | null) ?? '0'),
     refunded: BigInt((r.refunded_count as string | null) ?? '0'),
+    // A row from before 0025 carries no mode: easy.
+    mode: Number(r.mode) === 1 ? 1 : 0,
   }));
 }
 

@@ -378,6 +378,7 @@ describe('GET /tiers — which tiers may open a pool', () => {
     const chain = async () =>
       ({
         openTiers: [true, false, false, false, false, false, false],
+        hardOpenTiers: [false, false, false, false, false, false, false],
       }) as never;
     const res = await handleRead(
       tiersDb({ tiersOpened: [true, true, false, false, false, false, false] }),

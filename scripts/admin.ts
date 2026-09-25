@@ -69,21 +69,26 @@ commands
       --entry-signer <pubkey> --settlement-signer <pubkey> --keeper <pubkey>
       --ceilings <7 comma-separated lamport values>
       --min-platform <lamports | SOL decimal ending in "sol", e.g. 2sol>
-  migrate-pool              PERMISSIONLESS. The ONE-SHOT R7-b pool migration
-                            (2026-09-12): grows one Pool account by the two
-                            bytes min_seats needs and writes 52, the floor
-                            that pool's players entered under. Run it for
-                            EVERY pool the 'pools' command lists, right after the
-                            program upgrade — until it has, every instruction
-                            touching that pool fails on the short account.
-                            Self-disabling; a pool already at the current
-                            layout is reported and skipped
-      --pool-id <u64>
-  migrate-config            the ONE-SHOT 2026-09-07 layout migration: grows
-                            the live Config (380 → 484 bytes) and seeds the
-                            keeper + timings. Run right after the upgrade,
-                            before anything else (runbook step 3b)
-      --keeper <pubkey>
+  migrate-pool              PERMISSIONLESS. The one-shot Pool account growth
+                            to the current layout (850 bytes): a pre-R7-b
+                            pool (847) gets min_seats = 52, the floor its
+                            players entered under, and mode; a pre-Phase-B
+                            pool (849) gets mode alone, its floor kept. mode
+                            is always easy — hard did not exist. Run it for
+                            EVERY pool right after the Phase B upgrade —
+                            until it has, every instruction touching that
+                            pool fails on the short account. Self-disabling;
+                            a pool already at the current layout is reported
+                            and skipped
+      --pool-id <u64>       one pool
+      --all                 every pool 1..next_pool_id-1 that needs it, in
+                            order, one transaction each
+  migrate-config            the ONE-SHOT Phase B layout migration (2026-09-24):
+                            grows the live Config (484 → 603 bytes) with the
+                            hard ladder, every hard tier disabled. Takes no
+                            argument (the 2026-09-07 keeper-seeding path is
+                            retired). Run right after the upgrade, before
+                            anything else — see docs/RUNBOOK_phase-b-window.md
   set-keeper                the ONLY key open_pool accepts (prompt v2 §A;
                             the 24 h liveness fallback was removed
                             2026-09-07). May not be the zero key
@@ -114,6 +119,10 @@ commands
                             one additional tier per call. Closing is never
                             refused. See docs/RUNBOOK_open-tier.md
       --tiers <7 comma-separated 0/1, e.g. 1,0,0,0,0,0,0>
+      [--mode easy|hard]    WHICH ladder (Phase B). Default easy
+                            (set_open_tiers). hard sends set_hard_open_tiers,
+                            the hard ladder's own switch, and refuses until
+                            migrate-config has run
       [--dry-run]           run the checks, print current vs proposed, send
                             nothing
   set-paused                the kill switch: blocks register, and ONLY
@@ -217,7 +226,7 @@ interface Cli {
  * usage block, but the parser had no way to accept a bare flag — so the
  * documented form threw and it could only be passed with a dummy value.
  */
-const SWITCHES = new Set(['dry-run', 'keep-keeper', 'upgrade-preflight', 'self-test']);
+const SWITCHES = new Set(['dry-run', 'keep-keeper', 'upgrade-preflight', 'self-test', 'all']);
 
 function parseArgs(argv: string[]): Cli {
   const [command, ...rest] = argv;
@@ -360,10 +369,15 @@ async function cmdStatus(ctx: Ctx): Promise<void> {
     pots.push(d.readBigUInt64LE(224 + 8 * t));
   }
   const platform = await ctx.connection.getAccountInfo(ctx.pdas.platform(), 'confirmed');
-  if (d.length === CONFIG_SPACE_V1) {
+  if (d.length === CONFIG_SPACE_V2) {
     console.log(
-      'config: PRE-MIGRATION LAYOUT (380 bytes) — every other instruction fails until ' +
-        '`migrate-config` runs (runbook step 3b)'
+      'config: PRE-PHASE-B LAYOUT (484 bytes) — after the Phase B upgrade every other ' +
+        'instruction fails until `migrate-config` runs (docs/RUNBOOK_phase-b-window.md)'
+    );
+  } else if (d.length === CONFIG_SPACE_V1) {
+    console.log(
+      'config: the ORIGINAL 380-byte layout — no current program can grow it (the 2026-09-07 ' +
+        'migration is retired)'
     );
   } else if (d.length !== CONFIG_SPACE) {
     console.log(`config: ${d.length} bytes on chain; source says Config::SPACE = ${CONFIG_SPACE}`);
@@ -387,7 +401,7 @@ async function cmdStatus(ctx: Ctx): Promise<void> {
   console.log(`kyc threshold:     ${d.readBigUInt64LE(306)} lamports (0 = off)`);
   console.log(`detection block:   ${d[314] !== 0} (R11's full-escrow-tier switch)`);
   console.log(`next pool id:      ${d.readBigUInt64LE(315)}`);
-  if (d.length >= CONFIG_SPACE) {
+  if (d.length >= CONFIG_SPACE_V2) {
     // The 2026-09-07 tail (keeper 380, fill_deadline_seconds 412,
     // cooldown_seconds 420, tier_next_open_at 428).
     const nextOpen: bigint[] = [];
@@ -397,17 +411,36 @@ async function cmdStatus(ctx: Ctx): Promise<void> {
     console.log(`cooldown:          ${d.readBigInt64LE(420)} s`);
     console.log(`tier next open at: [${nextOpen.join(', ')}] (unix s; 0 = never settled)`);
   }
+  if (d.length >= CONFIG_SPACE) {
+    // The Phase B tail (hard_open_tiers 484, hard_active_pool_by_tier 491,
+    // hard_tier_next_open_at 547) — the hard ladder.
+    const hardOpen: number[] = [];
+    const hardActive: bigint[] = [];
+    const hardNext: bigint[] = [];
+    for (let t = 0; t < N_TIERS; t++) {
+      hardOpen.push(d[484 + t]);
+      hardActive.push(d.readBigUInt64LE(491 + 8 * t));
+      hardNext.push(d.readBigInt64LE(547 + 8 * t));
+    }
+    console.log(`hard open tiers:   [${hardOpen.join(', ')}]`);
+    console.log(`hard live pools:   [${hardActive.join(', ')}] (0 = none)`);
+    console.log(`hard next open at: [${hardNext.join(', ')}] (unix s)`);
+  }
   console.log(`platform balance:  ${BigInt(platform?.lamports ?? 0)} lamports`);
 }
 
-/** `Config::SPACE` since 2026-09-07 and the pre-migration size (state.rs). */
-const CONFIG_SPACE = 484;
-
-/** `Pool::SPACE` since R7-b (state.rs) — 849; it was 847 before the
- * 2026-09-12 upgrade appended `min_seats`. `migrate-pool` tells the two
- * apart by length. */
-const POOL_SPACE = 849;
+/** `Config::SPACE` since Phase B (state.rs, 2026-09-24): 603. `CONFIG_SPACE_V2`
+ * is the 2026-09-07..Phase-B size the live devnet account holds until
+ * `migrate-config` runs; `CONFIG_SPACE_V1` the original, which nothing can
+ * grow any more. */
+const CONFIG_SPACE = 603;
+const CONFIG_SPACE_V2 = 484;
 const CONFIG_SPACE_V1 = 380;
+
+/** `Pool::SPACE` since Phase B (state.rs) — 850; 849 from R7-b until then
+ * (`min_seats` present, `mode` absent) and 847 before R7-b. `migrate-pool`
+ * tells them apart by length; the program grows either old size. */
+const POOL_SPACE = 850;
 
 /* The drain verdict and its fixtures live in their own module so CI can run
  * them with no dependencies at all — this file imports @solana/web3.js and the
@@ -437,7 +470,7 @@ async function cmdPools(ctx: Ctx): Promise<void> {
   }
   const next = cfg.data.readBigUInt64LE(315);
   console.log(`drain query at ${new Date().toISOString()} — program ${ctx.programId.toBase58()}`);
-  console.log('id    tier  state      entrants  pot_lamports     fill_deadline (unix)');
+  console.log('id    tier  mode  state      entrants  pot_lamports     fill_deadline (unix)');
   const rows: PoolRow[] = [];
   const tally = new Map<string, number>();
   for (let id = 1n; id < next; id++) {
@@ -448,10 +481,13 @@ async function cmdPools(ctx: Ctx): Promise<void> {
     }
     const d = info.data;
     const state = POOL_STATES[d[51]] ?? `unknown(${d[51]})`;
+    // `mode` is the last byte since Phase B (offset 849); a pool at an
+    // older size has none and played easy.
+    const mode = d.length > 849 ? (d[849] === 1 ? 'hard' : 'easy') : 'easy';
     tally.set(state, (tally.get(state) ?? 0) + 1);
     rows.push({ id, state });
     console.log(
-      `${id.toString().padEnd(5)} ${String(d[16]).padEnd(5)} ${state.padEnd(10)} ` +
+      `${id.toString().padEnd(5)} ${String(d[16]).padEnd(5)} ${mode.padEnd(5)} ${state.padEnd(10)} ` +
         `${String(d.readUInt16LE(33)).padEnd(9)} ${d.readBigUInt64LE(25).toString().padEnd(16)} ` +
         `${d.readBigInt64LE(43)}`
     );
@@ -503,11 +539,29 @@ async function cmdInitConfig(ctx: Ctx): Promise<void> {
   );
 }
 
-/** `migrate_config(keeper)` — admin-signed, one-shot; the admin pays the
- * rent top-up (hence `isWritable` on the signer). Refused by the program
- * once the account is already 484 bytes. */
+/** `migrate_config()` — admin-signed, one-shot; the admin pays the rent
+ * top-up (hence `isWritable` on the signer). The Phase B (V2 → V3) growth:
+ * no argument. Refused by the program once the account is 603 bytes, and
+ * refused for the original 380-byte layout. */
 async function cmdMigrateConfig(ctx: Ctx): Promise<void> {
-  const keeper = new PublicKey(need(ctx.cli, 'keeper'));
+  if (ctx.cli.flags.has('keeper')) {
+    throw new Error(
+      'migrate-config takes no --keeper since Phase B: the migration preserves the keeper ' +
+        'already in the account (rotate it with set-keeper)'
+    );
+  }
+  const info = await ctx.connection.getAccountInfo(ctx.pdas.config(), 'confirmed');
+  if (!info) throw new Error('config: NOT INITIALISED (run init-config)');
+  console.log(`config: ${info.data.length} bytes on chain`);
+  if (info.data.length >= CONFIG_SPACE) {
+    console.log(`config: already at the current layout (${CONFIG_SPACE}) — nothing to do`);
+    return;
+  }
+  if (info.data.length !== CONFIG_SPACE_V2) {
+    throw new Error(
+      `config is ${info.data.length} bytes; the Phase B migration grows exactly ${CONFIG_SPACE_V2}`
+    );
+  }
   const admin = signerPubkey(ctx.cli);
   await deliver(
     ctx,
@@ -519,7 +573,7 @@ async function cmdMigrateConfig(ctx: Ctx): Promise<void> {
           { pubkey: ctx.pdas.config(), isSigner: false, isWritable: true },
           { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
         ],
-        data: Buffer.concat([disc('migrate_config'), keeper.toBuffer()]),
+        data: disc('migrate_config'),
       }),
     ],
     'admin'
@@ -680,15 +734,29 @@ async function cmdSetOpenTiers(ctx: Ctx): Promise<void> {
       return v === '1' ? 1 : 0;
     });
   if (tiers.length !== N_TIERS) throw new Error(`--tiers must list exactly ${N_TIERS} values`);
+  // Phase B: which ladder. The hard ladder has its own instruction so a
+  // proposal drafted against the easy setter keeps its payload.
+  const modeFlag = ctx.cli.flags.get('mode') ?? 'easy';
+  if (modeFlag !== 'easy' && modeFlag !== 'hard') {
+    throw new Error(`--mode must be easy or hard, got ${modeFlag}`);
+  }
+  const hard = modeFlag === 'hard';
 
   const info = await ctx.connection.getAccountInfo(ctx.pdas.config(), 'confirmed');
   if (!info) throw new Error('config: NOT INITIALISED (run init-config)');
   const d = info.data;
+  if (hard && d.length < CONFIG_SPACE) {
+    throw new Error(
+      `REFUSED — the live Config is ${d.length} bytes and carries no hard ladder; run ` +
+        '`migrate-config` after the Phase B upgrade first (docs/RUNBOOK_phase-b-window.md)'
+    );
+  }
   const current: number[] = [];
   const livePrice: bigint[] = [];
   const livePot: bigint[] = [];
   for (let t = 0; t < N_TIERS; t++) {
-    current.push(d[105 + t]);
+    // Easy at 105; the hard switch at 484 (state.rs, the Phase B tail).
+    current.push(hard ? d[484 + t] : d[105 + t]);
     livePrice.push(d.readBigUInt64LE(168 + 8 * t));
     livePot.push(d.readBigUInt64LE(224 + 8 * t));
   }
@@ -702,6 +770,7 @@ async function cmdSetOpenTiers(ctx: Ctx): Promise<void> {
     .reduce<number[]>((acc, isClosing, t) => (isClosing ? [...acc, t] : acc), []);
 
   console.log(`config:   ${ctx.pdas.config().toBase58()}`);
+  console.log(`ladder:   ${modeFlag} (${hard ? 'set_hard_open_tiers' : 'set_open_tiers'})`);
   console.log(`current:  [${current.join(', ')}]`);
   console.log(`proposed: [${tiers.join(', ')}]`);
   console.log(`opening:  ${opening.length === 0 ? '(none)' : opening.join(', ')}`);
@@ -747,7 +816,11 @@ async function cmdSetOpenTiers(ctx: Ctx): Promise<void> {
     console.log('\ndry run: checks passed, nothing sent.');
     return;
   }
-  await deliver(ctx, [adminOnlyIx(ctx, 'set_open_tiers', Buffer.from(tiers))], 'admin');
+  await deliver(
+    ctx,
+    [adminOnlyIx(ctx, hard ? 'set_hard_open_tiers' : 'set_open_tiers', Buffer.from(tiers))],
+    'admin'
+  );
 }
 
 /** Strict boolean flag — anything but "true"/"false" is an error rather
@@ -919,20 +992,39 @@ async function cmdRegisterSigners(ctx: Ctx): Promise<void> {
  * of them needs the multisig: they are not admin instructions.
  */
 /**
- * `migrate-pool` — the one-shot R7-b account growth, once per existing pool.
+ * `migrate-pool` — the one-shot Pool account growth, once per existing pool.
  *
- * The upgrade of 2026-09-12 appended `min_seats` to `Pool`, and Anchor
- * refuses a short account, so until this runs against a pool EVERY
+ * Anchor refuses a short account, so until this runs against a pool EVERY
  * instruction touching it fails — `pay_next_place` and `release_escrow`
- * included, on pools that are already Paid. Run it for every pool
- * `admin.ts pools` lists, immediately after the program upgrade.
+ * included, on pools that are already Paid. Two old sizes exist on devnet
+ * (state.rs): 847 (pre-R7-b, 2026-09-12 — gets `min_seats` = 52, the floor
+ * those players entered under, never the new 40, then `mode`) and 849
+ * (pre-Phase-B, 2026-09-24 — gets `mode` alone, floor kept). `mode` is
+ * always easy: hard did not exist when those pools opened.
  *
- * Permissionless and self-disabling: it writes one known constant into one
- * PDA-checked account, refuses anything already at the current layout, and
- * writes 52 — the floor those players entered under, never the new 40.
+ * Permissionless and self-disabling: it writes known constants into one
+ * PDA-checked account and refuses anything already at the current layout.
+ * `--all` walks every pool 1..next_pool_id−1 and sends one transaction per
+ * pool that needs it — the Phase B window has dozens.
  */
 async function cmdMigratePool(ctx: Ctx): Promise<void> {
-  const poolId = parsePoolId(need(ctx.cli, 'pool-id'));
+  if (ctx.cli.flags.get('all') !== undefined) {
+    const cfg = await ctx.connection.getAccountInfo(ctx.pdas.config(), 'confirmed');
+    if (!cfg) throw new Error('config: NOT INITIALISED (run init-config)');
+    const next = cfg.data.readBigUInt64LE(315);
+    let sent = 0;
+    for (let id = 1n; id < next; id++) {
+      const done = await migrateOnePool(ctx, id);
+      if (done) sent++;
+    }
+    console.log(`migrate-pool --all: ${sent} pool(s) migrated, ${next - 1n - BigInt(sent)} already current`);
+    return;
+  }
+  await migrateOnePool(ctx, parsePoolId(need(ctx.cli, 'pool-id')));
+}
+
+/** One pool; true when a migration was sent (or emitted), false when none was needed. */
+async function migrateOnePool(ctx: Ctx, poolId: bigint): Promise<boolean> {
   const info = await ctx.connection.getAccountInfo(ctx.pdas.pool(poolId), 'confirmed');
   if (!info) throw new Error(`pool ${poolId}: no account at ${ctx.pdas.pool(poolId).toBase58()}`);
   // Said before sending, because the on-chain refusal is a bare error code
@@ -941,7 +1033,7 @@ async function cmdMigratePool(ctx: Ctx): Promise<void> {
   console.log(`pool ${poolId}: ${info.data.length} bytes on chain`);
   if (info.data.length >= POOL_SPACE) {
     console.log(`pool ${poolId}: already at the current layout (${POOL_SPACE}) — nothing to do`);
-    return;
+    return false;
   }
   await deliver(
     ctx,
@@ -958,6 +1050,7 @@ async function cmdMigratePool(ctx: Ctx): Promise<void> {
     ],
     'any signer (permissionless)'
   );
+  return true;
 }
 
 async function cmdSealAtDeadline(ctx: Ctx): Promise<void> {
