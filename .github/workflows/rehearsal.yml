@@ -125,6 +125,18 @@ jobs:
           echo "the broken fixture was rejected, as it must be:"
           sed 's/^/  /' /tmp/broken.log
 
+      - name: Install backend/scoring dependencies
+        working-directory: backend/scoring
+        # The three steps below reach into backend/scoring — the oracle imports
+        # its engine, and populations.test.ts imports compareBattle. Node
+        # resolves from the IMPORTED file's directory upward, so
+        # battle-test/node_modules is invisible to it: backend/scoring needs
+        # its own install even though battle-test already declares the same
+        # @noble/hashes. It passes locally on the repo-root node_modules,
+        # which this job does not have — the first push of these steps went
+        # red on exactly that.
+        run: npm ci --no-audit --no-fund
+
       - name: The population properties hold, and the app's live rules still back them
         working-directory: battle-test
         run: |
