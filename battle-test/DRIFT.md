@@ -1899,3 +1899,79 @@ called the mechanism unknown. The mechanism was knowable from `main.ts` alone: p
 delivery. I had read `buildGeo`'s stub branch and reasoned about its four refusal reasons without
 reading the branch **above** it. Stopping to ask for the boot log was right; concluding that the
 secrets had not arrived was a guess I did not need to make and should not have written down.
+
+---
+
+## §H31 — the dial run does not exist any more, and every founder recipe describes it
+
+**Found 2026-09-26 19:05Z, while preparing T7.** Merging main into this branch turned
+`src/populations.test.ts` red with `Cannot find module app/src/components/blot/rebalance`. The
+module is not missing by accident: main's commit **59ca085, "Retire the dial run: the board is the
+only run"** (2026-09-24) deleted it, along with `battle-flow.tsx`, `battle/machine.ts`, the seven
+`seven-tiles` screens, `StatDials`, the `Timer`, the per-screen thermals, and **the 90-second run
+budget in `run-clock.ts`**.
+
+**What the founder now faces** (`app/src/battle/board/`):
+
+| was | is |
+|---|---|
+| seven screens, one battle each | ONE board of 35 cells, seven fields of five stats |
+| 90 seconds total, 15 seconds a screen (R9) | **three minutes** for the whole board (`BOARD_CLOCK_BUDGET_MS`), started by the first cell change |
+| drag a dial, the other four absorb it | a **stepper** of +1, +5, +10, +20 |
+| — | a per-field **lock**, allowed in easy mode only once that field holds exactly 100 |
+| untouched screen → even split (R9-b) | untouched field → even split, **and a half-filled unlocked field has its remainder spread back into the stats already placed** (`spread.ts`) |
+
+**Why this is a drift entry and not a note.** Every plan in this test from T1 to T3 carries a
+founder recipe written in the dial vocabulary — *"drag two stats to 0"*, *"drag ONE stat to 25 and
+leave the rest"*. Those instructions no longer describe anything, and one of them is now actively
+**unsafe**: the buzzer rule means "put 25 on one stat and leave the rest" ends as
+40/15/15/15/15, above the 25 cap that the whole unconditional derivation in T3, T4, T5 and T6
+rests on. A recipe that was capped under the dials is uncapped under the board.
+
+**What was done.** The dial generators (`uiFieldFrom`, `uiWall`, `uiPole`) stay exactly as they
+are — T3, T4, T5 and T6 are frozen against them and their roots must keep reproducing, which they
+do. New board generators `uiBoardA`/`uiBoardB` were added beside them and T7 uses those: each field
+carries a rotation of a capped multiset (25/25/20/20/10 and 25/20/20/20/15), every value one or two
+taps on the stepper, seven taps and one lock a field.
+
+**What was NOT done, and is the founder's call.** `MANUAL.md` still describes the dial run
+throughout — §9's recipe cards, the practice instruction in §5, the 90-second session. It is the
+test's own specification and rewriting it mid-week would make the earlier tests harder to read
+against their own plans, not easier. T7's plan carries the board description in a
+`founderInteraction` block instead. If the battle test continues past T8, the manual needs a pass.
+
+**The near miss.** Nothing here was caught by a gate. The language check passed, the plan validator
+passed, and all four frozen roots reproduced — because none of them knows what the app's interaction
+is. It surfaced only because a test file failed to *load*, and the first instinct was to write that
+failure off as pre-existing merge noise. It was the merge telling the truth.
+
+---
+
+## §H32 — `duplicate_sets` does not hard-block, and the review path has no window
+
+Two corrections found while reading the detection and settlement code for T7. Both were things this
+architect had asserted in writing and neither was true of the system as built.
+
+**1. "The one allocation signal that hard-blocks" blocks nothing.** `scripts/validate-plan.ts`
+carried that phrase in its header and T3's plan repeated it. In fact
+`DetectionReport.hardBlocks` is, in `backend/detection/src/pipeline.ts`'s own words, *"published to
+the reviewer and read by no code that moves anything"* — ruling **D-E9**, manual-only flagging.
+`Config.detection_hard_block` exists on chain and `admin.ts` can still flip it, but the daemon
+passes `fullEscrowTier: false` as a constant and nothing reads the switch. Detection also runs at
+**reveal**, long after the entry a block would have refused. So a duplicate set is a *finding*, not
+a refusal. The validator now permits a duplicate the plan **declares** in
+`intentionalDuplicateSets` with a reason, and still fails an undeclared one, which is the case that
+is a bug. T7 declares W00/W01 and predicts the finding.
+
+**2. There is no window in which a reviewer can flag a winner before it is paid.** The crank
+reveals, scores, runs detection, screens, commits and pays in **one tick** — T3 went from seal to
+payout in three seconds — and `detect` returns no auto-flags under D-E9
+(`backend/reveal/src/crank.ts:236`). So a flag based on *this* pool's own detection report can never
+land before *this* pool is paid. `flag_entry` is legal while the pool is `Open`
+(`preconditions.ts`; `flags.rs` requires only `!entry.settled`), so T7's flags go on **during the
+fill**, and the report will say so.
+
+**This is a product finding, not a test workaround.** As built, the review path can only ever act
+on evidence from **earlier** pools. If the founder wants review-before-payment on a pool's own
+findings, the crank needs a hold between `commit_results` and `pay_prizes` that it does not have.
+Raised for the founder; nothing was changed in the program.

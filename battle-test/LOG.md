@@ -575,6 +575,42 @@
   the WEAKER freeze standard**: frozen 1 h 33 min before the first entry but **not** before the pool
   existed, pool 29 having been opened 2 h 30 min before the plan merged. T6 and T2R hold the
   stronger one. Said rather than glossed.
-- **Still open:** §F-37, the 60-second pool-27 click. **T7** needs its own pool — pool 36 is Open
-  now. **T8** is desk work. Then restore the geo vendor secrets and rotate the Helius key, in that
-  order.
+- **2026-09-26 18:50Z** Merged `origin/main` — 47 commits, no conflict in `battle-test/`. **All four
+  frozen roots re-validated through the merged engine and reproduce byte-for-byte** (T3
+  `6dc18656…`, T4 `3950d12c…`, T5 `ff1bca37…`, T6 `49fec9c6…`). `backend/scoring/src/engine.ts`
+  had moved by 24 lines and the oracle imports it, so this was the first thing done and the
+  condition on going further. It did not move because the change is additive:
+  `scorePool(players, mode = 'easy')` gained a defaulted parameter.
+- **2026-09-26 18:56Z** Swept all 72 wallets back to the funder: 13.611361800 SOL in, funder now
+  **15.940787840**. 11.83 of it was W00's winnings from T5, T6 and T3. No founder action.
+- **2026-09-26 19:05Z** **§H31 — the dial run does not exist any more.** `populations.test.ts` went
+  red on `Cannot find module app/src/components/blot/rebalance`; the module was deleted by main's
+  59ca085 on 2026-09-24 along with the seven screens, the drags, the per-screen timer and the
+  90-second budget. The board — 35 cells, three minutes, a +1/+5/+10/+20 stepper, per-field locks —
+  is the only run. **Every founder recipe in every plan from T1 to T3 describes an interaction that
+  no longer exists**, and one of them is now unsafe: under the buzzer rule "put 25 on one stat and
+  leave the rest" ends 40/15/15/15/15, above the 25 cap the unconditional derivations rest on.
+  Added `uiBoardA`/`uiBoardB` beside the dial generators (which stay, so the frozen roots keep
+  reproducing) and wrote T7 against the board.
+- **2026-09-26 19:08Z** **§H32 — two of my own written claims were wrong.** (a) `duplicate_sets`
+  does NOT hard-block: `hardBlocks` is "read by no code that moves anything" under D-E9, and
+  detection runs at reveal anyway. `validate-plan.ts` said otherwise in its header and T3's plan
+  repeated it; the validator now allows a duplicate the plan DECLARES with a reason and still fails
+  an undeclared one. (b) **There is no window in which a reviewer can flag a winner before it is
+  paid** — the crank reveals, scores, detects, commits and pays in one tick, and `detect` returns
+  no auto-flags. A flag on this pool's own findings can never precede this pool's payment. That is
+  a product finding for the founder, not a test workaround.
+- **2026-09-26 19:11Z** **T7 frozen.** `registry/T7.plan.json`, sha256
+  `5bb785f4f666e772bc098a9fd8642e09bde35869a946dc4a53fb8115cc255c24`, and
+  `registry/T7.freeze.json` **written at freeze time** rather than two days late as T3's was.
+  The design changed from the manual's, with the founder's ratification: **T7 §9 cannot run as
+  written** — it asks for one headless winner AND two escrowed shares, and under
+  `PRIZE_BANDS_1024 = [1024n]` a seat paid nothing escrows nothing. So W00 and W01 carry
+  **identical** battle sets and tie at rank 1 for 2000000000 each, which is the only way one pool
+  holds two shares. The tie is unconditional: identical sets score identically against every
+  opponent, including the stranger already seated in pool 36. `scripts/t7-bounds.ts` derives three
+  unconditional claims (the tie; no capped seat can outscore a wall, 854 < 861; the founder cannot
+  decide the pool, 519 < 861) and one conditional — the walls hold rank 1 unless the stranger takes
+  8 or more of the 14 half-points on offer against one wall.
+- **Still open:** §F-37, the 60-second pool-27 click. **T7** awaits the freeze merge, then the fill.
+  **T8** is desk work. Then restore the geo vendor secrets and rotate the Helius key, in that order.
