@@ -12,9 +12,13 @@
  *   '{"module":"commonjs","moduleResolution":"node"}' src/populations.test.ts
  */
 
-import { compareBattle } from '../../backend/scoring/src/engine';
+import { compareBattle, scorePool } from '../../backend/scoring/src/engine';
+// The app's LIVE buzzer rule. Relative, so it needs no module-resolution shim
+// (the retired dial module did, because it imported through the app's `@/` alias).
+import { spreadUnplaced } from '../../app/src/battle/board/spread';
 import {
-  cappedField, wall, pole, uiWall, uiPole, uiFieldA, uiFieldB, distinctShapes, roundShare,
+  cappedField, wall, twinWall, pole, uiWall, uiPole, uiFieldA, uiFieldB, uiBoardA, uiBoardB,
+  distinctShapes, roundShare,
   BATTLES, FIELD_CAP, ALLOCATION_SUM, WALL_MIN,
 } from './populations';
 
@@ -172,46 +176,153 @@ console.log(`  allocation_entropy round-number half: pole ${Math.round(poleRound
   console.log(`  uiWall beats the field ${uw}/${uw}, uiPole loses ${up}/${up}, and uiWall never loses to uiPole`);
 }
 
-// 9. The founder instruction and these numbers must not drift apart. Re-derive
-//    both sets from the APP'S OWN dial rule and require an exact match: if
-//    someone changes `rebalance.ts`, this fails here rather than in a 4 SOL
-//    pool. The alias below is only so the app's `@/...` imports resolve from
-//    this runner; nothing under app/ is touched.
+// 9. The founder instruction and these numbers must not drift apart.
+//
+//    THIS CHECK USED TO RUN AGAINST THE APP'S DIAL RULE (`app/src/components/
+//    blot/rebalance.ts`) and re-derive uiWall and uiPole from it, so that a
+//    change to the dials failed here rather than in a 4 SOL pool. **The dial
+//    run no longer exists**: main's 59ca085 of 2026-09-24, "Retire the dial
+//    run: the board is the only run", deleted rebalance.ts along with the
+//    seven screens, the drag, the per-screen timer and the 90-second budget.
+//    DRIFT §H31 has the whole entry.
+//
+//    So the cross-check cannot be kept and must not be quietly dropped. The
+//    dial generators stay exactly as they are — T3, T4, T5 and T6 are frozen
+//    against them and their results roots must keep reproducing, which CI
+//    checks separately — but they are now HISTORICAL DATA rather than a
+//    derivation of anything live. Pinned here as an explicit snapshot so a
+//    careless edit still fails loudly.
 {
-  const Module = require('module');
-  const { join } = require('path');
-  const APP = join(__dirname, '..', '..', 'app', 'src');
-  const orig = Module._resolveFilename;
-  Module._resolveFilename = function (request: string, ...rest: unknown[]) {
-    return orig.call(this, request.startsWith('@/') ? join(APP, request.slice(2)) : request, ...rest);
-  };
-  try {
-    const { rebalance } = require(join(APP, 'components', 'blot', 'rebalance'));
-    const { EVEN_SPLIT } = require(join(APP, 'battle', 'allocation'));
-
-    const pairs: [number, number][] = [[0,1],[1,2],[2,3],[3,4],[4,0],[0,2],[1,3]];
-    pairs.forEach(([x, y], k) => {
-      const got = [...rebalance(rebalance(EVEN_SPLIT, x, 0), y, 0)];
-      const want = uiWall().battles[k];
-      if (got.join(',') !== want.join(',')) {
-        fail(`uiWall battle ${k}: the dials produce ${JSON.stringify(got)} but populations.ts says ${JSON.stringify(want)}`);
-      }
-    });
-
-    const spikes = [0, 1, 2, 3, 4, 2, 0];
-    spikes.forEach((x, k) => {
-      const got = [...rebalance(EVEN_SPLIT, x, 100)];
-      const want = uiPole().battles[k];
-      if (got.join(',') !== want.join(',')) {
-        fail(`uiPole battle ${k}: the dials produce ${JSON.stringify(got)} but populations.ts says ${JSON.stringify(want)}`);
-      }
-    });
-    console.log('  dial recipe: all 14 founder drags reproduce uiWall and uiPole exactly, through app/ rebalance.ts');
-  } finally {
-    Module._resolveFilename = orig;
-  }
+  const wallWant = [
+    [0, 0, 34, 33, 33], [34, 0, 0, 33, 33], [34, 33, 0, 0, 33],
+    [34, 33, 33, 0, 0], [0, 34, 33, 33, 0], [0, 34, 0, 33, 33],
+    [34, 0, 33, 0, 33],
+  ];
+  const poleWant = [
+    [100, 0, 0, 0, 0], [0, 100, 0, 0, 0], [0, 0, 100, 0, 0],
+    [0, 0, 0, 100, 0], [0, 0, 0, 0, 100], [0, 0, 100, 0, 0],
+    [100, 0, 0, 0, 0],
+  ];
+  uiWall().battles.forEach((got, k) => {
+    if (got.join(',') !== wallWant[k].join(',')) {
+      fail(`uiWall battle ${k}: ${JSON.stringify(got)} moved from the frozen ${JSON.stringify(wallWant[k])}`);
+    }
+  });
+  uiPole().battles.forEach((got, k) => {
+    if (got.join(',') !== poleWant[k].join(',')) {
+      fail(`uiPole battle ${k}: ${JSON.stringify(got)} moved from the frozen ${JSON.stringify(poleWant[k])}`);
+    }
+  });
+  console.log('  dial generators: uiWall and uiPole match their frozen snapshots (the app-side rule they derived from is gone)');
 }
 
+// 9b. The BOARD generators, cross-checked against the app's LIVE rule — the
+//     protection §9 used to give the dial generators, moved to the ones a
+//     founder now actually plays.
+//
+//     The claim being checked is the one the T7 recipe rests on: if the
+//     founder fills every field to exactly 100 and locks it, the buzzer rule
+//     adds nothing and the entry is what the plan says. And if a field were
+//     left HALF FILLED, the spread would push points back into the stats
+//     already placed and could break the 25 cap — which is why the recipe
+//     says fill every field, and why that is worth a test rather than a note.
+{
+  const allLocked = Array.from({ length: BATTLES }, () => true);
+  const noneLocked = Array.from({ length: BATTLES }, () => false);
+
+  for (const [name, e] of [['uiBoardA', uiBoardA()], ['uiBoardB', uiBoardB()]] as const) {
+    // Filled and locked: the buzzer changes nothing.
+    const locked = spreadUnplaced(e.battles, allLocked, 'easy');
+    if (JSON.stringify(locked) !== JSON.stringify(e.battles)) {
+      fail(`${name}: the buzzer rule altered a fully filled, locked board`);
+    }
+    // Filled but NOT locked: still nothing to spread, because each field
+    // already holds 100. This is the case the founder is actually in if they
+    // fill every field and forget to lock.
+    const unlocked = spreadUnplaced(e.battles, noneLocked, 'easy');
+    if (JSON.stringify(unlocked) !== JSON.stringify(e.battles)) {
+      fail(`${name}: the buzzer rule altered a fully filled board that was left unlocked`);
+    }
+    for (const bt of e.battles) {
+      if (bt.some((v) => v > FIELD_CAP)) fail(`${name}: ${JSON.stringify(bt)} breaks the ${FIELD_CAP} cap`);
+    }
+  }
+
+  // And the hazard, proven rather than asserted: 25 on one stat with the
+  // other 75 unplaced does NOT stay capped. This is why the dial recipe could
+  // not simply be reworded for the board.
+  const halfFilled = Array.from({ length: BATTLES }, () => [25, 0, 0, 0, 0]);
+  const spread = spreadUnplaced(halfFilled, noneLocked, 'easy');
+  if (!spread[0].some((v: number) => v > FIELD_CAP)) {
+    fail('the buzzer rule no longer pushes a half-filled field over the cap — DRIFT §H31 needs revisiting');
+  }
+  console.log(
+    `  board generators: uiBoardA and uiBoardB survive the buzzer rule filled and unlocked; ` +
+    `a 25-and-leave-it field becomes ${JSON.stringify(spread[0])}, which is why the recipe fills every field`
+  );
+}
+
+
+// 9c. THE TWIN WALL — the one property T7 rests on.
+//
+//     Two seats with identical battle sets score identically against every
+//     opponent, because compareBattle is positional: seat i's seven
+//     comparisons against seat j depend only on the two sets, so equal sets
+//     give equal results against ANY third player — including one whose
+//     allocation nobody can read. Equal score AND equal zones is what
+//     assignRanks needs for a shared rank, and a shared rank 1 is the only
+//     way a pool holds two prize shares under D-E2's single paid place.
+//
+//     Checked by scoring a real pool rather than by argument, and checked
+//     against an adversary chosen to be as awkward as possible.
+{
+  const SEED = 7100;
+  const w = wall(SEED);
+  const twin = twinWall(SEED, 7150);
+
+  if (JSON.stringify(twin.battles) !== JSON.stringify(w.battles)) {
+    fail('twinWall does not reproduce wall\'s battles — the tie is not a tie');
+  }
+  if (JSON.stringify(twin.timingsMs) === JSON.stringify(w.timingsMs)) {
+    fail('twinWall reproduces wall\'s TIMINGS too — the duplicate should fire one signal, not two');
+  }
+
+  // Score a pool of the pair plus an assortment of third parties, including
+  // the shapes an unknown entrant is most likely to play and the ones most
+  // hostile to a wall.
+  const others: number[][][] = [
+    Array.from({ length: BATTLES }, () => [20, 20, 20, 20, 20]),   // the buzzer's even split
+    Array.from({ length: BATTLES }, () => [100, 0, 0, 0, 0]),      // a single spike
+    Array.from({ length: BATTLES }, () => [0, 0, 50, 25, 25]),     // built to beat a wall's zeros
+    w.battles.map((b) => [...b]),                                  // a THIRD copy of the wall
+    cappedField(9001).battles.map((b) => [...b]),
+    pole(9002).battles.map((b) => [...b]),
+  ];
+  for (let take = 1; take <= others.length; take++) {
+    const players = [w.battles, twin.battles, ...others.slice(0, take)];
+    const scored = scorePool(players as never);
+    if (scored[0].scoreHalf !== scored[1].scoreHalf) {
+      fail(`twin pair scored ${scored[0].scoreHalf} vs ${scored[1].scoreHalf} against ${take} third parties`);
+    }
+    if (scored[0].zones !== scored[1].zones) {
+      fail(`twin pair took ${scored[0].zones} vs ${scored[1].zones} zones against ${take} third parties`);
+    }
+    if (scored[0].rank !== scored[1].rank) {
+      fail(`twin pair landed on ranks ${scored[0].rank} and ${scored[1].rank} against ${take} third parties`);
+    }
+  }
+
+  // Their mutual battles are seven draws: all five stats equal every time,
+  // so one half-point each and no zones from each other.
+  const pair = scorePool([w.battles, twin.battles] as never);
+  if (pair[0].scoreHalf !== BATTLES || pair[0].zones !== 0) {
+    fail(`twin vs twin gave ${pair[0].scoreHalf} half-points and ${pair[0].zones} zones, expected ${BATTLES} and 0`);
+  }
+  console.log(
+    `  twin wall: identical sets, different think-times; equal score, zones and rank against ` +
+    `every one of ${others.length} adversaries tried, and ${BATTLES} draws between themselves`
+  );
+}
 
 // 10. T5's founder seats. The whole test rests on two claims about them, and
 //     both must hold for ANY allocation in 1..25 — not just for the recipe,
@@ -262,35 +373,35 @@ console.log(`  allocation_entropy round-number half: pole ${Math.round(poleRound
   console.log(`  T5 founder seats: lose to the wall ${lost}/${lost}, beat the pole ${beat}/${beat} — so ranks 2..63, unconditionally`);
 }
 
-// 11. The T5 recipe is the app's own dial arithmetic, re-derived, so a change
-//     to rebalance.ts breaks here rather than in a 4 SOL pool — as for T4.
+// 11. The T5 founder recipe, pinned as a snapshot.
+//
+//     This block used to re-derive uiFieldA and uiFieldB from the app's own
+//     dial arithmetic, so a change to rebalance.ts broke here rather than in
+//     a 4 SOL pool. The dial run was retired on 2026-09-24 (DRIFT §H31) and
+//     rebalance.ts is gone, so there is nothing live left to derive from:
+//     these values are now frozen history, held here so an edit still fails.
+//     §9b gives the BOARD generators the live cross-check this one lost.
 {
-  const Module = require('module');
-  const { join } = require('path');
-  const APP = join(__dirname, '..', '..', 'app', 'src');
-  const orig = Module._resolveFilename;
-  Module._resolveFilename = function (request: string, ...rest: unknown[]) {
-    return orig.call(this, request.startsWith('@/') ? join(APP, request.slice(2)) : request, ...rest);
+  const want: Record<string, number[][]> = {
+    uiFieldA: [
+      [25, 19, 19, 19, 18], [19, 25, 19, 19, 18], [19, 19, 25, 19, 18],
+      [19, 19, 19, 25, 18], [19, 19, 19, 18, 25], [25, 19, 19, 19, 18],
+      [19, 19, 25, 19, 18],
+    ],
+    uiFieldB: [
+      [19, 19, 19, 18, 25], [19, 19, 19, 25, 18], [19, 19, 25, 19, 18],
+      [19, 25, 19, 19, 18], [25, 19, 19, 19, 18], [19, 19, 19, 25, 18],
+      [19, 25, 19, 19, 18],
+    ],
   };
-  try {
-    const { rebalance } = require(join(APP, 'components', 'blot', 'rebalance'));
-    const { EVEN_SPLIT } = require(join(APP, 'battle', 'allocation'));
-    const checks: [string, number[], number[][]][] = [
-      ['uiFieldA', [0, 1, 2, 3, 4, 0, 2], uiFieldA().battles],
-      ['uiFieldB', [4, 3, 2, 1, 0, 3, 1], uiFieldB().battles],
-    ];
-    for (const [name, order, want] of checks) {
-      order.forEach((k, i) => {
-        const got = [...rebalance(EVEN_SPLIT, k, 25)];
-        if (got.join(',') !== want[i].join(',')) {
-          fail(`${name} battle ${i}: the dials produce ${JSON.stringify(got)} but populations.ts says ${JSON.stringify(want[i])}`);
-        }
-      });
-    }
-    console.log('  T5 dial recipe: all 14 founder drags reproduce uiFieldA and uiFieldB exactly, through app/ rebalance.ts');
-  } finally {
-    Module._resolveFilename = orig;
+  for (const [name, e] of [['uiFieldA', uiFieldA()], ['uiFieldB', uiFieldB()]] as const) {
+    e.battles.forEach((got, i) => {
+      if (got.join(',') !== want[name][i].join(',')) {
+        fail(`${name} battle ${i}: ${JSON.stringify(got)} moved from the frozen ${JSON.stringify(want[name][i])}`);
+      }
+    });
   }
+  console.log('  T5 dial generators: uiFieldA and uiFieldB match their frozen snapshots');
 }
 
 console.log('\nALL PROPERTIES HOLD — the engineered outcome is arithmetic, not hope.');

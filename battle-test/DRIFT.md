@@ -1975,3 +1975,24 @@ fill**, and the report will say so.
 on evidence from **earlier** pools. If the founder wants review-before-payment on a pool's own
 findings, the crank needs a hold between `commit_results` and `pay_prizes` that it does not have.
 Raised for the founder; nothing was changed in the program.
+
+**§H31 addendum, 2026-09-26 19:22Z — the gate that would have caught it was never in CI.**
+`src/populations.test.ts` has existed since T4 and is the one place the founder generators are
+cross-checked against the app's own rules. **CI has never run it.** It has no `describe`/`it`, so
+`vitest` reports "no test suite found"; `ci-fast.yml`'s node job iterates the `backend/*` packages
+and never touches `battle-test/`; and `rehearsal.yml` validated plans but not populations. The
+suite was run by hand, which means it was run when someone thought to. Had it been in CI it would
+have gone red on 2026-09-24, the day `rebalance.ts` was deleted, instead of surfacing two days
+later because a merge happened to break a file nobody was looking at.
+
+Three steps added to `rehearsal.yml` (the one CI file in this lane): the population properties,
+**every frozen results root re-derived** — the check that was done by hand before both the T3 and
+T7 freezes and had no home — and `t7-bounds.ts`. The suite itself was repaired: the two blocks
+that re-derived the dial generators from `rebalance.ts` are now explicit snapshots that say why
+they can no longer derive anything, and `§9b` gives the BOARD generators the live cross-check the
+dial ones lost. It proves the hazard concretely rather than by argument: a field holding 25 with
+the rest unplaced comes back from the buzzer as **[40, 15, 15, 15, 15]**.
+
+`§9c` is new and is the one property T7 rests on — a twin wall scores identically to its original
+against every opponent, checked against six adversaries including an even split, a single spike, a
+set built to beat a wall's zeros, and a third copy of the wall itself.
