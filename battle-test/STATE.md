@@ -1,90 +1,68 @@
-# STATE — 2026-09-26 21:55 UTC — by Claude Code
+# STATE — 2026-09-26 22:30 UTC — by Claude Code
 
-Phase:            **T7's blocker is cleared and the fill is starting.** The freeze is merged and
-                  verified; the missing flag control is merged and live in production.
-Waiting on:       **the founder: F-42 — sitting one.** I will fill to 39 unattended and then stop;
-                  the rest needs them at the keyboard.
-Blocked:          nothing.
+Phase:            **T7 stood down — no wallet to sign with.** Pool 36 will nevertheless seal and
+                  play at 01:46:04Z, because a second stranger took it to exactly MIN_SEATS.
+Waiting on:       **the project owner's wallet.** Nothing else blocks T7.
+Blocked:          T7's two founder entries and its two flags — both need a signature.
 Results so far:   T1 **PASS** · T3 **PASS** · T4 **PASS** · T5 **PASS** · **T6 PASS\*** ·
-                  T2 **SPOILED** · T2R **PASS (7 of 8)** · pool 22 = observation, not a test
-Money:            funder **8.164767840** · 72 wallets at 0.108 each · T7 needs ~6.9 SOL of it
-Open PR:          none — **189 and 191 both merged.**
+                  T2 **SPOILED** · T2R **PASS (7 of 8)** · pool 22 and **pool 36** =
+                  observations, not tests
+Money:            funder **~4.3** after 38 entries · W00..W37 seated in pool 36 · the pot is
+                  4 SOL and pool 36 will pay it
+Open PR:          none — 189 and 191 both merged.
 Parallel session: **program development** — `session_01CosZsm5MB312HdbJH6y2zJ`, branch
                   `claude/program-dev`. Separate lane, no overlap.
 
 ## Where this actually stands
 
-Three things happened today, and the first two are the reason the third took as long as it did.
+**T7 is stood down and that was the right call**, but it does not mean nothing happens tonight.
 
-**The merge came first, and it had to.** This branch was 47 commits behind main and
-`backend/scoring/src/engine.ts` — which the oracle imports, and which produced every frozen root
-in this test — had moved by 24 lines. If it had changed behaviour, T3, T4, T5 and T6 would all
-have been invalidated retrospectively, not just T7. **All four roots reproduce byte-for-byte
-through the merged engine.** The change was additive: `scorePool` gained a mode parameter that
-defaults to easy.
+The project owner's wallet is unavailable. T7 needs a signature twice — once for the two founder
+entries that create the same-device finding, once for the two flags that make the prize-review
+path run — so both halves are blocked. Running the rest would spend the frozen plan on the part
+four earlier tests already largely proved, and skip the part that §H33 had just shown nothing has
+ever exercised. So: stand down.
 
-**§H31 — the dial run does not exist any more.** The merge turned a test file red, and the reason
-was not merge noise: main deleted the seven-screen dial run on 2026-09-24. The board is the only
-interaction now — 35 cells on one page, **three minutes** instead of 90 seconds, a
-+1/+5/+10/+20 stepper instead of a drag, and a per-field lock. Every founder recipe in every plan
-from T1 to T3 describes something that is gone, and one of them is now actively unsafe: under the
-board's buzzer rule, "put 25 on one stat and leave the rest" ends at 40/15/15/15/15 — above the
-25 cap that all four unconditional derivations rest on. T7 is written against the board; the old
-generators stay untouched so the frozen roots keep reproducing.
+**Then the ground moved.** At 22:03:29Z a second wallet that is not ours registered in pool 36,
+taking it from the 39 I had deliberately stopped at to exactly 40 — `MIN_SEATS`. That entry landed
+two minutes before the stand-down decision; neither of us knew. At 40 the refund path closes
+(`refund.rs:75` requires `entrants < min_seats`) and the seal path opens (`seal.rs:64` requires
+`>= min_seats`). **Pool 36 seals and plays at 01:46:04Z and nothing anyone does can stop it.**
 
-**§H32 — two things I had written down were wrong.** `duplicate_sets` does not hard-block
-anything: `hardBlocks` is published to the reviewer and read by no code that moves money (D-E9),
-and detection runs at reveal in any case. And there is **no window** in which a reviewer can flag
-a winner before it is paid — the crank reveals, scores, detects, commits and pays in one tick, and
-detection returns no automatic flags. Both corrections are in DRIFT; the second is a product
-finding for the founder rather than anything to fix here.
+**It is recorded as an observation, not as T7** — `registry/pool-36.observation.md`, the way pool
+22 was. Its field cannot match the frozen plan: two strangers instead of one, no founder seats, no
+flags. `T7.plan.json` stays byte-identical and unspent.
 
-## T7, and why it is not the test the manual describes
+## What pool 36 will show anyway
 
-**The manual's T7 cannot produce its own stated outcome.** §9 asks for one headless seat to win AND
-for two seats to have their shares escrowed. Only rank 1 is paid, and a seat paid nothing escrows
-nothing — so if one seat wins alone, the review path never runs. The founder ratified the redesign
-on 2026-09-26.
+Derived over the 38 seats actually in, before the seal:
 
-**What runs instead, in one pool:**
+- **W00 and W01 both stand at 511 half-points and 756 zones — identical.** U1 was always
+  unconditional and it survives the change of field: identical battle sets return identical
+  comparisons against every third player, so the two walls tie whatever the strangers played.
+- Best capped seat 292, ceiling 320; wall floor 511. **U2 holds.**
+- Unless a stranger wins four of its seven battles against a wall, the walls take rank 1 and
+  **split the pot 2000000000 each, remainder zero — the first pool on this cluster to pay two
+  seats.** Every scored pool before it paid exactly one.
+- It is also a deadline seal at exactly `MIN_SEATS`, which re-runs T3's path on the **Phase B**
+  build. A free regression check across a program upgrade.
 
-- **The device half.** Both founder accounts played from **one browser profile**, so they derive
-  the same device marker and the finding appears in the detection report. Detection flags nobody by
-  itself, so this half ends at the report — which is the claim being tested.
-- **The review half.** W00 and W01 carry **identical** battle sets, so they score identically
-  against every opponent and **tie at rank 1** for 2000000000 each. Two shares is the only way the
-  escrow path can run at all. Then: flag both during the fill → `pay_prizes` escrows both →
-  release W00 → forfeit W01 (which moves **nothing**) → `pay_next_place` gives W01's share to W00.
-  The treasury is unchanged from start to finish, and that is the point.
+## The two findings worth keeping (§H34)
 
-**What is unconditional, and what is not.** Pool 36 already holds one wallet that is not ours, and
-its allocation is sealed. So `scripts/t7-bounds.ts` separates the two:
+1. **A reviewer-wallet outage takes the whole review capability offline, and it fails open.** Two
+   reviewers are configured but both resolve to one wallet stack. With no signer, nothing can be
+   flagged, released or forfeited — and `daemon.ts`'s twelve-hour clock then **auto-releases** any
+   held share to its player. On mainnet that pays a flagged winner because someone's wallet broke
+   on the wrong evening. Worth a genuinely independent second reviewer, and worth ruling
+   deliberately whether that clock should fail open or fail held. It currently fails open by
+   omission.
+2. **Naming a pool in a frozen plan inherits its strangers — and holding a pool part-filled is the
+   exposure.** That second one is mine: I sequenced the fill to stop short and wait for the
+   founder, and every minute a pool sits part-filled is a minute the field can change. The re-run
+   wants the founder's seats first, then one fast fill to 64.
 
-| | claim |
-|---|---|
-| **U1** | W00 and W01 finish on the same score and the same zones and share a rank — whatever anyone plays |
-| **U2** | no capped seat can outscore a wall: its ceiling is 854, a wall's floor is 861 |
-| **U3** | the founder cannot decide this pool: best rival 505 + 14 = 519, against 861 |
-| **C1** | the shared rank is **1** unless the stranger takes 8 or more of the 14 half-points on offer against one wall — four wins of seven. Every capped set, every even split and every single-stat spike gives it none. |
+## The re-run
 
-If C1 fails the pair still ties, at rank 2, nothing escrows, and that is reported rather than
-worked around.
-
-**No results root is frozen**, for the first time in this test. A root is a function of all 64
-allocations and one of them is sealed and not ours. What is frozen is the function and 63 of its
-64 inputs; `reconcile.ts` recomputes the root at reveal and checks it against the chain, which is
-the claim that actually matters.
-
-**T7 is the first battle-test pool on the Phase B program** (live 2026-09-25T01:54:32Z). T3 settled
-29 minutes before that deploy, so nothing earlier is confounded — but any T7 result that differs
-from its predecessors has a second candidate explanation and the report will say so. `register.rs`,
-`escrow.rs` and `flags.rs` are textually untouched by Phase B, and the easy-mode sealed payload is
-byte-for-byte what every earlier pool used.
-
-## The freeze standard, stated plainly
-
-T6's freeze merged **before its pool existed** — the strongest form. T7 cannot reach that: the
-founder chose pool 36, and pool 36 already existed and held an entrant. T7's standard is T3's —
-frozen before any entry **of ours** — with one thing in its favour that T3 did not have: the
-pre-existing entry is **sealed**, so the plan was written in ignorance of it, says so, and makes no
-claim that depends on it. Unlike T3's, this freeze file was written at freeze time.
+T7 needs a new plan and a new freeze for a fresh pool — `T7.plan.json` names pool 36 and its seat
+count, so it cannot be reused. About an hour of work, once there is a wallet to sign with. The
+flag control shipped and is live in production, so the blocker §H33 found is already fixed.

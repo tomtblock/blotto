@@ -83,7 +83,19 @@
     "mergedAt": "2026-09-26T19:41:55Z",
     "poolHeldAtMerge": 1,
     "poolHeldAtMergeNote": "Only the prior occupant. Confirmed from the indexer's projection at the merge and again at 21:46Z, still 1 of 64.",
-    "firstEntryOfOursAt": null
+    "firstEntryOfOursAt": "2026-09-26T21:50:03Z",
+    "firstEntryOfOursSignature": "61WAS2GaCDdX71u7As4R5nfmudJcmV7GWy4Fmpj8u7WcrHU7BnxxTTnixFhjFxDaxWrijUmMVvbs5MSDrBchiXgo",
+    "freezePrecedesFirstEntryBy": "2 h 8 min 8 s"
+  },
+
+  "THE TEST WAS STOOD DOWN BEFORE IT COMPLETED": {
+    "_why": "A freeze record that reads as a confident prediction, with no note that the run never happened, is a misleading document. This block is here so the file cannot be read that way.",
+    "standDownAt": "2026-09-26T22:10Z",
+    "reason": "The project owner's wallet was unavailable, so neither founder entry nor either flag could be signed. Both halves of T7 — the same-device finding and the whole escrow/release/forfeit path — need that signature. They chose to stand down and I recommended it.",
+    "whatHadAlreadyHappened": "38 headless seats were in (W00..W37, first at 21:50:03Z), deliberately stopping at 39 total so the deadline would refund rather than seal.",
+    "whatOvertookIt": "At 2026-09-26T22:03:29Z a SECOND wallet that is not ours registered, taking pool 36 to exactly 40 — MIN_SEATS. trigger_refund requires entrants < min_seats (refund.rs:75) and seal_at_deadline requires entrants >= min_seats (seal.rs:64), so from that moment the pool seals and plays at its deadline and nothing anyone does can stop it.",
+    "soThisPlanDidNotRun": "Pool 36's settlement is recorded as an OBSERVATION (registry/pool-36.observation.md), not as T7. Its field cannot match this plan: two strangers rather than one, no founder seats, no flags. T7.plan.json stays byte-identical and unspent, and T7 proper needs a new plan and freeze for a later pool.",
+    "whatThePlanStillGotRight": "U1 is unconditional and survives the change of field: W00 and W01 stand at 511 half-points and 756 zones apiece among the 38 seated, identical, so they tie whatever the two strangers played. U2 survives too at this size — the best capped seat reaches 292 with a ceiling of 320, against a wall floor of 511."
   },
 
   "verifyIndependently": [
@@ -99,7 +111,10 @@
     "priorOccupantRegisteredAt": "2026-09-26T15:35:48Z",
     "planWrittenAt": "2026-09-26T19:11:47Z",
     "frozenAt": "2026-09-26T19:41:55Z",
-    "firstEntryOfOursAt": null,
-    "freezeMustPrecedeFirstEntry": true
+    "firstEntryOfOursAt": "2026-09-26T21:50:03Z",
+    "freezeMustPrecedeFirstEntry": true,
+    "freezePrecededFirstEntryBy": "2 h 8 min 8 s",
+    "secondStrangerRegisteredAt": "2026-09-26T22:03:29Z",
+    "secondStrangerNote": "Took the pool to 40 = MIN_SEATS, thirteen minutes after our fill stopped at 39, and made the seal unavoidable. See the stand-down block above."
   }
 }

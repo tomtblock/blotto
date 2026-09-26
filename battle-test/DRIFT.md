@@ -2044,3 +2044,50 @@ the local suite passing.
    is a control nobody can claim works. That is the argument for T7 running the whole sequence —
    flag, escrow, release, forfeit, next-place — on a real pool with real lamports, which is what
    it now does.
+
+---
+
+## §H34 — two findings from the night T7 did not run
+
+T7 was stood down at 22:10Z because the project owner's wallet was unavailable: neither founder
+entry nor either flag could be signed, and those are both halves of the test. Nothing was lost
+that mattered. Two things it exposed do matter, and neither is about tonight.
+
+### 1. A reviewer-wallet outage takes the review capability offline — and it fails OPEN
+
+`config/reviewers.json` lists two members, which looks like redundancy. It is not: both resolve to
+the same person's wallet stack, so one wallet problem removes **every** reviewer at once. With no
+signer there is no way to place a flag, and no way to log a release or an upheld forfeit.
+
+The part that matters is what happens next. `daemon.ts`'s review clock releases a held share to
+its player once `REVIEW_WINDOW_SECS` — twelve hours — has passed with no logged forfeit. So a
+reviewer outage spanning the window does not freeze a suspicious prize pending attention; **it
+pays it out**. The safe-looking default is the permissive one.
+
+On devnet with nothing flagged this cost nothing. On mainnet, a wallet lost or a phone replaced on
+the wrong evening pays a flagged winner automatically, and the published promise that a suspicious
+prize is held and reviewed quietly does not hold for those twelve hours. Worth the project owner's
+attention as a **second, independent reviewer** — a different person with a different wallet, which
+is what a two-member registry is presumably for — and worth deciding deliberately whether the
+clock should fail open or fail held. It currently fails open by omission rather than by ruling.
+
+### 2. Naming a pool in a frozen plan inherits every stranger who walks into it
+
+T4, T5, T6 and T3 all froze `poolId: null` on purpose, and that portability paid for itself when
+T4 lost pool 15 to the seal-lockout and ran on pool 16 with the plan unedited.
+
+T7 could not do that. A stranger was already seated in pool 36 when the plan was written, so the
+plan had to name the pool and account for that specific entrant — which made it un-portable. Then
+a **second** stranger arrived at 22:03:29Z, thirteen minutes after our fill stopped, taking the
+pool from 39 to exactly 40 and turning its deadline outcome from *refund* into *seal and play*. A
+deliberate safety margin was erased by someone who has every right to enter a public pool.
+
+Two lessons, both for the re-run:
+
+- **A plan that must name a pool should say what it does when the field changes underneath it.**
+  T7's contingency covered *one* extra stranger arriving; it did not cover one arriving after the
+  fill had deliberately stopped short.
+- **Holding a pool part-filled is the exposure.** Every minute between our first entry and the
+  seal is a minute a stranger can change the field. The fill wants to be one fast run to 64, with
+  the founder's seats going in *first* rather than in the middle — which is the opposite of how
+  tonight was sequenced, and the sequencing was mine.
