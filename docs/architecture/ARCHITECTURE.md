@@ -390,6 +390,7 @@ manual `deploy-backend`. Running all of this locally:
 | Item | State |
 |---|---|
 | Mainnet | Not deployed. The upgrade authority is a single devnet key and the multisig threshold is one; both are disclosed in `config/custody.json`. |
+| Pool key generation | Each pool's sealing key is generated in the operator's process, imported into the custody service and wiped locally (Turnkey offers no X25519 curve). For that instant the process holds the secret, so sealing rests on the custody policy. See [`../../backend/sealing/README.md`](../../backend/sealing/README.md). |
 | Settlement key custody | The settlement signer (also the keeper on devnet) is a local keypair loaded by the daemon, not co-signed through a custody service. |
 | Class-draw replay in the app | `backend/class-digest` implements the replay and is pinned to the Python vectors, but no page imports it. A player can replay their class from published events (`PoolVrfSeeded.vrf_seed`, each `EntryRegistered`'s index and slot hash, pool and player); there is no page that does it for them. |
 | Timing signal under the board | The timing-profile signal was designed for per-screen times. Under the board the slots carry each field's last-change time, so the signal's meaning has shifted; its thresholds are unchanged. |
