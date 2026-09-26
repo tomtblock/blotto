@@ -69,11 +69,12 @@ An earlier version of this section read as though it were the latter, and a
 who left the default tied for first and split the whole pot, against a field
 that concentrated on one and two stats rather than three. The correction
 below is measured with the product's own scoring engine over 400 pools of 40
-seats, and is reproducible from `tests/rehearsal`:
+seats, generated with this report (`measureDefaultTiers`,
+`tests/rehearsal/src/skill-evidence.ts`):
 
 | the other 39 seats | default's rank-1 rate | median rank |
 |---|---|---|
-| this study's mixed ladder | **0.0%** (0/400) | 26th of 40 |
+| this study's mixed ladder | **0.0%** (0/400) | 29th of 40 |
 | three-stat concentrators only | **0.0%** (0/400) | **40th — last, every pool** |
 | arbitrary free-integer allocations | **100.0%** (400/400) | **1st** |
 
