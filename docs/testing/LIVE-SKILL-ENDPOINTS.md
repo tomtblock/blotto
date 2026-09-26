@@ -1,7 +1,8 @@
-# Skill evidence — the live endpoints (E8)
+# Skill evidence — the live endpoints
 
-REPORT.md in this directory is the *simulated* exhibit (the deterministic
-strategy-ladder study). This page documents its **live counterpart**: three
+[`docs/skill-evidence/REPORT.md`](../skill-evidence/REPORT.md) (and its
+[hard-board counterpart](../skill-evidence/hard/REPORT.md)) is the
+*simulated* exhibit (the deterministic strategy-ladder study). This page documents its **live counterpart**: three
 public read-API endpoints computing the same class of statistics over real
 tournaments, so the skill evidence keeps updating from production data
 without anyone curating it.
@@ -11,7 +12,7 @@ without anyone curating it.
 `backend/indexer/test/read-api.spec.ts`), computed by
 `backend/indexer/src/player-history.ts`, and the read API is part of the
 indexer service's production entry (`serve`/`sync`, port
-`BLOTTO_READ_API_PORT`, default 8081 — docs/hosting.md). Base URL: the
+`BLOTTO_READ_API_PORT`, default 8081 — see [HOSTING](../guide/HOSTING.md)). Base URL: the
 same host the app uses as `NEXT_PUBLIC_INDEXER_URL`.
 
 ## The derivation — why these numbers are checkable
@@ -71,11 +72,11 @@ Reading: the base-rate context for the other two — how much repeat play
 exists at all, and therefore how much weight the persistence figures
 carry at any point in time.
 
-## Caveats counsel should state with the numbers
+## Caveats that belong with the numbers
 
 - **Sample size**: early in production the pair counts are small; the
   endpoints report raw counts precisely so a reader can judge the weight.
-  The simulated study (REPORT.md) carries the large-sample version of the
+  The simulated study ([REPORT.md](../skill-evidence/REPORT.md)) carries the large-sample version of the
   same claim under controlled conditions.
 - **Selection**: repeat entrants self-select. The persistence exhibit
   (conditioning on the previous outcome *within* the repeat population)

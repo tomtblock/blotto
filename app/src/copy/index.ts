@@ -618,7 +618,7 @@ export const COPY = {
     // PHASE-N-REVIEW (founder 2026-09-16, CHANGE-2026-09-16_ui-uplift.md §A7):
     // the same string also answers the ciphertext store's 409 — one seal per
     // wallet per pool, so a retry after a partial failure is refused before
-    // anything is signed (battle-test/LOG.md, 2026-09-16 00:19). The old
+    // anything is signed (docs/testing/TESTING-REPORT.md, seal lockout). The old
     // wording sent that player to the Rules page's eligibility list, which
     // is the wrong explanation. This one is true for both cases and stays
     // generic (PID §8: the refusal gives no reason). Proposal until ratified.

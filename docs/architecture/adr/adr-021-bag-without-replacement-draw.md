@@ -1,50 +1,71 @@
-> Exported from anarchy-fun for reference; superseded by Blotto Cup docs where they conflict.
+# ADR-021: The class draw is bag-without-replacement over `class_counters`
 
-## ADR-021: Rarity system — six-tier power-law distribution and AI trait assignment
+**Status:** Accepted · in force
+**Enforced in:** `crates/blotto-randomness/src/lib.rs` (`weighted_class_draw`),
+`programs/blotto_cup/src/instructions/register.rs`, `programs/blotto_cup/src/constants.rs`
+(`LAUNCH_CLASS_COUNTERS`), `backend/class-digest/src/digest.ts` (the browser replay)
 
-**Status:** Accepted (founder ratified 2026-05-22)
-**Date:** 2026-05-22
+## Context
 
-**Context.** Q-003 resolved the per-collection NFT distribution across rarity tiers. Q-004 resolved how sub-traits are assigned rareness levels (1–5) within each trait category.
+Each pass carries one of five cosmetic classes. The class is the only random element in the
+product, and it is kept away from anything a player can win: it affects no stat, no battle, no
+pool, no prize and no ranking tiebreak. The draw still has to be fair and checkable, because its
+published description ("one Mythic in every 64") is a statement to players. That needs:
 
-**Decision.**
+- a fixed, published composition per pool, not an independent chance per entry;
+- replay from public data by anyone, with no hidden table;
+- integer-only arithmetic, identical in Rust (on-chain) and TypeScript (the verify page).
 
-**Rarity tier distribution per collection (Q-003, Option A):**
+## Decision
 
-| Tier | Count | Share |
-|---|---|---|
-| Common | 250 | 59.5% |
-| Uncommon | 100 | 23.8% |
-| Rare | 50 | 11.9% |
-| Epic | 15 | 3.6% |
-| Legendary | 4 | 0.95% |
-| Mythic | 1 | 0.24% |
-| **Total** | **420** | **100%** |
+**A bag without replacement.** Each pool opens with `class_counters = [38, 15, 7, 3, 1]`
+(sum 64, one per seat), written by `open_pool` from `LAUNCH_CLASS_COUNTERS`. The five indices are
+shown to players as **Common, Uncommon, Rare, Epic, Mythic**, in the profile's collection only.
 
-These counts initialize the rarity counter array at collection creation. Per ADR-009 and ADR-026, each pack open decrements the counter for whichever tier is drawn. Sum is invariant: 420 at launch, 0 at graduation.
+For each entry, inside `register`:
 
-**Trait rareness assignment (Q-004):**
-- Sub-traits within each trait category are assigned rarity tiers (1–5) by a hosted LLM at collection creation.
-- Model: Claude or GPT-4-class. Specific model + version pinned per environment configuration.
-- Configuration: temperature 0, fixed prompt template controlled by anarchy team, fixed input format (creator's trait list).
-- Determinism: same input → same output. Pinning model version is non-negotiable; bumping the version requires a new ADR documenting the change and re-verifying determinism on test collections.
-- Output recorded immutably on-chain in the collection account at creation.
-- Creators do not influence assignments. Anarchy team controls the prompt and model choice.
-- Failure mode: if the model API is unreachable at collection creation, creation fails atomically. Acceptable — creation is a creator-initiated one-time event.
+1. Derive a 32-byte digest from five sources
+   ([ADR-026](adr-026-multi-source-randomness.md)).
+2. `weighted_class_draw(digest, class_counters)`: read the digest's first 8 bytes as a
+   little-endian `u64`, reduce it modulo the remaining total, and walk the counters as a cumulative
+   distribution to pick an index in `0..5`. The function reads the counters and does not change
+   them.
+3. The caller decrements the chosen counter, so the bag total falls by exactly one per entry and
+   reaches zero at the 64th. The class index is written to `Entry.class` and emitted in
+   `EntryRegistered`.
 
-**Tier-name overlap (Mythic).** The XP system also has a Mythic tier (100,000 XP, ADR-022). The overlap is intentional: both denote apex of their system. UI must disambiguate by context ("Mythic NFT" vs "Mythic-tier User").
+The argument and field are named `class_counters`. No variable in the draw is named after chance
+or weighting, by project rule.
 
-**Consequences.**
-- All anarchy.fun collections share the same global rarity distribution. This is a deliberate brand choice — players know the odds going in, every collection has its "holy grail" Mythic.
-- The hosted LLM is an off-chain dependency at the creation step only. Pack opens are 100% on-chain.
-- Audit-replayability: anyone can rerun the model with the same prompt + trait list and verify the on-chain assignments. Requires anarchy to publish the prompt template (recommend doing so in `Standards.md` once written).
-- Pinned model version is a real ops commitment — model providers deprecate versions, and we must either upgrade with a documented ADR or absorb the cost of keeping an older version available.
+## Consequences
 
-**Alternatives considered.**
-- *5-tier coarser distribution (Q-003 Option B)* — rejected. Option A's six tiers create more reveal moments.
-- *Creator-defined trait rareness* — rejected. Self-dealing risk.
-- *Deterministic heuristic (no AI)* — rejected. Heuristics produce weak rarity differentiation.
-- *On-chain inference* — rejected. Solana doesn't host arbitrary inference; one-time creation-step call is acceptable.
+- **The composition is fixed per pool, not per entry.** A full pool contains exactly one Mythic,
+  three Epic, seven Rare, fifteen Uncommon and thirty-eight Common. A pool that seals between 40
+  and 63 seats (R7-b) draws the bag down without emptying it; each draw is still uniform over what
+  remains, and the published statement describes the bag.
+- **Replayable from events.** The on-chain bag replaces the original design's committed, shuffled
+  class table: with the seed (`PoolVrfSeeded`), each entry's slot hash and index
+  (`EntryRegistered`) and the two public keys, anyone can replay every draw in order.
+- **Three copies, all checked.** The bag exists in the program (`constants.rs`), the draw crate, and
+  the TypeScript replay. A program test asserts the first two equal the Python-generated fixture
+  (`crates/blotto-randomness/fixtures/vectors.json`, from `gen_vectors.py`); `scripts/check-mirrors.py`
+  checks the TypeScript copy in CI.
+- **Class stays out of scoring by construction.** The replay lives in its own package
+  (`backend/class-digest`), separate from `backend/scoring`, and `scripts/check-standing-rules.sh`
+  fails CI if the scoring path mentions `class`.
+- **Modulo bias is accepted.** With at most 64 items against a 2^64 input space the bias is on the
+  order of 1 in 2^58. Rejection sampling would make an audit replay depend on a retry count, for no
+  effect on anything a player can win.
+- **The empty bag is unreachable.** The 64th entry seals the pool before another `register` can
+  run; the function panics on an empty bag as a defence-in-depth check.
 
----
+## Alternatives considered
 
+- **An independent weighted draw per entry (with replacement).** Rejected: a pool could hold zero or
+  several Mythics, so the published composition would be a tendency rather than a fact.
+- **A shuffled class table committed by Merkle root at open and published at close** (the original
+  design). Superseded: it needs an off-chain table and a publication step; the on-chain bag replays
+  from events alone.
+- **Any class-linked reward or effect.** Rejected as a rule, not a design choice. A proposed class
+  reward must answer no to both questions: would anyone pay money for it, and does it improve the
+  chance of winning?

@@ -1,34 +1,37 @@
-> Exported from anarchy-fun for reference; superseded by Blotto Cup docs where they conflict.
+# Q-016: Devnet verification of the Metaplex Core Collection freeze
 
-# Q-016 verification note — Metaplex Core Collection freeze, devnet run
+**Type:** Verification record (evidence for [ADR-027](adr-027-collection-freeze-propagation.md))
+**Environment:** Solana devnet · Metaplex Core `CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d`
+(the same address on devnet and mainnet) · mpl-core JS SDK 1.10.0 · Umi 1.5.1
+**Cited by:** `programs/blotto_cup/src/pass.rs` (the program ID and the rejection signature) and
+`tests/litesvm/tests/vrf_and_freeze.rs` (the asserted error code)
 
-**Source:** `anarchy-fun/docs/q-016-verification.md` (a pointer stub) and the full run report at
-`anarchy-fun/docs/archive/verification/q-016-verification.md`.
-**Run environment:** Solana devnet · Metaplex Core `CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d`
-(same address on devnet and mainnet) · mpl-core SDK 1.10.0 · Umi 1.5.1.
+## Question
 
-This is the empirical evidence behind the freeze-propagation half of ADR-027
-(`adr-027-collection-freeze-propagation.md`). It is carried because
-`programs/blotto_cup/src/pass.rs` and `tests/pass.ts` cite it as the source of the Metaplex Core
-program ID and of the freeze-rejection error signature.
+Can a pass be made non-transferable for life by freezing its **Collection**, with the pass itself
+minted bare? Two things had to hold:
+
+1. Metaplex Core accepts a `PermanentFreezeDelegate` plugin at the Collection level.
+2. A frozen Collection blocks transfers of its bare member assets, by owners and by delegates.
 
 ## Results
 
 | Test | Setup | Outcome | Error |
 |---|---|---|---|
-| 1 — baseline positive control | Unfrozen Collection, bare member Asset, owner transfer | **SUCCESS** | — |
-| 2 — **core test** | Collection with `PermanentFreezeDelegate { frozen: true, authority: UpdateAuthority }`, bare member Asset, owner transfer | **FAILURE** (freeze held) | `InvalidAuthority` / `0x9` |
-| 3 — unfreeze and retry | Same pair, Collection-level `updateCollectionPlugin(frozen: false)`, then retry | **SUCCESS** | — |
-| 4 — delegate-initiated transfer | Collection frozen, Asset minted with a granted `TransferDelegate`, delegate transfer | **FAILURE** (freeze held) | `InvalidAuthority` / `0x9` |
+| 1. Baseline | Unfrozen Collection, bare member asset, owner transfer | **Succeeded** | — |
+| 2. **Core test** | Collection with `PermanentFreezeDelegate { frozen: true, authority: UpdateAuthority }`, bare member asset, owner transfer | **Rejected** (freeze held) | `InvalidAuthority` / `0x9` |
+| 3. Thaw and retry | Same pair after a Collection-level update to `frozen: false`, then retry | Succeeded | — |
+| 4. Delegate transfer | Frozen Collection, asset minted with a granted `TransferDelegate`, delegate transfer | **Rejected** (freeze held) | `InvalidAuthority` / `0x9` |
 
-Test 3 is recorded for completeness. **Blotto Cup does not carry an unfreeze path** — see the scope
-note in `adr-027-collection-freeze-propagation.md`.
+Test 3 is recorded only to show the freeze is what blocked tests 2 and 4. **Blotto Cup has no
+thaw path**; no instruction in the program can perform test 3's update
+([ADR-027](adr-027-collection-freeze-propagation.md)).
 
-## The error signature that tests must match
+## The error signature tests must match
 
-A frozen-member transfer does **not** surface as `AssetIsFrozen` (`0xa`). It surfaces as
+A frozen-member transfer does **not** fail with `AssetIsFrozen` (`0xa`). It fails with
 `InvalidAuthority` (`0x9`), because the freeze plugin force-rejects inside the lifecycle validator.
-The program-log tail from Test 2:
+The program-log tail from test 2:
 
 ```
 Program log: programs/mpl-core/src/state/asset.rs:293:Approve
@@ -46,13 +49,13 @@ Program log: programs/mpl-core/src/plugins/internal/owner_managed/transfer_deleg
 Program log: programs/mpl-core/src/plugins/internal/permanent/permanent_freeze_delegate.rs:58:Reject
 ```
 
-Both frozen-transfer attempts were rejected at **preflight simulation**, so neither produced an
-on-chain signature.
+Both rejected transfers failed at preflight simulation, so neither produced an on-chain signature.
 
-## Why this matters to Blotto Cup
+## How the repository uses this
 
-The character pass is non-transferable for the life of the asset (PID §3, §8.4). The mechanism is
-exactly the one proven above: attach `PermanentFreezeDelegate { frozen: true }` at the **Collection**
-level with authority `UpdateAuthority` (which resolves to the program's Pool PDA), then mint every
-member **bare** so it inherits the freeze. `tests/pass.ts` asserts the negative case — that a minted
-pass cannot be transferred — by matching on the `0x9` signature above.
+- `pass.rs` creates each pool's Collection with exactly the plugin from test 2 (authority
+  `UpdateAuthority`, which resolves to the `Pool` PDA) and mints every pass bare.
+- `tests/litesvm/tests/vrf_and_freeze.rs` (`a_minted_pass_refuses_transfer`) mints a real pass
+  through `register` against the compiled program and a local copy of the Core program
+  (`tests/fixtures/mpl_core.so`), attempts an owner transfer, and asserts the error is `Custom(9)`,
+  the `0x9` above. A different code means the freeze mechanism has changed and must be re-verified.

@@ -19,7 +19,7 @@
  * than in a node's simulator.
  *
  * NOTHING CAN BE BURNT HERE. A wallet is burnt by storing a ciphertext it
- * never registers (DRIFT.md §H6). On a sealed pool the ciphertext route
+ * never registers (docs/testing/TESTING-REPORT.md). On a sealed pool the ciphertext route
  * refuses at its first gate, before the signature and before any write, so
  * there is nothing to store and nothing to strand. The refusal it returns is
  * itself part of the evidence: `pool filled` when the pool reached capacity,

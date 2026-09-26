@@ -1,52 +1,63 @@
-> Exported from anarchy-fun for reference; superseded by Blotto Cup docs where they conflict.
+# ADR-027: A Collection-level permanent freeze makes every pass non-transferable
 
-# ADR-027 (partial export): Collection-level Permanent Freeze Delegate propagates to member assets
+**Status:** Accepted · in force
+**Enforced in:** `programs/blotto_cup/src/pass.rs`; negative test
+`tests/litesvm/tests/vrf_and_freeze.rs` (`a_minted_pass_refuses_transfer`)
 
-**Source:** `anarchy-fun/docs/Decisions.md` → ADR-027, and the empirical run behind it
-(`docs/archive/verification/q-016-verification.md`, exported here as `q-016-verification-note.md`).
-**Original status:** Accepted (architect), 2026-05-27.
+## Context
 
-## Scope of this export — read this first
+The character pass ([ADR-003](adr-003-metaplex-core.md)) must never move from the wallet that
+paid for the entry. A pass that could be transferred could be sold, and a random, sellable item
+received for an entry fee is exactly what the product must not be. The mechanism has to:
 
-The original ADR-027 recorded **two** decisions. Only the **first** is carried into Blotto Cup:
+- hold for the life of every pass, with **no instruction in this program able to undo it**;
+- hold against delegates as well as owners;
+- cost nothing extra per entry.
 
-| Half of ADR-027 | Carried? |
-|---|---|
-| Collection-level `PermanentFreezeDelegate` exists, and a frozen Collection **propagates** to its member Assets | **Yes** — this is the mechanism behind the non-transferable character pass |
-| "Single-CPI unfreeze adopted at graduation; `unfreeze_batch` fallback dropped" | **No — deliberately dropped.** Blotto Cup has no unfreeze path at all |
+## Decision
 
-Blotto Cup's character pass is **permanently** non-transferable (PID §3, §8.4). There is no
-graduation, no thaw, and no instruction in `programs/blotto_cup` that can set `frozen: false`.
-Adding one would be a legal-position change and requires counsel sign-off. The unfreeze half of
-ADR-027 is recorded here only so a future reader knows it existed and was consciously not carried.
+- `create_pass_collection` creates each pool's Core Collection with one plugin:
+  `PermanentFreezeDelegate { frozen: true }`, authority `UpdateAuthority`, which resolves to the
+  pool's `Pool` PDA.
+- `mint_pass_cpi` mints every pass **bare**, with no asset-level plugins, so it inherits the
+  Collection's freeze.
+- **There is no thaw path.** No instruction in `programs/blotto_cup` sets `frozen: false` or issues
+  `UpdateCollectionPluginV1`. Because the plugin's authority is a program PDA, only this program
+  could ever sign such a change, and it contains no code that does. Adding one would change the
+  product's legal position and requires legal sign-off.
 
-## The finding that is carried
+This rests on two properties verified on devnet before the code relied on them
+([q-016](q-016-verification-note.md)):
 
-Both questions the original ADR set out to answer resolved **YES**, verified on devnet against
-Metaplex Core `CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d` (mpl-core SDK 1.10.0 / Umi 1.5.1):
+1. Core accepts a `PermanentFreezeDelegate` at the Collection level.
+2. A frozen Collection propagates to its bare member assets: an owner's transfer is rejected inside
+   the freeze plugin's lifecycle check, and so is a transfer by a legitimately granted
+   `TransferDelegate`.
 
-1. **A `PermanentFreezeDelegate` plugin exists and is accepted at the Collection level** —
-   `createCollection` accepts the plugin entry `{ type: 'PermanentFreezeDelegate', frozen, authority }`.
-2. **A frozen Collection propagates to its member Assets.** A member Asset minted **bare** (no
-   per-asset plugins) could not be transferred while the Collection was frozen; the transfer was
-   rejected inside the Collection's freeze lifecycle
-   (`plugins/internal/permanent/permanent_freeze_delegate.rs:58:Reject`).
+## Consequences
 
-Two consequences carried forward into `programs/blotto_cup/src/pass.rs`:
+- **The rejection code is `0x9` (`InvalidAuthority`), not `AssetIsFrozen` (`0xa`).** The freeze
+  plugin force-rejects inside the lifecycle validator. Tests asserting "this pass cannot move" match
+  `0x9` and the `permanent_freeze_delegate…Reject` log line; `a_minted_pass_refuses_transfer`
+  asserts `Custom(9)`. A different code there means the mechanism has moved.
+- **No per-asset delegate blocking is needed.** The Collection freeze overrides an approving
+  transfer delegate.
+- **Passes must be minted bare.** In the mpl-core version this was verified against, adding a plugin
+  to a Collection member after mint fails early, before any lifecycle check. Any member plugin would
+  have to be attached at creation; minting bare avoids the question entirely. The comment on the
+  mint call site says so and must stay.
+- **Permanence depends on upgrade governance.** The program is upgradeable, and an upgrade could add
+  an instruction that thaws a Collection. That risk is controlled by who holds the upgrade authority
+  (published in [`config/custody.json`](../../../config/custody.json) and on the custody page), not
+  by this mechanism.
+- **Known limitation.** The absence of a thaw instruction is checked by review; no CI check greps
+  for `frozen: false` or `UpdateCollectionPluginV1` today.
 
-- **Freeze rejection surfaces as program error `0x9` (`InvalidAuthority`), not `AssetIsFrozen`
-  (`0xa`).** The freeze plugin force-rejects the transfer in the lifecycle validator. Test code
-  asserting "this pass cannot move" must match on `0x9` plus the
-  `permanent_freeze_delegate…Reject` log line.
-- **The freeze holds against transfer delegates, not only owners.** An Asset minted with a
-  legitimately-granted `TransferDelegate` still could not be moved by that delegate while the
-  Collection was frozen — the delegate *approved*, the freeze *rejected*. The pass mint therefore
-  does not need to defensively block per-asset transfer delegates for freeze integrity.
+## Alternatives considered
 
-## Harness note carried into the mint code
-
-In mpl-core 1.10, a post-mint `AddPlugin` against a Collection member **panics early**
-(`utils/mod.rs:31`), before any lifecycle check. Plugins must be attached at mint time via
-`create`'s `plugins` argument. Blotto Cup mints the pass **bare** and inherits the Collection-level
-freeze, which sidesteps the trap entirely. This was tracked as IPC-003 in the old repo and is
-preserved as a comment on the mint call site.
+- **A per-asset freeze plugin on every pass.** Rejected: more work per entry, and adding plugins to
+  Collection members is the failing path described above.
+- **Token-2022 `NonTransferable`.** See [ADR-003](adr-003-metaplex-core.md): not chosen because the
+  Core freeze was already verified and tested.
+- **A freeze that can later be lifted** (for example, at some future lifecycle stage). Rejected
+  outright: a pass that can ever become transferable has a market, and the pass must have none.

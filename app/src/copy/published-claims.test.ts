@@ -431,8 +431,8 @@ const TERMS_PROMISES: readonly Promised[] = [
     commitment:
       'The lost-ciphertext refund is disclosed as a manual payment, because no code pays it.',
     // The file says so in capitals: "The published rule says that player's
-    // entry fee is refunded. NOTHING IN THIS CODEBASE PAYS IT." Finding 5
-    // of docs/compliance/SAFEGUARDS.md. Disclosing it is the whole
+    // entry fee is refunded. NOTHING IN THIS CODEBASE PAYS IT." Recorded
+    // under "Disclosed residuals" in docs/compliance/SAFEGUARDS.md. Disclosing it is the whole
     // point of the row — the claim and the code agree BECAUSE the claim
     // says the code does not do it.
     proof: 'backend/reveal/src/crank.ts',

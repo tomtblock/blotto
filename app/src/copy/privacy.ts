@@ -10,8 +10,8 @@
  * ── THE SOURCE IS THE INVENTORY, NOT ASSUMPTION ──────────────────────────
  *
  * Every line below is drafted from `docs/compliance/DATA-INVENTORY.md`
- * — §1 for what is held and what is not, §2 for what changed for a player,
- * §8 for the retention rules that are PROPOSED rather than enforced. Where
+ * — §1 for what is held and what is not, §2 for what was minimised, §3
+ * for retention (which periods code enforces and which are applied by hand). Where
  * this notice states a fact, a comment names the row it comes from. Nothing
  * here was written from memory of how the system probably works.
  *
@@ -39,7 +39,7 @@
  * ── RETENTION IS A POLICY, NOT YET A MECHANISM ───────────────────────────
  *
  * Nothing in the code deletes anything today except the fifteen-minute
- * location cache. §8 of the inventory proposes the rules; they are adopted
+ * location cache. §3 of the inventory sets the rules; they are adopted
  * here as the PUBLISHED periods and marked as policy rather than as a
  * mechanism, in those words, because publishing a period nothing enforces
  * as though it were enforced is the defect this repository keeps catching.
@@ -207,7 +207,7 @@ export const PRIVACY = {
       ],
     },
     {
-      // Inventory §8: the PROPOSED rules, adopted here as the published
+      // Inventory §3: the retention rules, adopted here as the published
       // policy and marked as policy. Only the geo cache is enforced.
       id: 'retention',
       heading: 'How long we keep it',

@@ -622,7 +622,7 @@ function t4Plan(p: Prediction): Record<string, unknown> {
  * SHAPES alone is unconditional, what depends on exact numbers is not — and
  * T4 proved that distinction is load-bearing, because the founder's hand-dialled
  * allocations matched the plan's exact numbers in one battle of seven and every
- * unconditional prediction still held (DRIFT.md §H10).
+ * unconditional prediction still held (docs/testing/TESTING-REPORT.md).
  *
  * T5 goes further than T4 in one place and less far in another. Further: the
  * founder's seats are predicted only to land in ranks 2..63 — their exact

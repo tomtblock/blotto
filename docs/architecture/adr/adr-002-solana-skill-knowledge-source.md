@@ -1,38 +1,55 @@
-> Exported from anarchy-fun for reference; superseded by Blotto Cup docs where they conflict.
+# ADR-002: The Solana Foundation dev skill is the source of current Solana idioms
 
-## ADR-002: Solana Foundation dev skill as canonical Claude knowledge source; framework choice (Anchor vs Pinocchio) deferred per-component
+**Status:** Accepted · in force
+**Applies to:** every change to `programs/blotto_cup`, the TypeScript chain clients, and the test
+harnesses
 
-**Status:** Accepted (founder ratified 2026-05-22)
-**Date:** 2026-05-22
+## Context
 
-**Context.** The original ADR pre-committed the project to Anchor latest stable as the framework. Founder pushed back: instead of pre-committing a framework, install a maintained Solana skill that gives Claude up-to-date context (January 2026 best practices, modern tooling, both Anchor and Pinocchio coverage, security guidance), and defer the framework choice to per-component decisions informed by actual CU profiling. This is structurally correct for a project where pack-open CU is the binding constraint — we should measure before committing.
+Blotto Cup is built largely with an AI coding agent working from written specifications. The
+Solana and Anchor ecosystem moves faster than any model's training data: account types, handler
+naming, IDL and code generation, CLI subcommands, client SDK package names, test validators and
+lint behaviour on macro-generated code have all changed within recent releases. A specification
+written from memory can be confidently out of date, and in a program whose prize vault has no
+withdraw instruction, an out-of-date pattern is a correctness risk rather than a style issue.
 
-**Decision.**
-1. **Primary Claude knowledge source: `solana-foundation/solana-dev-skill`.** Official Solana Foundation skill. Covers the full stack with January 2026 best practices: `@solana/kit` and framework-kit (over legacy web3.js), Anchor and Pinocchio programs, LiteSVM/Mollusk/Surfpool testing, IDL/codegen, payments via Commerce Kit, and a dedicated security module. Uses progressive disclosure (pulls in only what's needed per task).
-   - Install: `npx skills add https://github.com/solana-foundation/solana-dev-skill --skill solana-dev`
-2. **Complementary (optional, not v1-required): `solanabr/solana-claude`.** Full Claude Code configuration shipping 15 specialized agents (architect, anchor-engineer, pinocchio, DeFi, tokens, frontend, mobile, QA, docs, Unity, etc.), 24 workflow commands, and 6 MCP integrations (Helius for on-chain data, solana-dev docs, Context7, Playwright, memsearch). It pulls skill files from ecosystem repos rather than reinventing them, so it composes well with the Foundation skill.
-   - Adoption posture: cherry-pick. Adopt specific agents or MCP integrations (Helius MCP especially) as needs arise. Don't wholesale-import the config until we have a reason to.
-3. **Framework choice is deferred.** No project-wide commitment to Anchor or Pinocchio. Each program/instruction is profiled and the framework chosen on merit:
-   - Default for v1 scaffolding: Anchor (faster to set up, better IDL/codegen, sufficient for non-hot paths).
-   - Migration trigger: any hot-path instruction (especially `pack_open`) that exceeds a 200k CU budget under Anchor gets evaluated for Pinocchio migration. The Foundation skill covers both, so the migration cost is mostly mechanical.
-   - Decision is per-instruction, recorded in a follow-up ADR once we have profiling data.
+## Decision
 
-**Consequences.**
-- Claude responses are grounded in current Solana practice (post-`@solana/kit`, post-Pinocchio maturation) rather than potentially stale training-data priors.
-- The dedicated security module in the Foundation skill becomes the canonical reference for our threat-model and audit-prep docs.
-- We retain optionality on the framework decision until we have measurements. No accidental lock-in.
-- Slight build-velocity cost: v1 scaffolding in Anchor with the expectation that hot paths *may* migrate. Mitigated by structuring the program so hot-path math (curve integration, synthetic-sell payout, rarity draw) lives in framework-agnostic Rust modules that can be called from either an Anchor or Pinocchio entry point.
-- The Helius MCP from the BR config is the most immediately valuable supplemental — gives Claude on-chain query power for debugging. Recommend adopting this one component early.
+1. **The Solana Foundation dev skill (`solana-foundation/solana-dev-skill`) is the authoritative
+   source for current idioms.** It covers Anchor and lower-level program frameworks, the
+   `@solana/kit` client stack, LiteSVM / Mollusk / Surfpool testing, IDL and code generation, and a
+   security module.
+2. **Where a specification conflicts with the skill, the skill wins at execution time.** The
+   project's rules and invariants (the vault exit set, integer-only maths, the allocation invariant,
+   the language gate) are not idioms and are not overridden by it.
+3. **Uncertain patterns are flagged, not asserted.** A specification that relies on a pattern where
+   confidence is low says so explicitly, so the implementer checks the skill before following it.
+   The areas most likely to be stale are Anchor major-version idioms, Solana CLI flags, client SDK
+   package names, test-validator choice, and clippy behaviour on macro output.
+4. **Framework.** The program is written in Anchor. The pinned versions live in
+   `programs/blotto_cup/Cargo.toml` (`anchor-lang = "=1.0.2"`, `mpl-core = "=0.12.0"`,
+   `switchboard-on-demand = "=0.12.1"`), and the integration suite runs against the compiled
+   artifact in LiteSVM (`tests/litesvm/`). No instruction has been moved to a lower-level framework.
 
-**Follow-ups.**
-- Once `pack_open` is profiled on devnet, write a follow-up ADR locking in Anchor vs Pinocchio for that specific instruction (and any others over CU budget).
-- Decide whether Helius MCP gets installed at project start (recommend yes) or on-demand.
+## Consequences
 
-**Alternatives considered.**
-- *Pre-commit to Anchor (original v0.1 proposal)* — rejected. Locks in framework before we have data. Defensible for productivity but premature for a CU-sensitive project.
-- *Pre-commit to Pinocchio* — rejected. Sacrifices v1 velocity for performance we may not need on cold paths.
-- *No skill, rely on training-data priors* — rejected. Solana tooling has moved meaningfully since most training cutoffs (`@solana/kit` displacing web3.js, Pinocchio maturing, modern testing tools). Foundation skill keeps Claude current.
-- *Wholesale import of `solanabr/solana-claude`* — rejected for v1. 15 agents and 24 commands is a lot to onboard at once; cherry-pick the components that solve specific problems we have.
+- Specifications are grounded in current practice rather than training-data priors, and the
+  executor has a stated tie-breaker when the two disagree.
+- The skill's security module is a reference for the threat records in this directory
+  (`threat-tm-401` to `threat-tm-403`, `threat-tm-502`).
+- Dependency pins are deliberate. `programs/blotto_cup/Cargo.toml` documents why the Switchboard
+  and Metaplex Core SDKs are used without their `anchor` features (they would bring in a conflicting
+  `anchor-lang`); a version bump is a reviewed change, not a routine update.
+- The rule is repeated in [`CLAUDE.md`](../../../CLAUDE.md) under "Knowledge currency" so every
+  agent session sees it.
 
----
+## Alternatives considered
 
+- **Rely on the model's own knowledge.** Rejected: the areas listed in decision 3 have changed
+  within recent releases, and the failures are silent until build or runtime.
+- **Adopt a full third-party agent configuration** (many agents, commands and integrations at once).
+  Rejected: too much to onboard and review; individual components can be adopted when a specific
+  need arises.
+- **Commit to a lower-level framework up front for compute efficiency.** Rejected: Anchor's account
+  validation (`has_one`, `seeds`, `Signer`) is itself a security control here (see
+  `threat-tm-401`, `threat-tm-402`), and no instruction has needed the savings.

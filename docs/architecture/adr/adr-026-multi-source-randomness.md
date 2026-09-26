@@ -1,63 +1,75 @@
-> Exported from anarchy-fun for reference; superseded by Blotto Cup docs where they conflict.
+# ADR-026: The class digest mixes five sources, including the player's public key
 
-## ADR-026: Multi-source per-open randomness — supersedes ADR-004
+**Status:** Accepted · in force
+**Enforced in:** `crates/blotto-randomness/src/lib.rs` (`derive_class_randomness`),
+`programs/blotto_cup/src/vrf.rs` (`commit_vrf_seed`), `programs/blotto_cup/src/slot_hashes.rs`,
+`programs/blotto_cup/src/instructions/register.rs`, `backend/class-digest/src/digest.ts`
 
-**Status:** Accepted (founder ratified 2026-05-22)
-**Date:** 2026-05-22
-**Supersedes:** ADR-004 (single VRF seed only).
+## Context
 
-**Context.** ADR-004 committed to a single Switchboard On-Demand VRF call at collection launch, with per-open randomness derived as `hash(committed_seed || open_index || stable on-chain inputs)`. Q-022 (founder-surfaced during the Q-009 discussion) revealed that this design makes rarity outcomes fully predictable from public on-chain state. Sophisticated users could compute the tier for each upcoming `open_index` and race to claim favorable ones — the very "rarity sniping" the PRD claimed to prevent.
+The class draw ([ADR-021](adr-021-bag-without-replacement-draw.md)) needs 32 random bytes per
+entry. Those bytes must be:
 
-The architect should have flagged this gap when ADR-004 was authored. The gap was identified through founder questioning during the Q-022 discussion and is acknowledged here for the record.
+- **unpredictable at submission**, so nobody can choose their moment of entry to target a class;
+- **not steerable by the validator** that executes `register`;
+- **replayable afterwards** from public data;
+- **cheap**, because they are computed inside every `register`.
 
-**Decision.**
+A single oracle seed per pool, stretched by the entry index, fails the first test: once the seed is
+public, anyone can compute which seat index receives which class and time their entry. An oracle
+request per entry would be slow and would make every entry depend on the oracle's availability.
 
-**Per-open randomness derivation:**
+## Decision
+
+One Switchboard On-Demand randomness value per pool, combined per entry with execution-time and
+entry-specific inputs:
+
 ```
-random_bytes = hash(
-  committed_VRF_seed,      // from Switchboard On-Demand at launch
-  slot_hash_at_N-5,        // delayed slot hash from SlotHashes sysvar
-  open_index,              // current open counter from collection account
-  collection_pubkey        // disambiguates collections
-)
+digest = sha256( vrf_seed        32 bytes  committed once per pool by commit_vrf_seed
+               ‖ slot_hash       32 bytes  newest SlotHashes entry at least 5 slots old
+               ‖ entry_index      2 bytes  u16, little-endian
+               ‖ pool             32 bytes  the Pool account address
+               ‖ player           32 bytes  the entrant's public key )      130 bytes in all
 ```
 
-Where `slot_hash_at_N-5` is the blockhash from 5 slots before the execution slot, read from the `SlotHashes` sysvar at pack-open execution time.
+- **`vrf_seed`** is written once per pool by `commit_vrf_seed`, from a revealed Switchboard
+  Randomness account ([threat-tm-502](threat-tm-502.md) covers its checks). `register` refuses to run
+  until it is set (`VrfSeedNotCommitted`).
+- **`slot_hash`** is the newest `SlotHashes` entry with `slot ≤ current − 5` (`SLOT_HASH_DELAY = 5`
+  in `constants.rs`). It is finalised before the executing slot begins, so the executing validator
+  cannot influence it, and the entrant cannot know which slot their transaction will land in. "At
+  least 5 back" rather than "exactly 5" because skipped slots have no entry. The sysvar is read as
+  raw account data at a pinned address.
+- **`entry_index`** is the seat counter, encoded little-endian to match Borsh.
+- **`pool`** separates pools that could otherwise share the other inputs.
+- **`player`** binds the digest to the entrant, so two entries can never share a digest even in
+  constructed cases.
 
-**Why N-5 (delayed slot hash):**
-- A current-slot (N) hash lets the validator producing that slot manipulate outcomes by choosing transaction inclusion based on what they'd compute their slot hash to be.
-- A hash from 5 slots ago is already finalized when slot N executes. The validator at slot N has no influence over the hash of slot N-5.
-- At submission time, the user does not know which slot their tx will land in, and therefore cannot precompute the N-5 hash either.
-- 5 slots is comfortably outside the manipulation window (typical confirmation depth) while still inside the 512-entry `SlotHashes` sysvar buffer.
+## Consequences
 
-**Switchboard On-Demand role:** unchanged. One VRF call per collection at launch; the resulting seed is committed to the collection account. The VRF anchors long-term randomness; the delayed slot hash provides per-open unpredictability.
+- **Unpredictable, not steerable, replayable.** The chosen slot hash is stored on `Entry.slot_hash`
+  and emitted in `EntryRegistered`; the seed is emitted in `PoolVrfSeeded`. A replay therefore needs
+  no historical sysvar data, only the program log.
+- **One oracle interaction per pool**, not per entry. `register` pays only a sysvar read and one
+  SHA-256.
+- **Three implementations, one set of vectors.** The Rust crate, the TypeScript replay and a
+  Python generator (`crates/blotto-randomness/fixtures/gen_vectors.py`) agree on committed known
+  vectors. The crate's tests also rebuild the 130-byte stream by hand and flip one bit in each of
+  the five inputs, so dropping any input fails a test.
+- **Bounded stakes.** The digest decides a cosmetic class only. Even a fully compromised seed moves
+  nothing a player can win; scoring depends only on the sealed allocations.
 
-**Properties.**
+## Alternatives considered
 
-| Property | ADR-004 (single seed) | ADR-026 (multi-source) |
-|---|---|---|
-| Outcomes predictable pre-execution | Yes | No |
-| Validator can manipulate | No | No (delayed hash is finalized) |
-| User can target known-good `open_index` | Yes | No |
-| Bag-without-replacement preserved | Yes | Yes |
-| Audit-replayable | Yes | Yes |
-| Cost per open | Free (hash only) | Free (hash + ~5k CU sysvar read) |
-| VRF calls per collection | 1 | 1 (unchanged) |
-| Latency hit | None | None |
-
-**Consequences.**
-- The PRD's "no rarity sniping" promise now actually holds. Outcomes depend on data that doesn't exist at submission time.
-- XP intra-tier weighting (ADR-009) is unchanged — XP still affects trait selection, never tier selection.
-- Q-021 (`min_tier` slippage) becomes moot; the underlying exploit it would have defended against is fixed at the randomness layer.
-- Implementation: `pack_open` reads `SlotHashes` sysvar (~5k CU), computes the hash, proceeds with weighted draw. Trivial CU impact.
-- Audit-replayability: anyone can re-derive any historical open by reading the on-chain seed, on-chain `open_index`, and the historical `SlotHashes` entry. Slot hashes drop out of the sysvar after 512 slots; for deeper history, indexers maintain the data.
-
-**Alternatives considered.**
-- *Single VRF seed only (ADR-004 literal)* — superseded. Doesn't deliver on the "no rarity sniping" PRD claim.
-- *Per-open VRF call (one Switchboard call per pack open)* — rejected per ADR-004 reasoning. 420 VRF calls × 1-3s latency kills reveal UX.
-- *N-1 slot hash (less delay)* — rejected. Validator at slot N can still influence slot N-1 via inclusion ordering.
-- *Deep delay (N-100, etc.)* — rejected. Adds no security benefit; risks falling out of the sysvar buffer.
-- *Recent blockhash instead of slot hash* — rejected. Slot hashes are the more direct primitive.
-
----
-
+- **Pool seed only, stretched by entry index.** Rejected: predictable per seat once the seed is
+  public.
+- **An oracle request per entry.** Rejected: adds latency to every entry and makes every entry fail
+  when the oracle is unavailable.
+- **The current slot's hash (or one slot back).** Rejected: the leader producing the slot can
+  influence it through transaction inclusion.
+- **A much deeper delay.** Rejected: adds nothing once the hash is finalised, and risks leaving the
+  sysvar's window.
+- **A recent blockhash.** Rejected in favour of the `SlotHashes` sysvar, the more direct primitive
+  with a deterministic selection rule.
+- **Four inputs, without the player's key.** Rejected: the player key costs 32 bytes of hashing and
+  removes the only collision case the other four leave open.

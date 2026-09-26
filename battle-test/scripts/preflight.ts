@@ -1,7 +1,7 @@
 /**
  * preflight.ts — the go/no-go check that runs BEFORE anybody plays.
  *
- * WHY THIS EXISTS (DRIFT.md §H6, 2026-09-16). The app stores a player's sealed
+ * WHY THIS EXISTS (docs/testing/TESTING-REPORT.md, 2026-09-16). The app stores a player's sealed
  * allocation and THEN asks the entry service for permission. If the permission
  * step fails, the stored allocation stays. The store refuses a second,
  * different allocation for the same wallet and pool; a replay is never
@@ -32,7 +32,7 @@
  * allocation is sealed, no ciphertext is stored, nothing is registered,
  * nothing is spent.
  *
- * WHY IT ATTESTS FIRST (DRIFT.md §H27, 2026-09-22). `service.ts` will not
+ * WHY IT ATTESTS FIRST (docs/testing/TESTING-REPORT.md, 2026-09-22). `service.ts` will not
  * issue a packet to a wallet with no stored attestation at the current terms
  * version, and `enter.ts` makes that attestation immediately before asking —
  * the headless equivalent of the two-tile clickwrap. This script used to skip
@@ -77,7 +77,7 @@
  *     the fix live, is the check that decides.
  *
  * COST, stated honestly: one Turnkey signing activity per wallet checked
- * (DRIFT.md §H5). Check the two UI wallets before the founder plays, not all
+ * (docs/testing/TESTING-REPORT.md). Check the two UI wallets before the founder plays, not all
  * sixty-four — `enter.ts` carries its own stop for the headless run.
  *
  * Run:

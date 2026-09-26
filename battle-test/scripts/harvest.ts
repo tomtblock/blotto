@@ -133,7 +133,7 @@ async function main(): Promise<void> {
   // PLAYED. The sealed boxes have no public reader (PR 134 removed
   // /sealed-entries), which left `reconcile.ts` unable to detect input drift at
   // all and `allocations.ts` unable to move a single seat past COMMITTED —
-  // even on a pool that had revealed its secret (DRIFT.md §H9).
+  // even on a pool that had revealed its secret (docs/testing/TESTING-REPORT.md).
   //
   // The bundle is the public reader that does exist. `/pools/<pda>/leaderboard`
   // carries its `uri`, and the bundle carries every entry's revealed `battles`

@@ -1,211 +1,132 @@
-# 2026-09-16 — data minimisation: the cheap set
+# Data inventory
 
-**Produced:** 2026-09-16, on `claude/nice-turing-k0ipl5-minimise-1`, from `main` at `3cd0ec7`.
-**Instructions this implements, in the founder's words and with their dates:**
+What personal data Blotto Cup holds, where it lives, why, and for how long — and what was
+deliberately removed. It is the source the privacy notice (`app/src/copy/privacy.ts`, rendered at
+`/privacy`) is drafted from, and `app/src/copy/published-claims.test.ts` cites it as the proof for
+the notice's inventory claims. When what the platform holds changes, this file changes in the same
+change.
 
-| Date | Instruction |
-|---|---|
-| 2026-09-15 | *"So where is all the data stored re: the battles. More importantly, what data do we handle as a platform? We want to minimise."* — the inventory in §1 answers it |
-| 2026-09-15 | Four rulings on the inventory: detection inputs must not be public after reveal; appeals keep the decision public and the grounds private; drop the rivals list; sanctions screening stays as it is |
-| 2026-09-15, late | *"I just want to understand if this is something worth spending time and credits on"* — answered with the cheap set below; the key split and the private appeal grounds were deferred |
-| 2026-09-16 | *"Ok lets do the cheap fixes now. Approve everything."* |
-
-**Status of this document:** a change report, written from the branch it describes. Nothing here
-touches the program, `config/*.json`, PID v0.5, or the sanctions screening (ruling 4).
+Everything below was taken from the code, not from intent: the inventory was first taken on
+2026-09-15 by sweeping the app, the entry service, the indexer and the settlement process, and is
+kept current with them. Each row names the file or table that holds the data.
 
 ---
 
-## 1. What the inventory found
+## 1. What the platform holds
 
-Three read-only sweeps on 2026-09-15 — the browser app, the entry side, the indexer and daemon —
-against the code on `main`. In brief:
+### 1.1 Held by nothing of ours
 
-**Held by nothing of ours:** email, name, date of birth, documents, phone. The sign-in provider
-(Privy) holds the email; our code reads only its user id and the wallet addresses. No analytics or
-error-tracking script of any kind. The salt is discarded the moment the commitment is computed. No IP
-address is ever written to a column or a log line — two octets survive, in logs and in the
-sanctions-refusal record. The entry service holds no key and cannot open a sealed box.
+The product does not ask for, and has no field, column or log line for, any of the following:
 
-**Held, and where it goes:**
+- **Name**
+- **Date of birth** — age is a signed confirmation that the player is 18 or older; no birth date is
+  recorded (`backend/packet/src/attestations.ts`)
+- **Identity documents** — there is no identity check at entry or at payment
+- **Phone number**
+- **Postal address**
+- **A full network (IP) address in any durable record** — two octets (or one IPv6 hextet) survive,
+  in logs and in the record a sanctions refusal leaves (`backend/_shared/src/short.ts`, `ipPrefix`)
 
-| Data | Where | Who can read it | Kept |
+Also absent:
+
+- **No analytics and no error-tracking script** of any kind is loaded by the app
+  (`app/src/app/layout.tsx` carries no third-party script).
+- **No email address in the product's own stores**, except under the one-message opt-in in the
+  table below. The sign-in provider (Privy) holds any email used to sign in; our code reads only
+  its user id and the wallet addresses (`backend/packet/src/notify.ts` records a choice, never an
+  address).
+- **The entry's salt is not kept by the service.** The browser discards it once the commitment
+  `sha256(battles ‖ salt)` is computed; its only other copy is inside the sealed payload.
+- **The entry service holds no decryption key** and cannot open a sealed entry
+  (`backend/sealing/src/custody.ts`).
+
+Everything the platform does hold is keyed to a **wallet address**, not to a person. Nothing in
+the list below identifies a player unless their address does.
+
+### 1.2 Held, where, and who can read it
+
+| Data | Where | Who can read it | Why |
 |---|---|---|---|
-| Wallet address | chain, every derived table, the public read API, the two screening vendors | everyone | forever |
-| Full IP address | sent to the geo vendor once per address per 15 minutes; held in process memory for the cache | the vendor; nobody afterwards | 15 minutes |
-| 18+ / terms attestation | wallet, signature, server time | internal | forever |
-| The sealed box | `sealed_entries`: 175 bytes per seat | the daemon after close; **until this change, anyone, through the read API, once the secret was public** | forever |
-| Detection reports | wallets a signal fired on, with free-text detail | operator token; **until this change also printed whole into the daemon log** | forever |
-| Review decisions and appeals | the decision, the reviewer, and up to 2,000 characters of the player's own grounds | public, no login | forever |
-| Derived public rows | entries (with the flag and sanctions-hold columns), payouts, profile, career history, and **until this change a rivals graph** | public | forever |
-| The published bundle | every seat's battles, salt, wallet, rank and amount | everyone, permanently, on Irys | irreversible by design |
+| **Wallet address** | the chain; every derived table in the indexer; the public read API; the published results bundle; the sanctions screening sources | everyone | It is how the program knows whose entry, whose prize and whose refund |
+| **Full IP address** | sent once to the location provider per address; held in process memory by the lookup cache (`backend/packet/src/geo-cache.ts`) | the location provider; nobody afterwards | To apply the territory schedule (`config/territories.json`) at entry |
+| **Location verdict** | carried with the entry authorisation; two octets of the address in logs | internal | Evidence the territory rule was applied |
+| **Age and terms confirmation** | `attestations` table: wallet, terms version, server time, the wallet's signature | internal | The program will not authorise an entry without a confirmation at the current terms version (`config/terms.json`) |
+| **Sealed entry** | `sealed_entries` table: one encrypted box per seat — 175 bytes in an easy pool, 210 in a hard pool (payload `backend/sealing/src/payload.ts` plus 48 bytes of box overhead, `sealedbox.ts`). Inside: the seven battles, the salt, seven per-field timings, and a per-pool device marker | the settlement process, after the pool closes; **no public reader** — the read API has no route that returns a sealed box, before or after the reveal (`backend/indexer/src/read-api.ts`) | Sealing (nobody can read an allocation before close) and integrity review |
+| **Detection reports** | `detection_reports` table: the findings of the five signals, naming the wallets a signal fired on | the operator, through an operator-token route; not printed to logs | Integrity review before a prize is paid |
+| **Review decisions** | `review_decisions` table: wallet, action, the criterion cited, the reviewer key, the signature | public, append-only | So a decision can be checked against the published criterion |
+| **Complaints** | `complaints` table: reference, category, the player's own words, and — only when the player signed — wallet and signature | a signed complaint only to the wallet that signed it; an unsigned one to whoever holds its reference; the queue to reviewers through an operator-token route | So a person can answer, and the answer is on record |
+| **Opt-in email** | `notify_pool_optin` table: pool, wallet, email, signature | internal | To send the one "your tournament has finished" message the player asked for |
+| **Sanctions refusal record** | `sanctions_refusals` table: wallet, pool, the lists consulted, match data, country, IP prefix | internal | The record a refusal on a published sanctions list requires |
+| **Published results bundle** | permanent storage (`backend/reveal/src/publisher-irys.ts`): every seat's battles, salt, wallet, rank and amount | everyone, permanently | It is the file anyone uses to recompute the result (`app/src/verify/logic.ts`) |
+| **The player's own browser** | a device secret (`app/src/entry/device.ts`); cached choices under opaque key names (`app/src/storage/opaque-key.ts`) | the device only | The per-pool device marker; remembered settings |
 
-**Missing altogether:** a privacy notice, a DPIA, and any retention rule. Not one table has a
-deletion path; migration `0019` says so in writing. The v0.6 PID draft marked the notice as built;
-it was not, and that row is corrected here (§5).
+**What the published bundle does not carry**: the per-field timings and the device marker. Bundle
+version 2 removed both (`backend/reveal/src/bundle.ts`); they reach detection through a channel
+that is published nowhere (`backend/reveal/src/ranking.ts`, `forDetection`).
 
-**Two gaps the sweep found that were not what the audit believed.** Bundle version 2 (audit B-31,
-2026-09-12) removed the seven per-screen timings and the device marker from the published set so
-they would never be public. But the sealed box still carries both, and the read API's
-`sealed-entries` route handed every box to anyone once the secret was on chain — so both were
-public after all, for every pool ever played. And the browser kept the raw allocation integers of
-every battle in its local database, for every pool, forever, read by nothing.
+**The device marker is per pool.** What leaves the browser is
+`sha256("blotto:device:v2" ‖ pool ‖ secret)` (`app/src/entry/device.ts`). Markers from one device
+in two pools are unrelated values, so entries cannot be linked across tournaments by anyone,
+including the operator. The detection signal only ever compares markers within one pool.
 
-## 2. What changes for a player
+**Third parties that receive data:**
 
-| Surface | Before | After |
+| Recipient | Receives | Source |
 |---|---|---|
-| Results page, "what finished above you" | The browser fetched every seat's sealed box from the read API and opened it with the revealed secret | The browser reads the published bundle — the same file the Verify page recomputes — and checks each seat's battles against its on-chain fingerprint before showing anything. The boxes have no public reader |
-| Profile | A rivals panel: the eight wallets most often in the same pools | Gone. Nothing in scoring, payment or verification needed the graph |
-| Appeal form | A text box, and the rules' promise that decisions are published | The form says, before the player types, that the text is published in the signed log and cannot be withdrawn |
-| The player's own device | The five numbers of every battle ever played, plus a picture, kept forever | The numbers are gone (existing rows are stripped on first open); the pictures of a pool that refunded or closed unrevealed are deleted on the next visit. Pictures of open and revealed pools stay |
-| The player's own browser storage | Key names listing every wallet used and every pool paid in, and one tying the sign-in id to a wallet | Opaque names derived from the device's own secret; pre-change entries carried over once |
-| The public entries list | Every column of the table, whatever gets added to it | The fourteen on-chain columns, named |
-| Our logs and alerts | Whole wallets in three alerts and one warning; whole detection reports in the daemon log | The same truncated identifiers as the request logs; one counts line per detection run |
+| Sign-in provider (Privy) | the player's sign-in identity, including any email | provider-held; our code reads its user id and wallet addresses |
+| Location provider | the entrant's IP address, once per address per cache lifetime | `backend/packet/src/geo-iplocate.ts` |
+| Sanctions sources | wallet addresses, at entry and before payment | `backend/sanctions/src/` — the mirrored OFAC SDN list is local; Chainalysis and OpenSanctions are called when configured |
+| Permanent storage (Irys) | the results bundle | `backend/reveal/src/publisher-irys.ts` |
+| Email sender | the opt-in address, once | `backend/packet/src/notify-pool.ts` |
 
-Nothing changes on chain, in the sealed payload, in the bundle, or in what the daemon decrypts.
-Detection still receives the timings and the device marker at settlement, exactly as before.
+---
 
-## 3. The code
+## 2. What was minimised
 
-### 3.1 Backend
+Each of these removed data the product did not need.
 
-- **`backend/_shared/src/short.ts`** (new) — `short()` (six and four) and `ipPrefix()` (two octets
-  or one hextet), the one rule every service now imports. The review server, the entry gate and
-  the signer selector carried their own copies; `packet/src/service.ts` re-exports `ipPrefix` for
-  its existing importers.
-- **`backend/detection/src/signals.ts`** — `RevealedEntry.ipHash` and the IP correlation it fed are
-  gone. The field always arrived empty (`reveal/src/main.ts` passed `''`) and the header named it an
-  open seam; it invited somebody to start collecting hashed addresses to "finish" it. The signal keeps
-  its persisted name `device_ip_correlation`: it is a string in every stored report, the reviewer's
-  page renders it, and the battle-test manual's scenario T7 reads it.
-- **`backend/reveal/src/main.ts`** — the detection report is no longer printed whole to stdout; one
-  line carries the counts. The report itself is persisted for the reviewer's page, as before.
-- **`backend/reveal/src/crank.ts`** — the entry-refund-owed alert names how many and the truncated
-  wallets. The bundle's `scored_as_all_losses` remains the full list the manual pays from.
-- **`backend/detection/src/server.ts`** — the two alerts that carried a whole wallet now spread the
-  request log's own truncated identifiers.
-- **`backend/packet/src/service.ts`** — the sanctions-refusal warning names the wallet and pool in
-  truncated form; a failed insert no longer dumps the whole record into stdout and instead raises
-  `ALERT.packet.sanctionsRefusalUnrecorded` (new, `_shared/src/metrics.ts`) through an optional
-  `monitor` on `PacketServiceDeps`, wired in `main.ts`.
-- **`backend/indexer/src/read-api.ts`** — `/pools/:pool/entries` names its fourteen columns
-  (`ENTRY_COLUMNS`) instead of `SELECT *`; `/profiles/:player/rivals` and
-  `/pools/:pool/sealed-entries` are removed and fall to the existing 404.
-- **`backend/sealing/src/payload.ts`** — `battlesCommitment(battles, salt)`, the one definition of
-  `sha256(battles ‖ salt)`; `payloadBattlesHash` delegates to it. The browser uses it to check the
-  published bundle (§3.2).
-
-### 3.2 App
-
-- **`app/src/results/what-beat-you.ts`** — `battlesFromBundle()` replaces `decryptSeatBattles()`:
-  reads the published entries, decodes each battle set with the scoring engine's own decoder,
-  recomputes the commitment, and keeps only the seats that match. The panel
-  (`what-beat-you-panel.tsx`) fetches the archive's bundle URI, as the all-battles table already did.
-- **`app/src/data/`** — `RivalRow`, `SealedEntryRow`, `getRivals` and `getSealedEntries` are gone
-  from the seam, the HTTP client, the fixture and the scenarios.
-- **`app/src/app/profile/profile-client.tsx`** — the rivals panel and its read are gone.
-- **`app/src/app/pools/[pool]/results/appeal-panel.tsx`** — the published-text line, tied to the
-  textarea with `aria-describedby`.
-- **`app/src/battle/stills.ts`** — `StoredStill.allocation` is gone; database version 2 strips it
-  from existing rows on first open; `forgetStills(pool)` deletes one pool's rows.
-  **`app/src/battle/stills-sweep.ts`** (new) — the rule (`shouldForgetStills`: `Refunding`, or
-  `Closed` with no revealed secret) and the sweep, run on the profile gallery, the results montage
-  and the play page; it never deletes on a failed or absent read. `play-client.tsx` also clears the
-  retry copy of the run once a seat is held or may be.
-- **`app/src/storage/opaque-key.ts`** (new) — `opaqueKey`, `opaqueToken`, `migrateLegacyKey`, over
-  the device secret `entry/device.ts` already keeps (now exported as `deviceSecretBytes`). Converted:
-  the attestation cache, the welcome note, the notifications badge (its values become tokens), the
-  confetti latch, and the wallet bridge's active-wallet choice (the value is a token of the address,
-  resolved against the connected signers).
-
-### 3.3 What was deliberately NOT changed
-
-The sealed payload's layout, the bundle, the daemon's decryption, the program, PID v0.5, the
-sanctions screening at entry (ruling 4), and `POST /notify` with its `notify_optin` table — D-E11
-rules that route dormant and its consents kept, so the plan's line about removing it was wrong and
-was withdrawn before anything was built.
-
-## 4. Tests — rule 0.7
-
-**Rewritten in place, each citing the ruling:** `backend/detection/test/detection.spec.ts` (the
-fixture loses `ipHash`), `backend/reveal/test/crank.spec.ts` (two fixtures; the refund-owed alert
-asserts a count and truncated wallets, never a whole one), `backend/detection/test/review-server.spec.ts`
-(both alert cases assert the truncated identifiers), `backend/packet/test/sanctions-wiring.spec.ts`
-("shouts the record" becomes "pages, without reprinting the record"),
-`backend/indexer/test/read-api.spec.ts` (the rivals case and the sealed-entries case now prove the
-404s and that no query is issued), `tests/postgres/test/stores.spec.ts` (the real-rows case proves
-the store still holds the boxes and the API serves none), `tests/rehearsal/src/orchestrator.ts`,
-`app/src/results/what-beat-you.test.ts` (seal-and-decrypt becomes publish-and-check, with a tampered
-seat skipped), `app/src/data/scenarios.test.ts`, `app/src/app/pools/[pool]/results/appeal-panel.test.tsx`.
-
-**New:** `backend/_shared/test/short.spec.ts`; `read-api.spec.ts` "named columns, never SELECT *";
-`app/src/battle/stills-sweep.test.ts` (the rule, and the sweep against a fake store and indexer —
-including that a failed read deletes nothing); `app/src/storage/opaque-key.test.ts`.
-
-**Deleted:** none.
-
-## 5. Docs
-
-- `PID_Blotto-Cup_v0.6-DRAFT.md` C10: "Built" → not started, with what exists instead (this
-  inventory). PID v0.5 is not edited.
-- `01_PRODUCT_FACTS/PRODUCT-FACTS_BlottoCup_v1.md`: the "published post-reveal" row had said timings
-  and device hashes are published — false since B-31 — and the "who can read it early" row now says
-  the read API serves no ciphertext at all.
-- `AS-BUILT.md` §4, `ARCHITECTURE-DIAGRAMS.md`, `backend/sealing/README.md`, `backend/indexer/README.md`:
-  the sealed boxes have no public reader; the route table matches.
-- `OPERATING-MANUAL.md`: the refund-owed alert's wording.
-- `TECH-ARCHITECTURE_Blotto-Cup_v0.2.md` Appendix A: a dated note superseding §9's IP signal and §5's
-  "served only after reveal", with the proposed register row (§7).
-
-## 6. Verification
-
-| Check | Result |
+| Measure | Where |
 |---|---|
-| backend `_shared` · `detection` · `reveal` · `indexer` · `packet` · `sealing` — typecheck and tests | all clean: 85 · 56 · 202 · 128 · 175 · 36 passing |
-| `tests/rehearsal` typecheck and tests | 25 passing |
-| `tests/postgres` | rewritten; runs in CI's postgres lane (no database in the session) |
-| app `tsc --noEmit` · `eslint --max-warnings=0` | 0 · 0 |
-| app `vitest` | 59 files, **472 tests** (463 + 9 new) |
-| `next build`, fixture mode | compiled clean |
-| Playwright journey, 375 and 1280, fixture mode | **14/14** |
-| `scripts/check-language.sh` (§8.7, this report included) · `check-standing-rules.sh` · `check-fixtures.sh` · `check-env-examples.sh` | all clean |
+| The sealed boxes have **no public reader**. The results page's "what finished above you" view reads the published bundle and checks each seat against its on-chain commitment instead of decrypting boxes | `backend/indexer/src/read-api.ts` (route removed); `app/src/results/what-beat-you.ts` |
+| The public entries list returns **named columns**, never `SELECT *`, so a column added later is not published by accident | `backend/indexer/src/read-api.ts` `ENTRY_COLUMNS` |
+| The "rivals" graph (the wallets most often in the same pools) was removed; nothing in scoring, payment or verification needed it | `backend/indexer/src/read-api.ts` |
+| **No IP-derived value** is captured, stored or sealed for detection; the device half of the correlation signal stays | `backend/detection/src/signals.ts` |
+| Detection reports are persisted for the reviewer, never printed whole to logs; one counts line per run | `backend/reveal/src/main.ts` |
+| Logs and alerts carry **truncated** wallet identifiers and a two-octet IP prefix, from one shared rule | `backend/_shared/src/short.ts` |
+| Timings and the device marker are **not published** in the bundle | `backend/reveal/src/bundle.ts` (version 2) |
+| The device marker is **derived per pool**, never the stable device secret itself | `app/src/entry/device.ts` |
+| The browser keeps **no allocation**: pictures of past battles that earlier versions stored are deleted from the device | `app/src/storage/forget-blott-stills.ts` |
+| Browser storage key names are **opaque**, so they no longer list the wallets used or the pools entered | `app/src/storage/opaque-key.ts` |
+| The opt-in email is **deleted in the same statement that records the send** | `backend/packet/src/stores-pg.ts` (`SET sent_at = …, email = NULL`) |
 
-### 6.1 On devnet
+---
 
-**After the merge and the backend deploy:** `/pools/<pda>/entries` unchanged in shape;
-`/profiles/<wallet>/rivals` and `/pools/<pda>/sealed-entries` both 404; the results page of a settled
-pool renders "what finished above you" from the bundle; a refunded pool's blots vanish from My Blotts
-on the next visit; the daemon log carries `detection pool=N findings=… reviewRecommended=…
-hardBlocks=…` and no report body.
+## 3. Retention
 
-**Deploy order.** Merging ships the app to `www.blotto.gg` at once (Vercel deploys on merge); the
-app is backward compatible with the old backend. The server changes go live when the founder runs
-`deploy-backend` on `main`; the services restart for about a minute, and a failed first entry attempt
-still locks that wallet out of the pool, so deploy when nobody is mid-entry.
+The periods below are the published policy in the privacy notice (`app/src/copy/privacy.ts`,
+section "How long we keep it"). **Two are enforced by code; the rest are policy applied by hand**,
+because nothing in the system yet deletes anything on a schedule. The notice says so in those
+words.
 
-## 7. Proposals for the founder (implemented as proposals, marked `PHASE-N-REVIEW` where copy)
+| Data | Period | Enforced by |
+|---|---|---|
+| Full IP address | 15 minutes, in memory only | code — `backend/packet/src/geo-cache.ts` (`ttlMs` default) |
+| Opt-in email | until the message is sent | code — `backend/packet/src/stores-pg.ts` |
+| Sealed entry and the pool's detection report | until the pool's challenge window has closed and every decision on it is final | policy |
+| Age and terms confirmation | while the address can still enter | policy |
+| Sanctions refusal record | the period the obligation requires | policy; the number is not yet set |
+| Complaint | answered within 30 days (`COMPLAINT_RESOLVE_DAYS`), then kept a reasonable period so the answer can be shown | policy |
+| Review decision | permanent — it is the record a decision is checked against | by design (append-only) |
+| Wallet address on chain, and the published bundle | permanent; nobody can remove them, the operator included | by design |
 
-1. **Appeal form line:** "What you write here is published in the signed decision log and cannot be
-   withdrawn. Do not include personal details."
-2. **What-beat-you note:** "Re-scored in your browser from the published battle set, each seat
-   checked against its on-chain fingerprint. Seats only — no names."
-3. **Register row D-E16:** "The IP half of R11/4.3's device/IP correlation is removed: no IP-derived
-   value is captured, stored or sealed at entry; device correlation within a pool stays. The sealed
-   boxes have no public reader; the published bundle is the only public battle set."
-4. **Alert name:** `packet sanctions refusal not recorded`.
+**Erasure.** What can be erased on request is what is held off the chain. A chain record and a
+published bundle cannot be erased by anyone, because no mechanism exists that could do it. The
+privacy notice states this limit in the same section as the right.
 
-## 8. Still the founder's, and designed but deferred
+---
 
-- **A privacy notice and retention periods**, with counsel. §1 is the inventory the roadmap's §6.3
-  asks for; the proposed rules (purge the sealed boxes and detection reports once a pool's appeal
-  window has closed and every decision is final; attestations kept while the wallet can enter; the
-  sanctions-refusal period set by counsel; the vendors' log retention recorded and set) are in the
-  plan file and are not implemented until ratified.
-- **Appeal grounds private to reviewers.** Designed: the wallet signs a digest of the grounds, the
-  public row carries the digest, the text goes to a reviewer-only store. Built when a first real
-  appeal is near; devnet holds no appeal or decision row today.
-- **The two-box key split.** Designed: timings and device marker sealed to a per-pool detection key
-  through the same Turnkey custody flow, never published. Revisit before mainnet only if counsel wants
-  defence in depth against a database breach during the retention window. With the route gone, the
-  boxes are readable only inside our database.
-- **The one operational step:** run `deploy-backend` on `main` when nobody is mid-entry.
+## 4. Open
+
+- No automated deletion path exists yet; the policy periods in §3 are applied by hand.
+- The data controller's identity is not yet set (`config/operator.json` ships with every value
+  `null`), and the retention period for sanctions refusal records is not yet a published number.

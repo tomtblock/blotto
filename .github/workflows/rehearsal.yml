@@ -1,4 +1,4 @@
-# The devnet battle test's own lane (battle-test/MANUAL.md §2.4, §5.5, §11).
+# The devnet battle test's own lane (battle-test/README.md; results in docs/testing/TESTING-REPORT.md).
 #
 # THE BATTLE TEST DOES NOT TOUCH THE PRODUCT. Everything it builds lives in
 # `battle-test/`, plus this one file. The boundary job below enforces that on
@@ -62,7 +62,7 @@ jobs:
             echo "REFUSED — this battle-test PR changes files outside battle-test/:"
             echo "$stray" | sed 's/^/  /'
             echo
-            echo "The battle test is a separate folder by design (MANUAL.md 2.5). A product"
+            echo "The battle test is a separate folder by design (battle-test/README.md). A product"
             echo "change ships as its own PR so the two can never be confused."
             exit 1
           fi

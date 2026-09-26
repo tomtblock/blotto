@@ -1,6 +1,6 @@
 # Blotto Cup
 
-A paid-entry skill tournament on Solana, built on the Colonel Blotto game.
+A paid-entry tournament on Solana, built on the Colonel Blotto game: the result is decided by the players' decisions, with no chance in the scoring.
 
 Up to 64 players enter a pool. Each one places points across **seven sealed battles** of five
 stats — Strength, Speed, Heart, Wit, Durability — on a board, against one three-minute clock. When

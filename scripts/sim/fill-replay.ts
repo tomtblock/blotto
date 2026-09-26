@@ -333,12 +333,27 @@ function report(schedule: TerritorySchedule, rows: RateResult[], trials: number)
   const breakEven = rows.find((r) => r.refunded / r.trials <= 0.1);
   lines.push('## What it says');
   lines.push('');
+  {
+    const total = COUNTRY_MIX.reduce((a, [, w]) => a + w, 0);
+    const blockedWeight = COUNTRY_MIX.filter(([c]) => !territoryAllowed(schedule, c, null)).reduce(
+      (a, [, w]) => a + w,
+      0,
+    );
+    const pct = Math.round((blockedWeight / total) * 100);
+    lines.push(
+      `**Read this first.** The simulated arrivals follow an assumed country mix (below), and under ` +
+        `territory schedule version ${schedule.version} **${pct}% of that mix is blocked** at the entry gate. ` +
+        'The figures therefore depend heavily on that assumption; the "Mean seated" column is what ' +
+        'actually reaches a seat.',
+    );
+    lines.push('');
+  }
   lines.push(
-    `**Lowering the floor from 52 to 40 matters.** Across the arrival rates where the outcome is genuinely in ` +
-      `doubt (${midRates[0].expected}-${midRates[midRates.length - 1].expected} attempts in 12 hours), ` +
-      `the 40-seat floor refunds **${(100 * avgNew).toFixed(0)}%** of pools where the old 52-seat ` +
-      `floor refunded **${(100 * avgOld).toFixed(0)}%**. That is the difference between a product ` +
-      `that mostly runs and one that mostly gives the money back.`
+    `**Floor 40 against floor 52.** Averaged over ` +
+      `${midRates[0].expected}-${midRates[midRates.length - 1].expected} attempts in 12 hours, ` +
+      `the 40-seat floor refunds **${(100 * avgNew).toFixed(0)}%** of pools; the old 52-seat ` +
+      `floor refunded **${(100 * avgOld).toFixed(0)}%** on the same arrivals. The full curve is ` +
+      `in the table below.`
   );
   lines.push('');
   if (breakEven) {

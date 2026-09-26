@@ -265,7 +265,7 @@ export const TERMS = {
       //     codebase pays the lost-ciphertext refund; the remedy is one
       //     manual admin transaction per affected player, and the alert plus
       //     the published bundle's `scored_as_all_losses` list are the
-      //     ledger. Recorded as finding 5 of
+      //     ledger. Recorded under "Disclosed residuals" in
       //     docs/compliance/SAFEGUARDS.md.
       //
       //  2. THE BRIEF NAMED THE WRONG KEY, and this is the corrected form.

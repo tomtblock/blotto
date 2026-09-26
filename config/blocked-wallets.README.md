@@ -1,6 +1,6 @@
 # `blocked-wallets.json` — which addresses are refused, and why each row is there
 
-**Founder-owned.** The list in `blocked-wallets.json` is changed only on a founder instruction, and
+**Set by the operator.** The list in `blocked-wallets.json` changes only on an operator decision, and
 every change lands in its own commit saying so. This file is the legend: one row per address, the
 ground relied on, and the date the decision was taken.
 
@@ -12,8 +12,8 @@ ground relied on, and the date the decision was taken.
 
 ## Why the legend is not optional
 
-A blocklist without recorded reasons is the first thing a regulator asks about, and the terms of
-service promise something specific:
+A blocklist without recorded reasons cannot be checked or explained, and the terms of service
+promise something specific:
 
 > Where we do either, we will tell you which ground we relied on. You may challenge the decision
 > through our complaints route…
@@ -40,12 +40,12 @@ The only grounds available are the ones the terms enumerate. Nothing else may ap
 `sanctions-listed` is worth a note: the screening in `backend/sanctions/` already refuses every
 listed address at entry, from live published sources, and it needs no row here. An address arrives
 on this list under that ground only where a screening source has been withdrawn or cannot be
-reached and the founder has taken the decision by hand.
+reached and the operator has taken the decision by hand.
 
 ## What this list is not
 
 - **Not the sanctions screening.** That is live, refreshed, and consults published sources for every
-  entry (`backend/packet/src/sanctions-wiring.ts`). This file is the founder's own decisions.
+  entry (`backend/packet/src/sanctions-wiring.ts`). This file records the operator's own decisions.
 - **Not a territory rule.** Those are country codes in `territories.json` and apply to everyone.
 - **Not a prize hold.** Refusing an entry and withholding a settled prize are different acts with
   different mechanisms; a held prize is `flag_entry` and the escrow path, and it never comes to us
@@ -60,7 +60,7 @@ reached and the founder has taken the decision by hand.
 
 <!-- One row per address in blocked-wallets.json, in the same order. The
      Address cell is the base58 address in backticks; the Ground cell is one
-     of the six above; Decided is the date the founder took the decision.
+     of the six above; Decided is the date the operator took the decision.
      scripts/check-blocked-wallets.ts reads this table. -->
 
 ## Held

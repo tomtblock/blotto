@@ -377,7 +377,7 @@ export interface SeatResult {
    * True once this wallet's ciphertext is STORED. A seat that sealed and then
    * failed is not a retryable seat: the store refuses a second, different
    * allocation for the same wallet and pool, a replay always differs because
-   * the salt is fresh, and no delete path exists anywhere (DRIFT.md §H6). That
+   * the salt is fresh, and no delete path exists anywhere (docs/testing/TESTING-REPORT.md). That
    * wallet can never enter this pool again, so the runner stops rather than
    * doing it to the rest of the field.
    */
@@ -478,7 +478,7 @@ async function enterOne(args: {
     //
     // EXCEPT under --simulate, which must not seal (2026-09-16). This module
     // claimed a simulation "writes no state" while storing a ciphertext, and a
-    // stored ciphertext cannot be replaced or deleted (DRIFT.md §H6) — so the
+    // stored ciphertext cannot be replaced or deleted (docs/testing/TESTING-REPORT.md) — so the
     // SAFE mode permanently barred the wallet it was run on. It did exactly
     // that to W62 on pool 15. `register` needs the battles hash and the
     // packet, never the stored ciphertext, which is read only at reveal; so
@@ -525,7 +525,7 @@ async function enterOne(args: {
     // A 'confirmed' blockhash can be newer than the node that runs preflight,
     // which answers "Blockhash not found" and fails the send. On this runner
     // that is not a retryable annoyance: the ciphertext is already stored, so
-    // every such failure BURNS the wallet for this pool (DRIFT.md §H6). It
+    // every such failure BURNS the wallet for this pool (docs/testing/TESTING-REPORT.md). It
     // cost W22, W42 and W43 on pool 16 before this was fixed.
     //
     // The fix is to SKIP PREFLIGHT, not to age the blockhash. Preflight's only
@@ -699,7 +699,7 @@ async function main(): Promise<void> {
     );
     results.push(...batch);
 
-    // THE STOP (DRIFT.md §H6). A seat that sealed and then failed is burnt:
+    // THE STOP (docs/testing/TESTING-REPORT.md). A seat that sealed and then failed is burnt:
     // that wallet is barred from this pool for good. If the cause is the entry
     // gate rather than this one wallet, marching into the next batch burns the
     // rest of the field the same way — which is precisely how one outage would

@@ -458,7 +458,7 @@ function main(): void {
       lines.push('On a scored pool each was replaced by a spare playing THAT SEAT\'S OWN frozen');
       lines.push('allocation, so the field the engine scored is the field the plan predicted: a rank');
       lines.push('falls out of the allocations, never the wallet holding them. The absent rows are the');
-      lines.push('burnt wallets (DRIFT.md §H6, §H8), recorded rather than quietly substituted.');
+      lines.push('burnt wallets (docs/testing/TESTING-REPORT.md), recorded rather than quietly substituted.');
     }
   }
   lines.push('');

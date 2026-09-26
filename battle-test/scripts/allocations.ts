@@ -125,7 +125,7 @@ function main(): void {
   // `assembleBundle`, which holds the only production call to
   // `revealPoolSecret` (crank.ts:395-397). So COMMITTED is this table's
   // terminal state for a refunded pool, not a waiting one, and it says so
-  // rather than leaving twelve seats looking unfinished. DRIFT.md §H1.
+  // rather than leaving twelve seats looking unfinished. docs/testing/TESTING-REPORT.md.
   const neverReveals = !revealed && actual?.terminalState === 'Closed';
 
   // Addresses come from the roster, so a wallet is identifiable before it has
@@ -172,7 +172,7 @@ function main(): void {
     L.push(
       '| | **For this pool `COMMITTED` is terminal.** It refunded, and a refunded pool never ' +
       'reveals its secret on this tree — so these hashes stay sealed and no seat here can reach ' +
-      '`VERIFIED`. The finding, with its evidence, is `DRIFT.md` §H1. |'
+      '`VERIFIED`. The finding, with its evidence, is docs/testing/TESTING-REPORT.md. |'
     );
   }
   L.push('| `VERIFIED` | the pool revealed its secret; the published battles and salt recompute to the hash the chain recorded at entry |');
@@ -249,7 +249,7 @@ function main(): void {
     } else if (state === 'COMMITTED') {
       L.push(
         neverReveals
-          ? '| recomputed | **never** — this pool refunded and its secret was never revealed (DRIFT.md §H1) |'
+          ? '| recomputed | **never** — this pool refunded and its secret was never revealed (docs/testing/TESTING-REPORT.md) |'
           : '| recomputed | not yet — the pool has not revealed its secret |'
       );
     }
