@@ -7,7 +7,7 @@
  * allocation: the seat and the pool. That is the whole point of composing
  * THIS rather than the seven-Blott montage that used to be offered on the
  * review screen: a Blott's silhouette is a deterministic, per-stat-monotone
- * function of its five stats (components/blott/warp.ts), so a picture of
+ * function of its five stats (components/blot/blotGeometry.ts), so a picture of
  * seven of them was the sealed line-up, published while the pool was open.
  *
  * THE DRAWN CLASS IS NOT ON THE CARD. Until 2026-09-15 the pass named the

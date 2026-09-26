@@ -12,7 +12,7 @@
 import Link from 'next/link';
 import { MIN_SEATS, TIER_ENTRY_LAMPORTS, TIER_POT_LAMPORTS } from '@blotto/scoring';
 import { indexerApi, live } from '@/data/api';
-import { lamportsToSol } from '@/data/format';
+import { lamportsToSol, poolMode } from '@/data/format';
 import { COPY } from '@/copy';
 import { AppHeader } from '@/components/shell/app-header';
 import { TabBar } from '@/components/shell/tab-bar';
@@ -42,11 +42,17 @@ export default async function PoolsPage() {
   const archived = pools.filter((p) => p.state === 'Paid' && !p.resolving);
 
   // Group by tier, tiers ascending; a tier appears only when it has pools.
+  // Within a tier the easy ladder's pools come first, then the hard
+  // ladder's (Phase B) — each pool wears its mode chip so the two never read
+  // as one queue.
   const byTier = new Map<number, typeof pools>();
   for (const p of active) {
     const group = byTier.get(p.tier);
     if (group) group.push(p);
     else byTier.set(p.tier, [p]);
+  }
+  for (const group of byTier.values()) {
+    group.sort((a, b) => (poolMode(a) === poolMode(b) ? 0 : poolMode(a) === 'easy' ? -1 : 1));
   }
   const tiers = [...byTier.keys()].sort((a, b) => a - b);
 
@@ -117,6 +123,10 @@ export default async function PoolsPage() {
                           </span>
                           <span className="text-[14px] text-ink-muted">
                             {COPY.pool.entrantsOf(p.entrants, Number(MIN_SEATS))}
+                          </span>
+                          {/* Phase B: which rule this pool plays. */}
+                          <span className="text-[12px] text-ink-muted">
+                            {poolMode(p) === 'hard' ? COPY.board.modeHard : COPY.board.modeEasy}
                           </span>
                         </span>
                         <Pill

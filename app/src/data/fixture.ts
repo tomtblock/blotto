@@ -54,15 +54,26 @@ export const FIXTURE_API: IndexerApi = {
     // fixture's own (it IS the server here). Enablement mirrors
     // `init_config`'s launch posture — tier 0 only (R6/D1) — so the fixture
     // ladder renders what production renders rather than an empty page.
+    //
+    // Phase B: the hard ladder is enabled at tier 0 too, matching the open
+    // hard scenario in the catalogue — so the landing renders both cards,
+    // which is the state the design work needs to see.
     return {
       server_time: String(Math.floor(Date.now() / 1000)),
       enablement_source: 'launch_default' as const,
+      hard_enablement_source: 'launch_default' as const,
       tiers: TIER_ENTRY_LAMPORTS.map((_, tier) => ({
         tier,
         enabled: tier === 0,
         status: (tier === 0 ? 'open' : 'closed') as 'open' | 'closed',
         next_open_at: '0',
         last_pool_id: null,
+        hard: {
+          enabled: tier === 0,
+          status: (tier === 0 ? 'open' : 'closed') as 'open' | 'closed',
+          next_open_at: '0',
+          last_pool_id: null,
+        },
       })),
     };
   },

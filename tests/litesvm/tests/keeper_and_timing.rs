@@ -1,9 +1,12 @@
 //! The 2026-09-07 upgrade's operational half against the compiled artifact
-//! (prompt v2 §A, §B.6, §G; founder rulings 1 and 2):
+//! (prompt v2 §A, §B.6, §G; founder rulings 1 and 2), with `migrate_config`
+//! re-pointed at the Phase B upgrade (2026-09-24):
 //!
-//!   - `migrate_config` grows a PRE-upgrade Config (380 bytes) to the new
-//!     layout in place, admin-only, once; every other instruction is dead
-//!     between the upgrade and that transaction, and alive after it;
+//!   - `migrate_config` grows a PRE-Phase-B Config (484 bytes) to the new
+//!     layout in place — the hard ladder appended, every hard tier disabled
+//!     — admin-only, once; every other instruction is dead between the
+//!     upgrade and that transaction, and alive after it; the original
+//!     380-byte layout, whose migration this replaced, is refused;
 //!   - the keeper opens pools; a tier idle for 24 h past its cooldown opens
 //!     for anyone (the liveness fallback, removed 2026-09-07). Since the security fix of
 //!     2026-09-07 a tier that has never settled a pool is NOT open to anyone:
@@ -57,23 +60,26 @@ fn close_empty(env: &mut Env, id: u64) {
 fn migrate_config_grows_the_old_account_once_and_revives_every_instruction() {
     let Some(mut env) = Env::new() else { return };
     let admin = env.admin.pubkey();
-    let keeper = Pubkey::new_unique();
 
     // The migrated layout is what `init_config` writes today; a fresh
     // deployment never migrates.
     let fresh = read_config(&env.svm);
     assert_eq!(fresh.keeper, env.settlement.pubkey());
-    let ix = migrate_config_ix(&admin, &keeper);
+    let ix = migrate_config_ix(&admin);
     let err = env.send(&[ix], &[]).unwrap_err();
     assert!(
         err.contains("6062") || err.contains("ConfigAlreadyMigrated"),
         "{err}"
     );
 
-    // Devnet's situation after the upgrade: the account is the OLD size.
-    downgrade_config_to_v1(&mut env.svm);
+    // Devnet's situation after the Phase B upgrade: the account is the
+    // PRE-Phase-B size (484 — where the 2026-09-07 migration left it).
+    // Let the clock move first so "stamped at the migration" and "stamped
+    // at init" are distinguishable.
+    env.advance_time(7 * 24 * 60 * 60);
+    downgrade_config_to_v2(&mut env.svm);
     let old_bytes = env.svm.get_account(&config_pda()).unwrap().data;
-    assert_eq!(old_bytes.len(), CONFIG_SPACE_V1);
+    assert_eq!(old_bytes.len(), CONFIG_SPACE_V2);
     // Every instruction that deserialises Config is dead — even a deposit.
     let ix = fund_platform_ix(&admin, 1_000_000_000);
     let err = env.send(&[ix], &[]).unwrap_err();
@@ -84,23 +90,23 @@ fn migrate_config_grows_the_old_account_once_and_revives_every_instruction() {
 
     // Only the admin recorded IN the old bytes may migrate.
     let stranger = funded_keypair(&mut env);
-    let ix = migrate_config_ix(&stranger.pubkey(), &keeper);
+    let ix = migrate_config_ix(&stranger.pubkey());
     let err = env.send(&[ix], &[&stranger]).unwrap_err();
     assert!(
         err.contains("6063") || err.contains("ConfigNotMigratable"),
         "{err}"
     );
 
-    // The migration: grows to 484, tops up rent from the admin, writes the
-    // tail, touches nothing before it.
+    // The migration: grows to 603, tops up rent from the admin, writes the
+    // hard tail, touches nothing before it.
     let admin_before = env.balance(&admin);
-    let ix = migrate_config_ix(&admin, &keeper);
+    let ix = migrate_config_ix(&admin);
     env.send(&[ix], &[]).expect("migrate_config");
     let migrated_at = now(&env);
     let acct = env.svm.get_account(&config_pda()).unwrap();
     assert_eq!(acct.data.len(), CONFIG_SPACE);
     assert_eq!(
-        &acct.data[..CONFIG_SPACE_V1],
+        &acct.data[..CONFIG_SPACE_V2],
         &old_bytes[..],
         "old bytes untouched"
     );
@@ -113,35 +119,79 @@ fn migrate_config_grows_the_old_account_once_and_revives_every_instruction() {
         "the admin paid the top-up"
     );
     let cfg = read_config(&env.svm);
-    assert_eq!(cfg.keeper, keeper);
+    // Everything the V2 layout held is exactly as it was — the keeper
+    // included, which the retired V1 migration used to take as an argument.
+    assert_eq!(cfg.keeper, fresh.keeper);
     assert_eq!(cfg.fill_deadline_seconds, FILL_DEADLINE_SECS);
     assert_eq!(cfg.cooldown_seconds, COOLDOWN_SECS);
-    // Every tier's liveness clock starts at the migration, never at the
-    // epoch: a zero would put `open_pool`'s fallback window decades in the
-    // past and let any signer open a tier's first pool — choosing its
-    // sealing key with it. Security fix of 2026-09-07.
-    assert_eq!(cfg.tier_next_open_at, [migrated_at; 7]);
+    assert_eq!(
+        cfg.tier_next_open_at, fresh.tier_next_open_at,
+        "easy clocks untouched"
+    );
+    assert_eq!(cfg.open_tiers, fresh.open_tiers);
     assert_eq!(cfg.next_pool_id, fresh.next_pool_id, "counter preserved");
+    // The hard ladder: every tier disabled, no live pool, and every clock
+    // stamped at the migration rather than the epoch — the field means "the
+    // earliest this tier may open", and a `set_hard_open_tiers` restamps it
+    // on the edge anyway.
+    assert_eq!(cfg.hard_open_tiers, [false; 7]);
+    assert_eq!(cfg.hard_active_pool_by_tier, [0; 7]);
+    assert_eq!(cfg.hard_tier_next_open_at, [migrated_at; 7]);
+    assert_ne!(
+        migrated_at, fresh.tier_next_open_at[0],
+        "the clock did move"
+    );
 
     // Self-disabling: a second run is a clean failure, not a second write.
-    let ix = migrate_config_ix(&admin, &Pubkey::new_unique());
+    env.advance_time(60);
+    let ix = migrate_config_ix(&admin);
     let err = env.send(&[ix], &[]).unwrap_err();
     assert!(err.contains("6062"), "{err}");
     assert_eq!(
-        read_config(&env.svm).keeper,
-        keeper,
+        read_config(&env.svm).hard_tier_next_open_at,
+        [migrated_at; 7],
         "the tail was not rewritten"
     );
 
     // And the program is alive again: a deposit lands, an admin instruction
-    // lands (the keeper rotates back to the settlement signer, the devnet
-    // posture), and the keeper opens a pool.
+    // lands, and the keeper opens a pool — an easy one, and, once the founder
+    // enables the tier, a hard one beside it.
     let ix = fund_platform_ix(&admin, 1_000_000_000);
     env.send(&[ix], &[])
         .expect("a deposit lands after migration");
     env.send(&[set_keeper_ix(&admin, &env.settlement.pubkey())], &[])
         .expect("set_keeper lands after migration");
     env.open_ready_pool(1, 0);
+    env.send(
+        &[set_hard_open_tiers_ix(
+            &admin,
+            [true, false, false, false, false, false, false],
+        )],
+        &[],
+    )
+    .expect("set_hard_open_tiers lands after migration");
+    env.open_ready_pool_mode(2, 0, MODE_HARD);
+    assert_eq!(read_pool(&env.svm, &pool_pda(2)).mode, MODE_HARD);
+}
+
+/// The 380-byte original layout has no path any more: the migration that
+/// grew it (2026-09-07) met its retirement condition, and the Phase B one
+/// refuses it rather than growing it with a zeroed keeper.
+#[test]
+fn migrate_config_refuses_the_retired_380_byte_layout() {
+    let Some(mut env) = Env::new() else { return };
+    let admin = env.admin.pubkey();
+    downgrade_config_to_v1(&mut env.svm);
+    let err = env.send(&[migrate_config_ix(&admin)], &[]).unwrap_err();
+    assert!(
+        err.contains("6063") || err.contains("ConfigNotMigratable"),
+        "a V1 account is refused, not grown: {err}"
+    );
+    assert_eq!(
+        env.svm.get_account(&config_pda()).unwrap().data.len(),
+        CONFIG_SPACE_V1,
+        "and left exactly as it was"
+    );
 }
 
 #[test]
@@ -262,16 +312,10 @@ fn the_keeper_may_not_be_the_zero_key() {
         env.settlement.pubkey(),
         "the keeper is unchanged"
     );
-
-    // The same guard on the one-shot migration, which writes raw bytes.
-    downgrade_config_to_v1(&mut env.svm);
-    let err = env
-        .send(&[migrate_config_ix(&admin, &Pubkey::default())], &[])
-        .unwrap_err();
-    assert!(
-        err.contains("6068") || err.contains("KeeperMustNotBeZero"),
-        "migrate_config must refuse the zero key: {err}"
-    );
+    // (The retired 2026-09-07 `migrate_config` carried the same guard on
+    // its keeper argument; the Phase B migration takes no keeper — it
+    // preserves the one already in the account — so `set_keeper` is now
+    // the only writer.)
 }
 
 #[test]

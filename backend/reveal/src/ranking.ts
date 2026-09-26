@@ -30,7 +30,9 @@ import {
   merkleRoot,
   publicKeyOf,
   sealOpen,
+  encodeBattleSet,
   type BattleSet,
+  type BoardMode,
   type CiphertextStore,
   type PlayerResult,
   type ProofStep,
@@ -40,14 +42,6 @@ import type { ChainEntryView } from './chain';
 import type { RevealBundleEntry } from './bundle';
 
 const hex = (b: Uint8Array) => Buffer.from(b).toString('hex');
-
-/** Encode a battle set back to its canonical 35 bytes (local, tiny). */
-export function encode35(battles: BattleSet): Uint8Array {
-  const out = new Uint8Array(35);
-  let o = 0;
-  for (const b of battles) for (const v of b) out[o++] = v;
-  return out;
-}
 
 /**
  * One entry as the DETECTION layer sees it (R11, TECH-ARCH §9): the sealed
@@ -85,13 +79,19 @@ export interface RevealedEntries {
  *
  * `entries` must already be sorted by index — the caller reads them from
  * the chain and sorts once.
+ *
+ * `mode` is the POOL'S recorded placing rule (Phase B): a payload sealed
+ * under the other mode is the wrong length, fails to decode, and is scored
+ * as a lost ciphertext (`decrypt_failed`) — the rule is never inferred from
+ * the bytes.
  */
 export async function revealEntries(
   ciphertexts: CiphertextStore,
   poolId: bigint,
   secret: Uint8Array,
   entries: readonly ChainEntryView[],
-  step: (name: string, detail?: Record<string, unknown>) => void = () => {}
+  step: (name: string, detail?: Record<string, unknown>) => void = () => {},
+  mode: BoardMode = 'easy'
 ): Promise<RevealedEntries> {
   const keypair = { secretKey: secret, publicKey: publicKeyOf(secret) };
   const bundleEntries: RevealBundleEntry[] = [];
@@ -117,8 +117,8 @@ export async function revealEntries(
         status = 'decrypt_failed';
       } else {
         try {
-          const payload = decodePayload(opened);
-          const h = hex(battlesHash(payload.battles, payload.salt));
+          const payload = decodePayload(opened, mode);
+          const h = hex(battlesHash(payload.battles, payload.salt, mode));
           if (h !== e.battlesHash) {
             status = 'hash_mismatch';
           } else {
@@ -139,7 +139,7 @@ export async function revealEntries(
     bundleEntries.push({
       player: e.player,
       index: e.index,
-      battles: battles ? hex(encode35(battles)) : null,
+      battles: battles ? hex(encodeBattleSet(battles, mode)) : null,
       salt: payloadFields ? hex(payloadFields.salt) : null,
       battles_hash: e.battlesHash,
       status,
@@ -239,7 +239,9 @@ export async function recomputeRanking(
    */
   expectedEntrants: number,
   potLamports: bigint,
-  committedRootHex: string | null
+  committedRootHex: string | null,
+  /** The pool's recorded placing rule (Phase B) — `Pool.mode`, never guessed. */
+  mode: BoardMode = 'easy'
 ): Promise<PublishedRanking> {
   if (entries.length !== expectedEntrants) {
     throw new Error(
@@ -248,8 +250,8 @@ export async function recomputeRanking(
     );
   }
   const sorted = [...entries].sort((a, b) => a.index - b.index);
-  const { scoringInput } = await revealEntries(ciphertexts, poolId, secret, sorted);
-  const results = assignPrizes(scoreWithMissing(scoringInput), potLamports);
+  const { scoringInput } = await revealEntries(ciphertexts, poolId, secret, sorted, () => {}, mode);
+  const results = assignPrizes(scoreWithMissing(scoringInput, mode), potLamports);
   const byIndex = new Map(sorted.map((e) => [e.index, e.player]));
   const ranking = buildRanking(results, (i) => {
     const p = byIndex.get(i);

@@ -63,8 +63,9 @@ const MPL_CORE_ID = new PublicKey('CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d'
 export const ENTRY_SPACE = 228;
 
 /**
- * `Pool::SPACE` — 8 discriminator + `Pool::LEN` 841 (`state.rs`, pinned by
- * its own layout test). 839 until R7-b appended `min_seats` (2026-09-13).
+ * `Pool::SPACE` — 8 discriminator + `Pool::LEN` 842 (`state.rs`, pinned by
+ * its own layout test). 839 until R7-b appended `min_seats` (2026-09-13),
+ * 841 until Phase B appended `mode` (2026-09-24).
  *
  * Used as a LENGTH GUARD, which `getPool` had none of (audit 2026-09-11,
  * G-06). Every field below is read at a hard-coded offset, so an account
@@ -72,10 +73,24 @@ export const ENTRY_SPACE = 228;
  * address reads its `flagged` byte as `results_committed`, walks a payout
  * list out of a battles hash, and then fails on a range error 600 bytes
  * later — if it fails at all. Refusing by length, by name, up front, is the
- * difference between "this account is 228 bytes and a Pool is 849" and an
+ * difference between "this account is 228 bytes and a Pool is 850" and an
  * opaque buffer-bounds message from the middle of a settlement run.
  */
-export const POOL_SPACE = 849;
+export const POOL_SPACE = 850;
+
+/**
+ * `Pool::SPACE_V2` — the pre-Phase-B size (849): `min_seats` present, `mode`
+ * absent. Every pool devnet opened between R7-b and the Phase B upgrade is
+ * this size until `migrate_pool` grows it, and this client keeps settling
+ * them meanwhile — a pool that predates the field played easy, which is what
+ * `getPool` reports for it. (The pre-R7-b 847 is NOT accepted: the floor
+ * matters to nothing here, but a size this reader has never met is exactly
+ * what the guard exists to refuse.)
+ */
+export const POOL_SPACE_V2 = 849;
+
+/** Byte offset of `Pool.mode` (Phase B): the last byte of the account. */
+const POOL_MODE_OFFSET = 849;
 
 /**
  * Where `getEntries` reads each Entry field: BYTE OFFSETS from the start of
@@ -233,9 +248,10 @@ export class Web3Chain implements KeeperChain {
     // offset, and an account of the wrong type decodes into plausible numbers
     // rather than into an error. `test/chain-web3.spec.ts` pins both the
     // refusal and every offset against `state.rs`.
-    if (d.length !== POOL_SPACE) {
+    if (d.length !== POOL_SPACE && d.length !== POOL_SPACE_V2) {
       throw new Error(
-        `pool ${poolId} account is ${d.length} bytes; Pool::SPACE is ${POOL_SPACE} — refusing to decode it`
+        `pool ${poolId} account is ${d.length} bytes; Pool::SPACE is ${POOL_SPACE} ` +
+          `(or ${POOL_SPACE_V2} before Phase B) — refusing to decode it`
       );
     }
     // Offsets mirror state.rs since D-A1 v2 (asserted by its serialize-LEN
@@ -272,6 +288,9 @@ export class Web3Chain implements KeeperChain {
       paidMask: d.readBigUInt64LE(834),
       payouts,
       entrants: d.readUInt16LE(33),
+      // Phase B: the last byte, 0 easy / 1 hard; absent on a pre-Phase-B
+      // account, which was an easy pool by construction.
+      mode: d.length > POOL_MODE_OFFSET ? d[POOL_MODE_OFFSET] : 0,
     };
   }
 
@@ -330,8 +349,10 @@ export class Web3Chain implements KeeperChain {
     poolId: bigint,
     tier: number,
     sealingPubkey: Uint8Array,
-    sealingSecretHash: Uint8Array
+    sealingSecretHash: Uint8Array,
+    mode: number
   ): Promise<void> {
+    if (mode !== 0 && mode !== 1) throw new Error(`unknown board mode ${mode}`);
     const le = Buffer.alloc(8);
     le.writeBigUInt64LE(poolId);
     const keeper = this.keeper();
@@ -356,6 +377,8 @@ export class Web3Chain implements KeeperChain {
             Buffer.from([tier]),
             Buffer.from(sealingPubkey),
             Buffer.from(sealingSecretHash),
+            // Phase B: the appended `mode` argument (0 easy, 1 hard).
+            Buffer.from([mode]),
           ]),
         }),
       ],

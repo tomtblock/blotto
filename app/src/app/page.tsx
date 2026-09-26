@@ -17,7 +17,9 @@ import Link from 'next/link';
 import { MIN_SEATS, TIER_ENTRY_LAMPORTS, TIER_POT_LAMPORTS } from '@blotto/scoring';
 import { COPY } from '@/copy';
 import { indexerApi, live } from '@/data/api';
-import { lamportsToSol } from '@/data/format';
+import { lamportsToSol, poolMode } from '@/data/format';
+import type { PoolSummary } from '@/data/types';
+import type { BoardMode } from '@/battle/board/mode';
 import { AppHeader } from '@/components/shell/app-header';
 import { TabBar } from '@/components/shell/tab-bar';
 import { Countdown } from '@/components/ui/countdown';
@@ -87,6 +89,143 @@ function SeatRing({ entrants }: { entrants: number }) {
   );
 }
 
+/**
+ * One open pool as a long playing card (founder Phase B, 2026-09-24): its
+ * mode on the top edge, the Blott well, the seat ring, the pot, the entry,
+ * the deadline clock, the §8.6 line above the enter control. Two of these
+ * sit side by side when an easy and a hard pool are both open; clicking
+ * either goes straight down THAT pool's path (`/pools/{pool}`), and the
+ * board it reaches reads the pool's mode from the same record.
+ *
+ * The motion rule (one ambient loop per viewport) is kept by giving the
+ * loop to the first card only; a second card wears the same poster still.
+ */
+function PoolCard({ pool, withClip }: { pool: PoolSummary; withClip: boolean }) {
+  const mode = poolMode(pool);
+  return (
+    <div
+      data-testid={`pool-card-${mode}`}
+      className="candy candy-gloss relative flex flex-col overflow-hidden rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,var(--color-overlay)_0%,var(--color-game-raised)_38%,var(--color-game-base)_100%)] p-5 sm:p-6"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-game-ink-muted">
+          {COPY.landing.openPoolTitle}
+        </p>
+        <span
+          aria-label={COPY.landing.cardModeAria(mode)}
+          className="inline-flex items-center rounded-full border border-white/25 px-2.5 py-0.5 font-mono text-[11px] uppercase tracking-[0.1em] text-game-ink shadow-[inset_0_1px_0_rgba(255,246,236,0.14)]"
+        >
+          {mode === 'hard' ? COPY.board.modeHard : COPY.board.modeEasy}
+        </span>
+      </div>
+      {/* D-E1 §1.4: the pot travels with the pool, not the table. */}
+      {BigInt(pool.pot_lamports) !== TIER_POT_LAMPORTS[pool.tier] && (
+        <p className="mt-2 text-[12px] leading-5 text-game-ink-muted">{COPY.pool.potFixedAtOpen}</p>
+      )}
+      {/* The Blott's well: its own frame inside the card, never sharing one
+          with a number (tokens.ts: the prize amount and the Blot are both
+          yellow). A soft plum fade seats it in the vinyl rather than on it. */}
+      <div
+        aria-hidden="true"
+        className="relative mt-4 aspect-video overflow-hidden rounded-[20px] shadow-[inset_0_0_0_1px_rgba(255,246,236,0.08),inset_0_10px_24px_rgba(42,16,48,0.35)]"
+      >
+        {withClip ? (
+          <AmbientClip
+            tiers={CARD_CLIP}
+            poster={CARD_POSTER}
+            className="absolute inset-0 h-full w-full object-cover"
+            playWhenVisible={0.6}
+          />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element -- the clip's own poster, same bytes as the loop's first frame
+          <img src={CARD_POSTER} alt="" className="absolute inset-0 h-full w-full object-cover" />
+        )}
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,var(--color-game-raised)_0%,transparent_28%)]" />
+      </div>
+      <div className="mt-5 flex flex-wrap items-center gap-6">
+        <SeatRing entrants={pool.entrants} />
+        <div className="min-w-0 flex-1">
+          <p className="text-[12px] uppercase tracking-[0.14em] text-game-ink-muted">
+            {COPY.pool.prizeLabel}
+          </p>
+          <p className="tnum font-display text-[44px] font-extrabold leading-[48px] text-game-prize">
+            {lamportsToSol(pool.pot_lamports)}
+            <span className="ml-2 font-body text-[15px] font-medium text-game-ink-muted">SOL</span>
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-x-6 gap-y-1 text-game-ink">
+            <span className="tnum font-display text-[18px] font-bold">
+              {lamportsToSol(pool.entry_lamports)}
+              <span className="ml-1 font-body text-[12px] font-medium text-game-ink-muted">
+                SOL entry
+              </span>
+            </span>
+            {/* PHASE-E1-REVIEW (D18): this clock already sits in the same
+                card as the Enter link, against the rule the Countdown
+                documents. Not moved here — flagged for the founder. It
+                derives from the server's time; each pool keeps its own. */}
+            <Countdown
+              deadlineUnix={pool.fill_deadline}
+              serverTimeUnix={pool.server_time}
+              label={COPY.pool.fillDeadline}
+            />
+          </div>
+        </div>
+      </div>
+      {/* §8.6: above the enter control, always. */}
+      <p className="mt-5 max-w-prose text-[12px] leading-5 text-game-ink-muted">
+        {COPY.pool.decisionsFinal}
+      </p>
+      <Link
+        href={`/pools/${pool.pool}`}
+        className="key-action mt-3 flex h-14 items-center justify-center rounded-full bg-game-action font-display text-[18px] font-bold uppercase tracking-wide text-game-base hover:brightness-105"
+      >
+        {COPY.pool.enter}
+      </Link>
+      <p className="mt-3 text-center text-[11px] text-game-ink-muted">{COPY.pool.ageTerritoryNote}</p>
+    </div>
+  );
+}
+
+/**
+ * The hard card before its first pool: shown ONLY when `GET /tiers` says the
+ * founder has enabled the hard ladder somewhere and no hard pool is open
+ * yet. Data-derived — there is no switch in the app (Phase B plan, 3).
+ */
+function HardOpensSoonCard() {
+  return (
+    <div
+      data-testid="pool-card-hard-soon"
+      className="candy candy-gloss relative flex flex-col overflow-hidden rounded-[24px] border border-dashed border-white/20 bg-[linear-gradient(180deg,var(--color-overlay)_0%,var(--color-game-raised)_38%,var(--color-game-base)_100%)] p-5 sm:p-6"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-game-ink-muted">
+          {COPY.landing.hardOpensSoonTitle}
+        </p>
+        <span
+          aria-label={COPY.landing.cardModeAria('hard')}
+          className="inline-flex items-center rounded-full border border-white/25 px-2.5 py-0.5 font-mono text-[11px] uppercase tracking-[0.1em] text-game-ink shadow-[inset_0_1px_0_rgba(255,246,236,0.14)]"
+        >
+          {COPY.board.modeHard}
+        </span>
+      </div>
+      <div
+        aria-hidden="true"
+        className="relative mt-4 aspect-video overflow-hidden rounded-[20px] opacity-60 shadow-[inset_0_0_0_1px_rgba(255,246,236,0.08),inset_0_10px_24px_rgba(42,16,48,0.35)]"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element -- the clip's own poster */}
+        <img src={CARD_POSTER} alt="" className="absolute inset-0 h-full w-full object-cover" />
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,var(--color-game-raised)_0%,transparent_28%)]" />
+      </div>
+      <p className="mt-5 max-w-prose text-[14px] leading-6 text-game-ink">
+        {COPY.landing.hardOpensSoonBody}
+      </p>
+      <p className="mt-auto pt-5 text-center text-[11px] text-game-ink-muted">
+        {COPY.pool.ageTerritoryNote}
+      </p>
+    </div>
+  );
+}
+
 export default async function LandingPage() {
   const api = indexerApi();
   // SSR outage guard: a dead indexer degrades this page, never kills it.
@@ -100,8 +239,18 @@ export default async function LandingPage() {
   // Prompt v2 §B.6: the soonest tier still cooling down, for the "next pool
   // opens in" clock when nothing is open. Server time, never the device's.
   const open = pools.filter((p) => p.state === 'Open').sort((a, b) => a.tier - b.tier);
-  const hero = open[0];
-  const openByTier = new Map(open.map((p) => [p.tier, p]));
+  // Phase B (founder 2026-09-24): one card per open pool, the lowest tier of
+  // each ladder — easy on the left, hard on the right. The hero's own enter
+  // control goes to the easy pool when one is open (the landing demo stays
+  // easy), else to the hard one.
+  const lowestOf = (mode: BoardMode) => open.find((p) => poolMode(p) === mode);
+  const easyOpen = lowestOf('easy');
+  const hardOpen = lowestOf('hard');
+  const hero = easyOpen ?? hardOpen;
+  // The ladder below is the easy ladder's per-tier row; a hard pool open in
+  // the same tier gets its own row beneath it.
+  const openByTier = new Map(open.filter((p) => poolMode(p) === 'easy').map((p) => [p.tier, p]));
+  const hardOpenByTier = new Map(open.filter((p) => poolMode(p) === 'hard').map((p) => [p.tier, p]));
   const tierStatus = new Map(treasury?.tiers.map((t) => [t.tier, t]) ?? []);
   // WHICH TIERS THE FOUNDER HAS OPENED — read, never assumed (founder
   // instruction 2026-09-12 §2.3, §2.4). This page used to carry its own
@@ -116,12 +265,24 @@ export default async function LandingPage() {
   const enabledByTier = tiersRead
     ? new Map(tiersRead.tiers.map((t) => [t.tier, t.enabled]))
     : new Map(open.map((p) => [p.tier, true]));
+  // The hard ladder's enablement, by the same rule: the live Config through
+  // `GET /tiers`, else the ground truth of an open hard pool. A read API
+  // from before Phase B serves no `hard` — that reads as not enabled, which
+  // is true of it. The "Opens soon" card exists only on this signal.
+  const hardEnabledByTier = tiersRead
+    ? new Map(tiersRead.tiers.map((t) => [t.tier, t.hard?.enabled === true]))
+    : new Map([...hardOpenByTier.keys()].map((tier) => [tier, true]));
+  const hardEnabledAnywhere = [...hardEnabledByTier.values()].some(Boolean);
   // A tier appears if the founder has opened it, OR if it is still running a
   // pool. The second half matters: `open_tiers` gates `open_pool` and
   // nothing else — `register` never reads it — so closing a tier must not
   // hide a pool that is still taking entries from the players in it.
   const ladder = TIER_ENTRY_LAMPORTS.map((entry, tier) => ({ entry, tier })).filter(
-    ({ tier }) => enabledByTier.get(tier) === true || openByTier.has(tier)
+    ({ tier }) =>
+      enabledByTier.get(tier) === true ||
+      openByTier.has(tier) ||
+      hardEnabledByTier.get(tier) === true ||
+      hardOpenByTier.has(tier)
   );
 
   return (
@@ -181,7 +342,7 @@ export default async function LandingPage() {
                 href="#demo"
                 className="rounded-full border-2 border-brand-cream px-6 py-3 font-mono text-[13px] uppercase tracking-wide text-brand-cream hover:bg-brand-cream/10"
               >
-                {COPY.landing.tryDials}
+                {COPY.landing.tryBoard}
               </a>
             </div>
             {/* v3 D2: visible without scrolling on mobile (the hero is content-height there). */}
@@ -196,7 +357,8 @@ export default async function LandingPage() {
         </section>
         <main id="main" className="mx-auto w-full max-w-5xl flex-1 px-4 pb-28 sm:px-6">
 
-          {/* ——— The open pool: plum card, every number on the game layer. */}
+          {/* ——— The open pools: one long card per open pool, side by side
+              (founder Phase B). Every number on the game layer. */}
           <section className="mt-10">
             {!poolsLive.ok ? (
               <div className="candy candy-gloss relative overflow-hidden rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,var(--color-overlay)_0%,var(--color-game-raised)_38%,var(--color-game-base)_100%)] p-6">
@@ -206,77 +368,16 @@ export default async function LandingPage() {
                 </p>
               </div>
             ) : hero ? (
-              <div className="candy candy-gloss relative overflow-hidden rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,var(--color-overlay)_0%,var(--color-game-raised)_38%,var(--color-game-base)_100%)] p-5 sm:p-6">
-                <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-game-ink-muted">
-                  {COPY.landing.openPoolTitle}
-                </p>
-                {/* D-E1 §1.4: the pot travels with the pool, not the table. */}
-                {BigInt(hero.pot_lamports) !== TIER_POT_LAMPORTS[hero.tier] && (
-                  <p className="mt-2 text-[12px] leading-5 text-game-ink-muted">
-                    {COPY.pool.potFixedAtOpen}
-                  </p>
-                )}
-                <div className="mt-4 grid gap-5 sm:grid-cols-[minmax(0,1fr)_minmax(200px,38%)]">
-                <div className="flex flex-wrap items-center gap-6">
-                  <SeatRing entrants={hero.entrants} />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[12px] uppercase tracking-[0.14em] text-game-ink-muted">
-                      {COPY.pool.prizeLabel}
-                    </p>
-                    <p className="tnum font-display text-[44px] font-extrabold leading-[48px] text-game-prize">
-                      {lamportsToSol(hero.pot_lamports)}
-                      <span className="ml-2 font-body text-[15px] font-medium text-game-ink-muted">SOL</span>
-                    </p>
-                    <div className="mt-2 flex flex-wrap items-center gap-x-6 gap-y-1 text-game-ink">
-                      <span className="tnum font-display text-[18px] font-bold">
-                        {lamportsToSol(hero.entry_lamports)}
-                        <span className="ml-1 font-body text-[12px] font-medium text-game-ink-muted">
-                          SOL entry
-                        </span>
-                      </span>
-                      {/* PHASE-E1-REVIEW (D18): this clock already sits in the
-                          same card as the Enter link, against the rule the
-                          Countdown documents. Not moved here — flagged for
-                          the founder. It derives from the server's time. */}
-                      <Countdown
-                        deadlineUnix={hero.fill_deadline}
-                        serverTimeUnix={hero.server_time}
-                        label={COPY.pool.fillDeadline}
-                      />
-                    </div>
-                  </div>
-                </div>
-                {/* The Blott's well: its own frame inside the card, never
-                    sharing one with a number (tokens.ts: the prize amount and
-                    the Blot are both yellow). A soft plum fade on the side
-                    facing the numbers and a berry inner shadow seat it in the
-                    vinyl rather than on it. */}
-                <div
-                  aria-hidden="true"
-                  className="relative -order-1 aspect-video overflow-hidden rounded-[20px] shadow-[inset_0_0_0_1px_rgba(255,246,236,0.08),inset_0_10px_24px_rgba(42,16,48,0.35)] sm:order-none sm:aspect-auto sm:self-stretch"
-                >
-                  <AmbientClip
-                    tiers={CARD_CLIP}
-                    poster={CARD_POSTER}
-                    className="absolute inset-0 h-full w-full object-cover"
-                    playWhenVisible={0.6}
-                  />
-                  <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,var(--color-game-raised)_0%,transparent_28%)] sm:bg-[linear-gradient(90deg,var(--color-game-raised)_0%,transparent_32%)]" />
-                </div>
-                </div>
-                {/* §8.6: above the enter control, always. */}
-                <p className="mt-5 max-w-prose text-[12px] leading-5 text-game-ink-muted">
-                  {COPY.pool.decisionsFinal}
-                </p>
-                <Link
-                  href={`/pools/${hero.pool}`}
-                  className="key-action mt-3 flex h-14 items-center justify-center rounded-full bg-game-action font-display text-[18px] font-bold uppercase tracking-wide text-game-base hover:brightness-105"
-                >
-                  {COPY.pool.enter}
-                </Link>
-                <p className="mt-3 text-center text-[11px] text-game-ink-muted">
-                  {COPY.pool.ageTerritoryNote}
-                </p>
+              <div
+                data-testid="pool-cards"
+                className={`grid gap-5 ${hardOpen || hardEnabledAnywhere ? 'md:grid-cols-2' : ''}`}
+              >
+                {easyOpen && <PoolCard pool={easyOpen} withClip />}
+                {hardOpen ? (
+                  <PoolCard pool={hardOpen} withClip={!easyOpen} />
+                ) : hardEnabledAnywhere ? (
+                  <HardOpensSoonCard />
+                ) : null}
               </div>
             ) : null /* PHASE-N-REVIEW: the "no tournament is open" card was removed
                         at the founder's direction (2026-09-09). In that state the
@@ -365,9 +466,39 @@ export default async function LandingPage() {
                     </span>
                   </div>
                 );
+                // Phase B: the hard ladder's row at this tier — only where the
+                // founder has enabled it or a hard pool is running. Same pot,
+                // same entry; the mode is the difference, so it is named.
+                const hardPool = hardOpenByTier.get(tier);
+                const hardRow =
+                  hardPool || hardEnabledByTier.get(tier) === true ? (
+                    <div
+                      className={`flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-white/8 px-4 py-3.5 transition-colors sm:px-5 ${
+                        hardPool ? 'bg-white/5 hover:bg-white/8' : ''
+                      }`}
+                    >
+                      <span className="tnum w-24 font-display text-[17px] font-bold text-game-ink">
+                        {lamportsToSol(entry.toString())}
+                        <span className="ml-1 font-body text-[11px] font-medium text-game-ink-muted">SOL</span>
+                      </span>
+                      <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-game-ink-muted">
+                        {COPY.board.modeHard}
+                      </span>
+                      <span
+                        className={`ml-auto text-right text-[12px] ${
+                          hardPool ? 'text-game-action' : 'text-game-ink-muted'
+                        }`}
+                      >
+                        {hardPool
+                          ? `${COPY.fixtures.statusOpen} · ${COPY.pool.entrantsOf(hardPool.entrants, Number(MIN_SEATS))}`
+                          : COPY.landing.hardOpensSoonTitle}
+                      </span>
+                    </div>
+                  ) : null;
                 return (
                   <li key={tier}>
                     {openPool ? <Link href={`/pools/${openPool.pool}`}>{row}</Link> : row}
+                    {hardRow ? (hardPool ? <Link href={`/pools/${hardPool.pool}`}>{hardRow}</Link> : hardRow) : null}
                   </li>
                 );
               })}

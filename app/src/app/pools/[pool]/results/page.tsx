@@ -12,7 +12,7 @@
 import { notFound } from 'next/navigation';
 import { COPY } from '@/copy';
 import { indexerApi, live } from '@/data/api';
-import { lamportsToSol } from '@/data/format';
+import { lamportsToSol, poolMode } from '@/data/format';
 import { AppHeader } from '@/components/shell/app-header';
 import { TabBar } from '@/components/shell/tab-bar';
 import { BackLink } from '@/components/ui/back-link';
@@ -26,7 +26,6 @@ import { ArchiveStandings } from './archive-standings';
 import { AllBattles } from './all-battles';
 import { WhatBeatYouPanel } from './what-beat-you-panel';
 import { ShareResult } from './share-result';
-import { ShareSeven } from './share-seven';
 import { PaidConfetti } from './paid-confetti';
 import { ChallengeClient } from './challenge-client';
 
@@ -97,6 +96,8 @@ export default async function ResultsPage({ params }: { params: Promise<{ pool: 
         <header className="mb-6 flex flex-wrap items-center gap-3">
           <MarqueeHeading as="h1">{COPY.reveal.passPool(pool.id)}</MarqueeHeading>
           <Pill tone="field">{COPY.results.title}</Pill>
+          {/* Phase B: which rule this pool played. */}
+          <Pill tone="ink">{poolMode(pool) === 'hard' ? COPY.board.modeHard : COPY.board.modeEasy}</Pill>
         </header>
         {pool.state === 'Paid' && (
           <p className="-mt-2 mb-6 max-w-prose text-[15px] leading-6 font-medium text-brand-berry">
@@ -161,8 +162,6 @@ export default async function ResultsPage({ params }: { params: Promise<{ pool: 
                 .filter((e) => e.escrow_settled === 'forfeited')
                 .map((e) => e.player)}
             />
-            {/* The player's own seven, shareable now the pool has closed (2026-09-13). */}
-            <ShareSeven poolAddress={pool.pool} state={pool.state} />
             {archive && <ArchiveStandings archive={archive} />}
             {/* Founder 2026-09-09: every battle of every player, from the
                 same verified bundle, after the reveal. */}

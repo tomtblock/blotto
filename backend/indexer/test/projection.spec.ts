@@ -5,8 +5,10 @@
  * logs of a full lifecycle (64 entries, flags, reveal, a two-way tie for
  * first committed, payout, an escrow release, an admin forfeit and the
  * forfeited share paid to the cleared tied player — 2026-09-07), the admin
- * events of the upgrade (keeper, timings, a real Config migration), a
- * refund-fork pool, and a minimum-field pool (52 entries, the 12 h deadline
+ * events of the upgrades (keeper, timings, a real Phase B Config migration
+ * and the hard ladder's enablement — 2026-09-24), a refund-fork pool that is
+ * then migrated through both of `migrate_pool`'s old shapes, and a
+ * minimum-field pool (52 entries, the 12 h deadline
  * passes, `seal_at_deadline` seals, the winner takes the pot — D-E4),
  * executed by the compiled program in LiteSVM
  * (tests/litesvm/tests/dump_events.rs). So this suite checks the TypeScript
@@ -148,9 +150,21 @@ describe('blotto event decoding against real emitted bytes', () => {
       'NextPlacePaid',
       'KeeperSet',
       'PoolTimingSet',
-      'ConfigMigrated',
+      // Phase B (2026-09-24): the V2 → V3 Config migration, the hard
+      // ladder's enablement, and both shapes `migrate_pool` grows.
+      'HardLadderAdded',
+      'HardTiersOpened',
+      'PoolMigrated',
     ]) {
       expect(counts.get(name) ?? 0, name).to.be.greaterThan(0);
+    }
+    // The retired 2026-09-07 migration's event: no path emits it any more
+    // (the decoder keeps its layout for the one the devnet ledger holds).
+    expect(counts.get('ConfigMigrated') ?? 0).to.equal(0);
+    // Pool 2 was migrated through both old shapes: pre-Phase-B (mode
+    // written), then pre-R7-b (floor and mode written). Both read easy.
+    expect(counts.get('PoolMigrated')).to.equal(2);
+    {
     }
     expect(counts.get('EntryRegistered')).to.equal(118); // 64 + 2 refund pool + 52 min-field pool
     // Every tier-slot release stamps a cooldown: pool 1 Paid, pool 2 Closed,
@@ -485,8 +499,14 @@ describe('sanctions holds reach the derived tables', () => {
   }> {
     const store = new InMemoryEventStore();
     await ingestAll(store);
-    const entries = Object.values(store.projection.snapshot().entries);
-    const target = entries.find((e) => e.idx === 0)!;
+    const snap = store.projection.snapshot();
+    // Seat 0 of the 64-seat pool — the one the fixture flagged and released.
+    // Named by its pool rather than found as "the first seat 0": the
+    // snapshot's row order follows the players' (random, per regeneration)
+    // keys, and the fixture holds three seat-0 rows.
+    const fullPool = Object.values(snap.pools).find((p) => p.entrants === 64)!;
+    const entries = Object.values(snap.entries);
+    const target = entries.find((e) => e.pool === fullPool.pool && e.idx === 0)!;
     const other = entries.find((e) => e.pool === target.pool && e.idx === 1)!;
     const pool = target.pool as string;
     const player = target.player as string;

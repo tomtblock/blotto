@@ -29,6 +29,7 @@ import {
   CONFIG_OFFSETS,
   CONFIG_SPACE,
   CONFIG_SPACE_V1,
+  CONFIG_SPACE_V2,
   N_TIERS,
   decodeConfigAccount,
 } from '../../_shared/src/config-account';
@@ -215,6 +216,7 @@ function liveConfigView(over: Partial<TreasuryChainView> = {}): TreasuryChainVie
       384_000_000_000n,
     ],
     openTiers: [true, true, false, false, false, false, false],
+        hardOpenTiers: [false, false, false, false, false, false, false],
     platformRefundableLamports: 300_000_000n,
     platformBalanceLamports: 6_300_000_000n,
     vaultCushionLamports: CUSHION,
@@ -620,7 +622,38 @@ describe('the shared Config layout', () => {
 
   it('refuses any other size', () => {
     expect(() => decodeConfigAccount(new Uint8Array(CONFIG_SPACE + 8))).to.throw(
-      /492 bytes; source says 484/
+      /611 bytes; source says 603/
     );
+  });
+
+  // Phase B (2026-09-24): the hard ladder was appended, and the live account
+  // is the old size until `migrate_config` runs in the upgrade window.
+  it('reads a pre-Phase-B (484-byte) account with the hard ladder absent', () => {
+    const data = new Uint8Array(CONFIG_SPACE_V2);
+    data[CONFIG_OFFSETS.openTiers] = 1;
+    const decoded = decodeConfigAccount(data);
+    expect(decoded.openTiers[0]).to.equal(true);
+    expect(decoded.hardLadderPresent).to.equal(false);
+    expect(decoded.hardOpenTiers).to.deep.equal([false, false, false, false, false, false, false]);
+    expect(decoded.hardActivePoolByTier).to.deep.equal([0n, 0n, 0n, 0n, 0n, 0n, 0n]);
+    expect(decoded.hardTierNextOpenAt).to.deep.equal([0n, 0n, 0n, 0n, 0n, 0n, 0n]);
+  });
+
+  it('reads the hard ladder from a current account at the appended offsets', () => {
+    const data = new Uint8Array(CONFIG_SPACE);
+    const view = new DataView(data.buffer);
+    data[CONFIG_OFFSETS.hardOpenTiers + 1] = 1;
+    view.setBigUint64(CONFIG_OFFSETS.hardActivePoolByTier + 8 * 1, 31n, true);
+    view.setBigInt64(CONFIG_OFFSETS.hardTierNextOpenAt + 8 * 6, 1_790_000_000n, true);
+    const decoded = decodeConfigAccount(data);
+    expect(decoded.hardLadderPresent).to.equal(true);
+    expect(decoded.hardOpenTiers).to.deep.equal([false, true, false, false, false, false, false]);
+    expect(decoded.hardActivePoolByTier[1]).to.equal(31n);
+    expect(decoded.hardTierNextOpenAt[6]).to.equal(1_790_000_000n);
+    // The easy ladder is untouched by the tail — every easy field reads zero.
+    expect(decoded.openTiers).to.deep.equal([false, false, false, false, false, false, false]);
+    expect(decoded.activePoolByTier[1]).to.equal(0n);
+    // And the tail ends exactly at the account's end.
+    expect(CONFIG_OFFSETS.hardTierNextOpenAt + 8 * N_TIERS).to.equal(CONFIG_SPACE);
   });
 });

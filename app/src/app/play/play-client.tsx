@@ -18,10 +18,10 @@ import { address } from '@solana/kit';
 import { COPY } from '@/copy';
 import { blockedTerritoryPhrase } from '@/rules/territories';
 import { Button } from '@/components/ui/button';
-import { BattleFlow } from '@/battle/components/battle-flow';
+import { BoardFlow } from '@/battle/components/board/BoardFlow';
 import type { Allocation } from '@/battle/allocation';
 import { indexerApi } from '@/data/api';
-import { lamportsToSol } from '@/data/format';
+import { lamportsToSol, poolMode } from '@/data/format';
 import type { PoolSummary } from '@/data/types';
 import { rpcUrl } from '@/chain/rpc';
 import { makeTxRpc } from '@/tx/tx-rpc';
@@ -47,14 +47,12 @@ import { signInHref } from '@/app/signin/return-to';
 import { runInterruption } from './run-guard';
 import { RevealHost } from './reveal-host';
 import { PendingPanel } from '@/components/ui/pending-panel';
-import { sweepStills } from '@/battle/stills-sweep';
 import { SealedPanel } from './sealed-panel';
-import { SealStage, type SealKeyTone } from './seal-stage';
+import { SealStage, type ReviewSealApi, type SealKeyTone } from './seal-stage';
 import { INITIAL_SEAL_STAGE, reduceSealStage } from './seal-stage-machine';
 import { observeSigner } from './observed-signer';
 import { EnteredPanel } from './entered-panel';
 import { entryServiceNotifyVersion } from '@/notify/pool-notify';
-import type { ReviewSealApi } from '@/battle/components/battle-flow';
 import type { RevealState } from '@/reveal/machine';
 
 /*
@@ -252,7 +250,7 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
    * signatures (observed on the signer object this page hands to the entry
    * path, never inside it), and the reveal machine's beats. It is mounted
    * HERE, outside the flow and the takeover, so it survives the swap from
-   * BattleFlow to RevealHost without restarting its loop.
+   * the board to RevealHost without restarting its loop.
    */
   const [stagePhase, stageDispatch] = useReducer(reduceSealStage, INITIAL_SEAL_STAGE);
   const [reviewApi, setReviewApi] = useState<ReviewSealApi | null>(null);
@@ -288,6 +286,8 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
         player: auth.walletAddress,
         battles,
         timingsMs,
+        // The POOL's rule, from its record (Phase B) — never the board's guess.
+        mode: poolMode(pool),
       });
     },
     [pool, auth, rpc]
@@ -301,15 +301,9 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
     timingsMs: readonly number[];
   } | null>(null);
 
-  // Forget the stills of pools whose allocation will never be published
-  // (2026-09-16, data minimisation) — once, when the play page mounts.
-  useEffect(() => {
-    void sweepStills(indexerApi());
-  }, []);
-
   /*
    * C-17 / D-13 (audit 2026-09-11). THE RUN IS THE PLAYER'S WORK, and until
-   * the seal it exists nowhere but inside BattleFlow. Every gate below used
+   * the seal it exists nowhere but inside the board (BoardFlow). Every gate below used
    * to be re-evaluated on every render, so a wallet reconnect, an active-
    * address change, or a balance re-check in the middle of the ninety
    * seconds took the screen away and destroyed all seven allocations with
@@ -355,8 +349,8 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
   }, [lastConfirmed, onConfirm]);
 
   /* The seal controls, drawn on the blender's base while the seven are made
-   * and nothing is in flight. The two steps and the §8.6 line above each are
-   * exactly battle-flow.tsx's — the surface moved, the order did not. */
+   * and nothing is in flight: two steps, the §8.6 line above each — the
+   * same order the board's own unhosted review uses (BoardFlow). */
   const sealControls =
     reviewApi && !revealRun && (stagePhase === 'made' || stagePhase === 'armed') ? (
       stagePhase === 'armed' ? (
@@ -759,8 +753,10 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
         addFunds={auth.addFunds}
         onRecheck={() => setBalanceRun((n) => n + 1)}
       >
-        <BattleFlow
-          poolAddress={pool.pool}
+        {/* The board (founder brief 2026-09-24), under the rule the pool was
+            opened with (Phase B): easy or hard, read from the pool record. */}
+        <BoardFlow
+          mode={poolMode(pool)}
           onConfirm={onConfirm}
           onRunStarted={() => setRunWallet(flowWallet)}
           onReviewApi={onReviewApi}

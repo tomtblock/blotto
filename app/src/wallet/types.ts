@@ -18,8 +18,20 @@ import type { TxSigner } from "@/tx/types";
 
 export type AuthStatus = "initializing" | "signed-out" | "signed-in";
 
-/** Social login providers per D-08 (Google / Apple / X). */
-export type SocialProvider = "google" | "apple" | "twitter";
+/**
+ * Social login providers.
+ *
+ * D-08 named three — Google, Apple and X. **Apple was removed on 2026-09-24**
+ * by founder decision, after a review of the sign-in surface found it had
+ * never worked: the Privy dashboard refuses it (`403 disallowed_login_method`)
+ * and the page said nothing, so a player pressed a button that did nothing at
+ * all. The founder chose removal over enabling it in the dashboard.
+ *
+ * The removal is HERE, in the type, and not only in the button: a provider the
+ * app cannot name is a provider it cannot accidentally offer again from a
+ * second surface.
+ */
+export type SocialProvider = "google" | "twitter";
 
 /**
  * A Solana wallet the browser has REGISTERED (installed extension or in-app
@@ -89,8 +101,8 @@ export interface Auth {
    */
   walletAddress: string | null;
   /**
-   * The address the sign-in provider knows for this account — a Google or
-   * Apple sign-in carries one; a wallet or X sign-in does not, and this is
+   * The address the sign-in provider knows for this account — a Google
+   * sign-in carries one; a wallet or X sign-in does not, and this is
    * null. Read by the one-message opt-in on the sealed screen (round four,
    * 2026-09-17) so a social sign-in is one press; never sent anywhere
    * without the wallet signing the request that carries it.

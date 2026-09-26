@@ -45,6 +45,9 @@ export interface TreasuryChainView {
   /** `Config.open_tiers` — the enablement, without waiting for a
    * `TiersOpened` event that `init_config` never emits. */
   openTiers: readonly boolean[];
+  /** `Config.hard_open_tiers` (Phase B) — the hard ladder's enablement;
+   * all false on a pre-Phase-B account, which has no hard ladder. */
+  hardOpenTiers: readonly boolean[];
   /** `Config.platform_refundable` — players' money in transit (R7). */
   platformRefundableLamports: bigint;
   /** The platform treasury PDA's lamports, as the chain holds them. */
@@ -181,6 +184,7 @@ export async function readTreasuryChainView(
     tierPriceLamports: config.tierPriceLamports,
     tierPotLamports: config.tierPotLamports,
     openTiers: config.openTiers,
+    hardOpenTiers: config.hardOpenTiers,
     platformRefundableLamports: config.platformRefundable,
     // A platform PDA with no lamports is an unfunded treasury, not an error:
     // the account is a system-owned holder and only exists once funded.

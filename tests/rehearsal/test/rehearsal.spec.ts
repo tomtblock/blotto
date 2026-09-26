@@ -142,6 +142,7 @@ describe('the offline dress rehearsal', () => {
       fillDeadline: 0n,
       secretRevealed: false,
       resultsCommitted: false,
+      mode: 0,
       paidMask: 0n,
       payouts: [],
       entrants: LARGEST_REFUNDING_FIELD,

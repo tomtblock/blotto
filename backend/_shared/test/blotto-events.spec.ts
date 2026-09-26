@@ -39,6 +39,9 @@ const b58 = (b: Buffer): string => base58Encode(new Uint8Array(b));
 
 describe('TierSlotFreed (prompt v2 §B.6 — the cooldown stamp)', () => {
   it('decodes tier + pool_id + next_open_at, the times as decimal strings', () => {
+    // The pre-Phase-B shape: no `mode` byte. Every TierSlotFreed devnet
+    // emitted before 2026-09-24 looks like this, and reads as the easy
+    // ladder (`mode: null`) — the only ladder there was.
     const ev = decodeAnchorEvent(
       payload('TierSlotFreed', Buffer.concat([Buffer.from([3]), u64(41n), i64(1_788_929_242n)]))
     );
@@ -48,19 +51,129 @@ describe('TierSlotFreed (prompt v2 §B.6 — the cooldown stamp)', () => {
     expect(ev!.pool_id).to.equal('41');
     expect(ev!.next_open_at).to.equal('1788929242');
     expect(typeof ev!.next_open_at).to.equal('string', 'never a float, never a number');
+    expect(ev!.mode).to.equal(null, 'a pre-Phase-B event carries no mode');
   });
 
-  it('a body with a stray byte is layout drift, not a decode', () => {
+  it('the Phase B shape carries the ladder whose slot freed', () => {
+    const ev = decodeAnchorEvent(
+      payload(
+        'TierSlotFreed',
+        Buffer.concat([Buffer.from([0]), u64(7n), i64(1_788_929_242n), Buffer.from([1])])
+      )
+    );
+    expect(ev!.tier).to.equal(0);
+    expect(ev!.pool_id).to.equal('7');
+    expect(ev!.mode).to.equal(1, 'the hard ladder');
+  });
+
+  it('a body with a byte past `mode` is layout drift, not a decode', () => {
+    // One trailing byte is `mode` now (Phase B appended it); two is drift.
     let undecodable = '';
     const ev = decodeAnchorEvent(
       payload(
         'TierSlotFreed',
-        Buffer.concat([Buffer.from([0]), u64(1n), i64(0n), Buffer.from([0])])
+        Buffer.concat([Buffer.from([0]), u64(1n), i64(0n), Buffer.from([0, 0])])
       ),
       (name) => (undecodable = name)
     );
     expect(ev).to.equal(null);
     expect(undecodable).to.equal('TierSlotFreed');
+  });
+});
+
+/**
+ * Phase B (2026-09-24): the hard ladder. `mode` was APPENDED to three
+ * events a ledger already held at the shorter shape, so each decodes both
+ * shapes — `null` for the old one, never a guess dressed as data — and two
+ * new events carry the ladder's own migration and enablement.
+ */
+describe('the Phase B mode tail on PoolOpened and PoolMigrated', () => {
+  const opened = (tail: Buffer) =>
+    Buffer.concat([
+      key(1), // pool
+      u64(9n), // id
+      Buffer.from([0]), // tier
+      u64(100_000_000n), // entry_lamports
+      u64(4_000_000_000n), // pot_lamports
+      i64(1_788_929_242n), // fill_deadline
+      Buffer.from([15]), // timer_seconds
+      key(2), // sealing_pubkey
+      key(3), // sealing_secret_hash
+      tail,
+    ]);
+
+  it('PoolOpened: the pre-Phase-B shape reads mode null, the new shape reads it', () => {
+    const old = decodeAnchorEvent(payload('PoolOpened', opened(Buffer.alloc(0))));
+    expect(old!.event).to.equal('PoolOpened');
+    expect(old!.id).to.equal('9');
+    expect(old!.sealing_secret_hash).to.equal('03'.repeat(32));
+    expect(old!.mode).to.equal(null);
+    const hard = decodeAnchorEvent(payload('PoolOpened', opened(Buffer.from([1]))));
+    expect(hard!.mode).to.equal(1);
+    const easy = decodeAnchorEvent(payload('PoolOpened', opened(Buffer.from([0]))));
+    expect(easy!.mode).to.equal(0);
+  });
+
+  it('PoolOpened: two trailing bytes is drift', () => {
+    let undecodable = '';
+    const ev = decodeAnchorEvent(
+      payload('PoolOpened', opened(Buffer.from([0, 0]))),
+      (name) => (undecodable = name)
+    );
+    expect(ev).to.equal(null);
+    expect(undecodable).to.equal('PoolOpened');
+  });
+
+  it('PoolMigrated: the 2026-09-13 shape (pool, min_seats) and the Phase B shape (+ mode)', () => {
+    const old = decodeAnchorEvent(payload('PoolMigrated', Buffer.concat([key(4), u16(52)])));
+    expect(old!.event).to.equal('PoolMigrated');
+    expect(old!.min_seats).to.equal(52);
+    expect(old!.mode).to.equal(null);
+    const now = decodeAnchorEvent(
+      payload('PoolMigrated', Buffer.concat([key(4), u16(40), Buffer.from([0])]))
+    );
+    expect(now!.min_seats).to.equal(40);
+    expect(now!.mode).to.equal(0, 'a migrated pool is always easy');
+  });
+});
+
+describe('HardLadderAdded / HardTiersOpened (Phase B)', () => {
+  it('HardLadderAdded carries the migration instant as a decimal string', () => {
+    const ev = decodeAnchorEvent(payload('HardLadderAdded', i64(1_790_000_000n)));
+    expect(ev!.event).to.equal('HardLadderAdded');
+    expect(ev!.migrated_at).to.equal('1790000000');
+  });
+
+  it('HardLadderAdded with a trailing byte is drift', () => {
+    let undecodable = '';
+    const ev = decodeAnchorEvent(
+      payload('HardLadderAdded', Buffer.concat([i64(1n), Buffer.from([0])])),
+      (name) => (undecodable = name)
+    );
+    expect(ev).to.equal(null);
+    expect(undecodable).to.equal('HardLadderAdded');
+  });
+
+  it('HardTiersOpened decodes seven bools in tier order, like TiersOpened', () => {
+    const ev = decodeAnchorEvent(payload('HardTiersOpened', Buffer.from([1, 0, 0, 0, 0, 0, 0])));
+    expect(ev!.event).to.equal('HardTiersOpened');
+    expect(ev!.open_tiers).to.deep.equal([true, false, false, false, false, false, false]);
+  });
+
+  it('HardTiersOpened and TiersOpened carry DIFFERENT discriminators — one ladder is not the other', () => {
+    expect(
+      anchorEventDiscriminator('HardTiersOpened').equals(anchorEventDiscriminator('TiersOpened'))
+    ).to.equal(false);
+  });
+
+  it('six bools is a short body — refused, not padded', () => {
+    let undecodable = '';
+    const ev = decodeAnchorEvent(
+      payload('HardTiersOpened', Buffer.from([1, 0, 0, 0, 0, 0])),
+      (name) => (undecodable = name)
+    );
+    expect(ev).to.equal(null);
+    expect(undecodable).to.equal('HardTiersOpened');
   });
 });
 
@@ -107,7 +220,7 @@ describe('the 2026-09-07 admin events', () => {
     expect(ev!.cooldown_seconds).to.equal('300');
   });
 
-  it('ConfigMigrated carries the keeper and the seeded timings', () => {
+  it('ConfigMigrated (the retired 2026-09-07 migration; devnet holds one) still decodes', () => {
     const ev = decodeAnchorEvent(
       payload('ConfigMigrated', Buffer.concat([key(7), i64(43_200n), i64(300n)]))
     );

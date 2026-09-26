@@ -7,14 +7,13 @@
  * two headers said so after neither was true (audit 2026-09-11, A-25/F-17).
  * Where each actually lives:
  *
- *  - THE INTERACTION is `components/blot/rebalance.ts` — the dial-coupling
- *    rule behind <StatDials />. Dragging stat k to a target re-apportions
- *    the other four proportionally, integer-only, largest-remainder, so the
- *    five values sum to exactly 100 after every pointer event. Its 10,000
- *    random-drag test is in `components/blot/rebalance.test.ts`. The
- *    raw-weight model this file used to carry belonged to the pentagon
- *    radar, which <BlotMorph /> + <StatDials /> replaced; it had no caller
- *    and is gone with it.
+ *  - THE INTERACTION is the battle board's reducer, `battle/board/machine.ts`
+ *    (founder 2026-09-24): every `place` clips to the field's headroom, so
+ *    an easy-mode field can never exceed 100, and the buzzer's even spread
+ *    (`battle/board/spread.ts`) fills what is left. Its 10,000-sequence
+ *    property tests are in `battle/board/machine.test.ts`. (The dials'
+ *    coupling rule, `components/blot/rebalance.ts`, left with the dial run
+ *    on 2026-09-24.)
  *
  *  - THE SUBMISSION-BOUNDARY GUARD is `encodePayload` in
  *    `backend/sealing/src/payload.ts`, reached from `entry/submit.ts` on

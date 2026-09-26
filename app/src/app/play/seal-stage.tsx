@@ -10,15 +10,15 @@
  * the idle loop and the one-shot run, both cut from the same still, so the
  * switch is a crossfade onto a matching frame. The generic Blotts in the
  * scene are the prompt's, never the player's seven — a Blott's silhouette
- * is its allocation (components/blott/warp.ts), and this stage reads no
+ * is its allocation (components/blot/blotGeometry.ts), and this stage reads no
  * allocation at all.
  *
  * Round four (founder 2026-09-17, CHANGE-2026-09-16_ui-uplift.md §E): two
  * columns on a wide screen — the scene in its plum frame on the left, and
  * on the right, tops aligned, the review widget with the §8.6 line and the
  * seal key directly under it; a phone stacks the same pieces. The widget is
- * a SLOT: BattleFlow portals its review into it (`widgetRef`), so the flow
- * keeps owning the seven and their stills. `side` is what the column shows
+ * a SLOT: the board (BoardFlow) portals its review into it (`widgetRef`), so
+ * the flow keeps owning the entry. `side` is what the column shows
  * after the review — the pass, the sealed note, the actions — while the
  * blender stays on screen. Reduced motion: a still of the right moment and
  * no <video>.
@@ -37,6 +37,16 @@ const POSTER_IDLE = '/motion/seal/blender-idle.jpg';
 const POSTER_DONE = '/motion/seal/blender-done.jpg';
 
 export type SealKeyTone = 'action' | 'red';
+
+/**
+ * The flow's handle on the two-step seal while its review sits in this
+ * stage's widget slot: the page draws the seal keys under the slot, and
+ * the second key calls `confirm` on the flow that owns the entry.
+ */
+export interface ReviewSealApi {
+  /** Step two of the two-step seal: confirm — seal and submit. */
+  confirm: () => void;
+}
 
 export function SealStage({
   phase,

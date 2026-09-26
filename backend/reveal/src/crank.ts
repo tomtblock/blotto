@@ -72,6 +72,7 @@ import {
   assignPrizes,
   base58Decode,
   battlesHash,
+  boardModeOf,
   decodeBattleSet,
   decodePayload,
   ExportRefusedError,
@@ -427,12 +428,17 @@ async function assembleBundle(
     );
   }
 
+  // The pool's recorded placing rule (Phase B) decides how every sealed
+  // payload is decoded, hashed and scored. Read from the Pool account —
+  // never from the bytes, and never from the tier.
+  const mode = boardModeOf(pool.mode);
   const { bundleEntries, forDetection, scoringInput, allLosses } = await revealEntries(
     deps.ciphertexts,
     poolId,
     secret,
     chainEntries,
-    step
+    step,
+    mode
   );
 
   // An entry that cannot be decrypted or does not match its on-chain hash is
@@ -463,7 +469,7 @@ async function assembleBundle(
   // The pot is the POOL'S fixed pot (D-A1 revised) — read from chain state,
   // never derived from the entry price.
   const pot = pool.potLamports;
-  const results = assignPrizes(scoreWithMissing(scoringInput), pot);
+  const results = assignPrizes(scoreWithMissing(scoringInput, mode), pot);
   const playerAt = (index: number) => chainEntries[index].player;
   // Published leaf order (rank asc, entry index asc) is built in one place —
   // see ranking.ts, which the next-place driver reuses to prove against the
@@ -478,7 +484,8 @@ async function assembleBundle(
 
   // ---- 4. Assemble the bundle (published at step 7, after the money) ----
   const bundle: RevealBundle = {
-    version: 2,
+    version: 3,
+    mode,
     pool_id: poolId.toString(),
     secret: hex(secret),
     entry_lamports: pool.entryLamports.toString(),

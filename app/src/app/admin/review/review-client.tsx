@@ -19,6 +19,7 @@ import { indexerApi } from '@/data/api';
 import type { EntryRow } from '@/data/types';
 import { useAuth } from '@/wallet/auth-context';
 import { decisionOutcome, type DecisionOutcome } from './decision-outcome';
+import { ComplaintsPanel } from './complaints-panel';
 import { detectionRequestMessage } from './detection-request';
 
 const REVIEW_API = process.env.NEXT_PUBLIC_REVIEW_API_URL;
@@ -417,6 +418,12 @@ export function ReviewClient() {
           </div>
         )}
       </div>
+
+      {/* The complaints desk. Its own module because it reads and writes a
+          different record from the decision log above, through a different
+          route, and shares nothing with it but this page and the reviewer
+          gate on the door. */}
+      <ComplaintsPanel />
 
       {log.length > 0 && (
         <div>

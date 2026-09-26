@@ -57,7 +57,8 @@ const DERIVED: ReadonlyArray<{ table: string; key: readonly string[] }> = [
   { table: 'payouts', key: ['pool', 'rank'] },
   { table: 'profiles', key: ['player'] },
   { table: 'player_history', key: ['pool', 'player'] },
-  { table: 'tier_status', key: ['tier'] },
+  // Keyed per ladder since Phase B (migration 0025).
+  { table: 'tier_status', key: ['tier', 'mode'] },
 ];
 
 /**

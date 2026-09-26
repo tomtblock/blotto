@@ -57,6 +57,11 @@ export interface ChainPoolView {
   /** Seat-sorted committed payout list; empty until committed. */
   payouts: CommittedPayout[];
   entrants: number;
+  /** `Pool.mode` (Phase B, 2026-09-24): 0 easy, 1 hard — the placing rule
+   * the pool was opened under. The program records it and reads it for
+   * nothing; the engine that settles the pool is what it is for. A pool
+   * from before the field (a pre-Phase-B account) reads 0. */
+  mode: number;
 }
 
 /** What the daemon reads from `Config` each tick. */
@@ -92,6 +97,17 @@ export interface ChainConfigView {
   /** Per tier: the earliest unix second its next pool may open; 0n = the
    * tier never settled a pool. */
   tierNextOpenAt: bigint[];
+  /**
+   * Phase B (2026-09-24): the HARD ladder — its own enablement switch
+   * (`set_hard_open_tiers`), live slot and cooldown clock per tier, sharing
+   * the tier's price, pot and ceiling with the easy ladder above. False /
+   * zero everywhere on a pre-Phase-B account (`hardLadderPresent` false),
+   * which is exact: a program with no hard ladder has no open hard tier.
+   */
+  hardLadderPresent: boolean;
+  hardOpenTiers: boolean[];
+  hardActivePoolByTier: bigint[];
+  hardTierNextOpenAt: bigint[];
 }
 
 export interface ChainEntryView {
@@ -243,12 +259,14 @@ export interface KeeperChain extends SettlementChain {
   getConfig(): Promise<ChainConfigView>;
   /** `open_pool`: KEEPER-signed (prompt v2 §A — `Config.keeper` and nobody
    * else since 2026-09-07); `poolId` must equal `nextPoolId`; refused while
-   * the tier cools down. */
+   * the tier cools down. `mode` (Phase B, the appended argument) picks the
+   * ladder: 0 easy, 1 hard — each (mode, tier) has its own slot and clock. */
   openPool(
     poolId: bigint,
     tier: number,
     sealingPubkey: Uint8Array,
-    sealingSecretHash: Uint8Array
+    sealingSecretHash: Uint8Array,
+    mode: number
   ): Promise<void>;
   /** `commit_vrf_seed`: permissionless, write-once, Open pools only.
    * `randomnessAccount` is the Switchboard Randomness account (base58); the
@@ -556,7 +574,7 @@ export class FakeChain implements KeeperChain {
       // Sequential pools (D-A1 revised): Paid frees the tier's slot and
       // releases the pot from the treasury's book-keeping.
       this.reserved -= p.potLamports;
-      this.clearActiveSlot(poolId, p.tier);
+      this.clearActiveSlot(poolId, p.tier, p.mode);
     }
   }
 
@@ -762,7 +780,7 @@ export class FakeChain implements KeeperChain {
     this.platform += p.potLamports;
     this.reserved -= p.potLamports;
     // Sequential pools: the slot frees only when the pool CLOSES.
-    if (p.state === 'Closed') this.clearActiveSlot(poolId, p.tier);
+    if (p.state === 'Closed') this.clearActiveSlot(poolId, p.tier, p.mode);
   }
 
   async refund(poolId: bigint, player: string): Promise<void> {
@@ -780,7 +798,7 @@ export class FakeChain implements KeeperChain {
     if (contribution > 0n) this.refundableByPool.set(key, contribution - p.entryLamports);
     if ((this.entries.get(key) ?? []).every((x) => x.refunded)) {
       p.state = 'Closed';
-      this.clearActiveSlot(poolId, p.tier);
+      this.clearActiveSlot(poolId, p.tier, p.mode);
     }
   }
 
@@ -795,6 +813,9 @@ export class FakeChain implements KeeperChain {
       tierPriceLamports: [...this.config.tierPriceLamports],
       tierPotLamports: [...this.config.tierPotLamports],
       tierNextOpenAt: [...this.config.tierNextOpenAt],
+      hardOpenTiers: [...this.config.hardOpenTiers],
+      hardActivePoolByTier: [...this.config.hardActivePoolByTier],
+      hardTierNextOpenAt: [...this.config.hardTierNextOpenAt],
       platformReserved: this.reserved,
       platformRefundable: this.refundable,
     };
@@ -851,26 +872,53 @@ export class FakeChain implements KeeperChain {
       fillDeadlineSeconds: DEFAULT_FILL_DEADLINE_SECS,
       cooldownSeconds: DEFAULT_COOLDOWN_SECS,
       tierNextOpenAt: [0n, 0n, 0n, 0n, 0n, 0n, 0n],
+      // Phase B: the hard ladder starts fully disabled (admin.rs), like the
+      // program's `init_config`.
+      hardLadderPresent: true,
+      hardOpenTiers: [false, false, false, false, false, false, false],
+      hardActivePoolByTier: [0n, 0n, 0n, 0n, 0n, 0n, 0n],
+      hardTierNextOpenAt: [0n, 0n, 0n, 0n, 0n, 0n, 0n],
     };
+  }
+
+  /** The admin's `set_hard_open_tiers` (Phase B): the hard ladder's switch,
+   * with the same restamp-on-enable rule as `set_open_tiers`. */
+  setHardOpenTiers(openTiers: boolean[]): void {
+    const cfg = this.config;
+    if (!cfg) throw new Error('config account not found');
+    const now = this.now();
+    openTiers.forEach((enabled, t) => {
+      if (enabled && !cfg.hardOpenTiers[t]) {
+        cfg.hardTierNextOpenAt[t] = cfg.hardTierNextOpenAt[t] > now ? cfg.hardTierNextOpenAt[t] : now;
+      }
+    });
+    cfg.hardOpenTiers = [...openTiers];
   }
 
   async openPool(
     poolId: bigint,
     tier: number,
     sealingPubkey: Uint8Array,
-    sealingSecretHash: Uint8Array
+    sealingSecretHash: Uint8Array,
+    mode: number
   ): Promise<void> {
     const cfg = this.config;
     if (!cfg) throw new Error('config account not found');
     if (poolId !== cfg.nextPoolId) throw new Error('WrongPoolId');
     if (tier < 0 || tier >= cfg.openTiers.length) throw new Error('UnknownTier');
-    if (!cfg.openTiers[tier]) throw new Error('TierNotOpen');
-    if (cfg.activePoolByTier[tier] !== 0n) throw new Error('TierAlreadyHasOpenPool');
+    // Phase B: the mode is checked before any per-mode read (open_pool.rs).
+    if (mode !== 0 && mode !== 1) throw new Error('UnknownMode');
+    const hard = mode === 1;
+    const openTiers = hard ? cfg.hardOpenTiers : cfg.openTiers;
+    const active = hard ? cfg.hardActivePoolByTier : cfg.activePoolByTier;
+    const nextOpen = hard ? cfg.hardTierNextOpenAt : cfg.tierNextOpenAt;
+    if (!openTiers[tier]) throw new Error('TierNotOpen');
+    if (active[tier] !== 0n) throw new Error('TierAlreadyHasOpenPool');
     // Prompt v2 §B.6 / §A: the cooldown, then the keeper gate (open_pool.rs,
     // in the program's order). Keeper-only with no time-based exception since
     // the founder ruling of 2026-09-07 — audit O9b.
     const now = this.now();
-    const nextOpenAt = cfg.tierNextOpenAt[tier];
+    const nextOpenAt = nextOpen[tier];
     if (now < nextOpenAt) throw new Error('TierCoolingDown');
     if (this.opener !== cfg.keeper) throw new Error('NotKeeper');
     // The treasury policy gate (open_pool.rs): available = balance minus
@@ -891,7 +939,10 @@ export class FakeChain implements KeeperChain {
     const cushion = this.vaultCushionLamports;
     const available = this.platform - this.refundable;
     const needed =
-      pot + cushion + cfg.treasuryMinPlatformLamports + idleTierReserve(await this.getConfig(), tier, cushion);
+      pot +
+      cushion +
+      cfg.treasuryMinPlatformLamports +
+      idleTierReserve(await this.getConfig(), { tier, mode }, cushion);
     if (available < needed) throw new Error('TreasuryShortfall');
     // Fund the pot AND the cushion: treasury → the pool's prize vault,
     // before any entry. Only the pot is `reserved` — the cushion is not
@@ -913,6 +964,8 @@ export class FakeChain implements KeeperChain {
       paidMask: 0n,
       payouts: [],
       entrants: 0,
+      // Recorded at open, never rewritten (state.rs `Pool.mode`).
+      mode,
     });
     this.entries.set(poolId.toString(), []);
     this.openedWith.set(poolId.toString(), {
@@ -920,7 +973,7 @@ export class FakeChain implements KeeperChain {
       secretHash: sealingSecretHash.slice(),
     });
     cfg.nextPoolId += 1n;
-    cfg.activePoolByTier[tier] = poolId;
+    active[tier] = poolId;
   }
 
   async commitVrfSeed(poolId: bigint, _randomnessAccount: string): Promise<void> {
@@ -956,11 +1009,16 @@ export class FakeChain implements KeeperChain {
     this.refundableByPool.delete(poolId.toString());
   }
 
-  /** `slot.rs::free_tier_slot`: clear the slot and stamp the cooldown. */
-  private clearActiveSlot(poolId: bigint, tier: number): void {
-    if (this.config && this.config.activePoolByTier[tier] === poolId) {
-      this.config.activePoolByTier[tier] = 0n;
-      this.config.tierNextOpenAt[tier] = this.now() + this.config.cooldownSeconds;
+  /** `slot.rs::free_tier_slot`: clear the pool's OWN ladder's slot (its
+   * recorded mode decides — an easy pool can never free the hard slot) and
+   * stamp that ladder's cooldown. */
+  private clearActiveSlot(poolId: bigint, tier: number, mode: number): void {
+    if (!this.config) return;
+    const active = mode === 1 ? this.config.hardActivePoolByTier : this.config.activePoolByTier;
+    const nextOpen = mode === 1 ? this.config.hardTierNextOpenAt : this.config.tierNextOpenAt;
+    if (active[tier] === poolId) {
+      active[tier] = 0n;
+      nextOpen[tier] = this.now() + this.config.cooldownSeconds;
     }
   }
 }

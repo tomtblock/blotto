@@ -27,7 +27,7 @@ const T0 = Date.parse('2026-09-06T02:00:00Z');
 
 function report(errors = 0): TickReport {
   return {
-    opened: [{ poolId: 1n, tier: 0 }],
+    opened: [{ poolId: 1n, tier: 0, mode: 0 }],
     cranked: [],
     refundsTriggered: [],
     sealedAtDeadline: [],

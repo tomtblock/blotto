@@ -373,3 +373,22 @@ of them has been superseded.
   columns. Logs and alerts carry truncated identifiers only.
 - **Designed, deferred, on the record:** appeal grounds private to reviewers; the timings and device
   marker sealed to a per-pool detection key. Both in `docs/CHANGE-2026-09-16_data-minimisation.md` §8.
+
+### Two placing rules (§2, §3, §5, §6) — added 2026-09-25
+
+- **§2's "an allocation is `[u8; 5]` summing to 100" is the EASY rule only.** Since Phase B
+  (D-E17, built 2026-09-25) a pool carries `Pool.mode` (0 easy, 1 hard; the last byte of an
+  850-byte account) and a HARD pool's rule is that the board's thirty-five stats sum to 700, any
+  stat in `[0, 700]`. The hard encoding is 35 × `u16` little-endian (70 bytes); the commitment is
+  `sha256(mode's canonical bytes ‖ salt)`, so §3.3's `battles_hash` and §5's sealed payload (127
+  bytes easy, 162 hard) are per mode. The comparison and the ranking in §6 are unchanged and
+  mode-blind (a 5–0 sweep is possible in hard, since a battle may hold nothing).
+- **§3's `Config` carries a second ladder.** `hard_open_tiers`, `hard_active_pool_by_tier` and
+  `hard_tier_next_open_at` (603 bytes, appended); `open_pool` takes `mode`; `set_hard_open_tiers`
+  is the hard ladder's own founder switch; `idle_tier_reserve` counts both ladders. Events:
+  `PoolOpened.mode`, `TierSlotFreed.mode`, `PoolMigrated.mode`, `HardLadderAdded`,
+  `HardTiersOpened`.
+- **The published bundle is version 3** and names `mode`; a version-2 bundle reads as easy.
+- **The evidence** for the hard rule is `docs/skill-evidence/hard/REPORT.md`; the window that
+  deploys all of it is `docs/RUNBOOK_phase-b-window.md`.
+

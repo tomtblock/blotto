@@ -23,7 +23,14 @@
  * Pure module: no I/O, no Date, no randomness.
  */
 
-import { BATTLES, STATS, type Allocation, type BattleSet, assertBattleSet } from './allocation';
+import {
+  BATTLES,
+  STATS,
+  type Allocation,
+  type BattleSet,
+  type BoardMode,
+  assertBattleSet,
+} from './allocation';
 import { PAID_RANKS, PRIZE_BANDS_1024 } from './prizes';
 
 export type BattleOutcome = 'win' | 'loss' | 'draw';
@@ -37,7 +44,12 @@ export interface BattleComparison {
   statsB: number;
 }
 
-/** Compare one battle (PID §4.4). */
+/**
+ * Compare one battle (PID §4.4). Mode-blind on purpose: the rule is the same
+ * whether each battle carried 100 or the board carried 700 — a stat is won
+ * by the larger number, a battle by three or more stats. (In hard mode a
+ * 5–0 sweep is possible, since a battle need not hold any points at all.)
+ */
 export function compareBattle(a: Allocation, b: Allocation): BattleComparison {
   let statsA = 0;
   let statsB = 0;
@@ -73,10 +85,12 @@ export interface PlayerResult {
 /**
  * Score a whole pool. `players[i]` is seat i's battle set. Returns one
  * result per player, in seat order, with shared competition ranks and
- * `amountLamports` still 0n (see `assignPrizes`).
+ * `amountLamports` still 0n (see `assignPrizes`). `mode` decides which
+ * placing rule every set is validated against (Phase B); the comparison
+ * and the ranking are the same in both.
  */
-export function scorePool(players: readonly BattleSet[]): PlayerResult[] {
-  for (const p of players) assertBattleSet(p as readonly (readonly number[])[]);
+export function scorePool(players: readonly BattleSet[], mode: BoardMode = 'easy'): PlayerResult[] {
+  for (const p of players) assertBattleSet(p as readonly (readonly number[])[], mode);
   const n = players.length;
   const scoreHalf = new Array<number>(n).fill(0);
   const zones = new Array<number>(n).fill(0);

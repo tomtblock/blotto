@@ -78,7 +78,7 @@ describe('the security headers', () => {
     // The auth provider's embedded-wallet iframe.
     expect(csp.get('frame-src')).toMatch(/auth\.privy\.io/);
     // Wallet-standard wallets register their icons as data URIs; the
-    // lock-in stills and the montage are canvas blobs.
+    // character pass card is a canvas blob (app/play/compose-pass.ts).
     expect(csp.get('img-src')).toMatch(/data:/);
     expect(csp.get('img-src')).toMatch(/blob:/);
     // Next's framework bootstrap is inline (see the config's note on the

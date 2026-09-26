@@ -74,6 +74,7 @@ import type { KeeperChain, PoolStateName } from './chain';
 import type { PublishedBundleStore } from './published-store';
 import { planNextPlace, payNextPlacePortions, type NextPlacePaid } from './next-place';
 import { recomputeRanking } from './ranking';
+import { boardModeOf } from './deps';
 import { nextOpenable, type TierPoolStates } from './treasury';
 import type { CrankOutcome } from './crank';
 import type { CiphertextStore, PoolKeyCustody } from './deps';
@@ -178,8 +179,8 @@ export interface DaemonError {
 }
 
 export interface TickReport {
-  /** Pools opened this tick, with their tier. */
-  opened: { poolId: bigint; tier: number }[];
+  /** Pools opened this tick, with their tier and ladder (0 easy, 1 hard). */
+  opened: { poolId: bigint; tier: number; mode: number }[];
   /** Pools the crank ran for, with the state each rested at. */
   cranked: { poolId: bigint; finalState: string }[];
   /** Open pools past deadline whose refund fork this tick triggered (fewer
@@ -383,7 +384,8 @@ export function makeDaemon(deps: DaemonDeps): Daemon {
           entries,
           pool.entrants,
           pool.potLamports,
-          pool.resultsRootHex ?? null
+          pool.resultsRootHex ?? null,
+          boardModeOf(pool.mode)
         );
         const committedSeats = pool.payouts.map((p) => p.entryIndex);
         for (const f of forfeited) {
@@ -497,12 +499,14 @@ export function makeDaemon(deps: DaemonDeps): Daemon {
     }
 
     // ---- KEEP: complete launch steps on every live Open pool -------------
-    for (let tier = 0; tier < cfg.openTiers.length; tier++) {
-      const active = cfg.activePoolByTier[tier];
+    // Both ladders (Phase B): a hard pool needs its VRF seed and collection
+    // exactly as an easy one does.
+    for (const active of [...cfg.activePoolByTier, ...cfg.hardActivePoolByTier]) {
       if (active === 0n) continue;
       try {
         await completeLaunch(active, report);
       } catch (e) {
+        const tier = (await deps.chain.getPool(active)).tier;
         report.errors.push({ action: 'keeper', tier, message: String(e) });
         log('keeper:failed', { tier, error: String(e) });
       }
@@ -519,19 +523,21 @@ export function makeDaemon(deps: DaemonDeps): Daemon {
           // fills a slot, and a concurrent daemon may have moved both.
           const cur = await deps.chain.getConfig();
           const balance = await deps.chain.getPlatformBalance();
-          const states: TierPoolStates = await Promise.all(
-            cur.activePoolByTier.map(async (id): Promise<PoolStateName | 'none'> => {
-              if (id === 0n) return 'none';
-              return (await deps.chain.getPool(id)).state;
-            })
+          const stateOf = async (id: bigint): Promise<PoolStateName | 'none'> => {
+            if (id === 0n) return 'none';
+            return (await deps.chain.getPool(id)).state;
+          };
+          const states: TierPoolStates = await Promise.all(cur.activePoolByTier.map(stateOf));
+          const hardStates: TierPoolStates = await Promise.all(
+            cur.hardActivePoolByTier.map(stateOf)
           );
           // The cushion is the program's own rent figure, read from the
           // cluster: `open_pool` funds pot + cushion and counts both in
           // `needed`, so a mirror without it sends an open the program
           // refuses (2026-09-12).
           const cushion = await deps.chain.vaultCushion();
-          const verdict = nextOpenable(cur, balance, states, deps.now(), cushion);
-          if (verdict.tier === null) {
+          const verdict = nextOpenable(cur, balance, states, deps.now(), cushion, hardStates);
+          if (verdict.tier === null || verdict.mode === null) {
             log('keeper:hold', { reason: verdict.reason });
             // §2.2: a tier skipped because it is not open is the launch
             // posture working; the same silence from a shortfall or a stuck
@@ -540,13 +546,14 @@ export function makeDaemon(deps: DaemonDeps): Daemon {
             break;
           }
           const tier = verdict.tier;
+          const mode = verdict.mode;
           const poolId = cur.nextPoolId;
           const key =
             (await deps.custody.getPublishedKey(poolId)) ??
             (await deps.custody.createPoolKey(poolId));
-          await deps.chain.openPool(poolId, tier, key.publicKey, key.secretHash);
-          report.opened.push({ poolId, tier });
-          log('open_pool', { poolId: poolId.toString(), tier, reason: verdict.reason });
+          await deps.chain.openPool(poolId, tier, key.publicKey, key.secretHash, mode);
+          report.opened.push({ poolId, tier, mode });
+          log('open_pool', { poolId: poolId.toString(), tier, mode, reason: verdict.reason });
           await completeLaunch(poolId, report);
         } catch (e) {
           report.errors.push({ action: 'keeper', tier: -1, message: String(e) });

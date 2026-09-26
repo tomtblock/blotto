@@ -72,8 +72,11 @@ const ERR_DID_NOT_DESERIALIZE = 102;
 const ERR_FALLBACK_NOT_FOUND = 101;
 
 /** `Config::SPACE` in programs/blotto_cup/src/state.rs (8 + LEN) since the
- * 2026-09-07 upgrade; the pre-migration account is `CONFIG_SPACE_V1`. */
-const CONFIG_SPACE = 484;
+ * Phase B upgrade (2026-09-24); `CONFIG_SPACE_V2` is the 2026-09-07 size the
+ * live account holds until the Phase B `migrate_config` runs, and
+ * `CONFIG_SPACE_V1` the original. */
+const CONFIG_SPACE = 603;
+const CONFIG_SPACE_V2 = 484;
 const CONFIG_SPACE_V1 = 380;
 
 // ---------------------------------------------------------------------------
@@ -168,6 +171,12 @@ function adminChecks(somePubkey: PublicKey): WireCheck[] {
       signature: 'fill_deadline_seconds: i64, cooldown_seconds: i64',
       args: Buffer.concat([i64le(43_200n), i64le(300n)]),
     },
+    // Phase B (2026-09-24): the hard ladder's own switch.
+    {
+      name: 'set_hard_open_tiers',
+      signature: 'open_tiers: [bool; N_TIERS]',
+      args: Buffer.concat(Array.from({ length: N_TIERS }, () => boolb(false))),
+    },
   ];
 }
 
@@ -177,14 +186,15 @@ function i64le(v: bigint): Buffer {
   return b;
 }
 
-/** `migrate_config(keeper)` — its own account list (admin mut, config as an
- *  UncheckedAccount, the System Program). A live post-migration account
- *  reverts with ConfigAlreadyMigrated, which is a pass here. */
-function migrateConfigCheck(keeper: PublicKey): WireCheck {
+/** `migrate_config()` — its own account list (admin mut, config as an
+ *  UncheckedAccount, the System Program). No argument since Phase B (the
+ *  V2 → V3 growth). A live post-migration account reverts with
+ *  ConfigAlreadyMigrated, which is a pass here. */
+function migrateConfigCheck(_keeper: PublicKey): WireCheck {
   return {
     name: 'migrate_config',
-    signature: 'keeper: Pubkey',
-    args: keeper.toBuffer(),
+    signature: '(no arguments)',
+    args: Buffer.alloc(0),
   };
 }
 
@@ -405,9 +415,11 @@ async function checkConfigAccount(
     ok,
     detail: ok
       ? `${info.data.length} bytes — matches Config::SPACE`
-      : info.data.length === CONFIG_SPACE_V1
-        ? `${info.data.length} bytes — the PRE-MIGRATION layout: run \`admin.ts migrate-config\` (runbook step 3b)`
-        : `${info.data.length} bytes on chain, source says Config::SPACE = ${CONFIG_SPACE}`,
+      : info.data.length === CONFIG_SPACE_V2
+        ? `${info.data.length} bytes — the PRE-PHASE-B layout: run \`admin.ts migrate-config\` after the upgrade (docs/RUNBOOK_phase-b-window.md)`
+        : info.data.length === CONFIG_SPACE_V1
+          ? `${info.data.length} bytes — the original layout, which no current program can grow`
+          : `${info.data.length} bytes on chain, source says Config::SPACE = ${CONFIG_SPACE}`,
   };
 }
 

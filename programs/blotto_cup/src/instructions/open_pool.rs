@@ -17,10 +17,13 @@
 //!      EXISTING pool stay permissionless, and those are the properties that
 //!      actually protect players. So the fallback bought very little and
 //!      risked everything, and it is gone;
-//!   1. the tier is enabled (R6 switch);
-//!   2. the tier's previous pool reached `Paid` or `Closed` (SEQUENTIAL
-//!      pools per tier — the `active_pool_by_tier` slot clears only there)
-//!      AND its cooldown has elapsed (`tier_next_open_at`, prompt v2 §B.6);
+//!   1. the tier is enabled for the pool's MODE (R6 switch; the hard ladder
+//!      has its own switch since Phase B, founder rulings 2026-09-24);
+//!   2. the tier's previous pool OF THAT MODE reached `Paid` or `Closed`
+//!      (SEQUENTIAL pools per tier per mode — the slot clears only there)
+//!      AND its cooldown has elapsed (`tier_next_open_at` or its hard twin,
+//!      prompt v2 §B.6). An easy pool and a hard pool at one tier are two
+//!      pools with two slots, so both can be Open at once;
 //!   3. the D2 ceiling caps the pool's pass sales (price × 64);
 //!   4. the treasury policy holds: after funding this pot, the treasury
 //!      still has `min` + `reserve_pots` further pots of every OTHER
@@ -40,7 +43,7 @@
 
 use anchor_lang::prelude::*;
 
-use crate::constants::{CAPACITY, LAUNCH_CLASS_COUNTERS, MIN_SEATS, TIMER_SECONDS};
+use crate::constants::{CAPACITY, LAUNCH_CLASS_COUNTERS, MIN_SEATS, N_MODES, TIMER_SECONDS};
 use crate::error::ErrorCode;
 use crate::events::PoolOpened;
 use crate::instructions::treasury::idle_tier_reserve;
@@ -94,6 +97,7 @@ pub fn handle_open_pool(
     tier: u8,
     sealing_pubkey: [u8; 32],
     sealing_secret_hash: [u8; 32],
+    mode: u8,
 ) -> Result<()> {
     // Gapless ids: the argument exists only because PDA seeds need it.
     require!(
@@ -103,20 +107,24 @@ pub fn handle_open_pool(
 
     let tier_idx = tier as usize;
     require!(tier_idx < crate::constants::N_TIERS, ErrorCode::UnknownTier);
-    // R6: a tier must be opened by the founder before pools exist in it.
+    // Phase B: the placing rule is recorded, never guessed. Checked before
+    // any per-mode read so an unknown byte can never alias the easy ladder.
+    require!(mode < N_MODES, ErrorCode::UnknownMode);
+    // R6: a tier must be opened by the founder before pools exist in it —
+    // per mode since Phase B (`set_open_tiers` / `set_hard_open_tiers`).
     require!(
-        ctx.accounts.config.open_tiers[tier_idx],
+        ctx.accounts.config.open_tiers_for(mode)[tier_idx],
         ErrorCode::TierNotOpen
     );
-    // D-A1 v2: SEQUENTIAL pools per tier — the slot clears only when the
-    // previous pool reaches Paid or Closed.
+    // D-A1 v2: SEQUENTIAL pools per tier (per mode) — the slot clears only
+    // when the previous pool of this mode reaches Paid or Closed.
     require!(
-        ctx.accounts.config.active_pool_by_tier[tier_idx] == 0,
+        ctx.accounts.config.active_pool(mode, tier_idx) == 0,
         ErrorCode::TierAlreadyHasOpenPool
     );
     // Prompt v2 §B.6: the cooldown stamped when the slot freed.
     let now = Clock::get()?.unix_timestamp;
-    let next_open_at = ctx.accounts.config.tier_next_open_at[tier_idx];
+    let next_open_at = ctx.accounts.config.next_open_at(mode, tier_idx);
     require!(now >= next_open_at, ErrorCode::TierCoolingDown);
     // Prompt v2 §A.2, as amended by the founder ruling of 2026-09-07: the
     // KEEPER opens pools, and nobody else, ever. See the module doc for why
@@ -158,7 +166,7 @@ pub fn handle_open_pool(
         .ok_or(ErrorCode::Overflow)?;
     let needed = funding
         + (ctx.accounts.config.treasury_min_platform_lamports as u128)
-        + (idle_tier_reserve(&ctx.accounts.config, Some(tier_idx), cushion) as u128);
+        + (idle_tier_reserve(&ctx.accounts.config, Some((mode, tier_idx)), cushion) as u128);
     require!(available >= needed, ErrorCode::TreasuryShortfall);
 
     // Fund the pot: treasury → this pool's prize vault, locked before any
@@ -212,6 +220,9 @@ pub fn handle_open_pool(
     // upgrade drain gate does not hold for `Open` pools, so that is a real
     // sequence rather than a theoretical one (see `state.rs`).
     pool.min_seats = MIN_SEATS;
+    // Phase B: the placing rule, recorded once and never rewritten — the
+    // same guarantee `min_seats` and `fill_deadline` give.
+    pool.mode = mode;
     pool.bump = ctx.bumps.pool;
     pool.vault_bump = ctx.bumps.vault;
 
@@ -219,7 +230,7 @@ pub fn handle_open_pool(
         .next_pool_id
         .checked_add(1)
         .ok_or(ErrorCode::Overflow)?;
-    config.active_pool_by_tier[tier_idx] = pool_id;
+    config.set_active_pool(mode, tier_idx, pool_id);
 
     emit!(PoolOpened {
         pool: pool.key(),
@@ -231,6 +242,7 @@ pub fn handle_open_pool(
         timer_seconds: pool.timer_seconds,
         sealing_pubkey,
         sealing_secret_hash,
+        mode,
     });
 
     Ok(())

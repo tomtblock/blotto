@@ -26,6 +26,11 @@ pub struct PoolOpened {
     pub timer_seconds: u8,
     pub sealing_pubkey: [u8; 32],
     pub sealing_secret_hash: [u8; 32],
+    /// The placing rule (`MODE_EASY` / `MODE_HARD`) — APPENDED by Phase B
+    /// (founder rulings 2026-09-24). Every `PoolOpened` already in a ledger
+    /// was emitted without it; the decoder reads it only when the byte is
+    /// there and reports 0 otherwise, which is the rule those pools played.
+    pub mode: u8,
 }
 
 // `PoolVrfSeeded` and `PassCollectionCreated` are declared beside their
@@ -88,6 +93,8 @@ pub struct TierSlotFreed {
     pub tier: u8,
     pub pool_id: u64,
     pub next_open_at: i64,
+    /// Which ladder's slot (Phase B, appended; absent = easy).
+    pub mode: u8,
 }
 
 #[event]
@@ -209,7 +216,28 @@ pub struct ConfigMigrated {
 #[event]
 pub struct PoolMigrated {
     pub pool: Pubkey,
+    /// The floor written, or the floor the pool already carried when only
+    /// `mode` was missing.
     pub min_seats: u16,
+    /// Always `MODE_EASY` (Phase B, appended): a pool that predates the
+    /// field played easy.
+    pub mode: u8,
+}
+
+/// Phase B (founder rulings 2026-09-24): `migrate_config` grew Config with
+/// the hard ladder's slots, all tiers disabled, every hard cooldown stamped
+/// `migrated_at`.
+#[event]
+pub struct HardLadderAdded {
+    pub migrated_at: i64,
+}
+
+/// Hard-tier enablement (`set_hard_open_tiers`) — the hard twin of
+/// `TiersOpened`, for the same reason: the ledger must be able to tell an
+/// enabled-idle hard tier from a disabled one.
+#[event]
+pub struct HardTiersOpened {
+    pub open_tiers: [bool; crate::constants::N_TIERS],
 }
 
 #[event]

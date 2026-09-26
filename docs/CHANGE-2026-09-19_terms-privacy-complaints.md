@@ -1,9 +1,15 @@
 # CHANGE — 2026-09-19: terms of service, privacy notice, complaints route, retiring the reviewer
 
-**Status: report written from the branch `step/terms-privacy-complaints-2026-09-19`.** Built to
-`BRIEF_terms-privacy-complaints.md`. Every player-facing string is a **draft** carrying a
-`PHASE-N-REVIEW` note: brand voice and all user-facing language are founder-reserved, and both
-documents need counsel before real money moves.
+**Status: merged as #160.** Built to `BRIEF_terms-privacy-complaints.md`.
+
+**The voice was ratified by the founder on 2026-09-22**, after reading the rendered pages, and the
+`PHASE-N-REVIEW` draft markers in `app/src/copy/terms.ts` and `privacy.ts` were replaced with that
+ratification. The wording is now the published wording: changing it is a change to the agreement,
+not a tidy-up, and the substance moving means `config/terms.json` bumps again.
+
+**Ratifying how it reads did not ratify that it is sound in law.** Counsel has still not reviewed
+the liability cap, the governing-law clause, the refusal clause's enumerated grounds or any
+retention period, and the operator is still not named.
 
 **The documents are in the repository and the pages render, but the draft status is recorded HERE
 and not on the page.** A page that announced itself as an unreviewed draft would be worse than one

@@ -51,6 +51,7 @@ import {
 } from '../../reveal/node_modules/@solana/web3.js';
 import { loadPostgresConfig, parsePositiveInt } from '../../_shared/src/config';
 import { resolveRpcUrl } from '../../_shared/src/cluster';
+import { urlForLog } from '../../_shared/src/short';
 import { createPool } from '../../_shared/src/db';
 import { loadHygieneConfig } from '../../_shared/src/http-hygiene';
 import { buildMonitor, loadMonitor } from '../../_shared/src/monitor';
@@ -189,8 +190,11 @@ export function main(env: NodeJS.ProcessEnv = process.env): void {
         `review window closes).`
     );
   }
+  // `urlForLog`, never the raw url: the RPC url carries its API key in the
+  // query string, this line runs on EVERY boot, and `backend-status` copies
+  // the log into a GitHub Actions log that is retained (devnet, 2026-09-24).
   console.log(
-    `${SERVICE}: chain = ${rpcUrl} program ${env.BLOTTO_PROGRAM_ID ?? DEFAULT_PROGRAM_ID}`
+    `${SERVICE}: chain = ${urlForLog(rpcUrl)} program ${env.BLOTTO_PROGRAM_ID ?? DEFAULT_PROGRAM_ID}`
   );
   console.log(
     `${SERVICE}: reviewer budget = ${budget.actions} decisions per ${budget.windowMs}ms ` +

@@ -13,11 +13,12 @@
 #                    mode, at 375px and 1280px (audit 2026-09-11, G-20 / A-33)
 #   gitleaks       — the checkout AND the git history, pinned binary,
 #                    checksum-verified
-#   standing-rules — thirteen checks, in this order: the PID §8.7 language gate,
+#   standing-rules — fourteen checks, in this order: the PID §8.7 language gate,
 #                    the structural greps, the founder's territory schedule,
 #                    the operator identity behind the terms and privacy notice,
 #                    the wallet blocklist's recorded grounds, the published
-#                    numbers against the program's constants, the fill
+#                    numbers against the program's constants, the app's dead
+#                    files (no route reaches them), the fill
 #                    simulation's self-test, the upgrade pre-flight's verdict,
 #                    the env-example coverage check, the container-user check,
 #                    the Python oracles' fixtures, the Rust↔TypeScript mirror
@@ -513,6 +514,16 @@ jobs:
       # landing page spelled it.
       - name: Published numbers match the program (PID §8.6)
         run: npx --yes tsx@4.20.3 scripts/check-published-numbers.ts
+
+      # Every app source file must be reachable from a route Next serves, or
+      # be declared in the script with its reason (founder 2026-09-24:
+      # "the cleanliness of this repo is very important"). When the board
+      # replaced the dials, ~4,000 lines nothing could reach sat in the tree
+      # and every gate here stayed green, because none asks whether code is
+      # still RUN. Reads app/src as text, so nothing needs installing; it
+      # self-tests before reporting, like its neighbours.
+      - name: No dead app files (2026-09-24)
+        run: npx --yes tsx@4.20.3 scripts/check-dead-files.ts
 
       - name: The fill simulation still models the rule (§5.2)
         run: npx --yes tsx@4.20.3 scripts/sim/fill-replay.ts --self-test

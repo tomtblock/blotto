@@ -93,6 +93,9 @@ export function projectEvent(e: DecodedEvent): ProjectionOp[] {
             timer_seconds: e.timer_seconds,
             sealing_pubkey: e.sealing_pubkey,
             sealing_secret_hash: e.sealing_secret_hash,
+            // Phase B: the placing rule (0025). A pre-Phase-B event carries
+            // no byte and decodes `mode: null` — that pool played easy.
+            mode: e.mode === null || e.mode === undefined ? 0 : (e.mode as number),
             state: 'Open',
             entrants: 0,
             paid_mask: 0,
@@ -176,13 +179,18 @@ export function projectEvent(e: DecodedEvent): ProjectionOp[] {
     case 'TierSlotFreed':
       // Prompt v2 §B.6: the tier's slot freed (Paid or Closed) and its
       // cooldown started — the "next pool in" countdown's source. One row
-      // per tier (0013_tier_status.sql). `pools.go_deadline` (0012) is no
-      // longer written: the go-timer was removed before any deployment.
+      // per (tier, ladder) since Phase B (0013 + 0025): the easy and hard
+      // ladders keep separate slots and clocks, and a pre-Phase-B event
+      // (`mode: null`) is the easy ladder's. `pools.go_deadline` (0012) is
+      // no longer written: the go-timer was removed before any deployment.
       return [
         {
           kind: 'upsert',
           table: 'tier_status',
-          key: { tier: e.tier as number },
+          key: {
+            tier: e.tier as number,
+            mode: e.mode === null || e.mode === undefined ? 0 : (e.mode as number),
+          },
           set: { next_open_at: e.next_open_at, last_pool_id: e.pool_id },
         },
       ];

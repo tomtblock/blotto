@@ -305,3 +305,104 @@ describe('prize bands', () => {
     }
   });
 });
+
+/**
+ * HARD mode (Phase B, founder rulings 2026-09-24): the same engine over
+ * boards placed under the hard rule — thirty-five stats summing to 700,
+ * two bytes per stat on the wire. The oracle computes every number here
+ * with its own hard stream and its own 70-byte encoder; the TypeScript
+ * must reproduce all of it.
+ */
+describe('hard mode: hand-checked battle cases', () => {
+  for (const c of vectors.hard_battle_cases) {
+    it(c.name, () => {
+      const got = compareBattle(c.a as Allocation, c.b as Allocation);
+      expect(got.outcome).to.equal(c.outcome);
+      expect(got.statsA).to.equal(c.stats_a);
+      expect(got.statsB).to.equal(c.stats_b);
+    });
+  }
+  it('the total is seven battles’ worth of easy points', () => {
+    const { HARD_TOTAL } = require('../src');
+    expect(vectors.hard_total).to.equal(700);
+    expect(HARD_TOTAL).to.equal(vectors.hard_total);
+  });
+});
+
+describe('hard mode: pool vectors (four-player, full field, minimum field, stacked edges)', () => {
+  for (const pool of vectors.hard_pools) {
+    it(pool.name, () => {
+      const players: BattleSet[] = pool.players.map((p: any) => p.battles);
+      // The 70-byte encoding matches Python's; the 35-byte one refuses it.
+      for (let i = 0; i < players.length; i++) {
+        expect(hex(encodeBattleSet(players[i], 'hard'))).to.equal(pool.players[i].battles_hex);
+        expect(pool.players[i].battles_hex.length).to.equal(140);
+      }
+      expect(() => scorePool(players), 'a hard board is not an easy one').to.throw(
+        /sum to exactly 100|integers in \[0, 100\]/
+      );
+      const pot = potForEntry(BigInt(pool.entry_lamports));
+      const results = assignPrizes(scorePool(players, 'hard'), pot);
+      for (const expected of pool.results) {
+        const got = results[expected.index];
+        expect(got.scoreHalf, `score of seat ${expected.index}`).to.equal(expected.score_half);
+        expect(got.zones, `zones of seat ${expected.index}`).to.equal(expected.zones);
+        expect(got.rank, `rank of seat ${expected.index}`).to.equal(expected.rank);
+        expect(got.amountLamports.toString(), `amount of seat ${expected.index}`).to.equal(
+          expected.amount_lamports
+        );
+      }
+      expect(rankOrder(results)).to.deep.equal(pool.leaf_order.split(',').map(Number));
+      const myPayouts = results
+        .filter((r) => r.amountLamports > 0n)
+        .sort((a, b) => a.index - b.index)
+        .map((r) => ({ entry_index: r.index, amount: r.amountLamports.toString() }));
+      expect(myPayouts).to.deep.equal(pool.payouts);
+      if (pool.root) {
+        // The tree is mode-blind: player ‖ rank ‖ amount, nothing about the board.
+        const byRank = rankOrder(results);
+        const leaves = byRank.map((seat) =>
+          leafBytes({
+            player: unhex(pool.players_pubkeys[seat]),
+            rank: results[seat].rank,
+            amountLamports: results[seat].amountLamports,
+          })
+        );
+        expect(leaves.map(hex)).to.deep.equal(pool.leaves_hex);
+        expect(hex(merkleRoot(leaves))).to.equal(pool.root);
+      }
+    });
+  }
+});
+
+describe('hard mode: a lost ciphertext scores all losses exactly as in easy', () => {
+  for (const pool of vectors.hard_missing_pools) {
+    it(pool.name, () => {
+      const entries = pool.players.map((p: any, i: number) => ({
+        index: i,
+        battles: p === null ? null : (p.battles as BattleSet),
+      }));
+      const results = scoreWithMissing(entries, 'hard');
+      for (const expected of pool.results) {
+        const got = results[expected.index];
+        expect(got.scoreHalf, `score of seat ${expected.index}`).to.equal(expected.score_half);
+        expect(got.zones, `zones of seat ${expected.index}`).to.equal(expected.zones);
+        expect(got.rank, `rank of seat ${expected.index}`).to.equal(expected.rank);
+      }
+    });
+  }
+});
+
+describe('hard mode: battles hash over the 70-byte encoding', () => {
+  for (const [i, c] of vectors.hard_hash_cases.entries()) {
+    it(`hard hash case ${i}`, () => {
+      expect(hex(battlesHash(c.battles, unhex(c.salt), 'hard'))).to.equal(c.expected);
+      if (c.easy_expected) {
+        // The same numbers commit differently under the two modes: the
+        // mode is part of what was committed to.
+        expect(hex(battlesHash(c.battles, unhex(c.salt)))).to.equal(c.easy_expected);
+        expect(c.expected).to.not.equal(c.easy_expected);
+      }
+    });
+  }
+});

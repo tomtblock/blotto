@@ -116,13 +116,22 @@ import {
 } from './appeals';
 import { reviewSubmissionRefusal, type ReviewerRegistry } from './auth';
 import {
+  COMPLAINT_ACKNOWLEDGE_WORKING_DAYS,
   COMPLAINT_CATEGORY_KEYS,
+  COMPLAINT_NOTE_MAX,
+  COMPLAINT_QUEUE_DEFAULT,
+  COMPLAINT_QUEUE_MAX,
+  COMPLAINT_RESOLVE_DAYS,
   COMPLAINT_TEXT_MAX,
+  answeredRow,
+  complaintAnswerRefusal,
   complaintRuleRefusal,
   complaintSignatureRefusal,
   complaintStatus,
+  isAnswerReplay,
   lodgedRow,
   mayReadComplaint,
+  type ComplaintAnswerSubmission,
   type ComplaintCategory,
   type ComplaintStore,
   type ComplaintSubmission,
@@ -292,6 +301,37 @@ function parseComplaint(body: unknown): ComplaintSubmission | null {
     text: b.text,
     signedAt,
     signature,
+  };
+}
+
+/**
+ * The operator's answer, off the wire. Every field is checked here so the
+ * auth function can assume shapes and only judge the signature.
+ */
+function parseComplaintAnswer(body: unknown): ComplaintAnswerSubmission | null {
+  const b = body as Record<string, unknown>;
+  if (
+    !b ||
+    typeof b.reference !== 'string' ||
+    !COMPLAINT_REFERENCE_PATTERN.test(b.reference) ||
+    (b.kind !== 'acknowledged' && b.kind !== 'resolved') ||
+    typeof b.decidedBy !== 'string' ||
+    !B58.test(b.decidedBy) ||
+    typeof b.note !== 'string' ||
+    b.note.trim().length === 0 ||
+    b.note.length > COMPLAINT_NOTE_MAX ||
+    typeof b.decidedAt !== 'string' ||
+    typeof b.signature !== 'string'
+  ) {
+    return null;
+  }
+  return {
+    reference: b.reference,
+    kind: b.kind,
+    decidedBy: b.decidedBy,
+    note: b.note,
+    decidedAt: b.decidedAt,
+    signature: b.signature,
   };
 }
 
@@ -525,6 +565,110 @@ export async function handleReviewRoute(
     return line({ status: 200, body: status }, { reference, complaintStatus: status.status });
   }
 
+  if (route === '/complaints/open' && method === 'GET') {
+    // THE DESK'S QUEUE, and operator-token only — fail-closed, exactly as
+    // `/detection` is. This returns players' own words about their own
+    // problems: the most sensitive body of text the product holds, and the
+    // one thing on this service that must never be readable by a reference
+    // guess or an unauthenticated probe. An unset token is a 503, never an
+    // open route.
+    if (!deps.complaints || !deps.operatorToken) {
+      return line({ status: 503, body: { error: 'not_configured' } });
+    }
+    if (!operatorAuthorized(ctx.authorization, deps.operatorToken)) {
+      return line({ status: 401, body: { error: 'unauthorized' } }, { refusal: 'operator_token' });
+    }
+    const q = new URLSearchParams(queryString ?? '');
+    const asked = Number(q.get('limit') ?? COMPLAINT_QUEUE_DEFAULT);
+    if (!Number.isInteger(asked) || asked < 1 || asked > COMPLAINT_QUEUE_MAX) {
+      return line({ status: 400, body: { error: 'limit' } });
+    }
+    const open = await deps.complaints.listOpen(asked);
+    return line(
+      {
+        status: 200,
+        body: {
+          open: open.map((r) => ({
+            reference: r.reference,
+            category: r.category,
+            pool: r.pool,
+            text: r.body,
+            // Whether the complainant PROVED the address, which is what
+            // decides how much weight the desk can put on it.
+            signed: r.signature !== null,
+            wallet: r.wallet,
+            receivedAt: r.receivedAt,
+          })),
+          acknowledgeWorkingDays: COMPLAINT_ACKNOWLEDGE_WORKING_DAYS,
+          resolveDays: COMPLAINT_RESOLVE_DAYS,
+        },
+      },
+      { open: open.length }
+    );
+  }
+
+  if (route === '/complaints/answer' && method === 'POST') {
+    // The operator's half of the route: acknowledge or resolve, by APPENDING
+    // a row. There is no update and no delete, so the history of a complaint
+    // cannot be quietly rewritten — the status a player reads is derived
+    // from the thread (`complaints.ts::complaintStatus`).
+    //
+    // Authenticated by a REGISTRY SIGNATURE rather than by the operator
+    // token, and that is the whole point: the token would prove only that
+    // somebody holds the token, and `decided_by` has to name a person for
+    // the terms' "answered by someone other than whoever made the original
+    // one" to be checkable at all. The signature is what makes the stored
+    // name evidence instead of a typed assertion.
+    if (!deps.complaints) return line({ status: 503, body: { error: 'not_configured' } });
+    const answer = parseComplaintAnswer(body);
+    if (!answer) return line({ status: 400, body: { error: 'malformed' } });
+    const now = deps.now ?? Date.now;
+    const where = { reference: answer.reference, kind: answer.kind, by: short(answer.decidedBy) };
+
+    const authRefusal = complaintAnswerRefusal(deps.registry, answer, now());
+    if (authRefusal !== null) {
+      // Uniform to the CALLER — unknown signer, bad signature and stale all
+      // look identical, so this is not a registry-membership oracle. Named
+      // in the log, which the caller cannot reach (B-35).
+      return line({ status: 401, body: { error: 'unauthorized' } }, { ...where, refusal: authRefusal });
+    }
+
+    const thread = await deps.complaints.listFor(answer.reference);
+    // A complaint must EXIST before it can be answered. Without this an
+    // answer would conjure a thread with no lodge, which `complaintStatus`
+    // reports as null — a row nobody could ever read.
+    if (thread.length === 0) {
+      return line({ status: 404, body: { error: 'not_found' } }, { ...where, refusal: 'no_complaint' });
+    }
+    if (isAnswerReplay(thread, answer.signature)) {
+      return line(
+        { status: 409, body: { error: 'already_recorded' } },
+        { ...where, refusal: 'replay' }
+      );
+    }
+
+    const lodged = thread.find((r) => r.kind === 'lodged');
+    await deps.complaints.append(
+      answeredRow(
+        answer.reference,
+        answer.kind,
+        {
+          decidedBy: answer.decidedBy,
+          note: answer.note,
+          // Carried from the lodge so the row is self-describing in the
+          // queue and in an export; never taken from the caller, who could
+          // then mislabel somebody else's complaint.
+          category: lodged?.category ?? 'other',
+          pool: lodged?.pool ?? null,
+          signature: answer.signature,
+          signedAt: answer.decidedAt,
+        },
+        new Date(now()).toISOString()
+      )
+    );
+    return line({ status: 204, body: null }, where);
+  }
+
   if (route === '/complaints' && method === 'POST') {
     // An ABSENT store is 503 `not_configured`, never a refusal: the form
     // renders the two as different states on purpose, because "we did not
@@ -738,7 +882,9 @@ export async function handleReviewRoute(
     route === '/appeals' ||
     route === '/pending' ||
     route === '/detection' ||
-    route === '/complaints'
+    route === '/complaints' ||
+    route === '/complaints/open' ||
+    route === '/complaints/answer'
   ) {
     return line({ status: 405, body: { error: 'method' } });
   }

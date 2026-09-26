@@ -23,6 +23,7 @@ import {
   decodeBattleSet,
   leafBytes,
   merkleRoot,
+  type BoardMode,
 } from '@blotto/scoring';
 import { base58Decode } from '@blotto/shared/blotto-events';
 import { scoreWithMissing } from '@blotto/scoring';
@@ -90,6 +91,11 @@ export interface OnChainRecord {
 
 /** The published bundle (the crank's RevealBundle shape, already parsed). */
 export interface PublishedBundle {
+  /** 2 (every pool settled before Phase B) or 3 (names `mode`). */
+  version?: number;
+  /** Phase B: the placing rule the pool's boards were scored by. A version-2
+   * bundle carries none and played easy. Read through `bundleMode()`. */
+  mode?: 'easy' | 'hard';
   pool_id: string;
   secret: string;
   entry_lamports: string;
@@ -119,6 +125,20 @@ const unhex = (s: string) => {
   return out;
 };
 const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+
+/**
+ * The rule a published bundle's boards are decoded and scored by (Phase B).
+ * ONE reader for the verify page, the what-beat-you view and the all-battles
+ * table, because all three must agree with the crank: a version-2 bundle
+ * (or one that says nothing) is easy; anything else is refused rather than
+ * guessed, since a board decoded under the wrong rule fails its commitment
+ * and would read as a mismatch that is not one.
+ */
+export function bundleMode(bundle: Pick<PublishedBundle, 'version' | 'mode'>): BoardMode {
+  if (bundle.mode === undefined || bundle.mode === 'easy') return 'easy';
+  if (bundle.mode === 'hard') return 'hard';
+  throw new Error(`published bundle names an unknown mode: ${String(bundle.mode)}`);
+}
 
 /** `Ab3k…9fQz` — enough of an address to find it, never the whole string
  * in a one-line detail. */
@@ -260,6 +280,9 @@ export function verifyPool(bundle: PublishedBundle, chain: OnChainRecord): Verif
   let hashesOk = true;
   let hashCount = 0;
   const unchecked: string[] = [];
+  // Phase B: the bundle's own rule decides the decoding and the commitment
+  // (35 bytes / sha256 over 35 in easy; 70 / over 70 in hard).
+  const mode = bundleMode(bundle);
   for (const e of bundle.entries) {
     const committed = chain.battlesHashByPlayer[e.player];
     if (committed === undefined) {
@@ -268,8 +291,16 @@ export function verifyPool(bundle: PublishedBundle, chain: OnChainRecord): Verif
     }
     if (e.battles !== null && e.salt !== null) {
       hashCount++;
-      const battles = decodeBattleSet(unhex(e.battles));
-      const h = hex(battlesHash(battles, unhex(e.salt)));
+      let h: string;
+      try {
+        const battles = decodeBattleSet(unhex(e.battles), mode);
+        h = hex(battlesHash(battles, unhex(e.salt), mode));
+      } catch {
+        // A board that does not decode under the bundle's own rule cannot
+        // reproduce the commitment — a mismatch, not an exception.
+        hashesOk = false;
+        continue;
+      }
       if (h !== committed || h !== e.battles_hash) hashesOk = false;
       continue;
     }
@@ -296,8 +327,9 @@ export function verifyPool(bundle: PublishedBundle, chain: OnChainRecord): Verif
   const results = scoreWithMissing(
     byIndex.map((e) => ({
       index: e.index,
-      battles: e.battles !== null ? decodeBattleSet(unhex(e.battles)) : null,
-    }))
+      battles: e.battles !== null ? decodeBattleSet(unhex(e.battles), mode) : null,
+    })),
+    mode
   );
   // Amounts recomputed with the published split-pot rule (D3-B): tied
   // players share a competition rank and split the combined band prize.

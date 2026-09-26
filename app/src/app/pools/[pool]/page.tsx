@@ -15,8 +15,9 @@ import {
   TIER_POT_LAMPORTS,
 } from '@blotto/scoring';
 import { COPY } from '@/copy';
+import { BOARD_CLOCK_BUDGET_MS } from '@/battle/board/mode';
 import { indexerApi, live } from '@/data/api';
-import { lamportsToSol } from '@/data/format';
+import { lamportsToSol, poolMode } from '@/data/format';
 import { AppHeader } from '@/components/shell/app-header';
 import { TabBar } from '@/components/shell/tab-bar';
 import { LiveDataUnavailable } from '@/components/shell/live-unavailable';
@@ -50,6 +51,7 @@ const STRIP_POSTER = '/motion/pool/strip.jpg';
 const MIN_SEATS_N = Number(MIN_SEATS);
 const FILL_HOURS = Number(DEFAULT_FILL_DEADLINE_SECS / 3600n);
 const REVIEW_HOURS = Number(REVIEW_WINDOW_SECS / 3600n);
+const BOARD_MINUTES = BOARD_CLOCK_BUDGET_MS / 60_000;
 
 export default async function PoolPage({ params }: { params: Promise<{ pool: string }> }) {
   const { pool: poolId } = await params;
@@ -71,6 +73,9 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
   const pool = poolLive.value;
   if (!pool) notFound();
   const open = pool.state === 'Open';
+  // Phase B: the rule this pool plays, from its record — the badge and the
+  // "How this pool plays" box both read it, and the play page's board too.
+  const mode = poolMode(pool);
   // D-E1 §1.4: a pool carries the pot it OPENED with; when the launch
   // table has since moved, say the guarantee rather than look like a cut.
   const potDiffers =
@@ -99,6 +104,11 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
         <header className="mb-6 flex flex-wrap items-center gap-3">
           <MarqueeHeading as="h1">{COPY.reveal.passPool(pool.id)}</MarqueeHeading>
           <Pill tone="field">{poolStateLabel(pool)}</Pill>
+          {/* The mode this pool plays (founder 2026-09-24), from the pool
+              record (Phase B). */}
+          <Pill tone="ink" data-testid="pool-mode">
+            {mode === 'hard' ? COPY.board.modeHard : COPY.board.modeEasy}
+          </Pill>
           {/* Founder 2026-09-16 (D5): the Verify page recomputes a RESULT from
               the published bundle and the on-chain record, and an open pool
               has neither yet — the link led to "nothing to check". It appears
@@ -192,6 +202,17 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
               {COPY.fairPlay.title}
             </Link>
           </p>
+        </NeonSection>
+
+        {/* "How this pool plays" (founder 2026-09-24): the rule of THIS pool,
+            read before paying. Config-driven (D-B6): the minutes come from
+            the board's clock constant, never typed here. */}
+        <NeonSection heading={COPY.pool.howItPlaysHeading} className="mb-8">
+          <ul className="flex list-disc flex-col gap-3 pl-5 text-[17px] leading-[26px] text-ink marker:text-brand">
+            {COPY.pool.howItPlays(mode, BOARD_MINUTES).map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
         </NeonSection>
 
         {open ? (

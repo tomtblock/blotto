@@ -26,7 +26,7 @@ export const COPY = {
     // §2.5's copy constraint).
     tagline: 'Sixty-four seats. Seven battles. The winner takes the prize pool.',
     metaDescription:
-      'Up to sixty-four players enter, each sets seven sealed battles of five stats summing to 100. ' +
+      'Up to sixty-four players enter, each sets seven sealed battles of five stats — 100 points a battle, or 700 placed anywhere in a hard pool. ' +
       'The player ranked first takes a fixed prize pool, and every result is recomputable from published data.',
     tabs: { play: 'Play', pools: 'Pools', profile: 'Profile' },
     // The honest degraded state: the data service is unreachable, which is
@@ -54,10 +54,22 @@ export const COPY = {
   },
   signin: {
     title: 'Sign in',
-    subtitle:
-      'Sign in with an account and a wallet is made for you, or use a Solana wallet you already have.',
+    /*
+     * The second clause — "or use a Solana wallet you already have" — was
+     * removed on 2026-09-24 with the external-wallet buttons. It had to go
+     * with them: a page that offers no wallet route must not open by
+     * promising one, and a player reading it would look for a control that
+     * is not there.
+     *
+     * PHASE-N-REVIEW: the shortened line is the architect's, cut to the
+     * minimum true statement rather than re-voiced. The founder owns the
+     * wording. Put the clause back when `EXTERNAL_WALLET_SIGNIN_ENABLED`
+     * goes back to true (app/src/app/signin/signin-client.tsx).
+     */
+    subtitle: 'Sign in with an account and a wallet is made for you.',
     google: 'Continue with Google',
-    apple: 'Continue with Apple',
+    // Apple removed 2026-09-24 (founder): the provider was never enabled and the
+    // button did nothing. See wallet/types.ts.
     twitter: 'Continue with X',
     // The provider modal's own subtitle (capped at 100 characters by the SDK).
     modalMessage: 'Seven sealed battles. The winner takes the prize pool.',
@@ -357,6 +369,26 @@ export const COPY = {
     // the key our systems hold locked until the pool closes, the fill clock,
     // the field, the refund. Numbers come from the shared constants via the
     // caller. Proposal until ratified.
+    /*
+     * "How this pool plays" (founder 2026-09-24): the mode boundary a player
+     * reads BEFORE paying — the rule of THIS pool, config-driven (D-B6).
+     * Phase A: every pool is easy. PHASE-N-REVIEW: drafts; founder-owned.
+     */
+    howItPlaysHeading: 'How this pool plays',
+    howItPlays: (mode: 'easy' | 'hard', minutes: number): readonly string[] =>
+      mode === 'easy'
+        ? [
+            'Seven battles. In each one you split 100 points across Strength, Speed, Heart, Wit and Durability.',
+            `${minutes} minutes on one clock for all seven. It starts when you place your first point.`,
+            'At the buzzer whatever is on the board is your entry. Points you have not placed in a battle are spread evenly across its five stats, unless you locked that battle in.',
+            'A battle is won by taking three of the five stats against an opponent. Every player faces every other player.',
+          ]
+        : [
+            'Seven battles and 700 points. Place them anywhere — all in one battle, spread across all seven, or anything between.',
+            `${minutes} minutes on one clock. It starts when you place your first point.`,
+            'At the buzzer whatever is on the board is your entry. Points you have not placed are spread evenly across every stat of every battle you have not locked in.',
+            'A battle is won by taking three of the five stats against an opponent. Every player faces every other player.',
+          ],
     aboutPoints: (minSeats: number, fillHours: number): readonly string[] => [
       'The player ranked first takes the whole prize pool. A tie for first splits it equally.',
       'Your battles are encrypted on your device; the key stays locked in our systems until the pool closes. Only their hash goes on-chain at entry.',
@@ -435,15 +467,23 @@ export const COPY = {
     // is founder-reserved); everything else on the landing reuses lines
     // already ratified elsewhere in this file.
     heroTitle: 'Make your Blott',
-    tryDials: 'Try the dials',
-    // PHASE-N-REVIEW (founder 2026-09-16, CHANGE-2026-09-16_ui-uplift.md §A11):
-    // the practice machine now carries the padlocks the run has; one
-    // sentence says what they do. Proposal until ratified.
-    demoHint:
-      'Drag a dial — the other four give way. Press a padlock to hold a stat where it is. Nothing to sign, nothing to pay: this one is just to feel it.',
-    // PHASE-N-REVIEW (2026-09-09): the marquee line on the landing machine.
-    demoStatus: 'Practice machine',
+    // The board (founder 2026-09-24): the landing's toy is the board.
+    // PHASE-N-REVIEW: drafts; founder-owned.
+    tryBoard: 'Try the board',
+    demoBoardHint:
+      'Tap a troop, press and hold a field. Nothing to sign, nothing to pay: this one is just to feel it. A real entry plays the same board with a three-minute clock.',
     openPoolTitle: 'Open now',
+    /*
+     * Phase B (founder 2026-09-24): the two cards, side by side — one per
+     * open pool, each wearing its mode. The hard card shows "Opens soon"
+     * ONLY when the founder has enabled the hard ladder on chain and no hard
+     * pool is open yet (the tiers API says so; nothing in the app decides
+     * it). PHASE-N-REVIEW: drafts; founder-owned.
+     */
+    hardOpensSoonTitle: 'Opens soon',
+    hardOpensSoonBody:
+      'The hard board — 700 points to place anywhere across the seven battles — is switched on. Its first pool opens shortly; the easy pool is open now.',
+    cardModeAria: (mode: 'easy' | 'hard') => (mode === 'easy' ? 'Easy pool' : 'Hard pool'),
   },
 
   howItWorks: {
@@ -468,7 +508,7 @@ export const COPY = {
           // PHASE-N-REVIEW: said "fifteen seconds per screen" (R9); the client
           // runs one ninety-second budget for all seven (R9-b, run-clock.ts),
           // and two other strings already say so. Founder may veto.
-          'For each battle, split exactly 100 points across Strength, Speed, Heart, Wit and Durability — about ninety seconds for all seven. Your battles are encrypted on your device before you pay; nobody can read them until the pool closes.',
+          'For each battle, split exactly 100 points across Strength, Speed, Heart, Wit and Durability — or, in a hard pool, place 700 points anywhere across the seven. Three minutes on one clock. Your battles are encrypted on your device before you pay; nobody can read them until the pool closes.',
       },
       {
         title: 'Everyone fights everyone',
@@ -601,79 +641,27 @@ export const COPY = {
       'This attempt did not go through, and nothing was signed or charged this time. It was not a decision about you: either an earlier attempt from this wallet at this pool is the one that stands, or the pool stopped taking entries first. The pool page shows whether a seat was taken, and you can ask us about your own entry through /complaints.',
   },
   battle: {
-    screenOf: (k: number) => `Battle ${k} of 7`,
-    evenSplit: 'Even split',
-    // The effect of the default, stated as how the allocation PERFORMS —
-    // never as a chance of anything (the addendum's note for this line).
-    timerEffect:
-      'Against any allocation that concentrates points on three stats, an even split loses that battle three stats to two, every time — so it never beats a player who is thinking. Nothing is decided at random: the even split is simply the shape your entry starts from, and leaving it there is a decision like any other.',
     // The two-step seal (v3 D2): arm, then confirm. §8.6 renders above step 2.
     seal: 'Seal my allocation',
     sealConfirm: 'Confirm — seal and submit',
     sealCancel: 'Go back',
     sealing: 'Sealing your battles…',
     /*
-     * NOT HERE, DELIBERATELY (audit 2026-09-11, A-29): a points-remaining
-     * counter. This block carried `remainingPoints: 'Points to place'`,
-     * unrendered. PID §4.2 is explicit — "the player never does arithmetic
-     * and never sees a 'points remaining' counter" — because the counter is
-     * what turns a shape into a budgeting puzzle with round targets, and
-     * §4.3 quantifies what round targets do to the draw rate. A key that
-     * exists is a key someone renders. Also gone: a second copy of the stat
-     * names, which are `STAT_NAMES` in `battle/allocation.ts` and must have
-     * exactly one definition on the client — they are the fixed stat order
-     * the encoding depends on, not decoration.
+     * The stat names are NOT here: they are `STAT_NAMES` in
+     * `battle/allocation.ts` and have exactly one definition on the client —
+     * the fixed stat order the encoding depends on, not decoration. (This
+     * block once also refused a points-remaining counter under PID §4.2,
+     * audit A-29; the board shows what is left by the founder's ruling of
+     * 2026-09-24, register D-E17, and that override is recorded there.)
      */
-
-    /* v4 run (founder brief 2026-09-06), the timer sentence amended by the
-     * founder's addendum of 2026-09-07 (R9-b): an unlocked battle is
-     * entered as the even split, the one on screen included. */
-    approvedTitle: "You're in.",
-    begin: 'Make my first Blott',
-    ruleNinety:
-      'Ninety seconds for all seven battles. Any battle you have not locked when the timer ends \u2014 including the one on your screen \u2014 is entered as an even split of 20 points in each of the five stats.',
-    lockBattle: (n: number) => `Lock in battle ${n}`,
-    /* Dial locks (founder 2026-09-13): a locked stat keeps its value while
-     * the other dials move, and the others share what remains — shown as
-     * the dials' RANGE, never as a number (PID §4.2: no points-remaining
-     * counter). PHASE-N-REVIEW: drafts; the founder owns the words. */
-    lockStat: (name: string, value: number) => `Lock ${name} at ${value}`,
-    unlockStat: (name: string) => `Unlock ${name}`,
-    lockedStat: (name: string) => `${name} is locked`,
-    locksHint: 'A locked stat holds its value. The other dials share what is left.',
-    expiredNote: 'Time ran out \u2014 every battle you had not locked was entered as the even split.',
-    montageFooter: 'BLOTTO CUP \u00b7 blotto.gg \u00b7 18+ only \u00b7 not available in some territories',
-    share: 'Share',
-    shareFallbackCopied: 'Share line copied — the image downloaded to your device.',
-    // Founder 2026-09-09: "users should be able to share this to X".
-    shareX: 'Post on X',
-    shareXNote: 'X opened with your line. The image downloaded to your device — attach it to the post.',
     backSheetLine: 'Leaving locks nothing and loses nothing — your clock keeps running.',
     backStay: 'Stay',
     backLeave: 'Leave',
-
-    /* The machine (founder 2026-09-09): a locked Blot drops out of the
-     * chute, its still and its five numbers fill one of seven tiles under
-     * the machine, and the seventh lock is the crescendo. PHASE-N-REVIEW:
-     * drafts; the founder owns the words. */
-    // The rendered Blott's accessible one-liner (BlottRaster).
-    blottAria: (stats: string) => `Your Blott: ${stats}`,
-    tilesLabel: 'Your seven Blotts',
-    tileLocked: (n: number, stats: string) => `Battle ${n} locked: ${stats}`,
-    tileEmpty: (n: number) => `Battle ${n} — not yet made`,
     // PHASE-N-REVIEW (founder 2026-09-16, CHANGE-2026-09-16_ui-uplift.md §A11):
     // the seal stage's description for assistive tech — the scene is decorative,
     // the sentence says what it shows. Proposal until ratified.
     sealStageAria:
       'Seven Blotts on a conveyor dropping into a blender; the blender runs once your entry is signed.',
-    crescendo: 'All seven made.',
-    crescendoLine: 'Your Blotts are in the machine. Seal them to enter the pool.',
-    // 2026-09-13: what the seal IS, one line, beside the lock. The share
-    // that used to sit here moved to the character pass, after the seal is
-    // confirmed — see reveal.passShareLine for why.
-    sealWhat:
-      'Sealing encrypts your seven battles on this device and records their hash on-chain with your entry. Your wallet will ask you to sign once.',
-    sealAfter: 'Once sealed, you draw your character pass and can share it.',
   },
   /*
    * The welcome note (2026-09-13; re-voiced 2026-09-14): a short note in the
@@ -689,6 +677,111 @@ export const COPY = {
    * is unchanged — what this is, that results are recomputable, and what to
    * do next. No promise this product cannot keep.
    */
+  /*
+   * THE BATTLE BOARD (founder brief 2026-09-24): the map that replaces the
+   * dials — seven fields, five troops, press-and-hold to send points, a
+   * stepper for steps, lock-in per field, one three-minute clock. Two modes:
+   * easy (100 points in each battle — the rule the platform has always
+   * played) and hard (700 points anywhere across the seven; its pool lands
+   * in Phase B). PHASE-N-REVIEW: every line here is a draft; the founder
+   * owns the words. Vocabulary ruled 2026-09-24 (5.4): troop, crowd,
+   * field, points.
+   *
+   * PID §4.2 said the player never sees a points-remaining counter, and
+   * audit A-29 removed one on that basis (see the note in `battle` above).
+   * The founder's ruling of 2026-09-24 (5.3) asks for exactly that readout
+   * in both modes — per field in easy, one total in hard. PHASE-N-REVIEW:
+   * the ruling supersedes §4.2's sentence; recorded in
+   * docs/CHANGE-2026-09-24_battle-board.md for the PID reissue.
+   */
+  board: {
+    modeEasy: 'Easy · 100 per battle',
+    modeHard: 'Hard · 700 anywhere',
+    mapLabel: 'The battle board: seven fields around a castle',
+    field: (n: number) => `Field ${n}`,
+    chipEasy: (placed: number, left: number) => `${placed} placed · ${left} left`,
+    chipHard: (placed: number) => `${placed} placed`,
+    chipFull: '100 · Full',
+    chipLocked: (placed: number) => `Locked · ${placed}`,
+    chipAria: (n: number, line: string, locked: boolean) =>
+      `Field ${n}: ${line}${locked ? ', locked in' : ''}. Opens the stepper.`,
+    fieldAria: (n: number, troop: string | null, locked: boolean) =>
+      locked
+        ? `Field ${n} is locked in`
+        : troop
+          ? `Field ${n}. Press and hold, or press Enter, to send ${troop} here`
+          : `Field ${n}. Pick a troop first`,
+    trayLabel: 'Troops. Tap a card, then press and hold on a field.',
+    troopPlaced: (n: number) => `${n} placed`,
+    // Plaques (the mockup's field signs): name, the big line, the small line.
+    plaqueFull: 'Full',
+    plaqueLeft: (n: number) => `${n} left`,
+    plaquePlaced: (n: number) => `${n} placed`,
+    plaqueLocked: 'Locked in',
+    toastFull: (n: number) => `Field ${n} is full`,
+    toastPick: 'Pick a troop from the tray first',
+    zoomLabel: 'Zoom',
+    zoomReset: 'Reset zoom to 100%',
+    // The hint line: always the NEXT action, in one sentence (the mockup's words).
+    // Grab mode (founder 2026-09-24, second pass): the hand key. With it on
+    // the board only moves under the finger, and a tap on a field opens the
+    // stepper for the troop in hand — no disarming the tray to get at the keys.
+    grab: 'Grab',
+    grabAria: 'Grab mode: drag to move around, tap a field for its numbers',
+    hintGrab: (troop: string | null) =>
+      troop
+        ? `Grab mode. Drag to move around; tap a field to set its ${troop} in steps. Tap a troop card to deploy again.`
+        : 'Grab mode. Drag to move around; tap a field to pick a troop and set it in steps.',
+    hintPick: 'Tap a troop, then press and hold on a field',
+    hintHold: (troop: string) => `Press and hold on a field to send ${troop} there. Hold longer for more. Tap a plaque or a crowd’s number for steps.`,
+    hintHoldHard: (troop: string, left: number) => `Press and hold on a field to send ${troop} there. ${left} points left to place.`,
+    hintDeploying: (troop: string, n: number) => `Deploying ${troop} on Field ${n}…`,
+    hintLastSeconds: 'Ten seconds. Anything unplaced spreads evenly across the fields you have not locked in.',
+    // The clock (founder 2.3): the rule is said before the first touch.
+    timerHeld: 'Starts on your first point',
+    timerHeldAria: 'The clock starts when you place your first point',
+    timeLeft: 'Time left',
+    timerAria: (clock: string) => `${clock} remaining`,
+    bannerTitle: 'The clock starts when you place your first point',
+    bannerEasy: 'Three minutes for all seven battles. Each battle takes 100 points, split across your five troops however you like.',
+    bannerHard: 'Three minutes. 700 points to place anywhere across the seven battles — all in one, spread across all seven, or anything between.',
+    bannerLooking: 'Look around, pick a troop, zoom in — none of that starts it.',
+    bannerGo: 'Take the field',
+    readoutEasy: (full: number, locked: number) => `${full} / 7 battles full${locked ? ` · ${locked} locked in` : ''}`,
+    readoutHard: (left: number, locked: number) => `Left to place  ${left} / 700${locked ? ` · ${locked} locked in` : ''}`,
+    leave: '← Leave',
+    zoomIn: 'Zoom in',
+    zoomOut: 'Zoom out',
+    fit: 'Fit',
+    // The stepper.
+    stepperTitle: (troop: string, n: number) => `${troop} on Field ${n}`,
+    pickTroopTitle: (n: number) => `Which troop for Field ${n}?`,
+    leftHere: (n: number) => `${n} left on this field`,
+    leftToPlace: (n: number) => `${n} left to place`,
+    stepAria: (delta: number, troop: string, n: number) =>
+      `${delta > 0 ? 'Add' : 'Take back'} ${Math.abs(delta)} ${troop} ${delta > 0 ? 'to' : 'from'} Field ${n}`,
+    fillField: (troop: string) => `Fill with ${troop}`,
+    sendBack: (troop: string) => `Send ${troop} back`,
+    lock: (n: number) => `Lock in Field ${n}`,
+    unlock: (n: number) => `Unlock Field ${n}`,
+    lockedHint: (n: number) => `Field ${n} is locked in. It will not change, and the buzzer will not touch it.`,
+    lockNeedsFull: 'A field locks in once it is full.',
+    lockNeedsPlaced: (left: number) => `Place your remaining ${left} points first — this is the last open field.`,
+    close: 'Close',
+    submitEarly: 'Submit now',
+    submitComplete: 'Submit my board',
+    // Review.
+    reviewTitle: 'Your entry',
+    reviewSubmitted: (clock: string) => `Submitted with ${clock} left. Decisions are final once sealed.`,
+    reviewExpired: 'Time ran out. Whatever was on the board is your entry; anything unplaced was spread evenly across the fields you had not locked in.',
+    checkEasy: (per: number) => `7 battles · every battle sums to exactly ${per}`,
+    checkHard: (total: number) => `7 battles · ${total} points placed`,
+    reviewTableLabel: 'Your seven battles, five stats each',
+    reviewBattle: 'Battle',
+    reviewTotal: 'Total',
+    backToBoard: 'Back to board',
+    demoAgain: 'Try again',
+  },
   welcome: {
     teamName: 'The Blotto Cup team',
     greeting: 'Welcome to Blotto Cup.',
@@ -781,15 +874,6 @@ export const COPY = {
     // like the pool page — "Pool #N" on the marquee, this word on the chip
     // beside it and on the box the payout list sits in.
     title: 'Results',
-    // Share my seven (2026-09-13): the seven-Blott montage, offered only on
-    // a closed pool's results page — see results/share-seven.tsx for why it
-    // left the review screen. PHASE-N-REVIEW: drafts; the founder owns the words.
-    sevenHeadline: 'My seven battles.',
-    sevenAlt: 'Your seven Blotts, shapes only',
-    shareSevenTitle: 'Share your seven',
-    shareSevenLine:
-      'This pool has closed, so your seven Blotts can be shown. Every battle in it is on the Verify page, recomputable by anyone.',
-    shareSevenText: 'My seven Blotts from Blotto Cup — every result recomputable from published data. blotto.gg',
     paidAutomatically:
       'Prizes are paid automatically when results are committed. No claim step.',
     // Founder addendum 2026-09-07, ruling 1: the published rule is 12 hours.
@@ -1053,12 +1137,6 @@ export const COPY = {
       "Rarity is decorative. It changes nothing: not your battles, not your score, not your ranking, and no prize. A Mythic's Strength is worth exactly a Common's.",
     // Moved here from profile-client.tsx on 2026-09-17 (same words).
     collection: 'Character collection',
-    myBlots: 'My Blotts',
-    // 2026-09-13: this line said "Shapes, never numbers" — but a Blott's
-    // shape IS its numbers (components/blott/warp.ts), which is why the
-    // grid no longer offers a share. It says what is true instead.
-    myBlotsNote:
-      'Every battle you have locked, as its Blott — kept on this device only. Once a pool has closed, its results page lets you share the seven.',
   },
   custody: {
     // C13: the disclosure page. Everything here describes MECHANICS —
@@ -1178,7 +1256,7 @@ export const COPY = {
      * The pass as a SHAREABLE card (2026-09-13). This replaces the share
      * that used to sit on the review screen BEFORE sealing: that one handed
      * the player a picture of their seven Blotts, and a Blott's silhouette is
-     * a deterministic function of its five stats (components/blott/warp.ts)
+     * a deterministic function of its five stats (components/blot/blotGeometry.ts)
      * — so the image was the sealed allocation, readable, offered for
      * publication while the pool was still open. The pass carries the seat
      * and the pool number: public, nothing sealed — and since 2026-09-15 not
@@ -1218,7 +1296,7 @@ export const COPY = {
     // constants (rules.config passes MIN_SEATS and the go-timer) — the D-B6
     // rule that no figure on this page is hand-typed.
     howToEnter: (minSeats: number) =>
-      `Sign in, pick an open pool, and confirm the 18+ and terms statements — your wallet signs that confirmation once per terms version. Pay the entry price for the tier. Before an entry is accepted, your wallet is checked against published sanctions lists; every winning wallet is checked again before payment. You then set seven battles, about ninety seconds in total: each battle splits 100 points across five stats. Your battles are encrypted on your device before any payment moves. One entry per wallet per pool; there is no limit across pools. The keys that run the service — the admin, the keeper, the entry signer and the settlement signer — can never enter. A pool has 64 seats and runs with at least ${minSeats} players (see the field-size rule). Decisions are final: a submitted entry cannot be changed or withdrawn (see the refund rule for pools that never reach their minimum field).`,
+      `Sign in, pick an open pool, and confirm the 18+ and terms statements — your wallet signs that confirmation once per terms version. Pay the entry price for the tier. Before an entry is accepted, your wallet is checked against published sanctions lists; every winning wallet is checked again before payment. You then set seven battles, about ninety seconds in total: in an easy pool each battle splits 100 points across five stats; in a hard pool you place 700 points anywhere across the seven battles, every stat between 0 and 700, and the pool's page says which rule it plays. Your battles are encrypted on your device before any payment moves. One entry per wallet per pool; there is no limit across pools. The keys that run the service — the admin, the keeper, the entry signer and the settlement signer — can never enter. A pool has 64 seats and runs with at least ${minSeats} players (see the field-size rule). Decisions are final: a submitted entry cannot be changed or withdrawn (see the refund rule for pools that never reach their minimum field).`,
     priceIntro: (cooldownMinutes: number) =>
       `Seven tiers are configured, each with a fixed prize pool. A tier must be switched on by the operator before pools open in it; at launch only the smallest tier is on. One pool per tier is open at a time, and a new pool of that tier opens ${cooldownMinutes} minutes after the previous one has paid out or closed.`,
     // D-E2 (ratified 2026-09-06): one paid place. No percentage, no multiple.
@@ -1232,6 +1310,11 @@ export const COPY = {
     // R9-b (founder addendum 2026-09-07): the battle timer, the founder's
     // wording verbatim — the rule, then its effect stated as how the
     // allocation performs, never as a chance of anything.
+    // PHASE-N-REVIEW (Phase B, 2026-09-24): the even-split default and its
+    // three-to-two loss hold in both modes — a hard board also opens at seven
+    // even splits of 20 (7 × 100 = 700), so this paragraph needs no mode
+    // clause. howToEnter above names the hard rule; founder and counsel own
+    // the wording.
     battleTimer:
       'Lock each battle before its timer ends. Any battle you have not locked when the timer ends \u2014 including the one on your screen \u2014 is entered as an even split of 20 points in each of the five stats. Against any allocation that concentrates points on three stats, an even split loses that battle three stats to two, every time — so it never beats a player who is thinking. Nothing is decided at random: the even split is simply the shape your entry starts from, and leaving it there is a decision like any other.',
     // SUBSTANCE FIXED (D3-B; D-E2; the founder's addendum of 2026-09-07,
@@ -1304,7 +1387,16 @@ export const COPY = {
       // narrowed to what runs; it widens again when the capture lands.
       '(4) the same device behind multiple entries in one pool; ' +
       '(5) a score far outside the field’s distribution. ' +
-      'These signals are computed for every tournament and published with the review log. Nothing is flagged automatically: a flag is a decision taken by a person that an entry meets one of the criteria above, ' +
+      // NARROWED 2026-09-22. This read "computed for every tournament and
+      // published with the review log", which promised more than is served.
+      // The signals' VALUES are not published: `GET /detection` returns the
+      // report to an operator token and to nobody else (backend/detection/
+      // src/server.ts, ruling D-E9). What IS public, with no token, is
+      // `GET /decisions?pool=` — every decision on a pool with the criterion
+      // cited. PR #160's terms of service already say the narrower, true
+      // thing; this page said the broader one, so two published surfaces
+      // disagreed. The terms are right and this now matches them.
+      'These signals are computed for every tournament. Every decision and the criterion cited are recorded in a log anyone can read. Nothing is flagged automatically: a flag is a decision taken by a person that an entry meets one of the criteria above, ' +
       'and a flag never decides anything by itself \u2014 it only sends the entry to the signed review process below.',
     /*
      * C10 + the founder's addendum of 2026-09-07 (ruling 1): resolving,

@@ -142,14 +142,21 @@ fn lifecycle_log_fixture() {
     );
     env.send(&[ix], &[]).unwrap();
     // The 2026-09-07 admin events, restated at their launch values
-    // (KeeperSet, PoolTimingSet), and ConfigMigrated from a real migration
-    // of an old-size account (the tail is rewritten to the same values).
+    // (KeeperSet, PoolTimingSet).
     let ix = set_keeper_ix(&env.admin.pubkey(), &settlement.pubkey());
     env.send(&[ix], &[]).unwrap();
     let ix = set_pool_timing_ix(&env.admin.pubkey(), 12 * 60 * 60, 5 * 60);
     env.send(&[ix], &[]).unwrap();
-    downgrade_config_to_v1(&mut env.svm);
-    let ix = migrate_config_ix(&env.admin.pubkey(), &settlement.pubkey());
+    // Phase B (2026-09-24): HardLadderAdded from a real V2 → V3 migration
+    // of a pre-Phase-B-size account (the hard tail is rewritten to the same
+    // values), and HardTiersOpened restated at its launch value — every
+    // hard tier disabled. (ConfigMigrated, the retired 2026-09-07
+    // migration's event, is no longer emitted by any path; the decoder
+    // keeps its layout for the one devnet holds.)
+    downgrade_config_to_v2(&mut env.svm);
+    let ix = migrate_config_ix(&env.admin.pubkey());
+    env.send(&[ix], &[]).unwrap();
+    let ix = set_hard_open_tiers_ix(&env.admin.pubkey(), [false; 7]);
     env.send(&[ix], &[]).unwrap();
 
     // Pool 2: the refund fork — opened by hand so the VRF seed lands via a
@@ -171,6 +178,18 @@ fn lifecycle_log_fixture() {
         let ix = refund_ix(&settlement.pubkey(), 2, entry, &player.pubkey());
         env.send(&[ix], &[&settlement]).unwrap();
     }
+    // PoolMigrated, both shapes `migrate_pool` handles, from real
+    // migrations of the now-Closed pool 2: first shrunk to the pre-Phase-B
+    // 849 bytes (mode written, floor kept), then — after shrinking it
+    // again to the pre-R7-b 847 — floor and mode both written. Placed
+    // here, before pool 3, so the fixture's last four transactions stay
+    // pool 3's settlement (`projection.spec.ts` slices on that).
+    shrink_pool_to_v2(&mut env.svm, &pool_pda(2));
+    let ix = migrate_pool_ix(&settlement.pubkey(), 2);
+    env.send(&[ix], &[&settlement]).unwrap();
+    shrink_pool_to_v1(&mut env.svm, &pool_pda(2));
+    let ix = migrate_pool_ix(&settlement.pubkey(), 2);
+    env.send(&[ix], &[&settlement]).unwrap();
 
     // Pool 3: the minimum-field path (D-E4, option A) — 52 seats, the 12 h
     // deadline passes, `seal_at_deadline` closes the pool (PoolSealed with

@@ -233,6 +233,7 @@ const CLOSED = fixtureId('c1osed');
 const DEADLINE = fixtureId('dead1ine');
 const FIELD = fixtureId('fie1d');
 const FIELD_PAID = fixtureId('fie1dpaid');
+const HARD_OPEN = fixtureId('hard');
 
 export const SCENARIOS: readonly Scenario[] = [
   {
@@ -240,6 +241,21 @@ export const SCENARIOS: readonly Scenario[] = [
     what: 'A fresh pool, nearly empty. The enter path and the seat ring at rest.',
     summary: poolSummary({ pool: OPEN, id: 'FIXTURE', entrants: 3 }),
     entries: entries(OPEN, 3),
+    results: [],
+    payouts: [],
+  },
+  {
+    key: 'hard-open',
+    what: 'Phase B: an open HARD pool in the same tier — the second card on the landing, and the 700-anywhere board behind it.',
+    summary: poolSummary({
+      pool: HARD_OPEN,
+      id: 'FIXTURE-HARD',
+      mode: 'hard',
+      entrants: 5,
+      // Its own clock (founder: the pools run on separate timers).
+      fill_deadline: soon(9 * HOUR),
+    }),
+    entries: entries(HARD_OPEN, 5),
     results: [],
     payouts: [],
   },

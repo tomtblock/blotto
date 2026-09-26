@@ -80,6 +80,7 @@ const ALL_MIGRATIONS = [
   '0022_drop_go_deadline.sql',
   '0023_notify_pool_optin.sql',
   '0024_complaints.sql',
+  '0025_pool_mode.sql',
 ];
 
 describe('the re-derive marker, against the real migrations (audit E-15)', () => {
@@ -129,9 +130,13 @@ describe('the re-derive marker, against the real migrations (audit E-15)', () =>
     // 0004 dropped two derived tables; 0019 added a column to one that only
     // a replay can fill (the sanctions holds already in the ledger). Both
     // leave a derived table that does not yet say what the events say.
+    // 0025 (Phase B) added `pools.mode` and re-keyed `tier_status` per
+    // ladder; only a replay fills the mode of pools opened after the
+    // upgrade rather than leaving the column at its default.
     expect(marked, 'exactly the migrations that invalidate a derived table').to.deep.equal([
       '0004_seat_payouts.sql',
       '0019_sanctions.sql',
+      '0025_pool_mode.sql',
     ]);
   });
 });
@@ -174,6 +179,7 @@ describe('migrate() reports the invalidation to its caller', () => {
     expect(run.rederiveRequestedBy).to.deep.equal([
       '0004_seat_payouts.sql',
       '0019_sanctions.sql',
+      '0025_pool_mode.sql',
     ]);
     expect(run.rederiveRequired).to.equal(true);
     // Each applied file is recorded under its own name.
@@ -200,6 +206,7 @@ describe('migrate() reports the invalidation to its caller', () => {
     expect(run.rederiveRequestedBy).to.deep.equal([
       '0004_seat_payouts.sql',
       '0019_sanctions.sql',
+      '0025_pool_mode.sql',
     ]);
     expect(run.rederiveRequired).to.equal(true);
   });

@@ -27,14 +27,17 @@
 
 use anchor_lang::prelude::*;
 
-use crate::constants::{MIN_SEATS, N_TIERS};
+use crate::constants::{MIN_SEATS, MODE_EASY, MODE_HARD, N_TIERS};
 use crate::error::ErrorCode;
 use crate::events::{PlatformFunded, PlatformWithdrawn, TierEconomicsSet, TreasuryPolicySet};
 use crate::state::{Config, CONFIG_SEED, PLATFORM_SEED};
 
 /// The policy reserve for tiers with no live pool: `reserve_pots` further
-/// pots of every enabled tier whose `active_pool_by_tier` slot is empty,
-/// optionally excluding one tier (the one being opened right now).
+/// pots of every enabled (tier, mode) whose slot is empty, optionally
+/// excluding one (the one being opened right now). Since Phase B each tier
+/// has an easy and a hard slot (founder rulings 2026-09-24); an idle enabled
+/// hard tier reserves a pot exactly as an idle enabled easy tier does, at
+/// the same tier pot — two pools, two pots, one treasury.
 ///
 /// Each reserved pot carries `vault_cushion` — the rent-exempt minimum
 /// `open_pool` funds the vault with alongside the pot — because the reserve
@@ -54,15 +57,17 @@ use crate::state::{Config, CONFIG_SEED, PLATFORM_SEED};
 /// 300 SOL at the maximum reserve is a rounding error against `u64::MAX`); the
 /// saturation is here so the direction of failure is chosen rather than left to
 /// a cast.
-pub fn idle_tier_reserve(config: &Config, exclude_tier: Option<usize>, vault_cushion: u64) -> u64 {
+pub fn idle_tier_reserve(config: &Config, exclude: Option<(u8, usize)>, vault_cushion: u64) -> u64 {
     let mut reserve: u128 = 0;
-    for t in 0..N_TIERS {
-        if Some(t) == exclude_tier {
-            continue;
-        }
-        if config.open_tiers[t] && config.active_pool_by_tier[t] == 0 {
-            let per_pool = (config.tier_pot_lamports[t] as u128) + (vault_cushion as u128);
-            reserve = reserve.saturating_add(per_pool * (config.treasury_reserve_pots as u128));
+    for mode in [MODE_EASY, MODE_HARD] {
+        for t in 0..N_TIERS {
+            if Some((mode, t)) == exclude {
+                continue;
+            }
+            if config.open_tiers_for(mode)[t] && config.active_pool(mode, t) == 0 {
+                let per_pool = (config.tier_pot_lamports[t] as u128) + (vault_cushion as u128);
+                reserve = reserve.saturating_add(per_pool * (config.treasury_reserve_pots as u128));
+            }
         }
     }
     u64::try_from(reserve).unwrap_or(u64::MAX)

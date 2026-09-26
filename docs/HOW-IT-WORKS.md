@@ -30,9 +30,12 @@ About ninety seconds, once, and then nothing until the pool concludes.
 1. **They pay the entry** and receive a character pass — a non-transferable token with one of five
    classes on it. The class is decorative. It is read by nothing that decides the result: a Mythic's
    Strength is worth exactly what a Common's is.
-2. **They set seven battles.** Each battle distributes **100 points** across five stats — Strength,
-   Speed, Heart, Wit, Durability — as whole numbers adding to exactly 100. Any distribution is
-   allowed. There are no presets and no suggested splits.
+2. **They set seven battles.** In an easy pool each battle distributes **100 points** across five
+   stats — Strength, Speed, Heart, Wit, Durability — as whole numbers adding to exactly 100. In a
+   hard pool the player places **700 points anywhere** across the seven battles' thirty-five stats,
+   and a battle may hold nothing. A pool plays one rule or the other and says which; the two are
+   separate pools with separate prizes. Any distribution is allowed. There are no presets and no
+   suggested splits.
 3. **They submit.** The seven battles are sealed at that moment and cannot be changed.
 
 There is no second session, no upgrade to buy, and nothing that costs money after the entry.
