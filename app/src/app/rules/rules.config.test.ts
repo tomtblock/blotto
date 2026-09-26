@@ -94,10 +94,13 @@ describe('rulesSections', () => {
   it('the substance-fixed paragraphs state what the code enforces', () => {
     const byId = new Map(sections.map((s) => [s.id, s]));
     expect(byId.get('scoring')!.body).to.contain('three or more of its five stats');
-    // R9-b: the unlocked battle — the one on screen included — is the even
-    // split; the effect is stated as performance, never as a chance.
-    expect(byId.get('battle-timer')!.body).to.contain('including the one on your screen');
-    expect(byId.get('battle-timer')!.body).to.contain('even split of 20 points');
+    // The board's buzzer rule (app/src/battle/board/spread.ts): one clock,
+    // unplaced points spread evenly over unlocked battles, an untouched easy
+    // battle is 20 in each stat; the effect is stated as performance, never
+    // as a chance.
+    expect(byId.get('battle-timer')!.body).to.contain('One clock runs for the whole board');
+    expect(byId.get('battle-timer')!.body).to.contain('spread evenly across the stats of every battle you have not locked in');
+    expect(byId.get('battle-timer')!.body).to.contain('20 points in each');
     expect(byId.get('battle-timer')!.body).to.contain('three stats to two');
     expect(byId.get('battle-timer')!.body).to.not.match(/chance/i);
     // D-E2 + addendum ruling 3: an equal split, remainder to the lowest

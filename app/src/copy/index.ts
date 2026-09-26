@@ -1310,13 +1310,12 @@ export const COPY = {
     // R9-b (founder addendum 2026-09-07): the battle timer, the founder's
     // wording verbatim — the rule, then its effect stated as how the
     // allocation performs, never as a chance of anything.
-    // PHASE-N-REVIEW (Phase B, 2026-09-24): the even-split default and its
-    // three-to-two loss hold in both modes — a hard board also opens at seven
-    // even splits of 20 (7 × 100 = 700), so this paragraph needs no mode
-    // clause. howToEnter above names the hard rule; founder and counsel own
-    // the wording.
+    // Rewritten 2026-09-26 for the board (app/src/battle/board/spread.ts):
+    // one clock, and the spread of unplaced points per mode. The even
+    // split's three-to-two loss holds in both modes.
+    // PHASE-N-REVIEW: the operator owns the final wording.
     battleTimer:
-      'Lock each battle before its timer ends. Any battle you have not locked when the timer ends \u2014 including the one on your screen \u2014 is entered as an even split of 20 points in each of the five stats. Against any allocation that concentrates points on three stats, an even split loses that battle three stats to two, every time — so it never beats a player who is thinking. Nothing is decided at random: the even split is simply the shape your entry starts from, and leaving it there is a decision like any other.',
+      'One clock runs for the whole board. It starts when you place your first point. When you submit, or when the clock ends, any points you have not placed are spread evenly across the stats of every battle you have not locked in: in an easy pool each battle spreads its own unplaced points across its five stats, so a battle you never touch is entered as 20 points in each; in a hard pool the board\u2019s unplaced points are spread across every stat of every unlocked battle. Against any allocation that concentrates points on three stats, an even split loses that battle three stats to two, every time \u2014 so it never beats a player who is thinking. Nothing is decided at random: the spread is fixed and published, and leaving points unplaced is a decision like any other. After an early submit you see the result and can go back while time remains; when the clock ends, the board is final.',
     // SUBSTANCE FIXED (D3-B; D-E2; the founder's addendum of 2026-09-07,
     // rulings 2 and 3, wording verbatim): ranking, ties, and where a
     // forfeited first-place share goes — always to a player, never to us.
@@ -1441,7 +1440,7 @@ export const COPY = {
       price: 'Price and prize pool per tier',
       prizes: 'Who is paid',
       scoring: 'How scoring works',
-      battleTimer: 'The battle timer',
+      battleTimer: 'The clock and unplaced points',
       ties: 'Ranking, ties and forfeited prizes',
       randomness: 'What randomness does \u2014 and does not do',
       sealing: 'Sealing: when your battles are encrypted and revealed',
