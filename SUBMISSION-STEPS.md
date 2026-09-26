@@ -8,8 +8,7 @@ email, the legal documents and the internal notes.
 
 ## Before you start (in the private repository)
 
-1. **Merge the cleanup PR** (#190) on GitHub. One check, the battle-test lane's "boundary" job, fails
-   by design because the PR touches `battle-test/` and other folders together. Merge over it.
+1. **Merge the cleanup PR** (#190) on GitHub once its checks are green.
 2. **Delete the three internal folders** still on `main`. Everything in them is preserved on this
    archive branch. On your computer, in the repository folder:
 
@@ -20,14 +19,31 @@ email, the legal documents and the internal notes.
    git push
    ```
 
-3. **Decide on the old screenshots** in `docs/design/uplift-2026-09-16/` (taken before the battle
+3. **Once the devnet trial is finished**, remove its internal working files from `main` too (they
+   are preserved here on the archive branch as of 2026-09-26; anything written after that stays in
+   `main`'s history):
+
+   ```bash
+   git rm battle-test/MANUAL.md battle-test/LOG.md battle-test/STATE.md battle-test/DRIFT.md \
+          battle-test/FOUNDER-ACTIONS.md battle-test/docs/FIX-seal-lockout.md
+   git commit -m "Remove the devnet trial's internal working files" && git push
+   ```
+
+   If the trial is still running on submission day, skip this here and do it in the submission
+   copy instead (step 8).
+
+4. **Rotate the RPC provider key** (finding §H30). The old key was printed into this private
+   repository's `backend-status` Actions logs. The public copy never contains those logs, but the key
+   should be replaced anyway.
+
+5. **Decide on the old screenshots** in `docs/design/uplift-2026-09-16/` (taken before the battle
    board). Keep them or `git rm -r` them the same way.
 
 ## Make the fresh repository
 
-4. On GitHub: **New repository** → name it (e.g. `blotto-cup`) → **Private** for now → do **not** add
+6. On GitHub: **New repository** → name it (e.g. `blotto-cup`) → **Private** for now → do **not** add
    a README, licence or .gitignore (the files already exist).
-5. On your computer, export `main` **without history**. `git archive` copies only tracked files, so
+7. On your computer, export `main` **without history**. `git archive` copies only tracked files, so
    no local `.env`, key file or `node_modules` can slip in:
 
    ```bash
@@ -36,7 +52,7 @@ email, the legal documents and the internal notes.
    git -C ~/path/to/blotto archive main | tar -x   # use your private repo's real path
    ```
 
-6. **Remove the workflows that belong to your deployment.** They need your secrets and would fail
+8. **Remove the workflows that belong to your deployment.** They need your secrets and would fail
    on a schedule in the new repository:
 
    ```bash
@@ -45,10 +61,17 @@ email, the legal documents and the internal notes.
       .github/workflows/indexer-backfill.yml
    ```
 
+   If the trial's internal working files are still in `main` (step 3), remove them here:
+
+   ```bash
+   rm -f battle-test/MANUAL.md battle-test/LOG.md battle-test/STATE.md battle-test/DRIFT.md \
+         battle-test/FOUNDER-ACTIONS.md battle-test/docs/FIX-seal-lockout.md
+   ```
+
    Kept, because they need no secrets: `ci-fast`, `on-chain`, `rehearsal`, `security-sweep`,
    `skill-evidence`, `app-test-signer`, `app-lighthouse`, `stop-the-line`.
 
-7. **Commit as a no-reply identity**, so your personal email is not in the public history. Your
+9. **Commit as a no-reply identity**, so your personal email is not in the public history. Your
    GitHub no-reply address is under GitHub → Settings → Emails ("…@users.noreply.github.com"):
 
    ```bash
@@ -61,7 +84,7 @@ email, the legal documents and the internal notes.
 
 ## Check before it goes anywhere
 
-8. Run these in the new folder. Every one must come back clean:
+10. Run these in the new folder. Every one must come back clean:
 
    ```bash
    ./scripts/check-language.sh
@@ -80,22 +103,22 @@ email, the legal documents and the internal notes.
 
 ## Publish
 
-9. Push to the new repository:
+11. Push to the new repository:
 
    ```bash
    git remote add origin https://github.com/<you>/blotto-cup.git
    git push -u origin main
    ```
 
-10. On GitHub, in the new repository's **Settings**:
+12. On GitHub, in the new repository's **Settings**:
     - **Security → Private vulnerability reporting → Enable.** `SECURITY.md` tells people to use it.
     - **General → Automatically delete head branches → On.**
     - Add a description and topics (e.g. `solana`, `anchor`, `colonel-blotto`, `nextjs`).
-11. Open the **Actions** tab and let `ci-fast` run once on `main`; it should go green.
-12. When you are happy, **Settings → General → Change visibility → Public**, then share the link.
+13. Open the **Actions** tab and let `ci-fast` run once on `main`; it should go green.
+14. When you are happy, **Settings → General → Change visibility → Public**, then share the link.
 
 ## Afterwards
 
 - Keep the private repository. It is the only place the full history and this archive branch live.
-- Future work happens in the private repository; copy releases across the same way (steps 5–9),
+- Future work happens in the private repository; copy releases across the same way (steps 7–11),
   or make the public one the working repository from then on and stop using the private one.
