@@ -4,12 +4,12 @@
   "_why": "The plan is evidence only if it demonstrably predates the outcome. Commit dates can be set to anything; GitHub's merge timestamp and a Solana block time cannot. This file binds the two and is written SEPARATELY so T7.plan.json stays byte-identical to what was frozen.",
   "writtenAt": "2026-09-26T19:11:47Z",
   "writtenAtNote": "WRITTEN AT FREEZE TIME, before the freeze PR was opened and before any entry of ours existed. T3's freeze file was written two days after its pool ran and said so; this one is not.",
-  "pullRequest": null,
+  "pullRequest": 189,
   "repository": "tomtblock/blotto",
-  "mergedAt": null,
-  "mergedBy": null,
-  "mergeCommit": null,
-  "headCommit": null,
+  "mergedAt": "2026-09-26T19:41:55Z",
+  "mergedBy": "tomtblock",
+  "mergeCommit": "c32ca455c7da8b77bea53b36c7f159200f45467c",
+  "headCommit": "fe1d881132619b8bafd99ad3628a85f6c1e267f9",
   "planPath": "battle-test/registry/T7.plan.json",
   "planSha256": "5bb785f4f666e772bc098a9fd8642e09bde35869a946dc4a53fb8115cc255c24",
   "THE CLAIM THIS RECORD EXISTS TO MAKE": {
@@ -69,6 +69,23 @@
     "whatIsFrozenInstead": "The FUNCTION and 63 of its 64 inputs. The root is determined by the sets in T7.plan.json plus one set revealed at seal; reconcile.ts recomputes it and checks it against the chain. Nobody can alter 63 of the inputs after the fact, and the function is the committed oracle.",
     "theRootClaimT7StillMakes": "The root recomputed from the 64 revealed sets equals the on-chain results_root — the verifiability claim T4, T5, T6 and T3 each established with a point prediction."
   },
+  "planHashVerifiedAtMergeCommit": {
+    "_why": "The freeze claim is only worth as much as the bytes it names. planSha256 above was written BEFORE the PR was opened; this records that the file at the merge commit actually hashes to it, checked after the merge rather than asserted before it.",
+    "checkedAt": "2026-09-26T19:45Z",
+    "method": "GET /repos/tomtblock/blotto/contents/battle-test/registry/T7.plan.json?ref=c32ca455c7da8b77bea53b36c7f159200f45467c, base64-decoded, sha256 of the raw bytes.",
+    "bytes": 97232,
+    "sha256": "5bb785f4f666e772bc098a9fd8642e09bde35869a946dc4a53fb8115cc255c24",
+    "matchesPlanSha256": true
+  },
+
+  "firstEntryOfOursPrecededBy": {
+    "_why": "T7's freeze standard is 'before any entry of ours'. That is only a claim if the gap is recorded.",
+    "mergedAt": "2026-09-26T19:41:55Z",
+    "poolHeldAtMerge": 1,
+    "poolHeldAtMergeNote": "Only the prior occupant. Confirmed from the indexer's projection at the merge and again at 21:46Z, still 1 of 64.",
+    "firstEntryOfOursAt": null
+  },
+
   "verifyIndependently": [
     "The merge time will be served by GitHub's own API for this freeze PR and cannot be rewritten by this repository.",
     "sha256 of registry/T7.plan.json at the merge commit must equal planSha256 above.",
@@ -81,7 +98,7 @@
     "poolCreatedAtSource": "block time, read from chain via getSignaturesForAddress on the pool PDA (first signature 1HVWU9aCnph1oVayYtVM..., 2026-09-26T13:46:04Z). Not derived and not the indexer's.",
     "priorOccupantRegisteredAt": "2026-09-26T15:35:48Z",
     "planWrittenAt": "2026-09-26T19:11:47Z",
-    "frozenAt": null,
+    "frozenAt": "2026-09-26T19:41:55Z",
     "firstEntryOfOursAt": null,
     "freezeMustPrecedeFirstEntry": true
   }

@@ -612,5 +612,26 @@
   unconditional claims (the tie; no capped seat can outscore a wall, 854 < 861; the founder cannot
   decide the pool, 519 < 861) and one conditional — the walls hold rank 1 unless the stranger takes
   8 or more of the 14 half-points on offer against one wall.
-- **Still open:** §F-37, the 60-second pool-27 click. **T7** awaits the freeze merge, then the fill.
-  **T8** is desk work. Then restore the geo vendor secrets and rotate the Helius key, in that order.
+- **2026-09-26 19:41:55Z** **T7 freeze MERGED** — PR 189, merge commit `c32ca455`. Verified after
+  the fact rather than asserted before it: the plan file at that commit hashes to
+  `5bb785f4f666e772bc098a9fd8642e09bde35869a946dc4a53fb8115cc255c24`, exactly the value written
+  into `T7.freeze.json` before the PR was opened, and pool 36 still held only the stranger. The
+  freeze precedes our first entry.
+- **2026-09-26 20:00Z** **§H33 — nothing could place a flag, so the review path was unreachable.**
+  Found while working out how the founder would place T7's two flags. `flag_entry`'s only two
+  callers are the crank's auto-flag (dead under D-E9, returns an empty list as a constant) and
+  `POST /decisions` with action `flag` — which the server accepts on an Open pool and **nothing
+  ever sent**. The review page listed only already-flagged entries and offered no Flag control.
+  Searching the whole tree in every quoting style, the only occurrences were the server's own
+  type union, validator and dispatch. So escrow, release, forfeit, `pay_next_place`, the
+  twelve-hour clock and the appeal path all sat behind a gate with no handle. **This is larger
+  than T7**; T7 is how it surfaced.
+- **2026-09-26 21:4xZ** **PR 191 merged** — the flag control. Three files, +190, no deletions:
+  `flag-target.ts` (pure, tested) and the input plus button placed ABOVE the table, because the
+  table shows only flagged entries and an empty pool reads "Nothing flagged in this pool." — the
+  one control that can START a hold must not be hidden by there being nothing held. `act` now
+  returns its outcome so a refusal leaves the address in the box. Verified on the PR's preview
+  build and again **live in production**, by fetching `/admin/review`'s chunks and finding the
+  control's strings in the shipped bundle rather than trusting the local suite.
+- **Still open:** §F-37, the 60-second pool-27 click. **T7** is filling. **T8** is desk work.
+  Then restore the geo vendor secrets and rotate the Helius key, in that order.

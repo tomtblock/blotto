@@ -1996,3 +1996,51 @@ the rest unplaced comes back from the buzzer as **[40, 15, 15, 15, 15]**.
 `§9c` is new and is the one property T7 rests on — a twin wall scores identically to its original
 against every opponent, checked against six adversaries including an even split, a single spike, a
 set built to beat a wall's zeros, and a third copy of the wall itself.
+
+---
+
+## §H33 — nothing could place a flag, so the whole review path was unreachable
+
+**Found 2026-09-26 20:00Z, while working out how the founder would place T7's two flags.** It is
+the largest of the three findings in this family and it is not about T7.
+
+`flag_entry` has exactly two callers in the tree, and neither could fire:
+
+| caller | why not |
+|---|---|
+| `backend/reveal/src/crank.ts:240` | driven by `deps.detect()`, which under ruling **D-E9** returns an empty list as a constant. Permanently dead. |
+| `backend/detection/src/review.ts:221` | driven by `POST /decisions` with `action: 'flag'`. The server accepts it; `preconditions.ts` allows it on an **Open** pool; `flags.rs` requires only `!entry.settled`. **Nothing sent it.** |
+
+`app/src/app/admin/review/review-client.tsx` listed only entries that were *already* flagged —
+`entries.filter((e) => e.flagged || e.escrow_settled !== null)` — and offered Clear, Release,
+Forfeit and the two appeal actions. No Flag control. Searching the whole tree for the action
+string in every quoting style, the only occurrences were the server's own type union, its
+validator and its dispatch. **There was no sender anywhere.**
+
+So `pay_prizes` could never escrow, and therefore `release_escrow`, `forfeit_escrow`,
+`pay_next_place`, the twelve-hour review clock and the entire appeal path were unreachable. The
+published promise that a suspicious prize is held and reviewed could not be kept by anyone,
+including the operator.
+
+**Why it survived.** Everything else was built and tested. `act(player, action)` was already
+generic and its type union **already listed `'flag'`**; `decisionOutcome` took any action string
+and already carried the refusal copy for `entry_settled` and `flag_unchanged`. The gap was one
+input and one button — and the page's own empty state, *"Nothing flagged in this pool."*, reads as
+nothing-to-do rather than as a control that is missing.
+
+**Fixed in PR 191** (merged 2026-09-26T21:4xZ), outside this lane under the founder's explicit
+approval: `flag-target.ts` with its test, and the control placed **above** the table so it is
+visible precisely when the table is empty. Verified live in production by fetching
+`/admin/review`'s chunks and finding the control's strings in the shipped bundle — not merely by
+the local suite passing.
+
+**What this leaves for the founder.** Two things, neither fixed here:
+
+1. **A flag can still only ever be placed on evidence from an earlier pool** (§H32). The crank
+   reveals, scores, detects, commits and pays in one tick, so this pool's own findings can never
+   precede this pool's payment. Review-before-payment on a pool's own report needs a hold between
+   `commit_results` and `pay_prizes` that the crank does not have.
+2. **Nothing exercised this path before T7.** A control that no test and no rehearsal ever pressed
+   is a control nobody can claim works. That is the argument for T7 running the whole sequence —
+   flag, escrow, release, forfeit, next-place — on a real pool with real lamports, which is what
+   it now does.

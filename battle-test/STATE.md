@@ -1,15 +1,14 @@
-# STATE — 2026-09-26 19:15 UTC — by Claude Code
+# STATE — 2026-09-26 21:55 UTC — by Claude Code
 
-Phase:            **T7 is designed, frozen and funded. Waiting on the freeze-PR merge, then the
-                  fill.** Nothing of ours has entered pool 36.
-Waiting on:       **the founder: F-40 — merge the T7 freeze PR.** Nothing else is needed before
-                  the fill starts, and the fill is mine.
+Phase:            **T7's blocker is cleared and the fill is starting.** The freeze is merged and
+                  verified; the missing flag control is merged and live in production.
+Waiting on:       **the founder: F-42 — sitting one.** I will fill to 39 unattended and then stop;
+                  the rest needs them at the keyboard.
 Blocked:          nothing.
 Results so far:   T1 **PASS** · T3 **PASS** · T4 **PASS** · T5 **PASS** · **T6 PASS\*** ·
                   T2 **SPOILED** · T2R **PASS (7 of 8)** · pool 22 = observation, not a test
-Money:            funder **15.940787840** (all 72 wallets swept back) · every wallet **0** ·
-                  T7 needs ~6.9 SOL of it
-Open PR:          the T7 freeze PR, once pushed. **174 merged.**
+Money:            funder **8.164767840** · 72 wallets at 0.108 each · T7 needs ~6.9 SOL of it
+Open PR:          none — **189 and 191 both merged.**
 Parallel session: **program development** — `session_01CosZsm5MB312HdbJH6y2zJ`, branch
                   `claude/program-dev`. Separate lane, no overlap.
 
