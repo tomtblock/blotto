@@ -532,3 +532,49 @@
   since a refused attempt costs a network fee (15000 lamports, measured on the headless attempt in
   the same window). Whether a non-crypto-native player reads "settled" that way is user-facing
   language, which is founder-owned. Recorded, not changed.
+
+## 2026-09-25 / 26
+
+- **2026-09-25 01:24:52Z** **T3 SEALED AT THE DEADLINE, AND PLAYED.** Pool 29 reached its deadline
+  holding exactly 40 — `MIN_SEATS` — and `seal_at_deadline` fired two seconds later. The settlement
+  path, from the pool's own history: `SealAtDeadline` 01:24:52 → `RevealPoolSecret` 01:24:54 →
+  `CommitResults` 01:24:55 → `PayPrizes` 01:24:55. **`trigger_refund` does not appear.** Three
+  seconds from seal to payout, and the first time `seal_at_deadline` has ever run on this cluster.
+- **2026-09-26 14:34Z** Harvested and reconciled. **PASS on every frozen pass criterion**; see
+  `registry/T3.verdict.md`. The headline numbers: **W00 scored exactly 542 and W01 exactly 4**, both
+  POINT predictions rather than ranges, because premise P1 fixes both of the wall's founder
+  battles. W00 rank 1 paid the whole 4000000000; W01 rank 40; UI-A 39 and UI-B 38, neither paid.
+  Root **VERIFIED — recomputed from 40 seats · MATCH**. Vault 650240. 40 of 40 allocations
+  reproduce their committed hash. 0 flagged, 0 holds, 0 refunded.
+- **Per-seat cost, §H20's bands on a sixth pool:** `4441080 ×10` on seats 0..9 and `4446160 ×28` on
+  seats 10..39, plus the two UI seats in the high band — the exact 10/30 split predicted, boundary
+  precisely at seat 10. Measured from each register transaction's own pre/post balances. **The
+  wallet-balance method broke on W00** and the reason is worth keeping: the funder tops wallets UP
+  TO a target, and W00 already held 7.93 SOL from winning T5 and T6, so it was never funded and its
+  starting balance was not 108000000.
+- **THE FINDING: both founder seats timed out into the EVEN SPLIT.** UI-B played
+  `[20,20,20,20,20]` in **all seven** battles; UI-A dialled two and let the clock expire on five.
+  **§H13 recurring, and harder than T5's** — there one seat, here both. Every unconditional claim
+  held anyway: an even split is five non-zero stats none above 25, so P1 and P2 still applied.
+  **33 of 40 scores differ from the plan and every unconditional claim was exact.** That is the
+  two-tier split doing its job.
+- **It was invisible in the first reconcile, and that is a defect now fixed.** `INPUT_DRIFT` was
+  evaluated AFTER `RANK_DRIFT` in an `if/else if` chain, so any seat whose rank had also moved was
+  labelled `RANK_DRIFT` and the input check never ran — and input drift is precisely what CAUSES
+  rank drift, so they co-occur almost always. The report said only that two founder ranks were off
+  by one. `scripts/reconcile.ts` now checks input first and names the even split by count. Same
+  family as §H9's stub verdict: a check that exists but cannot fire.
+- **`RESULT: FAIL` stands, and is mine.** 22 of 38 headless seats drifted in rank. Exact field ranks
+  are not a pass criterion. The plan marked only the two founder seats `rankIsConditional` when it
+  should have marked all 38, because every headless rank depends on how the founders played.
+  **T4 had this on 2 seats, T5 on 44 of 62, T3 on 22 of 38** — three pools, one lesson, still not
+  fixed in the artifact that keeps repeating it.
+- **`T3.freeze.json` was written two days late**, and says so. `reconcile.ts` refused the pool as
+  UNFROZEN and was right to — no freeze record existed. It is built from GitHub's merge timestamp,
+  git hashes and devnet block times, all independently recoverable, and it records that **T3 holds
+  the WEAKER freeze standard**: frozen 1 h 33 min before the first entry but **not** before the pool
+  existed, pool 29 having been opened 2 h 30 min before the plan merged. T6 and T2R hold the
+  stronger one. Said rather than glossed.
+- **Still open:** §F-37, the 60-second pool-27 click. **T7** needs its own pool — pool 36 is Open
+  now. **T8** is desk work. Then restore the geo vendor secrets and rotate the Helius key, in that
+  order.
