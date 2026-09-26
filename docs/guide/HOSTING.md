@@ -102,11 +102,7 @@ setup, including which variables each path needs, is in
   containers. Unset means no CORS headers (`backend/_shared/src/http-hygiene.ts`). For a
   browser-driven local run, set `BLOTTO_API_CORS_ORIGINS=http://localhost:3000` in `.env`.
 - **Cluster.** Compose does not pass `BLOTTO_CLUSTER`, so every container runs against devnet.
-
-- **Cluster.** Leaving `BLOTTO_CLUSTER` unset means devnet, which is what a local stack wants. Set
-  `BLOTTO_RPC_URL` to use a private RPC instead of the public endpoint.
-- The daemon and the review service need their credentialed seams. Without them their containers
-  exit at startup with a message saying so.
+  Set `BLOTTO_RPC_URL` to use a private RPC instead of the public endpoint.
 
 ## Deploying the backend to Fly
 
