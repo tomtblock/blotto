@@ -13,7 +13,9 @@ Each entrant also receives a non-transferable character pass whose class is draw
 on-chain randomness. **The class is cosmetic** — nothing in scoring, payout or ranking reads it.
 
 > **Status: devnet only.** The program has never been deployed to mainnet and no real money has
-> entered it. Mainnet is gated on an external security audit and an independent legal review.
+> entered it. Mainnet is gated on independent legal review and the checklist in
+> [`docs/ROADMAP.md`](docs/ROADMAP.md). Under decision `R5`, an internal program review stands in for a
+> formal audit before launch, and an independent audit follows after ten settled mainnet pools.
 > Program ID (devnet): `5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17`.
 
 ## Two modes
@@ -56,8 +58,10 @@ with its source.
 | I want to… | Read |
 |---|---|
 | Understand the game and the money, without code | [How it works](docs/guide/HOW-IT-WORKS.md) |
+| Read the product requirements | [Product requirements (PRD)](docs/product/PRD.md) |
+| See where the project is and what stands before mainnet | [Roadmap](docs/ROADMAP.md) |
 | Run it locally, build it, test it | [Getting started](docs/guide/GETTING-STARTED.md) |
-| Know what is actually built | [Architecture](docs/architecture/ARCHITECTURE.md) · [Diagrams](docs/architecture/DIAGRAMS.md) |
+| Know what is actually built | [Architecture, as built](docs/architecture/ARCHITECTURE.md) · [Diagrams](docs/architecture/DIAGRAMS.md) |
 | Know why it is built that way | [Decision log](docs/architecture/DECISIONS.md) · [Design records](docs/architecture/adr/) |
 | See the devnet test results | [Testing report](docs/testing/TESTING-REPORT.md) |
 | Check the fairness and accountability safeguards | [Safeguards](docs/compliance/SAFEGUARDS.md) · [Product facts](docs/compliance/PRODUCT-FACTS.md) · [Data inventory](docs/compliance/DATA-INVENTORY.md) |

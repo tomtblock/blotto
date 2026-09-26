@@ -11,6 +11,13 @@ Where any document and the code disagree, the code is right and the document is 
 | [`../README.md`](../README.md) | What Blotto Cup is, the two modes, how the money moves, the quick start |
 | [`guide/HOW-IT-WORKS.md`](guide/HOW-IT-WORKS.md) | The whole mechanism in plain language, no code — for players, judges and reviewers |
 
+## Product and plan
+
+| Document | Canonical for |
+|---|---|
+| [`product/PRD.md`](product/PRD.md) | **The product requirements**: who it is for, the game, both modes, pools and prizes, fairness and eligibility requirements, non-goals, open product questions |
+| [`ROADMAP.md`](ROADMAP.md) | **Where the project is**: each build phase and its status, and the road-to-mainnet checklist |
+
 ## Guides — using and running it
 
 | Document | Canonical for |
@@ -24,7 +31,7 @@ Where any document and the code disagree, the code is right and the document is 
 
 | Document | Canonical for |
 |---|---|
-| [`architecture/ARCHITECTURE.md`](architecture/ARCHITECTURE.md) | **What exists**: services, the program's instructions and accounts, the money model, sealing, scoring, both modes, detection, what is not built |
+| [`architecture/ARCHITECTURE.md`](architecture/ARCHITECTURE.md) | **What exists — the as-built description**: services, the program's instructions and accounts, the money model, sealing, scoring, both modes, detection, what is not built |
 | [`architecture/DIAGRAMS.md`](architecture/DIAGRAMS.md) | Annotated diagrams of the same — canonical for nothing; `ARCHITECTURE.md` wins on any disagreement |
 | [`architecture/DECISIONS.md`](architecture/DECISIONS.md) | Every product and design decision, by ID (`R1`–`R21`, `D-A1`…`D-E17`), with its status and where it is enforced |
 | [`architecture/adr/`](architecture/adr/) | Design records for the class draw, the randomness digest, the pass standard and its non-transferability, and the program's threat mitigations |

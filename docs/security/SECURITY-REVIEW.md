@@ -1,9 +1,11 @@
 # Security review summary
 
 **Status.** Blotto Cup runs on Solana **devnet only**, with devnet SOL and no real money
-(program `5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17`). A mainnet launch is gated on an
-external security audit and on legal review; neither has happened yet. Everything below comes
-from the project's own reviews, and none of them is an independent audit.
+(program `5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17`). A mainnet launch is gated on legal
+review and the checklist in [`../ROADMAP.md`](../ROADMAP.md). Everything below comes from the
+project's own reviews, and none of them is an independent audit: under decision `R5`, the internal
+program review stands in for one before launch, and an independent audit follows after ten settled
+mainnet pools.
 
 This page summarises those reviews: what each one read, the threat model, how the on-chain money
 invariants are enforced and tested, what was found and fixed, and what is still open. To report a
@@ -136,8 +138,9 @@ The significant fixes:
 
 ## 5. Open items
 
-- **No external audit yet.** An independent audit is a precondition for mainnet, as is legal
-  review.
+- **No independent audit yet.** Under decision `R5` it follows after ten settled mainnet pools; the
+  internal program review stands in for it before launch. Legal review is a precondition for
+  mainnet.
 - **Upgrade authority and custody.** On devnet the program's upgrade authority is a single
   operator key. `config/custody.json` records that it moves to the multisig before mainnet. That
   multisig is currently 1-of-1 with no upgrade timelock set. Both are mainnet preconditions, and

@@ -1,7 +1,7 @@
 # Security policy
 
 Blotto Cup runs on Solana **devnet only**. It holds no real money, and a mainnet launch is gated
-on an external audit and legal review. Reports are still welcome and taken seriously: devnet is
+on legal review and the road-to-mainnet checklist (`docs/ROADMAP.md`). Reports are still welcome and taken seriously: devnet is
 where problems should be found.
 
 ## Scope
