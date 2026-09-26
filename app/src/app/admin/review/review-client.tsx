@@ -21,6 +21,7 @@ import { useAuth } from '@/wallet/auth-context';
 import { decisionOutcome, type DecisionOutcome } from './decision-outcome';
 import { ComplaintsPanel } from './complaints-panel';
 import { detectionRequestMessage } from './detection-request';
+import { flagTargetMessage, flagTargetRefusal } from './flag-target';
 
 const REVIEW_API = process.env.NEXT_PUBLIC_REVIEW_API_URL;
 
@@ -58,6 +59,9 @@ export function ReviewClient() {
   const [flagged, setFlagged] = useState<EntryRow[] | null>(null);
   const [log, setLog] = useState<LoggedDecision[]>([]);
   const [criterion, setCriterion] = useState('');
+  /** The wallet a reviewer is about to flag — the one decision that names a
+   * wallet the table is not already showing. See `flag-target.ts`. */
+  const [flagTarget, setFlagTarget] = useState('');
   /** The last decision's classified outcome — never a bare string, because
    * "recorded" and "landed on-chain but not logged" must not look alike. */
   const [outcome, setOutcome] = useState<DecisionOutcome | null>(null);
@@ -153,6 +157,29 @@ export function ReviewClient() {
     }
   }, [auth, pool]);
 
+  /**
+   * Place a flag on a wallet that is not yet in the table.
+   *
+   * This is the only control here that STARTS a hold rather than resolving
+   * one, and until it existed nothing could: `flag_entry`'s only other
+   * caller is the settlement crank's auto-flag, which ruling D-E9 turned
+   * off permanently. `act` does the signing, the POST and the outcome
+   * classification — this only decides whether the reviewer's signature is
+   * worth asking for.
+   */
+  const flag = async () => {
+    const refusal = flagTargetRefusal(flagTarget, (flagged ?? []).map((e) => e.player));
+    if (refusal) {
+      setNote(flagTargetMessage(refusal));
+      return;
+    }
+    const result = await act(flagTarget.trim(), 'flag');
+    // Cleared ONLY when the decision landed: `act` reloads the table then,
+    // so the wallet appears as a row and a second press would be a repeat.
+    // On a refusal the address stays in the box to be corrected or retried.
+    if (result?.settled) setFlagTarget('');
+  };
+
   const act = async (
     player: string,
     action: 'clear' | 'forfeit' | 'release' | 'flag' | 'appeal_upheld' | 'appeal_dismissed'
@@ -223,6 +250,9 @@ export function ReviewClient() {
     const result = decisionOutcome(action, player, res.status, body);
     setOutcome(result);
     if (result.settled) await load();
+    // Returned so a caller can tell a settled decision from a refusal; the
+    // early returns above answer `undefined`, which is also not settled.
+    return result;
   };
 
   // Stage E: an entry has an OPEN appeal when its latest lodge follows its
@@ -276,6 +306,33 @@ export function ReviewClient() {
           {outcome.message}
         </p>
       )}
+      {/*
+        * Placing a flag. ABOVE the table deliberately: the table shows only
+        * entries that are already flagged, so when a pool has none it reads
+        * "Nothing flagged in this pool." and looks like nothing to do. The
+        * one control that can start a hold must not be the one hidden by
+        * there being nothing held yet.
+        */}
+      <div className="rounded border p-3">
+        <div className="flex gap-2">
+          <input
+            data-testid="flag-target"
+            className="flex-1 rounded border bg-transparent p-2 font-mono text-sm"
+            placeholder="wallet to flag"
+            value={flagTarget}
+            onChange={(e) => setFlagTarget(e.target.value)}
+          />
+          <button type="button" className="rounded border px-4" onClick={flag}>
+            Flag
+          </button>
+        </div>
+        <p className="pt-2 text-xs opacity-70">
+          A flag holds this seat&rsquo;s prize share at payout instead of paying it. It moves no
+          money and takes nothing away — the share stays in the pool&rsquo;s vault until it is
+          released to the player or an admin-signed forfeit passes it to the next eligible place.
+          It can only be placed before the seat settles, so the window closes when the pool pays.
+        </p>
+      </div>
       {flagged && flagged.length === 0 && <p className="opacity-70">Nothing flagged in this pool.</p>}
       {flagged && flagged.length > 0 && (
         <table className="w-full text-left text-sm">
