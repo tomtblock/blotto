@@ -20,7 +20,7 @@
 //!
 //! **There is no instruction that can thaw a character pass.** See `pass.rs`.
 //!
-//! See `docs/INDEX.md` for the source-of-truth map and `CLAUDE.md` for the
+//! See `docs/README.md` for the source-of-truth map and `CLAUDE.md` for the
 //! full hard-rule list.
 
 // `clippy::diverging_sub_expression` fires on the entry-point glue emitted by
@@ -57,9 +57,8 @@ use crate::constants::N_TIERS;
 use crate::state::Payout;
 
 // Devnet program identity, generated fresh during Phase 0 extraction. The
-// predecessor's program ID (57goj6dM…) is NOT reused — see TRANSITION-REPORT.md,
-// which also records where this keypair's private half lives (outside this
-// repository, and never in it).
+// predecessor's program ID (57goj6dM…) is NOT reused. This keypair's private half lives
+// outside this repository and has never been in it.
 declare_id!("5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17");
 
 #[program]
@@ -508,7 +507,7 @@ mod program_id_copies {
                 contents.contains(&declared),
                 "{what} does not contain the declared program id {declared}. \
                  If the program was redeployed under a new keypair, update every \
-                 file in this list (and `docs/AS-BUILT.md` §3, which publishes \
+                 file in this list (and `docs/architecture/ARCHITECTURE.md` §3, which publishes \
                  the same list) in the same change."
             );
         }

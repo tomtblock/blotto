@@ -33,9 +33,9 @@ const WALLET = keyFor(21);
 
   it('put, get, pending, markSent — and a replacement reopens a sent row', async () => {
     const store = new PgPoolNotifyStore(pool);
-    await store.put({ pool: POOL_A, wallet: WALLET, email: 'tom@example.com', timestamp: 1_758_000_000n, walletSignature: 'c2ln', sentAt: null });
+    await store.put({ pool: POOL_A, wallet: WALLET, email: 'player@example.com', timestamp: 1_758_000_000n, walletSignature: 'c2ln', sentAt: null });
     const rec = await store.get(POOL_A, WALLET);
-    expect(rec?.email).to.equal('tom@example.com');
+    expect(rec?.email).to.equal('player@example.com');
     expect(rec?.timestamp).to.equal(1_758_000_000n);
     expect(rec?.sentAt).to.equal(null);
     expect((await store.pending()).map((r) => r.pool)).to.deep.equal([POOL_A]);

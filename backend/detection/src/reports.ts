@@ -11,7 +11,7 @@
  * `/decisions` flow over entries a person already flagged, so the layer that
  * is supposed to TELL a person what to look at was connected to nothing.
  *
- * WHAT D-E9 RATIFIED (option (a), `docs/BUILD-ROADMAP_v1.0.md`): detection
+ * WHAT D-E9 RATIFIED (option (a), `docs/architecture/DECISIONS.md`): detection
  * stays manual — no signal takes an automatic action, ever, and the on-chain
  * `Config.detection_hard_block` switch is read by nothing off-chain — but
  * every report is PERSISTED and surfaced to the reviewer before the review

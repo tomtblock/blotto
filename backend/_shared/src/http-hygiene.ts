@@ -15,11 +15,11 @@
  *
  * This module was written while nothing was deployed to a public URL, which is why the safe
  * default was "change nothing". Since then the indexer's read API, the packet service and the
- * review service all run on Fly behind public hostnames (`docs/hosting.md`), so **every knob left
+ * review service all run on Fly behind public hostnames (`docs/guide/HOSTING.md`), so **every knob left
  * unset is a public JSON API with no rate limit and no security headers**. The flags are not in
  * any committed Fly config; if they are on, they are on as deploy-time secrets, and
  * `fly secrets list` is how you find out. Turning them on for each public service is an open item
- * in `docs/AUDIT-2026-09-07.md`.
+ * in `docs/security/SECURITY-REVIEW.md`.
  *
  * Two things this does NOT change. The webhook stays unlimited by design (below). And the numbers
  * below remain PROPOSALS: nothing founder-ratified gives a rate limit, a window, a burst, a

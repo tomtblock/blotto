@@ -618,7 +618,7 @@ export const COPY = {
     // PHASE-N-REVIEW (founder 2026-09-16, CHANGE-2026-09-16_ui-uplift.md §A7):
     // the same string also answers the ciphertext store's 409 — one seal per
     // wallet per pool, so a retry after a partial failure is refused before
-    // anything is signed (battle-test/LOG.md, 2026-09-16 00:19). The old
+    // anything is signed (docs/testing/TESTING-REPORT.md, seal lockout). The old
     // wording sent that player to the Rules page's eligibility list, which
     // is the wrong explanation. This one is true for both cases and stays
     // generic (PID §8: the refusal gives no reason). Proposal until ratified.
@@ -692,7 +692,7 @@ export const COPY = {
    * The founder's ruling of 2026-09-24 (5.3) asks for exactly that readout
    * in both modes — per field in easy, one total in hard. PHASE-N-REVIEW:
    * the ruling supersedes §4.2's sentence; recorded in
-   * docs/CHANGE-2026-09-24_battle-board.md for the PID reissue.
+   * docs/architecture/ARCHITECTURE.md for the PID reissue.
    */
   board: {
     modeEasy: 'Easy · 100 per battle',
@@ -1005,7 +1005,7 @@ export const COPY = {
   /*
    * THE TWO DOCUMENTS (2026-09-19), in their own modules because each is
    * long enough to read on its own and both are drafted against
-   * 01_PRODUCT_FACTS. Exported through here so the one-place rule holds and
+   * docs/compliance/PRODUCT-FACTS.md. Exported through here so the one-place rule holds and
    * so the language gate and the published-numbers gate scan them.
    */
   terms: TERMS,
@@ -1295,8 +1295,8 @@ export const COPY = {
     // Strings that carry the field-size numbers are functions of the shared
     // constants (rules.config passes MIN_SEATS and the go-timer) — the D-B6
     // rule that no figure on this page is hand-typed.
-    howToEnter: (minSeats: number) =>
-      `Sign in, pick an open pool, and confirm the 18+ and terms statements — your wallet signs that confirmation once per terms version. Pay the entry price for the tier. Before an entry is accepted, your wallet is checked against published sanctions lists; every winning wallet is checked again before payment. You then set seven battles, about ninety seconds in total: in an easy pool each battle splits 100 points across five stats; in a hard pool you place 700 points anywhere across the seven battles, every stat between 0 and 700, and the pool's page says which rule it plays. Your battles are encrypted on your device before any payment moves. One entry per wallet per pool; there is no limit across pools. The keys that run the service — the admin, the keeper, the entry signer and the settlement signer — can never enter. A pool has 64 seats and runs with at least ${minSeats} players (see the field-size rule). Decisions are final: a submitted entry cannot be changed or withdrawn (see the refund rule for pools that never reach their minimum field).`,
+    howToEnter: (minSeats: number, boardMinutes: number) =>
+      `Sign in, pick an open pool, and confirm the 18+ and terms statements — your wallet signs that confirmation once per terms version. Pay the entry price for the tier. Before an entry is accepted, your wallet is checked against published sanctions lists; every winning wallet is checked again before payment. You then set seven battles on one ${boardMinutes}-minute clock, which starts when you place your first point: in an easy pool each battle splits 100 points across five stats; in a hard pool you place 700 points anywhere across the seven battles, every stat between 0 and 700, and the pool's page says which rule it plays. Your battles are encrypted on your device before any payment moves. One entry per wallet per pool; there is no limit across pools. The keys that run the service — the admin, the keeper, the entry signer and the settlement signer — can never enter. A pool has 64 seats and runs with at least ${minSeats} players (see the field-size rule). Decisions are final: a submitted entry cannot be changed or withdrawn (see the refund rule for pools that never reach their minimum field).`,
     priceIntro: (cooldownMinutes: number) =>
       `Seven tiers are configured, each with a fixed prize pool. A tier must be switched on by the operator before pools open in it; at launch only the smallest tier is on. One pool per tier is open at a time, and a new pool of that tier opens ${cooldownMinutes} minutes after the previous one has paid out or closed.`,
     // D-E2 (ratified 2026-09-06): one paid place. No percentage, no multiple.
@@ -1310,13 +1310,12 @@ export const COPY = {
     // R9-b (founder addendum 2026-09-07): the battle timer, the founder's
     // wording verbatim — the rule, then its effect stated as how the
     // allocation performs, never as a chance of anything.
-    // PHASE-N-REVIEW (Phase B, 2026-09-24): the even-split default and its
-    // three-to-two loss hold in both modes — a hard board also opens at seven
-    // even splits of 20 (7 × 100 = 700), so this paragraph needs no mode
-    // clause. howToEnter above names the hard rule; founder and counsel own
-    // the wording.
+    // Rewritten 2026-09-26 for the board (app/src/battle/board/spread.ts):
+    // one clock, and the spread of unplaced points per mode. The even
+    // split's three-to-two loss holds in both modes.
+    // PHASE-N-REVIEW: the operator owns the final wording.
     battleTimer:
-      'Lock each battle before its timer ends. Any battle you have not locked when the timer ends \u2014 including the one on your screen \u2014 is entered as an even split of 20 points in each of the five stats. Against any allocation that concentrates points on three stats, an even split loses that battle three stats to two, every time — so it never beats a player who is thinking. Nothing is decided at random: the even split is simply the shape your entry starts from, and leaving it there is a decision like any other.',
+      'One clock runs for the whole board. It starts when you place your first point. When you submit, or when the clock ends, any points you have not placed are spread evenly across the stats of every battle you have not locked in: in an easy pool each battle spreads its own unplaced points across its five stats, so a battle you never touch is entered as 20 points in each; in a hard pool the board\u2019s unplaced points are spread across every stat of every unlocked battle. Against any allocation that concentrates points on three stats, an even split loses that battle three stats to two, every time \u2014 so it never beats a player who is thinking. Nothing is decided at random: the spread is fixed and published, and leaving points unplaced is a decision like any other. After an early submit you see the result and can go back while time remains; when the clock ends, the board is final.',
     // SUBSTANCE FIXED (D3-B; D-E2; the founder's addendum of 2026-09-07,
     // rulings 2 and 3, wording verbatim): ranking, ties, and where a
     // forfeited first-place share goes — always to a player, never to us.
@@ -1374,7 +1373,7 @@ export const COPY = {
     detection:
       'Five published signals are computed over data every player can see once a pool is revealed: ' +
       '(1) allocation patterns — reuse of the same split, uniform round numbers; ' +
-      '(2) timing — how the ninety seconds were actually spent, screen by screen; ' +
+      '(2) timing — how the time on the clock was actually spent, battle by battle; ' +
       '(3) duplicate or near-duplicate battle sets across entries; ' +
       // NARROWED 2026-09-16. This read "the same device or network origin"
       // until a review found the network half does not run: the daemon
@@ -1441,7 +1440,7 @@ export const COPY = {
       price: 'Price and prize pool per tier',
       prizes: 'Who is paid',
       scoring: 'How scoring works',
-      battleTimer: 'The battle timer',
+      battleTimer: 'The clock and unplaced points',
       ties: 'Ranking, ties and forfeited prizes',
       randomness: 'What randomness does \u2014 and does not do',
       sealing: 'Sealing: when your battles are encrypted and revealed',

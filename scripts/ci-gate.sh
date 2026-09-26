@@ -7,7 +7,7 @@
 # ref the dispatcher happened to pick, with no test, typecheck or lint having
 # run against that commit (audit 2026-09-11, findings G-10 and E-16). The
 # only statement of the main-only convention was one sentence of prose in
-# docs/go-live-devnet.md.
+# docs/guide/HOSTING.md.
 #
 # This script is the enforcement. It answers one question — may the commit
 # named by GATE_SHA, reached by the ref named by GATE_REF, be deployed? — and
@@ -157,7 +157,7 @@ say() { printf '%s\n' "$*"; }
 refuse() {
   say "::error::deploy refused — $*"
   say ""
-  say "Nothing was deployed. docs/deploy-backend.md Step 5 explains both preconditions."
+  say "Nothing was deployed. docs/guide/HOSTING.md Step 5 explains both preconditions."
   exit 1
 }
 

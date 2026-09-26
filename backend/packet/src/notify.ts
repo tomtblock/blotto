@@ -18,7 +18,7 @@
  * The address itself is NOT stored here: the sign-in provider (Privy) holds
  * the account's email; the dispatch job reads the flag from this store and
  * resolves the address at send time. Dispatch needs a mail vendor and is a
- * deployment item (docs/hosting.md lists the need); this store is complete
+ * deployment item (docs/guide/HOSTING.md lists the need); this store is complete
  * without it.
  */
 

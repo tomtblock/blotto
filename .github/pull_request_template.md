@@ -10,7 +10,7 @@
 ## How it was verified
 
 <!--
-  Paste what you ran and what it said. CONTRIBUTING.md lists the twelve
+  Paste what you ran and what it said. CONTRIBUTING.md lists the fifteen
   standing-rules checks; a change to `programs/` or `tests/litesvm/` is NOT
   covered by the fast lane and needs the on-chain lane too.
 -->
@@ -35,6 +35,6 @@
 -->
 
 - [ ] On-chain money paths, or the pass mint
-- [ ] Anything in PID §8 (the legal characterisation) — **founder and counsel own this**
-- [ ] A founder-owned value: `config/*.json`, prices, pots, the fill rule, the territory schedule
+- [ ] How the product is characterised (docs/compliance/SAFEGUARDS.md, the terms or privacy notice) — needs operator and legal review
+- [ ] An operator-owned value: `config/*.json`, prices, pots, the fill rule, the territory schedule
 - [ ] A published claim a player reads — is it still true after this change?

@@ -41,7 +41,7 @@ export interface GeoLookup {
    * capability that has not been stated has not been proven, and the cost of
    * being wrong is a schedule entry that admits everyone it names while
    * reading as though it blocks them. `assertRegionCapability` below is the
-   * boot check TRANSITION-REPORT.md's accepted gap asked for.
+   * boot check the Phase 0 record's accepted gap asked for.
    */
   readonly resolvesRegion?: boolean;
 }
@@ -289,7 +289,7 @@ function regionRuleUnenforceable(
 }
 
 /**
- * The boot assertion TRANSITION-REPORT.md's accepted gap named as the
+ * The boot assertion the Phase 0 record's accepted gap named as the
  * prerequisite for the first sub-national rule, and which did not exist
  * (audit 2026-09-11, C-30).
  *

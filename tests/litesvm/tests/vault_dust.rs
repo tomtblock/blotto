@@ -10,7 +10,7 @@
 //! tier slot is freed only by `pay_prizes` or the two refund paths, that
 //! tier could never open another pool. Cost to the attacker: one lamport.
 //!
-//! `docs/internal-review.md` IR-3 had considered unsolicited donations and
+//! `docs/security/SECURITY-REVIEW.md` IR-3 had considered unsolicited donations and
 //! accepted them as harmless — correct about this program's own logic, which
 //! never reads those balances, and wrong about the runtime, which does.
 //!

@@ -13,7 +13,7 @@ blotto_cup = "5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17"
 # from the old repository is reused, ever).
 #
 # The keypair's private half lives OUTSIDE this repository and is never committed —
-# TRANSITION-REPORT.md records the path. Nothing under target/deploy/ is tracked
+# it is held by the operator, not in any tracked file. Nothing under target/deploy/ is tracked
 # here, unlike the old repo, which committed its program-identity keypair and then
 # had to treat it as compromised.
 #

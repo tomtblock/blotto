@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Program deploy (C12) — the one script behind docs/devnet-rehearsal.md
+# Program deploy (C12) — the one script behind docs/guide/DEVNET-REHEARSAL.md
 # step 1 plus the data-plane catch-up:
 #
 #   1. put the REAL program keypair in place (never committed — the path
@@ -76,7 +76,7 @@
 #      key must also BE the program's current upgrade authority — which it
 #      stops being the moment the authority moves to the Squads vault. That
 #      transfer has no path through this script by design; the procedure is
-#      docs/OPERATING-MANUAL.md §4, "Upgrading once the authority is a
+#      docs/guide/OPERATING-MANUAL.md §4, "Upgrading once the authority is a
 #      Squads vault".
 #
 # `--self-test` drives the two decisions that have no business being tested
@@ -348,7 +348,7 @@ if [ "$ACCOUNT_STATE" = "present" ]; then
     echo "        on-chain authority: $CURRENT_AUTHORITY" >&2
     echo "        this deploy's key  : $DEPLOY_PUBKEY" >&2
     echo "        If the authority has moved to the Squads vault, this script cannot" >&2
-    echo "        perform the upgrade: follow docs/OPERATING-MANUAL.md §4, 'Upgrading" >&2
+    echo "        perform the upgrade: follow docs/guide/OPERATING-MANUAL.md §4, 'Upgrading" >&2
     echo "        once the authority is a Squads vault' — write the buffer with this" >&2
     echo "        script's build, then propose and execute the upgrade from Squads." >&2
     exit 1
@@ -404,4 +404,4 @@ else
 fi
 
 echo "deploy: done. Next: transfer the upgrade authority to the Squads vault"
-echo "        (docs/devnet-rehearsal.md step 1) and start the services."
+echo "        (docs/guide/DEVNET-REHEARSAL.md step 1) and start the services."

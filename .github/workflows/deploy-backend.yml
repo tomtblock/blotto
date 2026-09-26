@@ -1,6 +1,6 @@
 # Devnet backend deploy (founder-triggered): the indexer, the packet service,
 # the settlement daemon and the review service onto Fly.io, Frankfurt, per
-# docs/hosting.md. Run it from the Actions tab ("Run workflow") — it is
+# docs/guide/HOSTING.md. Run it from the Actions tab ("Run workflow") — it is
 # never triggered by a push, because deploying is a decision, not a side
 # effect of merging.
 #
@@ -24,7 +24,7 @@
 # lookup that is already real.
 #
 # Repository secrets (Settings → Secrets and variables → Actions), per
-# docs/deploy-backend.md. Missing ones are reported by name in preflight.
+# docs/guide/HOSTING.md. Missing ones are reported by name in preflight.
 #
 #   Always required
 #     FLY_API_TOKEN, BLOTTO_DATABASE_URL, BLOTTO_HELIUS_WEBHOOK_SECRET
@@ -109,7 +109,7 @@ jobs:
   # Until 2026-09-12 this workflow shipped four services from whatever ref the
   # dispatcher picked, with no test, typecheck or lint having run against that
   # commit. The main-only convention existed as one sentence of prose in
-  # docs/go-live-devnet.md and nowhere else, which made the dispatch ref
+  # docs/guide/HOSTING.md and nowhere else, which made the dispatch ref
   # selector an undocumented rollback path: an older branch or tag redeploys
   # older code with today's credentials.
   #
@@ -273,7 +273,7 @@ jobs:
       - name: Preflight — Fly accepts the token
         run: |
           if ! flyctl apps list >/dev/null 2>&1; then
-            echo "::error::FLY_API_TOKEN is set but Fly rejected it. Since 2026-09-05 an organization on this account requires SSO, so account-level personal access tokens no longer authenticate — and they stay listed and unrevoked in the dashboard, so nothing there looks wrong. Create an ORG token ('fly tokens create org --org <slug>') per docs/deploy-backend.md Step 2 and update the GitHub secret. Nothing was deployed."
+            echo "::error::FLY_API_TOKEN is set but Fly rejected it. Since 2026-09-05 an organization on this account requires SSO, so account-level personal access tokens no longer authenticate — and they stay listed and unrevoked in the dashboard, so nothing there looks wrong. Create an ORG token ('fly tokens create org --org <slug>') per docs/guide/HOSTING.md Step 2 and update the GitHub secret. Nothing was deployed."
             exit 1
           fi
           echo "Fly accepts the token. Apps visible to it:"
@@ -398,7 +398,7 @@ jobs:
 
           if [ -n "$missing" ]; then
             echo "::error::missing repository secret(s):$missing"
-            echo "::error::Set them under Settings → Secrets and variables → Actions (docs/deploy-backend.md),"
+            echo "::error::Set them under Settings → Secrets and variables → Actions (docs/guide/HOSTING.md),"
             echo "::error::or re-run with allow_dev_credentials checked for a pre-C2 development deploy."
             echo "::error::Nothing was deployed."
             exit 1

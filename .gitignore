@@ -3,8 +3,8 @@
 # Unlike the old repo, NOTHING under target/ is re-included. The old repo committed
 # its program-identity keypair at target/deploy/<program>-keypair.json so every deploy
 # reused the same program ID; that keypair then had to be treated as compromised.
-# Blotto Cup keeps the program keypair OUTSIDE the repository — see TRANSITION-REPORT.md
-# for the path — and pins the program ID in Anchor.toml and declare_id! instead.
+# Blotto Cup keeps the program keypair OUTSIDE the repository — held by the operator, never
+# committed — and pins the program ID in Anchor.toml and declare_id! instead.
 /target/
 **/target/
 **/*.rs.bk

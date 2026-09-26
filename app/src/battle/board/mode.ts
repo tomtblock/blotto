@@ -15,7 +15,7 @@
  * Phase A wires EASY only — it needs no program, payload or engine change.
  * HARD is carried here so the reducer and its tests cover both from day
  * one; its pool, encoding and scoring-engine invariant land in Phase B
- * (docs/CHANGE-2026-09-24_battle-board.md).
+ * (docs/architecture/ARCHITECTURE.md).
  *
  * Nothing here is invented: 100 is `ALLOCATION_SUM`, 7 is `BATTLES`, and
  * 700 is their product. The three-minute clock is a founder ruling of

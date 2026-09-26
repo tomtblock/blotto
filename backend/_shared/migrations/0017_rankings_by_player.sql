@@ -1,5 +1,5 @@
 -- 2026-09-12 (audit 2026-09-11: B-07 / D-28 / F-06 / C-25; founder ruling
--- D-E8 in docs/BUILD-ROADMAP_v1.0.md §1.2).
+-- D-E8 in docs/architecture/DECISIONS.md §1.2).
 --
 -- `rankings` was keyed on the SEAT the published bundle claimed, and served
 -- that seat, the battle score and the zone count under the same "verified"

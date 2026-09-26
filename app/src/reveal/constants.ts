@@ -6,7 +6,7 @@
  * fragment flight, the extended-tell class threshold — some forty
  * PROVISIONAL founder-tunables under the Q-026 pattern. The founder's
  * instruction of 2026-09-14 removed the reveal, and the stage that consumed
- * them went with it (`docs/CHANGE-2026-09-15_reveal-and-rarity.md`). What
+ * them went with it (`docs/architecture/DECISIONS.md`). What
  * stays is the one value the surviving beats still need.
  */
 

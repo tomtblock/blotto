@@ -9,7 +9,7 @@
 //!
 //! The freeze: a minted pass must refuse transfer with mpl-core's
 //! `InvalidAuthority` (0x9) — the empirically verified rejection code (see
-//! programs/blotto_cup/src/pass.rs and docs/reference/q-016-verification-note.md).
+//! programs/blotto_cup/src/pass.rs and docs/architecture/adr/q-016-verification-note.md).
 
 use blotto_litesvm_tests::*;
 use solana_sdk::account::Account;
