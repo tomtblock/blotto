@@ -40,7 +40,7 @@ import { potForEntry } from '../../backend/scoring/src/prizes';
 import { leafBytes, merkleRoot } from '../../backend/scoring/src/merkle';
 import type { BattleSet, Allocation as EngineAllocation } from '../../backend/scoring/src/allocation';
 
-import { cappedField, wall, pole, uiWall, uiPole, uiFieldA, uiFieldB, distinctShapes, roundShare, type Entrant } from '../src/populations';
+import { cappedField, wall, twinWall, pole, uiWall, uiPole, uiFieldA, uiFieldB, uiBoardA, uiBoardB, distinctShapes, roundShare, type Entrant } from '../src/populations';
 
 const SCORING = resolve(__dirname, '..', '..', 'backend', 'scoring');
 const REG = resolve(__dirname, '..', 'registry');
@@ -151,7 +151,7 @@ export interface PlannedSeat {
   /** `ui` (the founder, through the live site) or `direct` (enter.ts). */
   route: 'ui' | 'direct';
   /** The part this seat plays in the engineered outcome. */
-  role: 'wall' | 'pole' | 'field';
+  role: 'wall' | 'twin' | 'pole' | 'field';
   generator: string;
   /** Absent on the two UI seats: those come from a drag recipe, not a seed. */
   seed?: number;
@@ -363,6 +363,93 @@ export function t3Field(): PlannedSeat[] {
     add(`W${String(i).padStart(2, '0')}`, 'direct', 'field', cappedField(seed), { seed });
   }
 
+  return seats;
+}
+
+/** T7's seeds, fixed here and never moved once the plan is frozen. */
+const T7_WALL_SEED = 7100;
+const T7_TWIN_TIMING_SEED = 7150;
+const T7_FIELD_SEED_BASE = 7000;
+
+/**
+ * T7's 63 PLANNED seats — the review path, and the first battle-test pool to
+ * run on the Phase B program.
+ *
+ * SIXTY-THREE, NOT SIXTY-FOUR. Pool 36 already held one entrant before this
+ * plan existed — `CRCK62mRC4zxsFRAx41g4MbQzGqsJQD3SURM7Te4VnhW`, a wallet that
+ * is not ours, registered 2026-09-26T15:35:48Z. It is a real player on a
+ * public devnet and it is not ours to move, so the plan seats 63 around it and
+ * says which claims survive its unknown allocation. That is T6's
+ * `deviation.json` method applied at the front instead of the back.
+ *
+ * WHY THERE ARE TWO WALLS. The manual's T7 card asks for a pool that reaches
+ * `Paid` with two shares escrowed AND for a single headless seat to win. Those
+ * cannot both happen: `PRIZE_BANDS_1024 = [1024n]` pays rank 1 alone, and
+ * `pay_prizes.rs:139` escrows a seat's `amount`, so a seat paid nothing
+ * escrows nothing. Two shares exist only when two seats TIE at rank 1, which
+ * `escrow.rs` says in as many words — the eligible group is "the tied
+ * first-place group". So W00 and W01 carry the SAME wall allocations
+ * (`twinWall`) and tie by construction; see that function for the proof, which
+ * does not depend on anything the stranger or the founder plays.
+ *
+ * WHY THE TIED PAIR IS HEADLESS AND NOT THE FOUNDER'S TWO ACCOUNTS. A tie has
+ * to be exact in score AND zones. The founder plays by hand against a
+ * 90-second clock, and T3 (§H13) ended with both founder seats timed out into
+ * the even split. A pair that has to be byte-equal cannot be produced that
+ * way. The same-device demonstration therefore rides on UI-A and UI-B, which
+ * needs no precision at all — only one browser profile — and the tie rides on
+ * two seats this script controls. What is given up is that the escrowed pair
+ * is not the same-device pair; under D-E9 no signal flags anybody by itself,
+ * so every flag in this system is a human act either way.
+ */
+export function t7Field(): PlannedSeat[] {
+  const seats: PlannedSeat[] = [];
+  const add = (
+    wallet: string,
+    route: 'ui' | 'direct',
+    role: PlannedSeat['role'],
+    e: Entrant,
+    extra: { seed?: number; recipe?: string }
+  ) =>
+    seats.push({ wallet, route, role, generator: e.generator, battles: e.battles, timingsMs: e.timingsMs, ...extra });
+
+  // The two founder accounts, played from ONE browser profile so they derive
+  // the same device marker. Ordinary capped seats otherwise: neither can win
+  // (see the unconditional derivation in `t7Plan`), and neither needs to.
+  //
+  // BOARD recipes, not dial recipes. The dial run was removed from the app on
+  // 2026-09-24 (main's 59ca085), taking the seven screens, the drag and the
+  // ninety-second clock with it; T7 is the first test written against the
+  // board. See `uiBoardFrom` in ../src/populations.ts for why a board recipe
+  // has to fill every field rather than move one stat.
+  add('UI-A', 'ui', 'field', uiBoardA(), {
+    recipe:
+      'FILL EVERY FIELD TO 100 AND LOCK IT. Field 1: Strength 25, Speed 25, Heart 20, Wit 20, ' +
+      'Durability 10. Each later field shifts that pattern one stat to the right (field 2 is ' +
+      'Speed 25, Heart 25, Wit 20, Durability 20, Strength 10, and so on, wrapping round). ' +
+      'On the stepper a 25 is +20 then +5, a 20 is one +20, a 10 is one +10 — seven taps a ' +
+      'field. Never take a stat above 25, and never leave a field short of 100: the buzzer ' +
+      'spreads whatever is unplaced back across that field and can push a stat over the cap.',
+  });
+  add('UI-B', 'ui', 'field', uiBoardB(), {
+    recipe:
+      'FILL EVERY FIELD TO 100 AND LOCK IT. Field 1: Strength 25, Speed 20, Heart 20, Wit 20, ' +
+      'Durability 15. Each later field shifts that pattern one stat to the right. On the ' +
+      'stepper a 25 is +20 then +5, a 20 is one +20, a 15 is +10 then +5 — seven taps a field. ' +
+      'Same two rules as UI-A: nothing above 25, and no field left short of 100.',
+  });
+
+  // The tied pair. Same battle seed, different timing seed.
+  add('W00', 'direct', 'wall', wall(T7_WALL_SEED), { seed: T7_WALL_SEED });
+  add('W01', 'direct', 'twin', twinWall(T7_WALL_SEED, T7_TWIN_TIMING_SEED), { seed: T7_WALL_SEED });
+
+  // W02..W60 are the capped field: 59 seats. 2 founder + 2 walls + 59 capped
+  // = 63 planned, and with the one stranger already seated that is CAPACITY
+  // exactly. The 64th register seals the pool in the same instruction.
+  for (let i = 2; i < 61; i++) {
+    const seed = T7_FIELD_SEED_BASE + i;
+    add(`W${String(i).padStart(2, '0')}`, 'direct', 'field', cappedField(seed), { seed });
+  }
   return seats;
 }
 
@@ -622,7 +709,7 @@ function t4Plan(p: Prediction): Record<string, unknown> {
  * SHAPES alone is unconditional, what depends on exact numbers is not — and
  * T4 proved that distinction is load-bearing, because the founder's hand-dialled
  * allocations matched the plan's exact numbers in one battle of seven and every
- * unconditional prediction still held (docs/testing/TESTING-REPORT.md).
+ * unconditional prediction still held (DRIFT.md §H10).
  *
  * T5 goes further than T4 in one place and less far in another. Further: the
  * founder's seats are predicted only to land in ranks 2..63 — their exact
@@ -1421,6 +1508,473 @@ function t3Plan(p: Prediction): Record<string, unknown> {
   };
 }
 
+/**
+ * T7 — the review path, on the first battle-test pool to run the Phase B program.
+ *
+ * Three things make this plan shaped differently from T3-T6, and each is stated
+ * in the file rather than worked around:
+ *
+ *   1. IT DOES NOT PREDICT A RESULTS ROOT. Every earlier plan point-predicted
+ *      one. A root is a function of all 64 seats' allocations, and one of
+ *      T7's 64 belongs to a player who is not ours. What this plan freezes
+ *      instead is the FUNCTION and 63 of its inputs: the root is determined by
+ *      the sets below plus one set revealed at seal, and `reconcile.ts`
+ *      recomputes it. Freezing a root we know cannot match would be a
+ *      prediction designed to fail.
+ *
+ *   2. ITS CENTRAL CLAIM IS A TIE, NOT A WINNER. W00 and W01 carry identical
+ *      battle sets, so they finish on identical scores and identical zones and
+ *      share rank 1. That is the only way one pool holds two prize shares under
+ *      D-E2, and two shares is what the escrow path needs.
+ *
+ *   3. IT DECLARES ITS OWN DETECTION FINDING. `duplicate_sets` WILL fire at
+ *      severity `strong` on W00 and W01 and put both in the report's
+ *      `hardBlocks` list. Nothing acts on that list (D-E9), and the pool paying
+ *      both seats normally is the demonstration, not a fault.
+ */
+function t7Plan(p: Prediction): Record<string, unknown> {
+  const PLANNED = p.seats.length;       // 63 seats this plan places
+  const AT_SEAL = 64;                   // CAPACITY, the planned pair plus the stranger
+  const B = 7;
+  const MAX_VS_ONE = B * 2;
+  const walls = p.seats.filter((s) => s.role === 'wall' || s.role === 'twin');
+  const wallScore63 = walls[0].scoreHalf;
+  const bestRival63 = Math.max(...p.seats.filter((s) => s.role === 'field').map((s) => s.scoreHalf));
+  const cappedCeiling = (AT_SEAL - 1 - walls.length) * B * 2;
+
+  return {
+    schema: 'blotto-rehearsal-plan/1',
+    test: 'T7',
+    title: 'Same device, a tie for first, and the review path end to end',
+    cluster: 'devnet',
+    programId: '5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17',
+    tier: 0,
+    mode: 'easy',
+    modeNote:
+      'MODE_EASY = 0 — seven battles of 100 points each, the shape every earlier pool in this ' +
+      'test used. Phase B added MODE_HARD (700 points across thirty-five cells) and went live on ' +
+      'devnet at 2026-09-25T01:54:32Z. T7 is the FIRST battle-test pool on the Phase B program; ' +
+      'T3 settled 29 minutes before that deploy, so T1, T2R, T3, T4, T5 and T6 all ran on the ' +
+      'pre-Phase-B program with no confound. Easy mode is the founder\'s choice, so the only ' +
+      'variable T7 adds is the program build.',
+    poolId: 36,
+    poolPda: 'DtaxjC8MoRZ3wGnR6KghsxV1gXvPP5yaTEssrroArpXX',
+    poolIdNote:
+      'NAMED, unlike T3-T6, and it has to be: pool 36 already holds an entrant this plan must ' +
+      'account for, so the plan cannot be pool-agnostic. It is frozen before OUR first entry, ' +
+      'which is the standard T3 could not meet (its freeze file was written two days late and ' +
+      'says so).',
+    entryLamports: p.entryLamports,
+    potLamports: p.potLamports,
+    minSeats: 40,
+    fillDeadlineSeconds: 43200,
+    frozenAt: null,
+    gitCommit: null,
+
+    priorOccupant: {
+      _:
+        'Pool 36 was not empty when this plan was written. One wallet that is not ours registered ' +
+        'before it, on a public devnet where anyone may play. It is not ours to move or exclude, ' +
+        'so the plan seats 63 around it and separates the claims that survive its unknown ' +
+        'allocation from the ones that do not.',
+      wallet: 'CRCK62mRC4zxsFRAx41g4MbQzGqsJQD3SURM7Te4VnhW',
+      registeredAt: '2026-09-26T15:35:48Z',
+      chainSeatIndex: 0,
+      consequence:
+        'Our plannedSeat N lands on CHAIN SEAT N+1. Every seat index in this file is our own ' +
+        'ordering; add one to read it against the chain.',
+      whatIsUnknowable:
+        'Its seven allocations are sealed until the pool secret is revealed. Nothing in this ' +
+        'plan assumes anything about them.',
+    },
+
+    hypothesis:
+      'A pool can hold two prize shares, and the review path can release one and forfeit the ' +
+      'other without a lamport reaching the operator. Two shares exist only on a tie for first, ' +
+      'so the tie is built rather than hoped for: W00 and W01 carry identical allocations and ' +
+      'therefore identical scores. Separately, two accounts played from one browser profile ' +
+      'produce a same-device finding in the detection report, and that finding by itself blocks ' +
+      'nobody.',
+
+    whyTheManualsT7CannotRunAsWritten: {
+      _:
+        'MANUAL.md §9 asks for "W62 the wall so a headless seat wins" AND for "Paid with 2 seats ' +
+        'escrowed; release one, forfeit one". Those are mutually exclusive, and the manual is ' +
+        'wrong rather than the program.',
+      readFromTheProgram: [
+        'backend/scoring/src/prizes.ts: PRIZE_BANDS_1024 = [1024n]. One band. Rank 1 takes the ' +
+          'whole pot and no other rank is paid.',
+        'pay_prizes.rs:139 escrows a seat\'s `amount` when entry.flagged. A seat paid nothing ' +
+          'escrows nothing.',
+        'escrow.rs: a forfeited first-place share passes to "the remaining eligible members of ' +
+          'the tied first-place group".',
+      ],
+      conclusion:
+        'If one headless seat wins alone, the other seats are paid zero and NOTHING escrows. Two ' +
+        'shares require two seats tied at rank 1. The founder ratified the redesign on ' +
+        '2026-09-26: the same-device demonstration rides on the two founder accounts, and the ' +
+        'escrow demonstration rides on two headless seats built to tie.',
+      whatIsGivenUp:
+        'The escrowed pair is not the same-device pair. Under D-E9 no signal flags anybody by ' +
+        'itself, so every flag in this system is a human act regardless of which seats it lands ' +
+        'on; what is bought is that release AND forfeit both run in one pool, which the ' +
+        'specified design cannot do at all.',
+    },
+
+    unconditionalDerivation: {
+      _:
+        'What follows from the shapes alone, for ANY allocation the stranger or the founder ' +
+        'plays. Scoring is pairwise additive, so a seat\'s final score is its score among the 63 ' +
+        'frozen seats plus 0..14 from the stranger — that single fact carries every bound here. ' +
+        'Recompute all of it with scripts/t7-bounds.ts, which exits non-zero if any claim fails.',
+      scoringRule:
+        'A stat goes to the larger number. A battle goes to whoever wins at least 3 of 5 stats, ' +
+        `otherwise it is a draw. Score is 2 half-points a win and 1 a draw, across ${B} battles ` +
+        `against each of the other ${AT_SEAL - 1} entrants.`,
+      maxScore: `${(AT_SEAL - 1) * B * 2}`,
+      premiseP1:
+        'Each wall holds three stats at 26 or above in EVERY battle and no capped seat holds any ' +
+        'stat above 25, so a wall wins at least 3 of 5 stats against any capped seat and takes ' +
+        `all ${B} battles. Checked against all 61 seed-generated shapes by t7-bounds.ts, not assumed.`,
+      premiseP3:
+        'W00 and W01 are equal allocation-for-allocation across all seven battles. Checked, not ' +
+        'assumed — and their think-times are deliberately NOT equal, so the duplicate shows up ' +
+        'as one signal rather than two.',
+      U1_theTieIsUnconditional:
+        '**W00 and W01 finish on the same score and the same zones and therefore SHARE a rank.** ' +
+        'compareBattle is positional, so by P3 their seven comparisons against any third player ' +
+        'are the same seven comparisons: the stranger adds the same amount to each, and so does ' +
+        `every founder seat. Against each other all five stats are equal in all ${B} battles, so ` +
+        `each takes ${B} half-points and no zones. Among the 63 frozen seats both stand at ` +
+        `${wallScore63} half-points and ${walls[0].zones} zones. This claim does not depend on ` +
+        'anything anyone else plays.',
+      U2_noCappedSeatCanOutscoreAWall:
+        `By P1 a capped seat takes 0 from each wall, so its ceiling is ${AT_SEAL - 1 - walls.length} ` +
+        `opponents × ${B} battles × 2 = **${cappedCeiling}**. A wall's FLOOR is **${wallScore63}** — ` +
+        `its ${wallScore63} among the frozen seats plus nothing at all from the stranger. ` +
+        `${cappedCeiling} < ${wallScore63}. This covers BOTH founder seats for any allocation ` +
+        'they dial inside 1..25, not just the recipe.',
+      U3_theFounderCannotDecideThisPool:
+        `The best score any frozen non-wall seat reaches is ${bestRival63}, and the most the ` +
+        `stranger can add is ${MAX_VS_ONE}, for ${bestRival63 + MAX_VS_ONE} — below the walls' ` +
+        `floor of ${wallScore63}. Nothing UI-A or UI-B does moves the winner.`,
+      C1_theOneThingTheStrangerCanDo:
+        `**CONDITIONAL, and the only conditional that matters.** A wall's final score is ` +
+        `${wallScore63} + (${MAX_VS_ONE} − s), where s is the stranger's half-points against ONE ` +
+        `wall — the same s against both, by P3. The stranger outscores the walls only if it takes ` +
+        `**8 or more of the 14 on offer against one wall** (four wins of seven, or fewer wins ` +
+        'topped up by draws). Every capped set, every even split and every single-stat spike ' +
+        `gives s = 0 and a wall score of ${wallScore63 + MAX_VS_ONE}.`,
+      ifC1Fails:
+        'The walls STILL tie — U1 is unconditional — but they tie at rank 2, the stranger takes ' +
+        'the pot, and nothing is escrowed. The escrow half of T7 then cannot run, and that is ' +
+        'the result to report, not something to work around.',
+    },
+
+    intentionalDuplicateSets: {
+      wallets: ['W00', 'W01'],
+      why:
+        'Two prize shares exist only on a tie for first (D-E2 pays one place), and a tie that ' +
+        'survives an unknown entrant\'s play requires identical battle sets. The resulting ' +
+        'duplicate_sets finding is part of what T7 tests: it is severity `strong`, it names both ' +
+        'players in the report\'s hardBlocks list, and under D-E9 nothing acts on it.',
+    },
+
+    expectations: {
+      terminalState: 'Paid',
+      entrants: PLANNED,
+      entrantsNote:
+        `${PLANNED} is the number of seats THIS PLAN places, which is what validate-plan.ts ` +
+        `checks the seat list against. The pool seals at ${AT_SEAL}: our ${PLANNED} plus the one ` +
+        'wallet already seated.',
+      poolEntrantsAtSeal: AT_SEAL,
+      sealsAtCapacity: true,
+      sealReason:
+        'CAPACITY. Our 63rd entry is the pool\'s 64th and seals it inside the same register ' +
+        'instruction — T4/T5/T6\'s path, not T3\'s deadline seal.',
+      settlementSequence: ['register (64th, seals)', 'reveal_pool_secret', 'commit_results', 'pay_prizes'],
+      paidSeatCount: 2,
+      paidSeatCountNote:
+        'TWO. Every scored pool so far paid exactly one. Two is the whole point: it is what a ' +
+        'tie for first produces under a one-band table, and what the escrow path needs.',
+      winners: ['W00', 'W01'],
+      winnersAreHeadless: true,
+      winnerLamportsEach: '2000000000',
+      splitIsExact:
+        '4000000000 / 2 = 2000000000 with remainder 0, so neither seat takes a remainder lamport ' +
+        'and the two amounts are equal. assignPrizes gives any indivisible remainder to the ' +
+        'lowest entry index; here there is none.',
+      wallScoreHalfFloor: wallScore63,
+      wallScoreHalfCeiling: wallScore63 + MAX_VS_ONE,
+      wallScoreNote:
+        'A RANGE of fifteen values, not a point prediction, and the range is the stranger\'s ' +
+        'doing alone — the founder cannot move it by a single half-point (P1). t7-bounds.ts ' +
+        'prints the score for each s.',
+      founderSeatsPaid: '0',
+      founderRankRange: [3, AT_SEAL],
+      founderRankNote:
+        'A RANGE. Rank 1 and rank 2 are unavailable to a capped seat by U2 (the two walls share ' +
+        'rank 1, so the next rank is 3). Exact ranks among the other capped seats are computed ' +
+        'at reveal: the founder plays by hand against a 90-second clock and §H13 recorded both ' +
+        'founder seats timing out into the even split in T3.',
+      resultsRoot: null,
+      resultsRootNote:
+        'DELIBERATELY ABSENT. See the module comment: 63 of the 64 inputs are frozen here and ' +
+        'the 64th is revealed at seal, so the root is determined but not yet computable. ' +
+        'reconcile.ts recomputes it from the revealed sets and checks it against the chain — ' +
+        'which is the claim that matters (the operator is checkable) and the one T4, T5, T6 and ' +
+        'T3 all established with a point prediction.',
+      vaultAfter: '650240',
+      vaultAfterNote:
+        'the rent cushion, never recovered — AFTER release_escrow, forfeit_escrow and ' +
+        'pay_next_place have all run. A forfeited share sits in this vault in the meantime.',
+      perSeatSunkLamportsLowBand: '4441080',
+      perSeatSunkLamportsHighBand: '4446160',
+      perSeatSunkNote:
+        'The two bands measured across six pools (DRIFT §H20): chain seats 0..9 sink 4441080 and ' +
+        'seats 10+ sink 4446160, one byte of devnet rent at 5080 lamports apart. The stranger ' +
+        'holds chain seat 0, so **9 of OUR seats fall in the low band and 54 in the high band** ' +
+        '— the first time the split has not been 10/N. If we see 10/53 instead, the boundary ' +
+        'does not track the chain index and §H20 needs rewriting.',
+      treasuryDeltaFromEntries: '6300000000',
+      treasuryDeltaNote:
+        `${PLANNED} entries of ours at ${p.entryLamports} lamports. The stranger's entry is a ` +
+        '64th 100000000 the treasury also receives and we did not pay; read the treasury twice, ' +
+        'both timestamped.',
+    },
+
+    reviewPath: {
+      _:
+        'The sequence T7 exists to run, with the signer of each step named. Every authority here ' +
+        'was read from the program, not assumed.',
+      whyTheFlagsGoOnDURINGTHEFILL: {
+        finding:
+          '**There is no window between seal and payment in which a reviewer could act.** The ' +
+          'crank reveals, scores, runs detection, commits and pays in ONE tick — T3 went from ' +
+          'seal to payout in three seconds. And detection returns no auto-flags under D-E9 ' +
+          '(reveal/src/crank.ts:236, pipeline.ts). So a flag based on THIS pool\'s own detection ' +
+          'report can never be placed before this pool is paid.',
+        consequence:
+          'flag_entry is legal while the pool is Open (preconditions.ts: flag → Open, Sealed, ' +
+          'Scored; flags.rs requires only !entry.settled). So the flags go on during the fill. ' +
+          'That is honest for a devnet exercise and it is also the finding: in production the ' +
+          'review path can only ever act on evidence from EARLIER pools, never on this one\'s. ' +
+          'If the founder wants review-before-payment on a pool\'s own findings, the crank needs ' +
+          'a hold it does not have. Raised for the founder, not worked around here.',
+      },
+      steps: [
+        {
+          n: 1,
+          what: 'flag W00 and flag W01',
+          when: 'while pool 36 is still Open, after both wallets are seated',
+          who: 'the founder, at /admin/review, signing a decision with a reviewer key',
+          signer: 'settlement_signer (EaDfwMWwW712L4YgdhBgEqbzzpdVP17e5mvY9LPwjrSD), landed by the review service',
+          expect: 'entry.flagged = true on both; no lamport moves',
+        },
+        {
+          n: 2,
+          what: 'the 64th register seals the pool; the crank scores and pays',
+          when: 'immediately, automatically',
+          who: 'the settlement daemon',
+          signer: 'settlement_signer',
+          expect:
+            'state Paid; commit_results carries TWO payouts of 2000000000; pay_prizes ESCROWS ' +
+            'both rather than sending them (pay_prizes.rs:139); the vault still holds both shares',
+        },
+        {
+          n: 3,
+          what: 'release W00',
+          when: 'once the pool is Paid',
+          who: 'the founder, at /admin/review — the reviewer decides the flag is not upheld',
+          signer: 'settlement_signer',
+          expect:
+            'release_escrow pays 2000000000 TO W00; entry.escrow_lamports = 0. The identity gate ' +
+            'in release_escrow does not apply at this amount: Config.kyc_required_above_lamports ' +
+            'reads 0 on chain, which is the switch held off under D-E5.',
+        },
+        {
+          n: 4,
+          what: 'uphold the flag on W01',
+          when: 'once the pool is Paid',
+          who: 'the founder, at /admin/review',
+          signer: 'NOBODY on chain at this step',
+          expect:
+            'the review service RECORDS the decision and reports recorded_pending_admin — it ' +
+            'holds no admin key (review.ts, case forfeit). The daemon\'s review clock then sees ' +
+            'the logged forfeit and refuses to auto-release W01 at the 12-hour window ' +
+            '(daemon.ts, forfeitLogged), which is the behaviour being tested.',
+        },
+        {
+          n: 5,
+          what: 'forfeit_escrow W01',
+          when: 'after step 4',
+          who: 'the founder, through Squads — the SECOND and last admin write of the week',
+          signer: 'Config.admin, a PDA, signing by CPI from the 1-of-1 multisig',
+          expect:
+            '**NO LAMPORT MOVES.** entry.forfeited = true and the share stays in pool 36\'s ' +
+            'vault. Read the vault before and after: identical. The Squads Data field is BASE58 ' +
+            '— admin.ts --emit-proposal prints dataBase64 and that cost a transaction on ' +
+            'Wednesday (DRIFT §H25).',
+        },
+        {
+          n: 6,
+          what: 'pay_next_place',
+          when: 'the next daemon tick after step 5',
+          who: 'the settlement daemon, automatically',
+          signer: 'settlement_signer',
+          expect:
+            'W01 is the only forfeited seat and W00 is the only other member of the tied ' +
+            'first-place group, so committed_peers is empty, group_size is 1, and W00 receives ' +
+            'the WHOLE forfeited 2000000000. W00 ends with 4000000000 — the entire pot — and ' +
+            'the treasury is unchanged across steps 3 to 6.',
+        },
+      ],
+      theClaimThisProves:
+        'A forfeited prize is never the operator\'s. It stays in its own pool\'s vault until a ' +
+        'player is paid it. Check it by reading the platform treasury before step 3 and after ' +
+        'step 6: the two figures must be identical.',
+    },
+
+    founderInteraction: {
+      _:
+        'T7 IS THE FIRST TEST WRITTEN AGAINST THE BOARD. Main retired the dial run on ' +
+        '2026-09-24 (commit 59ca085, "Retire the dial run: the board is the only run"), and this ' +
+        'branch picked it up in the merge of 2026-09-26. Every earlier plan\'s founder recipe ' +
+        'describes an interaction that no longer exists. Those plans are frozen and stay as they ' +
+        'are; this one does not repeat them.',
+      whatChanged: [
+        'ONE board of 35 cells — seven fields of five stats — replaces seven screens.',
+        'THREE MINUTES for the whole board (BOARD_CLOCK_BUDGET_MS), started by the first cell ' +
+          'change. The 90-second run and the 15-second per-screen timer (R9) are both gone.',
+        'A STEPPER of +1, +5, +10, +20 replaces the drag. There are no dials.',
+        'A per-field LOCK, which easy mode allows only once that field holds exactly 100.',
+        'The BUZZER RULE (spread.ts): at submit or timeout every unplaced point is spread ' +
+          'evenly across the cells of the UNLOCKED fields. An untouched field still becomes ' +
+          '20/20/20/20/20 — the even split survives — but a HALF-FILLED field has its remainder ' +
+          'pushed back into the stats already placed.',
+      ],
+      whyTheRecipeMustFillEveryField:
+        'The buzzer rule is why "put 25 on one stat" is no longer a safe instruction. Place 25 ' +
+        'and leave the other 75 unplaced and the spread adds 15 to every cell of that field, ' +
+        'turning the 25 into a 40 — above the cap that U2 and the whole unconditional derivation ' +
+        'rest on. Each recipe below therefore fills every field to exactly 100 and locks it.',
+      timeBudget:
+        'Seven taps a field plus a lock is 56 actions in 180 seconds, about three seconds each. ' +
+        'Every value in both recipes is one or two taps on the stepper: 25 is +20 then +5, 20 is ' +
+        'one +20, 15 is +10 then +5, 10 is one +10.',
+      ifTheClockBeatsYou:
+        'A field already filled and LOCKED is safe. A field left untouched becomes the even ' +
+        'split, which is capped at 20 and keeps U2 intact. The dangerous case is the ' +
+        'half-filled unlocked field — so lock as you go rather than at the end.',
+      applyTheSameCareToBoth:
+        'Both accounts are played from ONE browser profile, which is the point of T7\'s other ' +
+        'half. Sign out of the first and into the second WITHOUT changing browser, profile or ' +
+        'device: the device marker is what the detection finding is about.',
+    },
+
+    detection: {
+      hardBlocks: ['W00', 'W01'],
+      hardBlocksNote:
+        'PREDICTED, and predicted to do nothing. duplicate_sets at severity `strong` is one of ' +
+        'R11\'s two conclusive signals, so pipeline.ts puts both players in report.hardBlocks — ' +
+        'a list the header describes as "published to the reviewer and read by no code that ' +
+        'moves anything" (D-E9). Both seats must be scored, ranked and paid normally.',
+      notes: [
+        'duplicate_sets fires STRONG on W00 and W01 — "exact duplicate battle set" — and on ' +
+          'nobody else. This is declared, not an accident.',
+        'device_ip_correlation should name UI-A and UI-B: the two founder accounts are played ' +
+          'from one browser profile and derive the same device marker for this pool. THIS IS ' +
+          'T7\'s OTHER HALF, and it must not block either seat.',
+        'Neither founder seat may be refused, delayed or escrowed by the device finding. If one ' +
+          'is, D-E9 is not implemented the way the pipeline header says it is.',
+        'population_score is expected on W00 and W01, as it fired on the wall in T4, T5, T6 and T3.',
+        'allocation_entropy must NOT fire "strong" on anyone: every seat carries at least 3 ' +
+          'distinct shapes, and both walls carry 7.',
+        'timing_profile must NOT fire on the W00/W01 pair. Their think-times come from a ' +
+          'different seed on purpose, so the deliberate duplicate produces ONE signal with one ' +
+          'cause rather than two that look like corroboration.',
+      ],
+    },
+
+    seats: p.seats.map((s) => ({
+      seat: null,
+      plannedSeat: s.plannedSeat,
+      expectedChainSeat: s.plannedSeat + 1,
+      wallet: s.wallet,
+      route: s.route,
+      role: s.role,
+      generator: s.generator,
+      ...(s.seed !== undefined ? { seed: s.seed } : {}),
+      ...(s.recipe ? { recipe: s.recipe } : {}),
+      battles: s.battles,
+      scoreHalfAmongFrozen63: s.scoreHalf,
+      zonesAmongFrozen63: s.zones,
+      expectedScoreHalfFloor: s.scoreHalf,
+      expectedScoreHalfCeiling: s.scoreHalf + MAX_VS_ONE,
+      ...(s.role === 'wall' || s.role === 'twin'
+        ? { expectedRank: 1, expectedLamports: '2000000000', rankIsConditional: true, rankConditionalOn: 'the stranger only — see C1' }
+        : { expectedLamports: '0', rankIsConditional: true, unconditionalRankRange: [3, AT_SEAL] }),
+      distinctShapes: s.distinctShapes,
+    })),
+    seatNote:
+      'EVERY rank in this file is conditional, and the reason is not the founder. Ranks among ' +
+      'the capped seats depend on the two founder allocations, which are dialled by hand, and ' +
+      'every rank also shifts with the stranger. §H10 has fired on three plans now for marking ' +
+      'too few seats conditional; here the honest answer is all of them. What is NOT conditional ' +
+      'is U1, U2 and U3 above. `scoreHalfAmongFrozen63` is the frozen part of each seat\'s score ' +
+      'and the floor of its final score; the ceiling is 14 above it.',
+
+    contingency: [
+      'IF THE STRANGER OUTSCORES THE WALLS (C1 fails), the tie still holds at rank 2, nothing ' +
+        'escrows, and the review path cannot run. Report it; do not re-enter the pool or ' +
+        're-derive the plan. The device half of T7 is unaffected and still passes or fails on ' +
+        'its own terms.',
+      'IF A SECOND STRANGER ENTERS while we are filling, the pool seals one of our seats short. ' +
+        'Drop the LAST planned field seat, record which, and re-run t7-bounds.ts — U1 is ' +
+        'unaffected and U2 gains margin. Do not edit the frozen plan.',
+      'IF W00 OR W01 SEALS AND THEN FAILS TO REGISTER it is barred from the pool for good ' +
+        '(§H6) and the tie is gone. Substitute from the spare roster with --substitute so the ' +
+        'spare plays that seat\'s frozen allocation; the tie is between ALLOCATIONS, not ' +
+        'wallets, so a substitution preserves it. Say plainly which wallet changed.',
+      'IF THE FOUNDER TAKES A STAT ABOVE 25, P1 stops applying to that seat and U2 no longer ' +
+        'covers it. That is a FAIL of the test as designed, not of the product.',
+      'IF pay_prizes PAYS RATHER THAN ESCROWS, the flags did not land before it. Check the block ' +
+        'times of both flag_entry transactions against pay_prizes, from chain, and report the ' +
+        'ordering — that is a finding about the review path, not a spoiled run.',
+      'IF release_escrow REFUSES, read the entry: a sanctions hold refuses on both paths and is ' +
+        'lifted only by an admin-signed lift_sanctions_hold. It is NOT the integrity flag and ' +
+        'the review page cannot clear it.',
+      'IF THE FORFEIT SITS UNLANDED past the 12-hour review window, the daemon alerts ' +
+        '(forfeitUnlanded) and holds the share rather than paying W01. That alert firing is ' +
+        'correct behaviour, not a fault — but land the Squads transaction rather than testing it ' +
+        'by neglect.',
+    ],
+
+    passCriteria: [
+      'Pool 36 reaches **Paid** with **64** entrants.',
+      '**Two** seats are paid, not one: W00 and W01, **2000000000 lamports each**.',
+      'W00 and W01 finish on **identical scores and identical zones** and **share rank 1**.',
+      'Both flag_entry transactions land **before** pay_prizes, checked by block time from chain.',
+      'pay_prizes **escrows** both shares rather than sending them; the pool reaches Paid with ' +
+        '**2 shares held**.',
+      'release_escrow moves **2000000000 to W00**, read as a balance change on the player wallet.',
+      'forfeit_escrow moves **nothing**: the pool vault balance is **identical** before and after.',
+      'pay_next_place pays **W00** the forfeited 2000000000, so W00 holds the whole pot.',
+      '**The platform treasury is unchanged** from before release_escrow to after pay_next_place. ' +
+        'This is the claim the whole forfeit design exists to support.',
+      'The detection report contains **duplicate_sets strong on W00 and W01** and names both in ' +
+        'hardBlocks — and **neither is blocked, delayed or refused**.',
+      'The detection report contains a **same-device finding for UI-A and UI-B**, and **neither ' +
+        'founder seat is blocked**.',
+      'Neither founder wallet is paid; both finish at rank 3 or worse.',
+      'Every revealed allocation reproduces the battles_hash the chain recorded at entry.',
+      'The results root **recomputed from the 64 revealed sets** equals the on-chain results_root.',
+      'Nine of our seats sink 4441080 lamports and fifty-four sink 4446160.',
+      'The vault ends at **650240** lamports once every share has left it.',
+    ],
+  };
+}
+
 // ---------------------------------------------------------------------------
 // 4. CLI
 // ---------------------------------------------------------------------------
@@ -1439,9 +1993,9 @@ function main(): void {
   );
   if (process.argv.includes('--check-only')) return;
 
-  const FIELDS: Record<string, () => PlannedSeat[]> = { T3: t3Field, T4: t4Field, T5: t5Field, T6: t6Field };
+  const FIELDS: Record<string, () => PlannedSeat[]> = { T3: t3Field, T4: t4Field, T5: t5Field, T6: t6Field, T7: t7Field };
   const PLANS: Record<string, (p: Prediction) => Record<string, unknown>> = {
-    T3: t3Plan, T4: t4Plan, T5: t5Plan, T6: t6Plan,
+    T3: t3Plan, T4: t4Plan, T5: t5Plan, T6: t6Plan, T7: t7Plan,
   };
   const known = Object.keys(FIELDS).join('|');
 

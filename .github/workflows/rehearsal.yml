@@ -1,4 +1,4 @@
-# The devnet battle test's own lane (battle-test/README.md; results in docs/testing/TESTING-REPORT.md).
+# The devnet battle test's own lane (battle-test/MANUAL.md §2.4, §5.5, §11).
 #
 # THE BATTLE TEST DOES NOT TOUCH THE PRODUCT. Everything it builds lives in
 # `battle-test/`, plus this one file. The boundary job below enforces that on
@@ -62,7 +62,7 @@ jobs:
             echo "REFUSED — this battle-test PR changes files outside battle-test/:"
             echo "$stray" | sed 's/^/  /'
             echo
-            echo "The battle test is a separate folder by design (battle-test/README.md). A product"
+            echo "The battle test is a separate folder by design (MANUAL.md 2.5). A product"
             echo "change ships as its own PR so the two can never be confused."
             exit 1
           fi
@@ -124,6 +124,73 @@ jobs:
           fi
           echo "the broken fixture was rejected, as it must be:"
           sed 's/^/  /' /tmp/broken.log
+
+      - name: Install backend/scoring dependencies
+        working-directory: backend/scoring
+        # The three steps below reach into backend/scoring — the oracle imports
+        # its engine, and populations.test.ts imports compareBattle. Node
+        # resolves from the IMPORTED file's directory upward, so
+        # battle-test/node_modules is invisible to it: backend/scoring needs
+        # its own install even though battle-test already declares the same
+        # @noble/hashes. It passes locally on the repo-root node_modules,
+        # which this job does not have — the first push of these steps went
+        # red on exactly that.
+        run: npm ci --no-audit --no-fund
+
+      - name: The population properties hold, and the app's live rules still back them
+        working-directory: battle-test
+        run: |
+          set -euo pipefail
+          # ADDED 2026-09-26, after DRIFT §H31. This suite has existed since
+          # T4 and was never in CI — it was run by hand. It cross-checks the
+          # founder generators against the app's OWN rules, which is exactly
+          # the check that would have caught the dial run being deleted on
+          # 09-24 the day it happened, instead of two days later by accident.
+          npx ts-node --transpile-only \
+            --compiler-options '{"module":"commonjs","moduleResolution":"node"}' \
+            src/populations.test.ts
+
+      - name: Every frozen results root still reproduces
+        working-directory: battle-test
+        run: |
+          set -euo pipefail
+          # The plans are evidence only while the oracle still computes what
+          # they say. The oracle imports backend/scoring, which is outside
+          # this lane and moves without us — so a root that quietly changes
+          # would invalidate every scored test retrospectively, not just the
+          # next one. Checked here rather than trusted.
+          fail=0
+          for t in T3 T4 T5 T6; do
+            plan="registry/$t.plan.json"
+            [ -f "$plan" ] || continue
+            want="$(node -e "const d=require('./$plan');const r=(d.expectations||{}).resultsRootConditional;if(r)process.stdout.write(r)")"
+            [ -n "$want" ] || { echo "$t freezes no root — skipped"; continue; }
+            got="$(npx ts-node --transpile-only \
+              --compiler-options '{"module":"commonjs","moduleResolution":"node"}' \
+              scripts/oracle.ts --test "$t" | sed -n 's/^results root.*: //p')"
+            if [ "$got" = "$want" ]; then
+              echo "$t reproduces  $got"
+            else
+              echo "REFUSED — $t's frozen root MOVED"
+              echo "  frozen $want"
+              echo "  now    $got"
+              fail=1
+            fi
+          done
+          exit $fail
+
+      - name: T7's unconditional claims still hold
+        working-directory: battle-test
+        run: |
+          set -euo pipefail
+          # t7-bounds.ts exits non-zero if any of its claims stops holding,
+          # and checks its own premises against the generated shapes rather
+          # than assuming them. T7's plan is frozen against its output.
+          if [ -f scripts/t7-bounds.ts ]; then
+            npx ts-node --transpile-only \
+              --compiler-options '{"module":"commonjs","moduleResolution":"node"}' \
+              scripts/t7-bounds.ts
+          fi
 
   results:
     name: results — a failing test is loud

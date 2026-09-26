@@ -19,7 +19,7 @@
  * than in a node's simulator.
  *
  * NOTHING CAN BE BURNT HERE. A wallet is burnt by storing a ciphertext it
- * never registers (docs/testing/TESTING-REPORT.md). On a sealed pool the ciphertext route
+ * never registers (DRIFT.md §H6). On a sealed pool the ciphertext route
  * refuses at its first gate, before the signature and before any write, so
  * there is nothing to store and nothing to strand. The refusal it returns is
  * itself part of the evidence: `pool filled` when the pool reached capacity,
@@ -29,6 +29,10 @@
  *   BLOTTO_BT_SEED=<hex> BLOTTO_RPC_URL=<url> npx ts-node --transpile-only \
  *     --compiler-options '{"module":"commonjs","moduleResolution":"node"}' \
  *     scripts/late-attempt.ts --pool 27 --wallets W63-W71 [--out <path>]
+ *       [--expect 6000]   the refusal this run is TESTING FOR. T6 expects
+ *                         PoolNotOpen (6000, the state gate); T3's pause window
+ *                         expects Paused (6005, which `register` checks first).
+ *                         The raw code is always recorded either way.
  */
 
 import { randomBytes } from 'crypto';
@@ -50,6 +54,15 @@ const DEFAULT_PACKET = 'https://blotto-packet.fly.dev';
 
 /** Anchor numbers a program's error enum from 6000 in declaration order. */
 const POOL_NOT_OPEN = 6000;
+/** The pause gate, `register`'s FIRST check — T3's expected refusal (2026-09-24). */
+const PAUSED = 6005;
+/**
+ * Byte offset of `Config.paused`. The same constant `scripts/admin.ts:374` reads
+ * to print the flag, and confirmed live on 2026-09-24: it read 0 before the
+ * Squads `set_paused(true)` landed and 1 after, with nothing else touching the
+ * account between the two reads.
+ */
+const PAUSED_OFFSET = 104;
 const POOL_FULL = 6010;
 
 interface TermsEdition { version: number; updated: string }
@@ -151,10 +164,29 @@ async function main(): Promise<void> {
   if (!pool) throw new Error(`pool ${poolId} is not in the indexer`);
 
   console.log(`pool ${pool.id} (${pool.pool}) — ${pool.state}, ${pool.entrants} entrants`);
+  // An Open pool normally makes this script dangerous: the attempt would SUCCEED
+  // and take a seat, which is the opposite of what a refusal test wants.
+  //
+  // There is exactly one safe exception, and it is T3's (2026-09-24). A PAUSED
+  // pool is Open and still refuses every `register`, because the pause is the
+  // first gate the instruction checks. So the guard is not bypassed by a flag —
+  // it READS `Config.paused` FROM CHAIN and stands down only when the chain
+  // itself says the attempt cannot take a seat. A flag asserting "it's paused"
+  // would be the caller marking their own homework.
   if (pool.state === 'Open') {
-    throw new Error(
-      `pool ${pool.id} is still Open. A late attempt against an Open pool would SUCCEED and ` +
-      'take a seat — refusing to run.'
+    const [configPda] = PublicKey.findProgramAddressSync([Buffer.from('config')], PROGRAM_ID);
+    const configInfo = await connection.getAccountInfo(configPda);
+    if (!configInfo) throw new Error('no Config account on this cluster — refusing to run');
+    const paused = configInfo.data[PAUSED_OFFSET] !== 0;
+    if (!paused) {
+      throw new Error(
+        `pool ${pool.id} is still Open and entries are NOT paused. A late attempt would ` +
+        'SUCCEED and take a seat — refusing to run.'
+      );
+    }
+    console.log(
+      'pool is Open but Config.paused is TRUE, read from chain — every register is refused at ' +
+      'the pause gate, so no attempt here can take a seat.'
     );
   }
   console.log(`${walletIds.length} late attempts: ${walletIds.join(', ')}\n`);
@@ -253,11 +285,17 @@ async function main(): Promise<void> {
         const message = e instanceof Error ? e.message : String(e);
         r.registerError = message;
         r.customErrorCode = customErrorCode(message);
-        r.verdict = r.customErrorCode === POOL_NOT_OPEN
-          ? 'refused by the program at the STATE gate (PoolNotOpen, 6000)'
-          : r.customErrorCode === POOL_FULL
-            ? 'refused with PoolFull (6010) — the CAPACITY gate, which should be unreachable'
-            : `refused, but not with a recognised gate error (${r.customErrorCode ?? 'none'})`;
+        // Named per gate, and the EXPECTED one is the caller's to state (--expect).
+        // T6 expects PoolNotOpen (the state gate); T3 expects Paused (the pause
+        // gate, which `register` checks FIRST). Hard-coding one test's answer
+        // made the other's evidence read as an anomaly when it was the point.
+        r.verdict = r.customErrorCode === PAUSED
+          ? 'refused by the program at the PAUSE gate (Paused, 6005) — register\'s first check'
+          : r.customErrorCode === POOL_NOT_OPEN
+            ? 'refused by the program at the STATE gate (PoolNotOpen, 6000)'
+            : r.customErrorCode === POOL_FULL
+              ? 'refused with PoolFull (6010) — the CAPACITY gate, which should be unreachable'
+              : `refused, but not with a recognised gate error (${r.customErrorCode ?? 'none'})`;
       }
     } catch (e) {
       r.registerError = e instanceof Error ? e.message : String(e);
@@ -274,11 +312,12 @@ async function main(): Promise<void> {
     );
   }
 
-  const refusedCorrectly = results.filter((x) => x.customErrorCode === POOL_NOT_OPEN).length;
+  const expected = Number(flag('expect') ?? POOL_NOT_OPEN);
+  const refusedCorrectly = results.filter((x) => x.customErrorCode === expected).length;
   const registered = results.filter((x) => x.verdict.startsWith('REGISTERED')).length;
   const spent = results.map((x) => BigInt(x.lamportsSpent));
 
-  console.log(`\n${refusedCorrectly} of ${results.length} refused with PoolNotOpen (6000)`);
+  console.log(`\n${refusedCorrectly} of ${results.length} refused with the EXPECTED code ${expected}`);
   console.log(`${registered} took a seat (must be 0)`);
   console.log(
     `lamports spent: min ${spent.length ? spent.reduce((a, b) => (b < a ? b : a)).toString() : '-'}` +
@@ -290,7 +329,14 @@ async function main(): Promise<void> {
   writeFileSync(out, JSON.stringify({
     pool: { id: pool.id, pda: pool.pool, state: pool.state, entrants: pool.entrants },
     capturedAt: new Date().toISOString(),
-    expected: { error: 'PoolNotOpen', code: POOL_NOT_OPEN, notCode: POOL_FULL },
+    // The RUN's expectation, not one test's. Writing 'PoolNotOpen' into a file
+    // produced by a run that tested for 6005 is how evidence acquires a
+    // footnote, and a footnote is how a reader later concludes the wrong thing.
+    expected: {
+      error: expected === PAUSED ? 'Paused' : expected === POOL_NOT_OPEN ? 'PoolNotOpen' : `code ${expected}`,
+      code: expected,
+      notCode: expected === PAUSED ? [POOL_NOT_OPEN, POOL_FULL] : [POOL_FULL],
+    },
     attempts: results,
   }, null, 2) + '\n');
   console.log(`\nevidence -> ${out}`);

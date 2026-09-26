@@ -1,0 +1,98 @@
+{
+  "pool": {
+    "id": "29",
+    "pda": "3KekiNcocdfB4vEB99HA2mf6eZ2cTFAgrnE9jreisnmv",
+    "state": "Open",
+    "entrants": 30
+  },
+  "capturedAt": "2026-09-24T18:49:01.465Z",
+  "expected": {
+    "error": "Paused",
+    "code": 6005,
+    "notCode": [
+      6000,
+      6010
+    ]
+  },
+  "attempts": [
+    {
+      "wallet": "W38",
+      "address": "CkhWcpxE8x465NvkZCa2L4TfcqPoQJh85KkgcLciMwQT",
+      "balanceBefore": "108000000",
+      "balanceAfter": "107985000",
+      "lamportsSpent": "15000",
+      "attestation": 204,
+      "packet": 200,
+      "ciphertextStatus": 204,
+      "ciphertextBody": "",
+      "signature": null,
+      "registerError": "Transaction 5zrmNPyJoMu37u8mSa63kxJpm2qJEjUZ3oVuVJVzgZ4AxnpLVwfCEoo1hgPnxY1hzEjo6Rpscqru81GGAPik87bK resulted in an error. \nStatus: ({\"err\":{\"InstructionError\":[1,{\"Custom\":6005}]}}). \nCatch the `SendTransactionError` and call `getLogs()` on it for full details.",
+      "customErrorCode": 6005,
+      "verdict": "refused by the program at the PAUSE gate (Paused, 6005) \u2014 register's first check"
+    }
+  ],
+  "note": "Fired into T3's paused window on pool 29. The pool was Open and Config.paused read TRUE from chain, so the refusal can only be the pause gate \u2014 which register checks before the state gate, the deadline and capacity.",
+  "uiAttempt": {
+    "wallet": "UI-B",
+    "address": "6wqLMAS1guarBehRDGFSAApGUBLXuuHWmy9naepzu3sa",
+    "heldNoSeatAtThisPoint": true,
+    "whyThatMatters": "UI-B deliberately had no seat when this was fired, so the refusal has exactly one possible cause. A wallet already holding a seat would fail for two reasons at once and demonstrate neither.",
+    "copyShown": "Entries are paused right now, so this one was not accepted and nothing settled. Try again a little later.",
+    "verdict": "PASS",
+    "assessment": [
+      "A sentence a player can read \u2014 not a spinner, not a raw error code.",
+      "Names the actual reason: entries are paused.",
+      "States the outcome plainly: this entry was not accepted.",
+      "Does not imply the pool is finished, or that funds are at risk.",
+      "Gives the player a next step rather than leaving them stuck.",
+      "Carries no PID \u00a78.7 forbidden vocabulary and no urgency language (D3)."
+    ],
+    "oneObservationForTheFounder": "CORRECTED 2026-09-24T19:05Z. I first recorded that \"nothing settled\" was precise but possibly unclear, because a refused attempt costs a network fee. That is wrong for the path a PLAYER takes. UI-B's refusal has NO transaction on chain at all \u2014 its only transaction that day is the successful entry at 18:59:22Z. The app preflights, the RPC simulates, the 6005 comes back and the client refuses before anything is submitted, so the player pays NOTHING. The 15000 lamports I measured is an artefact of late-attempt.ts using skipPreflight:true DELIBERATELY, so that a refusal lands and its cost can be measured. \"Nothing settled\" is therefore simply accurate, and there is no observation to pass to counsel.",
+    "recovers": "The criterion T6 surrendered under \u00a7F-36 option (a) \u2014 a human reading a refusal in words. Not the same refusal path as T6 (pause, not a sealed pool), so it is the same CLASS of evidence rather than the same evidence.",
+    "refusalWasClientSide": {
+      "transactionOnChain": false,
+      "onlyUiBTransactionThatDay": "4mZG8iZQ11bsFfWCgzvGKPks\u2026 (the SUCCESSFUL entry, 18:59:22Z)",
+      "mechanism": "preflight simulation returns 6005; app/src/tx/errors.ts maps it to \"entries-paused\"",
+      "costToThePlayer": "0 lamports"
+    }
+  },
+  "onChain": {
+    "setPausedTrue": {
+      "sig": "5n7yXQPcz8tLcRY3yX9a94E9SsMwbMXaJUXDf1jWkBxJgxk5vLchCE3xNdVpLemPXShEuJpdX3cyhg9ZKVYtDBrG",
+      "at": "2026-09-24T18:46:37Z",
+      "err": null
+    },
+    "setPausedFalse": {
+      "sig": "5hChrEeyRcYMzB1RHjx7MAYHbnVdaZ82NKu4gE5kUm6DJV8edsaAGC2D7R3WieF5LQh3aBV8MJn3Cj9W4YB6bQHF",
+      "at": "2026-09-24T18:58:06Z",
+      "err": null
+    },
+    "headlessRefusal": {
+      "sig": "5zrmNPyJoMu37u8mSa63kxJpm2qJEjUZ3oVuVJVzgZ4AxnpLVwfCEoo1hgPnxY1hzEjo6Rpscqru81GGAPik87bK",
+      "at": "2026-09-24T18:49:00Z",
+      "slot": 503604760,
+      "err": {
+        "InstructionError": [
+          1,
+          {
+            "Custom": 6005
+          }
+        ]
+      },
+      "anchorLog": "AnchorError thrown in programs/blotto_cup/src/instructions/register.rs:138. Error Code: Paused. Error Number: 6005. Error Message: Entries are paused."
+    },
+    "firstPauseAttemptFailed": {
+      "sig": "4eRVDAkv5bGch3svNTiNQTUDWQzrAnU8C9j4ZMbiqjav8J8yDFqKEXcZNFishwqXSimawV36kez2Sb1CxheSfrTR",
+      "at": "2026-09-24T18:37:34Z",
+      "err": {
+        "InstructionError": [
+          2,
+          {
+            "Custom": 101
+          }
+        ]
+      },
+      "cause": "Squads TX Builder Data field is base58; base64 was supplied. The decoded bytes matched no discriminator. Operator error, not a defect."
+    }
+  }
+}

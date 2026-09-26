@@ -149,6 +149,39 @@ export function wall(seed: number): Entrant {
   };
 }
 
+/**
+ * A wall's TWIN: byte-identical battles, different think-times.
+ *
+ * Two entrants whose seven battles are equal allocation-for-allocation score
+ * IDENTICALLY, and provably so, whatever anyone else in the pool plays.
+ * `compareBattle` is positional, so against every third player the twin's
+ * seven comparisons are the same seven comparisons as the wall's; against each
+ * other every stat is equal, so all seven battles are draws worth one
+ * half-point each and no zones. Equal score AND equal zones is exactly what
+ * `assignRanks` requires for a shared rank, so the pair ties — and a tie at
+ * rank 1 is the only way one pool can hold TWO prize shares under D-E2's
+ * single paid place, which is what the escrow path needs to be exercised at
+ * all (`escrow.rs`: the group is the tied first-place group).
+ *
+ * The timings come from a SEPARATE seed on purpose. An identical allocation
+ * set is what makes the tie; identical think-times would additionally trip
+ * `timing_profile` and leave a report in which two signals fire for one
+ * cause. One deliberate duplicate should produce one signal —
+ * `duplicate_sets` at severity `strong` — so the report says what happened.
+ *
+ * `duplicate_sets` names both players in `DetectionReport.hardBlocks`. That
+ * list is REPORTED AND ACTED ON BY NOTHING under ruling D-E9
+ * (`detection/src/pipeline.ts`), so both seats are scored and paid normally;
+ * a pool in which they were not would be the finding.
+ */
+export function twinWall(battleSeed: number, timingSeed: number): Entrant {
+  return {
+    generator: 'twinWall',
+    battles: Array.from({ length: BATTLES }, (_, k) => wallAllocation(battleSeed, k)),
+    timingsMs: timings(timingSeed, 'twin'),
+  };
+}
+
 /** The certain loser: everything on one stat, and which one rotates. */
 export function poleAllocation(seed: number, battle: number): Allocation {
   // The base stat comes from the SEED ALONE, then rotates by the battle index.
@@ -282,6 +315,71 @@ function uiFieldFrom(order: readonly number[], generator: string): Entrant {
     }
   });
   return { generator, battles, timingsMs: timings(0, generator) };
+}
+
+/**
+ * ————— The BOARD generators (2026-09-24 onward) —————
+ *
+ * `uiFieldFrom` above derives its 25/19/19/19/18 from the DIAL rule, and the
+ * dial run no longer exists: main's commit 59ca085 ("Retire the dial run: the
+ * board is the only run") removed `rebalance.ts`, the seven screens, the
+ * per-screen timer and the ninety-second budget on 2026-09-24. The dial
+ * generators stay exactly as they are, because T3, T4, T5 and T6 are frozen
+ * against them and their roots must keep reproducing; nothing NEW should use
+ * them for a founder seat.
+ *
+ * What the founder now faces (`app/src/battle/board/`):
+ *   - ONE board of 35 cells — seven fields of five stats — not seven screens;
+ *   - a run clock of THREE MINUTES for the whole board, started by the first
+ *     cell change, not 90 seconds and not 15 seconds a screen;
+ *   - a stepper of +1, +5, +10 and +20, not a drag;
+ *   - a per-field LOCK, allowed in easy mode only once that field holds 100;
+ *   - the buzzer rule: at submit or timeout every unplaced point is spread
+ *     evenly across the cells of the UNLOCKED fields, so an untouched field
+ *     becomes 20/20/20/20/20 and a HALF-FILLED one has its remainder pushed
+ *     back into the stats already placed.
+ *
+ * That last clause is why these generators exist rather than a note in the
+ * plan. A recipe like "put 25 on one stat" is no longer safe on its own: leave
+ * the other 75 unplaced and the spread adds 15 to every cell, turning the 25
+ * into a 40 and breaking the cap that the whole unconditional derivation
+ * rests on. A board recipe has to fill each field to exactly 100.
+ *
+ * So each field carries a rotation of one capped multiset, chosen to be cheap
+ * on the stepper: every value is reachable in one or two taps.
+ */
+function uiBoardFrom(base: readonly number[], generator: string): Entrant {
+  if (base.length !== STATS) throw new Error(`${generator}: base needs ${STATS} values`);
+  const battles: Allocation[] = Array.from({ length: BATTLES }, (_, k) =>
+    // Rotate the multiset by the field index: seven fields over five
+    // positions gives five distinct shapes, comfortably clear of
+    // allocation_entropy's "strong" at two or fewer.
+    Array.from({ length: STATS }, (_, z) => base[(z + k) % STATS])
+  );
+  battles.forEach((b, i) => {
+    assertAllocation(b, `${generator}(${i})`);
+    if (b.some((v) => v < 1 || v > FIELD_CAP)) {
+      throw new Error(`${generator} battle ${i}: a stat is outside 1..${FIELD_CAP}`);
+    }
+  });
+  return { generator, battles, timingsMs: timings(base[0] * 100 + base[1], generator) };
+}
+
+/**
+ * UI-A on the board. 25/25/20/20/10 rotated per field: seven taps a field on
+ * the stepper (20+5, 20+5, 20, 20, 10), 49 in all, plus seven locks.
+ */
+export function uiBoardA(): Entrant {
+  return uiBoardFrom([25, 25, 20, 20, 10], 'uiBoardA');
+}
+
+/**
+ * UI-B on the board. 25/20/20/20/15 rotated per field — a different multiset
+ * from UI-A's, so the two founder seats can never share a battle set however
+ * the rotations line up. Also seven taps a field (20+5, 20, 20, 20, 10+5).
+ */
+export function uiBoardB(): Entrant {
+  return uiBoardFrom([25, 20, 20, 20, 15], 'uiBoardB');
 }
 
 /** UI-A in T5 — an ordinary field seat. Rotates Strength→Durability. */

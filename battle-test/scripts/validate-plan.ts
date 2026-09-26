@@ -10,9 +10,17 @@
  *   - every allocation is five non-negative integers summing to exactly 100
  *     in the fixed stat order — the invariant the program cannot enforce
  *     (CLAUDE.md), so it is enforced here and at the submission boundary;
- *   - no two entrants share an identical seven-battle set — the one
- *     allocation signal that hard-blocks (R11), so a plan that predicts one
- *     is predicting its own failure;
+ *   - no two entrants share an identical seven-battle set, UNLESS the plan
+ *     declares the pair in `intentionalDuplicateSets` and says why. An
+ *     identical pair is the `duplicate_sets` signal at severity `strong`
+ *     (`detection/src/signals.ts`) and puts both players in the report's
+ *     `hardBlocks` list — which under ruling D-E9 is REPORTED AND READ BY NO
+ *     CODE THAT MOVES ANYTHING (`detection/src/pipeline.ts`). Earlier copies
+ *     of this header called it "the one allocation signal that hard-blocks",
+ *     and T7's research showed that is not true of the system as built:
+ *     nothing blocks, and detection runs at reveal, long after the entry it
+ *     would have refused. The check stays a default because an ACCIDENTAL
+ *     duplicate is still a plan bug; a declared one is a test of the policy;
  *   - at least three distinct shapes per entrant — `allocation_entropy`
  *     fires "strong" at two or fewer, and the evidence should be clean;
  *   - every wallet exists in `wallets.json`, and no wallet appears twice in
@@ -51,6 +59,13 @@ interface Plan {
   schema: string;
   test: string;
   cluster?: string;
+  /**
+   * Wallet ids the plan deliberately gives identical battle sets, with the
+   * reason recorded in the plan itself. Declaring a pair here suppresses the
+   * duplicate failure for THOSE wallets and nothing else — an undeclared
+   * duplicate still fails, which is the case that is a bug.
+   */
+  intentionalDuplicateSets?: { wallets: string[]; why: string };
   expectations?: {
     terminalState?: string;
     entrants?: number;
@@ -102,6 +117,10 @@ function validate(path: string, roster: Set<string>): void {
 
   const seen = new Set<string>();
   const fingerprints = new Map<string, string>();
+  const declaredDuplicate = new Set(plan.intentionalDuplicateSets?.wallets ?? []);
+  if (plan.intentionalDuplicateSets && !plan.intentionalDuplicateSets.why) {
+    fail(name, 'intentionalDuplicateSets is declared without a `why` — a duplicate with no stated reason is a bug, not a design');
+  }
 
   for (const seat of plan.seats) {
     const who = seat.wallet ?? '(unnamed seat)';
@@ -140,7 +159,14 @@ function validate(path: string, roster: Set<string>): void {
     const fp = JSON.stringify(sets);
     const twin = fingerprints.get(fp);
     if (twin) {
-      fail(name, `${who} and ${twin} have an identical seven-battle set — the one allocation signal that hard-blocks (R11)`);
+      if (declaredDuplicate.has(seat.wallet) && declaredDuplicate.has(twin)) {
+        // Declared, with a reason, in the plan. Announced rather than passed
+        // over in silence: a reader of the CI log should see that this plan
+        // contains a duplicate on purpose.
+        console.log(`${name}: ${who} and ${twin} share a battle set BY DECLARATION — ${plan.intentionalDuplicateSets?.why ?? ''}`);
+      } else {
+        fail(name, `${who} and ${twin} have an identical seven-battle set, and the plan does not declare it in intentionalDuplicateSets`);
+      }
     } else {
       fingerprints.set(fp, seat.wallet);
     }

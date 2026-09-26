@@ -348,26 +348,45 @@ function main(): void {
       } else if (gotPaid !== wantPaid) {
         verdict = 'PAYOUT_MISMATCH';
         note = `paid ${sol(gotPaid)} SOL, plan said ${sol(wantPaid)}`;
-      } else if (seat.expectedRank !== undefined && got.rank !== undefined && got.rank !== seat.expectedRank) {
-        verdict = 'RANK_DRIFT';
-        note = `rank ${got.rank}, plan said ${seat.expectedRank}`;
       } else if (
         seat.battles &&
         got.revealedBattles &&
         JSON.stringify(got.revealedBattles) !== JSON.stringify(seat.battles)
       ) {
+        // INPUT drift is checked BEFORE rank drift, and the order is the whole
+        // point (T3, 2026-09-26). It used to come second, so any seat whose
+        // rank had also moved was labelled RANK_DRIFT and this check never ran
+        // — and input drift is precisely what CAUSES rank drift, so the two
+        // co-occur almost every time. On T3 that hid the single most important
+        // fact about the run: both founder seats had timed out into the even
+        // split, UI-B on all seven battles, and the report said only that
+        // their ranks were off by one. Reporting the effect while the cause is
+        // shadowed is the same family as the stub verdict below.
+        //
         // The allocation played is not the allocation planned. On a headless
         // seat that is a defect in this runner. On a UI seat it is a human at
-        // a dial under a ninety-second clock, and is expected — what matters
-        // is whether the rank and the money still landed where the plan said,
-        // which the two checks above have already established by this point.
+        // a dial under a ninety-second clock, and is expected.
         const differing = got.revealedBattles.filter(
           (b, i) => JSON.stringify(b) !== JSON.stringify(seat.battles![i])
         ).length;
+        const evenSplits = got.revealedBattles.filter(
+          (b) => new Set(b).size === 1
+        ).length;
+        const rankMoved =
+          seat.expectedRank !== undefined && got.rank !== undefined && got.rank !== seat.expectedRank;
         verdict = 'INPUT_DRIFT';
         note =
           `${differing} of 7 battles differ from the plan` +
-          (seat.route === 'ui' ? ' (played by hand — rank and payout still match)' : '');
+          // The timeout default is worth naming rather than leaving as "differs":
+          // an even split is what the client submits when the clock runs out, and
+          // DRIFT §H13 records that it also manufactures the strongest detection
+          // signal. A reader should not have to diff seven arrays to notice it.
+          (evenSplits ? `, ${evenSplits} of them the EVEN SPLIT (the timeout default)` : '') +
+          (rankMoved ? `; rank ${got.rank}, plan said ${seat.expectedRank}` : '') +
+          (seat.route === 'ui' ? ' — played by hand' : '');
+      } else if (seat.expectedRank !== undefined && got.rank !== undefined && got.rank !== seat.expectedRank) {
+        verdict = 'RANK_DRIFT';
+        note = `rank ${got.rank}, plan said ${seat.expectedRank}`;
       } else if (got.recomputedHashMatches === false) {
         verdict = 'INPUT_DRIFT';
         note = 'revealed allocation does NOT reproduce the hash committed at entry';
@@ -458,7 +477,7 @@ function main(): void {
       lines.push('On a scored pool each was replaced by a spare playing THAT SEAT\'S OWN frozen');
       lines.push('allocation, so the field the engine scored is the field the plan predicted: a rank');
       lines.push('falls out of the allocations, never the wallet holding them. The absent rows are the');
-      lines.push('burnt wallets (docs/testing/TESTING-REPORT.md), recorded rather than quietly substituted.');
+      lines.push('burnt wallets (DRIFT.md §H6, §H8), recorded rather than quietly substituted.');
     }
   }
   lines.push('');

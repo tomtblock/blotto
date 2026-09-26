@@ -7,7 +7,7 @@ services, and the **admin CLI worked examples** (`scripts/admin.ts`).
 **Status: the credentialed devnet run has happened.** Six scored tests and a shakedown ran on
 devnet from 2026-09-16 to 2026-09-22. Results, method and findings:
 [`../testing/TESTING-REPORT.md`](../testing/TESTING-REPORT.md). The trial tooling and raw evidence
-are in [`battle-test/`](../../battle-test/README.md).
+are in [`battle-test/`](../../battle-test/).
 
 Devnet only. Program id `5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17`. For running a deployment
 day to day, see [`OPERATING-MANUAL.md`](OPERATING-MANUAL.md); for hosting the services, see
@@ -171,7 +171,7 @@ including `set-vault-ceiling`, `set-kyc-threshold`, `set-detection-hard-block`,
 ### Step 4 — Fill pools
 
 Headless entrants and at least one browser entrant, entering by hand through the deployed app. The
-devnet trial's headless tooling is in [`battle-test/`](../../battle-test/README.md). There is no
+devnet trial's headless tooling is in [`battle-test/`](../../battle-test/). There is no
 automated spec for a credentialed browser entry. The credential-free half of the journey (landing,
 pool page, the entry gate's fail-closed panel, the verify page, at 375 px and 1280 px) is
 automated in `app/e2e/journey.spec.ts` and runs in `ci-fast` → journey.

@@ -1,0 +1,88 @@
+{
+  "schema": "blotto-rehearsal-freeze/1",
+  "test": "T7",
+  "_why": "The plan is evidence only if it demonstrably predates the outcome. Commit dates can be set to anything; GitHub's merge timestamp and a Solana block time cannot. This file binds the two and is written SEPARATELY so T7.plan.json stays byte-identical to what was frozen.",
+  "writtenAt": "2026-09-26T19:11:47Z",
+  "writtenAtNote": "WRITTEN AT FREEZE TIME, before the freeze PR was opened and before any entry of ours existed. T3's freeze file was written two days after its pool ran and said so; this one is not.",
+  "pullRequest": null,
+  "repository": "tomtblock/blotto",
+  "mergedAt": null,
+  "mergedBy": null,
+  "mergeCommit": null,
+  "headCommit": null,
+  "planPath": "battle-test/registry/T7.plan.json",
+  "planSha256": "5bb785f4f666e772bc098a9fd8642e09bde35869a946dc4a53fb8115cc255c24",
+  "THE CLAIM THIS RECORD EXISTS TO MAKE": {
+    "statement": "THE PREDICTION WAS FROZEN BEFORE ANY ENTRY OF OURS EXISTED, AND BEFORE ANYONE COULD READ THE ONE ENTRY THAT ALREADY DID.",
+    "standard": "T3's, not T6's — and unavoidably so.",
+    "whyNotT6sStandard": "T6's freeze merged twenty-nine minutes before its pool was created, which is the strongest form. T7 cannot reach it: the founder chose pool 36, and pool 36 already existed and already held one entrant when this plan was written. Running on a pool that does not yet exist would mean waiting for 36 to settle — roughly seven hours to its deadline — and would not remove the stranger, who would likely enter the next pool too.",
+    "whySealingMakesThisHonestANYWAY": "The one input that predates this freeze is SEALED. Pool 36's existing entrant submitted sha256(battles-and-salt) on chain and a ciphertext to the entry service; the plaintext cannot be read by us, by the operator or by anyone else until the pool secret is revealed at seal. So this plan was written in ignorance of it, and it says so: NO claim in the file assumes anything about that allocation. The three unconditional claims (U1, U2, U3) hold for every possible value of it, and the one conditional claim (C1) is stated AS A FUNCTION of it, with the threshold derived rather than guessed.",
+    "whatWouldFalsifyTheClaim": "Evidence that the stranger's allocation was readable before this file's writtenAt. That would be a sealing failure and a finding far larger than T7."
+  },
+  "poolAtFreeze": {
+    "poolId": 36,
+    "poolPda": "DtaxjC8MoRZ3wGnR6KghsxV1gXvPP5yaTEssrroArpXX",
+    "tier": 0,
+    "mode": "easy",
+    "entryLamports": "100000000",
+    "potLamports": "4000000000",
+    "minSeats": 40,
+    "state": "Open",
+    "entrantsAtFreeze": 1,
+    "fillDeadlineAt": "2026-09-27T01:46:04Z",
+    "parametersMatchPlan": true,
+    "parametersChecked": "tier 0, mode easy, entry 100000000, pot 4000000000, min_seats 40 — every one as the frozen plan states it. Read from the indexer's projection at 2026-09-26T19:11:48Z; to be re-read from chain before the first entry.",
+    "priorOccupant": {
+      "wallet": "CRCK62mRC4zxsFRAx41g4MbQzGqsJQD3SURM7Te4VnhW",
+      "registeredAt": "2026-09-26T15:35:48Z",
+      "chainSeatIndex": 0,
+      "isOurs": false,
+      "allocationKnown": false
+    },
+    "highestPoolIdAtFreeze": 37,
+    "note": "Pool 37 is the tier-0 HARD pool, open alongside 36 since Phase B. T7 runs on 36 and must not touch 37."
+  },
+  "programAtFreeze": {
+    "programId": "5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17",
+    "build": "Phase B",
+    "deployedAt": "2026-09-25T01:54:32Z",
+    "whyThisIsRecorded": "T7 is the FIRST battle-test pool to run on the Phase B program. T3 sealed and paid at 2026-09-25T01:24:55Z, twenty-nine minutes and thirty-seven seconds before that deploy, so T1, T2R, T3, T4, T5 and T6 all ran on the pre-Phase-B build with no confound. Any T7 result that differs from its predecessors has a second candidate explanation, and the report must say so rather than imply one continuous program.",
+    "whatPhaseBChanged": "Pool.mode was appended (account size 842), Config gained a hard-mode ladder, open_pool takes a mode, and the sealed payload is 127 bytes in easy mode or 162 in hard. register.rs, escrow.rs and flags.rs are TEXTUALLY UNTOUCHED by Phase B — checked against git, not assumed — and the easy-mode payload is byte-for-byte what every earlier pool used.",
+    "modeUnderTest": "easy (MODE_EASY = 0), the founder's choice, so the only variable T7 adds to the series is the program build."
+  },
+  "rootsRevalidatedBeforeFreeze": {
+    "_why": "This branch merged 47 commits of main immediately before T7 was written, and backend/scoring/src/engine.ts moved by 24 lines in them. The oracle imports that engine and it produced every frozen root in this test, so a silent change there would invalidate T3, T4, T5 and T6 retrospectively — not just T7.",
+    "checkedAt": "2026-09-26T18:58Z",
+    "mergeCommit": "af1f649",
+    "result": "All four reproduce BYTE-FOR-BYTE through the merged engine.",
+    "roots": {
+      "T3": "6dc186563733ff4f0e2f6e23463dbe75b28b1408663d98e8e36ff691d44ef48c",
+      "T4": "3950d12ceeb44f5028863c7c3cf8065415154a4a2c0680add95256b4334a34ac",
+      "T5": "ff1bca37fbc29e51bfe65bd92a707fdf613e8b84ec7353ba64af74c1ca2819f3",
+      "T6": "49fec9c6245f8856533f7fe0dbe48054f13179d6bbfad03ac902191b48a92c1b"
+    },
+    "whyTheyDidNotMove": "The engine change is additive: scorePool(players, mode = 'easy') gained a second parameter with an easy default, and the oracle calls it with one argument. Easy-mode scoring is unchanged."
+  },
+  "noResultsRootIsFrozen": {
+    "statement": "T7 FREEZES NO PREDICTED RESULTS ROOT, and that is deliberate.",
+    "why": "A root is a function of all 64 seats' allocations. One of T7's 64 is not ours and is sealed. Freezing a root that cannot match would be a prediction designed to fail.",
+    "whatIsFrozenInstead": "The FUNCTION and 63 of its 64 inputs. The root is determined by the sets in T7.plan.json plus one set revealed at seal; reconcile.ts recomputes it and checks it against the chain. Nobody can alter 63 of the inputs after the fact, and the function is the committed oracle.",
+    "theRootClaimT7StillMakes": "The root recomputed from the 64 revealed sets equals the on-chain results_root — the verifiability claim T4, T5, T6 and T3 each established with a point prediction."
+  },
+  "verifyIndependently": [
+    "The merge time will be served by GitHub's own API for this freeze PR and cannot be rewritten by this repository.",
+    "sha256 of registry/T7.plan.json at the merge commit must equal planSha256 above.",
+    "Every entry time is a block time read from devnet via getSignaturesForAddress on the pool PDA — not from this repository and not from the indexer.",
+    "The ORDER is the claim: GitHub's merge timestamp precedes the Solana block of our first register. Neither clock is ours.",
+    "The prior occupant's registration at 2026-09-26T15:35:48Z is also a block time, and it precedes this freeze. That is stated rather than hidden, and the sealing argument above is why it does not weaken the prediction."
+  ],
+  "timeline": {
+    "poolCreatedAt": "2026-09-26T13:46:04Z",
+    "poolCreatedAtSource": "block time, read from chain via getSignaturesForAddress on the pool PDA (first signature 1HVWU9aCnph1oVayYtVM..., 2026-09-26T13:46:04Z). Not derived and not the indexer's.",
+    "priorOccupantRegisteredAt": "2026-09-26T15:35:48Z",
+    "planWrittenAt": "2026-09-26T19:11:47Z",
+    "frozenAt": null,
+    "firstEntryOfOursAt": null,
+    "freezeMustPrecedeFirstEntry": true
+  }
+}

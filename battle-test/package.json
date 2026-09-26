@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "license": "Apache-2.0",
-  "description": "Devnet battle-test tooling (see README.md). Imports backend/scoring, backend/sealing, backend/packet and tests/rehearsal by relative path as read-only libraries; modifies nothing under app/, programs/, backend/ or tests/.",
+  "description": "Devnet battle-test tooling (see MANUAL.md). Imports backend/scoring, backend/sealing, backend/packet and tests/rehearsal by relative path as read-only libraries; modifies nothing under app/, programs/, backend/ or tests/.",
   "engines": { "node": ">=20" },
   "scripts": {
     "keys": "ts-node --transpile-only --compiler-options {\"module\":\"commonjs\",\"moduleResolution\":\"node\"} scripts/keys.ts",

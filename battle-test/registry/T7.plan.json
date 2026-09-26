@@ -1,0 +1,4747 @@
+{
+  "schema": "blotto-rehearsal-plan/1",
+  "test": "T7",
+  "title": "Same device, a tie for first, and the review path end to end",
+  "cluster": "devnet",
+  "programId": "5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17",
+  "tier": 0,
+  "mode": "easy",
+  "modeNote": "MODE_EASY = 0 — seven battles of 100 points each, the shape every earlier pool in this test used. Phase B added MODE_HARD (700 points across thirty-five cells) and went live on devnet at 2026-09-25T01:54:32Z. T7 is the FIRST battle-test pool on the Phase B program; T3 settled 29 minutes before that deploy, so T1, T2R, T3, T4, T5 and T6 all ran on the pre-Phase-B program with no confound. Easy mode is the founder's choice, so the only variable T7 adds is the program build.",
+  "poolId": 36,
+  "poolPda": "DtaxjC8MoRZ3wGnR6KghsxV1gXvPP5yaTEssrroArpXX",
+  "poolIdNote": "NAMED, unlike T3-T6, and it has to be: pool 36 already holds an entrant this plan must account for, so the plan cannot be pool-agnostic. It is frozen before OUR first entry, which is the standard T3 could not meet (its freeze file was written two days late and says so).",
+  "entryLamports": "100000000",
+  "potLamports": "4000000000",
+  "minSeats": 40,
+  "fillDeadlineSeconds": 43200,
+  "frozenAt": null,
+  "gitCommit": null,
+  "priorOccupant": {
+    "_": "Pool 36 was not empty when this plan was written. One wallet that is not ours registered before it, on a public devnet where anyone may play. It is not ours to move or exclude, so the plan seats 63 around it and separates the claims that survive its unknown allocation from the ones that do not.",
+    "wallet": "CRCK62mRC4zxsFRAx41g4MbQzGqsJQD3SURM7Te4VnhW",
+    "registeredAt": "2026-09-26T15:35:48Z",
+    "chainSeatIndex": 0,
+    "consequence": "Our plannedSeat N lands on CHAIN SEAT N+1. Every seat index in this file is our own ordering; add one to read it against the chain.",
+    "whatIsUnknowable": "Its seven allocations are sealed until the pool secret is revealed. Nothing in this plan assumes anything about them."
+  },
+  "hypothesis": "A pool can hold two prize shares, and the review path can release one and forfeit the other without a lamport reaching the operator. Two shares exist only on a tie for first, so the tie is built rather than hoped for: W00 and W01 carry identical allocations and therefore identical scores. Separately, two accounts played from one browser profile produce a same-device finding in the detection report, and that finding by itself blocks nobody.",
+  "whyTheManualsT7CannotRunAsWritten": {
+    "_": "MANUAL.md §9 asks for \"W62 the wall so a headless seat wins\" AND for \"Paid with 2 seats escrowed; release one, forfeit one\". Those are mutually exclusive, and the manual is wrong rather than the program.",
+    "readFromTheProgram": [
+      "backend/scoring/src/prizes.ts: PRIZE_BANDS_1024 = [1024n]. One band. Rank 1 takes the whole pot and no other rank is paid.",
+      "pay_prizes.rs:139 escrows a seat's `amount` when entry.flagged. A seat paid nothing escrows nothing.",
+      "escrow.rs: a forfeited first-place share passes to \"the remaining eligible members of the tied first-place group\"."
+    ],
+    "conclusion": "If one headless seat wins alone, the other seats are paid zero and NOTHING escrows. Two shares require two seats tied at rank 1. The founder ratified the redesign on 2026-09-26: the same-device demonstration rides on the two founder accounts, and the escrow demonstration rides on two headless seats built to tie.",
+    "whatIsGivenUp": "The escrowed pair is not the same-device pair. Under D-E9 no signal flags anybody by itself, so every flag in this system is a human act regardless of which seats it lands on; what is bought is that release AND forfeit both run in one pool, which the specified design cannot do at all."
+  },
+  "unconditionalDerivation": {
+    "_": "What follows from the shapes alone, for ANY allocation the stranger or the founder plays. Scoring is pairwise additive, so a seat's final score is its score among the 63 frozen seats plus 0..14 from the stranger — that single fact carries every bound here. Recompute all of it with scripts/t7-bounds.ts, which exits non-zero if any claim fails.",
+    "scoringRule": "A stat goes to the larger number. A battle goes to whoever wins at least 3 of 5 stats, otherwise it is a draw. Score is 2 half-points a win and 1 a draw, across 7 battles against each of the other 63 entrants.",
+    "maxScore": "882",
+    "premiseP1": "Each wall holds three stats at 26 or above in EVERY battle and no capped seat holds any stat above 25, so a wall wins at least 3 of 5 stats against any capped seat and takes all 7 battles. Checked against all 61 seed-generated shapes by t7-bounds.ts, not assumed.",
+    "premiseP3": "W00 and W01 are equal allocation-for-allocation across all seven battles. Checked, not assumed — and their think-times are deliberately NOT equal, so the duplicate shows up as one signal rather than two.",
+    "U1_theTieIsUnconditional": "**W00 and W01 finish on the same score and the same zones and therefore SHARE a rank.** compareBattle is positional, so by P3 their seven comparisons against any third player are the same seven comparisons: the stranger adds the same amount to each, and so does every founder seat. Against each other all five stats are equal in all 7 battles, so each takes 7 half-points and no zones. Among the 63 frozen seats both stand at 861 half-points and 1281 zones. This claim does not depend on anything anyone else plays.",
+    "U2_noCappedSeatCanOutscoreAWall": "By P1 a capped seat takes 0 from each wall, so its ceiling is 61 opponents × 7 battles × 2 = **854**. A wall's FLOOR is **861** — its 861 among the frozen seats plus nothing at all from the stranger. 854 < 861. This covers BOTH founder seats for any allocation they dial inside 1..25, not just the recipe.",
+    "U3_theFounderCannotDecideThisPool": "The best score any frozen non-wall seat reaches is 505, and the most the stranger can add is 14, for 519 — below the walls' floor of 861. Nothing UI-A or UI-B does moves the winner.",
+    "C1_theOneThingTheStrangerCanDo": "**CONDITIONAL, and the only conditional that matters.** A wall's final score is 861 + (14 − s), where s is the stranger's half-points against ONE wall — the same s against both, by P3. The stranger outscores the walls only if it takes **8 or more of the 14 on offer against one wall** (four wins of seven, or fewer wins topped up by draws). Every capped set, every even split and every single-stat spike gives s = 0 and a wall score of 875.",
+    "ifC1Fails": "The walls STILL tie — U1 is unconditional — but they tie at rank 2, the stranger takes the pot, and nothing is escrowed. The escrow half of T7 then cannot run, and that is the result to report, not something to work around."
+  },
+  "intentionalDuplicateSets": {
+    "wallets": [
+      "W00",
+      "W01"
+    ],
+    "why": "Two prize shares exist only on a tie for first (D-E2 pays one place), and a tie that survives an unknown entrant's play requires identical battle sets. The resulting duplicate_sets finding is part of what T7 tests: it is severity `strong`, it names both players in the report's hardBlocks list, and under D-E9 nothing acts on it."
+  },
+  "expectations": {
+    "terminalState": "Paid",
+    "entrants": 63,
+    "entrantsNote": "63 is the number of seats THIS PLAN places, which is what validate-plan.ts checks the seat list against. The pool seals at 64: our 63 plus the one wallet already seated.",
+    "poolEntrantsAtSeal": 64,
+    "sealsAtCapacity": true,
+    "sealReason": "CAPACITY. Our 63rd entry is the pool's 64th and seals it inside the same register instruction — T4/T5/T6's path, not T3's deadline seal.",
+    "settlementSequence": [
+      "register (64th, seals)",
+      "reveal_pool_secret",
+      "commit_results",
+      "pay_prizes"
+    ],
+    "paidSeatCount": 2,
+    "paidSeatCountNote": "TWO. Every scored pool so far paid exactly one. Two is the whole point: it is what a tie for first produces under a one-band table, and what the escrow path needs.",
+    "winners": [
+      "W00",
+      "W01"
+    ],
+    "winnersAreHeadless": true,
+    "winnerLamportsEach": "2000000000",
+    "splitIsExact": "4000000000 / 2 = 2000000000 with remainder 0, so neither seat takes a remainder lamport and the two amounts are equal. assignPrizes gives any indivisible remainder to the lowest entry index; here there is none.",
+    "wallScoreHalfFloor": 861,
+    "wallScoreHalfCeiling": 875,
+    "wallScoreNote": "A RANGE of fifteen values, not a point prediction, and the range is the stranger's doing alone — the founder cannot move it by a single half-point (P1). t7-bounds.ts prints the score for each s.",
+    "founderSeatsPaid": "0",
+    "founderRankRange": [
+      3,
+      64
+    ],
+    "founderRankNote": "A RANGE. Rank 1 and rank 2 are unavailable to a capped seat by U2 (the two walls share rank 1, so the next rank is 3). Exact ranks among the other capped seats are computed at reveal: the founder plays by hand against a 90-second clock and §H13 recorded both founder seats timing out into the even split in T3.",
+    "resultsRoot": null,
+    "resultsRootNote": "DELIBERATELY ABSENT. See the module comment: 63 of the 64 inputs are frozen here and the 64th is revealed at seal, so the root is determined but not yet computable. reconcile.ts recomputes it from the revealed sets and checks it against the chain — which is the claim that matters (the operator is checkable) and the one T4, T5, T6 and T3 all established with a point prediction.",
+    "vaultAfter": "650240",
+    "vaultAfterNote": "the rent cushion, never recovered — AFTER release_escrow, forfeit_escrow and pay_next_place have all run. A forfeited share sits in this vault in the meantime.",
+    "perSeatSunkLamportsLowBand": "4441080",
+    "perSeatSunkLamportsHighBand": "4446160",
+    "perSeatSunkNote": "The two bands measured across six pools (DRIFT §H20): chain seats 0..9 sink 4441080 and seats 10+ sink 4446160, one byte of devnet rent at 5080 lamports apart. The stranger holds chain seat 0, so **9 of OUR seats fall in the low band and 54 in the high band** — the first time the split has not been 10/N. If we see 10/53 instead, the boundary does not track the chain index and §H20 needs rewriting.",
+    "treasuryDeltaFromEntries": "6300000000",
+    "treasuryDeltaNote": "63 entries of ours at 100000000 lamports. The stranger's entry is a 64th 100000000 the treasury also receives and we did not pay; read the treasury twice, both timestamped."
+  },
+  "reviewPath": {
+    "_": "The sequence T7 exists to run, with the signer of each step named. Every authority here was read from the program, not assumed.",
+    "whyTheFlagsGoOnDURINGTHEFILL": {
+      "finding": "**There is no window between seal and payment in which a reviewer could act.** The crank reveals, scores, runs detection, commits and pays in ONE tick — T3 went from seal to payout in three seconds. And detection returns no auto-flags under D-E9 (reveal/src/crank.ts:236, pipeline.ts). So a flag based on THIS pool's own detection report can never be placed before this pool is paid.",
+      "consequence": "flag_entry is legal while the pool is Open (preconditions.ts: flag → Open, Sealed, Scored; flags.rs requires only !entry.settled). So the flags go on during the fill. That is honest for a devnet exercise and it is also the finding: in production the review path can only ever act on evidence from EARLIER pools, never on this one's. If the founder wants review-before-payment on a pool's own findings, the crank needs a hold it does not have. Raised for the founder, not worked around here."
+    },
+    "steps": [
+      {
+        "n": 1,
+        "what": "flag W00 and flag W01",
+        "when": "while pool 36 is still Open, after both wallets are seated",
+        "who": "the founder, at /admin/review, signing a decision with a reviewer key",
+        "signer": "settlement_signer (EaDfwMWwW712L4YgdhBgEqbzzpdVP17e5mvY9LPwjrSD), landed by the review service",
+        "expect": "entry.flagged = true on both; no lamport moves"
+      },
+      {
+        "n": 2,
+        "what": "the 64th register seals the pool; the crank scores and pays",
+        "when": "immediately, automatically",
+        "who": "the settlement daemon",
+        "signer": "settlement_signer",
+        "expect": "state Paid; commit_results carries TWO payouts of 2000000000; pay_prizes ESCROWS both rather than sending them (pay_prizes.rs:139); the vault still holds both shares"
+      },
+      {
+        "n": 3,
+        "what": "release W00",
+        "when": "once the pool is Paid",
+        "who": "the founder, at /admin/review — the reviewer decides the flag is not upheld",
+        "signer": "settlement_signer",
+        "expect": "release_escrow pays 2000000000 TO W00; entry.escrow_lamports = 0. The identity gate in release_escrow does not apply at this amount: Config.kyc_required_above_lamports reads 0 on chain, which is the switch held off under D-E5."
+      },
+      {
+        "n": 4,
+        "what": "uphold the flag on W01",
+        "when": "once the pool is Paid",
+        "who": "the founder, at /admin/review",
+        "signer": "NOBODY on chain at this step",
+        "expect": "the review service RECORDS the decision and reports recorded_pending_admin — it holds no admin key (review.ts, case forfeit). The daemon's review clock then sees the logged forfeit and refuses to auto-release W01 at the 12-hour window (daemon.ts, forfeitLogged), which is the behaviour being tested."
+      },
+      {
+        "n": 5,
+        "what": "forfeit_escrow W01",
+        "when": "after step 4",
+        "who": "the founder, through Squads — the SECOND and last admin write of the week",
+        "signer": "Config.admin, a PDA, signing by CPI from the 1-of-1 multisig",
+        "expect": "**NO LAMPORT MOVES.** entry.forfeited = true and the share stays in pool 36's vault. Read the vault before and after: identical. The Squads Data field is BASE58 — admin.ts --emit-proposal prints dataBase64 and that cost a transaction on Wednesday (DRIFT §H25)."
+      },
+      {
+        "n": 6,
+        "what": "pay_next_place",
+        "when": "the next daemon tick after step 5",
+        "who": "the settlement daemon, automatically",
+        "signer": "settlement_signer",
+        "expect": "W01 is the only forfeited seat and W00 is the only other member of the tied first-place group, so committed_peers is empty, group_size is 1, and W00 receives the WHOLE forfeited 2000000000. W00 ends with 4000000000 — the entire pot — and the treasury is unchanged across steps 3 to 6."
+      }
+    ],
+    "theClaimThisProves": "A forfeited prize is never the operator's. It stays in its own pool's vault until a player is paid it. Check it by reading the platform treasury before step 3 and after step 6: the two figures must be identical."
+  },
+  "founderInteraction": {
+    "_": "T7 IS THE FIRST TEST WRITTEN AGAINST THE BOARD. Main retired the dial run on 2026-09-24 (commit 59ca085, \"Retire the dial run: the board is the only run\"), and this branch picked it up in the merge of 2026-09-26. Every earlier plan's founder recipe describes an interaction that no longer exists. Those plans are frozen and stay as they are; this one does not repeat them.",
+    "whatChanged": [
+      "ONE board of 35 cells — seven fields of five stats — replaces seven screens.",
+      "THREE MINUTES for the whole board (BOARD_CLOCK_BUDGET_MS), started by the first cell change. The 90-second run and the 15-second per-screen timer (R9) are both gone.",
+      "A STEPPER of +1, +5, +10, +20 replaces the drag. There are no dials.",
+      "A per-field LOCK, which easy mode allows only once that field holds exactly 100.",
+      "The BUZZER RULE (spread.ts): at submit or timeout every unplaced point is spread evenly across the cells of the UNLOCKED fields. An untouched field still becomes 20/20/20/20/20 — the even split survives — but a HALF-FILLED field has its remainder pushed back into the stats already placed."
+    ],
+    "whyTheRecipeMustFillEveryField": "The buzzer rule is why \"put 25 on one stat\" is no longer a safe instruction. Place 25 and leave the other 75 unplaced and the spread adds 15 to every cell of that field, turning the 25 into a 40 — above the cap that U2 and the whole unconditional derivation rest on. Each recipe below therefore fills every field to exactly 100 and locks it.",
+    "timeBudget": "Seven taps a field plus a lock is 56 actions in 180 seconds, about three seconds each. Every value in both recipes is one or two taps on the stepper: 25 is +20 then +5, 20 is one +20, 15 is +10 then +5, 10 is one +10.",
+    "ifTheClockBeatsYou": "A field already filled and LOCKED is safe. A field left untouched becomes the even split, which is capped at 20 and keeps U2 intact. The dangerous case is the half-filled unlocked field — so lock as you go rather than at the end.",
+    "applyTheSameCareToBoth": "Both accounts are played from ONE browser profile, which is the point of T7's other half. Sign out of the first and into the second WITHOUT changing browser, profile or device: the device marker is what the detection finding is about."
+  },
+  "detection": {
+    "hardBlocks": [
+      "W00",
+      "W01"
+    ],
+    "hardBlocksNote": "PREDICTED, and predicted to do nothing. duplicate_sets at severity `strong` is one of R11's two conclusive signals, so pipeline.ts puts both players in report.hardBlocks — a list the header describes as \"published to the reviewer and read by no code that moves anything\" (D-E9). Both seats must be scored, ranked and paid normally.",
+    "notes": [
+      "duplicate_sets fires STRONG on W00 and W01 — \"exact duplicate battle set\" — and on nobody else. This is declared, not an accident.",
+      "device_ip_correlation should name UI-A and UI-B: the two founder accounts are played from one browser profile and derive the same device marker for this pool. THIS IS T7's OTHER HALF, and it must not block either seat.",
+      "Neither founder seat may be refused, delayed or escrowed by the device finding. If one is, D-E9 is not implemented the way the pipeline header says it is.",
+      "population_score is expected on W00 and W01, as it fired on the wall in T4, T5, T6 and T3.",
+      "allocation_entropy must NOT fire \"strong\" on anyone: every seat carries at least 3 distinct shapes, and both walls carry 7.",
+      "timing_profile must NOT fire on the W00/W01 pair. Their think-times come from a different seed on purpose, so the deliberate duplicate produces ONE signal with one cause rather than two that look like corroboration."
+    ]
+  },
+  "seats": [
+    {
+      "seat": null,
+      "plannedSeat": 0,
+      "expectedChainSeat": 1,
+      "wallet": "UI-A",
+      "route": "ui",
+      "role": "field",
+      "generator": "uiBoardA",
+      "recipe": "FILL EVERY FIELD TO 100 AND LOCK IT. Field 1: Strength 25, Speed 25, Heart 20, Wit 20, Durability 10. Each later field shifts that pattern one stat to the right (field 2 is Speed 25, Heart 25, Wit 20, Durability 20, Strength 10, and so on, wrapping round). On the stepper a 25 is +20 then +5, a 20 is one +20, a 10 is one +10 — seven taps a field. Never take a stat above 25, and never leave a field short of 100: the buzzer spreads whatever is unplaced back across that field and can push a stat over the cap.",
+      "battles": [
+        [
+          25,
+          25,
+          20,
+          20,
+          10
+        ],
+        [
+          25,
+          20,
+          20,
+          10,
+          25
+        ],
+        [
+          20,
+          20,
+          10,
+          25,
+          25
+        ],
+        [
+          20,
+          10,
+          25,
+          25,
+          20
+        ],
+        [
+          10,
+          25,
+          25,
+          20,
+          20
+        ],
+        [
+          25,
+          25,
+          20,
+          20,
+          10
+        ],
+        [
+          25,
+          20,
+          20,
+          10,
+          25
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 505,
+      "zonesAmongFrozen63": 981,
+      "expectedScoreHalfFloor": 505,
+      "expectedScoreHalfCeiling": 519,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 5
+    },
+    {
+      "seat": null,
+      "plannedSeat": 1,
+      "expectedChainSeat": 2,
+      "wallet": "UI-B",
+      "route": "ui",
+      "role": "field",
+      "generator": "uiBoardB",
+      "recipe": "FILL EVERY FIELD TO 100 AND LOCK IT. Field 1: Strength 25, Speed 20, Heart 20, Wit 20, Durability 15. Each later field shifts that pattern one stat to the right. On the stepper a 25 is +20 then +5, a 20 is one +20, a 15 is +10 then +5 — seven taps a field. Same two rules as UI-A: nothing above 25, and no field left short of 100.",
+      "battles": [
+        [
+          25,
+          20,
+          20,
+          20,
+          15
+        ],
+        [
+          20,
+          20,
+          20,
+          15,
+          25
+        ],
+        [
+          20,
+          20,
+          15,
+          25,
+          20
+        ],
+        [
+          20,
+          15,
+          25,
+          20,
+          20
+        ],
+        [
+          15,
+          25,
+          20,
+          20,
+          20
+        ],
+        [
+          25,
+          20,
+          20,
+          20,
+          15
+        ],
+        [
+          20,
+          20,
+          20,
+          15,
+          25
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 379,
+      "zonesAmongFrozen63": 926,
+      "expectedScoreHalfFloor": 379,
+      "expectedScoreHalfCeiling": 393,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 5
+    },
+    {
+      "seat": null,
+      "plannedSeat": 2,
+      "expectedChainSeat": 3,
+      "wallet": "W00",
+      "route": "direct",
+      "role": "wall",
+      "generator": "wall",
+      "seed": 7100,
+      "battles": [
+        [
+          0,
+          0,
+          31,
+          33,
+          36
+        ],
+        [
+          33,
+          35,
+          0,
+          0,
+          32
+        ],
+        [
+          36,
+          0,
+          35,
+          29,
+          0
+        ],
+        [
+          0,
+          36,
+          31,
+          0,
+          33
+        ],
+        [
+          30,
+          33,
+          0,
+          0,
+          37
+        ],
+        [
+          30,
+          31,
+          0,
+          0,
+          39
+        ],
+        [
+          0,
+          0,
+          32,
+          32,
+          36
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 861,
+      "zonesAmongFrozen63": 1281,
+      "expectedScoreHalfFloor": 861,
+      "expectedScoreHalfCeiling": 875,
+      "expectedRank": 1,
+      "expectedLamports": "2000000000",
+      "rankIsConditional": true,
+      "rankConditionalOn": "the stranger only — see C1",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 3,
+      "expectedChainSeat": 4,
+      "wallet": "W01",
+      "route": "direct",
+      "role": "twin",
+      "generator": "twinWall",
+      "seed": 7100,
+      "battles": [
+        [
+          0,
+          0,
+          31,
+          33,
+          36
+        ],
+        [
+          33,
+          35,
+          0,
+          0,
+          32
+        ],
+        [
+          36,
+          0,
+          35,
+          29,
+          0
+        ],
+        [
+          0,
+          36,
+          31,
+          0,
+          33
+        ],
+        [
+          30,
+          33,
+          0,
+          0,
+          37
+        ],
+        [
+          30,
+          31,
+          0,
+          0,
+          39
+        ],
+        [
+          0,
+          0,
+          32,
+          32,
+          36
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 861,
+      "zonesAmongFrozen63": 1281,
+      "expectedScoreHalfFloor": 861,
+      "expectedScoreHalfCeiling": 875,
+      "expectedRank": 1,
+      "expectedLamports": "2000000000",
+      "rankIsConditional": true,
+      "rankConditionalOn": "the stranger only — see C1",
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 4,
+      "expectedChainSeat": 5,
+      "wallet": "W02",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7002,
+      "battles": [
+        [
+          13,
+          12,
+          25,
+          25,
+          25
+        ],
+        [
+          19,
+          25,
+          25,
+          20,
+          11
+        ],
+        [
+          20,
+          16,
+          25,
+          17,
+          22
+        ],
+        [
+          17,
+          25,
+          21,
+          12,
+          25
+        ],
+        [
+          23,
+          25,
+          16,
+          25,
+          11
+        ],
+        [
+          18,
+          25,
+          18,
+          14,
+          25
+        ],
+        [
+          18,
+          20,
+          25,
+          25,
+          12
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 446,
+      "zonesAmongFrozen63": 947,
+      "expectedScoreHalfFloor": 446,
+      "expectedScoreHalfCeiling": 460,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 5,
+      "expectedChainSeat": 6,
+      "wallet": "W03",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7003,
+      "battles": [
+        [
+          25,
+          25,
+          15,
+          10,
+          25
+        ],
+        [
+          24,
+          14,
+          20,
+          25,
+          17
+        ],
+        [
+          25,
+          25,
+          8,
+          22,
+          20
+        ],
+        [
+          25,
+          13,
+          22,
+          25,
+          15
+        ],
+        [
+          21,
+          22,
+          16,
+          25,
+          16
+        ],
+        [
+          25,
+          17,
+          17,
+          17,
+          24
+        ],
+        [
+          18,
+          25,
+          19,
+          13,
+          25
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 440,
+      "zonesAmongFrozen63": 920,
+      "expectedScoreHalfFloor": 440,
+      "expectedScoreHalfCeiling": 454,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 6,
+      "expectedChainSeat": 7,
+      "wallet": "W04",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7004,
+      "battles": [
+        [
+          25,
+          25,
+          10,
+          15,
+          25
+        ],
+        [
+          25,
+          20,
+          19,
+          17,
+          19
+        ],
+        [
+          25,
+          17,
+          25,
+          17,
+          16
+        ],
+        [
+          16,
+          25,
+          21,
+          16,
+          22
+        ],
+        [
+          18,
+          25,
+          15,
+          17,
+          25
+        ],
+        [
+          22,
+          13,
+          17,
+          23,
+          25
+        ],
+        [
+          25,
+          20,
+          10,
+          25,
+          20
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 411,
+      "zonesAmongFrozen63": 916,
+      "expectedScoreHalfFloor": 411,
+      "expectedScoreHalfCeiling": 425,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 7,
+      "expectedChainSeat": 8,
+      "wallet": "W05",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7005,
+      "battles": [
+        [
+          16,
+          20,
+          20,
+          19,
+          25
+        ],
+        [
+          25,
+          20,
+          21,
+          17,
+          17
+        ],
+        [
+          19,
+          25,
+          17,
+          14,
+          25
+        ],
+        [
+          25,
+          20,
+          12,
+          25,
+          18
+        ],
+        [
+          19,
+          22,
+          22,
+          18,
+          19
+        ],
+        [
+          21,
+          4,
+          25,
+          25,
+          25
+        ],
+        [
+          19,
+          22,
+          15,
+          19,
+          25
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 400,
+      "zonesAmongFrozen63": 941,
+      "expectedScoreHalfFloor": 400,
+      "expectedScoreHalfCeiling": 414,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 8,
+      "expectedChainSeat": 9,
+      "wallet": "W06",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7006,
+      "battles": [
+        [
+          13,
+          22,
+          19,
+          25,
+          21
+        ],
+        [
+          20,
+          10,
+          20,
+          25,
+          25
+        ],
+        [
+          19,
+          16,
+          25,
+          25,
+          15
+        ],
+        [
+          24,
+          25,
+          13,
+          19,
+          19
+        ],
+        [
+          13,
+          21,
+          16,
+          25,
+          25
+        ],
+        [
+          13,
+          25,
+          17,
+          25,
+          20
+        ],
+        [
+          20,
+          17,
+          19,
+          19,
+          25
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 395,
+      "zonesAmongFrozen63": 921,
+      "expectedScoreHalfFloor": 395,
+      "expectedScoreHalfCeiling": 409,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 9,
+      "expectedChainSeat": 10,
+      "wallet": "W07",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7007,
+      "battles": [
+        [
+          20,
+          17,
+          25,
+          15,
+          23
+        ],
+        [
+          17,
+          20,
+          22,
+          25,
+          16
+        ],
+        [
+          19,
+          25,
+          16,
+          24,
+          16
+        ],
+        [
+          21,
+          20,
+          13,
+          21,
+          25
+        ],
+        [
+          16,
+          25,
+          11,
+          25,
+          23
+        ],
+        [
+          25,
+          17,
+          14,
+          20,
+          24
+        ],
+        [
+          25,
+          13,
+          25,
+          12,
+          25
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 412,
+      "zonesAmongFrozen63": 922,
+      "expectedScoreHalfFloor": 412,
+      "expectedScoreHalfCeiling": 426,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 10,
+      "expectedChainSeat": 11,
+      "wallet": "W08",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7008,
+      "battles": [
+        [
+          19,
+          25,
+          23,
+          17,
+          16
+        ],
+        [
+          12,
+          17,
+          25,
+          23,
+          23
+        ],
+        [
+          18,
+          25,
+          22,
+          22,
+          13
+        ],
+        [
+          15,
+          18,
+          25,
+          19,
+          23
+        ],
+        [
+          13,
+          21,
+          19,
+          25,
+          22
+        ],
+        [
+          25,
+          11,
+          25,
+          21,
+          18
+        ],
+        [
+          22,
+          19,
+          13,
+          25,
+          21
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 365,
+      "zonesAmongFrozen63": 902,
+      "expectedScoreHalfFloor": 365,
+      "expectedScoreHalfCeiling": 379,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 11,
+      "expectedChainSeat": 12,
+      "wallet": "W09",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7009,
+      "battles": [
+        [
+          19,
+          25,
+          19,
+          24,
+          13
+        ],
+        [
+          19,
+          18,
+          22,
+          19,
+          22
+        ],
+        [
+          20,
+          25,
+          14,
+          25,
+          16
+        ],
+        [
+          15,
+          25,
+          17,
+          18,
+          25
+        ],
+        [
+          12,
+          25,
+          25,
+          25,
+          13
+        ],
+        [
+          25,
+          12,
+          13,
+          25,
+          25
+        ],
+        [
+          19,
+          21,
+          19,
+          22,
+          19
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 391,
+      "zonesAmongFrozen63": 904,
+      "expectedScoreHalfFloor": 391,
+      "expectedScoreHalfCeiling": 405,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 12,
+      "expectedChainSeat": 13,
+      "wallet": "W10",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7010,
+      "battles": [
+        [
+          25,
+          22,
+          16,
+          16,
+          21
+        ],
+        [
+          24,
+          25,
+          19,
+          19,
+          13
+        ],
+        [
+          21,
+          13,
+          25,
+          25,
+          16
+        ],
+        [
+          18,
+          16,
+          22,
+          19,
+          25
+        ],
+        [
+          19,
+          25,
+          25,
+          20,
+          11
+        ],
+        [
+          12,
+          22,
+          19,
+          22,
+          25
+        ],
+        [
+          20,
+          25,
+          13,
+          25,
+          17
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 408,
+      "zonesAmongFrozen63": 928,
+      "expectedScoreHalfFloor": 408,
+      "expectedScoreHalfCeiling": 422,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 13,
+      "expectedChainSeat": 14,
+      "wallet": "W11",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7011,
+      "battles": [
+        [
+          16,
+          25,
+          17,
+          25,
+          17
+        ],
+        [
+          19,
+          16,
+          23,
+          17,
+          25
+        ],
+        [
+          12,
+          13,
+          25,
+          25,
+          25
+        ],
+        [
+          23,
+          17,
+          16,
+          25,
+          19
+        ],
+        [
+          21,
+          18,
+          18,
+          25,
+          18
+        ],
+        [
+          22,
+          15,
+          25,
+          18,
+          20
+        ],
+        [
+          19,
+          19,
+          24,
+          19,
+          19
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 364,
+      "zonesAmongFrozen63": 916,
+      "expectedScoreHalfFloor": 364,
+      "expectedScoreHalfCeiling": 378,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 14,
+      "expectedChainSeat": 15,
+      "wallet": "W12",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7012,
+      "battles": [
+        [
+          25,
+          25,
+          17,
+          17,
+          16
+        ],
+        [
+          19,
+          22,
+          22,
+          19,
+          18
+        ],
+        [
+          25,
+          16,
+          16,
+          24,
+          19
+        ],
+        [
+          13,
+          25,
+          16,
+          21,
+          25
+        ],
+        [
+          19,
+          18,
+          20,
+          18,
+          25
+        ],
+        [
+          25,
+          24,
+          25,
+          15,
+          11
+        ],
+        [
+          18,
+          11,
+          21,
+          25,
+          25
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 397,
+      "zonesAmongFrozen63": 925,
+      "expectedScoreHalfFloor": 397,
+      "expectedScoreHalfCeiling": 411,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 15,
+      "expectedChainSeat": 16,
+      "wallet": "W13",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7013,
+      "battles": [
+        [
+          25,
+          19,
+          18,
+          19,
+          19
+        ],
+        [
+          25,
+          10,
+          25,
+          16,
+          24
+        ],
+        [
+          16,
+          14,
+          25,
+          24,
+          21
+        ],
+        [
+          19,
+          24,
+          25,
+          19,
+          13
+        ],
+        [
+          10,
+          21,
+          25,
+          24,
+          20
+        ],
+        [
+          22,
+          24,
+          22,
+          7,
+          25
+        ],
+        [
+          18,
+          25,
+          11,
+          21,
+          25
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 420,
+      "zonesAmongFrozen63": 942,
+      "expectedScoreHalfFloor": 420,
+      "expectedScoreHalfCeiling": 434,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 16,
+      "expectedChainSeat": 17,
+      "wallet": "W14",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7014,
+      "battles": [
+        [
+          24,
+          25,
+          25,
+          19,
+          7
+        ],
+        [
+          13,
+          24,
+          14,
+          25,
+          24
+        ],
+        [
+          15,
+          25,
+          21,
+          14,
+          25
+        ],
+        [
+          20,
+          25,
+          23,
+          19,
+          13
+        ],
+        [
+          25,
+          12,
+          25,
+          21,
+          17
+        ],
+        [
+          23,
+          13,
+          25,
+          14,
+          25
+        ],
+        [
+          15,
+          25,
+          11,
+          25,
+          24
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 417,
+      "zonesAmongFrozen63": 953,
+      "expectedScoreHalfFloor": 417,
+      "expectedScoreHalfCeiling": 431,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 17,
+      "expectedChainSeat": 18,
+      "wallet": "W15",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7015,
+      "battles": [
+        [
+          19,
+          25,
+          20,
+          25,
+          11
+        ],
+        [
+          25,
+          25,
+          25,
+          19,
+          6
+        ],
+        [
+          10,
+          25,
+          25,
+          15,
+          25
+        ],
+        [
+          20,
+          25,
+          13,
+          17,
+          25
+        ],
+        [
+          25,
+          19,
+          25,
+          18,
+          13
+        ],
+        [
+          25,
+          25,
+          13,
+          25,
+          12
+        ],
+        [
+          20,
+          8,
+          25,
+          25,
+          22
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 496,
+      "zonesAmongFrozen63": 953,
+      "expectedScoreHalfFloor": 496,
+      "expectedScoreHalfCeiling": 510,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 18,
+      "expectedChainSeat": 19,
+      "wallet": "W16",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7016,
+      "battles": [
+        [
+          25,
+          13,
+          24,
+          13,
+          25
+        ],
+        [
+          23,
+          25,
+          10,
+          25,
+          17
+        ],
+        [
+          15,
+          25,
+          15,
+          25,
+          20
+        ],
+        [
+          14,
+          25,
+          25,
+          25,
+          11
+        ],
+        [
+          21,
+          17,
+          12,
+          25,
+          25
+        ],
+        [
+          25,
+          12,
+          15,
+          23,
+          25
+        ],
+        [
+          7,
+          25,
+          19,
+          25,
+          24
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 482,
+      "zonesAmongFrozen63": 941,
+      "expectedScoreHalfFloor": 482,
+      "expectedScoreHalfCeiling": 496,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 19,
+      "expectedChainSeat": 20,
+      "wallet": "W17",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7017,
+      "battles": [
+        [
+          23,
+          17,
+          13,
+          22,
+          25
+        ],
+        [
+          16,
+          24,
+          19,
+          19,
+          22
+        ],
+        [
+          23,
+          25,
+          16,
+          11,
+          25
+        ],
+        [
+          25,
+          24,
+          19,
+          19,
+          13
+        ],
+        [
+          25,
+          23,
+          14,
+          25,
+          13
+        ],
+        [
+          22,
+          25,
+          20,
+          11,
+          22
+        ],
+        [
+          23,
+          11,
+          25,
+          25,
+          16
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 401,
+      "zonesAmongFrozen63": 931,
+      "expectedScoreHalfFloor": 401,
+      "expectedScoreHalfCeiling": 415,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 20,
+      "expectedChainSeat": 21,
+      "wallet": "W18",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7018,
+      "battles": [
+        [
+          25,
+          16,
+          22,
+          21,
+          16
+        ],
+        [
+          23,
+          13,
+          23,
+          16,
+          25
+        ],
+        [
+          25,
+          25,
+          17,
+          17,
+          16
+        ],
+        [
+          25,
+          25,
+          15,
+          10,
+          25
+        ],
+        [
+          15,
+          19,
+          22,
+          19,
+          25
+        ],
+        [
+          17,
+          20,
+          22,
+          25,
+          16
+        ],
+        [
+          16,
+          13,
+          25,
+          22,
+          24
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 390,
+      "zonesAmongFrozen63": 924,
+      "expectedScoreHalfFloor": 390,
+      "expectedScoreHalfCeiling": 404,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 21,
+      "expectedChainSeat": 22,
+      "wallet": "W19",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7019,
+      "battles": [
+        [
+          25,
+          25,
+          25,
+          10,
+          15
+        ],
+        [
+          25,
+          17,
+          10,
+          25,
+          23
+        ],
+        [
+          21,
+          25,
+          13,
+          25,
+          16
+        ],
+        [
+          16,
+          14,
+          22,
+          25,
+          23
+        ],
+        [
+          11,
+          22,
+          25,
+          17,
+          25
+        ],
+        [
+          15,
+          16,
+          25,
+          25,
+          19
+        ],
+        [
+          15,
+          20,
+          25,
+          25,
+          15
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 446,
+      "zonesAmongFrozen63": 929,
+      "expectedScoreHalfFloor": 446,
+      "expectedScoreHalfCeiling": 460,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 22,
+      "expectedChainSeat": 23,
+      "wallet": "W20",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7020,
+      "battles": [
+        [
+          21,
+          22,
+          19,
+          22,
+          16
+        ],
+        [
+          14,
+          24,
+          25,
+          25,
+          12
+        ],
+        [
+          17,
+          25,
+          21,
+          12,
+          25
+        ],
+        [
+          22,
+          25,
+          14,
+          20,
+          19
+        ],
+        [
+          24,
+          25,
+          9,
+          25,
+          17
+        ],
+        [
+          25,
+          25,
+          15,
+          15,
+          20
+        ],
+        [
+          16,
+          25,
+          21,
+          22,
+          16
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 402,
+      "zonesAmongFrozen63": 923,
+      "expectedScoreHalfFloor": 402,
+      "expectedScoreHalfCeiling": 416,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 23,
+      "expectedChainSeat": 24,
+      "wallet": "W21",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7021,
+      "battles": [
+        [
+          21,
+          25,
+          25,
+          13,
+          16
+        ],
+        [
+          13,
+          22,
+          25,
+          16,
+          24
+        ],
+        [
+          21,
+          19,
+          25,
+          22,
+          13
+        ],
+        [
+          16,
+          25,
+          25,
+          24,
+          10
+        ],
+        [
+          25,
+          25,
+          17,
+          19,
+          14
+        ],
+        [
+          25,
+          19,
+          22,
+          18,
+          16
+        ],
+        [
+          17,
+          25,
+          25,
+          13,
+          20
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 428,
+      "zonesAmongFrozen63": 923,
+      "expectedScoreHalfFloor": 428,
+      "expectedScoreHalfCeiling": 442,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 24,
+      "expectedChainSeat": 25,
+      "wallet": "W22",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7022,
+      "battles": [
+        [
+          19,
+          12,
+          22,
+          25,
+          22
+        ],
+        [
+          19,
+          25,
+          25,
+          11,
+          20
+        ],
+        [
+          23,
+          25,
+          25,
+          13,
+          14
+        ],
+        [
+          21,
+          13,
+          22,
+          19,
+          25
+        ],
+        [
+          25,
+          24,
+          14,
+          12,
+          25
+        ],
+        [
+          22,
+          25,
+          16,
+          19,
+          18
+        ],
+        [
+          14,
+          23,
+          23,
+          15,
+          25
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 387,
+      "zonesAmongFrozen63": 909,
+      "expectedScoreHalfFloor": 387,
+      "expectedScoreHalfCeiling": 401,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 25,
+      "expectedChainSeat": 26,
+      "wallet": "W23",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7023,
+      "battles": [
+        [
+          19,
+          22,
+          16,
+          25,
+          18
+        ],
+        [
+          17,
+          20,
+          25,
+          13,
+          25
+        ],
+        [
+          14,
+          15,
+          25,
+          21,
+          25
+        ],
+        [
+          11,
+          25,
+          15,
+          24,
+          25
+        ],
+        [
+          8,
+          25,
+          20,
+          24,
+          23
+        ],
+        [
+          14,
+          24,
+          21,
+          25,
+          16
+        ],
+        [
+          11,
+          25,
+          25,
+          24,
+          15
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 402,
+      "zonesAmongFrozen63": 923,
+      "expectedScoreHalfFloor": 402,
+      "expectedScoreHalfCeiling": 416,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 26,
+      "expectedChainSeat": 27,
+      "wallet": "W24",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7024,
+      "battles": [
+        [
+          9,
+          25,
+          21,
+          20,
+          25
+        ],
+        [
+          23,
+          10,
+          25,
+          17,
+          25
+        ],
+        [
+          25,
+          21,
+          16,
+          23,
+          15
+        ],
+        [
+          9,
+          20,
+          25,
+          25,
+          21
+        ],
+        [
+          15,
+          25,
+          25,
+          20,
+          15
+        ],
+        [
+          23,
+          14,
+          25,
+          25,
+          13
+        ],
+        [
+          23,
+          25,
+          25,
+          16,
+          11
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 455,
+      "zonesAmongFrozen63": 975,
+      "expectedScoreHalfFloor": 455,
+      "expectedScoreHalfCeiling": 469,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 27,
+      "expectedChainSeat": 28,
+      "wallet": "W25",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7025,
+      "battles": [
+        [
+          23,
+          13,
+          16,
+          25,
+          23
+        ],
+        [
+          25,
+          25,
+          8,
+          25,
+          17
+        ],
+        [
+          25,
+          25,
+          6,
+          19,
+          25
+        ],
+        [
+          22,
+          25,
+          16,
+          14,
+          23
+        ],
+        [
+          21,
+          14,
+          25,
+          15,
+          25
+        ],
+        [
+          16,
+          25,
+          22,
+          14,
+          23
+        ],
+        [
+          20,
+          16,
+          25,
+          23,
+          16
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 456,
+      "zonesAmongFrozen63": 957,
+      "expectedScoreHalfFloor": 456,
+      "expectedScoreHalfCeiling": 470,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 28,
+      "expectedChainSeat": 29,
+      "wallet": "W26",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7026,
+      "battles": [
+        [
+          25,
+          14,
+          11,
+          25,
+          25
+        ],
+        [
+          25,
+          21,
+          12,
+          25,
+          17
+        ],
+        [
+          25,
+          20,
+          20,
+          24,
+          11
+        ],
+        [
+          25,
+          23,
+          10,
+          22,
+          20
+        ],
+        [
+          16,
+          25,
+          20,
+          16,
+          23
+        ],
+        [
+          10,
+          22,
+          24,
+          25,
+          19
+        ],
+        [
+          25,
+          12,
+          25,
+          13,
+          25
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 449,
+      "zonesAmongFrozen63": 962,
+      "expectedScoreHalfFloor": 449,
+      "expectedScoreHalfCeiling": 463,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 29,
+      "expectedChainSeat": 30,
+      "wallet": "W27",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7027,
+      "battles": [
+        [
+          18,
+          20,
+          23,
+          25,
+          14
+        ],
+        [
+          24,
+          16,
+          19,
+          19,
+          22
+        ],
+        [
+          25,
+          17,
+          20,
+          20,
+          18
+        ],
+        [
+          16,
+          15,
+          25,
+          25,
+          19
+        ],
+        [
+          25,
+          25,
+          18,
+          25,
+          7
+        ],
+        [
+          11,
+          25,
+          18,
+          21,
+          25
+        ],
+        [
+          19,
+          25,
+          16,
+          16,
+          24
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 405,
+      "zonesAmongFrozen63": 937,
+      "expectedScoreHalfFloor": 405,
+      "expectedScoreHalfCeiling": 419,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 30,
+      "expectedChainSeat": 31,
+      "wallet": "W28",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7028,
+      "battles": [
+        [
+          25,
+          20,
+          16,
+          20,
+          19
+        ],
+        [
+          25,
+          17,
+          13,
+          25,
+          20
+        ],
+        [
+          25,
+          18,
+          25,
+          20,
+          12
+        ],
+        [
+          25,
+          25,
+          21,
+          22,
+          7
+        ],
+        [
+          23,
+          25,
+          13,
+          14,
+          25
+        ],
+        [
+          25,
+          25,
+          14,
+          19,
+          17
+        ],
+        [
+          19,
+          25,
+          25,
+          15,
+          16
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 439,
+      "zonesAmongFrozen63": 936,
+      "expectedScoreHalfFloor": 439,
+      "expectedScoreHalfCeiling": 453,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 31,
+      "expectedChainSeat": 32,
+      "wallet": "W29",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7029,
+      "battles": [
+        [
+          8,
+          25,
+          25,
+          18,
+          24
+        ],
+        [
+          25,
+          14,
+          16,
+          25,
+          20
+        ],
+        [
+          25,
+          25,
+          21,
+          25,
+          4
+        ],
+        [
+          19,
+          16,
+          24,
+          25,
+          16
+        ],
+        [
+          25,
+          9,
+          25,
+          21,
+          20
+        ],
+        [
+          22,
+          20,
+          20,
+          13,
+          25
+        ],
+        [
+          25,
+          15,
+          25,
+          10,
+          25
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 491,
+      "zonesAmongFrozen63": 985,
+      "expectedScoreHalfFloor": 491,
+      "expectedScoreHalfCeiling": 505,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 32,
+      "expectedChainSeat": 33,
+      "wallet": "W30",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7030,
+      "battles": [
+        [
+          18,
+          25,
+          24,
+          12,
+          21
+        ],
+        [
+          25,
+          17,
+          25,
+          17,
+          16
+        ],
+        [
+          23,
+          25,
+          20,
+          25,
+          7
+        ],
+        [
+          16,
+          25,
+          19,
+          15,
+          25
+        ],
+        [
+          22,
+          22,
+          16,
+          18,
+          22
+        ],
+        [
+          15,
+          22,
+          25,
+          19,
+          19
+        ],
+        [
+          15,
+          22,
+          22,
+          19,
+          22
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 365,
+      "zonesAmongFrozen63": 906,
+      "expectedScoreHalfFloor": 365,
+      "expectedScoreHalfCeiling": 379,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 33,
+      "expectedChainSeat": 34,
+      "wallet": "W31",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7031,
+      "battles": [
+        [
+          19,
+          25,
+          24,
+          13,
+          19
+        ],
+        [
+          25,
+          9,
+          25,
+          16,
+          25
+        ],
+        [
+          19,
+          19,
+          22,
+          24,
+          16
+        ],
+        [
+          14,
+          24,
+          25,
+          25,
+          12
+        ],
+        [
+          19,
+          25,
+          22,
+          22,
+          12
+        ],
+        [
+          25,
+          19,
+          25,
+          11,
+          20
+        ],
+        [
+          24,
+          25,
+          13,
+          16,
+          22
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 426,
+      "zonesAmongFrozen63": 944,
+      "expectedScoreHalfFloor": 426,
+      "expectedScoreHalfCeiling": 440,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 34,
+      "expectedChainSeat": 35,
+      "wallet": "W32",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7032,
+      "battles": [
+        [
+          22,
+          24,
+          19,
+          19,
+          16
+        ],
+        [
+          25,
+          13,
+          19,
+          25,
+          18
+        ],
+        [
+          25,
+          25,
+          8,
+          23,
+          19
+        ],
+        [
+          25,
+          23,
+          17,
+          19,
+          16
+        ],
+        [
+          19,
+          18,
+          25,
+          13,
+          25
+        ],
+        [
+          25,
+          24,
+          21,
+          10,
+          20
+        ],
+        [
+          25,
+          21,
+          8,
+          24,
+          22
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 399,
+      "zonesAmongFrozen63": 939,
+      "expectedScoreHalfFloor": 399,
+      "expectedScoreHalfCeiling": 413,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 35,
+      "expectedChainSeat": 36,
+      "wallet": "W33",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7033,
+      "battles": [
+        [
+          25,
+          13,
+          12,
+          25,
+          25
+        ],
+        [
+          23,
+          25,
+          10,
+          23,
+          19
+        ],
+        [
+          12,
+          20,
+          24,
+          19,
+          25
+        ],
+        [
+          10,
+          16,
+          24,
+          25,
+          25
+        ],
+        [
+          25,
+          20,
+          14,
+          17,
+          24
+        ],
+        [
+          25,
+          22,
+          11,
+          25,
+          17
+        ],
+        [
+          13,
+          14,
+          25,
+          23,
+          25
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 432,
+      "zonesAmongFrozen63": 927,
+      "expectedScoreHalfFloor": 432,
+      "expectedScoreHalfCeiling": 446,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 36,
+      "expectedChainSeat": 37,
+      "wallet": "W34",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7034,
+      "battles": [
+        [
+          25,
+          13,
+          25,
+          25,
+          12
+        ],
+        [
+          23,
+          25,
+          19,
+          17,
+          16
+        ],
+        [
+          15,
+          16,
+          24,
+          25,
+          20
+        ],
+        [
+          11,
+          20,
+          25,
+          19,
+          25
+        ],
+        [
+          9,
+          25,
+          21,
+          25,
+          20
+        ],
+        [
+          25,
+          16,
+          16,
+          21,
+          22
+        ],
+        [
+          11,
+          19,
+          21,
+          24,
+          25
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 413,
+      "zonesAmongFrozen63": 915,
+      "expectedScoreHalfFloor": 413,
+      "expectedScoreHalfCeiling": 427,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 37,
+      "expectedChainSeat": 38,
+      "wallet": "W35",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7035,
+      "battles": [
+        [
+          25,
+          22,
+          16,
+          18,
+          19
+        ],
+        [
+          25,
+          15,
+          25,
+          19,
+          16
+        ],
+        [
+          19,
+          23,
+          14,
+          19,
+          25
+        ],
+        [
+          25,
+          24,
+          25,
+          21,
+          5
+        ],
+        [
+          10,
+          25,
+          19,
+          21,
+          25
+        ],
+        [
+          22,
+          22,
+          22,
+          21,
+          13
+        ],
+        [
+          13,
+          20,
+          25,
+          25,
+          17
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 390,
+      "zonesAmongFrozen63": 925,
+      "expectedScoreHalfFloor": 390,
+      "expectedScoreHalfCeiling": 404,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 38,
+      "expectedChainSeat": 39,
+      "wallet": "W36",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7036,
+      "battles": [
+        [
+          21,
+          25,
+          25,
+          17,
+          12
+        ],
+        [
+          23,
+          23,
+          10,
+          25,
+          19
+        ],
+        [
+          16,
+          25,
+          25,
+          11,
+          23
+        ],
+        [
+          25,
+          11,
+          25,
+          14,
+          25
+        ],
+        [
+          16,
+          24,
+          16,
+          19,
+          25
+        ],
+        [
+          22,
+          18,
+          16,
+          22,
+          22
+        ],
+        [
+          13,
+          22,
+          18,
+          22,
+          25
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 403,
+      "zonesAmongFrozen63": 923,
+      "expectedScoreHalfFloor": 403,
+      "expectedScoreHalfCeiling": 417,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 39,
+      "expectedChainSeat": 40,
+      "wallet": "W37",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7037,
+      "battles": [
+        [
+          25,
+          18,
+          25,
+          18,
+          14
+        ],
+        [
+          23,
+          16,
+          17,
+          19,
+          25
+        ],
+        [
+          22,
+          13,
+          25,
+          22,
+          18
+        ],
+        [
+          22,
+          25,
+          18,
+          25,
+          10
+        ],
+        [
+          19,
+          22,
+          22,
+          13,
+          24
+        ],
+        [
+          21,
+          13,
+          25,
+          19,
+          22
+        ],
+        [
+          25,
+          9,
+          25,
+          16,
+          25
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 434,
+      "zonesAmongFrozen63": 950,
+      "expectedScoreHalfFloor": 434,
+      "expectedScoreHalfCeiling": 448,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 40,
+      "expectedChainSeat": 41,
+      "wallet": "W38",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7038,
+      "battles": [
+        [
+          17,
+          23,
+          17,
+          25,
+          18
+        ],
+        [
+          24,
+          18,
+          25,
+          25,
+          8
+        ],
+        [
+          25,
+          25,
+          25,
+          20,
+          5
+        ],
+        [
+          22,
+          16,
+          22,
+          19,
+          21
+        ],
+        [
+          14,
+          25,
+          25,
+          12,
+          24
+        ],
+        [
+          22,
+          24,
+          25,
+          10,
+          19
+        ],
+        [
+          19,
+          15,
+          16,
+          25,
+          25
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 418,
+      "zonesAmongFrozen63": 939,
+      "expectedScoreHalfFloor": 418,
+      "expectedScoreHalfCeiling": 432,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 41,
+      "expectedChainSeat": 42,
+      "wallet": "W39",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7039,
+      "battles": [
+        [
+          25,
+          22,
+          10,
+          20,
+          23
+        ],
+        [
+          13,
+          17,
+          25,
+          22,
+          23
+        ],
+        [
+          25,
+          22,
+          10,
+          22,
+          21
+        ],
+        [
+          25,
+          25,
+          25,
+          19,
+          6
+        ],
+        [
+          25,
+          19,
+          24,
+          13,
+          19
+        ],
+        [
+          25,
+          17,
+          8,
+          25,
+          25
+        ],
+        [
+          25,
+          25,
+          20,
+          14,
+          16
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 453,
+      "zonesAmongFrozen63": 970,
+      "expectedScoreHalfFloor": 453,
+      "expectedScoreHalfCeiling": 467,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 42,
+      "expectedChainSeat": 43,
+      "wallet": "W40",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7040,
+      "battles": [
+        [
+          21,
+          20,
+          25,
+          14,
+          20
+        ],
+        [
+          23,
+          25,
+          25,
+          13,
+          14
+        ],
+        [
+          25,
+          25,
+          10,
+          25,
+          15
+        ],
+        [
+          15,
+          24,
+          25,
+          25,
+          11
+        ],
+        [
+          25,
+          20,
+          17,
+          21,
+          17
+        ],
+        [
+          25,
+          19,
+          22,
+          17,
+          17
+        ],
+        [
+          22,
+          13,
+          22,
+          25,
+          18
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 412,
+      "zonesAmongFrozen63": 930,
+      "expectedScoreHalfFloor": 412,
+      "expectedScoreHalfCeiling": 426,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 43,
+      "expectedChainSeat": 44,
+      "wallet": "W41",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7041,
+      "battles": [
+        [
+          21,
+          25,
+          17,
+          25,
+          12
+        ],
+        [
+          17,
+          16,
+          25,
+          25,
+          17
+        ],
+        [
+          25,
+          25,
+          19,
+          19,
+          12
+        ],
+        [
+          10,
+          16,
+          25,
+          24,
+          25
+        ],
+        [
+          17,
+          23,
+          25,
+          22,
+          13
+        ],
+        [
+          25,
+          13,
+          17,
+          20,
+          25
+        ],
+        [
+          22,
+          21,
+          16,
+          25,
+          16
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 404,
+      "zonesAmongFrozen63": 910,
+      "expectedScoreHalfFloor": 404,
+      "expectedScoreHalfCeiling": 418,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 44,
+      "expectedChainSeat": 45,
+      "wallet": "W42",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7042,
+      "battles": [
+        [
+          20,
+          23,
+          15,
+          25,
+          17
+        ],
+        [
+          20,
+          14,
+          21,
+          25,
+          20
+        ],
+        [
+          21,
+          25,
+          25,
+          8,
+          21
+        ],
+        [
+          23,
+          25,
+          20,
+          25,
+          7
+        ],
+        [
+          17,
+          22,
+          25,
+          16,
+          20
+        ],
+        [
+          14,
+          25,
+          15,
+          25,
+          21
+        ],
+        [
+          25,
+          25,
+          14,
+          14,
+          22
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 416,
+      "zonesAmongFrozen63": 947,
+      "expectedScoreHalfFloor": 416,
+      "expectedScoreHalfCeiling": 430,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 45,
+      "expectedChainSeat": 46,
+      "wallet": "W43",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7043,
+      "battles": [
+        [
+          11,
+          25,
+          25,
+          18,
+          21
+        ],
+        [
+          25,
+          20,
+          16,
+          14,
+          25
+        ],
+        [
+          4,
+          25,
+          25,
+          25,
+          21
+        ],
+        [
+          19,
+          21,
+          22,
+          16,
+          22
+        ],
+        [
+          25,
+          25,
+          20,
+          17,
+          13
+        ],
+        [
+          16,
+          25,
+          22,
+          19,
+          18
+        ],
+        [
+          12,
+          23,
+          24,
+          25,
+          16
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 409,
+      "zonesAmongFrozen63": 942,
+      "expectedScoreHalfFloor": 409,
+      "expectedScoreHalfCeiling": 423,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 46,
+      "expectedChainSeat": 47,
+      "wallet": "W44",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7044,
+      "battles": [
+        [
+          22,
+          25,
+          18,
+          14,
+          21
+        ],
+        [
+          24,
+          13,
+          25,
+          19,
+          19
+        ],
+        [
+          16,
+          25,
+          24,
+          16,
+          19
+        ],
+        [
+          7,
+          23,
+          22,
+          23,
+          25
+        ],
+        [
+          19,
+          25,
+          18,
+          22,
+          16
+        ],
+        [
+          22,
+          14,
+          19,
+          20,
+          25
+        ],
+        [
+          22,
+          25,
+          8,
+          22,
+          23
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 373,
+      "zonesAmongFrozen63": 927,
+      "expectedScoreHalfFloor": 373,
+      "expectedScoreHalfCeiling": 387,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 47,
+      "expectedChainSeat": 48,
+      "wallet": "W45",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7045,
+      "battles": [
+        [
+          25,
+          13,
+          22,
+          18,
+          22
+        ],
+        [
+          25,
+          25,
+          14,
+          11,
+          25
+        ],
+        [
+          7,
+          21,
+          25,
+          22,
+          25
+        ],
+        [
+          25,
+          23,
+          16,
+          20,
+          16
+        ],
+        [
+          11,
+          17,
+          25,
+          25,
+          22
+        ],
+        [
+          25,
+          19,
+          19,
+          22,
+          15
+        ],
+        [
+          13,
+          25,
+          25,
+          13,
+          24
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 455,
+      "zonesAmongFrozen63": 946,
+      "expectedScoreHalfFloor": 455,
+      "expectedScoreHalfCeiling": 469,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 48,
+      "expectedChainSeat": 49,
+      "wallet": "W46",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7046,
+      "battles": [
+        [
+          23,
+          16,
+          21,
+          25,
+          15
+        ],
+        [
+          23,
+          7,
+          25,
+          20,
+          25
+        ],
+        [
+          12,
+          25,
+          25,
+          25,
+          13
+        ],
+        [
+          21,
+          25,
+          22,
+          10,
+          22
+        ],
+        [
+          25,
+          10,
+          19,
+          25,
+          21
+        ],
+        [
+          21,
+          22,
+          19,
+          16,
+          22
+        ],
+        [
+          17,
+          25,
+          18,
+          19,
+          21
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 394,
+      "zonesAmongFrozen63": 934,
+      "expectedScoreHalfFloor": 394,
+      "expectedScoreHalfCeiling": 408,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 49,
+      "expectedChainSeat": 50,
+      "wallet": "W47",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7047,
+      "battles": [
+        [
+          19,
+          25,
+          25,
+          15,
+          16
+        ],
+        [
+          25,
+          25,
+          18,
+          13,
+          19
+        ],
+        [
+          23,
+          25,
+          22,
+          7,
+          23
+        ],
+        [
+          16,
+          11,
+          25,
+          25,
+          23
+        ],
+        [
+          18,
+          14,
+          24,
+          25,
+          19
+        ],
+        [
+          19,
+          17,
+          14,
+          25,
+          25
+        ],
+        [
+          25,
+          25,
+          15,
+          15,
+          20
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 429,
+      "zonesAmongFrozen63": 944,
+      "expectedScoreHalfFloor": 429,
+      "expectedScoreHalfCeiling": 443,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 50,
+      "expectedChainSeat": 51,
+      "wallet": "W48",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7048,
+      "battles": [
+        [
+          25,
+          16,
+          18,
+          16,
+          25
+        ],
+        [
+          20,
+          25,
+          14,
+          16,
+          25
+        ],
+        [
+          22,
+          10,
+          20,
+          25,
+          23
+        ],
+        [
+          22,
+          25,
+          20,
+          16,
+          17
+        ],
+        [
+          10,
+          16,
+          25,
+          24,
+          25
+        ],
+        [
+          14,
+          14,
+          25,
+          24,
+          23
+        ],
+        [
+          15,
+          16,
+          25,
+          19,
+          25
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 422,
+      "zonesAmongFrozen63": 951,
+      "expectedScoreHalfFloor": 422,
+      "expectedScoreHalfCeiling": 436,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 51,
+      "expectedChainSeat": 52,
+      "wallet": "W49",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7049,
+      "battles": [
+        [
+          23,
+          8,
+          25,
+          19,
+          25
+        ],
+        [
+          18,
+          22,
+          13,
+          22,
+          25
+        ],
+        [
+          18,
+          22,
+          25,
+          13,
+          22
+        ],
+        [
+          25,
+          23,
+          7,
+          20,
+          25
+        ],
+        [
+          14,
+          25,
+          16,
+          25,
+          20
+        ],
+        [
+          22,
+          22,
+          25,
+          22,
+          9
+        ],
+        [
+          25,
+          25,
+          25,
+          16,
+          9
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 464,
+      "zonesAmongFrozen63": 988,
+      "expectedScoreHalfFloor": 464,
+      "expectedScoreHalfCeiling": 478,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 52,
+      "expectedChainSeat": 53,
+      "wallet": "W50",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7050,
+      "battles": [
+        [
+          25,
+          22,
+          17,
+          25,
+          11
+        ],
+        [
+          25,
+          17,
+          18,
+          25,
+          15
+        ],
+        [
+          19,
+          16,
+          25,
+          24,
+          16
+        ],
+        [
+          25,
+          14,
+          16,
+          23,
+          22
+        ],
+        [
+          18,
+          25,
+          25,
+          10,
+          22
+        ],
+        [
+          25,
+          12,
+          23,
+          17,
+          23
+        ],
+        [
+          22,
+          13,
+          19,
+          24,
+          22
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 381,
+      "zonesAmongFrozen63": 917,
+      "expectedScoreHalfFloor": 381,
+      "expectedScoreHalfCeiling": 395,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 53,
+      "expectedChainSeat": 54,
+      "wallet": "W51",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7051,
+      "battles": [
+        [
+          25,
+          25,
+          15,
+          25,
+          10
+        ],
+        [
+          25,
+          25,
+          20,
+          8,
+          22
+        ],
+        [
+          19,
+          25,
+          22,
+          13,
+          21
+        ],
+        [
+          25,
+          16,
+          24,
+          16,
+          19
+        ],
+        [
+          14,
+          23,
+          13,
+          25,
+          25
+        ],
+        [
+          25,
+          16,
+          19,
+          15,
+          25
+        ],
+        [
+          16,
+          22,
+          21,
+          16,
+          25
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 430,
+      "zonesAmongFrozen63": 919,
+      "expectedScoreHalfFloor": 430,
+      "expectedScoreHalfCeiling": 444,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 54,
+      "expectedChainSeat": 55,
+      "wallet": "W52",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7052,
+      "battles": [
+        [
+          13,
+          13,
+          24,
+          25,
+          25
+        ],
+        [
+          21,
+          25,
+          25,
+          13,
+          16
+        ],
+        [
+          21,
+          25,
+          20,
+          11,
+          23
+        ],
+        [
+          13,
+          12,
+          25,
+          25,
+          25
+        ],
+        [
+          25,
+          22,
+          12,
+          22,
+          19
+        ],
+        [
+          19,
+          25,
+          10,
+          24,
+          22
+        ],
+        [
+          18,
+          25,
+          20,
+          18,
+          19
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 418,
+      "zonesAmongFrozen63": 929,
+      "expectedScoreHalfFloor": 418,
+      "expectedScoreHalfCeiling": 432,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 55,
+      "expectedChainSeat": 56,
+      "wallet": "W53",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7053,
+      "battles": [
+        [
+          13,
+          23,
+          19,
+          25,
+          20
+        ],
+        [
+          25,
+          19,
+          16,
+          24,
+          16
+        ],
+        [
+          21,
+          25,
+          4,
+          25,
+          25
+        ],
+        [
+          16,
+          25,
+          25,
+          11,
+          23
+        ],
+        [
+          23,
+          15,
+          12,
+          25,
+          25
+        ],
+        [
+          25,
+          25,
+          5,
+          25,
+          20
+        ],
+        [
+          22,
+          24,
+          16,
+          25,
+          13
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 483,
+      "zonesAmongFrozen63": 984,
+      "expectedScoreHalfFloor": 483,
+      "expectedScoreHalfCeiling": 497,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 56,
+      "expectedChainSeat": 57,
+      "wallet": "W54",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7054,
+      "battles": [
+        [
+          25,
+          17,
+          25,
+          25,
+          8
+        ],
+        [
+          19,
+          22,
+          24,
+          13,
+          22
+        ],
+        [
+          19,
+          13,
+          25,
+          22,
+          21
+        ],
+        [
+          25,
+          15,
+          23,
+          25,
+          12
+        ],
+        [
+          25,
+          24,
+          14,
+          21,
+          16
+        ],
+        [
+          19,
+          21,
+          25,
+          16,
+          19
+        ],
+        [
+          19,
+          22,
+          21,
+          13,
+          25
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 395,
+      "zonesAmongFrozen63": 923,
+      "expectedScoreHalfFloor": 395,
+      "expectedScoreHalfCeiling": 409,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 57,
+      "expectedChainSeat": 58,
+      "wallet": "W55",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7055,
+      "battles": [
+        [
+          18,
+          25,
+          25,
+          7,
+          25
+        ],
+        [
+          20,
+          25,
+          25,
+          17,
+          13
+        ],
+        [
+          23,
+          19,
+          13,
+          20,
+          25
+        ],
+        [
+          10,
+          19,
+          25,
+          23,
+          23
+        ],
+        [
+          16,
+          23,
+          19,
+          25,
+          17
+        ],
+        [
+          23,
+          19,
+          24,
+          9,
+          25
+        ],
+        [
+          22,
+          25,
+          13,
+          16,
+          24
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 446,
+      "zonesAmongFrozen63": 962,
+      "expectedScoreHalfFloor": 446,
+      "expectedScoreHalfCeiling": 460,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 58,
+      "expectedChainSeat": 59,
+      "wallet": "W56",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7056,
+      "battles": [
+        [
+          20,
+          23,
+          7,
+          25,
+          25
+        ],
+        [
+          25,
+          25,
+          21,
+          21,
+          8
+        ],
+        [
+          25,
+          25,
+          22,
+          16,
+          12
+        ],
+        [
+          16,
+          22,
+          22,
+          18,
+          22
+        ],
+        [
+          21,
+          14,
+          20,
+          20,
+          25
+        ],
+        [
+          25,
+          13,
+          24,
+          14,
+          24
+        ],
+        [
+          8,
+          23,
+          19,
+          25,
+          25
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 423,
+      "zonesAmongFrozen63": 951,
+      "expectedScoreHalfFloor": 423,
+      "expectedScoreHalfCeiling": 437,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 59,
+      "expectedChainSeat": 60,
+      "wallet": "W57",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7057,
+      "battles": [
+        [
+          25,
+          25,
+          13,
+          12,
+          25
+        ],
+        [
+          19,
+          15,
+          19,
+          25,
+          22
+        ],
+        [
+          16,
+          22,
+          22,
+          16,
+          24
+        ],
+        [
+          25,
+          25,
+          19,
+          6,
+          25
+        ],
+        [
+          25,
+          20,
+          19,
+          11,
+          25
+        ],
+        [
+          25,
+          5,
+          23,
+          25,
+          22
+        ],
+        [
+          23,
+          19,
+          10,
+          23,
+          25
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 440,
+      "zonesAmongFrozen63": 956,
+      "expectedScoreHalfFloor": 440,
+      "expectedScoreHalfCeiling": 454,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 60,
+      "expectedChainSeat": 61,
+      "wallet": "W58",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7058,
+      "battles": [
+        [
+          20,
+          25,
+          19,
+          25,
+          11
+        ],
+        [
+          22,
+          14,
+          16,
+          25,
+          23
+        ],
+        [
+          21,
+          10,
+          22,
+          25,
+          22
+        ],
+        [
+          16,
+          25,
+          11,
+          25,
+          23
+        ],
+        [
+          25,
+          25,
+          14,
+          25,
+          11
+        ],
+        [
+          25,
+          24,
+          16,
+          16,
+          19
+        ],
+        [
+          25,
+          25,
+          22,
+          10,
+          18
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 449,
+      "zonesAmongFrozen63": 938,
+      "expectedScoreHalfFloor": 449,
+      "expectedScoreHalfCeiling": 463,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 61,
+      "expectedChainSeat": 62,
+      "wallet": "W59",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7059,
+      "battles": [
+        [
+          19,
+          19,
+          22,
+          15,
+          25
+        ],
+        [
+          22,
+          22,
+          9,
+          25,
+          22
+        ],
+        [
+          19,
+          13,
+          22,
+          25,
+          21
+        ],
+        [
+          21,
+          19,
+          25,
+          10,
+          25
+        ],
+        [
+          22,
+          13,
+          25,
+          24,
+          16
+        ],
+        [
+          16,
+          16,
+          25,
+          24,
+          19
+        ],
+        [
+          25,
+          18,
+          18,
+          14,
+          25
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 384,
+      "zonesAmongFrozen63": 930,
+      "expectedScoreHalfFloor": 384,
+      "expectedScoreHalfCeiling": 398,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    },
+    {
+      "seat": null,
+      "plannedSeat": 62,
+      "expectedChainSeat": 63,
+      "wallet": "W60",
+      "route": "direct",
+      "role": "field",
+      "generator": "cappedField",
+      "seed": 7060,
+      "battles": [
+        [
+          25,
+          19,
+          12,
+          22,
+          22
+        ],
+        [
+          16,
+          19,
+          22,
+          21,
+          22
+        ],
+        [
+          15,
+          22,
+          19,
+          19,
+          25
+        ],
+        [
+          21,
+          13,
+          25,
+          16,
+          25
+        ],
+        [
+          25,
+          11,
+          25,
+          14,
+          25
+        ],
+        [
+          16,
+          24,
+          13,
+          25,
+          22
+        ],
+        [
+          17,
+          24,
+          25,
+          9,
+          25
+        ]
+      ],
+      "scoreHalfAmongFrozen63": 381,
+      "zonesAmongFrozen63": 932,
+      "expectedScoreHalfFloor": 381,
+      "expectedScoreHalfCeiling": 395,
+      "expectedLamports": "0",
+      "rankIsConditional": true,
+      "unconditionalRankRange": [
+        3,
+        64
+      ],
+      "distinctShapes": 7
+    }
+  ],
+  "seatNote": "EVERY rank in this file is conditional, and the reason is not the founder. Ranks among the capped seats depend on the two founder allocations, which are dialled by hand, and every rank also shifts with the stranger. §H10 has fired on three plans now for marking too few seats conditional; here the honest answer is all of them. What is NOT conditional is U1, U2 and U3 above. `scoreHalfAmongFrozen63` is the frozen part of each seat's score and the floor of its final score; the ceiling is 14 above it.",
+  "contingency": [
+    "IF THE STRANGER OUTSCORES THE WALLS (C1 fails), the tie still holds at rank 2, nothing escrows, and the review path cannot run. Report it; do not re-enter the pool or re-derive the plan. The device half of T7 is unaffected and still passes or fails on its own terms.",
+    "IF A SECOND STRANGER ENTERS while we are filling, the pool seals one of our seats short. Drop the LAST planned field seat, record which, and re-run t7-bounds.ts — U1 is unaffected and U2 gains margin. Do not edit the frozen plan.",
+    "IF W00 OR W01 SEALS AND THEN FAILS TO REGISTER it is barred from the pool for good (§H6) and the tie is gone. Substitute from the spare roster with --substitute so the spare plays that seat's frozen allocation; the tie is between ALLOCATIONS, not wallets, so a substitution preserves it. Say plainly which wallet changed.",
+    "IF THE FOUNDER TAKES A STAT ABOVE 25, P1 stops applying to that seat and U2 no longer covers it. That is a FAIL of the test as designed, not of the product.",
+    "IF pay_prizes PAYS RATHER THAN ESCROWS, the flags did not land before it. Check the block times of both flag_entry transactions against pay_prizes, from chain, and report the ordering — that is a finding about the review path, not a spoiled run.",
+    "IF release_escrow REFUSES, read the entry: a sanctions hold refuses on both paths and is lifted only by an admin-signed lift_sanctions_hold. It is NOT the integrity flag and the review page cannot clear it.",
+    "IF THE FORFEIT SITS UNLANDED past the 12-hour review window, the daemon alerts (forfeitUnlanded) and holds the share rather than paying W01. That alert firing is correct behaviour, not a fault — but land the Squads transaction rather than testing it by neglect."
+  ],
+  "passCriteria": [
+    "Pool 36 reaches **Paid** with **64** entrants.",
+    "**Two** seats are paid, not one: W00 and W01, **2000000000 lamports each**.",
+    "W00 and W01 finish on **identical scores and identical zones** and **share rank 1**.",
+    "Both flag_entry transactions land **before** pay_prizes, checked by block time from chain.",
+    "pay_prizes **escrows** both shares rather than sending them; the pool reaches Paid with **2 shares held**.",
+    "release_escrow moves **2000000000 to W00**, read as a balance change on the player wallet.",
+    "forfeit_escrow moves **nothing**: the pool vault balance is **identical** before and after.",
+    "pay_next_place pays **W00** the forfeited 2000000000, so W00 holds the whole pot.",
+    "**The platform treasury is unchanged** from before release_escrow to after pay_next_place. This is the claim the whole forfeit design exists to support.",
+    "The detection report contains **duplicate_sets strong on W00 and W01** and names both in hardBlocks — and **neither is blocked, delayed or refused**.",
+    "The detection report contains a **same-device finding for UI-A and UI-B**, and **neither founder seat is blocked**.",
+    "Neither founder wallet is paid; both finish at rank 3 or worse.",
+    "Every revealed allocation reproduces the battles_hash the chain recorded at entry.",
+    "The results root **recomputed from the 64 revealed sets** equals the on-chain results_root.",
+    "Nine of our seats sink 4441080 lamports and fifty-four sink 4446160.",
+    "The vault ends at **650240** lamports once every share has left it."
+  ]
+}

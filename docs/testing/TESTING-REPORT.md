@@ -436,7 +436,7 @@ routes that compute the same kind of statistics from real pools.
 ## 9. Raw data appendix
 
 Everything below is in [`battle-test/`](../../battle-test/) (tooling and how to run it:
-[`battle-test/README.md`](../../battle-test/README.md)).
+[`battle-test/README.md`](../../battle-test/)).
 
 | Path | Contents |
 |---|---|
