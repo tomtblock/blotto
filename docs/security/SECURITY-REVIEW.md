@@ -1,121 +1,156 @@
-# Internal review — the on-chain program (roadmap 5.5, the R5 substitute)
+# Security review summary
 
-**Scope.** `programs/blotto_cup/` at this branch's head, reviewed against the
-four carried threat-model entries (`docs/reference/threat-tm-*.md`), the
-vault-invariant suite, and the checklist of the ten most common Anchor
-vulnerability classes below. This review is the R5 substitute for a
-pre-mainnet audit — the independent audit follows after ten settled mainnet
-pools; R6 gates the 0.5 SOL tier on it.
+**Status.** Blotto Cup runs on Solana **devnet only**, with devnet SOL and no real money
+(program `5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17`). A mainnet launch is gated on an
+external security audit and on legal review; neither has happened yet. Everything below comes
+from the project's own reviews, and none of them is an independent audit.
 
-**Verdict.** One finding fixed during review (IR-1). Three accepted risks
-documented with rationale (IR-2..IR-4). No open blocking items. The founder
-should read IR-2..IR-4 and ratify each.
+This page summarises those reviews: what each one read, the threat model, how the on-chain money
+invariants are enforced and tested, what was found and fixed, and what is still open. To report a
+vulnerability, see [`SECURITY.md`](../../SECURITY.md).
 
 ---
 
-## Findings
+## 1. Reviews and their method
 
-### IR-1 — FIXED: permissionless collection creation accepted caller metadata
+| Review | Date | What was read | Method |
+|---|---|---|---|
+| **Repository review** | 2026-09-07 | The whole repository: the program, the backend services, the frontend, tests, scripts and documents | Every suite and gate run first as a baseline, then a dead-code pass, a pass for contradictions between constants and claims, and an adversarial read of the money paths and the public surfaces. Every claim was checked against code |
+| **Pre-mainnet program review** | Before 2026-09-11 | `programs/blotto_cup/` only, against the four carried threat-model entries (§2), the vault-invariant suite and a ten-class Anchor vulnerability checklist | Line-by-line review of each instruction's accounts, signer checks, arithmetic and state gates |
+| **Cold-read review** | 2026-09-11 | 338 of 439 source, test, migration, CI, script and deploy files (77%). 100% of the program and crates, backend services, migrations, CI workflows and deploy files; 74% of app source; test files sampled | Reviewers new to the codebase, one per area and slice of the tree, required to cite line numbers. Every finding went to a second reviewer who saw only the finding and was told to refute it. 20 findings were refuted and 81 were lowered in severity. None was raised |
 
-`create_pass_collection` is deliberately permissionless (any payer may fund
-the Collection account) — but it accepted a caller-supplied `name`/`uri`. A
-griefer could front-run the settlement crank after `open_pool` and label a
-pool's pass Collection with arbitrary text, which every pass in the pool
-would then sit under, permanently (there is deliberately no update path).
-**Fix:** metadata is now derived on-chain (`BLOTTO PASS COLLECTION #<id>`,
-empty uri per R12); no caller input reaches the Collection. All suites
-re-run green against the rebuilt artifact.
+**Limits the cold read stated itself.** It could not see branch-protection settings or the live
+deployment's configuration. It did not profile compute units, scan dependencies against a live
+advisory database, or assess legal questions. Vendor failure modes were read from the project's
+adapters, not observed. Its test-suite assessment is a sample, not a census.
 
-### IR-2 — ACCEPTED: `commit_vrf_seed` accepts either cluster's Switchboard ID
+## 2. Threat model
 
-The owner check admits the mainnet AND devnet Switchboard On-Demand program
-IDs, because the deploy target isn't knowable at compile time. Exploitability
-was analysed and is nil-to-negligible: an attacker cannot fabricate a
-non-zero `RandomnessAccountData` under either program's ownership
-(`allocate`+`assign` leaves data zeroed; only the owning program writes), so
-the check admits only genuinely oracle-produced values — the already-
-documented TM-502 substitution residual, which the multi-source digest
-(ADR-026) bounds and which, in this product, decides only cosmetics
-(PID §8.4). **Hardening option for Phase 7:** a cargo feature that pins the
-single expected ID per deploy. Founder to ratify either way.
+The system is built so that the operator can be checked, not trusted. Each boundary below lists
+what it can and cannot do if it goes wrong.
 
-### IR-3 — ACCEPTED: unsolicited lamport donations to the vault/fees PDAs
-
-Anyone can transfer lamports to the vault or fees PDA addresses. Nothing in
-the program reads those balances to make decisions — payout and refund
-amounts are always computed, never "whatever is in the account" — so a
-donation strands harmlessly (and keeps a reaped account alive, also
-harmless). The vault-model suite's ledger identity intentionally models
-program-driven flows only. No action.
-
-> **CORRECTED 2026-09-16 — this finding was wrong, and its text is left
-> standing because the record of what was thought is the useful part.** The
-> 2026-09-11 cold read raised the same scenario as **B-03, CRITICAL**: a
-> donated lamport is harmless to the program's *arithmetic*, which is what the
-> paragraph above reasons about, but not to the *runtime*. Every exit drains a
-> computed amount, so one stray lamport left a zero-data vault ending at 1 —
-> a balance Solana refuses, since such an account may end at zero or at rent
-> exemption and never between. The pot froze and the tier died with it. The
-> audit's own words: *"a risk that was seen, reasoned about, and closed for a
-> reason that is true about the program and false about the runtime."*
-> **Fixed and proven on chain:** `open_pool` now funds a rent cushion read
-> from the network, both debit helpers assert the post-balance lands on zero
-> or at rent exemption (`WouldStrandRentBalance`), and pool 9 carried a
-> donated lamport through an entry and out the other side on 2026-09-13.
-
-### IR-4 — ACCEPTED: escrowed shares depend on settlement-signer liveness
-
-A flagged or KYC-escrowed share can only leave the vault via
-settlement-signed `release_escrow`/`forfeit_escrow`. A vanished operator
-strands escrow (unlike refunds and payouts, which are permissionless or
-push). This is R10/R11's design — escrow exists precisely so a human
-reviews — and the KYC path releases on a packet, not operator grace. Recorded
-so nobody mistakes it for an oversight. The operational mitigation is the
-review window — **12 hours**, which is the published rule (D-E7 ruling 1,
-`REVIEW_WINDOW_SECS`), not TECH-ARCH §9's 24, which this line cited until
-2026-09-16. Behind it the program's own permissionless release at seven days
-(`ESCROW_AUTO_RELEASE_SECS`) means that even a settlement signer who never
-returns cannot hold a share for ever: after the window, any signer may release
-it to its player. Inaction pays the player, never the operator. That seven-day
-figure is a safeguard against our own failure and is deliberately never
-published as the deadline.
-
----
-
-## The ten-class Anchor checklist
-
-| # | Class | Status |
+| Boundary | What it holds or decides | What it cannot do |
 |---|---|---|
-| 1 | Missing signer checks (TM-402) | ✅ Admin: `Signer` + `has_one = admin`; settlement: `has_one = settlement_signer`. Negative tests for every admin ix and a settlement ix (LiteSVM `gates.rs`). Permissionless instructions are each argued at their site (write-once, state-gated, or pay-to-fixed-recipient). |
-| 2 | Missing owner / account-type validation | ✅ Typed `Account<'_, T>` everywhere state is read; `pay_prizes` remaining accounts go through `Account::try_from` (owner + discriminator) plus pool/player binding; recipient wallets are pinned to committed winners / `entry.player` / `config.platform_wallet`. |
-| 3 | PDA seed collisions (TM-401) | ✅ Six distinct prefixes; pairwise-distinctness and derived-address tests in `state.rs`. |
-| 4 | Arbitrary CPI targets | ✅ mpl-core pinned by address constant; System via `Program<System>`; all transfers through the one `vault.rs` chokepoint (CI-enforced); Switchboard owner-checked (IR-2). |
-| 5 | Integer overflow / underflow (TM-403) | ✅ `u128` intermediates in prize math; `checked_add` on counters that can grow; counter decrements proven non-underflowing (a zero-count class is unselectable by the cumulative walk); workspace `overflow-checks = true` applies to the SBF release build. Vault-model fuzz (10k sequences) + exact-division tests. |
-| 6 | Re-initialization | ✅ Anchor `init` on config/pool/entry (no `init_if_needed` anywhere); pool ids monotonic via `next_pool_id`; VRF write-once vs a zero sentinel that a real reveal cannot collide with. |
-| 7 | Account revival / closing hazards | ✅ No `close` anywhere; the two system-owned PDAs reap only by draining to exactly zero via computed amounts. |
-| 8 | Sysvar spoofing | ✅ Instructions and SlotHashes sysvars pinned by `address =`; ed25519 packet read from the sysvar with self-referential offset checks (cross-instruction references rejected). |
-| 9 | Duplicate / aliased accounts in a batch | ✅ `paid_mask` bit per rank + winners pairwise-distinct at commit + `entry.settled` write-back via `exit()` makes an aliased Entry fail on the second touch. |
-| 10 | Missing state-machine gates | ✅ Every handler starts from an explicit `PoolState` requirement; the full matrix is exercised by the LiteSVM suites (65th entry, pay-before-commit, commit-before-reveal, refund-before-deadline, double-everything). |
+| **The program and prize vaults** | Every lamport. Each pool's fixed pot sits in its own vault PDA from the moment the pool opens, before any entry is sold. Entry payments go to a separate platform treasury PDA | There is no instruction that withdraws from a prize vault, no admin escape hatch and no recover-funds path (§3) |
+| **The operator backend** (entry service, indexer, settlement daemon, review service) | Signs entry packets. Stores sealed ciphertexts. Seals, scores and settles pools. Commits the results root and the payout list | It cannot read an allocation before the pool closes (sealing, below). It cannot pay a prize to itself or to the treasury. The program checks that a committed payout list sums to the pool's pot, has the right length and uses in-range, strictly ordered seats. **Who is paid what** is checked by recomputation: the pool secret, every sealed entry and the scoring engine are published, and the verify page recomputes the ranking and checks the roster against the chain |
+| **Sealing keys** | Each pool has its own X25519 key. The browser encrypts the player's battles to it before payment, and only `sha256(battles ‖ salt)` goes on chain. The hash of the pool secret is committed at `open_pool` | The key's export policy prevents reading plaintext before the pool closes. After close the secret is revealed on chain, checked against the committed hash, and every entry becomes publicly checkable against its on-chain commitment |
+| **Reviewers** (two members in `config/reviewers.json`) | Can flag a winning entry for fair-play review, which holds that share in escrow | Cannot move lamports. Upholding a flag (`forfeit_escrow`) requires the admin multisig and moves nothing. The share stays in the pool's vault and passes only to the next eligible player. If no decision lands within the published 12-hour review window, the share is released to its player. An appeal is decided by a different registry member |
+| **The client** (browser app) | Enforces the allocation shape at submission and seals the payload | The program never sees an allocation, so it cannot enforce the shape. The scoring engine enforces it again at reveal: a malformed or unreadable sealed set scores as all losses and is published as such, and settlement does not halt |
 
-## Compute + size
+**Carried threat-model entries.** Four entries from the design's threat model remain in force:
+PDA seed collision (TM-401), missing signer checks on privileged instructions (TM-402), integer
+overflow and truncation (TM-403), and failure or compromise of the randomness oracle used for the
+cosmetic class draw (TM-502). Only the class draw uses randomness, and the class is cosmetic: no
+scoring, payout or ranking input reads it, and CI enforces that (§3).
 
-- `anchor build`: our stack frames clean (the one over-limit frame found in
-  `Register::try_accounts` was fixed in Phase 1 by boxing); remaining
-  stack warnings are dead mpl-core deserializers, documented in Cargo.toml.
-- `register` (the heaviest instruction: sha256 digest + bag draw + mpl-core
-  mint CPI + two transfers + packet parse) executes inside LiteSVM's default
-  per-instruction budget; exact CU numbers land in `docs/devnet-rehearsal.md`
-  with the 5.4 load run.
+## 3. On-chain invariants and how they are enforced
 
-## Standing property checks (CI, every push)
+| Invariant | Enforcement | Test or check |
+|---|---|---|
+| **No withdraw path from a prize vault.** Vault lamport exits are exactly `pay_prizes`, `release_escrow`, `pay_next_place` (all pay players) and `trigger_refund` (the untouched pot of an unplayed pool returns to the treasury). Once a pool plays, its prize is only ever paid to players. `forfeit_escrow` moves nothing | All lamport movement goes through two debit helpers in `programs/blotto_cup/src/vault.rs`. `system_program::transfer` appears nowhere else | `scripts/check-standing-rules.sh`, on every push. It allow-lists the files that may call each helper, then enumerates **functions**: every function that calls `vault_debit` or `platform_debit` must be one of seven named `file:function` pairs. A call site the extractor cannot place fails the check. It also asserts that `escrow.rs` cannot address the treasury, that `forfeit_escrow` moves no lamports, and that `register` credits no vault. The script tests itself first against a probe tree that breaks every rule |
+| **Treasury exits are bounded.** The treasury's exits are `open_pool` (pot into a vault), `refund` (each entry repaid in full on an unplayed pool) and the admin-gated `withdraw_platform` | `withdraw_platform` is refused on chain below a floor: the minimum balance, plus one pot and rent cushion per idle enabled tier, plus every refundable entry | Same script (check 6(e)). LiteSVM `treasury_gates.rs`. The property model in `programs/blotto_cup/tests/vault_model.rs` |
+| **Pots are fixed, never derived** | A tier's pot is a configured constant copied onto the `Pool` at open | Standing-rules check 6(g) fails on pot arithmetic over entries or balances |
+| **Distinct PDA seed prefixes** (TM-401) | Six prefixes: `config`, `platform`, `pool`, `vault`, `entry`, `pass_collection` | Pairwise-distinctness and derived-address tests in `state.rs` |
+| **Signer checks on privileged instructions** (TM-402) | Admin instructions use `Signer` plus `has_one = admin` (the admin is a multisig vault). Settlement instructions use `has_one = settlement_signer`. `open_pool` accepts only the configured keeper. Each permissionless instruction is justified where it is defined (write-once, state-gated, or pays a fixed recipient) | Negative tests for every admin instruction and the settlement path (LiteSVM `gates.rs`, `keeper_and_timing.rs`) |
+| **Checked integer math** (TM-403) | No floats anywhere in on-chain or scoring math. `u128` intermediates in prize arithmetic, `checked_add` on growing counters, and saturating (not wrapping) down-casts on floors. `overflow-checks = true` in the workspace release profile, which applies to the deployed build | 10,000-sequence vault property test, exact-division tests |
+| **Vault dust and rent cushion** | `open_pool` funds each vault with the pot **plus** the runtime's rent-exempt minimum for an empty account, read from the network at open. Both debit helpers refuse any transfer that would leave an account between zero and rent-exempt (`WouldStrandRentBalance`). A lamport donated to a vault can no longer freeze its payout or refund | Rust unit tests. LiteSVM `vault_dust.rs`: a vault with a donated lamport still pays and still refunds. Also shown on devnet: a pool whose vault held a donated lamport refunded in full and closed |
+| **Other Anchor classes** | Typed accounts wherever state is read. `remaining_accounts` checked for owner, discriminator and pool/player binding. mpl-core pinned by address. Sysvars pinned by `address =`. No `init_if_needed` and no `close`. Every handler requires an explicit `PoolState` | LiteSVM lifecycle, double-payment, fill-rule and state-matrix suites (`tests/litesvm/tests/`) |
+| **Pass cannot be transferred** | Passes are minted frozen. No instruction can unfreeze one | Standing greps that must stay empty: `frozen: false`, `UpdateCollectionPluginV1` |
+| **Class is cosmetic** | Nothing in the scoring path or `pay_prizes` reads class | Standing-rules rule 5: a whole-word grep for `class` over `backend/scoring/` and `pay_prizes.rs` |
+| **Upgrade safety** | Before any program upgrade, `scripts/admin.ts pools --upgrade-preflight` must report no pool mid-settlement (Sealed, Scored, Refunding) and none taking entries | `scripts/drain-verdict.ts --self-test` runs in CI and proves the pre-flight still refuses |
 
-- `system_program::transfer` appears only in `vault.rs`; `vault_debit` call
-  sites pinned to `pay_prizes/escrow/refund`; `platform_debit` to
-  `open_pool/refund/treasury` (standing rule 6). Corrected 2026-09-16: this
-  read `fees_debit` to `register/refund`, naming a helper that no longer
-  exists and sites that are no longer its — entries have gone 100% to the
-  treasury since D-A1, and `register` cannot address a vault at all.
-- No `class` token anywhere in the scoring path (standing rule 5).
-- Forbidden-vocabulary grep (PID §8.7) over the whole tree.
-- Greps that must stay empty forever: `frozen: false`,
-  `UpdateCollectionPluginV1` (the no-thaw doctrine, `pass.rs`).
+The compiled program is tested by the LiteSVM suite (`on-chain` workflow). The standing-rules lane
+of `ci-fast` runs 15 checks on every push, including the language gate, the structural greps
+above, the upgrade pre-flight self-test and a Rust-to-TypeScript mirror check. Dependency
+advisories run in `security-sweep` (blocking for Rust). Secret scanning covers the checkout and
+the git history.
+
+## 4. Findings and fixes
+
+### 2026-09-07 repository review
+
+- **1 high, program, fixed.** Under a liveness fallback, a non-keeper could open a tier's first
+  pool and choose its sealing key. That pool could take entries that no instruction could then
+  settle or refund. The fallback has since been removed: only the configured keeper may open a
+  pool (`open_pool.rs`, `NotKeeper`).
+- **Operational promises published before they were built** (a resolving state, sanctions
+  screening of winners, a 12-hour review clock, an appeal route). All four have since been built.
+  `app/src/copy/published-claims.test.ts` now fails the build when a published promise has no
+  artefact behind it.
+- **Smaller fixes:** a false claim that the program enforces the allocation shape; a stale
+  exit list in `vault.rs`'s own documentation; a mainnet-guard helper that was never called; an
+  unchecked TypeScript mirror of the program's constants (now compared by CI); a truncating cast
+  on a treasury floor (now saturating, the safe direction).
+
+### Pre-mainnet program review
+
+- **IR-1, fixed.** Permissionless pass-collection creation accepted caller-supplied metadata.
+  Metadata is now derived on chain.
+- **IR-2, accepted.** The randomness owner check accepts either cluster's oracle program ID.
+  An attacker cannot fabricate data owned by either program, and the draw decides only the
+  cosmetic class. A build flag pinning a single ID is a hardening option.
+- **IR-3, reversed and fixed.** Donated lamports to a vault were first judged harmless. The
+  cold read showed that a single donated lamport froze the vault, because the runtime refuses a
+  balance between zero and rent-exempt. This was fixed with the rent cushion (§3).
+- **IR-4, accepted by design.** A held share depends on the settlement signer to release it.
+  Two mitigations: the daemon releases it at the 12-hour review window, and the program allows
+  anyone to release it after seven days. Inaction pays the player, never the operator.
+- **Anchor checklist:** all ten classes addressed (§3).
+
+### 2026-09-11 cold-read review
+
+236 verified findings: **4 critical, 16 high, 118 medium, 98 low.** 20 more were refuted.
+
+| Severity | Status |
+|---|---|
+| Critical (4) | **All fixed**, each with a test that fails on the old code |
+| High (16) | **15 fixed.** The last is half fixed: settlement now refuses a field with too many unreadable entries, but a backup and restore procedure for sealed entries is still open (§5) |
+| Medium / low (216) | Worked in batches. Many are closed. The rest are tracked, and a set of program-side items waits for the next program upgrade (§5) |
+
+The significant fixes:
+
+- **Critical: sealed entries stored under one key and read under another.** Every entry would
+  have scored as missing. The store and the crank now use the same pool id, proven by a test that
+  posts through the HTTP route and reads back through the crank.
+- **Critical: unauthenticated ciphertext overwrite.** Anyone could replace another entrant's
+  sealed allocation. Writes now require the player's Ed25519 signature over the pool, wallet and
+  exact bytes. The pool must still be open, and a different allocation for a paid seat is
+  refused. A later refinement (the "seal lock-out" fix) lets a wallet replace an abandoned attempt
+  whose seat was never registered, and fails closed when it cannot tell. Verified in
+  `backend/packet/src/ciphertexts.ts`.
+- **Critical: payouts could never land.** The client sent an account read-only where the program
+  requires it writable. Fixed, and a test now compares every client instruction builder's
+  writable accounts against the program's Rust definitions.
+- **Critical: one donated lamport froze a vault.** Fixed by the rent cushion (§3). Deployed and
+  shown on devnet.
+- **High, settlement integrity:** the crank now refuses to settle if it read fewer entry accounts
+  than the pool's entrant count, or if unreadable entries exceed a set ceiling. It publishes the
+  bundle after paying rather than before. A sanctions screener that cannot answer now retries and
+  no longer places a permanent hold. An upheld review can no longer be overtaken by the 12-hour
+  release clock. The verify page checks the published roster against the chain.
+- **High, availability and hygiene:** the webhook checks its secret before buffering a body and
+  caps body size. Indexer backfill replays events in chain order. Geo lookups are no longer spent
+  on unauthenticated page views. Sign-in and appeal screens show a way out when a dependency is
+  down. The archive labels as "verified" only the fields the on-chain results root commits to
+  (player, rank, amount).
+
+## 5. Open items
+
+- **No external audit yet.** An independent audit is a precondition for mainnet, as is legal
+  review.
+- **Upgrade authority and custody.** On devnet the program's upgrade authority is a single
+  operator key. `config/custody.json` records that it moves to the multisig before mainnet. That
+  multisig is currently 1-of-1 with no upgrade timelock set. Both are mainnet preconditions, and
+  the public custody page shows the current values.
+- **Program-side hardening batch not yet shipped.** Medium and low program findings from the
+  2026-09-11 review are scheduled for the next program upgrade. One example: an on-chain check of
+  who is paid what. Today the program checks the payout list's total, length, seat range and
+  order, and recomputation from published data catches a wrong recipient.
+- **Remaining medium and low findings** from the 2026-09-11 review are open across the backend,
+  app, CI and tests. This page does not give an item-by-item count.
+- **Settlement key.** The settlement signer is a software key held by the settlement service.
+  Hardware-backed co-signing is not built.
+- **Sealed-entry backup.** A rehearsed backup and restore procedure for the off-chain store of
+  sealed entries is not yet in place. The crank's unreadable-entry ceiling limits the damage but
+  does not replace a backup.
+- **IR-2** (§4) remains an accepted risk.

@@ -13,8 +13,8 @@
 #                    mode, at 375px and 1280px (audit 2026-09-11, G-20 / A-33)
 #   gitleaks       — the checkout AND the git history, pinned binary,
 #                    checksum-verified
-#   standing-rules — fourteen checks, in this order: the PID §8.7 language gate,
-#                    the structural greps, the founder's territory schedule,
+#   standing-rules — fifteen checks, in this order: the language gate,
+#                    the structural greps, the territory schedule,
 #                    the operator identity behind the terms and privacy notice,
 #                    the wallet blocklist's recorded grounds, the published
 #                    numbers against the program's constants, the app's dead
