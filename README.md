@@ -1,4 +1,4 @@
-> **ARCHIVE BRANCH — PRIVATE.** A frozen snapshot of the repository before the public cleanup of 2026-09-26. Start at [ARCHIVE-INDEX.md](ARCHIVE-INDEX.md). The current project lives on `main`.
+> **ARCHIVE BRANCH — PRIVATE.** A frozen snapshot of the repository before the public cleanup of 2026-09-26. Start at [ARCHIVE-INDEX.md](ARCHIVE-INDEX.md); the steps for the public submission repository are in [SUBMISSION-STEPS.md](SUBMISSION-STEPS.md). The current project lives on `main`.
 
 # Blotto Cup
 
