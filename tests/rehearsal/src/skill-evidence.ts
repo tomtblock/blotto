@@ -15,7 +15,9 @@
  * evidence pipeline as well).
  */
 
-import { compareBattle, potForTier, type BoardMode } from '../../../backend/scoring/src';
+import { compareBattle, potForTier, scorePool, type BoardMode } from '../../../backend/scoring/src';
+import { generateLadderEntrant } from './ladder';
+import { generateEntrant } from './strategies';
 import {
   LADDER,
   homogeneousPopulation,
@@ -332,21 +334,148 @@ function baselinePct(seats: number): string {
 
 const SKILL_CLASSES = ['random', 'heuristic', 'optimised'] as const;
 
-/** The easy report's reading of the default rows — the text as published. */
-const EASY_DEFAULT_READING = `**The claim here is stronger than a statistical one, and it should be read
-as the stronger claim.** A battle is won by taking three of the five stats.
-Against any opponent who concentrates on three, the flat split loses those
-three and takes only the two the opponent starved — so it loses that battle
-3–2 by construction, not on average. A player who leaves the default does
-not merely do worse than one who thinks: across every pool in this study, at
-both field sizes, they never place first and never take a lamport.
+/**
+ * The default's three tiers (§H22, corrected 2026-09-19), MEASURED here so the
+ * report's prose is generated like every other number in it.
+ *
+ * Until 2026-09-26 this section of `REPORT.md` was written by hand from a run
+ * that was never committed, so the nightly reproduction could not produce it
+ * and the lane was red from 2026-09-20. It is now computed: the default (20
+ * in every stat of every battle) takes seat 0 against 39 seats of one
+ * composition, over `DEFAULT_TIER_POOLS` pools, ranked by the real engine
+ * (battles won, then stats won; ties share the better rank).
+ *
+ * Seeds are disjoint from every study run (offset 300,000,000 and up).
+ */
+export const DEFAULT_TIER_POOLS = 400;
+export const DEFAULT_TIER_SEATS = 40;
+export const ONE_DELIBERATE_POOLS = 200;
 
-That is also precisely why these rows are kept OUT of the headline
-comparison above. Measuring "skill" against a shape that cannot win a battle
-would overstate the effect — the honest measure of skill is the spread
-between entrants who are all genuinely competing, which is what the headline
-table reports.
+export interface DefaultTiers {
+  rows: { label: string; firsts: number; median: number; min: number; max: number }[];
+  /** Pools in which ONE deliberate entrant among defaults won outright, alone. */
+  soleWins: number;
+}
+
+export function measureDefaultTiers(baseSeed: number): DefaultTiers {
+  const EVEN = () => Array.from({ length: 7 }, () => [20, 20, 20, 20, 20]);
+  const others = DEFAULT_TIER_SEATS - 1;
+  const compositions: { label: string; field: (p: number) => number[][][] }[] = [
+    {
+      label: "this study's mixed ladder",
+      field: (p) => {
+        const pop = ladderPopulation(baseSeed + 300_000_000 + p, DEFAULT_TIER_SEATS);
+        pop.splice(pop.findIndex((e) => e.strategy === 'uniform'), 1);
+        return pop.map((e) => e.battles);
+      },
+    },
+    {
+      label: 'three-stat concentrators only',
+      field: (p) =>
+        Array.from({ length: others }, (_, i) =>
+          generateLadderEntrant(i % 2 ? 'heuristic' : 'optimised', (baseSeed + 400_000_000 + p) * 1000 + i).battles
+        ),
+    },
+    {
+      label: 'arbitrary free-integer allocations',
+      field: (p) =>
+        Array.from({ length: others }, (_, i) =>
+          generateEntrant('random', (baseSeed + 500_000_000 + p) * 1000 + i).battles
+        ),
+    },
+  ];
+  const rows = compositions.map(({ label, field }) => {
+    const ranks: number[] = [];
+    for (let p = 1; p <= DEFAULT_TIER_POOLS; p++) {
+      ranks.push(scorePool([EVEN(), ...field(p)] as never)[0].rank);
+    }
+    const sorted = [...ranks].sort((a, b) => a - b);
+    return {
+      label,
+      firsts: ranks.filter((r) => r === 1).length,
+      median: sorted[Math.floor((sorted.length - 1) / 2)],
+      min: sorted[0],
+      max: sorted[sorted.length - 1],
+    };
+  });
+  let soleWins = 0;
+  for (let p = 1; p <= ONE_DELIBERATE_POOLS; p++) {
+    const cls = p % 2 ? 'heuristic' : 'optimised';
+    const res = scorePool(
+      [generateLadderEntrant(cls, baseSeed + 600_000_000 + p).battles, ...Array.from({ length: others }, EVEN)] as never
+    );
+    if (res[0].rank === 1 && res.filter((r) => r.rank === 1).length === 1) soleWins++;
+  }
+  return { rows, soleWins };
+}
+
+function ordinal(n: number): string {
+  const t = n % 100;
+  const suffix = t >= 11 && t <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th';
+  return `${n}${n % 10 > 3 ? 'th' : suffix}`;
+}
+
+function tierCell(r: DefaultTiers['rows'][number], seats: number): string {
+  if (r.min === r.max && r.max === seats) return `**${ordinal(seats)} — last, every pool**`;
+  if (r.max === 1) return '**1st**';
+  return `${ordinal(r.median)} of ${seats}`;
+}
+
+/** The easy report's reading of the default rows, generated from `tiers`. */
+function easyDefaultReading(tiers: DefaultTiers): string {
+  const seats = DEFAULT_TIER_SEATS;
+  const table = tiers.rows
+    .map((r) => {
+      const rate = pct(BigInt(r.firsts), BigInt(DEFAULT_TIER_POOLS), 1);
+      return `| ${r.label} | **${rate}%** (${r.firsts}/${DEFAULT_TIER_POOLS}) | ${tierCell(r, seats)} |`;
+    })
+    .join('\n');
+  return `**The part of this that is structural.** A battle is won by taking three of
+the five stats. Against any opponent who concentrates on three, the flat
+split loses those three and takes only the two the opponent starved — so it
+loses that battle 3–2 **by construction, not on average**. That holds for
+any three-stat opponent and needs no statistics.
+
+**The part of this that is about THIS population, corrected 2026-09-19.**
+The rows above say the default never places first and never takes a lamport
+*in this study*. Two of the four ladder classes — \`heuristic\` and \`optimised\`
+— are defined as three-stat concentration, so half of every mixed field is
+the one shape the default loses to by construction. The 0.000% is real and
+reproducible, and it is **a property of a field that is half deliberate
+play**, not a property of the allocation.
+
+An earlier version of this section read as though it were the latter, and a
+${seats}-seat pool on devnet (pool 20, 2026-09-19) contradicted it: two entrants
+who left the default tied for first and split the whole pot, against a field
+that concentrated on one and two stats rather than three. The correction
+below is measured with the product's own scoring engine over ${DEFAULT_TIER_POOLS} pools of ${seats}
+seats, generated with this report (\`measureDefaultTiers\`,
+\`tests/rehearsal/src/skill-evidence.ts\`):
+
+| the other ${seats - 1} seats | default's rank-1 rate | median rank |
+|---|---|---|
+${table}
+
+**So the default is the MIDDLE of three tiers, not the bottom.** Deliberate
+three-stat play beats it totally; careless concentration loses to it totally.
+The headline metrics cannot show this, because rank-1 rate and paid-seat rate
+are zero for every class except the winner — the middle tier and the bottom
+tier both read 0.000% and look identical. The superlative that used to appear
+here, and in the app's rules copy, is not supported by this study's own data:
+the \`uniform\` class outscores the \`random\` class within these very runs.
+
+**And the default is not a strategy, because it cannot be one.** If every
+seat leaves the default, all ${seats} scores are identical, all ${seats} tie for first,
+and the pot divides ${seats} ways — each entrant receives exactly their entry back
+and nobody profits. Introduce a single three-stat player into that field and
+they win outright and take the entire pot, in ${tiers.soleWins} of ${ONE_DELIBERATE_POOLS} measured pools. One
+deliberate entrant is enough to make doing nothing pay zero.
+
+That is also why these rows are kept OUT of the headline comparison above:
+the honest measure of skill is the spread between entrants who are all
+genuinely competing, which is what the headline table reports.
 `;
+}
 
 /**
  * The hard report's reading of the same rows. Written with the correction
@@ -495,7 +624,7 @@ opens the flow, touches nothing, and locks in all seven battles.
 |---|---|---|---|---|---|---|
 ${defaultRows}
 
-${hard ? HARD_DEFAULT_READING : EASY_DEFAULT_READING}
+${hard ? HARD_DEFAULT_READING : easyDefaultReading(measureDefaultTiers(params.baseSeed))}
 ## Fields of equally-skilled entrants
 
 The v2 amendment's control runs: **${params.pools} pools per class, per field
@@ -517,8 +646,7 @@ the baseline for every class, at both field sizes. Skill differentiates
 BETWEEN classes (the headline table); within a class it cannot, which is
 exactly the shape a skill competition's outcomes should have.
 
-${renderHardSections(params, fields)}
-## Methodology
+${hard ? renderHardSections(params, fields) + '\n' : ''}## Methodology
 
 - **Runs**: at EACH field size (${sizes} seats), one mixed-field run
   (${params.pools} pools, equal numbers of each class — ${perClass} — seat
