@@ -61,7 +61,7 @@ Where any document and the code disagree, the code is right and the document is 
 |---|---|
 | [`../CONTRIBUTING.md`](../CONTRIBUTING.md) | Keys and secrets, the language gate, the standing-rules checks, commits and branches, CI |
 | [`../CLAUDE.md`](../CLAUDE.md) | The rules AI coding agents working in this repository follow — the same hard rules, stated for an agent |
-| [`design/`](design/) | Screen mockups and UI snapshots |
+| [`design/`](design/) | UI screenshots from 2026-09-16, taken before the battle board replaced the battle screens |
 
 ## Settings the operator owns
 

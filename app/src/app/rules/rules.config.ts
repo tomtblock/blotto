@@ -19,6 +19,7 @@ import {
   TIER_ENTRY_LAMPORTS,
   TIER_POT_LAMPORTS,
 } from '@blotto/scoring';
+import { BOARD_CLOCK_BUDGET_MS } from '@/battle/board/mode';
 import { COPY } from '@/copy';
 import { lamportsToSol } from '@/data/format';
 
@@ -91,7 +92,7 @@ export function rulesSections(): RulesSection[] {
       id: 'how-to-enter',
       heading: r.headings.howToEnter,
       kind: 'text',
-      body: r.howToEnter(minSeats),
+      body: r.howToEnter(minSeats, BOARD_CLOCK_BUDGET_MS / 60_000),
     },
     {
       id: 'price',
