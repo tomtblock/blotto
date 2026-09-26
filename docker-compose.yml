@@ -2,7 +2,7 @@
 # staging topology behind docs/guide/HOSTING.md. Secrets come from `.env` at the
 # repo root (cp backend/.env.example .env and fill), NEVER from this file.
 #
-#   docker compose up --build postgres indexer packet     # the read path
+#   docker compose up --build postgres indexer            # the read path (no vendor credentials)
 #   docker compose up --build                             # everything
 #
 # The daemon and review services need credentialed seams (Turnkey, Irys,
