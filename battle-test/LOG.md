@@ -429,3 +429,188 @@
   gate doing its job.** No entry was attempted, nothing was sealed, nothing was lost. T3 and T7
   cannot run from this container while the country-level block stands. Put to the founder as a
   decision: this is the blocked-territory list, which is founder-and-counsel-owned.
+- **15:25Z** Founder deleted both geo-vendor secrets and re-ran `deploy-backend` with
+  `allow_dev_credentials` ticked. Runs 37 and 38 failed first (the database-url incident PR 172
+  addresses); **run 39 succeeded**.
+- **16:05Z** **Still blocked — DRIFT §H29.** `/geo` unchanged at `{"allowed":false}`, `/packet`
+  still 403. The founder's steps were correct: run 39's own environment shows both vendor secrets
+  **empty** and `DEV_CREDS: true`, so the GB stub was staged and the packet machine rebooted at
+  15:27:35Z inside the deploy window. But the same run's smoke check **printed
+  `GET /geo → {"allowed":false}` at 15:29:03Z and reported success** — `curl --fail` passes on any
+  200 regardless of body. Proved from code that the stub is not in effect: a live GB stub allows
+  every address, since GB is not on the schedule and `regionRuleUnenforceable` is per-country with
+  no sub-national code in version 5. **Not diagnosing further without the boot line** — the
+  deploy's own dev-path grep searches for `GEO STUB` while the service prints `geo = STUB`, so the
+  run gave no signal either way. Next: founder runs `backend-status` (read-only, deploys nothing)
+  and I read `packet: geo = …` and the `geo BLOCK …` reason from the packet log.
+- **16:41Z** Founder ran `backend-status` for §H29. **The packet section was not in what came back,
+  so §H29 is still open** — but the output carried a live credential. **DRIFT §H30:**
+  `backend/detection/src/main.ts:193` logs the Helius RPC URL, API key and all, on every boot
+  (`SERVICE = 'review'`). Same key this session holds, confirmed by comparison not assumption. It
+  is the only such line in the tree; `redact()` already exists in
+  `backend/packet/src/signer-select.ts:24` and is used by two other services. Because
+  `backend-status` copies 400 log lines per app into a **GitHub Actions log**, every run
+  re-publishes it. **Redact before rotating** — rotating first would leak the new key on the next
+  boot. Verified the key appears nowhere in the working tree or in git history.
+- **16:41Z** Same output also confirmed, neither blocking: the `neondb_owner` password failure at
+  15:14:20Z was a real outage (it is what failed deploy runs 37 and 38, and what PR 172 was written
+  for), and `review: listening on :8083 (2 reviewer(s))` — the second reviewer key is live, so T7's
+  review path has both members whenever it runs.
+- **16:50Z** Founder ruled on §H30: the redaction goes to the program-dev session, and the key
+  rotation waits until the battle test finishes. **Could not hand it over directly** — that session
+  is a cloud session and not reachable by peer messaging from here, and it has moved on to
+  `claude/battle-modes` under a founder-assigned feature task. Wrote the handover as a file for the
+  founder to paste, scoped so it cuts its own short branch off `main` rather than stacking a
+  security fix on a half-finished feature branch. The note carries no live key.
+- **17:10Z** **§H29 solved, and it was precedence not delivery.** The packet machine events the
+  founder sent showed a `launch` event at 15:27:10Z — a fresh machine, so the staged secrets DID
+  arrive. `buildGeo` (`backend/packet/src/main.ts:138`) prefers the vendor whenever both its
+  variables are present, and the workflow's dev branch only staged the stub without clearing the
+  vendor from the app. Deleting the repository secrets empties them in the runner, not on Fly.
+  Founder asked for the fix here rather than in the program-dev session, which is mid-feature.
+  **PR 174** on `step/geo-dev-path-and-log-redaction`, cut from `main` at `c65aef0` so the
+  battle-test records stay out of it (the PR 163 lesson). Four hunks: the geo dev branch clears the
+  vendor; the signer dev branch clears Turnkey (same latent bug); the `/geo` smoke check reads its
+  answer; the dev-path grep matches `geo = ` instead of a string nothing emits. Plus §H30's
+  redaction — new `urlForLog` in `_shared/src/short.ts`, five tests. `_shared` 108, detection 112,
+  packet 223, all ten gates exit 0.
+- **17:10Z** **Path back to T3:** merge PR 174, re-run `deploy-backend` with
+  `allow_dev_credentials` **ticked**. That run clears the vendor from Fly, the stub takes effect,
+  `/geo` answers `allowed:true`, and T3 fills. Pool 29's deadline is 01:24:50Z.
+- **17:26Z** **GATE OPEN.** Founder ran `deploy-backend` run 40 on `250890b` with
+  `allow_dev_credentials` ticked. `/geo` now answers **`{"allowed":true}`** from this container —
+  decisive proof the GB stub is live, since the vendor would refuse this US address. PR 174's fix
+  worked.
+- **17:27Z** **Preflight on pool 29: EXIT 0.** All 39 headless wallets clear. UI-A and UI-B carry
+  the known `WARN`/`STOP` pair — their Privy keys are not on this disk so no clickwrap can be made
+  for them and their 403 is unreadable from outside (§H27's third verdict working as designed).
+  The chain-read confirms neither is registered. Funding re-checked: shortfall zero.
+- **17:28Z** **Filled to 29 headless, 29 of 29 landed, no failures.** Windows of 8:
+  8/8 → 8/8 → 8/8 → 5/5. W00 the wall, W01 the pole, W02–W28 the field — every seat playing its
+  frozen allocation from `registry/T3.plan.json`. Pool 29 reads **29 entrants**, 7.9 h to deadline.
+- **17:29Z** **Waiting on the founder: F-43.** UI-A must enter to reach 30, because the plan puts
+  it at seat 0 and no headless wallet can stand in for a founder seat. **I under-stated their
+  involvement earlier** — I said the pause was their only part; entering UI-A comes first. Then the
+  pause sequence. Nothing goes past 30 until the pause is on: the boundary is the point of the test.
+- **18:46Z** **The kill switch fired for the first time.** Founder executed `set_paused(true)`
+  through Squads. **`Config.paused = true`, read from chain**, with
+  `Program log: Instruction: SetPaused` and 6974 CU — matching my off-chain simulation exactly.
+  **It took two attempts, and the first failure was mine:** Squads' TX Builder Data field is
+  **base58**, and I handed over the base64 our `admin.ts --emit-proposal` prints (the field is
+  literally named `dataBase64`). Squads read `Wzx9wLDhptoB` as base58 → `28a27ca8a2a7a73bba`, which
+  matches no discriminator, and the program threw `InstructionFallbackNotFound` (101). An
+  **"Export as base58" button was on the same screen** and I did not register what it was telling
+  me. Correct value is `2AMgDu5cpQDDr`; unpause is `2AMgDu5cpQDDq`, differing only in the last
+  character. Cost: one transaction fee. The program rejecting a malformed admin instruction
+  cleanly is itself a small piece of evidence.
+- **18:49Z** **Headless paused attempt: `6005`.** W38 refused at the **pause gate** — not 6000, not
+  6010 — spending **15000 lamports**, a transaction fee and nothing else, and taking no seat. Same
+  figure as T6's nine refusals. This confirms on live traffic that `register` checks the pause
+  BEFORE the state gate, the deadline and capacity.
+- **18:49Z** Two fixes to `scripts/late-attempt.ts`, both because it was written for T6 and T3
+  needs the other answer: the expected code is now `--expect` rather than hardcoded 6000, and the
+  Open-pool safety guard now **reads `Config.paused` from chain** and stands down only when the
+  chain says no attempt can take a seat. A flag asserting "it's paused" would have been the caller
+  marking their own homework. The written evidence's `expected` block was corrected from
+  PoolNotOpen/6000 to Paused/6005 — **a label, not a measurement**; every measured field is as the
+  run produced it.
+- **18:50Z** **Waiting on the founder: F-45.** The UI attempt as UI-B while the pause is on — the
+  criterion T6 surrendered — then the unpause.
+- **18:55Z** **The UI refusal copy: PASS — the criterion T6 surrendered is recovered.** UI-B, which
+  deliberately held no seat at that moment, was refused with a sentence a person can read:
+
+  > *"Entries are paused right now, so this one was not accepted and nothing settled. Try again a
+  > little later."*
+
+  It names the real reason, states the outcome, does not imply the pool is finished or that funds
+  are at risk, and gives a next step. No §8.7 vocabulary, no urgency language. Recorded in
+  `evidence/T3-pool-29/paused-attempt.json`. **Not the same refusal path as T6** (a pause, not a
+  sealed pool), so it is the same CLASS of evidence rather than the same evidence.
+
+  **One observation passed to the founder and counsel, not an engineering defect:** "nothing
+  settled" is precise — it avoids claiming the player was charged nothing, which would be false,
+  since a refused attempt costs a network fee (15000 lamports, measured on the headless attempt in
+  the same window). Whether a non-crypto-native player reads "settled" that way is user-facing
+  language, which is founder-owned. Recorded, not changed.
+
+## 2026-09-25 / 26
+
+- **2026-09-25 01:24:52Z** **T3 SEALED AT THE DEADLINE, AND PLAYED.** Pool 29 reached its deadline
+  holding exactly 40 — `MIN_SEATS` — and `seal_at_deadline` fired two seconds later. The settlement
+  path, from the pool's own history: `SealAtDeadline` 01:24:52 → `RevealPoolSecret` 01:24:54 →
+  `CommitResults` 01:24:55 → `PayPrizes` 01:24:55. **`trigger_refund` does not appear.** Three
+  seconds from seal to payout, and the first time `seal_at_deadline` has ever run on this cluster.
+- **2026-09-26 14:34Z** Harvested and reconciled. **PASS on every frozen pass criterion**; see
+  `registry/T3.verdict.md`. The headline numbers: **W00 scored exactly 542 and W01 exactly 4**, both
+  POINT predictions rather than ranges, because premise P1 fixes both of the wall's founder
+  battles. W00 rank 1 paid the whole 4000000000; W01 rank 40; UI-A 39 and UI-B 38, neither paid.
+  Root **VERIFIED — recomputed from 40 seats · MATCH**. Vault 650240. 40 of 40 allocations
+  reproduce their committed hash. 0 flagged, 0 holds, 0 refunded.
+- **Per-seat cost, §H20's bands on a sixth pool:** `4441080 ×10` on seats 0..9 and `4446160 ×28` on
+  seats 10..39, plus the two UI seats in the high band — the exact 10/30 split predicted, boundary
+  precisely at seat 10. Measured from each register transaction's own pre/post balances. **The
+  wallet-balance method broke on W00** and the reason is worth keeping: the funder tops wallets UP
+  TO a target, and W00 already held 7.93 SOL from winning T5 and T6, so it was never funded and its
+  starting balance was not 108000000.
+- **THE FINDING: both founder seats timed out into the EVEN SPLIT.** UI-B played
+  `[20,20,20,20,20]` in **all seven** battles; UI-A dialled two and let the clock expire on five.
+  **§H13 recurring, and harder than T5's** — there one seat, here both. Every unconditional claim
+  held anyway: an even split is five non-zero stats none above 25, so P1 and P2 still applied.
+  **33 of 40 scores differ from the plan and every unconditional claim was exact.** That is the
+  two-tier split doing its job.
+- **It was invisible in the first reconcile, and that is a defect now fixed.** `INPUT_DRIFT` was
+  evaluated AFTER `RANK_DRIFT` in an `if/else if` chain, so any seat whose rank had also moved was
+  labelled `RANK_DRIFT` and the input check never ran — and input drift is precisely what CAUSES
+  rank drift, so they co-occur almost always. The report said only that two founder ranks were off
+  by one. `scripts/reconcile.ts` now checks input first and names the even split by count. Same
+  family as §H9's stub verdict: a check that exists but cannot fire.
+- **`RESULT: FAIL` stands, and is mine.** 22 of 38 headless seats drifted in rank. Exact field ranks
+  are not a pass criterion. The plan marked only the two founder seats `rankIsConditional` when it
+  should have marked all 38, because every headless rank depends on how the founders played.
+  **T4 had this on 2 seats, T5 on 44 of 62, T3 on 22 of 38** — three pools, one lesson, still not
+  fixed in the artifact that keeps repeating it.
+- **`T3.freeze.json` was written two days late**, and says so. `reconcile.ts` refused the pool as
+  UNFROZEN and was right to — no freeze record existed. It is built from GitHub's merge timestamp,
+  git hashes and devnet block times, all independently recoverable, and it records that **T3 holds
+  the WEAKER freeze standard**: frozen 1 h 33 min before the first entry but **not** before the pool
+  existed, pool 29 having been opened 2 h 30 min before the plan merged. T6 and T2R hold the
+  stronger one. Said rather than glossed.
+- **2026-09-26 18:50Z** Merged `origin/main` — 47 commits, no conflict in `battle-test/`. **All four
+  frozen roots re-validated through the merged engine and reproduce byte-for-byte** (T3
+  `6dc18656…`, T4 `3950d12c…`, T5 `ff1bca37…`, T6 `49fec9c6…`). `backend/scoring/src/engine.ts`
+  had moved by 24 lines and the oracle imports it, so this was the first thing done and the
+  condition on going further. It did not move because the change is additive:
+  `scorePool(players, mode = 'easy')` gained a defaulted parameter.
+- **2026-09-26 18:56Z** Swept all 72 wallets back to the funder: 13.611361800 SOL in, funder now
+  **15.940787840**. 11.83 of it was W00's winnings from T5, T6 and T3. No founder action.
+- **2026-09-26 19:05Z** **§H31 — the dial run does not exist any more.** `populations.test.ts` went
+  red on `Cannot find module app/src/components/blot/rebalance`; the module was deleted by main's
+  59ca085 on 2026-09-24 along with the seven screens, the drags, the per-screen timer and the
+  90-second budget. The board — 35 cells, three minutes, a +1/+5/+10/+20 stepper, per-field locks —
+  is the only run. **Every founder recipe in every plan from T1 to T3 describes an interaction that
+  no longer exists**, and one of them is now unsafe: under the buzzer rule "put 25 on one stat and
+  leave the rest" ends 40/15/15/15/15, above the 25 cap the unconditional derivations rest on.
+  Added `uiBoardA`/`uiBoardB` beside the dial generators (which stay, so the frozen roots keep
+  reproducing) and wrote T7 against the board.
+- **2026-09-26 19:08Z** **§H32 — two of my own written claims were wrong.** (a) `duplicate_sets`
+  does NOT hard-block: `hardBlocks` is "read by no code that moves anything" under D-E9, and
+  detection runs at reveal anyway. `validate-plan.ts` said otherwise in its header and T3's plan
+  repeated it; the validator now allows a duplicate the plan DECLARES with a reason and still fails
+  an undeclared one. (b) **There is no window in which a reviewer can flag a winner before it is
+  paid** — the crank reveals, scores, detects, commits and pays in one tick, and `detect` returns
+  no auto-flags. A flag on this pool's own findings can never precede this pool's payment. That is
+  a product finding for the founder, not a test workaround.
+- **2026-09-26 19:11Z** **T7 frozen.** `registry/T7.plan.json`, sha256
+  `5bb785f4f666e772bc098a9fd8642e09bde35869a946dc4a53fb8115cc255c24`, and
+  `registry/T7.freeze.json` **written at freeze time** rather than two days late as T3's was.
+  The design changed from the manual's, with the founder's ratification: **T7 §9 cannot run as
+  written** — it asks for one headless winner AND two escrowed shares, and under
+  `PRIZE_BANDS_1024 = [1024n]` a seat paid nothing escrows nothing. So W00 and W01 carry
+  **identical** battle sets and tie at rank 1 for 2000000000 each, which is the only way one pool
+  holds two shares. The tie is unconditional: identical sets score identically against every
+  opponent, including the stranger already seated in pool 36. `scripts/t7-bounds.ts` derives three
+  unconditional claims (the tie; no capped seat can outscore a wall, 854 < 861; the founder cannot
+  decide the pool, 519 < 861) and one conditional — the walls hold rank 1 unless the stranger takes
+  8 or more of the 14 half-points on offer against one wall.
+- **Still open:** §F-37, the 60-second pool-27 click. **T7** awaits the freeze merge, then the fill.
+  **T8** is desk work. Then restore the geo vendor secrets and rotate the Helius key, in that order.

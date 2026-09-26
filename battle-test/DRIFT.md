@@ -1773,3 +1773,226 @@ read back, so they can only be re-provisioned from the vendor.
 configuration change to every gate the deploy stages, not only to the one being fixed.* The Resend
 deploy was reasoned about as an email change. It was also a screening change, and nothing in the
 instruction said so.
+
+---
+
+### §H29 — the deploy staged the fix, printed the failure, and went green
+
+**What happened.** The founder deleted both geo-vendor secrets and re-ran `deploy-backend` with
+`allow_dev_credentials` ticked, exactly as asked. Run 39 (`36020082376`, 15:25–15:29Z) succeeded on
+every step. The gate did not change: `/geo` still answers `{"allowed":false}` and `/packet` still
+answers `403 entry_unavailable`.
+
+**They did it right, and the run's own printed environment proves it:**
+
+```
+GEO_VENDOR_URL:                    <- empty: deleted
+GEO_VENDOR_API_KEY:                <- empty: deleted
+DEV_CREDS: true                    <- the box was ticked
+```
+
+So `deploy-backend.yml:344-347` took the `elif`, `geo_mode=dev`, and lines 636-637 staged
+`GEO_STUB_COUNTRY="GB"` with `ALLOW_STUB_GEO="1"`. The packet machine rebooted inside the deploy
+window — its boot line is stamped 15:27:35Z, mid-deploy.
+
+**Three minutes later, in the same green run:**
+
+```
+GET https://blotto-packet.fly.dev/geo
+{"allowed":false}
+```
+
+**The deploy printed its own failure and reported success.** The smoke check is
+`curl --fail "$url"`, which passes on any 200 whatever the body says. This is the precise failure
+the workflow's own header says it exists to stop: *"a green tick and a working system were not the
+same thing, and nothing in the run said so."*
+
+**The stub is not in effect, and that is provable rather than guessed.** `geoVerdict`
+(`service.ts`) refuses for exactly four reasons. Against `StubGeoLookup` answering `GB`:
+
+| check | with the stub live |
+|---|---|
+| `territoryAllowed(GB)` | passes — GB is not among version 5's eighteen |
+| `regionRuleUnenforceable(GB)` | passes — it is **per country** (`code.startsWith("GB-")`) and the schedule carries no sub-national code at all |
+| `geo.vpnOrProxy` | false — needs `GEO_STUB_VPN=1`, never staged |
+| the lookup throws | n/a |
+
+A live stub answers `true` from **every** address. It answers `false`. So the staged secrets are
+not what the running process is using, even though the machine restarted.
+
+**Why this was invisible, which is a second defect.** `main.ts:186` logs the stub as:
+
+```
+packet: geo = STUB (dev only) — country=GB
+```
+
+`deploy-backend.yml`'s verification step greps the boot log for **`GEO STUB`** — uppercase, one
+space. That pattern **cannot match** the string the service emits. So the run's closing line,
+*"Expected on a credentialed run: … NO 'GEO STUB' line"*, is satisfied identically whether the dev
+path is live or dead. A run that staged the stub and a run that did not are indistinguishable in
+the log.
+
+**The lesson.** §H9's family again, at one remove: not a check whose exit code was swallowed, but
+**two checks that cannot fail** — one that curls an endpoint and ignores the answer, one that greps
+for a string nothing prints. A check that cannot fail is worse than no check, because it is
+reported as a pass.
+
+**Not diagnosed further here, deliberately.** Three wrong diagnoses today came from reasoning past
+a missing reading. The decisive line — `packet: geo = …` — is one click away in `backend-status`,
+which is `workflow_dispatch`, `permissions: {}`, checks out nothing and deploys nothing. Read it
+before changing anything else.
+
+---
+
+### §H30 — the review service prints the RPC key in the clear, on every boot
+
+**What happened.** The founder ran `backend-status` to fetch the line §H29 turns on. The packet
+section was not in what came back. A live credential was:
+
+```
+review: chain = https://devnet.helius-rpc.com/?api-key=<the live key> program 5aaw…XH17
+```
+
+It is the **same key this session has been using**, confirmed by comparison against the held copy
+rather than assumed — not a second one, not a stale one.
+
+**One line, and only one.** `backend/detection/src/main.ts:193` interpolates `rpcUrl` raw
+(`SERVICE = 'review'` there, which is why it surfaces under `blotto-review`). Nothing else in the
+tree logs an RPC URL: the daemon masks its queue, and the packet service already redacts comparable
+values through `redact()` in `backend/packet/src/signer-select.ts:24`. `backend/sanctions/src/select.ts`
+uses the same helper. The tooling to do this right already exists and this one call site missed it.
+
+**Why it is worse than a stray paste.** The line runs on every boot, so the key sits in
+`blotto-review`'s Fly log ring indefinitely — and `backend-status` dumps 400 log lines per app into
+a **GitHub Actions log**, readable by anyone with repository read access and retained by GitHub.
+Every future `backend-status` run re-publishes it. The workflow is founder-facing, read-only and
+safe by design in every other respect, which is exactly why nobody looked at what it prints.
+
+**The order of the fix is the opposite of the obvious one.** Rotating first puts the NEW key into
+the same log on the next boot. So: redact the line, deploy it, and only then rotate. This moves the
+rotation from "after the test week" to today.
+
+**The lesson.** §H28 was a deploy instruction that silently changed a gate nobody was thinking
+about. This is its twin: a **diagnostic** that silently published a secret nobody was thinking
+about. Both were reasoned about by what they were *for* rather than by what they *touch*. A command
+that prints logs is a command that prints whatever is in them.
+
+**§H29 RESOLVED, 2026-09-24 17:10Z — PR 174.** The cause was not that the staged secrets failed to
+apply. They applied. `buildGeo` (`backend/packet/src/main.ts:138`) **prefers the vendor** whenever
+`GEO_VENDOR_URL` and `GEO_VENDOR_API_KEY` are both present, and the workflow's dev branch only ever
+*staged* the stub — it never cleared the vendor from the app.
+
+Deleting the repository secrets emptied them in the **runner**, which is what `geo_mode` reads,
+while Fly kept whatever was staged to it last. The workflow believed it was on the dev path; the
+service was still on the vendor. Both were internally consistent, which is why the run was green.
+
+The block was already asymmetric and its own comment names the mirror-image hazard — *"A lingering
+stub goes live the moment either vendor variable empties — the exact silent failure this workflow
+exists to stop."* A lingering **vendor** was never considered.
+
+**The same asymmetry exists for the entry signer** and is latent only because nobody has removed the
+Turnkey secrets and ticked the box in one run. Fixed in the same PR.
+
+**I was wrong in this entry's first draft**, and the correction is worth keeping. I wrote that the
+staged secrets "are not what the running process is using, even though the machine restarted" and
+called the mechanism unknown. The mechanism was knowable from `main.ts` alone: precedence, not
+delivery. I had read `buildGeo`'s stub branch and reasoned about its four refusal reasons without
+reading the branch **above** it. Stopping to ask for the boot log was right; concluding that the
+secrets had not arrived was a guess I did not need to make and should not have written down.
+
+---
+
+## §H31 — the dial run does not exist any more, and every founder recipe describes it
+
+**Found 2026-09-26 19:05Z, while preparing T7.** Merging main into this branch turned
+`src/populations.test.ts` red with `Cannot find module app/src/components/blot/rebalance`. The
+module is not missing by accident: main's commit **59ca085, "Retire the dial run: the board is the
+only run"** (2026-09-24) deleted it, along with `battle-flow.tsx`, `battle/machine.ts`, the seven
+`seven-tiles` screens, `StatDials`, the `Timer`, the per-screen thermals, and **the 90-second run
+budget in `run-clock.ts`**.
+
+**What the founder now faces** (`app/src/battle/board/`):
+
+| was | is |
+|---|---|
+| seven screens, one battle each | ONE board of 35 cells, seven fields of five stats |
+| 90 seconds total, 15 seconds a screen (R9) | **three minutes** for the whole board (`BOARD_CLOCK_BUDGET_MS`), started by the first cell change |
+| drag a dial, the other four absorb it | a **stepper** of +1, +5, +10, +20 |
+| — | a per-field **lock**, allowed in easy mode only once that field holds exactly 100 |
+| untouched screen → even split (R9-b) | untouched field → even split, **and a half-filled unlocked field has its remainder spread back into the stats already placed** (`spread.ts`) |
+
+**Why this is a drift entry and not a note.** Every plan in this test from T1 to T3 carries a
+founder recipe written in the dial vocabulary — *"drag two stats to 0"*, *"drag ONE stat to 25 and
+leave the rest"*. Those instructions no longer describe anything, and one of them is now actively
+**unsafe**: the buzzer rule means "put 25 on one stat and leave the rest" ends as
+40/15/15/15/15, above the 25 cap that the whole unconditional derivation in T3, T4, T5 and T6
+rests on. A recipe that was capped under the dials is uncapped under the board.
+
+**What was done.** The dial generators (`uiFieldFrom`, `uiWall`, `uiPole`) stay exactly as they
+are — T3, T4, T5 and T6 are frozen against them and their roots must keep reproducing, which they
+do. New board generators `uiBoardA`/`uiBoardB` were added beside them and T7 uses those: each field
+carries a rotation of a capped multiset (25/25/20/20/10 and 25/20/20/20/15), every value one or two
+taps on the stepper, seven taps and one lock a field.
+
+**What was NOT done, and is the founder's call.** `MANUAL.md` still describes the dial run
+throughout — §9's recipe cards, the practice instruction in §5, the 90-second session. It is the
+test's own specification and rewriting it mid-week would make the earlier tests harder to read
+against their own plans, not easier. T7's plan carries the board description in a
+`founderInteraction` block instead. If the battle test continues past T8, the manual needs a pass.
+
+**The near miss.** Nothing here was caught by a gate. The language check passed, the plan validator
+passed, and all four frozen roots reproduced — because none of them knows what the app's interaction
+is. It surfaced only because a test file failed to *load*, and the first instinct was to write that
+failure off as pre-existing merge noise. It was the merge telling the truth.
+
+---
+
+## §H32 — `duplicate_sets` does not hard-block, and the review path has no window
+
+Two corrections found while reading the detection and settlement code for T7. Both were things this
+architect had asserted in writing and neither was true of the system as built.
+
+**1. "The one allocation signal that hard-blocks" blocks nothing.** `scripts/validate-plan.ts`
+carried that phrase in its header and T3's plan repeated it. In fact
+`DetectionReport.hardBlocks` is, in `backend/detection/src/pipeline.ts`'s own words, *"published to
+the reviewer and read by no code that moves anything"* — ruling **D-E9**, manual-only flagging.
+`Config.detection_hard_block` exists on chain and `admin.ts` can still flip it, but the daemon
+passes `fullEscrowTier: false` as a constant and nothing reads the switch. Detection also runs at
+**reveal**, long after the entry a block would have refused. So a duplicate set is a *finding*, not
+a refusal. The validator now permits a duplicate the plan **declares** in
+`intentionalDuplicateSets` with a reason, and still fails an undeclared one, which is the case that
+is a bug. T7 declares W00/W01 and predicts the finding.
+
+**2. There is no window in which a reviewer can flag a winner before it is paid.** The crank
+reveals, scores, runs detection, screens, commits and pays in **one tick** — T3 went from seal to
+payout in three seconds — and `detect` returns no auto-flags under D-E9
+(`backend/reveal/src/crank.ts:236`). So a flag based on *this* pool's own detection report can never
+land before *this* pool is paid. `flag_entry` is legal while the pool is `Open`
+(`preconditions.ts`; `flags.rs` requires only `!entry.settled`), so T7's flags go on **during the
+fill**, and the report will say so.
+
+**This is a product finding, not a test workaround.** As built, the review path can only ever act
+on evidence from **earlier** pools. If the founder wants review-before-payment on a pool's own
+findings, the crank needs a hold between `commit_results` and `pay_prizes` that it does not have.
+Raised for the founder; nothing was changed in the program.
+
+**§H31 addendum, 2026-09-26 19:22Z — the gate that would have caught it was never in CI.**
+`src/populations.test.ts` has existed since T4 and is the one place the founder generators are
+cross-checked against the app's own rules. **CI has never run it.** It has no `describe`/`it`, so
+`vitest` reports "no test suite found"; `ci-fast.yml`'s node job iterates the `backend/*` packages
+and never touches `battle-test/`; and `rehearsal.yml` validated plans but not populations. The
+suite was run by hand, which means it was run when someone thought to. Had it been in CI it would
+have gone red on 2026-09-24, the day `rebalance.ts` was deleted, instead of surfacing two days
+later because a merge happened to break a file nobody was looking at.
+
+Three steps added to `rehearsal.yml` (the one CI file in this lane): the population properties,
+**every frozen results root re-derived** — the check that was done by hand before both the T3 and
+T7 freezes and had no home — and `t7-bounds.ts`. The suite itself was repaired: the two blocks
+that re-derived the dial generators from `rebalance.ts` are now explicit snapshots that say why
+they can no longer derive anything, and `§9b` gives the BOARD generators the live cross-check the
+dial ones lost. It proves the hazard concretely rather than by argument: a field holding 25 with
+the rest unplaced comes back from the buzzer as **[40, 15, 15, 15, 15]**.
+
+`§9c` is new and is the one property T7 rests on — a twin wall scores identically to its original
+against every opponent, checked against six adversaries including an even split, a single spike, a
+set built to beat a wall's zeros, and a third copy of the wall itself.
