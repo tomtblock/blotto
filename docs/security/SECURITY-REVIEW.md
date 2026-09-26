@@ -136,6 +136,23 @@ The significant fixes:
   down. The archive labels as "verified" only the fields the on-chain results root commits to
   (player, rank, amount).
 
+### Devnet trial (operational)
+
+The devnet trial ([`../testing/TESTING-REPORT.md`](../testing/TESTING-REPORT.md) §5) produced two
+findings about deployment and logging rather than the program:
+
+- **A deploy that could not see its own failure, fixed** (finding 5.8). On the
+  development-credentials path, the entry service kept using the vendor location lookup because
+  the vendor credentials were still set on the app and take precedence. The run's smoke checks
+  passed regardless. The deploy workflow now clears the credentials it replaces, for both the
+  location lookup and the entry signer, and reads the `/geo` answer instead of only its status
+  code (PR 174).
+- **A credential in a boot log, fixed; rotation pending** (finding 5.9). A service logged its RPC
+  endpoint including the provider credential. The line now redacts it
+  (`urlForLog` in `backend/_shared/src/short.ts`, called from `backend/detection/src/main.ts`,
+  with tests). The credential is being rotated, after the redaction shipped so that the new one
+  never reaches the log.
+
 ## 5. Open items
 
 - **No independent audit yet.** Under decision `R5` it follows after ten settled mainnet pools; the
@@ -157,3 +174,4 @@ The significant fixes:
   sealed entries is not yet in place. The crank's unreadable-entry ceiling limits the damage but
   does not replace a backup.
 - **IR-2** (§4) remains an accepted risk.
+- **RPC credential rotation** after finding 5.9 is an open operator action.

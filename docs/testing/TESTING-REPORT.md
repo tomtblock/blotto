@@ -15,10 +15,10 @@ Contents: [1 Summary](#1-summary) · [2 Method](#2-method) ·
 
 ## 1. Summary
 
-Six scored tests and one shakedown ran on devnet between 2026-09-16 and 2026-09-22, all on tier 0
+Seven scored tests and one shakedown ran on devnet between 2026-09-16 and 2026-09-25, all on tier 0
 (entry 0.1 SOL, prize pool 4 SOL, minimum field 40, capacity 64). For every scored test, the
 prediction was committed and merged **before** the pool's first entry, and was then checked
-against the chain.
+against the chain. T7's prediction is frozen and its pool has not yet filled.
 
 | Test | Scenario | Pool | Outcome | Verdict |
 |---|---|---|---|---|
@@ -28,9 +28,9 @@ against the chain.
 | **T4** | Full pool — a browser wallet wins | 16 | `Paid` at 64 — browser wallet A took the whole 4 SOL, as predicted | **PASS** |
 | **T5** | Full pool — a headless wallet wins | 18 | `Paid` at 64 — headless W00 took the whole 4 SOL; both browser wallets unpaid | **PASS** (8 of 8) |
 | **T6** | Oversubscribed — 64 seat, 9 arrive late | 27 | `Paid` at 64 — 9 late attempts refused at the state gate, each charged only a network fee | **PASS\*** (one criterion not tested) |
+| **T3** | Seal at exactly 40, plus a pause during fill | 29 | `Paid` at 40 via `seal_at_deadline` — W00 took the whole 4 SOL; the pause refused an entry with 6005 | **PASS** (every frozen criterion) |
 | Pool 22 | Shakedown of T6's failure path | 22 | `Paid` at 64 — 9 s from seal to payout | Observation only, no verdict |
-| T3 | Seal at exactly 40, plus pause | — | Plan frozen; not run | Not run |
-| T7 | Same device → review | — | — | Not run |
+| T7 | Same device, a tie for first, then the review path | 36 | Plan frozen; not run | Not run |
 | T8 | Verify page + independent recompute | — | — | Not run |
 
 **Across every test that ran:**
@@ -38,13 +38,13 @@ against the chain.
 - **Money was conserved to the lamport.** Every refund returned exactly the 0.1 SOL entry, every
   paid pool paid exactly one rank the whole 4 SOL (or split it on a tie), and every prize vault
   ended at its 650240-lamport rent cushion.
-- **Every sealed allocation matched its commitment.** In T4, T5 and T6, all 64 revealed
-  allocations re-hash to the `battles_hash` the chain recorded at entry, and the results root
+- **Every sealed allocation matched its commitment.** In T3 (40 seats) and in T4, T5 and T6 (64
+  seats each), every revealed allocation re-hashes to the `battles_hash` the chain recorded at entry, and the results root
   recomputed from the published data equals the root committed on chain.
 - **The winner was always the seat the allocations predicted**, including when the winner was a
-  wallet with no relationship to the operator (T5, T6).
-- **Seven product findings** came out of the trial: three are fixed in code, three are open, and
-  one is a design property under review (§5).
+  wallet with no relationship to the operator (T3, T5, T6).
+- **Nine findings** came out of the trial: five are fixed in code, three are open, and one is a
+  design property under review (§5).
 
 ---
 
@@ -245,13 +245,66 @@ is unedited, and its own reconcile correctly reports a mismatch.
 | Recomputed results root equals the on-chain root | PASS — `3caf8e13…71d7` |
 | Per-seat cost in the two rent bands, with the boundary moved one seat later | PASS — 10 seats at 4441080, 54 at 4446160 |
 | Prize vault ends at 650240 | PASS |
-| A person reads the refusal copy | **Not tested** |
+| A person reads the refusal copy | **Not tested** (a person read a refusal in T3, on the pause path) |
 
 The late attempts show the gate order: the 64th entry seals the pool, so a 65th fails the state
 gate before it can reach the capacity gate. The ciphertext route told each late wallet
 `pool filled`. **Treasury:** 9387645440 before the fill, 15587645440 at harvest. The difference,
 6200000000, is exactly 62 × 100000000 (the two browser wallets had already paid before the first
 reading).
+
+### T3 — pool 29 — seal at exactly 40, plus a pause — PASS
+
+Pool `3KekiNcocdfB4vEB99HA2mf6eZ2cTFAgrnE9jreisnmv`. Frozen by PR 171, merged
+2026-09-24T15:55:01Z, 1 h 33 min before the first entry. This is the weaker freeze standard: pool
+29 already existed when the plan merged, and the freeze record was assembled after the run from
+independently recoverable timestamps (GitHub merge time, git hashes, devnet block times). It says
+so (`registry/T3.freeze.json`).
+
+T2R showed that 39 seats refund. T3 is the other side of the fork: a pool that reaches its
+deadline holding exactly 40 seats plays. It is also the first devnet pool sealed by
+`seal_at_deadline` rather than by the 64th entry. The indexer's `outcome_if_deadline_now` read
+`refund` at 39 entrants and `seal` at 40 on the same pool. From the pool's transaction history:
+`SealAtDeadline` two seconds after the deadline, then `RevealPoolSecret`, `CommitResults` and
+`PayPrizes`, three seconds from seal to payout. `trigger_refund` does not appear.
+
+Mid-fill, the operator set `Config.paused` through the multisig, and cleared it afterwards.
+
+| Criterion | Result |
+|---|---|
+| `Paid` with exactly 40 entrants, not `Closed` | PASS |
+| `seal_at_deadline` fires, `trigger_refund` does not | PASS — both read from chain |
+| Exactly one seat paid, W00, the whole 4000000000 | PASS |
+| W00 scores exactly 542; W01 scores exactly 4 and ranks 40th | PASS — 542; 4, 40th |
+| Neither browser wallet paid; both in ranks 2–39 | PASS — 39th and 38th, unpaid |
+| A headless entry in the paused window reverts `Paused` (6005) | PASS — 6005 |
+| That refusal costs a fee and nothing else | PASS — 15000; no entry, no pass, no rent |
+| Browser wallet B refused during the pause, accepted after it | PASS — eight minutes apart |
+| `Config.paused` true between the two writes, false after | PASS — read from chain both times |
+| A person reads the refusal copy | PASS — see below |
+| Every revealed allocation reproduces its committed hash | PASS — 40 of 40 |
+| Recomputed results root equals the on-chain root | PASS — `28c5608a…606b` |
+| Per-seat cost: 10 seats at 4441080, 30 at 4446160 | PASS — boundary at seat 10, as predicted |
+| Prize vault ends at 650240 | PASS |
+| No flag, no sanctions hold | PASS — 0 · 0 |
+
+**Point predictions, not ranges.** The plan fixed both of the wall's battles against the browser
+wallets, so it could predict W00's and W01's scores exactly, and both landed. The best
+generated rival, W33, was given a ceiling of 369. It finished second on 367.
+
+**The refusal a person read.** Browser wallet B, holding no seat at that moment, was refused
+during the pause with: *"Entries are paused right now, so this one was not accepted and nothing
+settled. Try again a little later."* It names the reason, states the outcome, does not suggest the
+pool is over or that funds are at risk, and gives a next step. The app's preflight simulation
+returned 6005 and the client stopped before submitting, so this refusal put no transaction on
+chain and cost the player nothing. The 15000-lamport fee in the table is from the headless
+attempt, which skips preflight on purpose so that its cost can be measured.
+
+`reconcile.ts` prints `RESULT: FAIL` for this pool: 16 MATCH, 22 RANK_DRIFT, 0 PAYOUT_MISMATCH,
+2 INPUT_DRIFT. Exact unpaid ranks were not a pass criterion. Both browser wallets let the clock
+run out (one on all seven battles, one on five) and were entered on the even split, which moved
+every head-to-head against them. The plan marked only those two seats' ranks as conditional
+(§6). The verdict against the frozen criteria is `registry/T3.verdict.md`.
 
 ### Pool 22 — shakedown (observation, no verdict)
 
@@ -285,6 +338,8 @@ The status of each finding was checked against the code on this branch.
 | 5.5 | A late entrant saw a hedged message instead of "this pool filled" | **Fixed** |
 | 5.6 | The even-split default can win against a field that concentrates on one or two stats | Design property, under review |
 | 5.7 | Two timed-out players produced a "strong" duplicate-set detection finding | **Fixed** |
+| 5.8 | A backend deploy staged a configuration change that did not take effect, printed the failure, and reported success | **Fixed** |
+| 5.9 | A service logged its RPC endpoint including the provider credential | **Fixed**; credential rotation pending |
 
 **5.1 Seal lockout — fixed.** The ciphertext store refuses a second, different allocation for a
 seat, so that a paid entry can never be overwritten. A replay always differs, because the salt is
@@ -316,7 +371,7 @@ signer probe, and `ofac_loaded` in `backend/sanctions/src/wire.ts` is only ever 
 `packet issued` before calling the signer. When signing throws, a second line logs
 `NOT issued`. A count of "issued" lines therefore reads normally throughout a signing outage.
 
-**5.5 Late-entrant copy — fixed; a person reading it on a live pool is still untested.** A late
+**5.5 Late-entrant copy — fixed; a person has not yet read the `pool filled` wording on a live pool.** A late
 entrant is refused at the ciphertext step, before any transaction, so nothing is charged. This was
 verified on pool 22, where the late wallet's balance was unchanged to the lamport. The route did
 distinguish `pool closed to entries` from `already sealed`, but the app read only the HTTP status
@@ -324,7 +379,8 @@ and showed one hedged sentence for both. **Now:** the route answers `pool filled
 `app/src/entry/outcome.ts` maps the body through a closed allowlist to `pool-full`, `pool-closed`
 or `seal-conflict`. `pool-full` shows "This pool filled before your entry reached it…". The
 packet-stage refusal stays generic by design. T6's criterion "a person reads the refusal" was not
-run (§8).
+run. In T3 a person read the pause refusal and it passed (§4); that is the same kind of check on a
+different refusal path (§8).
 
 **5.6 The even split can win — design property, under review.** The board opens at 20/20/20/20/20
 in every battle, and any battle not locked when the clock ends is entered that way. By
@@ -345,6 +401,25 @@ a hard block, rated them "strong" (T5, pool 18). Nothing was blocked, because th
 nobody and a flag is a reviewer's decision. **Now:** `backend/detection/src/signals.ts` compares
 only battles that both entries actually chose. Battles left at the default are excluded.
 
+**5.8 A green deploy that did not change the service — fixed.** A backend deploy on the
+development-credentials path staged the location-lookup stub and passed every step, yet the entry
+service kept refusing as before. Cause: precedence, not delivery. The packet service
+(`buildGeo`, `backend/packet/src/main.ts`) prefers the vendor lookup whenever vendor credentials
+are present on the app. Emptying them in the repository changed which path the workflow took, but
+not what the app held, so the service stayed on the vendor. Two smoke checks could not fail: one
+accepted any HTTP 200 whatever the body said, and one searched the boot log for a string the
+service never prints. **Now** (PR 174): the development path in
+`.github/workflows/deploy-backend.yml` unsets the vendor credentials it replaces, the same fix is
+applied to the entry signer, and the smoke step reads the `/geo` answer rather than only its
+status code.
+
+**5.9 A credential in a boot log — fixed; rotation pending.** A service logged its RPC endpoint
+including the provider credential, once per boot, and the operator's read-only status workflow
+copies recent service logs into CI output. The line now redacts it through `urlForLog`
+(`backend/_shared/src/short.ts`, called from `backend/detection/src/main.ts`, with tests in
+`backend/_shared/test/short.spec.ts`). No other call site logs an RPC endpoint. The credential is
+being rotated; the redaction shipped first, so the new credential never reaches the log.
+
 ---
 
 ## 6. Harness lessons
@@ -359,9 +434,16 @@ These are recorded because they bear on how much the results can be trusted.
 - **Unconditional claims beat exact predictions.** Every exact prediction about the hand-played
   seats' numbers was wrong. Every floor-versus-ceiling claim ("cannot win", "must be last",
   "rank 1 is one of these two seats") held.
-- **Hand-played seats make every other seat's exact rank conditional.** T5's field ranks drifted
-  because the browser wallets played differently from the plan. The plans now mark those ranks
-  conditional.
+- **Hand-played seats make every other seat's exact rank conditional.** T5's and T3's field ranks
+  drifted because the browser wallets played differently from the plan. Both plans marked only the
+  browser wallets' own ranks as conditional; exact field ranks were never a pass criterion, and
+  `reconcile.ts` reports the drift rather than hiding it.
+- **Write the freeze record at freeze time.** T3's freeze record was assembled after the run, from
+  timestamps nobody in the project can rewrite, and states that it was late. T7's was written when
+  its plan was frozen.
+- **Reconcile checks input drift first.** Input drift causes rank drift, so checking rank first hid
+  it. T3's first reconcile reported two browser-wallet ranks off by one and missed that both had
+  timed out. `reconcile.ts` now checks inputs first and counts even-split battles.
 - **Concurrency and the public RPC lose wallets.** Parallel entry and throttled endpoints produced
   expired blockhashes after sealing. The runner now stops at the first casualty and fills at
   concurrency 1, and the trial used a dedicated RPC for T6.
@@ -407,19 +489,19 @@ routes that compute the same kind of statistics from real pools.
 
 ## 8. Limits — what has not been tested
 
-- **T3** (seal at exactly 40, then `set_paused` mid-fill) did not run. Its plan is frozen in
-  `battle-test/registry/T3.plan.json`, and `battle-test/scripts/t3-bounds.ts` re-derives its claims. When it was due, the
-  harness host fell under the territory schedule in force, and the entry gate refused it as
-  configured. Sealing at exactly 40 through `seal_at_deadline` has devnet coverage only from
-  pool 20 (T2, spoiled). Otherwise it is covered by LiteSVM (`fill_rule.rs`) and the offline
-  rehearsal.
-- **T7** (two entrants from one browser profile, then a reviewer decision) did not run. Detection
-  and review are covered by unit tests and run in shadow mode in the offline rehearsal. No reviewer
-  flag, `forfeit_escrow` or `pay_next_place` has run on devnet.
+- **T7** (two entrants from one browser profile, then the review path) is frozen and has not
+  run. Its plan (`battle-test/registry/T7.plan.json`, pool 36) gives two headless seats identical
+  allocations so that they tie for first and hold two shares, the only way one pool can exercise
+  escrow: both flagged, `pay_prizes` escrows both, one share released, the other forfeited (which
+  moves nothing), then `pay_next_place` pays it to the remaining eligible seat. Until it runs,
+  detection and review are covered by unit tests and by shadow mode in the offline rehearsal, and
+  no reviewer flag, `forfeit_escrow` or `pay_next_place` has run on devnet.
 - **T8** (the public verify page, and a recompute by someone outside the project) did not run.
-  Results roots were recomputed by the harness from published data (T4, T5, T6), not by an
+  Results roots were recomputed by the harness from published data (T3, T4, T5, T6), not by an
   outside party.
-- **A person reading the late-entry refusal** (T6's ninth criterion) was not tested.
+- **A person reading the late-entry refusal** (T6's ninth criterion, the `pool filled` wording)
+  has not been tested on a live pool. A person did read the pause refusal in T3, and it passed
+  (§4); that covers the same kind of check on a different refusal path.
 - **The signing-service outage path**: with the signer down, the program refuses nothing and the
   entry service refuses everything. That was observed (5.3), not tested against a prediction.
 - **Hard mode on devnet**: every trial pool was easy mode, played on the client of the time, which
@@ -447,6 +529,7 @@ Everything below is in [`battle-test/`](../../battle-test/) (tooling and how to 
 | `battle-test/registry/<test>.reconcile.md` | Seat-by-seat diff of prediction against outcome |
 | `battle-test/registry/<test>.allocations.md` | Each seat's allocations beside the on-chain hash |
 | `battle-test/registry/T6.deviation.json`, `T6.verdict.md` | T6's pre-fill addendum and verdict |
+| `battle-test/registry/T3.verdict.md` | T3's verdict against its frozen criteria |
 | `battle-test/registry/pool-22.field.json`, `pool-22.observation.md` | The shakedown field and record |
 | `battle-test/evidence/<test>-pool-<id>/` | Pool snapshots, balance snapshots, entry logs, T6's late-attempt capture |
 
@@ -458,6 +541,8 @@ Everything below is in [`battle-test/`](../../battle-test/) (tooling and how to 
 | T4 | 16 | `EgbFPxSRgtc8hd68vbxjsQ8irYAifen7Zxf5uYNkrngq` | `0867584752741d72d7266b87b91c1f51417fe736bfd6150fbe44ed571ed7b156` |
 | T5 | 18 | `4KDw44RCUkGjKnCvbKFUugLwZWewvNuixSxPhk1ov1Eb` | `0e1d6b87140f8696ef9252a3d1858c48133ce196b265b6c1881668af5b193bcc` |
 | T6 | 27 | `3kkWSsX5BgpyVirejCRMAFXrdhoSnEdrHRQz4TQ4rvh9` | `3caf8e13fd58fd00963461fd1961c0de2cf516d745ffd69ef204bc82379071d7` |
+| T3 | 29 | `3KekiNcocdfB4vEB99HA2mf6eZ2cTFAgrnE9jreisnmv` | `28c5608a9d63de983c9afad575ac67750dba9ea85320be8d7504e25133bb606b` |
+| T7 (frozen, not run) | 36 | `DtaxjC8MoRZ3wGnR6KghsxV1gXvPP5yaTEssrroArpXX` | — |
 | Pool 22 | 22 | `CDKBFm2DybDUrkYhZzDXpPExoL3PU2EJbcBD1JboPaF7` | — |
 | (pool 15, lapsed) | 15 | `4rZWzP13Wz5uadk1LY8jiBmuCsPUE8RSZYKXDYocdKkn` | — |
 

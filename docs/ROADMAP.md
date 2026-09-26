@@ -32,13 +32,13 @@ mainnet) and 8 (opening further tiers) have not started; they are covered by §3
 | 1 Program | The Anchor program with the vault-invariant suite, deployed to devnet | **Done with changes** | The money model was rebuilt. The treasury pre-funds a fixed prize pool at open (D-A1, D-E1). **One paid place** replaced sixteen (D-E2). A 12-hour deadline and a 40-seat minimum field replaced 72 hours and a full pool (D-E6, R7-b). A forfeited share passes to the next eligible place, not to a later pool (D-E7). A rent cushion was added (2026-09-12). The admin is a multisig vault, but the gate's upgrade-authority item is still open (§3) |
 | 2 Scoring and sealing | A sealed devnet pool reveals, scores and pays automatically; the TypeScript engine matches Python vectors | **Done with changes** | The engine pays one place, so a pool pays one winner or splits a tie, not sixteen payouts. The custody service has no X25519 curve, so each pool key is generated in the operator's process and then imported under an export policy (see [ARCHITECTURE §10](architecture/ARCHITECTURE.md#10-not-built-and-known-limitations)) |
 | 3 Frontend | A stranger enters a devnet pool from a fresh browser, plays, sees the result and verifies it | **In progress** | The draggable pentagon and its 15-second timer were replaced by the battle board, which has one 3-minute clock (D-E17). A second pool type, hard mode, was added (D-E17 Phase B). The app is tested at mobile and desktop widths (R18). The gate has not passed: no one outside the project has verified a pool (T8, §3) |
-| 4 Gates and detection | Entry packet enforced on-chain, territory blocking, detection, a review page | **Done with changes** | Detection only reports, and a reviewer decides every flag (D-E9). The territory allow-list became a block-list (D-B3-2). The identity-check switch is built and off (R3, D-E5). A second reviewer key was added on 2026-09-24. The same-device review path has not run on devnet (T7) |
-| 5 Devnet dress rehearsal | Twenty settled pools including the refund path; every failure path exercised; internal review written | **In progress** | The twenty-pool rehearsal runs offline in CI ([`guide/DEVNET-REHEARSAL.md`](guide/DEVNET-REHEARSAL.md)). The live trial passed T1, T2R, T4, T5 and T6. T3, T7 and T8 have not run. The internal reviews are summarised in [`security/SECURITY-REVIEW.md`](security/SECURITY-REVIEW.md) |
+| 4 Gates and detection | Entry packet enforced on-chain, territory blocking, detection, a review page | **Done with changes** | Detection only reports, and a reviewer decides every flag (D-E9). The territory allow-list became a block-list (D-B3-2). The identity-check switch is built and off (R3, D-E5). A second reviewer key was added on 2026-09-24. The same-device review path has not run on devnet (T7, frozen) |
+| 5 Devnet dress rehearsal | Twenty settled pools including the refund path; every failure path exercised; internal review written | **In progress** | The twenty-pool rehearsal runs offline in CI ([`guide/DEVNET-REHEARSAL.md`](guide/DEVNET-REHEARSAL.md)). The live trial passed T1, T2R, T3, T4, T5 and T6. T7 is frozen and has not run; T8 has not run. The internal reviews are summarised in [`security/SECURITY-REVIEW.md`](security/SECURITY-REVIEW.md) |
 | 6 Compliance and documentation | Rules, terms and privacy live; language audit clean; territory named; mainnet keys listed | **In progress** | Rules, terms, privacy and a complaints route are live on devnet (2026-09-19). The language gate runs in CI. The territory schedule is at version 5. Still open: legal review, the operating entity and the mainnet keys (§3) |
 
 ## 3. Road to mainnet
 
-Every item must be closed before a mainnet deploy. None is ticked yet.
+Every item must be closed before a mainnet deploy.
 
 ### Security
 
@@ -72,14 +72,16 @@ All four are tracked in [TESTING-REPORT §5](testing/TESTING-REPORT.md#5-product
 
 ### Testing
 
-- [ ] **T3:** seal at exactly 40 seats, plus a pause during fill.
-- [ ] **T7:** two entries from one device, then a reviewer decision. No `forfeit_escrow` or
-      `pay_next_place` has run on devnet.
+- [x] **T3:** seal at exactly 40 seats, plus a pause during fill. Passed on pool 29
+      ([TESTING-REPORT §4](testing/TESTING-REPORT.md#4-devnet-results-per-test)).
+- [ ] **T7:** two entries from one device, then the review path. The plan is frozen; the pool has
+      not run. No `forfeit_escrow` or `pay_next_place` has run on devnet.
 - [ ] **T8:** the public verify page, with a recompute by someone outside the project.
-- [ ] **A person reads the late-entry refusal copy** on a live pool.
+- [ ] **A person reads the late-entry refusal copy** on a live pool. A person read the pause
+      refusal in T3 and it passed; the `pool filled` wording has not yet been read on a live pool.
 - [ ] **A hard-mode pool played on devnet.**
 
-All five are tracked in [TESTING-REPORT §8](testing/TESTING-REPORT.md#8-limits--what-has-not-been-tested).
+The open items are tracked in [TESTING-REPORT §8](testing/TESTING-REPORT.md#8-limits--what-has-not-been-tested).
 
 ### Legal and compliance
 
