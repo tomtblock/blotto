@@ -1,5 +1,5 @@
 # E5 (master prompt v3): the full backend on one machine — the local dev /
-# staging topology behind docs/hosting.md. Secrets come from `.env` at the
+# staging topology behind docs/guide/HOSTING.md. Secrets come from `.env` at the
 # repo root (cp backend/.env.example .env and fill), NEVER from this file.
 #
 #   docker compose up --build postgres indexer packet     # the read path

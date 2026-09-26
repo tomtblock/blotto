@@ -12,7 +12,7 @@
  *   as a fallback. It has to be: `init_config` writes all of them and emits
  *   NO event (`instructions/admin.rs`), so a ledger-only report published a
  *   0 minimum against a program enforcing 0.6 SOL, and six of seven tier
- *   pots wrong (O26, `docs/AUDIT-2026-09-07.md` §8 O26). `policy_source`
+ *   pots wrong (O26, `docs/security/SECURITY-REVIEW.md` §8 O26). `policy_source`
  *   says which was used on every response; `enablement_source` does the same
  *   for `open_tiers`, as it already did.
  *

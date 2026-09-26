@@ -432,7 +432,7 @@ const TERMS_PROMISES: readonly Promised[] = [
       'The lost-ciphertext refund is disclosed as a manual payment, because no code pays it.',
     // The file says so in capitals: "The published rule says that player's
     // entry fee is refunded. NOTHING IN THIS CODEBASE PAYS IT." Finding 5
-    // of docs/COMPLIANCE-REVIEW-2026-09-16.md. Disclosing it is the whole
+    // of docs/compliance/SAFEGUARDS.md. Disclosing it is the whole
     // point of the row — the claim and the code agree BECAUSE the claim
     // says the code does not do it.
     proof: 'backend/reveal/src/crank.ts',
@@ -549,13 +549,13 @@ const PRIVACY_PROMISES: readonly Promised[] = [
     // Drafted from the inventory rather than from assumption, which is what
     // makes the list checkable: every row of "what we hold" traces to §1 of
     // that report.
-    proof: 'docs/CHANGE-2026-09-16_data-minimisation.md',
+    proof: 'docs/compliance/DATA-INVENTORY.md',
   },
   {
     kind: 'mechanism',
     phrase: 'Everything we hold is tied to a wallet address rather than to a person',
     commitment: 'Nothing held identifies a player except their own address.',
-    proof: 'docs/CHANGE-2026-09-16_data-minimisation.md',
+    proof: 'docs/compliance/DATA-INVENTORY.md',
   },
   {
     kind: 'mechanism',
@@ -593,7 +593,7 @@ const PRIVACY_PROMISES: readonly Promised[] = [
     kind: 'mechanism',
     phrase: 'We do not ask for, and have nowhere to put, any of the following',
     commitment: 'No name, date of birth, document, phone number or postal address is collected.',
-    proof: 'docs/CHANGE-2026-09-16_data-minimisation.md',
+    proof: 'docs/compliance/DATA-INVENTORY.md',
   },
   {
     kind: 'mechanism',

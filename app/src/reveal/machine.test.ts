@@ -28,7 +28,7 @@
  * Gone with the taps, not rewritten, because their subject no longer
  * exists: the held-confirmation pass-through, the extended tell, the
  * `beat_elapsed` advance, and the `tapCount` parameterisation. The change
- * doc (`docs/CHANGE-2026-09-15_reveal-and-rarity.md`) names them.
+ * doc (`docs/architecture/DECISIONS.md`) names them.
  */
 
 import { describe, expect, it } from "vitest";

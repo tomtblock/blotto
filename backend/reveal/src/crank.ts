@@ -63,7 +63,7 @@
  * the obligation as a table and the admin CLI grows a command for it (plan
  * batch I1), the alert plus the bundle IS the ledger, and an unpaid entry is
  * a broken published promise rather than a deferred feature.
- * `docs/OPERATING-MANUAL.md` §7 ("An entry was scored as all losses") is the
+ * `docs/guide/OPERATING-MANUAL.md` §7 ("An entry was scored as all losses") is the
  * operator-facing copy of this.
  */
 

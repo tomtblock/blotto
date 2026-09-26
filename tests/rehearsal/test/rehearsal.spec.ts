@@ -3,7 +3,7 @@
  * cluster): twenty pools filled by the four-strategy population and settled
  * through the REAL crank + detection; the refund fork; conservation
  * reconciled on every pool. The devnet run repeats exactly this through
- * Web3Chain (docs/devnet-rehearsal.md).
+ * Web3Chain (docs/guide/DEVNET-REHEARSAL.md).
  */
 import { expect } from 'chai';
 import { runOfflinePool } from '../src';

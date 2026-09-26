@@ -372,7 +372,7 @@ describe('the geo decision is named in the log, never in the answer', () => {
  * `config/territories.json` accepts `"US-NY"`, `territoryAllowed` honours it,
  * and the production adapter returns no region at all — so such a line would
  * admit every person it names, silently, with the country-level lines beside
- * it working normally. TRANSITION-REPORT.md's accepted gap named a boot
+ * it working normally. the Phase 0 record's accepted gap named a boot
  * assertion as the prerequisite for the first such rule; it did not exist.
  */
 describe('sub-national rules are enforceable or refused, never inert (C-30)', () => {

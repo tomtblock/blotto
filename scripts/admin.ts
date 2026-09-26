@@ -20,7 +20,7 @@
  * in bigint — no float ever touches an amount.
  *
  * Run:  npx ts-node --transpile-only scripts/admin.ts <command> [flags]
- * Docs: docs/devnet-rehearsal.md (worked examples for every command).
+ * Docs: docs/guide/DEVNET-REHEARSAL.md (worked examples for every command).
  */
 
 import { createHash } from 'crypto';
@@ -62,7 +62,7 @@ commands
                             across that upgrade keeps the floor it opened
                             with while the site reads the shared constant,
                             so the two can disagree. See
-                            docs/RUNBOOK_r7b-upgrade.md
+                            docs/guide/OPERATING-MANUAL.md
       [--self-test]         drive the verdict through its fixtures and exit.
                             Touches no network
   init-config               one-time setup (admin = the signing key)
@@ -88,7 +88,7 @@ commands
                             hard ladder, every hard tier disabled. Takes no
                             argument (the 2026-09-07 keeper-seeding path is
                             retired). Run right after the upgrade, before
-                            anything else — see docs/RUNBOOK_phase-b-window.md
+                            anything else — see docs/guide/OPERATING-MANUAL.md
   set-keeper                the ONLY key open_pool accepts (prompt v2 §A;
                             the 24 h liveness fallback was removed
                             2026-09-07). May not be the zero key
@@ -117,7 +117,7 @@ commands
                             tier whose on-chain price or pot disagrees with
                             the ratified table, and refuses to open more than
                             one additional tier per call. Closing is never
-                            refused. See docs/RUNBOOK_open-tier.md
+                            refused. See docs/guide/OPERATING-MANUAL.md
       --tiers <7 comma-separated 0/1, e.g. 1,0,0,0,0,0,0>
       [--mode easy|hard]    WHICH ladder (Phase B). Default easy
                             (set_open_tiers). hard sends set_hard_open_tiers,
@@ -372,7 +372,7 @@ async function cmdStatus(ctx: Ctx): Promise<void> {
   if (d.length === CONFIG_SPACE_V2) {
     console.log(
       'config: PRE-PHASE-B LAYOUT (484 bytes) — after the Phase B upgrade every other ' +
-        'instruction fails until `migrate-config` runs (docs/RUNBOOK_phase-b-window.md)'
+        'instruction fails until `migrate-config` runs (docs/guide/OPERATING-MANUAL.md)'
     );
   } else if (d.length === CONFIG_SPACE_V1) {
     console.log(
@@ -748,7 +748,7 @@ async function cmdSetOpenTiers(ctx: Ctx): Promise<void> {
   if (hard && d.length < CONFIG_SPACE) {
     throw new Error(
       `REFUSED — the live Config is ${d.length} bytes and carries no hard ladder; run ` +
-        '`migrate-config` after the Phase B upgrade first (docs/RUNBOOK_phase-b-window.md)'
+        '`migrate-config` after the Phase B upgrade first (docs/guide/OPERATING-MANUAL.md)'
     );
   }
   const current: number[] = [];
@@ -780,7 +780,7 @@ async function cmdSetOpenTiers(ctx: Ctx): Promise<void> {
     throw new Error(
       `REFUSED — this call would open ${opening.length} additional tiers at once ` +
         `(${opening.join(', ')}). Open one tier per call, each with its own ` +
-        'proposal and its own verification. (docs/RUNBOOK_open-tier.md)'
+        'proposal and its own verification. (docs/guide/OPERATING-MANUAL.md)'
     );
   }
 
@@ -808,7 +808,7 @@ async function cmdSetOpenTiers(ctx: Ctx): Promise<void> {
         '\n\nThe next pool in that tier would be funded from the treasury at the ' +
         'figure above and would publish it as the prize. Run `set-tier-economics` ' +
         'for that tier first, confirm with `status`, then run this again. ' +
-        '(docs/RUNBOOK_open-tier.md)'
+        '(docs/guide/OPERATING-MANUAL.md)'
     );
   }
 

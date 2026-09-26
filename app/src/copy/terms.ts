@@ -10,7 +10,7 @@
  * ── THREE RULES THIS FILE IS WRITTEN UNDER ───────────────────────────────
  *
  * 1. EVERY FACTUAL ASSERTION MATCHES A ROW OF
- *    `01_PRODUCT_FACTS/PRODUCT-FACTS_BlottoCup_v1.md` OR A CITED FILE.
+ *    `docs/compliance/PRODUCT-FACTS.md` OR A CITED FILE.
  *    Anything that could not be matched was taken out rather than softened.
  *    Each section below names its source in a comment, so the next person
  *    can check a clause against the code in one hop.
@@ -266,7 +266,7 @@ export const TERMS = {
       //     manual admin transaction per affected player, and the alert plus
       //     the published bundle's `scored_as_all_losses` list are the
       //     ledger. Recorded as finding 5 of
-      //     docs/COMPLIANCE-REVIEW-2026-09-16.md.
+      //     docs/compliance/SAFEGUARDS.md.
       //
       //  2. THE BRIEF NAMED THE WRONG KEY, and this is the corrected form.
       //     It said a permanently lost SETTLEMENT key would leave a sealed

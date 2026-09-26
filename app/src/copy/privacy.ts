@@ -9,7 +9,7 @@
  *
  * ── THE SOURCE IS THE INVENTORY, NOT ASSUMPTION ──────────────────────────
  *
- * Every line below is drafted from `docs/CHANGE-2026-09-16_data-minimisation.md`
+ * Every line below is drafted from `docs/compliance/DATA-INVENTORY.md`
  * — §1 for what is held and what is not, §2 for what changed for a player,
  * §8 for the retention rules that are PROPOSED rather than enforced. Where
  * this notice states a fact, a comment names the row it comes from. Nothing

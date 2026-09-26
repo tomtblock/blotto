@@ -34,7 +34,7 @@
 # that test as a third clause, and on 2026-09-16 it marked
 # `claude/sharp-bohr-c8aeub` — the live battle-test branch, five commits ahead,
 # the newest committed hours earlier — as deletable, because main carried
-# `Merge PR #133 from tomtblock/claude/sharp-bohr-c8aeub` from an earlier
+# `Merge PR #133 from <owner>/claude/sharp-bohr-c8aeub` from an earlier
 # lifetime of that name. It also marked `claude/entry-signer-fail-closed`,
 # which carried an unmerged commit.
 #

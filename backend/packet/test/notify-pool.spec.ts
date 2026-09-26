@@ -31,9 +31,9 @@ function signed(pool: string, email: string, atUnix: bigint, key = kp.secretKey)
 describe('notify v2 — the opt-in', () => {
   it('stores a verified choice, trimmed, and serves it back unsent', async () => {
     const store = new MemoryPoolNotifyStore();
-    expect(await acceptPoolNotify(store, () => NOW, signed(POOL_A, 'tom@example.com', NOW))).to.equal(true);
+    expect(await acceptPoolNotify(store, () => NOW, signed(POOL_A, 'player@example.com', NOW))).to.equal(true);
     const rec = await store.get(POOL_A, WALLET);
-    expect(rec?.email).to.equal('tom@example.com');
+    expect(rec?.email).to.equal('player@example.com');
     expect(rec?.timestamp).to.equal(NOW);
     expect(rec?.sentAt).to.equal(null);
   });
@@ -93,7 +93,7 @@ describe('notify v2 — the dispatcher', () => {
   async function seeded() {
     const store = new MemoryPoolNotifyStore();
     for (const pool of [POOL_A, POOL_B, POOL_C]) {
-      expect(await acceptPoolNotify(store, () => NOW, signed(pool, 'tom@example.com', NOW))).to.equal(true);
+      expect(await acceptPoolNotify(store, () => NOW, signed(pool, 'player@example.com', NOW))).to.equal(true);
     }
     return store;
   }
@@ -112,16 +112,16 @@ describe('notify v2 — the dispatcher', () => {
     });
     expect(out).to.deep.equal({ sent: 2, waiting: 1, failed: 0 });
     expect(sender.sent.map((m) => m.subject).sort()).to.deep.equal(['Pool #15 has finished', 'Pool #16 has finished']);
-    expect(sender.sent.every((m) => m.to === 'tom@example.com')).to.equal(true);
+    expect(sender.sent.every((m) => m.to === 'player@example.com')).to.equal(true);
     expect(sender.sent.find((m) => m.subject.includes('16'))?.text).to.include(`https://www.blotto.gg/pools/${POOL_A}`);
     expect((await store.get(POOL_A, WALLET))?.email).to.equal(null);
     expect((await store.get(POOL_A, WALLET))?.sentAt?.toISOString()).to.equal('2026-09-17T03:00:00.000Z');
-    expect((await store.get(POOL_B, WALLET))?.email).to.equal('tom@example.com');
+    expect((await store.get(POOL_B, WALLET))?.email).to.equal('player@example.com');
     // No log line ever carries the address.
     expect(log.length).to.equal(2);
     for (const line of log) {
-      expect(line).to.not.include('tom@example.com');
-      expect(line).to.include('t***@example.com');
+      expect(line).to.not.include('player@example.com');
+      expect(line).to.include('p***@example.com');
     }
   });
 
@@ -154,7 +154,7 @@ describe('notify v2 — the dispatcher', () => {
     const first = await runNotifyDispatch(deps);
     expect(first.failed).to.equal(1);
     expect(first.waiting).to.equal(2);
-    expect((await store.get(POOL_A, WALLET))?.email).to.equal('tom@example.com');
+    expect((await store.get(POOL_A, WALLET))?.email).to.equal('player@example.com');
     sender.failing = false;
     expect((await runNotifyDispatch(deps)).sent).to.equal(1);
     expect((await store.get(POOL_A, WALLET))?.email).to.equal(null);
@@ -186,7 +186,7 @@ describe('notify v2 — the dispatcher', () => {
   });
 
   it('masks an address for logs', () => {
-    expect(maskAddress('tom@example.com')).to.equal('t***@example.com');
+    expect(maskAddress('player@example.com')).to.equal('p***@example.com');
     expect(maskAddress('nonsense')).to.equal('***');
   });
 });

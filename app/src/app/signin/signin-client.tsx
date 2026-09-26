@@ -67,7 +67,7 @@ const ICON_SOCIALS: Array<{ provider: SocialProvider; label: string; Mark: typeo
  *
  * Nothing in this repository can correct it; the full diagnosis, the captured
  * message and the costed alternatives are in
- * `docs/CHANGE-2026-09-24_signin-review.md`.
+ * `docs/guide/HOSTING.md`.
  *
  * TO RESTORE: set this to true. The handlers, the detection and the whole
  * `siwsSignIn` sequence are untouched and still under test — only the buttons

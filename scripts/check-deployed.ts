@@ -416,7 +416,7 @@ async function checkConfigAccount(
     detail: ok
       ? `${info.data.length} bytes — matches Config::SPACE`
       : info.data.length === CONFIG_SPACE_V2
-        ? `${info.data.length} bytes — the PRE-PHASE-B layout: run \`admin.ts migrate-config\` after the upgrade (docs/RUNBOOK_phase-b-window.md)`
+        ? `${info.data.length} bytes — the PRE-PHASE-B layout: run \`admin.ts migrate-config\` after the upgrade (docs/guide/OPERATING-MANUAL.md)`
         : info.data.length === CONFIG_SPACE_V1
           ? `${info.data.length} bytes — the original layout, which no current program can grow`
           : `${info.data.length} bytes on chain, source says Config::SPACE = ${CONFIG_SPACE}`,
@@ -648,7 +648,7 @@ async function main(): Promise<void> {
       `Rebuild and redeploy before running anything against it:\n` +
       `  anchor build\n` +
       `  solana program deploy target/deploy/blotto_cup.so --program-id ${programId.toBase58()} ...\n` +
-      `See docs/devnet-rehearsal-runbook.md (recovery notes) for the 2026-09-05 incident.`
+      `See docs/guide/OPERATING-MANUAL.md (recovery notes) for the 2026-09-05 incident.`
   );
   process.exitCode = 1;
 }

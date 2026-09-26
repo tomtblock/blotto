@@ -17,7 +17,7 @@
 //! thawed a whole collection once it reached the end of its launch lifecycle, so its
 //! NFTs could be listed and traded. That instruction is deliberately **not carried**,
 //! and neither is any part of the decision record that adopted it
-//! (`docs/reference/adr-027-collection-freeze-propagation.md` carries the propagation
+//! (`docs/architecture/adr/adr-027-collection-freeze-propagation.md` carries the propagation
 //! finding and explicitly drops the unfreeze half).
 //!
 //! The reason is the product's legal characterisation. PID §8.2 splits Blotto Cup
@@ -38,7 +38,7 @@
 //! with no member-level plugins, so it inherits the Collection-level freeze.
 //!
 //! This was verified empirically on devnet before the old repo relied on it; the
-//! run is carried at `docs/reference/q-016-verification-note.md`. Two findings from
+//! run is carried at `docs/architecture/adr/q-016-verification-note.md`. Two findings from
 //! it matter to anyone writing tests here:
 //!
 //! - A frozen-member transfer fails with **`InvalidAuthority` (`0x9`)**, not
@@ -78,7 +78,7 @@ use crate::state::{Pool, PoolState, PASS_COLLECTION_SEED, POOL_SEED};
 
 /// Metaplex Core program ID (`CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d`).
 /// Identical on devnet and mainnet (source:
-/// `docs/reference/q-016-verification-note.md`; also exported as `mpl_core::ID`).
+/// `docs/architecture/adr/q-016-verification-note.md`; also exported as `mpl_core::ID`).
 /// Hardcoded so the `address =` constraint does not depend on a cross-crate
 /// `Pubkey` reaching through the mpl-core facade.
 pub const MPL_CORE_ID: Pubkey = pubkey!("CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d");

@@ -1,7 +1,7 @@
 /*
  * The full journey against the FIXTURE backend (v3 D4): every moment a
  * player can reach without credentials, at 375px and 1280px, with the
- * screenshots the step report commits (docs/phase-reports/screenshots/).
+ * screenshots the step report commits (docs/testing/screenshots/).
  *
  * What is asserted here is the D2 contract, not pixels: the 18+/territory
  * line is visible on the landing viewport without scrolling; §8.6 renders
@@ -15,7 +15,7 @@ import { test, expect, type Page } from '@playwright/test';
 const POOL = 'F1XTUREPoo1111111111111111111111111111111111';
 /** The open HARD pool in the fixture catalogue (scenarios.ts, `hard-open`). */
 const HARD_POOL = 'F1XTUREhard111111111111111111111111111111111';
-const SHOTS = '../docs/phase-reports/screenshots/step-ui-arena';
+const SHOTS = '../docs/testing/screenshots/journey';
 
 const shot = (page: Page, name: string, project: string) =>
   page.screenshot({ path: `${SHOTS}/${name}-${project}.png`, fullPage: true });

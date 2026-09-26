@@ -10,7 +10,7 @@
  * takes no chain, constructs `new FakeChain()` itself, and returns that
  * concrete type so its callers can read `chain.paid` and `chain.escrowed`.
  * The devnet rehearsal is a different thing entirely: the DAEMON over
- * `Web3Chain` against a real cluster, described in docs/devnet-rehearsal.md
+ * `Web3Chain` against a real cluster, described in docs/guide/DEVNET-REHEARSAL.md
  * and driven by its runbook, not by this file.
  *
  * So what this is: the OFFLINE rehearsal that runs in CI — 20 pools, the

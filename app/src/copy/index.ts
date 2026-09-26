@@ -692,7 +692,7 @@ export const COPY = {
    * The founder's ruling of 2026-09-24 (5.3) asks for exactly that readout
    * in both modes — per field in easy, one total in hard. PHASE-N-REVIEW:
    * the ruling supersedes §4.2's sentence; recorded in
-   * docs/CHANGE-2026-09-24_battle-board.md for the PID reissue.
+   * docs/architecture/ARCHITECTURE.md for the PID reissue.
    */
   board: {
     modeEasy: 'Easy · 100 per battle',
@@ -1005,7 +1005,7 @@ export const COPY = {
   /*
    * THE TWO DOCUMENTS (2026-09-19), in their own modules because each is
    * long enough to read on its own and both are drafted against
-   * 01_PRODUCT_FACTS. Exported through here so the one-place rule holds and
+   * docs/compliance/PRODUCT-FACTS.md. Exported through here so the one-place rule holds and
    * so the language gate and the published-numbers gate scan them.
    */
   terms: TERMS,

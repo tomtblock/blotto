@@ -9,7 +9,7 @@
  * Blott stills) that had quietly gone dark because their only writer left.
  * None of it failed a build. Every gate here reports on what code SAYS; none
  * reported on whether anything still RAN it. The retirement is recorded in
- * docs/CHANGE-2026-09-24_battle-board.md §8–9; this makes the next one a
+ * docs/architecture/ARCHITECTURE.md §8–9; this makes the next one a
  * review comment on the change that orphans a file, not an audit months on.
  *
  * WHAT IT CHECKS. One rule, over the app's source (`app/src`, TypeScript and

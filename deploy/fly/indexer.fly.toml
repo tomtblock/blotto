@@ -1,7 +1,7 @@
 # Fly.io app config for the indexer service (E5). Frankfurt per TECH-ARCH §11
 # (EU region, never US). Deploy from the repo root:
 #   fly deploy --config deploy/fly/indexer.fly.toml
-# Secrets (fly secrets set ...): see docs/hosting.md — never in this file.
+# Secrets (fly secrets set ...): see docs/guide/HOSTING.md — never in this file.
 app = "blotto-indexer"
 primary_region = "fra"
 

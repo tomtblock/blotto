@@ -99,9 +99,8 @@ hits="$(
     --exclude-dir=target \
     --exclude-dir=.git \
     --exclude-dir=.next \
-    `# Historical by definition — docs/INDEX.md says so, and both are marked` \
-    `# non-authoritative in their own headers.` \
-    --exclude-dir=reference \
+    `# Historical by definition — docs/README.md says so, and it is marked` \
+    `# non-authoritative in its own header.` \
     --exclude-dir=archive \
     `# The founder's design-handoff folder (untracked; .gitignore keeps it out` \
     `# of the history, so CI never sees it — this guard is for local runs).` \
@@ -112,27 +111,8 @@ hits="$(
     `# The brief for counsel (docs/counsel-brief/). A document whose purpose` \
     `# is to put the statutory tests in front of a lawyer cannot avoid the` \
     `# statutory words, exactly as PID 8.7 cannot. It is dated, is quoted on` \
-    `# no player-facing surface, and INDEX.md says so.` \
+    `# no player-facing surface, and docs/README.md says so.` \
     --exclude-dir=counsel-brief \
-    `# The six source documents, copied verbatim. They are inputs to this` \
-    `# repository rather than content authored in it, and PID 8.7 necessarily` \
-    `# LISTS the words it forbids.` \
-    `#` \
-    `# The v0.6 DRAFT is here for the same reason: it reproduces v0.5's` \
-    `# section 8 word for word, which is the point of it -- the founder and` \
-    `# counsel diff a proposal against the document it would replace.` \
-    `# Everything the architect wrote in that file is clean; the two CARRIED` \
-    `# phrases that are not are flagged inside it.` \
-    --exclude=PID_Blotto-Cup_v0.5.md \
-    --exclude=PID_Blotto-Cup_v0.6-DRAFT.md \
-    --exclude=TECH-ARCHITECTURE_Blotto-Cup_v0.2.md \
-    --exclude=REPO-EXTRACTION-BRIEF_v1.1.md \
-    --exclude=REPO-TRANSITION-PLAYBOOK.md \
-    --exclude=BUILD-ROADMAP_v1.0.md \
-    `# The Phase 0 reports have to name the old product and the components that` \
-    `# were not carried in order to be useful.` \
-    --exclude=EXTRACTION-REPORT.md \
-    --exclude=TRANSITION-REPORT.md \
     `# These quote the forbidden list in order to forbid it — CONTRIBUTING` \
     `# and CLAUDE.md state the rule; the D-B7 step report documents which` \
     `# words were amended and to what. No other report gets this exclusion.` \
@@ -179,15 +159,8 @@ hits="$(
 camel_hits="$(
   grep -rnE "$PATTERN_CAMEL" . \
     --exclude-dir=node_modules --exclude-dir=target --exclude-dir=.git \
-    --exclude-dir=.next --exclude-dir=reference --exclude-dir=archive \
+    --exclude-dir=.next --exclude-dir=archive \
     --exclude-dir=handoff --exclude-dir=counsel-brief \
-    --exclude=PID_Blotto-Cup_v0.5.md \
-    --exclude=PID_Blotto-Cup_v0.6-DRAFT.md \
-    --exclude=TECH-ARCHITECTURE_Blotto-Cup_v0.2.md \
-    --exclude=REPO-EXTRACTION-BRIEF_v1.1.md \
-    --exclude=REPO-TRANSITION-PLAYBOOK.md \
-    --exclude=BUILD-ROADMAP_v1.0.md \
-    --exclude=EXTRACTION-REPORT.md --exclude=TRANSITION-REPORT.md \
     --exclude=CONTRIBUTING.md --exclude=CLAUDE.md \
     --exclude=step-vocabulary.md --exclude=check-language.sh \
     --exclude=LICENSE --exclude=Cargo.lock --exclude=package-lock.json \

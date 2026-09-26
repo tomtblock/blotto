@@ -49,7 +49,7 @@ use crate::state::{PLATFORM_SEED, VAULT_SEED};
 /// to leave a balance of 1, which the runtime rejects. The pot froze, the
 /// entrants went unpaid, and because the tier slot is freed only by
 /// `pay_prizes` or the two refund paths, that tier could never open another
-/// pool. `docs/internal-review.md` IR-3 had considered unsolicited donations
+/// pool. `docs/security/SECURITY-REVIEW.md` IR-3 had considered unsolicited donations
 /// and accepted them as harmless: true of this program's own logic, and not
 /// true of the runtime's.
 ///

@@ -27,13 +27,13 @@ const signer = { signMessage: async (m: Uint8Array) => new Uint8Array(64).fill(m
 describe('the one-message opt-in (notify v2)', () => {
   it('signs the canonical message and posts the four fields', async () => {
     const { fetchImpl, calls } = responder(204);
-    const out = await submitPoolNotify('https://svc', signer, WALLET, POOL, ' Tom@Example.com ', fetchImpl, () => 1_758_000_000n);
+    const out = await submitPoolNotify('https://svc', signer, WALLET, POOL, ' Player@Example.com ', fetchImpl, () => 1_758_000_000n);
     expect(out).toBe('ok');
     expect(calls[0]?.url).toBe('https://svc/notify/pool');
     const body = JSON.parse(String(calls[0]?.init?.body)) as Record<string, string>;
     expect(body.wallet).toBe(WALLET);
     expect(body.pool).toBe(POOL);
-    expect(body.email).toBe('Tom@Example.com');
+    expect(body.email).toBe('Player@Example.com');
     expect(body.atUnix).toBe('1758000000');
     expect(Buffer.from(body.signature, 'base64')).toHaveLength(64);
   });

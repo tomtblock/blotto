@@ -5,12 +5,11 @@
 //! executing validator's slot began, so the validator processing `register`
 //! has no influence over it — combined with the pool-committed VRF seed, the
 //! outcome is neither predictable at submission nor manipulable at execution
-//! (the carried ADR-026 reasoning, `docs/reference/adr-026-multi-source-randomness.md`).
+//! (the carried ADR-026 reasoning, `docs/architecture/adr/adr-026-multi-source-randomness.md`).
 //!
 //! The `SlotHashes` sysvar exceeds the size the `Sysvar` trait can load via
 //! syscall, so it is read as raw account data with an `address =` constraint
-//! pinning the account to the real sysvar (the pattern the predecessor proved;
-//! see EXTRACTION-REPORT.md §4's note).
+//! pinning the account to the real sysvar (the pattern the predecessor proved).
 //!
 //! # Layout
 //!

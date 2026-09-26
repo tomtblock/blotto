@@ -8,7 +8,7 @@
  * event decoder and, beside it, this program's own event layouts.
  *
  * NOT carried, and deliberately absent: that product's progression maths, its wallet
- * account decoding, and its per-event decoders. See EXTRACTION-REPORT.md.
+ * account decoding, and its per-event decoders.
  */
 
 export {

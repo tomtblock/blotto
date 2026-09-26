@@ -1,7 +1,7 @@
 //! Program constants.
 //!
 //! Every value here traces to the PID, TECH-ARCH, or the ratified decision
-//! register in `docs/BUILD-ROADMAP_v1.0.md` (CLAUDE.md: never invent values).
+//! register in `docs/architecture/DECISIONS.md` (CLAUDE.md: never invent values).
 //! The one derived table — the prize bands — shows its derivation inline.
 
 /// Seats per pool (PID §2, TECH-ARCH §2).

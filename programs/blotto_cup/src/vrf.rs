@@ -39,7 +39,7 @@
 //! the same slot the oracle revealed it. In practice the caller bundles the
 //! Switchboard `reveal` instruction and this `commit_vrf_seed` instruction in one
 //! transaction so that `Clock::slot == reveal_slot` holds. If the reveal never lands
-//! (`docs/reference/threat-tm-502.md`), `get_value` errors and the whole transaction
+//! (`docs/architecture/adr/threat-tm-502.md`), `get_value` errors and the whole transaction
 //! reverts atomically — no half-committed seed.
 //!
 //! # Residual risk — no payload binding (TM-502)

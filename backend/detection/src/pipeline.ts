@@ -6,7 +6,7 @@
  *
  * ── NOTHING HERE ACTS. THIS IS A REPORT. ──────────────────────────────────
  *
- * Founder ruling D-E9 (2026-09-12, `docs/BUILD-ROADMAP_v1.0.md`): detection
+ * Founder ruling D-E9 (2026-09-12, `docs/architecture/DECISIONS.md`): detection
  * is MANUAL. Every report is persisted (`reports.ts`, migration 0021) and
  * surfaced to the reviewer before the review window closes (`GET /detection`
  * in `server.ts`); no signal takes an automatic action. A flag is a

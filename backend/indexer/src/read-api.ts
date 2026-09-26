@@ -182,7 +182,7 @@ function poolRow(r: Record<string, unknown>, now: Now): Json {
     // property of the data: **`admin.ts pools --upgrade-preflight` refuses
     // the program upgrade while any pool is Open**, so no pool is ever open
     // across a change to the floor, so every live pool's stored floor IS
-    // this constant. `docs/RUNBOOK_r7b-upgrade.md` is where the rule is
+    // this constant. `docs/guide/OPERATING-MANUAL.md` is where the rule is
     // carried out and says why.
     //
     // An earlier version of this comment justified the shortcut differently

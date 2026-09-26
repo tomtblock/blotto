@@ -93,7 +93,7 @@ export function drainVerdict(rows: readonly PoolRow[], upgradePreflight: boolean
             'A pool open across the upgrade keeps the floor it opened with, ' +
             'which the site does not read. Wait for it to close, stop the ' +
             'daemon so the next one cannot open, then re-run. ' +
-            'docs/RUNBOOK_r7b-upgrade.md'
+            'docs/guide/OPERATING-MANUAL.md'
     );
   }
 

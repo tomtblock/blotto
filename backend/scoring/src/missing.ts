@@ -7,7 +7,7 @@
  * `register` credits 100% of an entry to the treasury, the pot is a fixed
  * constant funded from the treasury at `open_pool`, and the 80/20 split is
  * gone (state.rs PLATFORM_SEED, prize_math.rs, and the TECH-ARCH divergence
- * list in docs/INDEX.md).
+ * list in docs/README.md).
  *
  * Made precise here, because "all losses" needs a definition players can
  * recompute (tradeoff order #3):

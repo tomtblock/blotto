@@ -19,13 +19,13 @@
  *    `config/territories.json` carries today.
  *
  *    Until 2026-09-12 that was recorded in prose here and in
- *    TRANSITION-REPORT.md's accepted gap, and nothing in the code enforced
+ *    the Phase 0 record's accepted gap, and nothing in the code enforced
  *    it: a `"US-NY"` line could be added to the schedule and would admit
  *    every person it named, silently, because the region never arrives
  *    (audit 2026-09-11, C-30). `resolvesRegion = false` is that prose made
  *    mechanical — `assertRegionCapability` (service.ts) refuses to start a
  *    service whose schedule carries a sub-national rule this adapter cannot
- *    enforce, which is the boot assertion TRANSITION-REPORT.md asked for,
+ *    enforce, which is the boot assertion the Phase 0 record asked for,
  *    and `issuePacket` refuses the individual entry as a second line. A
  *    future adapter that does return ISO 3166-2 codes declares
  *    `resolvesRegion = true` and both checks pass.
