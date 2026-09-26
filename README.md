@@ -1,3 +1,5 @@
+> **ARCHIVE BRANCH — PRIVATE.** A frozen snapshot of the repository before the public cleanup of 2026-09-26. Start at [ARCHIVE-INDEX.md](ARCHIVE-INDEX.md). The current project lives on `main`.
+
 # Blotto Cup
 
 A paid-entry skill competition on Solana.
