@@ -25,7 +25,7 @@ import { ResultsReveal, VerifyAlways, type RevealRow } from './results-reveal';
 import { ArchiveStandings } from './archive-standings';
 import { AllBattles } from './all-battles';
 import { WhatBeatYouPanel } from './what-beat-you-panel';
-import { ShareResult } from './share-result';
+import { YourResult } from './your-result';
 import { PaidConfetti } from './paid-confetti';
 import { ChallengeClient } from './challenge-client';
 
@@ -116,6 +116,11 @@ export default async function ResultsPage({ params }: { params: Promise<{ pool: 
           </NeonSection>
         ) : (
           <>
+            {/* V2 (founder 2026-09-27): the signed-in entrant's own result
+                first — position, battles won, the leaderboard / verify /
+                share keys, the replay — then the pool's. Renders only under
+                a verified archive, for a wallet in it. */}
+            <YourResult pool={pool.pool} poolId={pool.id} archive={archive} />
             <NeonSection heading={COPY.results.title} data-testid="results-box">
               <div className="rounded-2xl border border-white/10 bg-white/5 p-1">
                 <ResultsReveal rows={rows} />
@@ -123,14 +128,6 @@ export default async function ResultsPage({ params }: { params: Promise<{ pool: 
               <p className="mt-4 max-w-prose text-[13px] leading-5 text-ink-muted">
                 {COPY.results.tieNote}
               </p>
-              {/* The player's own result card, once results are in. */}
-              <div className="mt-5">
-                <ShareResult
-                  pool={pool.pool}
-                  seatByPlayer={Object.fromEntries(entries.map((e) => [e.player, e.idx]))}
-                  paidSeats={results.filter((r) => BigInt(r.amount) > 0n).map((r) => r.seat)}
-                />
-              </div>
             </NeonSection>
             {/* v3 D3: browser-side decrypt + re-score of the seats above
                 yours, and the share card for your own result. */}

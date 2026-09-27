@@ -39,7 +39,7 @@ const ABSENT = '—';
  * recomputed score is missing shows the same dash an unknown entry number
  * does — the rank and prize beside it are still the chain's.
  */
-function battleScoreLabel(scoreHalf: number | null | undefined): string {
+export function battleScoreLabel(scoreHalf: number | null | undefined): string {
   if (typeof scoreHalf !== 'number' || !Number.isInteger(scoreHalf)) return ABSENT;
   const whole = Math.floor(scoreHalf / 2);
   return scoreHalf % 2 === 0 ? String(whole) : `${whole}.5`;
@@ -52,7 +52,7 @@ export function ArchiveStandings({ archive }: { archive: PoolLeaderboard }) {
   return (
     // Round four A2 (founder 2026-09-17): the standings are a titled neon box
     // like every block on the pink field; the table sits inside it.
-    <NeonSection heading={COPY.results.archive.title} data-testid="archive-standings">
+    <NeonSection id="standings" heading={COPY.results.archive.title} data-testid="archive-standings">
       {winners.length > 0 && (
         <p className="mb-3 text-[17px] font-semibold text-prize">
           {winners

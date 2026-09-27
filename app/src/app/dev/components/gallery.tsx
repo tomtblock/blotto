@@ -18,7 +18,7 @@ import { ToastProvider, useToast } from "@/components/ui/toast";
 import { Sheet } from "@/components/ui/sheet";
 import { NeonSection } from "@/components/ui/neon-section";
 import { NotificationsPanel, itemFor } from "@/components/shell/notifications";
-import { FIXTURE_CAREER } from "@/data/scenarios";
+import { FIXTURE_CAREER, SCENARIOS } from "@/data/scenarios";
 import { BlotMorph } from "@/components/blot/BlotMorph";
 import { SHAPE_REFERENCES } from "@/components/blot/blotGeometry";
 import { EVEN_SPLIT, type Allocation } from "@/battle/allocation";
@@ -223,17 +223,18 @@ export function Gallery() {
           </Sheet>
         </Section>
 
-        <Section title="Notifications (round four A2)">
+        <Section title="Notifications (V2, sketch G)">
           {/* The sheet's body over the fixture career, which holds a paid pool:
-              the win headline over the trophy, then the list. */}
+              the clip, then the table — the win in gold, one row already
+              opened, the rest New. */}
           <div className="max-w-lg">
             <NeonSection heading="Notifications" data-testid="notifications-demo">
               <NotificationsPanel
                 items={FIXTURE_CAREER.flatMap((row) => {
-                  const item = itemFor(row);
+                  const item = itemFor(row, SCENARIOS.find((s) => s.summary.pool === row.pool)?.summary.fill_deadline ?? null);
                   return item ? [item] : [];
                 })}
-                win={itemFor(FIXTURE_CAREER[0])}
+                seen={new Set([`${FIXTURE_CAREER[1]!.pool}:${FIXTURE_CAREER[1]!.state}`])}
               />
             </NeonSection>
           </div>
