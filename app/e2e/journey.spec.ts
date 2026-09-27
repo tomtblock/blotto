@@ -24,7 +24,7 @@ test('landing: montage hero, the choose-your-pool control, the 18+ line above th
   await page.goto('/');
   // V3 (founder 2026-09-27): the founder's three lines.
   await expect(page.getByTestId('hero-lines')).toHaveText(
-    'Sixty Four Seats. Seven Battlefields.Everyone Battles Everyone.The winner takes the prize pool.'
+    'Sixty Four Seats. Seven Battlefields.Everyone battles everyone.The winner takes the prize pool.'
   );
   // Founder 2026-09-09: the hero is the full-bleed montage. V2 (founder
   // 2026-09-27): with two boards the hero's control cannot name a pool, so

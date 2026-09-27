@@ -13,7 +13,10 @@
  * mode, and Post on X opens the intent with the founder's line and
  * nothing else — the pass PNG that downloaded beside it ("looks like a
  * virus") and the note that explained it are gone, with the canvas that
- * drew it. What is posted is the pool and the seat: nothing sealed.
+ * drew it. What is posted is the pool and the seat: nothing sealed. V4:
+ * from the sm breakpoint the "Sealed" card and the three keys stand to
+ * the RIGHT of the pass, spread over its full height; on a phone they
+ * stack under it.
  *
  * THE OPT-IN. A social sign-in that carries an address is one press; a
  * wallet or X sign-in is asked for one. Either way the wallet signs the
@@ -105,7 +108,7 @@ export function EnteredPanel({
   }, [email, send]);
 
   return (
-    <section aria-live="polite" className="animate-settle mx-auto flex w-full max-w-lg flex-col gap-4" data-testid="entered-panel">
+    <section aria-live="polite" className="animate-settle mx-auto grid w-full max-w-3xl grid-cols-1 gap-4 sm:grid-cols-2 sm:items-stretch" data-testid="entered-panel">
       <Card tone="light" className="text-center" data-testid="pass-card">
         {/* The petals, where the trophy Blott stood — the clip's own 4:5 frame. */}
         <div className="relative aspect-[4/5] max-h-[56vh] w-full overflow-hidden bg-brand-berry">
@@ -122,6 +125,7 @@ export function EnteredPanel({
         </div>
       </Card>
 
+      <div className="flex flex-col justify-between gap-4">
       <Card className="p-5">
         <h2 className="font-display text-[28px] leading-8 font-extrabold text-ink">{r.sealedTitle}</h2>
         <p className="mt-2 text-[14px] leading-5 text-ink-muted">{COPY.pool.checkBack(Number(MIN_SEATS))}</p>
@@ -202,6 +206,7 @@ export function EnteredPanel({
         >
           {r.playAgain}
         </Link>
+      </div>
       </div>
     </section>
   );

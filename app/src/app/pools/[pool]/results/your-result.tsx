@@ -94,7 +94,10 @@ export function YourResult({ pool, poolId, archive }: { pool: string; poolId: st
         </div>
         <div>
           <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-ink-muted">{r.battlesWon}</p>
-          <p className="tnum font-display text-[32px] leading-none font-bold text-ink">{r.battlesWonOf(battleScoreLabel(me.recomputed?.score_half))}</p>
+          {/* V4: out of every battle fought — seven against each other seat. */}
+          <p className="tnum font-display text-[32px] leading-none font-bold text-ink">
+            {r.battlesWonOf(battleScoreLabel(me.recomputed?.score_half), 7 * Math.max(0, archive.rows.length - 1))}
+          </p>
         </div>
         {me.amount_lamports !== '0' ? (
           <p className="text-[14px] font-semibold text-prize">{r.paid}</p>
@@ -105,20 +108,23 @@ export function YourResult({ pool, poolId, archive }: { pool: string; poolId: st
         <a href="#standings" className={KEY_CREAM} data-testid="your-result-leaderboard">
           {r.leaderboard}
         </a>
-        <Link href={verifyHref} className={KEY_QUIET} data-testid="your-result-verify">
-          {r.verify}
-        </Link>
-        <button
-          type="button"
-          aria-expanded={explain}
-          aria-label={r.verifyWhat}
-          title={r.verifyWhat}
-          onClick={() => setExplain((e) => !e)}
-          className="grid h-9 w-9 place-items-center rounded-full border border-white/25 font-display text-[16px] font-bold text-ink hover:border-brand hover:text-brand"
-          data-testid="your-result-verify-why"
-        >
-          ?
-        </button>
+        {/* V4: the "?" is a small key riding on Verify pool's shoulder. */}
+        <span className="inline-flex items-center gap-1">
+          <Link href={verifyHref} className={KEY_QUIET} data-testid="your-result-verify">
+            {r.verify}
+          </Link>
+          <button
+            type="button"
+            aria-expanded={explain}
+            aria-label={r.verifyWhat}
+            title={r.verifyWhat}
+            onClick={() => setExplain((e) => !e)}
+            className="grid h-6 w-6 place-items-center rounded-full border border-white/30 font-display text-[12px] font-bold text-ink-muted hover:border-brand hover:text-brand"
+            data-testid="your-result-verify-why"
+          >
+            ?
+          </button>
+        </span>
         <button type="button" onClick={shareOnX} className={KEY_QUIET} data-testid="your-result-share-x">
           {r.shareX}
         </button>

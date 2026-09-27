@@ -89,6 +89,8 @@ export function PoolPicker({ tiers, serverTime }: { tiers: readonly PickerTier[]
   // they sit IN the card (V3: the plum numbers box read as pasted on).
   const box = dark ? 'rounded-[18px] border border-white/15 bg-[#2e1134]' : 'rounded-[18px] border border-brand-berry/15 bg-[#f8e8dc]';
   const well = dark ? 'bg-[#2e1134]' : 'bg-[#f8e8dc]';
+  /* The numbers box's inner rules (V4). */
+  const rule = dark ? 'border-white/15' : 'border-brand-berry/15';
   const stripe = dark ? 'bg-brand-hot' : 'bg-brand-yellow';
   const chip = dark ? 'bg-brand-hot text-[#1f0a24]' : 'bg-brand-berry text-brand-cream';
   const prize = dark ? 'text-brand-yellow' : 'text-brand-deep-magenta';
@@ -188,37 +190,39 @@ export function PoolPicker({ tiers, serverTime }: { tiers: readonly PickerTier[]
                 <p className="text-[15px] leading-5 font-medium">{words.best}</p>
               </div>
 
-              {/* The numbers box fills what is left of the clip's height. */}
+              {/* The numbers box fills what is left of the clip's height (V4:
+                  the prize and the clock large on the top line, the entry
+                  and the seats smaller below, every cell ruled). */}
               {pool ? (
-                <div className={`grid flex-1 grid-cols-2 content-center gap-x-6 gap-y-4 px-4 py-4 ${box}`}>
-                  <div className="flex flex-col gap-0.5">
+                <div className={`grid flex-1 grid-cols-2 grid-rows-[auto_auto] content-stretch overflow-hidden ${box} ${dark ? 'border-white/25' : 'border-brand-berry/30'}`} data-testid="pool-picker-numbers">
+                  <div className={`flex flex-col justify-center gap-0.5 border-r border-b px-4 py-3 ${rule}`}>
                     <span className={`${LABEL} ${muted}`}>{COPY.pool.prizeLabel}</span>
-                    <span className={`tnum font-display text-[40px] leading-[42px] font-extrabold ${prize}`}>
+                    <span className={`tnum font-display text-[42px] leading-[44px] font-extrabold ${prize}`}>
                       {lamportsToSol(pool.pot_lamports)}
-                      <span className="ml-1.5 font-body text-[14px] font-medium">SOL</span>
+                      <span className="ml-1.5 font-body text-[15px] font-medium">SOL</span>
                     </span>
                   </div>
-                  <div className="flex flex-col gap-0.5">
-                    <span className={`${LABEL} ${muted}`}>{COPY.pool.entryLabel}</span>
-                    <span className="tnum font-display text-[26px] leading-[30px] font-extrabold">
-                      {lamportsToSol(pool.entry_lamports)}
-                      <span className={`ml-1 font-body text-[12px] font-medium ${muted}`}>SOL</span>
-                    </span>
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    <span className={`${LABEL} ${muted}`}>{COPY.landing.seatsLabel}</span>
-                    <span className="tnum font-display text-[26px] leading-[30px] font-extrabold">
-                      {pool.entrants}
-                      <span className={`ml-1 font-body text-[12px] font-medium ${muted}`}>/ 64</span>
-                    </span>
-                  </div>
-                  <div className="[&_span]:font-mono [&_span]:text-[10px] [&_span]:font-bold [&_span]:tracking-[0.12em] [&_time]:text-[26px] [&_time]:leading-[30px] [&_time]:font-extrabold">
+                  <div className={`flex flex-col justify-center border-b px-4 py-3 ${rule} [&_span]:font-mono [&_span]:text-[10px] [&_span]:font-bold [&_span]:tracking-[0.12em] [&_time]:text-[38px] [&_time]:leading-[44px] [&_time]:font-extrabold`}>
                     <Countdown
                       deadlineUnix={pool.fill_deadline}
                       serverTimeUnix={serverTime ?? pool.server_time}
                       label={COPY.landing.closesIn}
                       tone="inherit"
                     />
+                  </div>
+                  <div className={`flex flex-col justify-center gap-0.5 border-r px-4 py-2.5 ${rule}`}>
+                    <span className={`${LABEL} ${muted}`}>{COPY.pool.entryLabel}</span>
+                    <span className="tnum font-display text-[20px] leading-6 font-extrabold">
+                      {lamportsToSol(pool.entry_lamports)}
+                      <span className={`ml-1 font-body text-[11px] font-medium ${muted}`}>SOL</span>
+                    </span>
+                  </div>
+                  <div className="flex flex-col justify-center gap-0.5 px-4 py-2.5">
+                    <span className={`${LABEL} ${muted}`}>{COPY.landing.seatsLabel}</span>
+                    <span className="tnum font-display text-[20px] leading-6 font-extrabold">
+                      {pool.entrants}
+                      <span className={`ml-1 font-body text-[11px] font-medium ${muted}`}>/ 64</span>
+                    </span>
                   </div>
                 </div>
               ) : (

@@ -172,6 +172,11 @@
 .home-card--hot {
   box-shadow: var(--glow-home-hot), var(--elevation-home);
 }
+/* V4 (founder 2026-09-27): the demo board and the How it works card settle
+ * without the glow — the yellow tinge belongs to the entry card alone. */
+.home-card--plain {
+  box-shadow: var(--elevation-home);
+}
 
 /* The gloss: one soft cream highlight where a rounded surface faces the
  * light. Applied by the Card, never by hand. */
