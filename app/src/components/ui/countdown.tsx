@@ -36,6 +36,12 @@ export interface CountdownProps {
   now?: () => number;
   /** lg matches Stat's lg — the pool page's fixture numbers (2026-09-16). */
   size?: "md" | "lg";
+  /**
+   * `ink` (default) is the plum surfaces' cream. `inherit` takes the colour
+   * of the text around it — the home card's numbers box (V3), which is cream
+   * or plum with the card.
+   */
+  tone?: "ink" | "inherit";
 }
 
 interface Remaining {
@@ -66,6 +72,7 @@ export function Countdown({
   label,
   now = Date.now,
   size = "md",
+  tone = "ink",
 }: CountdownProps) {
   const deadline = Number(deadlineUnix);
   const serverTime = serverTimeUnix === undefined ? null : Number(serverTimeUnix);
@@ -100,14 +107,16 @@ export function Countdown({
     <div className="flex flex-col gap-1">
       {label ? (
         <span
-          className={`${size === "lg" ? "text-[13px]" : "text-[12px]"} uppercase tracking-[0.14em] text-ink-muted`}
+          className={`${size === "lg" ? "text-[13px]" : "text-[12px]"} uppercase tracking-[0.14em] ${
+            tone === "inherit" ? "opacity-70" : "text-ink-muted"
+          }`}
         >
           {label}
         </span>
       ) : null}
       <time
         className={
-          "tnum font-display text-ink " +
+          `tnum font-display ${tone === "inherit" ? "" : "text-ink "}` +
           (size === "lg" ? "text-[40px] leading-[44px] font-extrabold" : "text-[24px] leading-[30px] font-bold")
         }
       >

@@ -255,11 +255,12 @@ Seven fields around a castle, five troops (one per stat). Rules from `mode.ts`, 
 Two `fast-check` properties run 10,000 random event sequences per mode and assert every state and
 every submitted board is legal (`machine.test.ts`, `spread.test.ts`).
 
-**Where each mode shows.** The landing page shows one card per open pool — easy on the left, hard
-on the right — each with its own seat ring, pot, entry price and deadline clock. When the hard ladder
-is enabled but no hard pool is open, the right card reads "Opens soon"; when it is not enabled, the
-page shows one card. The pool, pools-index, results and verify pages all name the mode. The read
-API serves `mode` (`'easy' | 'hard'`) per pool and the hard ladder per tier under `GET /tiers`.
+**Where each mode shows.** The landing page has one entry card (`components/landing/PoolPicker.tsx`)
+with an Easy / Hard toggle and a tier filter; the card shows the chosen pool's own pot, entry, seats
+and deadline clock. When the hard ladder is enabled but no hard pool is open at that tier, the hard
+side reads "Opens soon"; a tier the founder has not opened is listed greyed as "Not open yet". The
+pool, pools-index, results and verify pages all name the mode. The read API serves `mode`
+(`'easy' | 'hard'`) per pool and the hard ladder per tier under `GET /tiers`.
 
 ## 5. Sealing
 

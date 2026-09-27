@@ -22,14 +22,16 @@ const shot = (page: Page, name: string, project: string) =>
 
 test('landing: montage hero, the choose-your-pool control, the 18+ line above the fold', async ({ page }, info) => {
   await page.goto('/');
-  await expect(
-    page.getByText('Sixty-four seats. Seven battles. The winner takes the prize pool.')
-  ).toBeVisible();
+  // V3 (founder 2026-09-27): the founder's three lines.
+  await expect(page.getByTestId('hero-lines')).toHaveText(
+    'Sixty Four Seats. Seven Battlefields.Everyone Battles Everyone.The winner takes the prize pool.'
+  );
   // Founder 2026-09-09: the hero is the full-bleed montage. V2 (founder
   // 2026-09-27): with two boards the hero's control cannot name a pool, so
-  // it takes the player to the picker.
+  // it takes the player to the picker. V3: How it works between the two.
   await expect(page.locator('video[poster*="hero_montage"]')).toHaveCount(1);
   await expect(page.getByTestId('hero-choose')).toBeVisible();
+  await expect(page.getByTestId('hero-how')).toHaveAttribute('href', '#how');
   // v3 D2: 18+/territory visible WITHOUT SCROLLING at this viewport.
   // The hero's own line is the first of several on the page.
   const note = page.getByText('18+ only · not available in some territories').first();
@@ -49,6 +51,8 @@ test('landing: one picker, Easy / Hard toggle, each side down its own pool (V2)'
   await expect(picker.getByTestId('pool-picker-state')).toContainText('Open now');
   await expect(picker.getByText('Closes in')).toBeVisible();
   await expect(picker.getByTestId('pool-picker-enter')).toHaveAttribute('href', new RegExp(`/pools/${POOL}$`));
+  // V3: Enter for real beside the demo goes to the same easy pool.
+  await expect(page.getByTestId('demo-enter')).toHaveAttribute('href', new RegExp(`/pools/${POOL}$`));
   // Hard: the card changes colour and its control lands on THAT pool.
   await picker.getByTestId('pool-picker-mode-hard').click();
   await expect(picker).toHaveAttribute('data-mode', 'hard');

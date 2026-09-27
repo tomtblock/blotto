@@ -66,6 +66,11 @@
 .bba--demo .bba-stage {
   height: clamp(360px, 56vh, 560px);
 }
+/* V3 (founder 2026-09-27): on the landing the board is one of the home's
+ * cards and wears their settled glow (tokens.css) under its own wood edge. */
+.bba--demo {
+  box-shadow: 0 4px 0 var(--wood-2), var(--glow-home-yellow), var(--elevation-home);
+}
 /* V2 (founder 2026-09-27): on a desktop the board is the whole screen. The
  * play page's column is narrow (the gates read best that way), so the board
  * breaks out of it against the play field's inline size (`100cqw`,

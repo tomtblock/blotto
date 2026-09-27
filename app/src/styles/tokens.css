@@ -157,6 +157,20 @@
   --elevation-key-action-down: 0 1px 0 var(--color-brand-deep), 0 3px 8px rgba(42, 16, 48, 0.22);
   --elevation-key-prize: 0 4px 0 var(--color-blot-shade), 0 10px 20px rgba(42, 16, 48, 0.28);
   --elevation-key-prize-down: 0 1px 0 var(--color-blot-shade), 0 3px 8px rgba(42, 16, 48, 0.22);
+  /* THE HOME'S CARDS (V3, founder 2026-09-27, "Colour palette and box
+   * shadow"): every card on the landing sits settled on the pink under one
+   * soft glow — yellow under the easy card and every other card, hot pink
+   * under the hard card — over a berry-tinted drop. Never black. */
+  --elevation-home: 0 18px 44px rgba(94, 27, 64, 0.28), 0 4px 12px rgba(94, 27, 64, 0.14);
+  --glow-home-yellow: 0 0 0 1px rgba(255, 222, 89, 0.45), 0 0 48px rgba(255, 222, 89, 0.55);
+  --glow-home-hot: 0 0 0 1px rgba(214, 60, 140, 0.5), 0 0 48px rgba(214, 60, 140, 0.55);
+}
+
+.home-card {
+  box-shadow: var(--glow-home-yellow), var(--elevation-home);
+}
+.home-card--hot {
+  box-shadow: var(--glow-home-hot), var(--elevation-home);
 }
 
 /* The gloss: one soft cream highlight where a rounded surface faces the

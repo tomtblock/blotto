@@ -17,14 +17,19 @@
 import { PRIVACY } from './privacy';
 import { TERMS } from './terms';
 
+/*
+ * The hero's lines (founder wording, V3 2026-09-27), one per line on the
+ * landing. Joined, they are the shell's tagline (the <title>).
+ */
+const HERO_LINES = ['Sixty Four Seats. Seven Battlefields.', 'Everyone Battles Everyone.', 'The winner takes the prize pool.'] as const;
+
 export const COPY = {
   shell: {
     title: 'Blotto Cup',
-    // D-E2 (ratified 2026-09-06): one paid place. Drafts pending founder
-    // voice; the substance — one winner, a fixed prize pool, recomputable
-    // results — is the register speaking. No multiple, ever (proposal E1
-    // §2.5's copy constraint).
-    tagline: 'Sixty-four seats. Seven battles. The winner takes the prize pool.',
+    // D-E2 (ratified 2026-09-06): one paid place. The substance — one
+    // winner, a fixed prize pool, recomputable results — is the register
+    // speaking. No multiple, ever (proposal E1 §2.5's copy constraint).
+    tagline: HERO_LINES.join(' '),
     metaDescription:
       'Up to sixty-four players enter, each sets seven sealed battles of five stats — 100 points a battle, or 700 placed anywhere in a hard pool. ' +
       'The player ranked first takes a fixed prize pool, and every result is recomputable from published data.',
@@ -464,6 +469,7 @@ export const COPY = {
     // Founder 2026-09-27: the hero title, two lines. The break is the
     // founder's; the h1 renders it with `whitespace-pre-line`.
     heroTitle: 'Battle ready\nBlotts',
+    heroLines: HERO_LINES,
     // Founder 2026-09-27: with two boards open the hero's button cannot say
     // which pool, so it takes the player to the picker instead.
     chooseYourPool: 'Choose your pool ↓',
@@ -472,6 +478,8 @@ export const COPY = {
     tryBoard: 'Try the board',
     demoBoardHint:
       'Tap a troop, press and hold a field. Nothing to sign, nothing to pay: this one is just to feel it. A real entry plays the same board with a three-minute clock.',
+    // V3 (founder 2026-09-27): beside the demo, straight into the easy flow.
+    enterForReal: 'Enter for real',
     /*
      * V2 (founder 2026-09-27, Figma Concept A as ONE card): a single
      * full-width card with an Easy / Hard toggle and a tier filter. The
@@ -500,34 +508,22 @@ export const COPY = {
     seatsLabel: 'Seats',
     enterEasy: 'Enter the easy pool',
     enterHard: 'Enter the hard pool',
-    tryBoardFirst: 'Try this board free first →',
-    howItPlays: 'How it plays',
     bestFor: 'Best for',
-    entryLooksLike: 'What an entry looks like',
+    // V3 (founder 2026-09-27, the Example Entry Card sketch): the card says
+    // the mode in one line and who it is for; the diagram and the "How it
+    // plays" list are gone.
     board: {
       easy: {
         name: 'Easy',
         title: '100 per battle',
         one: 'Seven battles. Every battle gets exactly 100 points to split across your five troops.',
-        how: [
-          'Split 100 points across Strength, Speed, Heart, Wit and Durability — in each of the seven battles.',
-          'Every battle is a full-strength fight. Your call is where each one is strong.',
-          'The place to start if this is your first entry.',
-        ],
         best: 'Your first entry, or anyone who wants seven even fights.',
-        caption: 'Example entry: every battle holds exactly 100.',
       },
       hard: {
         name: 'Hard',
         title: '700 anywhere',
         one: 'Seven battles. One budget of 700 points — stack a battle, leave another with nothing.',
-        how: [
-          'Place 700 points anywhere across the seven battles. Any stat, any battle, 0 to 700.',
-          'A battle can hold nothing: give it up to make another one stronger.',
-          'Same five stats, same three-minute clock, same scoring. A bigger decision.',
-        ],
         best: 'Players who know the board and want to choose which battles to win.',
-        caption: 'Example entry: 700 in total. B1 and B5 hold nothing; B2 holds 210.',
       },
     },
   },
