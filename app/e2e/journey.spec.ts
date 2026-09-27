@@ -169,9 +169,12 @@ test('pools, results (uncommitted), rules, custody, verify all render', async ({
   await expect(page.getByText('Results are not committed yet.')).toBeVisible();
   await expect(page.getByRole('link', { name: 'Verify a pool' })).toBeVisible();
 
-  await page.goto('/rules');
+  // V2: the rules sit on a tab strip; a hash opens its tab.
+  await page.goto('/rules#scoring');
   await expect(page.getByRole('heading', { name: 'Rules', exact: true })).toBeVisible();
   await expect(page.getByText('three or more of its five stats')).toBeVisible();
+  await page.getByRole('tab', { name: 'Ties' }).click();
+  await expect(page.getByText('Entry order plays no part in ranking')).toBeVisible();
   await shot(page, 'rules', info.project.name);
 
   await page.goto('/custody');

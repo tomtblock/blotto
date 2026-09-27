@@ -6,6 +6,11 @@
  * config/territories.json. Strings live in the copy module. Under D-E2 the
  * per-tier table (entry → prize pool) is the only table: the winner takes
  * the pool, so there is no per-position table to render.
+ *
+ * V2 (founder 2026-09-27: "tab and toggle rather than a long page"): the
+ * sections sit on a tab strip (components/ui/tabs), one at a time or, with
+ * "Read as one page", all in order. Every section's content is in the
+ * server HTML either way; a link like /rules#availability opens its tab.
  */
 import Link from 'next/link';
 import { COPY } from '@/copy';
@@ -13,8 +18,8 @@ import { AppHeader } from '@/components/shell/app-header';
 import { TabBar } from '@/components/shell/tab-bar';
 import { SiteFooter } from '@/components/shell/site-footer';
 import { PageIntro } from '@/components/ui/page-intro';
-import { NeonSection } from '@/components/ui/neon-section';
-import { rulesSections, type TierRow } from './rules.config';
+import { Tabs } from '@/components/ui/tabs';
+import { rulesSections, type RulesSection, type TierRow } from './rules.config';
 
 function TierPriceTable({ rows }: { rows: TierRow[] }) {
   const h = COPY.rules.tableHeadings;
@@ -44,88 +49,99 @@ function TierPriceTable({ rows }: { rows: TierRow[] }) {
   );
 }
 
+/** One section's body — the plum box, headed by the section's own heading. */
+function RuleSection({ s }: { s: RulesSection }) {
+  return (
+    <div className="neon-box p-5 sm:p-6" data-testid={`rules-${s.id}`}>
+      <h3 className="mb-2 font-display text-[22px] leading-7 font-bold text-ink">{s.heading}</h3>
+      <p className="max-w-prose text-[15px] leading-6 text-ink-muted">{s.body}</p>
+      {s.kind === 'text' && s.appendix && (
+        <p className="mt-2 max-w-prose text-[15px] leading-6 text-ink-muted">{s.appendix}</p>
+      )}
+      {s.kind === 'tiers' && (
+        <div className="mt-3">
+          <TierPriceTable rows={s.rows} />
+        </div>
+      )}
+      {s.kind === 'verify' && (
+        <p className="mt-3 text-[15px]">
+          <Link href={s.href} className="text-brand underline underline-offset-2 hover:text-brand-hot">
+            {s.linkText}
+          </Link>
+        </p>
+      )}
+      {s.kind === 'availability' && (
+        <div className="mt-2 text-[15px] leading-6 text-ink-muted">
+          {s.data.posture === 'block-list' ? (
+            // Block-list posture: the blocked territories ARE the list.
+            <ul className="list-disc pl-5">
+              {s.data.blocked.map((name: string) => (
+                <li key={name}>{name}</li>
+              ))}
+            </ul>
+          ) : (
+            <>
+              <ul className="list-disc pl-5">
+                {s.data.allowed.map((name: string) => (
+                  <li key={name}>{name}</li>
+                ))}
+              </ul>
+              {s.data.blocked.length > 0 && (
+                <p className="mt-2">
+                  {COPY.rules.availabilityBlocked} {s.data.blocked.join(', ')}
+                </p>
+              )}
+            </>
+          )}
+          {/* The schedule's own date and version (§3.3.2). Both come
+              from config/territories.json, so a reader can see how
+              current the list is and quote a version if they dispute
+              it. The version is visible on purpose: bumping it is how
+              a change is announced. */}
+          <p className="mt-3 text-[13px]">
+            {COPY.rules.availabilityUpdated(s.data.updated, s.data.scheduleVersion)}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function RulesPage() {
+  const sections = rulesSections();
   return (
     <>
       <AppHeader />
       {/* Founder 2026-09-16: the informational pages wear the landing's field —
-          pink page, each section a plum box ringed in neon with its heading
-          on a backlit marquee (NeonSection). The footer and tab bar stay on
-          plum outside the field, exactly as the landing does. */}
+          pink page, plum boxes. The footer and tab bar stay on plum outside
+          the field, exactly as the landing does. */}
       <div className="flex-1 bg-brand-pink">
-      <main id="main" className="mx-auto w-full max-w-3xl px-4 pt-6 pb-24">
-        <PageIntro
-          tone="marquee"
-          title={COPY.rules.title}
-          back={{ href: '/', label: COPY.shell.nav.backToPlay }}
-          lead={
-            <Link
-              href="/fair-play"
-              className="text-brand-berry underline underline-offset-2 hover:text-brand-deep-magenta"
-            >
-              {COPY.rules.fairPlayLink}
-            </Link>
-          }
-        />
-        <div className="flex flex-col gap-10">
-        {rulesSections().map((s) => (
-          <NeonSection key={s.id} id={s.id} heading={s.heading}>
-            <p className="max-w-prose text-[15px] leading-6 text-ink-muted">{s.body}</p>
-            {s.kind === 'text' && s.appendix && (
-              <p className="mt-2 max-w-prose text-[15px] leading-6 text-ink-muted">{s.appendix}</p>
-            )}
-            {s.kind === 'tiers' && (
-              <div className="mt-3">
-                <TierPriceTable rows={s.rows} />
-              </div>
-            )}
-            {s.kind === 'verify' && (
-              <p className="mt-3 text-[15px]">
-                <Link
-                  href={s.href}
-                  className="text-brand underline underline-offset-2 hover:text-brand-hot"
-                >
-                  {s.linkText}
-                </Link>
-              </p>
-            )}
-            {s.kind === 'availability' && (
-              <div className="mt-2 text-[15px] leading-6 text-ink-muted">
-                {s.data.posture === 'block-list' ? (
-                  // Block-list posture: the blocked territories ARE the list.
-                  <ul className="list-disc pl-5">
-                    {s.data.blocked.map((name: string) => (
-                      <li key={name}>{name}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <>
-                    <ul className="list-disc pl-5">
-                      {s.data.allowed.map((name: string) => (
-                        <li key={name}>{name}</li>
-                      ))}
-                    </ul>
-                    {s.data.blocked.length > 0 && (
-                      <p className="mt-2">
-                        {COPY.rules.availabilityBlocked} {s.data.blocked.join(', ')}
-                      </p>
-                    )}
-                  </>
-                )}
-                {/* The schedule's own date and version (§3.3.2). Both come
-                    from config/territories.json, so a reader can see how
-                    current the list is and quote a version if they dispute
-                    it. The version is visible on purpose: bumping it is how
-                    a change is announced. */}
-                <p className="mt-3 text-[13px]">
-                  {COPY.rules.availabilityUpdated(s.data.updated, s.data.scheduleVersion)}
-                </p>
-              </div>
-            )}
-          </NeonSection>
-        ))}
-        </div>
-      </main>
+        <main id="main" className="mx-auto w-full max-w-3xl px-4 pt-6 pb-24">
+          <PageIntro
+            tone="marquee"
+            title={COPY.rules.title}
+            back={{ href: '/', label: COPY.shell.nav.backToPlay }}
+            lead={
+              <Link
+                href="/fair-play"
+                className="text-brand-berry underline underline-offset-2 hover:text-brand-deep-magenta"
+              >
+                {COPY.rules.fairPlayLink}
+              </Link>
+            }
+          />
+          <Tabs
+            label={COPY.rules.tabsLabel}
+            allowAll
+            hash
+            mountHidden
+            tabs={sections.map((s) => ({
+              id: s.id,
+              label: COPY.rules.tabs[s.id] ?? s.heading,
+              content: <RuleSection s={s} />,
+            }))}
+          />
+        </main>
       </div>
       <SiteFooter />
       <TabBar />

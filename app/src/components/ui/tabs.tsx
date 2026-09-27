@@ -12,7 +12,7 @@
  * Nothing here reads or writes storage.
  */
 
-import { useEffect, useId, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useId, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from 'react';
 import { COPY } from '@/copy';
 
 export interface Tab {
@@ -34,6 +34,14 @@ export interface TabsProps {
   hash?: boolean;
   initial?: string;
   className?: string;
+  /**
+   * Render every panel's content, hidden, rather than only the current
+   * one's. On for documents: the whole text is in the server HTML, so a
+   * reader (or counsel, or a crawler) without the client bundle still gets
+   * the document, and "Read as one page" costs no fetch. Off for app
+   * screens whose panels read device state on mount.
+   */
+  mountHidden?: boolean;
 }
 
 const STRIP: Record<NonNullable<TabsProps['tone']>, { on: string; off: string; rail: string }> = {
@@ -54,36 +62,46 @@ function readHash(): string | null {
   const h = window.location.hash.replace(/^#/, '');
   return /^[A-Za-z0-9._~-]+$/.test(h) ? h : null;
 }
+/* The hash as an external store: the server snapshot is null (so the
+ * server HTML and the hydrating client agree on the first tab), and the
+ * client's own snapshot takes over right after — a link to /rules#scoring
+ * opens on that tab with no hydration mismatch and no effect. */
+const subscribeHash = (cb: () => void) => {
+  window.addEventListener('hashchange', cb);
+  return () => window.removeEventListener('hashchange', cb);
+};
+const noHash = () => null;
 
-export function Tabs({ tabs, label, allowAll = false, tone = 'berry', hash = false, initial, className = '' }: TabsProps) {
+export function Tabs({
+  tabs,
+  label,
+  allowAll = false,
+  tone = 'berry',
+  hash = false,
+  initial,
+  className = '',
+  mountHidden = false,
+}: TabsProps) {
   const id = useId();
   const first = tabs[0]?.id ?? '';
-  const [current, setCurrent] = useState<string>(() => {
-    const fromHash = hash ? readHash() : null;
-    if (fromHash && tabs.some((t) => t.id === fromHash)) return fromHash;
-    return initial && tabs.some((t) => t.id === initial) ? initial : first;
-  });
-  const [all, setAll] = useState(false);
-
-  // A hash typed or followed after mount (a link inside the document).
-  useEffect(() => {
-    if (!hash) return;
-    const onHash = () => {
-      const h = readHash();
-      if (h && tabs.some((t) => t.id === h)) {
-        setCurrent(h);
-        setAll(false);
-      }
-    };
-    window.addEventListener('hashchange', onHash);
-    return () => window.removeEventListener('hashchange', onHash);
-  }, [hash, tabs]);
+  const [picked, setPicked] = useState<string>(() => (initial && tabs.some((t) => t.id === initial) ? initial : first));
+  const rawHash = useSyncExternalStore(subscribeHash, readHash, noHash);
+  const hashTab = hash && rawHash && tabs.some((t) => t.id === rawHash) ? rawHash : null;
+  // In hash mode the URL is the truth (a link inside the document, the
+  // back button); the picked tab stands in until the hash names one.
+  const current = hashTab ?? picked;
+  // "Read as one page" holds until a tab is chosen or the hash moves on.
+  const [allAt, setAllAt] = useState<{ on: boolean; hash: string | null }>({ on: false, hash: null });
+  const all = allAt.on && allAt.hash === rawHash;
 
   const choose = (tabId: string) => {
-    setCurrent(tabId);
-    setAll(false);
-    if (hash && typeof window !== 'undefined') {
-      window.history.replaceState(null, '', `#${tabId}`);
+    setPicked(tabId);
+    setAllAt({ on: false, hash: null });
+    if (hash && typeof window !== 'undefined' && readHash() !== tabId) {
+      // A hash entry per tab (the back button steps through them); the
+      // store above listens for hashchange, which pushState does not fire.
+      window.history.pushState(null, '', `#${tabId}`);
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
     }
   };
 
@@ -133,7 +151,7 @@ export function Tabs({ tabs, label, allowAll = false, tone = 'berry', hash = fal
           <button
             type="button"
             aria-pressed={all}
-            onClick={() => setAll((a) => !a)}
+            onClick={() => setAllAt({ on: !all, hash: rawHash })}
             className={
               'ml-auto rounded-full px-3 py-1.5 text-[12px] underline underline-offset-2 ' +
               (tone === 'berry' ? 'text-brand-berry' : 'text-brand-cream/80')
@@ -157,7 +175,7 @@ export function Tabs({ tabs, label, allowAll = false, tone = 'berry', hash = fal
             {all ? (
               <h2 className="font-display text-[24px] leading-7 font-extrabold text-brand-berry">{t.label}</h2>
             ) : null}
-            {shown ? t.content : null}
+            {shown || mountHidden ? t.content : null}
           </section>
         );
       })}

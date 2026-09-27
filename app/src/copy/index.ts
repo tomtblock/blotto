@@ -643,6 +643,16 @@ export const COPY = {
     availabilityHeading: 'Where you can enter',
     randomnessHeading: 'Nothing random decides a result',
     checkHeading: 'Check it yourself',
+    // V2 (founder 2026-09-27): the tab strip's name and short labels.
+    tabsLabel: 'Sections of fair play',
+    tabs: {
+      skill: 'Skill',
+      screening: 'Screening',
+      age: '18+',
+      availability: 'Where',
+      randomness: 'Randomness',
+      check: 'Check it',
+    },
     checkIntro:
       'Nothing on this page asks you to take our word for it. Three pages let you look for yourself.',
     checkVerify: 'Recompute any result on the Verify page',
@@ -1579,5 +1589,27 @@ export const COPY = {
       entry: 'Entry (SOL)',
       pot: 'Prize pool (SOL)',
     },
+    // V2 (founder 2026-09-27): the rules read one section at a time on a
+    // tab strip, or as one page. Short labels by section id; the headings
+    // above stay the sections' own.
+    tabsLabel: 'Sections of the rules',
+    tabs: {
+      'how-to-enter': 'Entering',
+      price: 'Prices',
+      prizes: 'Who is paid',
+      scoring: 'Scoring',
+      'battle-timer': 'The clock',
+      ties: 'Ties',
+      randomness: 'Randomness',
+      sealing: 'Sealing',
+      'field-size': 'Field size',
+      refund: 'Refunds',
+      'pool-opening': 'Opening',
+      verify: 'Verify',
+      availability: 'Where',
+      age: '18+',
+      'responsible-play': 'Playing well',
+      detection: 'Detection',
+    } as Record<string, string>,
   },
 } as const;
