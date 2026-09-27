@@ -161,11 +161,11 @@ export function Gallery() {
 
         <Section title="Button">
           <div className="flex flex-wrap items-center gap-3">
-            <Button>Enter tournament</Button>
+            <Button>Enter pool</Button>
             <Button intent="quiet">View rules</Button>
             <Button intent="prize">See your result</Button>
-            <Button disabled>Enter tournament</Button>
-            <Button size="lg">Seal my allocation</Button>
+            <Button disabled>Enter pool</Button>
+            <Button size="lg">Confirm, Seal & Submit</Button>
           </div>
         </Section>
 

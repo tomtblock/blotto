@@ -40,6 +40,7 @@ import { AuthContext } from "./auth-context";
 import { AUTH_INIT_TIMEOUT_MS, selectAuth, unavailableMessage } from "./auth-select";
 import { sameAuthState } from "./auth-state";
 import { useDetectedSolanaWallets } from "./standard-wallets";
+import { useDirectSession } from "./direct-session";
 import type { Auth } from "./types";
 
 const PrivyBridge = dynamic(() => import("./privy-bridge"), { ssr: false });
@@ -164,6 +165,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // and in a build with no credential at all. The bridge reads the same
   // store, so the live value agrees.
   const detected = useDetectedSolanaWallets();
+  // The direct wallet session (V2, 2026-09-27): an external wallet signed in
+  // without the provider. Its hook reads the same wallet-standard store.
+  const direct = useDirectSession();
 
   // See the update-loop rule above. Keeping the previous object also keeps
   // its callback closures; that is safe — the SDK's functions dispatch to
@@ -201,8 +205,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [injected, live, appId, bridgeRejected, bridgeTimedOut]);
 
   const value = useMemo<Auth>(
-    () => selectAuth({ injected, live, appId, bridgeRejected, bridgeTimedOut, detected }),
-    [injected, live, appId, bridgeRejected, bridgeTimedOut, detected],
+    () =>
+      selectAuth({
+        injected,
+        direct: direct.auth,
+        directSignIn: direct.signIn,
+        directError: direct.lastError,
+        directClearError: direct.clearError,
+        live,
+        appId,
+        bridgeRejected,
+        bridgeTimedOut,
+        detected,
+      }),
+    [injected, direct.auth, direct.signIn, direct.lastError, direct.clearError, live, appId, bridgeRejected, bridgeTimedOut, detected],
   );
 
   return (

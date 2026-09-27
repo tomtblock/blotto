@@ -127,7 +127,7 @@ export const PRIVACY = {
         },
         {
           what: 'Your encrypted entry',
-          why: 'Your seven battles, a random salt, the time you spent on each screen, and a marker derived for that tournament from your device. All of it is encrypted on your device before you pay, and no battle in the tournament can be read, by us or by anyone else, until the tournament closes.',
+          why: 'Your seven battles, a random salt, how long you spent on each battle, and a marker derived for that tournament from your device. All of it is encrypted on your device before you pay, and no battle in the tournament can be read, by us or by anyone else, until the tournament closes.',
           kept: 'See the retention section. Nothing in the product serves it to anyone: the read interface has no route that returns an encrypted entry, before or after the reveal.',
         },
         {
@@ -170,7 +170,7 @@ export const PRIVACY = {
         'This is the most important thing in this notice, and it is said here rather than in the section about deleting things.',
         'When a tournament closes, we publish its full results to permanent storage. That published file carries, for every entry in the tournament: the seven battles as they were played, the salt that was sealed with them, the player’s wallet address, the rank, and the amount paid. It is the file anyone can use to recompute the whole result and check it against what the program committed to — that is why it exists, and it is what makes the outcome checkable rather than a matter of trusting us.',
         'It cannot be edited and it cannot be deleted by anyone, including the operator. If that is not acceptable to you, do not enter.',
-        'Two things are deliberately kept out of it: the time you spent on each screen, and the marker derived from your device. Those reach the operator’s own detection process and are published nowhere.',
+        'Two things are deliberately kept out of it: how long you spent on each battle, and the marker derived from your device. Those reach the operator’s own detection process and are published nowhere.',
       ],
     },
     {

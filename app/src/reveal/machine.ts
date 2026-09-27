@@ -37,7 +37,7 @@
  *    and the state still holds it, but the visual projection of the card
  *    does not expose it: the share card shows the pool and the seat, and
  *    the one surface that shows rarity is the profile
- *    (`COPY.profile.rarityCaveat` sits beside it there).
+ *    (the collection came off the profile on 2026-09-27; rarity is now named nowhere).
  *
  * The reducer is TOTAL — every (state, event) pair is defined, and events
  * that don't apply are no-ops (the same state object is returned). This

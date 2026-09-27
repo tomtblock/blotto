@@ -25,8 +25,8 @@ import type { TxFailure } from "@/tx/types";
  *
  * **A class confers nothing.** It does not affect any stat, any battle, any pool
  * or any prize (PID §8.4). It exists to be drawn and looked at — and since
- * 2026-09-15 it is not shown in the entry flow at all: the profile is the one
- * surface that names it, beside `COPY.profile.rarityCaveat`.
+ * 2026-09-15 it is not shown in the entry flow at all, and since 2026-09-27
+ * (the profile's collection removed) it is named nowhere a player looks.
  */
 export type RevealClass = 0 | 1 | 2 | 3 | 4;
 

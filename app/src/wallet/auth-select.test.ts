@@ -13,6 +13,10 @@ import type { Auth } from './types';
 
 const base = {
   injected: null,
+  direct: null,
+  directSignIn: async () => {},
+  directError: null,
+  directClearError: () => {},
   live: null,
   appId: 'app-id',
   bridgeRejected: false,

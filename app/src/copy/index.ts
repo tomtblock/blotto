@@ -125,7 +125,7 @@ export const COPY = {
     } as Record<string, string>,
     errorFallback: 'Sign-in did not complete. Try again, or use a different method.',
     signedInAs: 'Signed in as',
-    continueLink: 'Go to the arena',
+    continueLink: 'Find a pool',
   },
   // The wallet screen (2026-09-08): the one place a player sees what they
   // hold, adds to it, takes it out, or chooses which wallet plays. Every
@@ -154,8 +154,9 @@ export const COPY = {
     faucet: 'Get test SOL',
     faucetNote:
       'This is a test network. SOL here has no value and cannot be bought; a faucet gives it away.',
-    send: 'Send SOL',
-    sendTitle: 'Send SOL',
+    // V2 (founder 2026-09-27): the exit is called what it is for.
+    send: 'Cash out',
+    sendTitle: 'Cash out — send SOL',
     sendTo: 'To (Solana address)',
     sendAmount: 'Amount (SOL)',
     sendMax: 'Max',
@@ -183,10 +184,10 @@ export const COPY = {
     // (return-to.ts); that default is fixed, and this panel now offers the
     // two places a pool can be found rather than one.
     noPoolTitle: 'No pool selected',
-    noPool: 'Pick an open tournament to enter. The open pool is on the Play tab; every pool is on the Pools tab.',
+    noPool: 'Pick an open pool to enter. The open pools are on the home page; every pool is on the Pools tab.',
     browsePools: 'See all pools',
     ageAttestation:
-      'I confirm I am 18 or older and that entering a paid tournament for prizes is lawful where I live.',
+      'I confirm I am 18 or older and that entering a paid pool for prizes is lawful where I live.',
     // D-B4: the versioned clickwrap around the line above. SUBSTANCE FIXED:
     // acceptance is recorded with the wallet's signature and the terms
     // version; the wording of what is being accepted must stay accurate.
@@ -232,10 +233,10 @@ export const COPY = {
     territoryRecheck: 'Check again',
     // The pool read's two failure shapes, each with a way on. PHASE-N-REVIEW.
     poolMissingTitle: 'That pool is not here',
-    poolMissing: 'No tournament with this address is listed. It may have closed, or the link may be old.',
+    poolMissing: 'No pool with this address is listed. It may have closed, or the link may be old.',
     poolLoadFailedTitle: 'The pool could not be loaded',
     poolLoadFailed:
-      'The tournament data did not arrive. Try again; if it keeps happening, tell us through /complaints \u2014 include the web address you opened the site from.',
+      'The pool data did not arrive. Try again; if it keeps happening, tell us through /complaints \u2014 include the web address you opened the site from.',
     poolLoadRetry: 'Try again',
     // 2026-09-09: the entry page checks the pool's state and this wallet's
     // existing entry BEFORE the ninety seconds start. PHASE-N-REVIEW.
@@ -261,11 +262,14 @@ export const COPY = {
     // refusal with one shape (`entry_unavailable`), and §3.3.1 says not to
     // tell a visitor their location could not be determined, because that
     // narrates the mechanism rather than stating the rule.
+    territoryBlockedTitle: 'Not available here',
     territoryBlocked: (list: string) =>
       `Not available to residents of ${list}. Access is blocked by location.`,
     territoryBlockedSeeRules: 'The full list is on the rules page.',
     // C9: the balance pre-flight — shown BEFORE the timed session starts,
     // never after battles are allocated.
+    balanceInsufficientTitle: 'Not enough SOL for this entry',
+    balanceUnavailableTitle: 'Balance check needed',
     balanceInsufficient: (needSol: string, haveSol: string) =>
       `Entering this pool takes about ${needSol} SOL (entry price plus transaction costs). This wallet holds ${haveSol} SOL.`,
     balanceUnavailable:
@@ -297,6 +301,8 @@ export const COPY = {
       'You started this run signed in with a different wallet, and an entry is made by one wallet only. Switch back to that wallet to carry on where you left off, or start again with the wallet you are signed in with now.',
     walletChangedRestart: 'Start again with this wallet',
     signerConnecting: 'Connecting your wallet',
+    signInTitle: 'Sign in to enter',
+    signInLine: 'Entering needs a signed-in wallet.',
     signerMissingTitle: 'Your wallet is not ready',
     signerMissing:
       'This wallet is signed in but cannot sign yet. Reconnect it from your wallet page, or sign out and in again, before entering.',
@@ -357,7 +363,7 @@ export const COPY = {
     // held by our systems, locked against export until the pool closes.
     sealed:
       'Battles are encrypted on your device to a key our systems hold locked against export until the pool closes; their hash is recorded on-chain at entry.',
-    enter: 'Enter this tournament',
+    enter: 'Enter this pool',
     // 2026-09-13: three literals on the pool page, now here.
     verifyThisPool: 'Verify this pool',
     // PHASE-N-REVIEW (founder 2026-09-16, CHANGE-2026-09-16_ui-uplift.md §A11):
@@ -436,9 +442,9 @@ export const COPY = {
     // already provides, said out loud instead of read as a cut.
     potFixedAtOpen:
       'This pool\u2019s prize pool was fixed when it opened and is unaffected by later changes.',
-    noOpenPool: 'No tournament is open for entries right now.',
+    noOpenPool: 'No pool is open for entries right now.',
     noOpenPoolDetail:
-      'A tier opens once the prize treasury holds its full prize pool, the previous tournament in that tier has paid out or closed, and the tier\u2019s short cooldown has passed.',
+      'A tier opens once the prize treasury holds its full prize pool, the previous pool in that tier has paid out or closed, and the tier\u2019s short cooldown has passed.',
     // D-E4 (option A, 2026-09-07): the fill rule in one breath — field
     // size, the one clock, the refund. Numbers come from the shared
     // constants via the caller (12 hours at launch).
@@ -455,7 +461,7 @@ export const COPY = {
     // review; the substance (settled pools remain browsable, every result
     // recomputable) is the architecture speaking.
     archiveTitle: 'Archive',
-    archiveNote: 'Settled tournaments. Every result here is recomputable from published data.',
+    archiveNote: 'Settled pools. Every result here is recomputable from published data.',
     // Phase 2 Stage C: the derived RESOLVING badge — the published process
     // ("the tournament enters resolving. Resolving lasts up to 12 hours")
     // made visible on the pool a held share belongs to. Label + countdown
@@ -468,7 +474,7 @@ export const COPY = {
     stateOpen: 'Open now',
     resolvingEndsIn: 'Resolving ends in',
     resolvingNote: (hours: number) =>
-      `Results are published. A prize on this tournament is held while a flag against it is reviewed. If no decision is made within ${hours} hours, the flag is cleared and the prize is paid.`,
+      `Results are published. A prize on this pool is held while a flag against it is reviewed. If no decision is made within ${hours} hours, the flag is cleared and the prize is paid.`,
   },
   // The landing page's game explainer (founder ask 2026-08-28). Substance
   // must match the rules tab and PRODUCT-FACTS; wording is founder-voiced
@@ -723,8 +729,11 @@ export const COPY = {
   },
   battle: {
     // The two-step seal (v3 D2): arm, then confirm. §8.6 renders above step 2.
-    seal: 'Seal my allocation',
-    sealConfirm: 'Confirm — seal and submit',
+    // V2 (founder 2026-09-27): one verb pair — the board says "Submit my
+    // board", the review says "Confirm, Seal & Submit". "Allocation" left
+    // every player-facing line.
+    seal: 'Confirm, Seal & Submit',
+    sealConfirm: 'Confirm, Seal & Submit',
     sealCancel: 'Go back',
     sealing: 'Sealing your battles…',
     /*
@@ -868,7 +877,7 @@ export const COPY = {
     greeting: 'Welcome to Blotto Cup.',
     paragraphs: [
       "We're the Blotto Cup team. Thank you for joining — we mean that.",
-      'Blotto Cup is a competition of judgement: seven sealed battles, five stats to place in each, and the player ranked first takes the whole prize pool. Nothing is decided at random, and every result can be recomputed by anyone from published data.',
+      'Blotto Cup is a competition of judgement: seven sealed battles, five stats in each — 100 points a battle on the easy board, or 700 placed anywhere on the hard board — and the player ranked first takes the whole prize pool. Nothing is decided at random, and every result can be recomputed by anyone from published data.',
       'Pick a pool, make your seven, seal them, and check back when it has played. If anything is unclear, the rules page says it plainly.',
     ],
     justNow: 'Just now',
@@ -917,7 +926,8 @@ export const COPY = {
   },
   career: {
     chartTitle: 'Prize record',
-    chartNote: 'Prize per tournament, in entry order. Prize finishes in amber.',
+    chartNote: 'Prize per pool, in entry order. Prize finishes in amber.',
+    chartEmpty: 'The record fills in from your second pool.',
     // The rivals strings left with the panel on 2026-09-16 (the founder's
     // data-minimisation ruling of 2026-09-15).
   },
@@ -1097,7 +1107,7 @@ export const COPY = {
     signatureNotNeeded: 'No signature needed for this.',
     textLabel: 'What happened',
     textPlaceholder: 'What happened, and what you would like us to do.',
-    poolLabel: 'Which tournament (optional)',
+    poolLabel: 'Which pool (optional)',
     submit: 'Send this complaint',
     submitting: 'Sending…',
     /** The published undertaking. Both figures come from the constants. */
@@ -1184,24 +1194,24 @@ export const COPY = {
     title: 'Your career',
     lifetime: 'Lifetime record',
     poolsEntered: 'Pools entered',
-    // D-E2: a paid seat is a first place (or a share of one).
     prizeFinishes: 'Prize finishes',
     totalPrizes: 'Total prizes',
     readOnlyNote: 'Profiles are a read-only record. Nothing here affects any pool.',
-    /*
-     * The caveat beside the rarity collection — the ONE place a player sees
-     * their drawn tier. The wording is the founder's ruling of 2026-09-14,
-     * accepted in place of "this rarity means nothing right now, but it
-     * might mean something in the future": that second half tells a paying
-     * player a random draw may later carry value, which inverts the PID
-     * §8.4 position that the class is decorative and worth nothing, and so
-     * is a founder-and-counsel question, not copy. This sentence states the
-     * ratified position and nothing more.
-     */
-    rarityCaveat:
-      "Rarity is decorative. It changes nothing: not your battles, not your score, not your ranking, and no prize. A Mythic's Strength is worth exactly a Common's.",
-    // Moved here from profile-client.tsx on 2026-09-17 (same words).
-    collection: 'Character collection',
+    // V2 (founder 2026-09-27): the career is four tabs. The character
+    // collection came off the page (class is cosmetic and is shown nowhere
+    // a player acts).
+    tabsAria: 'Your career',
+    tabs: { wallet: 'Wallet', record: 'Record', prize: 'Prize record', notes: 'Battle notes' },
+    signInFirst: 'Sign in to see your record.',
+    signInFirstLine: 'Your career — every pool entered, every paid finish — is built from on-chain data for the wallet you sign in with.',
+    emptyTitle: 'No entries yet.',
+    emptyLine: 'Your first pool starts your record — the open pools are on the home page.',
+    notesTitle: 'Battle notes',
+    notesLine: 'Your own notes, for your next entry. Saved on this device only; nothing here is sent anywhere.',
+    notesPlaceholder: 'What worked, what to try next time…',
+    notesSave: 'Save',
+    notesSaved: 'Saved on this device',
+    notesUnavailable: 'Notes cannot be saved in this browser (storage is closed).',
   },
   custody: {
     // C13: the disclosure page. Everything here describes MECHANICS —
@@ -1228,7 +1238,7 @@ export const COPY = {
         name: 'Admin (multisig)',
         can: 'Open or close tiers, set ceilings, switches and pool timings, rotate the service signers and the keeper, pause new entries, and record that a review upheld a flag.',
         cannot:
-          'Move money. No admin instruction transfers a lamport \u2014 an upheld flag leaves the prize in the tournament\u2019s own vault for the next eligible player; pausing never blocks settlement or refunds.',
+          'Move money. No admin instruction transfers a lamport \u2014 an upheld flag leaves the prize in the pool\u2019s own vault for the next eligible player; pausing never blocks settlement or refunds.',
       },
       /*
        * WRITTEN BUT NOT RENDERED (audit 2026-09-11, A-29 — reported, not
@@ -1248,8 +1258,8 @@ export const COPY = {
        */
       keeper: {
         name: 'Keeper',
-        can: 'Open the next tournament of a tier once the previous one has paid out or closed and the tier\u2019s cooldown has passed. Nobody else can open a tournament, however long a tier sits idle: if the keeper stops, no new tournament opens and no money is at risk — sealing and refunding a tournament that is already running stay open to anyone, and the admin can rotate the keeper at any time.',
-        cannot: 'Enter a tournament, move money, or decide when a tournament runs \u2014 the seat count and the clock do.',
+        can: 'Open the next pool of a tier once the previous one has paid out or closed and the tier\u2019s cooldown has passed. Nobody else can open a pool, however long a tier sits idle: if the keeper stops, no new pool opens and no money is at risk — sealing and refunding a pool that is already running stay open to anyone, and the admin can rotate the keeper at any time.',
+        cannot: 'Enter a pool, move money, or decide when a pool runs \u2014 the seat count and the clock do.',
       },
       entrySigner: {
         name: 'Entry signer',
@@ -1260,7 +1270,7 @@ export const COPY = {
         name: 'Settlement signer',
         can: 'Reveal pool secrets after seal, commit results, run the prize payments the program validates, and pay a forfeited prize onward to the next eligible player against the committed results.',
         cannot:
-          'Choose amounts or recipients, or enter a tournament. The program checks every payout list against the pot and the recorded entries, and every onward payment against the committed results; a wrong list is rejected on-chain.',
+          'Choose amounts or recipients, or enter a pool. The program checks every payout list against the pot and the recorded entries, and every onward payment against the committed results; a wrong list is rejected on-chain.',
       },
       poolSealing: {
         name: 'Pool sealing keys (one per pool)',
@@ -1272,8 +1282,8 @@ export const COPY = {
         name: 'Prize treasury',
         holderNote:
           'Held by the program itself (a derived account \u2014 no private key exists)',
-        can: 'Hold pass-sale revenue, fund each tournament\u2019s fixed prize pool before entries open, and pay refunds. The one exit is a multisig-approved withdrawal, and the program blocks any withdrawal that would dip below the published floor: the minimum balance, one further prize pool per idle tier, and every entry payment that could still be refunded.',
-        cannot: 'Pay anyone directly, skim an open tournament, or touch the refundable entry payments \u2014 the floor is enforced by the program, not by policy.',
+        can: 'Hold pass-sale revenue, fund each pool\u2019s fixed prize pool before entries open, and pay refunds. The one exit is a multisig-approved withdrawal, and the program blocks any withdrawal that would dip below the published floor: the minimum balance, one further prize pool per idle tier, and every entry payment that could still be refunded.',
+        cannot: 'Pay anyone directly, skim an open pool, or touch the refundable entry payments \u2014 the floor is enforced by the program, not by policy.',
       },
       irysUpload: {
         name: 'Publishing wallet',
@@ -1385,11 +1395,11 @@ export const COPY = {
     // rulings 2 and 3, wording verbatim): ranking, ties, and where a
     // forfeited first-place share goes — always to a player, never to us.
     ties:
-      'Players are ranked by battles won, then by total stats won. Players who remain equal on both share a rank. Entry order plays no part in ranking or in deciding who is paid. It determines only where an indivisible remainder of a few lamports falls when a prize cannot be divided exactly. Your entry number is recorded when you enter and is visible to you before the tournament closes. No random process is used at any stage of ranking or payment. ' +
+      'Players are ranked by battles won, then by total stats won. Players who remain equal on both share a rank. Entry order plays no part in ranking or in deciding who is paid. It determines only where an indivisible remainder of a few lamports falls when a prize cannot be divided exactly. Your entry number is recorded when you enter and is visible to you before the pool closes. No random process is used at any stage of ranking or payment. ' +
       'If two or more players are ranked first, they are paid an equal share of the prize pool each; nobody ranked below first is paid. ' +
       'If a player ranked first is not paid because a flag against them is upheld, their share is divided equally between the remaining eligible players ranked first. If none of the players ranked first is eligible, the whole prize pool passes to the next rank and is divided equally between the eligible players there. Any indivisible remainder goes to the eligible player with the lowest entry number. ' +
       'A prize is always paid to a player. It is never returned to us. ' +
-      'Where more than one player shares the rank a prize passes to, we identify that group. The published rule is that they share equally, with any remainder going to the lowest entry number. The results bundle we publish after every tournament lets anyone check that we identified the group correctly.',
+      'Where more than one player shares the rank a prize passes to, we identify that group. The published rule is that they share equally, with any remainder going to the lowest entry number. The results bundle we publish after every pool lets anyone check that we identified the group correctly.',
     // SUBSTANCE FIXED: randomness scope (PID §8.3/§8.4).
     randomness:
       'Randomness from a Switchboard VRF seed, combined with a later slot hash, decides ONE thing: which character class artwork your pass shows. Class is cosmetic. It does not affect any stat, any battle, any score, any rank, or any prize \u2014 nothing in the scoring path reads it. Scoring and prizes depend only on the sealed battles every player submitted. Every class draw is replayable from published on-chain data.',
@@ -1397,7 +1407,7 @@ export const COPY = {
     // addendum wording of 2026-09-07 (ruling 5) — the key is generated and
     // held by our systems, export-locked; said plainly.
     sealing:
-      'Your battles are encrypted on your device before they are submitted. The key that can decrypt them is generated and held by our systems, locked against export, and is not released until the tournament closes and no further entry is possible. Until that moment no battle in the tournament can be read, by us or by anyone else. A hash of your battles is recorded on-chain at entry. When the tournament runs, the pool secret is published on-chain: at that moment everyone\u2019s battles become readable and checkable against the hashes committed at entry, and anyone can re-run the scoring.',
+      'Your battles are encrypted on your device before they are submitted. The key that can decrypt them is generated and held by our systems, locked against export, and is not released until the pool closes and no further entry is possible. Until that moment no battle in the pool can be read, by us or by anyone else. A hash of your battles is recorded on-chain at entry. When the pool runs, the pool secret is published on-chain: at that moment everyone\u2019s battles become readable and checkable against the hashes committed at entry, and anyone can re-run the scoring.',
     // D-E4 (ratified 2026-09-06; option A per the founder's ruling of
     // 2026-09-07): the minimum field and the ONE clock, 12 hours at launch.
     // SUBSTANCE FIXED: the seat count and the clock decide when a pool runs
@@ -1410,7 +1420,7 @@ export const COPY = {
     // plus the cooldown (prompt v2 §B.6). SUBSTANCE FIXED: sequential pools
     // + pre-funded fixed pots + the cooldown between them.
     poolOpening: (cooldownMinutes: number) =>
-      `Each tier runs one tournament at a time. A tier opens when the prize treasury holds its full prize pool, the previous tournament in that tier has paid out or closed, and ${cooldownMinutes} minutes have passed since. Prize pools are fixed per tier and are funded before entries open.`,
+      `Each tier runs one pool at a time. A tier opens when the prize treasury holds its full prize pool, the previous pool in that tier has paid out or closed, and ${cooldownMinutes} minutes have passed since. Prize pools are fixed per tier and are funded before entries open.`,
     verify:
       'Every number a player is paid is recomputable by that player. The Verify page decrypts the published battles with the revealed pool secret, re-runs the same scoring engine in your browser, rebuilds the results tree, and compares it against what was committed on-chain. Nothing on that page trusts the operator.',
     verifyLink: 'Open the Verify page',
@@ -1437,7 +1447,7 @@ export const COPY = {
     // re-voice this wording; the substance must stay identical to the code.
     detection:
       'Five published signals are computed over data every player can see once a pool is revealed: ' +
-      '(1) allocation patterns — reuse of the same split, uniform round numbers; ' +
+      '(1) placement patterns — reuse of the same split, uniform round numbers; ' +
       '(2) timing — how the time on the clock was actually spent, battle by battle; ' +
       '(3) duplicate or near-duplicate battle sets across entries; ' +
       // NARROWED 2026-09-16. This read "the same device or network origin"
@@ -1460,7 +1470,7 @@ export const COPY = {
       // cited. PR #160's terms of service already say the narrower, true
       // thing; this page said the broader one, so two published surfaces
       // disagreed. The terms are right and this now matches them.
-      'These signals are computed for every tournament. Every decision and the criterion cited are recorded in a log anyone can read. Nothing is flagged automatically: a flag is a decision taken by a person that an entry meets one of the criteria above, ' +
+      'These signals are computed for every pool. Every decision and the criterion cited are recorded in a log anyone can read. Nothing is flagged automatically: a flag is a decision taken by a person that an entry meets one of the criteria above, ' +
       'and a flag never decides anything by itself \u2014 it only sends the entry to the signed review process below.',
     /*
      * C10 + the founder's addendum of 2026-09-07 (ruling 1): resolving,
@@ -1495,7 +1505,7 @@ export const COPY = {
      * challenge ourselves without recovering a prize already paid.
      */
     reviewProcess:
-      'When a tournament closes, results are published and the tournament enters resolving. Resolving lasts up to 12 hours. ' +
+      'When a pool closes, results are published and the pool enters resolving. Resolving lasts up to 12 hours. ' +
       'During resolving we check the winning wallet against published sanctions lists, as we are required to. Where an entry has been flagged against the integrity criteria published above, a person decides that flag against those criteria. A flagged prize is held by the program: it is not paid to us and it is not paid to anyone else while the review runs. ' +
       'If no decision is made within 12 hours, the flag is cleared and the prize is paid. Separately, and as a safeguard against our own failure, the program allows anyone at all to release a held prize to the player it belongs to after seven days, without our involvement. ' +
       'You may challenge a decision through our complaints route, and we will tell you which criterion was cited. Every decision and the criterion cited are recorded. If a challenge succeeds after the prize has been paid to another player, we pay you the full prize ourselves and do not seek to recover a prize already paid.',
@@ -1511,7 +1521,7 @@ export const COPY = {
       sealing: 'Sealing: when your battles are encrypted and revealed',
       fieldSize: 'How many players a pool runs with',
       refund: 'Refund and closing rule',
-      poolOpening: 'When tournaments open',
+      poolOpening: 'When pools open',
       verify: 'How to verify a result',
       availability: 'Where Blotto Cup is available',
       age: '18+',

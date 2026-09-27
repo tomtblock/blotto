@@ -22,7 +22,7 @@
  * moment it reports — `live` wins over everything below it.
  */
 
-import type { Auth, DetectedWallet } from "./types";
+import type { Auth, AuthFailure, DetectedWallet } from "./types";
 
 /**
  * How long the shell waits for the provider before saying so.
@@ -111,6 +111,18 @@ export function unconfiguredAuth(reason: "absent" | "rejected" | "unreachable"):
 export interface AuthInputs {
   /** The automation signer, when its three gates all hold (see auth-provider). */
   injected: Auth | null;
+  /**
+   * The direct wallet session (V2, 2026-09-27: wallet/direct-session.tsx),
+   * when a player has signed in with an external wallet through it. It
+   * outranks the provider's report: it is an explicit choice the player
+   * made on this device, and the provider cannot currently complete an
+   * external-wallet sign-in at all (its message names the wrong chain).
+   */
+  direct?: Auth | null;
+  /** The direct route's sign-in and error channel, offered on every signed-out state. */
+  directSignIn?: (id: string) => Promise<void>;
+  directError?: AuthFailure | null;
+  directClearError?: () => void;
   /** What the bridge last reported, or null before it has reported at all. */
   live: Auth | null;
   appId: string | undefined;
@@ -128,9 +140,26 @@ export interface AuthInputs {
  */
 export function selectAuth(i: AuthInputs): Auth {
   if (i.injected) return i.injected;
-  if (i.live) return i.live;
-  if (!i.appId) return { ...unconfiguredAuth("absent"), detectedWallets: i.detected };
-  if (i.bridgeRejected) return { ...unconfiguredAuth("rejected"), detectedWallets: i.detected };
-  if (i.bridgeTimedOut) return { ...unconfiguredAuth("unreachable"), detectedWallets: i.detected };
-  return { ...INITIALIZING, detectedWallets: i.detected };
+  if (i.direct) return i.direct;
+  const base = i.live
+    ? i.live
+    : !i.appId
+      ? { ...unconfiguredAuth("absent"), detectedWallets: i.detected }
+      : i.bridgeRejected
+        ? { ...unconfiguredAuth("rejected"), detectedWallets: i.detected }
+        : i.bridgeTimedOut
+          ? { ...unconfiguredAuth("unreachable"), detectedWallets: i.detected }
+          : { ...INITIALIZING, detectedWallets: i.detected };
+  if (base.status === "signed-in" || !i.directSignIn) return base;
+  // Signed out (or the provider absent, rejected, late): an external wallet
+  // still signs in through the direct route, whatever the provider's state.
+  return {
+    ...base,
+    signInWithWallet: i.directSignIn,
+    lastError: base.lastError ?? i.directError ?? null,
+    clearError: () => {
+      base.clearError();
+      i.directClearError?.();
+    },
+  };
 }
