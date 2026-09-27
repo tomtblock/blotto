@@ -122,6 +122,11 @@ test('pool page: the fixed pot as one Stat, §8.6 above the enter control', asyn
   // beside it. The per-position table is gone — assert it stays gone.
   await expect(page.getByText('Prize pool', { exact: true })).toBeVisible();
   await expect(page.locator('.text-prize').first()).toHaveText('4SOL');
+  // V2 (founder 2026-09-27): the rule of who is paid sits on the "Pays" side
+  // of the one "How this pool…" box; "Plays" (the mode's rule) shows first.
+  const rules = page.getByTestId('pool-rules');
+  await expect(rules.getByTestId('pool-rules-plays')).toBeVisible();
+  await rules.getByTestId('pool-rules-toggle-pays').click();
   await expect(
     page.getByText('The player ranked first takes the whole prize pool. A tie for first splits it equally.')
   ).toBeVisible();

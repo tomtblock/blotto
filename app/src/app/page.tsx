@@ -51,8 +51,14 @@ export default async function LandingPage() {
   const [poolsLive, tiersLive] = await Promise.all([live(() => api.listPools()), live(() => api.getTiers())]);
   const pools = poolsLive.ok ? poolsLive.value : [];
   const open = pools.filter((p) => p.state === 'Open');
-  const openByTier = (mode: 'easy' | 'hard') =>
-    new Map(open.filter((p) => poolMode(p) === mode).map((p) => [p.tier, p]));
+  // One pool per ladder per tier is open at a time in production; the
+  // fixture catalogue holds several, and the FIRST listed is the one every
+  // surface (and the journey test) treats as the tier's open pool.
+  const openByTier = (mode: 'easy' | 'hard') => {
+    const m = new Map<number, (typeof open)[number]>();
+    for (const p of open) if (poolMode(p) === mode && !m.has(p.tier)) m.set(p.tier, p);
+    return m;
+  };
   const easyByTier = openByTier('easy');
   const hardByTier = openByTier('hard');
   // WHICH TIERS THE FOUNDER HAS OPENED — read, never assumed (founder
