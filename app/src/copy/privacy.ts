@@ -81,10 +81,10 @@ export const PRIVACY = {
   updatedLine: (updated: string) => `Last updated ${updated}.`,
   operatorUnsetNote:
     'The operating entity is not yet incorporated, so the entries below that name the controller read “not yet set”. No real-money tournament runs until they are filled in.',
-  /** The tab strip's accessible name (V2: one section at a time, or the whole notice). */
-  tabsLabel: 'Sections of the privacy notice',
-  /** Short tab labels, by section id — the headings stay the document's. */
-  tabs: {
+  /** The tiles' group name (V3: a tile per section, or the whole notice). */
+  tilesLabel: 'Sections of the privacy notice',
+  /** Short tile labels, by section id — the headings stay the document's. */
+  tiles: {
     controller: 'Who holds it',
     'what-we-hold': 'What we hold',
     'what-we-never-hold': 'Never held',

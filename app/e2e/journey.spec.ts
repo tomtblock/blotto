@@ -173,13 +173,21 @@ test('pools, results (uncommitted), rules, custody, verify all render', async ({
   await expect(page.getByText('Results are not committed yet.')).toBeVisible();
   await expect(page.getByRole('link', { name: 'Verify a pool' })).toBeVisible();
 
-  // V2: the rules sit on a tab strip; a hash opens its tab.
+  // V3: every rules section is a tile; a hash opens that section's card,
+  // the close key returns to the tiles, a tile opens its own.
   await page.goto('/rules#scoring');
   await expect(page.getByRole('heading', { name: 'Rules', exact: true })).toBeVisible();
-  await expect(page.getByText('three or more of its five stats')).toBeVisible();
-  await page.getByRole('tab', { name: 'Ties' }).click();
-  await expect(page.getByText('Entry order plays no part in ranking')).toBeVisible();
+  const modal = page.getByTestId('section-modal');
+  await expect(modal).toBeVisible();
+  await expect(modal.getByText('three or more of its five stats')).toBeVisible();
+  await modal.getByTestId('modal-close').click();
+  await expect(modal).toBeHidden();
+  await expect(page).toHaveURL(/\/rules$/);
   await shot(page, 'rules', info.project.name);
+  await page.getByTestId('tile-ties').click();
+  await expect(modal).toBeVisible();
+  await expect(modal.getByText('Entry order plays no part in ranking')).toBeVisible();
+  await expect(page).toHaveURL(/#ties$/);
 
   await page.goto('/custody');
   await expect(page.getByRole('heading', { name: 'Who holds which keys' })).toBeVisible();

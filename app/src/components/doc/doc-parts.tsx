@@ -3,7 +3,8 @@
  * `OperatorRows` is a definition list drawn with the classes the back pages
  * already use, rendering the same founder-owned identity on both documents
  * — one copy is better than two that can drift. (`DocNav`, the within-page
- * link list, left on 2026-09-27 when the documents became tabs.)
+ * link list, left on 2026-09-27 when the documents became sections a
+ * reader opens one at a time.)
  */
 
 import { COPY } from '@/copy';

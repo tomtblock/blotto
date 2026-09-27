@@ -2,10 +2,10 @@
  * /privacy (2026-09-19) — the privacy notice.
  *
  * Same back-page shape as /terms and for the same reasons: pink field,
- * marquee intro with a way back, and — V2, founder 2026-09-27 — the
- * sections on a tab strip, one at a time or all in order under "Read as one
- * page". Every section is in the server HTML either way (Tabs
- * `mountHidden`), so the notice never depends on a client bundle arriving.
+ * marquee intro with a way back, and — V3, founder 2026-09-27 — a tile per
+ * section that opens its text on the cream card, or all in order under
+ * "Read as one page". Every section is in the server HTML either way, so
+ * the notice never depends on a client bundle arriving.
  *
  * The "what we hold" section renders the inventory as a table on a wide
  * screen and as stacked rows on a phone — the same treatment the standings
@@ -20,7 +20,7 @@ import { AppHeader } from '@/components/shell/app-header';
 import { SiteFooter } from '@/components/shell/site-footer';
 import { TabBar } from '@/components/shell/tab-bar';
 import { PageIntro } from '@/components/ui/page-intro';
-import { Tabs } from '@/components/ui/tabs';
+import { SectionTiles } from '@/components/ui/section-tiles';
 import { operatorIdentity, operatorText, type OperatorIdentity } from '@/operator/operator';
 import { OperatorRows } from '@/components/doc/doc-parts';
 
@@ -30,8 +30,7 @@ export const metadata: Metadata = { title: p.title };
 
 function Section({ s, operator }: { s: PrivacySection; operator: OperatorIdentity }) {
   return (
-    <div className="neon-box p-5 sm:p-6" data-testid={`privacy-${s.id}`}>
-      <h3 className="mb-3 font-display text-[22px] leading-7 font-bold text-ink">{s.heading}</h3>
+    <div data-testid={`privacy-${s.id}`}>
       {s.body.map((paragraph) => (
         <p key={paragraph} className="mt-0 mb-3 max-w-prose text-[15px] leading-6 text-ink-muted last:mb-0">
           {paragraph}
@@ -136,14 +135,13 @@ export default function PrivacyPage() {
         <main id="main" className="mx-auto w-full max-w-3xl px-4 pt-6 pb-24">
           <PageIntro tone="marquee" title={p.title} back={{ href: '/', label: COPY.shell.nav.backToHome }} lead={p.intro} />
           <p className="-mt-3 mb-6 text-[14px] leading-5 text-brand-berry">{p.updatedLine(operator.updated)}</p>
-          <Tabs
-            label={p.tabsLabel}
+          <SectionTiles
+            label={p.tilesLabel}
             allowAll
-            hash
-            mountHidden
-            tabs={p.sections.map((s) => ({
+            sections={p.sections.map((s) => ({
               id: s.id,
-              label: p.tabs[s.id] ?? s.heading,
+              label: p.tiles[s.id] ?? s.heading,
+              heading: s.heading,
               content: <Section s={s} operator={operator} />,
             }))}
           />
