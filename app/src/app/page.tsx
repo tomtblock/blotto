@@ -42,8 +42,11 @@ const HERO_TIERS: readonly ClipTier[] = [
 ];
 
 /* Section headings share one scale (founder 2026-09-27: "make sure the
- * headings are the same"). The demo heading sits on one line from lg. */
+ * headings are the same"); the demo's heading (LiveDemo) wears the same. */
 const H2 = 'font-display text-[28px] font-extrabold leading-8 text-brand-berry sm:text-[34px] sm:leading-10';
+/* The hero's outlined keys: cream rim and text on the montage. */
+const HERO_OUTLINE =
+  'rounded-full border-2 border-brand-cream px-6 py-3 font-mono text-[13px] uppercase tracking-wide text-brand-cream hover:bg-brand-cream/10';
 
 export default async function LandingPage() {
   const api = indexerApi();
@@ -82,6 +85,8 @@ export default async function LandingPage() {
     hardEnabled: hardEnabled.get(tier) === true,
   }));
   const serverTime = tiersRead?.server_time ?? open[0]?.server_time ?? null;
+  // The picker's own default: the lowest tier with an open easy pool.
+  const firstEasy = pickerTiers.find((t) => t.easy !== null)?.easy ?? null;
 
   return (
     <>
@@ -115,13 +120,12 @@ export default async function LandingPage() {
             <h1 className="focus:outline-none max-w-[12ch] font-display text-[64px] font-extrabold uppercase leading-[0.92] tracking-tight whitespace-pre-line text-brand-yellow [text-shadow:0_5px_0_rgba(42,16,48,0.35)] sm:text-[96px] lg:text-[116px]">
               {COPY.landing.heroTitle}
             </h1>
-            <p className="mt-4 font-display text-[22px] font-bold leading-7 text-brand-cream sm:text-[26px] sm:leading-8">
-              {/* Founder 2026-09-09: one sentence per line. The string stays
-                  whole in COPY (the shell and the e2e text match use it);
-                  only the line breaks are decided here. */}
-              {COPY.shell.tagline.split(/(?<=\.)\s+/).map((line) => (
+            <p className="mt-4 font-display text-[22px] font-bold leading-7 text-brand-cream sm:text-[26px] sm:leading-8" data-testid="hero-lines">
+              {/* V3 (founder 2026-09-27): the founder's three lines, the
+                  breaks theirs. Joined they are the shell's tagline. */}
+              {COPY.landing.heroLines.map((line) => (
                 <span key={line} className="block">
-                  {line}{' '}
+                  {line}
                 </span>
               ))}
             </p>
@@ -135,10 +139,11 @@ export default async function LandingPage() {
               >
                 {COPY.landing.chooseYourPool}
               </a>
-              <a
-                href="#demo"
-                className="rounded-full border-2 border-brand-cream px-6 py-3 font-mono text-[13px] uppercase tracking-wide text-brand-cream hover:bg-brand-cream/10"
-              >
+              {/* V3: How it works between the two, in Try the board's outline. */}
+              <a href="#how" data-testid="hero-how" className={HERO_OUTLINE}>
+                {COPY.howItWorks.title}
+              </a>
+              <a href="#demo" className={HERO_OUTLINE}>
                 {COPY.landing.tryBoard}
               </a>
             </div>
@@ -158,16 +163,21 @@ export default async function LandingPage() {
             {!poolsLive.ok ? <LiveDataUnavailable /> : <PoolPicker tiers={pickerTiers} serverTime={serverTime} />}
           </section>
 
-          {/* ——— The live demo: the toy is the pitch. */}
-          <section id="demo" className="mt-14 scroll-mt-20">
-            <h2 className={`mb-4 ${H2} lg:whitespace-nowrap`}>{COPY.howItWorks.pentagonCaption}</h2>
-            <LiveDemo />
-          </section>
-
-          {/* ——— How it works: the five ratified steps, one animated scene at a time. */}
-          <section className="mt-14">
+          {/* ——— How it works: the five ratified steps, one animated scene at
+              a time (V3, founder 2026-09-27: before the demo). */}
+          <section id="how" className="mt-14 scroll-mt-20">
             <h2 className={`mb-4 ${H2}`}>{COPY.howItWorks.title}</h2>
             <HowItWorksCarousel steps={COPY.howItWorks.steps(Number(MIN_SEATS))} />
+          </section>
+
+          {/* ——— The live demo: the toy is the pitch. Beside it, Enter for
+              real: the open easy pool at the lowest open tier, the start of
+              the easy flow. */}
+          <section id="demo" className="mt-14 scroll-mt-20">
+            <LiveDemo
+              title={COPY.howItWorks.pentagonCaption}
+              enterHref={firstEasy ? `/pools/${firstEasy.pool}` : null}
+            />
           </section>
         </main>
         {/* Founder 2026-09-27: every relevant link at the foot of the page —
