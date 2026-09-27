@@ -97,6 +97,25 @@ export class Camera {
     this.emit();
   }
 
+  /** The current view, for putting back later (the hold zoom). */
+  view(): CameraView {
+    return { cx: this.cx, cy: this.cy, s: this.s };
+  }
+
+  /** `zoomAt`, eased over `duration` ms: the world point under `screen` ends where it started. */
+  zoomAtAnimated(screen: Point, factor: number, duration = 180): Promise<void> {
+    this.touched = true;
+    const w = this.toWorld(screen);
+    const s2 = Math.min(this.maxScale, Math.max(this.minScale, this.s * factor));
+    const target = { cx: w.x - (screen.x - this.vw / 2) / s2, cy: w.y - (screen.y - this.vh / 2) / s2, s: s2 };
+    const l = this.limit;
+    if (l) {
+      target.cx = Math.min(l.maxX, Math.max(l.minX, target.cx));
+      target.cy = Math.min(l.maxY, Math.max(l.minY, target.cy));
+    }
+    return this.animateTo(target, duration);
+  }
+
   clampScale(): void {
     if (this.s >= this.minScale && this.s <= this.maxScale) return;
     const was = this.touched;

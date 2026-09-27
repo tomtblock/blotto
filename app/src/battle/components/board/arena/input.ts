@@ -22,7 +22,8 @@ export interface InputHandlers {
   armedStat(): number | null;
   /** May the field take points right now (not locked, run live)? */
   canDeposit(field: number): boolean;
-  onHoldStart(field: number, stat: number): void;
+  /** A hold has begun on `field` with `stat`; `at` is the finger in screen (SVG) units. */
+  onHoldStart(field: number, stat: number, at: Point): void;
   /** The hold wants `n` more troops on `field`; returns how many the field took. */
   onHoldDeposit(field: number, stat: number, n: number, at: Point): number;
   onHoldMove(field: number | null): void;
@@ -108,7 +109,7 @@ export function attachInput(svg: SVGSVGElement, camera: Camera, layout: MapLayou
     deployed = 0;
     lastFrame = performance.now();
     svg.classList.add('bba-holding');
-    h.onHoldStart(field, stat);
+    h.onHoldStart(field, stat, screen);
     h.onHoldMove(field);
     frame = requestAnimationFrame(tick);
   };

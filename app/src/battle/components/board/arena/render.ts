@@ -24,7 +24,15 @@ interface GroupNodes {
   chip: SVGGElement;
   chipText: SVGTextElement;
   troops: SVGGElement[];
+  /** Where the chip sits in world units (null while the crowd is empty). */
+  chipAt: Point | null;
 }
+
+/* V2 (founder 2026-09-27, "chips min size"): a count chip never renders
+ * smaller than this on screen, however far the camera zooms out — it is
+ * counter-scaled around its anchor. The chip is 38 world units tall. */
+const CHIP_WORLD_H = 38;
+const CHIP_MIN_PX = 24;
 interface FieldNodes {
   hitPolygon: SVGPolygonElement;
   fieldGroup: SVGGElement;
@@ -76,6 +84,26 @@ export class MapRenderer {
 
   applyCamera(): void {
     this.world.setAttribute('transform', this.camera.transformAttr());
+    this.placeChips();
+  }
+
+  /** Chips at their anchors, counter-scaled so they keep a readable size. */
+  private placeChips(): void {
+    const k = Math.max(1, CHIP_MIN_PX / (CHIP_WORLD_H * this.camera.s));
+    for (const n of this.fields.values()) {
+      for (const g of n.groups) {
+        if (!g.chipAt) continue;
+        g.chip.setAttribute('transform', `translate(${g.chipAt.x.toFixed(1)} ${g.chipAt.y.toFixed(1)}) scale(${k.toFixed(3)})`);
+      }
+    }
+  }
+
+  /** The walkthrough's spotlight on one field (null clears). */
+  setGuide(field: number | null): void {
+    for (const [i, n] of this.fields) {
+      n.plaque.classList.toggle('bba-guide', i === field);
+      n.hitPolygon.classList.toggle('bba-guide', i === field);
+    }
   }
 
   private defs(): SVGDefsElement {
@@ -141,7 +169,7 @@ export class MapRenderer {
     );
     chipText.setAttribute('y', '-3');
     layer.append(hit, chip);
-    return { hit, chip, chipText, troops: [] };
+    return { hit, chip, chipText, troops: [], chipAt: null };
   }
 
   private buildPlaque(field: Field, layer: SVGGElement): { plaque: SVGGElement; score: SVGTextElement; sub: SVGTextElement } {
@@ -208,7 +236,10 @@ export class MapRenderer {
         }
         g.hit.setAttribute('visibility', c > 0 ? 'visible' : 'hidden');
         g.chip.setAttribute('visibility', c > 0 ? 'visible' : 'hidden');
-        if (c === 0) continue;
+        if (c === 0) {
+          g.chipAt = null;
+          continue;
+        }
         for (let i = 0; i < c; i++) {
           const p = troopSlot(field, stat, i);
           const t = g.troops[i] as SVGGElement;
@@ -223,7 +254,7 @@ export class MapRenderer {
         g.hit.setAttribute('cy', String(centre.y - size * 0.45));
         g.hit.setAttribute('rx', String(r + size * 0.45));
         g.hit.setAttribute('ry', String(r * GEOMETRY.groundSquash + size * 0.55));
-        g.chip.setAttribute('transform', `translate(${centre.x.toFixed(1)} ${(centre.y - r * GEOMETRY.groundSquash - size * 1.05).toFixed(1)})`);
+        g.chipAt = { x: centre.x, y: centre.y - r * GEOMETRY.groundSquash - size * 1.05 };
         g.chipText.textContent = String(counts[stat] ?? 0);
       }
       if (changed) this.sortSprites(n.sprites);
@@ -235,6 +266,7 @@ export class MapRenderer {
       n.fieldGroup.classList.toggle('bba-locked', locked[field.index] === true);
       n.hitPolygon.classList.toggle('bba-locked', locked[field.index] === true);
     }
+    this.placeChips();
   }
 
   private makeTroop(stat: number, i: number, size: number = GEOMETRY.spriteSize): SVGGElement {
