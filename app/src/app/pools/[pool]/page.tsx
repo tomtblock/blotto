@@ -30,7 +30,7 @@ import { ProgressRing } from '@/components/ui/progress-ring';
 import { Countdown } from '@/components/ui/countdown';
 import { poolStateLabel } from '@/components/pools/pool-state-label';
 import { MarqueeHeading } from '@/components/ui/marquee-heading';
-import { NeonSection } from '@/components/ui/neon-section';
+import { PoolRules } from './pool-rules';
 import { AmbientClip } from '@/components/ui/ambient-clip';
 import './pool-page.css';
 
@@ -188,32 +188,7 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
           </div>
         </Card>
 
-        <NeonSection heading={COPY.pool.aboutHeading} className="mb-8">
-          <ul className="flex list-disc flex-col gap-3 pl-5 text-[17px] leading-[26px] text-ink marker:text-brand">
-            {COPY.pool.aboutPoints(MIN_SEATS_N, FILL_HOURS).map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-          </ul>
-          <p className="mt-5 flex gap-5 text-[15px] text-ink-muted">
-            <Link href="/rules" className="underline underline-offset-2 hover:text-ink">
-              {COPY.rules.title}
-            </Link>
-            <Link href="/fair-play" className="underline underline-offset-2 hover:text-ink">
-              {COPY.fairPlay.title}
-            </Link>
-          </p>
-        </NeonSection>
-
-        {/* "How this pool plays" (founder 2026-09-24): the rule of THIS pool,
-            read before paying. Config-driven (D-B6): the minutes come from
-            the board's clock constant, never typed here. */}
-        <NeonSection heading={COPY.pool.howItPlaysHeading} className="mb-8">
-          <ul className="flex list-disc flex-col gap-3 pl-5 text-[17px] leading-[26px] text-ink marker:text-brand">
-            {COPY.pool.howItPlays(mode, BOARD_MINUTES).map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-          </ul>
-        </NeonSection>
+        <PoolRules mode={mode} minutes={BOARD_MINUTES} minSeats={MIN_SEATS_N} fillHours={FILL_HOURS} />
 
         {open ? (
           <section className="flex flex-col gap-4">

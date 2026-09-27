@@ -177,7 +177,7 @@ export function BoardFlow({ mode, onConfirm, onReviewApi, reviewHost = null, onR
     const idle = reduceBoard(state, { type: 'begin' });
     if (idle.phase !== 'play') return null;
     return (
-      <section className="bb animate-settle">
+      <section className={`bb animate-settle${demo ? '' : ' bb--wide'}`}>
         <div style={{ position: 'relative' }}>
           <Arena state={idle} interactive={false} onDeposit={() => 0} onOpenStepper={() => {}} onTapEmpty={() => {}} onHold={() => {}} demo={demo} />
           <ReadyBanner
@@ -211,7 +211,7 @@ export function BoardFlow({ mode, onConfirm, onReviewApi, reviewHost = null, onR
               ? COPY.board.hintHoldHard(selectedName, left)
               : COPY.board.hintHold(selectedName);
     return (
-      <section className="bb">
+      <section className={`bb${demo ? '' : ' bb--wide'}`}>
         <div style={{ position: 'relative' }}>
           <Arena
             state={play}
