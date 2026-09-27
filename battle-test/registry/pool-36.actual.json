@@ -1,0 +1,2954 @@
+{
+  "schema": "blotto-rehearsal-actual/1",
+  "test": "T7",
+  "poolId": "36",
+  "poolPda": "DtaxjC8MoRZ3wGnR6KghsxV1gXvPP5yaTEssrroArpXX",
+  "tier": 0,
+  "cluster": "devnet",
+  "harvestedAt": "2026-09-27T13:00:43.028Z",
+  "slot": 504790051,
+  "terminalState": "Paid",
+  "entrants": 40,
+  "minSeats": 40,
+  "entryLamports": "100000000",
+  "potLamports": "4000000000",
+  "fillDeadline": "1790473564",
+  "resultsRoot": "ed732b54eedf6c20227d03d9a141e6dabeaa6a28b57902cd3537886318b009c6",
+  "secretRevealed": true,
+  "outcomeIfDeadlineNow": "seal",
+  "treasuryLamports": "7579842560",
+  "vaultLamports": "650240",
+  "sources": {
+    "poolState": "https://blotto-indexer.fly.dev/pools",
+    "entries": "https://blotto-indexer.fly.dev/pools/DtaxjC8MoRZ3wGnR6KghsxV1gXvPP5yaTEssrroArpXX/entries",
+    "balances": "cluster, getMultipleAccountsInfo at the slot above",
+    "registerSignatures": "evidence/\u2026/headless-register.log",
+    "publishedBundle": "https://gateway.irys.xyz/36Y9vL9PPQqtvXQHk4kYdwHqgNiuU31ZAU4UAsNeYibw"
+  },
+  "unknownEntrants": [
+    "CRCK62mRC4zxsFRAx41g4MbQzGqsJQD3SURM7Te4VnhW"
+  ],
+  "seats": [
+    {
+      "seat": 0,
+      "wallet": "UNKNOWN(CRCK62mRC4zxsFRAx41g4MbQzGqsJQD3SURM7Te4VnhW)",
+      "route": "unknown",
+      "address": "CRCK62mRC4zxsFRAx41g4MbQzGqsJQD3SURM7Te4VnhW",
+      "battlesHash": "74482b945ff5fdc59db9368f9dd2519ea32a64b5f212666f9043eb01961b97c9",
+      "passAsset": "7zaUQrhghzLwyS1Jwmnn8mN34j3pmAeR5UE91JM4ck8A",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": null,
+      "slot": null,
+      "revealedBattles": [
+        [
+          18,
+          30,
+          18,
+          17,
+          17
+        ],
+        [
+          16,
+          23,
+          15,
+          31,
+          15
+        ],
+        [
+          17,
+          25,
+          17,
+          25,
+          16
+        ],
+        [
+          28,
+          22,
+          18,
+          16,
+          16
+        ],
+        [
+          25,
+          24,
+          17,
+          17,
+          17
+        ],
+        [
+          26,
+          37,
+          8,
+          21,
+          8
+        ],
+        [
+          18,
+          29,
+          18,
+          18,
+          17
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 39,
+      "scoreHalf": 193,
+      "zones": 591,
+      "amountLamports": "0",
+      "balanceAfter": "786671406"
+    },
+    {
+      "seat": 1,
+      "wallet": "W02",
+      "route": "direct",
+      "address": "3PQbmPxu92J5UZPfra9bMofF7FjPepefHAW6UyMae7yT",
+      "battlesHash": "053c5c921940a20f116bc79dbc15f748f421ad0610987b8b72b9708f78d20754",
+      "passAsset": "DoDyxMiDtyTKv4oFBompP5b44aLe4rsndxZToNSVVsYm",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "4QoRKWFBcLrfhZHUBkNXXsZKoXxMpbiJcJLXKJZcgJnekX6CvHidnh1J1gZa8yNAyae32WYddi8jCrhD9ygsGMiP",
+      "slot": 504553431,
+      "revealedBattles": [
+        [
+          13,
+          12,
+          25,
+          25,
+          25
+        ],
+        [
+          19,
+          25,
+          25,
+          20,
+          11
+        ],
+        [
+          20,
+          16,
+          25,
+          17,
+          22
+        ],
+        [
+          17,
+          25,
+          21,
+          12,
+          25
+        ],
+        [
+          23,
+          25,
+          16,
+          25,
+          11
+        ],
+        [
+          18,
+          25,
+          18,
+          14,
+          25
+        ],
+        [
+          18,
+          20,
+          25,
+          25,
+          12
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 6,
+      "scoreHalf": 293,
+      "zones": 605,
+      "amountLamports": "0",
+      "balanceAfter": "3558920"
+    },
+    {
+      "seat": 2,
+      "wallet": "W00",
+      "route": "direct",
+      "address": "BoQJjB4fGGTkyQcFKgfgiV3KEmWpaP2jjEpqnoX3iUMR",
+      "battlesHash": "b6563b77c007090e8c1d6c0802c2db3792cf92e3d6a57a995a40aeb531a15b06",
+      "passAsset": "7zR2EDrtFc9hqGeyKpQ5Jtok2nufMhsqx3yAgUJYmYpw",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "61WAS2GaCDdX71u7As4R5nfmudJcmV7GWy4Fmpj8u7WcrHU7BnxxTTnixFhjFxDaxWrijUmMVvbs5MSDrBchiXgo",
+      "slot": 504553432,
+      "revealedBattles": [
+        [
+          0,
+          0,
+          31,
+          33,
+          36
+        ],
+        [
+          33,
+          35,
+          0,
+          0,
+          32
+        ],
+        [
+          36,
+          0,
+          35,
+          29,
+          0
+        ],
+        [
+          0,
+          36,
+          31,
+          0,
+          33
+        ],
+        [
+          30,
+          33,
+          0,
+          0,
+          37
+        ],
+        [
+          30,
+          31,
+          0,
+          0,
+          39
+        ],
+        [
+          0,
+          0,
+          32,
+          32,
+          36
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 1,
+      "scoreHalf": 537,
+      "zones": 797,
+      "amountLamports": "2000000000",
+      "balanceAfter": "2003558920"
+    },
+    {
+      "seat": 3,
+      "wallet": "W03",
+      "route": "direct",
+      "address": "Coo447QMwr8SkSZZUABh86KKRo8AMpGcsAn4enVV8wEP",
+      "battlesHash": "d241250f57f02bd4164fce2a62aaa4eaf354282f06c74344f184f4e430663d68",
+      "passAsset": "Fk1JCnbhMbfjsnHvBL3c2GfU8FitaXsv5jki23Ptwa5D",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "4FyhvTbY5RoPqfAQ6CAY1R6mmheEDZFxvneyiC51Zbv9UQhN8oq9AcnqpRTWZeQebGcocCLh4neu5m16enDEirCf",
+      "slot": 504553440,
+      "revealedBattles": [
+        [
+          25,
+          25,
+          15,
+          10,
+          25
+        ],
+        [
+          24,
+          14,
+          20,
+          25,
+          17
+        ],
+        [
+          25,
+          25,
+          8,
+          22,
+          20
+        ],
+        [
+          25,
+          13,
+          22,
+          25,
+          15
+        ],
+        [
+          21,
+          22,
+          16,
+          25,
+          16
+        ],
+        [
+          25,
+          17,
+          17,
+          17,
+          24
+        ],
+        [
+          18,
+          25,
+          19,
+          13,
+          25
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 11,
+      "scoreHalf": 281,
+      "zones": 591,
+      "amountLamports": "0",
+      "balanceAfter": "3558920"
+    },
+    {
+      "seat": 4,
+      "wallet": "W01",
+      "route": "direct",
+      "address": "CF38D8UdFhCCakjK1Ty4RViSGpAfaKht5VEy8q79TTEH",
+      "battlesHash": "95318242518c74d3d7c6663fd04acebec205edfd3e3372f90828d72fd3e7b585",
+      "passAsset": "FuvoMK6aE96zJAyXMazq5XUdysCgTjrszK17SBoQaFic",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "5LngfZDXenGMS4Mo1b8SkiAJ9TqEruGBNdHjrmK68kNAW7Y7LWPUejFkbtgDpFwh47bKrUiswXLyYUicHHMeweob",
+      "slot": 504553443,
+      "revealedBattles": [
+        [
+          0,
+          0,
+          31,
+          33,
+          36
+        ],
+        [
+          33,
+          35,
+          0,
+          0,
+          32
+        ],
+        [
+          36,
+          0,
+          35,
+          29,
+          0
+        ],
+        [
+          0,
+          36,
+          31,
+          0,
+          33
+        ],
+        [
+          30,
+          33,
+          0,
+          0,
+          37
+        ],
+        [
+          30,
+          31,
+          0,
+          0,
+          39
+        ],
+        [
+          0,
+          0,
+          32,
+          32,
+          36
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 1,
+      "scoreHalf": 537,
+      "zones": 797,
+      "amountLamports": "2000000000",
+      "balanceAfter": "2003558920"
+    },
+    {
+      "seat": 5,
+      "wallet": "W07",
+      "route": "direct",
+      "address": "21ShzyRaxjEuY91HmWaMzDaSfzB53A1zFShxYKSW6B3i",
+      "battlesHash": "f63525987245424cca91e5e7717f574d047a2cff88a8d26127c3d574e5199124",
+      "passAsset": "DrySByUj1mWLwbtVcwiMSBxcuVrMY1hAPm16XVpbi6R9",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "DcrzXBnRg6UoQUxpB4Nr2oJ4iUqBoGjH5JRE6rXwSFu2v5152Y3mKngJ8uQWFAEcTVkoBE9hXBUwvKFLerHqoCw",
+      "slot": 504553450,
+      "revealedBattles": [
+        [
+          20,
+          17,
+          25,
+          15,
+          23
+        ],
+        [
+          17,
+          20,
+          22,
+          25,
+          16
+        ],
+        [
+          19,
+          25,
+          16,
+          24,
+          16
+        ],
+        [
+          21,
+          20,
+          13,
+          21,
+          25
+        ],
+        [
+          16,
+          25,
+          11,
+          25,
+          23
+        ],
+        [
+          25,
+          17,
+          14,
+          20,
+          24
+        ],
+        [
+          25,
+          13,
+          25,
+          12,
+          25
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 30,
+      "scoreHalf": 248,
+      "zones": 580,
+      "amountLamports": "0",
+      "balanceAfter": "3558920"
+    },
+    {
+      "seat": 6,
+      "wallet": "W06",
+      "route": "direct",
+      "address": "pmTjbpfoaCc2tZCNJXKdpDJZTr1qZ2f21apYXsQ7qq3",
+      "battlesHash": "40e45894ecb166cc00fb5d06998d659d3e849a73a8d9de771fdf6f98895cac4b",
+      "passAsset": "ARQeYA8VDvF8LQQ7gfGiL9BWCNW1ouGNyrZq99GRSUx6",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "51uEkDfR6TfNUQ7zpgisuBqSDx97iWVqDfGeuBgeKxT3161Ui4ThgwLc1NoeRNkj3HvdigRwRtwwpiauSJX83jDh",
+      "slot": 504553451,
+      "revealedBattles": [
+        [
+          13,
+          22,
+          19,
+          25,
+          21
+        ],
+        [
+          20,
+          10,
+          20,
+          25,
+          25
+        ],
+        [
+          19,
+          16,
+          25,
+          25,
+          15
+        ],
+        [
+          24,
+          25,
+          13,
+          19,
+          19
+        ],
+        [
+          13,
+          21,
+          16,
+          25,
+          25
+        ],
+        [
+          13,
+          25,
+          17,
+          25,
+          20
+        ],
+        [
+          20,
+          17,
+          19,
+          19,
+          25
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 25,
+      "scoreHalf": 251,
+      "zones": 589,
+      "amountLamports": "0",
+      "balanceAfter": "3558920"
+    },
+    {
+      "seat": 7,
+      "wallet": "W04",
+      "route": "direct",
+      "address": "H6iFKJMDttWj4ZfySPPPMG4EEE5cJkvNDZ9i1HNqRJdo",
+      "battlesHash": "4d89fa3d3602b669769a1066fa78998194eeda3459ae5c021796ce39a6cfca0e",
+      "passAsset": "Ak9UA9sUN43R5Ypd5m73QGFUhYH1L7DUfe7wvQZShBep",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "3YB87A2i5k5dr2Fuq8NjCqjJrWBG69mR5CU3q6B78rLWmwVzXm6Um2u1enoRiKgDNGRZPaskPTvxum8DS22B5PUo",
+      "slot": 504553451,
+      "revealedBattles": [
+        [
+          25,
+          25,
+          10,
+          15,
+          25
+        ],
+        [
+          25,
+          20,
+          19,
+          17,
+          19
+        ],
+        [
+          25,
+          17,
+          25,
+          17,
+          16
+        ],
+        [
+          16,
+          25,
+          21,
+          16,
+          22
+        ],
+        [
+          18,
+          25,
+          15,
+          17,
+          25
+        ],
+        [
+          22,
+          13,
+          17,
+          23,
+          25
+        ],
+        [
+          25,
+          20,
+          10,
+          25,
+          20
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 23,
+      "scoreHalf": 258,
+      "zones": 580,
+      "amountLamports": "0",
+      "balanceAfter": "3558920"
+    },
+    {
+      "seat": 8,
+      "wallet": "W05",
+      "route": "direct",
+      "address": "7F3Mn8MMznLcCFGVB52jFn9J2xQbGHm8MH2V1NwC8wHa",
+      "battlesHash": "4896998a2f11c664aa51a4b98ac92da3c242390ff84231eab21ba47c4adf6674",
+      "passAsset": "455qAboTxDcFcEUDMoGeiCNXuFHsDTdDxHkUPZErYLCV",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "3mJMBgqtn8CY7RRMGSCmxwcFsXo1FjX2RUUvLjzXgW8csQhwDYtqtjkAf8RkSVheid6b2rVLJwFUCe9TDSEf7Hcf",
+      "slot": 504553451,
+      "revealedBattles": [
+        [
+          16,
+          20,
+          20,
+          19,
+          25
+        ],
+        [
+          25,
+          20,
+          21,
+          17,
+          17
+        ],
+        [
+          19,
+          25,
+          17,
+          14,
+          25
+        ],
+        [
+          25,
+          20,
+          12,
+          25,
+          18
+        ],
+        [
+          19,
+          22,
+          22,
+          18,
+          19
+        ],
+        [
+          21,
+          4,
+          25,
+          25,
+          25
+        ],
+        [
+          19,
+          22,
+          15,
+          19,
+          25
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 29,
+      "scoreHalf": 249,
+      "zones": 591,
+      "amountLamports": "0",
+      "balanceAfter": "3558920"
+    },
+    {
+      "seat": 9,
+      "wallet": "W08",
+      "route": "direct",
+      "address": "BmttwNHBih1LkppkNM8nyfQj9o88DLcsWMkS3J8Zjt5D",
+      "battlesHash": "405618c299a076507ed8c413f1c8bcf66e227286fde8e285f6e42936ab435405",
+      "passAsset": "6vfvKxbZnZMJppKFez9ddb6CxMwDnA3qmePNNwL1RsQY",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "GJCnxb67u5uZk9gE4rvtQHY4kyzv53mCAzK3C3JQ8AXwFJfN9yqRJBsm8zNT28FVFLeQt5KXUkYiAwKHDNk8Tww",
+      "slot": 504553519,
+      "revealedBattles": [
+        [
+          19,
+          25,
+          23,
+          17,
+          16
+        ],
+        [
+          12,
+          17,
+          25,
+          23,
+          23
+        ],
+        [
+          18,
+          25,
+          22,
+          22,
+          13
+        ],
+        [
+          15,
+          18,
+          25,
+          19,
+          23
+        ],
+        [
+          13,
+          21,
+          19,
+          25,
+          22
+        ],
+        [
+          25,
+          11,
+          25,
+          21,
+          18
+        ],
+        [
+          22,
+          19,
+          13,
+          25,
+          21
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 36,
+      "scoreHalf": 232,
+      "zones": 579,
+      "amountLamports": "0",
+      "balanceAfter": "3558920"
+    },
+    {
+      "seat": 10,
+      "wallet": "W09",
+      "route": "direct",
+      "address": "HAe7n7ZYHycQBvTdVtFRqKcWTfxFKHKQkjvYvfNM9Fts",
+      "battlesHash": "cd5139e88cec24076146218ad030015ad755b8ea39e013710543e8d4213724ce",
+      "passAsset": "7xwtQPGKq5et8kMPh85H3Ex3ATyHChWFtzPUqHJSDkoj",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "67opEVDDMGCTBNZxV6e2ik4JnLbro3cTvdYnoRZF5iW34r9EQeFzdWGLPYc7qfsbr6feGKX7f7ed4G7JRmhRHUrh",
+      "slot": 504553519,
+      "revealedBattles": [
+        [
+          19,
+          25,
+          19,
+          24,
+          13
+        ],
+        [
+          19,
+          18,
+          22,
+          19,
+          22
+        ],
+        [
+          20,
+          25,
+          14,
+          25,
+          16
+        ],
+        [
+          15,
+          25,
+          17,
+          18,
+          25
+        ],
+        [
+          12,
+          25,
+          25,
+          25,
+          13
+        ],
+        [
+          25,
+          12,
+          13,
+          25,
+          25
+        ],
+        [
+          19,
+          21,
+          19,
+          22,
+          19
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 28,
+      "scoreHalf": 250,
+      "zones": 579,
+      "amountLamports": "0",
+      "balanceAfter": "3553840"
+    },
+    {
+      "seat": 11,
+      "wallet": "W11",
+      "route": "direct",
+      "address": "8jJSNEFqHbbS3Xonu75J7TbTDrBg8SryJBL849yofzKY",
+      "battlesHash": "442ff917ecf600182a46e4453bdc8e0ae6899c1cd41d20fe5d99e0556e700190",
+      "passAsset": "2P2HKo6vfUXBzCSuvn7zWAYdJthyRAnDPZrC3i7mkGaM",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "2H2teEDDFuaZPsAqcFm1r5PWucaRKw1pqJBX1VmP69kK5yKXgk8k7cTJYnfsyqv3EkMKdbm9GGab8NttPMZYzPzp",
+      "slot": 504553520,
+      "revealedBattles": [
+        [
+          16,
+          25,
+          17,
+          25,
+          17
+        ],
+        [
+          19,
+          16,
+          23,
+          17,
+          25
+        ],
+        [
+          12,
+          13,
+          25,
+          25,
+          25
+        ],
+        [
+          23,
+          17,
+          16,
+          25,
+          19
+        ],
+        [
+          21,
+          18,
+          18,
+          25,
+          18
+        ],
+        [
+          22,
+          15,
+          25,
+          18,
+          20
+        ],
+        [
+          19,
+          19,
+          24,
+          19,
+          19
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 38,
+      "scoreHalf": 222,
+      "zones": 575,
+      "amountLamports": "0",
+      "balanceAfter": "3553840"
+    },
+    {
+      "seat": 12,
+      "wallet": "W10",
+      "route": "direct",
+      "address": "76TpE6MMG5uHEqA9ALJrrZyMr5Mv4LR47GgnEmByyfFn",
+      "battlesHash": "30c672c57ef0df9539ffbd5bc70338e63583ececac6e87cd42e42af68046f3f3",
+      "passAsset": "8JvP5WWDweyzyVb2weuSWNcPnpCCQr3NPvDaCTH42jB2",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "5d8mc78WoCGYgTvQFQd56sqNDGAvA2NkwKpnCBEhKe1XdvaWGvf3jjtTgQa3zx9rQoKZbf3ye8SaWwRtJ385WiEe",
+      "slot": 504553521,
+      "revealedBattles": [
+        [
+          25,
+          22,
+          16,
+          16,
+          21
+        ],
+        [
+          24,
+          25,
+          19,
+          19,
+          13
+        ],
+        [
+          21,
+          13,
+          25,
+          25,
+          16
+        ],
+        [
+          18,
+          16,
+          22,
+          19,
+          25
+        ],
+        [
+          19,
+          25,
+          25,
+          20,
+          11
+        ],
+        [
+          12,
+          22,
+          19,
+          22,
+          25
+        ],
+        [
+          20,
+          25,
+          13,
+          25,
+          17
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 16,
+      "scoreHalf": 265,
+      "zones": 597,
+      "amountLamports": "0",
+      "balanceAfter": "3553840"
+    },
+    {
+      "seat": 13,
+      "wallet": "W15",
+      "route": "direct",
+      "address": "5LFF41tQuiteJgqUwBtTrvHChQCsYFwnBzEPsoCYmnrP",
+      "battlesHash": "3523db05b618c36058687fd39e55a7d3371a61c172de38c2b4e3df7cddb05495",
+      "passAsset": "ACosERWogRF5bsR9o97vn6pCwNK3UdT5wWBCLEE4p3xX",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "2MxYBTdz6FY1yGUJBzj3fT3bQX9VhFTBY37LKDCNfYHNCKaDQkuqSgAFXCVfE1Jdo4Mo2P46BNa554KhASFrH7co",
+      "slot": 504553529,
+      "revealedBattles": [
+        [
+          19,
+          25,
+          20,
+          25,
+          11
+        ],
+        [
+          25,
+          25,
+          25,
+          19,
+          6
+        ],
+        [
+          10,
+          25,
+          25,
+          15,
+          25
+        ],
+        [
+          20,
+          25,
+          13,
+          17,
+          25
+        ],
+        [
+          25,
+          19,
+          25,
+          18,
+          13
+        ],
+        [
+          25,
+          25,
+          13,
+          25,
+          12
+        ],
+        [
+          20,
+          8,
+          25,
+          25,
+          22
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 3,
+      "scoreHalf": 313,
+      "zones": 600,
+      "amountLamports": "0",
+      "balanceAfter": "3553840"
+    },
+    {
+      "seat": 14,
+      "wallet": "W14",
+      "route": "direct",
+      "address": "7LopdohKE7oojY2oaaVa5rCYUaQAwpnLSB4QfFaL5AaL",
+      "battlesHash": "6a213752cd402d63aa52f1e5f3bd06ff2728d412cb7cdbf33091ded9f98ab1e7",
+      "passAsset": "FuYRf7a9pJbMAVDBg6DgPjBeKpmmZYjmbTVB2j2HeicL",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "4unzWxkgjBTLCUaLv9XNKav12SH3REHedfe7JJiQTpMZi38YTNkngRwSsTYqdcvZxVpkBoeVcsdYCdZDqtCkLALf",
+      "slot": 504553529,
+      "revealedBattles": [
+        [
+          24,
+          25,
+          25,
+          19,
+          7
+        ],
+        [
+          13,
+          24,
+          14,
+          25,
+          24
+        ],
+        [
+          15,
+          25,
+          21,
+          14,
+          25
+        ],
+        [
+          20,
+          25,
+          23,
+          19,
+          13
+        ],
+        [
+          25,
+          12,
+          25,
+          21,
+          17
+        ],
+        [
+          23,
+          13,
+          25,
+          14,
+          25
+        ],
+        [
+          15,
+          25,
+          11,
+          25,
+          24
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 12,
+      "scoreHalf": 279,
+      "zones": 614,
+      "amountLamports": "0",
+      "balanceAfter": "3553840"
+    },
+    {
+      "seat": 15,
+      "wallet": "W12",
+      "route": "direct",
+      "address": "EAnKMXm5NrD6uzoDDKn3FGooJoCRxxF1GVMMKKabALjR",
+      "battlesHash": "001851564328edba1a8a50f03201c549f7faa72077f4de758d124ce527f6d4d0",
+      "passAsset": "AmsmyCBKkkmsUsPgA1KfsUYW8qjHNox8HY3U7CXut9Lo",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "4B94CpHXqFiB87mkADMZ66NcXSD4no43QAiFpNgswRSBzvHBiR6kKDgbLnXqeXho4TjoYUCS7BE48WqRFvokHsfy",
+      "slot": 504553529,
+      "revealedBattles": [
+        [
+          25,
+          25,
+          17,
+          17,
+          16
+        ],
+        [
+          19,
+          22,
+          22,
+          19,
+          18
+        ],
+        [
+          25,
+          16,
+          16,
+          24,
+          19
+        ],
+        [
+          13,
+          25,
+          16,
+          21,
+          25
+        ],
+        [
+          19,
+          18,
+          20,
+          18,
+          25
+        ],
+        [
+          25,
+          24,
+          25,
+          15,
+          11
+        ],
+        [
+          18,
+          11,
+          21,
+          25,
+          25
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 31,
+      "scoreHalf": 248,
+      "zones": 579,
+      "amountLamports": "0",
+      "balanceAfter": "3553840"
+    },
+    {
+      "seat": 16,
+      "wallet": "W13",
+      "route": "direct",
+      "address": "BdiQooDYCNnkBTEuWrvbUtapc1bEKNsvpXSU8U3FFNgn",
+      "battlesHash": "1c656cd10270f9b927cf0b50bec57cee83bf0a2f2943b84d016504762ba8d93d",
+      "passAsset": "6CvHa7Tvs6BU5sqzqknTLLGHZSpssJKgqTMn6xmzzdrY",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "32VSwM9U8suV9ws4NcxaUjM93gUpMsAzp2LdYvuDbHqbzkPtAsCKRagHkXcHNYJF4XAE7m3PZtG5gEJVQH6DJsTK",
+      "slot": 504553530,
+      "revealedBattles": [
+        [
+          25,
+          19,
+          18,
+          19,
+          19
+        ],
+        [
+          25,
+          10,
+          25,
+          16,
+          24
+        ],
+        [
+          16,
+          14,
+          25,
+          24,
+          21
+        ],
+        [
+          19,
+          24,
+          25,
+          19,
+          13
+        ],
+        [
+          10,
+          21,
+          25,
+          24,
+          20
+        ],
+        [
+          22,
+          24,
+          22,
+          7,
+          25
+        ],
+        [
+          18,
+          25,
+          11,
+          21,
+          25
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 15,
+      "scoreHalf": 265,
+      "zones": 599,
+      "amountLamports": "0",
+      "balanceAfter": "3553840"
+    },
+    {
+      "seat": 17,
+      "wallet": "W18",
+      "route": "direct",
+      "address": "EfRD2Sh3R2rkja48U4uwb96F8tu3aZSzef5R2mQMJzu",
+      "battlesHash": "706fe808a010ac9a38eef40dd346be727b76f0ec1a7213d541405aeed4aa7920",
+      "passAsset": "Bh5ZqTESwgjE4XbdhiegiVTDJBcqAP5ngzb9CAcGA7ct",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "g4sRSR4cqHWp4zdzDuZxBZgFqJDBrDjuwm4ysyFG4LaqdyKzyt4eGRP7kccJwUVRvkC3ixM3LkFFBwozitjv4mU",
+      "slot": 504553552,
+      "revealedBattles": [
+        [
+          25,
+          16,
+          22,
+          21,
+          16
+        ],
+        [
+          23,
+          13,
+          23,
+          16,
+          25
+        ],
+        [
+          25,
+          25,
+          17,
+          17,
+          16
+        ],
+        [
+          25,
+          25,
+          15,
+          10,
+          25
+        ],
+        [
+          15,
+          19,
+          22,
+          19,
+          25
+        ],
+        [
+          17,
+          20,
+          22,
+          25,
+          16
+        ],
+        [
+          16,
+          13,
+          25,
+          22,
+          24
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 34,
+      "scoreHalf": 242,
+      "zones": 576,
+      "amountLamports": "0",
+      "balanceAfter": "3553840"
+    },
+    {
+      "seat": 18,
+      "wallet": "W17",
+      "route": "direct",
+      "address": "6oqBtFcE46nP6SfPpSN5iX582sJXeMnBuAYBdN9FPuaG",
+      "battlesHash": "1ea8e2b4afa218ac00ce384f5b7200e8eb5eacb40fb2bdc7b6b4953e9e1a9c49",
+      "passAsset": "7Fgkn2tN6dP1i5xFCi8fFQPtqjBSMd7ReRKcAfG8DPga",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "5HYbCx3A1UspJSyTt4nCJUHDULPU5rmYbPuiL6JcDs252tNBFsC6WpngkjQiXpbCKsnaMfAWRSCodKgZCV4tzK5X",
+      "slot": 504553552,
+      "revealedBattles": [
+        [
+          23,
+          17,
+          13,
+          22,
+          25
+        ],
+        [
+          16,
+          24,
+          19,
+          19,
+          22
+        ],
+        [
+          23,
+          25,
+          16,
+          11,
+          25
+        ],
+        [
+          25,
+          24,
+          19,
+          19,
+          13
+        ],
+        [
+          25,
+          23,
+          14,
+          25,
+          13
+        ],
+        [
+          22,
+          25,
+          20,
+          11,
+          22
+        ],
+        [
+          23,
+          11,
+          25,
+          25,
+          16
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 24,
+      "scoreHalf": 257,
+      "zones": 591,
+      "amountLamports": "0",
+      "balanceAfter": "3553840"
+    },
+    {
+      "seat": 19,
+      "wallet": "W19",
+      "route": "direct",
+      "address": "7vKioBwZHigM9zLVXPZe23BgrR44Sf2etmP9LfxcJUqm",
+      "battlesHash": "2a94750bda10833246b3d2d1d38f3b8ef05ae09933bc66016a9a3b8679cad807",
+      "passAsset": "cjaYv3XSXwmuCkE8ZevN4kE2AdafT3QUc2o8YQ9KP6r",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "3prxE1zvGLgyPx7JNm5r6cFD7yq6HvXZqP3soJuLxYojaxFcS3FbKgc8Ss6i1FCzXkEUsk7Kf1YCvDaAtwTpDRRZ",
+      "slot": 504553552,
+      "revealedBattles": [
+        [
+          25,
+          25,
+          25,
+          10,
+          15
+        ],
+        [
+          25,
+          17,
+          10,
+          25,
+          23
+        ],
+        [
+          21,
+          25,
+          13,
+          25,
+          16
+        ],
+        [
+          16,
+          14,
+          22,
+          25,
+          23
+        ],
+        [
+          11,
+          22,
+          25,
+          17,
+          25
+        ],
+        [
+          15,
+          16,
+          25,
+          25,
+          19
+        ],
+        [
+          15,
+          20,
+          25,
+          25,
+          15
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 10,
+      "scoreHalf": 282,
+      "zones": 591,
+      "amountLamports": "0",
+      "balanceAfter": "3553840"
+    },
+    {
+      "seat": 20,
+      "wallet": "W16",
+      "route": "direct",
+      "address": "J8vnziqaqjr7miqNDmbiffGh8Hq3Pit8GNNjkk4hQeiJ",
+      "battlesHash": "6151478f12ac012bbda07c6a9cc0adb1d93a2cf8fbf5a8b04dbb6b2e332f3342",
+      "passAsset": "4QsLrToU5cvJ9x6H8bWEa44mw6rShZv4HBZsJja6VsjS",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "6tUzuYHJ8fELhVdACVGCJkoUgWwRxMLBTcVYs7x79HyDJtYnKxUFRFATD5PgxbnpNroprTxozXa1sm7R7zcq7wc",
+      "slot": 504553564,
+      "revealedBattles": [
+        [
+          25,
+          13,
+          24,
+          13,
+          25
+        ],
+        [
+          23,
+          25,
+          10,
+          25,
+          17
+        ],
+        [
+          15,
+          25,
+          15,
+          25,
+          20
+        ],
+        [
+          14,
+          25,
+          25,
+          25,
+          11
+        ],
+        [
+          21,
+          17,
+          12,
+          25,
+          25
+        ],
+        [
+          25,
+          12,
+          15,
+          23,
+          25
+        ],
+        [
+          7,
+          25,
+          19,
+          25,
+          24
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 5,
+      "scoreHalf": 309,
+      "zones": 602,
+      "amountLamports": "0",
+      "balanceAfter": "3553840"
+    },
+    {
+      "seat": 21,
+      "wallet": "W22",
+      "route": "direct",
+      "address": "9wbGkEfUFXZFA8LTSXgQmPCMfVUMNLL5XGJbo95M29kA",
+      "battlesHash": "0cbd454be6e0a329e5a1da27848f9c4c5f5bd5277fe93b112537f83b1d0b25f2",
+      "passAsset": "3kg7LL19cowE7Q6DPSTdX14Smxa6pQ2D1NcsWAQ61VbK",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "4SyBmNfJ8QdgdhLZDp8uy7M16RsGpfmZEVBzLRVvwRaVn5r1JgFoioHqgERHmqDERpqqBFwi9Pg4E4tfaXSbYja9",
+      "slot": 504553572,
+      "revealedBattles": [
+        [
+          19,
+          12,
+          22,
+          25,
+          22
+        ],
+        [
+          19,
+          25,
+          25,
+          11,
+          20
+        ],
+        [
+          23,
+          25,
+          25,
+          13,
+          14
+        ],
+        [
+          21,
+          13,
+          22,
+          19,
+          25
+        ],
+        [
+          25,
+          24,
+          14,
+          12,
+          25
+        ],
+        [
+          22,
+          25,
+          16,
+          19,
+          18
+        ],
+        [
+          14,
+          23,
+          23,
+          15,
+          25
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 35,
+      "scoreHalf": 234,
+      "zones": 579,
+      "amountLamports": "0",
+      "balanceAfter": "3553840"
+    },
+    {
+      "seat": 22,
+      "wallet": "W23",
+      "route": "direct",
+      "address": "3MHZq2t7roYHsEPFX7LK1AcPGkUp5RVx82RzHHt6ZCj7",
+      "battlesHash": "0114c0e056c5500d7c1c0898bc9dccee061a21ab17caf9f13420cecdead181b0",
+      "passAsset": "ABXbULi3G2nsWeJS1FCewGnvngMme1ju9a55SXKgaNwB",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "4B3EEJhhkgon5UKDap6t7gyobbsAtoo3jdcduYoTVsPia8yPGEGh6rQgGdPVdU4vjPiWVyxN9QPkWA1ivyQL9P3q",
+      "slot": 504553572,
+      "revealedBattles": [
+        [
+          19,
+          22,
+          16,
+          25,
+          18
+        ],
+        [
+          17,
+          20,
+          25,
+          13,
+          25
+        ],
+        [
+          14,
+          15,
+          25,
+          21,
+          25
+        ],
+        [
+          11,
+          25,
+          15,
+          24,
+          25
+        ],
+        [
+          8,
+          25,
+          20,
+          24,
+          23
+        ],
+        [
+          14,
+          24,
+          21,
+          25,
+          16
+        ],
+        [
+          11,
+          25,
+          25,
+          24,
+          15
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 33,
+      "scoreHalf": 244,
+      "zones": 580,
+      "amountLamports": "0",
+      "balanceAfter": "3553840"
+    },
+    {
+      "seat": 23,
+      "wallet": "W20",
+      "route": "direct",
+      "address": "7NhgEuPtvjYVyqFD4isCnKFNqSxmLLCxZzSvky3JX4oX",
+      "battlesHash": "fa644c20621e5c3f680886c95360bad08d9cc9b48482ddc238424ab43e053110",
+      "passAsset": "51nbg5xWDPMwge9nv6az8PBczVSFE961Vyon43N49jAK",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "5KtcX7P2PjRURZsutD3QrpLNnTXvJPhd852Wjtehsqj9A4gtUPRcRc74iifM6YwEqDmwfiNCfNVdFUiabcc2ucB7",
+      "slot": 504553572,
+      "revealedBattles": [
+        [
+          21,
+          22,
+          19,
+          22,
+          16
+        ],
+        [
+          14,
+          24,
+          25,
+          25,
+          12
+        ],
+        [
+          17,
+          25,
+          21,
+          12,
+          25
+        ],
+        [
+          22,
+          25,
+          14,
+          20,
+          19
+        ],
+        [
+          24,
+          25,
+          9,
+          25,
+          17
+        ],
+        [
+          25,
+          25,
+          15,
+          15,
+          20
+        ],
+        [
+          16,
+          25,
+          21,
+          22,
+          16
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 21,
+      "scoreHalf": 259,
+      "zones": 587,
+      "amountLamports": "0",
+      "balanceAfter": "3553840"
+    },
+    {
+      "seat": 24,
+      "wallet": "W21",
+      "route": "direct",
+      "address": "Bk4SKwVgvZvrZ2Y2txCknoDcZuoamhq7LdD94QUUR5Mu",
+      "battlesHash": "2bcc6943ea3e29a120e5c40b83611c4a88e5ecc950eac54ee94ebda6aedd8113",
+      "passAsset": "2Va7jyN1ppyE8aVN9cd9Rso879VGhsGhbNdcPjdejj71",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "UqUqHLct7TKt9iEecprsXxm9oLwYCUcRtA31rPHLe9FYLfE2LKsd4CgPdQPkjf1bDdnsujNxoyhGypZvCHccE6d",
+      "slot": 504553573,
+      "revealedBattles": [
+        [
+          21,
+          25,
+          25,
+          13,
+          16
+        ],
+        [
+          13,
+          22,
+          25,
+          16,
+          24
+        ],
+        [
+          21,
+          19,
+          25,
+          22,
+          13
+        ],
+        [
+          16,
+          25,
+          25,
+          24,
+          10
+        ],
+        [
+          25,
+          25,
+          17,
+          19,
+          14
+        ],
+        [
+          25,
+          19,
+          22,
+          18,
+          16
+        ],
+        [
+          17,
+          25,
+          25,
+          13,
+          20
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 18,
+      "scoreHalf": 262,
+      "zones": 586,
+      "amountLamports": "0",
+      "balanceAfter": "3553840"
+    },
+    {
+      "seat": 25,
+      "wallet": "W26",
+      "route": "direct",
+      "address": "HfkvkWMPs9keMsaHcuH8AX1DCn3yeRuiaAbH3S6W8vZE",
+      "battlesHash": "70fada4333f8197ec24ff7b3ae8a572c20a7c82e5dfe73a27534ac24e9d07abd",
+      "passAsset": "J4LVb54oZUxJcF4gSFXeN6tQJKPLkeq7LC1GXZTGe3L9",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "41cBER4Q4tL9vpVqPuUdVNRvgrZVVCVjB9RiMKpQCSaCny6m4GdEh54X61iVrECgT8FSD7HRw8DUXKTKqLaxzxMD",
+      "slot": 504553593,
+      "revealedBattles": [
+        [
+          25,
+          14,
+          11,
+          25,
+          25
+        ],
+        [
+          25,
+          21,
+          12,
+          25,
+          17
+        ],
+        [
+          25,
+          20,
+          20,
+          24,
+          11
+        ],
+        [
+          25,
+          23,
+          10,
+          22,
+          20
+        ],
+        [
+          16,
+          25,
+          20,
+          16,
+          23
+        ],
+        [
+          10,
+          22,
+          24,
+          25,
+          19
+        ],
+        [
+          25,
+          12,
+          25,
+          13,
+          25
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 9,
+      "scoreHalf": 284,
+      "zones": 614,
+      "amountLamports": "0",
+      "balanceAfter": "3553840"
+    },
+    {
+      "seat": 26,
+      "wallet": "W24",
+      "route": "direct",
+      "address": "7qvXkBndmUFQx6AHwZ5bQEVMWVmS5fb8jaNiimNxsyTq",
+      "battlesHash": "3e381d48e957e8a681c0d5e122670a954a906bf9a4f1c12646ef325247f77262",
+      "passAsset": "CqLuDRkcSpFvDpE7v38fX3qrppUb1nrYo7Tct6R8SijA",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "3PY1wXi9mngnDrfiSjEWKEeNitiaj8UhEtTDMayLSz2pP3ygugrE6SiiqS7gtQwFWpxGV3bXLYEvLDL1TAQzSAHH",
+      "slot": 504553593,
+      "revealedBattles": [
+        [
+          9,
+          25,
+          21,
+          20,
+          25
+        ],
+        [
+          23,
+          10,
+          25,
+          17,
+          25
+        ],
+        [
+          25,
+          21,
+          16,
+          23,
+          15
+        ],
+        [
+          9,
+          20,
+          25,
+          25,
+          21
+        ],
+        [
+          15,
+          25,
+          25,
+          20,
+          15
+        ],
+        [
+          23,
+          14,
+          25,
+          25,
+          13
+        ],
+        [
+          23,
+          25,
+          25,
+          16,
+          11
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 8,
+      "scoreHalf": 288,
+      "zones": 618,
+      "amountLamports": "0",
+      "balanceAfter": "3553840"
+    },
+    {
+      "seat": 27,
+      "wallet": "W27",
+      "route": "direct",
+      "address": "69BuMKj1e7LNsDYgmbXfJtk1WppgoepFUFq6pWg7Nut7",
+      "battlesHash": "00e2b1a9598a33f662013fdde06de8ee19e0d5aaf6d9433c82cfa10ac564af14",
+      "passAsset": "8tSvrx8wUJeZp5hH1JmSC5UasUBJpj63fUVfxytqU6pd",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "3Bew538ify4k1JyZP7pkjPJHj8q3hFcooLEYCBVGyFj6rEnPeQBhhY6SUKLMLb3YFzKzWnQU58wqHGz11yS7C6MM",
+      "slot": 504553593,
+      "revealedBattles": [
+        [
+          18,
+          20,
+          23,
+          25,
+          14
+        ],
+        [
+          24,
+          16,
+          19,
+          19,
+          22
+        ],
+        [
+          25,
+          17,
+          20,
+          20,
+          18
+        ],
+        [
+          16,
+          15,
+          25,
+          25,
+          19
+        ],
+        [
+          25,
+          25,
+          18,
+          25,
+          7
+        ],
+        [
+          11,
+          25,
+          18,
+          21,
+          25
+        ],
+        [
+          19,
+          25,
+          16,
+          16,
+          24
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 20,
+      "scoreHalf": 261,
+      "zones": 603,
+      "amountLamports": "0",
+      "balanceAfter": "3553840"
+    },
+    {
+      "seat": 28,
+      "wallet": "W25",
+      "route": "direct",
+      "address": "HbFoy8h6Y7Awavs1onxN9qSwZrRDUa3Ti8P3idE6Q2wq",
+      "battlesHash": "0ff370640b3687d1d8a985481d20356dc224296f490ab3bb346d34bf077e131c",
+      "passAsset": "2UVpirSzP9kXNUz5g83hE7D92LMCiw8yJKcYK1GxVSvf",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "2LLozCf7qQ4jJKZCLcjTsgGdKSQL7kMvugC8Agj44xeKheHPokw6jQCTR8tVDW38UiE4kehkvRiFUtxoqhdzdoHz",
+      "slot": 504553594,
+      "revealedBattles": [
+        [
+          23,
+          13,
+          16,
+          25,
+          23
+        ],
+        [
+          25,
+          25,
+          8,
+          25,
+          17
+        ],
+        [
+          25,
+          25,
+          6,
+          19,
+          25
+        ],
+        [
+          22,
+          25,
+          16,
+          14,
+          23
+        ],
+        [
+          21,
+          14,
+          25,
+          15,
+          25
+        ],
+        [
+          16,
+          25,
+          22,
+          14,
+          23
+        ],
+        [
+          20,
+          16,
+          25,
+          23,
+          16
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 7,
+      "scoreHalf": 290,
+      "zones": 606,
+      "amountLamports": "0",
+      "balanceAfter": "3553840"
+    },
+    {
+      "seat": 29,
+      "wallet": "W29",
+      "route": "direct",
+      "address": "HURavDvBLTvz3hFHcEWZ6LhP59qA2GQ5ZMfamVRNm7Jv",
+      "battlesHash": "bde9faef2098dee080ad63a3f5e625d3151d5ce0287d113ba8172a55afb0eff6",
+      "passAsset": "AjN5UaCdgCP5nsZx3qgPo6LjRA1iDanJqD5gD5ATBAGV",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "34vBtmxukGdR9NoqQ8kzCxfkUwyTk9A3EGmL51VFCmU8G11RAw1BMcidkKs9VMYkwxpTeB9WRNgsfRM17DkqKzwL",
+      "slot": 504553603,
+      "revealedBattles": [
+        [
+          8,
+          25,
+          25,
+          18,
+          24
+        ],
+        [
+          25,
+          14,
+          16,
+          25,
+          20
+        ],
+        [
+          25,
+          25,
+          21,
+          25,
+          4
+        ],
+        [
+          19,
+          16,
+          24,
+          25,
+          16
+        ],
+        [
+          25,
+          9,
+          25,
+          21,
+          20
+        ],
+        [
+          22,
+          20,
+          20,
+          13,
+          25
+        ],
+        [
+          25,
+          15,
+          25,
+          10,
+          25
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 4,
+      "scoreHalf": 312,
+      "zones": 636,
+      "amountLamports": "0",
+      "balanceAfter": "3553840"
+    },
+    {
+      "seat": 30,
+      "wallet": "W30",
+      "route": "direct",
+      "address": "85MN5Tc24gVRvCkZzRSjM3hkoKUbTd975XvCMRczPyEG",
+      "battlesHash": "715d2bbbb7eebcec110e84fe9f709214559974a1542fd491844e16e7b8299e60",
+      "passAsset": "CzqFoSWtmAznGEVM5nhMonFMnbtASyCTowcbTCAjzth1",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "5jSES9ZqqQxidTZhGePNTVavQBsinVvhD1JHYWAYHyqAwRxLC5T1kBigmdZryqNpqRBMiGpd8ccpbc6HKVZVzs2S",
+      "slot": 504553603,
+      "revealedBattles": [
+        [
+          18,
+          25,
+          24,
+          12,
+          21
+        ],
+        [
+          25,
+          17,
+          25,
+          17,
+          16
+        ],
+        [
+          23,
+          25,
+          20,
+          25,
+          7
+        ],
+        [
+          16,
+          25,
+          19,
+          15,
+          25
+        ],
+        [
+          22,
+          22,
+          16,
+          18,
+          22
+        ],
+        [
+          15,
+          22,
+          25,
+          19,
+          19
+        ],
+        [
+          15,
+          22,
+          22,
+          19,
+          22
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 37,
+      "scoreHalf": 223,
+      "zones": 570,
+      "amountLamports": "0",
+      "balanceAfter": "3553840"
+    },
+    {
+      "seat": 31,
+      "wallet": "W31",
+      "route": "direct",
+      "address": "ARKd8adMn8B2MUY7XjA3R3Vjj2zXMkC6UV97WmFmPUBC",
+      "battlesHash": "71d26a19378c9de4de81fcdd87f70ae7ec79f03822dd41f36dd11a64aca43117",
+      "passAsset": "BeaaK1nErfEf6DSj92s7Y8MMtkPQB1zTMwwHgZDmMMqE",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "2aqWtVL1v9pqDyADGrALrTTcXa99sWXsZm56m2WgC191jfrP6QL2eMRqWGGB7DNRsmsXvuqxBMHW9NQDx6K1Gqkj",
+      "slot": 504553604,
+      "revealedBattles": [
+        [
+          19,
+          25,
+          24,
+          13,
+          19
+        ],
+        [
+          25,
+          9,
+          25,
+          16,
+          25
+        ],
+        [
+          19,
+          19,
+          22,
+          24,
+          16
+        ],
+        [
+          14,
+          24,
+          25,
+          25,
+          12
+        ],
+        [
+          19,
+          25,
+          22,
+          22,
+          12
+        ],
+        [
+          25,
+          19,
+          25,
+          11,
+          20
+        ],
+        [
+          24,
+          25,
+          13,
+          16,
+          22
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 14,
+      "scoreHalf": 266,
+      "zones": 602,
+      "amountLamports": "0",
+      "balanceAfter": "3553840"
+    },
+    {
+      "seat": 32,
+      "wallet": "W28",
+      "route": "direct",
+      "address": "2CK7ubGSRqn2gwBbGZCq7oooWbthRqBJnqYYvJBR44pi",
+      "battlesHash": "71791d5afc2ab0ece56dd82aa726ce3ff03f6ce8959b3644649ee10ebc6751b6",
+      "passAsset": "45qtoQYc6eo8TBk9z6ZESMPuPx2MjDdN1GN2pmfmpVoY",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "atAiY2o3bwLeYLAZ9N2XRdbXcJxpJfYbYCukMUta782PhjCVnKyZpux7CtoE1JuPy2sxRNwCtG1RYcQi2MtRzya",
+      "slot": 504553604,
+      "revealedBattles": [
+        [
+          25,
+          20,
+          16,
+          20,
+          19
+        ],
+        [
+          25,
+          17,
+          13,
+          25,
+          20
+        ],
+        [
+          25,
+          18,
+          25,
+          20,
+          12
+        ],
+        [
+          25,
+          25,
+          21,
+          22,
+          7
+        ],
+        [
+          23,
+          25,
+          13,
+          14,
+          25
+        ],
+        [
+          25,
+          25,
+          14,
+          19,
+          17
+        ],
+        [
+          19,
+          25,
+          25,
+          15,
+          16
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 13,
+      "scoreHalf": 272,
+      "zones": 594,
+      "amountLamports": "0",
+      "balanceAfter": "3553840"
+    },
+    {
+      "seat": 33,
+      "wallet": "W33",
+      "route": "direct",
+      "address": "2c9pKUy6hx94bGPj4rJ4czb4HhH1La1anfhWf52tJy91",
+      "battlesHash": "4fd3da0e16557dc5f48fab712bdcb3efbf2eb74d522201ee89b2b06da34b4ea6",
+      "passAsset": "8uqk3KcSUmQNeonVC2ooWkGhZ9ikXv2kjhS4sfEvNuos",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "5d3q6Mn4ERw5TUyhjmCcaJFdFFXMH9CiwynipybWqLhrNXJjKUc7opCf7JQw6YmKg4FxJPbcMovaCvmsKwhue2iJ",
+      "slot": 504553664,
+      "revealedBattles": [
+        [
+          25,
+          13,
+          12,
+          25,
+          25
+        ],
+        [
+          23,
+          25,
+          10,
+          23,
+          19
+        ],
+        [
+          12,
+          20,
+          24,
+          19,
+          25
+        ],
+        [
+          10,
+          16,
+          24,
+          25,
+          25
+        ],
+        [
+          25,
+          20,
+          14,
+          17,
+          24
+        ],
+        [
+          25,
+          22,
+          11,
+          25,
+          17
+        ],
+        [
+          13,
+          14,
+          25,
+          23,
+          25
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 18,
+      "scoreHalf": 262,
+      "zones": 586,
+      "amountLamports": "0",
+      "balanceAfter": "3553840"
+    },
+    {
+      "seat": 34,
+      "wallet": "W32",
+      "route": "direct",
+      "address": "E97qquyinwkiAovRkV5aCMhVmMdT11c26LYgSQm1PiVi",
+      "battlesHash": "d2ae9693557edaa69a6b05d82be5bfb790fd0d1bae919b6096f55e3eadff5393",
+      "passAsset": "A2HN8kKFLak2nB2dQ4dp98H9wrrtEew7hEeWu8Kkq5DX",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "21NvRYRCuN9fiipaeEhib6hEm3fqPVC2TJTNGMwyduhNHzNL1iS6oXXjwJ4YBZQQLpvWHtvxrVwzcpJ94CB7UZVK",
+      "slot": 504553664,
+      "revealedBattles": [
+        [
+          22,
+          24,
+          19,
+          19,
+          16
+        ],
+        [
+          25,
+          13,
+          19,
+          25,
+          18
+        ],
+        [
+          25,
+          25,
+          8,
+          23,
+          19
+        ],
+        [
+          25,
+          23,
+          17,
+          19,
+          16
+        ],
+        [
+          19,
+          18,
+          25,
+          13,
+          25
+        ],
+        [
+          25,
+          24,
+          21,
+          10,
+          20
+        ],
+        [
+          25,
+          21,
+          8,
+          24,
+          22
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 26,
+      "scoreHalf": 250,
+      "zones": 594,
+      "amountLamports": "0",
+      "balanceAfter": "3553840"
+    },
+    {
+      "seat": 35,
+      "wallet": "W35",
+      "route": "direct",
+      "address": "FHy2QgnPkbcNeiC5cMRe2Ymi6i2kWMnCmQRJdo1nB2b8",
+      "battlesHash": "744087a661b2f151164df75750614032a77b2dea49c51a25c574a419c125f0ea",
+      "passAsset": "9Jn3RpuhojcNZijnZaZpj93K6kbY4bZNC5GxYu3ZYHqd",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "rFraxtzNeR7m6CeU4ChgQ9C79bNKKZ7nKcV4CTghSr3mTC2YcEVdqHTuR7wyzpYQeyCvf9hd32D8hdCyx9tdf5y",
+      "slot": 504553664,
+      "revealedBattles": [
+        [
+          25,
+          22,
+          16,
+          18,
+          19
+        ],
+        [
+          25,
+          15,
+          25,
+          19,
+          16
+        ],
+        [
+          19,
+          23,
+          14,
+          19,
+          25
+        ],
+        [
+          25,
+          24,
+          25,
+          21,
+          5
+        ],
+        [
+          10,
+          25,
+          19,
+          21,
+          25
+        ],
+        [
+          22,
+          22,
+          22,
+          21,
+          13
+        ],
+        [
+          13,
+          20,
+          25,
+          25,
+          17
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 32,
+      "scoreHalf": 245,
+      "zones": 583,
+      "amountLamports": "0",
+      "balanceAfter": "3553840"
+    },
+    {
+      "seat": 36,
+      "wallet": "W34",
+      "route": "direct",
+      "address": "E5DSmevYhFSDfyF1Yvp4WiLLd3cVHHrqzhA48pfM5BEC",
+      "battlesHash": "037bfe45d05c352f0902bfb7e581b78bb89169a96d92b9ae9a0623a26c549898",
+      "passAsset": "FDb2rCZhG7H5WDLGCFTJ4F4nmdn3bZ12Um9iAAYuQ1TZ",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "43sPbvQ6zVQxgcGeA9VrusqGrfYRdfS8p7uPagpwqN2UXGEmREmXGhbPnZebc7AuiDZwZpr2obMByShmS7AMAdje",
+      "slot": 504553664,
+      "revealedBattles": [
+        [
+          25,
+          13,
+          25,
+          25,
+          12
+        ],
+        [
+          23,
+          25,
+          19,
+          17,
+          16
+        ],
+        [
+          15,
+          16,
+          24,
+          25,
+          20
+        ],
+        [
+          11,
+          20,
+          25,
+          19,
+          25
+        ],
+        [
+          9,
+          25,
+          21,
+          25,
+          20
+        ],
+        [
+          25,
+          16,
+          16,
+          21,
+          22
+        ],
+        [
+          11,
+          19,
+          21,
+          24,
+          25
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 22,
+      "scoreHalf": 259,
+      "zones": 579,
+      "amountLamports": "0",
+      "balanceAfter": "3553840"
+    },
+    {
+      "seat": 37,
+      "wallet": "W36",
+      "route": "direct",
+      "address": "HgnAG7HAMqHyhPgghNjH8fw5536nupNvZngCHkWFYvqA",
+      "battlesHash": "4a9845fc442b5597ab7b19260e7886bf02df95ec00013eddf28f9539fc4ed841",
+      "passAsset": "C66mG2TH9vFpz8s2AoF3PW5AmDPothd9j33SyeqE9GGn",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "58XAMoJPRpwS64TUF3aZhAjx4UizxRgJ4kroAvn4xCNmbkYziPBpviRXacwA8Qsg39nF5kLKxe4TRHMmePdkCXz4",
+      "slot": 504553673,
+      "revealedBattles": [
+        [
+          21,
+          25,
+          25,
+          17,
+          12
+        ],
+        [
+          23,
+          23,
+          10,
+          25,
+          19
+        ],
+        [
+          16,
+          25,
+          25,
+          11,
+          23
+        ],
+        [
+          25,
+          11,
+          25,
+          14,
+          25
+        ],
+        [
+          16,
+          24,
+          16,
+          19,
+          25
+        ],
+        [
+          22,
+          18,
+          16,
+          22,
+          22
+        ],
+        [
+          13,
+          22,
+          18,
+          22,
+          25
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 27,
+      "scoreHalf": 250,
+      "zones": 582,
+      "amountLamports": "0",
+      "balanceAfter": "3553840"
+    },
+    {
+      "seat": 38,
+      "wallet": "W37",
+      "route": "direct",
+      "address": "EdodvtHdYxgGwMzPwa3BzDR8NhMdL5jMkKTZKTzekaip",
+      "battlesHash": "f28a487602b396444bd4b6bd6482e67ffe47da6cecb6403aee10126259fe4649",
+      "passAsset": "FDPbNiTiSZGoY9f94NyCH9P4kZXAhZAUcavTz5K3FbV7",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "5gKv2VRpbyTDaAhZujt5UjdrPCTvojLGnzyM7AQQBaRjkefYpmfqXoE5dGYaPiPCf5wE9qefjv7cAuHS94tCTMpw",
+      "slot": 504553673,
+      "revealedBattles": [
+        [
+          25,
+          18,
+          25,
+          18,
+          14
+        ],
+        [
+          23,
+          16,
+          17,
+          19,
+          25
+        ],
+        [
+          22,
+          13,
+          25,
+          22,
+          18
+        ],
+        [
+          22,
+          25,
+          18,
+          25,
+          10
+        ],
+        [
+          19,
+          22,
+          22,
+          13,
+          24
+        ],
+        [
+          21,
+          13,
+          25,
+          19,
+          22
+        ],
+        [
+          25,
+          9,
+          25,
+          16,
+          25
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 17,
+      "scoreHalf": 263,
+      "zones": 596,
+      "amountLamports": "0",
+      "balanceAfter": "3553840"
+    },
+    {
+      "seat": 39,
+      "wallet": "UI-A",
+      "route": "ui",
+      "address": "7fpaNh8mAi9SDJyvu6sVFxsqqP8LE3whvBJ1K9ZFYPve",
+      "battlesHash": "73bafdad877ecaf5bfd043ad4a6c35510daae992bc4c32cfe011b0383c043129",
+      "passAsset": "4rPSZKj1XD9kXWFnRDoq57vWcBgMswv443zmAmGH59BG",
+      "termsVersion": 4,
+      "flagged": false,
+      "refunded": false,
+      "sanctionsHold": false,
+      "nextPlaceLamports": "0",
+      "registerSig": "3VdrP4TALScfjinh4Y8fLjt1dtdir5ndxFQkKwvnoQ89txA6UP9QaRLtrXWKjVdkHFtwdMB4nMmSXzcYLzuBPVbP",
+      "slot": 504556920,
+      "revealedBattles": [
+        [
+          20,
+          20,
+          20,
+          20,
+          20
+        ],
+        [
+          20,
+          20,
+          20,
+          20,
+          20
+        ],
+        [
+          20,
+          20,
+          20,
+          20,
+          20
+        ],
+        [
+          20,
+          20,
+          20,
+          20,
+          20
+        ],
+        [
+          20,
+          20,
+          20,
+          20,
+          20
+        ],
+        [
+          20,
+          20,
+          20,
+          20,
+          20
+        ],
+        [
+          20,
+          20,
+          20,
+          20,
+          20
+        ]
+      ],
+      "revealedStatus": "ok",
+      "recomputedHashMatches": true,
+      "rank": 40,
+      "scoreHalf": 185,
+      "zones": 596,
+      "amountLamports": "0",
+      "balanceAfter": "10251130274"
+    }
+  ],
+  "_note": "Renamed from T7.actual.json. This is pool 36's settlement, NOT T7's: T7 was stood down and its frozen plan describes a different field. Filed as an observation (registry/pool-36.observation.md), scored against nothing."
+}

@@ -2071,23 +2071,43 @@ attention as a **second, independent reviewer** — a different person with a di
 is what a two-member registry is presumably for — and worth deciding deliberately whether the
 clock should fail open or fail held. It currently fails open by omission rather than by ruling.
 
-### 2. Naming a pool in a frozen plan inherits every stranger who walks into it
+### 2. My own margin was erased — and I misread by whom
 
-T4, T5, T6 and T3 all froze `poolId: null` on purpose, and that portability paid for itself when
-T4 lost pool 15 to the seal-lockout and ran on pool 16 with the plan unedited.
+**CORRECTED 2026-09-27 13:10Z, after the reveal.** While pool 36 was still open I reported that a
+**second stranger** had entered at 22:03:29Z and taken it to exactly 40, closing the refund path.
+The reveal shows the 40th entrant was **UI-A — the project owner's own account**. I had checked
+the registering signature against my headless register log, not found it, and concluded "not
+ours". UI-A enters through the app and was never going to be in that log. The claim reached four
+files and a message to the project owner before the data corrected it. Wrong twice over: wrong
+about who, and reasoned from an absence in the wrong place.
 
-T7 could not do that. A stranger was already seated in pool 36 when the plan was written, so the
-plan had to name the pool and account for that specific entrant — which made it un-portable. Then
-a **second** stranger arrived at 22:03:29Z, thirteen minutes after our fill stopped, taking the
-pool from 39 to exactly 40 and turning its deadline outcome from *refund* into *seal and play*. A
-deliberate safety margin was erased by someone who has every right to enter a public pool.
+What is actually true, and still worth keeping:
 
-Two lessons, both for the re-run:
+- **Only one stranger ever entered pool 36**, at 15:35:48Z — exactly the one `T7.plan.json` was
+  written around. The plan's contingency for extra strangers was never tested.
+- **A stop-at-39 margin only holds if I control the entrant count, and I do not.** UI-A is inside
+  the plan and outside my control. Any future "stop short and wait" needs to account for the
+  seats the project owner may fill while waiting — or, better, avoid waiting at all: their seats
+  first, then one fast fill to capacity.
+- **Naming a pool still costs portability.** T4, T5, T6 and T3 froze `poolId: null` and stayed
+  portable; T7 had to name pool 36 because of that one stranger, and so could not move.
 
-- **A plan that must name a pool should say what it does when the field changes underneath it.**
-  T7's contingency covered *one* extra stranger arriving; it did not cover one arriving after the
-  fill had deliberately stopped short.
-- **Holding a pool part-filled is the exposure.** Every minute between our first entry and the
-  seal is a minute a stranger can change the field. The fill wants to be one fast run to 64, with
-  the founder's seats going in *first* rather than in the middle — which is the opposite of how
-  tonight was sequenced, and the sequencing was mine.
+The underlying fact this exposed is useful: **UI-A registered successfully at 22:03:29Z, five
+minutes before the wallet was reported unusable.** The app signs in through Privy with an embedded
+wallet; the reviewer key is a separate external wallet. The play path worked and the reviewer path
+did not — which is precisely why T7's flags were blocked while an entry was not.
+
+### 3. What pool 36 proved anyway
+
+Filed as `registry/pool-36.observation.md`. **W00 and W01 finished on identical scores (537) and
+identical zones (797), shared rank 1, and were paid 2000000000 each with zero remainder** — the
+first pool on this cluster to pay two seats. The recomputed results root matches the chain, all 40
+allocations reproduce their committed hashes, and the vault ended at exactly the 650240 rent
+cushion.
+
+So **U1 — the claim T7 was built around — is demonstrated**, on a real pool with real lamports
+and an entrant nobody controlled. What remains unproven is the half that needs a wallet: the
+same-device finding, and the escrow / release / forfeit / next-place path.
+
+**§H13 recurs a fourth time.** UI-A played the even split in all seven battles and came last at
+185. Every unconditional claim survived it, because an even split is five stats none above 25.

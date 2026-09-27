@@ -93,9 +93,9 @@
     "standDownAt": "2026-09-26T22:10Z",
     "reason": "The project owner's wallet was unavailable, so neither founder entry nor either flag could be signed. Both halves of T7 — the same-device finding and the whole escrow/release/forfeit path — need that signature. They chose to stand down and I recommended it.",
     "whatHadAlreadyHappened": "38 headless seats were in (W00..W37, first at 21:50:03Z), deliberately stopping at 39 total so the deadline would refund rather than seal.",
-    "whatOvertookIt": "At 2026-09-26T22:03:29Z a SECOND wallet that is not ours registered, taking pool 36 to exactly 40 — MIN_SEATS. trigger_refund requires entrants < min_seats (refund.rs:75) and seal_at_deadline requires entrants >= min_seats (seal.rs:64), so from that moment the pool seals and plays at its deadline and nothing anyone does can stop it.",
-    "soThisPlanDidNotRun": "Pool 36's settlement is recorded as an OBSERVATION (registry/pool-36.observation.md), not as T7. Its field cannot match this plan: two strangers rather than one, no founder seats, no flags. T7.plan.json stays byte-identical and unspent, and T7 proper needs a new plan and freeze for a later pool.",
-    "whatThePlanStillGotRight": "U1 is unconditional and survives the change of field: W00 and W01 stand at 511 half-points and 756 zones apiece among the 38 seated, identical, so they tie whatever the two strangers played. U2 survives too at this size — the best capped seat reaches 292 with a ceiling of 320, against a wall floor of 511."
+    "whatOvertookIt": "At 2026-09-26T22:03:29Z UI-A — the project owner's own account — registered, taking pool 36 to exactly 40 = MIN_SEATS. CORRECTED 2026-09-27: while the pool was open this was reported as a SECOND stranger, because the signature was absent from the headless register log; UI-A enters through the app and was never in that log. Only one stranger ever entered pool 36. trigger_refund requires entrants < min_seats (refund.rs:75) and seal_at_deadline requires entrants >= min_seats (seal.rs:64), so from that moment the pool seals and plays at its deadline and nothing anyone does can stop it.",
+    "soThisPlanDidNotRun": "Pool 36's settlement is recorded as an OBSERVATION (registry/pool-36.observation.md), not as T7. Its field cannot match this plan: 40 seats rather than 64, one founder seat rather than two, and no flags. T7.plan.json stays byte-identical and unspent, and T7 proper needs a new plan and freeze for a later pool.",
+    "whatThePlanStillGotRight": "EVERYTHING THAT DID NOT NEED THE MISSING WALLET. Settled 2026-09-27T01:46:20Z: W00 and W01 both scored 537 with 797 zones — IDENTICAL — shared rank 1 and were paid 2000000000 each with zero remainder, the first two-seat payout on this cluster. Predicted range was 511..539 and the best capped seat was predicted to cap at 320; it reached 313. The recomputed results root matches the chain and all 40 allocations reproduce their committed hashes. U1, the claim this plan was built around, is demonstrated."
   },
 
   "verifyIndependently": [
@@ -114,7 +114,7 @@
     "firstEntryOfOursAt": "2026-09-26T21:50:03Z",
     "freezeMustPrecedeFirstEntry": true,
     "freezePrecededFirstEntryBy": "2 h 8 min 8 s",
-    "secondStrangerRegisteredAt": "2026-09-26T22:03:29Z",
-    "secondStrangerNote": "Took the pool to 40 = MIN_SEATS, thirteen minutes after our fill stopped at 39, and made the seal unavoidable. See the stand-down block above."
+    "fortiethEntrantRegisteredAt": "2026-09-26T22:03:29Z",
+    "fortiethEntrantNote": "UI-A, the project owner's own account — not a stranger, as first reported. It took the pool to 40 = MIN_SEATS eleven minutes after our fill stopped at 39 and made the seal unavoidable. It registered five minutes before the wallet was reported unusable, which fits: the app signs in through Privy with an embedded wallet while the reviewer key is a separate external wallet, so the play path worked and the reviewer path did not."
   }
 }

@@ -1,68 +1,69 @@
-# STATE — 2026-09-26 22:30 UTC — by Claude Code
+# STATE — 2026-09-27 13:15 UTC — by Claude Code
 
-Phase:            **T7 stood down — no wallet to sign with.** Pool 36 will nevertheless seal and
-                  play at 01:46:04Z, because a second stranger took it to exactly MIN_SEATS.
-Waiting on:       **the project owner's wallet.** Nothing else blocks T7.
-Blocked:          T7's two founder entries and its two flags — both need a signature.
+Phase:            **T7 stood down; pool 36 played anyway and proved T7's central claim.** The
+                  half that needs a wallet is still unproven.
+Waiting on:       **the project owner's reviewer wallet.** Nothing else blocks T7.
+Blocked:          T7's same-device half and its whole review path — both need a signature.
 Results so far:   T1 **PASS** · T3 **PASS** · T4 **PASS** · T5 **PASS** · **T6 PASS\*** ·
                   T2 **SPOILED** · T2R **PASS (7 of 8)** · pool 22 and **pool 36** =
                   observations, not tests
-Money:            funder **~4.3** after 38 entries · W00..W37 seated in pool 36 · the pot is
-                  4 SOL and pool 36 will pay it
+Money:            W00 and W01 hold **2.003558920** each, having been paid 2 SOL apiece ·
+                  pool 36 vault **650240** · treasury 7579842560 · wallets not yet swept
 Open PR:          none — 189 and 191 both merged.
 Parallel session: **program development** — `session_01CosZsm5MB312HdbJH6y2zJ`, branch
                   `claude/program-dev`. Separate lane, no overlap.
 
-## Where this actually stands
+## What happened
 
-**T7 is stood down and that was the right call**, but it does not mean nothing happens tonight.
+T7 was stood down at 22:10Z: the reviewer wallet was unavailable, and both halves of the test —
+the same-device finding and the escrow / release / forfeit path — need it. Pool 36 then sealed and
+played anyway, because it had reached exactly `MIN_SEATS`.
 
-The project owner's wallet is unavailable. T7 needs a signature twice — once for the two founder
-entries that create the same-device finding, once for the two flags that make the prize-review
-path run — so both halves are blocked. Running the rest would spend the frozen plan on the part
-four earlier tests already largely proved, and skip the part that §H33 had just shown nothing has
-ever exercised. So: stand down.
+**Pool 36 settled at 01:46:20Z and every prediction held.**
 
-**Then the ground moved.** At 22:03:29Z a second wallet that is not ours registered in pool 36,
-taking it from the 39 I had deliberately stopped at to exactly 40 — `MIN_SEATS`. That entry landed
-two minutes before the stand-down decision; neither of us knew. At 40 the refund path closes
-(`refund.rs:75` requires `entrants < min_seats`) and the seal path opens (`seal.rs:64` requires
-`>= min_seats`). **Pool 36 seals and plays at 01:46:04Z and nothing anyone does can stop it.**
+| | predicted | actual |
+|---|---|---|
+| **W00 / W01** | tie, identical score **and** zones, unconditionally | **537 and 797 apiece — identical, rank 1** |
+| the split | 2000000000 each, zero remainder | **exact** |
+| wall score | 511..539 | **537** |
+| best capped seat | ceiling 320 | **313** |
+| vault after | 650240 | **650240** |
 
-**It is recorded as an observation, not as T7** — `registry/pool-36.observation.md`, the way pool
-22 was. Its field cannot match the frozen plan: two strangers instead of one, no founder seats, no
-flags. `T7.plan.json` stays byte-identical and unspent.
+**The first pool on this cluster to pay two seats.** Every scored pool before it paid one. The
+results root recomputed from the 40 revealed sets **matches the chain**, all 40 allocations
+reproduce their committed hashes, and all 40 ranks and amounts reproduce from published data
+alone.
 
-## What pool 36 will show anyway
+So **U1 — the claim T7 was built around — is demonstrated**, on a real pool with real lamports and
+an entrant nobody controlled. Filed as `registry/pool-36.observation.md`; `T7.plan.json` is
+byte-identical and unspent.
 
-Derived over the 38 seats actually in, before the seal:
+## A correction I owe
 
-- **W00 and W01 both stand at 511 half-points and 756 zones — identical.** U1 was always
-  unconditional and it survives the change of field: identical battle sets return identical
-  comparisons against every third player, so the two walls tie whatever the strangers played.
-- Best capped seat 292, ceiling 320; wall floor 511. **U2 holds.**
-- Unless a stranger wins four of its seven battles against a wall, the walls take rank 1 and
-  **split the pot 2000000000 each, remainder zero — the first pool on this cluster to pay two
-  seats.** Every scored pool before it paid exactly one.
-- It is also a deadline seal at exactly `MIN_SEATS`, which re-runs T3's path on the **Phase B**
-  build. A free regression check across a program upgrade.
+While the pool was open I reported that a **second stranger** had taken it to 40. **Wrong.** The
+40th entrant was **UI-A, the project owner's own account.** I checked the signature against my
+headless register log, did not find it, and concluded "not ours" — but UI-A enters through the
+app and was never going to be in that log. The claim reached four files and a message before the
+reveal corrected it. Only one stranger ever entered pool 36: the one the plan was written around.
 
-## The two findings worth keeping (§H34)
+It leaves a useful fact. **UI-A registered at 22:03:29Z, five minutes before the wallet was
+reported unusable.** The app signs in through Privy with an embedded wallet; the reviewer key is a
+separate external wallet. **The play path worked and the reviewer path did not** — which is
+exactly why T7's flags were blocked while an entry was not.
 
-1. **A reviewer-wallet outage takes the whole review capability offline, and it fails open.** Two
-   reviewers are configured but both resolve to one wallet stack. With no signer, nothing can be
-   flagged, released or forfeited — and `daemon.ts`'s twelve-hour clock then **auto-releases** any
-   held share to its player. On mainnet that pays a flagged winner because someone's wallet broke
-   on the wrong evening. Worth a genuinely independent second reviewer, and worth ruling
-   deliberately whether that clock should fail open or fail held. It currently fails open by
-   omission.
-2. **Naming a pool in a frozen plan inherits its strangers — and holding a pool part-filled is the
-   exposure.** That second one is mine: I sequenced the fill to stop short and wait for the
-   founder, and every minute a pool sits part-filled is a minute the field can change. The re-run
-   wants the founder's seats first, then one fast fill to 64.
+## Still unproven, and still T7's job
 
-## The re-run
+- the **same-device finding** — needs both founder accounts from one browser window
+- the **review path** end to end: flag → escrow → release → forfeit → next-place
 
-T7 needs a new plan and a new freeze for a fresh pool — `T7.plan.json` names pool 36 and its seat
-count, so it cannot be reused. About an hour of work, once there is a wallet to sign with. The
-flag control shipped and is live in production, so the blocker §H33 found is already fixed.
+§H13 recurred a fourth time: UI-A played the even split in all seven battles and came last at 185.
+Every unconditional claim survived it, because an even split is five stats none above 25.
+
+## Next
+
+1. Sweep the wallets back to the funder.
+2. When there is a working reviewer wallet: a **new plan and freeze** for a fresh pool —
+  `T7.plan.json` names pool 36 and cannot be reused. Sequence it the other way round: the project
+  owner's seats first, then one fast fill to capacity, so no margin sits open waiting.
+3. §H34 records the two findings worth keeping — the review path fails **open** on a reviewer
+  outage, and a stop-short margin only holds if I control the entrant count, which I do not.

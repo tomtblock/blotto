@@ -642,24 +642,35 @@
   to stand down; I recommended it, on the ground that running without the flags would spend the
   frozen plan on the half four earlier tests already largely proved while skipping the half that
   §H33 had just shown nothing has ever exercised.
-- **2026-09-26 22:03:29Z** **and then a second stranger registered**, taking pool 36 to exactly 40.
-  The entry landed two minutes BEFORE the stand-down decision and neither of us knew. At 40 the
-  pool is at MIN_SEATS: `trigger_refund` requires `entrants < min_seats` (refund.rs:75) and
-  `seal_at_deadline` requires `>= min_seats` (seal.rs:64), so **pool 36 seals and plays at
-  01:46:04Z and nothing can stop it.** Standing down no longer means nothing happens.
-- **What pool 36 will show, derived before the seal.** Over the 38 seated: **W00 and W01 both at
-  511 half-points and 756 zones, identical**, so U1 holds unconditionally and they tie whatever the
-  strangers played. Best capped seat 292 against a wall floor of 511, so U2 holds too. If no
-  stranger wins 4 of 7 against a wall, the two walls take rank 1 and **split the pot 2000000000
-  each with zero remainder — the first pool on this cluster to pay two seats**. It is also a
-  deadline seal at exactly MIN_SEATS, which re-runs T3's path on the Phase B build for free.
-- **Filed as `registry/pool-36.observation.md`, not as T7.** Its field cannot match the frozen
-  plan — two strangers, no founder seats, no flags — so scoring it against `T7.plan.json` would
-  report huge drift and mean nothing. **`T7.plan.json` stays byte-identical and unspent**; T7
-  proper needs a new plan and freeze for a later pool.
-- **§H34** records the two things worth keeping: a reviewer-wallet outage takes the whole review
-  capability offline and the twelve-hour clock then **fails open**, paying a flagged winner; and
-  naming a pool in a frozen plan inherits every stranger who walks into it. The second is mine —
-  I sequenced the fill to hold seats open, and holding is the exposure.
-- **Still open:** §F-37, the 60-second pool-27 click. **T7** awaits a working wallet and a new
-  freeze. **T8** is desk work. Then restore the geo vendor secrets and rotate the Helius key.
+- **2026-09-26 22:03:29Z** **the pool went to 40 — and I misread why.** I reported a SECOND
+  stranger; the reveal shows the 40th entrant was **UI-A, the project owner's own account**. I had
+  checked the signature against my headless register log, not found it, and concluded "not ours" —
+  but UI-A enters through the app and was never going to be in that log. The wrong claim reached
+  four files and a message before the data corrected it. **Only one stranger ever entered pool 36**,
+  the one the plan was written around. At 40 the refund path closed (`refund.rs:75`) and the seal
+  path opened (`seal.rs:64`), so the pool played whatever anyone did.
+- **UI-A registered five minutes before the wallet was reported unusable**, and that fits: the app
+  signs in through Privy with an embedded wallet while the reviewer key is a separate external
+  wallet. **The play path worked; the reviewer path did not** — which is exactly what blocked T7's
+  flags while leaving an entry possible.
+- **2026-09-27 01:46:16-20Z — pool 36 sealed and paid.** `SealAtDeadline` twelve seconds after the
+  deadline, then reveal, commit and pay in four seconds. **`TriggerRefund` does not appear.**
+- **THE RESULT: W00 and W01 both scored 537 with 797 zones — IDENTICAL — shared rank 1, and were
+  paid 2000000000 each with ZERO remainder.** The first pool on this cluster to pay two seats;
+  every scored pool before it paid one. Predicted range 511..539, actual 537. Best capped seat
+  predicted to cap at 320, actual 313 (W15, rank 3). Vault ended at **650240**, the rent cushion
+  exactly. 0 flagged, 0 holds, 0 refunded.
+- **Verifiability: the results root recomputed from the 40 revealed sets MATCHES the chain**
+  (`ed732b54…`), all 40 allocations reproduce their committed `battles_hash`, and all 40 ranks and
+  amounts reproduce from the published sets alone.
+- **So U1 — the claim T7 was built around — is demonstrated** on a real pool, with real lamports,
+  against an entrant nobody controlled. It needed no wallet, no flags and no plan match. Filed as
+  `registry/pool-36.observation.md` with `pool-36.actual.json`; **`T7.plan.json` stays
+  byte-identical and unspent.**
+- **§H13 recurs a fourth time.** UI-A played the even split in all seven battles — 20/20/20/20/20,
+  the buzzer's default for an untouched board — and came last at 185. Every unconditional claim
+  survived it, because an even split is five stats none above 25. The stranger, playing a genuinely
+  varied set, scored 193 and still finished 39th of 40.
+- **Still open:** §F-37, the 60-second pool-27 click. **T7** awaits a working reviewer wallet and
+  a new plan and freeze — its device half and its whole review path are still unproven. **T8** is
+  desk work. Then restore the geo vendor secrets and rotate the Helius key.
