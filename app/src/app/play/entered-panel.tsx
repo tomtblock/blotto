@@ -1,13 +1,12 @@
 'use client';
 
 /*
- * The column beside the blender once the entry is CONFIRMED (founder
- * 2026-09-17, CHANGE-2026-09-16_ui-uplift.md §E): the pass, "Sealed" with
- * the trophy Blott and the rule in two lines, then — where the seal key
- * stood — Post on X and the one-message opt-in, then the way to the pool
- * page and home. It replaces the page-layout pass card (pass-card.tsx) and
- * the sealed panel (sealed-panel.tsx) when the seal stage hosts the flow;
- * the blender stays on screen, blended.
+ * The success screen (V2, founder 2026-09-27, sketches D and E): the end
+ * of the entry flow, and terminal — there is no Continue and no dismiss.
+ * The petals clip over the pass ("I'm in.", the seat, the asset), "Sealed"
+ * with the rule in two lines, then Post on X, the one-message opt-in and
+ * Play again, which goes home. The trophy Blott, the "one message…" note
+ * and the two small links it used to carry are gone by the same review.
  *
  * Only X is offered (founder: "remove the other share button"). The pass
  * PNG and the intent are pass-card.tsx's, unchanged.
@@ -27,10 +26,18 @@ import { COPY } from '@/copy';
 import { XMark } from '@/wallet/wallet-icons';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { BlottSprite } from '@/components/blott/BlottSprite';
+import { AmbientClip } from '@/components/ui/ambient-clip';
 import { truncateAddress } from '@/wallet/types';
 import { looksLikeEmail, submitPoolNotify, type PoolNotifySigner } from '@/notify/pool-notify';
 import { openXWithPass, passPoolLine, passShareTextFor, usePassImage } from './pass-card';
+
+const PETALS = [{ mp4: '/motion/v2/petals.mp4', webm: '/motion/v2/petals.webm' }];
+const PETALS_POSTER = '/motion/v2/petals.jpg';
+
+/* The keys: the action pink one (the only object of its colour on screen),
+ * and the cream one for the actions that move no money. */
+const KEY = 'h-14 w-full border-[3px] border-brand-cream shadow-[var(--elevation-key-action)]';
+const KEY_CREAM = 'h-14 w-full border-[3px] border-brand-berry';
 
 type OptIn =
   | { state: 'idle' }
@@ -87,37 +94,37 @@ export function EnteredPanel({
   }, [email, send]);
 
   return (
-    <section aria-live="polite" className="flex flex-col gap-4" data-testid="entered-panel">
-      <Card tone="light" className="p-5 text-center" data-testid="pass-card">
-        <p className="font-mono text-[11px] tracking-[0.16em] uppercase text-brand-berry/70">
-          {COPY.shell.title} · {passPoolLine(poolNumber)}
-        </p>
-        <div className="relative mx-auto mt-1 h-28 w-28">
-          <div aria-hidden className="absolute inset-3 rounded-full bg-brand-pale-pink opacity-70 blur-2xl" />
-          <BlottSprite pose="cheer" size={112} className="relative" />
+    <section aria-live="polite" className="animate-settle mx-auto flex w-full max-w-md flex-col gap-4" data-testid="entered-panel">
+      <Card tone="light" className="text-center" data-testid="pass-card">
+        {/* The petals, where the trophy Blott stood. */}
+        <div className="relative h-44 w-full overflow-hidden bg-brand-berry">
+          <AmbientClip tiers={PETALS} poster={PETALS_POSTER} className="absolute inset-0 h-full w-full object-cover" />
+          <div aria-hidden="true" className="absolute inset-x-0 bottom-0 h-12 bg-[linear-gradient(180deg,transparent_0%,var(--color-brand-cream)_100%)]" />
         </div>
-        <p className="font-display text-[36px] leading-none font-extrabold text-brand-berry">{r.passEntered}</p>
-        <p className="mt-2 text-[15px] font-semibold text-brand-berry">{r.cardSeat(entryIndex)}</p>
-        <p className="mt-1 font-mono text-[11px] text-brand-berry/60">{truncateAddress(asset)}</p>
+        <div className="px-5 pt-1 pb-6">
+          <p className="font-mono text-[11px] tracking-[0.16em] uppercase text-brand-berry/70">
+            {COPY.shell.title} · {passPoolLine(poolNumber)}
+          </p>
+          <p className="mt-2 font-display text-[44px] leading-none font-extrabold text-brand-berry">{r.passEntered}</p>
+          <p className="mt-3 text-[16px] font-semibold text-brand-berry">{r.cardSeat(entryIndex)}</p>
+          <p className="mt-1 font-mono text-[11px] text-brand-berry/60">{truncateAddress(asset)}</p>
+        </div>
       </Card>
 
-      <div className="seal-stage-note">
-        <div className="flex items-center gap-3">
-          <BlottSprite pose="trophy" size={56} className="shrink-0" />
-          <h2 className="font-display text-[28px] leading-8 font-extrabold text-ink">{r.sealedTitle}</h2>
-        </div>
-        <p className="mt-2 text-[14px] leading-5 text-ink-muted">{COPY.pool.checkBackShort(Number(MIN_SEATS))}</p>
-      </div>
+      <Card className="p-5">
+        <h2 className="font-display text-[28px] leading-8 font-extrabold text-ink">{r.sealedTitle}</h2>
+        <p className="mt-2 text-[14px] leading-5 text-ink-muted">{COPY.pool.checkBack(Number(MIN_SEATS))}</p>
+      </Card>
 
-      <div className="seal-stage-controls">
-        <Button size="lg" className="seal-stage-key" onClick={postOnX} disabled={!png} data-testid="entered-post-x">
+      <div className="flex flex-col gap-3">
+        <Button size="lg" className={KEY} onClick={postOnX} disabled={!png} data-testid="entered-post-x">
           <XMark size={18} />
           <span className="ml-2">{r.passShareX}</span>
         </Button>
         {xNote ? <p className="text-center text-[12px] leading-4 text-brand-berry">{xNote}</p> : null}
 
         {notifyOffered && optIn.state === 'idle' ? (
-          <Button size="lg" className="seal-stage-key seal-stage-key-cream" onClick={keepUpdated} data-testid="keep-updated">
+          <Button size="lg" intent="cream" className={KEY_CREAM} onClick={keepUpdated} data-testid="keep-updated">
             {COPY.notify.keepUpdated}
           </Button>
         ) : null}
@@ -149,14 +156,17 @@ export function EnteredPanel({
               className="h-12 rounded-full border-2 border-brand-berry/30 bg-brand-cream px-5 text-[15px] text-brand-berry placeholder:text-brand-berry/40 focus:border-brand-berry focus:outline-none"
             />
             {optIn.error ? <p className="text-[12px] text-brand-berry">{optIn.error}</p> : null}
-            <Button size="lg" type="submit" className="seal-stage-key seal-stage-key-cream" data-testid="keep-updated-send">
+            <Button size="lg" type="submit" intent="cream" className={KEY_CREAM} data-testid="keep-updated-send">
               {COPY.notify.keepUpdatedSend}
             </Button>
           </form>
         ) : null}
         {notifyOffered && optIn.state === 'sending' ? (
-          <p className="seal-stage-status">
-            <span className="seal-stage-status-ring" aria-hidden="true" />
+          <p className="flex items-center justify-center gap-3 font-mono text-[12px] tracking-[0.14em] uppercase text-brand-berry">
+            <span
+              aria-hidden="true"
+              className="inline-block h-3.5 w-3.5 animate-[rotate-once_1s_linear_infinite] rounded-full border-2 border-brand-berry border-t-transparent"
+            />
             {COPY.notify.keepUpdatedSigning}
           </p>
         ) : null}
@@ -168,24 +178,21 @@ export function EnteredPanel({
         {notifyOffered && optIn.state === 'failed' ? (
           <div className="flex flex-col items-center gap-2">
             <p className="text-center text-[13px] text-brand-berry">{COPY.notify.keepUpdatedFailed}</p>
-            <Button intent="quiet" onClick={keepUpdated}>
+            <Button intent="quiet" className="border-brand-berry/40 text-brand-berry" onClick={keepUpdated}>
               {COPY.notify.keepUpdated}
             </Button>
           </div>
         ) : null}
-        {notifyOffered && optIn.state === 'idle' ? (
-          <p className="text-center text-[12px] leading-4 text-brand-berry/80">{COPY.notify.keepUpdatedNote}</p>
-        ) : null}
-      </div>
 
-      <p className="flex justify-center gap-5 text-[14px] text-brand-berry">
-        <Link href={`/pools/${poolAddress}`} className="underline underline-offset-2 hover:text-brand-deep-magenta">
-          {COPY.pool.viewPool}
+        {/* Founder 2026-09-27: "Play again" — the way onward is another pool. */}
+        <Link
+          href="/"
+          data-testid="entered-play-again"
+          className="flex h-14 w-full items-center justify-center rounded-full border-[3px] border-brand-berry/60 font-display text-[18px] font-bold uppercase tracking-wide text-brand-berry hover:bg-brand-berry/10"
+        >
+          {r.playAgain}
         </Link>
-        <Link href="/" className="underline underline-offset-2 hover:text-brand-deep-magenta">
-          {COPY.shell.nav.backToHome}
-        </Link>
-      </p>
+      </div>
     </section>
   );
 }

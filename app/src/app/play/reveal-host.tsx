@@ -9,14 +9,13 @@
  *   - the waiting beat's stall timer (host-timing.ts) → `stall_timeout`;
  *   - dismiss / retry buttons → `dismiss` / `retry`.
  *
- * WHAT CHANGED 2026-09-15. Until then this host also rendered the reveal —
- * the egg, the tapping, the class tell and unseal — from a stage component
- * that read the drawn class off the machine's projection. The founder's
- * instruction of 2026-09-14 removed the reveal: between the signature and
- * the chain's answer the player now sees a quiet waiting hold, and the
- * card that follows carries no class. The projection no longer has one to
- * give (machine.ts, `RevealVisual`), so this file cannot show it even by
- * accident.
+ * WHAT IT DRAWS (V2, founder 2026-09-27). The waiting beat is whatever the
+ * page hands in as `waiting` — the signing hold over the board's record
+ * (signing-overlay.tsx). The card beat is `renderCard` — the success screen
+ * (entered-panel.tsx), terminal: no Continue, no dismiss. A failure is the
+ * site's one stop card, with Try again only when the failure says a fresh
+ * attempt is safe. The page-layout pass card and the reveal scene this host
+ * once drew are gone.
  *
  * CONFIRMED-BEFORE-CARD is the machine's own invariant (typed, pinned in
  * machine.test.ts) — nothing here can render the card early because the
@@ -31,10 +30,10 @@
  * packet, a program error after broadcast) — audit O27.
  *
  * Leaving the takeover reports WHICH exit was taken (`RevealExit`, from the
- * machine's visual): the page behind renders "Sealed" only for `entered`.
- * Until 2026-09-11 every dismiss reported the same thing, and a player whose
- * transaction had failed pressed Back into "Your seven battles are sealed" —
- * audit O25.
+ * machine's visual): `not-entered` restarts the flow, `pending` goes to the
+ * pool page. Until 2026-09-11 every dismiss reported the same thing, and a
+ * player whose transaction had failed pressed Back into "Your seven battles
+ * are sealed" — audit O25.
  */
 
 import { useEffect, useReducer, useState, type ReactNode } from 'react';
@@ -49,41 +48,33 @@ import {
 } from '@/reveal/machine';
 import { beatTimer } from '@/reveal/host-timing';
 import type { RevealResult } from '@/reveal/types';
-import { PendingPanel } from '@/components/ui/pending-panel';
-import { PassCard } from './pass-card';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { STOP_ACTIONS, StopCard, type StopAction } from '@/components/ui/stop-card';
 
 export function RevealHost({
   result,
   onRetry,
   onDone,
-  poolNumber,
   onBeat,
-  quiet = false,
+  waiting,
   renderCard,
 }: {
-  /** Founder 2026-09-16: the seal stage follows the beats (card → done, failed → stopped). */
+  /** Each beat, once, to whoever draws the page behind this host. */
   onBeat?: (beat: RevealState['beat']) => void;
-  /**
-   * Round four (2026-09-17): the host that draws the scene also draws the
-   * confirmed entry — the pass, the sealed note, the actions — in its own
-   * column (entered-panel.tsx). Given, the card beat renders this instead of
-   * the page-layout PassCard, and there is no Continue: the column is the
-   * end of the flow, its links the exits.
-   */
-  renderCard?: (card: { entryIndex: number; asset: string }) => ReactNode;
-  /** The page shows the wait itself (the blender); the entry beat renders nothing. */
-  quiet?: boolean;
+  /** What the waiting beat shows — the signing hold, drawn over the page. */
+  waiting: ReactNode;
+  /** The confirmed entry: the success screen. Terminal — its links are the exits. */
+  renderCard: (card: { entryIndex: number; asset: string }) => ReactNode;
   /** The entry's terminal state — resolves, never rejects (outcome.ts). */
   result: Promise<RevealResult>;
-  /** The pool's number, for the pass card (2026-09-13). Optional: the card
-   *  omits it rather than guess. */
-  poolNumber?: string | number;
   /** Re-submit after a failure whose `retryable` is true (nothing landed,
    *  nothing can); absent = no retry offered. */
   onRetry?: () => Promise<RevealResult>;
   /** Called once when the player leaves the takeover, with the exit taken:
-   *  `entered` (a seat is held), `not-entered` (nothing landed), or
-   *  `pending` (broadcast, not yet confirmed — it may still land). */
+   *  `not-entered` (nothing landed) or `pending` (broadcast, not yet
+   *  confirmed — it may still land). `entered` is no longer reachable: the
+   *  success screen has no dismiss. */
   onDone: (exit: RevealExit) => void;
 }) {
   const [state, dispatch] = useReducer(
@@ -120,7 +111,7 @@ export function RevealHost({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [beat]);
 
-  // Report each beat once to whoever draws the scene behind this host.
+  // Report each beat once to whoever draws the page behind this host.
   useEffect(() => {
     onBeat?.(state.beat);
   }, [state.beat, onBeat]);
@@ -130,61 +121,54 @@ export function RevealHost({
   }
 
   if (visual.beat === 'entry') {
-    // Waiting for the chain. Nothing to tap, nothing to reveal; the stall
-    // timer above is what keeps this from being a dead end.
-    if (quiet) return null;
-    return <PendingPanel label={COPY.reveal.confirming} />;
+    // Waiting for the chain. Nothing to tap; the stall timer above is what
+    // keeps this from being a dead end.
+    return <>{waiting}</>;
   }
 
   if (visual.beat === 'stalled') {
+    // A genuine stall, never a failure: the entry is submitted and may still
+    // land, so the way out is the pool page, which shows it when it does.
     return (
-      <section className="flex max-w-prose flex-col gap-4 p-6" aria-live="polite">
-        <p className="text-sm opacity-80">{COPY.reveal.stalled}</p>
-        <button type="button" className="underline" onClick={() => dispatch({ kind: 'dismiss' })}>
+      <Card className="animate-rise flex flex-col gap-4 p-6" aria-live="polite" data-testid="entry-stalled">
+        <h2 className="font-display text-[26px] leading-[30px] font-extrabold text-ink">{COPY.reveal.stalledTitle}</h2>
+        <p className="max-w-prose text-[15px] leading-6 text-ink-muted">{COPY.reveal.stalled}</p>
+        <Button intent="quiet" className="self-start" onClick={() => dispatch({ kind: 'dismiss' })}>
           {COPY.reveal.stalledDismiss}
-        </button>
-      </section>
+        </Button>
+      </Card>
     );
   }
 
   if (visual.beat === 'card') {
-    if (renderCard) return <>{renderCard({ entryIndex: visual.entryIndex, asset: visual.asset })}</>;
-    // The pass, and — now that the entry is CONFIRMED — the share
-    // (2026-09-13; see pass-card.tsx for what it may show and why).
-    return (
-      <div className="flex flex-col items-center p-2">
-        <PassCard
-          entryIndex={visual.entryIndex}
-          asset={visual.asset}
-          poolNumber={poolNumber}
-          onDone={() => dispatch({ kind: 'dismiss' })}
-        />
-      </div>
-    );
+    return <>{renderCard({ entryIndex: visual.entryIndex, asset: visual.asset })}</>;
   }
 
-  // failed
+  // failed — the rejection card (founder 2026-09-27): the site's stop card,
+  // with the ways out that fit the failure. Try again only when safe; Add
+  // SOL when the wallet could not cover it; Find another pool always.
+  const retryable = Boolean(onRetry) && visual.failure.retryable;
+  const actions: StopAction[] = [];
+  if (onRetry && retryable) {
+    actions.push({
+      label: COPY.stop.tryAgain,
+      intent: 'primary',
+      'data-testid': 'entry-retry',
+      onClick: () => {
+        dispatch({ kind: 'retry' });
+        setPending(onRetry());
+      },
+    });
+  }
+  if (visual.failure.kind === 'insufficient-sol') {
+    actions.push({ href: '/wallet', label: COPY.gate.topUp, intent: retryable ? 'quiet' : 'primary' });
+  }
+  actions.push({ ...STOP_ACTIONS.findAnotherPool(), intent: actions.some((a) => a.intent === 'primary') ? 'quiet' : 'primary' });
+  actions.push({ label: COPY.stop.backToPool, intent: 'quiet', onClick: () => dispatch({ kind: 'dismiss' }) });
   return (
-    <div className="flex flex-col items-center gap-4">
-      <div className="flex max-w-prose flex-col gap-3 text-center" aria-live="polite">
-        <p className="text-sm text-red-400">{visual.failure.message}</p>
-        {onRetry && visual.failure.retryable && (
-          <button
-            type="button"
-            className="rounded border px-6 py-2"
-            onClick={() => {
-              dispatch({ kind: 'retry' });
-              setPending(onRetry());
-            }}
-          >
-            {COPY.reveal.failedRetry}
-          </button>
-        )}
-        <button type="button" className="underline" onClick={() => dispatch({ kind: 'dismiss' })}>
-          {COPY.reveal.failedDismiss}
-        </button>
-      </div>
-    </div>
+    <StopCard kind="failure" title={COPY.stop.entryFailedTitle} actions={actions} data-testid="stop-entry-failed">
+      <p>{visual.failure.message}</p>
+    </StopCard>
   );
 }
 

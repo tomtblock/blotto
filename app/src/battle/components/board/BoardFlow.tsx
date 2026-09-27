@@ -3,10 +3,11 @@
 /*
  * The BOARD run (founder brief 2026-09-24) — the entry session the play
  * page mounts, and the landing page's demo. It never sees a wallet: sealing
- * happens outside via `onConfirm`, and when the page hosts the seal stage
- * the review is drawn into the stage's widget slot and the seal keys are
- * the page's (`ReviewSealApi`, app/play/seal-stage.tsx). The seven-screen
- * dial run it replaced was removed on 2026-09-24.
+ * happens outside via `onConfirm`. The review ends in ONE key, "Confirm,
+ * Seal & Submit" (V2, founder 2026-09-27: the two-step arm-then-confirm and
+ * the seal-stage scene that hosted it are gone); after the buzzer that key
+ * is already focused, so the player's next press is the seal. The seven-
+ * screen dial run this replaced was removed on 2026-09-24.
  *
  * Ready → board (the machine, src/battle/board/machine.ts) → review →
  * confirmed. The reducer owns every rule; this component feeds ticks and
@@ -21,7 +22,6 @@
 
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createPortal } from 'react-dom';
 import { COPY } from '@/copy';
 import { Button } from '@/components/ui/button';
 import { Sheet } from '@/components/ui/sheet';
@@ -29,6 +29,7 @@ import { STAT_NAMES, type Allocation } from '@/battle/allocation';
 import {
   type BoardEvent,
   type BoardPlayState,
+  type BoardReviewState,
   boardComplete,
   boardRemaining,
   fieldRemaining,
@@ -37,7 +38,6 @@ import {
 } from '@/battle/board/machine';
 import { type BoardMode, EASY_PER_FIELD, HARD_TOTAL } from '@/battle/board/mode';
 import { sampleTick } from '@/battle/run-clock';
-import type { ReviewSealApi } from '@/app/play/seal-stage';
 import { Arena } from './arena/Arena';
 import { GrabKey, HintLine, ModeBadge, ProgressReadout, ReadyBanner, TimerCard } from './hud';
 import { ReviewPanel } from './ReviewPanel';
@@ -51,8 +51,6 @@ const LAST_SECONDS_MS = 10_000;
 export interface BoardFlowProps {
   mode: BoardMode;
   onConfirm: (battles: readonly Allocation[], timingsMs: readonly number[]) => void;
-  onReviewApi?: (api: ReviewSealApi | null) => void;
-  reviewHost?: HTMLElement | null;
   onRunStarted?: () => void;
   /** Demo mode (the landing page): no seal, no leave guard; the review offers "Try again". */
   demo?: boolean;
@@ -82,7 +80,7 @@ function toAllocations(battles: readonly (readonly number[])[], mode: BoardMode)
   return rows;
 }
 
-export function BoardFlow({ mode, onConfirm, onReviewApi, reviewHost = null, onRunStarted, demo = false }: BoardFlowProps) {
+export function BoardFlow({ mode, onConfirm, onRunStarted, demo = false }: BoardFlowProps) {
   const router = useRouter();
   const [state, dispatch] = useReducer(reduceBoard, mode, (m) => initialBoardState(m));
   const [openField, setOpenField] = useState<number | null>(null);
@@ -91,8 +89,14 @@ export function BoardFlow({ mode, onConfirm, onReviewApi, reviewHost = null, onR
    * disarmed, a tap on a field opens its stepper. Picking a card ends it. */
   const [grab, setGrab] = useState(false);
   const [leaveSheet, setLeaveSheet] = useState(false);
-  const [sealArmed, setSealArmed] = useState(false);
   const confirmed = useRef(false);
+  /* The seal key, focused the moment the review appears — so the buzzer's
+   * review needs one press (Enter, or the key itself) to seal. */
+  const sealKey = useRef<HTMLButtonElement>(null);
+  /* The review as sealed, kept so the confirmed phase can show the entry's
+   * record under the signing hold rather than a bare sentence. Set by the
+   * seal key's own handler, which has the review in hand. */
+  const [record, setRecord] = useState<BoardReviewState | null>(null);
 
   const play = state.phase === 'play' ? state : null;
   const review = state.phase === 'review' ? state : null;
@@ -103,12 +107,10 @@ export function BoardFlow({ mode, onConfirm, onReviewApi, reviewHost = null, onR
     playRef.current = play;
   }, [play]);
 
-  /* The seal stage's handle on the confirm. */
+  const inReview = review !== null && !demo;
   useEffect(() => {
-    if (!review || !onReviewApi || demo) return;
-    onReviewApi({ confirm: () => dispatch({ type: 'confirm' }) });
-    return () => onReviewApi(null);
-  }, [review, onReviewApi, demo]);
+    if (inReview) sealKey.current?.focus();
+  }, [inReview]);
 
   /* The run clock — elapsed time against performance.now(). */
   const ticking = play !== null && play.clockStarted;
@@ -292,7 +294,6 @@ export function BoardFlow({ mode, onConfirm, onReviewApi, reviewHost = null, onR
 
   /* ——— Review. ——— */
   if (review) {
-    const hosted = Boolean(onReviewApi) && !demo;
     const panel = (
       <ReviewPanel
         review={review}
@@ -300,12 +301,8 @@ export function BoardFlow({ mode, onConfirm, onReviewApi, reviewHost = null, onR
           setOpenField(null);
           send({ type: 'resume' });
         }}
-        compact={hosted}
       />
     );
-    if (hosted) {
-      return reviewHost ? createPortal(<div className="bb flex flex-col gap-4">{panel}</div>, reviewHost) : null;
-    }
     if (demo) {
       return (
         <section className="bb flex flex-col gap-4">
@@ -319,33 +316,40 @@ export function BoardFlow({ mode, onConfirm, onReviewApi, reviewHost = null, onR
     return (
       <section className="bb flex flex-col gap-5">
         {panel}
-        {sealArmed ? (
-          <div className="flex flex-col gap-3">
-            {/* PID §8.6 — above the confirm, always. */}
-            <p className="text-[15px] font-semibold leading-6 text-ink">{COPY.pool.decisionsFinal}</p>
-            <Button size="lg" onClick={() => send({ type: 'confirm' })}>
-              {COPY.battle.sealConfirm}
-            </Button>
-            <Button intent="quiet" onClick={() => setSealArmed(false)}>
-              {COPY.battle.sealCancel}
-            </Button>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-3">
-            <p className="text-[13px] leading-5 text-ink-muted">{COPY.pool.decisionsFinal}</p>
-            <Button size="lg" onClick={() => setSealArmed(true)}>
-              {COPY.battle.seal}
-            </Button>
-          </div>
-        )}
+        <div className="flex flex-col gap-3">
+          {/* PID §8.6 — above the confirm, always. Do not move it below. */}
+          <p className="text-[15px] font-semibold leading-6 text-ink">{COPY.pool.decisionsFinal}</p>
+          {/* One step (V2): confirm, seal and submit. The wallet's own
+              prompts are the second look; the key is focused on arrival. */}
+          <Button
+            ref={sealKey}
+            size="lg"
+            // The one commit key on the pink field: a cream rim so it reads
+            // on pink, taller than the tray's keys.
+            className="h-16 border-[3px] border-brand-cream text-[20px] shadow-[var(--elevation-key-action)]"
+            onClick={() => {
+              setRecord(review);
+              send({ type: 'confirm' });
+            }}
+            data-testid="seal-confirm"
+          >
+            {COPY.battle.seal}
+          </Button>
+        </div>
       </section>
     );
   }
 
-  /* ——— Confirmed: the parent owns the seal; this holds the screen. ——— */
+  /* ——— Confirmed: the parent owns the seal and draws the signing hold over
+     this — the entry's record, dimmed, and one line. ——— */
   return (
-    <section aria-live="polite" className="flex flex-col items-center gap-6 py-14">
-      <p className="animate-rise text-[15px] text-ink-muted">{COPY.battle.sealing}</p>
+    <section aria-live="polite" className="bb flex flex-col gap-4" data-testid="board-sealing">
+      {record ? (
+        <div aria-hidden="true" className="pointer-events-none opacity-60">
+          <ReviewPanel review={record} />
+        </div>
+      ) : null}
+      <p className="animate-rise text-center text-[15px] text-ink-muted">{COPY.battle.sealing}</p>
     </section>
   );
 }

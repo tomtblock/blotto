@@ -32,7 +32,7 @@ const capacity = Number(CAPACITY);
 const SUPERSEDED = [52, 32];
 
 describe('the field size in player-facing copy', () => {
-  it('states the live minimum on the sealed panel, the screen shown after payment', () => {
+  it('states the live minimum on the success screen, the screen shown after payment', () => {
     const sealed = COPY.pool.checkBack(minSeats);
     expect(sealed).to.contain(`at least ${minSeats}`);
     for (const stale of SUPERSEDED) {

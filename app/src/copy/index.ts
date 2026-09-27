@@ -358,11 +358,6 @@ export const COPY = {
     // PID §8.6: displayed ABOVE the enter button, always.
     decisionsFinal:
       'Decisions are final. Once your seven battles are submitted they cannot be changed or withdrawn.',
-    // Says the same thing as rules.sealing in one line. It used to say "a key
-    // nobody holds", which is not what is built: the key is generated and
-    // held by our systems, locked against export until the pool closes.
-    sealed:
-      'Battles are encrypted on your device to a key our systems hold locked against export until the pool closes; their hash is recorded on-chain at entry.',
     enter: 'Enter this pool',
     // 2026-09-13: three literals on the pool page, now here.
     verifyThisPool: 'Verify this pool',
@@ -372,8 +367,9 @@ export const COPY = {
     // PHASE-N-REVIEW (founder 2026-09-16, round two: "condense the number of
     // words, maybe bullet points, larger"): the four points under that
     // marquee, in place of the three ratified paragraphs prizeRule / sealed /
-    // refundRule, which stay as the long forms (sealed is still the sealed
-    // panel's line). Substance unchanged: one paid place and a tie for first
+    // refundRule; prizeRule stays as the long form (the sealed line left
+    // with the sealed panel, 2026-09-27; rules.sealing is the full statement).
+    // Substance unchanged: one paid place and a tie for first
     // splits equally (the lamport-remainder rule lives on the Rules page),
     // the key our systems hold locked until the pool closes, the fill clock,
     // the field, the refund. Numbers come from the shared constants via the
@@ -416,27 +412,12 @@ export const COPY = {
     // should check back when the pool has reached 64 and concluded." The
     // size rule was D-E4's (52) and is now R7-b's (40, 2026-09-12) — this
     // string carried 52 until 2026-09-16 and is the screen a player reads
-    // immediately AFTER paying, where PID §8.6 requires the fill deadline
-    // and refund rule to be stated accurately. It is a function of the
-    // shared constant for that reason, not for tidiness.
-    // PHASE-N-REVIEW: drafts; the founder owns the words.
-    checkBackTitle: 'Now the pool fills',
-    // PHASE-N-REVIEW (founder 2026-09-17, round four, §E): the same rule in
-    // two lines, for the column beside the blender.
-    checkBackShort: (minSeats: number) =>
-      `The pool plays at 64 players, or at its deadline with at least ${minSeats}. Every battle is then revealed and scored, and the ranking appears on the pool page.`,
+    // immediately AFTER paying (the success screen, entered-panel.tsx),
+    // where PID §8.6 requires the fill deadline and refund rule to be stated
+    // accurately. It is a function of the shared constant for that reason,
+    // not for tidiness. PHASE-N-REVIEW: a draft; the founder owns the words.
     checkBack: (minSeats: number) =>
-      `Your seven battles are sealed. Nothing more to do here. The pool plays when it reaches 64 players, or at its deadline with at least ${minSeats} — every battle is then revealed and scored, and the ranking appears on the pool page. Check back then.`,
-    // D-E11 (founder ruling 2026-09-13): the two email lines that stood here
-    // — "Email me when this pool has concluded" and "We will email you when a
-    // pool you are in has concluded." — are gone. Nothing in this repository
-    // can send an email and there is no provider account, so both were
-    // promises a player could check and find false. The opt-in they drove was
-    // wallet-signed and stored, which made it worse: the player could show
-    // what they agreed to and we could not show we had done it. Cut now,
-    // dispatcher later; these lines come back with it.
-    viewPool: 'Follow this pool',
-    viewResults: 'Results and every battle',
+      `The pool plays at 64 players, or at its deadline with at least ${minSeats}. Every battle is then revealed and scored, and the ranking appears on the pool page.`,
     // D-E1 §1.4 (option A): shown on any pool whose on-chain pot differs
     // from the CURRENT launch table — the guarantee the architecture
     // already provides, said out loud instead of read as a cut.
@@ -568,6 +549,12 @@ export const COPY = {
     seePools: 'See open pools',
     openWallet: 'Open your wallet',
     tryAgain: 'Try again',
+    // The rejection card after a failed entry (founder 2026-09-27): the
+    // failure's own sentence (tx/errors.ts) under this title, then the ways
+    // out. "Back to this pool" restarts the flow from a fresh read of the
+    // pool; nothing landed when it is offered (reveal/machine.ts).
+    entryFailedTitle: 'Your entry did not go through',
+    backToPool: 'Back to this pool',
     // The 404 page (founder 2026-09-27: designed and branded).
     notFoundTitle: 'That page is not here',
     notFoundLine: 'The link may be old, or the address mistyped.',
@@ -728,13 +715,11 @@ export const COPY = {
       'This attempt did not go through, and nothing was signed or charged this time. It was not a decision about you: either an earlier attempt from this wallet at this pool is the one that stands, or the pool stopped taking entries first. The pool page shows whether a seat was taken, and you can ask us about your own entry through /complaints.',
   },
   battle: {
-    // The two-step seal (v3 D2): arm, then confirm. §8.6 renders above step 2.
-    // V2 (founder 2026-09-27): one verb pair — the board says "Submit my
-    // board", the review says "Confirm, Seal & Submit". "Allocation" left
-    // every player-facing line.
+    // V2 (founder 2026-09-27): ONE step and one verb pair — the board says
+    // "Submit my board", the review says "Confirm, Seal & Submit" (the
+    // two-step arm-then-confirm of v3 D2 is gone; §8.6 renders above the
+    // one key). "Allocation" left every player-facing line.
     seal: 'Confirm, Seal & Submit',
-    sealConfirm: 'Confirm, Seal & Submit',
-    sealCancel: 'Go back',
     sealing: 'Sealing your battles…',
     /*
      * The stat names are NOT here: they are `STAT_NAMES` in
@@ -747,11 +732,6 @@ export const COPY = {
     backSheetLine: 'Leaving locks nothing and loses nothing — your clock keeps running.',
     backStay: 'Stay',
     backLeave: 'Leave',
-    // PHASE-N-REVIEW (founder 2026-09-16, CHANGE-2026-09-16_ui-uplift.md §A11):
-    // the seal stage's description for assistive tech — the scene is decorative,
-    // the sentence says what it shows. Proposal until ratified.
-    sealStageAria:
-      'Seven Blotts on a conveyor dropping into a blender; the blender runs once your entry is signed.',
   },
   /*
    * The welcome note (2026-09-13; re-voiced 2026-09-14): a short note in the
@@ -909,7 +889,6 @@ export const COPY = {
       `One message will go to ${email} when this pool ends. The address is deleted the moment it is sent.`,
     keepUpdatedFailed: 'That did not save. Try again in a moment.',
     keepUpdatedBadEmail: 'That does not look like an address.',
-    keepUpdatedNote: 'One message about this pool, nothing else. The address is kept only until it is sent.',
     sealed: (id: string) => `Pool #${id} sealed — battles are being revealed`,
     scored: (id: string) => `Pool #${id}: results are committed`,
     paid: (id: string) => `Pool #${id}: prizes are paid`,
@@ -1319,14 +1298,12 @@ export const COPY = {
     // carried (Goblin … Titan) were dropped by the founder on 2026-09-15;
     // the program's class indices are unchanged. Cosmetic: labels read by
     // nothing in any scoring or prize path, and shown on the profile only.
-    cardTitle: 'Your pass',
-    // Round four (§E): the heading beside the trophy Blott on the sealed column.
+    // The success screen's heading (entered-panel.tsx).
     sealedTitle: 'Sealed',
     rarityNames: ['Common', 'Uncommon', 'Rare', 'Epic', 'Mythic'] as const,
     rarityCounts: [38, 15, 7, 3, 1] as const,
     rarityOf: (count: number) => `${count} of every 64 passes`,
     cardSeat: (n: number) => `Seat ${n + 1} of 64`,
-    cardDone: 'Continue',
     /*
      * The pass as a SHAREABLE card (2026-09-13). This replaces the share
      * that used to sit on the review screen BEFORE sealing: that one handed
@@ -1341,23 +1318,30 @@ export const COPY = {
      */
     passEntered: "I'm in.",
     passPool: (n: string | number) => `Pool #${n}`,
-    passShareTitle: 'Share your pass',
-    passShareLine: 'Your seven battles stay sealed. The pass shows your pool and your seat — nothing more.',
-    // The waiting beat, between the signature and the chain's answer. It
+    /*
+     * The signing hold (V2, founder 2026-09-27; signing-overlay.tsx): the
+     * whole screen from the one seal press until the network answers — a
+     * graphic and one sentence, no hash. Three sentences for the three steps
+     * the page can observe: the sealed entry not yet signed, the payment not
+     * yet signed, the chain confirming. PHASE-N-REVIEW: drafts.
+     */
+    signingTitle: 'Sealing your entry',
+    signingSeal: 'Approve the first prompt in your wallet — it signs your sealed entry.',
+    signingPay: 'Now the payment. Approve it in your wallet.',
+    // The waiting beat, between the signatures and the chain's answer. It
     // replaced the egg's "keep tapping, or simply wait" (2026-09-15).
     confirming: 'Confirming your entry with the network. Nothing more is needed from you.',
     passShareText: (n: string | number) =>
       `I'm in Blotto Cup pool #${n}. Seven sealed battles, the winner takes the prize pool. blotto.gg`,
-    passShare: 'Share',
     passShareX: 'Post on X',
-    passShareFallbackCopied: 'Share line copied — the pass downloaded to your device.',
     passShareXNote: 'X opened with your line. The pass downloaded to your device — attach it to the post.',
     passFooter: 'BLOTTO CUP · blotto.gg · 18+ only · not available in some territories',
+    // Founder 2026-09-27: the success screen's way onward is another pool.
+    playAgain: 'Play again',
+    stalledTitle: 'Still confirming',
     stalled:
       'Confirmation is taking longer than usual. Your entry is submitted and nothing further is needed — results appear on the pool page once the network confirms.',
     stalledDismiss: 'Back to the pool',
-    failedRetry: 'Try again',
-    failedDismiss: 'Back',
   },
   rules: {
     // D-B6 (ratified 2026-08-27): the rules tab, plain language, one section

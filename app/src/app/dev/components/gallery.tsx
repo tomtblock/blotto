@@ -22,6 +22,9 @@ import { FIXTURE_CAREER } from "@/data/scenarios";
 import { BlotMorph } from "@/components/blot/BlotMorph";
 import { SHAPE_REFERENCES } from "@/components/blot/blotGeometry";
 import { EVEN_SPLIT, type Allocation } from "@/battle/allocation";
+import { STOP_ACTIONS, StopCard } from "@/components/ui/stop-card";
+import { EnteredPanel } from "@/app/play/entered-panel";
+import { SigningOverlay } from "@/app/play/signing-overlay";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -233,6 +236,45 @@ export function Gallery() {
                 win={itemFor(FIXTURE_CAREER[0])}
               />
             </NeonSection>
+          </div>
+        </Section>
+
+        <Section title="Entry flow (V2): the hold, the success screen, the rejection card">
+          {/* The three screens after the seal press, without a wallet or a
+              chain: the signing hold (drawn fixed on the real page; pinned
+              inside a frame here), the success screen, and a failure on the
+              stop card. Reviewed by eye here before a real entry is risked. */}
+          <div id="entry-flow" className="flex flex-col gap-8">
+            <div className="relative h-[640px] overflow-hidden rounded-[28px] bg-brand-pink [&>[role=dialog]]:absolute">
+              <SigningOverlay step="pay" />
+            </div>
+            <div className="rounded-[28px] bg-brand-pink p-4 sm:p-6" data-testid="gallery-entered">
+              <EnteredPanel
+                entryIndex={11}
+                asset="F1XTUREpass11111111111111111111111111111111"
+                poolNumber={7}
+                poolAddress="F1XTUREPoo1111111111111111111111111111111111"
+                wallet="F1XTUREP1ayer111111111111111111111111111111"
+                signer={undefined}
+                email={null}
+                apiBase={undefined}
+                notifyOffered
+              />
+            </div>
+            <div className="rounded-[28px] bg-brand-pink p-4 sm:p-6">
+              <StopCard
+                kind="failure"
+                title="Your entry did not go through"
+                actions={[
+                  { label: "Try again", intent: "primary" },
+                  { href: "/wallet", label: "Add SOL", intent: "quiet" },
+                  { ...STOP_ACTIONS.findAnotherPool(), intent: "quiet" },
+                  { label: "Back to this pool", intent: "quiet" },
+                ]}
+              >
+                <p>Your wallet could not cover the entry and the transaction cost. Nothing was charged.</p>
+              </StopCard>
+            </div>
           </div>
         </Section>
 
