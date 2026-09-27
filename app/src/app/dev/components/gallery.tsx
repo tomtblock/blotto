@@ -7,6 +7,7 @@
  */
 import { useState } from "react";
 import { TIER_POT_LAMPORTS } from "@blotto/scoring";
+import { COPY } from "@/copy";
 import { palette, type as typeTokens, motion, elevation } from "@/design/tokens";
 import { lamportsToSol } from "@/data/format";
 import { Button } from "@/components/ui/button";
