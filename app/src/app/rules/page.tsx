@@ -7,10 +7,10 @@
  * per-tier table (entry → prize pool) is the only table: the winner takes
  * the pool, so there is no per-position table to render.
  *
- * V2 (founder 2026-09-27: "tab and toggle rather than a long page"): the
- * sections sit on a tab strip (components/ui/tabs), one at a time or, with
- * "Read as one page", all in order. Every section's content is in the
- * server HTML either way; a link like /rules#availability opens its tab.
+ * V3 (founder 2026-09-27): every section is a tile (components/ui/
+ * section-tiles); a tile opens its text on the cream card, a click outside
+ * returns to the tiles. Every section's content is in the server HTML; a
+ * link like /rules#availability opens that section.
  */
 import Link from 'next/link';
 import { COPY } from '@/copy';
@@ -18,7 +18,7 @@ import { AppHeader } from '@/components/shell/app-header';
 import { TabBar } from '@/components/shell/tab-bar';
 import { SiteFooter } from '@/components/shell/site-footer';
 import { PageIntro } from '@/components/ui/page-intro';
-import { Tabs } from '@/components/ui/tabs';
+import { SectionTiles } from '@/components/ui/section-tiles';
 import { rulesSections, type RulesSection, type TierRow } from './rules.config';
 
 function TierPriceTable({ rows }: { rows: TierRow[] }) {
@@ -49,11 +49,10 @@ function TierPriceTable({ rows }: { rows: TierRow[] }) {
   );
 }
 
-/** One section's body — the plum box, headed by the section's own heading. */
+/** One section's body; the card it opens on carries the heading. */
 function RuleSection({ s }: { s: RulesSection }) {
   return (
-    <div className="neon-box p-5 sm:p-6" data-testid={`rules-${s.id}`}>
-      <h3 className="mb-2 font-display text-[22px] leading-7 font-bold text-ink">{s.heading}</h3>
+    <div data-testid={`rules-${s.id}`}>
       <p className="max-w-prose text-[15px] leading-6 text-ink-muted">{s.body}</p>
       {s.kind === 'text' && s.appendix && (
         <p className="mt-2 max-w-prose text-[15px] leading-6 text-ink-muted">{s.appendix}</p>
@@ -130,14 +129,12 @@ export default function RulesPage() {
               </Link>
             }
           />
-          <Tabs
-            label={COPY.rules.tabsLabel}
-            allowAll
-            hash
-            mountHidden
-            tabs={sections.map((s) => ({
+          <SectionTiles
+            label={COPY.rules.tilesLabel}
+            sections={sections.map((s) => ({
               id: s.id,
-              label: COPY.rules.tabs[s.id] ?? s.heading,
+              label: COPY.rules.tiles[s.id] ?? s.heading,
+              heading: s.heading,
               content: <RuleSection s={s} />,
             }))}
           />

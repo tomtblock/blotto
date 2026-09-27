@@ -16,6 +16,21 @@ body {
   font-family: var(--font-body);
 }
 
+/* A document read on cream (V3, founder 2026-09-27: the tiles' modal,
+ * components/ui/modal.tsx). The game layer's ink names re-pointed, so a
+ * section written for a plum box — its tables, lists and links — reads as
+ * plum on cream with the classes it already has. rgba() only: tokens.css
+ * is the one place a hex is allowed. */
+.on-cream {
+  --color-ink: var(--color-brand-berry);
+  --color-ink-muted: rgba(94, 27, 64, 0.72);
+  --color-line: rgba(94, 27, 64, 0.18);
+  --color-overlay: rgba(94, 27, 64, 0.08);
+  --color-brand: var(--color-brand-deep-magenta);
+  --color-prize: var(--color-brand-deep);
+  --color-base: var(--color-brand-cream);
+}
+
 /* Desktop scale (founder 2026-09-16: "on a desktop, the site looks better at
  * 90% zoom"). Every layout here was tuned at phone widths and a wide screen
  * shows the same column, larger. Until the desktop type scale exists

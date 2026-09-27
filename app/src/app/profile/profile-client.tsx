@@ -1,21 +1,16 @@
 'use client';
 
 /*
- * The career (R15; restyled by v3 D2, extended by D3; V2 by the founder's
- * review of 2026-09-27): four tabs — Wallet, Record, Prize record, Battle
- * notes. Read-only — nothing here can affect a pool. The character
- * collection (the one surface that named the drawn rarity) came off the
- * page on 2026-09-27; class is cosmetic and is now shown nowhere.
+ * The profile (R15; restyled by v3 D2, extended by D3; V3 by the founder's
+ * feedback of 2026-09-27): ONE dashboard — the wallet, the lifetime record,
+ * the previous finishes (components/profile/finishes.tsx). Read-only —
+ * nothing here can affect a pool.
  *
- * The rivals panel (D3, "the wallets most often in your pools") was removed
- * on 2026-09-16 under the founder's data-minimisation ruling of 2026-09-15:
- * a co-entrant graph nothing in scoring, payment or verification needed.
- *
- * PHASE-D3-REVIEW: v3 asks for a "rank history" chart. Rank labels are
- * not indexed (D3-B: they live in the published bundle), so the chart is
- * the PRIZE record — amount per pool in entry order, the paid/unpaid
- * outcome that is on-chain and player-verifiable. Bar heights are display
- * proportions; every displayed amount stays a bigint-derived string.
+ * Gone in V3: the tabs, the prize-record chart and the battle notes (the
+ * founder's call; the notes were the one thing this page stored, so the
+ * browser now holds nothing for the profile). Gone earlier: the character
+ * collection (2026-09-27; class is cosmetic and is shown nowhere) and the
+ * rivals panel (2026-09-16, the data-minimisation ruling).
  */
 import { useEffect, useState } from 'react';
 import { COPY } from '@/copy';
@@ -24,45 +19,10 @@ import { indexerApi, live, type Live } from '@/data/api';
 import { lamportsToSol } from '@/data/format';
 import type { CareerRow, ProfileRow } from '@/data/types';
 import { NeonSection } from '@/components/ui/neon-section';
-import { Tabs } from '@/components/ui/tabs';
 import { LiveDataUnavailable } from '@/components/shell/live-unavailable';
 import { Stat } from '@/components/ui/stat';
 import { WalletCard } from '@/components/wallet/wallet-card';
-import { BattleNotes } from '@/components/profile/battle-notes';
-
-function PrizeRecordChart({ career }: { career: CareerRow[] }) {
-  if (career.length < 2) {
-    return <p className="text-[15px] leading-6 text-ink-muted">{COPY.career.chartEmpty}</p>;
-  }
-  const max = career.reduce((m, r) => {
-    const v = BigInt(r.amount_lamports);
-    return v > m ? v : m;
-  }, 0n);
-  return (
-    <>
-      <p className="mb-4 text-[13px] leading-5 text-ink-muted">{COPY.career.chartNote}</p>
-      <div className="flex h-28 items-end gap-1.5" role="img" aria-label={COPY.career.chartTitle}>
-        {career.map((r) => {
-          const v = BigInt(r.amount_lamports);
-          // Display proportion only — the amount itself never leaves bigint.
-          const h = max > 0n && v > 0n ? Math.max(8, Number((v * 100n) / max)) : 4;
-          return (
-            <div
-              key={`${r.pool}`}
-              // E3: rank appears only once the pool's published bundle
-              // verified against the on-chain root (null/absent otherwise).
-              title={`#${r.entries_to_date}: ${r.paid ? `${lamportsToSol(r.amount_lamports)} SOL` : 'unpaid'}${
-                typeof r.rank === 'number' ? ` · ${COPY.results.rank(r.rank)}` : ''
-              }`}
-              className={'w-full max-w-8 rounded-t ' + (r.paid ? 'bg-prize' : 'bg-overlay')}
-              style={{ height: `${h}%` }}
-            />
-          );
-        })}
-      </div>
-    </>
-  );
-}
+import { Finishes, finishRows } from '@/components/profile/finishes';
 
 /**
  * What the page shows for a career read (audit 2026-09-11, C-15 / D-16).
@@ -129,6 +89,8 @@ export function ProfileClient() {
      */
     profile: Live<ProfileRow | null>;
     career: CareerRow[];
+    /** Each pool's fill deadline (the finishes table's date), by address. */
+    closedByPool: Map<string, string>;
   } | null>(null);
 
   useEffect(() => {
@@ -136,13 +98,14 @@ export function ProfileClient() {
     let cancelled = false;
     const api = indexerApi();
     void (async () => {
-      const [profile, career] = await Promise.all([
+      const [profile, career, pools] = await Promise.all([
         live(() => api.getProfile(wallet)),
-        // A secondary panel: the chart simply shows its empty line when its
+        // A secondary panel: the table simply shows its empty line when its
         // read fails. It cannot be mistaken for a statement about the player.
         api.getCareer(wallet).catch(() => [] as CareerRow[]),
+        api.listPools().catch(() => []),
       ]);
-      if (!cancelled) setResult({ wallet, profile, career });
+      if (!cancelled) setResult({ wallet, profile, career, closedByPool: new Map(pools.map((p) => [p.pool, p.fill_deadline])) });
     })();
     return () => {
       cancelled = true;
@@ -158,33 +121,15 @@ export function ProfileClient() {
     );
   }
 
-  const view = profileView(result && result.wallet === wallet ? result.profile : null);
+  const mine = result && result.wallet === wallet ? result : null;
+  const view = profileView(mine ? mine.profile : null);
   return (
-    <Tabs
-      label={COPY.profile.tabsAria}
-      tone="berry"
-      tabs={[
-        { id: 'wallet', label: COPY.profile.tabs.wallet, content: <WalletCard /> },
-        { id: 'record', label: COPY.profile.tabs.record, content: <Record view={view} /> },
-        {
-          id: 'prize',
-          label: COPY.profile.tabs.prize,
-          content: (
-            <NeonSection heading={COPY.career.chartTitle}>
-              <PrizeRecordChart career={result?.wallet === wallet ? result.career : []} />
-            </NeonSection>
-          ),
-        },
-        {
-          id: 'notes',
-          label: COPY.profile.tabs.notes,
-          content: (
-            <NeonSection heading={COPY.profile.notesTitle}>
-              <BattleNotes wallet={wallet} />
-            </NeonSection>
-          ),
-        },
-      ]}
-    />
+    <div className="flex flex-col gap-10" data-testid="profile-dashboard">
+      <WalletCard />
+      <Record view={view} />
+      <NeonSection heading={COPY.profile.finishes.title} data-testid="finishes">
+        <Finishes rows={mine ? finishRows(mine.career, mine.closedByPool) : []} />
+      </NeonSection>
+    </div>
   );
 }

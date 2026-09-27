@@ -58,7 +58,7 @@ the list below identifies a player unless their address does.
 | **Opt-in email** | `notify_pool_optin` table: pool, wallet, email, signature | internal | To send the one "your tournament has finished" message the player asked for |
 | **Sanctions refusal record** | `sanctions_refusals` table: wallet, pool, the lists consulted, match data, country, IP prefix | internal | The record a refusal on a published sanctions list requires |
 | **Published results bundle** | permanent storage (`backend/reveal/src/publisher-irys.ts`): every seat's battles, salt, wallet, rank and amount | everyone, permanently | It is the file anyone uses to recompute the result (`app/src/verify/logic.ts`) |
-| **The player's own browser** | a device secret (`app/src/entry/device.ts`); cached choices under opaque key names (`app/src/storage/opaque-key.ts`); since 2026-09-27 the player's own battle notes (`app/src/components/profile/battle-notes.tsx`) and which external wallet to reconnect (`app/src/wallet/direct-session.tsx`), both under opaque keys | the device only | The per-pool device marker; remembered settings |
+| **The player's own browser** | a device secret (`app/src/entry/device.ts`); cached choices under opaque key names (`app/src/storage/opaque-key.ts`); since 2026-09-27 which external wallet to reconnect (`app/src/wallet/direct-session.tsx`), under an opaque key (the battle notes of the same day were removed on the founder's V3 review, so the profile stores nothing) | the device only | The per-pool device marker; remembered settings |
 
 **What the published bundle does not carry**: the per-field timings and the device marker. Bundle
 version 2 removed both (`backend/reveal/src/bundle.ts`); they reach detection through a channel

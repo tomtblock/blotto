@@ -3,13 +3,14 @@
  *
  * The back-page shape (/rules, /fair-play, /custody): the app header, a pink
  * field wrapping a centred main column, a marquee page intro with a way
- * back. V2 (founder 2026-09-27): the sections sit on a tab strip, one at a
- * time or — because this is a document a reader or counsel may want whole —
- * all in order under "Read as one page". Every section is in the server
- * HTML whichever way it is read (Tabs `mountHidden`), so a document a
- * player is agreeing to never depends on a client bundle arriving (the
- * 2026-09-13 gate incident, where a refused bundle left a page blank with a
- * correct tab title). A link like /terms#complaints opens on that tab.
+ * back. V3 (founder 2026-09-27): every section is a tile that opens its
+ * text on the cream card (components/ui/section-tiles) or — because this is
+ * a document a reader or counsel may want whole — all in order under "Read
+ * as one page". Every section is in the server HTML whichever way it is
+ * read, so a document a player is agreeing to never depends on a client
+ * bundle arriving (the 2026-09-13 gate incident, where a refused bundle
+ * left a page blank with a correct tab title). A link like
+ * /terms#complaints opens that section.
  */
 import type { Metadata } from 'next';
 import Link from 'next/link';
@@ -20,7 +21,7 @@ import { AppHeader } from '@/components/shell/app-header';
 import { SiteFooter } from '@/components/shell/site-footer';
 import { TabBar } from '@/components/shell/tab-bar';
 import { PageIntro } from '@/components/ui/page-intro';
-import { Tabs } from '@/components/ui/tabs';
+import { SectionTiles } from '@/components/ui/section-tiles';
 import { operatorIdentity, operatorText, type OperatorIdentity } from '@/operator/operator';
 import { OperatorRows } from '@/components/doc/doc-parts';
 
@@ -30,8 +31,7 @@ export const metadata: Metadata = { title: t.title };
 
 function Section({ s, operator }: { s: TermsSection; operator: OperatorIdentity }) {
   return (
-    <div className="neon-box p-5 sm:p-6" data-testid={`terms-${s.id}`}>
-      <h3 className="mb-3 font-display text-[22px] leading-7 font-bold text-ink">{s.heading}</h3>
+    <div data-testid={`terms-${s.id}`}>
       {s.body.map((paragraph) => (
         <p key={paragraph} className="mt-0 mb-3 max-w-prose text-[15px] leading-6 text-ink-muted last:mb-0">
           {paragraph}
@@ -107,14 +107,13 @@ export default function TermsPage() {
           <p className="-mt-3 mb-6 max-w-prose text-[14px] leading-5 text-brand-berry">
             {t.versionLine(termsConfig.version, termsConfig.updated)}
           </p>
-          <Tabs
-            label={t.tabsLabel}
+          <SectionTiles
+            label={t.tilesLabel}
             allowAll
-            hash
-            mountHidden
-            tabs={t.sections.map((s) => ({
+            sections={t.sections.map((s) => ({
               id: s.id,
-              label: t.tabs[s.id] ?? s.heading,
+              label: t.tiles[s.id] ?? s.heading,
+              heading: s.heading,
               content: <Section s={s} operator={operator} />,
             }))}
           />

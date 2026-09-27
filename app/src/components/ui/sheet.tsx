@@ -14,6 +14,7 @@
  * like the page it opens over.
  */
 import { useEffect, useRef, type ReactNode } from "react";
+import { COPY } from "@/copy";
 import { MarqueeHeading } from "./marquee-heading";
 
 export interface SheetProps {
@@ -53,7 +54,7 @@ export function Sheet({ open, onClose, title, children }: SheetProps) {
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={COPY.shell.close}
             className="absolute top-3 right-3 grid h-9 w-9 place-items-center rounded-full text-ink-muted hover:bg-overlay hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
           >
             <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">

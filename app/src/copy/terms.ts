@@ -78,7 +78,7 @@ const RELEASE_DAYS = Number(ESCROW_AUTO_RELEASE_SECS / 86400n);
 const MIN_AGE = 18;
 
 export interface TermsSection {
-  /** Stable anchor: the tab's hash, and the id a link inside the site uses. */
+  /** Stable anchor: the tile's hash, and the id a link inside the site uses. */
   id: string;
   heading: string;
   /** One paragraph per entry. */
@@ -100,10 +100,10 @@ export const TERMS = {
   /** The one honest line about the unnamed operator, shown when any value is unset. */
   operatorUnsetNote:
     'The operating entity is not yet incorporated, so the entries below that name it read “not yet set”. Nothing is hidden by that: no real-money tournament runs until they are filled in.',
-  /** The tab strip's accessible name (V2: one section at a time, or the whole document). */
-  tabsLabel: 'Sections of the terms',
-  /** Short tab labels, by section id — the headings stay the document's. */
-  tabs: {
+  /** The tiles' group name (V3: a tile per section, or the whole document). */
+  tilesLabel: 'Sections of the terms',
+  /** Short tile labels, by section id — the headings stay the document's. */
+  tiles: {
     'who-we-are': 'Who we are',
     eligibility: 'Who may enter',
     'what-this-is': 'The service',

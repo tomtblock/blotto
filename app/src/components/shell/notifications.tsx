@@ -106,7 +106,7 @@ function writeSeen(wallet: string, tokens: Set<string>): void {
  * flag; the amount is guarded so a row with `paid` and no lamports (a share
  * held, then forfeited) is not called a win.
  */
-function wonSolOf(row: Pick<CareerRow, 'state' | 'paid' | 'amount_lamports'>): string | null {
+export function wonSolOf(row: Pick<CareerRow, 'state' | 'paid' | 'amount_lamports'>): string | null {
   if (row.state !== 'Paid' || !row.paid) return null;
   try {
     return BigInt(row.amount_lamports) > 0n ? lamportsToSol(row.amount_lamports) : null;

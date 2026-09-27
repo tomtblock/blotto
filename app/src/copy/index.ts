@@ -39,10 +39,12 @@ export const COPY = {
     liveDataUnavailable: 'Live pool data is temporarily unavailable.',
     liveDataUnavailableDetail:
       'The data service could not be reached. Refresh in a moment — nothing on-chain is affected.',
-    // V2 (founder 2026-09-27): the documents' tab strip offers the whole
-    // page at once for anyone who wants to read it as one document.
-    tabsReadAsOnePage: 'Read as one page',
-    tabsOneAtATime: 'One section at a time',
+    // The terms and the privacy notice offered whole, for anyone who wants
+    // to read one as a single document (components/ui/section-tiles.tsx).
+    readAsOnePage: 'Read as one page',
+    oneSectionAtATime: 'One section at a time',
+    // The close key on every dialog (components/ui/modal.tsx, sheet.tsx).
+    close: 'Close',
     // 2026-09-13 (accessibility baseline): the skip link and the footer
     // landmark, which no page had. PHASE-N-REVIEW: drafts; founder voice.
     skipToContent: 'Skip to content',
@@ -639,9 +641,9 @@ export const COPY = {
     availabilityHeading: 'Where you can enter',
     randomnessHeading: 'Nothing random decides a result',
     checkHeading: 'Check it yourself',
-    // V2 (founder 2026-09-27): the tab strip's name and short labels.
-    tabsLabel: 'Sections of fair play',
-    tabs: {
+    // V3 (founder 2026-09-27): the tiles' group name and short labels.
+    tilesLabel: 'Sections of fair play',
+    tiles: {
       skill: 'Skill',
       screening: 'Screening',
       age: '18+',
@@ -998,13 +1000,6 @@ export const COPY = {
     positionRefund: 'Refund',
     positionPending: '—',
   },
-  career: {
-    chartTitle: 'Prize record',
-    chartNote: 'Prize per pool, in entry order. Prize finishes in amber.',
-    chartEmpty: 'The record fills in from your second pool.',
-    // The rivals strings left with the panel on 2026-09-16 (the founder's
-    // data-minimisation ruling of 2026-09-15).
-  },
   beatYou: {
     title: 'What finished above you',
     // 2026-09-16: the panel reads the published battle set and checks each
@@ -1309,27 +1304,36 @@ export const COPY = {
       'We could not supply this pool\u2019s bundle address. That happens when the published bundle has not been verified against the on-chain commitment \u2014 which is exactly when checking it yourself matters most. The address is in the pool\u2019s own publication record on the gateway, and we will give it to you on request through /complaints.',
   },
   profile: {
-    title: 'Your career',
+    // V3 (founder 2026-09-27): "Profile", one dashboard.
+    title: 'Profile',
     lifetime: 'Lifetime record',
     poolsEntered: 'Pools entered',
     prizeFinishes: 'Prize finishes',
     totalPrizes: 'Total prizes',
     readOnlyNote: 'Profiles are a read-only record. Nothing here affects any pool.',
-    // V2 (founder 2026-09-27): the career is four tabs. The character
-    // collection came off the page (class is cosmetic and is shown nowhere
-    // a player acts).
-    tabsAria: 'Your career',
-    tabs: { wallet: 'Wallet', record: 'Record', prize: 'Prize record', notes: 'Battle notes' },
     signInFirst: 'Sign in to see your record.',
     signInFirstLine: 'Your career — every pool entered, every paid finish — is built from on-chain data for the wallet you sign in with.',
     emptyTitle: 'No entries yet.',
     emptyLine: 'Your first pool starts your record — the open pools are on the home page.',
-    notesTitle: 'Battle notes',
-    notesLine: 'Your own notes, for your next entry. Saved on this device only; nothing here is sent anywhere.',
-    notesPlaceholder: 'What worked, what to try next time…',
-    notesSave: 'Save',
-    notesSaved: 'Saved on this device',
-    notesUnavailable: 'Notes cannot be saved in this browser (storage is closed).',
+    /*
+     * V3 (founder 2026-09-27): the previous finishes as a table in the
+     * notifications sheet's style (its column words are `notify.*`), and a
+     * pool opens a card with how the player played it — their own seven
+     * battles from the published bundle. PHASE-N-REVIEW: drafts; founder
+     * may re-voice.
+     */
+    finishes: {
+      title: 'Previous finishes',
+      tableAria: 'Your previous pools',
+      empty: 'Your finishes appear here from your first pool.',
+      openAria: (id: string) => `How you played pool #${id}`,
+      matrixKicker: 'How you played',
+      matrixLoading: 'Reading the published data…',
+      matrixUnpublished: 'Your battles for this pool are shown once the pool has been revealed and its published data verified.',
+      matrixMissing: 'Your battles for this pool are not in the published data.',
+      matrixFailed: 'The published data could not be read just now. The results page fetches the same file.',
+      matrixAria: (id: string) => `Your seven battles in pool #${id}`,
+    },
   },
   custody: {
     // C13: the disclosure page. Everything here describes MECHANICS —
@@ -1656,11 +1660,11 @@ export const COPY = {
       entry: 'Entry (SOL)',
       pot: 'Prize pool (SOL)',
     },
-    // V2 (founder 2026-09-27): the rules read one section at a time on a
-    // tab strip, or as one page. Short labels by section id; the headings
-    // above stay the sections' own.
-    tabsLabel: 'Sections of the rules',
-    tabs: {
+    // V3 (founder 2026-09-27): every section is a tile that opens its
+    // text. Short labels by section id; the headings above stay the
+    // sections' own.
+    tilesLabel: 'Sections of the rules',
+    tiles: {
       'how-to-enter': 'Entering',
       price: 'Prices',
       prizes: 'Who is paid',
