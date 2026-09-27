@@ -9,7 +9,7 @@
 }
 .pool-strip {
   position: relative;
-  height: 150px;
+  height: 220px;
   margin: 0 -16px 18px;
   overflow: hidden;
   mask-image: linear-gradient(90deg, transparent 0, black 12%, black 88%, transparent 100%);
@@ -25,7 +25,8 @@
     position: sticky;
     top: 56px;
     align-self: flex-start;
-    flex: 0 0 clamp(200px, 23vw, 440px);
+    /* V3 (founder 2026-09-27): more of the margin is the scene. */
+    flex: 0 0 clamp(240px, 29vw, 600px);
     height: calc(100vh - 56px);
     overflow: hidden;
     mask-image: linear-gradient(180deg, transparent 0, black 10%, black 90%, transparent 100%);
@@ -36,16 +37,17 @@
     height: 100%;
     object-fit: cover;
   }
-  /* The inner edge fades into the field so the belts read as running INTO the page. */
+  /* The inner edge fades into the field over its last fifth (V3: a
+     narrower fade, so less of the rail reads as pink). */
   .pool-rail-fade {
     position: absolute;
     inset: 0;
     pointer-events: none;
   }
   .pool-rail-left .pool-rail-fade {
-    background: linear-gradient(90deg, transparent 55%, var(--color-brand-pink) 100%);
+    background: linear-gradient(90deg, transparent 78%, var(--color-brand-pink) 100%);
   }
   .pool-rail-right .pool-rail-fade {
-    background: linear-gradient(270deg, transparent 55%, var(--color-brand-pink) 100%);
+    background: linear-gradient(270deg, transparent 78%, var(--color-brand-pink) 100%);
   }
 }

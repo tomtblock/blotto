@@ -7,6 +7,7 @@
  */
 import { useState } from "react";
 import { TIER_POT_LAMPORTS } from "@blotto/scoring";
+import { COPY } from "@/copy";
 import { palette, type as typeTokens, motion, elevation } from "@/design/tokens";
 import { lamportsToSol } from "@/data/format";
 import { Button } from "@/components/ui/button";
@@ -168,7 +169,7 @@ export function Gallery() {
             <Button intent="quiet">View rules</Button>
             <Button intent="prize">See your result</Button>
             <Button disabled>Enter pool</Button>
-            <Button size="lg">Confirm, Seal & Submit</Button>
+            <Button size="lg">{COPY.battle.seal}</Button>
           </div>
         </Section>
 
@@ -254,6 +255,7 @@ export function Gallery() {
                 entryIndex={11}
                 asset="F1XTUREpass11111111111111111111111111111111"
                 poolNumber={7}
+                mode="easy"
                 poolAddress="F1XTUREPoo1111111111111111111111111111111111"
                 wallet="F1XTUREP1ayer111111111111111111111111111111"
                 signer={undefined}

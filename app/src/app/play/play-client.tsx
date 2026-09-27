@@ -616,6 +616,7 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
             entryIndex={card.entryIndex}
             asset={card.asset}
             poolNumber={pool.id}
+            mode={poolMode(pool)}
             poolAddress={pool.pool}
             wallet={auth.walletAddress ?? ''}
             signer={auth.signers.find((s) => s.address === auth.walletAddress)}

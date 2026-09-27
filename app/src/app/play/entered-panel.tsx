@@ -8,8 +8,12 @@
  * Play again, which goes home. The trophy Blott, the "one message…" note
  * and the two small links it used to carry are gone by the same review.
  *
- * Only X is offered (founder: "remove the other share button"). The pass
- * PNG and the intent are pass-card.tsx's, unchanged.
+ * Only X is offered (founder: "remove the other share button"). V3
+ * (founder, the same day): the card is bigger, its pool line names the
+ * mode, and Post on X opens the intent with the founder's line and
+ * nothing else — the pass PNG that downloaded beside it ("looks like a
+ * virus") and the note that explained it are gone, with the canvas that
+ * drew it. What is posted is the pool and the seat: nothing sealed.
  *
  * THE OPT-IN. A social sign-in that carries an address is one press; a
  * wallet or X sign-in is asked for one. Either way the wallet signs the
@@ -27,9 +31,9 @@ import { XMark } from '@/wallet/wallet-icons';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { AmbientClip } from '@/components/ui/ambient-clip';
+import type { BoardMode } from '@/battle/board/mode';
 import { truncateAddress } from '@/wallet/types';
 import { looksLikeEmail, submitPoolNotify, type PoolNotifySigner } from '@/notify/pool-notify';
-import { openXWithPass, passPoolLine, passShareTextFor, usePassImage } from './pass-card';
 
 const PETALS = [{ mp4: '/motion/v2/petals.mp4', webm: '/motion/v2/petals.webm' }];
 const PETALS_POSTER = '/motion/v2/petals.jpg';
@@ -46,10 +50,22 @@ type OptIn =
   | { state: 'done'; email: string }
   | { state: 'failed' };
 
+/** The pool line on the pass, or the wordmark when the page could not read the pool. */
+function passPoolLine(poolNumber?: string | number): string {
+  return poolNumber !== undefined ? COPY.reveal.passPool(poolNumber) : COPY.shell.title;
+}
+
+/** The line that is posted, and only that: the web intent takes text. */
+export function openXWithLine(poolNumber?: string | number): void {
+  const text = poolNumber !== undefined ? COPY.reveal.passShareText(poolNumber) : COPY.shell.tagline;
+  window.open(`https://x.com/intent/post?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
+}
+
 export function EnteredPanel({
   entryIndex,
   asset,
   poolNumber,
+  mode,
   poolAddress,
   wallet,
   signer,
@@ -60,6 +76,8 @@ export function EnteredPanel({
   entryIndex: number;
   asset: string;
   poolNumber?: string | number;
+  /** The rule this pool played; on the pass line beside the pool. */
+  mode: BoardMode;
   poolAddress: string;
   wallet: string;
   signer: PoolNotifySigner | undefined;
@@ -70,14 +88,7 @@ export function EnteredPanel({
   notifyOffered: boolean;
 }) {
   const r = COPY.reveal;
-  const png = usePassImage(entryIndex, poolNumber);
-  const shareText = passShareTextFor(poolNumber);
-  const [xNote, setXNote] = useState<string | null>(null);
-  const postOnX = useCallback(() => {
-    if (!png) return;
-    openXWithPass(png, shareText);
-    setXNote(r.passShareXNote);
-  }, [png, shareText, r]);
+  const postOnX = useCallback(() => openXWithLine(poolNumber), [poolNumber]);
 
   const [optIn, setOptIn] = useState<OptIn>({ state: 'idle' });
   const send = useCallback(
@@ -94,19 +105,19 @@ export function EnteredPanel({
   }, [email, send]);
 
   return (
-    <section aria-live="polite" className="animate-settle mx-auto flex w-full max-w-md flex-col gap-4" data-testid="entered-panel">
+    <section aria-live="polite" className="animate-settle mx-auto flex w-full max-w-lg flex-col gap-4" data-testid="entered-panel">
       <Card tone="light" className="text-center" data-testid="pass-card">
-        {/* The petals, where the trophy Blott stood. */}
-        <div className="relative h-44 w-full overflow-hidden bg-brand-berry">
+        {/* The petals, where the trophy Blott stood — the clip's own 4:5 frame. */}
+        <div className="relative aspect-[4/5] max-h-[56vh] w-full overflow-hidden bg-brand-berry">
           <AmbientClip tiers={PETALS} poster={PETALS_POSTER} className="absolute inset-0 h-full w-full object-cover" />
-          <div aria-hidden="true" className="absolute inset-x-0 bottom-0 h-12 bg-[linear-gradient(180deg,transparent_0%,var(--color-brand-cream)_100%)]" />
+          <div aria-hidden="true" className="absolute inset-x-0 bottom-0 h-16 bg-[linear-gradient(180deg,transparent_0%,var(--color-brand-cream)_100%)]" />
         </div>
-        <div className="px-5 pt-1 pb-6">
-          <p className="font-mono text-[11px] tracking-[0.16em] uppercase text-brand-berry/70">
-            {COPY.shell.title} · {passPoolLine(poolNumber)}
+        <div className="px-5 pt-1 pb-7">
+          <p className="font-mono text-[12px] tracking-[0.16em] uppercase text-brand-berry/70" data-testid="pass-line">
+            {COPY.shell.title} · {passPoolLine(poolNumber)} · {mode === 'hard' ? COPY.board.modeHard : COPY.board.modeEasy}
           </p>
-          <p className="mt-2 font-display text-[44px] leading-none font-extrabold text-brand-berry">{r.passEntered}</p>
-          <p className="mt-3 text-[16px] font-semibold text-brand-berry">{r.cardSeat(entryIndex)}</p>
+          <p className="mt-2 font-display text-[56px] leading-none font-extrabold text-brand-berry">{r.passEntered}</p>
+          <p className="mt-3 text-[18px] font-semibold text-brand-berry">{r.cardSeat(entryIndex)}</p>
           <p className="mt-1 font-mono text-[11px] text-brand-berry/60">{truncateAddress(asset)}</p>
         </div>
       </Card>
@@ -117,11 +128,10 @@ export function EnteredPanel({
       </Card>
 
       <div className="flex flex-col gap-3">
-        <Button size="lg" className={KEY} onClick={postOnX} disabled={!png} data-testid="entered-post-x">
+        <Button size="lg" className={KEY} onClick={postOnX} data-testid="entered-post-x">
           <XMark size={18} />
           <span className="ml-2">{r.passShareX}</span>
         </Button>
-        {xNote ? <p className="text-center text-[12px] leading-4 text-brand-berry">{xNote}</p> : null}
 
         {notifyOffered && optIn.state === 'idle' ? (
           <Button size="lg" intent="cream" className={KEY_CREAM} onClick={keepUpdated} data-testid="keep-updated">

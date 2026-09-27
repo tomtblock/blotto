@@ -37,16 +37,16 @@ import './pool-page.css';
 /*
  * Founder 2026-09-16 (CHANGE-2026-09-16_ui-uplift.md §A6, then §C the same
  * evening): the page a player decides on wears the pink field, and on a wide
- * screen two conveyor rails run down the viewport's edges into the centre
- * where the Enter control is — ONE portrait loop, the right rail its mirror,
- * so the page ships one clip. Below lg a single strip carries the same scene
- * above the card. Every number stays on plum; the prize amount stays the
- * only yellow inside a card.
+ * screen two rails run down the viewport's edges into the centre where the
+ * Enter control is — ONE portrait loop, the right rail its mirror, so the
+ * page ships one clip. V3 (founder 2026-09-27): the loop is the "Looping
+ * Pool" scene, cut to loop without a seam (a one-second dissolve back to
+ * its own start), and the rails take more of the margin. Below lg a single
+ * strip carries the same clip above the card. Every number stays on plum;
+ * the prize amount stays the only yellow inside a card.
  */
 const RAIL = [{ mp4: '/motion/pool/rail.mp4', webm: '/motion/pool/rail.webm' }];
 const RAIL_POSTER = '/motion/pool/rail.jpg';
-const STRIP = [{ mp4: '/motion/pool/strip.mp4', webm: '/motion/pool/strip.webm' }];
-const STRIP_POSTER = '/motion/pool/strip.jpg';
 
 const MIN_SEATS_N = Number(MIN_SEATS);
 const FILL_HOURS = Number(DEFAULT_FILL_DEADLINE_SECS / 3600n);
@@ -94,7 +94,7 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
         </aside>
       <main id="main" className="mx-auto w-full max-w-3xl px-4 pt-6 pb-24 sm:px-6">
         <div className="pool-strip lg:hidden" aria-hidden="true">
-          <AmbientClip tiers={STRIP} poster={STRIP_POSTER} className="pool-strip-clip" playWhenVisible={0.5} />
+          <AmbientClip tiers={RAIL} poster={RAIL_POSTER} className="pool-strip-clip" playWhenVisible={0.5} />
         </div>
         <div className="mb-2">
           <BackLink href="/pools" tone="berry">
