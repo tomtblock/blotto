@@ -52,29 +52,15 @@ const ICON_SOCIALS: Array<{ provider: SocialProvider; label: string; Mark: typeo
   { provider: "twitter", label: COPY.signin.twitter, Mark: XMark },
 ];
 
-/**
- * EXTERNAL WALLET SIGN-IN IS HIDDEN (founder, 2026-09-24). Hidden, not
- * removed: this is a vendor outage, not a product decision, and the day it
- * lifts we want the buttons back without rebuilding them.
- *
- * WHY. Privy's sign-in-with-Solana always states `Chain ID: mainnet`, for an
- * application that is devnet end to end. Phantom compares that line and
- * refuses to display the request — "the chain ID does not match the provided
- * chain ID for verification" — and Privy's own login modal fails the same
- * way, so both routes are shut. Privy support have confirmed it in writing:
- * `generateSiwsMessage` takes only an address, and SIWS "messages default to
- * mainnet regardless of your RPC configuration".
- *
- * Nothing in this repository can correct it; the full diagnosis, the captured
- * message and the costed alternatives are in
- * `docs/guide/HOSTING.md`.
- *
- * TO RESTORE: set this to true. The handlers, the detection and the whole
- * `siwsSignIn` sequence are untouched and still under test — only the buttons
- * are withheld. Restore it once Privy emits a devnet chain id, and re-run the
- * sign-in review before saying it works.
+/*
+ * EXTERNAL WALLET SIGN-IN IS BACK (V2, founder 2026-09-27), through the
+ * DIRECT route (wallet/direct-sign-in.ts): the wallet-standard connect and
+ * a statement signed on the player's device, never the provider's
+ * sign-in-with-Solana message — which names mainnet for a devnet app, so
+ * Phantom refuses it (the 24 September hiding, docs/guide/HOSTING.md).
+ * The wallet rows therefore work whatever the provider's state: they are
+ * disabled only while a sign-in is in flight.
  */
-const EXTERNAL_WALLET_SIGNIN_ENABLED = false;
 
 const ROW =
   "flex h-14 w-full items-center gap-3 rounded-xl border border-line bg-raised px-4 text-left " +
@@ -228,9 +214,7 @@ export function SignInClient() {
         ))}
       </div>
 
-      {EXTERNAL_WALLET_SIGNIN_ENABLED ? (
-        <>
-        <div className="my-2 flex items-center gap-3" aria-hidden>
+      <div className="my-2 flex items-center gap-3" aria-hidden>
           <span className="h-px flex-1 bg-line" />
           <span className="text-[12px] uppercase tracking-[0.14em] text-ink-muted">
             {COPY.signin.walletDivider}
@@ -243,7 +227,7 @@ export function SignInClient() {
             <li key={w.id}>
               <button
                 type="button"
-                disabled={disabled || busyWallet !== null}
+                disabled={initializing || busyWallet !== null}
                 onClick={() => void onWallet(w.id)}
                 data-testid={`wallet-${w.id}`}
                 className={ROW}
@@ -282,8 +266,6 @@ export function SignInClient() {
             </button>
           </li>
         </ul>
-        </>
-      ) : null}
 
       <p className="mt-3 text-[12px] leading-5 text-ink-muted">{COPY.pool.ageTerritoryNote}</p>
     </div>

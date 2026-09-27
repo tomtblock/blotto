@@ -47,6 +47,7 @@ import { signInHref } from '@/app/signin/return-to';
 import { runInterruption } from './run-guard';
 import { RevealHost } from './reveal-host';
 import { PendingPanel } from '@/components/ui/pending-panel';
+import { STOP_ACTIONS, StopCard } from '@/components/ui/stop-card';
 import { SealedPanel } from './sealed-panel';
 import { SealStage, type ReviewSealApi, type SealKeyTone } from './seal-stage';
 import { INITIAL_SEAL_STAGE, reduceSealStage } from './seal-stage-machine';
@@ -78,18 +79,6 @@ const FAUCET_URL = 'https://faucet.solana.com/';
  */
 const SIGNER_WAIT_MS = 8_000;
 
-/* v3 D2: every empty/error state on the entry path is designed, not a bare
- * sentence — same panel shape whatever stopped the flow. */
-function StatePanel({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="candy candy-gloss animate-rise relative flex flex-col gap-2 overflow-hidden rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,var(--color-overlay)_0%,var(--color-raised)_38%,var(--color-base)_100%)] p-6">
-      <h2 className="font-display text-[24px] font-bold text-ink">{title}</h2>
-      <div className="flex max-w-prose flex-col gap-2 text-[15px] leading-6 text-ink-muted">
-        {children}
-      </div>
-    </section>
-  );
-}
 
 /** After this long a hold says so, rather than looking frozen. */
 /** Ceiling on the browser's fallback read of the pool. */
@@ -439,51 +428,49 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
 
   if (!poolId) {
     return (
-      <StatePanel title={COPY.gate.noPoolTitle}>
+      <StopCard
+        kind="dead-end"
+        title={COPY.gate.noPoolTitle}
+        actions={[STOP_ACTIONS.findAnotherPool(), STOP_ACTIONS.seePools()]}
+        data-testid="stop-no-pool"
+      >
         <p>{COPY.gate.noPool}</p>
-        <div className="mt-2 flex flex-wrap gap-2">
-          <Link
-            href="/"
-            className="inline-flex h-11 items-center rounded-full bg-brand px-6 text-[15px] font-semibold text-(--color-base) hover:bg-brand-hot"
-          >
-            {COPY.shell.nav.backToPlay}
-          </Link>
-          <Link
-            href="/pools"
-            className="inline-flex h-11 items-center rounded-full border border-white/20 px-6 text-[15px] text-ink hover:border-brand hover:text-brand"
-          >
-            {COPY.gate.browsePools}
-          </Link>
-        </div>
-      </StatePanel>
+      </StopCard>
     );
   }
   if (!pool) {
     if (poolLoad === 'missing') {
       return (
-        <StatePanel title={COPY.gate.poolMissingTitle}>
+        <StopCard
+          kind="dead-end"
+          title={COPY.gate.poolMissingTitle}
+          actions={[STOP_ACTIONS.findAnotherPool(), STOP_ACTIONS.backHome()]}
+          data-testid="stop-pool-missing"
+        >
           <p>{COPY.gate.poolMissing}</p>
-          <Link href="/" className="mt-1 text-brand underline underline-offset-2">
-            {COPY.shell.nav.backToPlay}
-          </Link>
-        </StatePanel>
+        </StopCard>
       );
     }
     if (poolLoad === 'failed') {
       return (
-        <StatePanel title={COPY.gate.poolLoadFailedTitle}>
+        <StopCard
+          kind="error"
+          title={COPY.gate.poolLoadFailedTitle}
+          actions={[
+            {
+              label: COPY.gate.poolLoadRetry,
+              intent: 'primary',
+              onClick: () => {
+                setPoolLoad('loading');
+                setPoolRun((n) => n + 1);
+              },
+            },
+            { ...STOP_ACTIONS.findAnotherPool(), intent: 'quiet' },
+          ]}
+          data-testid="stop-pool-load-failed"
+        >
           <p>{COPY.gate.poolLoadFailed}</p>
-          <Button
-            intent="quiet"
-            className="self-start"
-            onClick={() => {
-              setPoolLoad('loading');
-              setPoolRun((n) => n + 1);
-            }}
-          >
-            {COPY.gate.poolLoadRetry}
-          </Button>
-        </StatePanel>
+        </StopCard>
       );
     }
     return <PendingPanel label="Loading the pool" />;
@@ -496,12 +483,17 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
   // away: they finish, and `register` gives them the honest refusal.
   if (pool.state !== 'Open' && !done && !revealRun && !runInProgress) {
     return (
-      <StatePanel title={COPY.gate.poolClosedTitle}>
+      <StopCard
+        kind="dead-end"
+        title={COPY.gate.poolClosedTitle}
+        actions={[
+          STOP_ACTIONS.findAnotherPool(),
+          { href: `/pools/${pool.pool}/results`, label: COPY.pool.resultsLink, intent: 'quiet' },
+        ]}
+        data-testid="stop-pool-closed"
+      >
         <p>{COPY.gate.poolClosed}</p>
-        <Link href="/pools" className="mt-1 text-brand underline underline-offset-2">
-          {COPY.gate.poolClosedLink}
-        </Link>
-      </StatePanel>
+      </StopCard>
     );
   }
 
@@ -511,7 +503,22 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
     // Fail-closed covers a slow or unreachable check too (D-B3), so the
     // panel offers one more look before the player concludes anything.
     return (
-      <StatePanel title="Not available here">
+      <StopCard
+        kind="refusal"
+        title={COPY.gate.territoryBlockedTitle}
+        actions={[
+          {
+            label: COPY.gate.territoryRecheck,
+            intent: 'primary',
+            onClick: () => {
+              setGeo('checking');
+              setGeoRun((n) => n + 1);
+            },
+          },
+          STOP_ACTIONS.backHome(),
+        ]}
+        data-testid="stop-territory"
+      >
         {/* The list is GENERATED from config/territories.json (§3.3) — never
             typed here, so a founder instruction that changes the schedule
             changes this panel in the same commit. Named in full rather than
@@ -525,17 +532,7 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
           </Link>
         </p>
         <p className="text-[13px]">{COPY.gate.territoryRecheckNote}</p>
-        <Button
-          intent="quiet"
-          className="self-start"
-          onClick={() => {
-            setGeo('checking');
-            setGeoRun((n) => n + 1);
-          }}
-        >
-          {COPY.gate.territoryRecheck}
-        </Button>
-      </StatePanel>
+      </StopCard>
     );
   }
 
@@ -547,21 +544,26 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
    */
   if (runInProgress && interruption === 'account-changed') {
     return (
-      <StatePanel title={COPY.gate.walletChangedTitle}>
+      <StopCard
+        kind="dead-end"
+        title={COPY.gate.walletChangedTitle}
+        actions={[
+          {
+            label: COPY.gate.walletChangedRestart,
+            intent: 'primary',
+            onClick: () => {
+              setRunWallet(null);
+              setLastConfirmed(null);
+              setSubmitBlocked(false);
+              setEntered(null);
+            },
+          },
+          STOP_ACTIONS.wallet(),
+        ]}
+        data-testid="stop-wallet-changed"
+      >
         <p>{COPY.gate.walletChanged}</p>
-        <Button
-          intent="quiet"
-          className="self-start"
-          onClick={() => {
-            setRunWallet(null);
-            setLastConfirmed(null);
-            setSubmitBlocked(false);
-            setEntered(null);
-          }}
-        >
-          {COPY.gate.walletChangedRestart}
-        </Button>
-      </StatePanel>
+      </StopCard>
     );
   }
 
@@ -570,17 +572,19 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
   // not allowed to unmount it (C-17 / D-13).
   if (auth.status !== 'signed-in' && !runInProgress) {
     return (
-      <StatePanel title="Sign in to enter">
-        <p>Entering needs a signed-in wallet — sign in from the header above.</p>
-        {/* D-17: the pool travels with them, so signing in returns to THIS
-            tournament rather than to "No pool selected". */}
-        <Link
-          href={signInHref(`/play?pool=${poolId}`)}
-          className="mt-1 text-brand underline underline-offset-2"
-        >
-          {COPY.signin.title}
-        </Link>
-      </StatePanel>
+      <StopCard
+        kind="dead-end"
+        title={COPY.gate.signInTitle}
+        actions={[
+          /* D-17: the pool travels with them, so signing in returns to THIS
+             pool rather than to "No pool selected". */
+          { href: signInHref(`/play?pool=${poolId}`), label: COPY.signin.title, intent: 'primary' },
+          { ...STOP_ACTIONS.findAnotherPool(), intent: 'quiet' },
+        ]}
+        data-testid="stop-sign-in"
+      >
+        <p>{COPY.gate.signInLine}</p>
+      </StopCard>
     );
   }
   if (!auth.walletAddress && !runInProgress) {
@@ -591,12 +595,14 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
     // so — never let the ninety seconds start against a wallet that cannot
     // confirm at the end.
     return signerWaitExpired ? (
-      <StatePanel title={COPY.gate.signerMissingTitle}>
+      <StopCard
+        kind="error"
+        title={COPY.gate.signerMissingTitle}
+        actions={[{ ...STOP_ACTIONS.wallet(), intent: 'primary' }, { ...STOP_ACTIONS.findAnotherPool(), intent: 'quiet' }]}
+        data-testid="stop-signer-missing"
+      >
         <p>{COPY.gate.signerMissing}</p>
-        <Link href="/wallet" className="mt-1 text-brand underline underline-offset-2">
-          {COPY.gate.signerMissingLink}
-        </Link>
-      </StatePanel>
+      </StopCard>
     ) : (
       <PendingPanel label={COPY.gate.signerConnecting} />
     );
@@ -613,15 +619,18 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
     }
     if (entered.seat !== null) {
       return (
-        <StatePanel title={COPY.gate.alreadyEnteredTitle}>
+        <StopCard
+          kind="dead-end"
+          title={COPY.gate.alreadyEnteredTitle}
+          actions={[
+            { href: `/pools/${pool.pool}`, label: COPY.gate.alreadyEnteredPool, intent: 'primary' },
+            { href: `/pools/${pool.pool}/results`, label: COPY.gate.alreadyEnteredResults, intent: 'quiet' },
+            { ...STOP_ACTIONS.findAnotherPool(), intent: 'quiet' },
+          ]}
+          data-testid="stop-already-entered"
+        >
           <p>{COPY.gate.alreadyEntered(entered.seat)}</p>
-          <Link href={`/pools/${pool.pool}`} className="mt-1 text-brand underline underline-offset-2">
-            {COPY.gate.alreadyEnteredPool}
-          </Link>
-          <Link href={`/pools/${pool.pool}/results`} className="text-brand underline underline-offset-2">
-            {COPY.gate.alreadyEnteredResults}
-          </Link>
-        </StatePanel>
+        </StopCard>
       );
     }
   }
@@ -717,17 +726,17 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
    */
   if (submitBlocked) {
     return (
-      <StatePanel title={COPY.gate.signerMissingTitle}>
+      <StopCard
+        kind="failure"
+        title={COPY.gate.signerMissingTitle}
+        actions={[
+          { label: COPY.gate.poolLoadRetry, intent: 'primary', onClick: retrySubmit },
+          STOP_ACTIONS.wallet(),
+        ]}
+        data-testid="stop-submit-blocked"
+      >
         <p>{COPY.gate.signerMissing}</p>
-        <div className="mt-1 flex flex-wrap items-center gap-3">
-          <Button intent="quiet" onClick={retrySubmit} disabled={!lastConfirmed}>
-            {COPY.gate.poolLoadRetry}
-          </Button>
-          <Link href="/wallet" className="text-brand underline underline-offset-2">
-            {COPY.gate.signerMissingLink}
-          </Link>
-        </div>
-      </StatePanel>
+      </StopCard>
     );
   }
 
@@ -799,8 +808,11 @@ function BalanceGateView({
     (BigInt(entryLamports) + ENTRY_COST_HEADROOM_LAMPORTS).toString()
   );
   return (
-    <StatePanel
-      title={state.state === 'insufficient' ? 'Not enough SOL for this entry' : 'Balance check needed'}
+    <StopCard
+      kind={state.state === 'insufficient' ? 'refusal' : 'error'}
+      title={state.state === 'insufficient' ? COPY.gate.balanceInsufficientTitle : COPY.gate.balanceUnavailableTitle}
+      actions={[STOP_ACTIONS.findAnotherPool()]}
+      data-testid="stop-balance"
     >
       <div aria-live="polite" className="flex flex-col gap-4">
         {state.state === 'insufficient' ? (
@@ -872,7 +884,7 @@ function BalanceGateView({
           </p>
         ) : null}
       </div>
-    </StatePanel>
+    </StopCard>
   );
 }
 

@@ -107,7 +107,7 @@ type Promised = Mechanism | Undertaking;
 const RULES_PROMISES: readonly Promised[] = [
   {
     kind: 'mechanism',
-    phrase: 'the tournament enters resolving',
+    phrase: 'the pool enters resolving',
     commitment: 'A settled pool occupies a named "resolving" state before prizes are final.',
     // Derived, not stored (Phase 2 Stage C): the read API computes it from
     // held shares and REVIEW_WINDOW_SECS, and both pool pages render it.
@@ -272,7 +272,7 @@ const RULES_PROMISES: readonly Promised[] = [
   },
   {
     kind: 'mechanism',
-    phrase: 'no battle in the tournament can be read, by us or by anyone else',
+    phrase: 'can be read, by us or by anyone else',
     commitment: 'Not even the operator can read a sealed battle before the tournament closes.',
     // The same mechanism as the promise above, stated from our side: the
     // export policy is a TYPE every custody implementation must honour, and
@@ -305,7 +305,7 @@ const RULES_PROMISES: readonly Promised[] = [
   },
   {
     kind: 'mechanism',
-    phrase: 'The results bundle we publish after every tournament',
+    phrase: 'The results bundle we publish after every pool',
     commitment:
       'A bundle is published for every settled tournament, carrying what a player needs to check the group we identified.',
     // Tradeoff order #3, made concrete: the bundle carries every entry's

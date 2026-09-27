@@ -14,8 +14,8 @@
  * THE DRAWN CLASS IS NOT ON THE PASS. Until 2026-09-15 this card named the
  * class, its rarity, and glowed in the class hue behind the mascot. The
  * founder's instruction of 2026-09-14 — the rarity assignment is not
- * broadcast to players — took all three off; the one surface that shows
- * rarity is the profile, with `COPY.profile.rarityCaveat` beside it. The
+ * broadcast to players — took all three off; since 2026-09-27 no surface
+ * shows rarity at all (the profile's collection was removed too). The
  * `RevealVisual` this renders from no longer carries a class at all, so
  * the card cannot show one even by accident.
  */

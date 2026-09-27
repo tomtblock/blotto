@@ -133,7 +133,7 @@ test('pool page: the fixed pot as one Stat, §8.6 above the enter control', asyn
   await expect(page.getByRole('table')).toHaveCount(0);
   const finalText = page.getByText(/Decisions are final/);
   await expect(finalText).toBeVisible();
-  const enter = page.getByRole('link', { name: 'Enter this tournament' });
+  const enter = page.getByRole('link', { name: 'Enter this pool' });
   await expect(enter).toBeVisible();
   // §8.6: the statement renders ABOVE the enter control in the document.
   const above = await page.evaluate(() => {
@@ -141,7 +141,7 @@ test('pool page: the fixed pot as one Stat, §8.6 above the enter control', asyn
       p.textContent?.includes('Decisions are final')
     );
     const control = [...document.querySelectorAll('a')].find((a) =>
-      a.textContent?.includes('Enter this tournament')
+      a.textContent?.includes('Enter this pool')
     );
     if (!statement || !control) return false;
     return Boolean(statement.compareDocumentPosition(control) & Node.DOCUMENT_POSITION_FOLLOWING);

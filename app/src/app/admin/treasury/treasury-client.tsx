@@ -211,7 +211,7 @@ export function TreasuryClient() {
 
       {r.tier0_pools_to_next_unlock !== null ? (
         <p className="text-sm opacity-80">
-          Full tier-0 tournaments to the next unlock at current economics:{' '}
+          Full tier-0 pools to the next unlock at current economics:{' '}
           <span className="font-mono">{r.tier0_pools_to_next_unlock}</span>
         </p>
       ) : null}

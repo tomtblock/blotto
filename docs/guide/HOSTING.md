@@ -347,7 +347,7 @@ them.**
    which the "Move my wallet" flow needs. Leave funding off.
 4. **The Solana chain setting.** Set it to **devnet** for a devnet deployment.
 
-### Why wallet sign-in can fail
+### Why wallet sign-in does not go through the provider
 
 Sign-in with an external wallet (Phantom, Solflare, Backpack and others) uses a
 sign-in-with-Solana message that the provider composes on its server. Captured from the live
@@ -356,14 +356,18 @@ compares that line with the chain it is connected to and refuses to show the req
 ID does not match the provided chain ID for verification". The provider's own login modal fails
 the same way.
 
-**No code in this repository can correct it.** `generateSiwsMessage` takes only an address, and
-the SDK has no chain argument for it. The app's `SOLANA_RPCS_CONFIG` declares devnet only, and
-that did not change the message. The fix has to come from the provider's configuration or the
-provider itself. Until it does, **external-wallet sign-in is hidden** on the sign-in page
-(`EXTERNAL_WALLET_SIGNIN_ENABLED` in `app/src/app/signin/signin-client.tsx`). The handlers stay
-in place and under test. Restore the flag once the provider issues a devnet chain id, and re-run
-the sign-in review against the real domain before saying it works. Social sign-in, with its
-embedded wallet, is unaffected.
+**No code in this repository can correct the provider's message.** `generateSiwsMessage` takes
+only an address, and the SDK has no chain argument for it. So since 2026-09-27 an external wallet
+signs in **without the provider**: the DIRECT route (`app/src/wallet/direct-sign-in.ts`,
+`direct-session.tsx`). The browser's wallet standard connects the wallet, the wallet signs a short
+statement composed on the player's device (it names the address, the moment and a nonce, and says
+it moves nothing), and the app treats that address as the signed-in wallet. Nothing is sent to a
+server: the app keeps no session store, the entry service verifies the 18+ confirmation with the
+wallet's own signature over a message it composes itself, and the admin pages check the address
+against `config/reviewers.json`. The wallet to reconnect is remembered under an opaque browser
+key holding the wallet-standard id and a token of the address, never the address. A direct session
+has no email, no funding window and no key export (those are the provider's, for its embedded
+wallet); it has the send / cash-out flow. Social sign-in, with its embedded wallet, is unchanged.
 
 **The Google consent screen** names the sign-in provider's application, not the product, unless
 the operator supplies its own Google OAuth credentials to the provider.
@@ -453,8 +457,8 @@ The services also read operator-owned files from the repository rather than from
   as with compose or by hand with `fly deploy`, must set them itself. The rate-limit numbers are
   proposals, not ratified values. [`../security/SECURITY-REVIEW.md`](../security/SECURITY-REVIEW.md)
   tracks this.
-- **External-wallet sign-in is hidden** until the sign-in provider issues a devnet chain id
-  ([above](#why-wallet-sign-in-can-fail)).
+- **External-wallet sign-in goes through the direct route**, not the provider, because the
+  provider's sign-in message names the wrong chain ([above](#why-wallet-sign-in-can-fail)).
 - **Nothing scrapes the metrics endpoint yet**, and no alert destination is configured. Alerts
   are log lines plus a counter.
 - **A KYC provider is not connected.** The on-chain KYC switch is off.

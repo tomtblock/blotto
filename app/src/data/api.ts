@@ -100,7 +100,7 @@ class HttpIndexerApi implements IndexerApi {
  * cause and the fix, not a generic network error.
  */
 export const INDEXER_UNCONFIGURED_MESSAGE =
-  'indexer not configured (NEXT_PUBLIC_INDEXER_URL) — no live tournament data is available in this build';
+  'indexer not configured (NEXT_PUBLIC_INDEXER_URL) — no live pool data is available in this build';
 
 /**
  * The production stand-in for a missing indexer: every method rejects.

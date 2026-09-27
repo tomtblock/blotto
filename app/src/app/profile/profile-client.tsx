@@ -1,10 +1,11 @@
 'use client';
 
 /*
- * The career record (R15; restyled by v3 D2, extended by D3): lifetime
- * pools, paid finishes, prize totals in prize amber, the prize-record
- * chart off the player_history read API, the class collection as artwork
- * shelf. Read-only — nothing here can affect a pool.
+ * The career (R15; restyled by v3 D2, extended by D3; V2 by the founder's
+ * review of 2026-09-27): four tabs — Wallet, Record, Prize record, Battle
+ * notes. Read-only — nothing here can affect a pool. The character
+ * collection (the one surface that named the drawn rarity) came off the
+ * page on 2026-09-27; class is cosmetic and is now shown nowhere.
  *
  * The rivals panel (D3, "the wallets most often in your pools") was removed
  * on 2026-09-16 under the founder's data-minimisation ruling of 2026-09-15:
@@ -12,7 +13,7 @@
  *
  * PHASE-D3-REVIEW: v3 asks for a "rank history" chart. Rank labels are
  * not indexed (D3-B: they live in the published bundle), so the chart is
- * the PRIZE record — amount per tournament in entry order, the paid/unpaid
+ * the PRIZE record — amount per pool in entry order, the paid/unpaid
  * outcome that is on-chain and player-verifiable. Bar heights are display
  * proportions; every displayed amount stays a bigint-derived string.
  */
@@ -23,17 +24,22 @@ import { indexerApi, live, type Live } from '@/data/api';
 import { lamportsToSol } from '@/data/format';
 import type { CareerRow, ProfileRow } from '@/data/types';
 import { NeonSection } from '@/components/ui/neon-section';
+import { Tabs } from '@/components/ui/tabs';
 import { LiveDataUnavailable } from '@/components/shell/live-unavailable';
 import { Stat } from '@/components/ui/stat';
+import { WalletCard } from '@/components/wallet/wallet-card';
+import { BattleNotes } from '@/components/profile/battle-notes';
 
 function PrizeRecordChart({ career }: { career: CareerRow[] }) {
-  if (career.length < 2) return null;
+  if (career.length < 2) {
+    return <p className="text-[15px] leading-6 text-ink-muted">{COPY.career.chartEmpty}</p>;
+  }
   const max = career.reduce((m, r) => {
     const v = BigInt(r.amount_lamports);
     return v > m ? v : m;
   }, 0n);
   return (
-    <NeonSection heading={COPY.career.chartTitle}>
+    <>
       <p className="mb-4 text-[13px] leading-5 text-ink-muted">{COPY.career.chartNote}</p>
       <div className="flex h-28 items-end gap-1.5" role="img" aria-label={COPY.career.chartTitle}>
         {career.map((r) => {
@@ -48,15 +54,13 @@ function PrizeRecordChart({ career }: { career: CareerRow[] }) {
               title={`#${r.entries_to_date}: ${r.paid ? `${lamportsToSol(r.amount_lamports)} SOL` : 'unpaid'}${
                 typeof r.rank === 'number' ? ` · ${COPY.results.rank(r.rank)}` : ''
               }`}
-              className={
-                'w-full max-w-8 rounded-t ' + (r.paid ? 'bg-prize' : 'bg-overlay')
-              }
+              className={'w-full max-w-8 rounded-t ' + (r.paid ? 'bg-prize' : 'bg-overlay')}
               style={{ height: `${h}%` }}
             />
           );
         })}
       </div>
-    </NeonSection>
+    </>
   );
 }
 
@@ -77,6 +81,37 @@ export function profileView(read: Live<ProfileRow | null> | null): ProfileView {
   return read.value === null ? 'empty' : { row: read.value };
 }
 
+function Record({ view }: { view: ProfileView }) {
+  if (view === 'loading') {
+    return (
+      <div aria-live="polite" className="flex flex-col items-center gap-4 py-14">
+        <div className="h-8 w-8 rounded-full border-2 border-overlay border-t-brand motion-safe:animate-rotate" aria-hidden />
+      </div>
+    );
+  }
+  // The honest degraded state — never "No entries yet", which is a claim
+  // about this player rather than about our own data service.
+  if (view === 'unavailable') return <LiveDataUnavailable />;
+  if (view === 'empty') {
+    return (
+      <NeonSection heading={COPY.profile.lifetime}>
+        <p className="text-[17px] font-medium text-ink">{COPY.profile.emptyTitle}</p>
+        <p className="mt-2 max-w-prose text-[14px] leading-5 text-ink-muted">{COPY.profile.emptyLine}</p>
+      </NeonSection>
+    );
+  }
+  const profile = view.row;
+  return (
+    <NeonSection heading={COPY.profile.lifetime}>
+      <div className="flex flex-wrap items-end gap-x-10 gap-y-4">
+        <Stat label={COPY.profile.poolsEntered} value={profile.pools_entered} />
+        <Stat label={COPY.profile.prizeFinishes} value={profile.seats_paid} tone="brand" />
+        <Stat label={COPY.profile.totalPrizes} value={lamportsToSol(profile.total_won_lamports)} unit="SOL" tone="prize" />
+      </div>
+    </NeonSection>
+  );
+}
+
 export function ProfileClient() {
   const auth = useAuth();
   const wallet = auth.status === 'signed-in' ? auth.walletAddress : null;
@@ -90,9 +125,7 @@ export function ProfileClient() {
      * `row: null` on ANY failure, and `null` is what "this wallet has never
      * entered" looks like — so an indexer outage rendered "No entries yet."
      * to a player with a career. `live()` is the guard the codebase already
-     * has for exactly this conflation (data/api.ts): "the indexer says
-     * nothing" and "we could not reach the indexer" are different claims,
-     * and only one of them is about the player.
+     * has for exactly this conflation (data/api.ts).
      */
     profile: Live<ProfileRow | null>;
     career: CareerRow[];
@@ -105,9 +138,8 @@ export function ProfileClient() {
     void (async () => {
       const [profile, career] = await Promise.all([
         live(() => api.getProfile(wallet)),
-        // A secondary panel: the chart simply does not render when its read
-        // fails. It cannot be mistaken for a statement about the player, so
-        // it does not degrade the whole page.
+        // A secondary panel: the chart simply shows its empty line when its
+        // read fails. It cannot be mistaken for a statement about the player.
         api.getCareer(wallet).catch(() => [] as CareerRow[]),
       ]);
       if (!cancelled) setResult({ wallet, profile, career });
@@ -117,82 +149,42 @@ export function ProfileClient() {
     };
   }, [wallet]);
 
-  const view = profileView(result && result.wallet === wallet ? result.profile : null);
-
   if (!wallet) {
     return (
       <NeonSection heading={COPY.profile.lifetime}>
-        <p className="text-[17px] font-medium text-ink">Sign in to see your record.</p>
-        <p className="mt-2 max-w-prose text-[14px] leading-5 text-ink-muted">
-          Your career — every tournament entered, every paid finish, every character pass —
-          is built from on-chain data for the wallet you sign in with.
-        </p>
-      </NeonSection>
-    );
-  }
-  if (view === 'loading') {
-    return (
-      <div aria-live="polite" className="flex flex-col items-center gap-4 py-14">
-        <div
-          className="h-8 w-8 rounded-full border-2 border-overlay border-t-brand motion-safe:animate-rotate"
-          aria-hidden
-        />
-      </div>
-    );
-  }
-  if (view === 'unavailable') {
-    // The honest degraded state — never "No entries yet", which is a claim
-    // about this player rather than about our own data service.
-    return <LiveDataUnavailable />;
-  }
-  if (view === 'empty') {
-    return (
-      <NeonSection heading={COPY.profile.lifetime}>
-        <p className="text-[17px] font-medium text-ink">No entries yet.</p>
-        <p className="mt-2 max-w-prose text-[14px] leading-5 text-ink-muted">
-          Your first tournament starts your record — the Play tab has the open pool.
-        </p>
+        <p className="text-[17px] font-medium text-ink">{COPY.profile.signInFirst}</p>
+        <p className="mt-2 max-w-prose text-[14px] leading-5 text-ink-muted">{COPY.profile.signInFirstLine}</p>
       </NeonSection>
     );
   }
 
-  const profile = view.row;
+  const view = profileView(result && result.wallet === wallet ? result.profile : null);
   return (
-    <div className="animate-rise flex flex-col gap-10">
-      <NeonSection heading={COPY.profile.lifetime}>
-        <div className="flex flex-wrap items-end gap-x-10 gap-y-4">
-          <Stat label={COPY.profile.poolsEntered} value={profile.pools_entered} />
-          <Stat label={COPY.profile.prizeFinishes} value={profile.seats_paid} tone="brand" />
-          <Stat
-            label={COPY.profile.totalPrizes}
-            value={lamportsToSol(profile.total_won_lamports)}
-            unit="SOL"
-            tone="prize"
-          />
-        </div>
-      </NeonSection>
-      <PrizeRecordChart career={result?.career ?? []} />
-      <NeonSection heading={COPY.profile.collection}>
-        {/* The ONE player-facing surface that names the drawn rarity
-            (founder 2026-09-15: profile only, tier names only, with the
-            caveat beneath). The per-tier hue is art and stays. */}
-        <dl className="grid grid-cols-5 gap-3 text-center">
-          {profile.class_counts.map((n, i) => (
-            <div key={i} className="flex flex-col gap-1">
-              <dt className="text-[10px] uppercase tracking-[0.12em] text-ink-muted">
-                {COPY.reveal.rarityNames[i]}
-              </dt>
-              <dd
-                className="tnum font-display text-[28px] leading-[30px] font-bold"
-                style={{ color: n > 0 ? `var(--color-class-${i})` : 'var(--color-ink-muted)' }}
-              >
-                {n}
-              </dd>
-            </div>
-          ))}
-        </dl>
-        <p className="mt-4 text-[13px] leading-5 text-ink-muted">{COPY.profile.rarityCaveat}</p>
-      </NeonSection>
-    </div>
+    <Tabs
+      label={COPY.profile.tabsAria}
+      tone="berry"
+      tabs={[
+        { id: 'wallet', label: COPY.profile.tabs.wallet, content: <WalletCard /> },
+        { id: 'record', label: COPY.profile.tabs.record, content: <Record view={view} /> },
+        {
+          id: 'prize',
+          label: COPY.profile.tabs.prize,
+          content: (
+            <NeonSection heading={COPY.career.chartTitle}>
+              <PrizeRecordChart career={result?.wallet === wallet ? result.career : []} />
+            </NeonSection>
+          ),
+        },
+        {
+          id: 'notes',
+          label: COPY.profile.tabs.notes,
+          content: (
+            <NeonSection heading={COPY.profile.notesTitle}>
+              <BattleNotes wallet={wallet} />
+            </NeonSection>
+          ),
+        },
+      ]}
+    />
   );
 }
