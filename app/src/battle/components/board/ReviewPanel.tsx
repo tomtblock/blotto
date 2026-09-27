@@ -2,10 +2,9 @@
 
 /*
  * The review: the entry as a 7 × 5 table with a Σ column, the check line,
- * the buzzer note when the clock ended it, and the actions — Seal (drawn
- * by the host when it owns the seal stage) and Back to board while time
- * remains. No JSON, no export, no replay here: a real entry has one
- * forward action and one back (plan §2).
+ * the buzzer note when the clock ended it, and Back to board while time
+ * remains; the one seal key is the flow's (BoardFlow). No JSON, no export,
+ * no replay here: a real entry has one forward action and one back (plan §2).
  */
 
 import { STAT_NAMES } from '@/battle/allocation';
@@ -17,22 +16,12 @@ import { ModeBadge } from './hud';
 
 const ABBR = ['STR', 'SPD', 'HRT', 'WIT', 'DUR'] as const;
 
-export function ReviewPanel({
-  review,
-  onResume,
-  compact = false,
-}: {
-  review: BoardReviewState;
-  onResume?: () => void;
-  compact?: boolean;
-}) {
+export function ReviewPanel({ review, onResume }: { review: BoardReviewState; onResume?: () => void }) {
   const total = review.battles.reduce((a, row) => a + row.reduce((x, y) => x + y, 0), 0);
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-3">
-        <h2 className={compact ? 'font-display text-[30px] leading-[32px] font-extrabold text-ink' : 'font-display text-[40px] leading-[42px] font-extrabold text-ink'}>
-          {COPY.board.reviewTitle}
-        </h2>
+        <h2 className="font-display text-[40px] leading-[42px] font-extrabold text-ink">{COPY.board.reviewTitle}</h2>
         <ModeBadge mode={review.mode} />
       </div>
       <p className="text-[14px] leading-5 text-ink-muted">
