@@ -67,9 +67,10 @@
   height: clamp(360px, 56vh, 560px);
 }
 /* V3 (founder 2026-09-27): on the landing the board is one of the home's
- * cards and wears their settled glow (tokens.css) under its own wood edge. */
+ * cards and settles like them (tokens.css) under its own wood edge — V4:
+ * without the yellow glow. */
 .bba--demo {
-  box-shadow: 0 4px 0 var(--wood-2), var(--glow-home-yellow), var(--elevation-home);
+  box-shadow: 0 4px 0 var(--wood-2), var(--elevation-home);
 }
 /* V2 (founder 2026-09-27): on a desktop the board is the whole screen. The
  * play page's column is narrow (the gates read best that way), so the board
@@ -412,13 +413,87 @@
   background: linear-gradient(#ffe27a, var(--gold));
   font-size: 17px;
 }
-/* V3 (founder 2026-09-27): the full board's seal key glows — the one key
- * on the screen that commits, taller and brighter than the tray's. */
+/* V3 (founder 2026-09-27): the seal key — the one key on the screen that
+ * commits, taller than the tray's. V4: it stands beside the troops from the
+ * first moment, greyed until the board is full, then lit and glowing. */
 .bb-btn--seal {
   min-height: 60px;
   padding: 0 28px;
   font-size: 19px;
+}
+.bb-btn--seal:disabled {
+  opacity: 1;
+  background: linear-gradient(#d9d2c4, #b9b1a2);
+  color: rgba(42, 26, 16, 0.55);
+  box-shadow: 0 3px 0 var(--wood-2), 0 5px 10px rgba(0, 0, 0, 0.2);
+  cursor: not-allowed;
+}
+.bb-btn--seal-on {
   animation: bb-seal-glow 1.6s ease-in-out infinite alternate;
+}
+/* The foot of the board: the tray with the seal key beside it on a wide
+ * screen, under it on a phone. */
+.bb-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 14px 22px;
+}
+.bb-foot .bb-tray {
+  margin: 0;
+  flex: 0 1 620px;
+}
+.bb-seal-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: 320px;
+}
+.bb-final {
+  margin: 0;
+  font: 600 13px/1.35 var(--font-body, system-ui);
+  color: #fff;
+  text-align: center;
+  text-shadow: 0 1px 0 var(--wood), 0 0 8px rgba(0, 0, 0, 0.5);
+}
+/* The little box on hover (and keyboard focus) while the key is greyed. */
+.bb-seal-tip-anchor {
+  position: relative;
+  display: inline-flex;
+}
+.bb-seal-tip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  transform: translateX(-50%) translateY(4px);
+  white-space: nowrap;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: var(--outline) solid var(--wood);
+  background: var(--cream);
+  color: var(--bb-ink);
+  font: 700 13px var(--font-body, system-ui);
+  box-shadow: 0 3px 0 var(--wood-2), 0 5px 10px rgba(0, 0, 0, 0.3);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms, transform 120ms;
+  z-index: 5;
+}
+.bb-seal-tip::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translateX(-50%);
+  border: 7px solid transparent;
+  border-top-color: var(--wood);
+}
+.bb-seal-tip-anchor:hover .bb-seal-tip,
+.bb-seal-tip-anchor:focus-within .bb-seal-tip {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }
 @keyframes bb-seal-glow {
   from {
@@ -812,7 +887,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .bba-troop-body { animation: none; }
-  .bb-btn--seal { animation: none; box-shadow: 0 3px 0 var(--wood-2), 0 5px 10px rgba(0, 0, 0, 0.3), 0 0 24px 6px rgba(255, 210, 31, 0.65); }
+  .bb-btn--seal-on { animation: none; box-shadow: 0 3px 0 var(--wood-2), 0 5px 10px rgba(0, 0, 0, 0.3), 0 0 24px 6px rgba(255, 210, 31, 0.65); }
   .bba-troop.bba-hop { transition: none; }
   .bb-bar > i, .bb-troop { transition: none; }
   .bb-troop--selected { transform: none; }

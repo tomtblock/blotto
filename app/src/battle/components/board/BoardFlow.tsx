@@ -359,41 +359,47 @@ export function BoardFlow({ mode, onConfirm, onRunStarted, demo = false }: Board
           )}
         </div>
         <HintLine text={hint} />
-        <TroopTray state={play} onSelect={selectTroop} />
-        {play.clockStarted && guideStep === null && (complete && !demo ? (
-          /* V3: the full board's own seal key — §8.6 above it, always. The
-             review state is taken from the reducer for the record under the
-             signing hold, then submit and confirm go through as one press. */
-          <div className="flex flex-col items-center gap-3">
-            <p className="text-center text-[14px] font-semibold leading-5 text-ink">{COPY.pool.decisionsFinal}</p>
-            <button
-              type="button"
-              className="bb-btn bb-btn--commit bb-btn--seal"
-              onClick={() => {
-                setOpenField(null);
-                const reviewed = reduceBoard(play, { type: 'submit' });
-                if (reviewed.phase === 'review') setRecord(reviewed);
-                send({ type: 'submit' });
-                send({ type: 'confirm' });
-              }}
-              data-testid="board-seal"
-            >
-              {COPY.battle.seal}
-            </button>
+        {/* V4 (founder 2026-09-27): the seal key lives beside the troops from
+            the first moment — greyed, with "Allocate all blotts first" on
+            hover, until every field is full; then it glows. §8.6 sits above
+            it, always. A full REAL board seals from here (the review state is
+            taken from the reducer for the record under the signing hold, then
+            submit and confirm go through as one press); the demo's full board
+            goes to its review, which offers Try again. */}
+        <div className="bb-foot">
+          <TroopTray state={play} onSelect={selectTroop} />
+          <div className="bb-seal-wrap" data-complete={complete ? '1' : '0'}>
+            {!demo && <p className="bb-final">{COPY.pool.decisionsFinal}</p>}
+            <span className="bb-seal-tip-anchor">
+              <button
+                type="button"
+                className={'bb-btn bb-btn--commit bb-btn--seal' + (complete ? ' bb-btn--seal-on' : '')}
+                disabled={!complete || guideStep !== null}
+                aria-describedby={complete ? undefined : 'bb-seal-tip'}
+                onClick={() => {
+                  if (!complete) return;
+                  setOpenField(null);
+                  if (demo) {
+                    send({ type: 'submit' });
+                    return;
+                  }
+                  const reviewed = reduceBoard(play, { type: 'submit' });
+                  if (reviewed.phase === 'review') setRecord(reviewed);
+                  send({ type: 'submit' });
+                  send({ type: 'confirm' });
+                }}
+                data-testid="board-seal"
+              >
+                {demo ? COPY.board.submitComplete : COPY.battle.seal}
+              </button>
+              {!complete && (
+                <span role="tooltip" id="bb-seal-tip" className="bb-seal-tip">
+                  {COPY.board.sealLocked}
+                </span>
+              )}
+            </span>
           </div>
-        ) : (
-          <button
-            type="button"
-            className={'bb-btn self-center ' + (complete ? 'bb-btn--commit' : '')}
-            onClick={() => {
-              setOpenField(null);
-              send({ type: 'submit' });
-            }}
-            data-testid="board-submit"
-          >
-            {complete ? COPY.board.submitComplete : COPY.board.submitEarly}
-          </button>
-        ))}
+        </div>
 
         {!demo && (
           <Sheet open={leaveSheet} onClose={() => setLeaveSheet(false)} title={COPY.battle.backStay}>

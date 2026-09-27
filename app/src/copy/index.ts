@@ -21,7 +21,7 @@ import { TERMS } from './terms';
  * The hero's lines (founder wording, V3 2026-09-27), one per line on the
  * landing. Joined, they are the shell's tagline (the <title>).
  */
-const HERO_LINES = ['Sixty Four Seats. Seven Battlefields.', 'Everyone Battles Everyone.', 'The winner takes the prize pool.'] as const;
+const HERO_LINES = ['Sixty Four Seats. Seven Battlefields.', 'Everyone battles everyone.', 'The winner takes the prize pool.'] as const;
 
 export const COPY = {
   shell: {
@@ -847,10 +847,11 @@ export const COPY = {
     lockNeedsFull: 'A field locks in once it is full.',
     lockNeedsPlaced: (left: number) => `Place your remaining ${left} points first — this is the last open field.`,
     close: 'Close',
-    submitEarly: 'Submit now',
-    // The landing demo's full board (a real entry's full board says
-    // `battle.seal`).
+    // V4 (founder 2026-09-27): the seal key sits beside the troops from the
+    // first moment, greyed until every field is full; the landing demo's
+    // says this instead of the seal words, since nothing signs there.
     submitComplete: 'Submit my board',
+    sealLocked: 'Allocate all blotts first',
     /*
      * V2 (founder 2026-09-27; the co-founder's board): bulk clearing, Undo,
      * and the nine-step walkthrough with the clock held. PHASE-N-REVIEW:
@@ -1009,7 +1010,9 @@ export const COPY = {
     // seat against its on-chain fingerprint; it no longer opens sealed
     // boxes. PHASE-N-REVIEW: wording is a proposal pending the founder's voice.
     note: 'Re-scored in your browser from the published battle set, each seat checked against its on-chain fingerprint. Seats only — no names.',
-    headToHead: (w: number, d: number, l: number) => `${w}W · ${d}D · ${l}L against you`,
+    // V4 (founder 2026-09-27): YOUR record against that seat, said as
+    // yours — "against you" read as if the winner had lost to you.
+    headToHead: (w: number, d: number, l: number) => `You ${w}W · ${d}D · ${l}L`,
     unavailable:
       'The sealed battles for this pool are not available to decrypt yet. The Verify page recomputes the full result from the published bundle.',
   },
@@ -1068,7 +1071,9 @@ export const COPY = {
       positionLabel: 'Position',
       position: (rank: number, of: number) => `#${rank} of ${of}`,
       battlesWon: 'Battles won',
-      battlesWonOf: (label: string) => `${label} of 7`,
+      // V4: of every battle this player fought — seven against each of
+      // the other seats in the verified field.
+      battlesWonOf: (label: string, fought: number) => `${label} of ${fought}`,
       paid: 'Prize paid to your wallet',
       leaderboard: 'See full leaderboard',
       verify: 'Verify pool',

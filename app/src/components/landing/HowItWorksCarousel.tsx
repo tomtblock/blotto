@@ -81,7 +81,7 @@ export function HowItWorksCarousel({ steps }: { steps: readonly HowItWorksStep[]
       }}
     >
       <div
-        className="home-card overflow-hidden rounded-3xl bg-brand-cream"
+        className="home-card--plain overflow-hidden rounded-3xl bg-brand-cream"
         aria-live="polite"
       >
         <div className="relative aspect-video w-full bg-brand-pale-pink">
