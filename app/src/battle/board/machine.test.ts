@@ -231,6 +231,72 @@ describe('submit, expiry and review', () => {
   });
 });
 
+describe('bulk clearing, undo and restart (V2)', () => {
+  const placed: BoardEvent[] = [
+    { type: 'place', field: 0, stat: 0, delta: 40 },
+    { type: 'place', field: 0, stat: 1, delta: 60 },
+    { type: 'place', field: 1, stat: 2, delta: 25 },
+  ];
+
+  it('clear_field empties one field and stamps it; a locked field is left alone', () => {
+    const s = play(run('easy', [...placed, { type: 'tick', ms: 1_000 }, { type: 'clear_field', field: 0 }]));
+    expect(s.grid[0]).toEqual([0, 0, 0, 0, 0]);
+    expect(s.grid[1]).toEqual([0, 0, 25, 0, 0]);
+    expect(s.lastChangeMs[0]).toBe(1_000);
+    const locked = play(run('easy', [...placed, { type: 'lock', field: 0 }, { type: 'clear_field', field: 0 }]));
+    expect(fieldSum(locked.grid[0])).toBe(EASY_PER_FIELD);
+  });
+
+  it('clear_board empties every unlocked field and nothing else', () => {
+    const s = play(run('easy', [...placed, { type: 'lock', field: 0 }, { type: 'clear_board' }]));
+    expect(fieldSum(s.grid[0])).toBe(EASY_PER_FIELD);
+    expect(fieldSum(s.grid[1])).toBe(0);
+    expect(s.clockStarted).toBe(true);
+    // Nothing to clear: the state is returned unchanged (no stamp moves).
+    const empty = play(begin('easy'));
+    expect(reduceBoard(empty, { type: 'clear_board' })).toBe(empty);
+  });
+
+  it('restore puts an earlier grid back, keeps locked fields, and ignores an illegal grid', () => {
+    const before = play(run('easy', placed));
+    const after = play(reduceBoard(before, { type: 'clear_board' }));
+    const back = play(reduceBoard(after, { type: 'restore', grid: before.grid }));
+    expect(back.grid).toEqual(before.grid);
+    // A locked field keeps its value through a restore.
+    const lockedThen = play(run('easy', [...placed, { type: 'lock', field: 0 }]));
+    const restored = play(reduceBoard(lockedThen, { type: 'restore', grid: after.grid }));
+    expect(fieldSum(restored.grid[0])).toBe(EASY_PER_FIELD);
+    expect(fieldSum(restored.grid[1])).toBe(0);
+    // Illegal: a field over 100, or the wrong shape.
+    const over = before.grid.map((r, f) => (f === 2 ? [101, 0, 0, 0, 0] : r));
+    expect(reduceBoard(after, { type: 'restore', grid: over })).toBe(after);
+    expect(reduceBoard(after, { type: 'restore', grid: [[1, 2, 3]] })).toBe(after);
+  });
+
+  it('restore never starts the clock', () => {
+    const s = play(begin('easy'));
+    const grid = s.grid.map((r, f) => (f === 0 ? [10, 0, 0, 0, 0] : r));
+    const r = play(reduceBoard(s, { type: 'restore', grid }));
+    expect(r.grid[0][0]).toBe(10);
+    expect(r.clockStarted).toBe(false);
+    expect(r.remainingMs).toBe(BOARD_CLOCK_BUDGET_MS);
+  });
+
+  it('hard: a restore that would overflow the board with the locked fields is ignored', () => {
+    const s = play(run('hard', [{ type: 'place', field: 0, stat: 0, delta: 700 }, { type: 'lock', field: 0 }]));
+    const grid = s.grid.map((r, f) => (f === 1 ? [1, 0, 0, 0, 0] : f === 0 ? [0, 0, 0, 0, 0] : r));
+    expect(reduceBoard(s, { type: 'restore', grid })).toBe(s);
+  });
+
+  it('restart is a fresh board with the clock unstarted', () => {
+    const s = play(run('easy', [...placed, { type: 'tick', ms: 30_000 }, { type: 'lock', field: 0 }, { type: 'restart' }]));
+    expect(gridSum(s.grid)).toBe(0);
+    expect(s.locked.every((l) => !l)).toBe(true);
+    expect(s.clockStarted).toBe(false);
+    expect(s.remainingMs).toBe(BOARD_CLOCK_BUDGET_MS);
+  });
+});
+
 /* ——— The property: any sequence of events ends on a legal entry. ——— */
 
 const fieldArb = fc.integer({ min: -1, max: FIELDS });
@@ -240,6 +306,16 @@ const eventArb: fc.Arbitrary<BoardEvent> = fc.oneof(
   { weight: 30, arbitrary: fc.record({ type: fc.constant('place' as const), field: fieldArb, stat: statArb, delta: fc.constant(1) }) },
   { weight: 3, arbitrary: fc.record({ type: fc.constant('fill_field' as const), field: fieldArb, stat: statArb }) },
   { weight: 3, arbitrary: fc.record({ type: fc.constant('send_back' as const), field: fieldArb, stat: statArb }) },
+  { weight: 1, arbitrary: fc.record({ type: fc.constant('clear_field' as const), field: fieldArb }) },
+  { weight: 1, arbitrary: fc.constant({ type: 'clear_board' as const }) },
+  {
+    weight: 2,
+    arbitrary: fc.record({
+      type: fc.constant('restore' as const),
+      grid: fc.array(fc.array(fc.integer({ min: 0, max: 120 }), { minLength: STATS, maxLength: STATS }), { minLength: FIELDS, maxLength: FIELDS }),
+    }),
+  },
+  { weight: 1, arbitrary: fc.constant({ type: 'restart' as const }) },
   { weight: 4, arbitrary: fc.record({ type: fc.constant('lock' as const), field: fieldArb }) },
   { weight: 2, arbitrary: fc.record({ type: fc.constant('unlock' as const), field: fieldArb }) },
   { weight: 3, arbitrary: fc.record({ type: fc.constant('select' as const), stat: fc.oneof(fc.constant(null), statArb) }) },

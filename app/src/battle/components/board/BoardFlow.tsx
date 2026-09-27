@@ -38,8 +38,9 @@ import {
 } from '@/battle/board/machine';
 import { type BoardMode, EASY_PER_FIELD, HARD_TOTAL } from '@/battle/board/mode';
 import { sampleTick } from '@/battle/run-clock';
+import type { Grid } from '@/battle/board/spread';
 import { Arena } from './arena/Arena';
-import { GrabKey, HintLine, ModeBadge, ProgressReadout, ReadyBanner, TimerCard } from './hud';
+import { BoardGuide, ClearBoardKey, GrabKey, HintLine, ModeBadge, ProgressReadout, ReadyBanner, TimerCard, UndoKey } from './hud';
 import { ReviewPanel } from './ReviewPanel';
 import { Stepper } from './Stepper';
 import { TroopTray } from './TroopTray';
@@ -90,6 +91,14 @@ export function BoardFlow({ mode, onConfirm, onRunStarted, demo = false }: Board
   const [grab, setGrab] = useState(false);
   const [leaveSheet, setLeaveSheet] = useState(false);
   const confirmed = useRef(false);
+  /* UNDO (V2, founder 2026-09-27; the co-founder's undo stack): the grids
+   * before each change. A whole hold is one step; a stepper press, a tap
+   * and a clear are one each. `restore` in the reducer keeps locked fields. */
+  const [undoStack, setUndoStack] = useState<Grid[]>([]);
+  const holdSnap = useRef<Grid | null>(null);
+  /* THE WALKTHROUGH (V2): the step on screen, or null. The clock is held
+   * while it runs, and "Start building" restarts the board empty. */
+  const [guideStep, setGuideStep] = useState<number | null>(null);
   /* The seal key, focused the moment the review appears — so the buzzer's
    * review needs one press (Enter, or the key itself) to seal. */
   const sealKey = useRef<HTMLButtonElement>(null);
@@ -112,8 +121,9 @@ export function BoardFlow({ mode, onConfirm, onRunStarted, demo = false }: Board
     if (inReview) sealKey.current?.focus();
   }, [inReview]);
 
-  /* The run clock — elapsed time against performance.now(). */
-  const ticking = play !== null && play.clockStarted;
+  /* The run clock — elapsed time against performance.now(). Held during
+   * the walkthrough (its board is thrown away at the end). */
+  const ticking = play !== null && play.clockStarted && guideStep === null;
   const baseline = useRef<number | null>(null);
   useEffect(() => {
     if (!ticking) {
@@ -154,24 +164,74 @@ export function BoardFlow({ mode, onConfirm, onRunStarted, demo = false }: Board
 
   const send = useCallback((e: BoardEvent) => dispatch(e), []);
 
+  /* One undo step: the grid as it is before the change about to be made. */
+  const snapshot = useCallback(() => {
+    const s = playRef.current;
+    if (s) setUndoStack((h) => [...h, s.grid]);
+  }, []);
+  /* A hold is one step: snapshot at the first field the finger reaches,
+   * kept only if the grid changed by the time it lifts. */
+  const onHoldChange = useCallback((field: number | null) => {
+    setHoldField(field);
+    const s = playRef.current;
+    if (field !== null && holdSnap.current === null && s) holdSnap.current = s.grid;
+    if (field === null && holdSnap.current !== null) {
+      const before = holdSnap.current;
+      holdSnap.current = null;
+      if (s && s.grid !== before) setUndoStack((h) => [...h, before]);
+    }
+  }, []);
+  const undo = useCallback(() => {
+    const prev = undoStack[undoStack.length - 1];
+    if (!prev) return;
+    dispatch({ type: 'restore', grid: prev });
+    setUndoStack((h) => h.slice(0, -1));
+  }, [undoStack]);
+
   /* The deploy curve asks for `n`; the reducer takes what fits. We report
    * that number back so the gesture can say "full" — the reducer clips
-   * again regardless. */
-  const onDeposit = useCallback((field: number, stat: number, n: number): number => {
-    const s = playRef.current;
-    if (!s || s.locked[field]) return 0;
-    const placed = Math.min(n, fieldRemaining(s, field));
-    if (placed > 0) dispatch({ type: 'place', field, stat, delta: placed });
-    return placed;
-  }, []);
+   * again regardless. A tap (no hold open) is its own undo step. */
+  const onDeposit = useCallback(
+    (field: number, stat: number, n: number): number => {
+      const s = playRef.current;
+      if (!s || s.locked[field]) return 0;
+      const placed = Math.min(n, fieldRemaining(s, field));
+      if (placed > 0) {
+        if (holdSnap.current === null) snapshot();
+        dispatch({ type: 'place', field, stat, delta: placed });
+        setGuideStep((g) => (g === 4 ? 5 : g));
+      }
+      return placed;
+    },
+    [snapshot]
+  );
   const onOpenStepper = useCallback((field: number, stat: number | null) => {
     if (stat !== null) dispatch({ type: 'select', stat });
     setOpenField(field);
+    setGuideStep((g) => (g === 6 ? 7 : g));
   }, []);
   const onTapEmpty = useCallback(() => setOpenField(null), []);
   const selectTroop = useCallback((stat: number | null) => {
     if (stat !== null) setGrab(false);
     dispatch({ type: 'select', stat });
+    if (stat !== null) setGuideStep((g) => (g === 3 ? 4 : g));
+  }, []);
+  /* A step back of any kind satisfies the walkthrough's seventh step. */
+  const tookBack = useCallback(() => setGuideStep((g) => (g === 7 ? 8 : g)), []);
+
+  /* The walkthrough: begins the board with the clock held; ends on a fresh one. */
+  const startGuide = useCallback(() => {
+    dispatch({ type: 'begin' });
+    setGuideStep(1);
+    onRunStarted?.();
+  }, [onRunStarted]);
+  const endGuide = useCallback(() => {
+    dispatch({ type: 'restart' });
+    setUndoStack([]);
+    holdSnap.current = null;
+    setOpenField(null);
+    setGrab(false);
+    setGuideStep(null);
   }, []);
 
   /* ——— Ready: the banner over an idle arena. ——— */
@@ -188,6 +248,7 @@ export function BoardFlow({ mode, onConfirm, onRunStarted, demo = false }: Board
               dispatch({ type: 'begin' });
               onRunStarted?.();
             }}
+            onGuide={startGuide}
           />
         </div>
         <TroopTray state={idle} onSelect={() => {}} disabled />
@@ -222,7 +283,8 @@ export function BoardFlow({ mode, onConfirm, onRunStarted, demo = false }: Board
             onDeposit={onDeposit}
             onOpenStepper={onOpenStepper}
             onTapEmpty={onTapEmpty}
-            onHold={setHoldField}
+            onHold={onHoldChange}
+            highlightField={guideStep === 2 || guideStep === 4 || guideStep === 6 ? 0 : null}
             demo={demo}
           />
           <div className="bb-hud">
@@ -234,19 +296,58 @@ export function BoardFlow({ mode, onConfirm, onRunStarted, demo = false }: Board
               <ModeBadge mode={play.mode} />
               <GrabKey on={grab} onToggle={() => setGrab((g) => !g)} />
               {!demo && (
-                <button type="button" className="bb-btn" onClick={() => setLeaveSheet(true)}>
+                <button type="button" className="bb-btn bb-leave" onClick={() => setLeaveSheet(true)}>
                   {COPY.board.leave}
                 </button>
               )}
             </div>
+            {/* V2: Undo and the bin on the right, clear of Field 1 under the HUD. */}
+            <div className="bb-hud-right">
+              <UndoKey depth={undoStack.length} onUndo={undo} />
+              <ClearBoardKey
+                disabled={boardRemaining(play) === (play.mode === 'easy' ? EASY_PER_FIELD * 7 : HARD_TOTAL)}
+                onClear={() => {
+                  snapshot();
+                  setOpenField(null);
+                  send({ type: 'clear_board' });
+                  tookBack();
+                }}
+              />
+            </div>
           </div>
+          {guideStep !== null && (
+            <BoardGuide
+              mode={play.mode}
+              step={guideStep}
+              onNext={() => setGuideStep((g) => (g === null ? null : g + 1))}
+              onBack={() => setGuideStep((g) => (g === null ? null : Math.max(1, g - 1)))}
+              onSkip={endGuide}
+              onStart={endGuide}
+            />
+          )}
           {stepperField !== null && (
             <Stepper
               state={play}
               field={stepperField}
-              onPlace={(field, stat, delta) => send({ type: 'place', field, stat, delta })}
-              onFill={(field, stat) => send({ type: 'fill_field', field, stat })}
-              onSendBack={(field, stat) => send({ type: 'send_back', field, stat })}
+              onPlace={(field, stat, delta) => {
+                snapshot();
+                send({ type: 'place', field, stat, delta });
+                if (delta < 0) tookBack();
+              }}
+              onFill={(field, stat) => {
+                snapshot();
+                send({ type: 'fill_field', field, stat });
+              }}
+              onSendBack={(field, stat) => {
+                snapshot();
+                send({ type: 'send_back', field, stat });
+                tookBack();
+              }}
+              onClearField={(field) => {
+                snapshot();
+                send({ type: 'clear_field', field });
+                tookBack();
+              }}
               onLock={(field) => send({ type: 'lock', field })}
               onUnlock={(field) => send({ type: 'unlock', field })}
               onSelect={(stat) => send({ type: 'select', stat })}
@@ -256,7 +357,7 @@ export function BoardFlow({ mode, onConfirm, onRunStarted, demo = false }: Board
         </div>
         <HintLine text={hint} />
         <TroopTray state={play} onSelect={selectTroop} />
-        {play.clockStarted && (
+        {play.clockStarted && guideStep === null && (
           <button
             type="button"
             className={'bb-btn self-center ' + (complete ? 'bb-btn--commit' : '')}

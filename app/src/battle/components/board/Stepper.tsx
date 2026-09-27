@@ -26,17 +26,20 @@ export interface StepperProps {
   onPlace: (field: number, stat: number, delta: number) => void;
   onFill: (field: number, stat: number) => void;
   onSendBack: (field: number, stat: number) => void;
+  /** V2: every point off this field (bulk clearing). */
+  onClearField: (field: number) => void;
   onLock: (field: number) => void;
   onUnlock: (field: number) => void;
   onSelect: (stat: number) => void;
   onClose: () => void;
 }
 
-export function Stepper({ state, field, onPlace, onFill, onSendBack, onLock, onUnlock, onSelect, onClose }: StepperProps) {
+export function Stepper({ state, field, onPlace, onFill, onSendBack, onClearField, onLock, onUnlock, onSelect, onClose }: StepperProps) {
   const stat = state.selected;
   const isLocked = state.locked[field] === true;
   const left = fieldRemaining(state, field);
   const fieldNo = field + 1;
+  const fieldPlaced = (state.grid[field] ?? []).reduce((a, b) => a + b, 0);
 
   if (stat === null) {
     return (
@@ -126,6 +129,15 @@ export function Stepper({ state, field, onPlace, onFill, onSendBack, onLock, onU
         </button>
         <button type="button" className="bb-btn" disabled={isLocked || value === 0} onClick={() => onSendBack(field, stat)}>
           {COPY.board.sendBack(name)}
+        </button>
+        <button
+          type="button"
+          className="bb-btn bb-btn--danger"
+          disabled={isLocked || fieldPlaced === 0}
+          onClick={() => onClearField(field)}
+          data-testid="stepper-clear-field"
+        >
+          {COPY.board.clearField(fieldNo)}
         </button>
         {isLocked ? (
           <button type="button" className="bb-btn" onClick={() => onUnlock(field)}>

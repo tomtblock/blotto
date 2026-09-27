@@ -24,7 +24,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { type BoardPlayState, fieldFull, fieldRemaining } from '@/battle/board/machine';
 import { COPY } from '@/copy';
-import { Camera } from './camera';
+import { Camera, type CameraView } from './camera';
 import { DEPLOY } from './deploy';
 import { attachInput } from './input';
 import { type MapLayout, type Point, buildMap } from './map';
@@ -42,8 +42,16 @@ export interface ArenaProps {
   onTapEmpty: () => void;
   /** The finger is deploying on `field` (null when it lifts). */
   onHold: (field: number | null) => void;
+  /** The walkthrough's spotlight on one field. */
+  highlightField?: number | null;
   demo?: boolean;
 }
+
+/* V2 (founder 2026-09-27; the co-founder's hold zoom): while a finger
+ * holds on a field the camera closes in around it by this factor, and
+ * goes back where it was when the finger lifts. Not under reduced motion. */
+const HOLD_ZOOM = 1.7;
+const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
 export interface ArenaHandle {
   fitAll: () => void;
@@ -51,13 +59,27 @@ export interface ArenaHandle {
 }
 
 const HUD_TOP_PX = 118;
+/** The walkthrough's card sits at the foot of the stage (board.css .bb-guide). */
+const GUIDE_INSET_PX = 230;
 
-export function Arena({ state, interactive, grab = false, onDeposit, onOpenStepper, onTapEmpty, onHold, demo = false }: ArenaProps) {
+export function Arena({
+  state,
+  interactive,
+  grab = false,
+  onDeposit,
+  onOpenStepper,
+  onTapEmpty,
+  onHold,
+  highlightField = null,
+  demo = false,
+}: ArenaProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   const layoutRef = useRef<MapLayout | null>(null);
   const cameraRef = useRef<Camera | null>(null);
   const rendererRef = useRef<MapRenderer | null>(null);
   const pendingSpawn = useRef<Point | null>(null);
+  /** The view before the hold zoom, to go back to when the finger lifts. */
+  const preHold = useRef<CameraView | null>(null);
   const [pct, setPct] = useState(100);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<number | null>(null);
@@ -118,9 +140,13 @@ export function Arena({ state, interactive, grab = false, onDeposit, onOpenStepp
     const detach = attachInput(renderer.svg, camera, layout, DEPLOY, {
       armedStat: () => (propsRef.current.interactive && !propsRef.current.grab ? stateRef.current.selected : null),
       canDeposit: (field) => propsRef.current.interactive && !propsRef.current.grab && !stateRef.current.locked[field],
-      onHoldStart(field) {
+      onHoldStart(field, _stat, at) {
         renderer.setHover(field);
         propsRef.current.onHold(field);
+        if (!reducedMotion()) {
+          preHold.current = camera.view();
+          void camera.zoomAtAnimated(at, HOLD_ZOOM);
+        }
       },
       onHoldDeposit(field, stat, n, at) {
         pendingSpawn.current = at;
@@ -135,6 +161,9 @@ export function Arena({ state, interactive, grab = false, onDeposit, onOpenStepp
       onHoldEnd() {
         renderer.setHover(null);
         propsRef.current.onHold(null);
+        const back = preHold.current;
+        preHold.current = null;
+        if (back) void camera.animateTo(back, 220);
       },
       onTapField(field, stat, at) {
         pendingSpawn.current = at;
@@ -199,6 +228,24 @@ export function Arena({ state, interactive, grab = false, onDeposit, onOpenStepp
     renderer.update(state.grid, state.locked, state.mode, (field) => plaqueLine(state, field));
     renderer.spawnFrom = null;
   }, [state, interactive, grab]);
+
+  /* The walkthrough's spotlight: the field lit, and the camera on it; the
+   * whole board again when the spotlight goes out. */
+  const lastHighlight = useRef<number | null>(null);
+  useEffect(() => {
+    rendererRef.current?.setGuide(highlightField);
+    if (highlightField !== null) {
+      // Framed in the band between the HUD and the walkthrough's card, so
+      // the field the card is talking about is the one under the finger.
+      const cam = cameraRef.current;
+      const f = layoutRef.current?.fields[highlightField];
+      if (cam && f) {
+        cam.insets = { top: HUD_TOP_PX, right: 0, bottom: GUIDE_INSET_PX, left: 0 };
+        void cam.fit(f.bounds, 16, 320);
+      }
+    } else if (lastHighlight.current !== null) fitAll(320);
+    lastHighlight.current = highlightField;
+  }, [highlightField, fitAll]);
 
   const zoom = (factor: number) => {
     const cam = cameraRef.current;

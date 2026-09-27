@@ -300,7 +300,21 @@
   left: 10px;
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 6px;
+}
+.bb-hud-right {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+.bb-leave {
+  font-size: 13px;
+  padding: 0 12px;
 }
 .bb-card {
   background: var(--cream);
@@ -619,6 +633,100 @@
   background: transparent;
   border-color: transparent;
   box-shadow: none;
+}
+
+/* ---- V2: the bin, undo, the inline confirm, the walkthrough ---- */
+.bb-btn--danger {
+  background: linear-gradient(#ffb0b0, #e86a6a);
+  color: #3a0d0d;
+}
+.bb-bin {
+  padding: 0 12px;
+  align-self: flex-start;
+}
+.bb-undo {
+  padding: 0 12px 0 10px;
+  font-size: 13px;
+  align-self: flex-start;
+}
+.bb-confirm {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px 6px 12px;
+  background: var(--cream);
+  border: var(--outline) solid var(--wood);
+  border-radius: 14px;
+  box-shadow: 0 3px 0 var(--wood-2), 0 5px 10px rgba(0, 0, 0, 0.3);
+  color: var(--bb-ink);
+  font: 700 13px var(--font-body, system-ui);
+}
+.bb-confirm .bb-btn {
+  min-height: 34px;
+  min-width: 44px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+.bb-guide {
+  position: absolute;
+  bottom: 58px; /* clear of the zoom widget; Field 1 sits at the top of the map */
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 27; /* above the stepper (25) and the banner scrim (26) */
+  width: min(92%, 440px);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px 12px;
+  background: var(--cream);
+  border: var(--outline) solid var(--wood);
+  border-radius: 18px;
+  box-shadow: 0 4px 0 var(--wood-2), 0 10px 24px rgba(0, 0, 0, 0.45);
+  color: var(--bb-ink);
+}
+.bb-guide--top {
+  bottom: auto;
+  top: 118px;
+}
+.bb-guide h3 {
+  margin: 0;
+  font: 800 18px var(--bb-display);
+}
+.bb-guide p {
+  margin: 0;
+  font: 500 14px var(--font-body, system-ui);
+  line-height: 1.45;
+  color: var(--bb-ink-muted);
+}
+.bb-guide-keys {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+.bb-guide-keys .bb-btn {
+  min-height: 38px;
+  padding: 0 14px;
+  font-size: 14px;
+}
+.bb-guide-wait {
+  font: 700 13px var(--font-body, system-ui);
+  color: var(--brand-purple);
+  padding: 0 6px;
+}
+/* the walkthrough's spotlight on a field and its plaque */
+.bba-map .bba-field-hit.bba-guide {
+  fill: #ffe27a;
+  fill-opacity: 0.3;
+  stroke: #ffe27a;
+  stroke-width: 10;
+  stroke-opacity: 0.9;
+}
+.bba-plaque.bba-guide .bba-plaque-bg {
+  stroke: #ffe27a;
+  stroke-width: 10;
+  filter: drop-shadow(0 0 14px rgba(255, 226, 122, 0.9));
 }
 
 /* ---- the ready banner over the stage ---- */

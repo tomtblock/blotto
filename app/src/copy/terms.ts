@@ -78,7 +78,7 @@ const RELEASE_DAYS = Number(ESCROW_AUTO_RELEASE_SECS / 86400n);
 const MIN_AGE = 18;
 
 export interface TermsSection {
-  /** Stable anchor, used by the within-page navigation. */
+  /** Stable anchor: the tab's hash, and the id a link inside the site uses. */
   id: string;
   heading: string;
   /** One paragraph per entry. */
@@ -100,7 +100,29 @@ export const TERMS = {
   /** The one honest line about the unnamed operator, shown when any value is unset. */
   operatorUnsetNote:
     'The operating entity is not yet incorporated, so the entries below that name it read “not yet set”. Nothing is hidden by that: no real-money tournament runs until they are filled in.',
-  navLabel: 'On this page',
+  /** The tab strip's accessible name (V2: one section at a time, or the whole document). */
+  tabsLabel: 'Sections of the terms',
+  /** Short tab labels, by section id — the headings stay the document's. */
+  tabs: {
+    'who-we-are': 'Who we are',
+    eligibility: 'Who may enter',
+    'what-this-is': 'The service',
+    'entry-and-payment': 'Entering',
+    'rules-as-published': 'Rules as published',
+    prizes: 'Prizes',
+    refunds: 'Refunds',
+    integrity: 'Integrity',
+    refusal: 'Refusal',
+    liability: 'Liability',
+    'blockchain-risk': 'Network risks',
+    'two-residuals': 'Disclosures',
+    availability: 'Availability',
+    tax: 'Tax',
+    changes: 'Changes',
+    complaints: 'Complaints',
+    law: 'Law',
+    general: 'The rest',
+  } as Record<string, string>,
 
   sections: [
     {
@@ -133,10 +155,16 @@ export const TERMS = {
       // in either direction (brief §4.3). PID §8 is founder-and-counsel's
       // and this document does not pre-empt it. Facts: PRODUCT-FACTS §1
       // (scoring, battles, stats) and §3 (the only random draw).
+      //
+      // Version 5 (founder 2026-09-27): the hard board. A tournament plays
+      // one of two placing rules, recorded on it when it opens (Pool.mode);
+      // the first paragraph now states both, and that the rule is shown
+      // before entry. The scoring paragraph is unchanged because the
+      // scoring rule is mode-blind (compareBattle).
       id: 'what-this-is',
       heading: 'What the service is',
       body: [
-        'Blotto Cup runs tournaments. Up to sixty-four players pay a fixed entry for a tournament, and each player splits 100 points across five attributes, seven times over. Those seven decisions are encrypted on your own device before you pay, and the program records only a fingerprint of them.',
+        'Blotto Cup runs tournaments. Up to sixty-four players pay a fixed entry for a tournament, and each player sets seven battles of five attributes under the placing rule that tournament was opened with: in an easy tournament, 100 points split across the five attributes in each battle; in a hard tournament, 700 points placed anywhere across the seven battles, any attribute from 0 to 700. Which rule a tournament plays is shown before you enter and cannot change once it has opened. Those seven decisions are encrypted on your own device before you pay, and the program records only a fingerprint of them.',
         'When the tournament closes, every entry is scored against every other entry by a published rule: for each of the seven battles, the entry that takes at least three of the five attributes wins it, and an equal split is a draw worth half a win to each. Players are ranked by battles won, then by attributes won. The player ranked first is paid the prize.',
         'Nothing in the path from your entry to the payment is decided by chance. The one random draw in the product chooses which character artwork your pass shows, and no class value is read anywhere in the scoring, ranking, prize or tiebreak path.',
         'These terms describe what the service does and how it decides. They do not assert what the service is in law, in either direction.',

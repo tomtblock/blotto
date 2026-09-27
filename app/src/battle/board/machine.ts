@@ -111,6 +111,18 @@ export type BoardEvent =
   | { type: 'fill_field'; field: number; stat: number }
   /** Take every point of `stat` back off `field`. */
   | { type: 'send_back'; field: number; stat: number }
+  /** V2 (founder 2026-09-27, bulk clearing): every point off `field`. */
+  | { type: 'clear_field'; field: number }
+  /** Every point off every field that is not locked in. */
+  | { type: 'clear_board' }
+  /**
+   * Undo: put back an earlier grid. Locked fields keep what they hold (a
+   * lock is a promise the board keeps); an illegal grid is ignored whole.
+   * Never starts the clock — only a placement does.
+   */
+  | { type: 'restore'; grid: Grid }
+  /** The walkthrough is over: a fresh, empty board with the clock unstarted. */
+  | { type: 'restart' }
   | { type: 'lock'; field: number }
   | { type: 'unlock'; field: number }
   | { type: 'tick'; ms: number }
@@ -186,6 +198,47 @@ function withCell(s: BoardPlayState, field: number, stat: number, value: number)
   return { ...s, grid, lastChangeMs, clockStarted: true };
 }
 
+/** Write whole rows at once (bulk clearing, undo), stamping each changed field. */
+function withRows(s: BoardPlayState, rows: ReadonlyMap<number, readonly number[]>, startClock: boolean): BoardPlayState {
+  const grid = s.grid.map((row, f) => (rows.has(f) ? [...(rows.get(f) as readonly number[])] : row));
+  const lastChangeMs = s.lastChangeMs.map((t, f) => (rows.has(f) ? runMs(s) : t));
+  return { ...s, grid, lastChangeMs, clockStarted: s.clockStarted || startClock };
+}
+
+const ZERO_ROW: readonly number[] = Object.freeze(Array.from({ length: STATS }, () => 0));
+
+/** A grid the board could legally hold under `mode`: shape, integers, caps. */
+export function legalGrid(grid: unknown, mode: BoardMode): grid is Grid {
+  if (!Array.isArray(grid) || grid.length !== FIELDS) return false;
+  let total = 0;
+  for (const row of grid) {
+    if (!Array.isArray(row) || row.length !== STATS) return false;
+    let sum = 0;
+    for (const v of row) {
+      if (!Number.isInteger(v) || v < 0) return false;
+      sum += v;
+    }
+    if (mode === 'easy' && sum > EASY_PER_FIELD) return false;
+    total += sum;
+  }
+  return mode === 'easy' || total <= HARD_TOTAL;
+}
+
+function freshPlay(mode: BoardMode, budgetMs: number): BoardPlayState {
+  return {
+    phase: 'play',
+    mode,
+    grid: emptyGrid(),
+    locked: NO_LOCKS,
+    selected: null,
+    clockStarted: false,
+    remainingMs: budgetMs,
+    budgetMs,
+    lastChangeMs: NO_TIMES,
+    expired: false,
+  };
+}
+
 function finish(s: BoardPlayState, expired: boolean): BoardReviewState {
   const battles = spreadUnplaced(s.grid, s.locked, s.mode);
   return {
@@ -206,20 +259,7 @@ function finish(s: BoardPlayState, expired: boolean): BoardReviewState {
 export function reduceBoard(state: BoardState, event: BoardEvent): BoardState {
   switch (state.phase) {
     case 'ready':
-      if (event.type === 'begin') {
-        return {
-          phase: 'play',
-          mode: state.mode,
-          grid: emptyGrid(),
-          locked: NO_LOCKS,
-          selected: null,
-          clockStarted: false,
-          remainingMs: state.budgetMs,
-          budgetMs: state.budgetMs,
-          lastChangeMs: NO_TIMES,
-          expired: false,
-        };
-      }
+      if (event.type === 'begin') return freshPlay(state.mode, state.budgetMs);
       return state;
 
     case 'play':
@@ -253,6 +293,34 @@ export function reduceBoard(state: BoardState, event: BoardEvent): BoardState {
           if (state.grid[field][stat] === 0) return state;
           return withCell(state, field, stat, 0);
         }
+        case 'clear_field': {
+          const { field } = event;
+          if (!validField(field) || state.locked[field] || fieldSum(state.grid[field]) === 0) return state;
+          return withRows(state, new Map([[field, ZERO_ROW]]), false);
+        }
+        case 'clear_board': {
+          const rows = new Map<number, readonly number[]>();
+          for (let f = 0; f < FIELDS; f++) if (!state.locked[f] && fieldSum(state.grid[f]) > 0) rows.set(f, ZERO_ROW);
+          if (rows.size === 0) return state;
+          return withRows(state, rows, false);
+        }
+        case 'restore': {
+          if (!legalGrid(event.grid, state.mode)) return state;
+          const rows = new Map<number, readonly number[]>();
+          for (let f = 0; f < FIELDS; f++) {
+            if (state.locked[f]) continue;
+            const row = event.grid[f];
+            if (row.some((v, z) => v !== state.grid[f][z])) rows.set(f, row);
+          }
+          if (rows.size === 0) return state;
+          const next = withRows(state, rows, false);
+          // Locked rows kept their values; in hard mode the two halves
+          // together must still fit the board.
+          if (state.mode === 'hard' && gridSum(next.grid) > HARD_TOTAL) return state;
+          return next;
+        }
+        case 'restart':
+          return freshPlay(state.mode, state.budgetMs);
         case 'lock': {
           if (!canLock(state, event.field)) return state;
           const locked = state.locked.map((v, f) => (f === event.field ? true : v));

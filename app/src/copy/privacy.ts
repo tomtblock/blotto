@@ -81,7 +81,22 @@ export const PRIVACY = {
   updatedLine: (updated: string) => `Last updated ${updated}.`,
   operatorUnsetNote:
     'The operating entity is not yet incorporated, so the entries below that name the controller read “not yet set”. No real-money tournament runs until they are filled in.',
-  navLabel: 'On this page',
+  /** The tab strip's accessible name (V2: one section at a time, or the whole notice). */
+  tabsLabel: 'Sections of the privacy notice',
+  /** Short tab labels, by section id — the headings stay the document's. */
+  tabs: {
+    controller: 'Who holds it',
+    'what-we-hold': 'What we hold',
+    'what-we-never-hold': 'Never held',
+    'what-is-published': 'What is public',
+    'device-marker': 'Device marker',
+    'why-and-basis': 'Why we hold it',
+    'automated-decisions': 'Decisions',
+    retention: 'How long',
+    'your-rights': 'Your rights',
+    authority: 'Authority',
+    contact: 'Contact',
+  } as Record<string, string>,
   /** The draft-period marker, used on every retention row. */
   policyNote:
     'These periods are our published policy. Except for the location cache, they are not yet enforced by code: nothing in the system deletes anything automatically, and until that is built each period is a rule we apply by hand.',

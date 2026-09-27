@@ -643,6 +643,16 @@ export const COPY = {
     availabilityHeading: 'Where you can enter',
     randomnessHeading: 'Nothing random decides a result',
     checkHeading: 'Check it yourself',
+    // V2 (founder 2026-09-27): the tab strip's name and short labels.
+    tabsLabel: 'Sections of fair play',
+    tabs: {
+      skill: 'Skill',
+      screening: 'Screening',
+      age: '18+',
+      availability: 'Where',
+      randomness: 'Randomness',
+      check: 'Check it',
+    },
     checkIntro:
       'Nothing on this page asks you to take our word for it. Three pages let you look for yourself.',
     checkVerify: 'Recompute any result on the Verify page',
@@ -840,6 +850,77 @@ export const COPY = {
     close: 'Close',
     submitEarly: 'Submit now',
     submitComplete: 'Submit my board',
+    /*
+     * V2 (founder 2026-09-27; the co-founder's board): bulk clearing, Undo,
+     * and the nine-step walkthrough with the clock held. PHASE-N-REVIEW:
+     * drafts; the founder owns the words. The walkthrough's minutes come
+     * from the board's clock constant, never typed.
+     */
+    undo: 'Undo',
+    undoAria: 'Undo the last change — a whole hold, a step, or a clear',
+    clearField: (n: number) => `Clear Field ${n}`,
+    clearBoardAria: 'Send every troop back to the tray',
+    clearBoardConfirm: 'Send every troop back?',
+    yes: 'Yes',
+    no: 'No',
+    guideKey: 'Show me how first',
+    guideStep: (n: number, of: number) => `Step ${n} of ${of}`,
+    guideNext: 'Next',
+    guideBack: 'Back',
+    guideSkip: 'Skip',
+    guideStart: 'Start building',
+    guideWaiting: 'Your move…',
+    guide: (mode: 'easy' | 'hard', minutes: number): readonly { title: string; body: string; waits: boolean }[] => [
+      {
+        title: 'Seven fields, seven battles',
+        body:
+          mode === 'easy'
+            ? 'Each field around the castle is one battle, and every battle takes 100 points. Set all seven, then submit.'
+            : 'Each field around the castle is one battle. You have 700 points to place across the seven — all in one, spread across all, or anything between.',
+        waits: false,
+      },
+      {
+        title: mode === 'easy' ? '100 points per field' : '700 points across the board',
+        body:
+          mode === 'easy'
+            ? 'Field 1’s plaque counts what you have placed there, out of 100. Every field has one.'
+            : 'The readout at the top counts what is left of your 700. A field’s plaque counts what stands on it.',
+        waits: false,
+      },
+      { title: 'Your troops are your stats', body: 'Tap one of the five cards below to arm it.', waits: true },
+      {
+        title: 'Press and hold to send them',
+        body: 'Press and hold on Field 1. Hold longer for more, tap for one, slide off to pause. The clock does not run during this walkthrough.',
+        waits: true,
+      },
+      {
+        title: 'Every troop is a point',
+        body:
+          mode === 'easy'
+            ? 'The chip counts this stat; the plaque counts the whole field out of 100. A full field takes no more troops.'
+            : 'The chip counts this stat; the readout counts the whole board out of 700. When it reads 0 left, the board is placed.',
+        waits: false,
+      },
+      { title: 'Change your mind', body: 'Tap the number above the crowd to open its controls.', waits: true },
+      {
+        title: 'Send some back',
+        body: 'Take one back with −1, five with −5, or the whole crowd with Send back. Clear Field empties the field. Undo takes back a whole hold.',
+        waits: true,
+      },
+      {
+        title: 'The clock',
+        body: `${minutes} minutes from your first troop. At the buzzer the board is submitted as it stands, and points you never placed are spread evenly across the stats of the fields you have not locked in. A spread-thin field loses to a focused one, so fill every field yourself.`,
+        waits: false,
+      },
+      {
+        title: 'Submit',
+        body:
+          mode === 'easy'
+            ? 'When every plaque reads Full, submit. Your entry is encrypted on your device before you pay; nobody can read it until the pool closes. Once submitted it is final.'
+            : 'When the readout reads 0 left, submit. Your entry is encrypted on your device before you pay; nobody can read it until the pool closes. Once submitted it is final.',
+        waits: false,
+      },
+    ],
     // Review.
     reviewTitle: 'Your entry',
     reviewSubmitted: (clock: string) => `Submitted with ${clock} left. Decisions are final once sealed.`,
@@ -1579,5 +1660,27 @@ export const COPY = {
       entry: 'Entry (SOL)',
       pot: 'Prize pool (SOL)',
     },
+    // V2 (founder 2026-09-27): the rules read one section at a time on a
+    // tab strip, or as one page. Short labels by section id; the headings
+    // above stay the sections' own.
+    tabsLabel: 'Sections of the rules',
+    tabs: {
+      'how-to-enter': 'Entering',
+      price: 'Prices',
+      prizes: 'Who is paid',
+      scoring: 'Scoring',
+      'battle-timer': 'The clock',
+      ties: 'Ties',
+      randomness: 'Randomness',
+      sealing: 'Sealing',
+      'field-size': 'Field size',
+      refund: 'Refunds',
+      'pool-opening': 'Opening',
+      verify: 'Verify',
+      availability: 'Where',
+      age: '18+',
+      'responsible-play': 'Playing well',
+      detection: 'Detection',
+    } as Record<string, string>,
   },
 } as const;
