@@ -20,16 +20,16 @@ const SHOTS = '../docs/testing/screenshots/journey';
 const shot = (page: Page, name: string, project: string) =>
   page.screenshot({ path: `${SHOTS}/${name}-${project}.png`, fullPage: true });
 
-test('landing: montage hero, the enter control, the 18+ line above the fold', async ({ page }, info) => {
+test('landing: montage hero, the choose-your-pool control, the 18+ line above the fold', async ({ page }, info) => {
   await page.goto('/');
   await expect(
     page.getByText('Sixty-four seats. Seven battles. The winner takes the prize pool.')
   ).toBeVisible();
-  // Founder 2026-09-09: the hero is the full-bleed montage (the seat ring
-  // left the hero with the "Pools are now open" card); the open fixture
-  // pool is entered from the hero's control.
+  // Founder 2026-09-09: the hero is the full-bleed montage. V2 (founder
+  // 2026-09-27): with two boards the hero's control cannot name a pool, so
+  // it takes the player to the picker.
   await expect(page.locator('video[poster*="hero_montage"]')).toHaveCount(1);
-  await expect(page.getByRole('link', { name: 'Enter this tournament' }).first()).toBeVisible();
+  await expect(page.getByTestId('hero-choose')).toBeVisible();
   // v3 D2: 18+/territory visible WITHOUT SCROLLING at this viewport.
   // The hero's own line is the first of several on the page.
   const note = page.getByText('18+ only · not available in some territories').first();
@@ -37,32 +37,29 @@ test('landing: montage hero, the enter control, the 18+ line above the fold', as
   await shot(page, 'landing', info.project.name);
 });
 
-test('landing: one long card per open pool, easy beside hard, each down its own path (Phase B)', async ({
-  page,
-}) => {
+test('landing: one picker, Easy / Hard toggle, each side down its own pool (V2)', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('blotto.preloader.seen', 'v2'));
   await page.goto('/');
   // The fixture catalogue holds one open easy pool and one open hard pool in
-  // tier 0: two cards, each wearing its mode, each with its own clock.
-  const cards = page.getByTestId('pool-cards');
-  const easy = cards.getByTestId('pool-card-easy');
-  const hard = cards.getByTestId('pool-card-hard');
-  await expect(easy).toBeVisible();
-  await expect(hard).toBeVisible();
-  await expect(easy.getByLabel('Easy pool')).toHaveText('Easy · 100 per battle');
-  await expect(hard.getByLabel('Hard pool')).toHaveText('Hard · 700 anywhere');
-  await expect(easy.getByText('Pool closes for entries in')).toBeVisible();
-  await expect(hard.getByText('Pool closes for entries in')).toBeVisible();
-  // No "Opens soon" placeholder while a hard pool is actually open.
-  await expect(page.getByTestId('pool-card-hard-soon')).toHaveCount(0);
-  // Clicking the hard card's control lands on THAT pool, which says so.
-  await hard.getByRole('link', { name: 'Enter this tournament' }).click();
+  // tier 0: one card, Easy chosen first, the whole card switching on the
+  // toggle.
+  const picker = page.getByTestId('pool-picker');
+  await expect(picker).toBeVisible();
+  await expect(picker).toHaveAttribute('data-mode', 'easy');
+  await expect(picker.getByTestId('pool-picker-state')).toContainText('Open now');
+  await expect(picker.getByText('Closes in')).toBeVisible();
+  await expect(picker.getByTestId('pool-picker-enter')).toHaveAttribute('href', new RegExp(`/pools/${POOL}$`));
+  // Hard: the card changes colour and its control lands on THAT pool.
+  await picker.getByTestId('pool-picker-mode-hard').click();
+  await expect(picker).toHaveAttribute('data-mode', 'hard');
+  await expect(picker.getByTestId('pool-picker-state')).toContainText('Open now');
+  await picker.getByTestId('pool-picker-enter').click();
   await expect(page).toHaveURL(new RegExp(`/pools/${HARD_POOL}$`));
   await expect(page.getByTestId('pool-mode')).toHaveText('Hard · 700 anywhere');
   await expect(page.getByText('Seven battles and 700 points. Place them anywhere', { exact: false })).toBeVisible();
   // And the easy one lands on the easy pool.
   await page.goto('/');
-  await page.getByTestId('pool-card-easy').getByRole('link', { name: 'Enter this tournament' }).click();
+  await page.getByTestId('pool-picker-enter').click();
   await expect(page).toHaveURL(new RegExp(`/pools/${POOL}$`));
   await expect(page.getByTestId('pool-mode')).toHaveText('Easy · 100 per battle');
 });

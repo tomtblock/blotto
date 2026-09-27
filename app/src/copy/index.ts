@@ -31,9 +31,13 @@ export const COPY = {
     tabs: { play: 'Play', pools: 'Pools', profile: 'Profile' },
     // The honest degraded state: the data service is unreachable, which is
     // NOT the same statement as "no tournament is open".
-    liveDataUnavailable: 'Live tournament data is temporarily unavailable.',
+    liveDataUnavailable: 'Live pool data is temporarily unavailable.',
     liveDataUnavailableDetail:
       'The data service could not be reached. Refresh in a moment — nothing on-chain is affected.',
+    // V2 (founder 2026-09-27): the documents' tab strip offers the whole
+    // page at once for anyone who wants to read it as one document.
+    tabsReadAsOnePage: 'Read as one page',
+    tabsOneAtATime: 'One section at a time',
     // 2026-09-13 (accessibility baseline): the skip link and the footer
     // landmark, which no page had. PHASE-N-REVIEW: drafts; founder voice.
     skipToContent: 'Skip to content',
@@ -359,7 +363,6 @@ export const COPY = {
     // PHASE-N-REVIEW (founder 2026-09-16, CHANGE-2026-09-16_ui-uplift.md §A11):
     // the marquee over the pool page's three rule paragraphs, now a neon box
     // on the yellow field. Proposal until ratified.
-    aboutHeading: 'How this pool pays',
     // PHASE-N-REVIEW (founder 2026-09-16, round two: "condense the number of
     // words, maybe bullet points, larger"): the four points under that
     // marquee, in place of the three ratified paragraphs prizeRule / sealed /
@@ -374,7 +377,12 @@ export const COPY = {
      * reads BEFORE paying — the rule of THIS pool, config-driven (D-B6).
      * Phase A: every pool is easy. PHASE-N-REVIEW: drafts; founder-owned.
      */
-    howItPlaysHeading: 'How this pool plays',
+    // V2 (founder 2026-09-27): one box, "How this pool…", a Plays / Pays
+    // toggle inside it. The two headings above became the toggle's words.
+    howThisPool: 'How this pool…',
+    rulesToggleAria: 'Plays or pays',
+    rulesPlays: 'Plays',
+    rulesPays: 'Pays',
     howItPlays: (mode: 'easy' | 'hard', minutes: number): readonly string[] =>
       mode === 'easy'
         ? [
@@ -455,6 +463,9 @@ export const COPY = {
     // (the hours come from the shared constant via the caller); wording is
     // a draft pending founder voice review like every line in this file.
     resolving: 'Resolving',
+    // V2 (founder 2026-09-27): one word set for a pool's state everywhere —
+    // an open pool is "Open now" on the home card, the list and the page.
+    stateOpen: 'Open now',
     resolvingEndsIn: 'Resolving ends in',
     resolvingNote: (hours: number) =>
       `Results are published. A prize on this tournament is held while a flag against it is reviewed. If no decision is made within ${hours} hours, the flag is cleared and the prize is paid.`,
@@ -463,27 +474,97 @@ export const COPY = {
   // must match the rules tab and PRODUCT-FACTS; wording is founder-voiced
   // like all copy — re-voicing rights reserved.
   landing: {
-    // Hero voice is a PLACEHOLDER awaiting founder re-voice (brand voice
-    // is founder-reserved); everything else on the landing reuses lines
-    // already ratified elsewhere in this file.
-    heroTitle: 'Make your Blott',
+    // Founder 2026-09-27: the hero title, two lines. The break is the
+    // founder's; the h1 renders it with `whitespace-pre-line`.
+    heroTitle: 'Battle ready\nBlotts',
+    // Founder 2026-09-27: with two boards open the hero's button cannot say
+    // which pool, so it takes the player to the picker instead.
+    chooseYourPool: 'Choose your pool ↓',
     // The board (founder 2026-09-24): the landing's toy is the board.
     // PHASE-N-REVIEW: drafts; founder-owned.
     tryBoard: 'Try the board',
     demoBoardHint:
       'Tap a troop, press and hold a field. Nothing to sign, nothing to pay: this one is just to feel it. A real entry plays the same board with a three-minute clock.',
-    openPoolTitle: 'Open now',
     /*
-     * Phase B (founder 2026-09-24): the two cards, side by side — one per
-     * open pool, each wearing its mode. The hard card shows "Opens soon"
-     * ONLY when the founder has enabled the hard ladder on chain and no hard
-     * pool is open yet (the tiers API says so; nothing in the app decides
-     * it). PHASE-N-REVIEW: drafts; founder-owned.
+     * V2 (founder 2026-09-27, Figma Concept A as ONE card): a single
+     * full-width card with an Easy / Hard toggle and a tier filter. The
+     * hard side reads "Opens soon" ONLY when the founder has enabled the
+     * hard ladder on chain and no hard pool is open yet (the tiers API says
+     * so; nothing in the app decides it). A tier the founder has not opened
+     * is listed greyed with "Not open yet" (founder ruling 2026-09-27,
+     * reversing 2026-09-12 §2.4) and cannot be chosen. All drafts;
+     * founder-owned.
      */
-    hardOpensSoonTitle: 'Opens soon',
-    hardOpensSoonBody:
-      'The hard board — 700 points to place anywhere across the seven battles — is switched on. Its first pool opens shortly; the easy pool is open now.',
-    cardModeAria: (mode: 'easy' | 'hard') => (mode === 'easy' ? 'Easy pool' : 'Hard pool'),
+    pickBoardTitle: 'Pick your board',
+    pickBoardLine:
+      'Both boards give you 700 points for seven battles. Easy puts exactly 100 in every battle. Hard lets you move them anywhere.',
+    pickBoardAria: 'Which board',
+    tierFilterAria: 'Which entry price',
+    tierNotOpen: 'Not open yet',
+    tierLegend: 'Greyed prices are not open yet',
+    openNow: 'Open now',
+    opensSoon: 'Opens soon',
+    opensSoonLine: (mode: 'easy' | 'hard') =>
+      mode === 'hard'
+        ? 'The hard board is switched on. Its first pool at this price opens shortly.'
+        : 'The easy board is switched on. Its next pool at this price opens shortly.',
+    seatsOf: (n: number) => `${n} of 64 seats`,
+    closesIn: 'Closes in',
+    seatsLabel: 'Seats',
+    enterEasy: 'Enter the easy pool',
+    enterHard: 'Enter the hard pool',
+    tryBoardFirst: 'Try this board free first →',
+    howItPlays: 'How it plays',
+    bestFor: 'Best for',
+    entryLooksLike: 'What an entry looks like',
+    board: {
+      easy: {
+        name: 'Easy',
+        title: '100 per battle',
+        one: 'Seven battles. Every battle gets exactly 100 points to split across your five troops.',
+        how: [
+          'Split 100 points across Strength, Speed, Heart, Wit and Durability — in each of the seven battles.',
+          'Every battle is a full-strength fight. Your call is where each one is strong.',
+          'The place to start if this is your first entry.',
+        ],
+        best: 'Your first entry, or anyone who wants seven even fights.',
+        caption: 'Example entry: every battle holds exactly 100.',
+      },
+      hard: {
+        name: 'Hard',
+        title: '700 anywhere',
+        one: 'Seven battles. One budget of 700 points — stack a battle, leave another with nothing.',
+        how: [
+          'Place 700 points anywhere across the seven battles. Any stat, any battle, 0 to 700.',
+          'A battle can hold nothing: give it up to make another one stronger.',
+          'Same five stats, same three-minute clock, same scoring. A bigger decision.',
+        ],
+        best: 'Players who know the board and want to choose which battles to win.',
+        caption: 'Example entry: 700 in total. B1 and B5 hold nothing; B2 holds 210.',
+      },
+    },
+  },
+
+  /*
+   * V2 (founder 2026-09-27): every stop on the site — a dead end, a
+   * refusal, an error, a failed action — is one card (components/ui/
+   * stop-card.tsx) and always offers a way out. These are its shared words.
+   */
+  stop: {
+    kinds: {
+      'dead-end': 'Nothing to do here',
+      refusal: 'Not this time',
+      error: 'Something went wrong',
+      failure: 'Did not go through',
+    },
+    findAnotherPool: 'Find another pool',
+    backHome: 'Back to the home page',
+    seePools: 'See open pools',
+    openWallet: 'Open your wallet',
+    tryAgain: 'Try again',
+    // The 404 page (founder 2026-09-27: designed and branded).
+    notFoundTitle: 'That page is not here',
+    notFoundLine: 'The link may be old, or the address mistyped.',
   },
 
   howItWorks: {
@@ -796,22 +877,6 @@ export const COPY = {
   },
   // v3 D3: retention surfaces — mastery and standing only. Factual state
   // changes, never pressure; the do-not-build vocabulary is CI-enforced.
-  fixtures: {
-    // PHASE-N-REVIEW: the founder asked for a word other than "Fixtures"
-    // (2026-09-09); "Prize pools" is the proposal, from the approved lexicon.
-    title: 'Prize pools',
-    // `statusComingSoon: 'Coming soon'` was removed on 2026-09-13 (founder
-    // instruction 2026-09-12 §2.4). A tier the founder has not opened is no
-    // longer listed at all, so there is nothing for the phrase to label —
-    // and the approved lexicon carries no wording for it, because an
-    // unopenable tier advertising a prize pool is a statement about future
-    // availability this product is not in a position to make.
-    statusOpen: 'Taking entries',
-    statusSettling: 'Settling',
-    statusOpenable: 'Covered — opens next',
-    statusShort: 'Opens when the treasury covers it',
-    shortBy: (sol: string) => `${sol} SOL to go`,
-  },
   notify: {
     title: 'Notifications',
     emptyTitle: 'Nothing yet',
