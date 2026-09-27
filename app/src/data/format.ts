@@ -43,6 +43,18 @@ export function formatSolShort(lamports: bigint, decimals = 3): string {
  * default has to be the same everywhere: easy, the rule every pool before
  * Phase B played. Never inferred from the tier, the pot or the id.
  */
+/**
+ * A unix-seconds decimal string as a calendar day, in UTC — the same text on
+ * the server and on every device (no local time zone, no locale surprise).
+ * Empty for a value that is not a time.
+ */
+export function formatDay(unixSeconds: string | null | undefined): string {
+  if (!unixSeconds || !/^\d+$/.test(unixSeconds)) return '';
+  const ms = Number(unixSeconds) * 1000;
+  if (!Number.isFinite(ms)) return '';
+  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(new Date(ms));
+}
+
 export function poolMode(pool: Pick<PoolSummary, 'mode'>): BoardMode {
   return pool.mode === 'hard' ? 'hard' : 'easy';
 }

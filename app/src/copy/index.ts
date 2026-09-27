@@ -898,10 +898,28 @@ export const COPY = {
     // is — the list line, the toast, and the headline at the top of the
     // sheet. The amount is the chain's (career row, bigint → string).
     won: (id: string, sol: string) => `Pool #${id}: you won ${sol} SOL`,
-    wonHeadline: 'Congratulations',
-    wonLine: (sol: string) => `You won ${sol} SOL`,
-    wonSeeResults: 'See the results',
     refunding: (id: string) => `Pool #${id} did not reach its minimum field — refunds are open`,
+    /*
+     * THE TABLE (V2, founder 2026-09-27, sketch G): the sheet is a clip over
+     * a table — Pool, Position, Date, the way to the results — a win in
+     * gold, and "New" on a row whose results this device has not opened.
+     * The date is the day the pool closed to entries (its fill deadline,
+     * the pool record's one clock). Position is the verified archive's rank
+     * where there is one; before that the state says what is happening.
+     * The Congratulations box and its confetti left with this.
+     */
+    tableAria: 'Your pools',
+    colPool: 'Pool',
+    colPosition: 'Position',
+    colDate: 'Date',
+    viewResults: 'View results',
+    viewPool: 'View pool',
+    newTag: 'New',
+    positionRank: (rank: number) => `#${rank}`,
+    positionWinner: 'Winner',
+    positionSealed: 'Revealing',
+    positionRefund: 'Refund',
+    positionPending: '—',
   },
   career: {
     chartTitle: 'Prize record',
@@ -919,9 +937,6 @@ export const COPY = {
     headToHead: (w: number, d: number, l: number) => `${w}W · ${d}D · ${l}L against you`,
     unavailable:
       'The sealed battles for this pool are not available to decrypt yet. The Verify page recomputes the full result from the published bundle.',
-  },
-  share: {
-    button: 'Share your result card',
   },
   results: {
     // PHASE-N-REVIEW (round four A2, 2026-09-17): the results page is titled
@@ -965,6 +980,53 @@ export const COPY = {
       title: 'Challenge this decision',
       note:
         'A flag against your entry was upheld and your prize passed to the next eligible player. You can challenge that decision here. A person reads it, decides it against the published criteria, and the decision and the criterion cited are recorded. If a challenge succeeds after the prize has gone to another player, we pay you the full prize ourselves.',
+    },
+    /*
+     * YOUR RESULT (V2, founder 2026-09-27: "player-first"; your-result.tsx).
+     * Position out of the verified field, battles won, the three keys, the
+     * replay, and the way to tell us. The denominator here IS the archive's
+     * row count — the field this pool actually played with, never a typed
+     * number. PHASE-N-REVIEW: drafts; the founder owns the words.
+     */
+    yourResult: {
+      title: 'Your result',
+      positionLabel: 'Position',
+      position: (rank: number, of: number) => `#${rank} of ${of}`,
+      battlesWon: 'Battles won',
+      battlesWonOf: (label: string) => `${label} of 7`,
+      paid: 'Prize paid to your wallet',
+      leaderboard: 'See full leaderboard',
+      verify: 'Verify pool',
+      verifyWhat: 'What does verifying do?',
+      verifyExplainer:
+        'Verifying recomputes this whole result in your own browser: it fetches the published battles and the revealed pool secret, re-scores every player against every other, rebuilds the results tree and compares it to what the chain holds. Every number on this page can be reached that way. Nothing asks for trust.',
+      shareX: 'Share on X',
+      shareText: (rank: number, poolId: string) =>
+        `I finished #${rank} in Blotto Cup pool #${poolId}. Seven sealed battles, every result recomputable by anyone. blotto.gg`,
+      // The replay: your seven battles against one opponent, fought on
+      // screen from the published battles. Named by rank, never by wallet.
+      replayTitle: (opponent: string) => `Your seven battles against ${opponent}`,
+      replayWinner: 'the winner',
+      replayRank: (rank: number) => `#${rank}`,
+      replayPlay: 'Play the replay',
+      replaySkip: 'Skip to the result',
+      replayAgain: 'Watch again',
+      replayMarch: 'March…',
+      replayLoading: 'Reading the published battles…',
+      replayUnavailable:
+        'The published battles could not be read just now, so there is nothing to replay. The Verify page fetches the same file.',
+      replayBattle: (n: number) => `Battle ${n}`,
+      replayYou: 'You',
+      replayWon: 'Won',
+      replayLost: 'Lost',
+      replayDrawn: 'Drawn',
+      replayTally: (won: number, lost: number, drawn: number) => `Won ${won} · Lost ${lost} · Drawn ${drawn}`,
+      replayAhead: 'you came out ahead',
+      replayBehind: 'they came out ahead',
+      replayLevel: 'dead level',
+      replayByStats: '(level on battles; stats won decide)',
+      feedback: 'Something look wrong? Tell us. A person reads every message.',
+      feedbackLink: 'Send a message',
     },
     // No denominator: a pool runs with MIN_SEATS..64 players (R7-b, which
     // superseded D-E4's 52 on 2026-09-12) and the career
