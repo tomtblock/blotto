@@ -3,13 +3,16 @@
 /*
  * The BOARD run (founder brief 2026-09-24) — the entry session the play
  * page mounts, and the landing page's demo. It never sees a wallet: sealing
- * happens outside via `onConfirm`. The review ends in ONE key, "Confirm,
- * Seal & Submit" (V2, founder 2026-09-27: the two-step arm-then-confirm and
- * the seal-stage scene that hosted it are gone); after the buzzer that key
- * is already focused, so the player's next press is the seal. The seven-
- * screen dial run this replaced was removed on 2026-09-24.
+ * happens outside via `onConfirm`. ONE key seals (V2, founder 2026-09-27:
+ * the two-step arm-then-confirm and the seal-stage scene that hosted it are
+ * gone). V3 (founder, the same day): a FULL board seals straight from the
+ * board — its key glows and says "Confirm, Sign & Seal", and there is no
+ * review page in between; the review remains for an early submit and for
+ * the buzzer, where the same key is already focused so the player's next
+ * press is the seal. The seven-screen dial run this replaced was removed
+ * on 2026-09-24.
  *
- * Ready → board (the machine, src/battle/board/machine.ts) → review →
+ * Ready → board (the machine, src/battle/board/machine.ts) → (review →)
  * confirmed. The reducer owns every rule; this component feeds ticks and
  * the arena's gestures and renders state. The arena itself (arena/) is the
  * founder's mockup — painted map, sprite crowds, camera, deploy curve —
@@ -357,7 +360,28 @@ export function BoardFlow({ mode, onConfirm, onRunStarted, demo = false }: Board
         </div>
         <HintLine text={hint} />
         <TroopTray state={play} onSelect={selectTroop} />
-        {play.clockStarted && guideStep === null && (
+        {play.clockStarted && guideStep === null && (complete && !demo ? (
+          /* V3: the full board's own seal key — §8.6 above it, always. The
+             review state is taken from the reducer for the record under the
+             signing hold, then submit and confirm go through as one press. */
+          <div className="flex flex-col items-center gap-3">
+            <p className="text-center text-[14px] font-semibold leading-5 text-ink">{COPY.pool.decisionsFinal}</p>
+            <button
+              type="button"
+              className="bb-btn bb-btn--commit bb-btn--seal"
+              onClick={() => {
+                setOpenField(null);
+                const reviewed = reduceBoard(play, { type: 'submit' });
+                if (reviewed.phase === 'review') setRecord(reviewed);
+                send({ type: 'submit' });
+                send({ type: 'confirm' });
+              }}
+              data-testid="board-seal"
+            >
+              {COPY.battle.seal}
+            </button>
+          </div>
+        ) : (
           <button
             type="button"
             className={'bb-btn self-center ' + (complete ? 'bb-btn--commit' : '')}
@@ -369,7 +393,7 @@ export function BoardFlow({ mode, onConfirm, onRunStarted, demo = false }: Board
           >
             {complete ? COPY.board.submitComplete : COPY.board.submitEarly}
           </button>
-        )}
+        ))}
 
         {!demo && (
           <Sheet open={leaveSheet} onClose={() => setLeaveSheet(false)} title={COPY.battle.backStay}>

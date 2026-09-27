@@ -723,11 +723,12 @@ export const COPY = {
       'This attempt did not go through, and nothing was signed or charged this time. It was not a decision about you: either an earlier attempt from this wallet at this pool is the one that stands, or the pool stopped taking entries first. The pool page shows whether a seat was taken, and you can ask us about your own entry through /complaints.',
   },
   battle: {
-    // V2 (founder 2026-09-27): ONE step and one verb pair — the board says
-    // "Submit my board", the review says "Confirm, Seal & Submit" (the
-    // two-step arm-then-confirm of v3 D2 is gone; §8.6 renders above the
-    // one key). "Allocation" left every player-facing line.
-    seal: 'Confirm, Seal & Submit',
+    // V3 (founder 2026-09-27): ONE key — a full board's own key says
+    // "Confirm, Sign & Seal" and seals straight from the board; the review
+    // (an early submit, or the buzzer) ends in the same key. The two-step
+    // arm-then-confirm of v3 D2 is gone; §8.6 renders above the key.
+    // "Allocation" left every player-facing line.
+    seal: 'Confirm, Sign & Seal',
     sealing: 'Sealing your battles…',
     /*
      * The stat names are NOT here: they are `STAT_NAMES` in
@@ -847,6 +848,8 @@ export const COPY = {
     lockNeedsPlaced: (left: number) => `Place your remaining ${left} points first — this is the last open field.`,
     close: 'Close',
     submitEarly: 'Submit now',
+    // The landing demo's full board (a real entry's full board says
+    // `battle.seal`).
     submitComplete: 'Submit my board',
     /*
      * V2 (founder 2026-09-27; the co-founder's board): bulk clearing, Undo,
@@ -1474,11 +1477,12 @@ export const COPY = {
     // The waiting beat, between the signatures and the chain's answer. It
     // replaced the egg's "keep tapping, or simply wait" (2026-09-15).
     confirming: 'Confirming your entry with the network. Nothing more is needed from you.',
+    // V3 (founder 2026-09-27): the founder's own line. Text only — the
+    // pass PNG that used to download beside it is gone ("looks like a
+    // virus"), and so is the note that explained it.
     passShareText: (n: string | number) =>
-      `I'm in Blotto Cup pool #${n}. Seven sealed battles, the winner takes the prize pool. blotto.gg`,
+      `I'm in Blotto Cup pool #${n} on blotto.gg. Seven sealed battlefields, everyone plays everyone. The winner takes the prize pool. Come and join me!`,
     passShareX: 'Post on X',
-    passShareXNote: 'X opened with your line. The pass downloaded to your device — attach it to the post.',
-    passFooter: 'BLOTTO CUP · blotto.gg · 18+ only · not available in some territories',
     // Founder 2026-09-27: the success screen's way onward is another pool.
     playAgain: 'Play again',
     stalledTitle: 'Still confirming',

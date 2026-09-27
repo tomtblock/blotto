@@ -412,6 +412,22 @@
   background: linear-gradient(#ffe27a, var(--gold));
   font-size: 17px;
 }
+/* V3 (founder 2026-09-27): the full board's seal key glows — the one key
+ * on the screen that commits, taller and brighter than the tray's. */
+.bb-btn--seal {
+  min-height: 60px;
+  padding: 0 28px;
+  font-size: 19px;
+  animation: bb-seal-glow 1.6s ease-in-out infinite alternate;
+}
+@keyframes bb-seal-glow {
+  from {
+    box-shadow: 0 3px 0 var(--wood-2), 0 5px 10px rgba(0, 0, 0, 0.3), 0 0 14px 2px rgba(255, 210, 31, 0.45);
+  }
+  to {
+    box-shadow: 0 3px 0 var(--wood-2), 0 5px 10px rgba(0, 0, 0, 0.3), 0 0 34px 10px rgba(255, 210, 31, 0.85);
+  }
+}
 /* the hand key (grab mode) — a square Clash key that turns gold when it is on */
 .bb-grab {
   padding: 0 12px 0 10px;
@@ -796,6 +812,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .bba-troop-body { animation: none; }
+  .bb-btn--seal { animation: none; box-shadow: 0 3px 0 var(--wood-2), 0 5px 10px rgba(0, 0, 0, 0.3), 0 0 24px 6px rgba(255, 210, 31, 0.65); }
   .bba-troop.bba-hop { transition: none; }
   .bb-bar > i, .bb-troop { transition: none; }
   .bb-troop--selected { transform: none; }

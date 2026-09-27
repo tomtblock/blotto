@@ -77,8 +77,8 @@ describe('the security headers', () => {
     expect(csp.get('connect-src')).toMatch(/wss:/);
     // The auth provider's embedded-wallet iframe.
     expect(csp.get('frame-src')).toMatch(/auth\.privy\.io/);
-    // Wallet-standard wallets register their icons as data URIs; the
-    // character pass card is a canvas blob (app/play/compose-pass.ts).
+    // Wallet-standard wallets register their icons as data URIs, and the
+    // provider's embedded-wallet screens draw from blob URLs.
     expect(csp.get('img-src')).toMatch(/data:/);
     expect(csp.get('img-src')).toMatch(/blob:/);
     // Next's framework bootstrap is inline (see the config's note on the
