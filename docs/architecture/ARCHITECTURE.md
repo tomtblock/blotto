@@ -60,7 +60,11 @@ of five stats (otherwise a draw), and every player is compared with every other 
 ```
 
 Five deployable units — four backend services and the frontend. Topology, ports and health checks
-in detail: [`../guide/HOSTING.md`](../guide/HOSTING.md).
+in detail: [`../guide/HOSTING.md`](../guide/HOSTING.md). The frontend is reached on two channels
+that are one build: the site, and an Android WebView shell (`mobile/`, for the Solana dApp Store)
+that opens the site and holds nothing of its own. The closed list of what differs on a phone, the
+build check that keeps every entrant on the served build, and the package's own procedures are in
+[`../guide/MOBILE.md`](../guide/MOBILE.md) (D-E18).
 
 | Unit | Package | Port | What it does |
 |---|---|---|---|
@@ -377,6 +381,9 @@ self-testing checks, in order:
 | 14 | `scripts/ci-gate.sh --self-test` | The deploy gate still judges correctly |
 | 15 | `scripts/deploy-devnet.sh --self-test` | The program deploy still reads a cluster |
 
+`ci-fast` has no path filter, so a change under `mobile/` (the Android shell, D-E18) runs it in
+full; no lane builds the package or opens an emulator ([`../guide/MOBILE.md` §7](../guide/MOBILE.md#7-ci)).
+
 Other workflows: `on-chain` (`anchor build` and the LiteSVM integration suite, including
 `hard_mode.rs`, on program changes), `deployed-drift` (daily and on program changes: simulates every
 instruction against the live program), `backend-watch` (every 15 minutes: probes health, restarts a
@@ -402,3 +409,4 @@ manual `deploy-backend`. Running all of this locally:
 | Territory schedule | `config/territories.json` blocks at country level. Sub-national codes cannot be enforced (the geo source returns a subdivision name, not an ISO code) and the schedule refuses them. The sanctioned-jurisdictions country list is not yet in the schedule; wallet-level sanctions screening applies meanwhile. See [`../../config/territories.README.md`](../../config/territories.README.md). |
 | Where a confirmed sanctions match's share finally goes | Not defined: the share stays in the vault under the hold. Any future answer will not be a path to the operator. |
 | Board share image | There is no board-native "share your seven" image after a pool closes. |
+| The Android package | The app-side half of the mobile channel is built (D-E18); the package itself has not been generated (it needs the Android SDK), nothing is submitted to the Solana dApp Store, and no CI lane exercises a real mobile wallet. Whether the Seeker's built-in wallet can sign an entry (rather than sign-and-send only) is unverified. [`../guide/MOBILE.md` §9](../guide/MOBILE.md#9-known-limitations-and-open-questions). |

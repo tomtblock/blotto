@@ -104,6 +104,19 @@ const nextConfig: NextConfig = {
      * above.
      */
     NEXT_PUBLIC_FIXTURE_DATA: process.env.NEXT_PUBLIC_FIXTURE_DATA ?? "0",
+    /*
+     * THE BUILD'S OWN VERSION (2026-09-28, D-E18). One build serves every
+     * channel — the site and the Android shell that opens it — and the
+     * play page refuses to seal an entry from a page that is not the build
+     * the server is serving (src/build/version.ts). The value is inlined
+     * HERE so the browser bundle and the server route that answers it are
+     * stamped from the same string by the same build: the hosting
+     * provider's commit hash when it is building, an explicit override
+     * when set, and "unversioned" for a local build — where both sides
+     * agree trivially and the check is a no-op by construction.
+     */
+    NEXT_PUBLIC_BUILD_VERSION:
+      process.env.NEXT_PUBLIC_BUILD_VERSION ?? process.env.VERCEL_GIT_COMMIT_SHA ?? "unversioned",
   },
 
   /*
@@ -165,7 +178,16 @@ const nextConfig: NextConfig = {
       "font-src 'self' data:",
       "img-src 'self' data: blob: https:",
       "media-src 'self' blob:",
-      "connect-src 'self' https: wss:",
+      /*
+       * THE MOBILE WALLET'S LOOPBACK (2026-09-28, D-E18). On Android the
+       * mobile wallet standard talks to the wallet app over a WebSocket to
+       * the phone's OWN loopback address — plain `ws:`, because there is no
+       * certificate for localhost — and `wss:` alone blocks it. The two
+       * origins below are the loopback and nothing else: no remote host,
+       * no scheme beyond a socket to the same device. Inside the shell the
+       * intents go native and this line is not exercised.
+       */
+      "connect-src 'self' https: wss: ws://localhost:* ws://127.0.0.1:*",
       "worker-src 'self' blob:",
       "frame-src 'self' https://auth.privy.io https://*.privy.io https://*.moonpay.com",
       // The clickjacking fix. Nothing may frame this app, ever.

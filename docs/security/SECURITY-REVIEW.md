@@ -175,3 +175,13 @@ findings about deployment and logging rather than the program:
   does not replace a backup.
 - **IR-2** (§4) remains an accepted risk.
 - **RPC credential rotation** after finding 5.9 is an open operator action.
+- **The Android package** (D-E18, 2026-09-28). The app-side changes were reviewed with the change:
+  the mobile wallet library is loaded on Android only and registers into the existing wallet
+  registry; the response headers admit a plain WebSocket to the loopback only (pinned by test); the
+  build check fails open on an unreachable version route, by design, and is stated as such. Open:
+  the package's signing key is a new long-lived secret held by hand
+  ([`../guide/MOBILE.md` §4](../guide/MOBILE.md#4-the-signing-key)); a WebView has no address bar or
+  browser interstitials, so the shell's own navigation allow-list (that it opens only our host and
+  hands other links to the system browser) must be confirmed on the generated project before any
+  submission; and the third-party library's transport has not been reviewed beyond its published
+  source.

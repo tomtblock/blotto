@@ -27,6 +27,8 @@ import { useAuth } from "@/wallet/auth-context";
 import type { SocialProvider } from "@/wallet/types";
 import { GoogleMark, WalletGlyph, XMark } from "@/wallet/wallet-icons";
 import { CopyableAddressPill } from "@/components/copyable-address";
+import { offersSocialSignIn } from "@/channel/channel";
+import { useChannel } from "@/channel/use-channel";
 import { signInDestination } from "./return-to";
 
 /*
@@ -82,6 +84,18 @@ export function SignInClient() {
   } = useAuth();
   const router = useRouter();
   const [busyWallet, setBusyWallet] = useState<string | null>(null);
+  /*
+   * THE CHANNEL (2026-09-28, D-E18). Inside the Solana Mobile shell the
+   * social routes are not drawn: Google refuses to open its sign-in page
+   * inside an embedded WebView (`disallowed_useragent`), and a button that
+   * cannot work is the dead end this page has been rid of twice already
+   * (Apple, 2026-09-24; the silent failures of 2026-09-08). The wallet rows
+   * are the same rows as everywhere else — on a phone the mobile wallet
+   * standard registers there (wallet/mobile-wallet.tsx). 'web' on the
+   * server and during hydration, so the markup agrees; the shell re-renders
+   * to its own surface a beat later.
+   */
+  const socials = offersSocialSignIn(useChannel());
 
   /*
    * D-17 (audit 2026-09-11): where to go afterwards. This used to be a
@@ -132,7 +146,7 @@ export function SignInClient() {
   return (
     <div className="flex flex-col gap-3 pt-1">
       <p className="mb-1 max-w-prose text-[15px] leading-6 text-ink-muted">
-        {COPY.signin.subtitle}
+        {socials ? COPY.signin.subtitle : COPY.signin.webshellSubtitle}
       </p>
 
       {unavailable ? (
@@ -170,6 +184,8 @@ export function SignInClient() {
         </div>
       ) : null}
 
+      {socials ? (
+      <>
       {/* Hero: Google on a light ground, the mark in its own colours. */}
       <button
         type="button"
@@ -221,6 +237,8 @@ export function SignInClient() {
           </span>
           <span className="h-px flex-1 bg-line" />
         </div>
+      </>
+      ) : null}
 
         <ul className="flex flex-col gap-2" data-testid="detected-wallets">
           {detectedWallets.map((w) => (
@@ -242,6 +260,11 @@ export function SignInClient() {
               </button>
             </li>
           ))}
+          {/* The provider's own wallet list (WalletConnect QR, wallets not
+              installed) opens the provider's modal, which is a browser
+              surface; inside the shell the mobile wallet row above IS the
+              door to every installed wallet, so this row is not drawn. */}
+          {socials ? (
           <li>
             <button
               type="button"
@@ -265,6 +288,7 @@ export function SignInClient() {
               </span>
             </button>
           </li>
+          ) : null}
         </ul>
 
       <p className="mt-3 text-[12px] leading-5 text-ink-muted">{COPY.pool.ageTerritoryNote}</p>

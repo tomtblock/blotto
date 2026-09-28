@@ -55,6 +55,23 @@ choices are hidden. Nothing rewards reaction speed, spending more, or playing mo
 
 There is no second session, no upgrade to buy, and nothing that costs money after the entry.
 
+### 2.1 Channels
+
+The product is reached two ways, and they are **one build** (D-E18):
+
+| Channel | What it is | Requirement |
+|---|---|---|
+| The site | The Next.js app in any browser, tested at 375 px and 1280 px on every change (R18) | — |
+| The Android package | A WebView shell, published through the Solana dApp Store, that opens the deployed site. It holds no copy of the product | Every deploy reaches both channels at once; a page from an older build cannot seal an entry (the build check, [`MOBILE.md` §2](../guide/MOBILE.md#2-what-differs-on-mobile--the-complete-list)) |
+
+What may differ on a phone is limited to surfaces that cannot work there, and the complete list is
+kept in [`../guide/MOBILE.md` §2](../guide/MOBILE.md#2-what-differs-on-mobile--the-complete-list).
+The one player-facing difference: **inside the Android package, sign-in is by a Solana wallet
+only** — the social routes cannot open in an embedded view. Phantom and Solflare are the tested
+wallets; the package cannot restrict the choice to one wallet brand, and does not claim to. A
+wallet that can sign in but cannot sign an entry is told so before the board is played. Nothing on
+the board, in sealing, in scoring or in the prize reads the channel.
+
 ## 3. The game
 
 ### 3.1 The board
@@ -298,6 +315,8 @@ The product does not and will not have:
 - **A claim step**, a discretionary payment, a prize-vault withdrawal, or any path by which a
   played pool's prize reaches the operator.
 - **Automatic sanctions against a player from detection** alone (D-E9).
+- **A second copy of the product for a second channel.** The Android package opens the site; it
+  never carries its own pages, rules or scoring (D-E18).
 
 ## 11. Success measures and quality bars
 
@@ -309,6 +328,7 @@ two quality bars:
 | A 0.5 SOL pool fills within 24 hours without outreach (R17) | target | Not measurable until that tier opens (R6) |
 | App performance and accessibility score (D-E12) | at least 90 | Checked weekly in CI |
 | Screen widths tested on every change (R18) | 375 px and 1280 px | In force |
+| Every entrant in a pool seals on the build the server is serving (D-E18) | the play page refuses a stale page before the seal | In force; `app/src/build/version.ts` |
 
 ## 12. Open product questions
 

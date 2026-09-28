@@ -235,6 +235,13 @@ the way in, and from `backend/reveal/src/crank.ts` on the way out; the pool's mo
 `app/src/battle/board/machine.test.ts`; `backend/reveal/test/crank.spec.ts`;
 `tests/litesvm/tests/hard_mode.rs`.
 
+**The client half holds across channels and deploys.** The same bundle encodes the entry on the
+site and inside the Android package (which opens the site and carries no copy of the product), and
+the play page refuses to seal from a page whose build is not the one the server is serving — a tab
+or a phone app left open across a deploy — before anything is signed. Enforced by
+`app/src/build/version.ts` and `app/src/app/api/version/route.ts`; proven by
+`app/src/build/version.test.ts`. D-E18, [`../guide/MOBILE.md`](../guide/MOBILE.md).
+
 ## 10. Age attestation and terms versioning
 
 **What it is.** Before any paid action the player ticks two unticked boxes — 18 or older, and

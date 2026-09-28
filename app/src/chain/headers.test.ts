@@ -75,6 +75,13 @@ describe('the security headers', () => {
     expect(csp.get('connect-src')).toMatch(/https:/);
     // Solana RPC subscriptions are a websocket (privy-bridge.tsx).
     expect(csp.get('connect-src')).toMatch(/wss:/);
+    // The mobile wallet standard's loopback socket on Android
+    // (wallet/mobile-wallet.tsx, D-E18): the phone's own address, plain ws.
+    expect(csp.get('connect-src')).toMatch(/ws:\/\/localhost:\*/);
+    expect(csp.get('connect-src')).toMatch(/ws:\/\/127\.0\.0\.1:\*/);
+    // …and ONLY the loopback: no plain-ws remote host may ever be listed.
+    const plainWs = csp.get('connect-src')!.split(/\s+/).filter((s) => s.startsWith('ws://'));
+    expect(plainWs.every((s) => /^ws:\/\/(localhost|127\.0\.0\.1):\*$/.test(s))).toBe(true);
     // The auth provider's embedded-wallet iframe.
     expect(csp.get('frame-src')).toMatch(/auth\.privy\.io/);
     // Wallet-standard wallets register their icons as data URIs, and the
