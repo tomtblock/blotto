@@ -78,6 +78,13 @@ export const COPY = {
      * goes back to true (app/src/app/signin/signin-client.tsx).
      */
     subtitle: 'Sign in with an account and a wallet is made for you.',
+    /*
+     * INSIDE THE SOLANA MOBILE SHELL (2026-09-28, D-E18) the social routes
+     * are not offered — Google refuses to open its sign-in page inside an
+     * embedded WebView — so the page opens on the wallet rows and says so.
+     * PHASE-N-REVIEW: plain sentence pending the founder's wording.
+     */
+    webshellSubtitle: 'Sign in with your Solana wallet. Phantom and Solflare are the tested ones.',
     google: 'Continue with Google',
     // Apple removed 2026-09-24 (founder): the provider was never enabled and the
     // button did nothing. See wallet/types.ts.
@@ -314,6 +321,29 @@ export const COPY = {
     signerMissing:
       'This wallet is signed in but cannot sign yet. Reconnect it from your wallet page, or sign out and in again, before entering.',
     signerMissingLink: 'Open your wallet',
+    /*
+     * The KNOWN case (D-E18): a mobile wallet that signs in but offers
+     * sign-and-send only, which the entry path cannot use (wallet/types.ts,
+     * `signerLimit`). Different next step from `signerMissing` — reconnecting
+     * cannot help — so it gets its own sentence. PHASE-N-REVIEW: wording.
+     */
+    signerCannotSignTransactions:
+      'This wallet can sign in but cannot enter a pool yet. Sign out and sign in with Phantom or Solflare.',
+  },
+  /*
+   * THE BUILD CHECK (2026-09-28, D-E18: one build for every channel). Just
+   * before the entry is sealed the page asks the server which build is
+   * live; if this page is from an older one — a tab or the Android app
+   * left open across a deploy — it stops here, before anything is signed,
+   * and offers a reload. Nothing was sent, nothing was signed, nothing
+   * changed on chain. PHASE-N-REVIEW: plain sentences pending the
+   * founder's wording; keeping the board across the reload is a follow-up.
+   */
+  build: {
+    staleTitle: 'Blotto Cup has been updated',
+    stale:
+      'This screen is from an earlier version of the site, so the entry was not sealed and nothing was signed. Reload to get the current version, then play the board again.',
+    reload: 'Reload',
   },
   preloader: {
     // First-visit gate only (root route, once). The line is the same

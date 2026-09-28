@@ -127,6 +127,9 @@ Only steps the recorded decisions already plan are listed here.
   on is a signed multisig decision (D-E9).
 - **Illustrated pass art** could be added as a metadata update, never a change to the competition
   (R12).
+- **The Solana dApp Store listing** (D-E18). The app-side half is built; the Android package is
+  generated and submitted only after the mainnet launch and the legal review of the listing, per
+  the checklist in [`guide/MOBILE.md` §8](guide/MOBILE.md#8-submitting-to-the-solana-dapp-store).
 
 Known limitations with no scheduled fix are listed in
 [ARCHITECTURE §10](architecture/ARCHITECTURE.md#10-not-built-and-known-limitations).

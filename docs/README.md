@@ -25,6 +25,7 @@ Where any document and the code disagree, the code is right and the document is 
 | [`guide/GETTING-STARTED.md`](guide/GETTING-STARTED.md) | Prerequisites, running the app and the backend locally, building the program, every CI check |
 | [`guide/HOSTING.md`](guide/HOSTING.md) | The deployment topology, ports and health checks; deploying the backend and the app; sign-in configuration; the vendor map |
 | [`guide/OPERATING-MANUAL.md`](guide/OPERATING-MANUAL.md) | Operating a deployment: roles and keys, the admin CLI, opening tiers, program upgrades, the daemon, reviews, incidents |
+| [`guide/MOBILE.md`](guide/MOBILE.md) | **The mobile channel**: the complete list of what differs on a phone, building and signing the Android package (`mobile/`), change control for one app on two channels, and the Solana dApp Store submission checklist |
 | [`guide/DEVNET-REHEARSAL.md`](guide/DEVNET-REHEARSAL.md) | The offline settlement rehearsal CI runs, and worked examples of the admin CLI against devnet |
 
 ## Architecture — what is built and why

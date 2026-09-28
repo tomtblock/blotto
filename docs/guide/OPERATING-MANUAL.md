@@ -616,6 +616,11 @@ RPC.
 Every service prints `BLOTTO_BUILD_COMMIT` as its first log line. Read that line. Do not compare
 a commit shown on a web page against a branch.
 
+The app answers `GET /api/version` with the commit hash it was built from (D-E18) — the same
+value on the site and inside the Android package, since the package opens the site. A player who
+reports "Blotto Cup has been updated" at the seal was on a page from an older build and was
+refused before signing; a reload is the whole fix ([`MOBILE.md` §2](MOBILE.md#2-what-differs-on-mobile--the-complete-list), item 5).
+
 ### A deploy refused on the database URL
 
 Before any machine is replaced, `deploy-backend` opens one session to `BLOTTO_DATABASE_URL` and
@@ -808,3 +813,5 @@ of its code.
 - Skip the drain before a program upgrade, or separate a layout upgrade from its migration.
 - Place a sanctions hold or withhold a prize by hand.
 - Widen the language gate's exclusion list to make a change pass.
+- Build a second copy of the product for the phone, or sign the Android package with any key but
+  the dApp Store key, or commit that key anywhere ([`MOBILE.md`](MOBILE.md) §1 and §4).

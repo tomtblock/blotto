@@ -1,0 +1,21 @@
+# The signing key for the dApp Store package — NEVER committed, in any
+# form. The store refuses an update signed with a different key, so losing
+# it means the listing can never be updated; leaking it means anyone can
+# publish as us. It lives in the operator's password manager
+# (docs/guide/MOBILE.md §4).
+*.jks
+*.keystore
+*.p12
+*.pem
+
+# Passwords for the key: environment variables only (webshell.env.example).
+.env
+*.env
+!webshell.env.example
+
+# Build output and Gradle caches of the generated Android project.
+**/build/
+**/.gradle/
+**/local.properties
+**/*.apk
+**/*.aab

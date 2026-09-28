@@ -230,6 +230,10 @@ root `.env`; it defaults to the project's devnet id).
 
 ---
 
+**On a phone.** The same deployed site, in an Android emulator's Chrome or inside the Android
+package, is [`MOBILE.md` §5](MOBILE.md#5-testing-on-an-emulator-or-a-phone); the package needs
+the Android SDK and Node 24, which nothing else here does.
+
 ## Building and testing the program
 
 ```bash

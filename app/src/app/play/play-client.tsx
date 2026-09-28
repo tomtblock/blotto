@@ -52,6 +52,7 @@ import { observeSigner } from './observed-signer';
 import { EnteredPanel } from './entered-panel';
 import { SigningOverlay, type SignStep } from './signing-overlay';
 import { entryServiceNotifyVersion } from '@/notify/pool-notify';
+import { BUILD_VERSION, checkBuildVersion } from '@/build/version';
 import type { RevealState } from '@/reveal/machine';
 
 /** D-C: the top-up prompt ships behind a flag, OFF by default. */
@@ -297,12 +298,37 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
    * the allocations survive in `lastConfirmed` and the panel offers a retry
    * rather than a dead "Sealing…" hold. */
   const [submitBlocked, setSubmitBlocked] = useState(false);
+  /*
+   * THE BUILD CHECK (2026-09-28, D-E18; build/version.ts has the reasoning).
+   * One build serves the site and the Android shell, and a page left open
+   * across a deploy — a phone app in the background for days — must not
+   * seal an entry the current engine would read differently. Asked ONCE
+   * when the page opens, so the common case stops before a board is
+   * played, and AGAIN at the seal, so a deploy during the three minutes is
+   * caught before anything is signed. `unknown` (the route did not answer)
+   * proceeds: this guards a stale page, not an absent server.
+   */
+  const [staleBuild, setStaleBuild] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void checkBuildVersion({ fetch, current: BUILD_VERSION }).then((verdict) => {
+      if (!cancelled && verdict === 'stale') setStaleBuild(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const onConfirm = useCallback(
     async (battles: readonly Allocation[], timingsMs: readonly number[]) => {
       // Remembered FIRST and unconditionally: it is the player's ninety
       // seconds, and it must survive whatever the submit does next.
       setLastConfirmed({ battles, timingsMs });
+      // Before the seal, never after: a stale page signs nothing.
+      if ((await checkBuildVersion({ fetch, current: BUILD_VERSION })) === 'stale') {
+        setStaleBuild(true);
+        return;
+      }
       const run = startSubmit(battles, timingsMs);
       if (run) {
         setSubmitBlocked(false);
@@ -486,6 +512,31 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
     );
   }
 
+  /*
+   * A stale build stops everything, run or no run (D-E18): once the seal
+   * has refused there is nothing on this page that can be entered, and the
+   * only way forward is the current build. Placed ahead of the run-guard
+   * gates on purpose — it is not a reconnect flicker, it is a fact about
+   * the page. The pre-flight variant fires before a board exists, so the
+   * ordinary case costs the player nothing; the seal-time variant is the
+   * rare one and says what was and was not done.
+   */
+  if (staleBuild) {
+    return (
+      <StopCard
+        kind="dead-end"
+        title={COPY.build.staleTitle}
+        actions={[
+          { label: COPY.build.reload, intent: 'primary', onClick: () => window.location.reload() },
+          { ...STOP_ACTIONS.findAnotherPool(), intent: 'quiet' },
+        ]}
+        data-testid="stop-stale-build"
+      >
+        <p>{COPY.build.stale}</p>
+      </StopCard>
+    );
+  }
+
   // Each of the three gates below can flip for a moment during an ordinary
   // reconnect. Before a run they are the pre-flight; during one they are
   // not allowed to unmount it (C-17 / D-13).
@@ -513,14 +564,20 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
     // Signed in, address known, nothing that can sign for it. Hold, then say
     // so — never let the ninety seconds start against a wallet that cannot
     // confirm at the end.
-    return signerWaitExpired ? (
+    //
+    // The KNOWN case does not hold (D-E18): a mobile wallet that offers
+    // sign-and-send only has said so at sign-in (wallet/types.ts,
+    // `signerLimit`), reconnecting cannot change it, and the sentence names
+    // the wallets that can enter instead.
+    const cannotSignTransactions = auth.status === 'signed-in' && auth.signerLimit === 'no-sign-transaction';
+    return signerWaitExpired || cannotSignTransactions ? (
       <StopCard
         kind="error"
         title={COPY.gate.signerMissingTitle}
         actions={[{ ...STOP_ACTIONS.wallet(), intent: 'primary' }, { ...STOP_ACTIONS.findAnotherPool(), intent: 'quiet' }]}
         data-testid="stop-signer-missing"
       >
-        <p>{COPY.gate.signerMissing}</p>
+        <p>{cannotSignTransactions ? COPY.gate.signerCannotSignTransactions : COPY.gate.signerMissing}</p>
       </StopCard>
     ) : (
       <PendingPanel label={COPY.gate.signerConnecting} />

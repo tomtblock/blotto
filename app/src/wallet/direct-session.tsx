@@ -138,11 +138,17 @@ export function useDirectSession(): DirectSession {
   const auth = useMemo<Auth | null>(() => {
     if (!session) return null;
     const signers = directSigners(session.wallet);
+    // A connected wallet with a Solana account and no signer has told us
+    // why: it lacks `solana:signTransaction` (directSigners returns nothing
+    // for such a wallet). Name it, so the play page can (types.ts).
+    const cannotSignTransactions =
+      signers.length === 0 && session.wallet.accounts.length > 0;
     return {
       status: "signed-in",
       walletAddress: session.address,
       email: null,
       signers,
+      ...(cannotSignTransactions ? { signerLimit: "no-sign-transaction" as const } : {}),
       detectedWallets: detected,
       lastError,
       clearError,

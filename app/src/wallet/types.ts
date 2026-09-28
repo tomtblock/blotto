@@ -114,6 +114,17 @@ export interface Auth {
    * dependency points auth → tx (types only) so lib/tx stays provider-free.
    */
   signers: TxSigner[];
+  /**
+   * Why `signers` is empty although a wallet is signed in, when the reason
+   * is KNOWN rather than a reconnect still in flight (2026-09-28, D-E18).
+   * A mobile wallet reached through the mobile wallet standard may offer
+   * sign-and-send only; the tx seam needs a wallet that signs and hands the
+   * transaction back (tx/execute.ts, the founder-ruled signing order), so
+   * such a wallet can sign in but cannot enter. The play page says so in
+   * words instead of waiting eight seconds for a signer that will never
+   * come. Absent means "no known limitation".
+   */
+  signerLimit?: 'no-sign-transaction';
   /** Wallets registered in this browser, connected or not (see above). */
   detectedWallets: readonly DetectedWallet[];
   /** The most recent failure, or null. Cleared by `clearError` or a success. */

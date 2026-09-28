@@ -9,6 +9,7 @@ import { SiteAntics } from '@/components/blott/SiteAntics';
 import { SkipLink } from '@/components/shell/skip-link';
 import { RouteFocus } from '@/components/shell/route-focus';
 import { ForgetBlottStills } from '@/storage/ForgetBlottStills';
+import { MobileWalletAdapter } from '@/wallet/mobile-wallet';
 
 // SELF-HOSTED, NOT FETCHED (2026-09-22). These three were `next/font/google`,
 // which downloads the font files from Google at BUILD TIME. That made every
@@ -93,6 +94,9 @@ export default function RootLayout({
               <SiteAntics />
               <RouteFocus />
               <ForgetBlottStills />
+              {/* Registers the mobile wallet standard on Android only; renders
+                  nothing and downloads nothing anywhere else (D-E18). */}
+              <MobileWalletAdapter />
             </ToastProvider>
           </QueryProvider>
         </AuthProvider>

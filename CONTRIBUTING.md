@@ -145,6 +145,11 @@ runs offline.
 - One logical change per commit, with a message that says what changed and why.
 - Branch from the default branch; never commit to it directly.
 - A commit that touches on-chain money paths, the pass mint, or a published claim says so in its body.
+- A commit that touches the channel logic (the sign-in page, the wallet or tx seams, the response
+  headers, the manifest) says so too, and its author has read
+  [`docs/guide/MOBILE.md` §6](docs/guide/MOBILE.md#6-change-control-what-a-change-means-for-the-phone):
+  the site and the Android package are one build, and that section says which changes need a
+  package rebuild (almost none).
 - Name branches **`<prefix>/<subject>`**, lower case and hyphenated: `feat/`, `fix/`, `docs/`,
   `review/`, `revert/`, `ops/`. Rename a machine-generated branch before opening its PR.
 - Delete a branch when its PR merges (Settings → General → *Automatically delete head branches*).
@@ -162,7 +167,10 @@ Other lanes: `on-chain` (the SBF build and LiteSVM), `rehearsal` (the battle-tes
 rules), `skill-evidence` (nightly regeneration of the study), `security-sweep`
 (`cargo deny` and `cargo audit`), `deployed-drift` (the deployed program matches the source),
 `app-test-signer` (no test signer in the production bundle) and the deploy and monitoring
-workflows described in [`docs/guide/HOSTING.md`](docs/guide/HOSTING.md).
+workflows described in [`docs/guide/HOSTING.md`](docs/guide/HOSTING.md). Nothing builds the
+Android package (`mobile/`): it is built by hand by the holder of its signing key, and `ci-fast`
+still runs in full on any commit that touches only `mobile/`
+([`docs/guide/MOBILE.md` §7](docs/guide/MOBILE.md#7-ci)).
 
 **If the default branch goes red, fixing it outranks new work.** The `stop-the-line` workflow opens
 an issue when a main-branch lane fails and closes it when the lane next passes.

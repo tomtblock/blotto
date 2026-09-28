@@ -404,7 +404,7 @@ each other in sequence. Unpause last, so the first entries land on a site that c
 |---|---|---|
 | Stop new entries | `set-paused --paused true` (proposal) | Entries are refused on chain. Open pools still settle or refund |
 | Resume | `set-paused --paused false` | Entries accepted, and the daemon opens pools again |
-| Ship a front-end change | Merge to `main` | Vercel builds `main`. A variable change needs a manual redeploy |
+| Ship a front-end change | Merge to `main` | Vercel builds `main`. A variable change needs a manual redeploy. The Android package shows the change on its next launch — a page already open is refused at the seal until reloaded ([`MOBILE.md` §6](MOBILE.md#6-change-control-what-a-change-means-for-the-phone)) |
 | Ship a backend change | Actions → deploy-backend, on `main` | Manual by design. A pool mid-settlement resumes |
 | See what is running | Actions → backend-status | Read-only forensics for all four apps |
 | Rebuild the indexer | Actions → indexer-backfill | Idempotent |
@@ -428,7 +428,8 @@ What each outside service does, what talks to it, and what happens when it fails
 
 | Vendor | Job | Talks to | Configured by | When it fails |
 |---|---|---|---|---|
-| **Vercel** | Hosts the Next.js app and builds `main` on every merge. Serves server-side reads of the indexer. The verify page runs the scoring engine in the browser | Browser, indexer | Project settings (above) | The site is down. Nothing on chain or in the services changes |
+| **Vercel** | Hosts the Next.js app and builds `main` on every merge. Serves server-side reads of the indexer. The verify page runs the scoring engine in the browser. Its commit hash stamps each build (`NEXT_PUBLIC_BUILD_VERSION`, D-E18), which the play page checks before a seal | Browser, indexer, the Android package | Project settings (above) | The site is down, on every channel. Nothing on chain or in the services changes |
+| **Solana dApp Store** (not yet) | Will distribute the Android package — a WebView shell that opens this site — once the mainnet launch and its legal review are through. Publisher, app and release records are minted on mainnet by a publisher wallet | Phones running the package | [`MOBILE.md`](MOBILE.md) §8; the signing key per §4 there | Installs and updates stop. Installed packages keep opening the site |
 | **Privy** | Social sign-in (Google, X), the embedded Solana wallet created at a social sign-in, key export, and external-wallet sign-in (hidden, see above) | Browser only | `NEXT_PUBLIC_PRIVY_*`, the provider dashboard | Sign-in stops working. The site still renders |
 | **Helius** | The RPC for every read and send (browser, daemon, review, indexer backfill), and the webhook that pushes finalized program transactions to the indexer | Browser, services, Solana | `NEXT_PUBLIC_SOLANA_RPC_URL`, `BLOTTO_DEVNET_RPC_URL`, `BLOTTO_HELIUS_WEBHOOK_SECRET` | Browsers cannot read balances or send. The daemon stalls (its `lastTick.at` goes stale). The indexer catches up from RPC afterwards |
 | **Fly.io** | Four machines in Frankfurt, one app per service | Postgres, RPC, the vendors below | `deploy/fly/*.fly.toml`, plus secrets staged by the deploy workflow | Each service fails closed on its own |

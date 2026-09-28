@@ -512,6 +512,12 @@ routes that compute the same kind of statistics from real pools.
   exercised. The field in every trial pool came from the test's own generators.
 - **Load**: T6's fill used 64 seats plus 9 late attempts. No sustained multi-pool load test has
   been run.
+- **The mobile channel** (D-E18, 2026-09-28): the channel detection, the sign-in surface per
+  channel, the build check and the loopback-only header widening are unit-tested
+  ([`../guide/MOBILE.md` §5](../guide/MOBILE.md#5-testing-on-an-emulator-or-a-phone) names the
+  files), and the fixture-mode production build and the journey suite pass with them. No Android
+  emulator, no real mobile wallet and no Android package has been exercised: the mobile wallet
+  standard has not connected a wallet, signed a statement or signed an entry in any run.
 
 ---
 
