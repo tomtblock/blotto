@@ -703,7 +703,7 @@ Players lodge complaints through the site. Complaints about a decision must be s
 may be unsigned. The review service stores them in an append-only table. The published windows
 are **5 working days to acknowledge and 30 days to answer**
 (`COMPLAINT_ACKNOWLEDGE_WORKING_DAYS`, `COMPLAINT_RESOLVE_DAYS` in
-`backend/detection/src/complaints.ts`). The service serves these values, so the page never
+`backend/detection/src/complaint-windows.ts`). The service serves these values, so the page never
 re-types them.
 
 | | Route | Authenticated by |

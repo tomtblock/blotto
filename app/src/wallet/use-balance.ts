@@ -19,10 +19,8 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
-import { address } from "@solana/kit";
-import { useMemo } from "react";
 import { rpcUrl } from "@/chain/rpc";
-import { makeTxRpc, type TxRpc } from "@/tx/tx-rpc";
+import type { TxRpc } from "@/tx/tx-rpc";
 
 export const BALANCE_POLL_MS = 15_000;
 export const BALANCE_STALE_MS = 5_000;
@@ -47,12 +45,27 @@ export function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 
 export const balanceQueryKey = (wallet: string | null) => ["balance", wallet] as const;
 
+/*
+ * The Solana client (`@solana/kit`, the largest module in the app's first
+ * load) is imported HERE, on the first read, rather than at the top: the
+ * header calls this hook on every page, and until a wallet is signed in
+ * there is nothing to read — so a visitor never downloads it (measured
+ * 2026-09-27: 176 KB gzipped off the landing's JavaScript).
+ */
+async function liveRpc(): Promise<TxRpc> {
+  const { makeTxRpc } = await import("@/tx/tx-rpc");
+  return makeTxRpc(rpcUrl());
+}
+
 export function useBalance(wallet: string | null, rpcOverride?: TxRpc) {
-  const rpc = useMemo(() => rpcOverride ?? makeTxRpc(rpcUrl()), [rpcOverride]);
   return useQuery<bigint, Error>({
     queryKey: balanceQueryKey(wallet),
     enabled: wallet !== null,
-    queryFn: () => withTimeout(rpc.getBalance(address(wallet as string)), BALANCE_TIMEOUT_MS),
+    queryFn: async () => {
+      const rpc = rpcOverride ?? (await liveRpc());
+      const { address } = await import("@solana/kit");
+      return withTimeout(rpc.getBalance(address(wallet as string)), BALANCE_TIMEOUT_MS);
+    },
     refetchInterval: BALANCE_POLL_MS,
     staleTime: BALANCE_STALE_MS,
     retry: 1,

@@ -44,12 +44,35 @@ import { FIXTURE_API } from './fixture';
  */
 const READ_TIMEOUT_MS = 8_000;
 
+/*
+ * SERVER READS ARE SHARED FOR TEN SECONDS (2026-09-27, page speed). A page
+ * rendered on the server used to read the indexer afresh on every request
+ * (`cache: 'no-store'`), which put a round trip to the read API — from the
+ * app's region to the indexer's — in front of every visitor's first byte,
+ * and made the landing and the pool page uncacheable at the edge. With
+ * `next.revalidate` the same read is served from Next's data cache for
+ * this long and refreshed behind the next request, so the landing and a
+ * pool page are edge-cached for ten seconds and a burst of visitors costs
+ * the indexer one read. What can be ten seconds old: a seat count and a
+ * pool's state on a server-rendered page. The clock is unaffected (every
+ * countdown carries the server's own time and derives the offset once,
+ * components/ui/countdown.tsx), a browser-side read (the play page's gates,
+ * the bell, the profile) is never cached, and nothing a player is PAID on
+ * is read here.
+ *
+ * PHASE-N-REVIEW: ten seconds rather than a minute because a closing
+ * pool's seat count is on the picker; the founder may want it shorter or
+ * longer once real traffic shows the indexer's read load.
+ */
+const SERVER_READ_TTL_S = 10;
+
 class HttpIndexerApi implements IndexerApi {
   constructor(private readonly base: string) {}
 
   private async get<T>(path: string): Promise<T | null> {
+    const onServer = typeof window === 'undefined';
     const res = await fetch(`${this.base}${path}`, {
-      cache: 'no-store',
+      ...(onServer ? { next: { revalidate: SERVER_READ_TTL_S } } : { cache: 'no-store' }),
       signal: AbortSignal.timeout(READ_TIMEOUT_MS),
     });
     // 404: no such row. 400: the path names something that cannot exist

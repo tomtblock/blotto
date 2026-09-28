@@ -12,13 +12,16 @@
  * Only the visible card mounts a <video>; the others hold their poster, so
  * the page never decodes five loops at once (the motion rule — one ambient
  * loop per viewport — is kept: the hero reel is above, this is below the
- * fold). Reduced motion renders the poster only, exactly as the hero does.
+ * fold). The clip is an AmbientClip that plays only while in view and
+ * fetches nothing before (2026-09-27, page speed: it used to autoplay
+ * off-screen and stream its whole file on landing). Reduced motion renders
+ * the poster only, exactly as the hero does.
  *
  * The step COPY is untouched; this component only decides presentation.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { usePrefersReducedMotion } from '@/components/blot/springs';
+import { AmbientClip } from '@/components/ui/ambient-clip';
 import { COPY } from '@/copy';
 
 export interface HowItWorksStep {
@@ -37,7 +40,6 @@ const SWIPE_PX = 40;
 
 export function HowItWorksCarousel({ steps }: { steps: readonly HowItWorksStep[] }) {
   const [index, setIndex] = useState(0);
-  const reduced = usePrefersReducedMotion();
   const count = steps.length;
   const touchX = useRef<number | null>(null);
   const regionRef = useRef<HTMLDivElement>(null);
@@ -85,25 +87,14 @@ export function HowItWorksCarousel({ steps }: { steps: readonly HowItWorksStep[]
         aria-live="polite"
       >
         <div className="relative aspect-video w-full bg-brand-pale-pink">
-          {reduced ? (
-            // eslint-disable-next-line @next/next/no-img-element -- poster swap for a video
-            <img src={clip.poster} alt="" aria-hidden="true" className="h-full w-full object-cover" />
-          ) : (
-            <video
-              key={index}
-              className="h-full w-full object-cover"
-              autoPlay
-              muted
-              loop
-              playsInline
-              preload="metadata"
-              poster={clip.poster}
-              aria-hidden="true"
-            >
-              <source src={clip.mp4} type="video/mp4" />
-              <source src={clip.webm} type="video/webm" />
-            </video>
-          )}
+          <AmbientClip
+            key={index}
+            tiers={[{ mp4: clip.mp4, webm: clip.webm }]}
+            poster={clip.poster}
+            className="h-full w-full object-cover"
+            playWhenVisible={0.3}
+            preload="none"
+          />
         </div>
         <div className="grid gap-4 p-5 sm:grid-cols-[1fr_auto] sm:items-end sm:p-7">
           <div>

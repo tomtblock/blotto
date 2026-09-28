@@ -66,7 +66,7 @@ import {
 import {
   COMPLAINT_ACKNOWLEDGE_WORKING_DAYS,
   COMPLAINT_RESOLVE_DAYS,
-} from '@blotto/detection/complaints';
+} from '@blotto/detection/complaint-windows';
 
 /** Small display integers from the shared mirrors of the program constants. */
 const MIN_FIELD = Number(MIN_SEATS);

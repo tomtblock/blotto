@@ -44,11 +44,20 @@
  *     payment bug.
  */
 
-import { createHash } from 'crypto';
+import { sha256 } from '@noble/hashes/sha256';
 
-/** 8-byte Anchor event discriminator for `<Name>`: `sha256("event:<Name>")[..8]`. */
+/**
+ * 8-byte Anchor event discriminator for `<Name>`: `sha256("event:<Name>")[..8]`.
+ *
+ * Hashed with `@noble/hashes` rather than Node's `crypto` (2026-09-27, page
+ * speed): this module also runs in the browser — the app decodes the
+ * register transaction's logs and reads published events — and Node's
+ * `crypto` there is a 360 KB polyfill of the whole OpenSSL surface, loaded
+ * by every page that reaches this file, to compute one SHA-256. The
+ * digest is byte-identical.
+ */
 export function anchorEventDiscriminator(name: string): Buffer {
-  return createHash('sha256').update(`event:${name}`).digest().subarray(0, 8);
+  return Buffer.from(sha256(`event:${name}`)).subarray(0, 8);
 }
 
 /** The `Program data: ` prefix Anchor writes for each emitted event. */

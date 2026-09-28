@@ -23,6 +23,7 @@
       "@solana/web3.js": ["./node_modules/@solana/web3.js"],
       "@blotto/scoring": ["../backend/scoring/src"],
       "@blotto/sealing": ["../backend/sealing/src"],
+      "@blotto/sealing/*": ["../backend/sealing/src/*"],
       "@blotto/shared/*": ["../backend/_shared/src/*"],
       "@blotto/packet/*": ["../backend/packet/src/*"],
       "@blotto/reveal/*": ["../backend/reveal/src/*"],

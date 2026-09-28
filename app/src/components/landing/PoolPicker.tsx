@@ -163,6 +163,7 @@ export function PoolPicker({ tiers, serverTime }: { tiers: readonly PickerTier[]
                 poster={CLIP[mode].poster}
                 className="absolute inset-0 h-full w-full object-cover"
                 playWhenVisible={0.4}
+                preload="none"
               />
             </div>
 

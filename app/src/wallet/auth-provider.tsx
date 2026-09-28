@@ -46,6 +46,32 @@ import type { Auth } from "./types";
 const PrivyBridge = dynamic(() => import("./privy-bridge"), { ssr: false });
 
 /*
+ * WHEN THE BRIDGE LOADS (2026-09-27, page speed). The provider SDK and the
+ * wallet adapters it carries are the largest thing the browser downloads
+ * (about 500 KB gzipped over three chunks), and they used to start the
+ * moment any page mounted — ahead of the hero, the card and the board. A
+ * returning session (the provider keeps its token under `privy:` keys in
+ * storage) still loads it at once, so a signed-in player's header settles
+ * as before. A first-time visitor gets it once the page has painted and
+ * the main thread is idle (bounded at 2.5 s), or on their first touch or
+ * keypress, whichever comes first — so pressing Sign in never waits on a
+ * timer. The ten-second deadline below starts when the bridge mounts.
+ */
+const IDLE_LOAD_TIMEOUT_MS = 2_500;
+const SESSION_KEY_PREFIX = "privy:";
+
+function hasProviderSession(): boolean {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      if (localStorage.key(i)?.startsWith(SESSION_KEY_PREFIX)) return true;
+    }
+  } catch {
+    // Storage closed: treat as a first visit.
+  }
+  return false;
+}
+
+/*
  * UPDATE-LOOP RULE (production incident, 2026-08-28): the bridge's adapter
  * rebuilds its Auth object whenever any provider-SDK hook return changes
  * identity — and once the SDK finishes initializing (real credentials
@@ -148,6 +174,33 @@ class BridgeBoundary extends Component<
 export function AuthProvider({ children }: { children: ReactNode }) {
   const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
   const [live, setLive] = useState<Auth | null>(null);
+  // Whether the bridge should be mounted yet (see WHEN THE BRIDGE LOADS).
+  // The initialiser runs once, in the browser; on the server the bridge is
+  // never rendered (ssr: false), so the markup agrees either way.
+  const [wantBridge, setWantBridge] = useState<boolean>(() => typeof window !== "undefined" && hasProviderSession());
+  useEffect(() => {
+    if (wantBridge || !appId) return;
+    let done = false;
+    const go = () => {
+      if (done) return;
+      done = true;
+      setWantBridge(true);
+    };
+    // Safari has no requestIdleCallback; a plain timer stands in there.
+    const hasIdle = typeof window.requestIdleCallback === "function";
+    const idle = hasIdle
+      ? window.requestIdleCallback(go, { timeout: IDLE_LOAD_TIMEOUT_MS })
+      : window.setTimeout(go, IDLE_LOAD_TIMEOUT_MS);
+    const opts = { once: true, passive: true } as const;
+    window.addEventListener("pointerdown", go, opts);
+    window.addEventListener("keydown", go, opts);
+    return () => {
+      if (hasIdle) window.cancelIdleCallback(idle);
+      else window.clearTimeout(idle);
+      window.removeEventListener("pointerdown", go);
+      window.removeEventListener("keydown", go);
+    };
+  }, [wantBridge, appId]);
   // Set once, by the boundary below, when the bridge cannot initialise.
   const [bridgeRejected, setBridgeRejected] = useState(false);
   // Set once, by the deadline below, when the bridge has not reported in
@@ -196,13 +249,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * the cause without anyone having to click a disabled button first.
    */
   useEffect(() => {
-    if (injected || live !== null || !appId || bridgeRejected || bridgeTimedOut) return;
+    if (injected || live !== null || !appId || !wantBridge || bridgeRejected || bridgeTimedOut) return;
     const timer = setTimeout(() => {
       console.warn(unavailableMessage("unreachable"));
       setBridgeTimedOut((prev) => (prev ? prev : true));
     }, AUTH_INIT_TIMEOUT_MS);
     return () => clearTimeout(timer);
-  }, [injected, live, appId, bridgeRejected, bridgeTimedOut]);
+  }, [injected, live, appId, wantBridge, bridgeRejected, bridgeTimedOut]);
 
   const value = useMemo<Auth>(
     () =>
@@ -223,7 +276,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider value={value}>
-      {appId && !bridgeRejected ? (
+      {appId && wantBridge && !bridgeRejected ? (
         <BridgeBoundary onFailure={onBridgeFailure}>
           <PrivyBridge appId={appId} onAuth={onAuth} />
         </BridgeBoundary>
