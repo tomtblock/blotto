@@ -1178,7 +1178,7 @@ export const COPY = {
    *
    * THE TWO WINDOWS ARE FUNCTIONS OF THE CONSTANTS, never typed figures
    * (COMPLAINT_ACKNOWLEDGE_WORKING_DAYS / COMPLAINT_RESOLVE_DAYS in
-   * backend/detection/src/complaints.ts), for the reason every number on a
+   * backend/detection/src/complaint-windows.ts), for the reason every number on a
    * player-facing surface is: on 2026-09-12 a constant moved and three
    * hand-typed strings kept the old figure while every gate reported clean.
    *

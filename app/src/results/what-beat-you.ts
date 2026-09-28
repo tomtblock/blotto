@@ -24,7 +24,8 @@
  * battle sets leave this module.
  */
 
-import { battlesCommitment } from '@blotto/sealing';
+// The leaf module, not the barrel (see entry/submit.ts for why).
+import { battlesCommitment } from '@blotto/sealing/payload';
 import { compareBattle, decodeBattleSet, type BattleComparison, type BattleSet } from '@blotto/scoring';
 import { bundleMode, type PublishedBundle } from '@/verify/logic';
 

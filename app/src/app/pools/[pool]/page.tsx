@@ -47,6 +47,11 @@ import './pool-page.css';
  */
 const RAIL = [{ mp4: '/motion/pool/rail.mp4', webm: '/motion/pool/rail.webm' }];
 const RAIL_POSTER = '/motion/pool/rail.jpg';
+/* The rails exist from lg (pool-page.css) and the strip below it; each
+ * mounts its <video> only at its own widths (2026-09-27, page speed: a
+ * phone streamed the two hidden rails, a desktop the hidden strip). */
+const RAIL_MEDIA = '(min-width: 1024px)';
+const STRIP_MEDIA = '(max-width: 1023.98px)';
 
 const MIN_SEATS_N = Number(MIN_SEATS);
 const FILL_HOURS = Number(DEFAULT_FILL_DEADLINE_SECS / 3600n);
@@ -89,12 +94,12 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
       <div className="flex-1 bg-brand-pink">
       <div className="pool-field flex w-full">
         <aside className="pool-rail pool-rail-left" aria-hidden="true">
-          <AmbientClip tiers={RAIL} poster={RAIL_POSTER} className="pool-rail-clip" />
+          <AmbientClip tiers={RAIL} poster={RAIL_POSTER} className="pool-rail-clip" media={RAIL_MEDIA} />
           <div className="pool-rail-fade" />
         </aside>
       <main id="main" className="mx-auto w-full max-w-3xl px-4 pt-6 pb-24 sm:px-6">
         <div className="pool-strip lg:hidden" aria-hidden="true">
-          <AmbientClip tiers={RAIL} poster={RAIL_POSTER} className="pool-strip-clip" playWhenVisible={0.5} />
+          <AmbientClip tiers={RAIL} poster={RAIL_POSTER} className="pool-strip-clip" playWhenVisible={0.5} preload="none" media={STRIP_MEDIA} />
         </div>
         <div className="mb-2">
           <BackLink href="/pools" tone="berry">
@@ -215,7 +220,7 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
         )}
       </main>
         <aside className="pool-rail pool-rail-right" aria-hidden="true">
-          <AmbientClip tiers={RAIL} poster={RAIL_POSTER} className="pool-rail-clip" mirror />
+          <AmbientClip tiers={RAIL} poster={RAIL_POSTER} className="pool-rail-clip" mirror media={RAIL_MEDIA} />
           <div className="pool-rail-fade" />
         </aside>
       </div>

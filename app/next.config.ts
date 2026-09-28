@@ -176,6 +176,24 @@ const nextConfig: NextConfig = {
     ].join("; ");
 
     return [
+      /*
+       * THE CLIPS AND SPRITES CACHE FOR A DAY (2026-09-27, page speed). The
+       * platform's default for files under public/ is `max-age=0,
+       * must-revalidate`: every visit re-asks for every clip and poster,
+       * a round trip each even when the answer is 304. The files change
+       * rarely and by a whole re-encode; a day in the browser cache, then a
+       * week of serving the old copy while the new one is fetched behind
+       * it, is the right trade. A swapped clip reaches everyone within a
+       * day; a renamed file reaches them at once.
+       */
+      {
+        source: "/motion/:path*",
+        headers: [{ key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" }],
+      },
+      {
+        source: "/blott/:path*",
+        headers: [{ key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" }],
+      },
       {
         source: "/:path*",
         headers: [

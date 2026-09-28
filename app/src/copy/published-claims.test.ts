@@ -68,7 +68,7 @@ import { REVIEW_WINDOW_SECS } from '@blotto/scoring';
 import {
   COMPLAINT_ACKNOWLEDGE_WORKING_DAYS,
   COMPLAINT_RESOLVE_DAYS,
-} from '@blotto/detection/complaints';
+} from '@blotto/detection/complaint-windows';
 import { COPY } from './index';
 import { rulesSections } from '@/app/rules/rules.config';
 
@@ -472,14 +472,14 @@ const TERMS_PROMISES: readonly Promised[] = [
     // it rather than typing it; the test below pins the rendered sentence
     // to the constant. A window one person can meet while a pool is
     // running — a window we miss is worse than one we never published.
-    proof: 'backend/detection/src/complaints.ts',
+    proof: 'backend/detection/src/complaint-windows.ts',
   },
   {
     kind: 'mechanism',
     phrase: 'working days and answer it within',
     commitment:
       'A complaint is answered within the published window (thirty days at this version).',
-    proof: 'backend/detection/src/complaints.ts',
+    proof: 'backend/detection/src/complaint-windows.ts',
   },
   {
     kind: 'mechanism',

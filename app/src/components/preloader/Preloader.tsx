@@ -218,11 +218,11 @@ export function Preloader({ onDone }: PreloaderProps) {
           onEnded={() => dispatch({ type: 'ended' })}
           onClick={settledOrStatic ? enter : undefined}
         >
-          <source src={src.mp4} type="video/mp4" />
-          {src.webm && (
-            /* Last source: its failure means nothing else can play. */
-            <source src={src.webm} type="video/webm" onError={() => dispatch({ type: 'video-error' })} />
-          )}
+          {/* VP9 first (2026-09-27, page speed: the same frames at 70% of the
+              bytes, and every browser but Safari plays it); H.264 last, and
+              its failure means nothing else can play. */}
+          {src.webm && <source src={src.webm} type="video/webm" />}
+          <source src={src.mp4} type="video/mp4" onError={() => dispatch({ type: 'video-error' })} />
         </video>
       )}
       {phase === 'static' && (

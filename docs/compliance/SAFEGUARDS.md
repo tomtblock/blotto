@@ -334,8 +334,8 @@ five working days to acknowledge and thirty days to resolve. Complaints that ask
 change must be signed by the wallet; others need not be. Every event in a complaint's life is an
 append-only row, and every answer is signed by a reviewer key and records who answered.
 
-**Enforced by.** `backend/detection/src/complaints.ts` (`COMPLAINT_ACKNOWLEDGE_WORKING_DAYS`,
-`COMPLAINT_RESOLVE_DAYS`, `mayReadComplaint`), `complaints-pg.ts`; `app/src/app/complaints/`;
+**Enforced by.** `backend/detection/src/complaint-windows.ts` (`COMPLAINT_ACKNOWLEDGE_WORKING_DAYS`,
+`COMPLAINT_RESOLVE_DAYS`), `complaints.ts` (`mayReadComplaint`), `complaints-pg.ts`; `app/src/app/complaints/`;
 `app/src/app/admin/review/complaints-desk.ts`.
 
 **Proven by.** `backend/detection/test/complaints.spec.ts`.

@@ -21,11 +21,12 @@
  * today (submit.test.ts).
  */
 
-import {
-  encodePayload,
-  seal,
-  payloadBattlesHash,
-} from '@blotto/sealing';
+// The LEAF modules, never the package barrel: `@blotto/sealing`'s index
+// also re-exports the Turnkey and Postgres custody, and a browser bundle
+// that reaches them carries a Node crypto polyfill it never runs
+// (measured 2026-09-27: 115 KB gzipped on the play page).
+import { encodePayload, payloadBattlesHash } from '@blotto/sealing/payload';
+import { seal } from '@blotto/sealing/sealedbox';
 import type { Allocation } from '@/battle/allocation';
 import type { BoardMode } from '@/battle/board/mode';
 import type { IssuedPacketBytes } from './register-tx';

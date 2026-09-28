@@ -56,7 +56,7 @@
  * is a separate question from whether we publish them.
  */
 
-import { COMPLAINT_RESOLVE_DAYS } from '@blotto/detection/complaints';
+import { COMPLAINT_RESOLVE_DAYS } from '@blotto/detection/complaint-windows';
 import { ESCROW_AUTO_RELEASE_SECS, REVIEW_WINDOW_SECS } from '@blotto/scoring';
 
 const REVIEW_HOURS = Number(REVIEW_WINDOW_SECS / 3600n);

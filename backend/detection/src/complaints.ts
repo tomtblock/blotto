@@ -42,6 +42,14 @@ import {
   canonicalComplaintMessage,
 } from './complaint-message';
 import { REVIEW_SIGNATURE_WINDOW_MS, isCanonicalIsoInstant, type SubmissionRefusal } from './auth';
+import { COMPLAINT_ACKNOWLEDGE_WORKING_DAYS, COMPLAINT_RESOLVE_DAYS } from './complaint-windows';
+
+/**
+ * The published response windows live in `complaint-windows.ts` (a module
+ * with no imports, so the copy can quote them without this file's crypto);
+ * re-exported here for the service and its tests.
+ */
+export { COMPLAINT_ACKNOWLEDGE_WORKING_DAYS, COMPLAINT_RESOLVE_DAYS };
 
 /**
  * The five categories, and whether a wallet signature is required.
@@ -73,19 +81,6 @@ export function signatureRequired(category: ComplaintCategory): boolean {
 
 /** The player's own words: non-empty, bounded like the appeal grounds. */
 export const COMPLAINT_TEXT_MAX = 4000;
-
-/**
- * The published response windows, in working days and days.
- *
- * These are the terms' undertaking and are deliberately LONGER than a
- * support desk would like: five working days to acknowledge and thirty days
- * to resolve are windows one person can meet while a pool is running, and a
- * window we miss is worse than a window we never published. Both are
- * registered claims (`app/src/copy/published-claims.test.ts`) and the copy
- * reads them from here rather than typing a figure.
- */
-export const COMPLAINT_ACKNOWLEDGE_WORKING_DAYS = 5;
-export const COMPLAINT_RESOLVE_DAYS = 30;
 
 /** What a player submits. `signature`/`signedAt` are absent when unsigned. */
 export interface ComplaintSubmission {
