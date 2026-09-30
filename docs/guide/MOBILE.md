@@ -189,13 +189,36 @@ wallet rows (item 2). Everything else is the site. To watch the wallet handshake
 `cluster='devnet'` on the sign-in.
 
 **Verified 2026-09-30** (emulator: Pixel, Android 15 / API 35 with Google Play; Phantom on Solana
-devnet; the site at `www.blotto.gg`): the playground's capability check — Phantom signs a
-transaction, the entry path's requirement; sign-in and a devnet pool entry in Chrome (after the
-local-network grant); the package built, signed and installed, opening on the wallet rows; the
-`solana-wallet://` launch from inside the shell, once §3's `<queries>` block was added. Items 7 and
-8 were written from that run's log (§9) and are the next thing to confirm there: one association
-per sign-in, no "Revoking AuthRecord". One emulator at a time — two of them, with Phantom and the
-shell open, froze the machine twice.
+devnet; the site at `www.blotto.gg`), in order, each from Phantom's own log:
+
+- the playground's capability check — Phantom signs a transaction, the entry path's requirement;
+- sign-in and a devnet pool entry in Chrome (after the local-network grant);
+- the package built, signed and installed, opening on the wallet rows (item 2);
+- **inside the shell, with §3's two patches and item 9's file live:** the `solana-wallet://` launch;
+  sign-in as one session (item 7: one `associate/local`, `Authorize request completed
+  successfully`, `cluster='devnet'`); the verifier passing — `MWA session started … callingPackage=
+  gg.blotto.app` and `IdentityVerifier: DAL verification for https://www.blotto.gg (caller=
+  gg.blotto.app): true`; then three silent re-authorizations (`AuthRecord still valid; reissuing`)
+  each followed by a signature — the age attestation and the seal's ciphertext message, twice. No
+  "Revoking AuthRecord". That is the whole wallet integration the store needs.
+
+**Not yet seen inside the shell:** the entry transaction landing. On the two attempts the seal's
+ciphertext signature completed and the flow stopped before any `signTransaction` session with "The
+network request did not go through" — the sentence for a fetch or RPC call that threw — and by
+then the emulator had degraded to the point that Chrome, the morning's control, failed one step
+earlier (Phantom opening to its home screen: the page never reached its local socket). Nothing in
+the log points at the app; the emulator does. Confirm on a real phone, or on a cold-booted
+emulator with the diagnostic build below and the WebView's Network tab open.
+
+**Reading the WebView's network from the Mac** (diagnostic build only — revert before any store
+build): in the generated `MainActivity.kt` change `setWebContentsDebuggingEnabled(BuildConfig.DEBUG)`
+to `(true)` and `isDebug = BuildConfig.DEBUG` to `true`, rebuild, reinstall; Chrome on the Mac →
+`chrome://inspect#devices` → *inspect* the Blotto Cup WebView → Network. The console then reaches
+`adb logcat` too. A release build forwards neither.
+
+**One emulator at a time**, and nothing else heavy on the machine: two emulators with Phantom and
+the shell open froze it twice, and after four hours the board art rendered as noise and requests
+stopped completing. The clips (§9) are most of the load; a cold boot restores it for a while.
 
 **A real phone**: enable developer options and USB debugging, plug it in, and use the same
 `device install`. A Seeker answers the open question in §9 about its built-in wallet.
