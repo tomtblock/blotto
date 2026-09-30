@@ -203,13 +203,12 @@ devnet; the site at `www.blotto.gg`), in order, each from Phantom's own log:
   each followed by a signature — the age attestation and the seal's ciphertext message, twice. No
   "Revoking AuthRecord". That is the whole wallet integration the store needs.
 
-**Not yet seen inside the shell:** the entry transaction landing. On the two attempts the seal's
-ciphertext signature completed and the flow stopped before any `signTransaction` session with "The
-network request did not go through" — the sentence for a fetch or RPC call that threw — and by
-then the emulator had degraded to the point that Chrome, the morning's control, failed one step
-earlier (Phantom opening to its home screen: the page never reached its local socket). Nothing in
-the log points at the app; the emulator does. Confirm on a real phone, or on a cold-booted
-emulator with the diagnostic build below and the WebView's Network tab open.
+**And the entry itself, 04:22 UTC:** after §2 item 10 deployed, the same shell (no rebuild — the
+site carries the fix) sealed an easy-mode entry into devnet pool #50 and the play page showed
+"I'm in. Seat 1 of 64". The first two attempts had stopped after the ciphertext with "The network
+request did not go through" — the WebView's Network tab showed every request green, and the cause
+was the WebView's missing Ed25519 (§9). That closes the loop the store needs: everything a player
+does, from the app drawer to a seat.
 
 **Reading the WebView's network from the Mac** (diagnostic build only — revert before any store
 build): in the generated `MainActivity.kt` change `setWebContentsDebuggingEnabled(BuildConfig.DEBUG)`
