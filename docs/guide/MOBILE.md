@@ -68,6 +68,7 @@ the server and during hydration, so every page's first paint is the web page.
 | 7 | Android (browser and shell) | **Sign-in is one wallet request.** The direct route signs in through the wallet's own sign-in (`solana:signIn`: connect and the signed statement together, one-line statement) instead of connect and then a separate signature. A wallet that offers no sign-in, or answers it with no result, takes the two-step route as on the web | A wallet app is reached one session per request, and two sessions in a row race inside the shell: the WebView fires the second intent while the wallet's screen is still closing, and the wallet revokes the token it just granted (found 2026-09-30 on an emulator; §9 has the log) | `app/src/wallet/direct-sign-in.ts` (`walletSignIn`); `direct-session.tsx` |
 | 8 | Android (browser and shell) | **No wallet prompt launches while the page is not in front.** Before every prompt — the seal signs a message and then, a few RPC round trips later, the entry transaction — the page waits until it is visible and focused, plus 300 ms for the wallet's screen to finish closing; 2.5 s at most, then it goes anyway | The same race, for the two signatures the seal takes in a row | `app/src/wallet/in-front.ts`; `direct-sign-in.ts` (`settle`) |
 | 9 | All (read by the shell's wallet) | **The site publishes the package's identity** at `/.well-known/assetlinks.json` — the package id and the signing certificate's SHA-256 — and the gate lets that path through without a cookie. The shell, for its part, launches the wallet with `startActivityForResult` (§3's patch) so the wallet can read which app is asking | A mobile wallet verifies WHO is asking before it re-authorizes without a prompt: it reads the calling package and checks it against that file on the identity URI's host (Solana Mobile's `digital-asset-links-android`, used by MWA wallets). Unverified, Phantom allows the first connect — the player approves it on screen — and refuses every silent re-authorization after it, so no signature ever completes (found 2026-09-30; §9). A browser is exempt: the wallet trusts the page's origin | `app/src/channel/android-app.ts`; `app/src/app/.well-known/assetlinks.json/route.ts`; `app/src/proxy.ts`; `mobile/patch-shell.sh` |
+| 10 | Any browser without Ed25519 in WebCrypto — in practice an older Android WebView | **Ed25519 is polyfilled where `crypto.subtle` lacks it**, before the entry's pass-asset keypair is generated: a probe first, Solana's own polyfill downloaded and installed only on failure. A modern browser pays nothing | The entry transaction is partial-signed by a keypair made on the device with WebCrypto Ed25519, which Chrome shipped by default only in 137; the emulator's WebView was Chromium 124, and kit's guard threw after the ciphertext was stored and before the wallet was asked (§9). The dApp Store package is a WebView | `app/src/chain/ed25519.ts`; `app/src/entry/services.ts`; `@solana/webcrypto-ed25519-polyfill` |
 
 Two consequences that are not code changes:
 
@@ -352,6 +353,16 @@ not set up.
     publishing the package's identity. Phantom reads that file with Solana Mobile's own verifier,
     which follows no redirect and requires content type exactly `application/json` — which is
     why the gate exempts `/.well-known/` and the route sets the header by hand.
+- **The WebView can be older than the phone's Chrome, and lack Ed25519 in WebCrypto.** With the
+  wallet fully working (§5), the entry stopped after the ciphertext was stored and before any
+  `signTransaction` session, showing "The network request did not go through" — while the
+  WebView's Network tab (read as §5 describes) showed every request green: `packet` 200,
+  `ciphertexts` 204, the RPC calls 200. The sentence is the play page's catch-all for an
+  exception in the build, and the exception is kit's `ED25519_ALGORITHM_UNIMPLEMENTED` (3610002)
+  from `generateKeyPair` — the emulator's WebView is Chromium **124** (`chrome://inspect` shows
+  the version), and Chrome shipped Ed25519 in `crypto.subtle` by default in 137. §2 item 10 is the
+  answer. A real phone updates its WebView through Play and is usually current; the emulator
+  image's is frozen, which makes it the better test.
 - **Two wallet sessions in a row race inside the shell** (2026-09-30, Android 15 emulator,
   Phantom). The log of the sign-in as it was — connect, then a separate signature:
 
