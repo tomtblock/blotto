@@ -11,7 +11,7 @@ meets comes from the site the shell opens, so the site and the app are always th
 | Path | What it is |
 |---|---|
 | `webshell.env.example` | The two environment variable names the build reads (key passwords). Names only |
-| `add-wallet-queries.sh` | Adds to the generated `AndroidManifest.xml` the `<queries>` block Android 11+ needs before the shell may launch the wallet app; `webshell init` writes none. Run after every `init` (manual §3) |
+| `patch-shell.sh` | The two patches the generated project needs before a wallet app works with it — the Android 11+ `<queries>` block, and the wallet launched with `startActivityForResult` so the wallet can verify the app. `webshell init` writes neither. Run after every `init` (manual §3) |
 | `.gitignore` | Refuses the signing key, its passwords, and build output |
 | `blotto-cup/` | The generated Android project, once `webshell init` has been run (see the manual §3). Not present until then |
 

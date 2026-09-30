@@ -67,6 +67,7 @@ the server and during hydration, so every page's first paint is the web page.
 | 6 | All | A **web app manifest** at `/manifest.webmanifest` and an icon at `/icon.png` | Browsers use it for "add to home screen"; `webshell init --manifest` reads it to seed the package's name, icon and start URL, so the shell and the site cannot drift on those | `app/src/app/manifest.ts`; `app/public/icon.png` |
 | 7 | Android (browser and shell) | **Sign-in is one wallet request.** The direct route signs in through the wallet's own sign-in (`solana:signIn`: connect and the signed statement together, one-line statement) instead of connect and then a separate signature. A wallet that offers no sign-in, or answers it with no result, takes the two-step route as on the web | A wallet app is reached one session per request, and two sessions in a row race inside the shell: the WebView fires the second intent while the wallet's screen is still closing, and the wallet revokes the token it just granted (found 2026-09-30 on an emulator; §9 has the log) | `app/src/wallet/direct-sign-in.ts` (`walletSignIn`); `direct-session.tsx` |
 | 8 | Android (browser and shell) | **No wallet prompt launches while the page is not in front.** Before every prompt — the seal signs a message and then, a few RPC round trips later, the entry transaction — the page waits until it is visible and focused, plus 300 ms for the wallet's screen to finish closing; 2.5 s at most, then it goes anyway | The same race, for the two signatures the seal takes in a row | `app/src/wallet/in-front.ts`; `direct-sign-in.ts` (`settle`) |
+| 9 | All (read by the shell's wallet) | **The site publishes the package's identity** at `/.well-known/assetlinks.json` — the package id and the signing certificate's SHA-256 — and the gate lets that path through without a cookie. The shell, for its part, launches the wallet with `startActivityForResult` (§3's patch) so the wallet can read which app is asking | A mobile wallet verifies WHO is asking before it re-authorizes without a prompt: it reads the calling package and checks it against that file on the identity URI's host (Solana Mobile's `digital-asset-links-android`, used by MWA wallets). Unverified, Phantom allows the first connect — the player approves it on screen — and refuses every silent re-authorization after it, so no signature ever completes (found 2026-09-30; §9). A browser is exempt: the wallet trusts the page's origin | `app/src/channel/android-app.ts`; `app/src/app/.well-known/assetlinks.json/route.ts`; `app/src/proxy.ts`; `mobile/patch-shell.sh` |
 
 Two consequences that are not code changes:
 
@@ -103,11 +104,13 @@ cd mobile
 #    page as the manifest ("Unexpected token '<'"). Name the site and the app instead.
 npx solana-mobile@latest webshell init blotto-cup --url https://<the deployed host> --app-name "Blotto Cup" --application-id gg.blotto.app --keystore-path <path outside the repository>/blotto-dappstore.jks --keystore-alias blotto
 
-# 3. Add the package-visibility declaration the wallet launch needs. `webshell init`
-#    (0.5.0) writes none, and without it Android 11+ silently refuses the shell's
-#    `solana-wallet://` launch: the wallet app never opens and the page reports
-#    "Failed to connect to the wallet websocket" (§9). Idempotent; run it after every init.
-./add-wallet-queries.sh
+# 3. Apply the two patches the generated project needs before a wallet app works with
+#    it; `webshell init` (0.5.0) writes neither (§9 has both findings). One: the
+#    Android 11+ `<queries>` block, without which the shell cannot open the wallet at
+#    all ("Failed to connect to the wallet websocket"). Two: the wallet launched with
+#    startActivityForResult, without which the wallet cannot see which app is asking,
+#    cannot verify it, and refuses every re-authorization. Idempotent; run after every init.
+./patch-shell.sh
 
 # 4. Build the signed release package. The two passwords come from the environment
 #    (mobile/webshell.env.example names them), never from a file in the tree; when a
@@ -117,6 +120,13 @@ SOLANA_MOBILE_KEYSTORE_PASSWORD='…' SOLANA_MOBILE_KEY_PASSWORD='…' npx solan
 # 5. Confirm it is signed with the store key (the certificate fingerprint must match
 #    the one recorded in the operator's password manager, §4).
 apksigner verify --print-certs blotto-cup/app/build/outputs/apk/release/app-release.apk
+
+# 6. Publish that certificate's fingerprint — the "SHA-256 digest" line of step 5 — in
+#    `app/src/channel/android-app.ts` (ANDROID_SIGNING_CERT_SHA256), and deploy. The
+#    site then serves /.well-known/assetlinks.json naming the package and its
+#    certificate, which is how a wallet verifies the app (§2 item 9). Not a secret: both
+#    are readable from the published package. A new signing key means a new entry; the
+#    old one stays listed while packages signed with it are still installed anywhere.
 ```
 
 The tool sets the WebView's user agent to carry the token `Solana Mobile Web Shell` (its
@@ -301,12 +311,24 @@ not set up.
   can sign in but not enter until §2 item 3's ruling is revisited — which means a change to the
   signing order in `app/src/tx/execute.ts` and a founder decision, not a mobile change. Settle it
   on a Seeker before the store submission.
-- **`webshell init` (solana-mobile 0.5.0) writes no `<queries>` block**, so the package it
-  generates cannot launch a wallet app on Android 11 or newer: the intent is silently refused and
-  the page reports "Failed to connect to the wallet websocket at ws://localhost:…/solana-wallet"
-  with the wallet installed and working in Chrome (a browser is exempt from the rule). §3's
-  `add-wallet-queries.sh` adds the block; keep running it until the tool writes one itself. Worth
+- **`webshell init` (solana-mobile 0.5.0) generates a shell no wallet can work with**, for two
+  reasons, both patched by §3's `patch-shell.sh`; keep running it until the tool changes. Worth
   reporting to Solana Mobile — the owner's call, as it is a public report in the product's name.
+  - **No `<queries>` block**, so the package cannot launch a wallet app on Android 11 or newer:
+    the intent is silently refused and the page reports "Failed to connect to the wallet
+    websocket at ws://localhost:…/solana-wallet" with the wallet installed and working in Chrome
+    (a browser is exempt from the rule).
+  - **The wallet is launched with plain `startActivity`** (`WebShellViewClient.kt`), so the wallet
+    cannot read which app is asking (`getCallingPackage()` needs `startActivityForResult`) and
+    cannot verify it against the site's `/.well-known/assetlinks.json`. Phantom's log, on the age
+    confirmation after a sign-in that had worked: `callingPackage=null` … `not verified
+    (mwaIdentity…)` … `code=-1, message=authorization request failed` … `Revoking AuthRecord`;
+    the app shows "This wallet cannot sign the confirmation". A first connect is allowed
+    unverified because the player approves it on screen; a silent re-authorization — which every
+    signature starts with — is refused. §2 item 9 is the answer: the patch, and the site
+    publishing the package's identity. Phantom reads that file with Solana Mobile's own verifier,
+    which follows no redirect and requires content type exactly `application/json` — which is
+    why the gate exempts `/.well-known/` and the route sets the header by hand.
 - **Two wallet sessions in a row race inside the shell** (2026-09-30, Android 15 emulator,
   Phantom). The log of the sign-in as it was — connect, then a separate signature:
 
