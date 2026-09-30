@@ -35,7 +35,9 @@ export const ANDROID_PACKAGE_ID = 'gg.blotto.app';
  * colon form). More than one only while a key is being rotated.
  */
 export const ANDROID_SIGNING_CERT_SHA256: readonly string[] = [
-  // FILLED FROM THE OWNER'S KEYSTORE — see MOBILE.md §3 step 6.
+  // The owner's store signing key, read from the package on 2026-09-30
+  // (`apksigner verify --print-certs`, V2 signer). MOBILE.md §3 step 6.
+  'b4f0c7315b5a42dcff93e8b8461498bea943433fc5cf8b2160b5cb3c587312a2',
 ];
 
 export const ASSET_LINKS_RELATION = 'delegate_permission/common.handle_all_urls';
