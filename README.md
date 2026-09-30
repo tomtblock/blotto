@@ -67,6 +67,7 @@ with its source.
 | Check the fairness and accountability safeguards | [Safeguards](docs/compliance/SAFEGUARDS.md) · [Product facts](docs/compliance/PRODUCT-FACTS.md) · [Data inventory](docs/compliance/DATA-INVENTORY.md) |
 | Review security | [Security review](docs/security/SECURITY-REVIEW.md) · [Reporting a vulnerability](SECURITY.md) |
 | Deploy or operate it | [Hosting](docs/guide/HOSTING.md) · [Operating manual](docs/guide/OPERATING-MANUAL.md) |
+| Run or ship the Android app (Solana dApp Store) | [`mobile/README.md`](mobile/README.md) — the short way in · [The mobile channel](docs/guide/MOBILE.md) — the manual |
 | Contribute | [Contributing](CONTRIBUTING.md) |
 
 The full map is [`docs/README.md`](docs/README.md).
