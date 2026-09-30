@@ -18,6 +18,7 @@ import {
   ciphertextStatusMessage,
 } from '@blotto/packet/ciphertext-message';
 import { generateKeyPair, getAddressFromPublicKey } from '@solana/kit';
+import { ensureEd25519 } from '@/chain/ed25519';
 import { executeTrade } from '@/tx/execute';
 import type { TxRpc } from '@/tx/tx-rpc';
 import type { LifecycleLogEntry, TxFailure, TxSigner } from '@/tx/types';
@@ -304,7 +305,10 @@ export function makeLiveEntryServices(cfg: LiveEntryServicesConfig): EntryServic
 
       // The fresh pass asset: Core's CreateV2 requires the new asset
       // account's signature, so it partial-signs locally AFTER the wallet
-      // (the load-bearing order documented in execute.ts).
+      // (the load-bearing order documented in execute.ts). The keypair is
+      // WebCrypto Ed25519, which an Android WebView may lack (chain/
+      // ed25519.ts): make sure of it before kit's guard runs its own probe.
+      await ensureEd25519();
       const passAssetKeyPair = await generateKeyPair();
       const passAsset = await getAddressFromPublicKey(passAssetKeyPair.publicKey);
 
