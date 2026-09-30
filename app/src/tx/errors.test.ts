@@ -296,3 +296,16 @@ describe("retryable and entryRecorded", () => {
     }
   });
 });
+
+describe("build-failed (2026-09-30, the Android shell)", () => {
+  it("is the device's failure, not the network's: nothing sent, safe to retry, no seat held", () => {
+    const f = makeFailure("build-failed", "pass asset keypair: ED25519_ALGORITHM_UNIMPLEMENTED", false);
+    expect(f.message).toBe(
+      "Your browser could not prepare the entry. Nothing was sent and nothing was charged. Try again; if it happens again, try a different browser.",
+    );
+    expect(f.broadcast).toBe(false);
+    expect(f.retryable).toBe(true);
+    expect(entryRecorded(f)).toBe(false);
+    expect(f.message).not.toBe(FAILURE_COPY["rpc-failure"]);
+  });
+});

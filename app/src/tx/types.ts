@@ -97,6 +97,11 @@ export type TxFailureKind =
   // shown as one: the player was told they were not allowed to enter, when
   // what happened is that an earlier attempt is the one that stands.
   | "seal-conflict"
+  // 2026-09-30 (the Android shell, MOBILE.md §9): the entry could not be
+  // BUILT on this device — the pass asset's keypair, WebCrypto Ed25519 —
+  // before anything was sent. It used to fall through to the network
+  // sentence, which sent a night's investigation down the wrong path.
+  | "build-failed"
   | "rpc-failure"
   | "outcome-unreadable"
   | "outcome-mismatch";

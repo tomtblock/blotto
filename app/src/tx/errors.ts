@@ -164,6 +164,10 @@ export const FAILURE_COPY: Record<TxFailureKind, string> = {
   "packet-stale": COPY.tx.packetStale,
   "entry-refused": COPY.tx.entryRefused,
   "seal-conflict": COPY.tx.sealConflict,
+  // Nothing left the device: the keypair the entry is partial-signed with
+  // could not be made here (founder-approved wording, 2026-09-30).
+  "build-failed":
+    "Your browser could not prepare the entry. Nothing was sent and nothing was charged. Try again; if it happens again, try a different browser.",
   "rpc-failure":
     "The network request did not go through. Check your connection and try again.",
   // The transaction LANDED; only the read-back failed. See property 2 above.
