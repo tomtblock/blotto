@@ -19,6 +19,7 @@ import {
 } from '@blotto/packet/ciphertext-message';
 import { generateKeyPair, getAddressFromPublicKey } from '@solana/kit';
 import { ensureEd25519 } from '@/chain/ed25519';
+import { errorText, makeFailure } from '@/tx/errors';
 import { executeTrade } from '@/tx/execute';
 import type { TxRpc } from '@/tx/tx-rpc';
 import type { LifecycleLogEntry, TxFailure, TxSigner } from '@/tx/types';
@@ -308,9 +309,21 @@ export function makeLiveEntryServices(cfg: LiveEntryServicesConfig): EntryServic
       // (the load-bearing order documented in execute.ts). The keypair is
       // WebCrypto Ed25519, which an Android WebView may lack (chain/
       // ed25519.ts): make sure of it before kit's guard runs its own probe.
-      await ensureEd25519();
-      const passAssetKeyPair = await generateKeyPair();
-      const passAsset = await getAddressFromPublicKey(passAssetKeyPair.publicKey);
+      // A failure HERE is this device, not the network: say so (the
+      // "build-failed" kind), rather than fall through to the connection
+      // sentence, which is what happened on the emulator's WebView 124.
+      let passAssetKeyPair: Awaited<ReturnType<typeof generateKeyPair>>;
+      let passAsset: Awaited<ReturnType<typeof getAddressFromPublicKey>>;
+      try {
+        await ensureEd25519();
+        passAssetKeyPair = await generateKeyPair();
+        passAsset = await getAddressFromPublicKey(passAssetKeyPair.publicKey);
+      } catch (error) {
+        throw new RegisterFailedError(
+          makeFailure('build-failed', `pass asset keypair: ${errorText(error)}`, false),
+          null
+        );
+      }
 
       const instructions = [
         buildEd25519Instruction(packet),

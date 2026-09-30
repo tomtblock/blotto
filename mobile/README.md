@@ -33,9 +33,9 @@ Once per machine: Node 24, Android Studio with the SDK, and its bundled JDK on t
 "Prerequisites"). Then, from this folder:
 
 ```bash
-npx solana-mobile@latest webshell init blotto-cup --url https://www.blotto.gg --app-name "Blotto Cup" --application-id gg.blotto.app --keystore-path <outside the repository>/blotto-dappstore.jks --keystore-alias blotto
+npx solana-mobile@0.5.0 webshell init blotto-cup --url https://www.blotto.gg --app-name "Blotto Cup" --application-id gg.blotto.app --keystore-path <outside the repository>/blotto-dappstore.jks --keystore-alias blotto
 ./patch-shell.sh                                  # the two patches the shell needs; idempotent
-npx solana-mobile@latest webshell build blotto-cup # prompts for the key passwords if unset
+npx solana-mobile@0.5.0 webshell build blotto-cup # prompts for the key passwords if unset
 adb install -r blotto-cup/app/build/outputs/apk/release/app-release.apk
 ```
 

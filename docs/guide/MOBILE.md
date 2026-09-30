@@ -106,7 +106,7 @@ cd mobile
 #    (seeding the name and icon from /manifest.webmanifest) did NOT work against our
 #    host on 2026-09-30: the apex host redirects to www and the tool read the redirect
 #    page as the manifest ("Unexpected token '<'"). Name the site and the app instead.
-npx solana-mobile@latest webshell init blotto-cup --url https://<the deployed host> --app-name "Blotto Cup" --application-id gg.blotto.app --keystore-path <path outside the repository>/blotto-dappstore.jks --keystore-alias blotto
+npx solana-mobile@0.5.0 webshell init blotto-cup --url https://<the deployed host> --app-name "Blotto Cup" --application-id gg.blotto.app --keystore-path <path outside the repository>/blotto-dappstore.jks --keystore-alias blotto
 
 # 3. Apply the two patches the generated project needs before a wallet app works with
 #    it; `webshell init` (0.5.0) writes neither (§9 has both findings). One: the
@@ -119,7 +119,7 @@ npx solana-mobile@latest webshell init blotto-cup --url https://<the deployed ho
 # 4. Build the signed release package. The two passwords come from the environment
 #    (mobile/webshell.env.example names them), never from a file in the tree; when a
 #    variable is unset the tool prompts for it.
-SOLANA_MOBILE_KEYSTORE_PASSWORD='…' SOLANA_MOBILE_KEY_PASSWORD='…' npx solana-mobile@latest webshell build blotto-cup --keystore-path <the same path> --keystore-alias blotto
+SOLANA_MOBILE_KEYSTORE_PASSWORD='…' SOLANA_MOBILE_KEY_PASSWORD='…' npx solana-mobile@0.5.0 webshell build blotto-cup --keystore-path <the same path> --keystore-alias blotto
 
 # 5. Confirm it is signed with the store key (the certificate fingerprint must match
 #    the one recorded in the operator's password manager, §4).
@@ -208,7 +208,7 @@ then the seal's signature and the entry transaction. This exercises items 1, 3, 
 `.apk` from the release, `adb install -r app-release.apk`, and continue below. It must be the
 key holder's build; a package signed with another key stops at the first signature after sign-in.
 
-**The package**: `npx solana-mobile@latest device install blotto-cup/app/build/outputs/apk/release/app-release.apk`
+**The package**: `npx solana-mobile@0.5.0 device install blotto-cup/app/build/outputs/apk/release/app-release.apk`
 (or `adb install -r …`), then open "Blotto Cup" from the app drawer. The sign-in page opens on the
 wallet rows (item 2). Everything else is the site. To watch the wallet handshake:
 `adb logcat -c && adb logcat | grep -i "solana-wallet\|PhantomMWA\|AuthRecord"` — one
@@ -364,10 +364,10 @@ not set up.
   script refuses, patch by hand, and update the script in the same change.
 - **Node 24 for the shell tool, Node 20 for everything else.** A version manager (`nvm use 24`
   in `mobile/`, `nvm use 20` elsewhere) is the practical answer; nothing in CI touches the shell.
-- **The play page's catch-all error copy** ("The network request did not go through") covers every
-  unclassified exception in the entry build, not only network ones — it sent the 2026-09-30
-  investigation down a network path first. Worth a distinct sentence for "something in this
-  browser could not build the entry"; user-facing copy, so the owner's call.
+- **A failure to build the entry on the device has its own sentence since 2026-09-30** (the
+  `build-failed` kind: "Your browser could not prepare the entry…"), raised by the register step
+  when the pass asset's keypair cannot be made. Before that it fell through to the network
+  sentence, which sent the WebView investigation down the wrong path first.
 - **The Seeker's built-in wallet (Seed Vault Wallet)**: whether it advertises `sign_transactions`
   and whether it supports devnet are unverified. If it offers sign-and-send only, a Seeker owner
   can sign in but not enter until §2 item 3's ruling is revisited — which means a change to the
