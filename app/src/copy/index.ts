@@ -209,14 +209,18 @@ export const COPY = {
     // statement; the edition is named by its date (the message binds it).
     termsAcceptance:
       'I accept the Blotto Cup terms. My wallet signs this statement once and the acceptance is recorded.',
-    // The redesigned gate (2026-09-09): a short lead, a step label per
-    // statement, and what the wallet prompt that follows is. PHASE-N-REVIEW.
-    gateIntro: 'Two statements, then your wallet signs them once. Signing is free and moves nothing.',
-    gateStep: (n: number, of: number) => `Statement ${n} of ${of}`,
-    gateConfirmed: 'Confirmed',
-    gateSignNote: 'Your wallet will show the statement and ask you to sign it.',
-    gateSigning: 'Waiting for your wallet…',
-    gateReadTerms: 'Read the rules and terms',
+    // V5 (founder 2026-09-30): the clickwrap is no longer its own screen.
+    // The two statements stand on the board's rail (app/play/entry-rail.tsx)
+    // and the one seal key waits on them; the lead, the step labels and
+    // "Confirm and continue" that the full-screen gate carried are gone.
+    // PHASE-N-REVIEW: drafts; the founder owns the words.
+    statementsLabel: 'Before you can seal',
+    // What the greyed seal key says on hover while the statements wait
+    // (the board's own reason, "Allocate all blotts first", comes first).
+    sealHoldStatements: 'Confirm the two statements first',
+    // The stop card when the statements could not be signed at the seal:
+    // the seven battles are kept, and Try again re-runs the same press.
+    attestFailedTitle: 'Your statements were not signed',
     /*
      * C-13 (audit 2026-09-11): one sentence per reason, because the next
      * step differs. PHASE-N-REVIEW: drafted, founder may re-voice.
@@ -263,8 +267,6 @@ export const COPY = {
     alreadyEnteredPool: 'Open the pool page',
     alreadyEnteredResults: 'Results and the leaderboard',
     entriesChecking: 'Checking your entries',
-    ageConfirm: 'Confirm and continue',
-    gateTitle: 'Before you enter',
     // The Territory line (founder instruction 2026-09-12 §3.3.1). It NAMES
     // the schedule, generated from config/territories.json — a visitor who
     // is refused should be able to see whether their territory is on the
@@ -418,6 +420,8 @@ export const COPY = {
      */
     // V2 (founder 2026-09-27): one box, "How this pool…", a Plays / Pays
     // toggle inside it. The two headings above became the toggle's words.
+    // V5 (founder 2026-09-30): the box stands beside the board
+    // (components/pools/pool-rules.tsx on the entry rail), not on the pool page.
     howThisPool: 'How this pool…',
     rulesToggleAria: 'Plays or pays',
     rulesPlays: 'Plays',
@@ -851,6 +855,9 @@ export const COPY = {
     timerHeldAria: 'The clock starts when you place your first point',
     timeLeft: 'Time left',
     timerAria: (clock: string) => `${clock} remaining`,
+    // V5 (founder 2026-09-30): the column beside the board — the rules,
+    // the statements, the seal key.
+    railLabel: 'How this pool plays, and the seal',
     bannerTitle: 'The clock starts when you place your first point',
     bannerEasy: 'Three minutes for all seven battles. Each battle takes 100 points, split across your five troops however you like.',
     bannerHard: 'Three minutes. 700 points to place anywhere across the seven battles — all in one, spread across all seven, or anything between.',
@@ -1507,6 +1514,9 @@ export const COPY = {
      * yet signed, the chain confirming. PHASE-N-REVIEW: drafts.
      */
     signingTitle: 'Sealing your entry',
+    // V5 (founder 2026-09-30): the statements' signature, first, for a
+    // wallet not yet on record — free, and it moves nothing.
+    signingAttest: 'First, your wallet signs the two statements you confirmed. Signing them is free and moves nothing.',
     signingSeal: 'Approve the first prompt in your wallet — it signs your sealed entry.',
     signingPay: 'Now the payment. Approve it in your wallet.',
     // The waiting beat, between the signatures and the chain's answer. It

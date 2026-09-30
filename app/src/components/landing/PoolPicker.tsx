@@ -239,7 +239,7 @@ export function PoolPicker({ tiers, serverTime }: { tiers: readonly PickerTier[]
           <p className={`text-[12px] leading-4 sm:whitespace-nowrap ${muted}`}>{COPY.pool.decisionsFinal}</p>
           {pool ? (
             <Link
-              href={`/pools/${pool.pool}`}
+              href={`/play?pool=${pool.pool}`}
               data-testid="pool-picker-enter"
               className={`flex h-14 items-center justify-center rounded-full font-display text-[20px] font-extrabold uppercase tracking-wide transition-colors ${cta}`}
             >

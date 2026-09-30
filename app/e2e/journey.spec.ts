@@ -50,22 +50,21 @@ test('landing: one picker, Easy / Hard toggle, each side down its own pool (V2)'
   await expect(picker).toHaveAttribute('data-mode', 'easy');
   await expect(picker.getByTestId('pool-picker-state')).toContainText('Open now');
   await expect(picker.getByText('Closes in')).toBeVisible();
-  await expect(picker.getByTestId('pool-picker-enter')).toHaveAttribute('href', new RegExp(`/pools/${POOL}$`));
+  // V5 (founder 2026-09-30): Enter lands on the BOARD — the pool page is
+  // no longer a stop on the way in.
+  await expect(picker.getByTestId('pool-picker-enter')).toHaveAttribute('href', new RegExp(`/play\\?pool=${POOL}$`));
   // V3: Enter for real beside the demo goes to the same easy pool.
-  await expect(page.getByTestId('demo-enter')).toHaveAttribute('href', new RegExp(`/pools/${POOL}$`));
-  // Hard: the card changes colour and its control lands on THAT pool.
+  await expect(page.getByTestId('demo-enter')).toHaveAttribute('href', new RegExp(`/play\\?pool=${POOL}$`));
+  // Hard: the card changes colour and its control lands on THAT pool's board.
   await picker.getByTestId('pool-picker-mode-hard').click();
   await expect(picker).toHaveAttribute('data-mode', 'hard');
   await expect(picker.getByTestId('pool-picker-state')).toContainText('Open now');
   await picker.getByTestId('pool-picker-enter').click();
-  await expect(page).toHaveURL(new RegExp(`/pools/${HARD_POOL}$`));
-  await expect(page.getByTestId('pool-mode')).toHaveText('Hard · 700 anywhere');
-  await expect(page.getByText('Seven battles and 700 points. Place them anywhere', { exact: false })).toBeVisible();
-  // And the easy one lands on the easy pool.
+  await expect(page).toHaveURL(new RegExp(`/play\\?pool=${HARD_POOL}$`));
+  // And the easy one lands on the easy pool's board.
   await page.goto('/');
   await page.getByTestId('pool-picker-enter').click();
-  await expect(page).toHaveURL(new RegExp(`/pools/${POOL}$`));
-  await expect(page.getByTestId('pool-mode')).toHaveText('Easy · 100 per battle');
+  await expect(page).toHaveURL(new RegExp(`/play\\?pool=${POOL}$`));
 });
 
 test('landing: the board demo pours points and locks a field (founder 2026-09-24)', async ({ page }) => {
@@ -122,23 +121,22 @@ test('pool page: the fixed pot as one Stat, §8.6 above the enter control', asyn
 }, info) => {
   await page.goto(`/pools/${POOL}`);
   // D-E2: ONE paid place. The pool page shows the pot the pool OPENED with
-  // as a single Stat (the tier-0 fixture's fixed 4 SOL, D-E1) with the rule
-  // beside it. The per-position table is gone — assert it stays gone.
+  // as a single Stat (the tier-0 fixture's fixed 4 SOL, D-E1). The
+  // per-position table is gone — assert it stays gone.
   await expect(page.getByText('Prize pool', { exact: true })).toBeVisible();
   await expect(page.locator('.text-prize').first()).toHaveText('4SOL');
-  // V2 (founder 2026-09-27): the rule of who is paid sits on the "Pays" side
-  // of the one "How this pool…" box; "Plays" (the mode's rule) shows first.
-  const rules = page.getByTestId('pool-rules');
-  await expect(rules.getByTestId('pool-rules-plays')).toBeVisible();
-  await rules.getByTestId('pool-rules-toggle-pays').click();
-  await expect(
-    page.getByText('The player ranked first takes the whole prize pool. A tie for first splits it equally.')
-  ).toBeVisible();
+  await expect(page.getByTestId('pool-mode')).toHaveText('Easy · 100 per battle');
+  // V5 (founder 2026-09-30): "How this pool…" and the rails clip left this
+  // page for the board's rail; the page is the pool's record, its Enter
+  // lands on the board, and it streams nothing.
+  await expect(page.getByTestId('pool-rules')).toHaveCount(0);
+  await expect(page.locator('video')).toHaveCount(0);
   await expect(page.getByRole('table')).toHaveCount(0);
   const finalText = page.getByText(/Decisions are final/);
   await expect(finalText).toBeVisible();
   const enter = page.getByRole('link', { name: 'Enter this pool' });
   await expect(enter).toBeVisible();
+  await expect(enter).toHaveAttribute('href', new RegExp(`/play\\?pool=${POOL}$`));
   // §8.6: the statement renders ABOVE the enter control in the document.
   const above = await page.evaluate(() => {
     const statement = [...document.querySelectorAll('p')].find((p) =>

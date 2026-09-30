@@ -16,7 +16,12 @@
  * drew it. What is posted is the pool and the seat: nothing sealed. V4:
  * from the sm breakpoint the "Sealed" card and the three keys stand to
  * the RIGHT of the pass, spread over its full height; on a phone they
- * stack under it.
+ * stack under it. V5 (founder 2026-09-30: "looks great on a mobile, a
+ * little small on the PC"): on a wide screen the panel breaks out of the
+ * play page's narrow column onto a 1024px stage (globals.css
+ * `.play-breakout`, the board's own trick), the pass grows with it, the
+ * heading and the seat line scale up and the keys stand taller. Below the
+ * lg width nothing changes.
  *
  * THE OPT-IN. A social sign-in that carries an address is one press; a
  * wallet or X sign-in is asked for one. Either way the wallet signs the
@@ -43,8 +48,8 @@ const PETALS_POSTER = '/motion/v2/petals.jpg';
 
 /* The keys: the action pink one (the only object of its colour on screen),
  * and the cream one for the actions that move no money. */
-const KEY = 'h-14 w-full border-[3px] border-brand-cream shadow-[var(--elevation-key-action)]';
-const KEY_CREAM = 'h-14 w-full border-[3px] border-brand-berry';
+const KEY = 'h-14 w-full border-[3px] border-brand-cream shadow-[var(--elevation-key-action)] lg:h-16 lg:text-[20px]';
+const KEY_CREAM = 'h-14 w-full border-[3px] border-brand-berry lg:h-16 lg:text-[20px]';
 
 type OptIn =
   | { state: 'idle' }
@@ -108,27 +113,31 @@ export function EnteredPanel({
   }, [email, send]);
 
   return (
-    <section aria-live="polite" className="animate-settle mx-auto grid w-full max-w-3xl grid-cols-1 gap-4 sm:grid-cols-2 sm:items-stretch" data-testid="entered-panel">
+    <section
+      aria-live="polite"
+      className="play-breakout animate-settle mx-auto grid w-full max-w-3xl grid-cols-1 gap-4 sm:grid-cols-2 sm:items-stretch lg:max-w-5xl lg:gap-6"
+      data-testid="entered-panel"
+    >
       <Card tone="light" className="text-center" data-testid="pass-card">
         {/* The petals, where the trophy Blott stood — the clip's own 4:5 frame. */}
-        <div className="relative aspect-[4/5] max-h-[56vh] w-full overflow-hidden bg-brand-berry">
+        <div className="relative aspect-[4/5] max-h-[56vh] w-full overflow-hidden bg-brand-berry lg:max-h-[64vh]">
           <AmbientClip tiers={PETALS} poster={PETALS_POSTER} className="absolute inset-0 h-full w-full object-cover" />
           <div aria-hidden="true" className="absolute inset-x-0 bottom-0 h-16 bg-[linear-gradient(180deg,transparent_0%,var(--color-brand-cream)_100%)]" />
         </div>
-        <div className="px-5 pt-1 pb-7">
-          <p className="font-mono text-[12px] tracking-[0.16em] uppercase text-brand-berry/70" data-testid="pass-line">
+        <div className="px-5 pt-1 pb-7 lg:pt-3 lg:pb-9">
+          <p className="font-mono text-[12px] tracking-[0.16em] uppercase text-brand-berry/70 lg:text-[13px]" data-testid="pass-line">
             {COPY.shell.title} · {passPoolLine(poolNumber)} · {mode === 'hard' ? COPY.board.modeHard : COPY.board.modeEasy}
           </p>
-          <p className="mt-2 font-display text-[56px] leading-none font-extrabold text-brand-berry">{r.passEntered}</p>
-          <p className="mt-3 text-[18px] font-semibold text-brand-berry">{r.cardSeat(entryIndex)}</p>
-          <p className="mt-1 font-mono text-[11px] text-brand-berry/60">{truncateAddress(asset)}</p>
+          <p className="mt-2 font-display text-[56px] leading-none font-extrabold text-brand-berry lg:text-[84px]">{r.passEntered}</p>
+          <p className="mt-3 text-[18px] font-semibold text-brand-berry lg:text-[24px]">{r.cardSeat(entryIndex)}</p>
+          <p className="mt-1 font-mono text-[11px] text-brand-berry/60 lg:text-[12px]">{truncateAddress(asset)}</p>
         </div>
       </Card>
 
       <div className="flex flex-col justify-between gap-4">
-      <Card className="p-5">
-        <h2 className="font-display text-[28px] leading-8 font-extrabold text-ink">{r.sealedTitle}</h2>
-        <p className="mt-2 text-[14px] leading-5 text-ink-muted">{COPY.pool.checkBack(Number(MIN_SEATS))}</p>
+      <Card className="p-5 lg:p-7">
+        <h2 className="font-display text-[28px] leading-8 font-extrabold text-ink lg:text-[36px] lg:leading-10">{r.sealedTitle}</h2>
+        <p className="mt-2 text-[14px] leading-5 text-ink-muted lg:text-[16px] lg:leading-6">{COPY.pool.checkBack(Number(MIN_SEATS))}</p>
       </Card>
 
       <div className="flex flex-col gap-3">
@@ -202,7 +211,7 @@ export function EnteredPanel({
         <Link
           href="/"
           data-testid="entered-play-again"
-          className="flex h-14 w-full items-center justify-center rounded-full border-[3px] border-brand-berry/60 font-display text-[18px] font-bold uppercase tracking-wide text-brand-berry hover:bg-brand-berry/10"
+          className="flex h-14 w-full items-center justify-center rounded-full border-[3px] border-brand-berry/60 font-display text-[18px] font-bold uppercase tracking-wide text-brand-berry hover:bg-brand-berry/10 lg:h-16 lg:text-[20px]"
         >
           {r.playAgain}
         </Link>

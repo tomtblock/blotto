@@ -183,3 +183,12 @@ main:focus {
 .play-field {
   container-type: inline-size;
 }
+
+/* V5 (founder 2026-09-30): the success screen breaks out of the same
+ * column the same way, onto a stage no wider than the lg container. */
+@media (min-width: 1024px) {
+  .play-breakout {
+    width: min(100cqw - 40px, 1024px);
+    margin-left: calc(50% - min(100cqw - 40px, 1024px) / 2);
+  }
+}

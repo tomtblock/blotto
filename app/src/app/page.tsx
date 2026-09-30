@@ -175,7 +175,7 @@ export default async function LandingPage() {
           <section id="demo" className="mt-14 scroll-mt-20">
             <LiveDemo
               title={COPY.howItWorks.pentagonCaption}
-              enterHref={firstEasy ? `/pools/${firstEasy.pool}` : null}
+              enterHref={firstEasy ? `/play?pool=${firstEasy.pool}` : null}
             />
           </section>
         </main>

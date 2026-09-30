@@ -54,26 +54,17 @@ export interface AmbientClipProps {
   once?: boolean;
   /** Fired when a one-shot clip reaches its end. */
   onEnded?: () => void;
-  /** Mirror horizontally — the pool page's right rail is the left rail's asset. */
-  mirror?: boolean;
   /** Hold the clip still (a stopped belt after a failure); clears to resume. */
   paused?: boolean;
-  /** Mount the <video> only while this media query matches (the poster otherwise). */
-  media?: string;
 }
 
-/* The media query as an external store: null on the server and for the
- * hydrating render (so both draw the poster), the real answer after. */
-function useMediaMatch(query: string | undefined): boolean | null {
+/* Hydration as an external store: false on the server and for the
+ * hydrating render (so both draw the poster), true after. */
+function useHydrated(): boolean {
   return useSyncExternalStore(
-    (cb) => {
-      if (query === undefined || typeof window === 'undefined') return () => {};
-      const mql = window.matchMedia(query);
-      mql.addEventListener('change', cb);
-      return () => mql.removeEventListener('change', cb);
-    },
-    () => (query === undefined ? true : window.matchMedia(query).matches),
-    () => null
+    () => () => {},
+    () => true,
+    () => false
   );
 }
 
@@ -85,15 +76,12 @@ export function AmbientClip({
   preload = 'metadata',
   once = false,
   onEnded,
-  mirror = false,
   paused = false,
-  media,
 }: AmbientClipProps) {
   const reduced = usePrefersReducedMotion();
-  const matches = useMediaMatch(media);
+  const hydrated = useHydrated();
   const ref = useRef<HTMLVideoElement>(null);
-  const style = mirror ? { transform: 'scaleX(-1)' } : undefined;
-  const video = !reduced && matches === true;
+  const video = !reduced && hydrated;
 
   useEffect(() => {
     const el = ref.current;
@@ -122,13 +110,12 @@ export function AmbientClip({
 
   if (!video) {
     // eslint-disable-next-line @next/next/no-img-element -- poster swap for a video; next/image adds nothing here
-    return <img src={poster} alt="" aria-hidden="true" className={className} style={style} />;
+    return <img src={poster} alt="" aria-hidden="true" className={className} />;
   }
   return (
     <video
       ref={ref}
       className={className}
-      style={style}
       autoPlay={playWhenVisible === undefined}
       muted
       loop={!once}

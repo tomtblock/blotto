@@ -1,0 +1,22 @@
+/*
+ * The entry rail (entry-rail.tsx) beside the board: a column whose rules
+ * box takes the height the board leaves, so the statements and the seal
+ * key under it sit at the foot, level with the troop tray. Tokens only.
+ */
+.entry-rail {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+  gap: 14px;
+}
+.entry-rail > .neon-section {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  margin-top: 0;
+}
+.entry-rail > .neon-section > .neon-box {
+  flex: 1 1 auto;
+  padding: 30px 18px 18px;
+}

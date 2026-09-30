@@ -43,7 +43,7 @@ interface Row {
 const STANDALONE: Row[] = [
   { href: '/', name: 'home', label: '/', what: 'Home — the live pool, or the empty state when none is open.' },
   { href: '/pools', name: 'pools', label: '/pools', what: 'The pool list, with every lifecycle state present at once.' },
-  { href: '/play', name: 'play', label: '/play', what: 'The entry session: age gate, seven battles, review, sealed submit.', auth: true },
+  { href: '/play', name: 'play', label: '/play', what: 'The entry session: the board, the rules and the statements in one view, the sealed submit.', auth: true },
   { href: '/profile', name: 'profile', label: '/profile', what: 'Career, prize totals, the cosmetic class collection.', auth: true },
   { href: '/verify', name: 'verify', label: '/verify', what: 'The public recompute page. Works signed out, by design.' },
   { href: '/rules', name: 'rules', label: '/rules', what: 'Rules and the §8.6 statements.' },
