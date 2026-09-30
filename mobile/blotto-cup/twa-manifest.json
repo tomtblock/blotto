@@ -1,0 +1,13 @@
+{
+  "fallbackType": "webview",
+  "generatorApp": "solana-mobile",
+  "host": "www.blotto.gg",
+  "launcherName": "Blotto Cup",
+  "name": "Blotto Cup",
+  "packageId": "gg.blotto.app",
+  "startUrl": "/",
+  "signingKey": {
+    "alias": "blotto",
+    "path": "/Users/tomhumber/keys/blotto-dappstore.jks"
+  }
+}
