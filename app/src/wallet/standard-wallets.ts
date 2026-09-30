@@ -55,6 +55,18 @@ export interface SignTransactionFeature {
     ...inputs: readonly { account: WalletAccount; transaction: Uint8Array; chain?: string }[]
   ): Promise<readonly { signedTransaction: Uint8Array }[]>;
 }
+/**
+ * The wallet standard's own sign-in (`solana:signIn`): connect AND a signed
+ * statement in ONE request. The mobile wallet standard carries it as a
+ * single wallet session, which is why the direct route uses it on Android
+ * (direct-sign-in.ts). The fields are the sign-in message's; the wallet
+ * composes the message and adds the domain and the address itself.
+ */
+export interface SignInFeature {
+  signIn(
+    ...inputs: readonly { statement?: string; nonce?: string; issuedAt?: string }[]
+  ): Promise<readonly { account: WalletAccount; signedMessage: Uint8Array; signature: Uint8Array }[]>;
+}
 
 export function featureOf<T>(wallet: Wallet, name: string): T | null {
   const f = (wallet.features as Record<string, unknown>)[name];

@@ -34,6 +34,7 @@ import {
   isRejection,
   walletId,
   type ConnectFeature,
+  type SignInFeature,
   type SignMessageFeature,
   type SignTransactionFeature,
 } from "./standard-wallets";
@@ -52,9 +53,27 @@ export function directStatement(address: string, nonce: string, issuedAt: string
   );
 }
 
+/**
+ * The same statement for the wallet standard's own sign-in, on one line: a
+ * sign-in message's statement field may not hold a line break, and the
+ * wallet adds the address, the nonce and the moment as fields of its own.
+ */
+export const WALLET_SIGN_IN_STATEMENT =
+  "Sign in to Blotto Cup with this wallet. This signature proves you control the wallet. It moves nothing and costs nothing.";
+
 export interface DirectDeps {
   nonce(): string;
   issuedAt(): string;
+  /**
+   * Sign in through the wallet's own `solana:signIn` where it offers one —
+   * connect and the signed statement in ONE wallet session — instead of
+   * connect then `signMessage`. The mobile channel passes true (see
+   * in-front.ts for the race the second session runs on Android); the web
+   * passes nothing and keeps the two-step route exactly as it was.
+   */
+  walletSignIn?: boolean;
+  /** Awaited before every wallet prompt; the mobile channel's "page in front" wait (in-front.ts). */
+  settle?: () => Promise<void>;
 }
 
 export type DirectOutcome =
@@ -82,8 +101,30 @@ export async function directSignIn(wallet: Wallet, deps: DirectDeps): Promise<Di
   const sign = featureOf<SignMessageFeature>(wallet, "solana:signMessage");
   if (!connect || !sign) return { ok: false, code: "blotto_wallet_no_headless_path" };
 
+  const signIn = deps.walletSignIn ? featureOf<SignInFeature>(wallet, "solana:signIn") : null;
+  if (signIn) {
+    try {
+      await deps.settle?.();
+      const [signed] = await signIn.signIn({
+        statement: WALLET_SIGN_IN_STATEMENT,
+        nonce: deps.nonce(),
+        issuedAt: deps.issuedAt(),
+      });
+      if (!signed || signed.signature.length === 0) return { ok: false, code: "blotto_wallet_declined" };
+      if (!signed.account.address) return { ok: false, code: "blotto_wallet_no_account" };
+      return { ok: true, address: signed.account.address, walletId: walletId(wallet.name), account: signed.account };
+    } catch (error) {
+      if (isRejection(error)) return { ok: false, code: "blotto_wallet_declined", detail: String(error) };
+      // The wallet took the request but returned no sign-in result (a wallet
+      // app without the sign-in payload): fall through to the two-step route.
+      // Its connect is cached by the library, so no second session opens
+      // for it; the statement costs the one prompt it always did.
+    }
+  }
+
   let account: WalletAccount | undefined;
   try {
+    await deps.settle?.();
     const { accounts } = await connect.connect();
     account = firstSolanaAccount(accounts);
   } catch (error) {
@@ -97,6 +138,7 @@ export async function directSignIn(wallet: Wallet, deps: DirectDeps): Promise<Di
 
   try {
     const statement = directStatement(account.address, deps.nonce(), deps.issuedAt());
+    await deps.settle?.();
     const [signed] = await sign.signMessage({ account, message: new TextEncoder().encode(statement) });
     if (!signed || signed.signature.length === 0) return { ok: false, code: "blotto_wallet_declined" };
     return { ok: true, address: account.address, walletId: walletId(wallet.name), account };
@@ -130,8 +172,14 @@ export async function directReconnect(
   }
 }
 
-/** The wallet's Solana accounts as TxSigners for the tx seam. */
-export function directSigners(wallet: Wallet): TxSigner[] {
+/**
+ * The wallet's Solana accounts as TxSigners for the tx seam. `settle`, when
+ * given, is awaited before every prompt — the mobile channel's "page in
+ * front" wait (in-front.ts): the seal signs a message and then, a few RPC
+ * round trips later, the transaction, and on Android those are two wallet
+ * sessions in a row.
+ */
+export function directSigners(wallet: Wallet, settle?: () => Promise<void>): TxSigner[] {
   const signTx = featureOf<SignTransactionFeature>(wallet, "solana:signTransaction");
   const signMsg = featureOf<SignMessageFeature>(wallet, "solana:signMessage");
   if (!signTx) return [];
@@ -142,12 +190,14 @@ export function directSigners(wallet: Wallet): TxSigner[] {
       kind: "external" as const,
       label: wallet.name,
       signTransaction: async (transaction: Uint8Array) => {
+        await settle?.();
         const [out] = await signTx.signTransaction({ account, transaction, chain: SOLANA_CHAIN });
         if (!out) throw new Error(`${wallet.name} returned no signed transaction`);
         return out.signedTransaction;
       },
       signMessage: signMsg
         ? async (message: Uint8Array) => {
+            await settle?.();
             const [out] = await signMsg.signMessage({ account, message });
             if (!out) throw new Error(`${wallet.name} returned no signature`);
             return out.signature;

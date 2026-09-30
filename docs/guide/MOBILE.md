@@ -65,6 +65,8 @@ the server and during hydration, so every page's first paint is the web page.
 | 4 | All | The response headers' `connect-src` allows `ws://localhost:*` and `ws://127.0.0.1:*` — the phone's **own loopback**, nothing remote | The mobile wallet standard's browser transport is a plain WebSocket to the wallet app on the same device | `app/next.config.ts`; pinned by `app/src/chain/headers.test.ts`, which also refuses any other plain-`ws` origin |
 | 5 | All | **The build check.** The play page asks `/api/version` which build is live — once when it opens, and again just before the seal — and a page from an older build stops before anything is signed, with a reload | A phone app left in the background across a deploy would otherwise seal an entry from an older bundle; two players in one pool must be on one build | `app/src/build/version.ts`; `app/src/app/api/version/route.ts`; `next.config.ts` (`NEXT_PUBLIC_BUILD_VERSION`); `COPY.build` |
 | 6 | All | A **web app manifest** at `/manifest.webmanifest` and an icon at `/icon.png` | Browsers use it for "add to home screen"; `webshell init --manifest` reads it to seed the package's name, icon and start URL, so the shell and the site cannot drift on those | `app/src/app/manifest.ts`; `app/public/icon.png` |
+| 7 | Android (browser and shell) | **Sign-in is one wallet request.** The direct route signs in through the wallet's own sign-in (`solana:signIn`: connect and the signed statement together, one-line statement) instead of connect and then a separate signature. A wallet that offers no sign-in, or answers it with no result, takes the two-step route as on the web | A wallet app is reached one session per request, and two sessions in a row race inside the shell: the WebView fires the second intent while the wallet's screen is still closing, and the wallet revokes the token it just granted (found 2026-09-30 on an emulator; §9 has the log) | `app/src/wallet/direct-sign-in.ts` (`walletSignIn`); `direct-session.tsx` |
+| 8 | Android (browser and shell) | **No wallet prompt launches while the page is not in front.** Before every prompt — the seal signs a message and then, a few RPC round trips later, the entry transaction — the page waits until it is visible and focused, plus 300 ms for the wallet's screen to finish closing; 2.5 s at most, then it goes anyway | The same race, for the two signatures the seal takes in a row | `app/src/wallet/in-front.ts`; `direct-sign-in.ts` (`settle`) |
 
 Two consequences that are not code changes:
 
@@ -81,31 +83,44 @@ Two consequences that are not code changes:
 Done on a workstation, by hand, at the moments §6 names. Nothing here runs in CI (§7).
 
 **Prerequisites** (once): Node.js **24 or newer** (the `webshell` command requires it; the rest of
-the repository runs on 20 — use a version manager), JDK 17 or newer, Android Studio with the
-Android SDK and command-line tools, and `apksigner` on the `PATH` (it ships with the SDK's
-build-tools).
+the repository runs on 20 — use a version manager), a JDK (Android Studio's bundled one serves:
+`export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"` on macOS, and its
+`bin` on the `PATH`; without it the build stops at "Unable to locate a Java Runtime"), Android
+Studio with the Android SDK and command-line tools, and `apksigner` on the `PATH` (it ships with
+the SDK's build-tools).
 
-**The commands.** Verified against Solana Mobile's documentation and the `solana-mobile` npm
-package (0.5.0) on 2026-09-28; the tool is new and its flags may move, so run `--help` first and
-read what it says.
+**The commands.** Run on macOS on 2026-09-30 with the `solana-mobile` npm package (0.5.0); the tool
+is new and its flags may move, so run `--help` first and read what it says.
 
 ```bash
 # 1. From the repository root. The generated project lives beside this file.
 cd mobile
 
-# 2. Generate the Android project from the site's own manifest. One line; read the
-#    prompts — the app name and icon are seeded from the manifest, the package id is
-#    the permanent identity of the listing (§8) and is set ONCE.
-npx solana-mobile@latest webshell init blotto-cup --manifest https://<the deployed host>/manifest.webmanifest --application-id gg.blotto.app --keystore-path <path outside the repository>/blotto-dappstore.jks --keystore-alias blotto
+# 2. Generate the Android project. One line; read the prompts — the package id is the
+#    permanent identity of the listing (§8) and is set ONCE. The `--manifest` form
+#    (seeding the name and icon from /manifest.webmanifest) did NOT work against our
+#    host on 2026-09-30: the apex host redirects to www and the tool read the redirect
+#    page as the manifest ("Unexpected token '<'"). Name the site and the app instead.
+npx solana-mobile@latest webshell init blotto-cup --url https://<the deployed host> --app-name "Blotto Cup" --application-id gg.blotto.app --keystore-path <path outside the repository>/blotto-dappstore.jks --keystore-alias blotto
 
-# 3. Build the signed release package. The two passwords come from the environment
-#    (mobile/webshell.env.example names them), never from a file in the tree.
+# 3. Add the package-visibility declaration the wallet launch needs. `webshell init`
+#    (0.5.0) writes none, and without it Android 11+ silently refuses the shell's
+#    `solana-wallet://` launch: the wallet app never opens and the page reports
+#    "Failed to connect to the wallet websocket" (§9). Idempotent; run it after every init.
+./add-wallet-queries.sh
+
+# 4. Build the signed release package. The two passwords come from the environment
+#    (mobile/webshell.env.example names them), never from a file in the tree; when a
+#    variable is unset the tool prompts for it.
 SOLANA_MOBILE_KEYSTORE_PASSWORD='…' SOLANA_MOBILE_KEY_PASSWORD='…' npx solana-mobile@latest webshell build blotto-cup --keystore-path <the same path> --keystore-alias blotto
 
-# 4. Confirm it is signed with the store key (the certificate fingerprint must match
+# 5. Confirm it is signed with the store key (the certificate fingerprint must match
 #    the one recorded in the operator's password manager, §4).
 apksigner verify --print-certs blotto-cup/app/build/outputs/apk/release/app-release.apk
 ```
+
+The tool sets the WebView's user agent to carry the token `Solana Mobile Web Shell` (its
+`MainActivity.kt`), which is what `app/src/channel/channel.ts` reads.
 
 `webshell init` writes `twa-manifest.json` (its own settings, re-read on a later `init`) and
 `gradle.properties` (with `SOLANA_MOBILE_VERSION_CODE` and `SOLANA_MOBILE_VERSION_NAME`). Commit
@@ -150,13 +165,27 @@ own "Get test SOL" link on the balance screen when `NEXT_PUBLIC_DEVNET_FAUCET=1`
 `solana airdrop`).
 
 **The site in the emulator's Chrome** (no package needed): open the deployed host. Sign in: the
-list shows "Mobile Wallet Adapter"; tapping it opens Phantom, which asks to connect and then to
-sign the statement. Enter a pool: Phantom shows the two attestation signatures and the entry
-transaction. This exercises items 1, 3, 4 and 5 of §2.
+list shows "Mobile Wallet Adapter"; tapping it opens Phantom, which asks once to connect and sign
+the statement (item 7). Chrome first asks for **local network access** — the wallet answers over
+the phone's own loopback — and the sign-in fails until that is granted; the shell needs no such
+grant, it launches the wallet as an app. Enter a pool: Phantom shows the attestation signature,
+then the seal's signature and the entry transaction. This exercises items 1, 3, 4, 5, 7 and 8 of §2.
 
 **The package**: `npx solana-mobile@latest device install blotto-cup/app/build/outputs/apk/release/app-release.apk`
 (or `adb install -r …`), then open "Blotto Cup" from the app drawer. The sign-in page opens on the
-wallet rows (item 2). Everything else is the site.
+wallet rows (item 2). Everything else is the site. To watch the wallet handshake:
+`adb logcat -c && adb logcat | grep -i "solana-wallet\|PhantomMWA\|AuthRecord"` — one
+`v1/associate/local` line per wallet request, and "Authorize request completed successfully" with
+`cluster='devnet'` on the sign-in.
+
+**Verified 2026-09-30** (emulator: Pixel, Android 15 / API 35 with Google Play; Phantom on Solana
+devnet; the site at `www.blotto.gg`): the playground's capability check — Phantom signs a
+transaction, the entry path's requirement; sign-in and a devnet pool entry in Chrome (after the
+local-network grant); the package built, signed and installed, opening on the wallet rows; the
+`solana-wallet://` launch from inside the shell, once §3's `<queries>` block was added. Items 7 and
+8 were written from that run's log (§9) and are the next thing to confirm there: one association
+per sign-in, no "Revoking AuthRecord". One emulator at a time — two of them, with Phantom and the
+shell open, froze the machine twice.
 
 **A real phone**: enable developer options and USB debugging, plug it in, and use the same
 `device install`. A Seeker answers the open question in §9 about its built-in wallet.
@@ -272,9 +301,30 @@ not set up.
   can sign in but not enter until §2 item 3's ruling is revisited — which means a change to the
   signing order in `app/src/tx/execute.ts` and a founder decision, not a mobile change. Settle it
   on a Seeker before the store submission.
-- **The shell's exact flags** are documented from Solana Mobile's pages and the CLI's published
-  package, not from a run: this environment has no Android SDK. Run `--help` and correct §3 in the
-  same change if anything differs.
+- **`webshell init` (solana-mobile 0.5.0) writes no `<queries>` block**, so the package it
+  generates cannot launch a wallet app on Android 11 or newer: the intent is silently refused and
+  the page reports "Failed to connect to the wallet websocket at ws://localhost:…/solana-wallet"
+  with the wallet installed and working in Chrome (a browser is exempt from the rule). §3's
+  `add-wallet-queries.sh` adds the block; keep running it until the tool writes one itself. Worth
+  reporting to Solana Mobile — the owner's call, as it is a public report in the product's name.
+- **Two wallet sessions in a row race inside the shell** (2026-09-30, Android 15 emulator,
+  Phantom). The log of the sign-in as it was — connect, then a separate signature:
+
+  ```text
+  02:35:50.256  eth_requestAccounts: user approved
+  02:35:50.463  Authorize request completed successfully … cluster='devnet'
+  02:35:50.489  PhantomMWA: Clearing scenario                ← session 1 tearing down
+  02:35:50.510  START … solana-wallet:/ … result code=3      ← session 2, 47 ms later, delivered to
+                                                               the wallet activity still on top
+  02:35:51.109  Revoking AuthRecord{id=2 …}                   ← the wallet revokes session 2's token
+  02:35:51.631  PhantomMWA: Clearing scenario  ×2
+  ```
+
+  Chrome does not fire an external intent from a page that is not in front, so there the second
+  session waits for the wallet to close; the shell's WebView fires it at once. Items 7 and 8 of §2
+  are the answer: one session for the sign-in, and no prompt while the page is not in front. If the
+  log still shows a revoke after them, the next thing to look at is the shell's own intent
+  handling (`MainActivity.kt`, `shouldOverrideUrlLoading`).
 - **The board is not kept across the build-check reload** (§2, item 5). The pre-flight check
   catches the ordinary case before a board exists; the seal-time case loses the board. Keeping it
   would mean storing allocations on the device, which the data inventory currently rules out.

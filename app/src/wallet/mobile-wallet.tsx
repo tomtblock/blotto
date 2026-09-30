@@ -10,8 +10,9 @@
  * Seed Vault Wallet …) through an Android intent. Because it registers into
  * the SAME registry standard-wallets.ts already reads, nothing downstream
  * changes: the sign-in page lists it as it lists Phantom on a desktop, and
- * the direct route (direct-sign-in.ts) connects it and has it sign the
- * statement exactly as it would an extension.
+ * the direct route (direct-sign-in.ts) signs in with it — through the
+ * wallet's own sign-in, one wallet session, because every request to a
+ * wallet APP is a session of its own and two in a row race (in-front.ts).
  *
  * THREE THINGS ARE DELIBERATE HERE.
  *
