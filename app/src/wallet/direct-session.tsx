@@ -17,9 +17,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Wallet } from "@wallet-standard/base";
 import { opaqueKey, opaqueToken } from "@/storage/opaque-key";
+import { usesMobileWallet } from "@/channel/channel";
+import { useChannel } from "@/channel/use-channel";
 import type { Auth, AuthFailure } from "./types";
 import { findStandardWallet, useDetectedSolanaWallets, useStandardWalletList } from "./standard-wallets";
 import { directReconnect, directSignIn, directSigners, randomNonce } from "./direct-sign-in";
+import { pageInFront } from "./in-front";
 
 const PURPOSE = "direct-session";
 const STORAGE_KEY = opaqueKey(PURPOSE, "active");
@@ -71,6 +74,12 @@ export function useDirectSession(): DirectSession {
   const detected = useDetectedSolanaWallets();
   const [session, setSession] = useState<Session | null>(null);
   const [lastError, setLastError] = useState<AuthFailure | null>(null);
+  // On Android the wallet is an app reached one session per request
+  // (in-front.ts): sign in through the wallet's own sign-in (one session)
+  // and let no prompt launch while the page is not in front. On the web
+  // both are off and the route is what it always was.
+  const mobile = usesMobileWallet(useChannel());
+  const settle = mobile ? pageInFront : undefined;
   // The silent reconnect runs once per remembered wallet, the moment the
   // wallet registers in the page; never again in the same load.
   const reconnected = useRef<string | null>(null);
@@ -103,6 +112,8 @@ export function useDirectSession(): DirectSession {
       const outcome = await directSignIn(wallet, {
         nonce: randomNonce,
         issuedAt: () => new Date().toISOString(),
+        walletSignIn: mobile,
+        settle,
       });
       if (!outcome.ok) {
         if (outcome.detail) console.error("[auth] direct wallet sign-in failed:", outcome.detail);
@@ -114,7 +125,7 @@ export function useDirectSession(): DirectSession {
       remember(token ? { id: outcome.walletId, token } : null);
       setSession({ id: outcome.walletId, address: outcome.address, wallet });
     },
-    [wallets],
+    [wallets, mobile, settle],
   );
 
   const clearError = useCallback(() => setLastError(null), []);
@@ -137,7 +148,7 @@ export function useDirectSession(): DirectSession {
 
   const auth = useMemo<Auth | null>(() => {
     if (!session) return null;
-    const signers = directSigners(session.wallet);
+    const signers = directSigners(session.wallet, settle);
     // A connected wallet with a Solana account and no signer has told us
     // why: it lacks `solana:signTransaction` (directSigners returns nothing
     // for such a wallet). Name it, so the play page can (types.ts).
@@ -165,7 +176,7 @@ export function useDirectSession(): DirectSession {
       },
       signOut,
     };
-  }, [session, detected, lastError, clearError, signIn, signOut]);
+  }, [session, detected, lastError, clearError, signIn, signOut, settle]);
 
   return { auth, signIn, lastError, clearError };
 }
