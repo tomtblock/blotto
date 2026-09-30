@@ -13,9 +13,16 @@
 *.env
 !webshell.env.example
 
-# Build output and Gradle caches of the generated Android project.
+# Build output, Gradle caches and machine-local files of the generated
+# Android project. local.properties holds this machine's SDK path.
 **/build/
 **/.gradle/
+**/.kotlin/
 **/local.properties
 **/*.apk
 **/*.aab
+
+# IDE state, if Android Studio is opened on the project.
+**/.idea/
+**/*.iml
+**/captures/

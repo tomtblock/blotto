@@ -7,10 +7,13 @@ changing the app who needs to know what a change means for the phone. It assumes
 Android package, and the store submission**. Decision `D-E18` in
 [`../architecture/DECISIONS.md`](../architecture/DECISIONS.md) is the ruling it implements.
 
-**Current reality.** Nothing has been submitted to the Solana dApp Store, and nothing will be
-before the mainnet launch ([`../ROADMAP.md`](../ROADMAP.md) §3). The Android package has not yet
-been generated (§3 below is the procedure; it needs a machine with the Android SDK). The app-side
-changes are live on every deploy and change nothing for a desktop or iOS visitor (§1).
+**Current reality (2026-09-30).** Nothing has been submitted to the Solana dApp Store, and nothing
+will be before the mainnet launch ([`../ROADMAP.md`](../ROADMAP.md) §3). The Android package has
+been generated, signed with the store key, patched (§3), installed on an Android 15 emulator and
+taken through sign-in, verification and a devnet entry (§5). **The generated project is not yet
+committed** — it exists on the key holder's machine; §3 says how to commit it. The app-side changes
+are live on every deploy and change nothing for a desktop or iOS visitor (§1). The short way in for
+anyone new is [`mobile/README.md`](../../mobile/README.md).
 
 **Contents**
 
@@ -134,9 +137,28 @@ The tool sets the WebView's user agent to carry the token `Solana Mobile Web She
 `MainActivity.kt`), which is what `app/src/channel/channel.ts` reads.
 
 `webshell init` writes `twa-manifest.json` (its own settings, re-read on a later `init`) and
-`gradle.properties` (with `SOLANA_MOBILE_VERSION_CODE` and `SOLANA_MOBILE_VERSION_NAME`). Commit
-the generated project under `mobile/blotto-cup/`; `mobile/.gitignore` refuses the keystore, the
-passwords and the build output.
+`gradle.properties` (with `SOLANA_MOBILE_VERSION_CODE` and `SOLANA_MOBILE_VERSION_NAME`).
+
+**Commit the generated project** under `mobile/blotto-cup/`, so the build is reproducible from the
+repository and the patches travel with it. `mobile/.gitignore` refuses the keystore, the passwords,
+the build output and the machine-local files; check the list before the first commit:
+
+```bash
+# From the repository root. First, if the project carries the diagnostic switches (§5), revert them:
+sed -i '' 's/setWebContentsDebuggingEnabled(true)/setWebContentsDebuggingEnabled(BuildConfig.DEBUG)/; s/isDebug = true,/isDebug = BuildConfig.DEBUG,/' mobile/blotto-cup/app/src/main/java/gg/blotto/app/MainActivity.kt
+git add mobile/blotto-cup
+git status --short mobile/        # no .jks, no build/, no local.properties — .gitignore refuses them
+git diff --cached --stat | tail -1
+```
+
+**Who builds, who installs.** The key holder builds; everyone else installs the built `.apk`. A
+package signed with any other key installs and opens, and signs in, but no signature after that
+completes: the wallet verifies the package's certificate against the one fingerprint the site
+publishes (§2 item 9), and a second "development" fingerprint cannot be published without letting
+anyone with that key present as Blotto Cup on a wallet's consent screen. Share the `.apk` — it is
+what the store will publish — as an attachment on a GitHub release of the repository, marked
+pre-release while it opens devnet, named with the `versionCode` and the commit it was built from.
+Never share the `.jks`.
 
 **Which host.** For a hackathon or a test, a devnet preview deployment's host. For the store, the
 production host after the mainnet launch. The host is baked into the package, so the two are
@@ -181,6 +203,10 @@ the statement (item 7). Chrome first asks for **local network access** — the w
 the phone's own loopback — and the sign-in fails until that is granted; the shell needs no such
 grant, it launches the wallet as an app. Enter a pool: Phantom shows the attestation signature,
 then the seal's signature and the entry transaction. This exercises items 1, 3, 4, 5, 7 and 8 of §2.
+
+**A package someone else built** (the usual case — §3 "Who builds, who installs"): download the
+`.apk` from the release, `adb install -r app-release.apk`, and continue below. It must be the
+key holder's build; a package signed with another key stops at the first signature after sign-in.
 
 **The package**: `npx solana-mobile@latest device install blotto-cup/app/build/outputs/apk/release/app-release.apk`
 (or `adb install -r …`), then open "Blotto Cup" from the app drawer. The sign-in page opens on the
@@ -244,7 +270,7 @@ The package is rebuilt and resubmitted only when one of its own three facts chan
 | Any page, copy, board, rule, style, dependency of `app/` | Live on the next deploy, like the site | Nothing extra. Check it at 375 px (the `journey` lane already does) and, for anything on the sign-in or entry path, in the emulator (§5) |
 | The sign-in page (`app/src/app/signin/`), the wallet seam (`app/src/wallet/`), the tx seam (`app/src/tx/`) or the response headers (`next.config.ts`) | Live on the next deploy — and these are the files the channel logic lives in | Read §2 first. Run the emulator path (§5) before merging. If the change adds a channel difference, add it to §2's table in the same commit |
 | The **app name, icon or start URL** (`app/src/app/manifest.ts`, `app/public/icon.png`) | The site changes at once; the package shows the OLD name and icon until rebuilt | Rebuild the package (§3, step 2 re-reads the manifest) with a higher `versionCode`; submit it as an update (§8) |
-| The **deployed host** (a domain move) | The package keeps opening the old address | Rebuild with the new `--manifest` URL; submit as an update. Keep the old host answering until the review is through |
+| The **deployed host** (a domain move) | The package keeps opening the old address | Rebuild with the new `--url` (§3), and publish the identity file on the new host too — the wallet checks the host the app names; submit as an update. Keep the old host answering until the review is through |
 | The **package id** or the **signing key** | Never | Either one breaks the listing's identity. The store treats a new package id as a new app and refuses a new key outright (§4) |
 | `mobile/**` only (the generated project, this manual's commands) | Nothing until a package is built from it | `ci-fast` still runs in full on the commit (§7); the language gate reads every file here |
 | The program, the backend, `config/` | Exactly as for the site; the phone is a client of the same services | Nothing extra |
@@ -329,6 +355,23 @@ not set up.
 
 ## 9. Known limitations and open questions
 
+- **The generated project is not in the repository yet.** It was generated and patched on the key
+  holder's machine on 2026-09-30 and still carries §5's diagnostic switches; §3 "Commit the
+  generated project" is the procedure. Until it lands, a second machine regenerates it from §3 —
+  which works, but only with the store key.
+- **Only the key holder's package is verified** (§3 "Who builds, who installs"). Testers install
+  the shared `.apk`; a package built with another key demonstrates the pre-fix failure exactly
+  ("This wallet cannot sign the confirmation"). This is the wallet standard working as designed,
+  not a defect to engineer around.
+- **`patch-shell.sh` is pinned to the 0.5.0 template's exact lines** and exits non-zero on
+  anything else. A newer `solana-mobile` may change the template; when it does, read what the
+  script refuses, patch by hand, and update the script in the same change.
+- **Node 24 for the shell tool, Node 20 for everything else.** A version manager (`nvm use 24`
+  in `mobile/`, `nvm use 20` elsewhere) is the practical answer; nothing in CI touches the shell.
+- **The play page's catch-all error copy** ("The network request did not go through") covers every
+  unclassified exception in the entry build, not only network ones — it sent the 2026-09-30
+  investigation down a network path first. Worth a distinct sentence for "something in this
+  browser could not build the entry"; user-facing copy, so the owner's call.
 - **The Seeker's built-in wallet (Seed Vault Wallet)**: whether it advertises `sign_transactions`
   and whether it supports devnet are unverified. If it offers sign-and-send only, a Seeker owner
   can sign in but not enter until §2 item 3's ruling is revisited — which means a change to the
