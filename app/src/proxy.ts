@@ -24,7 +24,11 @@ export function proxy(req: NextRequest) {
   const admitted = secret !== '' && req.cookies.get(GATE_COOKIE)?.value === secret;
 
   const { pathname, search } = req.nextUrl;
-  const isGateSurface = pathname === '/gate' || pathname === '/api/gate';
+  // `/.well-known/` is read by machines that carry no cookie — the mobile
+  // wallet's identity verifier fetches assetlinks.json and follows no
+  // redirect (src/channel/android-app.ts). Nothing under it is a page.
+  const isGateSurface =
+    pathname === '/gate' || pathname === '/api/gate' || pathname.startsWith('/.well-known/');
 
   let res: NextResponse;
   if (admitted || isGateSurface) {
