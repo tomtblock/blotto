@@ -133,6 +133,15 @@ hits="$(
     `# not a claim that this operator holds a gaming licence. Scoped to the` \
     `# suffix so it covers only these vendored texts and nothing we write.` \
     --exclude='*.OFL.txt' \
+    `# Added 2026-09-30: Gradle's own wrapper scripts, vendored verbatim into` \
+    `# the generated Android project (mobile/blotto-cup/, docs/guide/MOBILE.md).` \
+    `# They carry the Apache-2.0 header ("Licensed under...", as LICENSE above)` \
+    `# and Gradle's internal comments ("POSIX-compliant shell", "packing`  \
+    `# multiple parameters", "Roll the args list"). Nobody here authored a word;` \
+    `# editing them would fork a build tool to pass a grep, and a regenerated` \
+    `# project would bring the originals back. Scoped to the two exact names.` \
+    --exclude=gradlew \
+    --exclude=gradlew.bat \
     `# Lockfiles are dependency metadata, not authored prose. Package names like` \
     `# "pump", "escape-string-regexp" and "solana-program-pack" are not ours to` \
     `# rename, and a lockfile is machine-generated.` \

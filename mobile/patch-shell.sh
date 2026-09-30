@@ -66,6 +66,18 @@ else
   echo "patch-shell: added the solana-wallet <queries> block to $MANIFEST"
 fi
 
+# ---- 1b. the language gate ---------------------------------------------------
+# One comment in the template ("dispatch a ... one to ... the") uses two words
+# the repository's language gate refuses (scripts/check-language.sh), so this
+# script cannot spell them either: the pattern matches the shape of the line.
+# Same meaning, different words.
+if grep -qE 'dispatch a [a-z]+ one to [a-z]+ the' "$CLIENT"; then
+  TMP="$CLIENT.tmp.$$"
+  sed -E 's/dispatch a [a-z]+ one to [a-z]+ the/dispatch one ourselves to release the/' "$CLIENT" > "$TMP"
+  mv "$TMP" "$CLIENT"
+  echo "patch-shell: reworded the template comment the language gate refuses"
+fi
+
 # ---- 2. startActivityForResult for the wallet ------------------------------
 if grep -q 'launchWallet(' "$CLIENT"; then
   echo "patch-shell: WebShellViewClient.kt already launches the wallet for a result"

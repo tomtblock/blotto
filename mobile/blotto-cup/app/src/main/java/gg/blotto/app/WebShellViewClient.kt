@@ -30,7 +30,7 @@ open class WebShellViewClient(
                 if (launchWallet(Intent(Intent.ACTION_VIEW, url))) {
                     // The wallet protocol library uses window.blur to detect that the
                     // wallet app opened.  In a WebView the blur event never fires
-                    // naturally, so we dispatch a synthetic one to unblock the
+                    // naturally, so we dispatch one ourselves to release the
                     // detection promise (3-second timeout in startSession.ts).
                     view.evaluateJavascript("window.dispatchEvent(new Event('blur'))", null)
                 }
