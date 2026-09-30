@@ -10,10 +10,10 @@ Android package, and the store submission**. Decision `D-E18` in
 **Current reality (2026-09-30).** Nothing has been submitted to the Solana dApp Store, and nothing
 will be before the mainnet launch ([`../ROADMAP.md`](../ROADMAP.md) §3). The Android package has
 been generated, signed with the store key, patched (§3), installed on an Android 15 emulator and
-taken through sign-in, verification and a devnet entry (§5). **The generated project is not yet
-committed** — it exists on the key holder's machine; §3 says how to commit it. The app-side changes
-are live on every deploy and change nothing for a desktop or iOS visitor (§1). The short way in for
-anyone new is [`mobile/README.md`](../../mobile/README.md).
+taken through sign-in, verification and a devnet entry (§5). The generated project is committed
+under `mobile/blotto-cup/` with both patches applied and the diagnostic switches off. The app-side
+changes are live on every deploy and change nothing for a desktop or iOS visitor (§1). The short
+way in for anyone new is [`mobile/README.md`](../../mobile/README.md).
 
 **Contents**
 
@@ -355,10 +355,6 @@ not set up.
 
 ## 9. Known limitations and open questions
 
-- **The generated project is not in the repository yet.** It was generated and patched on the key
-  holder's machine on 2026-09-30 and still carries §5's diagnostic switches; §3 "Commit the
-  generated project" is the procedure. Until it lands, a second machine regenerates it from §3 —
-  which works, but only with the store key.
 - **Only the key holder's package is verified** (§3 "Who builds, who installs"). Testers install
   the shared `.apk`; a package built with another key demonstrates the pre-fix failure exactly
   ("This wallet cannot sign the confirmation"). This is the wallet standard working as designed,

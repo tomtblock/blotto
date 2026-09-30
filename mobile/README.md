@@ -49,7 +49,7 @@ Every line, what each does and what can go wrong: manual **§3**. Share the `.ap
 | `patch-shell.sh` | The two patches the generated project needs before a wallet app works with it — the Android 11+ `<queries>` block, and the wallet launched with `startActivityForResult` so the wallet can verify the app. `webshell init` (0.5.0) writes neither. Run after every `init` |
 | `webshell.env.example` | The two environment variable names the build reads (key passwords). Names only |
 | `.gitignore` | Refuses the signing key, its passwords, build output and machine-local files |
-| `blotto-cup/` | The generated Android project, once `webshell init` has been run and committed (manual §3). Absent until then — see the manual's "Current reality" |
+| `blotto-cup/` | The generated Android project (solana-mobile 0.5.0, both patches applied), committed 2026-09-30. `twa-manifest.json` names the key holder's keystore path, so `webshell build blotto-cup` works there without flags; on another machine pass `--keystore-path` and `--keystore-alias` (manual §3) |
 
 The signing key is **never** in this folder or anywhere in the repository. Nothing in `mobile/`
 is built by CI; the standing-rules and language gates still read every committed file here.
