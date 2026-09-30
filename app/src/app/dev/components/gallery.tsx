@@ -250,7 +250,7 @@ export function Gallery() {
             <div className="relative h-[640px] overflow-hidden rounded-[28px] bg-brand-pink [&>[role=dialog]]:absolute">
               <SigningOverlay step="pay" />
             </div>
-            <div className="rounded-[28px] bg-brand-pink p-4 sm:p-6" data-testid="gallery-entered">
+            <div className="play-field rounded-[28px] bg-brand-pink p-4 sm:p-6" data-testid="gallery-entered">
               <EnteredPanel
                 entryIndex={11}
                 asset="F1XTUREpass11111111111111111111111111111111"

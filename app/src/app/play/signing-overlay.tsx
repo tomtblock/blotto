@@ -9,22 +9,29 @@
  * blender), which is deleted. V3 (founder, the same day): the card is
  * bigger — most of the viewport while the transaction finalises.
  *
- * The three steps are the ones the page can actually observe (observed-
+ * The steps are the ones the page can actually observe (observed-
  * signer.ts): the wallet has not yet signed the sealed entry, has signed it
  * but not the payment, or has signed both and the chain is confirming.
+ * V5 (founder 2026-09-30): one more, AHEAD of those — the statements'
+ * signature (entry/attestation.ts), for a wallet whose acceptance was not
+ * on record when the key was pressed. That prompt can hang (a mobile
+ * wallet that never came back), so that step alone carries a way to stop
+ * waiting; the entry's own prompts are the tx seam's to time out.
  */
 
 import { COPY } from '@/copy';
 import { AmbientClip } from '@/components/ui/ambient-clip';
+import { Button } from '@/components/ui/button';
 
-export type SignStep = 'seal' | 'pay' | 'network';
+export type SignStep = 'attest' | 'seal' | 'pay' | 'network';
 
 const CLIP = [{ mp4: '/motion/v2/sign.mp4', webm: '/motion/v2/sign.webm' }];
 const POSTER = '/motion/v2/sign.jpg';
 
-export function SigningOverlay({ step }: { step: SignStep }) {
+export function SigningOverlay({ step, onCancel }: { step: SignStep; onCancel?: () => void }) {
   const r = COPY.reveal;
-  const line = step === 'seal' ? r.signingSeal : step === 'pay' ? r.signingPay : r.confirming;
+  const line =
+    step === 'attest' ? r.signingAttest : step === 'seal' ? r.signingSeal : step === 'pay' ? r.signingPay : r.confirming;
   return (
     <div
       role="dialog"
@@ -48,6 +55,12 @@ export function SigningOverlay({ step }: { step: SignStep }) {
           />
           {line}
         </p>
+        {step === 'attest' && onCancel ? (
+          // The way out of a prompt that never comes back (audit C-13).
+          <Button intent="quiet" className="border-brand-cream/40 text-brand-cream" onClick={onCancel} data-testid="gate-cancel">
+            {COPY.gate.attestCancel}
+          </Button>
+        ) : null}
       </div>
     </div>
   );

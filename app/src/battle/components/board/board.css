@@ -72,20 +72,74 @@
 .bba--demo {
   box-shadow: 0 4px 0 var(--wood-2), var(--elevation-home);
 }
-/* V2 (founder 2026-09-27): on a desktop the board is the whole screen. The
- * play page's column is narrow (the gates read best that way), so the board
- * breaks out of it against the play field's inline size (`100cqw`,
- * globals.css) and stands taller; the landing demo grows in its column. */
+/* V5 (founder 2026-09-30): the real run is ONE view — the board and its
+ * tray on the left, the rail (entry-rail.tsx) with the seal key at its foot
+ * on the right. The play page's column is narrow (the gates read best that
+ * way), so the run breaks out of it against the play field's inline size
+ * (`100cqw`, globals.css) from the sm width, and becomes the two-column
+ * grid from lg. Below that the rail stacks under the tray. The landing
+ * demo grows in its own column. */
+.bb--run {
+  width: 100%;
+}
+.bb-run-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+}
+.bb-run-main .bb-tray {
+  margin: 0 auto;
+}
+.bb-run-rail {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 14px;
+}
+.bb-run-rail .bb-seal-wrap {
+  width: 100%;
+  max-width: none;
+  margin-top: auto;
+}
+.bb-run-rail .bb-btn--seal {
+  width: 100%;
+}
+.bb-run-rail .bb-seal-tip-anchor {
+  width: 100%;
+}
+/* On the pink field the §8.6 line is berry, not the stage's white. */
+.bb-run-rail .bb-final {
+  color: var(--color-brand-berry, #5e1b40);
+  text-shadow: none;
+  font-size: 12px;
+}
+@media (min-width: 640px) {
+  .bb--run {
+    width: min(100cqw - 40px, 1440px);
+    margin-left: calc(50% - min(100cqw - 40px, 1440px) / 2);
+  }
+  .bb--run .bba-stage {
+    height: clamp(480px, 66vh, 820px);
+  }
+}
 @media (min-width: 900px) {
-  .bb--wide {
-    width: min(100cqw - 40px, 1120px);
-    margin-left: calc(50% - min(100cqw - 40px, 1120px) / 2);
-  }
-  .bb--wide .bba-stage {
-    height: clamp(520px, 78vh, 960px);
-  }
   .bba--demo .bba-stage {
     height: clamp(480px, 70vh, 820px);
+  }
+}
+@media (min-width: 1024px) {
+  .bb--run {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) clamp(320px, 27cqw, 400px);
+    align-items: stretch;
+    gap: 8px 22px;
+  }
+  .bb--run .bba-stage {
+    height: clamp(520px, 72vh, 900px);
+  }
+  .bb-run-rail {
+    min-height: 100%;
   }
 }
 .bba-map {

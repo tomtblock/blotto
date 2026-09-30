@@ -12,6 +12,14 @@
  * press is the seal. The seven-screen dial run this replaced was removed
  * on 2026-09-24.
  *
+ * V5 (founder 2026-09-30): the entry is ONE view. The real run is a grid —
+ * the board with the troop tray under it on the left, and on the right a
+ * RAIL the page hands in (`rail`: "How this pool…", the statements) with
+ * the seal key at its foot. The key waits on the board (every field full)
+ * and on the page (`sealHold`: the statements, until they are confirmed),
+ * and says which. The demo keeps its own foot: the tray with "Submit my
+ * board" beside it.
+ *
  * Ready → board (the machine, src/battle/board/machine.ts) → (review →)
  * confirmed. The reducer owns every rule; this component feeds ticks and
  * the arena's gestures and renders state. The arena itself (arena/) is the
@@ -23,7 +31,7 @@
  * remainder carried.
  */
 
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useReducer, useRef, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { COPY } from '@/copy';
 import { Button } from '@/components/ui/button';
@@ -58,6 +66,12 @@ export interface BoardFlowProps {
   onRunStarted?: () => void;
   /** Demo mode (the landing page): no seal, no leave guard; the review offers "Try again". */
   demo?: boolean;
+  /** The real run's rail: beside the board on a wide screen, under it on a
+   * phone; the seal key stands at its foot. Ignored by the demo. */
+  rail?: ReactNode;
+  /** A reason outside the board that the seal must wait on (the statements),
+   * shown on the greyed key; null when the page is ready. */
+  sealHold?: string | null;
 }
 
 /**
@@ -84,7 +98,45 @@ function toAllocations(battles: readonly (readonly number[])[], mode: BoardMode)
   return rows;
 }
 
-export function BoardFlow({ mode, onConfirm, onRunStarted, demo = false }: BoardFlowProps) {
+/**
+ * The one commit key (V4, founder 2026-09-27; V5 at the rail's foot): greyed
+ * with the reason on hover until nothing holds it, then lit and glowing.
+ * §8.6 sits above it, always. `hold` is the sentence the key waits on, or
+ * null when it is live.
+ */
+const SealKey = forwardRef<
+  HTMLButtonElement,
+  { hold: string | null; onSeal: () => void }
+>(function SealKey({ hold, onSeal }, ref) {
+  const live = hold === null;
+  return (
+    <div className="bb-seal-wrap" data-complete={live ? '1' : '0'}>
+      <p className="bb-final">{COPY.pool.decisionsFinal}</p>
+      <span className="bb-seal-tip-anchor">
+        <button
+          ref={ref}
+          type="button"
+          className={'bb-btn bb-btn--commit bb-btn--seal' + (live ? ' bb-btn--seal-on' : '')}
+          disabled={!live}
+          aria-describedby={live ? undefined : 'bb-seal-tip'}
+          onClick={() => {
+            if (live) onSeal();
+          }}
+          data-testid="board-seal"
+        >
+          {COPY.battle.seal}
+        </button>
+        {!live && (
+          <span role="tooltip" id="bb-seal-tip" className="bb-seal-tip">
+            {hold}
+          </span>
+        )}
+      </span>
+    </div>
+  );
+});
+
+export function BoardFlow({ mode, onConfirm, onRunStarted, demo = false, rail, sealHold = null }: BoardFlowProps) {
   const router = useRouter();
   const [state, dispatch] = useReducer(reduceBoard, mode, (m) => initialBoardState(m));
   const [openField, setOpenField] = useState<number | null>(null);
@@ -237,24 +289,43 @@ export function BoardFlow({ mode, onConfirm, onRunStarted, demo = false }: Board
     setGuideStep(null);
   }, []);
 
+  /* The real run's rail column: what the page handed in, then the key. */
+  const railColumn = (hold: string | null, onSeal: () => void) => (
+    <aside className="bb-run-rail" aria-label={COPY.board.railLabel}>
+      {rail}
+      <SealKey ref={sealKey} hold={hold} onSeal={onSeal} />
+    </aside>
+  );
+
   /* ——— Ready: the banner over an idle arena. ——— */
   if (state.phase === 'ready') {
     const idle = reduceBoard(state, { type: 'begin' });
     if (idle.phase !== 'play') return null;
+    const begin = () => {
+      dispatch({ type: 'begin' });
+      onRunStarted?.();
+    };
+    const stage = (
+      <div style={{ position: 'relative' }}>
+        <Arena state={idle} interactive={false} onDeposit={() => 0} onOpenStepper={() => {}} onTapEmpty={() => {}} onHold={() => {}} demo={demo} />
+        <ReadyBanner mode={mode} onDismiss={begin} onGuide={startGuide} />
+      </div>
+    );
+    if (demo) {
+      return (
+        <section className="bb animate-settle">
+          {stage}
+          <TroopTray state={idle} onSelect={() => {}} disabled />
+        </section>
+      );
+    }
     return (
-      <section className={`bb animate-settle${demo ? '' : ' bb--wide'}`}>
-        <div style={{ position: 'relative' }}>
-          <Arena state={idle} interactive={false} onDeposit={() => 0} onOpenStepper={() => {}} onTapEmpty={() => {}} onHold={() => {}} demo={demo} />
-          <ReadyBanner
-            mode={mode}
-            onDismiss={() => {
-              dispatch({ type: 'begin' });
-              onRunStarted?.();
-            }}
-            onGuide={startGuide}
-          />
+      <section className="bb bb--run animate-settle">
+        <div className="bb-run-main">
+          {stage}
+          <TroopTray state={idle} onSelect={() => {}} disabled />
         </div>
-        <TroopTray state={idle} onSelect={() => {}} disabled />
+        {railColumn(COPY.board.sealLocked, () => {})}
       </section>
     );
   }
@@ -276,149 +347,164 @@ export function BoardFlow({ mode, onConfirm, onRunStarted, demo = false }: Board
             : play.mode === 'hard'
               ? COPY.board.hintHoldHard(selectedName, left)
               : COPY.board.hintHold(selectedName);
-    return (
-      <section className={`bb${demo ? '' : ' bb--wide'}`}>
-        <div style={{ position: 'relative' }}>
-          <Arena
-            state={play}
-            interactive={stepperField === null}
-            grab={grab}
-            onDeposit={onDeposit}
-            onOpenStepper={onOpenStepper}
-            onTapEmpty={onTapEmpty}
-            onHold={onHoldChange}
-            highlightField={guideStep === 2 || guideStep === 4 || guideStep === 6 ? 0 : null}
-            demo={demo}
-          />
-          <div className="bb-hud">
-            <div className="bb-hud-top">
-              <TimerCard remainingMs={play.remainingMs} started={play.clockStarted} />
-              <ProgressReadout state={play} />
-            </div>
-            <div className="bb-hud-left">
-              <ModeBadge mode={play.mode} />
-              <GrabKey on={grab} onToggle={() => setGrab((g) => !g)} />
-              {!demo && (
-                <button type="button" className="bb-btn bb-leave" onClick={() => setLeaveSheet(true)}>
-                  {COPY.board.leave}
-                </button>
-              )}
-            </div>
-            {/* V2: Undo and the bin on the right, clear of Field 1 under the HUD. */}
-            <div className="bb-hud-right">
-              <UndoKey depth={undoStack.length} onUndo={undo} />
-              <ClearBoardKey
-                disabled={boardRemaining(play) === (play.mode === 'easy' ? EASY_PER_FIELD * 7 : HARD_TOTAL)}
-                onClear={() => {
-                  snapshot();
-                  setOpenField(null);
-                  send({ type: 'clear_board' });
-                  tookBack();
-                }}
-              />
-            </div>
+    const stage = (
+      <div style={{ position: 'relative' }}>
+        <Arena
+          state={play}
+          interactive={stepperField === null}
+          grab={grab}
+          onDeposit={onDeposit}
+          onOpenStepper={onOpenStepper}
+          onTapEmpty={onTapEmpty}
+          onHold={onHoldChange}
+          highlightField={guideStep === 2 || guideStep === 4 || guideStep === 6 ? 0 : null}
+          demo={demo}
+        />
+        <div className="bb-hud">
+          <div className="bb-hud-top">
+            <TimerCard remainingMs={play.remainingMs} started={play.clockStarted} />
+            <ProgressReadout state={play} />
           </div>
-          {guideStep !== null && (
-            <BoardGuide
-              mode={play.mode}
-              step={guideStep}
-              onNext={() => setGuideStep((g) => (g === null ? null : g + 1))}
-              onBack={() => setGuideStep((g) => (g === null ? null : Math.max(1, g - 1)))}
-              onSkip={endGuide}
-              onStart={endGuide}
-            />
-          )}
-          {stepperField !== null && (
-            <Stepper
-              state={play}
-              field={stepperField}
-              onPlace={(field, stat, delta) => {
-                snapshot();
-                send({ type: 'place', field, stat, delta });
-                if (delta < 0) tookBack();
-              }}
-              onFill={(field, stat) => {
-                snapshot();
-                send({ type: 'fill_field', field, stat });
-              }}
-              onSendBack={(field, stat) => {
-                snapshot();
-                send({ type: 'send_back', field, stat });
-                tookBack();
-              }}
-              onClearField={(field) => {
-                snapshot();
-                send({ type: 'clear_field', field });
-                tookBack();
-              }}
-              onLock={(field) => send({ type: 'lock', field })}
-              onUnlock={(field) => send({ type: 'unlock', field })}
-              onSelect={(stat) => send({ type: 'select', stat })}
-              onClose={() => setOpenField(null)}
-            />
-          )}
-        </div>
-        <HintLine text={hint} />
-        {/* V4 (founder 2026-09-27): the seal key lives beside the troops from
-            the first moment — greyed, with "Allocate all blotts first" on
-            hover, until every field is full; then it glows. §8.6 sits above
-            it, always. A full REAL board seals from here (the review state is
-            taken from the reducer for the record under the signing hold, then
-            submit and confirm go through as one press); the demo's full board
-            goes to its review, which offers Try again. */}
-        <div className="bb-foot">
-          <TroopTray state={play} onSelect={selectTroop} />
-          <div className="bb-seal-wrap" data-complete={complete ? '1' : '0'}>
-            {!demo && <p className="bb-final">{COPY.pool.decisionsFinal}</p>}
-            <span className="bb-seal-tip-anchor">
-              <button
-                type="button"
-                className={'bb-btn bb-btn--commit bb-btn--seal' + (complete ? ' bb-btn--seal-on' : '')}
-                disabled={!complete || guideStep !== null}
-                aria-describedby={complete ? undefined : 'bb-seal-tip'}
-                onClick={() => {
-                  if (!complete) return;
-                  setOpenField(null);
-                  if (demo) {
-                    send({ type: 'submit' });
-                    return;
-                  }
-                  const reviewed = reduceBoard(play, { type: 'submit' });
-                  if (reviewed.phase === 'review') setRecord(reviewed);
-                  send({ type: 'submit' });
-                  send({ type: 'confirm' });
-                }}
-                data-testid="board-seal"
-              >
-                {demo ? COPY.board.submitComplete : COPY.battle.seal}
+          <div className="bb-hud-left">
+            <ModeBadge mode={play.mode} />
+            <GrabKey on={grab} onToggle={() => setGrab((g) => !g)} />
+            {!demo && (
+              <button type="button" className="bb-btn bb-leave" onClick={() => setLeaveSheet(true)}>
+                {COPY.board.leave}
               </button>
-              {!complete && (
-                <span role="tooltip" id="bb-seal-tip" className="bb-seal-tip">
-                  {COPY.board.sealLocked}
-                </span>
-              )}
-            </span>
+            )}
+          </div>
+          {/* V2: Undo and the bin on the right, clear of Field 1 under the HUD. */}
+          <div className="bb-hud-right">
+            <UndoKey depth={undoStack.length} onUndo={undo} />
+            <ClearBoardKey
+              disabled={boardRemaining(play) === (play.mode === 'easy' ? EASY_PER_FIELD * 7 : HARD_TOTAL)}
+              onClear={() => {
+                snapshot();
+                setOpenField(null);
+                send({ type: 'clear_board' });
+                tookBack();
+              }}
+            />
           </div>
         </div>
-
-        {!demo && (
-          <Sheet open={leaveSheet} onClose={() => setLeaveSheet(false)} title={COPY.battle.backStay}>
-            <p className="max-w-prose text-[15px] leading-6 text-ink-muted">{COPY.battle.backSheetLine}</p>
-            <div className="mt-4 flex gap-3">
-              <Button
-                onClick={() => {
-                  setLeaveSheet(false);
-                  history.pushState({ blottoRun: true }, '');
-                }}
-              >
-                {COPY.battle.backStay}
-              </Button>
-              <Button intent="quiet" onClick={() => router.push('/')}>
-                {COPY.battle.backLeave}
-              </Button>
-            </div>
-          </Sheet>
+        {guideStep !== null && (
+          <BoardGuide
+            mode={play.mode}
+            step={guideStep}
+            onNext={() => setGuideStep((g) => (g === null ? null : g + 1))}
+            onBack={() => setGuideStep((g) => (g === null ? null : Math.max(1, g - 1)))}
+            onSkip={endGuide}
+            onStart={endGuide}
+          />
         )}
+        {stepperField !== null && (
+          <Stepper
+            state={play}
+            field={stepperField}
+            onPlace={(field, stat, delta) => {
+              snapshot();
+              send({ type: 'place', field, stat, delta });
+              if (delta < 0) tookBack();
+            }}
+            onFill={(field, stat) => {
+              snapshot();
+              send({ type: 'fill_field', field, stat });
+            }}
+            onSendBack={(field, stat) => {
+              snapshot();
+              send({ type: 'send_back', field, stat });
+              tookBack();
+            }}
+            onClearField={(field) => {
+              snapshot();
+              send({ type: 'clear_field', field });
+              tookBack();
+            }}
+            onLock={(field) => send({ type: 'lock', field })}
+            onUnlock={(field) => send({ type: 'unlock', field })}
+            onSelect={(stat) => send({ type: 'select', stat })}
+            onClose={() => setOpenField(null)}
+          />
+        )}
+      </div>
+    );
+
+    if (demo) {
+      /* The demo's foot (V4): the tray with its submit key beside it, greyed
+         until every field is full; the full board goes to its review, which
+         offers Try again. */
+      return (
+        <section className="bb">
+          {stage}
+          <HintLine text={hint} />
+          <div className="bb-foot">
+            <TroopTray state={play} onSelect={selectTroop} />
+            <div className="bb-seal-wrap" data-complete={complete ? '1' : '0'}>
+              <span className="bb-seal-tip-anchor">
+                <button
+                  type="button"
+                  className={'bb-btn bb-btn--commit bb-btn--seal' + (complete ? ' bb-btn--seal-on' : '')}
+                  disabled={!complete || guideStep !== null}
+                  aria-describedby={complete ? undefined : 'bb-seal-tip'}
+                  onClick={() => {
+                    if (!complete) return;
+                    setOpenField(null);
+                    send({ type: 'submit' });
+                  }}
+                  data-testid="board-seal"
+                >
+                  {COPY.board.submitComplete}
+                </button>
+                {!complete && (
+                  <span role="tooltip" id="bb-seal-tip" className="bb-seal-tip">
+                    {COPY.board.sealLocked}
+                  </span>
+                )}
+              </span>
+            </div>
+          </div>
+        </section>
+      );
+    }
+
+    /* The real run (V5): the board and its tray on the left, the rail on
+       the right with the one key at its foot. A full board seals from
+       here: the review state is taken from the reducer for the record
+       under the signing hold, then submit and confirm go through as one
+       press. The board's own reason comes first, then the page's. */
+    const hold = !complete ? COPY.board.sealLocked : guideStep !== null ? COPY.board.sealLocked : sealHold;
+    return (
+      <section className="bb bb--run">
+        <div className="bb-run-main">
+          {stage}
+          <HintLine text={hint} />
+          <TroopTray state={play} onSelect={selectTroop} />
+        </div>
+        {railColumn(hold, () => {
+          setOpenField(null);
+          const reviewed = reduceBoard(play, { type: 'submit' });
+          if (reviewed.phase === 'review') setRecord(reviewed);
+          send({ type: 'submit' });
+          send({ type: 'confirm' });
+        })}
+
+        <Sheet open={leaveSheet} onClose={() => setLeaveSheet(false)} title={COPY.battle.backStay}>
+          <p className="max-w-prose text-[15px] leading-6 text-ink-muted">{COPY.battle.backSheetLine}</p>
+          <div className="mt-4 flex gap-3">
+            <Button
+              onClick={() => {
+                setLeaveSheet(false);
+                history.pushState({ blottoRun: true }, '');
+              }}
+            >
+              {COPY.battle.backStay}
+            </Button>
+            <Button intent="quiet" onClick={() => router.push('/')}>
+              {COPY.battle.backLeave}
+            </Button>
+          </div>
+        </Sheet>
       </section>
     );
   }
@@ -444,29 +530,17 @@ export function BoardFlow({ mode, onConfirm, onRunStarted, demo = false }: Board
         </section>
       );
     }
+    /* The buzzer's review (or an early submit): the record on the left, the
+       same rail and the same key on the right, focused on arrival so one
+       press seals. The board is complete by construction here (the spread);
+       only the page's hold can still wait. */
     return (
-      <section className="bb flex flex-col gap-5">
-        {panel}
-        <div className="flex flex-col gap-3">
-          {/* PID §8.6 — above the confirm, always. Do not move it below. */}
-          <p className="text-[15px] font-semibold leading-6 text-ink">{COPY.pool.decisionsFinal}</p>
-          {/* One step (V2): confirm, seal and submit. The wallet's own
-              prompts are the second look; the key is focused on arrival. */}
-          <Button
-            ref={sealKey}
-            size="lg"
-            // The one commit key on the pink field: a cream rim so it reads
-            // on pink, taller than the tray's keys.
-            className="h-16 border-[3px] border-brand-cream text-[20px] shadow-[var(--elevation-key-action)]"
-            onClick={() => {
-              setRecord(review);
-              send({ type: 'confirm' });
-            }}
-            data-testid="seal-confirm"
-          >
-            {COPY.battle.seal}
-          </Button>
-        </div>
+      <section className="bb bb--run">
+        <div className="bb-run-main">{panel}</div>
+        {railColumn(sealHold, () => {
+          setRecord(review);
+          send({ type: 'confirm' });
+        })}
       </section>
     );
   }

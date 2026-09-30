@@ -1,17 +1,27 @@
 'use client';
 
 /*
- * The play-flow client (C9): geo gate → sign-in → age attestation → the
- * BALANCE pre-flight → the battle flow → the sealed submit through the REAL
- * transaction pipeline → the reveal takeover on the outcome.
+ * The play-flow client (C9): geo gate → sign-in → the BALANCE pre-flight →
+ * the board, with "How this pool…" and the two statements beside it → the
+ * ONE seal press → (the statements' signature, for a wallet not yet on
+ * record) → the sealed submit through the REAL transaction pipeline → the
+ * reveal takeover on the outcome.
  *
- * The balance check runs BEFORE the ninety-second session ever starts:
+ * The balance check runs BEFORE the three-minute session ever starts:
  * a wallet that cannot cover entry + transaction costs sees the shortfall
  * (and, behind NEXT_PUBLIC_TOPUP_ENABLED, the provider top-up flow) instead
  * of a timer it cannot afford to finish.
+ *
+ * V5 (founder 2026-09-30): the entry is one view. The full-screen "Before
+ * you enter" clickwrap that stood ahead of the board is gone; its two
+ * statements are tiles on the board's rail (entry-rail.tsx), the seal key
+ * waits on them (entry/seal-hold.ts), and the SAME signed acceptance
+ * (D-B4, entry/attestation.ts) is taken at the seal press, ahead of the
+ * entry's own two prompts. Nothing about what is signed, recorded or
+ * verified changed — only where the player confirms it.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { address } from '@solana/kit';
@@ -38,11 +48,8 @@ import { checkGeoGate, type GeoGateState } from '@/entry/geo-gate';
 import type { AddFundsOptions } from '@/wallet/types';
 import { openFunding } from '@/wallet/funding';
 import { isMainnet } from '@/chain/cluster';
-import {
-  hasLocalAttestation,
-  submitAttestation,
-  type AttestationFailure,
-} from '@/entry/attestation';
+import { hasLocalAttestation, submitAttestation, type AttestationFailure } from '@/entry/attestation';
+import { sealHold } from '@/entry/seal-hold';
 import { signInHref } from '@/app/signin/return-to';
 import { runInterruption } from './run-guard';
 import { RevealHost } from './reveal-host';
@@ -50,6 +57,7 @@ import { PendingPanel } from '@/components/ui/pending-panel';
 import { STOP_ACTIONS, StopCard } from '@/components/ui/stop-card';
 import { observeSigner } from './observed-signer';
 import { EnteredPanel } from './entered-panel';
+import { EntryRail, notifyAttested, useAttested } from './entry-rail';
 import { SigningOverlay, type SignStep } from './signing-overlay';
 import { entryServiceNotifyVersion } from '@/notify/pool-notify';
 import { BUILD_VERSION, checkBuildVersion } from '@/build/version';
@@ -70,8 +78,6 @@ const FAUCET_URL = 'https://faucet.solana.com/';
  */
 const SIGNER_WAIT_MS = 8_000;
 
-
-/** After this long a hold says so, rather than looking frozen. */
 /** Ceiling on the browser's fallback read of the pool. */
 const POOL_LOAD_TIMEOUT_MS = 8_000;
 
@@ -117,6 +123,15 @@ function EntriesCheck({
 /** The server's read of the pool: `null` when the server could not read. */
 export type InitialPool = { pool: PoolSummary | null } | null;
 
+/**
+ * The statements' signature at the seal press (V5): idle until the press;
+ * `signing` while the wallet prompt and the POST are out (the hold shows
+ * its own sentence and a way to stop waiting); `failed` with the reason,
+ * on a stop card that keeps the seven battles and offers the same press
+ * again.
+ */
+type AttestState = { phase: 'idle' } | { phase: 'signing' } | { phase: 'failed'; reason: AttestationFailure };
+
 export function PlayClient({ initial = null }: { initial?: InitialPool }) {
   const params = useSearchParams();
   const router = useRouter();
@@ -148,7 +163,7 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
    * a network error"): the chain holds one entry per wallet per pool, and a
    * second `register` fails at the entry account's creation. Read the pool's
    * entries FIRST, so a wallet that is already in sees its seat instead of
-   * ninety seconds of battles that cannot be entered. Keyed by (pool,
+   * three minutes of battles that cannot be entered. Keyed by (pool,
    * wallet); a read that fails or times out lets the run proceed — the tx
    * classifier still names a duplicate honestly if it comes to that.
    */
@@ -226,8 +241,8 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
    * THE SIGNING HOLD (V2, founder 2026-09-27; signing-overlay.tsx): from the
    * seal press until the network answers, the whole screen is one graphic
    * and one sentence over the board's record. Which sentence is decided by
-   * the wallet's two signatures, observed on the signer object this page
-   * hands to the entry path (never inside it), and by the takeover's beat.
+   * the wallet's signatures, observed on the signer object this page hands
+   * to the entry path (never inside it), and by the takeover's beat.
    */
   const [signStep, setSignStep] = useState<SignStep>('seal');
   const [revealBeat, setRevealBeat] = useState<RevealState['beat']>('entry');
@@ -240,6 +255,30 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
   // it only when there is a dispatcher behind it.
   const [notifyVersion, setNotifyVersion] = useState<string | null>(null);
   const onRevealBeat = useCallback((beat: RevealState['beat']) => setRevealBeat(beat), []);
+
+  /*
+   * THE STATEMENTS (V5). Whether this wallet's acceptance of the current
+   * terms is on record on this device; the two tiles' state while it is
+   * not; and the signature's progress at the seal press. The tiles reset
+   * with the wallet: a different account confirms for itself.
+   */
+  const [consent, setConsent] = useState<{ wallet: string | null; age: boolean; terms: boolean }>({
+    wallet: null,
+    age: false,
+    terms: false,
+  });
+  const ageChecked = consent.wallet === wallet && consent.age;
+  const termsChecked = consent.wallet === wallet && consent.terms;
+  const setAgeChecked = useCallback(
+    (next: boolean) => setConsent((c) => ({ wallet, age: next, terms: c.wallet === wallet && c.terms })),
+    [wallet]
+  );
+  const setTermsChecked = useCallback(
+    (next: boolean) => setConsent((c) => ({ wallet, age: c.wallet === wallet && c.age, terms: next })),
+    [wallet]
+  );
+  const [attest, setAttest] = useState<AttestState>({ phase: 'idle' });
+  const cancelAttest = useRef<AbortController | null>(null);
 
   const startSubmit = useCallback(
     (battles: readonly Allocation[], timingsMs: readonly number[]): Promise<RevealResult> | null => {
@@ -269,7 +308,8 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
 
   // The confirmed battles, kept ONLY to power retry after a failure the tx
   // seam marks `retryable` (a fresh salt + upsert ciphertext + new packet —
-  // nothing landed and nothing can).
+  // nothing landed and nothing can), and after a statements' signature that
+  // did not go through.
   const [lastConfirmed, setLastConfirmed] = useState<{
     battles: readonly Allocation[];
     timingsMs: readonly number[];
@@ -279,8 +319,8 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
    * C-17 / D-13 (audit 2026-09-11). THE RUN IS THE PLAYER'S WORK, and until
    * the seal it exists nowhere but inside the board (BoardFlow). Every gate below used
    * to be re-evaluated on every render, so a wallet reconnect, an active-
-   * address change, or a balance re-check in the middle of the ninety
-   * seconds took the screen away and destroyed all seven allocations with
+   * address change, or a balance re-check in the middle of the three
+   * minutes took the screen away and destroyed all seven allocations with
    * no message and no recovery.
    *
    * The wallet the run BELONGS to is captured when the player begins.
@@ -319,15 +359,48 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
     };
   }, []);
 
+  /**
+   * The seal press, from the board or the buzzer's review. In order: the
+   * build check; the statements' signature when this wallet's acceptance
+   * is not on record (the key only lit once both tiles were confirmed,
+   * seal-hold.ts); then the entry itself. Each step that stops says so and
+   * keeps the seven battles for the same press again.
+   */
   const onConfirm = useCallback(
     async (battles: readonly Allocation[], timingsMs: readonly number[]) => {
-      // Remembered FIRST and unconditionally: it is the player's ninety
-      // seconds, and it must survive whatever the submit does next.
+      // Remembered FIRST and unconditionally: it is the player's three
+      // minutes, and it must survive whatever the submit does next.
       setLastConfirmed({ battles, timingsMs });
       // Before the seal, never after: a stale page signs nothing.
       if ((await checkBuildVersion({ fetch, current: BUILD_VERSION })) === 'stale') {
         setStaleBuild(true);
         return;
+      }
+      const signerWallet = auth.status === 'signed-in' ? auth.walletAddress : null;
+      const signer = signerWallet ? auth.signers.find((s) => s.address === signerWallet) : undefined;
+      if (signerWallet && !hasLocalAttestation(signerWallet)) {
+        // The acceptance is the signature, not the tick (D-B4): taken now,
+        // once, ahead of the entry's own prompts. Fail-closed like the gate
+        // it replaced — a refusal, a decline or a hung prompt stops here.
+        setAttest({ phase: 'signing' });
+        setSignStep('attest');
+        const controller = new AbortController();
+        cancelAttest.current = controller;
+        const result = await submitAttestation(
+          process.env.NEXT_PUBLIC_ENTRY_API_URL,
+          signer,
+          signerWallet,
+          undefined,
+          undefined,
+          { signal: controller.signal }
+        );
+        cancelAttest.current = null;
+        if (!result.ok) {
+          setAttest({ phase: 'failed', reason: result.reason });
+          return;
+        }
+        notifyAttested();
+        setAttest({ phase: 'idle' });
       }
       const run = startSubmit(battles, timingsMs);
       if (run) {
@@ -342,11 +415,12 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
         setSubmitBlocked(true);
       }
     },
-    [startSubmit]
+    [startSubmit, auth]
   );
 
   const retrySubmit = useCallback(() => {
     setBoardBehind(false);
+    setAttest({ phase: 'idle' });
     if (lastConfirmed) void onConfirm(lastConfirmed.battles, lastConfirmed.timingsMs);
   }, [lastConfirmed, onConfirm]);
 
@@ -442,7 +516,7 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
     );
   }
 
-  // D-B3: territory gate ahead of everything, including the attestation.
+  // D-B3: territory gate ahead of everything, including the statements.
   if (geo === 'checking') return <PendingPanel label="Checking availability" />;
   if (geo === 'blocked') {
     // Fail-closed covers a slow or unreachable check too (D-B3), so the
@@ -500,6 +574,7 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
               setRunWallet(null);
               setLastConfirmed(null);
               setSubmitBlocked(false);
+              setAttest({ phase: 'idle' });
               setEntered(null);
             },
           },
@@ -562,7 +637,7 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
   }
   if (!hasSigner && !runInProgress) {
     // Signed in, address known, nothing that can sign for it. Hold, then say
-    // so — never let the ninety seconds start against a wallet that cannot
+    // so — never let the three minutes start against a wallet that cannot
     // confirm at the end.
     //
     // The KNOWN case does not hold (D-E18): a mobile wallet that offers
@@ -621,39 +696,38 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
   if (!flowWallet) return <PendingPanel label="Resolving your wallet" />;
 
   /*
-   * The board under its gates. Built ONCE and always returned in the same
-   * slot of the same fragment, with or without the takeover beside it:
-   * React keeps the board's state — the player's seven battles — only while
-   * its position in the tree is unchanged, and the signing hold is drawn
-   * over that record, not instead of it.
+   * The board under its gates, with the rail beside it. Built ONCE and
+   * always returned in the same slot of the same fragment, with or without
+   * the takeover beside it: React keeps the board's state — the player's
+   * seven battles — only while its position in the tree is unchanged, and
+   * the signing hold is drawn over that record, not instead of it.
    */
   const board = (
-    <AttestationGate
+    <BalanceGateView
       key={flowWallet}
+      // Once the entry is in flight the balance pre-flight is behind us; a
+      // re-check must not blank the record under the hold.
+      state={revealRun ? { state: 'ok', haveLamports: 0n } : balanceForGate}
+      entryLamports={pool.entry_lamports}
       wallet={flowWallet}
-      signer={auth.signers.find((s) => s.address === flowWallet)}
+      addFunds={auth.addFunds}
+      onRecheck={() => setBalanceRun((n) => n + 1)}
     >
-      <BalanceGateView
-        // Once the entry is in flight the balance pre-flight is behind us; a
-        // re-check must not blank the record under the hold.
-        state={revealRun ? { state: 'ok', haveLamports: 0n } : balanceForGate}
-        entryLamports={pool.entry_lamports}
+      <BoardWithRail
         wallet={flowWallet}
-        addFunds={auth.addFunds}
-        onRecheck={() => setBalanceRun((n) => n + 1)}
-      >
-        {/* The board (founder brief 2026-09-24), under the rule the pool was
-            opened with (Phase B): easy or hard, read from the pool record. */}
-        <BoardFlow
-          mode={poolMode(pool)}
-          onConfirm={onConfirm}
-          onRunStarted={() => {
-            setRunWallet(flowWallet);
-            setBoardBehind(true);
-          }}
-        />
-      </BalanceGateView>
-    </AttestationGate>
+        mode={poolMode(pool)}
+        ageChecked={ageChecked}
+        termsChecked={termsChecked}
+        onAgeChange={setAgeChecked}
+        onTermsChange={setTermsChecked}
+        railDisabled={attest.phase === 'signing'}
+        onConfirm={onConfirm}
+        onRunStarted={() => {
+          setRunWallet(flowWallet);
+          setBoardBehind(true);
+        }}
+      />
+    </BalanceGateView>
   );
 
   // The reveal takeover owns the screen from confirm onward: the hold over
@@ -739,6 +813,45 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
   }
 
   /*
+   * The statements' signature is out (V5): the same hold as the entry's,
+   * over the board's record, with its own sentence and a way to stop
+   * waiting on a prompt that never comes back.
+   */
+  if (attest.phase === 'signing') {
+    return (
+      <>
+        {boardBehind ? board : null}
+        <SigningOverlay step="attest" onCancel={() => cancelAttest.current?.abort()} />
+      </>
+    );
+  }
+
+  /*
+   * The statements were not signed: one sentence per reason (audit C-13),
+   * because the next step differs — a wallet that cannot sign messages is
+   * not helped by trying again; a declined prompt is not an error. The
+   * seven battles are held in `lastConfirmed`, so Try again is the same
+   * press: the statements first, then the entry.
+   */
+  if (attest.phase === 'failed') {
+    const retryable = attest.reason !== 'not-configured' && attest.reason !== 'cannot-sign';
+    return (
+      <StopCard
+        kind="failure"
+        title={COPY.gate.attestFailedTitle}
+        actions={[
+          ...(retryable ? [{ label: COPY.gate.poolLoadRetry, intent: 'primary' as const, onClick: retrySubmit, 'data-testid': 'gate-retry' }] : []),
+          { ...STOP_ACTIONS.wallet(), intent: retryable ? ('quiet' as const) : ('primary' as const) },
+          { ...STOP_ACTIONS.findAnotherPool(), intent: 'quiet' },
+        ]}
+        data-testid="stop-attest-failed"
+      >
+        <p data-testid="gate-error">{COPY.gate.attestErrors[attest.reason]}</p>
+      </StopCard>
+    );
+  }
+
+  /*
    * The seal could not be submitted — signed in, and nothing able to sign at
    * that moment. The seven allocations are held in `lastConfirmed`, so this
    * is a retry, not a restart: pressing try again re-submits the SAME
@@ -765,6 +878,56 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
       {board}
       {null}
     </>
+  );
+}
+
+/**
+ * The board and its rail for one wallet (V5). Whether the statements are
+ * drawn, and whether the seal waits on them, follows the device's record
+ * of this wallet's acceptance — read through a store so the server and
+ * the hydrating render agree (entry-rail.tsx).
+ */
+function BoardWithRail({
+  wallet,
+  mode,
+  ageChecked,
+  termsChecked,
+  onAgeChange,
+  onTermsChange,
+  railDisabled,
+  onConfirm,
+  onRunStarted,
+}: {
+  wallet: string;
+  mode: ReturnType<typeof poolMode>;
+  ageChecked: boolean;
+  termsChecked: boolean;
+  onAgeChange: (next: boolean) => void;
+  onTermsChange: (next: boolean) => void;
+  railDisabled: boolean;
+  onConfirm: (battles: readonly Allocation[], timingsMs: readonly number[]) => void;
+  onRunStarted: () => void;
+}) {
+  const attested = useAttested(wallet);
+  const hold = sealHold({ attested, ageChecked, termsChecked });
+  return (
+    <BoardFlow
+      mode={mode}
+      onConfirm={onConfirm}
+      onRunStarted={onRunStarted}
+      sealHold={hold === 'statements' ? COPY.gate.sealHoldStatements : null}
+      rail={
+        <EntryRail
+          mode={mode}
+          attested={attested}
+          ageChecked={ageChecked}
+          termsChecked={termsChecked}
+          onAgeChange={onAgeChange}
+          onTermsChange={onTermsChange}
+          disabled={railDisabled}
+        />
+      }
+    />
   );
 }
 
@@ -876,232 +1039,5 @@ function BalanceGateView({
         ) : null}
       </div>
     </StopCard>
-  );
-}
-
-/**
- * D-B4 clickwrap gate: renders its children only for a wallet whose
- * acceptance of the CURRENT terms version is on record. Lazy initial state
- * (no effect) — the component is re-mounted per wallet via `key`.
- */
-/* The attestation flag lives in localStorage; reading it during the first
- * render made server and client HTML disagree (hydration error). The
- * store below reads it through useSyncExternalStore — false on the
- * server, the real value after hydration, notified on a fresh attest. */
-const attestListeners = new Set<() => void>();
-function subscribeAttested(cb: () => void): () => void {
-  attestListeners.add(cb);
-  return () => attestListeners.delete(cb);
-}
-function notifyAttested() {
-  for (const cb of attestListeners) cb();
-}
-
-function AttestationGate({
-  wallet,
-  signer,
-  children,
-}: {
-  wallet: string;
-  signer: { signMessage?(message: Uint8Array): Promise<Uint8Array> } | undefined;
-  children: React.ReactNode;
-}) {
-  const attested = useSyncExternalStore(
-    subscribeAttested,
-    () => hasLocalAttestation(wallet),
-    () => false
-  );
-  const [ageChecked, setAgeChecked] = useState(false);
-  const [termsChecked, setTermsChecked] = useState(false);
-  /*
-   * C-13 (audit 2026-09-11): the REASON, not a boolean. Each one gets its
-   * own sentence, because "this wallet cannot sign messages" and "your
-   * connection dropped" have different next steps and only one of them is
-   * worth trying again.
-   */
-  const [attestError, setAttestError] = useState<AttestationFailure | null>(null);
-  const [attesting, setAttesting] = useState(false);
-  /** Lets the player stop waiting on a wallet prompt that never answers —
-   * the gate had no exit at all while it waited. */
-  const cancelAttest = useRef<AbortController | null>(null);
-
-  const onAttest = useCallback(async () => {
-    if (attesting) return;
-    setAttesting(true);
-    setAttestError(null);
-    const controller = new AbortController();
-    cancelAttest.current = controller;
-    const result = await submitAttestation(
-      process.env.NEXT_PUBLIC_ENTRY_API_URL,
-      signer,
-      wallet,
-      undefined,
-      undefined,
-      { signal: controller.signal }
-    );
-    cancelAttest.current = null;
-    setAttesting(false);
-    if (result.ok) notifyAttested();
-    else setAttestError(result.reason);
-  }, [attesting, signer, wallet]);
-
-  if (attested) return <>{children}</>;
-
-  // v3 D2: the clickwrap is a full-screen moment — the whole viewport is the
-  // agreement, nothing competes with it. Founder 2026-09-09: each statement
-  // is a designed tile with its own check mark, not a browser checkbox; the
-  // confirm stays disabled until both are confirmed, and the page says what
-  // the wallet prompt that follows is.
-  const statements = [
-    { checked: ageChecked, set: setAgeChecked, text: COPY.gate.ageAttestation, link: null },
-    {
-      checked: termsChecked,
-      set: setTermsChecked,
-      text: COPY.gate.termsAcceptance,
-      link: { href: '/rules', label: COPY.gate.gateReadTerms },
-    },
-  ] as const;
-  const confirmedCount = statements.filter((st) => st.checked).length;
-  const ready = confirmedCount === statements.length;
-
-  return (
-    <section className="animate-settle flex min-h-[70vh] flex-col justify-center gap-6">
-      <div className="flex flex-col gap-2">
-        <h2 className="font-display text-[34px] leading-[38px] font-extrabold text-ink">
-          {COPY.gate.gateTitle}
-        </h2>
-        <p className="max-w-prose text-[15px] leading-6 text-ink-muted">{COPY.gate.gateIntro}</p>
-      </div>
-      <ol className="flex flex-col gap-3">
-        {statements.map((st, i) => (
-          <li key={i}>
-            <StatementTile
-              index={i + 1}
-              of={statements.length}
-              checked={st.checked}
-              onChange={st.set}
-              text={st.text}
-              link={st.link}
-              disabled={attesting}
-            />
-          </li>
-        ))}
-      </ol>
-      {attestError && (
-        <p className="text-[14px] leading-5 text-price-down" role="alert" data-testid="gate-error">
-          {COPY.gate.attestErrors[attestError]}
-        </p>
-      )}
-      <div className="flex flex-col gap-3">
-        <Button size="lg" disabled={!ready || attesting} onClick={onAttest} data-testid="gate-confirm">
-          {attesting ? COPY.gate.gateSigning : COPY.gate.ageConfirm}
-        </Button>
-        {attesting && (
-          // The way out of a prompt that never came back. Without it the
-          // button stayed disabled and the page was a dead end.
-          <Button
-            intent="quiet"
-            data-testid="gate-cancel"
-            onClick={() => cancelAttest.current?.abort()}
-          >
-            {COPY.gate.attestCancel}
-          </Button>
-        )}
-        <p className="text-[13px] leading-5 text-ink-muted" aria-live="polite">
-          {ready ? COPY.gate.gateSignNote : `${confirmedCount} / ${statements.length}`}
-        </p>
-      </div>
-    </section>
-  );
-}
-
-/**
- * One statement of the clickwrap: a large tap target whose whole face is
- * the control. The real checkbox is kept for assistive tech and tests but
- * drawn by us — a ring that fills with the brand colour and a check mark
- * when confirmed — so the two statements read as part of the product, not
- * as a form. A "read the terms" link sits inside the tile without toggling it.
- */
-function StatementTile({
-  index,
-  of,
-  checked,
-  onChange,
-  text,
-  link,
-  disabled,
-}: {
-  index: number;
-  of: number;
-  checked: boolean;
-  onChange: (next: boolean) => void;
-  text: string;
-  link: { href: string; label: string } | null;
-  disabled: boolean;
-}) {
-  return (
-    <label
-      data-testid={`gate-statement-${index}`}
-      data-checked={checked ? 'true' : 'false'}
-      className={
-        'group relative flex cursor-pointer items-start gap-4 rounded-2xl border p-5 transition-[border-color,background-color,box-shadow] ' +
-        (checked
-          ? 'border-brand bg-brand/10 shadow-[0_0_0_1px_var(--color-brand)]'
-          : 'border-line bg-raised hover:border-brand/40') +
-        (disabled ? ' cursor-default opacity-70' : '')
-      }
-    >
-      <input
-        type="checkbox"
-        checked={checked}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.checked)}
-        className="peer sr-only"
-      />
-      <span
-        aria-hidden
-        className={
-          'mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full border-2 transition-[background-color,border-color,transform] ' +
-          'peer-focus-visible:ring-2 peer-focus-visible:ring-brand-cream peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-(--color-base) ' +
-          (checked
-            ? 'scale-100 border-brand bg-brand text-(--color-base)'
-            : 'border-line bg-base text-transparent group-hover:border-brand/60')
-        }
-      >
-        <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none">
-          <path
-            d="M4 10.5l4 4 8-9"
-            stroke="currentColor"
-            strokeWidth="2.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </span>
-      <span className="flex min-w-0 flex-1 flex-col gap-1.5">
-        <span className="flex items-center justify-between gap-3">
-          <span className="font-mono text-[11px] tracking-[0.14em] whitespace-nowrap text-ink-muted uppercase">
-            {COPY.gate.gateStep(index, of)}
-          </span>
-          {checked ? (
-            <span className="shrink-0 rounded-full bg-brand px-2 py-0.5 font-mono text-[10px] tracking-[0.12em] text-(--color-base) uppercase">
-              {COPY.gate.gateConfirmed}
-            </span>
-          ) : null}
-        </span>
-        <span className="text-[16px] leading-6 text-ink">{text}</span>
-        {link ? (
-          <Link
-            href={link.href}
-            target="_blank"
-            rel="noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="w-fit text-[13px] text-brand underline underline-offset-2"
-          >
-            {link.label}
-          </Link>
-        ) : null}
-      </span>
-    </label>
   );
 }
