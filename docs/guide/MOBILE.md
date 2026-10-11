@@ -113,7 +113,9 @@ npx solana-mobile@0.5.0 webshell init blotto-cup --url https://<the deployed hos
 #    Android 11+ `<queries>` block, without which the shell cannot open the wallet at
 #    all ("Failed to connect to the wallet websocket"). Two: the wallet launched with
 #    startActivityForResult, without which the wallet cannot see which app is asking,
-#    cannot verify it, and refuses every re-authorization. Idempotent; run after every init.
+#    cannot verify it, and refuses every re-authorization. The script also sets
+#    allowBackup="false" (hardening; the backup rules already exclude the WebView's
+#    storage — scanner triage 2026-10-11, item E). Idempotent; run after every init.
 ./patch-shell.sh
 
 # 4. Build the signed release package. The two passwords come from the environment

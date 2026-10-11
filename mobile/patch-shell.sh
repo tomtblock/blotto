@@ -1,7 +1,8 @@
 #!/bin/sh
 # Applies the two patches the generated Android shell needs before a wallet
-# app will work with it. Idempotent: run it after every `webshell init`, and
-# again after any regeneration. docs/guide/MOBILE.md §3 and §9.
+# app will work with it, and one hardening patch. Idempotent: run it after
+# every `webshell init`, and again after any regeneration.
+# docs/guide/MOBILE.md §3 and §9.
 #
 # 1. AndroidManifest.xml — the `<queries>` block. Since Android 11 an app
 #    cannot see or launch another app's intent unless it declares that intent
@@ -21,6 +22,15 @@
 #    on screen) and refuses every silent re-authorization after it, so no
 #    signature ever completes. Verified against the solana-mobile 0.5.0
 #    template, 2026-09-30.
+#
+# 3. AndroidManifest.xml — `android:allowBackup="false"`. The template writes
+#    "true". backup_rules.xml and data_extraction_rules.xml already keep the
+#    WebView's storage out of every backup, and no wallet key lives in this
+#    app, so this is belt-and-braces: nothing of ours leaves the device in an
+#    `adb backup` or a cloud backup at all. The two rules files stay — on
+#    Android 12+ this attribute does not govern device-to-device transfer, and
+#    data_extraction_rules.xml is what excludes the WebView's storage there.
+#    Scanner triage 2026-10-11, item E (docs/security/SCANNER-TRIAGE-2026-10-11.md).
 #
 # Usage: mobile/patch-shell.sh [path/to/generated/project]   (default: mobile/blotto-cup)
 
@@ -129,4 +139,17 @@ else
   ' "$CLIENT" > "$TMP"
   mv "$TMP" "$CLIENT"
   echo "patch-shell: WebShellViewClient.kt now launches the wallet with startActivityForResult"
+fi
+
+# ---- 3. no app-data backup --------------------------------------------------
+if grep -q 'android:allowBackup="false"' "$MANIFEST"; then
+  echo "patch-shell: manifest already sets allowBackup=\"false\""
+elif grep -q 'android:allowBackup="true"' "$MANIFEST"; then
+  TMP="$MANIFEST.tmp.$$"
+  sed 's/android:allowBackup="true"/android:allowBackup="false"/' "$MANIFEST" > "$TMP"
+  mv "$TMP" "$MANIFEST"
+  echo "patch-shell: set allowBackup=\"false\" in $MANIFEST"
+else
+  echo "patch-shell: no android:allowBackup attribute in $MANIFEST; set it to \"false\" by hand (MOBILE.md §3)" >&2
+  exit 1
 fi
