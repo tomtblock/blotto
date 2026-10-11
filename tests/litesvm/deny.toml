@@ -1,0 +1,36 @@
+# cargo-deny config for the LiteSVM integration workspace — advisories only.
+#
+# This workspace is TEST TOOLING. It loads the compiled program (`.so`) into an
+# in-process validator; none of its crates is compiled into the program, and the
+# root deny.toml / .cargo/audit.toml govern the program's own graph. It has its
+# own lockfile, and until 2026-10-11 no workflow audited it at all (scanner
+# triage, item G: docs/security/SCANNER-TRIAGE-2026-10-11.md).
+#
+# Every entry below arrives through litesvm / agave host crates we do not
+# control. The list mirrors tests/litesvm/.cargo/audit.toml exactly; keep the two
+# in step. A red result here always means a NEW finding.
+
+[advisories]
+unsound = "all"
+ignore = [
+    # curve25519-dalek 3.2.0 — timing variability in scalar subtraction. Reached
+    # through agave-precompiles 4.2.1, which pins ed25519-dalek =1.0.1 (and so
+    # this dalek line). Matters only where secret scalars meet an attacker who can
+    # time them; the harness signs with throwaway test keys, locally.
+    "RUSTSEC-2024-0344",
+    # ed25519-dalek 1.0.1 — signing-API misuse (a public key passed in separately
+    # from its secret). Same pin and same reasoning; the harness never signs with
+    # a key that matters.
+    "RUSTSEC-2022-0093",
+    # rand 0.7.3 — unsound only with a custom logger calling `rand::rng()`; same
+    # agave-precompiles path. The harness installs no such logger.
+    "RUSTSEC-2026-0097",
+    # Unmaintained, no known vulnerability, reached through litesvm / agave:
+    # ansi_term (litesvm), derivative and paste (proc-macros under the ark-*
+    # crates via solana-poseidon), bincode and libsecp256k1 (as at the root).
+    "RUSTSEC-2021-0139",
+    "RUSTSEC-2024-0388",
+    "RUSTSEC-2024-0436",
+    "RUSTSEC-2025-0141",
+    "RUSTSEC-2025-0161",
+]

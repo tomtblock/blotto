@@ -19,28 +19,29 @@
 #   a red result there always means a NEW finding. Both tools were run
 #   against this lockfile on 2026-09-12 before this lane was written:
 #   `cargo deny check advisories` says "advisories ok" and `cargo audit`
-#   reports nothing, so the lane is green the day it lands. (It does warn
-#   that two ignore entries — RUSTSEC-2026-0235 and RUSTSEC-2026-0190 — no
-#   longer match any crate. Stale ignores, worth removing from BOTH files in
-#   one change; they cost nothing today but an ignore that outlives its
-#   reason is exactly what .cargo/audit.toml's own header warns about.)
+#   reports nothing, so the lane is green the day it lands.
 #
-#   The NPM half REPORTS and never fails. It cannot honestly block yet: the
-#   tree carries high-severity advisories today with no fix available, all of
-#   them inside ecosystem-pinned dependency trees we do not control —
-#   `bigint-buffer` reached through @solana/web3.js in the settlement
-#   daemon's Irys and Switchboard SDKs, and `axios` reached through the
-#   wallet SDKs in the web app. A lane that is red the day it lands is a lane
-#   people learn to skip, and that is how `--no-audit` ended up on every
-#   install in the first place.
+#   Corrected by the scanner triage of 2026-10-11
+#   (docs/security/SCANNER-TRIAGE-2026-10-11.md, item G):
+#     - this comment used to call RUSTSEC-2026-0235 and -0190 stale. Only
+#       -0190 was (anyhow 1.0.104 is patched) and it is gone. -0235 (rkyv)
+#       is a weak optional dependency cargo-deny can see through and
+#       cargo-audit cannot: drop it and `cargo audit` goes red;
+#     - cargo-deny reported "unsound" advisories only for workspace crates,
+#       so RUSTSEC-2026-0306 (faster-hex, transitive) passed silently.
+#       deny.toml now sets `unsound = "all"`;
+#     - the LiteSVM workspace (tests/litesvm, its own lockfile) was never
+#       audited. It now is, with its own triaged lists;
+#     - `cargo deny check licenses` now runs against the licence policy in
+#       deny.toml (founder ruling 2026-10-11).
 #
-#   What it would take to make the npm half block: triage the current set
-#   into a committed baseline of advisory ids, each with its reachability
-#   finding written next to it, exactly as .cargo/audit.toml does for Rust —
-#   and then fail on any id NOT in that baseline. That is a piece of work
-#   with a named owner, not something to fake with an untriaged ignore list.
-#   Until it happens the npm output is printed into the run summary, where a
-#   person can see it, rather than into an exit code nobody acts on.
+#   The NPM half now BLOCKS too, on HIGH and CRITICAL only, against a
+#   committed baseline (scripts/npm-advisory-baseline.json) in which every
+#   accepted advisory carries its reachability finding — the condition this
+#   header used to set for blocking. Until 2026-10-11 it reported and never
+#   failed, and next 16.3.0's three critical advisories sat in that report
+#   unread until an external scanner listed them. Moderate and low are still
+#   reported, never gated.
 #
 # On the daily schedule nothing blocks a DEPLOY at all, and the mechanism is
 # deliberately minimal: this workflow is simply not part of the deploy gate.
@@ -56,6 +57,10 @@
 # where it competes for attention with a failure someone can actually fix
 # now. And the two halves below are separate JOBS so a Rust advisory and an
 # npm one are reported independently rather than one hiding the other.
+#
+# Not audited, deliberately: the repository root's yarn.lock. It holds the
+# root's dev tooling only, no runtime dependency of any deployed service, and
+# `npm audit` there would want a package-lock.json the root must not have.
 #
 # ── VERSIONS ────────────────────────────────────────────────────────────────
 #
@@ -81,8 +86,15 @@ on:
       - 'Cargo.toml'
       - 'deny.toml'
       - '.cargo/audit.toml'
+      # The LiteSVM workspace's own lockfile and lists (the literal
+      # 'Cargo.lock' above matches the root file only).
+      - 'tests/litesvm/Cargo.lock'
+      - 'tests/litesvm/deny.toml'
+      - 'tests/litesvm/.cargo/audit.toml'
       - '**/package-lock.json'
       - '**/package.json'
+      - 'scripts/check-npm-advisories.mjs'
+      - 'scripts/npm-advisory-baseline.json'
       - '.github/workflows/security-sweep.yml'
 
 concurrency:
@@ -146,14 +158,49 @@ jobs:
         continue-on-error: true
         run: cargo audit
 
+      # The licence policy in deny.toml (founder ruling 2026-10-11): permissive
+      # licences only, and mpl-core as a named, hash-pinned exception.
+      - name: cargo deny check licenses
+        id: licenses
+        continue-on-error: true
+        run: cargo deny check licenses
+
+      # The LiteSVM integration workspace: test tooling with its own lockfile,
+      # never compiled into the program. Its own lists live beside it
+      # (tests/litesvm/deny.toml, tests/litesvm/.cargo/audit.toml) — cargo-deny
+      # finds deny.toml next to the manifest, and cargo-audit reads
+      # .cargo/audit.toml from the directory it runs in.
+      - name: cargo deny check advisories (tests/litesvm)
+        id: deny_litesvm
+        continue-on-error: true
+        run: cargo deny --manifest-path tests/litesvm/Cargo.toml check advisories
+
+      - name: cargo audit (tests/litesvm)
+        id: audit_litesvm
+        continue-on-error: true
+        working-directory: tests/litesvm
+        run: cargo audit
+
       - name: Verdict
         run: |
           deny='${{ steps.deny.outcome }}'
           audit='${{ steps.audit.outcome }}'
-          echo "cargo-deny : $deny"
-          echo "cargo-audit: $audit"
-          if [ "$deny" = "success" ] && [ "$audit" = "success" ]; then
-            echo "no new advisory against anything in Cargo.lock"
+          licenses='${{ steps.licenses.outcome }}'
+          deny_litesvm='${{ steps.deny_litesvm.outcome }}'
+          audit_litesvm='${{ steps.audit_litesvm.outcome }}'
+          echo "cargo-deny advisories      : $deny"
+          echo "cargo-audit                : $audit"
+          echo "cargo-deny licences        : $licenses"
+          echo "cargo-deny (tests/litesvm) : $deny_litesvm"
+          echo "cargo-audit (tests/litesvm): $audit_litesvm"
+          if [ "$licenses" != "success" ]; then
+            echo "::error::a licence outside the policy in deny.toml — a new dependency, or a changed"
+            echo "::error::licence text (mpl-core's is hash-pinned). Not ours to wave through: the policy"
+            echo "::error::is a founder decision; raise it rather than widening the allow list."
+          fi
+          if [ "$deny" = "success" ] && [ "$audit" = "success" ] && [ "$licenses" = "success" ] \
+             && [ "$deny_litesvm" = "success" ] && [ "$audit_litesvm" = "success" ]; then
+            echo "no new advisory against either lockfile, and every licence within policy"
             exit 0
           fi
           echo "::error::a NEW dependency advisory — see the two steps above for the RUSTSEC id"
@@ -181,63 +228,70 @@ jobs:
       # need node_modules, so nothing is installed here and the job is a
       # minute rather than ten.
       #
-      # TWO PASSES, NEITHER BLOCKING (see the header for why, and for what it
-      # would take to change that).
+      # TWO REPORTS, THEN ONE GATE.
       #
-      #   The first pass is `--omit=dev --audit-level=high`: the packages
-      #   actually installed into the four service images, at the severities
-      #   worth acting on. Its per-package result goes into the run summary,
-      #   so "which of our services ships a known-vulnerable dependency" is a
-      #   question with a visible answer rather than a buried one.
+      #   The first report is `--omit=dev --audit-level=high`: the RUNTIME
+      #   dependencies, at the severities worth acting on, per package, into
+      #   the run summary. Note what it is not: it is not "what the images
+      #   contain". The four service images run `npm ci` WITHOUT --omit=dev
+      #   (they start through ts-node, a dev dependency — deploy/docker/), so
+      #   every dev dependency is in them too, present though never loaded.
+      #   That is why the gate below audits the full tree.
       #
-      #   The second is the full tree including dev dependencies, printed in
-      #   collapsed groups. A vitest or typescript advisory is worth seeing
-      #   and is not in any image.
+      #   The second report is the full tree including dev dependencies,
+      #   printed in collapsed groups, moderate and low included.
       #
-      # The root is deliberately NOT audited here: it uses yarn (yarn.lock),
-      # `npm audit` there would want a package-lock.json it must not have,
-      # and the root holds no runtime dependency of any deployed service.
-      - name: npm audit (shipped dependencies — reported, never blocking)
+      #   The gate (scripts/check-npm-advisories.mjs) fails on any HIGH or
+      #   CRITICAL advisory, dev included, that is not in
+      #   scripts/npm-advisory-baseline.json with its reason.
+      #
+      # Every package directory with a package-lock.json is covered, in one
+      # list (the gate's PACKAGE_DIRS is the same list). Until 2026-10-11 the
+      # loops skipped battle-test and tests/postgres. The root is not audited:
+      # see the header.
+      - name: npm audit (runtime dependencies — reported)
         run: |
-          flagged=""
           {
-            echo "### npm advisories in shipped dependencies"
+            echo "### npm advisories in runtime dependencies"
             echo
-            echo "\`npm audit --omit=dev --audit-level=high\`, per package."
+            echo "\`npm audit --omit=dev --audit-level=high\`, per package. The gate step below decides"
+            echo "pass or fail against the triaged baseline; this table only shows where they are."
             echo
             echo "| package | high or critical |"
             echo "|---|---|"
           } >> "$GITHUB_STEP_SUMMARY"
-          for dir in backend/_shared backend/scoring backend/class-digest backend/sealing \
+          for dir in app backend/_shared backend/scoring backend/class-digest backend/sealing \
                      backend/sanctions backend/reveal backend/indexer backend/packet \
-                     backend/detection app tests/rehearsal; do
+                     backend/detection battle-test tests/postgres tests/rehearsal; do
             echo "::group::$dir"
             if (cd "$dir" && npm audit --omit=dev --audit-level=high); then
               echo "| $dir | none |" >> "$GITHUB_STEP_SUMMARY"
             else
-              echo "| $dir | **yes** — see the job log |" >> "$GITHUB_STEP_SUMMARY"
-              flagged="$flagged $dir"
-              echo "::warning::$dir ships a dependency with a high or critical advisory"
+              echo "| $dir | yes — see the job log and the gate step |" >> "$GITHUB_STEP_SUMMARY"
             fi
             echo "::endgroup::"
           done
-          if [ -n "$flagged" ]; then
-            {
-              echo
-              echo "Known as of 2026-09-12 and not yet triaged: \`backend/reveal\` (bigint-buffer,"
-              echo "reached through @solana/web3.js, no fix available) and \`app\` (axios,"
-              echo "reached through the wallet SDKs). Anything else in the table above is NEW"
-              echo "and wants a look."
-            } >> "$GITHUB_STEP_SUMMARY"
-          fi
+          {
+            echo
+            echo "Accepted, each with its reason in scripts/npm-advisory-baseline.json: \`app\` (braces"
+            echo "under React Native's bundler, never shipped to the web) and \`backend/reveal\`"
+            echo "(bigint-buffer, no fixed release, a code path the daemon does not run)."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: npm audit (full tree, including dev — reported)
         if: always()
         run: |
-          for dir in backend/_shared backend/scoring backend/class-digest backend/sealing \
+          for dir in app backend/_shared backend/scoring backend/class-digest backend/sealing \
                      backend/sanctions backend/reveal backend/indexer backend/packet \
-                     backend/detection app tests/rehearsal; do
+                     backend/detection battle-test tests/postgres tests/rehearsal; do
             echo "::group::$dir (dev included)"
             (cd "$dir" && npm audit) || true
             echo "::endgroup::"
           done
+
+      # THE GATE. Blocks on a high or critical advisory, dev included, that
+      # nobody has triaged. Proven against this commit's predecessor: the
+      # app lockfile with next 16.3.0 fails it with all of next's advisories.
+      - name: npm advisory gate (high and critical, against the baseline)
+        if: always()
+        run: node scripts/check-npm-advisories.mjs

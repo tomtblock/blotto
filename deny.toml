@@ -1,7 +1,8 @@
-# cargo-deny config — advisory gate.
+# cargo-deny config — the advisory gate and, since 2026-10-11, the licence gate.
 #
 # Carried from the predecessor repository. Scope: `cargo deny check advisories`
-# only — a license/bans/sources policy is a separate decision and is NOT gated here.
+# and `cargo deny check licenses` (both run by .github/workflows/security-sweep.yml).
+# A bans/sources policy is a separate decision and is NOT gated here.
 #
 # The ignore list mirrors .cargo/audit.toml exactly, and was re-verified against THIS
 # workspace's Cargo.lock at extraction time rather than inherited on trust. The
@@ -11,13 +12,50 @@
 # A red advisory check therefore always means a NEW finding.
 
 [advisories]
+# "Unsound" advisories in DEPENDENCIES count too. cargo-deny 0.20's default
+# (`workspace`) reports them only for workspace crates, which is how
+# RUSTSEC-2026-0306 (faster-hex, published 2026-09-20) passed this gate without
+# a word until the scanner triage of 2026-10-11 found it
+# (docs/security/SCANNER-TRIAGE-2026-10-11.md, item G).
+unsound = "all"
 ignore = [
-    # Stale lockfile entry, unreachable from any workspace member.
+    # rkyv — a weak optional dependency Cargo records in the lockfile and never
+    # activates; unreachable. Needed for cargo-audit, which reads the raw lockfile.
     "RUSTSEC-2026-0235",
     # bincode unmaintained — ecosystem-pinned via Anchor / Agave.
     "RUSTSEC-2025-0141",
     # libsecp256k1 unmaintained — ecosystem-pinned via Anchor / Agave.
     "RUSTSEC-2025-0161",
-    # anyhow downcast_mut() unsoundness — no reachable trigger.
-    "RUSTSEC-2026-0190",
+    # faster-hex 0.10.0 unsound — x86 AVX2 decoder only; Switchboard calls the
+    # encoder and the program runs on SBF. Bumped with the next program release.
+    "RUSTSEC-2026-0306",
 ]
+
+# The licence policy (founder ruling 2026-10-11, scanner triage item G): every
+# licence in the tree must be one of these permissive ones, and anything else is
+# a named, reviewed exception. Checked against the whole workspace graph; no GPL,
+# AGPL or MPL appears anywhere in it.
+[licenses]
+confidence-threshold = 0.93
+allow = [
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "MIT",
+    "Unicode-3.0",
+]
+
+# mpl-core ships its licence as a file with no SPDX expression in its manifest.
+# It is the Metaplex(TM) NFT Open Source License v1.0 — NOT Apache-2.0, whatever a
+# text matcher guesses — and its text travels with this repository
+# (THIRD-PARTY-NOTICES.md, third-party/mpl-core/LICENSE). The hash pins the exact
+# text: if a future release changes the licence, this clarification stops matching
+# and the gate fails, which is the point.
+[[licenses.clarify]]
+crate = "mpl-core@=0.12.0"
+expression = "LicenseRef-Metaplex-NFT-OSL-1.0"
+license-files = [{ path = "LICENSE", hash = 0xd3dacb8e }]
+
+[[licenses.exceptions]]
+crate = "mpl-core@=0.12.0"
+allow = ["LicenseRef-Metaplex-NFT-OSL-1.0"]

@@ -65,7 +65,10 @@ scoring, payout or ranking input reads it, and CI enforces that (§3).
 The compiled program is tested by the LiteSVM suite (`on-chain` workflow). The standing-rules lane
 of `ci-fast` runs 15 checks on every push, including the language gate, the structural greps
 above, the upgrade pre-flight self-test and a Rust-to-TypeScript mirror check. Dependency
-advisories run in `security-sweep` (blocking for Rust). Secret scanning covers the checkout and
+advisories run in `security-sweep`: blocking for Rust (both lockfiles, "unsound" advisories in
+dependencies included) and, since 2026-10-11, for npm at high and critical against a triaged
+baseline (`scripts/npm-advisory-baseline.json`). The same lane gates licences against the policy
+in `deny.toml`. Secret scanning covers the checkout and
 the git history.
 
 ## 4. Findings and fixes

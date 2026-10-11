@@ -388,7 +388,7 @@ Other workflows: `on-chain` (`anchor build` and the LiteSVM integration suite, i
 `hard_mode.rs`, on program changes), `deployed-drift` (daily and on program changes: simulates every
 instruction against the live program), `backend-watch` (every 15 minutes: probes health, restarts a
 stopped machine), `skill-evidence` (nightly reproduction of the generated reports), `security-sweep`
-(nightly dependency advisories), `stop-the-line` (opens an issue when `main` goes red), and the
+(nightly dependency advisories and the licence policy, blocking on anything not triaged), `stop-the-line` (opens an issue when `main` goes red), and the
 manual `deploy-backend`. Running all of this locally:
 [`../guide/GETTING-STARTED.md`](../guide/GETTING-STARTED.md). Results:
 [`../testing/TESTING-REPORT.md`](../testing/TESTING-REPORT.md).
