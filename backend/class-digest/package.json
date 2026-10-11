@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "license": "Apache-2.0",
   "private": true,
-  "description": "The cosmetic class digest + bag draw in TypeScript (roadmap 2.2), for the verify page's draw replay. Deliberately its OWN package, outside @blotto/scoring: standing rule 5 (roadmap §3) greps the scoring path for 'class' and fails on any hit — the class must be structurally unable to touch scoring, and separate packages make that a build fact rather than a convention.",
+  "description": "The cosmetic class digest + bag draw in TypeScript (roadmap 2.2), for the verify page's draw replay. Deliberately its OWN package, outside @blotto/scoring: standing rule 5 (roadmap \u00a73) greps the scoring path for 'class' and fails on any hit \u2014 the class must be structurally unable to touch scoring, and separate packages make that a build fact rather than a convention.",
   "engines": {
     "node": ">=20"
   },
@@ -24,5 +24,16 @@
     "ts-mocha": "^10.0.0",
     "ts-node": "^10.9.0",
     "typescript": "^5.7.3"
+  },
+  "overrides": {
+    "mocha": {
+      "serialize-javascript": "^7.0.5",
+      "js-yaml": "^4.3.2",
+      "minimatch@4": "^4.2.6",
+      "nanoid": "^3.3.18",
+      "diff": "^5.2.2",
+      "chokidar": "^4.0.3"
+    },
+    "brace-expansion@1": "^1.1.21"
   }
 }

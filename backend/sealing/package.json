@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "license": "Apache-2.0",
   "private": true,
-  "description": "Sealing (roadmap 2.3; TECH-ARCH §5): the sealed-box cryptography clients encrypt with, the canonical sealed-payload encoding, the pool-key custody seam (Turnkey in production, an in-process policy-enforcing implementation for development and tests), and the ciphertext store.",
+  "description": "Sealing (roadmap 2.3; TECH-ARCH \u00a75): the sealed-box cryptography clients encrypt with, the canonical sealed-payload encoding, the pool-key custody seam (Turnkey in production, an in-process policy-enforcing implementation for development and tests), and the ciphertext store.",
   "engines": {
     "node": ">=20"
   },
@@ -27,5 +27,16 @@
     "ts-mocha": "^10.0.0",
     "ts-node": "^10.9.0",
     "typescript": "^5.7.3"
+  },
+  "overrides": {
+    "mocha": {
+      "serialize-javascript": "^7.0.5",
+      "js-yaml": "^4.3.2",
+      "minimatch@4": "^4.2.6",
+      "nanoid": "^3.3.18",
+      "diff": "^5.2.2",
+      "chokidar": "^4.0.3"
+    },
+    "brace-expansion@1": "^1.1.21"
   }
 }
