@@ -153,7 +153,8 @@ signer against `Config`.
 
 | Signer | Instructions |
 |---|---|
-| **Admin** (the Squads multisig vault) | `init_config`, `migrate_config`, `set_keeper`, `set_pool_timing`, `set_paused`, `rotate_entry_signer`, `set_settlement_signer`, `set_open_tiers`, `set_hard_open_tiers`, `set_vault_ceiling`, `set_kyc_threshold`, `set_detection_hard_block`, `set_tier_economics`, `set_treasury_policy`, `withdraw_platform`, `forfeit_escrow`, `lift_sanctions_hold` |
+| **Admin** (the Squads multisig vault) | `migrate_config`, `set_keeper`, `set_pool_timing`, `set_paused`, `rotate_entry_signer`, `set_settlement_signer`, `set_open_tiers`, `set_hard_open_tiers`, `set_vault_ceiling`, `set_kyc_threshold`, `set_detection_hard_block`, `set_tier_economics`, `set_treasury_policy`, `withdraw_platform`, `forfeit_escrow`, `lift_sanctions_hold` |
+| **The program's upgrade authority** | `init_config`, once; it names the admin as an argument |
 | **Keeper** | `open_pool` (takes `mode`: 0 easy, 1 hard) |
 | **Settlement signer** | `reveal_pool_secret`, `commit_results`, `pay_prizes`, `pay_next_place`, `flag_entry`, `clear_flag`, `place_sanctions_hold`, `release_escrow` (reviewed path) |
 | **Player** | `register` |

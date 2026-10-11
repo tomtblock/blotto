@@ -90,9 +90,12 @@ A="npx ts-node --transpile-only scripts/admin.ts"
 $A status
 $A pools                     # every pool's state and mode
 
-# One-time setup: the signing key becomes admin. --ceilings is each tier's
-# gross-intake ceiling (D2); the example is entry × 64 for the seven tiers.
+# One-time setup, signed by the program's UPGRADE AUTHORITY (the program
+# refuses any other signer); --config-admin names the key that becomes admin.
+# --ceilings is each tier's gross-intake ceiling (D2); the example is
+# entry × 64 for the seven tiers.
 $A init-config \
+  --config-admin      <admin-pubkey> \
   --entry-signer      <entry-signer-pubkey> \
   --settlement-signer <settlement-signer-pubkey> \
   --keeper            <keeper-pubkey> \

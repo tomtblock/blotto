@@ -23,12 +23,4 @@ ignore = [
     "RUSTSEC-2025-0141",
     # libsecp256k1 0.7.2, unmaintained. Reachable, ecosystem-pinned as above.
     "RUSTSEC-2025-0161",
-    # faster-hex 0.10.0, "unsound": `hex_decode_unchecked` can read past its input
-    # on x86 AVX2. Reachable as a dependency (switchboard-on-demand, so it is in the
-    # program's build graph), but Switchboard calls only the ENCODER `hex_string`,
-    # and the program runs on SBF, not x86. 0.10.1 fixes it and is a semver-
-    # compatible `cargo update -p faster-hex`; it changes a build input of the
-    # deployed program, so it ships with the next program release and this entry
-    # goes with it (scanner triage 2026-10-11, items G and H).
-    "RUSTSEC-2026-0306",
 ]

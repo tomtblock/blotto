@@ -67,17 +67,20 @@ pub mod blotto_cup {
 
     // ---- Admin (Squads vault only) --------------------------------------
 
-    /// One-time global setup — write-once, so a second call reverts. The
-    /// signer becomes admin (the Squads vault) and the launch policy is
+    /// One-time global setup — write-once, so a second call reverts. Only
+    /// the program's upgrade authority may sign it (scanner triage
+    /// 2026-10-11, item A); `admin` (the Squads vault) is an argument, and
+    /// the launch policy is
     /// baked in per the decision register: only the 0.1 tier open (R6), not
     /// paused, the detection full-escrow switch off (R11), the KYC switch at
     /// 0 (R3), tier prices and pots seeded from the launch constants
     /// (D-A1 revised), and a treasury reserve of one further pot per idle
     /// enabled tier. The arguments are the values that legitimately differ
-    /// per deployment: the three service keys, the per-tier ceilings and the
-    /// treasury's minimum balance.
+    /// per deployment: the admin, the three service keys, the per-tier
+    /// ceilings and the treasury's minimum balance.
     pub fn init_config(
         ctx: Context<InitConfig>,
+        admin: Pubkey,
         entry_signer: Pubkey,
         settlement_signer: Pubkey,
         keeper: Pubkey,
@@ -86,6 +89,7 @@ pub mod blotto_cup {
     ) -> Result<()> {
         instructions::handle_init_config(
             ctx,
+            admin,
             entry_signer,
             settlement_signer,
             keeper,

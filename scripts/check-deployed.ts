@@ -257,8 +257,15 @@ function permissionlessCheck(
 }
 
 /** `init_config`'s own account list — it creates the Config PDA, so it takes
- *  the platform PDA and the System Program too (InitConfig in admin.rs). */
-function initConfigCheck(entrySigner: PublicKey, settlementSigner: PublicKey): WireCheck {
+ *  the platform PDA and the System Program too, and since the scanner triage
+ *  of 2026-10-11 (item A) the program and its ProgramData account, from which
+ *  it reads the upgrade authority (InitConfig in admin.rs). The new admin is
+ *  the FIRST argument: the signer no longer becomes admin by signing. */
+function initConfigCheck(
+  configAdmin: PublicKey,
+  entrySigner: PublicKey,
+  settlementSigner: PublicKey
+): WireCheck {
   // Launch ceilings in lamports (price × 64 per tier; tier 0 = 6.4 SOL) —
   // integers, never a float-rounded SOL figure.
   const ceilings = [
@@ -273,9 +280,10 @@ function initConfigCheck(entrySigner: PublicKey, settlementSigner: PublicKey): W
   return {
     name: 'init_config',
     signature:
-      'entry_signer: Pubkey, settlement_signer: Pubkey, keeper: Pubkey, ' +
+      'admin: Pubkey, entry_signer: Pubkey, settlement_signer: Pubkey, keeper: Pubkey, ' +
       'vault_ceiling_lamports: [u64; N_TIERS], treasury_min_platform_lamports: u64',
     args: Buffer.concat([
+      configAdmin.toBuffer(),
       entrySigner.toBuffer(),
       settlementSigner.toBuffer(),
       settlementSigner.toBuffer(),
@@ -482,7 +490,11 @@ async function main(): Promise<void> {
     verdicts.push(await checkOne(connection, programId, check, adminKeys, admin));
   }
 
-  const init = initConfigCheck(admin, admin);
+  const init = initConfigCheck(admin, admin, admin);
+  const programData = PublicKey.findProgramAddressSync(
+    [programId.toBuffer()],
+    new PublicKey('BPFLoaderUpgradeab1e11111111111111111111111')
+  )[0];
   verdicts.push(
     await checkOne(
       connection,
@@ -492,6 +504,8 @@ async function main(): Promise<void> {
         { pubkey: admin, isSigner: true, isWritable: true },
         { pubkey: config, isSigner: false, isWritable: true },
         { pubkey: platform, isSigner: false, isWritable: false },
+        { pubkey: programId, isSigner: false, isWritable: false },
+        { pubkey: programData, isSigner: false, isWritable: false },
         { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       ],
       admin

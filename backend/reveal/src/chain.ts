@@ -277,8 +277,10 @@ export interface KeeperChain extends SettlementChain {
   createPassCollection(poolId: bigint): Promise<void>;
   /** Whether the pool's pass-collection asset exists (its PDA is initialized). */
   hasPassCollection(poolId: bigint): Promise<boolean>;
-  /** `init_config`: one-time global setup, admin-signed. */
+  /** `init_config`: one-time global setup, signed by the program's upgrade
+   * authority; `admin` (default: that signer) becomes Config.admin. */
   initConfig(args: {
+    admin?: string;
     entrySigner: string;
     settlementSigner: string;
     keeper: string;
@@ -847,6 +849,7 @@ export class FakeChain implements KeeperChain {
   reserved = 0n;
 
   async initConfig(args: {
+    admin?: string;
     entrySigner: string;
     settlementSigner: string;
     keeper: string;

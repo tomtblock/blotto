@@ -26,9 +26,6 @@ ignore = [
     "RUSTSEC-2025-0141",
     # libsecp256k1 unmaintained — ecosystem-pinned via Anchor / Agave.
     "RUSTSEC-2025-0161",
-    # faster-hex 0.10.0 unsound — x86 AVX2 decoder only; Switchboard calls the
-    # encoder and the program runs on SBF. Bumped with the next program release.
-    "RUSTSEC-2026-0306",
 ]
 
 # The licence policy (founder ruling 2026-10-11, scanner triage item G): every

@@ -24,15 +24,22 @@ use crate::state::{Config, CONFIG_SEED, PLATFORM_SEED};
 
 #[derive(Accounts)]
 pub struct InitConfig<'info> {
-    /// Becomes `Config.admin`. Deployed with the devnet Squads vault signing
-    /// (roadmap 1.1), so admin is the multisig from the first transaction.
-    /// Also signs `forfeit_escrow` since 2026-09-07 (prompt v2 §E.2).
+    /// The program's UPGRADE AUTHORITY — the only key that may initialise
+    /// Config (scanner triage 2026-10-11, item A). It pays the rent; it does
+    /// not become the admin, which is the `admin` argument.
+    ///
+    /// Until then the signer simply BECAME `Config.admin`. `Config` sits at a
+    /// fixed PDA, so on a fresh deployment whoever landed `init_config` first
+    /// — in the window between the program going live and our own
+    /// transaction — would have owned the keeper, both signers and
+    /// `withdraw_platform`. Devnet was initialised long before this by the
+    /// Squads vault; the gap was a mainnet one.
     #[account(mut)]
-    pub admin: Signer<'info>,
+    pub deployer: Signer<'info>,
 
     #[account(
         init,
-        payer = admin,
+        payer = deployer,
         space = Config::SPACE,
         seeds = [CONFIG_SEED],
         bump,
@@ -44,6 +51,28 @@ pub struct InitConfig<'info> {
     /// zero-data system account funded lazily by the first deposit.
     #[account(seeds = [PLATFORM_SEED], bump)]
     pub platform: UncheckedAccount<'info>,
+
+    /// This program. `Program<BlottoCup>` pins the address to `crate::ID`;
+    /// read only to find its ProgramData account.
+    #[account(
+        constraint = program.programdata_address()? == Some(program_data.key())
+            @ ErrorCode::NotUpgradeAuthority
+    )]
+    pub program: Program<'info, crate::program::BlottoCup>,
+
+    /// The upgradeable loader's record of this program (`Account` checks its
+    /// owner is that loader). Its upgrade authority must be the signer, so a
+    /// program deployed with no authority can never be initialised: deploy
+    /// upgradeable, initialise, then move or burn the authority. Anchor's own
+    /// documented pattern (`anchor-lang` 1.0.2, `src/accounts/account.rs`).
+    // PHASE-N-REVIEW: the two typed loader reads cost ~64 KB of program size (measured: 661,656 ->
+    // 725,704 bytes, bincode); hand-parsing the 45-byte header would avoid it, but correctness and a
+    // reviewable standard form outrank rent (CLAUDE.md tradeoff order), so the standard form stays.
+    #[account(
+        constraint = program_data.upgrade_authority_address == Some(deployer.key())
+            @ ErrorCode::NotUpgradeAuthority
+    )]
+    pub program_data: Account<'info, ProgramData>,
 
     pub system_program: Program<'info, System>,
 }
@@ -57,18 +86,23 @@ pub struct InitConfig<'info> {
 /// the published launch constants (D-A1 revised: founder-changeable later via
 /// `set_tier_economics`), treasury reserve of ONE further pot per idle enabled
 /// tier (v2 default). The founder-owned numbers that may legitimately differ
-/// per deploy — signers, ceilings, the treasury's minimum balance — are
-/// arguments.
+/// per deploy — the admin, signers, ceilings, the treasury's minimum balance
+/// — are arguments.
 pub fn handle_init_config(
     ctx: Context<InitConfig>,
+    admin: Pubkey,
     entry_signer: Pubkey,
     settlement_signer: Pubkey,
     keeper: Pubkey,
     vault_ceiling_lamports: [u64; N_TIERS],
     treasury_min_platform_lamports: u64,
 ) -> Result<()> {
+    // A zero admin would leave every admin instruction unsignable for good:
+    // Config is write-once and nothing rotates the admin. Refuse it here
+    // rather than discover it after the deployment is live.
+    require!(admin != Pubkey::default(), ErrorCode::AdminMustNotBeZero);
     let config = &mut ctx.accounts.config;
-    config.admin = ctx.accounts.admin.key();
+    config.admin = admin;
     config.entry_signer = entry_signer;
     config.settlement_signer = settlement_signer;
     // Prompt v2 §A: the keeper opens pools; the multisig controls WHO opens

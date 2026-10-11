@@ -436,13 +436,22 @@ export class Web3Chain implements KeeperChain {
   }
 
   async initConfig(args: {
+    /** Becomes Config.admin. Defaults to the signing key, which must be the
+     * program's upgrade authority either way (scanner triage 2026-10-11,
+     * item A): the program refuses any other signer. */
+    admin?: string;
     entrySigner: string;
     settlementSigner: string;
     keeper: string;
     vaultCeilingLamports: bigint[];
     treasuryMinPlatformLamports: bigint;
   }): Promise<void> {
-    const admin = this.admin('init_config');
+    const deployer = this.admin('init_config');
+    const configAdmin = args.admin ? new PublicKey(args.admin) : deployer.publicKey;
+    const [programData] = PublicKey.findProgramAddressSync(
+      [this.cfg.programId.toBuffer()],
+      new PublicKey('BPFLoaderUpgradeab1e11111111111111111111111')
+    );
     if (args.vaultCeilingLamports.length !== N_TIERS) {
       throw new Error(`vault ceilings must list exactly ${N_TIERS} tiers`);
     }
@@ -454,13 +463,16 @@ export class Web3Chain implements KeeperChain {
       new TransactionInstruction({
         programId: this.cfg.programId,
         keys: [
-          { pubkey: admin.publicKey, isSigner: true, isWritable: true },
+          { pubkey: deployer.publicKey, isSigner: true, isWritable: true },
           { pubkey: this.configPda(), isSigner: false, isWritable: true },
           { pubkey: this.platformPda(), isSigner: false, isWritable: false },
+          { pubkey: this.cfg.programId, isSigner: false, isWritable: false },
+          { pubkey: programData, isSigner: false, isWritable: false },
           { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
         ],
         data: Buffer.concat([
           disc('init_config'),
+          configAdmin.toBuffer(),
           new PublicKey(args.entrySigner).toBuffer(),
           new PublicKey(args.settlementSigner).toBuffer(),
           new PublicKey(args.keeper).toBuffer(),
@@ -469,7 +481,7 @@ export class Web3Chain implements KeeperChain {
         ]),
       })
     );
-    await sendAndConfirmTransaction(this.cfg.connection, tx, [admin], {
+    await sendAndConfirmTransaction(this.cfg.connection, tx, [deployer], {
       commitment: 'confirmed',
     });
   }

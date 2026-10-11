@@ -36,6 +36,9 @@ import {
 } from '@solana/web3.js';
 
 const N_TIERS = 7;
+/** The upgradeable BPF loader; a program's ProgramData account is the PDA of
+ * `[program_id]` under it. `init_config` reads the upgrade authority there. */
+const BPF_LOADER_UPGRADEABLE = new PublicKey('BPFLoaderUpgradeab1e11111111111111111111111');
 const DEFAULT_PROGRAM_ID = '5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17';
 import { resolveRpcUrl } from '../backend/_shared/src/cluster';
 // The ratified tier table, from the same module the program's constants are
@@ -65,7 +68,11 @@ commands
                             docs/guide/OPERATING-MANUAL.md
       [--self-test]         drive the verdict through its fixtures and exit.
                             Touches no network
-  init-config               one-time setup (admin = the signing key)
+  init-config               one-time setup. Signed by the program's UPGRADE
+                            AUTHORITY (the program refuses any other signer);
+                            --config-admin names the key that becomes
+                            Config.admin (the Squads vault on mainnet)
+      --config-admin <pubkey>
       --entry-signer <pubkey> --settlement-signer <pubkey> --keeper <pubkey>
       --ceilings <7 comma-separated lamport values>
       --min-platform <lamports | SOL decimal ending in "sol", e.g. 2sol>
@@ -502,6 +509,11 @@ async function cmdPools(ctx: Ctx): Promise<void> {
 }
 
 async function cmdInitConfig(ctx: Ctx): Promise<void> {
+  // Who becomes Config.admin is an argument since the scanner triage of
+  // 2026-10-11 (item A): only the program's upgrade authority may sign
+  // init_config, so the first caller can no longer make itself admin.
+  // Required — nothing is guessed, least of all the one irreversible field.
+  const configAdmin = new PublicKey(need(ctx.cli, 'config-admin'));
   const entrySigner = new PublicKey(need(ctx.cli, 'entry-signer'));
   const settlementSigner = new PublicKey(need(ctx.cli, 'settlement-signer'));
   const keeper = new PublicKey(need(ctx.cli, 'keeper'));
@@ -512,7 +524,13 @@ async function cmdInitConfig(ctx: Ctx): Promise<void> {
     throw new Error(`--ceilings must list exactly ${N_TIERS} values`);
   }
   const minPlatform = parseAmount(need(ctx.cli, 'min-platform'));
-  const admin = signerPubkey(ctx.cli);
+  // The signer slot: the upgrade authority (FEE_PAYER_KEYPAIR, or the vault
+  // passed as --admin with --emit-proposal when the vault holds the authority).
+  const deployer = signerPubkey(ctx.cli);
+  const [programData] = PublicKey.findProgramAddressSync(
+    [ctx.programId.toBuffer()],
+    BPF_LOADER_UPGRADEABLE
+  );
   const ceilingsBuf = Buffer.concat(ceilings.map(u64le));
   await deliver(
     ctx,
@@ -520,13 +538,16 @@ async function cmdInitConfig(ctx: Ctx): Promise<void> {
       new TransactionInstruction({
         programId: ctx.programId,
         keys: [
-          { pubkey: admin, isSigner: true, isWritable: true },
+          { pubkey: deployer, isSigner: true, isWritable: true },
           { pubkey: ctx.pdas.config(), isSigner: false, isWritable: true },
           { pubkey: ctx.pdas.platform(), isSigner: false, isWritable: false },
+          { pubkey: ctx.programId, isSigner: false, isWritable: false },
+          { pubkey: programData, isSigner: false, isWritable: false },
           { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
         ],
         data: Buffer.concat([
           disc('init_config'),
+          configAdmin.toBuffer(),
           entrySigner.toBuffer(),
           settlementSigner.toBuffer(),
           keeper.toBuffer(),
@@ -535,7 +556,7 @@ async function cmdInitConfig(ctx: Ctx): Promise<void> {
         ]),
       }),
     ],
-    'the account becoming admin'
+    "the program's upgrade authority"
   );
 }
 

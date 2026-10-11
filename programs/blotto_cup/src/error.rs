@@ -207,6 +207,12 @@ pub enum ErrorCode {
     // 6074 — Phase B (founder rulings 2026-09-24): the placing mode.
     #[msg("Unknown pool mode")]
     UnknownMode,
+    // 6075 — scanner triage 2026-10-11, item A: `init_config` is signed by
+    // the program's upgrade authority, and names a non-zero admin.
+    #[msg("Only the program's upgrade authority may initialise Config")]
+    NotUpgradeAuthority,
+    #[msg("The admin must not be the zero key")]
+    AdminMustNotBeZero,
 }
 
 #[cfg(test)]
@@ -238,6 +244,8 @@ mod error_numbers {
             (ErrorCode::PoolAlreadyMigrated, 6072),
             (ErrorCode::PoolNotMigratable, 6073),
             (ErrorCode::UnknownMode, 6074),
+            (ErrorCode::NotUpgradeAuthority, 6075),
+            (ErrorCode::AdminMustNotBeZero, 6076),
         ] {
             assert_eq!(u32::from(code), expected, "{code:?}");
         }

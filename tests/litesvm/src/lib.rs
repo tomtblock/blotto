@@ -218,7 +218,10 @@ pub fn ed25519_ix(key: &SigningKey, message: &[u8]) -> Instruction {
 // Instruction builders (account orders mirror the #[derive(Accounts)] structs)
 // ---------------------------------------------------------------------------
 
+/// `init_config` — signed by the program's upgrade authority (`deployer`),
+/// naming `admin` as Config's admin (scanner triage 2026-10-11, item A).
 pub fn init_config_ix(
+    deployer: &Pubkey,
     admin: &Pubkey,
     entry_signer: &Pubkey,
     settlement_signer: &Pubkey,
@@ -227,6 +230,7 @@ pub fn init_config_ix(
     treasury_min_platform_lamports: u64,
 ) -> Instruction {
     let mut data = disc("init_config").to_vec();
+    data.extend_from_slice(admin.as_ref());
     data.extend_from_slice(entry_signer.as_ref());
     data.extend_from_slice(settlement_signer.as_ref());
     data.extend_from_slice(keeper.as_ref());
@@ -237,13 +241,54 @@ pub fn init_config_ix(
     Instruction {
         program_id: program_id(),
         accounts: vec![
-            AccountMeta::new(*admin, true),
+            AccountMeta::new(*deployer, true),
             AccountMeta::new(config_pda(), false),
             AccountMeta::new_readonly(platform_pda(), false),
+            AccountMeta::new_readonly(program_id(), false),
+            AccountMeta::new_readonly(program_data_address(), false),
             AccountMeta::new_readonly(system_program_id(), false),
         ],
         data,
     }
+}
+
+/// The upgradeable loader, which owns every program's ProgramData account.
+pub fn bpf_loader_upgradeable_id() -> Pubkey {
+    Pubkey::from_str("BPFLoaderUpgradeab1e11111111111111111111111").unwrap()
+}
+
+/// The program's ProgramData account: `[program_id]` under the loader.
+pub fn program_data_address() -> Pubkey {
+    Pubkey::find_program_address(&[program_id().as_ref()], &bpf_loader_upgradeable_id()).0
+}
+
+/// Set (or clear) the loaded program's upgrade authority.
+///
+/// LiteSVM 0.16 loads a program through the upgradeable loader with NO
+/// upgrade authority, and `init_config` refuses any signer that is not the
+/// upgrade authority (scanner triage 2026-10-11, item A). The ProgramData
+/// metadata is bincode `UpgradeableLoaderState::ProgramData { slot,
+/// upgrade_authority_address }`: a u32 variant tag (3), the u64 slot, then
+/// the `Option<Pubkey>` — its tag at byte 12 and the key at 13..45.
+pub fn set_upgrade_authority(svm: &mut LiteSVM, authority: Option<&Pubkey>) {
+    let address = program_data_address();
+    let mut account = svm.get_account(&address).expect("ProgramData account");
+    assert_eq!(
+        account.data[0..4],
+        3u32.to_le_bytes(),
+        "not an UpgradeableLoaderState::ProgramData account"
+    );
+    match authority {
+        Some(key) => {
+            account.data[12] = 1;
+            account.data[13..45].copy_from_slice(key.as_ref());
+        }
+        None => {
+            account.data[12] = 0;
+            account.data[13..45].fill(0);
+        }
+    }
+    svm.set_account(address, account).expect("set ProgramData");
 }
 
 /// `fund_platform_wallet` — permissionless treasury deposit.
@@ -1113,26 +1158,35 @@ pub struct Env {
     pub captured_logs: Vec<Vec<String>>,
 }
 
+/// A fresh SVM with both programs loaded and the sysvars set, and Config NOT
+/// initialised; the program has no upgrade authority until
+/// `set_upgrade_authority`. `Env::new` builds on it; the `init_config` gate
+/// tests use it bare. Returns None (skip) when artifacts are missing.
+pub fn bare_svm() -> Option<LiteSVM> {
+    let (program_so, mpl_so) = artifacts()?;
+    let mut svm = LiteSVM::new();
+    svm.add_program_from_file(program_id(), program_so).unwrap();
+    svm.add_program_from_file(mpl_core_id(), mpl_so).unwrap();
+
+    // A believable clock + slot history: slot 100, entries ≥ 5 back.
+    svm.warp_to_slot(100);
+    let mut clock: Clock = svm.get_sysvar::<Clock>();
+    clock.unix_timestamp = 1_756_000_000;
+    svm.set_sysvar(&clock);
+    let hashes: Vec<(u64, solana_sdk::hash::Hash)> = (60..=99)
+        .rev()
+        .map(|s| (s, solana_sdk::hash::Hash::new_unique()))
+        .collect();
+    svm.set_sysvar(&SlotHashes::new(&hashes));
+    Some(svm)
+}
+
 impl Env {
     /// Fresh SVM with both programs loaded, sysvars set, config initialized.
     /// Returns None (skip) when artifacts are missing.
     #[allow(clippy::new_ret_no_self)]
     pub fn new() -> Option<Env> {
-        let (program_so, mpl_so) = artifacts()?;
-        let mut svm = LiteSVM::new();
-        svm.add_program_from_file(program_id(), program_so).unwrap();
-        svm.add_program_from_file(mpl_core_id(), mpl_so).unwrap();
-
-        // A believable clock + slot history: slot 100, entries ≥ 5 back.
-        svm.warp_to_slot(100);
-        let mut clock: Clock = svm.get_sysvar::<Clock>();
-        clock.unix_timestamp = 1_756_000_000;
-        svm.set_sysvar(&clock);
-        let hashes: Vec<(u64, solana_sdk::hash::Hash)> = (60..=99)
-            .rev()
-            .map(|s| (s, solana_sdk::hash::Hash::new_unique()))
-            .collect();
-        svm.set_sysvar(&SlotHashes::new(&hashes));
+        let mut svm = bare_svm()?;
 
         let admin = Keypair::new();
         let settlement = Keypair::new();
@@ -1161,12 +1215,16 @@ impl Env {
         // key opens and settles); tests of the keeper gate rotate it.
         let ix = init_config_ix(
             &admin.pubkey(),
+            &admin.pubkey(),
             &entry_signer_pk,
             &settlement.pubkey(),
             &settlement.pubkey(),
             ceilings,
             0,
         );
+        // The test admin is also the program's upgrade authority, so it may
+        // sign `init_config` (and names itself admin, as the devnet setup did).
+        set_upgrade_authority(&mut svm, Some(&admin.pubkey()));
         let mut env = Env {
             svm,
             admin,

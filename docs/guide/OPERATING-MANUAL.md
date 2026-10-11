@@ -107,7 +107,7 @@ They are parsed as integers, and no float ever touches an amount.
 |---|---|---|
 | `status` | read | Config: keys, both tier ladders, prices, pots, switches, treasury, timings. Warns if Config is on an older layout |
 | `pools` | read | Every pool with its state and mode, then the **drain verdict**. It exits 1 while any pool is Sealed, Scored or Refunding. Add `--upgrade-preflight` to also refuse while any pool is Open ([§4](#4-program-upgrades-and-account-migrations)). `--self-test` runs the verdict's fixtures |
-| `init-config` | becomes admin | One-time setup. There is no `set_admin`, so whoever signs this is the admin for good |
+| `init-config` | the program's upgrade authority | One-time setup. `--config-admin` names the admin; there is no `set_admin`, so that key is the admin for good. The program refuses any signer but the upgrade authority (scanner triage 2026-10-11, item A) |
 | `migrate-config` | admin | One-shot growth of Config to the current layout after an upgrade that adds fields. Self-disabling ([§4](#4-program-upgrades-and-account-migrations)) |
 | `migrate-pool` | permissionless | One-shot growth of one pool (`--pool-id`) or every pool (`--all`) to the current layout. Self-disabling, and it skips pools already current |
 | `set-keeper` | admin | Sets the only key `open_pool` accepts |
@@ -771,14 +771,20 @@ examples. [`HOSTING.md`](HOSTING.md) has the hosting steps.
 4. **Settlement signer.** Generate it **before** `init_config`, because `init_config` needs its
    public key. Stage it as `SETTLEMENT_SIGNER_KEYPAIR_B64`, and fund it: it pays every daemon
    transaction.
-5. **`init_config`.** Emit the proposal with the vault as `--admin`, the two signers, the
-   ceilings and `--min-platform`. Before approving:
-   - check that `--admin` is the **vault**, not the multisig account;
-   - simulate the proposal;
+5. **`init_config`.** It must be signed by the program's **upgrade authority**: the program
+   refuses any other signer, which is what stops a stranger initialising Config first in the
+   window after the deploy (scanner triage 2026-10-11, item A). Run it straight after the deploy,
+   with the deploying key, naming the vault as `--config-admin`, with the two signers, the
+   ceilings and `--min-platform`. If the upgrade authority has already moved to the multisig,
+   emit it as a proposal instead (`--emit-proposal --admin <vault>`). Before signing:
+   - check that `--config-admin` is the **vault**, not the multisig account and not the deploying
+     key;
+   - simulate it;
    - run `npm run check-deployed`.
 
-   Whoever signs becomes admin for good. Verify with `status`, and confirm that a second
-   `init_config` reverts.
+   The named key is the admin for good. Verify with `status`, confirm that a second
+   `init_config` reverts, and only then move the upgrade authority to the multisig (a mainnet
+   precondition, [`../security/SECURITY-REVIEW.md`](../security/SECURITY-REVIEW.md) §5).
 6. **Fund the treasury.** Run `fund-platform-wallet`. Pool 1 cannot open until the treasury
    covers the pot plus the floor.
 7. **Services.** Deploy the indexer and create the RPC provider's webhook, then the packet
