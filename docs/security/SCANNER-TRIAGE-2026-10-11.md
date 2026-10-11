@@ -50,23 +50,23 @@ standing-rules gates pass at this commit.
 ## 2. What needs doing
 
 Lettered for reference. A (on-chain correctness) and F (the product's legal position) rank
-highest under the project's tradeoff order; B is the most urgent. "Decision" marks an item that
-waits on the project owner.
+highest under the project's tradeoff order; B was the most urgent. The project owner accepted every
+recommendation below on 2026-10-11; the status column records where each item stands.
 
-| Item | What | When | Decision |
-|---|---|---|---|
-| **A** | `init_config` callable by anyone on a fresh deployment | Written now, shipped with the next program upgrade, before any mainnet deployment | Timing |
-| **B** | `next` 16.3.0 → 16.3.8 | Before the hackathon submission | — |
-| **C** | Same-major npm fixes and overrides | App: with B. Backend: with the next backend deploy | — |
-| **D** | Pin the four service base images by digest | Next backend deploy | — |
-| **E** | Android `allowBackup="false"` | Next Android package build | Timing |
-| **F** | `mpl-core`'s licence: ship a copy, ask counsel | Notice now; counsel before mainnet | Yes |
-| **G** | Close the advisory-lane gaps this triage found | Any time | Licence policy only |
-| **H** | `faster-hex` 0.10.0 → 0.10.1 | Next program upgrade | — |
-| **I** | Images install dev dependencies | After the submission | Yes (deployment change) |
-| **J** | Move the backend off `@solana/web3.js` v1 | Tech debt, after mainnet blockers | — |
-| **K** | Correct two documents on the class draw | Any time | — |
-| **L** | Encode the pool id in the app's indexer paths | With B | — |
+| Item | What | Status |
+|---|---|---|
+| **A** | `init_config` callable by anyone on a fresh deployment | **Written and tested, held for the next program upgrade.** Only the upgrade authority may sign; the admin is an argument. Built with Solana 3.1.10 and run through the full LiteSVM suite (73 passed, 5 of them new). Kept off `main` until devnet is upgraded with it, because it changes `init_config`'s wire contract. Adds ~64 KB to the program |
+| **B** | `next` 16.3.0 → 16.3.8 | **Done.** Lint, typecheck, 614 tests and `next build` pass. Live once merged and Vercel redeploys |
+| **C** | Same-major npm fixes and overrides | **Done.** App with B; backend and test packages tested (nine backend suites, the rehearsal). Backend changes go live at the next manual backend deploy |
+| **D** | Pin the four service base images by digest | **Done**, with Dependabot refreshing the pin weekly. Live at the next backend deploy |
+| **E** | Android `allowBackup="false"` | **Done**, as a third idempotent patch in `mobile/patch-shell.sh`. In the first store build |
+| **F** | `mpl-core`'s licence: ship a copy, ask counsel | **Done; counsel open.** `THIRD-PARTY-NOTICES.md` and `third-party/mpl-core/LICENSE`; question 12 in the counsel brief |
+| **G** | Close the advisory-lane gaps this triage found | **Done.** npm gate on a triaged baseline, licence policy, LiteSVM audited, "unsound" advisories caught |
+| **H** | `faster-hex` 0.10.0 → 0.10.1 | **Written, held with A** (it changes the program's bytes) |
+| **I** | Images install dev dependencies | **Open — after the submission** (owner's decision: precompile and `--omit=dev`) |
+| **J** | Move the backend off `@solana/web3.js` v1 | **Open — tech debt**, after the mainnet blockers |
+| **K** | Correct two documents on the class draw | **Done** |
+| **L** | Encode the pool id in the app's indexer paths | **Done**, with B, with a test |
 
 ### A. `init_config` can be initialised by whoever calls it first (#3, #61)
 
@@ -113,7 +113,7 @@ account so the test admin is the upgrade authority, because LiteSVM 0.16 loads p
 upgrade authority; one new negative test. It changes `init_config`'s wire contract, which the
 `deployed-drift` lane compares with devnet, so it lands together with a program upgrade.
 
-**Decision — when.** (a) Write it now and ship it with the next program upgrade, before any
+**Decision — when** (the owner chose (a), 2026-10-11). (a) Write it now and ship it with the next program upgrade, before any
 mainnet deployment. *Recommended*: it closes the gap where it exists, and does not upgrade the
 devnet program days before judging for a gap devnet does not have. (b) Write it and upgrade devnet
 now: the code and the deployment agree sooner, at the cost of an upgrade under time pressure for
@@ -187,7 +187,7 @@ no wallet key lives in this app (keys stay in the wallet app or with the sign-in
 scanner's "a wallet file leaves with the backup" does not hold. Still, `allowBackup="false"` costs
 nothing for a WebView shell, and it is one less thing to argue about with a store reviewer.
 
-**Decision — when.** It only takes effect in a newly built and signed package. Recommended: in
+**Decision — when** (decided 2026-10-11: now, as the package had not yet been submitted). It only takes effect in a newly built and signed package. Recommended: in
 the next package build; not worth a rebuild on its own.
 
 ### F. `mpl-core`'s licence (from the report's notes)
@@ -200,7 +200,7 @@ It also forbids derivative works that compete with Metaplex Core (§4(c)); a tou
 Core for passes is not that. The repository ships no copy, and nothing in the documents or the
 counsel brief mentions it.
 
-**Decision.** (a) Add a third-party notice file now carrying Metaplex's licence text and
+**Decision** (the owner chose (a), 2026-10-11). (a) Add a third-party notice file now carrying Metaplex's licence text and
 pointing at the crate, and add the question to the counsel brief for confirmation before mainnet.
 *Recommended*: it does what the licence asks at no cost and does not pre-empt counsel. (b) Wait
 for counsel before doing anything: leaves the repository out of step with the licence meanwhile.
@@ -223,7 +223,7 @@ its own exception.
   pass matches what the images install (it does not — item I), and its list of known findings is
   stale. Fix all three, and commit the accepted set in §4.1 as the baseline the workflow header
   already asks for, so the npm half can start blocking on anything new.
-- **Licence policy — decision.** `deny.toml` says a licence policy "is a separate decision". The
+- **Licence policy — decision** (the owner chose to gate it, 2026-10-11). `deny.toml` says a licence policy "is a separate decision". The
   tree is all permissive (Apache-2.0, MIT, BSD-2/3-Clause, Unicode-3.0; no GPL, AGPL or MPL), plus
   `mpl-core`. Recommended: gate it — an allow-list of those five, and `mpl-core` as a named,
   hash-pinned exception so a licence change upstream fails CI. Trialed: passes today.
@@ -238,7 +238,7 @@ its own.
 
 The images run `npm ci` without `--omit=dev` because they start through `ts-node`, a dev
 dependency. So mocha's tree, and its advisories, ship in every image even though nothing runs it.
-**Decision**, after the submission: precompile with `tsc` and run `node`, then build with
+**Decision** (accepted 2026-10-11, for after the submission): precompile with `tsc` and run `node`, then build with
 `npm ci --omit=dev`. Recommended — smaller images, and the sweep's runtime pass would finally
 describe what ships. Rejected: moving `ts-node` into `dependencies`, which keeps a compiler in
 production for no benefit.

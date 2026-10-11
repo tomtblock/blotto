@@ -162,18 +162,22 @@ findings about deployment and logging rather than the program:
 137 items (81 against our code, 56 against dependencies); the item-by-item verdicts are in
 [`SCANNER-TRIAGE-2026-10-11.md`](SCANNER-TRIAGE-2026-10-11.md).
 
-- **Program: no exploitable defect; one deploy-time gap, open.** On a fresh deployment,
-  `init_config` makes whoever calls it first the admin. The devnet `Config` is already initialised
-  with the Squads vault as admin, so it matters for mainnet. The fix — only the program's upgrade
-  authority may initialise — is designed and waits on the next program upgrade (triage item A).
-- **`next` 16.3.0, open.** Nine live advisories, three critical, one touching a feature the app
-  uses (`next/og`). Fixed by the 16.3.8 patch (triage item B).
-- **Dependencies otherwise:** real advisories on code paths this project does not run, with
-  same-major fixes for most; the rest accepted, each with its reason.
-- **Licence, open.** `mpl-core` ships the Metaplex NFT Open Source License, not Apache-2.0, and asks
-  for a copy to go to recipients; the repository ships none (triage item F).
-- **Advisory lanes:** cargo-deny skipped "unsound" advisories in dependencies, the LiteSVM lockfile
-  was never audited, and the npm sweep missed two packages (triage item G).
+- **Program: no exploitable defect; one deploy-time gap, fix held for the next upgrade.** On a
+  fresh deployment, `init_config` made whoever called it first the admin. The devnet `Config` was
+  initialised long ago with the Squads vault as admin, so it matters for mainnet. The fix — only
+  the program's upgrade authority may initialise, and the admin is an argument — is written and
+  passes the LiteSVM suite, and ships with the next program upgrade (triage items A and H).
+- **`next` 16.3.0, fixed.** Nine live advisories, three critical, one touching a feature the app
+  uses (`next/og`). Upgraded to the 16.3.8 patch (triage item B).
+- **Dependencies otherwise, fixed or accepted:** real advisories on code paths this project does not
+  run. Same-major fixes applied across the app, backend and test packages; five with no usable
+  fix accepted, each with its reason in `scripts/npm-advisory-baseline.json`.
+- **Licence, notice shipped; counsel open.** `mpl-core` ships the Metaplex NFT Open Source License,
+  not Apache-2.0, and asks for a copy to go to recipients. `THIRD-PARTY-NOTICES.md` now carries it;
+  the counsel brief asks whether that suffices (triage item F).
+- **Advisory lanes, fixed:** cargo-deny skipped "unsound" advisories in dependencies, the LiteSVM
+  lockfile was never audited, and the npm sweep reported but never failed. All three now gate
+  (triage item G).
 
 ## 5. Open items
 
@@ -195,9 +199,10 @@ findings about deployment and logging rather than the program:
 - **Sealed-entry backup.** A rehearsed backup and restore procedure for the off-chain store of
   sealed entries is not yet in place. The crank's unreadable-entry ceiling limits the damage but
   does not replace a backup.
-- **From the 2026-10-11 scanner triage**: the `init_config` upgrade-authority gate (with the next
-  program upgrade, before any mainnet deployment); the `next` 16.3.8 patch; the `mpl-core` licence
-  notice and counsel's view of that licence; and the advisory-lane gaps. Each is a lettered item in
+- **From the 2026-10-11 scanner triage**: the `init_config` upgrade-authority gate and the
+  `faster-hex` bump, written and tested, ship with the next program upgrade and must land before
+  any mainnet deployment; counsel's view of the Metaplex licence; the service images installing dev
+  dependencies; the move off `@solana/web3.js` v1. Status per item in
   [`SCANNER-TRIAGE-2026-10-11.md`](SCANNER-TRIAGE-2026-10-11.md) §2.
 - **IR-2** (§4) remains an accepted risk.
 - **RPC credential rotation** after finding 5.9 is an open operator action.
