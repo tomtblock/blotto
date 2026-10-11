@@ -122,6 +122,9 @@ hits="$(
     --exclude=check-language.sh \
     `# The verbatim Apache-2.0 text ("Licensed under..."). Legal boilerplate` \
     `# nobody here authored; software licensing, not a gaming-licence claim.` \
+    `# The basename also covers third-party/<crate>/LICENSE (2026-10-11): a` \
+    `# dependency's licence reproduced verbatim because it asks to travel with` \
+    `# the work (THIRD-PARTY-NOTICES.md). Same category, nothing authored here.` \
     --exclude=LICENSE \
     `# The same category, added 2026-09-22: the SIL Open Font License 1.1 text` \
     `# shipped beside each self-hosted font in app/src/fonts. It trips \`licensed\`` \

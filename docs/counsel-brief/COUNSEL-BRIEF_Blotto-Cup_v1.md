@@ -830,6 +830,13 @@ Stated so that counsel advises on the product that exists. Sources: `docs/COMPLI
     reviewer sufficient to support a forfeiture against an unfair-terms challenge?
 11. **Documents.** Terms of service, privacy notice, complaints and dispute route, governing law,
     limitation of liability: what is required before the first pool with strangers in it.
+12. **Third-party software licence.** The on-chain program links Metaplex Core (`mpl-core`) to
+    mint passes. Its licence is the *Metaplex NFT Open Source License v1.0*, not Apache-2.0: it
+    treats a linked work as a derivative work and on-chain deployment as distribution, requires a
+    copy of the licence to go to recipients, and forbids derivative works that compete with Metaplex
+    Core. The repository now ships the licence text and a notice (`THIRD-PARTY-NOTICES.md`). Is that
+    sufficient for a mainnet deployment and for the Apache-2.0 release of the rest of the code, and
+    does anything in the licence constrain how the operator may use or describe the passes?
 
 ---
 

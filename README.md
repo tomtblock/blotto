@@ -110,4 +110,5 @@ The backend stack, the program build and every CI check are in
 
 ## Licence
 
-Apache-2.0. See [`LICENSE`](LICENSE).
+Apache-2.0. See [`LICENSE`](LICENSE). One dependency of the on-chain program, Metaplex Core, has
+a licence of its own; see [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
