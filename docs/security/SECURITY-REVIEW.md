@@ -20,6 +20,7 @@ vulnerability, see [`SECURITY.md`](../../SECURITY.md).
 | **Repository review** | 2026-09-07 | The whole repository: the program, the backend services, the frontend, tests, scripts and documents | Every suite and gate run first as a baseline, then a dead-code pass, a pass for contradictions between constants and claims, and an adversarial read of the money paths and the public surfaces. Every claim was checked against code |
 | **Pre-mainnet program review** | Before 2026-09-11 | `programs/blotto_cup/` only, against the four carried threat-model entries (§2), the vault-invariant suite and a ten-class Anchor vulnerability checklist | Line-by-line review of each instruction's accounts, signer checks, arithmetic and state gates |
 | **Cold-read review** | 2026-09-11 | 338 of 439 source, test, migration, CI, script and deploy files (77%). 100% of the program and crates, backend services, migrations, CI workflows and deploy files; 74% of app source; test files sampled | Reviewers new to the codebase, one per area and slice of the tree, required to cite line numbers. Every finding went to a second reviewer who saw only the finding and was told to refute it. 20 findings were refuted and 81 were lowered in severity. None was raised |
+| **Automated scanner report** | 2026-10-11 | The whole repository at `68bb08c`, by an automated tool supplied with the Solana hackathon: source patterns, npm and Rust advisories, licences, container and Android configuration | Pattern matching, unverified by the tool itself. Every item was re-checked by hand against the code, and every dependency item against the live advisory databases — item by item in [`SCANNER-TRIAGE-2026-10-11.md`](SCANNER-TRIAGE-2026-10-11.md) |
 
 **Limits the cold read stated itself.** It could not see branch-protection settings or the live
 deployment's configuration. It did not profile compute units, scan dependencies against a live
@@ -153,6 +154,24 @@ findings about deployment and logging rather than the program:
   with tests). The credential is being rotated, after the redaction shipped so that the new one
   never reaches the log.
 
+### 2026-10-11 automated scanner report
+
+137 items (81 against our code, 56 against dependencies); the item-by-item verdicts are in
+[`SCANNER-TRIAGE-2026-10-11.md`](SCANNER-TRIAGE-2026-10-11.md).
+
+- **Program: no exploitable defect; one deploy-time gap, open.** On a fresh deployment,
+  `init_config` makes whoever calls it first the admin. The devnet `Config` is already initialised
+  with the Squads vault as admin, so it matters for mainnet. The fix — only the program's upgrade
+  authority may initialise — is designed and waits on the next program upgrade (triage item A).
+- **`next` 16.3.0, open.** Nine live advisories, three critical, one touching a feature the app
+  uses (`next/og`). Fixed by the 16.3.8 patch (triage item B).
+- **Dependencies otherwise:** real advisories on code paths this project does not run, with
+  same-major fixes for most; the rest accepted, each with its reason.
+- **Licence, open.** `mpl-core` ships the Metaplex NFT Open Source License, not Apache-2.0, and asks
+  for a copy to go to recipients; the repository ships none (triage item F).
+- **Advisory lanes:** cargo-deny skipped "unsound" advisories in dependencies, the LiteSVM lockfile
+  was never audited, and the npm sweep missed two packages (triage item G).
+
 ## 5. Open items
 
 - **No independent audit yet.** Under decision `R5` it follows after ten settled mainnet pools; the
@@ -173,6 +192,10 @@ findings about deployment and logging rather than the program:
 - **Sealed-entry backup.** A rehearsed backup and restore procedure for the off-chain store of
   sealed entries is not yet in place. The crank's unreadable-entry ceiling limits the damage but
   does not replace a backup.
+- **From the 2026-10-11 scanner triage**: the `init_config` upgrade-authority gate (with the next
+  program upgrade, before any mainnet deployment); the `next` 16.3.8 patch; the `mpl-core` licence
+  notice and counsel's view of that licence; and the advisory-lane gaps. Each is a lettered item in
+  [`SCANNER-TRIAGE-2026-10-11.md`](SCANNER-TRIAGE-2026-10-11.md) §2.
 - **IR-2** (§4) remains an accepted risk.
 - **RPC credential rotation** after finding 5.9 is an open operator action.
 - **The Android package** (D-E18, 2026-09-28). The app-side changes were reviewed with the change:
