@@ -30,10 +30,14 @@ who wins money**.
   no entry is ever drawn from an empty seed. A pool whose seed never lands takes no entries, stays
   below the minimum field, and returns its prize pool to the treasury at the deadline through the
   permissionless `trigger_refund`.
-- **A known seed is not enough.** The class digest also mixes a slot hash from at least five slots
-  back, the entry index, the pool and the player's key
-  ([ADR-026](adr-026-multi-source-randomness.md)), so even full knowledge of the seed does not make
-  an entry's class predictable at submission.
+- **A known seed is not enough to choose a class.** The class digest also mixes a slot hash from at
+  least five slots back, the entry index, the pool and the player's key
+  ([ADR-026](adr-026-multi-source-randomness.md)). The seed is public once committed, and the
+  candidate slot hashes are public before an entry is sent, so an entrant can estimate their class
+  and time an entry around it; what they cannot fix in advance is the landing slot or the entry
+  index, so they cannot choose it. The class is cosmetic and the bag fixes each class's count per
+  pool, so this moves nothing of value (corrected 2026-10-11; the earlier wording said
+  "unpredictable", which overstated it).
 - **Auditable.** The committed seed and the randomness account used are emitted in `PoolVrfSeeded`.
 
 ## Residual risk
