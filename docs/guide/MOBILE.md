@@ -238,6 +238,10 @@ request did not go through" — the WebView's Network tab showed every request g
 was the WebView's missing Ed25519 (§9). That closes the loop the store needs: everything a player
 does, from the app drawer to a seat.
 
+**Evidence:** [`../testing/MOBILE-E2E.md`](../testing/MOBILE-E2E.md) — this run's entry
+transaction, pool PDA and outcome, each with its source. Pool #50 never sealed: it refunded with one
+entrant, so this run exercised no settlement or verify page.
+
 **Reading the WebView's network from the Mac** (diagnostic build only — revert before any store
 build): in the generated `MainActivity.kt` change `setWebContentsDebuggingEnabled(BuildConfig.DEBUG)`
 to `(true)` and `isDebug = BuildConfig.DEBUG` to `true`, rebuild, reinstall; Chrome on the Mac →

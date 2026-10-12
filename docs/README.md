@@ -10,6 +10,7 @@ Where any document and the code disagree, the code is right and the document is 
 |---|---|
 | [`../README.md`](../README.md) | What Blotto Cup is, the two modes, how the money moves, the quick start |
 | [`guide/HOW-IT-WORKS.md`](guide/HOW-IT-WORKS.md) | The whole mechanism in plain language, no code — for players, judges and reviewers |
+| [`../REVIEWERS.md`](../REVIEWERS.md) | The reviewer's entry point: ten files to read first, one sequence diagram, and links to the mobile, security and status facts. Canonical for nothing; it points |
 
 ## Product and plan
 
@@ -45,6 +46,7 @@ Where any document and the code disagree, the code is right and the document is 
 | [`skill-evidence/REPORT.md`](skill-evidence/REPORT.md) · [`skill-evidence/hard/REPORT.md`](skill-evidence/hard/REPORT.md) | The skill-evidence study for each mode — how often each strategy finishes first. **Generated** by `npm run skill-evidence` in `tests/rehearsal`; a nightly CI lane fails on drift. Never edit by hand |
 | [`testing/FILL-SIMULATION.md`](testing/FILL-SIMULATION.md) | How often a pool fills under the 40-seat, 12-hour rule. **Generated** by `scripts/sim/fill-replay.ts --write` |
 | [`testing/LIVE-SKILL-ENDPOINTS.md`](testing/LIVE-SKILL-ENDPOINTS.md) | The live read-API endpoints that publish the same statistics from real tournaments |
+| [`testing/MOBILE-E2E.md`](testing/MOBILE-E2E.md) | **The evidence of each mobile end-to-end run on devnet**: one table per run, every signature with its source, and what was not recorded |
 | [`../battle-test/`](../battle-test/) | The devnet trial's tooling, frozen predictions and raw on-chain evidence |
 
 ## Compliance — safeguards and facts
