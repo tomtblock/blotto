@@ -1,5 +1,19 @@
 # Automated security report: triage of 2026-10-11
 
+**Re-check on `ab85855` (12 October 2026, after PR #211 merged).** `npm audit --package-lock-only`
+in every directory with a `package-lock.json`, against the live advisory database. npm counts
+affected *packages*; the last column is the distinct high and critical *advisories*, every one of
+which is in `scripts/npm-advisory-baseline.json` with its reason (`node scripts/check-npm-advisories.mjs`:
+0 new). Rust: `cargo deny check advisories` is clean on the root workspace and on `tests/litesvm`.
+
+| Lockfile | Critical | High (packages, full tree) | High (packages, runtime only) | Moderate | High advisories, all in the baseline |
+|---|---:|---:|---:|---:|---|
+| `app` | 0 | 24 | 13 | 45 | 4: `braces`; `extract-zip` ×2 and `basic-ftp` (dev only, via lighthouse) |
+| `backend/reveal` | 0 | 5 | 5 | 2 | 1: `bigint-buffer` (no fixed release; not called) |
+| `backend/_shared`, `scoring`, `class-digest`, `sealing`, `sanctions`, `indexer`, `packet`, `detection` | 0 | 0 | 0 | 0 | — |
+| `battle-test` | 0 | 0 | 0 | 4 | — |
+| `tests/postgres`, `tests/rehearsal` | 0 | 0 | 0 | 0 | — |
+
 **What this is.** A free automated security report was produced for the Solana hackathon
 submission against commit `68bb08c` (11 October 2026). It lists 81 items against our code and
 56 against our dependencies. The report says of its own code section that "nothing was confirmed
