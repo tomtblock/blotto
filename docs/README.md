@@ -61,6 +61,7 @@ Where any document and the code disagree, the code is right and the document is 
 | Document | Canonical for |
 |---|---|
 | [`security/SECURITY-REVIEW.md`](security/SECURITY-REVIEW.md) | The reviews performed, the threat model, the on-chain invariants, findings fixed and items still open |
+| [`security/SCANNER-TRIAGE-2026-10-11.md`](security/SCANNER-TRIAGE-2026-10-11.md) | The item-by-item verdicts on the automated security report of 2026-10-11, and the plan for each real item. `SECURITY-REVIEW.md` carries the summary and the open items |
 | [`../SECURITY.md`](../SECURITY.md) | How to report a vulnerability |
 
 ## Process
@@ -68,6 +69,7 @@ Where any document and the code disagree, the code is right and the document is 
 | Document | Canonical for |
 |---|---|
 | [`../CONTRIBUTING.md`](../CONTRIBUTING.md) | Keys and secrets, the language gate, the standing-rules checks, commits and branches, CI |
+| [`../THIRD-PARTY-NOTICES.md`](../THIRD-PARTY-NOTICES.md) | Dependency licences that ask for their text to travel with the work (Metaplex Core) |
 | [`../CLAUDE.md`](../CLAUDE.md) | The rules AI coding agents working in this repository follow — the same hard rules, stated for an agent |
 | [`design/`](design/) | UI screenshots from 2026-09-16, taken before the battle board replaced the battle screens |
 

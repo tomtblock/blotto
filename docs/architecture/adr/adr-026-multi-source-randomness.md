@@ -10,7 +10,8 @@
 The class draw ([ADR-021](adr-021-bag-without-replacement-draw.md)) needs 32 random bytes per
 entry. Those bytes must be:
 
-- **unpredictable at submission**, so nobody can choose their moment of entry to target a class;
+- **hard to target at submission**, so choosing a moment of entry to land a particular class is
+  unreliable (see Consequences for how far this holds);
 - **not steerable by the validator** that executes `register`;
 - **replayable afterwards** from public data;
 - **cheap**, because they are computed inside every `register`.
@@ -37,7 +38,7 @@ digest = sha256( vrf_seed        32 bytes  committed once per pool by commit_vrf
   until it is set (`VrfSeedNotCommitted`).
 - **`slot_hash`** is the newest `SlotHashes` entry with `slot ≤ current − 5` (`SLOT_HASH_DELAY = 5`
   in `constants.rs`). It is finalised before the executing slot begins, so the executing validator
-  cannot influence it, and the entrant cannot know which slot their transaction will land in. "At
+  cannot influence it, and the entrant cannot know exactly which slot their transaction will land in. "At
   least 5 back" rather than "exactly 5" because skipped slots have no entry. The sysvar is read as
   raw account data at a pinned address.
 - **`entry_index`** is the seat counter, encoded little-endian to match Borsh.
@@ -47,7 +48,15 @@ digest = sha256( vrf_seed        32 bytes  committed once per pool by commit_vrf
 
 ## Consequences
 
-- **Unpredictable, not steerable, replayable.** The chosen slot hash is stored on `Entry.slot_hash`
+- **Hard to target, not validator-steerable, replayable.** "Hard to target" is the honest claim,
+  not "unpredictable" (corrected 2026-10-11, scanner triage §5). At submission an entrant already
+  knows the seed, the pool, their own key, the likely entry index and every candidate slot hash —
+  the hash used is the newest at least five slots older than the LANDING slot, and those are
+  public before the transaction is sent. What they do not know is which slot it lands in, or
+  whether another entry takes the index first, so they can estimate their class and time an entry
+  around it, but not choose it. Nothing of value follows: the class is cosmetic, the bag fixes how
+  many of each class a pool hands out, and a pass cannot be transferred, so there is nothing to
+  resell. The chosen slot hash is stored on `Entry.slot_hash`
   and emitted in `EntryRegistered`; the seed is emitted in `PoolVrfSeeded`. A replay therefore needs
   no historical sysvar data, only the program log.
 - **One oracle interaction per pool**, not per entry. `register` pays only a sysvar read and one

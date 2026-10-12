@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "license": "Apache-2.0",
   "private": true,
-  "description": "The scoring engine (roadmap 2.1, R20): allocations, the 35-byte battle-set encoding, the all-vs-all engine, ranking with tie-breaks, prize amounts in 1024ths, the results Merkle tree, and the class digest (2.2). Pure functions, no I/O, no Date — one module that runs identically in the settlement crank (Node) and the verify page (browser).",
+  "description": "The scoring engine (roadmap 2.1, R20): allocations, the 35-byte battle-set encoding, the all-vs-all engine, ranking with tie-breaks, prize amounts in 1024ths, the results Merkle tree, and the class digest (2.2). Pure functions, no I/O, no Date \u2014 one module that runs identically in the settlement crank (Node) and the verify page (browser).",
   "engines": {
     "node": ">=20"
   },
@@ -26,5 +26,16 @@
     "ts-mocha": "^10.0.0",
     "ts-node": "^10.9.0",
     "typescript": "^5.7.3"
+  },
+  "overrides": {
+    "mocha": {
+      "serialize-javascript": "^7.0.5",
+      "js-yaml": "^4.3.2",
+      "minimatch@4": "^4.2.6",
+      "nanoid": "^3.3.18",
+      "diff": "^5.2.2",
+      "chokidar": "^4.0.3"
+    },
+    "brace-expansion@1": "^1.1.21"
   }
 }

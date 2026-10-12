@@ -89,4 +89,32 @@ describe('indexerApi', () => {
     // A configured build is not the throwing stand-in: reads reach the network.
     expect(typeof indexerApi().listPools).toBe('function');
   });
+
+  it('escapes a pool id or wallet taken from the URL, so it names a row and never another route', async () => {
+    // Scanner triage 2026-10-11, item L: the reads interpolate values that
+    // arrive from the page URL. A crafted id must stay ONE path segment.
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('NEXT_PUBLIC_INDEXER_URL', 'https://indexer.example');
+    const seen: string[] = [];
+    vi.stubGlobal('fetch', async (url: string) => {
+      seen.push(url);
+      return new Response(null, { status: 404 });
+    });
+    try {
+      const api = indexerApi();
+      await api.getPool('../treasury');
+      await api.getEntries('7?x=1');
+      await api.getProfile('a/b#c');
+      // An ordinary base58 address is untouched.
+      await api.getLeaderboard('5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17');
+      expect(seen).toEqual([
+        'https://indexer.example/pools/..%2Ftreasury',
+        'https://indexer.example/pools/7%3Fx%3D1/entries',
+        'https://indexer.example/profiles/a%2Fb%23c',
+        'https://indexer.example/pools/5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17/leaderboard',
+      ]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });

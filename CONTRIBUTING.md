@@ -165,7 +165,8 @@ runs offline.
 `standing-rules`. The `postgres` job fails if any case came back pending rather than passing it.
 Other lanes: `on-chain` (the SBF build and LiteSVM), `rehearsal` (the battle-test folder's own
 rules), `skill-evidence` (nightly regeneration of the study), `security-sweep`
-(`cargo deny` and `cargo audit`), `deployed-drift` (the deployed program matches the source),
+(`cargo deny` and `cargo audit` on both Rust lockfiles, the licence policy, and the npm advisory
+gate against `scripts/npm-advisory-baseline.json`), `deployed-drift` (the deployed program matches the source),
 `app-test-signer` (no test signer in the production bundle) and the deploy and monitoring
 workflows described in [`docs/guide/HOSTING.md`](docs/guide/HOSTING.md). Nothing builds the
 Android package (`mobile/`): it is built by hand by the holder of its signing key, and `ci-fast`

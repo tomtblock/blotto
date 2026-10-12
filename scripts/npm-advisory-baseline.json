@@ -1,0 +1,12 @@
+{
+  "_about": "The npm advisories at HIGH or CRITICAL that are known, triaged and accepted, per package directory, each with the reason it is accepted. scripts/check-npm-advisories.mjs fails on any high or critical advisory NOT listed here, and warns on any entry here that no longer appears (remove it: an ignore that outlives its reason is worse than none). Triage of record: docs/security/SCANNER-TRIAGE-2026-10-11.md, section 4.1. Moderate and low advisories are reported by the workflow, never gated.",
+  "app": {
+    "GHSA-vfj7-8cjw-p6xm": "braces <=3.0.3, no fixed release. Present at runtime only as a dependency of React Native's metro bundler, an auto-installed peer of @solana-mobile/wallet-standard-mobile and of Privy's styled-components; never bundled for the web. Also reached by eslint at lint time on our own globs.",
+    "GHSA-jmr9-qjv8-65gv": "extract-zip <=2.0.1, no fixed release. Dev only: lighthouse -> puppeteer. The Lighthouse gate drives the runner's own Chrome through chrome-launcher, so puppeteer never downloads or unpacks a browser. Cleared by lighthouse 13 (a major bump), when taken.",
+    "GHSA-7pqw-9j4j-h8q3": "extract-zip <=2.0.1: as GHSA-jmr9-qjv8-65gv.",
+    "GHSA-c475-qrg2-pj4r": "basic-ftp 5.3.1, fixed only on the 6.x line. Dev only: lighthouse -> puppeteer -> proxy-agent -> get-uri, which requires ^5. The Lighthouse gate opens no FTP connection. Cleared by lighthouse 13, when taken."
+  },
+  "backend/reveal": {
+    "GHSA-3gc7-fjrx-p6mg": "bigint-buffer 1.1.5, no fixed release (unmaintained since 2022; the latest @solana/spl-token still requires it). Reached through Irys and Switchboard -> @solana/spl-token -> @solana/buffer-layout-utils. toBigIntLE runs only when decoding SPL token-account amounts; the daemon moves native SOL, and the one spl-token helper Switchboard calls derives an address and decodes nothing."
+  }
+}

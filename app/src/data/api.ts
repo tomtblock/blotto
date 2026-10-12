@@ -66,6 +66,14 @@ const READ_TIMEOUT_MS = 8_000;
  */
 const SERVER_READ_TTL_S = 10;
 
+/**
+ * One path segment. Pool ids and wallet addresses reach these reads from the
+ * page URL, so a crafted value must name a row and never another route of the
+ * read API (scanner triage 2026-10-11, item L). A real id or base58 address
+ * contains nothing this escapes.
+ */
+const seg = (value: string): string => encodeURIComponent(value);
+
 class HttpIndexerApi implements IndexerApi {
   constructor(private readonly base: string) {}
 
@@ -87,22 +95,22 @@ class HttpIndexerApi implements IndexerApi {
     return (await this.get<PoolSummary[]>('/pools')) ?? [];
   }
   async getPool(pool: string) {
-    return this.get<PoolSummary>(`/pools/${pool}`);
+    return this.get<PoolSummary>(`/pools/${seg(pool)}`);
   }
   async getEntries(pool: string) {
-    return (await this.get<EntryRow[]>(`/pools/${pool}/entries`)) ?? [];
+    return (await this.get<EntryRow[]>(`/pools/${seg(pool)}/entries`)) ?? [];
   }
   async getResults(pool: string) {
-    return (await this.get<ResultRow[]>(`/pools/${pool}/results`)) ?? [];
+    return (await this.get<ResultRow[]>(`/pools/${seg(pool)}/results`)) ?? [];
   }
   async getPayouts(pool: string) {
-    return (await this.get<PayoutRow[]>(`/pools/${pool}/payouts`)) ?? [];
+    return (await this.get<PayoutRow[]>(`/pools/${seg(pool)}/payouts`)) ?? [];
   }
   async getProfile(player: string) {
-    return this.get<ProfileRow>(`/profiles/${player}`);
+    return this.get<ProfileRow>(`/profiles/${seg(player)}`);
   }
   async getCareer(player: string) {
-    return (await this.get<CareerRow[]>(`/profiles/${player}/history`)) ?? [];
+    return (await this.get<CareerRow[]>(`/profiles/${seg(player)}/history`)) ?? [];
   }
   async getTreasury() {
     return this.get<TreasuryTiers>('/treasury');
@@ -113,7 +121,7 @@ class HttpIndexerApi implements IndexerApi {
   async getLeaderboard(pool: string) {
     // 404 = no VERIFIED archive for this pool (the read API fails closed;
     // an unverified or mismatched bundle is indistinguishable from none).
-    return this.get<PoolLeaderboard>(`/pools/${pool}/leaderboard`);
+    return this.get<PoolLeaderboard>(`/pools/${seg(pool)}/leaderboard`);
   }
 }
 
