@@ -1,5 +1,7 @@
 # Blotto Cup
 
+> Reviewing this for a hackathon or an audit? Start at [`REVIEWERS.md`](REVIEWERS.md).
+
 A paid-entry tournament on Solana, built on the Colonel Blotto game: the result is decided by the players' decisions, with no chance in the scoring.
 
 Up to 64 players enter a pool. Each one places points across **seven sealed battles** of five

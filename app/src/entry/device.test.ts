@@ -2,6 +2,7 @@
  * pools (audit 2026-09-11, B-40), absent (zeros) when storage is closed,
  * never a throw. */
 import { afterEach, describe, expect, it } from 'vitest';
+import { sha256 } from '@noble/hashes/sha256';
 import { deviceMarker } from './device';
 
 const POOL_A = 'Poo1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
@@ -57,16 +58,43 @@ describe('deviceMarker', () => {
     const marker = deviceMarker(POOL_A);
     expect(store.has('blotto:device-marker:v1')).toBe(false);
     expect([...marker]).not.toEqual([...Buffer.from(leaked, 'hex')]);
-    const secret = store.get('blotto:device-secret:v2');
-    expect(secret).toMatch(/^[0-9a-f]{64}$/);
-    expect(secret).not.toBe(leaked);
+    const salt = store.get('blotto:device-salt:v3');
+    expect(salt).toMatch(/^[0-9a-f]{64}$/);
+    expect(salt).not.toBe(leaked);
   });
 
-  it('never sends the stored secret itself', () => {
+  it('never sends the stored salt itself', () => {
     const store = shim();
     const marker = deviceMarker(POOL_A);
-    const secret = store.get('blotto:device-secret:v2')!;
-    expect(Buffer.from(marker).toString('hex')).not.toBe(secret);
+    const salt = store.get('blotto:device-salt:v3')!;
+    expect(Buffer.from(marker).toString('hex')).not.toBe(salt);
+  });
+
+  it('carries a v2 salt to the v3 name once, and the marker does not change by a byte', () => {
+    // 2026-10-12: only the storage NAME moved (the v2 name read to a scanner
+    // as key material). A browser that entered before keeps its markers, so
+    // the in-pool same-device signal is undisturbed across the rename.
+    const store = shim();
+    const v2 = 'cd'.repeat(32);
+    store.set('blotto:device-secret:v2', v2);
+    const marker = deviceMarker(POOL_A);
+    expect(store.get('blotto:device-salt:v3')).toBe(v2);
+    expect(store.has('blotto:device-secret:v2')).toBe(false);
+    // The derivation, spelled out independently: sha256(domain NUL pool NUL ‖ salt).
+    const label = new TextEncoder().encode(`blotto:device:v2\u0000${POOL_A}\u0000`);
+    const salt = Buffer.from(v2, 'hex');
+    const expected = sha256(new Uint8Array([...label, ...salt]));
+    expect([...marker]).toEqual([...expected]);
+    // And later reads come from v3 alone.
+    expect([...deviceMarker(POOL_A)]).toEqual([...expected]);
+  });
+
+  it('a malformed v2 value is dropped, never carried', () => {
+    const store = shim();
+    store.set('blotto:device-secret:v2', 'not-hex');
+    deviceMarker(POOL_A);
+    expect(store.has('blotto:device-secret:v2')).toBe(false);
+    expect(store.get('blotto:device-salt:v3')).toMatch(/^[0-9a-f]{64}$/);
   });
 
   it('closed storage yields all zeros (absence, which detection ignores)', () => {
