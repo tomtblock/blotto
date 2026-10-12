@@ -4,9 +4,7 @@
   "private": true,
   "license": "Apache-2.0",
   "description": "Devnet battle-test tooling (see MANUAL.md). Imports backend/scoring, backend/sealing, backend/packet and tests/rehearsal by relative path as read-only libraries; modifies nothing under app/, programs/, backend/ or tests/.",
-  "engines": {
-    "node": ">=20"
-  },
+  "engines": { "node": ">=20" },
   "scripts": {
     "keys": "ts-node --transpile-only --compiler-options {\"module\":\"commonjs\",\"moduleResolution\":\"node\"} scripts/keys.ts",
     "registry": "ts-node --transpile-only --compiler-options {\"module\":\"commonjs\",\"moduleResolution\":\"node\"} scripts/registry.ts",
@@ -23,10 +21,5 @@
     "@types/node": "^20.0.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.3"
-  },
-  "overrides": {
-    "@solana/web3.js": {
-      "jayson": "^5.0.0"
-    }
   }
 }

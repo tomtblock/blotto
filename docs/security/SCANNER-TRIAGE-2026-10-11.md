@@ -153,8 +153,9 @@ path), and every fix below was trial-resolved and re-audited in a scratch copy.
 - **`backend/reveal`**: `overrides` for `js-yaml` `^4.3.2`, `ws` `^8.21.0` under
   `@ethersproject/providers`, `jayson` `^5.0.0` under `@solana/web3.js` (drops `stream-json` and
   an old `uuid`), and `toml` `^4.3.0` (a major bump; checked that its API is a superset and that
-  Switchboard still loads). The same `jayson` override in `backend/indexer`, `tests/rehearsal` and
-  `battle-test`.
+  Switchboard still loads). The same `jayson` override in `backend/indexer` and `tests/rehearsal`.
+  `battle-test` (devnet trial tooling, moderate advisories only) gets it in a change of its own:
+  the rehearsal lane's boundary rule lets a change touching `battle-test/` touch nothing else.
 - **The mocha set**, in the nine backend packages and both test packages: scoped overrides for
   `serialize-javascript`, `js-yaml`, `minimatch@4`, `nanoid`, `diff`. Trial: `backend/scoring`
   installs and its 137 tests pass.
@@ -344,7 +345,8 @@ Three facts frame this table:
 - **Live counts, runtime dependencies only (`npm audit --omit=dev`), today → after items B and C:**
   app 2 critical / 17 high → 0 / 13 (all `braces`, React Native's bundler only);
   `backend/reveal` 0 / 9 → 0 / 5 (all the `bigint-buffer` chain); `backend/indexer`,
-  `tests/rehearsal`, `battle-test` 4 moderate → 0; every other package 0 → 0.
+  `tests/rehearsal` 4 moderate → 0; `battle-test` 4 moderate, unchanged (see item C); every other
+  package 0 → 0.
 
 | Item | Sev. | Where | Path | Verdict | Fix |
 |---|---|---|---|---|---|
