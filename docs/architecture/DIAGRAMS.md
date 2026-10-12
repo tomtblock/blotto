@@ -104,17 +104,17 @@ sequenceDiagram
   B->>C: balance ≥ price + 0.01 SOL
   Note over B: battle board, one 3-minute clock from the first point placed
   Note over B: easy: each battle sums to 100 · hard: 700 across 35 cells
-  Note over B: payload (127 B easy, 162 B hard) sealed to the pool's X25519 key; commitment = sha256(battles ‖ salt)
-  B->>P: POST /ciphertexts (before any money; length held to the pool's mode)
+  Note over B: payload (127 B easy, 162 B hard) sealed to the pool's X25519 key · commitment = sha256(battles ‖ salt)
+  B->>P: POST /ciphertexts (before any money · length held to the pool's mode)
   B->>P: POST /packet
-  P->>V: IPLocate again; OFAC, Chainalysis, OpenSanctions; attestation on record
+  P->>V: IPLocate again · OFAC, Chainalysis, OpenSanctions · attestation on record
   P->>V: Turnkey signs the 85-byte packet (60 s to use it)
   P-->>B: packet + Ed25519 instruction
   B->>C: simulateTransaction (compute budget, low balance, refused pool)
   B->>W: sign
   Note over B: the fresh pass keypair co-signs locally
   B->>C: sendTransaction, then poll to "confirmed"
-  Note over C: register: verify packet, move the price to the treasury, draw the class, mint the frozen pass, emit EntryRegistered; the 64th seat seals
+  Note over C: register: verify packet, move the price to the treasury, draw the class, mint the frozen pass, emit EntryRegistered · the 64th seat seals
   C-->>B: the landed transaction's own event: class, seat, pass
   C-->>P: finalized webhook to the indexer a few seconds later
 ```
@@ -163,7 +163,7 @@ stateDiagram-v2
   Open --> Refunding: trigger_refund, anyone, < min_seats past the deadline (5)<br/>the untouched pot returns to the treasury
   Open --> Closed: 0 entrants past the deadline
   Refunding --> Closed: refund × n, anyone, the full price from the treasury
-  Paid --> [*]: a held share (6): release at 12 h or by anyone at 7 days; forfeit then pay_next_place; sanctions hold lifted by admin only
+  Paid --> [*]: a held share (6) · release at 12 h or by anyone at 7 days · forfeit then pay_next_place · sanctions hold lifted by admin only
   Closed --> [*]
   note right of Paid: the (mode, tier) slot frees, 5-minute cooldown, the keeper opens the next pool (7)
 ```
@@ -207,11 +207,11 @@ flowchart LR
   S4["4 score<br/>identical field, half-points as integers"]
   S5["5 rank and split<br/>score, then stats won"]
   S6["6 results tree<br/>leaf = player ‖ rank ‖ amount"]
-  S7["7 publish the bundle<br/>Irys, version 3, names the mode"]
-  S8["8 detection report<br/>advisory, persisted"]
-  S9["9 screen winners<br/>match: hold · no answer: retry next tick"]
-  S10["10 commit_results<br/>root + payouts, sum = pot"]
-  S11["11 pay_prizes<br/>batched; escrow for flagged or held"]
+  S7["7 detection report<br/>advisory, persisted"]
+  S8["8 screen winners<br/>match: hold · no answer: retry next tick"]
+  S9["9 commit_results<br/>root + payouts, sum = pot"]
+  S10["10 pay_prizes<br/>batched; escrow for flagged or held"]
+  S11["11 publish the bundle<br/>Irys, version 3, names the mode"]
   S12["12 onward<br/>slot frees, cooldown, next pool"]
   TICK --> S1 --> S2 --> S3 --> S4 --> S5 --> S6 --> S7 --> S8 --> S9 --> S10 --> S11 --> S12
 ```
@@ -230,16 +230,19 @@ flowchart LR
    pot equally if that rank is first.
 6. **The results tree.** One leaf per seat, domain-separated sha256. The root is what the chain
    commits and what a player recomputes.
-7. **Publication.** The bundle carries the secret, every board and salt, the commitments and
-   statuses, the results, the payouts and the root. Timings and device markers are never published.
-8. **Detection is advisory.** Five signals run on every pool and the report is persisted. A flag is
+7. **Detection is advisory.** Five signals run on every pool and the report is persisted. A flag is
    a signed human decision on the review desk, never the daemon's.
-9. **Winner screening.** Every wallet in the payout list is checked against the sanctions lists. A
+8. **Winner screening.** Every wallet in the payout list is checked against the sanctions lists. A
    match places an on-chain hold before anything is committed. A screening that cannot answer places
    nothing: the crank refuses to commit and screens again on the next tick.
-10. **Commit.** The root and the payout list go on chain. The program refuses a list that is
-    unsorted, duplicated, out of range or does not sum to the pot.
-11. **Pay.** Vault to winner, batched. A flagged or held seat's share stays in the vault as escrow.
+9. **Commit.** The root and the payout list go on chain. The program refuses a list that is
+   unsorted, duplicated, out of range or does not sum to the pot.
+10. **Pay.** Vault to winner, batched. A flagged or held seat's share stays in the vault as escrow.
+11. **Publication, after the money.** The bundle carries the secret, every board and salt, the
+    commitments and statuses, the results, the payouts and the root. Timings and device markers are
+    never published. It runs last on purpose (`backend/reveal/src/crank.ts`): an upload that keeps
+    failing must not hold a sealed pool's prize behind a storage vendor, so a bundle still owed is
+    published on a later tick.
 12. **Onward.** The slot frees, the cooldown runs, and the OPEN phase funds the next pot from the
     treasury if the policy floor allows, with a fresh sealing key, randomness account and pass
     collection.
