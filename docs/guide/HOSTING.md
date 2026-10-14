@@ -74,7 +74,9 @@ It answers **503** in two cases:
 - it is ready but has not completed a tick in fifteen minutes (`STALE_TICK_MS`,
   `backend/reveal/src/health.ts`).
 
-Either way, Fly's check restarts a stuck loop and the `backend-watch` workflow reports it
+Either way, the failing check takes the machine out of Fly's routing and the `backend-watch`
+workflow reports it. Fly does not restart a machine whose check fails, so recovery is the cause
+clearing or a manual restart
 ([`OPERATING-MANUAL.md` §9](OPERATING-MANUAL.md#9-monitoring)).
 
 **A green `/health` is not proof that the database works.** Only the indexer's boot path touches

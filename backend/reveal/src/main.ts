@@ -591,10 +591,15 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
       console.error(`${SERVICE}: tick threw:`, err instanceof Error ? err.message : err);
     },
     afterIteration: () => {
-      // A tick that throws (config unreadable, RPC down) still counts as
-      // completed for liveness — the loop is alive and will retry. A tick
-      // that never returns is the case /health's staleness rule catches; say
-      // so here too, since a restart wipes the evidence.
+      // Only a tick that RETURNS refreshes `lastTick` (afterTick above). A
+      // tick that throws (config unreadable, RPC down) does not: the loop is
+      // alive and retries, but it is doing no work, so a failure that
+      // persists past STALE_TICK_MS reads as stale here and as a 503 on
+      // /health — the right answer for a settlement loop that cannot reach
+      // the chain (2026-10-11: the RPC provider's credit allowance ran out,
+      // and every tick threw on the clock read). A tick that never returns
+      // reaches the same verdict the same way; say so here too, since a
+      // restart wipes the evidence.
       const lastAt = health.lastTick ? Date.parse(health.lastTick.at) : (health.readyAtMs ?? 0);
       if (Date.now() - lastAt > STALE_TICK_MS) {
         monitor.alert(ALERT.reveal.tickStale, { sinceMs: Date.now() - lastAt });
