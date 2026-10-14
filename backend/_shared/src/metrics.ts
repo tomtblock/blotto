@@ -275,8 +275,9 @@ export const ALERT = {
     /**
      * No tick has completed within the staleness budget: the loop is wedged
      * on something that will not answer. /health turns 503 on the same
-     * condition so the platform restarts the process (audit 2026-09-11,
-     * C-22 / C-27).
+     * condition (audit 2026-09-11, C-22 / C-27). That takes the machine out
+     * of Fly's routing and turns `backend-watch` red; it does not restart the
+     * process (backend/reveal/src/health.ts, file header).
      */
     tickStale: 'reveal daemon tick stale',
     /**

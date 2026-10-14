@@ -535,9 +535,15 @@ error names the seat. The usual cause is a wallet account that cannot receive th
 
 No tick has completed within the staleness budget: 15 minutes, `STALE_TICK_MS` in
 `backend/reveal/src/health.ts`. The loop is stuck on something that will not answer, such as a
-vendor socket or an RPC. Fly restarts a machine whose check fails, and `backend-watch` reports
-it. The log's last `phase=` and step lines show where it stopped. A daemon still starting after
-five minutes (`STARTUP_BUDGET_MS`) also answers 503.
+vendor socket or an RPC. A ready daemon whose every tick throws reads the same way: a tick that
+throws does not count as completed. **Nothing restarts it.** A failing check only takes the machine
+out of Fly's routing, so `backend-watch` goes red with a timed-out probe rather than the 503 body,
+and `backend-watch` starts stopped machines only. Run `backend-status`: its checks section prints
+the last 503 body, and the log's last `phase=`, step and `tick:failed` lines show where it stopped.
+If the cause is outside the process (the RPC provider answering `429 … max usage reached` means its
+credit allowance is spent), fix that and the next completed tick clears the 503 with no restart. If
+the loop is stuck on a socket that never answers, restart the machine by hand. A daemon still
+starting after five minutes (`STARTUP_BUDGET_MS`) also answers 503.
 
 ### A pool is Paid but has no published bundle
 

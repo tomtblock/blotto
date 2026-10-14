@@ -16,8 +16,29 @@
  * process is doing. That creates a second hazard, which is the one this file
  * is careful about: a daemon wedged in initialisation must NOT report healthy
  * forever. Past `STARTUP_BUDGET_MS` without reaching `ready`, /health returns
- * 503 and the platform restarts it — otherwise the fix would trade a visible
- * failure for a silent one, which is the exact fault it exists to remove.
+ * 503 — otherwise the fix would trade a visible failure for a silent one,
+ * which is the exact fault it exists to remove.
+ *
+ * WHAT A 503 DOES, AND DOES NOT DO. Until 2026-10-14 this comment said the
+ * platform restarts the machine on a 503. It does not: on Fly a failing
+ * service check only takes the machine out of routing
+ * (fly.io/docs/reference/health-checks). The process keeps running, and the
+ * proxy stops forwarding requests to it, so the probe in `backend-watch`
+ * times out instead of reading this payload; `backend-status` prints the
+ * check's last output. `backend-watch` starts a STOPPED machine and never
+ * restarts a running one (its header). So a 503 is an alarm — backend-watch
+ * goes red within a cycle — and recovery is either the condition clearing on
+ * its own (the next tick that completes turns this back to 200) or a person
+ * restarting the machine.
+ *
+ * PHASE-N-REVIEW: nothing restarts a daemon that is wedged rather than
+ * failing. Observed 2026-10-11 → 10-14, where the cause was the RPC
+ * provider's exhausted credit allowance, a restart would not have helped — the
+ * same process went back to 200 on its next tick once credits were restored,
+ * after 63 hours on 503 with no restart. For
+ * a tick stuck on a socket that never answers it is the remedy, and
+ * backend-watch is forbidden it by design. Whether to allow it is a founder
+ * call, not this file's.
  *
  * Structure follows `backend/detection/src/server.ts`: a pure function the
  * specs exercise directly, and a thin server around it.
@@ -61,9 +82,10 @@ export const STARTUP_BUDGET_MS = 300_000;
  * legitimate one is a settlement whose winner screening runs once per tied
  * winner (up to ~13 s each on the vendor's retry budget), so a 52-way tie
  * could approach eleven minutes. The budget sits above that so a healthy
- * worst case never restarts itself, and well below the twelve-hour review
- * window so a wedged daemon is restarted long before any clock it drives
- * matters. Not a founder number; tune from measured ticks.
+ * worst case never reports itself unhealthy, and well below the twelve-hour
+ * review window so a wedged daemon raises the alarm long before any clock it
+ * drives matters (it is not restarted automatically — see the file header).
+ * Not a founder number; tune from measured ticks.
  */
 export const STALE_TICK_MS = 15 * 60_000;
 
