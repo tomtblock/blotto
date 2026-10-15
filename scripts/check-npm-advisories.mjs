@@ -43,6 +43,7 @@ export const PACKAGE_DIRS = [
   'backend/indexer',
   'backend/packet',
   'backend/detection',
+  'backend/watch',
   'battle-test',
   'tests/postgres',
   'tests/rehearsal',

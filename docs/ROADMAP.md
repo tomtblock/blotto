@@ -102,10 +102,13 @@ The open items are tracked in [TESTING-REPORT §8](testing/TESTING-REPORT.md#8-l
 
 ### Operations
 
-- [ ] **Metrics scraped and alerting in place.** Services export metrics, but nothing scrapes
-      them. Tracked in [OPERATING-MANUAL §9](guide/OPERATING-MANUAL.md#9-monitoring).
-- [ ] **Fee-balance floor and cost instrumentation.** Nothing halts a running daemon as the
-      settlement signer's balance falls, and a pool cycle's cost is not measured. Tracked in
+- [ ] **Metrics scraped and alerting in place.** Built (R23): the watcher reads every service's
+      alerts and checks the chain, and posts failures to the founders' Telegram group. Done once
+      `deploy-watch` has run with its secrets ([HOSTING — The watcher](guide/HOSTING.md#the-watcher)).
+      Tracked in [OPERATING-MANUAL §9](guide/OPERATING-MANUAL.md#9-monitoring).
+- [ ] **Fee-balance floor and cost instrumentation.** The watcher now alerts when the settlement
+      signer falls below its floor (`config/watch.json`), but nothing halts a running daemon as the
+      balance falls, and a pool cycle's cost is not measured. Tracked in
       [ARCHITECTURE §10](architecture/ARCHITECTURE.md#10-not-built-and-known-limitations).
 - [ ] **Runbooks rehearsed for mainnet,** including the upgrade path once the authority is a
       multisig vault and a rehearsed revert. Tracked in

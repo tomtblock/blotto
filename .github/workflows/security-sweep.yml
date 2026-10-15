@@ -262,7 +262,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           for dir in app backend/_shared backend/scoring backend/class-digest backend/sealing \
                      backend/sanctions backend/reveal backend/indexer backend/packet \
-                     backend/detection battle-test tests/postgres tests/rehearsal; do
+                     backend/detection backend/watch battle-test tests/postgres tests/rehearsal; do
             echo "::group::$dir"
             if (cd "$dir" && npm audit --omit=dev --audit-level=high); then
               echo "| $dir | none |" >> "$GITHUB_STEP_SUMMARY"
@@ -283,7 +283,7 @@ jobs:
         run: |
           for dir in app backend/_shared backend/scoring backend/class-digest backend/sealing \
                      backend/sanctions backend/reveal backend/indexer backend/packet \
-                     backend/detection battle-test tests/postgres tests/rehearsal; do
+                     backend/detection backend/watch battle-test tests/postgres tests/rehearsal; do
             echo "::group::$dir (dev included)"
             (cd "$dir" && npm audit) || true
             echo "::endgroup::"

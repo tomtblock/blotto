@@ -179,6 +179,27 @@ findings about deployment and logging rather than the program:
   lockfile was never audited, and the npm sweep reported but never failed. All three now gate
   (triage item G).
 
+### 2026-10-15 monitoring work (R23)
+
+- **The daemon served its metrics publicly, fixed.** The daemon's health server, on the port Fly
+  routes to the internet, also answered `GET /metrics` with the full Prometheus exposition: every
+  counter and alert reason this system keeps. `deploy/fly/daemon.fly.toml`, `HOSTING.md` and
+  `metrics-listener.ts` all said that exposition was private. The route is removed
+  (`backend/reveal/src/health.ts`) and a test pins `/metrics` to 404 on that port; the exposition
+  is now served on the private listener only. The fix takes effect at the next `deploy-backend`.
+- **New credentials, scoped.** The watcher adds three: a Telegram bot token; a fine-grained
+  GitHub token (one repository, Actions read and write); and a Claude token used only by
+  `diagnose.yml`. What each can and cannot do is in
+  [`../guide/OPERATING-MANUAL.md` §1](../guide/OPERATING-MANUAL.md#1-roles-and-keys). The GitHub
+  token is the widest: it can start any workflow that can be started by hand, including
+  `deploy-backend`, and it acts as the person who created it. A GitHub App would narrow and
+  identify it.
+- **Diagnoses run in a public repository.** Evidence goes to files, is redacted, and is never
+  printed, uploaded or cached. Claude reads it with read-only tools, because logs carry text that
+  outsiders can influence. Its answer is read from a file, not passed through a workflow expression
+  that the log would print. To be confirmed on the first real run: that the action itself prints
+  none of the diagnosis.
+
 ## 5. Open items
 
 - **No independent audit yet.** Under decision `R5` it follows after ten settled mainnet pools; the
@@ -206,6 +227,10 @@ findings about deployment and logging rather than the program:
   [`SCANNER-TRIAGE-2026-10-11.md`](SCANNER-TRIAGE-2026-10-11.md) §2.
 - **IR-2** (§4) remains an accepted risk.
 - **RPC credential rotation** after finding 5.9 is an open operator action.
+- **Backend logs in public run logs.** `backend-status` prints the last 400 lines of each
+  service's Fly log, and `deploy-backend` prints selected lines, into this public repository's
+  Actions logs. The services already truncate wallets and IPs before logging, but anything else in
+  a log line is public there. Found while building the watcher's diagnosis, which prints nothing.
 - **The Android package** (D-E18, 2026-09-28). The app-side changes were reviewed with the change:
   the mobile wallet library is loaded on Android only and registers into the existing wallet
   registry; the response headers admit a plain WebSocket to the loopback only (pinned by test); the

@@ -1,0 +1,201 @@
+# Deploy the watcher, blotto-watch (decision R23). Run by hand from main:
+# Actions → deploy-watch → Run workflow. Tick "send_test_message" the first
+# time, to prove the bot reaches the group.
+#
+# Separate from deploy-backend ON PURPOSE. The watcher reports a broken
+# backend deploy; it must not be shipped, or fail to ship, with one. It
+# holds no Fly token, no database URL and no signing key: only the Telegram
+# bot, a read-and-dispatch GitHub token, and the RPC URL whose allowance it
+# watches. docs/guide/HOSTING.md, "The watcher", has the steps to create each.
+
+name: deploy-watch
+
+# Least privilege, as deploy-backend: the deploy job's token can read the
+# checkout and nothing else; the gate job alone reads run conclusions.
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      send_test_message:
+        description: "Send one 'watcher connected' message to the Telegram group after deploying (do this the first time)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-watch
+  cancel-in-progress: true
+
+jobs:
+  # The same gate as deploy-backend (scripts/ci-gate.sh): main only, and
+  # ci-fast green on this commit.
+  gate:
+    name: may this commit be deployed
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Ref and CI preconditions
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          GATE_SHA: ${{ github.sha }}
+          GATE_REF: ${{ github.ref }}
+          GATE_ALLOW_RED: "false"
+        run: ./scripts/ci-gate.sh
+
+  deploy:
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      WATCH_APP: blotto-watch
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # v1.6, 2026-09-12
+
+      - name: Preflight — the secrets the watcher needs
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          WATCH_GITHUB_TOKEN: ${{ secrets.WATCH_GITHUB_TOKEN }}
+          BLOTTO_DEVNET_RPC_URL: ${{ secrets.BLOTTO_DEVNET_RPC_URL }}
+        run: |
+          missing=""
+          for n in FLY_API_TOKEN TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID; do
+            if [ -z "${!n}" ]; then missing="$missing $n"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::missing repository secret(s):$missing — see docs/guide/HOSTING.md, 'The watcher'. Nothing was deployed."
+            exit 1
+          fi
+          if [ -z "$WATCH_GITHUB_TOKEN" ]; then
+            echo "::warning::WATCH_GITHUB_TOKEN is not set: the watcher will not see CI lanes and cannot ask Claude for a diagnosis."
+          fi
+          if [ -z "$BLOTTO_DEVNET_RPC_URL" ]; then
+            echo "::warning::BLOTTO_DEVNET_RPC_URL is not set: the watcher cannot see the RPC provider's allowance run out."
+          fi
+          if ! flyctl apps list >/dev/null 2>&1; then
+            echo "::error::FLY_API_TOKEN is set but Fly rejected it — it must be an ORG token (HOSTING.md Step 2). Nothing was deployed."
+            exit 1
+          fi
+
+      - name: Create the app (first run only)
+        run: |
+          if ! existing=$(flyctl apps list --json 2>&1); then
+            echo "::error::could not list Fly apps: $existing"; exit 1
+          fi
+          if printf '%s' "$existing" | jq -e --arg a "$WATCH_APP" 'any(.[]; (.Name // .name) == $a)' >/dev/null; then
+            echo "$WATCH_APP exists"
+          elif ! out=$(flyctl apps create "$WATCH_APP" 2>&1); then
+            if flyctl status --app "$WATCH_APP" >/dev/null 2>&1; then
+              echo "$WATCH_APP exists after all"
+            else
+              echo "::error::creating $WATCH_APP failed: $out"; exit 1
+            fi
+          fi
+
+      # A deploy does not guarantee a public IP (incident 2026-08-29), and
+      # backend-watch reaches /health over the public address.
+      - name: Ensure the app has public IPs
+        run: |
+          if ! ips=$(flyctl ips list --app "$WATCH_APP" --json 2>&1); then
+            echo "::error::could not read IP assignments: $ips"; exit 1
+          fi
+          count=$(printf '%s' "$ips" | jq 'if type == "array" then length elif type == "null" then 0 else error("unexpected shape") end')
+          if [ "$count" -eq 0 ]; then
+            flyctl ips allocate-v4 --shared --app "$WATCH_APP"
+            flyctl ips allocate-v6 --app "$WATCH_APP"
+          fi
+          flyctl ips list --app "$WATCH_APP"
+
+      - name: Stage secrets
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          WATCH_GITHUB_TOKEN: ${{ secrets.WATCH_GITHUB_TOKEN }}
+          BLOTTO_DEVNET_RPC_URL: ${{ secrets.BLOTTO_DEVNET_RPC_URL }}
+        run: |
+          flyctl secrets set --app "$WATCH_APP" --stage \
+            TELEGRAM_BOT_TOKEN="$TELEGRAM_BOT_TOKEN" \
+            TELEGRAM_CHAT_ID="$TELEGRAM_CHAT_ID"
+          if [ -n "$WATCH_GITHUB_TOKEN" ]; then
+            flyctl secrets set --app "$WATCH_APP" --stage WATCH_GITHUB_TOKEN="$WATCH_GITHUB_TOKEN"
+          else
+            flyctl secrets unset --app "$WATCH_APP" --stage WATCH_GITHUB_TOKEN || true
+          fi
+          # The services' own provider URL: the watcher probes its allowance.
+          if [ -n "$BLOTTO_DEVNET_RPC_URL" ]; then
+            flyctl secrets set --app "$WATCH_APP" --stage WATCH_PROVIDER_RPC_URL="$BLOTTO_DEVNET_RPC_URL"
+          else
+            flyctl secrets unset --app "$WATCH_APP" --stage WATCH_PROVIDER_RPC_URL || true
+          fi
+          # Never a dry run in deployment.
+          flyctl secrets unset --app "$WATCH_APP" --stage WATCH_DRY_RUN || true
+
+      - name: Deploy
+        run: flyctl deploy . --config deploy/fly/watch.fly.toml --remote-only --yes --ha=false --build-arg BLOTTO_BUILD_COMMIT="$GITHUB_SHA"
+
+      # One machine, started: two watchers would send every alert twice.
+      - name: Exactly one machine, and it is running
+        run: |
+          machines=$(flyctl machine list --app "$WATCH_APP" --json)
+          total=$(printf '%s' "$machines" | jq 'length')
+          for id in $(printf '%s' "$machines" | jq -r '.[] | select(.state != "started") | .id'); do
+            flyctl machine start "$id" --app "$WATCH_APP" || true
+          done
+          if [ "$total" -ne 1 ]; then
+            echo "::error::$WATCH_APP has $total machines; it must have exactly one, or the group gets every alert twice. Destroy the extras with 'fly machine destroy'."
+            flyctl machine list --app "$WATCH_APP" || true
+            exit 1
+          fi
+
+      - name: The watcher answers /health and has completed a round
+        run: |
+          url="https://$WATCH_APP.fly.dev/health"
+          for i in $(seq 1 18); do
+            body=$(curl --silent --show-error --max-time 20 "$url" || true)
+            case "$body" in
+              *'"ok":true'*'"lastCycleAt":"'*) echo "watcher healthy: $body"; exit 0 ;;
+            esac
+            echo "attempt $i: ${body:-(no answer yet)}"
+            sleep 10
+          done
+          echo "--- last 60 watcher log lines ---"
+          flyctl logs --app "$WATCH_APP" --no-tail 2>/dev/null | tail -60 || true
+          echo "::error::the watcher did not report a completed round within 3 minutes"
+          exit 1
+
+      # The boot lines say what the watcher can see. A service whose private
+      # metrics are unreachable has its own alerts invisible to the watcher.
+      - name: Report what the watcher can see
+        run: |
+          log=$(flyctl logs --app "$WATCH_APP" --no-tail 2>/dev/null || true)
+          printf '%s\n' "$log" | grep -E 'watch: (messages|chain reads|provider allowance probe|CI lanes and diagnosis|metrics blotto-)' | tail -20 || true
+          if printf '%s\n' "$log" | grep -q 'metrics blotto-.*UNREACHABLE'; then
+            echo "::warning::some services' private metrics are unreachable from the watcher — their own alerts will not reach Telegram until that is fixed (OPERATING-MANUAL §9)"
+          fi
+
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v4.4.0
+        if: inputs.send_test_message
+        with:
+          node-version: 22
+
+      - name: Send the test message
+        if: inputs.send_test_message
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          for pkg in _shared watch; do (cd "backend/$pkg" && npm ci --no-audit --no-fund --silent); done
+          cd backend/watch && npx ts-node --transpile-only src/cli/telegram-test.ts

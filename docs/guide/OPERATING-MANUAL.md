@@ -44,6 +44,9 @@ Each key is described by its role. The current public keys are in
 | **Sealing custody** | Turnkey. Each pool's secret is generated in the daemon, imported at `open_pool`, and locked against export by policy until the pool seals or passes its deadline | Decrypt one pool's entries, and only after that pool closes | Be read early. The export policy is the sealing mechanism |
 | **Reviewer keys** | Two wallets listed in [`config/reviewers.json`](../../config/reviewers.json) | Sign review decisions and complaint answers, and read the detection and complaints queues through the app | Send any chain transaction. The review service acts with the settlement signer, and a forfeit still needs the admin |
 | **Bundle upload wallet** | A funded Irys wallet held by the daemon | Pay to publish each settled pool's results bundle | Anything on the program |
+| **Watcher's Telegram bot** | `TELEGRAM_BOT_TOKEN`, a GitHub secret staged on `blotto-watch` (R23). It does not expire | Post to the founders' group, and nowhere else once joining other groups is switched off in @BotFather | Read anything, or touch the program or the services |
+| **Watcher's GitHub token** | `WATCH_GITHUB_TOKEN`: a fine-grained token on this repository only, Actions read and write, with an expiry. The watcher warns 14 days before it runs out | Read CI runs; start any workflow that can be started by hand, which includes `diagnose`, `deploy-backend` and `backend-status`; cancel or re-run runs; delete run logs; disable a workflow. It acts as the person who created it | Read secrets, or push code. Upgrade path: a GitHub App, which does not expire and has its own identity that deploy workflows could refuse |
+| **Claude token for diagnoses** | `CLAUDE_CODE_OAUTH_TOKEN` (`claude setup-token`), a GitHub secret used only by `diagnose.yml`. Record the date it was made; it lasts about a year and its expiry cannot be read. When it lapses, every diagnosis reply says it is unavailable | Run Claude on the owner's subscription, read-only, against redacted evidence | Anything else: in that step Claude has no shell, no write tool and no web access |
 
 **No key can move a prize vault's lamports anywhere but to a player**, apart from
 `trigger_refund`, which returns an unplayed pool's untouched pot to the treasury.
@@ -301,6 +304,11 @@ If the upgrade changed an instruction the services send or an event they read, r
 - the daemon's `/health` reaching `"ready":true`;
 - the read API serving any new fields (`GET /tiers`, `GET /pools`).
 
+If `Config` or `Pool` grew, also run `deploy-watch`. The watcher reads both accounts through the
+shared layouts (`backend/_shared/src/config-account.ts`, `pool-account.ts`), and an old watcher
+refuses an account of a size it does not know. It reports that as "can't read the chain", not as a
+wrong answer.
+
 A deploy does not always restore a machine count you set to zero. If the daemon does not come
 back, restore it:
 
@@ -518,6 +526,27 @@ delayed slot hash, the entry index, the pool and the player. `SWITCHBOARD_QUEUE`
 fixed seed to every pool.
 
 ## 7. When something is wrong
+
+### An alert arrived in Telegram
+
+The watcher (R23) only writes when something is broken. Each message names what failed, what was
+seen, the likely cause, and the first thing to do. Its last line is the incident key, for example
+`pools:not-enterable`. What follows in the same thread:
+
+- **🔎 Claude's diagnosis**, a few minutes later, for failures that logs can explain. It is a
+  silent reply with the cause, the evidence, numbered steps, and one sentence to paste into Claude
+  Code if the fix needs code. It can be wrong: it reads redacted logs and the code, and states its
+  confidence. "Unavailable" means the diagnosis run failed. The likely cause in the alert still
+  stands.
+- **Also failing now**: a consequence of the same cause, for example the indexer falling behind
+  because the RPC provider is refusing calls. It is silent unless players are affected.
+- **⏰ Still failing**: a reminder every four hours, or every 24 for a red CI lane.
+- **✅ Cleared**: a silent reply when the check has passed twice in a row.
+
+Act on the alert's "What to do" line, or on the diagnosis. The sections below cover each failure
+in depth. To have the fix made, open Claude Code on this repository and paste the diagnosis's last
+line, or the whole thread. The incident keys and their thresholds are in
+[`config/watch.README.md`](../../config/watch.README.md).
 
 ### A pool is stuck in Sealed
 
@@ -738,12 +767,14 @@ A player sees `received`, then the operator's acknowledgement, then the answer. 
 | Tool | What it does |
 |---|---|
 | `GET /health` on each service | `{ ok: true, … }`. The daemon's payload adds `ready`, `phase`, `settlementSol` and `lastTick` (with `at` and counts of pools opened, cranked, refunded, held and published, plus errors). **Alert on `lastTick.at` going stale.** The daemon's own 503 does this after 15 minutes |
-| `backend-watch` workflow | Runs every 15 minutes. It probes all four services, **starts a stopped machine** (never more than that), and turns red naming any service that stays unhealthy. Turn on GitHub Actions failure notifications to be paged |
+| **The watcher (`blotto-watch`, R23)** | The alarm. Once a minute it checks what a player depends on: each service's `/health` and the indexer's webhook port; the daemon's tick age, tick errors and signer balance; on chain, that every open pool has its pass collection and a funded vault, and that no pool sits past its deadline or stuck in Sealed, Scored or Refunding; that every enabled tier has a pool; the treasury; whether the indexer is behind the chain; the RPC provider's allowance; the services' own alert counters; the web app and whether it serves the latest `main`; and the CI lanes on `main`, including a failed `deploy-backend`. It posts to the founders' Telegram group only on failure ([§7](#an-alert-arrived-in-telegram)). It holds service checks while a backend deploy runs. Thresholds: [`config/watch.json`](../../config/watch.json) |
+| `diagnose` workflow | Started by the watcher for a new incident that logs can explain, at most six a day. Gathers Fly logs and state into files, redacts them, has Claude (read-only tools) find the cause, and posts it as a silent reply in the alert's thread. Prints nothing of the evidence or the answer, because the repository is public |
+| `backend-watch` workflow | Scheduled every 15 minutes, though GitHub has run it 2–10 hours apart. It probes the four services and the watcher, **starts a stopped machine** (never more than that), and turns red naming any service that stays unhealthy. It is the watcher's dead-man switch: when `blotto-watch` itself is down, it posts that to the Telegram group |
 | `backend-status` workflow | Read-only forensics, run by hand: each app's Fly status, machine list and recent logs |
 | `deployed-drift` workflow | After a merge that touches the program, and daily: does the deployed program still match `main`? Simulation only |
 | `indexer-backfill` workflow | By hand: walks the chain into the ledger and rebuilds the derived tables. Idempotent. Its `archive-backfill` mode also runs daily to fill the verified-results archive |
-| Metrics | Deployed services use the Prometheus sink (`BLOTTO_MONITOR_SINK=prometheus`). Every alert still writes its log line and also increments `blotto_alerts_total{reason}`. The endpoint listens on port 9090 on Fly's private network only. Nothing scrapes it yet |
-| Alert reasons | Defined once in `backend/_shared/src/metrics.ts`. The ones an operator acts on: `reveal entry refund owed after lost ciphertext`, `reveal settled pool still unpublished`, `reveal forfeit logged but not landed on chain` |
+| Metrics | Deployed services use the Prometheus sink (`BLOTTO_MONITOR_SINK=prometheus`). Every alert still writes its log line and also increments `blotto_alerts_total{reason}`. The endpoint listens on port 9090 on Fly's private network only; until 2026-10-15 the daemon also served it on its public health port, which is now closed. The watcher scrapes all four over the private network |
+| Alert reasons | Defined once in `backend/_shared/src/metrics.ts`. The watcher posts each one the first time its counter rises, and clears it after an hour without another. The ones that affect players are marked critical (`backend/watch/src/alerts.ts`), among them `reveal entry refund owed after lost ciphertext`, `reveal settled pool still unpublished` and `reveal forfeit logged but not landed on chain` |
 
 ## 10. Bringing up a credentialed deployment
 
@@ -799,7 +830,11 @@ examples. [`HOSTING.md`](HOSTING.md) has the hosting steps.
      whole of the sealing claim. If the export succeeds, stop;
    - exporting after the pool seals succeeds;
    - one bundle is published and can be fetched.
-9. **Upgrade authority to the vault**, once the code has stopped changing and `check-deployed`
+9. **The watcher.** Create the Telegram bot and group, the watcher's GitHub token and the Claude
+   token, then run `deploy-watch` with "send test message" ticked ([`HOSTING.md`](HOSTING.md), "The
+   watcher"). The group should receive one "watcher connected" message, and then nothing until
+   something breaks.
+10. **Upgrade authority to the vault**, once the code has stopped changing and `check-deployed`
    passes. After this, every upgrade follows
    [Upgrading once the authority is a Squads vault](#upgrading-once-the-authority-is-a-squads-vault).
    Update `config/custody.json` in the same change.

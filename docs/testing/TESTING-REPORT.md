@@ -104,7 +104,7 @@ timing, and real wallets.
 |---|---|---|---|
 | Program unit tests, fmt, clippy `-D warnings` | `programs/`, `crates/` | Host-side program logic | `ci-fast` → rust (every PR) |
 | LiteSVM integration (16 test files) | `tests/litesvm/` | The built SBF artifact: lifecycle, fill rule, tiers and ties, next-place payout, treasury gates, vault dust, hard mode, packet layout, double payment | `on-chain` (PRs touching program code) |
-| Backend packages (`_shared`, `scoring`, `class-digest`, `sealing`, `sanctions`, `reveal`, `indexer`, `packet`, `detection`) | `backend/*` | Typecheck and unit tests per service | `ci-fast` → node |
+| Backend packages (`_shared`, `scoring`, `class-digest`, `sealing`, `sanctions`, `reveal`, `indexer`, `packet`, `detection`, `watch`) | `backend/*` | Typecheck and unit tests per service. The watcher's include a replay of the 2026-10-10 entry outage, which must raise "Entries are blocked" within minutes | `ci-fast` → node |
 | Offline rehearsal | `tests/rehearsal/` | Twenty 64-entrant pools settled through the real crank and detection on a simulated chain, with the pot conserved in each. Also: a pool at exactly the minimum field reaches `Paid`, detection runs in shadow mode and blocks nobody, and a pool one seat short refunds in full | `ci-fast` → node |
 | Postgres stores | `tests/postgres/` | Migrations and every Postgres-backed store against a real database | `ci-fast` → postgres |
 | App | `app/` | Lint, typecheck, unit tests, production build | `ci-fast` → node |

@@ -1,6 +1,7 @@
-# Build context for all four service images. Every one of them deploys with
-# `flyctl deploy .` from the repository root (deploy-backend.yml), so this one
-# file governs the context for indexer, packet, daemon and review alike.
+# Build context for all five images. Every one of them deploys with
+# `flyctl deploy .` from the repository root (deploy-backend.yml, and
+# deploy-watch.yml for the watcher), so this one file governs the context for
+# indexer, packet, daemon, review and watch alike.
 #
 # 2026-08-31: the context was 4.9 GB. Each image reinstalls its own
 # dependencies from package-lock anyway (`npm ci` per package in every

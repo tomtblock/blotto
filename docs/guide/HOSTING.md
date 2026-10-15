@@ -37,9 +37,11 @@ set in `deploy/fly/*.fly.toml`.
 | **review** | `backend/detection` → `src/main.ts` | 8083 | `GET /health` | Postgres, `config/reviewers.json`, settlement keypair, RPC |
 | **daemon** (keeper and crank) | `backend/reveal` → `src/main.ts` | 8084 (health only) | `GET /health` (reports the last tick) | Postgres, settlement keypair, Turnkey custody, Irys upload wallet, sanctions source, RPC |
 | **app** | `app/` on Vercel | 443 | the site loads | The three service URLs, the RPC URL, the sign-in provider |
+| **watch** (the watcher, R23) | `backend/watch` → `src/main.ts`, in Amsterdam, not Frankfurt | 8085 | `GET /health` (503 when its loop or its Telegram delivery is stuck) | Telegram bot, a read-and-dispatch GitHub token, the RPC URL whose allowance it watches. No database, no signing key, no Fly token |
 
 Each service also serves a Prometheus metrics endpoint on port 9090. That port is reachable only
-over Fly's private network. Fly routes each service's `internal_port`, and nothing else.
+over Fly's private network, where the watcher reads it. Fly routes each service's `internal_port`,
+and nothing else.
 
 **Where the money path runs.** An entry's payment goes from the player's wallet straight to the
 program in one transaction. The packet service authorises the entry and the RPC relays it. No
@@ -74,8 +76,9 @@ It answers **503** in two cases:
 - it is ready but has not completed a tick in fifteen minutes (`STALE_TICK_MS`,
   `backend/reveal/src/health.ts`).
 
-Either way, the failing check takes the machine out of Fly's routing and the `backend-watch`
-workflow reports it. Fly does not restart a machine whose check fails, so recovery is the cause
+Either way, the failing check takes the machine out of Fly's routing, and the watcher reports it
+([below](#the-watcher)). The watcher reads the body as well as the status: a daemon answering 200
+with errors on every tick is reported too, which the status alone never showed. Fly does not restart a machine whose check fails, so recovery is the cause
 clearing or a manual restart
 ([`OPERATING-MANUAL.md` §9](OPERATING-MANUAL.md#9-monitoring)).
 
@@ -333,6 +336,61 @@ dropped past the retry window.
 The webhook only speeds up delivery. The chain is the source of truth, and the ledger rebuilds
 from RPC.
 
+## The watcher
+
+`blotto-watch` (decision R23, `backend/watch`) posts to a private Telegram group when something
+breaks, and only then. What it checks and how to read an alert:
+[`OPERATING-MANUAL.md` §9 and §7](OPERATING-MANUAL.md#an-alert-arrived-in-telegram). When it
+speaks up: [`config/watch.json`](../../config/watch.json).
+
+It needs four repository secrets (**Settings → Secrets and variables → Actions → New repository
+secret**). It also uses `FLY_API_TOKEN` and `BLOTTO_DEVNET_RPC_URL`, which are already set.
+
+| Name | What it is |
+|---|---|
+| `TELEGRAM_BOT_TOKEN` | The bot's token from @BotFather |
+| `TELEGRAM_CHAT_ID` | The group's chat id, a negative number |
+| `WATCH_GITHUB_TOKEN` | A fine-grained token: this repository only, Actions read and write. Optional; without it there are no CI alerts and no diagnoses |
+| `CLAUDE_CODE_OAUTH_TOKEN` | From `claude setup-token`. Optional; without it every diagnosis reply says "unavailable" |
+
+### Setting it up, step by step
+
+1. **Make the bot.** In Telegram, open a chat with **@BotFather** and send `/newbot`. Give it a
+   name (`Blotto Watch`) and a username ending in `bot`. BotFather replies with a token like
+   `123456789:AA…`. Copy it.
+2. **Make the group.** In Telegram: **New Group**. Add your co-founder and the bot (search for its
+   username). Name it, for example `Blotto alerts`.
+3. **Find the group's chat id.** In the group, send `/start@<your bot's username>`. Then open
+   `https://api.telegram.org/bot<TOKEN>/getUpdates` in a browser, with your token in place of
+   `<TOKEN>`. Find `"chat":{"id":-…`: the negative number is the chat id. Close the tab
+   afterwards; that address contains the token.
+4. **Stop anyone adding the bot elsewhere.** In @BotFather send `/setjoingroups`, pick the bot, and
+   choose **Disable**. Do this after step 2.
+5. **Make the GitHub token.** On github.com: your picture → **Settings → Developer settings →
+   Personal access tokens → Fine-grained tokens → Generate new token**.
+   - Name: `blotto-watch`.
+   - Expiration: your choice. The watcher warns 14 days before it runs out.
+   - Repository access: **Only select repositories** → `tomtblock/blotto`.
+   - Permissions → Repository permissions → **Actions: Read and write**. Nothing else is needed.
+   - Generate, and copy the token.
+6. **Make the Claude token.** On your own computer, in a terminal, run `claude setup-token`. Sign
+   in when the browser opens, then copy the token it prints. It uses your Claude subscription, at
+   most six diagnoses a day.
+7. **Save the four secrets** from steps 1, 3, 5 and 6, under the names in the table above.
+8. **Deploy.** **Actions → deploy-watch → Run workflow**, on `main`, with **send test message**
+   ticked. It takes about five minutes. The group should receive "👋 Blotto watcher connected."
+   After that it stays silent until something breaks.
+9. **Check what it can see.** The run's "Report what the watcher can see" step lists each
+   service's private metrics as reachable. A warning there means that service's own alerts will
+   not reach the group.
+
+**After a token change**, update the secret and run `deploy-watch` again. Telegram's bot token
+does not expire. If the group is ever converted to a supergroup, its chat id changes; the watcher
+follows it and says so in the group, and `TELEGRAM_CHAT_ID` should then be updated.
+
+**There must be exactly one watcher machine.** Two would send every alert twice. The deploy
+refuses to finish otherwise.
+
 ## Sign-in provider settings
 
 Sign-in and the embedded wallet come from Privy (`app/src/wallet/privy-bridge.tsx`). Some of its
@@ -433,7 +491,9 @@ What each outside service does, what talks to it, and what happens when it fails
 | **Solana dApp Store** (not yet) | Will distribute the Android package — a WebView shell that opens this site — once the mainnet launch and its legal review are through. Publisher, app and release records are minted on mainnet by a publisher wallet | Phones running the package | [`MOBILE.md`](MOBILE.md) §8; the signing key per §4 there | Installs and updates stop. Installed packages keep opening the site |
 | **Privy** | Social sign-in (Google, X), the embedded Solana wallet created at a social sign-in, key export, and external-wallet sign-in (hidden, see above) | Browser only | `NEXT_PUBLIC_PRIVY_*`, the provider dashboard | Sign-in stops working. The site still renders |
 | **Helius** | The RPC for every read and send (browser, daemon, review, indexer backfill), and the webhook that pushes finalized program transactions to the indexer | Browser, services, Solana | `NEXT_PUBLIC_SOLANA_RPC_URL`, `BLOTTO_DEVNET_RPC_URL`, `BLOTTO_HELIUS_WEBHOOK_SECRET` | Browsers cannot read balances or send. The daemon stalls (its `lastTick.at` goes stale). The indexer catches up from RPC afterwards |
-| **Fly.io** | Four machines in Frankfurt, one app per service | Postgres, RPC, the vendors below | `deploy/fly/*.fly.toml`, plus secrets staged by the deploy workflow | Each service fails closed on its own |
+| **Fly.io** | Four machines in Frankfurt, one app per service, and the watcher in Amsterdam | Postgres, RPC, the vendors below | `deploy/fly/*.fly.toml`, plus secrets staged by the deploy workflows | Each service fails closed on its own. If the watcher is down, `backend-watch` tells the group |
+| **Telegram** | The founders' alert group. The watcher's only outbound channel | Watcher, `diagnose`, `backend-watch` | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Alerts are not delivered. After 15 minutes of refusals the watcher's `/health` turns 503, and `backend-watch` goes red, so GitHub's failure email is the fallback |
+| **Anthropic (Claude)** | The diagnosis posted under an alert. Runs in `diagnose.yml` on the owner's subscription, with read-only tools over redacted logs | `diagnose` only | `CLAUDE_CODE_OAUTH_TOKEN` | The diagnosis reply says "unavailable". The alert's own likely cause still stands |
 | **Neon** (managed Postgres, Frankfurt) | The event ledger and projections (indexer); attestations, notification preferences and ciphertexts (packet); the signed review log and complaints (review); published pool keys (daemon) | Every service | `BLOTTO_DATABASE_URL` | Every service degrades. The read API errors, packets are refused, ticks fail |
 | **IPLocate** | The country and VPN/proxy verdict per IP behind the territory check, cached per IP for 15 minutes | Packet service | `GEO_VENDOR_URL`, `GEO_VENDOR_API_KEY` | Every entry is refused (fail-closed). A quota response is logged as a lookup failure, not a territory decision |
 | **Sanctions sources** | A mirrored OFAC SDN list (no credential; it refuses to answer once stale), plus optional Chainalysis and OpenSanctions. Every entrant is screened at entry, and every winner at settlement | Packet service, daemon | `SANCTIONS_*` | With no source configured, the service does not start. At settlement, an unanswerable screening holds the share |
@@ -442,7 +502,7 @@ What each outside service does, what talks to it, and what happens when it fails
 | **Irys** | Stores the published results bundle for each settled pool. The verify page fetches it | Daemon | `IRYS_UPLOAD_KEY`, `IRYS_NETWORK` | Payment still happens. The bundle is published on a later tick |
 | **Squads** | The admin multisig. Every admin instruction is a Squads transaction | The program | [`config/custody.json`](../../config/custody.json) records it | Admin instructions cannot land. Pools keep running |
 | **Mail provider** (optional) | The one-message notification to players who opt in. The address is resolved through the sign-in provider at send time | Packet service | `EMAIL_API_URL`, `EMAIL_API_KEY`, `EMAIL_FROM` | Off unless all three are set. Nothing else depends on it |
-| **GitHub Actions** | CI on every change, the manual `deploy-backend`, `backend-watch` every 15 minutes, and `deployed-drift` and the archive backfill daily | Fly, the chain (read-only simulation) | `.github/workflows/` | Nothing live changes. Deploys and probes stop |
+| **GitHub Actions** | CI on every change, the manual `deploy-backend` and `deploy-watch`, `backend-watch` (scheduled every 15 minutes, run hours apart in practice), `diagnose` when the watcher asks, and `deployed-drift` and the archive backfill daily | Fly, the chain (read-only simulation), Telegram, Anthropic | `.github/workflows/` | Nothing live changes. Deploys stop, and the watcher stops seeing CI lanes and starting diagnoses |
 | **Solana** | The program, its PDAs, rent and fees. Players pay their own entry and pass rent. The keeper wallet pays each pool's open, randomness, collection and settlement transactions | Everything above | `declare_id!` | — |
 
 The services also read operator-owned files from the repository rather than from a vendor:
@@ -460,6 +520,15 @@ The services also read operator-owned files from the repository rather than from
   tracks this.
 - **External-wallet sign-in goes through the direct route**, not the provider, because the
   provider's sign-in message names the wrong chain ([above](#why-wallet-sign-in-can-fail)).
-- **Nothing scrapes the metrics endpoint yet**, and no alert destination is configured. Alerts
-  are log lines plus a counter.
+- **The watcher's memory is in-process.** A restart forgets what was open. A failure that is still
+  going on is announced again once, marked "may have started earlier".
+- **The watcher's own outage is reported late.** `backend-watch` is its dead-man switch, and GitHub
+  runs that schedule hours apart. An outside heartbeat service would be faster; that is an owner
+  decision.
+- **What players see in their browser is not reported.** A failed entry stays in the player's
+  browser, because the privacy notice promises no error tracking. The watcher infers "nobody can
+  enter" from the chain instead. A scheduled test entry, which requests a packet and simulates
+  `register` without sending it, is deferred (R23).
+- **The watcher reads the chain through the public devnet endpoint**, so that it survives the
+  services' provider failing. Before mainnet it needs a second provider.
 - **A KYC provider is not connected.** The on-chain KYC switch is off.

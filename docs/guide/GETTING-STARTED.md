@@ -49,8 +49,8 @@ npm run setup                            # installs every backend package, then 
 array of 64 byte values). CI's gitleaks job catches the same shape, but only after the commit exists.
 
 **`npm run setup` is required, not a convenience.** It runs `npm ci` in `backend/_shared`,
-`scoring`, `class-digest`, `sealing`, `sanctions`, `reveal`, `indexer`, `packet`, `detection` (in
-that order), then in `app/`. The app imports the backend packages' *source files* directly, and
+`scoring`, `class-digest`, `sealing`, `sanctions`, `reveal`, `indexer`, `packet`, `detection`,
+`watch` (in that order), then in `app/`. The app imports the backend packages' *source files* directly, and
 those files resolve their dependencies from each backend package's own `node_modules`. Installing
 `app/` alone is never enough: `next dev` fails with `Module not found: Can't resolve
 '@turnkey/crypto'` (or a similar package) until every backend package is installed. It takes about

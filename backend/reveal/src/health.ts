@@ -45,8 +45,6 @@
  */
 
 import { createServer, type Server } from 'http';
-import { serveMetricsIfPrometheus } from '../../_shared/src/prometheus';
-import type { Monitor } from '../../_shared/src/monitor';
 import type { TickReport } from './daemon';
 import { formatSol } from './startup';
 
@@ -209,9 +207,7 @@ export function healthPayload(
 export function serveDaemonHealth(
   state: DaemonHealth,
   port: number,
-  now: () => number = Date.now,
-  /** When the Prometheus sink is selected, `/metrics` is served beside `/health`. */
-  monitor?: Monitor
+  now: () => number = Date.now
 ): Server {
   const server = createServer((req, res) => {
     if (req.method === 'GET' && req.url === '/health') {
@@ -219,9 +215,12 @@ export function serveDaemonHealth(
       res.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(body));
       return;
     }
-    if (monitor && serveMetricsIfPrometheus(monitor, req, res)) {
-      return;
-    }
+    // No /metrics here (R23, 2026-10-15). This is the port Fly routes to the
+    // internet, and until then the Prometheus exposition was served on it
+    // beside /health — every counter and alert reason this system keeps,
+    // public, against what daemon.fly.toml, HOSTING.md and
+    // metrics-listener.ts all said. The exposition lives on the private
+    // listener (:9090) alone, where the watcher reads it.
     res.writeHead(404).end();
   });
   server.listen(port, () => {

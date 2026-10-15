@@ -1,13 +1,14 @@
 # Dependabot — base images only (scanner triage 2026-10-11, item D).
 #
-# The four service images pin node:22-slim by digest (deploy/docker/), so a
+# The five images (four services and the watcher) pin node:22-slim by
+# digest (deploy/docker/), so a
 # rebuild can never take a different base without a reviewed change. A pin
 # nobody refreshes stops receiving Debian and Node security fixes, so this
 # proposes each new digest of the same tag weekly, as a PR that runs CI like
 # any other. Major-version moves (node 24) are ignored here: they are a
 # deliberate change, made by hand with the rest of the runtime alignment.
 #
-# npm and Cargo are deliberately NOT listed: across fourteen lockfiles they
+# npm and Cargo are deliberately NOT listed: across sixteen lockfiles they
 # would open a stream of PRs nobody triages. The npm advisory gate
 # (scripts/check-npm-advisories.mjs) and the Rust advisory lanes in
 # security-sweep.yml fail on anything new instead.
