@@ -31,7 +31,6 @@ import type {
   ChainProofStep,
   CommittedPayout,
   KeeperChain,
-  PoolStateName,
 } from './chain';
 // The `Config` layout is shared source, not a copy: the indexer's treasury
 // report has to read the same account, and a second set of byte offsets for
@@ -42,8 +41,8 @@ import {
   N_TIERS,
   decodeConfigAccount,
 } from '../../_shared/src/config-account';
+import { decodePoolHead } from '../../_shared/src/pool-account';
 
-const STATE_NAMES: PoolStateName[] = ['Open', 'Sealed', 'Scored', 'Paid', 'Refunding', 'Closed'];
 
 /** Metaplex Core, pinned by address in the program (`pass.rs::MPL_CORE_ID`). */
 const MPL_CORE_ID = new PublicKey('CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d');
@@ -63,34 +62,13 @@ const MPL_CORE_ID = new PublicKey('CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d'
 export const ENTRY_SPACE = 228;
 
 /**
- * `Pool::SPACE` — 8 discriminator + `Pool::LEN` 842 (`state.rs`, pinned by
- * its own layout test). 839 until R7-b appended `min_seats` (2026-09-13),
- * 841 until Phase B appended `mode` (2026-09-24).
- *
- * Used as a LENGTH GUARD, which `getPool` had none of (audit 2026-09-11,
- * G-06). Every field below is read at a hard-coded offset, so an account
- * that is not a Pool is decoded as one: an Entry handed here by a wrong
- * address reads its `flagged` byte as `results_committed`, walks a payout
- * list out of a battles hash, and then fails on a range error 600 bytes
- * later — if it fails at all. Refusing by length, by name, up front, is the
- * difference between "this account is 228 bytes and a Pool is 850" and an
- * opaque buffer-bounds message from the middle of a settlement run.
+ * `Pool::SPACE` and the pre-Phase-B `Pool::SPACE_V2`, re-exported from the
+ * shared layout (`backend/_shared/src/pool-account.ts`, R23) so the daemon and
+ * the watcher read the same bytes. Used as a LENGTH GUARD (audit 2026-09-11,
+ * G-06): an account that is not a Pool must be refused by name, up front,
+ * not decoded into plausible numbers.
  */
-export const POOL_SPACE = 850;
-
-/**
- * `Pool::SPACE_V2` — the pre-Phase-B size (849): `min_seats` present, `mode`
- * absent. Every pool devnet opened between R7-b and the Phase B upgrade is
- * this size until `migrate_pool` grows it, and this client keeps settling
- * them meanwhile — a pool that predates the field played easy, which is what
- * `getPool` reports for it. (The pre-R7-b 847 is NOT accepted: the floor
- * matters to nothing here, but a size this reader has never met is exactly
- * what the guard exists to refuse.)
- */
-export const POOL_SPACE_V2 = 849;
-
-/** Byte offset of `Pool.mode` (Phase B): the last byte of the account. */
-const POOL_MODE_OFFSET = 849;
+export { POOL_SPACE, POOL_SPACE_V2 } from '../../_shared/src/pool-account';
 
 /**
  * Where `getEntries` reads each Entry field: BYTE OFFSETS from the start of
@@ -244,22 +222,16 @@ export class Web3Chain implements KeeperChain {
     const info = await this.cfg.connection.getAccountInfo(this.poolPda(poolId), 'confirmed');
     if (!info) throw new Error(`pool ${poolId} account not found`);
     const d = info.data;
-    // Length first (audit 2026-09-11, G-06): every read below is a hard-coded
-    // offset, and an account of the wrong type decodes into plausible numbers
-    // rather than into an error. `test/chain-web3.spec.ts` pins both the
-    // refusal and every offset against `state.rs`.
-    if (d.length !== POOL_SPACE && d.length !== POOL_SPACE_V2) {
-      throw new Error(
-        `pool ${poolId} account is ${d.length} bytes; Pool::SPACE is ${POOL_SPACE} ` +
-          `(or ${POOL_SPACE_V2} before Phase B) — refusing to decode it`
-      );
-    }
-    // Offsets mirror state.rs since D-A1 v2 (asserted by its serialize-LEN
-    // tests and the LiteSVM readers): disc 8 | id 8 | tier 1 |
-    // entry_lamports 8 | pot_lamports 8 | entrants 2 | opened_at 8 |
-    // fill_deadline 8 | state 1 | sealing 32 | hash 32 | vrf 32 |
-    // counters 10 | secret_revealed 1 | root 32 | committed 1 |
-    // payouts_len 2 | payouts 64×(seat 2 + amount 8) | paid_mask 8 | ...
+    // The head — and the length guard that refuses an account of the wrong
+    // type before any fixed-offset read (audit 2026-09-11, G-06) — is the
+    // shared layout's (`_shared/src/pool-account.ts`, R23), so the daemon and
+    // the watcher cannot drift apart on the same bytes.
+    const head = decodePoolHead(d, `pool ${poolId}`);
+    // The tail, read only here. Offsets mirror state.rs since D-A1 v2
+    // (asserted by its serialize-LEN tests and the LiteSVM readers): … |
+    // state 1 (51) | sealing 32 | hash 32 | vrf 32 | counters 10 |
+    // secret_revealed 1 | root 32 | committed 1 | payouts_len 2 |
+    // payouts 64×(seat 2 + amount 8) | paid_mask 8 | ...
     const committed = d[191] !== 0;
     const payouts: CommittedPayout[] = [];
     if (committed) {
@@ -274,11 +246,11 @@ export class Web3Chain implements KeeperChain {
     }
     return {
       poolId,
-      tier: d[16],
-      state: STATE_NAMES[d[51]],
-      entryLamports: d.readBigUInt64LE(17),
-      potLamports: d.readBigUInt64LE(25),
-      fillDeadline: BigInt(d.readBigInt64LE(43)),
+      tier: head.tier,
+      state: head.state,
+      entryLamports: head.entryLamports,
+      potLamports: head.potLamports,
+      fillDeadline: head.fillDeadline,
       // vrf_seed occupies bytes 116..148; all-zero is the uncommitted sentinel.
       vrfCommitted: d.subarray(116, 148).some((b) => b !== 0),
       secretRevealed: d[158] !== 0,
@@ -287,10 +259,8 @@ export class Web3Chain implements KeeperChain {
       resultsRootHex: committed ? d.subarray(159, 191).toString('hex') : null,
       paidMask: d.readBigUInt64LE(834),
       payouts,
-      entrants: d.readUInt16LE(33),
-      // Phase B: the last byte, 0 easy / 1 hard; absent on a pre-Phase-B
-      // account, which was an easy pool by construction.
-      mode: d.length > POOL_MODE_OFFSET ? d[POOL_MODE_OFFSET] : 0,
+      entrants: head.entrants,
+      mode: head.mode,
     };
   }
 

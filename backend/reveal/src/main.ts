@@ -187,14 +187,13 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
   // Past the startup budget the endpoint turns 503, so a wedged init is a
   // restart rather than a machine that looks fine forever.
   // Metrics and alerts: the daemon's first Monitor wiring (audit 2026-09-11,
-  // E-04). The sink follows BLOTTO_MONITOR_SINK like every other service; the
-  // Prometheus sink also serves /metrics beside /health.
+  // E-04). The sink follows BLOTTO_MONITOR_SINK like every other service.
   const monitor = buildMonitor(loadMonitor(env), SERVICE);
-  // E-09: the exposition, on the private network only. Silent no-op on
-  // every sink but prometheus.
+  // E-09: the exposition, on the private network only — never beside the
+  // public /health (R23). Silent no-op on every sink but prometheus.
   startMetricsListener(monitor, SERVICE, env);
   const health = newDaemonHealth();
-  serveDaemonHealth(health, healthPort, Date.now, monitor);
+  serveDaemonHealth(health, healthPort, Date.now);
   console.log(`${SERVICE}: tick every ${intervalMs}ms once ready`);
 
   // Every phase change is logged with elapsed time. The log is the only

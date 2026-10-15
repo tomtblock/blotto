@@ -149,6 +149,18 @@ describe('the daemon health server', () => {
       server.close();
     }
   });
+
+  it('never serves /metrics on the public health port (R23)', async () => {
+    // Until 2026-10-15 the Prometheus exposition rode this port — the one Fly
+    // routes to the internet. It belongs on the private listener alone.
+    const server = serveDaemonHealth(starting(), 0, () => T0);
+    try {
+      const port = (server.address() as AddressInfo).port;
+      expect((await fetchHealth(port, '/metrics')).status).to.equal(404);
+    } finally {
+      server.close();
+    }
+  });
 });
 
 function fetchHealth(
