@@ -207,6 +207,13 @@ pub enum ErrorCode {
     // 6074 — Phase B (founder rulings 2026-09-24): the placing mode.
     #[msg("Unknown pool mode")]
     UnknownMode,
+    // 6075 — R22 (2026-10-15): with `register` no longer waiting for a seed,
+    // a seed that landed after the first entry would change the draw for
+    // later entries only, and a replay that applies one seed per pool could
+    // no longer reproduce the earlier ones. `commit_vrf_seed` therefore runs
+    // only on a pool nobody has entered.
+    #[msg("A VRF seed can only be committed before the first entry")]
+    VrfSeedAfterEntries,
 }
 
 #[cfg(test)]
@@ -238,6 +245,7 @@ mod error_numbers {
             (ErrorCode::PoolAlreadyMigrated, 6072),
             (ErrorCode::PoolNotMigratable, 6073),
             (ErrorCode::UnknownMode, 6074),
+            (ErrorCode::VrfSeedAfterEntries, 6075),
         ] {
             assert_eq!(u32::from(code), expected, "{code:?}");
         }

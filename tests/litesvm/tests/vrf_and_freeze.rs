@@ -130,6 +130,41 @@ fn commit_vrf_seed_copies_a_revealed_value_write_once() {
 }
 
 #[test]
+fn commit_vrf_seed_refuses_once_a_pool_has_an_entry() {
+    // R22: `register` no longer waits for a seed, so a seed landing after the
+    // first entry would leave that entry drawn without it while a replay
+    // applies the pool's one seed to every entry. The commit refuses instead.
+    let Some(mut env) = Env::new() else { return };
+    let settlement = env.settlement.insecure_clone();
+    env.fund_platform(TIER_POTS[0] + VAULT_RENT_CUSHION);
+    let ix = open_pool_ix(&settlement.pubkey(), 1, 0, [9; 32], env.sealing_secret_hash);
+    env.send(&[ix], &[&settlement]).unwrap();
+    let ix = create_pass_collection_ix(&settlement.pubkey(), 1);
+    env.send(&[ix], &[&settlement])
+        .expect("create_pass_collection");
+    env.register_player(1)
+        .expect("an unseeded pool takes entries");
+
+    let anyone = Keypair::new();
+    env.svm.airdrop(&anyone.pubkey(), 1_000_000_000).unwrap();
+    let slot = env.svm.get_sysvar::<solana_sdk::clock::Clock>().slot;
+    let rand = Pubkey::new_unique();
+    set_randomness_account(&mut env, rand, sb_mainnet_pid(), slot, [77u8; 32]);
+    let err = env
+        .send(&[commit_vrf_ix(&anyone.pubkey(), 1, &rand)], &[&anyone])
+        .unwrap_err();
+    assert!(
+        err.contains("6075") || err.contains("VrfSeedAfterEntries"),
+        "{err}"
+    );
+    assert_eq!(
+        read_vrf_seed(&env, &pool_pda(1)),
+        [0u8; 32],
+        "seed stays unset"
+    );
+}
+
+#[test]
 fn a_minted_pass_refuses_transfer() {
     let Some(mut env) = Env::new() else { return };
     env.open_ready_pool(1, 0);

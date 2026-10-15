@@ -401,10 +401,10 @@ describe('the hard ladder: nextOpenable ↔ FakeChain (Phase B)', () => {
       { poolId: 2n, tier: 0, mode: 1 },
     ]);
     expect(r.completed).to.deep.equal([
-      { poolId: 1n, step: 'vrf' },
       { poolId: 1n, step: 'pass_collection' },
-      { poolId: 2n, step: 'vrf' },
+      { poolId: 1n, step: 'vrf' },
       { poolId: 2n, step: 'pass_collection' },
+      { poolId: 2n, step: 'vrf' },
     ]);
     expect((await chain.getPool(2n)).mode).to.equal(1);
     expect((await daemon.tick()).opened).to.deep.equal([]);

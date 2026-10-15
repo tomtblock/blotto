@@ -1,6 +1,6 @@
 # ADR-026: The class digest mixes five sources, including the player's public key
 
-**Status:** Accepted · in force
+**Status:** Accepted · in force · **amended by R22 (2026-10-15): the oracle input is no longer committed**
 **Enforced in:** `crates/blotto-randomness/src/lib.rs` (`derive_class_randomness`),
 `programs/blotto_cup/src/vrf.rs` (`commit_vrf_seed`), `programs/blotto_cup/src/slot_hashes.rs`,
 `programs/blotto_cup/src/instructions/register.rs`, `backend/class-digest/src/digest.ts`
@@ -20,10 +20,32 @@ A single oracle seed per pool, stretched by the entry index, fails the first tes
 public, anyone can compute which seat index receives which class and time their entry. An oracle
 request per entry would be slow and would make every entry depend on the oracle's availability.
 
+## Amendment — R22, 2026-10-15: no oracle seed
+
+Switchboard, the oracle behind `vrf_seed`, announced its shutdown on 2026-09-19 and ended support on
+2026-09-25. Its devnet oracles sent their last heartbeat on 2026-10-10, and from pool 90 on no seed
+could be committed. Because `register` refused to run without one, **no pool could take an entry**
+until this amendment.
+
+- `register` no longer requires a seed. The digest below is unchanged, byte for byte: a pool that
+  never received a seed hashes 32 zero bytes in the `vrf_seed` position. A pool seeded before the
+  shutdown keeps its seed, so every earlier entry replays exactly as before.
+- `commit_vrf_seed` remains, but refuses once a pool has an entry (`VrfSeedAfterEntries`, 6075), so a
+  late seed can never split one pool's entries into two draws that a one-seed replay could not
+  reproduce.
+- The daemon commits no seed. It creates each pool's pass collection first, because `register` needs
+  the collection and no longer needs the seed.
+- What is given up: the per-pool input that was unknown until the oracle revealed it. The four
+  remaining inputs keep every property in **Consequences** below. "Hard to target" never depended on
+  the seed being secret, because the seed was public before the first entry anyway. The class is
+  cosmetic, and nothing in scoring, ranking or prizes reads it.
+- Open, before mainnet: whether a live randomness provider returns as the fifth input. The digest
+  already has the slot for it.
+
 ## Decision
 
 One Switchboard On-Demand randomness value per pool, combined per entry with execution-time and
-entry-specific inputs:
+entry-specific inputs. **Since R22 the value is no longer committed; see the amendment above.**
 
 ```
 digest = sha256( vrf_seed        32 bytes  committed once per pool by commit_vrf_seed

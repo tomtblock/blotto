@@ -110,12 +110,22 @@ pub struct CommitVrfSeed<'info> {
 
 pub fn handle_commit_vrf_seed(ctx: Context<CommitVrfSeed>, _pool_id: u64) -> Result<()> {
     // 0. Phase 1: the seed is only meaningful while the pool is accepting
-    //    entries — `register` requires it, and nothing after seal reads it
-    //    afresh. Rejecting non-Open states closes the (harmless but pointless)
-    //    window where a seed could land on a sealed or refunding pool.
+    //    entries — `register` reads it (it no longer requires it, R22), and
+    //    nothing after seal reads it afresh. Rejecting non-Open states closes
+    //    the (harmless but pointless) window where a seed could land on a
+    //    sealed or refunding pool.
     require!(
         ctx.accounts.pool.state == PoolState::Open,
         ErrorCode::PoolNotOpen
+    );
+
+    // 0b. Before the first entry only (R22). `register` no longer waits for a
+    //    seed, so a seed landing mid-pool would split the pool into entries
+    //    drawn with and without it, and the one-seed-per-pool replay
+    //    (ADR-026) could not reproduce the first group.
+    require!(
+        ctx.accounts.pool.entrants == 0,
+        ErrorCode::VrfSeedAfterEntries
     );
 
     // 1. Write-once. Reject if a seed is already committed. The zero-filled

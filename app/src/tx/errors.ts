@@ -45,7 +45,7 @@ export const PROGRAM_ERROR_CODES: Readonly<Record<number, TxFailureKind>> = {
   6001: "program-rejected", // VrfSeedAlreadyCommitted
   6002: "program-rejected", // InvalidRandomnessAccount
   6003: "program-rejected", // RandomnessNotResolved
-  6004: "program-rejected", // VrfSeedNotCommitted
+  6004: "program-rejected", // VrfSeedNotCommitted — no longer raised since R22
   // The three `register` refusals a player can meet from the play screen.
   // Positions verified against error.rs on 2026-09-09: 6005 Paused, 6006
   // TierNotOpen … 6010 PoolFull, 6011 DeadlinePassed. Inserting a variant

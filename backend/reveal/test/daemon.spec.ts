@@ -138,8 +138,8 @@ describe('the daemon (C8): keeper', () => {
     expect(r1.errors).to.deep.equal([]);
     expect(r1.opened).to.deep.equal([{ poolId: 1n, tier: 0, mode: 0 }]);
     expect(r1.completed).to.deep.equal([
-      { poolId: 1n, step: 'vrf' },
       { poolId: 1n, step: 'pass_collection' },
+      { poolId: 1n, step: 'vrf' },
     ]);
     const pool = await w.chain.getPool(1n);
     expect(pool.state).to.equal('Open');
@@ -765,8 +765,8 @@ describe('the daemon (C8): resume after a crash', () => {
     expect(r.errors).to.deep.equal([]);
     expect(r.opened).to.deep.equal([]); // no duplicate open
     expect(r.completed).to.deep.equal([
-      { poolId: 1n, step: 'vrf' },
       { poolId: 1n, step: 'pass_collection' },
+      { poolId: 1n, step: 'vrf' },
     ]);
     expect((await w.chain.getConfig()).nextPoolId).to.equal(2n);
   });
@@ -801,13 +801,74 @@ describe('the daemon (C8): resume after a crash', () => {
     expect(r1.errors.length).to.equal(1);
     expect(r1.errors[0].action).to.equal('keeper');
     expect((await w.chain.getPool(1n)).vrfCommitted).to.equal(false);
+    // The failing oracle no longer holds the collection back (R22): entries
+    // need the collection, not the seed.
+    expect(r1.completed).to.deep.equal([{ poolId: 1n, step: 'pass_collection' }]);
+    expect(await w.chain.hasPassCollection(1n)).to.equal(true);
 
     const r2 = await daemon.tick();
     expect(r2.errors).to.deep.equal([]);
-    expect(r2.completed).to.deep.equal([
-      { poolId: 1n, step: 'vrf' },
-      { poolId: 1n, step: 'pass_collection' },
-    ]);
+    expect(r2.completed).to.deep.equal([{ poolId: 1n, step: 'vrf' }]);
+  });
+
+  it('with no coordinator (R22) a pool launches with its collection and no seed, cleanly', async () => {
+    const w = await makeWorld();
+    const daemon = makeDaemon({
+      chain: w.chain,
+      custody: w.custody,
+      ciphertexts: w.store,
+      vrf: null,
+      crank: (id) =>
+        crankPool(
+          { chain: w.chain, custody: w.custody, ciphertexts: w.store, publisher: w.publisher },
+          id
+        ),
+      now: () => w.clock.t,
+    });
+
+    const r1 = await daemon.tick();
+    expect(r1.errors).to.deep.equal([]);
+    expect(r1.opened).to.deep.equal([{ poolId: 1n, tier: 0, mode: 0 }]);
+    expect(r1.completed).to.deep.equal([{ poolId: 1n, step: 'pass_collection' }]);
+    expect((await w.chain.getPool(1n)).vrfCommitted).to.equal(false);
+    expect(await w.chain.hasPassCollection(1n)).to.equal(true);
+
+    // Nothing left to do on the next tick, and nothing reported as failing.
+    const r2 = await daemon.tick();
+    expect(r2.errors).to.deep.equal([]);
+    expect(r2.completed).to.deep.equal([]);
+  });
+
+  it('never attempts a seed once the pool has an entrant (the program refuses it, R22)', async () => {
+    const w = await makeWorld();
+    let attempts = 0;
+    const counting = {
+      commitSeed: async (poolId: bigint) => {
+        attempts++;
+        await w.chain.commitVrfSeed(poolId, 'stub');
+      },
+    };
+    const daemon = makeDaemon({
+      chain: w.chain,
+      custody: w.custody,
+      ciphertexts: w.store,
+      vrf: counting,
+      crank: (id) =>
+        crankPool(
+          { chain: w.chain, custody: w.custody, ciphertexts: w.store, publisher: w.publisher },
+          id
+        ),
+      now: () => w.clock.t,
+    });
+    // The crash window again, but an entry landed before any seed did.
+    const key = await w.custody.createPoolKey(1n);
+    await w.chain.openPool(1n, 0, key.publicKey, key.secretHash, 0);
+    w.chain.pools.get('1')!.entrants = 1;
+
+    const r = await daemon.tick();
+    expect(r.errors).to.deep.equal([]);
+    expect(r.completed).to.deep.equal([{ poolId: 1n, step: 'pass_collection' }]);
+    expect(attempts).to.equal(0);
   });
 });
 

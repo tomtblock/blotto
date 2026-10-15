@@ -72,7 +72,8 @@ export async function step<T>(
 
 /**
  * The settlement signer pays for every instruction the daemon sends —
- * `open_pool`, `commit_vrf_seed`, `create_pass_collection`,
+ * `open_pool`, `create_pass_collection` (and `commit_vrf_seed` when a
+ * coordinator is configured — none in production since R22),
  * `reveal_pool_secret`, `commit_results`, `pay_prizes` — plus the rent for
  * every account those create.
  *
@@ -116,7 +117,7 @@ export function assertCanPayFees(
     `${SERVICE_LABEL}: the settlement signer ${address} holds ` +
       `${formatSol(lamports)} SOL, below the ${formatSol(floorLamports)} SOL floor. ` +
       `It pays the fee and the account rent for every instruction this daemon ` +
-      `sends — open_pool, commit_vrf_seed, create_pass_collection, ` +
+      `sends — open_pool, create_pass_collection, ` +
       `reveal_pool_secret, commit_results, pay_prizes — so with an empty ` +
       `signer the keeper cannot open a pool and fails once per tick with ` +
       `"Attempt to debit an account but found no record of a prior credit". ` +

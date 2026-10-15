@@ -110,7 +110,14 @@ export interface DaemonDeps {
    * a bundle back (see ranking.ts). The crank already receives its own
    * handle to the same store. */
   ciphertexts: CiphertextStore;
-  vrf: VrfCoordinator;
+  /**
+   * Who commits a pool's VRF seed, or `null` for none (R22, 2026-10-15).
+   * Production passes `null`: Switchboard, the only oracle wired, shut down,
+   * and `register` no longer waits for a seed — the class draw runs on its
+   * other four inputs. A coordinator is still accepted (tests, bench, a
+   * future provider); `commit_vrf_seed` only lands before the first entry.
+   */
+  vrf: VrfCoordinator | null;
   /** Run the settlement crank for one pool (crank.ts composed with its own
    * deps; injectable so daemon tests can observe or fail it). */
   crank: (poolId: bigint) => Promise<CrankOutcome>;
@@ -451,19 +458,28 @@ export function makeDaemon(deps: DaemonDeps): Daemon {
     );
   }
 
-  /** Land whatever launch steps the tier's Open pool still misses. */
+  /**
+   * Land whatever launch steps the tier's Open pool still misses.
+   *
+   * The pass collection comes FIRST because `register` cannot mint without
+   * it, while the seed is optional (R22). Until 2026-10-15 the seed came
+   * first, so when Switchboard's oracles stopped (2026-10-10) every launch
+   * threw at the seed and no pool from 90 on ever got a collection either.
+   * The seed is attempted only before the first entry, matching the
+   * program's `VrfSeedAfterEntries` guard.
+   */
   async function completeLaunch(poolId: bigint, report: TickReport): Promise<void> {
     const pool = await deps.chain.getPool(poolId);
     if (pool.state !== 'Open') return;
-    if (!pool.vrfCommitted) {
-      await deps.vrf.commitSeed(poolId);
-      report.completed.push({ poolId, step: 'vrf' });
-      log('commit_vrf_seed', { poolId: poolId.toString() });
-    }
     if (!(await deps.chain.hasPassCollection(poolId))) {
       await deps.chain.createPassCollection(poolId);
       report.completed.push({ poolId, step: 'pass_collection' });
       log('create_pass_collection', { poolId: poolId.toString() });
+    }
+    if (!pool.vrfCommitted && deps.vrf !== null && pool.entrants === 0) {
+      await deps.vrf.commitSeed(poolId);
+      report.completed.push({ poolId, step: 'vrf' });
+      log('commit_vrf_seed', { poolId: poolId.toString() });
     }
   }
 

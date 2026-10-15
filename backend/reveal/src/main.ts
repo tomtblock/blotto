@@ -18,17 +18,14 @@
  *                                (`Config.keeper`, prompt v2 §A). Absent =
  *                                the settlement signer opens pools too, the
  *                                devnet posture until E6 splits the keys
- *   SWITCHBOARD_QUEUE            the Switchboard On-Demand queue (base58) —
- *                                selects the PRODUCTION VRF coordinator
- *                                (vrf-switchboard.ts): fresh Randomness
- *                                account per pool, reveal bundled with
- *                                commit_vrf_seed
- *   RANDOMNESS_ACCOUNT           a fixed Randomness account for the STUB
- *                                coordinator (tests/bench only; ignored when
- *                                SWITCHBOARD_QUEUE is set). One of the two
- *                                must be set — the daemon refuses to start
- *                                with neither (fail-closed, like every
- *                                credentialed seam).
+ *   SWITCHBOARD_QUEUE            IGNORED since R22 (2026-10-15). Switchboard
+ *                                shut down, and the class draw no longer
+ *                                needs a seed; a value set here is logged
+ *                                and otherwise unused
+ *   RANDOMNESS_ACCOUNT           optional — a fixed Randomness account for
+ *                                the STUB coordinator (tests/bench only).
+ *                                Unset = no seed is committed, the
+ *                                production posture since R22
  *   TURNKEY_API_BASE_URL/_PUBLIC_KEY/_PRIVATE_KEY, TURNKEY_ORGANIZATION_ID,
  *   TURNKEY_USER_ID              pool-key custody (R21)
  *   IRYS_UPLOAD_KEY, IRYS_NETWORK  bundle publishing
@@ -93,7 +90,6 @@ import { crankPool, publishBundle, type CrankDeps, type RevealedForDetection } f
 import { PgPublishedBundleStore } from './published-store';
 import { makePriorityFeeSampler } from './priority-fee';
 import { makeDaemon, StubVrfCoordinator, type VrfCoordinator } from './daemon';
-import { makeSwitchboardOps, SwitchboardVrfCoordinator } from './vrf-switchboard';
 import { IrysPublisher, irysNetworkFor, irysUploaderFromEnv } from './publisher-irys';
 import { STALE_TICK_MS, newDaemonHealth, serveDaemonHealth, type DaemonPhase } from './health';
 import {
@@ -114,12 +110,12 @@ const DEFAULT_PROGRAM_ID = '5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17';
 // by name and never without an explicit endpoint) — _shared/src/cluster.ts.
 
 /**
- * Budgets for the two startup steps that leave the process and talk to a
- * vendor. Switchboard measured 19-21s on devnet, so 45s is generous without
- * being indefinite; Irys is given the same. Exceeding either is fatal — see
- * startup.ts for why a stalled daemon must not be allowed to sit silently.
+ * Budget for the startup step that leaves the process to talk to a vendor.
+ * Irys gets 45s, the figure Switchboard measured (19-21s on devnet) once set
+ * for both steps; Switchboard itself is no longer loaded (R22). Exceeding it
+ * is fatal — see startup.ts for why a stalled daemon must not be allowed to
+ * sit silently.
  */
-const SWITCHBOARD_BUDGET_MS = 45_000;
 const IRYS_BUDGET_MS = 45_000;
 // Was 30s, on the reasoning that "the OFAC mirror is a single file download"
 // and so needed less than the oracle steps above. The premise was right and
@@ -185,7 +181,7 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
   const healthPort = portEnv(env, 'BLOTTO_DAEMON_HEALTH_PORT', 8084);
 
   // FIRST, before any credential, database handle or network fetch. The
-  // Switchboard and Irys steps below take ~25s between them, and a platform
+  // vendor steps below (Irys, the OFAC mirror) take tens of seconds, and a platform
   // health check that arrives during those seconds must find something
   // listening — see health.ts for the 2026-09-06 deploy this comes from.
   // Past the startup budget the endpoint turns 503, so a wedged init is a
@@ -252,29 +248,17 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
       `${formatSol(health.settlementLamports)} SOL`
   );
 
-  // VRF: the production Switchboard coordinator when a queue is configured;
-  // the fixed-account stub only when explicitly asked for (tests/bench);
-  // neither configured → refuse to start, like every credentialed seam.
-  // The coordinator and the chain reference each other (the chain bundles
-  // the coordinator's reveal ix; the coordinator lands the commit through
-  // the chain), resolved by closure: both arrows run only inside daemon
-  // ticks, long after both consts below are assigned.
-  let vrf: VrfCoordinator;
-  enter('switchboard');
-  const swCoordinator: SwitchboardVrfCoordinator | null = env.SWITCHBOARD_QUEUE
-    ? new SwitchboardVrfCoordinator({
-        ops: await step('switchboard queue', SWITCHBOARD_BUDGET_MS, () =>
-          makeSwitchboardOps({
-            connection,
-            payer: settlementSigner,
-            queue: new PublicKey(env.SWITCHBOARD_QUEUE as string),
-          }),
-          log
-        ),
-        commitOnChain: (poolId, account): Promise<void> => chain.commitVrfSeed(poolId, account),
-        log: (stage, detail) => console.log(`${SERVICE}: ${stage}`, JSON.stringify(detail ?? {})),
-      })
-    : null;
+  // VRF (R22, 2026-10-15): none in production. Switchboard, the only oracle
+  // this daemon ever drove, shut down (announced 2026-09-19); its devnet
+  // oracles stopped on 2026-10-10 and every launch from pool 90 on failed at
+  // the seed. `register` no longer waits for one, so the daemon commits none.
+  // The stub stays for tests and the bench, which arrange a reveal out of band.
+  if (env.SWITCHBOARD_QUEUE) {
+    log(
+      'SWITCHBOARD_QUEUE is set but ignored: Switchboard has shut down and the ' +
+        'class draw needs no seed (R22)'
+    );
+  }
 
   const keeperSigner = env.KEEPER_KEYPAIR
     ? Keypair.fromSecretKey(
@@ -293,32 +277,27 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
     programId,
     settlementSigner,
     keeperSigner,
-    makeVrfRevealIx: swCoordinator
-      ? (account) => swCoordinator.makeVrfRevealIx(account)
-      : undefined,
     // The same fee choice the browser bids (C-34), sampled once per window.
     priorityFeeMicroLamports: makePriorityFeeSampler(connection, {
       lockedWritableAccounts: [programId],
     }),
   });
 
-  // Same reasoning as the packet service's signer line: both coordinators
-  // start cleanly and report healthy, so the only way an operator can tell a
-  // production run from one silently pinned to the stub is to say so here.
-  if (swCoordinator) {
-    console.log(`${SERVICE}: VRF = SWITCHBOARD On-Demand (queue ${env.SWITCHBOARD_QUEUE})`);
-    vrf = swCoordinator;
-  } else if (env.RANDOMNESS_ACCOUNT) {
+  // Same reasoning as the packet service's signer line: say which seed path
+  // this run takes, because both start cleanly and report healthy.
+  let vrf: VrfCoordinator | null;
+  if (env.RANDOMNESS_ACCOUNT) {
     console.warn(
       `${SERVICE}: VRF = STUB COORDINATOR (RANDOMNESS_ACCOUNT=${env.RANDOMNESS_ACCOUNT}) — ` +
-        `tests and bench only. The class draw is NOT consuming live Switchboard ` +
-        `randomness. Set SWITCHBOARD_QUEUE for production.`
+        `tests and bench only.`
     );
     vrf = new StubVrfCoordinator(chain, env.RANDOMNESS_ACCOUNT);
   } else {
-    throw new Error(
-      `${SERVICE}: set SWITCHBOARD_QUEUE (production) or RANDOMNESS_ACCOUNT (stub, tests/bench) — refusing to run without a VRF coordinator`
+    console.log(
+      `${SERVICE}: VRF = none (R22) — pools open without a seed; the class draw ` +
+        `uses a delayed slot hash, the entry index, the pool and the player`
     );
+    vrf = null;
   }
 
   // THE CLOCK IS THE CHAIN'S (audit 2026-09-11, C-35 / F-10). The program
