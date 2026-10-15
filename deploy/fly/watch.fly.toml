@@ -1,0 +1,43 @@
+# Fly.io app config for the watcher (R23). Deploy from the repo root:
+#   fly deploy --config deploy/fly/watch.fly.toml
+# (or Actions → deploy-watch). Secrets: see docs/guide/HOSTING.md, "The
+# watcher" — never in this file.
+app = "blotto-watch"
+
+# Amsterdam, not Frankfurt where the four services run. Still EU (TECH-ARCH
+# §11), but a regional outage that takes the services down must not take
+# down the thing that reports it.
+primary_region = "ams"
+
+[build]
+  dockerfile = "../docker/Dockerfile.watch"
+
+[env]
+  WATCH_HEALTH_PORT = "8085"
+
+[http_service]
+  internal_port = 8085
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+# backend-watch probes this same path and posts to the group when it fails.
+[[http_service.checks]]
+  interval = "15s"
+  timeout = "5s"
+  grace_period = "30s"
+  method = "GET"
+  path = "/health"
+
+# The watchdog exits the process when the loop stops completing rounds; the
+# machine must come back by itself.
+[[restart]]
+  policy = "always"
+
+# DECLARED, not defaulted: "no [[vm]] block" silently means 256 MB, which has
+# taken down two services before (daemon 2026-09-06, packet 2026-09-08). The
+# watcher is light (ts-node plus fetch), and 512 MB matches the review service.
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

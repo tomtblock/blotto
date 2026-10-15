@@ -59,8 +59,10 @@ of five stats (otherwise a draw), and every player is compared with every other 
     Irys (published bundles)
 ```
 
-Five deployable units — four backend services and the frontend. Topology, ports and health checks
-in detail: [`../guide/HOSTING.md`](../guide/HOSTING.md). The frontend is reached on two channels
+Six deployable units — four backend services, the frontend, and the watcher (`backend/watch`, R23):
+a fifth Fly app in another region that checks all of the above from outside, chain included, and
+tells the founders' Telegram group when something breaks. Topology, ports and health checks in
+detail: [`../guide/HOSTING.md`](../guide/HOSTING.md). The frontend is reached on two channels
 that are one build: the site, and an Android WebView shell (`mobile/`, for the Solana dApp Store)
 that opens the site and holds nothing of its own. The closed list of what differs on a phone, the
 build check that keeps every entrant on the served build, and the package's own procedures are in
@@ -388,10 +390,13 @@ full; no lane builds the package or opens an emulator ([`../guide/MOBILE.md` §7
 
 Other workflows: `on-chain` (`anchor build` and the LiteSVM integration suite, including
 `hard_mode.rs`, on program changes), `deployed-drift` (daily and on program changes: simulates every
-instruction against the live program), `backend-watch` (every 15 minutes: probes health, restarts a
-stopped machine), `skill-evidence` (nightly reproduction of the generated reports), `security-sweep`
+instruction against the live program), `backend-watch` (scheduled every 15 minutes, run hours apart
+in practice: probes health, starts a stopped machine, and is the watcher's dead-man switch),
+`diagnose` (started by the watcher: Claude's read-only diagnosis of an alert, posted to Telegram),
+`skill-evidence` (nightly reproduction of the generated reports), `security-sweep`
 (nightly dependency advisories and the licence policy, blocking on anything not triaged), `stop-the-line` (opens an issue when `main` goes red), and the
-manual `deploy-backend`. Running all of this locally:
+manual `deploy-backend` and `deploy-watch`. The live alarm is not a workflow: GitHub's scheduler is
+too late for it, so the watcher runs on Fly. Running all of this locally:
 [`../guide/GETTING-STARTED.md`](../guide/GETTING-STARTED.md). Results:
 [`../testing/TESTING-REPORT.md`](../testing/TESTING-REPORT.md).
 

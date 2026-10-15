@@ -1,0 +1,30 @@
+# watcher image (R23). Build FROM THE REPO ROOT:
+#   docker build -f deploy/docker/Dockerfile.watch -t blotto-watch .
+# The watcher imports the shared layouts by relative path, so the image
+# carries backend/_shared beside backend/watch, plus config/ for its
+# owner-set thresholds (config/watch.json). Nothing else: no other service's
+# code, no signing key, no database client.
+#
+# Pinned by digest, the same node:22-slim index every service image uses
+# (scanner triage 2026-10-11, item D); Dependabot proposes each new digest.
+FROM node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
+
+# Which commit this image was built from — reported on the watcher's /health.
+ARG BLOTTO_BUILD_COMMIT=unknown
+ENV BLOTTO_BUILD_COMMIT=$BLOTTO_BUILD_COMMIT
+
+# Unprivileged from the first install on (E-22): the base image's `node` user.
+WORKDIR /app
+RUN chown node:node /app
+COPY --chown=node:node backend/_shared backend/_shared
+COPY --chown=node:node backend/watch backend/watch
+COPY --chown=node:node config config
+
+USER node
+RUN for d in backend/_shared backend/watch; do \
+      (cd "$d" && npm ci --no-audit --no-fund); \
+    done
+
+WORKDIR /app/backend/watch
+EXPOSE 8085
+CMD ["npx", "ts-node", "--transpile-only", "src/main.ts"]

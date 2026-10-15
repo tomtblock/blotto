@@ -78,6 +78,8 @@ including the operator. The detection signal only ever compares markers within o
 | Sanctions sources | wallet addresses, at entry and before payment | `backend/sanctions/src/` — the mirrored OFAC SDN list is local; Chainalysis and OpenSanctions are called when configured |
 | Permanent storage (Irys) | the results bundle | `backend/reveal/src/publisher-irys.ts` |
 | Email sender | the opt-in address, once | `backend/packet/src/notify-pool.ts` |
+| Telegram (the founders' private alert group, since 2026-10-15, R23) | operational facts when something breaks: check names, pool numbers, counts, balances, error reasons. No wallet address or IP is put into an alert | `backend/watch/src/format.ts`; `backend/watch/src/checks.ts` |
+| Anthropic (Claude, for an alert's diagnosis) | when a diagnosis runs: recent service logs and public service state, **redacted first** — every IP and IP prefix removed, wallet addresses cut to their first four characters, credentials removed. The diagnosis it returns is redacted again before it reaches the Telegram group | `.github/workflows/diagnose.yml`; `backend/watch/src/redact.ts` |
 
 ---
 
@@ -93,6 +95,7 @@ Each of these removed data the product did not need.
 | **No IP-derived value** is captured, stored or sealed for detection; the device half of the correlation signal stays | `backend/detection/src/signals.ts` |
 | Detection reports are persisted for the reviewer, never printed whole to logs; one counts line per run | `backend/reveal/src/main.ts` |
 | Logs and alerts carry **truncated** wallet identifiers and a two-octet IP prefix, from one shared rule | `backend/_shared/src/short.ts` |
+| Logs leave the platform for an alert's diagnosis only after **redaction**, which also drops the two-octet prefix. Nothing gathered for a diagnosis is printed to the public repository's run log, uploaded as an artifact or cached, and it is deleted when the run ends | `backend/watch/src/redact.ts`; `.github/workflows/diagnose.yml` |
 | Timings and the device marker are **not published** in the bundle | `backend/reveal/src/bundle.ts` (version 2) |
 | The device marker is **derived per pool**, never the stable device secret itself | `app/src/entry/device.ts` |
 | The browser keeps **no allocation**: pictures of past battles that earlier versions stored are deleted from the device | `app/src/storage/forget-blott-stills.ts` |

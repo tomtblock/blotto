@@ -1,0 +1,79 @@
+{
+  "loop": {
+    "intervalSeconds": 60,
+    "watchdogSeconds": 300,
+    "httpTimeoutSeconds": 10
+  },
+  "incidents": {
+    "clearAfterPasses": 2,
+    "reminderHours": 4,
+    "laneReminderHours": 24,
+    "flapWindowMinutes": 30,
+    "maxMessagesPerHour": 10
+  },
+  "services": {
+    "apps": ["blotto-indexer", "blotto-packet", "blotto-daemon", "blotto-review"],
+    "failuresToAlert": {
+      "blotto-indexer": 3,
+      "blotto-packet": 4,
+      "blotto-daemon": 6,
+      "blotto-review": 3
+    },
+    "ingestUrl": "https://blotto-indexer.fly.dev:8080/health",
+    "ingestFailuresToAlert": 3
+  },
+  "daemon": {
+    "tickStaleSeconds": 300,
+    "tickErrorPolls": 5,
+    "settlementFloorLamports": "200000000"
+  },
+  "chain": {
+    "readFailuresToAlert": 5,
+    "failuresToAlert": 2,
+    "passCollectionGraceSeconds": 120,
+    "fillDeadlineSlackSeconds": 300,
+    "keeperSlackSeconds": 300,
+    "sealedMaxMinutes": 30,
+    "scoredMaxMinutes": 15,
+    "refundingMaxMinutes": 30,
+    "pausedIsIncident": true
+  },
+  "indexer": {
+    "lagPolls": 5,
+    "ledgerFallbackPolls": 3
+  },
+  "provider": {
+    "probeEverySeconds": 300,
+    "creditsSpentFailuresToAlert": 1,
+    "otherFailuresToAlert": 3
+  },
+  "alerts": {
+    "metricsPort": 9090,
+    "quietMinutesToClear": 60,
+    "scrapeFailuresToAlert": 5,
+    "ignoreReasons": ["reveal daemon tick stale"]
+  },
+  "site": {
+    "aliasUrl": "https://blotto-jade.vercel.app/api/version",
+    "domainUrl": "https://www.blotto.gg/.well-known/assetlinks.json",
+    "failuresToAlert": 3,
+    "versionLagMinutes": 20
+  },
+  "lanes": {
+    "pollEverySeconds": 300,
+    "deploySettleSeconds": 360,
+    "tokenExpiryWarnDays": 14,
+    "watched": [
+      "ci-fast.yml",
+      "on-chain.yml",
+      "deployed-drift.yml",
+      "deploy-backend.yml",
+      "backend-watch.yml",
+      "security-sweep.yml"
+    ]
+  },
+  "diagnosis": {
+    "maxPerDay": 6,
+    "minMinutesBetweenSameCheck": 360
+  }
+}

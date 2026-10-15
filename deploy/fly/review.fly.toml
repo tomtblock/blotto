@@ -20,9 +20,9 @@ primary_region = "fra"
   # deliberate — the exposition names every counter and alert reason this
   # system keeps, which is an operational map with no reason to be public.
   #
-  # Nothing scrapes it yet, and no alert destination is configured. Both are
-  # operator decisions: point an agent at :9090 over the private network, and
-  # set a webhook secret for the direct push if one is wanted.
+  # The watcher (blotto-watch, R23) reads it over the private network and
+  # posts each alert to the founders' Telegram group. Its port must stay the
+  # one config/watch.json's `alerts.metricsPort` names (a spec checks it).
   BLOTTO_MONITOR_SINK = "prometheus"
   BLOTTO_METRICS_PORT = "9090"
   BLOTTO_REVIEW_PORT = "8083"

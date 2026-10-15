@@ -35,7 +35,7 @@ Where any document and the code disagree, the code is right and the document is 
 |---|---|
 | [`architecture/ARCHITECTURE.md`](architecture/ARCHITECTURE.md) | **What exists — the as-built description**: services, the program's instructions and accounts, the money model, sealing, scoring, both modes, detection, what is not built |
 | [`architecture/DIAGRAMS.md`](architecture/DIAGRAMS.md) | Annotated diagrams of the same — canonical for nothing; `ARCHITECTURE.md` wins on any disagreement |
-| [`architecture/DECISIONS.md`](architecture/DECISIONS.md) | Every product and design decision, by ID (`R1`–`R21`, `D-A1`…`D-E17`), with its status and where it is enforced |
+| [`architecture/DECISIONS.md`](architecture/DECISIONS.md) | Every product and design decision, by ID (`R1`–`R23`, `D-A1`…`D-E18`), with its status and where it is enforced |
 | [`architecture/adr/`](architecture/adr/) | Design records for the class draw, the randomness digest, the pass standard and its non-transferability, and the program's threat mitigations |
 
 ## Testing — the evidence
@@ -88,6 +88,7 @@ deliberately, in its own commit.
 | [`../config/blocked-wallets.json`](../config/blocked-wallets.json) | Wallets refused an entry, each with an enumerated ground |
 | [`../config/operator.json`](../config/operator.json) | The operating entity named by the terms; a mainnet deploy is refused while any value is unset |
 | [`../config/custody.json`](../config/custody.json) | The custody disclosure page: upgrade authority, signers, timelock |
+| [`../config/watch.json`](../config/watch.json) | When the watcher alerts the founders' Telegram group: every threshold, reminder and limit (legend: [`watch.README.md`](../config/watch.README.md)) |
 | [`../programs/blotto_cup/src/constants.rs`](../programs/blotto_cup/src/constants.rs) | Tier prices and pots, the seat floor and ceiling, the fill deadline |
 
 ## Citations in code comments

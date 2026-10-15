@@ -19,6 +19,14 @@
 # it is meaningful now because its /health answers 503 once no tick has
 # completed within its staleness budget (backend/reveal/src/health.ts), so
 # a wedged settlement loop shows up here as a red run within a cycle.
+#
+# 2026-10-15 (R23): the watcher, blotto-watch, is probed too — this workflow
+# is the watcher's dead-man switch. When blotto-watch is the one down, the
+# last step posts to the founders' Telegram group itself, because nothing
+# else will. For the other four it says nothing: the watcher already has,
+# within minutes. GitHub runs this "every fifteen minutes" schedule hours
+# apart in practice (2–10 h observed), so it is a late safety net, not the
+# alarm.
 
 name: backend-watch
 
@@ -54,7 +62,13 @@ jobs:
             curl --fail --silent --show-error --max-time 20 "$1" >/dev/null 2>&1
           }
           fail=0
-          for app in blotto-indexer blotto-packet blotto-daemon blotto-review; do
+          for app in blotto-indexer blotto-packet blotto-daemon blotto-review blotto-watch; do
+            # The watcher is deployed separately (deploy-watch). Until its first
+            # deploy there is nothing to probe, and that is not an outage.
+            if [ "$app" = "blotto-watch" ] && ! flyctl status --app "$app" >/dev/null 2>&1; then
+              echo "$app: not deployed yet — skipped"
+              continue
+            fi
             url="https://$app.fly.dev/health"
             if probe "$url"; then
               echo "$app: healthy"
@@ -82,7 +96,35 @@ jobs:
             else
               echo "::error::$app is unhealthy and did not recover after a start attempt — run backend-status for the event log"
               flyctl machine list --app "$app" || true
+              echo "$app" >> "$RUNNER_TEMP/unhealthy"
               fail=1
             fi
           done
           exit $fail
+
+      # The dead-man switch. Only when the watcher itself is down: then
+      # nobody else will tell the group, so this does, naming everything that
+      # is down. The bot token is a secret (masked) and goes only to curl.
+      - name: Tell the group when the watcher itself is down
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if ! grep -qx blotto-watch "$RUNNER_TEMP/unhealthy" 2>/dev/null; then
+            echo "the watcher is up; it reports the others itself"
+            exit 0
+          fi
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "::warning::the watcher is down and TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID are not set here, so nobody was told"
+            exit 0
+          fi
+          others=$(grep -vx blotto-watch "$RUNNER_TEMP/unhealthy" | paste -sd, - | sed 's/,/, /g')
+          text="🔴 Blotto: the watcher (blotto-watch) is down, so no alerts are being sent. Also down: ${others:-nothing else}. Restart it with Actions → deploy-watch; Actions → backend-status shows its logs. Run: ${RUN_URL}"
+          if ! curl -sS --fail -m 20 -o /dev/null "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+              --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+              --data-urlencode "text=${text}" \
+              --data-urlencode "link_preview_options={\"is_disabled\":true}"; then
+            echo "::warning::Telegram did not accept the message"
+          fi
