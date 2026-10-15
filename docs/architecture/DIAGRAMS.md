@@ -42,14 +42,13 @@ flowchart LR
     TREAS["treasury PDA"]
     VAULT["prize vault per pool"]
     MPL["Metaplex Core passes"]
-    SB["Switchboard randomness"]
   end
   APP -- "1 sealed board" --> PACKET
   APP -- "3 entry packet" --> PACKET
   PACKET --> IPL & SANC & TK
   APP --> WALLET
   WALLET == "2 one signed transaction: entry + the price" ==> PROG
-  PROG --> TREAS & VAULT & MPL & SB
+  PROG --> TREAS & VAULT & MPL
   PROG -. "4 finalized webhook" .-> INDEXER
   INDEXER --> PG
   PACKET --> PG

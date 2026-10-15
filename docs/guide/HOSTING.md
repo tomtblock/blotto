@@ -35,7 +35,7 @@ set in `deploy/fly/*.fly.toml`.
 | **indexer** | `backend/indexer` → `src/index.ts sync` | 8080 webhook · 8081 read API | `GET /health` on both | Postgres, RPC, webhook secret |
 | **packet** (the entry gate) | `backend/packet` → `src/main.ts` | 8082 | `GET /health` | Postgres, entry signer (Turnkey), geo vendor, sanctions source, `config/territories.json`, `config/terms.json`, `config/blocked-wallets.json` |
 | **review** | `backend/detection` → `src/main.ts` | 8083 | `GET /health` | Postgres, `config/reviewers.json`, settlement keypair, RPC |
-| **daemon** (keeper and crank) | `backend/reveal` → `src/main.ts` | 8084 (health only) | `GET /health` (reports the last tick) | Postgres, settlement keypair, Turnkey custody, Irys upload wallet, Switchboard queue, sanctions source, RPC |
+| **daemon** (keeper and crank) | `backend/reveal` → `src/main.ts` | 8084 (health only) | `GET /health` (reports the last tick) | Postgres, settlement keypair, Turnkey custody, Irys upload wallet, sanctions source, RPC |
 | **app** | `app/` on Vercel | 443 | the site loads | The three service URLs, the RPC URL, the sign-in provider |
 
 Each service also serves a Prometheus metrics endpoint on port 9090. That port is reachable only
@@ -177,7 +177,6 @@ missing secret **by name**.
 | Name | Source |
 |---|---|
 | `TURNKEY_USER_ID` | The Turnkey console (sealing custody) |
-| `SWITCHBOARD_QUEUE` | The Switchboard On-Demand queue address. This is public configuration, not a credential |
 | `IRYS_UPLOAD_KEY` | The funded upload wallet's secret key, base58 |
 | `SETTLEMENT_SIGNER_KEYPAIR_B64` | The settlement keypair file, base64 on one line. It is decoded into memory-backed storage at boot |
 | `BLOTTO_REVIEW_OPERATOR_TOKEN` | Optional secret. It switches on the reviewer's detection and complaints queues. It is an operator secret and must never reach a browser bundle |
@@ -229,8 +228,8 @@ that it asserts:
 
 **The acceptance line.** The final step prints which signer and which randomness source each
 service chose. A credentialed run reads `entry signer = TURNKEY`, has **no `GEO STUB` line**,
-and reads `VRF = SWITCHBOARD On-Demand`. Anything else means a development path is live even
-though the run is green.
+and reads `VRF = none (R22)`. Anything else — above all `VRF = STUB COORDINATOR` — means a
+development path is live even though the run is green.
 
 **Troubleshooting**
 
@@ -439,7 +438,6 @@ What each outside service does, what talks to it, and what happens when it fails
 | **IPLocate** | The country and VPN/proxy verdict per IP behind the territory check, cached per IP for 15 minutes | Packet service | `GEO_VENDOR_URL`, `GEO_VENDOR_API_KEY` | Every entry is refused (fail-closed). A quota response is logged as a lookup failure, not a territory decision |
 | **Sanctions sources** | A mirrored OFAC SDN list (no credential; it refuses to answer once stale), plus optional Chainalysis and OpenSanctions. Every entrant is screened at entry, and every winner at settlement | Packet service, daemon | `SANCTIONS_*` | With no source configured, the service does not start. At settlement, an unanswerable screening holds the share |
 | **Turnkey** | The entry signer (Ed25519, cannot be exported) and custody of each pool's sealing secret (export-locked until the pool closes) | Packet service, daemon | `TURNKEY_*`, `ENTRY_SIGNER_*` | No packets, so no entries. A pool cannot be revealed, so settlement waits |
-| **Switchboard On-Demand** | One randomness account per pool, whose reveal is bundled with `commit_vrf_seed`. It feeds the cosmetic class draw and nothing in scoring | Daemon (through the RPC), the program | `SWITCHBOARD_QUEUE` | A pool cannot take entries until its seed is committed. The daemon retries |
 | **Metaplex Core** | The pass collection for each pool, and one frozen pass per entry | The program | A pinned program address | Entries fail if the collection is missing. The daemon creates it at open |
 | **Irys** | Stores the published results bundle for each settled pool. The verify page fetches it | Daemon | `IRYS_UPLOAD_KEY`, `IRYS_NETWORK` | Payment still happens. The bundle is published on a later tick |
 | **Squads** | The admin multisig. Every admin instruction is a Squads transaction | The program | [`config/custody.json`](../../config/custody.json) records it | Admin instructions cannot land. Pools keep running |

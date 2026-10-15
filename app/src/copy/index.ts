@@ -1578,7 +1578,7 @@ export const COPY = {
       'Where more than one player shares the rank a prize passes to, we identify that group. The published rule is that they share equally, with any remainder going to the lowest entry number. The results bundle we publish after every pool lets anyone check that we identified the group correctly.',
     // SUBSTANCE FIXED: randomness scope (PID §8.3/§8.4).
     randomness:
-      'Randomness from a Switchboard VRF seed, combined with a later slot hash, decides ONE thing: which character class artwork your pass shows. Class is cosmetic. It does not affect any stat, any battle, any score, any rank, or any prize \u2014 nothing in the scoring path reads it. Scoring and prizes depend only on the sealed battles every player submitted. Every class draw is replayable from published on-chain data.',
+      'Randomness from a recent slot hash, mixed with your entry\u2019s position in the pool, the pool and your wallet\u2019s key, decides ONE thing: which character class artwork your pass shows. Class is cosmetic. It does not affect any stat, any battle, any score, any rank, or any prize \u2014 nothing in the scoring path reads it. Scoring and prizes depend only on the sealed battles every player submitted. Every class draw is replayable from published on-chain data.',
     // SUBSTANCE FIXED: the sealing lifecycle (TECH-ARCH §5), the founder's
     // addendum wording of 2026-09-07 (ruling 5) — the key is generated and
     // held by our systems, export-locked; said plainly.

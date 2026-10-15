@@ -1,6 +1,6 @@
 //! Gate tests: admin authority, the pause switch, pool-opening rules
-//! (R6/R14/ceiling), the VRF precondition, packet rejection cases, and
-//! settlement-signer binding. (Roadmap 1.1–1.3 acceptance criteria.)
+//! (R6/R14/ceiling), registering without a VRF seed (R22), packet rejection
+//! cases, and settlement-signer binding. (Roadmap 1.1–1.3 acceptance criteria.)
 
 use blotto_litesvm_tests::*;
 use solana_sdk::clock::Clock;
@@ -268,19 +268,37 @@ fn lowering_a_ceiling_blocks_the_next_open_not_the_open_pool() {
 }
 
 #[test]
-fn register_requires_a_committed_vrf_seed() {
+fn register_draws_from_the_other_four_inputs_without_a_seed() {
     let Some(mut env) = Env::new() else { return };
-    // Open WITHOUT patching a VRF seed (and without a pass collection —
-    // the VRF gate fires before the mint is reached).
+    // Open WITHOUT patching a VRF seed — the state of every devnet pool from
+    // 90 on, after Switchboard's oracles stopped (R22). The pass
+    // collection is still created: `register` mints into it.
     let settlement = env.settlement.insecure_clone();
     env.fund_platform(TIER_POTS[0] + VAULT_RENT_CUSHION);
     let ix = open_pool_ix(&settlement.pubkey(), 1, 0, [9; 32], env.sealing_secret_hash);
     env.send(&[ix], &[&settlement]).unwrap();
-    let err = env.register_player(1).unwrap_err();
-    assert!(
-        err.contains("6004") || err.contains("VrfSeedNotCommitted"),
-        "{err}"
-    );
+    let ix = create_pass_collection_ix(&settlement.pubkey(), 1);
+    env.send(&[ix], &[&settlement])
+        .expect("create_pass_collection");
+
+    let pool = pool_pda(1);
+    let seed = |env: &Env| env.svm.get_account(&pool).unwrap().data[116..148].to_vec();
+    assert_eq!(seed(&env), vec![0u8; 32], "opens without a seed");
+    let before = read_pool(&env.svm, &pool);
+
+    let (_player, entry) = env
+        .register_player(1)
+        .expect("an unseeded pool takes entries (R22)");
+
+    let after = read_pool(&env.svm, &pool);
+    assert_eq!(after.entrants, 1);
+    // Exactly one class left the bag, and it is the one the entry carries.
+    let class = read_entry(&env.svm, &entry).class as usize;
+    for i in 0..5 {
+        let expected = before.class_counters[i] - u16::from(i == class);
+        assert_eq!(after.class_counters[i], expected, "counter {i}");
+    }
+    assert_eq!(seed(&env), vec![0u8; 32], "register never writes the seed");
 }
 
 #[test]

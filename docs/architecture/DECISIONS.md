@@ -50,7 +50,7 @@ Contents: [Product and market](#product-and-market-r1r17) ·
 | R16 | A shareable result card (image and link). No on-chain change and no reward for sharing. | 2026-08-26 | In force; the card carries no class since 2026-09-15 | `app/src/app/card/[pool]/[player]/route.tsx` |
 | R17 | Success target: one 0.5 SOL pool fills within 24 hours without outreach. | 2026-08-26 | Target; not measurable until the 0.5 SOL tier opens (R6) | — |
 
-## Engineering (R18–R21)
+## Engineering (R18–R22)
 
 | ID | Decision | Decided | Status | Enforced in |
 |---|---|---|---|---|
@@ -58,6 +58,7 @@ Contents: [Product and market](#product-and-market-r1r17) ·
 | R19 | Sign-in through an embedded-wallet provider with social login, with an external wallet as an option. | 2026-08-26 | In force. The per-pool device marker used by detection is derived in the app, not from the sign-in provider | `app/src/wallet/`; `app/src/entry/device.ts` |
 | R20 | The backend is TypeScript throughout. The scoring engine and the results tree are one TypeScript module run unchanged by the settlement process and the browser. Python-generated vectors are the independent check. No Rust scoring crate, no WASM. The class-draw crate stays Rust because the program needs it, with a TypeScript twin pinned to the same vectors. | 2026-08-26 | In force | `backend/scoring/`; `backend/class-digest/`; `crates/blotto-randomness/`; `backend/scoring/fixtures/gen_vectors.py` |
 | R21 | Keys are held in a multisig (admin) and a key-management service (entry signer, pool sealing keys) from devnet onward. | 2026-08-26 | Partly in force on devnet: the admin is a multisig vault; the program upgrade authority is a single operator key until before mainnet | [`config/custody.json`](../../config/custody.json); `app/src/app/custody/` |
+| R22 | **No oracle seed in the class draw.** `register` no longer requires a committed VRF seed. The cosmetic class digest runs on a slot hash at least five slots old, the entry index, the pool and the player, with 32 zero bytes in the seed's position for a pool that has none. `commit_vrf_seed` remains, and refuses once a pool has an entry. The daemon commits no seed and creates the pass collection first. Reason: Switchboard shut down (support ended 2026-09-25; its devnet oracles stopped 2026-10-10), and from pool 90 on no pool could take an entry. Nothing in scoring, ranking or prizes reads the class. | 2026-10-15 | In force. Before mainnet: decide whether a live randomness provider returns as the fifth input | `programs/blotto_cup/src/instructions/register.rs`; `programs/blotto_cup/src/vrf.rs`; `backend/reveal/src/daemon.ts`; [`adr/adr-026-multi-source-randomness.md`](adr/adr-026-multi-source-randomness.md) |
 
 ## Tiers, ties and the treasury (D1–D3-B, D-A)
 

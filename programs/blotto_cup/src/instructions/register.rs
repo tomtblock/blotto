@@ -4,7 +4,7 @@
 //!
 //! Order of operations in the handler (each step names its test):
 //!
-//!   1. gates — paused, state, deadline, capacity, VRF seed present, and the
+//!   1. gates — paused, state, deadline, capacity, and the
 //!      belt-and-braces check that the prize vault already holds the pot
 //!      (D-A1 revised: pots are pre-funded at `open_pool`; an entry NEVER
 //!      touches a prize vault);
@@ -16,9 +16,10 @@
 //!      platform treasury PDA, tracked in `Config.platform_refundable` so
 //!      `withdraw_platform`'s floor keeps it program-held while the pool can
 //!      still refund (R7);
-//!   4. class draw — delayed slot hash + committed VRF seed + entry index +
-//!      pool + player through `blotto_randomness` (cosmetic; read by nothing
-//!      in the scoring path, PID §8.4);
+//!   4. class draw — delayed slot hash + the pool's VRF seed (zero when none
+//!      was committed, R22) + entry index + pool + player through
+//!      `blotto_randomness` (cosmetic; read by nothing in the scoring path,
+//!      PID §8.4);
 //!   5. pass mint — bare member of the frozen Collection (`pass.rs`);
 //!   6. state writes + `EntryRegistered`;
 //!   7. the 64th entry seals via `seal_pool` — refunds are now impossible,
@@ -158,12 +159,19 @@ pub fn handle_register(
         ErrorCode::DeadlinePassed
     );
     require!(ctx.accounts.pool.entrants < CAPACITY, ErrorCode::PoolFull);
-    // The class digest needs the committed seed; entries before the commit
-    // would have to draw from nothing.
-    require!(
-        ctx.accounts.pool.vrf_seed != [0u8; 32],
-        ErrorCode::VrfSeedNotCommitted
-    );
+    // No seed gate (decision R22, 2026-10-15). Until then `register`
+    // refused every entry while `Pool.vrf_seed` was zero. Switchboard, the
+    // only oracle that could commit it, shut down (announced 2026-09-19); its
+    // devnet oracles stopped on 2026-10-10, and from pool 90 on no pool could
+    // take an entry. The class draw is cosmetic and read by nothing in the
+    // scoring path, so it now runs on the four inputs that need no oracle — a
+    // slot hash at least SLOT_HASH_DELAY slots old, the entry index, the pool
+    // and the player (ADR-026). A pool that never received a seed hashes 32
+    // zero bytes in that position; one seeded before the shutdown keeps its
+    // seed, so every existing entry replays unchanged.
+    // PHASE-N-REVIEW: before mainnet, decide whether a live VRF provider
+    // returns as the fifth input; the digest already has the slot for it.
+
     // Belt-and-braces (D-A1 revised): the pot was moved into the prize vault
     // at `open_pool`, before any entry. No reachable state violates this —
     // the vault has no exit until settlement — but a player's money must

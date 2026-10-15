@@ -83,7 +83,7 @@ the scoring path never mentions class).
 
 **External services used:** Solana RPC with webhooks (Helius), sign-in and embedded wallets
 (Privy; Phantom also supported), key custody for the entry signer and pool secrets (Turnkey),
-permanent publication (Irys), randomness (Switchboard On-Demand), the admin multisig (Squads), IP
+permanent publication (Irys), the admin multisig (Squads), IP
 geolocation (IPLocate), sanctions lists (OFAC SDN, Chainalysis, OpenSanctions), Postgres. The
 vendor map and configuration: [`../guide/HOSTING.md`](../guide/HOSTING.md).
 
@@ -232,8 +232,10 @@ hold a seat, and `escrow.rs` has no treasury path at all.
 
 Five classes (Goblin, Knight, Wizard, Dragon, Titan) drawn without replacement from an on-chain bag
 of `[38, 15, 7, 3, 1]` (sum 64) stored on the pool as `class_counters`. The draw digest combines the
-pool's Switchboard seed (`commit_vrf_seed`, required before the first entry), a slot hash from at
-least five slots back, the pool, the entry index and the player key
+pool's VRF seed, a slot hash from at least five slots back, the pool, the entry index and the
+player key. Since R22 (2026-10-15) no oracle commits a seed — Switchboard shut down — so pools from
+90 on hash 32 zero bytes in the seed's place; `commit_vrf_seed` remains, and refuses once a pool has
+an entry
 ([`adr/adr-021-bag-without-replacement-draw.md`](adr/adr-021-bag-without-replacement-draw.md),
 [`adr/adr-026-multi-source-randomness.md`](adr/adr-026-multi-source-randomness.md)). Every draw
 replays from published events. The pass is a Metaplex Core asset in a collection frozen at creation;

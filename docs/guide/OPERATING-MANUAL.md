@@ -447,15 +447,15 @@ banners in this order:
     triggers the refund and drains it.
   - For a settled pool, it runs the review clock, the owed bundle and the next-place step
     (below).
-- **KEEP.** Finishes the launch steps of every live Open pool on both ladders: the randomness
-  seed and the pass collection.
+- **KEEP.** Finishes the launch step of every live Open pool on both ladders: the pass
+  collection, without which `register` cannot mint. No randomness seed is committed since R22.
 - **OPEN.** For each enabled tier on each ladder whose slot is free, whose cooldown has passed,
   and which the treasury can fund, it opens the next pool. Custody creates the sealing key, then
-  `open_pool`, then `commit_vrf_seed`, then `create_pass_collection`. While the deployment is
+  `open_pool`, then `create_pass_collection`. While the deployment is
   paused, the daemon skips this phase, because nobody could enter the pool.
 
 ```
-open_pool → commit_vrf_seed → create_pass_collection → register × n
+open_pool → create_pass_collection → register × n
    │
    ├─ 64th seat, or the deadline with ≥ the pool's floor seated
    │     Sealed → reveal_pool_secret → commit_results → Scored → pay_prizes → Paid
@@ -510,12 +510,12 @@ nothing already running.
 
 - the settlement key, holding at least 0.05 SOL;
 - Turnkey custody;
-- a funded upload wallet;
-- `SWITCHBOARD_QUEUE`, the production randomness.
+- a funded upload wallet.
 
-It refuses to start without a randomness source. **Never set `RANDOMNESS_ACCOUNT` on a real
-deployment.** It selects the test stub, the daemon starts cleanly on it, and the class draw's
-randomness claim is silently lost.
+No randomness source is needed since R22: Switchboard shut down, and the class draw runs on a
+delayed slot hash, the entry index, the pool and the player. `SWITCHBOARD_QUEUE` is ignored if set.
+**Never set `RANDOMNESS_ACCOUNT` on a real deployment.** It selects the test stub, which commits a
+fixed seed to every pool.
 
 ## 7. When something is wrong
 
@@ -789,11 +789,11 @@ examples. [`HOSTING.md`](HOSTING.md) has the hosting steps.
    covers the pot plus the floor.
 7. **Services.** Deploy the indexer and create the RPC provider's webhook, then the packet
    service, then the app with its service URLs ([`HOSTING.md`](HOSTING.md)).
-8. **Daemon and review.** Stage `SWITCHBOARD_QUEUE`, the Turnkey values including
+8. **Daemon and review.** Stage the Turnkey values including
    `TURNKEY_USER_ID`, `IRYS_UPLOAD_KEY` and the settlement keypair. Fill
    `config/reviewers.json` before relying on review. Then verify:
    - `/health` reads `"ready":true`, not merely a 200;
-   - the log shows the Switchboard path, not the stub;
+   - the log shows `VRF = none (R22)`, not the stub;
    - one pool key is created in Turnkey at `open_pool`;
    - **exporting a pool key before the pool seals is refused by Turnkey policy.** This is the
      whole of the sealing claim. If the export succeeds, stop;

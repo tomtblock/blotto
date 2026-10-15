@@ -44,8 +44,10 @@
 #   Daemon (C5) — REQUIRED since 2026-09-12 (audit 2026-09-11, E-05); an
 #   absent one refuses the run rather than skipping the service, unless
 #   allow_dev_credentials is ticked
-#     TURNKEY_USER_ID, SWITCHBOARD_QUEUE, IRYS_UPLOAD_KEY,
-#     SETTLEMENT_SIGNER_KEYPAIR_B64
+#     TURNKEY_USER_ID, IRYS_UPLOAD_KEY, SETTLEMENT_SIGNER_KEYPAIR_B64
+#   (SWITCHBOARD_QUEUE was required until R22, 2026-10-15: Switchboard shut
+#   down and the class draw needs no seed. It is no longer read or staged,
+#   and the step below unsets it from the daemon.)
 #   Review service (C6) — REQUIRED on the same terms
 #     SETTLEMENT_SIGNER_KEYPAIR_B64
 #
@@ -235,7 +237,6 @@ jobs:
       GEO_VENDOR_API_KEY: ${{ secrets.GEO_VENDOR_API_KEY }}
       SANCTIONS_CHAINALYSIS_API_KEY: ${{ secrets.SANCTIONS_CHAINALYSIS_API_KEY }}
       SANCTIONS_OPENSANCTIONS_API_KEY: ${{ secrets.SANCTIONS_OPENSANCTIONS_API_KEY }}
-      SWITCHBOARD_QUEUE: ${{ secrets.SWITCHBOARD_QUEUE }}
       IRYS_UPLOAD_KEY: ${{ secrets.IRYS_UPLOAD_KEY }}
       # Round four (2026-09-17): the one-message opt-in's mail provider, for the
       # packet service. All three or the dispatcher stays off and the app
@@ -368,7 +369,7 @@ jobs:
           # of four services is a decision, so a person makes it.
           daemon_missing=""
           for n in TURNKEY_API_BASE_URL TURNKEY_API_PUBLIC_KEY TURNKEY_API_PRIVATE_KEY \
-                   TURNKEY_ORGANIZATION_ID TURNKEY_USER_ID SWITCHBOARD_QUEUE \
+                   TURNKEY_ORGANIZATION_ID TURNKEY_USER_ID \
                    IRYS_UPLOAD_KEY SETTLEMENT_SIGNER_KEYPAIR_B64; do
             if [ -z "${!n:-}" ]; then daemon_missing="$daemon_missing $n"; fi
           done
@@ -743,12 +744,12 @@ jobs:
             TURNKEY_ORGANIZATION_ID="$TURNKEY_ORGANIZATION_ID" \
             TURNKEY_USER_ID="$TURNKEY_USER_ID" \
             IRYS_UPLOAD_KEY="$IRYS_UPLOAD_KEY" \
-            IRYS_NETWORK="devnet" \
-            SWITCHBOARD_QUEUE="$SWITCHBOARD_QUEUE"
-          # RANDOMNESS_ACCOUNT selects the STUB coordinator, which starts
-          # cleanly and reports healthy while the class draw consumes no live
-          # randomness at all. SWITCHBOARD_QUEUE is set above; make sure the
-          # stub selector is not sitting alongside it.
+            IRYS_NETWORK="devnet"
+          # R22 (2026-10-15): no seed coordinator in production. Switchboard
+          # shut down, so SWITCHBOARD_QUEUE is removed (the daemon would only
+          # log that it ignores it), and RANDOMNESS_ACCOUNT — the tests/bench
+          # stub, which would commit a fixed seed — must never be staged.
+          flyctl secrets unset --app "$DAEMON_APP" --stage SWITCHBOARD_QUEUE || true
           flyctl secrets unset --app "$DAEMON_APP" --stage RANDOMNESS_ACCOUNT || true
 
           # The bundle announce (audit 2026-09-11, D-02). Until 2026-09-12
@@ -1094,7 +1095,7 @@ jobs:
           fi
           echo
           echo "Expected on a credentialed run: 'entry signer = TURNKEY', a 'geo = N source(s)' line,"
-          echo "'VRF = SWITCHBOARD On-Demand', and NO database TLS line. Anything else means a"
+          echo "'VRF = none (R22)', and NO database TLS line. Anything else means a"
           echo "dev path is live or the database url wants changing."
           echo
           echo "On an allow_dev_credentials run expect 'geo = STUB (dev only)' instead. If that line"

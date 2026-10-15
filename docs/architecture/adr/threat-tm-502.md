@@ -1,6 +1,16 @@
 # TM-502: The randomness oracle fails or is compromised
 
-**Status:** Mitigated · residual risk low (and limited to a cosmetic outcome)
+**Status:** Closed by R22 (2026-10-15). The oracle is no longer a dependency. Kept as the record of
+the threat while it applied, and of the guard that remains on `commit_vrf_seed`.
+
+> **What changed.** Switchboard shut down: it announced on 2026-09-19 and ended support on 2026-09-25.
+> Its devnet oracles stopped on 2026-10-10, which is the availability risk below in its worst form:
+> under "no seed, no entries", no pool from 90 on could take an entry. R22 removes that gate.
+> `register` draws without a seed, using the four other inputs of
+> [ADR-026](adr-026-multi-source-randomness.md). `commit_vrf_seed` is unchanged except that it
+> now refuses once a pool has an entry (`VrfSeedAfterEntries`).
+
+**Former status:** Mitigated · residual risk low (and limited to a cosmetic outcome)
 **Enforced in:** `programs/blotto_cup/src/vrf.rs` (`commit_vrf_seed`),
 `programs/blotto_cup/src/instructions/register.rs`
 
