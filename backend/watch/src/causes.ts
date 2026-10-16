@@ -106,9 +106,14 @@ export function explain(inc: Incident): Explanation {
   const name = rest.join(':');
   switch (kind) {
     case 'service':
+      // 2026-10-16: Fly's platform-wide, region-by-region host reboots took
+      // the daemon down for 14 minutes and the indexer for 31, one machine
+      // each; both came back by themselves. The machine events said so (flyd
+      // "crash", exit_code=-1, not OOM, not requested), and status.flyio.net
+      // named it.
       return {
         cause: `${name} is not answering. Fly takes a failing machine out of routing but does not restart it.`,
-        action: `${BACKEND_STATUS}. If it shows "max usage reached", the Helius credits are spent. A running but stuck machine needs \`fly machine restart\` (HOSTING.md).`,
+        action: `First look at status.flyio.net: during Fly host maintenance a service is down 15–30 minutes and returns by itself. Otherwise ${BACKEND_STATUS}. If it shows "max usage reached", the Helius credits are spent. A running but stuck machine needs \`fly machine restart\` (HOSTING.md).`,
       };
     case 'daemon':
       if (name === 'tick-stale') {
