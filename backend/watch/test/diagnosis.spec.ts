@@ -4,12 +4,14 @@ import * as path from 'path';
 import {
   DIAGNOSIS_SCHEMA,
   diagnosable,
+  extractFailure,
   extractStructuredOutput,
   keysToDiagnose,
   newDispatchLog,
   parseDiagnosis,
   recordDispatch,
   renderDiagnosis,
+  renderDiagnosisUnavailable,
   type Diagnosis,
 } from '../src/diagnosis';
 import type { Incident } from '../src/incidents';
@@ -102,6 +104,50 @@ describe('reading the answer out of the execution file', () => {
   it('returns null when there is no answer', () => {
     expect(extractStructuredOutput('[]')).to.equal(null);
     expect(extractStructuredOutput('garbage')).to.equal(null);
+  });
+});
+
+describe('saying why there is no answer', () => {
+  // The shape of the 2026-10-16 runs: one turn, 255 ms, no model usage.
+  const refused = (result: unknown) =>
+    JSON.stringify([
+      { type: 'system', subtype: 'init', model: 'm' },
+      { type: 'result', subtype: 'success', is_error: true, duration_ms: 255, num_turns: 1, result },
+    ]);
+
+  it('quotes what Claude Code said when the session ended in error', () => {
+    expect(extractFailure(refused('Invalid API key · Please run /login'))).to.equal('Invalid API key · Please run /login');
+  });
+
+  it('names the error subtype when there is no text', () => {
+    const file = JSON.stringify([{ type: 'result', subtype: 'error_max_turns', is_error: true }]);
+    expect(extractFailure(file)).to.equal('error_max_turns');
+  });
+
+  it('reads the errors list when the result carries no text', () => {
+    const file = JSON.stringify({ type: 'result', subtype: 'error_during_execution', errors: ['first', 'second'] });
+    expect(extractFailure(file)).to.equal('first; second');
+  });
+
+  it('says nothing when the session did not end in error', () => {
+    const file = JSON.stringify([{ type: 'result', subtype: 'success', is_error: false, result: 'prose, no JSON' }]);
+    expect(extractFailure(file)).to.equal(null);
+    expect(extractFailure('[]')).to.equal(null);
+    expect(extractFailure('garbage')).to.equal(null);
+  });
+
+  it('redacts it and keeps it to one short line', () => {
+    const said = extractFailure(refused(`request from 198.51.100.7 refused\n${'x'.repeat(500)}`)) ?? '';
+    expect(said).not.to.contain('198.51.100.7');
+    expect(said).not.to.contain('\n');
+    expect(said.length).to.be.at.most(200);
+  });
+
+  it('puts it in the unavailable reply, escaped', () => {
+    const html = renderDiagnosisUnavailable('the diagnosis step did not finish (failure)', null, 'limit <reached>');
+    expect(html).to.contain('Claude Code said: <i>limit &lt;reached&gt;</i>');
+    expect(html).to.contain('The likely cause above still stands.');
+    expect(renderDiagnosisUnavailable('it produced no answer', null)).not.to.contain('Claude Code said');
   });
 });
 

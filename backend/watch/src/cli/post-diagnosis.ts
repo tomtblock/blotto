@@ -11,7 +11,7 @@
  */
 
 import * as fs from 'fs';
-import { extractStructuredOutput, parseDiagnosis, renderDiagnosis, renderDiagnosisUnavailable } from '../diagnosis';
+import { extractFailure, extractStructuredOutput, parseDiagnosis, renderDiagnosis, renderDiagnosisUnavailable } from '../diagnosis';
 import { TelegramNotifier } from '../telegram';
 
 const arg = (name: string): string | null => {
@@ -34,7 +34,11 @@ async function run(): Promise<void> {
   const d = raw ? parseDiagnosis(raw) : null;
   const html = d
     ? renderDiagnosis(d)
-    : renderDiagnosisUnavailable(arg('reason') ?? (raw ? 'its answer was not in the expected shape' : 'it produced no answer'), arg('run-url'));
+    : renderDiagnosisUnavailable(
+        arg('reason') ?? (raw ? 'its answer was not in the expected shape' : 'it produced no answer'),
+        arg('run-url'),
+        execution ? extractFailure(execution) : null
+      );
   const id = await new TelegramNotifier(token, chat).send(html, { replyTo, silent: true });
   if (id === null) throw new Error('Telegram did not accept the reply');
   console.log(d ? 'diagnosis posted' : 'posted: diagnosis unavailable');

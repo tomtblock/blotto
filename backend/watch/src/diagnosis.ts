@@ -101,20 +101,7 @@ export const DIAGNOSIS_SCHEMA = {
  * Returns the answer as a JSON string, or null.
  */
 export function extractStructuredOutput(executionFile: string): string | null {
-  let messages: unknown[] = [];
-  try {
-    const whole = JSON.parse(executionFile) as unknown;
-    messages = Array.isArray(whole) ? whole : [whole];
-  } catch {
-    for (const line of executionFile.split('\n')) {
-      try {
-        messages.push(JSON.parse(line));
-      } catch {
-        // not a JSON line
-      }
-    }
-  }
-  for (const m of [...messages].reverse()) {
+  for (const m of [...readMessages(executionFile)].reverse()) {
     if (typeof m !== 'object' || m === null) continue;
     const msg = m as { type?: unknown; structured_output?: unknown; result?: unknown };
     if (msg.structured_output !== undefined && msg.structured_output !== null) {
@@ -126,6 +113,56 @@ export function extractStructuredOutput(executionFile: string): string | null {
       const end = text.lastIndexOf('}');
       if (start >= 0 && end > start) return text.slice(start, end + 1);
     }
+  }
+  return null;
+}
+
+/** The session's messages: a JSON array, one JSON object, or one object per line. */
+function readMessages(executionFile: string): unknown[] {
+  try {
+    const whole = JSON.parse(executionFile) as unknown;
+    return Array.isArray(whole) ? whole : [whole];
+  } catch {
+    const messages: unknown[] = [];
+    for (const line of executionFile.split('\n')) {
+      try {
+        messages.push(JSON.parse(line));
+      } catch {
+        // not a JSON line
+      }
+    }
+    return messages;
+  }
+}
+
+/** The longest failure reason quoted in the group: one line, read on a phone. */
+const FAILURE_MAX_CHARS = 200;
+
+/**
+ * Why the session ended without an answer, from its final `result` message:
+ * the text Claude Code reported when it ended in error (a refused or expired
+ * token, a spent usage limit, an API refusal), else the error subtype that
+ * ended it (`error_max_turns`). Redacted and cut to one short line. Null when
+ * the session did not end in error.
+ *
+ * It goes to the group inside the "unavailable" reply and, like the
+ * diagnosis, never to the public log. Learnt 2026-10-16: the first two
+ * diagnoses ever dispatched ended 255 ms in, on one turn with no model usage,
+ * and the reply could only say "did not finish" — the reason was in this
+ * file, which the workflow deletes when the run ends.
+ */
+export function extractFailure(executionFile: string): string | null {
+  for (const m of [...readMessages(executionFile)].reverse()) {
+    if (typeof m !== 'object' || m === null) continue;
+    const msg = m as { type?: unknown; subtype?: unknown; is_error?: unknown; result?: unknown; errors?: unknown };
+    if (msg.type !== 'result') continue;
+    const subtype = typeof msg.subtype === 'string' ? msg.subtype : '';
+    if (msg.is_error !== true && !subtype.startsWith('error')) return null;
+    const errors = Array.isArray(msg.errors) ? msg.errors.filter((e): e is string => typeof e === 'string') : [];
+    const said = typeof msg.result === 'string' && msg.result.trim().length > 0 ? msg.result : errors.join('; ');
+    const line = redact(said).text.replace(/\s+/g, ' ').trim();
+    if (line.length === 0) return subtype.length > 0 ? subtype : null;
+    return line.length > FAILURE_MAX_CHARS ? `${line.slice(0, FAILURE_MAX_CHARS - 1)}…` : line;
   }
   return null;
 }
@@ -175,7 +212,9 @@ export function renderDiagnosis(d: Diagnosis): string {
   return fitBlocks(head, blocks, '');
 }
 
-export function renderDiagnosisUnavailable(reason: string, runUrl: string | null): string {
+/** `failure` is what Claude Code itself said (`extractFailure`), already redacted. */
+export function renderDiagnosisUnavailable(reason: string, runUrl: string | null, failure: string | null = null): string {
   const where = runUrl ? ` Run: ${escapeHtml(runUrl)}` : '';
-  return `🔎 <b>Claude's diagnosis is unavailable</b>: ${escapeHtml(reason)}.${where}\nThe likely cause above still stands.`;
+  const said = failure ? `\nClaude Code said: <i>${escapeHtml(failure)}</i>` : '';
+  return `🔎 <b>Claude's diagnosis is unavailable</b>: ${escapeHtml(reason)}.${where}${said}\nThe likely cause above still stands.`;
 }
