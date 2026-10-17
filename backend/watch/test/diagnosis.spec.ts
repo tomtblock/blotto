@@ -159,6 +159,14 @@ describe('the workflow asks Claude for exactly this schema', () => {
     expect(JSON.parse(m![1])).to.deep.equal(DIAGNOSIS_SCHEMA);
   });
 
+  it('gathers what rules out the platform: machine histories and Fly status (2026-10-16)', () => {
+    const wf = fs.readFileSync(path.resolve(__dirname, '../../../.github/workflows/diagnose.yml'), 'utf8');
+    expect(wf).to.contain('flyctl machine status "$id" --app "$app"');
+    expect(wf).to.contain('https://status.flyio.net/api/v2/summary.json');
+    expect(wf).to.contain('<app>.machines.txt');
+    expect(wf).to.contain('fly-status.json');
+  });
+
   it('gives Claude read-only tools and nothing else', () => {
     const wf = fs.readFileSync(path.resolve(__dirname, '../../../.github/workflows/diagnose.yml'), 'utf8');
     expect(wf).to.contain('--allowedTools Read,Grep,Glob\n');
