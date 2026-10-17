@@ -477,9 +477,10 @@ export function classifyProvider(p: RpcProbe): ProviderState {
 }
 
 /**
- * The services' provider, probed with one `getSlot`. A spent allowance never
- * recovers on its own, so it alerts on the first sighting; everything else
- * must persist. The URL carries the API key and never reaches a message.
+ * The services' provider, probed with one account read (`probeProvider`). A
+ * spent allowance never recovers on its own, so it alerts on the first
+ * sighting; everything else must persist. The URL carries the API key and
+ * never reaches a message.
  */
 export function providerResult(probe: RpcProbe | null, t: WatchConfig): CheckResult {
   const state = probe === null ? null : classifyProvider(probe);
@@ -491,12 +492,15 @@ export function providerResult(probe: RpcProbe | null, t: WatchConfig): CheckRes
       state === 'creditsSpent' ? t.provider.creditsSpentFailuresToAlert : t.provider.otherFailuresToAlert,
   };
   if (probe === null || state === null) return unknown(base, 'not probed this round');
-  if (state === 'ok') return pass(base, 'getSlot answered');
+  if (state === 'ok') return pass(base, 'an account read answered');
   const words: Record<Exclude<ProviderState, 'ok'>, string> = {
     creditsSpent: 'the monthly credit allowance is spent ("max usage reached")',
     rateLimited: 'rate limited (HTTP 429)',
     keyRejected: `the API key was refused (HTTP ${probe.status})`,
-    unreachable: probe.status === null ? `no answer (${probe.error ?? 'timeout'})` : `HTTP ${probe.status}`,
+    unreachable:
+      probe.status === null
+        ? `no answer (${probe.error ?? 'timeout'})`
+        : `an account read failed: ${probe.error ?? `HTTP ${probe.status}`}`,
   };
   return fail(base, words[state], { body: probe.body.slice(0, 500), state });
 }

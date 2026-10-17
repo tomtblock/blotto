@@ -74,7 +74,7 @@ The loop runs every `loop.intervalSeconds`; "N polls" below means N rounds of th
 
 | Key | Value | Why |
 |---|---|---|
-| `provider.probeEverySeconds` | 300 | One `getSlot` every five minutes is 288 a day, about 8,600 credits a month. |
+| `provider.probeEverySeconds` | 300 | One account read (`getAccountInfo` of the Clock sysvar) every five minutes is 288 a day, about 8,600 credits a month. An account read and not `getSlot`, since 2026-10-17: on 2026-10-16 Helius failed account reads for 36 minutes while `getSlot` kept answering. |
 | `provider.creditsSpentFailuresToAlert` | 1 | "max usage reached" never clears on its own: say so at once. |
 | `provider.otherFailuresToAlert` | 3 | A plain rate limit or outage must last fifteen minutes. |
 

@@ -106,16 +106,39 @@ export async function readChain(rpcUrl: string, timeoutMs: number, fetchImpl: Fe
 }
 
 /**
- * One `getSlot` against the services' own provider. The URL carries the API
- * key: it is used here and nowhere else — not in a log line, not in a fact.
+ * One account read against the services' own provider: `getAccountInfo` of
+ * the Clock sysvar, which always exists. An account read, because account
+ * reads are what the services live on. The URL carries the API key: it is
+ * used here and nowhere else — not in a log line, not in a fact.
+ *
+ * Until 2026-10-17 this was one `getSlot`. On 2026-10-16 Helius's "Devnet
+ * Account Data Degraded Availability" failed every daemon tick for 36 minutes
+ * ("failed to get info about account Sysv…: 500 Internal Server Error") and
+ * the indexer's chain reads with it, while `getSlot` kept answering: the
+ * provider check stayed green and the founders got the consequences as
+ * three unrelated-looking alerts instead of their cause.
  */
 export async function probeProvider(url: string, timeoutMs: number, fetchImpl: Fetch = fetch): Promise<RpcProbe> {
   try {
-    await rpcCall<number>(url, 'getSlot', [{ commitment: 'confirmed' }], { fetchImpl, timeoutMs });
+    const r = await rpcCall<{ value?: unknown } | null>(
+      url,
+      'getAccountInfo',
+      [CLOCK_SYSVAR, { encoding: 'base64', commitment: 'confirmed' }],
+      { fetchImpl, timeoutMs }
+    );
+    // A provider that answers 200 with no account has failed the read all
+    // the same: the Clock sysvar is never absent.
+    if (r === null || r.value === null || r.value === undefined) {
+      return { ok: false, status: 200, body: '', error: 'answered without the Clock sysvar, which always exists' };
+    }
     return { ok: true, status: 200, body: '', error: null };
   } catch (e) {
     if (e instanceof RpcError) {
-      return { ok: false, status: e.status, body: e.body.slice(0, 2000), error: e.status === null ? e.message.replace(url, '<provider>') : null };
+      // A transport failure (no status) or a JSON-RPC error inside a 200:
+      // the message is the only cause there is. An HTTP refusal speaks for
+      // itself through its status and body.
+      const say = e.status === null || e.status === 200;
+      return { ok: false, status: e.status, body: e.body.slice(0, 2000), error: say ? e.message.split(url).join('<provider>') : null };
     }
     return { ok: false, status: null, body: '', error: 'probe failed' };
   }
