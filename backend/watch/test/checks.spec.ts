@@ -16,7 +16,9 @@ import {
   treasuryResult,
   type DaemonHealth,
 } from '../src/checks';
-import { byKey, cfg, chainPool, configView, snapshot, T0 } from './fixtures';
+import { probeProvider } from '../src/collect';
+import { CLOCK_SYSVAR } from '../src/solana';
+import { byKey, cfg, chainPool, configView, fakeFetch, snapshot, T0 } from './fixtures';
 
 const NOW = Date.parse('2026-10-15T02:10:00Z');
 const ok = { status: 200, body: '{"ok":true}', error: null };
@@ -191,6 +193,55 @@ describe('the RPC provider check', () => {
     expect(r.failuresToOpen).to.equal(cfg.provider.otherFailuresToAlert);
     expect(classifyProvider({ ok: false, status: 401, body: '', error: null })).to.equal('keyRejected');
     expect(classifyProvider({ ok: false, status: null, body: '', error: 'ENOTFOUND' })).to.equal('unreachable');
+  });
+
+  it('names a failed account read, which must persist like any outage', () => {
+    const r = providerResult({ ok: false, status: 500, body: 'Internal Server Error', error: null }, cfg);
+    expect(r.status).to.equal('fail');
+    expect(r.detail).to.equal('an account read failed: HTTP 500');
+    expect(r.failuresToOpen).to.equal(cfg.provider.otherFailuresToAlert);
+    const empty = providerResult({ ok: false, status: 200, body: '', error: 'answered without the Clock sysvar, which always exists' }, cfg);
+    expect(empty.detail).to.contain('without the Clock sysvar');
+    expect(providerResult({ ok: true, status: 200, body: '', error: null }, cfg).detail).to.equal('an account read answered');
+  });
+});
+
+describe('the provider probe', () => {
+  const URL_WITH_KEY = 'https://devnet.helius-rpc.example/?api-key=SECRETKEY';
+  const clock = { jsonrpc: '2.0', id: 1, result: { context: { slot: 1 }, value: { lamports: 1, owner: 'Sysvar1111111111111111111111111111111111111', data: ['', 'base64'] } } };
+
+  it('reads an account, the Clock sysvar, rather than asking for the slot', async () => {
+    const { fetchImpl, calls } = fakeFetch([[200, clock]]);
+    expect(await probeProvider(URL_WITH_KEY, 1000, fetchImpl)).to.deep.equal({ ok: true, status: 200, body: '', error: null });
+    const req = calls[0]!.body as { method: string; params: unknown[] };
+    expect(req.method).to.equal('getAccountInfo');
+    expect(req.params[0]).to.equal(CLOCK_SYSVAR);
+  });
+
+  it('fails on the 2026-10-16 answer: HTTP 500 to an account read', async () => {
+    const { fetchImpl } = fakeFetch([[500, 'Internal Server Error']]);
+    const p = await probeProvider(URL_WITH_KEY, 1000, fetchImpl);
+    expect(p).to.include({ ok: false, status: 500, error: null });
+    expect(classifyProvider(p)).to.equal('unreachable');
+  });
+
+  it('fails a 200 that carries no account, or a JSON-RPC error, and says which', async () => {
+    const none = fakeFetch([[200, { jsonrpc: '2.0', id: 1, result: { context: { slot: 1 }, value: null } }]]);
+    expect((await probeProvider(URL_WITH_KEY, 1000, none.fetchImpl)).error).to.contain('without the Clock sysvar');
+    const rpcErr = fakeFetch([[200, { jsonrpc: '2.0', id: 1, error: { code: -32603, message: 'Internal error' } }]]);
+    const p = await probeProvider(URL_WITH_KEY, 1000, rpcErr.fetchImpl);
+    expect(p.ok).to.equal(false);
+    expect(p.error).to.equal('getAccountInfo: -32603 Internal error');
+  });
+
+  it('never puts the URL, which carries the API key, into what it reports', async () => {
+    const fetchImpl = (async () => {
+      throw new Error(`connect ECONNREFUSED ${URL_WITH_KEY}`);
+    }) as typeof fetch;
+    const p = await probeProvider(URL_WITH_KEY, 1000, fetchImpl);
+    expect(p.status).to.equal(null);
+    expect(p.error).to.contain('<provider>');
+    expect(JSON.stringify(p)).not.to.contain('SECRETKEY');
   });
 });
 
