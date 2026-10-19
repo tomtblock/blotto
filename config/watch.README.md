@@ -37,7 +37,7 @@ The loop runs every `loop.intervalSeconds`; "N polls" below means N rounds of th
 | Key | Value | Why |
 |---|---|---|
 | `services.apps` | the four Fly apps | What `/health` is probed on, at `https://<app>.fly.dev`. |
-| `services.failuresToAlert` | indexer 3, packet 4, daemon 6, review 3 | Each must outlast the app's Fly grace period (indexer and review 30 s, packet 180 s, daemon 300 s), so a restart is never called an outage. While a `deploy-backend` run is going, service checks are held regardless. |
+| `services.failuresToAlert` | indexer 3, packet 4, daemon 6, review 3 | Each must outlast the app's Fly grace period (indexer and review 30 s, packet 180 s, daemon 300 s), so a restart is never called an outage. While a `deploy-backend` run is going, service checks are held regardless. The indexer's figure also applies to its pages (`indexer:read-api`), which can fail while its `/health` answers. |
 | `services.ingestUrl` | indexer `:8080/health` | The webhook receiver the RPC provider delivers events to, probed over IPv4 because that is how the provider reaches it. |
 | `services.ingestFailuresToAlert` | 3 | Grace 30 s, as above. |
 

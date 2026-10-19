@@ -157,6 +157,15 @@ export function explain(inc: Incident): Explanation {
         action: 'Fund the platform treasury (OPERATING-MANUAL, treasury section), or disable the tier.',
       };
     case 'indexer':
+      if (name === 'read-api') {
+        // 2026-10-17: the database's plan quota was spent; every query was
+        // refused for 37 hours while the indexer's /health read ok.
+        return {
+          cause:
+            'The indexer is up, but the pages the site reads (/pools, /treasury) fail, so players see no tournaments. The usual cause is the database: every service shares it, so entries and settlement are likely failing too.',
+          action: `${BACKEND_STATUS} (indexer, "read API failed on"). If it says "exceeded the quota", the Neon plan's limit is spent: console.neon.tech → Billing.`,
+        };
+      }
       if (name === 'chain-read') {
         return {
           cause: 'The indexer’s own chain reads are failing, so its numbers fall back to its ledger.',

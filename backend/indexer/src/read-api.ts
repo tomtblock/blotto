@@ -649,6 +649,32 @@ export interface ReadApiOptions {
   treasuryChainReader?: TreasuryChainReader | null;
 }
 
+/** The longest error text one failed read puts in the log. */
+const FAILURE_LOG_MAX_CHARS = 300;
+
+/**
+ * The log line for a read that threw. The caller is told only
+ * `{"error":"internal"}`; this line is for the operator, who until
+ * 2026-10-19 got nothing at all — on 2026-10-17 every page answered 500 for
+ * 37 hours (the database's plan quota was spent) and the log never said why.
+ *
+ * It names the route by its first path segment alone: `backend-status`
+ * prints these logs into a public run, and the rest of a URL can carry a
+ * player's address or query values. A first segment that is not a plain
+ * route name is not echoed either. The error is cut to one line, so nothing
+ * a caller sends can forge a log line of its own.
+ */
+export function readFailureLine(url: string, err: unknown): string {
+  const first = (url.split('?')[0] ?? '').split('/').filter(Boolean)[0] ?? '';
+  const route = /^[a-z][a-z-]{0,31}$/.test(first) ? `/${first}` : '/(other)';
+  const e = (typeof err === 'object' && err !== null ? err : {}) as { message?: unknown; code?: unknown };
+  const message = typeof e.message === 'string' ? e.message : String(err);
+  const code = typeof e.code === 'string' && /^[A-Z0-9]{5}$/.test(e.code) ? ` [${e.code}]` : '';
+  const line = message.replace(/\s+/g, ' ').trim();
+  const cut = line.length > FAILURE_LOG_MAX_CHARS ? `${line.slice(0, FAILURE_LOG_MAX_CHARS - 1)}…` : line;
+  return `indexer: read API failed on ${route}${code}: ${cut}`;
+}
+
 export function serveReadApi(
   db: Queryable,
   port: number,
@@ -718,10 +744,11 @@ export function serveReadApi(
         })
         .end(JSON.stringify(body));
     } catch (e) {
+      // The caller learns nothing of the cause; the log does (readFailureLine).
+      console.error(readFailureLine(req.url ?? '/', e));
       res
         .writeHead(500, { 'content-type': 'application/json', ...outcome.headers })
         .end(JSON.stringify({ error: 'internal' }));
-      void e;
     }
   });
   // Stop the sweep with the server, so a test that opens and closes several

@@ -1,7 +1,8 @@
 /** Read-API routing specs over a canned Queryable — shapes, 404s, address
  * validation, and the verify-record assembly from raw ledger rows. */
 import { expect } from 'chai';
-import { handleRead } from '../src/read-api';
+import type { AddressInfo } from 'net';
+import { handleRead, readFailureLine, serveReadApi } from '../src/read-api';
 import type { Queryable } from '../src/shared';
 
 const POOL = 'F1XTUREPoo1111111111111111111111111111111111';
@@ -404,5 +405,54 @@ describe('GET /tiers — which tiers may open a pool', () => {
     expect(res.status).to.equal(200);
     const body = res.body as { enablement_source: string };
     expect(body.enablement_source).to.equal('ledger');
+  });
+});
+
+describe('read API — a read that throws (2026-10-17)', () => {
+  // The database's words on 2026-10-17, when the plan quota was spent.
+  const QUOTA = 'Your account or project has exceeded the quota. Upgrade your plan to increase limits.';
+  const PLAYER = 'F1XTUREP1ayer111111111111111111111111111111';
+
+  it('logs the route and the cause, never the rest of the URL', () => {
+    const line = readFailureLine(`/profiles/${PLAYER}/history?limit=5`, new Error(QUOTA));
+    expect(line).to.equal(`indexer: read API failed on /profiles: ${QUOTA}`);
+    expect(line).not.to.contain(PLAYER);
+    expect(line).not.to.contain('limit=5');
+  });
+
+  it('adds a Postgres error code, and keeps the line to one short line', () => {
+    const err = Object.assign(new Error('terminating connection\nforged: line'), { code: '57P01' });
+    expect(readFailureLine('/pools', err)).to.equal('indexer: read API failed on /pools [57P01]: terminating connection forged: line');
+    const long = readFailureLine('/pools', new Error('x'.repeat(1000)));
+    expect(long).not.to.contain('\n');
+    expect(long.length).to.be.at.most('indexer: read API failed on /pools: '.length + 300);
+  });
+
+  it('does not echo a first segment that is not a plain route name', () => {
+    expect(readFailureLine('/%0aFAKE LOG LINE', new Error('e'))).to.equal('indexer: read API failed on /(other): e');
+    expect(readFailureLine('/', 'boom')).to.equal('indexer: read API failed on /(other): boom');
+  });
+
+  it('answers the caller "internal" and nothing more, and logs why', async () => {
+    const throwing: Queryable = {
+      async query() {
+        throw new Error(QUOTA);
+      },
+    };
+    const logged: string[] = [];
+    const original = console.error;
+    console.error = (...args: unknown[]) => void logged.push(args.map(String).join(' '));
+    const server = serveReadApi(throwing, 0, undefined, { treasuryChainReader: null });
+    try {
+      if (!server.listening) await new Promise<void>((resolve) => server.once('listening', () => resolve()));
+      const { port } = server.address() as AddressInfo;
+      const res = await fetch(`http://127.0.0.1:${port}/pools/${POOL}`);
+      expect(res.status).to.equal(500);
+      expect(await res.json()).to.deep.equal({ error: 'internal' });
+      expect(logged).to.deep.equal([`indexer: read API failed on /pools: ${QUOTA}`]);
+    } finally {
+      console.error = original;
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 });
