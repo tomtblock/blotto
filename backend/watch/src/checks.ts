@@ -102,6 +102,36 @@ export function serviceResult(app: string, probe: Probe, t: WatchConfig, deployi
   return isOk(probe) ? pass(base, `HTTP ${probe.status}`) : fail(base, probeDetail(probe));
 }
 
+/**
+ * The indexer's read API: the pages the site lists tournaments and the
+ * treasury from. Its `/health` is static and answers while every page fails,
+ * so the pages are checked themselves. Only a server error fails it: no
+ * answer is the service check's to report, and a 4xx (a rate limit) says
+ * nothing either way. Same patience as the indexer's own health check.
+ *
+ * 2026-10-17: the database's plan quota was spent and every page answered
+ * 500 for 37 hours while `/health` read 200. This watcher read those 500s as
+ * "could not check" — the pool and treasury parsers return null on anything
+ * but a 200 — and raised nothing louder than the reconciliation alert.
+ */
+export function readApiResult(pools: Probe, treasury: Probe, t: WatchConfig, deploying: boolean): CheckResult {
+  const base: Base = {
+    key: 'indexer:read-api',
+    title: "The site can't list tournaments: the indexer's pages are failing",
+    severity: 'critical',
+    failuresToOpen: t.services.failuresToAlert['blotto-indexer'] ?? 3,
+  };
+  if (deploying) return unknown(base, 'a backend deploy is running');
+  const pages: [string, Probe][] = [
+    ['/pools', pools],
+    ['/treasury', treasury],
+  ];
+  const broken = pages.filter(([, p]) => p.status !== null && p.status >= 500);
+  if (broken.length > 0) return fail(base, broken.map(([path, p]) => `${path} ${probeDetail(p)}`).join('; '));
+  if (pages.every(([, p]) => isOk(p))) return pass(base, '/pools and /treasury answer');
+  return unknown(base, pages.map(([path, p]) => `${path} ${probeDetail(p)}`).join('; '));
+}
+
 /** The indexer's webhook receiver (port 8080) — the path the RPC provider delivers events on. */
 export function ingestResult(probe: Probe, t: WatchConfig, deploying: boolean): CheckResult {
   const base: Base = {

@@ -9,6 +9,7 @@ import {
   PoolStateClock,
   poolResults,
   providerResult,
+  readApiResult,
   serviceResult,
   siteResult,
   TickMemory,
@@ -171,6 +172,33 @@ describe('treasury and indexer checks', () => {
   it('fails chain-read when /treasury fell back to the ledger', () => {
     const t = parseTreasury({ status: 200, body: treasuryBody('open', 'ledger'), error: null });
     expect(byKey(indexerResults(null, null, t, cfg), 'indexer:chain-read').status).to.equal('fail');
+  });
+});
+
+describe("the indexer's pages (2026-10-17)", () => {
+  const internal = { status: 500, body: '{"error":"internal"}', error: null };
+
+  it('fails when a page answers a server error while /health reads ok', () => {
+    const r = readApiResult(internal, ok, cfg, false);
+    expect(r.key).to.equal('indexer:read-api');
+    expect(r.status).to.equal('fail');
+    expect(r.severity).to.equal('critical');
+    expect(r.detail).to.equal('/pools HTTP 500: internal');
+    expect(r.failuresToOpen).to.equal(cfg.services.failuresToAlert['blotto-indexer']);
+    expect(readApiResult(internal, internal, cfg, false).detail).to.equal('/pools HTTP 500: internal; /treasury HTTP 500: internal');
+  });
+
+  it('passes when both pages answer', () => {
+    expect(readApiResult(ok, ok, cfg, false).status).to.equal('pass');
+  });
+
+  it('leaves no answer to the service check, and a rate limit to nobody', () => {
+    expect(readApiResult({ status: null, body: '', error: 'timeout' }, ok, cfg, false).status).to.equal('unknown');
+    expect(readApiResult({ status: 429, body: '', error: null }, ok, cfg, false).status).to.equal('unknown');
+  });
+
+  it('holds while a backend deploy runs', () => {
+    expect(readApiResult(internal, internal, cfg, true).status).to.equal('unknown');
   });
 });
 

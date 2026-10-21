@@ -33,6 +33,7 @@ import {
   PoolStateClock,
   poolResults,
   providerResult,
+  readApiResult,
   serviceResult,
   siteResult,
   TickMemory,
@@ -161,6 +162,7 @@ export class Watcher {
 
     cfg.services.apps.forEach((app, i) => out.push(serviceResult(app, services[i], cfg, deploying)));
     out.push(ingestResult(ingest, cfg, deploying));
+    out.push(readApiResult(pools, treasury, cfg, deploying));
 
     const daemonIdx = cfg.services.apps.indexOf('blotto-daemon');
     const daemonHealth = daemonIdx >= 0 ? parseDaemonHealth(services[daemonIdx]) : null;
