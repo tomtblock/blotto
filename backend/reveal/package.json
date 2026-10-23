@@ -35,7 +35,7 @@
     "@ethersproject/providers": {
       "ws": "^8.21.0"
     },
-    "toml": "^4.3.0",
+    "toml": "^5.0.1",
     "@solana/web3.js": {
       "jayson": "^5.0.0"
     },
