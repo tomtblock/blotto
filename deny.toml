@@ -29,6 +29,10 @@ ignore = [
     # faster-hex 0.10.0 unsound — x86 AVX2 decoder only; Switchboard calls the
     # encoder and the program runs on SBF. Bumped with the next program release.
     "RUSTSEC-2026-0306",
+    # crypto-bigint 0.5.5 timing variability — host-only: k256 is a non-SBF
+    # dependency of solana-secp256k1-recover, and the program never recovers a
+    # secp256k1 key. No fixed 0.5 release; cleared when Solana adopts k256 0.14.
+    "RUSTSEC-2026-0387",
 ]
 
 # The licence policy (founder ruling 2026-10-11, scanner triage item G): every

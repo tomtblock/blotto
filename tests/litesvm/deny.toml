@@ -25,6 +25,12 @@ ignore = [
     # rand 0.7.3 — unsound only with a custom logger calling `rand::rng()`; same
     # agave-precompiles path. The harness installs no such logger.
     "RUSTSEC-2026-0097",
+    # crypto-bigint 0.5.5 — timing variability in constant-time arithmetic, fixed
+    # only in 0.7.6. Reached through k256 0.13 under agave-precompiles
+    # (solana-secp256k1-program) and solana-secp256k1-recover; the harness only
+    # verifies test signatures with throwaway keys, locally. No fixed 0.5 release
+    # (same finding as the root .cargo/audit.toml, 2026-10-24).
+    "RUSTSEC-2026-0387",
     # Unmaintained, no known vulnerability, reached through litesvm / agave:
     # ansi_term (litesvm), derivative and paste (proc-macros under the ark-*
     # crates via solana-poseidon), bincode and libsecp256k1 (as at the root).
