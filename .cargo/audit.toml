@@ -31,4 +31,18 @@ ignore = [
     # deployed program, so it ships with the next program release and this entry
     # goes with it (scanner triage 2026-10-11, items G and H).
     "RUSTSEC-2026-0306",
+    # crypto-bigint 0.5.5, timing variability in operations meant to be constant-
+    # time (published 2026-10-24; fixed only in 0.7.6). Path: crypto-bigint <-
+    # elliptic-curve 0.13 <- k256 0.13.4 <- solana-secp256k1-recover 3.3.0 <-
+    # solana-program 3.0 (via mpl-core) and 4.1 (via switchboard-on-demand).
+    # UNREACHABLE from the deployed program: solana-secp256k1-recover declares k256
+    # only under `cfg(not(any(target_os = "solana", target_arch = "bpf")))` (its
+    # Cargo.toml) and on SBF calls the `sol_secp256k1_recover` syscall instead, so
+    # neither crate is compiled into the program; and the program never calls
+    # secp256k1 recovery on any target (nothing in programs/ names it). The
+    # services are TypeScript. No fix to take: the newest solana-secp256k1-recover
+    # (3.3.0) still requires k256 ^0.13, i.e. crypto-bigint 0.5. Remove this entry
+    # when the Solana crates move to k256 0.14 and the lockfile follows (checked
+    # 2026-10-24).
+    "RUSTSEC-2026-0387",
 ]

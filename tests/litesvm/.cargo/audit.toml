@@ -7,6 +7,7 @@ ignore = [
     "RUSTSEC-2024-0344", # curve25519-dalek 3.2.0, via agave-precompiles; test keys only
     "RUSTSEC-2022-0093", # ed25519-dalek 1.0.1, pinned by agave-precompiles; test keys only
     "RUSTSEC-2026-0097", # rand 0.7.3 unsound with a custom logger; none installed
+    "RUSTSEC-2026-0387", # crypto-bigint 0.5.5 timing, via k256 0.13; test keys only, no 0.5 fix
     "RUSTSEC-2021-0139", # ansi_term unmaintained
     "RUSTSEC-2024-0388", # derivative unmaintained
     "RUSTSEC-2024-0436", # paste unmaintained
