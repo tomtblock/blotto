@@ -200,7 +200,10 @@ export function PoolPicker({ tiers, serverTime }: { tiers: readonly PickerTier[]
                     <span className={`${LABEL} ${muted}`}>{COPY.pool.prizeLabel}</span>
                     <span className={`tnum font-display text-[42px] leading-[44px] font-extrabold ${prize}`}>
                       {lamportsToSol(pool.pot_lamports)}
-                      <span className="ml-1.5 font-body text-[15px] font-medium">SOL</span>
+                      {/* The unit is small text, so it needs 4.5:1, which the light card's
+                          magenta (3.6:1 on #f8e8dc) does not reach; the 42 px figure is
+                          large text and passes at 3:1 (D-E12, 2026-10-26). */}
+                      <span className={`ml-1.5 font-body text-[15px] font-medium ${dark ? '' : 'text-brand-berry'}`}>SOL</span>
                     </span>
                   </div>
                   <div className={`flex flex-col justify-center border-b px-4 py-3 ${rule} [&_span]:font-mono [&_span]:text-[10px] [&_span]:font-bold [&_span]:tracking-[0.12em] [&_time]:text-[38px] [&_time]:leading-[44px] [&_time]:font-extrabold`}>

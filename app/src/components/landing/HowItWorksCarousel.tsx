@@ -98,7 +98,9 @@ export function HowItWorksCarousel({ steps }: { steps: readonly HowItWorksStep[]
         </div>
         <div className="grid gap-4 p-5 sm:grid-cols-[1fr_auto] sm:items-end sm:p-7">
           <div>
-            <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-brand-deep-magenta">
+            {/* Berry, not magenta: magenta on cream is 4.0:1 at this size, under
+                the 4.5:1 floor (D-E12, 2026-10-26). */}
+            <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-brand-berry/80">
               {COPY.howItWorks.stepOf(index + 1, count)}
             </p>
             <h3 className="mt-1 font-display text-[24px] font-extrabold leading-7 text-brand-berry sm:text-[30px] sm:leading-9">
@@ -132,7 +134,10 @@ export function HowItWorksCarousel({ steps }: { steps: readonly HowItWorksStep[]
           </div>
         </div>
       </div>
-      <ol className="mt-4 flex items-center justify-center gap-2" aria-label={COPY.howItWorks.title}>
+      {/* The dot is drawn inside a 24 px button: 24 px is the touch-target
+          floor, and a 10 px button a finger cannot reliably hit (D-E12,
+          2026-10-26). The buttons touch, so the dots sit 24 px apart. */}
+      <ol className="mt-2 flex items-center justify-center" aria-label={COPY.howItWorks.title}>
         {steps.map((s, i) => (
           <li key={s.title}>
             <button
@@ -140,10 +145,15 @@ export function HowItWorksCarousel({ steps }: { steps: readonly HowItWorksStep[]
               onClick={() => go(i)}
               aria-label={COPY.howItWorks.stepOf(i + 1, count)}
               aria-current={i === index ? 'step' : undefined}
-              className={`block h-2.5 rounded-full transition-[width,background-color] duration-200 ${
-                i === index ? 'w-7 bg-brand-berry' : 'w-2.5 bg-brand-berry/35 hover:bg-brand-berry/60'
-              }`}
-            />
+              className="group flex h-6 min-w-6 items-center justify-center"
+            >
+              <span
+                aria-hidden="true"
+                className={`block h-2.5 rounded-full transition-[width,background-color] duration-200 ${
+                  i === index ? 'w-7 bg-brand-berry' : 'w-2.5 bg-brand-berry/35 group-hover:bg-brand-berry/60'
+                }`}
+              />
+            </button>
           </li>
         ))}
       </ol>

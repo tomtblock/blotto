@@ -21,7 +21,7 @@ import { AppHeader } from '@/components/shell/app-header';
 import { TabBar } from '@/components/shell/tab-bar';
 import { SiteFooter } from '@/components/shell/site-footer';
 import { LiveDataUnavailable } from '@/components/shell/live-unavailable';
-import { AmbientClip, type ClipTier } from '@/components/ui/ambient-clip';
+import { AmbientClip, type ClipTier, type PosterTier } from '@/components/ui/ambient-clip';
 import { LiveDemo } from '@/components/landing/LiveDemo';
 import { HowItWorksCarousel } from '@/components/landing/HowItWorksCarousel';
 import { PoolPicker, type PickerTier } from '@/components/landing/PoolPicker';
@@ -38,6 +38,18 @@ const HERO_TIERS: readonly ClipTier[] = [
   { mp4: '/motion/landing/hero_montage_2160.mp4', webm: '/motion/landing/hero_montage_2160.webm', media: '(min-width: 1600px)' },
   { mp4: '/motion/landing/hero_montage_1080.mp4', webm: '/motion/landing/hero_montage_1080.webm', media: '(min-width: 768px)' },
   { mp4: '/motion/landing/hero_montage.mp4', webm: '/motion/landing/hero_montage.webm' },
+];
+
+/**
+ * The hero's poster is the page's largest paint, so it is the one picture a
+ * phone waits for (D-E12; Lighthouse 2026-10-26). WebP cuts of the original
+ * 1920×1080 JPEG (157 KB): 1920 wide (78 KB) from the tablet width up, as
+ * the 1080p and 2160p reels are, and 1280 wide (49 KB), the 720p reel's own
+ * width, for a phone. Made with sharp: `resize({ width }).webp({ quality: 78 })`.
+ */
+const HERO_POSTER = '/motion/landing/hero_montage_poster_1280.webp';
+const HERO_POSTER_TIERS: readonly PosterTier[] = [
+  { src: '/motion/landing/hero_montage_poster_1920.webp', media: '(min-width: 768px)' },
 ];
 
 /* Section headings share one scale (founder 2026-09-27: "make sure the
@@ -101,7 +113,9 @@ export default async function LandingPage() {
         <section className="relative isolate overflow-hidden bg-brand-berry">
           <AmbientClip
             tiers={HERO_TIERS}
-            poster="/motion/landing/hero_montage_poster.jpg"
+            poster={HERO_POSTER}
+            posterTiers={HERO_POSTER_TIERS}
+            priority
             className="absolute inset-0 h-full w-full object-cover"
             playWhenVisible={0.2}
           />

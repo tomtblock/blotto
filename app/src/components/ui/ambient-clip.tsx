@@ -24,9 +24,21 @@
  *     strip) mounts its <video> only when the query matches, so a phone
  *     never streams the rails and a desktop never streams the strip. The
  *     server and the first client render agree on the poster.
+ *   - THE POSTER IS THE PAGE'S FIRST PICTURE (2026-10-26, D-E12 page
+ *     speed). The server renders the poster as an <img>; the <video> takes
+ *     its place after hydration. A below-the-fold clip (`preload="none"`)
+ *     loads that <img> lazily, so it does not compete with the top of the
+ *     page for the first second of a phone connection. A `priority` clip
+ *     (the landing hero, whose poster is the page's largest paint) asks for
+ *     its poster first, and hands over to the <video> only once the poster
+ *     has painted — swapped any earlier, the paint that counts becomes the
+ *     video's, which waits on every script on the page (one Lighthouse run
+ *     of 2026-10-26 recorded exactly that: the video as the largest paint,
+ *     at 6.6 s). The video then reuses the cut the <img> chose, so nothing
+ *     is fetched twice.
  */
 
-import { useEffect, useRef, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { usePrefersReducedMotion } from '@/components/blot/springs';
 
 export interface ClipTier {
@@ -36,10 +48,27 @@ export interface ClipTier {
   media?: string;
 }
 
+/** A larger cut of the poster and the CSS media query it is for. */
+export interface PosterTier {
+  src: string;
+  media: string;
+}
+
 export interface AmbientClipProps {
   /** Largest first; the last tier has no `media`. */
   tiers: readonly ClipTier[];
+  /** The poster; with `posterTiers`, the smallest cut (the fallback). */
   poster: string;
+  /**
+   * Larger cuts of the poster, largest first, chosen by media query like
+   * `tiers`. Media queries rather than a width `srcset`: a `srcset` image is
+   * sized by its density-corrected width, which the largest-paint measure
+   * can read as upscaled — and then the video's poster that replaces it
+   * would count as a new, later paint.
+   */
+  posterTiers?: readonly PosterTier[];
+  /** This poster is the page's largest paint: fetch it first, swap after it paints. */
+  priority?: boolean;
   className?: string;
   /** Play only while this much of the clip is in view (0–1); omit to play always. */
   playWhenVisible?: number;
@@ -71,6 +100,8 @@ function useHydrated(): boolean {
 export function AmbientClip({
   tiers,
   poster,
+  posterTiers,
+  priority = false,
   className = '',
   playWhenVisible,
   preload = 'metadata',
@@ -81,7 +112,31 @@ export function AmbientClip({
   const reduced = usePrefersReducedMotion();
   const hydrated = useHydrated();
   const ref = useRef<HTMLVideoElement>(null);
-  const video = !reduced && hydrated;
+  const imgRef = useRef<HTMLImageElement>(null);
+  // A priority clip's poster, once it has painted: the cut the <img> chose.
+  const [painted, setPainted] = useState<string | null>(null);
+  const video = !reduced && hydrated && (!priority || painted !== null);
+
+  useEffect(() => {
+    const img = imgRef.current;
+    if (!priority || reduced || !img) return;
+    let frame = 0;
+    // One frame after load, so the poster is on screen before it is replaced.
+    // A poster that fails to load hands over too: the video is still wanted.
+    const shown = () => {
+      frame = requestAnimationFrame(() => setPainted(img.currentSrc || poster));
+    };
+    if (img.complete) shown();
+    else {
+      img.addEventListener('load', shown);
+      img.addEventListener('error', shown);
+    }
+    return () => {
+      cancelAnimationFrame(frame);
+      img.removeEventListener('load', shown);
+      img.removeEventListener('error', shown);
+    };
+  }, [priority, reduced, poster]);
 
   useEffect(() => {
     const el = ref.current;
@@ -109,8 +164,28 @@ export function AmbientClip({
   }, [playWhenVisible, video]);
 
   if (!video) {
-    // eslint-disable-next-line @next/next/no-img-element -- poster swap for a video; next/image adds nothing here
-    return <img src={poster} alt="" aria-hidden="true" className={className} />;
+    const img = (
+      // eslint-disable-next-line @next/next/no-img-element -- poster swap for a video; next/image adds nothing here
+      <img
+        ref={imgRef}
+        src={poster}
+        alt=""
+        aria-hidden="true"
+        className={className}
+        fetchPriority={priority ? 'high' : undefined}
+        loading={preload === 'none' ? 'lazy' : undefined}
+      />
+    );
+    if (!posterTiers?.length) return img;
+    return (
+      // `display: contents`: the <img> keeps its place in the caller's layout.
+      <picture className="contents">
+        {posterTiers.map((t) => (
+          <source key={t.src} srcSet={t.src} media={t.media} />
+        ))}
+        {img}
+      </picture>
+    );
   }
   return (
     <video
@@ -121,7 +196,7 @@ export function AmbientClip({
       loop={!once}
       playsInline
       preload={preload}
-      poster={poster}
+      poster={painted ?? poster}
       aria-hidden="true"
       onEnded={onEnded}
     >

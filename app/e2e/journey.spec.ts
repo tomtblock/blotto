@@ -36,6 +36,11 @@ test('landing: montage hero, the choose-your-pool control, the 18+ line above th
   // The hero's own line is the first of several on the page.
   const note = page.getByText('18+ only · not available in some territories').first();
   await expect(note).toBeInViewport();
+  // The demo board mounts as the reader nears it (D-E12, 2026-10-26): bring it
+  // in first, so the full-page shot shows the board, not the space held for it.
+  await page.locator('#demo').scrollIntoViewIfNeeded();
+  await expect(page.getByTestId('board-demo').getByTestId('board-begin')).toBeVisible();
+  await page.evaluate(() => window.scrollTo(0, 0));
   await shot(page, 'landing', info.project.name);
 });
 
