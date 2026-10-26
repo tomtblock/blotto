@@ -33,6 +33,17 @@
 # treat a single point below the line as a signal to re-run before treating
 # it as a regression, and the accessibility numbers (which are deterministic)
 # as the harder of the two.
+#
+# FIRST PASS, 2026-10-26 (the Play page's first-load bytes and its contrast
+# and touch-target findings):
+#
+#     play   performance 90   accessibility 100
+#     pool   performance 92   accessibility 95
+#
+# Play clears the bar with no margin (a workstation read 88, 90, 90), so
+# this stays weekly: in `ci-fast` a single noisy point would block an
+# unrelated change. What still loads before the Play page's first paint is
+# mostly the code and fonts every page loads.
 
 name: app-lighthouse
 
