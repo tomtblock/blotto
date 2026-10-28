@@ -1,6 +1,6 @@
 import { expect } from 'chai';
 import { ALERT } from '../../_shared/src/metrics';
-import { AlertCounterTracker, alertSeverity, parseAlertCounters } from '../src/alerts';
+import { AlertCounterTracker, alertSeverity, metricsNotMeasuredHere, metricsReachResult, parseAlertCounters } from '../src/alerts';
 
 const line = (reason: string, n: number, service = 'daemon'): string =>
   `blotto_alerts_total{reason="${reason.replace(/"/g, '\\"')}",service="${service}"} ${n}`;
@@ -60,5 +60,20 @@ describe('the alert counter tracker', () => {
   it('calls the alerts that affect players critical', () => {
     expect(alertSeverity(ALERT.reveal.entryRefundOwed)).to.equal('critical');
     expect(alertSeverity(ALERT.indexer.reconcileFailed)).to.equal('warning');
+  });
+});
+
+describe('the diagnosis snapshot, off the private network', () => {
+  it('marks an unreachable metrics address as not measured, not failed', () => {
+    const r = metricsNotMeasuredHere(metricsReachResult('blotto-daemon', 'fetch failed (ENOTFOUND)', 5));
+    expect(r.status).to.equal('unknown');
+    expect(r.key).to.equal('watch:metrics:blotto-daemon');
+    expect(r.detail).to.match(/^not measured/);
+  });
+
+  it('leaves every other verdict exactly as it was', () => {
+    const reach = metricsReachResult('blotto-daemon', null, 5);
+    const other = { ...reach, key: 'service:blotto-daemon', status: 'fail' as const, detail: 'HTTP 503' };
+    expect(metricsNotMeasuredHere(other)).to.equal(other);
   });
 });

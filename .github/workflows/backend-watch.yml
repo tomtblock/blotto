@@ -54,7 +54,18 @@ jobs:
     env:
       FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
     steps:
-      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # v1.6, 2026-09-12
+      # flyctl is downloaded from Fly on every run. On 2026-10-28 at 22:19 the
+      # download answered "503 Service Unavailable" once: the run failed
+      # before probing anything, and the watcher raised a red-lane alert for
+      # a download. So one more attempt after a pause; a second failure is
+      # real and fails the run exactly as before.
+      - id: flyctl
+        uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # v1.6, 2026-09-12
+        continue-on-error: true
+      - if: steps.flyctl.outcome == 'failure'
+        run: sleep 30
+      - if: steps.flyctl.outcome == 'failure'
+        uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # v1.6, 2026-09-12
 
       - name: Probe health, start stopped machines, fail loudly
         run: |

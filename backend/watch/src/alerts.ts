@@ -134,3 +134,23 @@ export function metricsReachResult(app: string, error: string | null, failuresTo
     ? { ...base, status: 'pass', detail: 'metrics readable' }
     : { ...base, status: 'fail', detail: error };
 }
+
+/**
+ * The diagnosis snapshot (cli/snapshot.ts) runs on a GitHub runner, outside
+ * Fly's private network, where `<app>.internal` never resolves: every
+ * `watch:metrics:*` verdict there is ENOTFOUND, whatever the services are
+ * doing. Reported as a failure, it sent a diagnosis after a fault that was
+ * not there (2026-10-28). Off the network it is marked not measured; the
+ * deployed watcher reads the metrics from inside and raises this check
+ * itself when it cannot.
+ */
+export function metricsNotMeasuredHere(r: CheckResult): CheckResult {
+  if (!r.key.startsWith('watch:metrics:')) return r;
+  return {
+    ...r,
+    status: 'unknown',
+    detail:
+      "not measured: this snapshot ran outside Fly's private network, where the metrics address does not " +
+      'resolve. The deployed watcher reads it from inside and raises this check itself if it cannot.',
+  };
+}
