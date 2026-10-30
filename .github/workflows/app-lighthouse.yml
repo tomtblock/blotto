@@ -64,7 +64,11 @@ concurrency:
 jobs:
   lighthouse:
     name: performance and accessibility
-    runs-on: ubuntu-latest
+    # 24.04, not ubuntu-latest, for the reason in ci-fast's `journey` job:
+    # Playwright 1.56.1 cannot install Chromium on 26.04. Bumping Playwright
+    # instead would also change the Chrome the 2026-10-26 scores were
+    # measured on, which is a change of its own.
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
