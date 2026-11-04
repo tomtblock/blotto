@@ -75,4 +75,11 @@ describe('the sign-in surface by channel', () => {
     // The territory and age line is on every channel.
     expect(html).toContain(COPY.pool.ageTerritoryNote);
   });
+
+  it('never server-renders the "Phantom not detected" hint: the server sees no wallets, and it would flash', () => {
+    channel = 'web';
+    const html = page({ ...signedOut, detectedWallets: [] });
+    expect(html).not.toContain('data-testid="phantom-hint"');
+    expect(html).not.toContain(COPY.signin.phantomNotDetected);
+  });
 });

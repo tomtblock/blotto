@@ -19,7 +19,7 @@
  * before the page had no channel to hear about one at all.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { COPY } from "@/copy";
@@ -30,6 +30,10 @@ import { CopyableAddressPill } from "@/components/copyable-address";
 import { offersSocialSignIn } from "@/channel/channel";
 import { useChannel } from "@/channel/use-channel";
 import { signInDestination } from "./return-to";
+import { offersPhantomHint } from "./extension-hint";
+
+// Nothing to subscribe to: the store exists for its server/client split.
+const noSubscribe = (): (() => void) => () => {};
 
 /*
  * Whether sign-in works is asked of the AUTH PROVIDER, not of the
@@ -95,7 +99,16 @@ export function SignInClient() {
    * server and during hydration, so the markup agrees; the shell re-renders
    * to its own surface a beat later.
    */
-  const socials = offersSocialSignIn(useChannel());
+  const channel = useChannel();
+  const socials = offersSocialSignIn(channel);
+  // How to make an installed Phantom show up (extension-hint.ts). False on
+  // the server and during hydration, which see no wallets, so it never
+  // flashes for a player whose Phantom registers a moment later.
+  const phantomHint = useSyncExternalStore(
+    noSubscribe,
+    () => offersPhantomHint(channel, navigator.userAgent, detectedWallets),
+    () => false
+  );
 
   /*
    * D-17 (audit 2026-09-11): where to go afterwards. This used to be a
@@ -290,6 +303,12 @@ export function SignInClient() {
           </li>
           ) : null}
         </ul>
+
+      {phantomHint ? (
+        <p data-testid="phantom-hint" className="text-[12px] leading-5 text-ink-muted">
+          {COPY.signin.phantomNotDetected}
+        </p>
+      ) : null}
 
       <p className="mt-3 text-[12px] leading-5 text-ink-muted">{COPY.pool.ageTerritoryNote}</p>
     </div>
