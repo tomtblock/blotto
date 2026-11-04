@@ -90,15 +90,21 @@ const SOLANA_RPCS_CONFIG = {
 
 /**
  * The wallet buttons Privy's own modal shows (the "More wallets" door and
- * the link-a-wallet flow), in this order. Phantom first because it is the
- * one the founder named; the detected bucket catches anything else the
- * browser has (Ctrl, Glow, …) under its own name and icon; the QR entry is
- * the desktop→phone path.
+ * the link-a-wallet flow), in this order. The detected bucket catches what
+ * the browser has (Ctrl, Glow, …) under its own name and icon; the QR entry
+ * is the desktop→phone path.
+ *
+ * PHANTOM IS NOT NAMED HERE (founder, 2026-11-04). Through the provider it
+ * cannot sign in to this devnet app at all (docs/guide/HOSTING.md, "Why
+ * wallet sign-in does not go through the provider"), so the named entry
+ * could only ever do one thing: when Phantom was not active on the page, open
+ * the Chrome Web Store. A tester with Phantom installed but not running on
+ * the site took that for a fault. An active Phantom is the sign-in page's
+ * own "Detected" row, and the detected bucket below still lists it here.
  */
 const WALLET_LIST: NonNullable<
   NonNullable<PrivyClientConfig["appearance"]>["walletList"]
 > = [
-  "phantom",
   "solflare",
   "backpack",
   "detected_solana_wallets",

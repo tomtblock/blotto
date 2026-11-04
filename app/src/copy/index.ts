@@ -95,6 +95,12 @@ export const COPY = {
     detected: 'Detected',
     moreWallets: 'More wallets',
     moreWalletsNote: 'Solflare, Backpack, a mobile wallet, or a QR code',
+    // Under the wallet rows on a desktop browser where Phantom is not
+    // detected (signin/extension-hint.ts). The founder's wording, approved
+    // 2026-11-04, after a tester with Phantom installed but not active on
+    // the site was sent to the Chrome Web Store.
+    phantomNotDetected:
+      "Have Phantom installed but don't see it here? Make sure it's switched on for this site, in this Chrome profile, then reload.",
     wallet: 'Connect a wallet',
     // Rendered only in builds without sign-in credentials (previews, local
     // dev) — the buttons would silently do nothing otherwise.
