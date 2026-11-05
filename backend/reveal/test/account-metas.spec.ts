@@ -129,6 +129,8 @@ const EXPR_TO_FIELD: ReadonlyArray<readonly [RegExp, string]> = [
   [/this\.passCollectionPda\(/, 'pass_collection'],
   [/this\.entryPda\(/, 'entry'],
   [/this\.poolPda\(|^poolKey$/, 'pool'],
+  // D-E19: the pool's own type (pay / refund) or the type being opened.
+  [/this\.poolTypePda\(|^poolType$/, 'pool_type'],
   [/this\.cfg\.settlementSigner\.publicKey/, 'settlement_signer'],
   [/SystemProgram\.programId/, 'system_program'],
 ];
@@ -190,6 +192,15 @@ const BUILDER_TO_STRUCT: Record<string, string> = {
 describe('account metadata, across the language boundary', () => {
   const rust = parseRustAccounts();
   const client = parseClientBuilders();
+
+  it('the pool type is compared wherever the client names it (D-E19)', () => {
+    for (const method of ['openPool', 'payPrizes', 'triggerRefund', 'refund']) {
+      expect(
+        (client.get(method) ?? []).some((a) => a.field === 'pool_type'),
+        `${method} must name the pool_type account`
+      ).to.equal(true);
+    }
+  });
 
   it('parsed both sides', () => {
     expect(rust.size, 'accounts structs found in the program').to.be.greaterThan(10);

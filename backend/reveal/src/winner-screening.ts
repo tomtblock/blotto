@@ -11,9 +11,11 @@
  * # Who is screened
  *
  * Every wallet in the committed payout list — not "the winner" singular.
- * Under D-E2 that is normally one seat, but a tie for first divides the pot
- * between several, and each of them is a winning wallet in the only sense
- * the promise can mean. At most a handful of screenings per pool.
+ * Since the Ladder (D-E19) that is every paid place of the pool's table —
+ * 2, 4, 8 or 16 seats — plus every member of a tie that straddles the paid
+ * line, and each of them is a winning wallet in the only sense the promise
+ * can mean. Sixteen screenings for a full 64-player table; the whole field
+ * only if the whole field ties.
  *
  * # What a hold does, and what it is not
  *
@@ -70,10 +72,10 @@ export type ScreenWinners = (
 ) => Promise<WinnerHold[]>;
 
 /**
- * Build the hook from a screener. Screens sequentially: the list is a
- * handful of wallets at most, and one vendor request at a time keeps a rate
- * limit from turning a tie into a burst of failures that would hold every
- * winner at once.
+ * Build the hook from a screener. Screens sequentially: the list is the
+ * paid places (sixteen at most for an untied table), and one vendor request
+ * at a time keeps a rate limit from turning a long list into a burst of
+ * failures that would hold every winner at once.
  */
 export function makeWinnerScreen(
   check: SanctionsCheck,

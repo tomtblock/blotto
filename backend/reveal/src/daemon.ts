@@ -288,9 +288,10 @@ export function makeDaemon(deps: DaemonDeps): Daemon {
   // The publish backoff, per pool. In-memory like the floor: a restart
   // retries at once, which is the right thing after a fix.
   const publishRetry = new Map<string, { failures: number; nextAttemptMs: number }>();
-  // Ladder pools whose forfeited share is held for the cascade upgrade, so
-  // the line and the metric fire once per pool rather than every tick.
-  // In-memory: a restart says it once more, which is the right amount.
+  // Ladder pools (`poolId`) and their forfeited shares (`poolId:player`)
+  // already reported as held for the cascade upgrade, so the line and the
+  // metric fire once rather than every tick. In-memory: a restart says it
+  // once more, which is the right amount.
   const heldForCascade = new Set<string>();
   // The last state each pool was seen in this process — the keeper's hold
   // reason names a busy type's pool by it, at no extra RPC.
@@ -439,19 +440,26 @@ export function makeDaemon(deps: DaemonDeps): Daemon {
         // re-read every later pool every tick; the restart that ships the
         // cascade rescans from `startPoolId` and finds it again.
         const key = poolId.toString();
-        if (!heldForCascade.has(key)) {
+        // A share forfeited later in the same pool (its review ran longer)
+        // is reported when it is first seen; the pool is announced once.
+        const fresh = forfeited.filter((f) => !heldForCascade.has(`${key}:${f.player}`));
+        if (fresh.length > 0) {
+          const firstForPool = !heldForCascade.has(key);
           heldForCascade.add(key);
-          for (const f of forfeited) {
+          for (const f of fresh) {
+            heldForCascade.add(`${key}:${f.player}`);
             report.held.push({ poolId, player: f.player, reason: 'next_place_unsupported' });
           }
-          deps.monitor?.recordEvent(METRIC.reveal.releaseHeld, {
-            reason: 'next_place_unsupported',
-          });
+          if (firstForPool) {
+            deps.monitor?.recordEvent(METRIC.reveal.releaseHeld, {
+              reason: 'next_place_unsupported',
+            });
+          }
           log('pay_next_place:held-until-cascade', {
             poolId: key,
             paidPlaces: pool.paidPlaces,
-            players: forfeited.map((f) => f.player),
-            heldLamports: forfeited.reduce((a, f) => a + f.escrowLamports, 0n).toString(),
+            players: fresh.map((f) => f.player),
+            heldLamports: fresh.reduce((a, f) => a + f.escrowLamports, 0n).toString(),
             reason:
               'a forfeited share of a multi-place pool is held in its vault until the ' +
               '"field moves up" payout ships (NextPlaceUnsupported)',
@@ -625,10 +633,11 @@ export function makeDaemon(deps: DaemonDeps): Daemon {
     // the sequential rule, the cooldown, current economics, the policy
     // floor), lowest tier first; loop until it says none, so one tick opens
     // every pool type the treasury can carry. Bounded by the number of
-    // enabled types read at the start: each open fills one slot, so the loop
-    // can never need more, and a type enabled mid-tick waits for the next.
+    // enabled types read at the start, plus the pass that reports the hold:
+    // each open (or refusal) settles one type, so the loop can never need
+    // more, and a type enabled mid-tick waits for the next.
     if (!cfg.paused && poolTypes !== null) {
-      const bound = poolTypes.filter((t) => t.enabled).length;
+      const bound = poolTypes.filter((t) => t.enabled).length + 1;
       // A type whose open the program refused this tick (a reason this
       // mirror does not model — the D2 ceiling, a raced id) is not offered
       // again until the next tick, so it cannot starve the types behind it.

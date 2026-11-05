@@ -55,7 +55,25 @@ import {
   SystemProgram,
   Transaction,
 } from '@solana/web3.js';
-import { ENTRY_LAYOUT, ENTRY_SPACE, POOL_SPACE, POOL_SPACE_V2, Web3Chain } from '../src/chain-web3';
+import {
+  ENTRY_LAYOUT,
+  ENTRY_SPACE,
+  POOL_SPACE,
+  POOL_SPACE_V2,
+  POOL_SPACE_V3,
+  POOL_TYPE_DISCRIMINATOR,
+  POOL_TYPE_SPACE,
+  Web3Chain,
+  poolTypeRemainingAccounts,
+} from '../src/chain-web3';
+import {
+  POOL_TYPE_OFFSETS,
+  compareAddressBytes,
+  poolTypeSeeds,
+} from '../../_shared/src/pool-type-account';
+import { CONFIG_OFFSETS, CONFIG_SPACE } from '../../_shared/src/config-account';
+import { base58Encode } from '../../_shared/src/blotto-events';
+import { TIER_ENTRY_LAMPORTS, ladderTable, minFieldFor, prizePoolFor } from '../../scoring/src';
 
 const STATE_RS = join(__dirname, '../../../programs/blotto_cup/src/state.rs');
 const CONSTANTS_RS = join(__dirname, '../../../programs/blotto_cup/src/constants.rs');
@@ -65,14 +83,18 @@ const rust = readFileSync(STATE_RS, 'utf8');
 // The Pool layout, derived from the Rust rather than restated
 // ---------------------------------------------------------------------------
 
-/** `constants.rs::CAPACITY`, read from the source. */
-function capacity(): number {
-  const m = /pub const CAPACITY: u16 = (\d+);/.exec(readFileSync(CONSTANTS_RS, 'utf8'));
-  expect(m, 'constants.rs no longer declares CAPACITY').to.not.equal(null);
+/** A `constants.rs` integer constant, read from the source. */
+function rustConst(name: string): number {
+  const m = new RegExp(`pub const ${name}: \\w+ = (\\d+);`).exec(readFileSync(CONSTANTS_RS, 'utf8'));
+  expect(m, `constants.rs no longer declares ${name}`).to.not.equal(null);
   return Number(m![1]);
 }
 
-/** Borsh widths for the types `Pool` declares. Fixed width, no padding. */
+/** `constants.rs::CAPACITY` — the largest pool (64), which sizes the fixed
+ * `payouts` array and `paid_mask` whatever a pool's own capacity is. */
+const capacity = (): number => rustConst('CAPACITY');
+
+/** Borsh widths for the types `Pool` and `PoolType` declare. Fixed width, no padding. */
 function widths(): Record<string, number> {
   return {
     u64: 8,
@@ -85,6 +107,8 @@ function widths(): Record<string, number> {
     '[u16; 5]': 10,
     // `Payout { entry_index: u16, amount: u64 }` × CAPACITY.
     '[Payout; CAPACITY as usize]': 10 * capacity(),
+    // The Ladder's prize table (D-E19): whole multiples, zero-padded.
+    '[u8; MAX_PAID_PLACES]': rustConst('MAX_PAID_PLACES'),
   };
 }
 
@@ -99,19 +123,22 @@ function fieldsOf(structName: string): Array<{ name: string; type: string }> {
   }));
 }
 
-/** Byte offset of every `Pool` field, the 8-byte discriminator included. */
-function poolOffsets(): { offsets: Record<string, number>; space: number } {
+/** Byte offset of every field of `structName`, the 8-byte discriminator included. */
+function structOffsets(structName: string): { offsets: Record<string, number>; space: number } {
   const W = widths();
   let offset = 8;
   const offsets: Record<string, number> = {};
-  for (const f of fieldsOf('Pool')) {
+  for (const f of fieldsOf(structName)) {
     const width = W[f.type];
-    expect(width, `no Borsh width for Pool.${f.name}: ${f.type}`).to.not.equal(undefined);
+    expect(width, `no Borsh width for ${structName}.${f.name}: ${f.type}`).to.not.equal(undefined);
     offsets[f.name] = offset;
     offset += width;
   }
   return { offsets, space: offset };
 }
+
+/** Byte offset of every `Pool` field, the 8-byte discriminator included. */
+const poolOffsets = () => structOffsets('Pool');
 
 /** The value `state.rs`'s own layout test pins for a named constant. */
 function pinned(expr: string): number {
@@ -155,6 +182,13 @@ const FIXTURE = {
   paid_mask: (1n << 9n) | (1n << 12n),
   refunded_count: 0,
   timer_seconds: 15,
+  // R7-b / Phase B / the Ladder (D-E19): a 16-player pool's terms, distinct
+  // from the 64-player defaults a pre-Ladder reconstruction would give.
+  min_seats: minFieldFor(16),
+  mode: 0,
+  capacity: 16,
+  paid_places: ladderTable(16).length,
+  prize_table: [...ladderTable(16)],
 };
 
 /** A `Pool` account's bytes, written at the offsets the RUST declares. */
@@ -190,7 +224,47 @@ function poolAccount(
   d.writeBigUInt64LE(v.paid_mask, offsets.paid_mask);
   d.writeUInt16LE(v.refunded_count, offsets.refunded_count);
   d.writeUInt8(v.timer_seconds, offsets.timer_seconds);
+  d.writeUInt16LE(v.min_seats, offsets.min_seats);
+  d.writeUInt8(v.mode, offsets.mode);
+  d.writeUInt16LE(v.capacity, offsets.capacity);
+  d.writeUInt8(v.paid_places, offsets.paid_places);
+  v.prize_table.forEach((m, i) => d.writeUInt8(m, offsets.prize_table + i));
   return { data: d, offsets };
+}
+
+/** A `PoolType` account's bytes (57), at the shared layout's offsets. */
+function poolTypeAccount(t: {
+  mode: number;
+  tier: number;
+  capacity: number;
+  enabled?: boolean;
+  activePool?: bigint;
+  nextOpenAt?: bigint;
+  discriminator?: Buffer;
+}): Buffer {
+  const O = POOL_TYPE_OFFSETS;
+  const d = Buffer.alloc(POOL_TYPE_SPACE);
+  (t.discriminator ?? POOL_TYPE_DISCRIMINATOR).copy(d, 0);
+  const table = ladderTable(t.capacity);
+  d.writeUInt8(t.mode, O.mode);
+  d.writeUInt8(t.tier, O.tier);
+  d.writeUInt16LE(t.capacity, O.capacity);
+  d.writeUInt16LE(minFieldFor(t.capacity), O.minSeats);
+  d.writeUInt8(table.length, O.paidPlaces);
+  table.forEach((m, i) => d.writeUInt8(m, O.prizeTable + i));
+  d.writeBigUInt64LE(prizePoolFor(table, TIER_ENTRY_LAMPORTS[t.tier]), O.potLamports);
+  d.writeUInt8(t.enabled === false ? 0 : 1, O.enabled);
+  d.writeBigUInt64LE(t.activePool ?? 0n, O.activePool);
+  d.writeBigInt64LE(t.nextOpenAt ?? 0n, O.nextOpenAt);
+  d.writeUInt8(254, O.bump);
+  return d;
+}
+
+/** A 605-byte Config whose only meaningful field here is the enabled count. */
+function configAccount(enabledPoolTypes: number): Buffer {
+  const d = Buffer.alloc(CONFIG_SPACE);
+  d.writeUInt16LE(enabledPoolTypes, CONFIG_OFFSETS.enabledPoolTypes);
+  return d;
 }
 
 /** An `Entry` account's bytes, written at the offsets `ENTRY_LAYOUT` names. */
@@ -300,6 +374,11 @@ const CONFIG_PDA = pda([Buffer.from('config')]);
 const PLATFORM_PDA = pda([Buffer.from('platform')]);
 const entryPda = (player: PublicKey) =>
   pda([Buffer.from('entry'), POOL_PDA.toBuffer(), player.toBuffer()]);
+/** The pool-type PDA, from the shared seeds (D-E19). */
+const poolTypePda = (mode: number, tier: number, capacity: number) =>
+  pda(poolTypeSeeds(mode, tier, capacity));
+/** The fixture pool's OWN type: what pay / refund name. */
+const FIXTURE_TYPE_PDA = poolTypePda(FIXTURE.mode, FIXTURE.tier, FIXTURE.capacity);
 
 /** Anchor's global instruction discriminator — recomputed, never copied. */
 function discriminator(name: string): Buffer {
@@ -371,6 +450,27 @@ describe('the Pool account layout the settlement client decodes (G-06)', () => {
       { entryIndex: 9, amountLamports: 3_000_000_000n },
       { entryIndex: 12, amountLamports: 1_000_000_000n },
     ]);
+    // The Ladder tail (D-E19), read where the program writes it.
+    expect(view.capacity, 'capacity').to.equal(FIXTURE.capacity);
+    expect(view.minSeats, 'min_seats').to.equal(FIXTURE.min_seats);
+    expect(view.paidPlaces, 'paid_places').to.equal(FIXTURE.paid_places);
+    expect(view.prizeTable, 'prize_table, zero-padded to 16').to.deep.equal([
+      ...FIXTURE.prize_table,
+      ...new Array(16 - FIXTURE.prize_table.length).fill(0),
+    ]);
+  });
+
+  it('the fields before 842 did not move: payouts and paid_mask sit where they always did', () => {
+    // The Ladder APPENDED its tail (capacity @850, paid_places @852,
+    // prize_table @853); the full decode's hard-coded offsets — payouts at
+    // 194, paid_mask at 834 — must still be the program's.
+    const { offsets } = poolOffsets();
+    expect(offsets.payouts_len).to.equal(192);
+    expect(offsets.payouts).to.equal(194);
+    expect(offsets.paid_mask).to.equal(834);
+    expect([offsets.min_seats, offsets.mode, offsets.capacity, offsets.paid_places, offsets.prize_table]).to.deep.equal([
+      847, 849, 850, 852, 853,
+    ]);
   });
 
   it('an all-zero vrf_seed is the uncommitted sentinel, and the last byte of it counts', async () => {
@@ -412,7 +512,27 @@ describe('the Pool account layout the settlement client decodes (G-06)', () => {
     await chain(c3.connection)
       .getPool(POOL_ID)
       .catch((e: Error) => (message = e.message));
-    expect(message).to.match(/847 bytes; Pool::SPACE is 850/);
+    expect(message).to.match(/847 bytes; Pool::SPACE is 869/);
+  });
+
+  it('a pre-Ladder account (850) still decodes — as 64 players and one place worth the prize pool', async () => {
+    // Every devnet pool until `migrate_pool` runs after the Ladder upgrade:
+    // read as what its players entered under (`preLadderTable`), never as
+    // the zero bytes a short account would hand a fixed-offset read.
+    expect(POOL_SPACE_V3).to.equal(pinned('Pool::SPACE_V3'));
+    const entry = TIER_ENTRY_LAMPORTS[0];
+    const pot = prizePoolFor(ladderTable(64), entry);
+    const full = poolAccount({ entry_lamports: entry, pot_lamports: pot, min_seats: minFieldFor(64), mode: 1 });
+    const pre = Buffer.from(full.data.subarray(0, POOL_SPACE_V3));
+    const { connection } = fakeCluster({ [POOL_PDA.toBase58()]: pre });
+    const view = await chain(connection).getPool(POOL_ID);
+    expect(view.capacity).to.equal(64);
+    expect(view.paidPlaces).to.equal(1);
+    expect(view.prizeTable).to.deep.equal([Number(pot / entry), ...new Array(15).fill(0)]);
+    expect(view.minSeats).to.equal(minFieldFor(64));
+    expect(view.mode).to.equal(1);
+    expect(view.paidMask).to.equal(FIXTURE.paid_mask);
+    expect(view.payouts.length).to.equal(2);
   });
 
   it('an uncommitted pool reports no root and no payouts, whatever the bytes hold', async () => {
@@ -503,20 +623,47 @@ describe('the Entry accounts the settlement client reads (getEntries)', () => {
 });
 
 describe('the instruction wire format, decoded back out of the bytes sent', () => {
-  it('open_pool: keeper-signed, and its arguments survive the encoding', async () => {
-    const { connection, sent } = fakeCluster();
+  /** A cluster holding Config and the eight launch pool types (D-E19). */
+  function ladderCluster(over: { enabled?: number; disabled?: string[] } = {}) {
+    const types = [0, 1].flatMap((mode) => [8, 16, 32, 64].map((capacity) => ({ mode, tier: 0, capacity })));
+    const disabled = new Set(over.disabled ?? []);
+    const enabledCount = over.enabled ?? types.filter((t) => !disabled.has(`${t.mode}:${t.capacity}`)).length;
+    const cluster = fakeCluster({ [CONFIG_PDA.toBase58()]: configAccount(enabledCount) });
+    for (const t of types) {
+      cluster.programAccounts.push({
+        pubkey: poolTypePda(t.mode, t.tier, t.capacity),
+        account: {
+          data: poolTypeAccount({ ...t, enabled: !disabled.has(`${t.mode}:${t.capacity}`) }),
+        },
+      });
+    }
+    return { ...cluster, types };
+  }
+
+  it('open_pool: keeper-signed, its pool type writable, every OTHER enabled type after it in address order', async () => {
+    const { connection, sent, types } = ladderCluster();
     const sealingPubkey = new Uint8Array(32).fill(0x7a);
     const secretHash = new Uint8Array(32).fill(0x7b);
-    await chain(connection, { keeperSigner }).openPool(POOL_ID, 3, sealingPubkey, secretHash, 1);
+    await chain(connection, { keeperSigner }).openPool(POOL_ID, 0, sealingPubkey, secretHash, 1, 16);
 
     const ix = onlyIx(sent);
+    const opening = poolTypePda(1, 0, 16);
+    const others = types
+      .map((t) => poolTypePda(t.mode, t.tier, t.capacity))
+      .filter((k) => !k.equals(opening))
+      .sort((a, b) => compareAddressBytes(a.toBytes(), b.toBytes()));
+    expect(others.length, 'enabled_pool_types − 1').to.equal(7);
     expect(metas(ix)).to.deep.equal([
       meta(keeperSigner.publicKey, true, true),
       meta(CONFIG_PDA, false, true),
       meta(POOL_PDA, false, true),
       meta(VAULT_PDA, false, true),
       meta(PLATFORM_PDA, false, true),
+      meta(opening, false, true), // D-E19: the type being opened
       meta(SystemProgram.programId, false, false),
+      // Remaining: the other enabled types, read-only, strictly ascending
+      // by raw address bytes (the program compares `Pubkey`s).
+      ...others.map((k) => meta(k, false, false)),
     ]);
     expect(sent[0].signers.map((s) => s.publicKey.toBase58()), 'the keeper pays the rent').to.deep.equal([
       keeperSigner.publicKey.toBase58(),
@@ -524,18 +671,59 @@ describe('the instruction wire format, decoded back out of the bytes sent', () =
 
     const data = ix.data;
     expect(data.subarray(0, 8).equals(discriminator('open_pool'))).to.equal(true);
+    expect(data.subarray(0, 8).toString('hex'), 'the contract`s discriminator').to.equal('60d76e3d01f6cde4');
     expect(data.readBigUInt64LE(8), 'pool_id').to.equal(POOL_ID);
-    expect(data[16], 'tier').to.equal(3);
+    expect(data[16], 'tier').to.equal(0);
     expect(data.subarray(17, 49).equals(Buffer.from(sealingPubkey))).to.equal(true);
     expect(data.subarray(49, 81).equals(Buffer.from(secretHash))).to.equal(true);
-    // Phase B: `mode` is the appended argument — the last byte.
+    // Phase B: `mode`; D-E19: `capacity` u16 LE, appended after it.
     expect(data[81], 'mode').to.equal(1);
-    expect(data.length, 'no trailing bytes').to.equal(82);
+    expect(data.readUInt16LE(82), 'capacity').to.equal(16);
+    expect(data.length, 'no trailing bytes').to.equal(84);
+  });
+
+  it('open_pool leaves disabled types out of the list, and refuses to open one', async () => {
+    const { connection, sent } = ladderCluster({ disabled: ['0:32', '1:64'] });
+    await chain(connection).openPool(POOL_ID, 0, new Uint8Array(32), new Uint8Array(32), 0, 8);
+    const ix = onlyIx(sent);
+    expect(ix.keys.length, '7 fixed + (6 enabled − 1)').to.equal(7 + 5);
+    const listed = ix.keys.slice(7).map((k) => k.pubkey.toBase58());
+    expect(listed).to.not.include(poolTypePda(0, 0, 32).toBase58());
+    expect(listed).to.not.include(poolTypePda(1, 0, 64).toBase58());
+
+    const again = ladderCluster({ disabled: ['0:32'] });
+    let threw = '';
+    await chain(again.connection)
+      .openPool(POOL_ID, 0, new Uint8Array(32), new Uint8Array(32), 0, 32)
+      .catch((e: Error) => (threw = e.message));
+    expect(threw).to.match(/PoolTypeDisabled/);
+    expect(again.sent.length, 'nothing is sent').to.equal(0);
+  });
+
+  it('open_pool refuses to send a list Config would not believe (a lagging read)', async () => {
+    // Config counts nine enabled types; the RPC returned eight.
+    const { connection, sent } = ladderCluster({ enabled: 9 });
+    let threw = '';
+    await chain(connection)
+      .openPool(POOL_ID, 0, new Uint8Array(32), new Uint8Array(32), 0, 8)
+      .catch((e: Error) => (threw = e.message));
+    expect(threw).to.match(/PoolTypeListIncomplete/);
+    expect(sent.length).to.equal(0);
+  });
+
+  it('open_pool refuses a capacity that is not a pool size before any read', async () => {
+    const { connection, sent } = ladderCluster();
+    let threw = '';
+    await chain(connection)
+      .openPool(POOL_ID, 0, new Uint8Array(32), new Uint8Array(32), 0, 12)
+      .catch((e: Error) => (threw = e.message));
+    expect(threw).to.match(/no pool of 12 players/);
+    expect(sent.length).to.equal(0);
   });
 
   it('open_pool defaults the keeper to the settlement signer when no keeper key is held', async () => {
-    const { connection, sent } = fakeCluster();
-    await chain(connection).openPool(POOL_ID, 0, new Uint8Array(32), new Uint8Array(32), 0);
+    const { connection, sent } = ladderCluster();
+    await chain(connection).openPool(POOL_ID, 0, new Uint8Array(32), new Uint8Array(32), 0, 64);
     expect(sent[0].signers.map((s) => s.publicKey.toBase58())).to.deep.equal([
       settlementSigner.publicKey.toBase58(),
     ]);
@@ -599,6 +787,8 @@ describe('the instruction wire format, decoded back out of the bytes sent', () =
       meta(CONFIG_PDA, false, true), // WRITABLE — PayPrizes declares it mut
       meta(POOL_PDA, false, true),
       meta(VAULT_PDA, false, true),
+      // D-E19: the pool's OWN type, from its recorded mode/tier/capacity.
+      meta(FIXTURE_TYPE_PDA, false, true),
       meta(SystemProgram.programId, false, false),
       // The seats in the order they were asked for, each wallet followed by
       // its Entry PDA.
@@ -776,7 +966,7 @@ describe('the instruction wire format, decoded back out of the bytes sent', () =
 
   it('refund returns the price from the platform treasury, not from the prize vault', async () => {
     const player = Keypair.fromSeed(new Uint8Array(32).fill(54)).publicKey;
-    const { connection, sent } = fakeCluster();
+    const { connection, sent } = fakeCluster({ [POOL_PDA.toBase58()]: poolAccount({ state: 4 }).data });
     await chain(connection).refund(POOL_ID, player.toBase58());
     const ix = onlyIx(sent);
     expect(metas(ix)).to.deep.equal([
@@ -786,6 +976,8 @@ describe('the instruction wire format, decoded back out of the bytes sent', () =
       meta(PLATFORM_PDA, false, true),
       meta(entryPda(player), false, true),
       meta(player, false, true),
+      // D-E19: the pool's own type — the last refund frees its slot.
+      meta(FIXTURE_TYPE_PDA, false, true),
       meta(SystemProgram.programId, false, false),
     ]);
     expect(metas(ix).some((m) => m.startsWith(VAULT_PDA.toBase58())), 'the prize vault is not touched by a refund').to.equal(false);
@@ -819,7 +1011,7 @@ describe('the instruction wire format, decoded back out of the bytes sent', () =
     ]);
     expect(onlyIx(seal.sent).data.subarray(0, 8).equals(discriminator('seal_at_deadline'))).to.equal(true);
 
-    const refundTrigger = fakeCluster();
+    const refundTrigger = fakeCluster({ [POOL_PDA.toBase58()]: poolAccount({ state: 0 }).data });
     await chain(refundTrigger.connection).triggerRefund(POOL_ID);
     expect(metas(onlyIx(refundTrigger.sent))).to.deep.equal([
       meta(settlementSigner.publicKey, true, false),
@@ -827,8 +1019,19 @@ describe('the instruction wire format, decoded back out of the bytes sent', () =
       meta(POOL_PDA, false, true),
       meta(VAULT_PDA, false, true),
       meta(PLATFORM_PDA, false, true),
+      // D-E19: the pool's own type, derived from what the POOL records.
+      meta(FIXTURE_TYPE_PDA, false, true),
       meta(SystemProgram.programId, false, false),
     ]);
+  });
+
+  it('a pre-Ladder pool`s settlement names the 64-player type of its own mode and tier', async () => {
+    // An 850-byte (unmigrated) pool reads as 64 seats, so the PDA is that
+    // type's — the one `migrate_pool` will leave it pointing at too.
+    const pre = Buffer.from(poolAccount({ state: 0, mode: 1 }).data.subarray(0, POOL_SPACE_V3));
+    const { connection, sent } = fakeCluster({ [POOL_PDA.toBase58()]: pre });
+    await chain(connection).triggerRefund(POOL_ID);
+    expect(metas(onlyIx(sent))[5]).to.equal(meta(poolTypePda(1, FIXTURE.tier, 64), false, true));
   });
 
   it('commit_vrf_seed bundles the Switchboard reveal into the SAME transaction', async () => {
@@ -935,5 +1138,86 @@ describe('the pure reads the daemon depends on', () => {
     const { connection } = fakeCluster({ [PLATFORM_PDA.toBase58()]: Buffer.alloc(0) });
     expect(await chain(connection).getPlatformBalance()).to.equal(1_000_000n);
     expect(await chain(fakeCluster({}).connection).getPlatformBalance()).to.equal(0n);
+  });
+});
+
+describe('the PoolType accounts (D-E19)', () => {
+  it('the shared layout is the running sum of state.rs`s PoolType fields, and the size it pins', () => {
+    const { offsets, space } = structOffsets('PoolType');
+    expect(space).to.equal(pinned('PoolType::SPACE'));
+    expect(POOL_TYPE_SPACE).to.equal(space);
+    expect({
+      mode: offsets.mode,
+      tier: offsets.tier,
+      capacity: offsets.capacity,
+      minSeats: offsets.min_seats,
+      paidPlaces: offsets.paid_places,
+      prizeTable: offsets.prize_table,
+      potLamports: offsets.pot_lamports,
+      enabled: offsets.enabled,
+      activePool: offsets.active_pool,
+      nextOpenAt: offsets.next_open_at,
+      bump: offsets.bump,
+    }).to.deep.equal({ ...POOL_TYPE_OFFSETS });
+  });
+
+  it('the discriminator is Anchor`s account hash, as the contract states', () => {
+    expect(POOL_TYPE_DISCRIMINATOR.toString('hex')).to.equal('23bee6af4b720965');
+  });
+
+  it('getPoolTypes filters on size and discriminator, drops impostors, decodes and orders', async () => {
+    const { connection, programAccounts, filters } = fakeCluster();
+    const k = (mode: number, cap: number) => poolTypePda(mode, 0, cap);
+    programAccounts.push(
+      { pubkey: k(1, 8), account: { data: poolTypeAccount({ mode: 1, tier: 0, capacity: 8, activePool: 12n, nextOpenAt: 77n }) } },
+      { pubkey: k(0, 64), account: { data: poolTypeAccount({ mode: 0, tier: 0, capacity: 64, enabled: false }) } },
+      // A 57-byte account that is not a PoolType: an RPC that ignored the
+      // memcmp must not turn it into one.
+      {
+        pubkey: Keypair.fromSeed(new Uint8Array(32).fill(90)).publicKey,
+        account: { data: poolTypeAccount({ mode: 0, tier: 0, capacity: 8, discriminator: Buffer.alloc(8, 1) }) },
+      },
+      { pubkey: k(0, 8), account: { data: poolTypeAccount({ mode: 0, tier: 0, capacity: 8 }) } }
+    );
+    const types = await chain(connection).getPoolTypes();
+    expect(filters[0]).to.deep.equal([
+      { dataSize: POOL_TYPE_SPACE },
+      { memcmp: { offset: 0, bytes: base58Encode(POOL_TYPE_DISCRIMINATOR) } },
+    ]);
+    expect(types.map((t) => [t.mode, t.tier, t.capacity])).to.deep.equal([
+      [0, 0, 8],
+      [0, 0, 64],
+      [1, 0, 8],
+    ]);
+    expect(types[0].address).to.equal(k(0, 8).toBase58());
+    expect(types[1].enabled).to.equal(false);
+    expect(types[2].activePool).to.equal(12n);
+    expect(types[2].nextOpenAt).to.equal(77n);
+    expect(types[0].prizeTable.slice(0, 2)).to.deep.equal([...ladderTable(8)]);
+    expect(types[0].potLamports).to.equal(prizePoolFor(ladderTable(8), TIER_ENTRY_LAMPORTS[0]));
+    expect(types[0].minSeats).to.equal(minFieldFor(8));
+    expect(types[0]).to.not.have.property('bump');
+  });
+
+  it('poolTypeRemainingAccounts: the enabled set, ascending by raw bytes, the count Config proves', () => {
+    const keys = [8, 16, 32, 64].map((cap) => poolTypePda(0, 0, cap).toBase58());
+    const listed = [
+      { address: keys[0], enabled: true },
+      { address: keys[1], enabled: false },
+      { address: keys[2], enabled: true },
+      { address: keys[3], enabled: true },
+    ];
+    // withdraw_platform's shape: every enabled type, none excluded.
+    const all = poolTypeRemainingAccounts(3, listed, null).map((k) => k.toBase58());
+    expect(all.length).to.equal(3);
+    expect(all).to.not.include(keys[1]);
+    const bytes = all.map((a) => new PublicKey(a).toBytes());
+    for (let i = 1; i < bytes.length; i++) {
+      expect(compareAddressBytes(bytes[i - 1], bytes[i]), 'strictly ascending').to.be.lessThan(0);
+    }
+    // open_pool's: the one being opened is left out.
+    expect(poolTypeRemainingAccounts(3, listed, keys[2]).map((k) => k.toBase58())).to.not.include(keys[2]);
+    expect(() => poolTypeRemainingAccounts(4, listed, null)).to.throw(/PoolTypeListIncomplete/);
+    expect(() => poolTypeRemainingAccounts(3, listed, keys[1])).to.throw(/PoolTypeDisabled/);
   });
 });

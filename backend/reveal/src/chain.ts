@@ -433,6 +433,15 @@ interface SplitState {
  * machine that a crank bug (double commit, pay before commit, a malformed
  * payout list, a seat outside the committed set) fails the same way it
  * would on-chain.
+ *
+ * Since the Ladder (D-E19) it also holds the `PoolType` accounts and
+ * enforces what the program does with them: a pool seals at ITS capacity,
+ * a deadline seals at ITS minimum field and refunds below it, a commit is
+ * bounded by ITS first prize, pay / refund free ITS type's slot and stamp
+ * that type's cooldown (and need that type's account to exist at all),
+ * `pay_next_place` refuses a multi-place pool, and `open_pool` refuses a
+ * disabled type, a closed tier, a busy or cooling type, stale economics,
+ * and a treasury short of the reserve over every OTHER enabled type.
  */
 export class FakeChain implements KeeperChain {
   pools = new Map<string, ChainPoolView>();

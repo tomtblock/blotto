@@ -29,6 +29,7 @@ import {
 import {
   assignPrizes,
   battlesHash,
+  boardModeOf,
   ladderTable,
   minFieldFor,
   prizePoolFor,
@@ -132,31 +133,38 @@ async function enterPlayers(w: World, poolId: bigint, n: number): Promise<string
   if (!key) throw new Error(`pool ${poolId} was never opened`);
   const entries = w.chain.entries.get(poolId.toString())!;
   const pool = w.chain.pools.get(poolId.toString())!;
+  // The pool's recorded placing rule decides the payload's encoding and its
+  // hash. An easy board (100 per battle) is also a valid hard one (700
+  // across the board), so the same deterministic field serves both modes.
+  const mode = boardModeOf(pool.mode);
   const players: string[] = [];
   for (let i = 0; i < n; i++) {
-    const player = base58Encode(sha(`p:${poolId}:${i}`));
+    const player = base58Encode(sha(`p:${poolId}:${entries.length}`));
     players.push(player);
     const payload: SealedPayload = {
-      battles: battlesFor(i * 100),
-      salt: sha(`salt:${poolId}:${i}`),
+      battles: battlesFor(entries.length * 100),
+      salt: sha(`salt:${poolId}:${entries.length}`),
       timingsMs: [1000, 2000, 3000, 4000, 5000, 6000, 7000],
-      deviceHash: sha(`device:${poolId}:${i}`),
+      deviceHash: sha(`device:${poolId}:${entries.length}`),
     };
     entries.push({
       player,
       index: entries.length,
-      battlesHash: hex(battlesHash(payload.battles, payload.salt)),
+      battlesHash: hex(battlesHash(payload.battles, payload.salt, mode)),
       flagged: false,
       refunded: false,
       settled: false,
       forfeited: false,
     });
     pool.entrants = entries.length;
-    await w.store.put(poolId, player, seal(encodePayload(payload), key.publicKey));
+    await w.store.put(poolId, player, seal(encodePayload(payload, mode), key.publicKey));
     w.chain.applyEntryTransitions(poolId);
   }
   return players;
 }
+
+/** The battle sets `enterPlayers` seats at indices 0..n-1, in seat order. */
+const fieldOf = (n: number): BattleSet[] => Array.from({ length: n }, (_, i) => battlesFor(i * 100));
 
 describe('the daemon (C8): keeper', () => {
   it('first tick opens one launch-complete pool for the open tier; second tick is a no-op', async () => {
@@ -478,12 +486,15 @@ describe('the daemon (C8): the minimum field (D-E4)', () => {
 });
 
 describe('the daemon (C8): escrow under the 2026-09-07 ruling (FakeChain mirror)', () => {
-  it('a forfeit moves nothing; the share passes to the eligible tied player, never the treasury', async function () {
+  it('a forfeit moves nothing; the share passes to the eligible tied player, never the treasury (a pre-Ladder pool)', async function () {
     this.timeout(30000);
     const w = await makeWorld();
     await w.daemon.tick(); // opens pool 1
+    // `pay_next_place` serves one-place pools — every pool opened before
+    // the Ladder, as `migrate_pool` records it (D-E19).
+    makePreLadder(w.chain.pools.get('1')!);
     const players = await enterPlayers(w, 1n, 64); // seals
-    const pot = potForTier(0);
+    const pot = POT_64;
     // Flag both tied winners, then commit a two-way tie for first under a
     // REAL results root (the next-place payout verifies against it).
     await w.chain.flagEntry(1n, players[0]);
@@ -574,7 +585,7 @@ describe('the daemon (C8): resume after a crash', () => {
     expect(held.length).to.be.greaterThan(0, 'the winning share is held');
     let heldTotal = 0n;
     for (const [, v] of held) heldTotal += v;
-    expect(heldTotal).to.equal(potForTier(0), 'the whole pot is under review');
+    expect(heldTotal).to.equal(POT_64, 'the whole prize pool is under review');
     for (const [player] of held) {
       expect(w.chain.escrowedAt.get(player)).to.equal(settledAt, 'escrowed_at is the settlement instant');
     }
@@ -598,7 +609,7 @@ describe('the daemon (C8): resume after a crash', () => {
     for (const [player, v] of w.chain.paid) {
       if (held.some(([p]) => p === player)) paid += v;
     }
-    expect(paid).to.equal(potForTier(0));
+    expect(paid).to.equal(POT_64);
     const after = await w.chain.getEntries(1n);
     for (const [player] of held) {
       const e = after.find((x) => x.player === player)!;
@@ -623,17 +634,17 @@ describe('the daemon (C8): resume after a crash', () => {
     const held = [...w.chain.escrowed.keys()];
     expect(held.length).to.be.greaterThan(0);
 
-    // Review upholds every held share: forfeited, waiting for
-    // pay_next_place — the clock must leave each exactly where it is.
+    // Review upholds every held share: forfeited — in a Ladder pool held
+    // in the vault until the cascade ships (D-E19) — and the clock must
+    // leave each exactly where it is.
     for (const p of held) await w.chain.forfeitEscrow(1n, p);
 
     w.clock.t = settledAt + REVIEW_WINDOW_SECS + 24n * 3600n;
     const r = await w.daemon.tick();
     expect(r.errors).to.deep.equal([]);
     expect(r.released).to.deep.equal([], 'a forfeited share is never auto-released');
+    expect(r.nextPlacePaid).to.deep.equal([], 'nor paid onward in a multi-place pool');
     for (const p of held) expect(w.chain.escrowed.get(p)).to.not.equal(undefined, 'still held');
-    // And a forfeited hold does not pin the pool as non-terminal: the
-    // sweep treats it as decided (its route is pay_next_place, audit O23).
     const r2 = await w.daemon.tick();
     expect(r2.errors).to.deep.equal([]);
     expect(r2.released).to.deep.equal([]);
@@ -673,13 +684,16 @@ describe('the daemon (C8): resume after a crash', () => {
     expect(releasedAll).to.deep.equal(held.sort());
   });
 
-  it('the next-place driver: an upheld flag on the winner pays the share to the next rank (O23)', async function () {
+  it('the next-place driver: an upheld flag on the winner pays the share to the next rank (O23, a pre-Ladder pool)', async function () {
     this.timeout(120000);
+    // `pay_next_place` serves one-place pools — every pool opened before the
+    // Ladder (D-E19) — so both passes settle one, as `migrate_pool` records it.
     // Pass 1: settle a pool naturally to learn who the scoring engine ranks
     // first. The field is deterministic (players are seeded by pool id and
     // index), so pass 2 reproduces it exactly.
     const probe = await makeWorld();
     await probe.daemon.tick();
+    makePreLadder(probe.chain.pools.get('1')!);
     await enterPlayers(probe, 1n, 64);
     await probe.daemon.tick();
     const winnerSeat = (await probe.chain.getPool(1n)).payouts[0].entryIndex;
@@ -689,9 +703,10 @@ describe('the daemon (C8): resume after a crash', () => {
     // entry), and therefore the only way a prize is ever escrowed.
     const w = await makeWorld();
     await w.daemon.tick();
+    makePreLadder(w.chain.pools.get('1')!);
     const players = await enterPlayers(w, 1n, 64);
     await w.chain.flagEntry(1n, players[winnerSeat]);
-    const pot = potForTier(0);
+    const pot = POT_64;
 
     const r1 = await w.daemon.tick();
     expect(r1.errors).to.deep.equal([]);
@@ -730,7 +745,7 @@ describe('the daemon (C8): resume after a crash', () => {
       await w.custody.exportSecret(1n),
       await w.chain.getEntries(1n),
       (await w.chain.getPool(1n)).entrants,
-      pot,
+      { table: [Number(pot / TIER_ENTRY_LAMPORTS[0])], entryLamports: TIER_ENTRY_LAMPORTS[0] },
       (await w.chain.getPool(1n)).resultsRootHex
     );
     const atNextRank = ranking.rows.filter((r) => r.rank === 2);
@@ -751,27 +766,29 @@ describe('the daemon (C8): resume after a crash', () => {
     expect(r3.nextPlacePaid).to.deep.equal([]);
   });
 
-  it('the sweep does not go terminal on a pool whose share is still held or forfeited (O23)', async function () {
+  it('the sweep does not go terminal on a pool whose share is still held or forfeited (O23, a pre-Ladder pool)', async function () {
     this.timeout(120000);
     // The floor advances over a terminal PREFIX. A pool that settles with a
     // held share must therefore not read as terminal, or the sweep would
     // walk past it and never come back to carry the share onward.
     const probe = await makeWorld();
     await probe.daemon.tick();
+    makePreLadder(probe.chain.pools.get('1')!);
     await enterPlayers(probe, 1n, 64);
     await probe.daemon.tick();
     const winnerSeat = (await probe.chain.getPool(1n)).payouts[0].entryIndex;
 
     const w = await makeWorld();
     await w.daemon.tick();
+    makePreLadder(w.chain.pools.get('1')!);
     const players = await enterPlayers(w, 1n, 64);
     await w.chain.flagEntry(1n, players[winnerSeat]);
     await w.daemon.tick(); // settles; the prize is escrowed under the flag
 
-    // Held: a second pool opens for the tier, and pool 1 is still swept.
+    // Held: a second pool opens for the type, and pool 1 is still swept.
     await w.chain.forfeitEscrow(1n, players[winnerSeat]);
     const before = w.chain.escrowed.get(players[winnerSeat]);
-    expect(before).to.equal(potForTier(0));
+    expect(before).to.equal(POT_64);
     const r = await w.daemon.tick();
     expect(r.nextPlacePaid.length).to.be.greaterThan(0, 'the sweep came back to pool 1');
   });
@@ -795,7 +812,7 @@ describe('the daemon (C8): resume after a crash', () => {
     const w = await makeWorld();
     // The crash window: open_pool landed, VRF + collection never did.
     const key = await w.custody.createPoolKey(1n);
-    await w.chain.openPool(1n, 0, key.publicKey, key.secretHash, 0);
+    await w.chain.openPool(1n, 0, key.publicKey, key.secretHash, 0, 64);
 
     const r = await w.daemon.tick();
     expect(r.errors).to.deep.equal([]);
@@ -898,7 +915,7 @@ describe('the daemon (C8): resume after a crash', () => {
     });
     // The crash window again, but an entry landed before any seed did.
     const key = await w.custody.createPoolKey(1n);
-    await w.chain.openPool(1n, 0, key.publicKey, key.secretHash, 0);
+    await w.chain.openPool(1n, 0, key.publicKey, key.secretHash, 0, 64);
     w.chain.pools.get('1')!.entrants = 1;
 
     const r = await daemon.tick();
@@ -930,7 +947,7 @@ describe('the daemon (C8): double-run', () => {
 
     const cfg = await w.chain.getConfig();
     expect(cfg.nextPoolId).to.equal(2n); // exactly ONE pool exists
-    expect(cfg.activePoolByTier[0]).to.equal(1n);
+    expect((await typeOf(w)).activePool).to.equal(1n);
     const pool = await w.chain.getPool(1n);
     expect(pool.state).to.equal('Open');
     expect(pool.vrfCommitted).to.equal(true);
@@ -961,17 +978,16 @@ describe('the daemon (C8): double-run', () => {
     // conserved exactly — the paid-mask (mirrored from the program) makes a
     // second settlement of any seat fail rather than pay twice.
     expect((await w.chain.getPool(1n)).state).to.equal('Paid');
-    const pot = potForTier(0);
     let paid = 0n;
     for (const v of w.chain.paid.values()) paid += v;
     for (const v of w.chain.escrowed.values()) paid += v;
-    expect(paid).to.equal(pot);
+    expect(paid).to.equal(POT_64);
     // And, after the cooldown, the tier has exactly one successor — even
     // with both daemons ticking.
     w.clock.t += (await w.chain.getConfig()).cooldownSeconds;
     await Promise.all([w.daemon.tick(), second.tick()]);
     expect((await w.chain.getConfig()).nextPoolId).to.equal(3n);
-    expect((await w.chain.getConfig()).activePoolByTier[0]).to.equal(2n);
+    expect((await typeOf(w)).activePool).to.equal(2n);
   });
 });
 
@@ -1160,10 +1176,11 @@ describe('the daemon (proposal E1 §5.3): the keeper-cost seam', () => {
       tier: number,
       sealingPubkey: Uint8Array,
       sealingSecretHash: Uint8Array,
-      mode: number
+      mode: number,
+      capacity: number
     ): Promise<void> {
       this.meter();
-      return super.openPool(poolId, tier, sealingPubkey, sealingSecretHash, mode);
+      return super.openPool(poolId, tier, sealingPubkey, sealingSecretHash, mode, capacity);
     }
     override async commitVrfSeed(poolId: bigint, randomnessAccount: string): Promise<void> {
       this.meter();
@@ -1185,6 +1202,7 @@ describe('the daemon (proposal E1 §5.3): the keeper-cost seam', () => {
       vaultCeilingLamports: TIER_ENTRY_LAMPORTS.map((e) => e * 64n),
       treasuryMinPlatformLamports: 0n,
     });
+    chain.addPoolType(0, 0, 64);
     chain.fundPlatform(1_800_000_000_000n);
     const custody = new LocalCustody(async (id) => {
       const p = await chain.getPool(id);
@@ -1375,9 +1393,12 @@ describe('the daemon (C8): the review clock leaves two holds alone (2026-09-12)'
 
   it('a forfeit already in the decision log is never released by the clock; the alert fires once the window passes unlanded; the next-place step pays once the forfeit lands (D-03)', async function () {
     this.timeout(120000);
-    // Pass 1: learn the winning seat (deterministic field).
+    // Pass 1: learn the winning seat (deterministic field). Both passes
+    // settle a one-place (pre-Ladder) pool, the shape `pay_next_place`
+    // serves (D-E19).
     const probe = await makeWorld();
     await probe.daemon.tick();
+    makePreLadder(probe.chain.pools.get('1')!);
     await enterPlayers(probe, 1n, 64);
     await probe.daemon.tick();
     const winnerSeat = (await probe.chain.getPool(1n)).payouts[0].entryIndex;
@@ -1399,13 +1420,14 @@ describe('the daemon (C8): the review clock leaves two holds alone (2026-09-12)'
       monitor,
     });
     await daemon.tick();
+    makePreLadder(w.chain.pools.get('1')!);
     const players = await enterPlayers(w, 1n, 64);
     const winner = players[winnerSeat];
     await w.chain.flagEntry(1n, winner);
     const settledAt = w.clock.t;
     const r1 = await daemon.tick();
     expect(r1.errors).to.deep.equal([]);
-    expect(w.chain.escrowed.get(winner)).to.equal(potForTier(0), "the winner's prize is held");
+    expect(w.chain.escrowed.get(winner)).to.equal(POT_64, "the winner's prize is held");
     forfeitLogged.add(winner);
 
     // Inside the window: held, no alert yet (the multisig is not late).
@@ -1421,7 +1443,7 @@ describe('the daemon (C8): the review clock leaves two holds alone (2026-09-12)'
     const r3 = await daemon.tick();
     expect(r3.errors).to.deep.equal([]);
     expect(r3.released).to.deep.equal([], 'a logged forfeit is never auto-released');
-    expect(w.chain.escrowed.get(winner)).to.equal(potForTier(0));
+    expect(w.chain.escrowed.get(winner)).to.equal(POT_64);
     expect(monitor.alerts.map((a) => a.reason)).to.deep.equal([ALERT.reveal.forfeitUnlanded]);
     expect(monitor.alerts[0].detail).to.include({ poolId: '1', player: winner });
 
@@ -1510,5 +1532,263 @@ describe('the daemon (C8): a Paid pool still owes its bundle (2026-09-12)', () =
     wall += 10_000;
     await daemon.tick();
     expect(owedCalls).to.equal(4, 'a recorded bundle is never re-uploaded');
+  });
+});
+
+/*
+ * THE LADDER, END TO END (D-E19, founder ruling 2026-11-04/05): eight pool
+ * types at launch — both modes × 8, 16, 32 and 64 players at tier 0 — each
+ * with its own slot, cooldown, minimum field and fixed table. The keeper
+ * opens all of them; each settles on its own table; a forfeited share in a
+ * multi-place pool is held, never paid onward.
+ */
+describe('the daemon (D-E19): the Ladder end to end', () => {
+  /** Every launch type's opened entry, in the policy's order. */
+  const launchOrder = () =>
+    LAUNCH_TYPES.map(([mode, tier, capacity]) => ({ mode, tier, capacity }))
+      .sort((a, b) => a.tier - b.tier || a.mode - b.mode || a.capacity - b.capacity)
+      .map((t, i) => ({ poolId: BigInt(i + 1), tier: t.tier, mode: t.mode, capacity: t.capacity }));
+
+  it('the launch posture: eight pool types open at once, each launch-complete; the next tick is a no-op', async () => {
+    const w = await makeWorld(LAUNCH_TYPES);
+    const r = await w.daemon.tick();
+    expect(r.errors).to.deep.equal([]);
+    expect(r.opened).to.deep.equal(launchOrder());
+    expect(r.completed).to.deep.equal(
+      launchOrder().flatMap((o) => [
+        { poolId: o.poolId, step: 'pass_collection' },
+        { poolId: o.poolId, step: 'vrf' },
+      ])
+    );
+    for (const o of launchOrder()) {
+      const p = await w.chain.getPool(o.poolId);
+      const table = ladderTable(o.capacity);
+      expect([p.mode, p.capacity, p.minSeats, p.paidPlaces], `pool ${o.poolId}`).to.deep.equal([
+        o.mode,
+        o.capacity,
+        minFieldFor(o.capacity),
+        table.length,
+      ]);
+      expect(p.potLamports).to.equal(prizePoolFor(table, TIER_ENTRY_LAMPORTS[0]));
+      expect((await typeOf(w, o.mode, 0, o.capacity)).activePool).to.equal(o.poolId);
+    }
+    const r2 = await w.daemon.tick();
+    expect(r2.errors).to.deep.equal([]);
+    expect(r2.opened).to.deep.equal([]);
+    expect(r2.completed).to.deep.equal([]);
+    expect((await w.chain.getConfig()).nextPoolId).to.equal(9n);
+  });
+
+  it('every size fills to its capacity, seals, settles on its own table to the lamport, and its type reopens', async function () {
+    this.timeout(60000);
+    const w = await makeWorld(LAUNCH_TYPES);
+    await w.daemon.tick();
+    for (const o of launchOrder()) {
+      await enterPlayers(w, o.poolId, o.capacity);
+      expect((await w.chain.getPool(o.poolId)).state, `pool ${o.poolId} seals at ${o.capacity}`).to.equal('Sealed');
+    }
+    const platformBefore = w.chain.platform;
+    const r = await w.daemon.tick();
+    expect(r.errors).to.deep.equal([]);
+    expect(r.cranked).to.deep.equal(launchOrder().map((o) => ({ poolId: o.poolId, finalState: 'Paid' })));
+    // Settlement moves nothing into or out of the treasury.
+    expect(w.chain.platform).to.equal(platformBefore);
+
+    for (const o of launchOrder()) {
+      const pool = await w.chain.getPool(o.poolId);
+      const table = ladderTable(o.capacity);
+      const entry = TIER_ENTRY_LAMPORTS[0];
+      const mode = boardModeOf(o.mode);
+      // The committed list is exactly the engine's nonzero amounts over the
+      // pool's table and entry price (D3-B ties included)…
+      const engine = assignPrizes(scorePool(fieldOf(o.capacity), mode), table, entry);
+      expect(pool.payouts, `pool ${o.poolId}`).to.deep.equal(
+        engine
+          .filter((x) => x.amountLamports > 0n)
+          .sort((a, b) => a.index - b.index)
+          .map((x) => ({ entryIndex: x.index, amountLamports: x.amountLamports }))
+      );
+      expect(pool.payouts.length, `${o.capacity} pays at least its ${table.length} places`).to.be.at.least(table.length);
+      // …and the paid set carries exactly the prize pool.
+      const players = (await w.chain.getEntries(o.poolId)).map((e) => e.player);
+      let paid = 0n;
+      for (const p of players) paid += w.chain.paid.get(p) ?? 0n;
+      expect(paid, `pool ${o.poolId}`).to.equal(prizePoolFor(table, entry));
+      expect(paid).to.equal(pool.potLamports);
+      // The bundle names the terms (version 4).
+      const bundle = [...w.publisher.published.values()].find((b) => b.pool_id === o.poolId.toString())!;
+      expect([bundle.version, bundle.capacity, bundle.paid_places, bundle.min_seats]).to.deep.equal([
+        4,
+        o.capacity,
+        table.length,
+        minFieldFor(o.capacity),
+      ]);
+      expect(bundle.prize_table).to.deep.equal([...table]);
+      expect(bundle.mode).to.equal(mode);
+    }
+
+    // Each type's slot freed at Paid; after the cooldown all eight reopen.
+    const next = await tickAfterCooldown(w);
+    expect(next.errors).to.deep.equal([]);
+    expect(next.opened.map((o) => o.capacity)).to.deep.equal(launchOrder().map((o) => o.capacity));
+    expect(next.opened.map((o) => o.poolId)).to.deep.equal(launchOrder().map((o) => o.poolId + 8n));
+  });
+
+  it('the minimum field per size: at it the pool seals and pays its table; one below it refunds in full', async function () {
+    this.timeout(60000);
+    const easy = LAUNCH_TYPES.filter(([mode]) => mode === 0);
+    const w = await makeWorld(easy);
+    const r0 = await w.daemon.tick();
+    expect(r0.opened.map((o) => o.capacity)).to.deep.equal([8, 16, 32, 64]);
+    for (const o of r0.opened) {
+      // The POOL's own floor, copied from its type at open.
+      expect((await w.chain.getPool(o.poolId)).minSeats).to.equal(minFieldFor(o.capacity));
+      await enterPlayers(w, o.poolId, minFieldFor(o.capacity));
+    }
+    w.clock.t = (await w.chain.getPool(1n)).fillDeadline + 1n;
+    const r1 = await w.daemon.tick();
+    expect(r1.errors).to.deep.equal([]);
+    expect(r1.sealedAtDeadline).to.deep.equal([1n, 2n, 3n, 4n]);
+    expect(r1.refundsTriggered).to.deep.equal([]);
+    expect(r1.cranked.map((c) => c.finalState)).to.deep.equal(['Paid', 'Paid', 'Paid', 'Paid']);
+    for (const o of r0.opened) {
+      const pool = await w.chain.getPool(o.poolId);
+      expect(pool.entrants).to.equal(minFieldFor(o.capacity));
+      let total = 0n;
+      for (const c of pool.payouts) total += c.amountLamports;
+      expect(total, `the ${o.capacity}-player table, paid in full at its minimum field`).to.equal(pool.potLamports);
+    }
+
+    const r2 = await tickAfterCooldown(w);
+    expect(r2.opened.map((o) => o.capacity)).to.deep.equal([8, 16, 32, 64]);
+    const below = new Map<bigint, string[]>();
+    for (const o of r2.opened) {
+      below.set(o.poolId, await enterPlayers(w, o.poolId, minFieldFor(o.capacity) - 1));
+    }
+    w.clock.t = (await w.chain.getPool(r2.opened[0].poolId)).fillDeadline + 1n;
+    const r3 = await w.daemon.tick();
+    expect(r3.errors).to.deep.equal([]);
+    expect(r3.sealedAtDeadline).to.deep.equal([]);
+    expect(r3.refundsTriggered).to.deep.equal(r2.opened.map((o) => o.poolId));
+    expect(r3.cranked.map((c) => c.finalState)).to.deep.equal(['Closed', 'Closed', 'Closed', 'Closed']);
+    for (const players of below.values()) {
+      for (const p of players) expect(w.chain.paid.get(p)).to.equal(TIER_ENTRY_LAMPORTS[0]); // 100% back (R7)
+    }
+    for (const o of r2.opened) {
+      // The type's slot freed at Closed and its cooldown is stamped.
+      const t = await typeOf(w, 0, 0, o.capacity);
+      expect(t.activePool).to.equal(0n);
+      expect(t.nextOpenAt).to.equal(w.clock.t + (await w.chain.getConfig()).cooldownSeconds);
+    }
+  });
+
+  it('a Ladder pool with an upheld flag: the share is HELD in its vault, never paid onward, said once', async function () {
+    this.timeout(60000);
+    const w = await makeWorld([[0, 0, 8]]);
+    const monitor = new RecordingMonitor();
+    const steps: string[] = [];
+    let nextPlaceCalls = 0;
+    const real = w.chain.payNextPlace.bind(w.chain);
+    w.chain.payNextPlace = async (...args: Parameters<FakeChain['payNextPlace']>) => {
+      nextPlaceCalls++;
+      return real(...args);
+    };
+    const daemon = makeDaemon({
+      chain: w.chain,
+      custody: w.custody,
+      ciphertexts: w.store,
+      vrf: new StubVrfCoordinator(w.chain, base58Encode(sha('randomness'))),
+      crank: (poolId) =>
+        crankPool({ chain: w.chain, custody: w.custody, ciphertexts: w.store, publisher: w.publisher }, poolId),
+      now: () => w.clock.t,
+      monitor,
+      log: (step) => steps.push(step),
+    });
+    await daemon.tick();
+    const players = await enterPlayers(w, 1n, 8); // fills and seals
+    // Every seat flagged before settlement: whoever the table pays is paid
+    // INTO escrow — the winners are the engine's to decide, not the test's.
+    for (const p of players) await w.chain.flagEntry(1n, p);
+    const r1 = await daemon.tick();
+    expect(r1.errors).to.deep.equal([]);
+    expect(r1.cranked).to.deep.equal([{ poolId: 1n, finalState: 'Paid' }]);
+    const held = [...w.chain.escrowed.keys()];
+    expect(held.length, 'the 8-player table pays two places (or a tie)').to.be.at.least(2);
+
+    // Review upholds every flag. Nothing moves at forfeit.
+    for (const p of held) await w.chain.forfeitEscrow(1n, p);
+    const escrowBefore = new Map(w.chain.escrowed);
+    const platformBefore = w.chain.platform;
+
+    const r2 = await daemon.tick();
+    expect(r2.errors).to.deep.equal([]);
+    expect(r2.nextPlacePaid).to.deep.equal([]);
+    expect(nextPlaceCalls, 'pay_next_place is never called for a multi-place pool').to.equal(0);
+    expect(r2.held.map((h) => h.reason)).to.deep.equal(held.map(() => 'next_place_unsupported'));
+    expect(r2.held.map((h) => h.player).sort()).to.deep.equal([...held].sort());
+    expect(monitor.count(METRIC.reveal.releaseHeld, { reason: 'next_place_unsupported' })).to.equal(1);
+    expect(steps.filter((x) => x === 'pay_next_place:held-until-cascade')).to.have.length(1);
+    expect(w.chain.escrowed).to.deep.equal(escrowBefore, 'every share still in the vault');
+    expect(w.chain.platform).to.equal(platformBefore, 'not one lamport to us');
+    for (const p of held) expect(w.chain.paid.get(p) ?? 0n).to.equal(0n);
+
+    // Said ONCE per pool: the next ticks neither repeat it nor error.
+    const r3 = await daemon.tick();
+    expect(r3.errors).to.deep.equal([]);
+    expect(r3.held).to.deep.equal([]);
+    expect(monitor.count(METRIC.reveal.releaseHeld, { reason: 'next_place_unsupported' })).to.equal(1);
+    expect(steps.filter((x) => x === 'pay_next_place:held-until-cascade')).to.have.length(1);
+    expect(nextPlaceCalls).to.equal(0);
+    // And the program would refuse it anyway.
+    await expectRejects(
+      () => real(1n, held[0], players.find((p) => !held.includes(p))!, 3, 0n, [], 1, true, []),
+      'NextPlaceUnsupported'
+    );
+    // The type is free again after its cooldown: a held share never
+    // freezes the pool type.
+    w.clock.t += (await w.chain.getConfig()).cooldownSeconds;
+    const r4 = await daemon.tick();
+    expect(r4.errors).to.deep.equal([]);
+    expect(r4.opened).to.deep.equal([{ poolId: 2n, tier: 0, mode: 0, capacity: 8 }]);
+  });
+
+  it('a share forfeited later in the same Ladder pool is reported when it is first seen', async function () {
+    this.timeout(60000);
+    const w = await makeWorld([[0, 0, 8]]);
+    await w.daemon.tick();
+    const players = await enterPlayers(w, 1n, 8);
+    for (const p of players) await w.chain.flagEntry(1n, p);
+    await w.daemon.tick(); // Paid; every paid share escrowed under review
+    const held = [...w.chain.escrowed.keys()];
+    expect(held.length).to.be.at.least(2);
+    // One review upholds first; the other is still open (in the window).
+    await w.chain.forfeitEscrow(1n, held[0]);
+    const r1 = await w.daemon.tick();
+    expect(r1.errors).to.deep.equal([]);
+    expect(r1.held.filter((h) => h.reason === 'next_place_unsupported').map((h) => h.player)).to.deep.equal([held[0]]);
+    // The second is upheld a tick later: reported then, the first not again.
+    await w.chain.forfeitEscrow(1n, held[1]);
+    const r2 = await w.daemon.tick();
+    expect(r2.held.filter((h) => h.reason === 'next_place_unsupported').map((h) => h.player)).to.deep.equal([held[1]]);
+    expect(r2.nextPlacePaid).to.deep.equal([]);
+  });
+
+  it('a pool type the program refuses does not starve the types behind it', async () => {
+    const w = await makeWorld(LAUNCH_TYPES);
+    // A refusal the mirror does not model (the D2 ceiling): the 16-player
+    // easy type is refused; the six types behind it in priority still open.
+    const real = w.chain.openPool.bind(w.chain);
+    w.chain.openPool = async (poolId, tier, pk, hash, mode, capacity) => {
+      if (mode === 0 && capacity === 16) throw new Error('VaultCeilingExceeded');
+      return real(poolId, tier, pk, hash, mode, capacity);
+    };
+    const r = await w.daemon.tick();
+    expect(r.errors.map((e) => [e.action, e.capacity, e.message.includes('VaultCeilingExceeded')])).to.deep.equal([
+      ['keeper', 16, true],
+    ]);
+    expect(r.opened.map((o) => `${o.mode}:${o.capacity}`)).to.deep.equal([
+      '0:8', '0:32', '0:64', '1:8', '1:16', '1:32', '1:64',
+    ]);
+    expect(r.opened.map((o) => o.poolId)).to.deep.equal([1n, 2n, 3n, 4n, 5n, 6n, 7n], 'ids stay gapless');
   });
 });

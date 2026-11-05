@@ -18,7 +18,7 @@ import {
   type SealedPayload,
 } from '../../sealing/src';
 import { StubSanctionsCheck, type SanctionsCheck } from '../../sanctions/src';
-import { battlesHash, type BattleSet } from '../../scoring/src';
+import { battlesHash, ladderTable, type BattleSet } from '../../scoring/src';
 import { ladderChain, ladderPoolView } from './ladder-fixtures';
 import { base58Encode } from '../../_shared/src/blotto-events';
 
@@ -237,6 +237,31 @@ describe('the winner check (Stage F)', () => {
       expect(threw!.message).to.match(/could not answer/);
       expect(t.chain.paid.size, 'nobody is paid unscreened').to.equal(0);
       expect(t.chain.sanctionsHeld.size, 'and no hold was recorded for an outage').to.equal(0);
+    });
+
+    it('screens EVERY paid seat of the table, not first place alone (D-E19)', async function () {
+      this.timeout(30000);
+      const t = await sealedPool();
+      const asked: string[][] = [];
+      await crankPool(
+        {
+          chain: t.chain,
+          custody: t.custody,
+          ciphertexts: t.store,
+          publisher: t.publisher,
+          screenWinners: async (_poolId, wallets) => {
+            asked.push([...wallets]);
+            return [];
+          },
+        },
+        1n
+      );
+      const pool = await t.chain.getPool(1n);
+      const entries = await t.chain.getEntries(1n);
+      const paidWallets = pool.payouts.map((p) => entries.find((e) => e.index === p.entryIndex)!.player);
+      expect(asked).to.have.length(1);
+      expect(asked[0]).to.deep.equal(paidWallets);
+      expect(asked[0].length, 'a 64-player table pays sixteen places').to.be.at.least(ladderTable(64).length);
     });
 
     it('a resumed crank does not place a hold twice', async function () {

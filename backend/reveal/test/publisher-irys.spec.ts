@@ -10,13 +10,19 @@
 import { expect } from 'chai';
 import { IrysPublisher, irysNetworkFor, type IrysUploader } from '../src';
 import type { RevealBundle } from '../src';
+import { ladderTable, minFieldFor } from '../../scoring/src';
 
 const bundle: RevealBundle = {
-  version: 3,
+  version: 4,
   mode: 'easy',
   pool_id: '42',
   secret: 'aa'.repeat(32),
   entry_lamports: '100000000',
+  // Version 4 (D-E19): the pool's terms — an 8-player pool's launch table.
+  capacity: 8,
+  paid_places: ladderTable(8).length,
+  prize_table: [...ladderTable(8)],
+  min_seats: minFieldFor(8),
   // One entry in the version-2 shape: battles, salt and the commitment —
   // no timings and no device hash (audit B-31).
   entries: [
@@ -54,7 +60,7 @@ describe('IrysPublisher (C11)', () => {
     const tags = Object.fromEntries(uploads[0].opts!.tags!.map((t) => [t.name, t.value]));
     expect(tags['Content-Type']).to.equal('application/json');
     expect(tags['Blotto-Pool']).to.equal('42');
-    expect(tags['Blotto-Bundle-Version']).to.equal('3');
+    expect(tags['Blotto-Bundle-Version']).to.equal('4');
   });
 
   it('an id-less answer is an error, never a broken URI', async () => {

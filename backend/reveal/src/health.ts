@@ -77,10 +77,13 @@ export const STARTUP_BUDGET_MS = 300_000;
  * was implemented by nothing.
  *
  * PHASE-N-REVIEW: fifteen minutes. A normal tick takes seconds; the longest
- * legitimate one is a settlement whose winner screening runs once per tied
- * winner (up to ~13 s each on the vendor's retry budget), so a 52-way tie
- * could approach eleven minutes. The budget sits above that so a healthy
- * worst case never reports itself unhealthy, and well below the twelve-hour
+ * legitimate one is a settlement whose winner screening runs once per paid
+ * seat (up to ~13 s each on the vendor's retry budget). Since the Ladder
+ * (D-E19) a full 64-player table screens sixteen wallets (~3.5 minutes) and
+ * a whole-field tie all 64 (~14 minutes) — the margin under the budget is
+ * now thin in that worst case, and several pools settling in one tick add
+ * up. The budget sits above a single pool's worst case so a healthy one
+ * never reports itself unhealthy, and well below the twelve-hour
  * review window so a wedged daemon raises the alarm long before any clock it
  * drives matters (it is not restarted automatically — see the file header).
  * Not a founder number; tune from measured ticks.
