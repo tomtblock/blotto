@@ -28,6 +28,7 @@ Where any document and the code disagree, the code is right and the document is 
 | [`guide/OPERATING-MANUAL.md`](guide/OPERATING-MANUAL.md) | Operating a deployment: roles and keys, the admin CLI, opening tiers, program upgrades, the daemon, reviews, incidents |
 | [`guide/MOBILE.md`](guide/MOBILE.md) | **The mobile channel**: the complete list of what differs on a phone, building and signing the Android package (`mobile/`), change control for one app on two channels, and the Solana dApp Store submission checklist |
 | [`guide/DEVNET-REHEARSAL.md`](guide/DEVNET-REHEARSAL.md) | The offline settlement rehearsal CI runs, and worked examples of the admin CLI against devnet |
+| [`guide/LADDER-LAUNCH.md`](guide/LADDER-LAUNCH.md) | The one-time devnet launch of the Ladder (D-E19): the order and the values, from draining the last winner-takes-all pools to eight 0.1 SOL pool types live. Points to the operating manual for each procedure |
 
 ## Architecture — what is built and why
 
