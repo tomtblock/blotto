@@ -74,8 +74,11 @@ draw and a stacked battle meeting a conceded one never is.
 
 ## Population mix and fairness of the measurement
 
-Each mixed study pool holds an equal number of entrants of each class (16 each in a 64-seat pool),
-and seat order is shuffled by a seeded Fisher–Yates per pool. Seat index never decides who is paid
+Each mixed study pool holds an equal number of entrants of each class (16 each in a 64-player pool,
+2 each in an 8-player one). Two minimum fields of the Ladder (D-E19) do not divide by four — 5 of 8
+and 10 of 16 — so there the extra entries rotate between classes pool by pool (`classCounts` in
+`../src/ladder.ts`): over any four consecutive pools, and so over the study's 200, every class holds
+exactly the same number of entries. Seat order is shuffled by a seeded Fisher–Yates per pool. Seat index never decides who is paid
 (D3-B), but it does place the indivisible lamport remainder of a tie split and the published leaf
 order; the shuffle removes even that residual correlation between class and seat.
 

@@ -3,9 +3,10 @@
  * long-running process the product loop needs:
  *
  *   - SETTLE: every Sealed pool goes through the crank (2.4) to Paid; an
- *     Open pool past its deadline is sealed and cranked when it holds the
- *     minimum field (52..63 entrants, D-E4) and refund-triggered and
- *     drained when it does not.
+ *     Open pool past its deadline is sealed and cranked when it holds its
+ *     OWN minimum field (`Pool.min_seats` — 5, 10, 20 or 40 at launch for
+ *     8, 16, 32 or 64 players, D-E4/D-E19) and refund-triggered and drained
+ *     when it does not.
  *   - THE REVIEW CLOCK (Phase 2 Stage D): the rules page's "if no decision
  *     is made within 12 hours, the flag is cleared and the prize is paid".
  *     A settled pool's flagged, still-escrowed, not-forfeited share is
@@ -33,33 +34,40 @@
  *     divided among the eligible players at the rank it passes to, with
  *     `pay_next_place`. Until this existed the program could do it and
  *     nothing asked, so an upheld share sat in the vault indefinitely.
- *   - KEEP: every open tier always has exactly one Open pool. Once a
- *     tier's slot frees (the pool reaches Paid or Closed — sequential
- *     pools, D-A1 revised — which clears `Config.active_pool_by_tier`) AND
- *     its cooldown has elapsed (`Config.tier_next_open_at`, prompt v2
- *     §B.6 — five minutes at launch), the next tick opens the successor:
- *     sealing key from custody → `open_pool` (keeper-signed, prompt v2 §A)
- *     → `commit_vrf_seed` → `create_pass_collection`.
+ *     Since the Ladder (D-E19) only a pool paying ONE place qualifies —
+ *     every pool opened before it. A Ladder pool's forfeited share is HELD
+ *     in its vault (the program refuses with `NextPlaceUnsupported`) until
+ *     the "field moves up" payout ships; the daemon never calls
+ *     `pay_next_place` for one, and says so once per pool.
+ *   - KEEP: every enabled POOL TYPE — (mode, tier, capacity), D-E19 — on an
+ *     open tier always has exactly one Open pool. Once a type's slot frees
+ *     (its pool reaches Paid or Closed — sequential pools, D-A1 revised —
+ *     which clears `PoolType.active_pool`) AND its cooldown has elapsed
+ *     (`PoolType.next_open_at`, prompt v2 §B.6 — five minutes at launch),
+ *     the next tick opens the successor: sealing key from custody →
+ *     `open_pool` (keeper-signed, prompt v2 §A) → `create_pass_collection`
+ *     (→ `commit_vrf_seed` when a coordinator is wired).
  *
  * POLL-BASED AND IDEMPOTENT. There is no local database: every tick reads
  * the chain's CURRENT state and does only what is missing, so a crashed
  * daemon resumes by simply starting again, and two daemons running at once
  * cannot corrupt anything — the program's own guards (gapless pool ids, one
- * Open pool per tier, write-once VRF seed, write-once collection PDA, the
- * paid-mask) reject the loser's transaction, the daemon logs the rejection
- * and the next tick observes the winner's result. Every per-pool and
- * per-tier failure is caught and reported; one broken pool never stops the
- * sweep or the keeper.
+ * Open pool per pool type, write-once VRF seed, write-once collection PDA,
+ * the paid-mask) reject the loser's transaction, the daemon logs the
+ * rejection and the next tick observes the winner's result. Every per-pool
+ * and per-type failure is caught and reported; one broken pool never stops
+ * the sweep or the keeper.
  *
  * Crash windows the keeper closes on resume:
  *   - after `createPoolKey`, before `open_pool` landed → custody's
  *     `getPublishedKey` republishes the SAME key (the hash committed
  *     on-chain must match the secret custody holds);
- *   - after `open_pool`, before VRF or the collection → the tier's active
- *     pool is Open but incomplete; the tick commits the seed and creates
- *     the collection before anything else. `register` requires the VRF
- *     seed, so an incomplete pool cannot take entries — completion is the
- *     keeper's job, not the player's problem.
+ *   - after `open_pool`, before the collection (or the seed) → the pool
+ *     type's live pool is Open but incomplete; the tick creates the
+ *     collection (and commits a seed, when a coordinator is wired) before
+ *     anything else. `register` cannot mint without the collection, so an
+ *     incomplete pool cannot take entries — completion is the keeper's job,
+ *     not the player's problem.
  *
  * The production PROCESS entry (env wiring, Turnkey custody, the Irys
  * publisher, the Switchboard coordinator) lands with the C11/C12 adapters;
@@ -67,15 +75,20 @@
  * crank itself took in Phase 2.
  */
 
-import { MIN_SEATS, REVIEW_WINDOW_SECS } from '../../scoring/src';
+import { REVIEW_WINDOW_SECS } from '../../scoring/src';
 import { ALERT, METRIC } from '../../_shared/src/metrics';
 import type { Monitor } from '../../_shared/src/monitor';
-import type { KeeperChain, PoolStateName } from './chain';
+import type { ChainPoolTypeView, KeeperChain, PoolStateName } from './chain';
 import type { PublishedBundleStore } from './published-store';
-import { planNextPlace, payNextPlacePortions, type NextPlacePaid } from './next-place';
-import { recomputeRanking } from './ranking';
+import {
+  nextPlaceSupported,
+  planNextPlace,
+  payNextPlacePortions,
+  type NextPlacePaid,
+} from './next-place';
+import { poolPrizeTable, recomputeRanking } from './ranking';
 import { boardModeOf } from './deps';
-import { nextOpenable, type TierPoolStates } from './treasury';
+import { nextOpenable, poolTypeKey, poolTypeLabel } from './treasury';
 import type { CrankOutcome } from './crank';
 import type { CiphertextStore, PoolKeyCustody } from './deps';
 
@@ -182,19 +195,23 @@ export interface DaemonError {
   action: string;
   poolId?: string;
   tier?: number;
+  /** The pool type's size, when the failure belongs to one (D-E19). */
+  capacity?: number;
   message: string;
 }
 
 export interface TickReport {
-  /** Pools opened this tick, with their tier and ladder (0 easy, 1 hard). */
-  opened: { poolId: bigint; tier: number; mode: number }[];
+  /** Pools opened this tick, with their pool type: tier, ladder (0 easy,
+   * 1 hard) and capacity (D-E19). */
+  opened: { poolId: bigint; tier: number; mode: number; capacity: number }[];
   /** Pools the crank ran for, with the state each rested at. */
   cranked: { poolId: bigint; finalState: string }[];
-  /** Open pools past deadline whose refund fork this tick triggered (fewer
-   * than 52 entrants, D-E4). */
+  /** Open pools past deadline whose refund fork this tick triggered (below
+   * the pool's own minimum field, D-E4). */
   refundsTriggered: bigint[];
-  /** Open pools past deadline this tick sealed at 52..63 entrants (D-E4);
-   * each is cranked in the same tick. */
+  /** Open pools past deadline this tick sealed at or above their own
+   * minimum field and below their capacity (D-E4); each is cranked in the
+   * same tick. */
   sealedAtDeadline: bigint[];
   /** Launch-completion steps performed (VRF commits, collections). */
   completed: { poolId: bigint; step: 'vrf' | 'pass_collection' }[];
@@ -204,10 +221,16 @@ export interface TickReport {
   /** Portions of upheld-flag shares paid on to the next eligible place this
    * tick (audit O23). One entry per recipient, not per forfeiter. */
   nextPlacePaid: NextPlacePaid[];
-  /** Held shares the review clock deliberately left in place this tick and
-   * why: a sanctions hold the program would refuse to release, or a forfeit
-   * already in the decision log (2026-09-12). */
-  held: { poolId: bigint; player: string; reason: 'sanctions_hold' | 'forfeit_logged' }[];
+  /** Held shares the daemon deliberately left in place this tick and why: a
+   * sanctions hold the program would refuse to release, a forfeit already in
+   * the decision log (2026-09-12), or a FORFEITED share of a Ladder pool,
+   * which `pay_next_place` refuses (`NextPlaceUnsupported`) until the "field
+   * moves up" payout ships (D-E19) — reported the tick it is first seen. */
+  held: {
+    poolId: bigint;
+    player: string;
+    reason: 'sanctions_hold' | 'forfeit_logged' | 'next_place_unsupported';
+  }[];
   /** Bundles the "bundle owed" pass published this tick (2026-09-12). */
   published: { poolId: bigint; uri: string }[];
   /** Every caught failure — the tick continues past each. */
@@ -246,7 +269,8 @@ export interface LoopHooks {
 }
 
 export interface Daemon {
-  /** One pass: settle everything settleable, then top up every open tier. */
+  /** One pass: settle everything settleable, then top up every enabled
+   * pool type on an open tier. */
   tick(): Promise<TickReport>;
   /** Poll loop: tick, sleep, repeat until the signal aborts. A throwing
    * tick (e.g. RPC down) is logged and retried next interval. THE ONLY
@@ -264,6 +288,14 @@ export function makeDaemon(deps: DaemonDeps): Daemon {
   // The publish backoff, per pool. In-memory like the floor: a restart
   // retries at once, which is the right thing after a fix.
   const publishRetry = new Map<string, { failures: number; nextAttemptMs: number }>();
+  // Ladder pools (`poolId`) and their forfeited shares (`poolId:player`)
+  // already reported as held for the cascade upgrade, so the line and the
+  // metric fire once rather than every tick. In-memory: a restart says it
+  // once more, which is the right amount.
+  const heldForCascade = new Set<string>();
+  // The last state each pool was seen in this process — the keeper's hold
+  // reason names a busy type's pool by it, at no extra RPC.
+  const knownStates = new Map<bigint, PoolStateName>();
 
   /** Tell the indexer where a bundle is. Fire-safe by contract (see DaemonDeps.announceBundle). */
   async function announce(poolId: bigint, uri: string, report: TickReport): Promise<void> {
@@ -282,19 +314,32 @@ export function makeDaemon(deps: DaemonDeps): Daemon {
 
     // The deadline is STRICTLY past, exactly as both instructions compare
     // `Clock` on-chain — at `now == fill_deadline` neither would land.
-    // (A full pool can never be Open: the 64th `register` seals it.)
+    // (A full pool can never be Open: the `register` that reaches the
+    // pool's capacity seals it.)
     if (pool.state === 'Open' && deps.now() > pool.fillDeadline) {
-      if (BigInt(pool.entrants) >= MIN_SEATS) {
+      // The POOL's own floor, copied at open (R7-b, D-E19) — the field both
+      // instructions read, so the daemon and the program cannot disagree
+      // about which side of the fork a pool is on.
+      if (pool.entrants >= pool.minSeats) {
         // D-E4 (option A): the minimum field is met — seal and play. One
         // clock: the deadline set at open (12 h at launch), never moved.
         await deps.chain.sealAtDeadline(poolId);
         report.sealedAtDeadline.push(poolId);
-        log('seal_at_deadline', { poolId: poolId.toString(), entrants: pool.entrants });
+        log('seal_at_deadline', {
+          poolId: poolId.toString(),
+          entrants: pool.entrants,
+          minSeats: pool.minSeats,
+          capacity: pool.capacity,
+        });
       } else {
         // R7: the deadline passed below the minimum field — the refund fork.
         await deps.chain.triggerRefund(poolId);
         report.refundsTriggered.push(poolId);
-        log('trigger_refund', { poolId: poolId.toString() });
+        log('trigger_refund', {
+          poolId: poolId.toString(),
+          entrants: pool.entrants,
+          minSeats: pool.minSeats,
+        });
       }
       pool = await deps.chain.getPool(poolId);
     }
@@ -381,7 +426,46 @@ export function makeDaemon(deps: DaemonDeps): Daemon {
     if (pool.state === 'Paid') {
       const entries = await deps.chain.getEntries(poolId);
       const forfeited = entries.filter((e) => e.forfeited && e.escrowLamports > 0n);
-      if (forfeited.length > 0) {
+      if (forfeited.length > 0 && !nextPlaceSupported(pool)) {
+        // D-E19: a Ladder pool pays several places, and `pay_next_place`'s
+        // rule — "the committed list IS the tied first-place group" — would
+        // pay the wrong players there, so the program refuses it
+        // (`NextPlaceUnsupported`). The share stays in THIS pool's vault,
+        // never to the operator, until the "field moves up" payout ships.
+        // Nothing for the daemon to send: say so once per pool, report it,
+        // and count it so the watcher sees a share waiting on an upgrade.
+        //
+        // PHASE-D-E19-REVIEW: such a pool does NOT hold the sweep floor. No
+        // tick can move the share, and a floor pinned until an upgrade would
+        // re-read every later pool every tick; the restart that ships the
+        // cascade rescans from `startPoolId` and finds it again.
+        const key = poolId.toString();
+        // A share forfeited later in the same pool (its review ran longer)
+        // is reported when it is first seen; the pool is announced once.
+        const fresh = forfeited.filter((f) => !heldForCascade.has(`${key}:${f.player}`));
+        if (fresh.length > 0) {
+          const firstForPool = !heldForCascade.has(key);
+          heldForCascade.add(key);
+          for (const f of fresh) {
+            heldForCascade.add(`${key}:${f.player}`);
+            report.held.push({ poolId, player: f.player, reason: 'next_place_unsupported' });
+          }
+          if (firstForPool) {
+            deps.monitor?.recordEvent(METRIC.reveal.releaseHeld, {
+              reason: 'next_place_unsupported',
+            });
+          }
+          log('pay_next_place:held-until-cascade', {
+            poolId: key,
+            paidPlaces: pool.paidPlaces,
+            players: fresh.map((f) => f.player),
+            heldLamports: fresh.reduce((a, f) => a + f.escrowLamports, 0n).toString(),
+            reason:
+              'a forfeited share of a multi-place pool is held in its vault until the ' +
+              '"field moves up" payout ships (NextPlaceUnsupported)',
+          });
+        }
+      } else if (forfeited.length > 0) {
         sharesOutstanding = true;
         const secret = await deps.custody.exportSecret(poolId);
         const ranking = await recomputeRanking(
@@ -390,13 +474,13 @@ export function makeDaemon(deps: DaemonDeps): Daemon {
           secret,
           entries,
           pool.entrants,
-          pool.potLamports,
+          { table: poolPrizeTable(pool.prizeTable, pool.paidPlaces, poolId), entryLamports: pool.entryLamports },
           pool.resultsRootHex ?? null,
           boardModeOf(pool.mode)
         );
         const committedSeats = pool.payouts.map((p) => p.entryIndex);
         for (const f of forfeited) {
-          const plan = planNextPlace(ranking, entries, committedSeats, f);
+          const plan = planNextPlace(ranking, entries, committedSeats, f, pool);
           if (plan.blocker !== null) {
             log('pay_next_place:holding', {
               poolId: poolId.toString(),
@@ -453,13 +537,16 @@ export function makeDaemon(deps: DaemonDeps): Daemon {
       }
     }
 
+    // Only live pools can be a busy type's, so a terminal one is forgotten.
+    if (TERMINAL.has(pool.state)) knownStates.delete(poolId);
+    else knownStates.set(poolId, pool.state);
     return (
       TERMINAL.has(pool.state) && !holdOutstanding && !sharesOutstanding && !publishOutstanding
     );
   }
 
   /**
-   * Land whatever launch steps the tier's Open pool still misses.
+   * Land whatever launch steps a pool type's Open pool still misses.
    *
    * The pass collection comes FIRST because `register` cannot mint without
    * it, while the seed is optional (R22). Until 2026-10-15 the seed came
@@ -515,69 +602,113 @@ export function makeDaemon(deps: DaemonDeps): Daemon {
     }
 
     // ---- KEEP: complete launch steps on every live Open pool -------------
-    // Both ladders (Phase B): a hard pool needs its VRF seed and collection
-    // exactly as an easy one does.
-    for (const active of [...cfg.activePoolByTier, ...cfg.hardActivePoolByTier]) {
-      if (active === 0n) continue;
+    // Every pool type's live pool (D-E19) — both ladders, every size: each
+    // needs its collection (and its seed, when a coordinator is wired)
+    // exactly as any other does. Read after the sweep, which frees slots.
+    let poolTypes: ChainPoolTypeView[] | null = null;
+    try {
+      poolTypes = await deps.chain.getPoolTypes();
+    } catch (e) {
+      report.errors.push({ action: 'keeper', message: String(e) });
+      log('keeper:failed', { error: String(e) });
+    }
+    for (const t of poolTypes ?? []) {
+      if (t.activePool === 0n) continue;
       try {
-        await completeLaunch(active, report);
+        await completeLaunch(t.activePool, report);
       } catch (e) {
-        const tier = (await deps.chain.getPool(active)).tier;
-        report.errors.push({ action: 'keeper', tier, message: String(e) });
-        log('keeper:failed', { tier, error: String(e) });
+        report.errors.push({
+          action: 'keeper',
+          tier: t.tier,
+          capacity: t.capacity,
+          poolId: t.activePool.toString(),
+          message: String(e),
+        });
+        log('keeper:failed', { poolType: poolTypeLabel(t), error: String(e) });
       }
     }
 
     // ---- OPEN: the treasury policy decides (D-A1 revised) ----------------
-    // `nextOpenable` mirrors `open_pool`'s gates exactly (sequential rule +
-    // cooldown + policy floor), lowest tier first; loop until it says none,
-    // so one tick opens every tier the treasury can carry.
-    if (!cfg.paused) {
-      for (let guard = 0; guard < cfg.openTiers.length; guard++) {
+    // `nextOpenable` mirrors `open_pool`'s gates exactly (both switches,
+    // the sequential rule, the cooldown, current economics, the policy
+    // floor), lowest tier first; loop until it says none, so one tick opens
+    // every pool type the treasury can carry. Bounded by the number of
+    // enabled types read at the start, plus the pass that reports the hold:
+    // each open (or refusal) settles one type, so the loop can never need
+    // more, and a type enabled mid-tick waits for the next.
+    if (!cfg.paused && poolTypes !== null) {
+      const bound = poolTypes.filter((t) => t.enabled).length + 1;
+      // A type whose open the program refused this tick (a reason this
+      // mirror does not model — the D2 ceiling, a raced id) is not offered
+      // again until the next tick, so it cannot starve the types behind it.
+      const skip = new Set<string>();
+      let types: ChainPoolTypeView[] = poolTypes;
+      for (let guard = 0; guard < bound; guard++) {
+        let pick: { tier: number; mode: number; capacity: number } | null = null;
+        let opened = false;
         try {
-          // Fresh config each pass: each open advances next_pool_id and
-          // fills a slot, and a concurrent daemon may have moved both.
+          // Fresh reads each pass after the first: each open advances
+          // next_pool_id, fills a slot and moves the treasury, and a
+          // concurrent daemon may have moved all three.
+          if (guard > 0) types = await deps.chain.getPoolTypes();
           const cur = await deps.chain.getConfig();
           const balance = await deps.chain.getPlatformBalance();
-          const stateOf = async (id: bigint): Promise<PoolStateName | 'none'> => {
-            if (id === 0n) return 'none';
-            return (await deps.chain.getPool(id)).state;
-          };
-          const states: TierPoolStates = await Promise.all(cur.activePoolByTier.map(stateOf));
-          const hardStates: TierPoolStates = await Promise.all(
-            cur.hardActivePoolByTier.map(stateOf)
-          );
           // The cushion is the program's own rent figure, read from the
-          // cluster: `open_pool` funds pot + cushion and counts both in
-          // `needed`, so a mirror without it sends an open the program
+          // cluster: `open_pool` funds prize pool + cushion and counts both
+          // in `needed`, so a mirror without it sends an open the program
           // refuses (2026-09-12).
           const cushion = await deps.chain.vaultCushion();
-          const verdict = nextOpenable(cur, balance, states, deps.now(), cushion, hardStates);
-          if (verdict.tier === null || verdict.mode === null) {
+          const verdict = nextOpenable(cur, types, balance, deps.now(), cushion, {
+            poolStates: knownStates,
+            skip,
+          });
+          if (verdict.tier === null || verdict.mode === null || verdict.capacity === null) {
             log('keeper:hold', { reason: verdict.reason });
-            // §2.2: a tier skipped because it is not open is the launch
+            // §2.2: a type skipped because it is not enabled is the launch
             // posture working; the same silence from a shortfall or a stuck
             // pool is an incident. The label is what tells them apart.
             deps.monitor?.recordEvent(METRIC.reveal.keeperHold, { reason: verdict.reason });
             break;
           }
-          const tier = verdict.tier;
-          const mode = verdict.mode;
+          pick = { tier: verdict.tier, mode: verdict.mode, capacity: verdict.capacity };
           const poolId = cur.nextPoolId;
           const key =
             (await deps.custody.getPublishedKey(poolId)) ??
             (await deps.custody.createPoolKey(poolId));
-          await deps.chain.openPool(poolId, tier, key.publicKey, key.secretHash, mode);
-          report.opened.push({ poolId, tier, mode });
-          log('open_pool', { poolId: poolId.toString(), tier, mode, reason: verdict.reason });
+          await deps.chain.openPool(
+            poolId,
+            pick.tier,
+            key.publicKey,
+            key.secretHash,
+            pick.mode,
+            pick.capacity
+          );
+          opened = true;
+          report.opened.push({ poolId, ...pick });
+          knownStates.set(poolId, 'Open');
+          log('open_pool', { poolId: poolId.toString(), ...pick, reason: verdict.reason });
           await completeLaunch(poolId, report);
         } catch (e) {
-          report.errors.push({ action: 'keeper', tier: -1, message: String(e) });
-          log('keeper:failed', { error: String(e) });
+          report.errors.push({
+            action: 'keeper',
+            tier: pick?.tier ?? -1,
+            ...(pick ? { capacity: pick.capacity } : {}),
+            message: String(e),
+          });
+          log('keeper:failed', { poolType: pick ? poolTypeLabel(pick) : null, error: String(e) });
+          // Opened, then a launch step failed: the next tick's completion
+          // pass retries it, and the types behind this one still open now.
+          if (opened) continue;
+          // The program refused this type: skip it for the rest of the tick.
+          if (pick !== null) {
+            skip.add(poolTypeKey(pick));
+            continue;
+          }
+          // A read failed before any type was chosen: nothing more to learn.
           break;
         }
       }
-    } else {
+    } else if (cfg.paused) {
       // PHASE-C-REVIEW: paused holds the KEEPER only — `set_paused` blocks
       // `register`, so opening pools nobody can enter is pointless churn;
       // settlement above keeps running because pausing must never strand

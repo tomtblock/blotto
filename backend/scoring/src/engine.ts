@@ -31,7 +31,7 @@ import {
   type BoardMode,
   assertBattleSet,
 } from './allocation';
-import { PAID_RANKS, PRIZE_BANDS_1024 } from './prizes';
+import { amountForRank, assertPrizeTable } from './prizes';
 
 export type BattleOutcome = 'win' | 'loss' | 'draw';
 
@@ -166,20 +166,34 @@ export function rankOrder(results: readonly PlayerResult[]): number[] {
 }
 
 /**
- * D3-B split-pot prize assignment. A tie group whose members share rank r
- * with size s occupies positions r..r+s-1; its combined prize is the sum of
- * the band amounts of those positions that are ≤ PAID_RANKS (positions
- * past the table pay zero). Each member takes floor(combined / s); the
- * indivisible lamport remainder goes to the group's lowest entry index.
- * Every tied member with a nonzero share is paid. Under D-E2 (one paid
- * place) that means: the sole rank-1 player takes the pot, or a tie for
- * first splits it; nobody ranked second or lower is paid.
+ * D3-B split-pot prize assignment over a pool's prize table (D-E19, the
+ * Ladder). A tie group whose members share rank r with size s occupies
+ * positions r..r+s-1; its combined prize is the sum of `table[pos-1] ×
+ * entry` over those positions, with every position past the table paying
+ * zero — so a group can straddle the paid line and share what the paid
+ * positions inside it are worth (four players tied across 15th–18th of a
+ * 64-player pool share 15th and 16th). Each member takes floor(combined / s);
+ * the indivisible lamport remainder goes to the group's lowest entry index.
+ * Every tied member with a nonzero share is paid. Untied amounts are always
+ * whole multiples of the entry.
  *
- * Returns a NEW array in seat order with `amountLamports` filled. The sum
- * of all amounts equals the sum of the band amounts (the whole pot),
- * exactly — conservation is asserted, not assumed.
+ * `table` and `entryLamports` are the POOL's own — copied on chain at open
+ * (`Pool.prize_table`, `Pool.entry_lamports`) — never the launch table,
+ * because a pool plays by the terms it opened under.
+ *
+ * Returns a NEW array in seat order with `amountLamports` filled. The sum of
+ * all amounts equals the table's value over the positions the field
+ * occupies (the whole prize pool whenever at least `table.length` players
+ * took part — always true of a pool that played, since its minimum field
+ * exceeds its paid places), exactly — conservation is asserted, not assumed.
  */
-export function assignPrizes(results: readonly PlayerResult[], pot: bigint): PlayerResult[] {
+export function assignPrizes(
+  results: readonly PlayerResult[],
+  table: readonly number[],
+  entryLamports: bigint,
+): PlayerResult[] {
+  assertPrizeTable(table);
+  if (entryLamports <= 0n) throw new Error(`entry price must be positive, got ${entryLamports}`);
   const out = results.map((r) => ({ ...r, amountLamports: 0n }));
   // Group members by shared rank.
   const byRank = new Map<number, number[]>();
@@ -194,7 +208,7 @@ export function assignPrizes(results: readonly PlayerResult[], pot: bigint): Pla
     const size = BigInt(seats.length);
     let combined = 0n;
     for (let pos = rank; pos < rank + seats.length; pos++) {
-      if (pos <= PAID_RANKS) combined += (pot * PRIZE_BANDS_1024[pos - 1]) / 1024n;
+      combined += amountForRank(table, entryLamports, pos);
     }
     if (combined === 0n) continue;
     const each = combined / size;
@@ -208,11 +222,10 @@ export function assignPrizes(results: readonly PlayerResult[], pot: bigint): Pla
     }
   }
   // With n players the occupied positions are 1..n, so the expected total
-  // is the first min(PAID_RANKS, n) bands — the whole pot for any pool with
-  // at least one player (pools run with 52..64, D-E4).
+  // is the table's value over positions 1..min(paid places, n).
   let expected = 0n;
-  for (let pos = 1; pos <= Math.min(PAID_RANKS, out.length); pos++) {
-    expected += (pot * PRIZE_BANDS_1024[pos - 1]) / 1024n;
+  for (let pos = 1; pos <= Math.min(table.length, out.length); pos++) {
+    expected += amountForRank(table, entryLamports, pos);
   }
   if (paidTotal !== expected) {
     throw new Error(`split-pot conservation failed: paid ${paidTotal}, expected ${expected}`);

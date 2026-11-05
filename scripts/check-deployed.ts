@@ -72,12 +72,25 @@ const ERR_DID_NOT_DESERIALIZE = 102;
 const ERR_FALLBACK_NOT_FOUND = 101;
 
 /** `Config::SPACE` in programs/blotto_cup/src/state.rs (8 + LEN) since the
- * Phase B upgrade (2026-09-24); `CONFIG_SPACE_V2` is the 2026-09-07 size the
- * live account holds until the Phase B `migrate_config` runs, and
- * `CONFIG_SPACE_V1` the original. */
-const CONFIG_SPACE = 603;
+ * Ladder upgrade (D-E19): 605. `CONFIG_SPACE_V3` is the Phase B size the
+ * live account holds until the Ladder `migrate_config` runs, `CONFIG_SPACE_V2`
+ * the 2026-09-07 size and `CONFIG_SPACE_V1` the original. Kept as literals
+ * rather than imported from backend/_shared/src/config-account.ts because
+ * that module imports @noble/hashes and this lane installs only the root
+ * tooling; `scripts/check-mirrors.py` and the shared module's own tests pin
+ * the same numbers against state.rs. */
+const CONFIG_SPACE = 605;
+const CONFIG_SPACE_V3 = 603;
 const CONFIG_SPACE_V2 = 484;
 const CONFIG_SPACE_V1 = 380;
+
+// Pool and PoolType sizes come from the shared layouts, which have no
+// dependencies (so this lane can load them): Pool 869 since the Ladder (850
+// before it, 849 before Phase B), PoolType 57.
+import { POOL_SPACE, POOL_SPACE_V2, POOL_SPACE_V3 } from '../backend/_shared/src/pool-account';
+import { POOL_TYPE_SPACE } from '../backend/_shared/src/pool-type-account';
+/** `Pool::SPACE_V1` — pre-R7-b (847); the shared decoder no longer accepts it. */
+const POOL_SPACE_V1 = 847;
 
 // ---------------------------------------------------------------------------
 // Encoding helpers — the same wire contract scripts/admin.ts encodes against.
@@ -234,6 +247,57 @@ function sanctionsHoldCheck(name: 'place_sanctions_hold' | 'lift_sanctions_hold'
     name,
     signature: 'pool_id: u64',
     args: u64le(1n),
+  };
+}
+
+/**
+ * The Ladder (D-E19). Three new admin instructions, `open_pool`'s appended
+ * `capacity`, and the instructions whose ACCOUNT lists grew (a pool type, or
+ * the enabled pool types as remaining accounts) — those keep their argument
+ * shapes, so this check sees only that the deployed build has them; the
+ * account lists are pinned by the LiteSVM suite.
+ *
+ * An old build answers the three new instructions with Anchor 101 (no such
+ * instruction), which is exactly the drift this script exists to report.
+ * `open_pool` is weaker: Borsh ignores trailing bytes, so a pre-Ladder build
+ * accepts the longer argument list too (the limit stated in the header).
+ */
+function ladderChecks(): WireCheck[] {
+  const capacity = Buffer.alloc(2);
+  capacity.writeUInt16LE(8);
+  const minSeats = Buffer.alloc(2);
+  minSeats.writeUInt16LE(5);
+  const table = Buffer.alloc(16);
+  table[0] = 3;
+  table[1] = 2;
+  return [
+    {
+      name: 'init_pool_type',
+      signature: 'mode: u8, tier: u8, capacity: u16',
+      args: Buffer.concat([u8b(0), u8b(0), capacity]),
+    },
+    {
+      name: 'set_pool_type_economics',
+      signature:
+        'mode: u8, tier: u8, capacity: u16, min_seats: u16, prize_table: [u8; 16], pot_lamports: u64',
+      args: Buffer.concat([u8b(0), u8b(0), capacity, minSeats, table, u64le(500_000_000n)]),
+    },
+    {
+      name: 'set_pool_type_enabled',
+      signature: 'mode: u8, tier: u8, capacity: u16, enabled: bool',
+      args: Buffer.concat([u8b(0), u8b(0), capacity, boolb(false)]),
+    },
+  ];
+}
+
+function openPoolCheck(): WireCheck {
+  const capacity = Buffer.alloc(2);
+  capacity.writeUInt16LE(8);
+  return {
+    name: 'open_pool',
+    signature:
+      'pool_id: u64, tier: u8, sealing_pubkey: [u8; 32], sealing_secret_hash: [u8; 32], mode: u8, capacity: u16',
+    args: Buffer.concat([u64le(1n), u8b(0), Buffer.alloc(32, 1), Buffer.alloc(32, 2), u8b(0), capacity]),
   };
 }
 
@@ -415,11 +479,87 @@ async function checkConfigAccount(
     ok,
     detail: ok
       ? `${info.data.length} bytes — matches Config::SPACE`
-      : info.data.length === CONFIG_SPACE_V2
-        ? `${info.data.length} bytes — the PRE-PHASE-B layout: run \`admin.ts migrate-config\` after the upgrade (docs/guide/OPERATING-MANUAL.md)`
-        : info.data.length === CONFIG_SPACE_V1
-          ? `${info.data.length} bytes — the original layout, which no current program can grow`
-          : `${info.data.length} bytes on chain, source says Config::SPACE = ${CONFIG_SPACE}`,
+      : info.data.length === CONFIG_SPACE_V3
+        ? `${info.data.length} bytes — the PRE-LADDER layout: run \`admin.ts migrate-config\` right after the Ladder upgrade (docs/guide/OPERATING-MANUAL.md §4)`
+        : info.data.length === CONFIG_SPACE_V2
+          ? `${info.data.length} bytes — the PRE-PHASE-B layout: \`admin.ts migrate-config\` grows it straight to ${CONFIG_SPACE}`
+          : info.data.length === CONFIG_SPACE_V1
+            ? `${info.data.length} bytes — the original layout, which no current program can grow`
+            : `${info.data.length} bytes on chain, source says Config::SPACE = ${CONFIG_SPACE}`,
+  };
+}
+
+/** sha256("account:<Name>")[..8]. */
+function accountDisc(name: string): Buffer {
+  return createHash('sha256').update(`account:${name}`).digest().subarray(0, 8);
+}
+
+/**
+ * Every Pool account, counted by size. A pool below `Pool::SPACE` fails every
+ * instruction that touches it until `migrate-pool` grows it, so a non-zero
+ * count is red — the Pool counterpart of the Config row.
+ */
+async function checkPoolAccounts(connection: Connection, programId: PublicKey): Promise<Verdict> {
+  const disc = accountDisc('Pool');
+  const counts = new Map<number, number>();
+  for (const size of [POOL_SPACE, POOL_SPACE_V3, POOL_SPACE_V2, POOL_SPACE_V1]) {
+    const accounts = await connection.getProgramAccounts(programId, {
+      commitment: 'confirmed',
+      dataSlice: { offset: 0, length: 8 },
+      filters: [{ dataSize: size }],
+    });
+    counts.set(size, accounts.filter((a) => Buffer.from(a.account.data).equals(disc)).length);
+  }
+  const stale = [POOL_SPACE_V3, POOL_SPACE_V2, POOL_SPACE_V1].reduce((n, size) => n + (counts.get(size) ?? 0), 0);
+  const summary = [...counts.entries()].filter(([, n]) => n > 0).map(([size, n]) => `${n} at ${size}`).join(', ') || 'none';
+  return {
+    name: 'Pool account layouts',
+    ok: stale === 0,
+    detail:
+      stale === 0
+        ? `${summary} — every pool matches Pool::SPACE (${POOL_SPACE})`
+        : `${summary} — ${stale} below Pool::SPACE (${POOL_SPACE}): run \`admin.ts migrate-pool --all\` after the upgrade`,
+  };
+}
+
+/**
+ * Every PoolType account (D-E19), and whether the enabled ones agree with
+ * `Config.enabled_pool_types` — the count `open_pool` and
+ * `withdraw_platform` check their remaining accounts against. A
+ * disagreement would refuse both (PoolTypeListIncomplete).
+ */
+async function checkPoolTypeAccounts(
+  connection: Connection,
+  programId: PublicKey,
+  config: PublicKey
+): Promise<Verdict> {
+  const disc = accountDisc('PoolType');
+  const accounts = (
+    await connection.getProgramAccounts(programId, {
+      commitment: 'confirmed',
+      filters: [{ dataSize: POOL_TYPE_SPACE }],
+    })
+  ).filter((a) => Buffer.from(a.account.data.subarray(0, 8)).equals(disc));
+  // `enabled` at offset 39 (pool-type-account.ts POOL_TYPE_OFFSETS).
+  const enabled = accounts.filter((a) => a.account.data[39] !== 0).length;
+  const cfg = await connection.getAccountInfo(config, 'confirmed');
+  if (!cfg || cfg.data.length !== CONFIG_SPACE) {
+    return {
+      name: 'PoolType accounts',
+      ok: accounts.length === 0,
+      detail:
+        accounts.length === 0
+          ? `none (${POOL_TYPE_SPACE}-byte layout) — Config is not at the Ladder layout yet`
+          : `${accounts.length} exist while Config is not at the Ladder layout — investigate`,
+    };
+  }
+  const counted = cfg.data.readUInt16LE(603); // `enabled_pool_types`, the Ladder tail
+  return {
+    name: 'PoolType accounts',
+    ok: enabled === counted,
+    detail:
+      `${accounts.length} at ${POOL_TYPE_SPACE} bytes, ${enabled} enabled; Config.enabled_pool_types = ${counted}` +
+      (enabled === counted ? '' : ' — DISAGREE: open_pool and withdraw_platform will refuse'),
   };
 }
 
@@ -549,12 +689,20 @@ async function main(): Promise<void> {
   // The three permissionless instructions (audit D-06). Their account lists
   // are the daemon's own, and `scripts/admin.ts` now builds the same ones:
   //   seal_at_deadline [signer, config, pool]
-  //   trigger_refund   [signer, config, pool, vault, platform, system]
-  //   refund           [signer, config, pool, platform, entry, player, system]
-  // The pool and entry PDAs do not exist, so account validation fails well
-  // after the arguments deserialize — which is a pass for a wire check.
+  //   trigger_refund   [signer, config, pool, vault, platform, pool_type, system]
+  //   refund           [signer, config, pool, platform, entry, player, pool_type, system]
+  // (pool_type since D-E19: the PoolType of the pool's own mode, tier and
+  // capacity.) The pool and entry PDAs do not exist, so account validation
+  // fails well after the arguments deserialize — a pass for a wire check.
   const entryPlaceholder = PublicKey.findProgramAddressSync(
     [Buffer.from('entry'), poolPda.toBuffer(), admin.toBuffer()],
+    programId
+  )[0];
+  const cap8 = Buffer.alloc(2);
+  cap8.writeUInt16LE(8);
+  // `["ptype", [mode], [tier], capacity u16 LE]` — easy / tier 0 / 8 players.
+  const poolTypePda = PublicKey.findProgramAddressSync(
+    [Buffer.from('ptype'), Buffer.from([0]), Buffer.from([0]), cap8],
     programId
   )[0];
   const permissionlessKeys: Record<string, TransactionInstruction['keys']> = {
@@ -569,6 +717,7 @@ async function main(): Promise<void> {
       { pubkey: poolPda, isSigner: false, isWritable: true },
       { pubkey: vaultPda, isSigner: false, isWritable: true },
       { pubkey: platform, isSigner: false, isWritable: true },
+      { pubkey: poolTypePda, isSigner: false, isWritable: true },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     ],
     refund: [
@@ -578,6 +727,7 @@ async function main(): Promise<void> {
       { pubkey: platform, isSigner: false, isWritable: true },
       { pubkey: entryPlaceholder, isSigner: false, isWritable: true },
       { pubkey: admin, isSigner: false, isWritable: true },
+      { pubkey: poolTypePda, isSigner: false, isWritable: true },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     ],
   };
@@ -610,8 +760,66 @@ async function main(): Promise<void> {
     );
   }
 
+  // The Ladder (D-E19): the three pool-type instructions — admin, Config
+  // (read-only for init, which also takes the System Program; writable for
+  // the other two) and the pool type — and `open_pool` with its appended
+  // capacity, signed by the keeper. The pool type does not exist yet on a
+  // freshly upgraded deployment, which is a pass: the arguments
+  // deserialized before any account was read.
+  const keeper =
+    configInfo && configInfo.data.length >= 412 ? new PublicKey(configInfo.data.subarray(380, 412)) : admin;
+  const [initCheck, economicsCheck, enabledCheck] = ladderChecks();
+  verdicts.push(
+    await checkOne(
+      connection,
+      programId,
+      initCheck,
+      [
+        { pubkey: admin, isSigner: true, isWritable: true },
+        { pubkey: config, isSigner: false, isWritable: false },
+        { pubkey: poolTypePda, isSigner: false, isWritable: true },
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      ],
+      admin
+    )
+  );
+  for (const check of [economicsCheck, enabledCheck]) {
+    verdicts.push(
+      await checkOne(
+        connection,
+        programId,
+        check,
+        [
+          { pubkey: admin, isSigner: true, isWritable: false },
+          { pubkey: config, isSigner: false, isWritable: true },
+          { pubkey: poolTypePda, isSigner: false, isWritable: true },
+        ],
+        admin
+      )
+    );
+  }
+  verdicts.push(
+    await checkOne(
+      connection,
+      programId,
+      openPoolCheck(),
+      [
+        { pubkey: keeper, isSigner: true, isWritable: true },
+        { pubkey: config, isSigner: false, isWritable: true },
+        { pubkey: poolPda, isSigner: false, isWritable: true },
+        { pubkey: vaultPda, isSigner: false, isWritable: true },
+        { pubkey: platform, isSigner: false, isWritable: true },
+        { pubkey: poolTypePda, isSigner: false, isWritable: true },
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      ],
+      keeper
+    )
+  );
+
   const layout = await checkConfigAccount(connection, config);
   if (layout !== null) verdicts.push(layout);
+  verdicts.push(await checkPoolAccounts(connection, programId));
+  verdicts.push(await checkPoolTypeAccounts(connection, programId, config));
 
   const width = Math.max(...verdicts.map((v) => v.name.length));
   for (const v of verdicts) {

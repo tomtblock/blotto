@@ -1,87 +1,77 @@
-//! Pure prize arithmetic: the band amount for a rank, and the split of a tie
-//! group's combined prize.
+//! Pure prize arithmetic under the Ladder (D-E19, founder ruling 2026-11-04):
+//! what a position is worth, and the split of a tie group's combined prize.
 //!
 //! # Who calls this, and who does not (corrected 2026-09-12, audit A-14/B-42)
 //!
 //! **No instruction handler calls either function, and nothing on chain
-//! checks a payout against the band table.** The previous header said
-//! "Handlers call these", which was never true of this program. What is
-//! true:
+//! checks a payout against the prize table seat by seat.** What is true:
 //!
 //!   - **The amounts are computed OFF CHAIN**, by the settlement crank, in
 //!     `backend/scoring/src/prizes.ts` (`amountForRank`) and
 //!     `backend/scoring/src/engine.ts` (`assignPrizes`) — the same TypeScript
 //!     module the verify page runs in the browser (R20), so a player
 //!     recomputes every amount from the published bundle.
-//!   - **What the program enforces is the SHAPE and the TOTAL, not the
-//!     split.** `commit_results` refuses a payout list that is empty or
-//!     longer than `CAPACITY`, that names a seat outside the field, that is
-//!     not strictly seat-ascending (sorted and duplicate-free in one check),
-//!     or whose amounts do not sum to EXACTLY `Pool.pot_lamports`.
-//!     `pay_prizes` then pays the committed list and nothing else. So the
-//!     settlement signer cannot change the total, cannot pay a stranger and
-//!     cannot pay a seat twice — but the program does not know that rank 1
-//!     takes 1024/1024, and a list that gave the pot to the wrong seat would
-//!     land. What catches that is recomputation: the published bundle plus
-//!     the on-chain results root and payout list.
-//!   - **`pay_next_place` does its own division** (equal shares, the
-//!     indivisible remainder to the lowest seat) inline in
-//!     `instructions/escrow.rs`; it does not call `split_group` either.
+//!   - **What the program enforces is the SHAPE, the BOUNDS and the TOTAL,
+//!     not the split.** `commit_results` refuses a payout list that is empty
+//!     or longer than `CAPACITY`, that names a seat outside the field, that
+//!     is not strictly seat-ascending, that holds a zero amount or one above
+//!     the pool's first prize (`prize_table[0] × entry`, D-E19 §7.6), or
+//!     whose amounts do not sum to EXACTLY `Pool.pot_lamports`. The program
+//!     does not rank (D-E19 decision 6), so a list that paid the right
+//!     amounts to the wrong seats would land; what catches that is
+//!     recomputation from the published bundle and the on-chain root.
+//!   - **`pay_next_place` does its own division** inline in
+//!     `instructions/escrow.rs`, and since D-E19 only for pools paying one
+//!     place (those opened before the Ladder).
 //!
-//! These functions and the tables they read (`PAID_RANKS`,
-//! `PRIZE_BANDS_1024`) are therefore reachable only from tests: the unit
-//! tests below, which pin the published figures, and the vault-invariant
-//! fuzz suite (`tests/vault_model.rs`), which drives `split_group` through
-//! 10k random instruction sequences so the model and the on-chain payout
-//! paths cannot drift apart on arithmetic. The module is kept — deliberately
-//! — because it is the Rust-side statement of the published rule and the
-//! oracle the fuzz model scores against; whether the band table should be
-//! enforced on chain is a program-upgrade question, not a documentation one.
+//! These functions are therefore reachable only from tests: the unit tests
+//! below, which pin the published figures, and the vault-invariant fuzz
+//! suite (`tests/vault_model.rs`), which drives `split_group` through
+//! random instruction sequences so the model and the on-chain payout paths
+//! cannot drift apart on arithmetic. The module is kept — deliberately — as
+//! the Rust-side statement of the published rule.
 //!
 //! Integer-only, `u128` intermediates where a product can grow (threat-tm-403).
+//! There is no division in a position's worth: it is `multiple × entry`,
+//! exact at every tier. The only division is the tie split.
 
-use crate::constants::{PAID_RANKS, PRIZE_BANDS_1024};
+use crate::constants::MAX_PAID_PLACES;
 
-// D-A1 (revised, 2026-08-27): pots are FIXED constants funded from the
-// platform treasury at `open_pool`. The former `vault_share`/`fee_share`/
-// `pot(entry)` derivations are deliberately GONE — nothing in this program
-// computes a pot from entries or balances (standing-rules grep).
-
-/// The prize for `rank` (1-based, 1..=PAID_RANKS): `pot × band / 1024`.
-/// Under D-E2 (winner takes all) the only band is rank 1 = 1024/1024 = the
-/// whole pot, exact for any pot.
-///
-/// For every configured tier the pot is a multiple of 1024 lamports, so this
-/// divides exactly and the bands sum the pot with zero residual — asserted in
-/// the tests below and re-asserted at runtime by the vault invariant.
-pub fn band_amount(pot_lamports: u64, rank: u8) -> u64 {
-    debug_assert!((1..=PAID_RANKS as u8).contains(&rank));
-    ((pot_lamports as u128) * (PRIZE_BANDS_1024[(rank - 1) as usize] as u128) / 1024) as u64
+/// What position `rank` (1-based) is worth in a pool paying `prize_table`
+/// at `entry_lamports`: `prize_table[rank-1] × entry_lamports`, zero past
+/// the paid places (and zero for the table's zero padding). Saturates
+/// rather than wraps: unreachable at any configured tier (255 × 7.5 SOL is
+/// far below `u64::MAX`), and a saturated amount fails the exact-sum check
+/// instead of paying a wrapped one.
+pub fn place_amount(prize_table: &[u8; MAX_PAID_PLACES], entry_lamports: u64, rank: u16) -> u64 {
+    if rank == 0 || rank as usize > MAX_PAID_PLACES {
+        return 0;
+    }
+    let v = (prize_table[(rank - 1) as usize] as u128) * (entry_lamports as u128);
+    u64::try_from(v).unwrap_or(u64::MAX)
 }
 
-/// Split-pot arithmetic for a tie group (decision D3-B, 2026-08-27):
-/// a group of `group_size` players tied from 1-based position `first_rank`
-/// occupies positions `first_rank .. first_rank + group_size - 1`; its
-/// combined prize is the sum of those positions' band amounts (positions
-/// beyond `PAID_RANKS` contribute zero). Returns `(each, remainder)`: every
-/// tied player receives `each = combined / group_size`, and the `remainder`
-/// lamports go to the tied player with the lowest entry index — entry index
-/// places the remainder, never decides who is paid. Integer-only; shared by
-/// the scoring engine's oracle-pinned twin, the vault model and the tests
-/// so the arithmetic exists in exactly one on-chain-adjacent place.
-///
-/// Under D-E2 this is the sharp edge (proposal E1 §2.4): a tie for first
-/// splits the ENTIRE pot k ways and nobody else is paid — `split_group(pot,
-/// 1, k) = (pot / k, pot % k)`, `split_group(pot, 2, k) = (0, 0)`. Unchanged
-/// code; the tests below pin the new shapes.
-pub fn split_group(pot_lamports: u64, first_rank: u16, group_size: u16) -> (u64, u64) {
+/// Split-pot arithmetic for a tie group (decision D3-B, 2026-08-27,
+/// unchanged by D-E19): a group of `group_size` players tied from 1-based
+/// position `first_rank` occupies positions `first_rank ..= first_rank +
+/// group_size - 1`; its combined prize is the sum of those positions'
+/// worth, with positions past the paid places contributing zero — so a group
+/// can straddle the paid line (four tied across 15th–18th of 64 share 15th
+/// and 16th). Returns `(each, remainder)`: every tied player receives
+/// `each = combined / group_size`, and the `remainder` lamports go to the
+/// tied player with the lowest entry index — entry index places the
+/// remainder, never decides who is paid.
+pub fn split_group(
+    prize_table: &[u8; MAX_PAID_PLACES],
+    entry_lamports: u64,
+    first_rank: u16,
+    group_size: u16,
+) -> (u64, u64) {
     assert!(group_size > 0, "a tie group has at least one member");
     let mut combined: u128 = 0;
     for offset in 0..group_size {
-        let rank = first_rank + offset;
-        if rank >= 1 && rank <= PAID_RANKS as u16 {
-            combined += band_amount(pot_lamports, rank as u8) as u128;
-        }
+        let rank = first_rank.saturating_add(offset);
+        combined += place_amount(prize_table, entry_lamports, rank) as u128;
     }
     (
         (combined / group_size as u128) as u64,
@@ -92,137 +82,159 @@ pub fn split_group(pot_lamports: u64, first_rank: u16, group_size: u16) -> (u64,
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::constants::{CAPACITY, MIN_SEATS, TIER_ENTRY_LAMPORTS, TIER_POT_LAMPORTS};
+    use crate::constants::{
+        LADDER_MIN_SEATS, LADDER_TABLES, POOL_CAPACITIES, TIER_ENTRY_LAMPORTS, TIER_POT_LAMPORTS,
+    };
 
-    /// The bands must partition the pot exactly: Σ bands = 1024 — true of
-    /// the single D-E2 band as it was of the sixteen before it.
-    #[test]
-    fn bands_sum_to_1024() {
-        assert_eq!(PRIZE_BANDS_1024.iter().sum::<u64>(), 1024);
-        assert_eq!(PAID_RANKS, 1, "D-E2: one paid place");
+    fn prize_pool(table: &[u8; MAX_PAID_PLACES], entry: u64) -> u64 {
+        (1..=MAX_PAID_PLACES as u16)
+            .map(|r| place_amount(table, entry, r))
+            .sum()
     }
 
-    /// The published figure for the 0.1 tier under D-E2: the pot is 4 SOL
-    /// (D-E1) and the player ranked first receives all of it; every other
-    /// rank receives nothing. This replaces the top-16 pin wholesale — it
-    /// exists so the code cannot drift from the figure PID §6 (reissue,
-    /// counsel gate — proposal E1 §8.1) publishes.
+    /// The spec's "prize pool by tier" grid (D-E19 §4), every cell: 5, 10,
+    /// 20 and 40 entries at every tier, so 0.5 / 1 / 2 / 4 SOL at 0.1 SOL
+    /// and 37.5 / 75 / 150 / 300 SOL at 7.5 SOL. The 64 column is the D-E1
+    /// tier pot, unchanged.
     #[test]
-    fn winner_takes_the_whole_pot_at_the_entry_tier() {
-        let pot = TIER_POT_LAMPORTS[0];
-        assert_eq!(pot, 4_000_000_000, "tier-0 pot must be 4 SOL (D-E1)");
-        assert_eq!(band_amount(pot, 1), 4_000_000_000, "rank 1 takes the pot");
-        // Ranks 2+ are outside the paid places: a group starting there is
-        // worth exactly nothing, however large.
-        for k in 1..=CAPACITY {
-            assert_eq!(split_group(pot, 2, k), (0, 0), "rank 2+ (group of {k})");
-        }
-        assert_eq!(split_group(pot, 17, 5), (0, 0));
-    }
-
-    /// For every configured tier: the pot constant divides by 1024 with zero
-    /// remainder (invariant kept under D-E2 — constants.rs) and the paid
-    /// places sum to the pot exactly — no residue, nothing stranded in the
-    /// vault.
-    ///
-    /// It also pins the pot's published relationship WITHOUT the program
-    /// ever computing one: since R7-b (founder instruction 2026-09-12) that
-    /// relationship is `pot == MIN_SEATS × price`, which at `MIN_SEATS = 40`
-    /// is the same figure the D-E1 derivation gave (62.5% of price × 64).
-    /// The pots did not move; what moved is the minimum field, from 52 down
-    /// onto the break-even point itself.
-    #[test]
-    fn every_tier_pot_divides_exactly_with_zero_residual() {
-        for (t, &pot) in TIER_POT_LAMPORTS.iter().enumerate() {
-            assert_eq!(pot % 1024, 0, "tier {t} pot not a multiple of 1024");
-            let paid: u64 = (1..=PAID_RANKS as u8).map(|r| band_amount(pot, r)).sum();
-            assert_eq!(paid, pot, "prizes must sum to the pot exactly");
-            // THE PUBLISHED RELATIONSHIP, since R7-b (founder instruction
-            // 2026-09-12): the pot is exactly the minimum field's intake.
-            //
-            // This replaces the D-E1 derivation assert (`pot == price / 8 * 5
-            // * 64`, 62.5% of a full field), which the instruction asked to
-            // delete. The two agree at these constants — 62.5% of 64 IS 40 —
-            // so nothing about the pots changed; what changed is which
-            // relationship the program pins, and this is the one the fill
-            // rule depends on. The pot stays a table entry; nothing here
-            // computes it at runtime.
-            assert_eq!(
-                pot,
-                MIN_SEATS as u64 * TIER_ENTRY_LAMPORTS[t],
-                "tier {t}: pot must equal MIN_SEATS × price (R7-b)"
-            );
-            // The same comparison `set_tier_economics` enforces on the live
-            // values. `<=` since R7-b: the minimum field must COVER the pot,
-            // and at exactly 40 seats it covers it exactly — break-even,
-            // accepted by the founder's ruling of 2026-09-13 on the ground
-            // that the pot is pre-funded from the treasury. A pot LARGER
-            // than the floor's intake is still refused.
-            assert!(
-                pot <= MIN_SEATS as u64 * TIER_ENTRY_LAMPORTS[t],
-                "tier {t}: MIN_SEATS × price must cover the pot"
-            );
-            assert_eq!(
-                pot / TIER_ENTRY_LAMPORTS[t],
-                MIN_SEATS as u64,
-                "tier {t}: the pot is exactly the minimum field's intake"
-            );
-        }
-    }
-
-    /// D3-B split groups under D-E2 (proposal E1 §2.4 — the required tie
-    /// shapes, at every tier): a solo winner takes the pot; a two-way tie
-    /// for first halves it (pots are even); a three-way tie at tier 0 is
-    /// 1_333_333_333 each with ONE lamport to the lowest seat; a 64-way tie
-    /// splits with zero remainder at every tier (pot = price × 40 and every
-    /// price is a whole number of hundredths of a SOL, so pot / 64 is exact);
-    /// and a tie for SECOND pays nothing to anyone in it. Each × size +
-    /// remainder reconstructs the pot exactly in every case.
-    #[test]
-    fn split_groups_conserve_lamports_exactly() {
-        for (t, &pot) in TIER_POT_LAMPORTS.iter().enumerate() {
-            // Solo winner.
-            assert_eq!(split_group(pot, 1, 1), (pot, 0), "tier {t} solo");
-            // Two-way tie for first.
-            let (each, rem) = split_group(pot, 1, 2);
-            assert_eq!(each, pot / 2, "tier {t} two-way");
-            assert_eq!(rem, 0, "tier {t}: every pot is even");
-            // Sixty-four-way tie: exact at every tier.
-            let (each, rem) = split_group(pot, 1, 64);
-            assert_eq!(each, pot / 64, "tier {t} 64-way");
-            assert_eq!(rem, 0, "tier {t}: pot / 64 is exact");
-            assert_eq!(each as u128 * 64, pot as u128);
-            // Tie for second: nobody in it is paid.
-            assert_eq!(split_group(pot, 2, 2), (0, 0), "tier {t} tie for second");
-            // Every k-way tie for first reconstructs the pot exactly.
-            for k in 1..=CAPACITY {
-                let (each, rem) = split_group(pot, 1, k);
+    fn prize_pools_are_the_published_grid() {
+        let entries_worth = [5u64, 10, 20, 40];
+        for (t, &entry) in TIER_ENTRY_LAMPORTS.iter().enumerate() {
+            for (k, table) in LADDER_TABLES.iter().enumerate() {
                 assert_eq!(
-                    each as u128 * k as u128 + rem as u128,
-                    pot as u128,
-                    "tier {t}: {k}-way tie must conserve the pot"
+                    prize_pool(table, entry),
+                    entries_worth[k] * entry,
+                    "tier {t}, {} players",
+                    POOL_CAPACITIES[k]
                 );
-                assert!(rem < k as u64, "remainder is a proper residue");
+            }
+            assert_eq!(
+                prize_pool(&LADDER_TABLES[3], entry),
+                TIER_POT_LAMPORTS[t],
+                "tier {t}: the 64 column is the D-E1 tier pot"
+            );
+        }
+        // Spot-check the spec's own figures at 0.1 SOL.
+        let e = TIER_ENTRY_LAMPORTS[0];
+        assert_eq!(place_amount(&LADDER_TABLES[0], e, 1), 300_000_000); // 0.3 SOL
+        assert_eq!(place_amount(&LADDER_TABLES[1], e, 1), 500_000_000); // 0.5 SOL
+        assert_eq!(place_amount(&LADDER_TABLES[2], e, 1), 800_000_000); // 0.8 SOL
+        assert_eq!(place_amount(&LADDER_TABLES[3], e, 1), 1_200_000_000); // 1.2 SOL
+                                                                          // The largest single prize anywhere in the grid: 1st of a 7.5 SOL
+                                                                          // 64-player pool, 90 SOL.
+        assert_eq!(
+            place_amount(&LADDER_TABLES[3], TIER_ENTRY_LAMPORTS[6], 1),
+            90_000_000_000
+        );
+    }
+
+    /// Every untied prize is a whole multiple of the entry, every rank past
+    /// the paid line is worth zero, and the minimum field covers the prize
+    /// pool exactly (break-even) at every size and tier.
+    #[test]
+    fn untied_prizes_are_whole_multiples_and_the_floor_is_break_even() {
+        for &entry in TIER_ENTRY_LAMPORTS.iter() {
+            for (k, table) in LADDER_TABLES.iter().enumerate() {
+                let cap = POOL_CAPACITIES[k];
+                let paid = cap / 4;
+                for r in 1..=cap {
+                    let a = place_amount(table, entry, r);
+                    assert_eq!(a % entry, 0);
+                    assert_eq!(a == 0, r > paid, "{cap}: rank {r}");
+                }
+                assert_eq!(
+                    prize_pool(table, entry),
+                    LADDER_MIN_SEATS[k] as u64 * entry,
+                    "{cap}: the minimum field's entries equal the prize pool"
+                );
             }
         }
-        // The visible-remainder case: tier 0, three-way tie for first.
-        let pot = TIER_POT_LAMPORTS[0];
-        let (each, rem) = split_group(pot, 1, 3);
-        assert_eq!(each, 1_333_333_333);
-        assert_eq!(rem, 1, "one indivisible lamport to the lowest seat");
-        assert_eq!(4_000_000_000u64, 1_333_333_333 * 3 + 1);
     }
 
-    /// PID §6's rounded percentage column sums to 100.02% — the reason bands
-    /// were NOT expressed in bps under top-16, and the reason the 1024ths
-    /// form is kept under D-E2 (a return to a multi-place table is a
-    /// constants edit, not a re-derivation). Kept so nobody "fixes" a future
-    /// table back to rounded percentages.
+    /// D3-B split groups under the Ladder: the shapes the spec names, at
+    /// every size and tier. Each × size + remainder reconstructs the group's
+    /// combined worth exactly, and every k-way tie for first at every size
+    /// conserves.
     #[test]
-    fn the_rounded_bps_table_would_misallocate() {
-        let bps: [u64; 16] = [
-            2637, 1543, 996, 762, 488, 488, 488, 488, 264, 264, 264, 264, 264, 264, 264, 264,
-        ];
-        assert_eq!(bps.iter().sum::<u64>(), 10_002, "rounded bps over-allocate");
+    fn split_groups_conserve_lamports_exactly() {
+        for &entry in TIER_ENTRY_LAMPORTS.iter() {
+            for (k, table) in LADDER_TABLES.iter().enumerate() {
+                let cap = POOL_CAPACITIES[k];
+                let paid = cap / 4;
+                // Solo first.
+                assert_eq!(
+                    split_group(table, entry, 1, 1),
+                    (table[0] as u64 * entry, 0)
+                );
+                // Everyone tied: the whole prize pool, split.
+                let (each, rem) = split_group(table, entry, 1, cap);
+                assert_eq!(
+                    each as u128 * cap as u128 + rem as u128,
+                    prize_pool(table, entry) as u128
+                );
+                // A group entirely below the paid line is worth nothing.
+                assert_eq!(split_group(table, entry, paid + 1, cap - paid), (0, 0));
+                // Every k-way tie for first conserves 1st..kth.
+                for g in 1..=cap {
+                    let (each, rem) = split_group(table, entry, 1, g);
+                    let want: u128 = (1..=g).map(|r| place_amount(table, entry, r) as u128).sum();
+                    assert_eq!(
+                        each as u128 * g as u128 + rem as u128,
+                        want,
+                        "{cap}: {g}-way"
+                    );
+                    assert!(rem < g as u64);
+                }
+            }
+        }
+        // The spec's example: four tied across 15th–18th of 64 share 15th
+        // and 16th (one entry each) — half an entry apiece, exactly.
+        let e = TIER_ENTRY_LAMPORTS[0];
+        assert_eq!(split_group(&LADDER_TABLES[3], e, 15, 4), (e / 2, 0));
+        // A three-way tie for first of 8 at 0.1 SOL: (3 + 2 + 0) entries =
+        // 0.5 SOL over three, two indivisible lamports to the lowest seat.
+        assert_eq!(split_group(&LADDER_TABLES[0], e, 1, 3), (166_666_666, 2));
+    }
+
+    /// `commit_results` refuses any amount above first place. That bound must
+    /// never refuse the published rule's own output: for every launch table,
+    /// every tie group (every start rank, every size that fits the pool),
+    /// at the smallest price a table can be set at and at every configured
+    /// tier, the lowest seat's share — `each + remainder` — is at most first
+    /// place. Below `MIN_TABLE_ENTRY_LAMPORTS` it can fail (the case that
+    /// set the floor: a 13-way tie for first of 64 at 1 lamport).
+    #[test]
+    fn the_first_place_bound_never_refuses_a_rule_split() {
+        use crate::constants::MIN_TABLE_ENTRY_LAMPORTS;
+        let mut prices = vec![MIN_TABLE_ENTRY_LAMPORTS, MIN_TABLE_ENTRY_LAMPORTS + 1];
+        prices.extend_from_slice(&TIER_ENTRY_LAMPORTS);
+        for (k, table) in LADDER_TABLES.iter().enumerate() {
+            let cap = POOL_CAPACITIES[k];
+            for &entry in &prices {
+                let first = place_amount(table, entry, 1);
+                for start in 1..=cap {
+                    for size in 1..=(cap - start + 1) {
+                        let (each, rem) = split_group(table, entry, start, size);
+                        assert!(
+                            each + rem <= first,
+                            "{cap}: tie of {size} from rank {start} at {entry} lamports pays {} > first {first}",
+                            each + rem
+                        );
+                    }
+                }
+            }
+        }
+        // And the floor is not slack: at 1 lamport the bound does refuse a
+        // rule split, which is why the floor exists.
+        let (each, rem) = split_group(&LADDER_TABLES[3], 1, 1, 13);
+        assert!(each + rem > place_amount(&LADDER_TABLES[3], 1, 1));
+    }
+
+    #[test]
+    fn rank_zero_and_past_the_table_are_worth_nothing() {
+        let t = LADDER_TABLES[3];
+        assert_eq!(place_amount(&t, 1, 0), 0);
+        assert_eq!(place_amount(&t, 1, 17), 0);
+        assert_eq!(place_amount(&t, 1, u16::MAX), 0);
     }
 }

@@ -23,7 +23,12 @@ function reportStatuses(): string[] {
     ),
     'utf8'
   );
-  const union = /status:\s*((?:'[a-z_]+'\s*\|\s*)+'[a-z_]+')/.exec(source);
+  // The union is declared inline (`status: 'open' | …`) or, since the
+  // Ladder's per-type report (D-E19), as a named alias (`type SlotStatus =
+  // 'open' | …`). Either form is the report's own list.
+  const union =
+    /type SlotStatus\s*=\s*((?:'[a-z_]+'\s*\|\s*)+'[a-z_]+')/.exec(source) ??
+    /status:\s*((?:'[a-z_]+'\s*\|\s*)+'[a-z_]+')/.exec(source);
   expect(union, 'the report still declares a status union').not.toBeNull();
   return [...union![1].matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
 }

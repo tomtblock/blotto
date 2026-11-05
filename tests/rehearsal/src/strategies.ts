@@ -96,12 +96,16 @@ export function generateEntrant(strategy: StrategyName, seed: number): Generated
 }
 
 /** The rehearsal population mix for one pool (5.1): mostly random/consistent,
- * a clustered contingent, and one scripted bot per pool. */
-export function poolPopulation(poolSeed: number): GeneratedEntrant[] {
+ * a clustered contingent, and one scripted bot in the LAST seat. `seats`
+ * defaults to 64, the largest pool (D-E19), which reproduces the population
+ * every rehearsal used before the Ladder; a smaller pool takes the same mix
+ * at its own size, bot included. */
+export function poolPopulation(poolSeed: number, seats = 64): GeneratedEntrant[] {
+  if (!Number.isInteger(seats) || seats < 1) throw new Error(`a pool seats at least one entrant, got ${seats}`);
   const out: GeneratedEntrant[] = [];
-  for (let i = 0; i < 64; i++) {
+  for (let i = 0; i < seats; i++) {
     const strategy: StrategyName =
-      i === 63 ? 'scripted_uniform' : i % 4 === 3 ? 'clustered' : i % 2 === 0 ? 'random' : 'consistent';
+      i === seats - 1 ? 'scripted_uniform' : i % 4 === 3 ? 'clustered' : i % 2 === 0 ? 'random' : 'consistent';
     out.push(generateEntrant(strategy, poolSeed * 1000 + i));
   }
   return out;

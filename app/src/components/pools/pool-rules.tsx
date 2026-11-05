@@ -11,30 +11,46 @@
  * the board they are placing on and the pool page is no longer a stop on
  * the way in. The links under it are the rules and the terms — the two
  * documents the statements below the box refer to.
+ *
+ * D-E19 (the Ladder): the Pays side states THIS pool's prizes in the
+ * founder's prize sentence, its own size and its own minimum field — read
+ * from the pool record (`poolLadder`), so a pool of 8 and a pool of 64
+ * never borrow each other's rule.
  */
 
 import { useState } from 'react';
 import Link from 'next/link';
 import { COPY } from '@/copy';
 import type { BoardMode } from '@/battle/board/mode';
+import type { PoolLadder } from '@/data/format';
 import { NeonSection } from '@/components/ui/neon-section';
+import { prizeSentence } from './prize-table';
 import { Toggle } from '@/components/ui/toggle';
 
 export function PoolRules({
   mode,
   minutes,
-  minSeats,
+  ladder,
   fillHours,
   className = '',
 }: {
   mode: BoardMode;
   minutes: number;
-  minSeats: number;
+  /** THIS pool's size, floor and table (D-E19) — never the launch tables. */
+  ladder: PoolLadder;
   fillHours: number;
   className?: string;
 }) {
   const [side, setSide] = useState<'plays' | 'pays'>('plays');
-  const lines = side === 'plays' ? COPY.pool.howItPlays(mode, minutes) : COPY.pool.aboutPoints(minSeats, fillHours);
+  const lines =
+    side === 'plays'
+      ? COPY.pool.howItPlays(mode, minutes)
+      : COPY.pool.aboutPoints({
+          prizeSentence: prizeSentence(ladder.prizeAmounts),
+          capacity: ladder.capacity,
+          minSeats: ladder.minSeats,
+          fillHours,
+        });
   return (
     <NeonSection heading={COPY.pool.howThisPool} className={className} data-testid="pool-rules">
       <div className="mb-4">

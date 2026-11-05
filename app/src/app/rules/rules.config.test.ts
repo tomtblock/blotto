@@ -3,47 +3,114 @@
  * availability list renders from the founder-owned config. */
 import { describe, expect, it } from 'vitest';
 import {
-  MIN_SEATS,
-  PAID_RANKS,
+  LADDER_TABLES,
+  MIN_FIELD_BY_CAPACITY,
+  POOL_CAPACITIES,
   TIER_ENTRY_LAMPORTS,
-  TIER_POT_LAMPORTS,
   amountForRank,
+  prizePoolFor,
 } from '@blotto/scoring';
 import territories from '@config/territories.json';
-import { FIELD_RULES, availability, rulesSections, tierRows } from './rules.config';
+import { FIELD_RULES, availability, prizeTables, rulesSections, tierRows } from './rules.config';
 import { blockedTerritoryPhrase } from '@/rules/territories';
+import { lamportsToSol } from '@/data/format';
 
 describe('tierRows', () => {
   it('one row per configured tier, numbers from the shared table', () => {
     const rows = tierRows();
     expect(rows.length).to.equal(TIER_ENTRY_LAMPORTS.length);
-    // Tier 0 (D-E1): 0.1 SOL entry, 4 SOL prize pool.
     expect(rows[0].entrySol).to.equal('0.1');
-    expect(rows[0].potSol).to.equal('4');
-    // Tier 6: 7.5 SOL entry, 300 SOL prize pool.
     expect(rows[6].entrySol).to.equal('7.5');
-    expect(rows[6].potSol).to.equal('300');
+  });
+});
+
+/*
+ * D-E19 (the Ladder): one prize table per pool size, a column per entry
+ * price, every cell the engine's `amountForRank` — the rules page cannot
+ * show a prize the program would not pay.
+ */
+describe('prizeTables', () => {
+  const tables = prizeTables();
+
+  it('one table per size, smallest first, each with its minimum field and paid places', () => {
+    expect(tables.map((t) => t.capacity)).to.deep.equal([...POOL_CAPACITIES]);
+    for (const t of tables) {
+      expect(t.minField, `${t.capacity}`).to.equal(MIN_FIELD_BY_CAPACITY[t.capacity as 8 | 16 | 32 | 64]);
+      expect(t.paidPlaces, `${t.capacity}`).to.equal(LADDER_TABLES[t.capacity as 8 | 16 | 32 | 64].length);
+      expect(t.columns.length).to.equal(TIER_ENTRY_LAMPORTS.length);
+      expect(t.heading).to.contain(`${t.capacity} players`);
+      expect(t.heading).to.contain(`minimum field ${t.minField}`);
+    }
   });
 
-  it('one paid place (D-E2): the prize pool shown IS the winner’s prize at every tier', () => {
-    expect(PAID_RANKS).to.equal(1);
-    TIER_POT_LAMPORTS.forEach((pot, tier) => {
-      expect(amountForRank(pot, 1), `tier ${tier}`).to.equal(pot);
-      expect(amountForRank(pot, 2), `tier ${tier} rank 2`).to.equal(0n);
-    });
+  it('every cell is amountForRank over the published table, and every band is one amount', () => {
+    for (const t of tables) {
+      const table = LADDER_TABLES[t.capacity as 8 | 16 | 32 | 64];
+      // The bands cover every paid place exactly once, in order.
+      expect(t.rows[0]!.from).to.equal(1);
+      expect(t.rows[t.rows.length - 1]!.to).to.equal(table.length);
+      TIER_ENTRY_LAMPORTS.forEach((entry, tier) => {
+        for (const r of t.rows) {
+          for (let place = r.from; place <= r.to; place++) {
+            expect(r.perTier[tier], `${t.capacity} tier ${tier} place ${place}`).to.equal(
+              lamportsToSol(amountForRank(table, entry, place).toString())
+            );
+          }
+        }
+        expect(t.totals[tier]).to.equal(lamportsToSol(prizePoolFor(table, entry).toString()));
+      });
+    }
+  });
+
+  it('shows the founder\u2019s launch figures at 0.1 SOL', () => {
+    // The literals beside the derivation, as the field-size pin below does:
+    // the test above proves the page follows the tables; this proves the
+    // tables are the ones the founder ruled on 2026-11-04/05.
+    const at = (capacity: number) =>
+      tables.find((t) => t.capacity === capacity)!.rows.map((r) => [r.from, r.to, r.perTier[0]]);
+    expect(at(8)).to.deep.equal([
+      [1, 1, '0.3'],
+      [2, 2, '0.2'],
+    ]);
+    expect(at(16)).to.deep.equal([
+      [1, 1, '0.5'],
+      [2, 2, '0.3'],
+      [3, 3, '0.1'],
+      [4, 4, '0.1'],
+    ]);
+    expect(at(32)).to.deep.equal([
+      [1, 1, '0.8'],
+      [2, 2, '0.4'],
+      [3, 3, '0.2'],
+      [4, 4, '0.2'],
+      [5, 8, '0.1'],
+    ]);
+    expect(at(64)).to.deep.equal([
+      [1, 1, '1.2'],
+      [2, 2, '0.6'],
+      [3, 3, '0.3'],
+      [4, 4, '0.3'],
+      [5, 8, '0.2'],
+      [9, 16, '0.1'],
+    ]);
   });
 });
 
 describe('FIELD_RULES', () => {
-  it('carries the shared minimum field and timings, never hand-typed', () => {
-    expect(FIELD_RULES.minSeats).to.equal(Number(MIN_SEATS));
-    // R7-b (founder instruction 2026-09-12): 40, down from D-E4's 52. The
-    // literal is kept beside the mirror deliberately — the assertion above
-    // proves the page follows the shared constant, and this one proves the
-    // shared constant is the number the founder ratified. Together they
-    // catch a drift in either direction; the first alone would pass if both
-    // moved by accident.
-    expect(FIELD_RULES.minSeats).to.equal(40);
+  it('carries the shared minimum fields and timings, never hand-typed', () => {
+    for (const z of FIELD_RULES.sizes) {
+      expect(z.minField, `${z.capacity}`).to.equal(MIN_FIELD_BY_CAPACITY[z.capacity as 8 | 16 | 32 | 64]);
+    }
+    // D-E19 (founder ruling 2026-11-04): 5 / 10 / 20 / 40 — each size's
+    // break-even field. The literals are kept beside the mirror deliberately
+    // — the assertion above proves the page follows the shared constant, and
+    // this one proves the shared constant is the number the founder ratified.
+    expect(FIELD_RULES.sizes.map((z) => [z.capacity, z.minField])).to.deep.equal([
+      [8, 5],
+      [16, 10],
+      [32, 20],
+      [64, 40],
+    ]);
     // Founder ruling 2026-09-07: 12 hours, one clock; five-minute cooldown.
     expect(FIELD_RULES.fillDeadlineHours).to.equal(12);
     expect(FIELD_RULES.cooldownMinutes).to.equal(5);
@@ -103,27 +170,42 @@ describe('rulesSections', () => {
     expect(byId.get('battle-timer')!.body).to.contain('20 points in each');
     expect(byId.get('battle-timer')!.body).to.contain('three stats to two');
     expect(byId.get('battle-timer')!.body).to.not.match(/chance/i);
-    // D-E2 + addendum ruling 3: an equal split, remainder to the lowest
-    // entry number; a forfeited share passes to players, never to us.
-    expect(byId.get('ties')!.body).to.contain('paid an equal share of the prize pool each');
-    expect(byId.get('ties')!.body).to.contain('lowest entry number');
-    expect(byId.get('ties')!.body).to.contain('nobody ranked below first is paid');
-    expect(byId.get('ties')!.body).to.contain('divided equally between the remaining eligible players ranked first');
-    expect(byId.get('ties')!.body).to.contain('It is never returned to us.');
-    expect(byId.get('ties')!.body).to.not.match(/returns to us/i);
-    expect(byId.get('prizes')!.body).to.contain('The player ranked first receives the whole prize pool');
-    expect(byId.get('prizes')!.body).to.not.match(/\d+\s*[×x]/); // no multiple, ever
-    expect(byId.get('prizes')!.body).to.not.contain('%');
+    // D3-B under D-E19 + addendum ruling 3: a tie shares the places it
+    // occupies, across the paid line too, remainder to the lowest entry
+    // number; a forfeited share stays with the pool's players, never us.
+    const ties = byId.get('ties')!.body;
+    expect(ties).to.contain('share equally the prizes of the places they occupy together');
+    expect(ties).to.contain('A tie that reaches past the last paid place');
+    expect(ties).to.contain('lowest entry number');
+    expect(ties).to.contain(
+      'If a flag is upheld, the withheld prize stays in the pool\u2019s prize vault and can only ever be paid to other players of the same pool; it never goes to the operator.'
+    );
+    expect(ties).to.contain('It is never returned to us.');
+    expect(ties).to.not.match(/returns to us/i);
+    // The one-place rule is gone, not restated.
+    expect(ties).to.not.match(/ranked first, they are paid|nobody ranked below first/i);
+    const prizes = byId.get('prizes')!;
+    expect(prizes.kind).to.equal('prizes');
+    expect(prizes.body).to.contain('fixed prizes to its highest places');
+    expect(prizes.body).to.contain('never by how many players entered');
+    expect(prizes.body).to.not.match(/\d+\s*[×x]/); // no multiple, ever
+    expect(prizes.body).to.not.contain('%');
+    expect(prizes.body).to.not.match(/\bpot\b|winner takes|\bseat|\bc[a]sh|\bchance/i);
+    if (prizes.kind === 'prizes') expect(prizes.tables.length).to.equal(POOL_CAPACITIES.length);
     expect(byId.get('randomness')!.body).to.contain('class');
     expect(byId.get('randomness')!.body).to.contain('does not affect any stat');
-    // D-E4 (option A): the minimum field and the one clock, from the shared
-    // constants — 12 hours; no go-timer, no 72 hours anywhere.
-    expect(byId.get('field-size')!.body).to.contain(`at least ${FIELD_RULES.minSeats} players`);
+    // D-E4 (option A) under D-E19: each size's minimum field and the one
+    // clock, from the shared constants — 12 hours; no go-timer, no 72 hours.
+    for (const z of FIELD_RULES.sizes) {
+      expect(byId.get('field-size')!.body).to.contain(`${z.minField} players in a pool of ${z.capacity}`);
+      expect(byId.get('how-to-enter')!.body).to.contain(String(z.capacity));
+    }
     expect(byId.get('field-size')!.body).to.contain(`up to ${FIELD_RULES.fillDeadlineHours} hours`);
     expect(byId.get('field-size')!.body).to.contain('Nobody decides when a pool runs');
+    expect(byId.get('field-size')!.body).to.not.match(/\bseat/i);
     expect(byId.get('refund')!.body).to.contain(`${FIELD_RULES.fillDeadlineHours} hours after it opened`);
-    expect(byId.get('refund')!.body).to.contain(`fewer than ${FIELD_RULES.minSeats} players`);
-    expect(byId.get('how-to-enter')!.body).to.contain(`at least ${FIELD_RULES.minSeats} players`);
+    expect(byId.get('refund')!.body).to.contain('fewer players than its minimum field');
+    expect(byId.get('how-to-enter')!.body).to.contain('at least its minimum field');
     expect(byId.get('how-to-enter')!.body).to.contain('One entry per wallet per pool');
     expect(byId.get('pool-opening')!.body).to.contain(`${FIELD_RULES.cooldownMinutes} minutes`);
     for (const s of sections) {

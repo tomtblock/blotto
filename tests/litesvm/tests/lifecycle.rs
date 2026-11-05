@@ -1,7 +1,11 @@
 //! The full pool lifecycle against the compiled artifact: 64 entries, seal,
 //! reveal, commit, payout — every lamport accounted for at the end.
 //! (Roadmap 1.3–1.5 gates, run for real instead of asserted on a model.)
-//! Under D-E2 the committed list is one seat — the winner — taking the pot.
+//! Under the Ladder (D-E19) a 64-player pool pays its top quarter — sixteen
+//! places, `[12, 6, 3, 3, 2, 2, 2, 2, 1 × 8]` entries — and the committed
+//! list is those sixteen seats. The escrow paths that still serve a
+//! ONE-PLACE pool (every pool opened before the Ladder) run against a
+//! migrated pool (`Env::open_legacy_pool`).
 
 use blotto_litesvm_tests::*;
 use sha2::{Digest, Sha256};
@@ -10,26 +14,41 @@ use solana_sdk::signature::Keypair;
 use solana_sdk::signer::Signer;
 
 const ENTRY: u64 = 100_000_000; // tier 0: 0.1 SOL
-const POT: u64 = 4_000_000_000; // tier 0's FIXED pot (D-E1)
+const POT: u64 = 4_000_000_000; // a 64-player pool's prize pool at tier 0: 40 entries
 
 #[test]
-fn full_lifecycle_pays_the_pot_to_the_lamport() {
+fn full_lifecycle_pays_the_ladder_table_to_the_lamport() {
     let Some(mut env) = Env::new() else { return };
     env.open_ready_pool(1, 0);
     let pool = pool_pda(1);
+    let pool_type = pool_type_pda(MODE_EASY, 0, 64);
 
-    // ---- pot locked at open, BEFORE any entry (D-A1 revised) ----
+    // ---- prize pool locked at open, BEFORE any entry (D-A1 revised) ----
     assert_eq!(
         env.balance(&vault_pda(1)),
         POT + VAULT_RENT_CUSHION,
-        "pot pre-funded at open, on top of the rent cushion"
+        "prize pool pre-funded at open, on top of the rent cushion"
     );
-    assert_eq!(read_pool(&env.svm, &pool).pot_lamports, POT);
+    let pv = read_pool(&env.svm, &pool);
+    assert_eq!(pv.pot_lamports, POT);
+    // The pool copied its type's terms at open (D-E19).
+    assert_eq!(
+        (pv.capacity, pv.paid_places, pv.min_seats, pv.prize_table),
+        (64, 16, 40, LADDER_TABLES[3])
+    );
     let cfg = read_config(&env.svm);
-    assert_eq!(cfg.platform_reserved, POT, "pot recorded as locked");
-    assert_eq!(cfg.active_pool_by_tier[0], 1, "tier slot taken");
+    assert_eq!(cfg.platform_reserved, POT, "prize pool recorded as locked");
+    assert_eq!(
+        read_pool_type(&env.svm, &pool_type).active_pool,
+        1,
+        "the type's slot taken"
+    );
+    assert_eq!(
+        cfg.active_pool_by_tier, [0; 7],
+        "Config's per-tier slot is no longer written"
+    );
     let platform_at_open = env.balance(&platform_pda());
-    let opened_deadline = read_pool(&env.svm, &pool).fill_deadline;
+    let opened_deadline = pv.fill_deadline;
 
     // ---- 64 entries ----
     let mut players: Vec<(Keypair, Pubkey)> = Vec::new();
@@ -48,8 +67,7 @@ fn full_lifecycle_pays_the_pot_to_the_lamport() {
     assert_eq!(pv.entrants, 64);
     assert_eq!(pv.state, 1, "Sealed");
     assert_eq!(pv.class_counters, [0u16; 5], "bag empties exactly at seal");
-    // Option A (2026-09-07): the deadline set at open is never rewritten —
-    // not by the 52nd seat (the go-timer is gone), not by the 64th.
+    // Option A (2026-09-07): the deadline set at open is never rewritten.
     assert_eq!(
         pv.fill_deadline, opened_deadline,
         "the fill deadline is set once at open and never moves"
@@ -57,7 +75,7 @@ fn full_lifecycle_pays_the_pot_to_the_lamport() {
     assert_eq!(
         env.balance(&vault_pda(1)),
         POT + VAULT_RENT_CUSHION,
-        "vault still holds the pot exactly, on top of its rent cushion"
+        "vault still holds the prize pool exactly, on top of its rent cushion"
     );
     assert_eq!(
         env.balance(&platform_pda()) - platform_at_open,
@@ -66,8 +84,12 @@ fn full_lifecycle_pays_the_pot_to_the_lamport() {
     );
     let cfg = read_config(&env.svm);
     assert_eq!(cfg.platform_refundable, 0, "entries became revenue at seal");
-    // SEQUENTIAL pools (D-A1 revised): sealing does NOT free the tier slot.
-    assert_eq!(cfg.active_pool_by_tier[0], 1, "slot still held after seal");
+    // SEQUENTIAL pools (D-A1 revised): sealing does NOT free the slot.
+    assert_eq!(
+        read_pool_type(&env.svm, &pool_type).active_pool,
+        1,
+        "slot still held after seal"
+    );
 
     // ---- 65th entry rejected ----
     let err = env.register_player(1).unwrap_err();
@@ -82,13 +104,15 @@ fn full_lifecycle_pays_the_pot_to_the_lamport() {
 
     // ---- commit before reveal is rejected ----
     let settlement = env.settlement.insecure_clone();
-    // D-E2: the committed payout list — seat 0 is this pool's ranking's
-    // first place and takes the whole pot (no ties).
-    let payouts = winner_payout(POT);
-    let mut commit_args = [1u8; 32].to_vec();
-    commit_args.extend_from_slice(&encode_payouts(&payouts));
-    let ix = settle_ix(&settlement.pubkey(), 1, "commit_results", &commit_args);
-    let err = env.send(&[ix], &[&settlement]).unwrap_err();
+    // The committed payout list: no ties, seat i is rank i + 1, and the
+    // sixteen paid places take the table — 1.2, 0.6, 0.3, 0.3, 0.2 × 4 and
+    // 0.1 × 8 SOL, summing to the 4 SOL prize pool.
+    let payouts = straight_payouts(&LADDER_TABLES[3], ENTRY);
+    assert_eq!(payouts.len(), 16);
+    assert_eq!(payouts[0], (0, 1_200_000_000));
+    assert_eq!(payouts[15], (15, 100_000_000));
+    assert_eq!(payouts.iter().map(|&(_, a)| a).sum::<u64>(), POT);
+    let err = env.commit(1, [1u8; 32], &payouts).unwrap_err();
     assert!(
         err.contains("6025") || err.contains("SecretNotRevealed"),
         "{err}"
@@ -106,66 +130,284 @@ fn full_lifecycle_pays_the_pot_to_the_lamport() {
         <[u8; 32]>::from(Sha256::digest(secret)),
         env.sealing_secret_hash
     );
-    let ix = settle_ix(&settlement.pubkey(), 1, "reveal_pool_secret", &secret);
-    env.send(&[ix], &[&settlement]).expect("reveal");
+    env.reveal(1);
 
     // ---- commit results ----
-    let ix = settle_ix(&settlement.pubkey(), 1, "commit_results", &commit_args);
-    env.send(&[ix], &[&settlement]).expect("commit_results");
+    env.commit(1, [1u8; 32], &payouts).expect("commit_results");
     let pv = read_pool(&env.svm, &pool);
     assert_eq!(pv.state, 2, "Scored");
-    assert_eq!(pv.payouts, payouts, "one committed seat, the whole pot");
-
-    // ---- pay the winner ----
-    let (winner, winner_entry) = &players[0];
-    let before = env.balance(&winner.pubkey());
-    let ix = pay_prizes_ix(
-        &settlement.pubkey(),
-        1,
-        &[0],
-        &[(winner.pubkey(), *winner_entry)],
-    );
-    env.send(&[ix], &[&settlement]).expect("pay the winner");
-
-    // ---- the pot to the lamport, vault reaped to zero, state Paid ----
     assert_eq!(
-        env.balance(&winner.pubkey()) - before,
+        pv.payouts, payouts,
+        "sixteen committed seats, the whole table"
+    );
+
+    // ---- 17th place is not in the paid set (checked while Scored, so the
+    // ---- list — not the state gate — is what refuses it) ----
+    let (p, e) = &players[16];
+    let ix = env.pay_ix(1, &[16], &[(p.pubkey(), *e)]);
+    let err = env.send(&[ix], &[&settlement]).unwrap_err();
+    assert!(
+        err.contains("6045") || err.contains("SeatNotInPayouts"),
+        "{err}"
+    );
+
+    // ---- pay all sixteen places, in batches ----
+    let platform_before_pay = env.balance(&platform_pda());
+    let deltas = env.pay_all(1, &players, &payouts);
+
+    // ---- every place to the lamport, vault to its cushion, state Paid ----
+    assert_eq!(
+        deltas,
+        payouts.iter().map(|&(_, a)| a).collect::<Vec<u64>>(),
+        "each place receives exactly its table amount"
+    );
+    assert_eq!(
+        deltas.iter().sum::<u64>(),
         POT,
-        "winner takes all"
+        "the places share the prize pool exactly"
     );
     let pv = read_pool(&env.svm, &pool);
     assert_eq!(pv.state, 3, "Paid");
-    assert_eq!(pv.paid_mask, 0b1, "one bit: the winner's seat");
+    assert_eq!(pv.paid_mask, 0xFFFF, "sixteen bits: seats 0..15");
     assert_eq!(
         env.balance(&vault_pda(1)),
         VAULT_RENT_CUSHION,
-        "the pot has fully left; the rent cushion stays behind"
+        "the prize pool has fully left; the rent cushion stays behind"
     );
-    // Paid frees the tier slot and releases the pot from the book-keeping.
+    assert_eq!(
+        env.balance(&platform_pda()),
+        platform_before_pay,
+        "the treasury neither paid nor received anything at payout"
+    );
+    // Paid frees the type's slot and releases the pot from the book-keeping.
     let cfg = read_config(&env.svm);
-    assert_eq!(cfg.active_pool_by_tier[0], 0, "slot freed at Paid");
+    assert_eq!(
+        read_pool_type(&env.svm, &pool_type).active_pool,
+        0,
+        "slot freed at Paid"
+    );
     assert_eq!(cfg.platform_reserved, 0, "pot released from reserved");
 
-    // ---- second place is not in the paid set; double pay rejected ----
+    // ---- a paid place cannot be paid again: the state gate answers ----
     let (p, e) = &players[1];
-    let ix = pay_prizes_ix(&settlement.pubkey(), 1, &[1], &[(p.pubkey(), *e)]);
+    let ix = env.pay_ix(1, &[1], &[(p.pubkey(), *e)]);
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
-    // Pool is Paid, so the state gate fires first.
     assert!(
         err.contains("6027") || err.contains("ResultsNotCommitted"),
         "{err}"
     );
 }
 
-/// Escrow under D-E2 is all-or-nothing per paid seat (proposal E1 §12): the
-/// fixture uses a two-way tie for first so the three escrow paths — release,
-/// forfeit and next-place payout — run against real paid seats in one pool. Since
-/// 2026-09-07 (founder ruling 4) a forfeit moves NOTHING and the share is
-/// paid to the next eligible place; the treasury never sees it.
+/// Escrow in a Ladder pool (D-E19): flagged paid seats escrow at payout, a
+/// cleared one is released to its player, and an upheld one is FORFEITED —
+/// which moves nothing — and then HELD: `pay_next_place` refuses a pool that
+/// pays more than one place (`NextPlaceUnsupported`, founder decision of
+/// 2026-11-05), so the share stays in the pool's own vault, out of the
+/// operator's reach, until the field-moves-up payout ships.
 #[test]
-fn flagged_winners_escrow_then_release_forfeit_and_next_place() {
+fn flagged_ladder_seats_escrow_and_a_forfeited_share_is_held() {
     let Some(mut env) = Env::new() else { return };
     env.open_ready_pool(1, 0);
+    let players = env.register_n(1, 64);
+    let settlement = env.settlement.insecure_clone();
+    let admin = env.admin.pubkey();
+
+    // Flag first and second place before payout.
+    for (_, entry) in players.iter().take(2) {
+        let ix = flag_ix(&settlement.pubkey(), 1, entry, "flag_entry");
+        env.send(&[ix], &[&settlement]).expect("flag");
+    }
+    env.reveal(1);
+    // A two-way tie for first: seats 0 and 1 share 1st and 2nd (12 + 6
+    // entries) — 0.9 SOL each — and seats 2..15 take ranks 3..16.
+    let mut groups = vec![2u16];
+    groups.extend(std::iter::repeat_n(1u16, 14));
+    let payouts = ladder_payouts(&LADDER_TABLES[3], ENTRY, &groups);
+    assert_eq!(payouts.len(), 16);
+    assert_eq!(
+        &payouts[..3],
+        &[(0, 900_000_000), (1, 900_000_000), (2, 300_000_000)]
+    );
+    assert_eq!(payouts.iter().map(|&(_, a)| a).sum::<u64>(), POT);
+    env.commit(1, [1u8; 32], &payouts).expect("commit");
+    let deltas = env.pay_all(1, &players, &payouts);
+
+    // The two flagged seats escrowed; the other fourteen were paid.
+    assert_eq!(&deltas[..2], &[0, 0]);
+    assert_eq!(deltas[2..].iter().sum::<u64>(), POT - 1_800_000_000);
+    for (_, entry) in &players[..2] {
+        assert_eq!(read_entry(&env.svm, entry).escrow_lamports, 900_000_000);
+    }
+    assert_eq!(
+        env.balance(&vault_pda(1)),
+        1_800_000_000 + VAULT_RENT_CUSHION
+    );
+    assert_eq!(read_pool(&env.svm, &pool_pda(1)).state, 3, "Paid");
+
+    // Seat 0's review cleared: released to its player.
+    let before = env.balance(&players[0].0.pubkey());
+    let ix = release_escrow_ix(
+        &settlement.pubkey(),
+        1,
+        &players[0].1,
+        &players[0].0.pubkey(),
+    );
+    env.send(&[ix], &[&settlement]).expect("release");
+    assert_eq!(env.balance(&players[0].0.pubkey()) - before, 900_000_000);
+
+    // Seat 1's flag upheld: forfeited, nothing moves.
+    let platform_before = env.balance(&platform_pda());
+    env.send(&[forfeit_escrow_ix(&admin, 1, &players[1].1)], &[])
+        .expect("forfeit");
+    assert!(read_entry(&env.svm, &players[1].1).forfeited);
+    assert_eq!(
+        env.balance(&platform_pda()),
+        platform_before,
+        "no lamport reaches the operator"
+    );
+
+    // And the share cannot be paid onward in a Ladder pool — not to the
+    // cleared co-leader, not to anyone — so it is HELD where it is.
+    let before = env.balance(&players[0].0.pubkey());
+    let ix = pay_next_place_ix(
+        &settlement.pubkey(),
+        1,
+        &players[1].1,
+        &players[0].1,
+        &players[0].0.pubkey(),
+        1,
+        900_000_000,
+        &[],
+        1,
+        true,
+        &[],
+    );
+    assert_refused(
+        env.send(&[ix], &[&settlement]),
+        "6087",
+        "NextPlaceUnsupported",
+    );
+    assert_eq!(env.balance(&players[0].0.pubkey()), before);
+    assert_eq!(
+        read_entry(&env.svm, &players[1].1).escrow_lamports,
+        900_000_000
+    );
+    assert_eq!(
+        env.balance(&vault_pda(1)),
+        900_000_000 + VAULT_RENT_CUSHION,
+        "the forfeited share is held in the pool's own vault"
+    );
+    // A forfeited share is never released to the forfeiter either.
+    let ix = release_escrow_ix(
+        &settlement.pubkey(),
+        1,
+        &players[1].1,
+        &players[1].0.pubkey(),
+    );
+    assert_refused(
+        env.send(&[ix], &[&settlement]),
+        "6057",
+        "EscrowForfeitedAlready",
+    );
+    assert_eq!(
+        env.balance(&platform_pda()),
+        platform_before,
+        "still nothing to the operator"
+    );
+}
+
+#[test]
+fn refund_fork_returns_the_full_entry() {
+    let Some(mut env) = Env::new() else { return };
+    env.open_ready_pool(1, 0);
+    let pool_type = pool_type_pda(MODE_EASY, 0, 64);
+
+    let players = env.register_n(1, 3);
+
+    // Before the deadline: trigger rejected.
+    let settlement = env.settlement.insecure_clone();
+    let ix = env.trigger_refund_ix(&settlement.pubkey(), 1);
+    let err = env.send(&[ix], &[&settlement]).unwrap_err();
+    assert!(
+        err.contains("6012") || err.contains("DeadlineNotPassed"),
+        "{err}"
+    );
+
+    // Past the deadline (12 h at launch — `Config.fill_deadline_seconds`):
+    // registers reject, trigger lands (any signer).
+    env.advance_time(12 * 3600 + 1);
+    let err = env.register_player(1).unwrap_err();
+    assert!(
+        err.contains("6011") || err.contains("DeadlinePassed"),
+        "{err}"
+    );
+    let rando = Keypair::new();
+    env.svm.airdrop(&rando.pubkey(), 1_000_000_000).unwrap();
+    let platform_before = env.balance(&platform_pda());
+    let ix = env.trigger_refund_ix(&rando.pubkey(), 1);
+    env.send(&[ix], &[&rando]).expect("trigger_refund");
+    assert_eq!(read_pool(&env.svm, &pool_pda(1)).state, 4, "Refunding");
+    // The untouched prize pool returned to the treasury.
+    assert_eq!(
+        env.balance(&vault_pda(1)),
+        VAULT_RENT_CUSHION,
+        "pot returned at trigger; the rent cushion stays behind"
+    );
+    assert_eq!(
+        env.balance(&platform_pda()) - platform_before,
+        POT,
+        "treasury got the pot back"
+    );
+    assert_eq!(read_config(&env.svm).platform_reserved, 0);
+    // The slot is still held: Refunding is not Closed.
+    assert_eq!(read_pool_type(&env.svm, &pool_type).active_pool, 1);
+
+    // Refund all three — each gets the FULL 0.1 SOL back.
+    for (player, entry) in &players {
+        let before = env.balance(&player.pubkey());
+        let ix = env.refund_ix(&rando.pubkey(), 1, entry, &player.pubkey());
+        env.send(&[ix], &[&rando]).expect("refund");
+        assert_eq!(
+            env.balance(&player.pubkey()) - before,
+            ENTRY,
+            "R7 full refund"
+        );
+        // Second refund of the same entry rejected — AlreadyRefunded while
+        // the pool is still Refunding; PoolNotRefunding once the last refund
+        // closed it (the state gate fires first).
+        let ix = env.refund_ix(&rando.pubkey(), 1, entry, &player.pubkey());
+        let err = env.send(&[ix], &[&rando]).unwrap_err();
+        assert!(err.contains("6035") || err.contains("6034"), "{err}");
+    }
+
+    let pv = read_pool(&env.svm, &pool_pda(1));
+    assert_eq!(pv.state, 5, "Closed");
+    assert_eq!(env.balance(&vault_pda(1)), VAULT_RENT_CUSHION);
+    let cfg = read_config(&env.svm);
+    assert_eq!(
+        cfg.platform_refundable, 0,
+        "every refundable lamport repaid"
+    );
+    let t = read_pool_type(&env.svm, &pool_type);
+    assert_eq!(t.active_pool, 0, "slot freed at Closed");
+    assert_eq!(
+        t.next_open_at,
+        env.now() + 5 * 60,
+        "and the type's cooldown stamped"
+    );
+}
+
+/// Escrow in a ONE-PLACE pool — every pool opened before the Ladder, once
+/// `migrate_pool` has grown it — where all three escrow paths still run:
+/// release, forfeit and next-place payout. The fixture uses a two-way tie for
+/// first so they run against real paid seats in one pool. Since 2026-09-07
+/// (founder ruling 4) a forfeit moves NOTHING and the share is paid to the
+/// next eligible place; the treasury never sees it. (A Ladder pool's
+/// forfeited share is HELD instead — the test above.)
+#[test]
+fn a_one_place_pools_flagged_winners_escrow_then_release_forfeit_and_next_place() {
+    let Some(mut env) = Env::new() else { return };
+    env.open_legacy_pool(1, 0);
     let mut players: Vec<(Keypair, Pubkey)> = Vec::new();
     for _ in 0..64 {
         players.push(env.register_player(1).unwrap());
@@ -195,7 +437,7 @@ fn flagged_winners_escrow_then_release_forfeit_and_next_place() {
 
     // Pay both seats in one batch.
     let metas: Vec<(Pubkey, Pubkey)> = players[..2].iter().map(|(p, e)| (p.pubkey(), *e)).collect();
-    let ix = pay_prizes_ix(&settlement.pubkey(), 1, &[0, 1], &metas);
+    let ix = env.pay_ix(1, &[0, 1], &metas);
     let paid_at = env
         .svm
         .get_sysvar::<solana_sdk::clock::Clock>()
@@ -334,81 +576,6 @@ fn flagged_winners_escrow_then_release_forfeit_and_next_place() {
     assert!(err.contains("6036") || err.contains("NoEscrow"), "{err}");
 }
 
-#[test]
-fn refund_fork_returns_the_full_entry() {
-    let Some(mut env) = Env::new() else { return };
-    env.open_ready_pool(1, 0);
-
-    let mut players: Vec<(Keypair, Pubkey)> = Vec::new();
-    for _ in 0..3 {
-        players.push(env.register_player(1).unwrap());
-    }
-
-    // Before the deadline: trigger rejected.
-    let settlement = env.settlement.insecure_clone();
-    let ix = trigger_refund_ix(&settlement.pubkey(), 1);
-    let err = env.send(&[ix], &[&settlement]).unwrap_err();
-    assert!(
-        err.contains("6012") || err.contains("DeadlineNotPassed"),
-        "{err}"
-    );
-
-    // Past the deadline (12 h at launch — `Config.fill_deadline_seconds`):
-    // registers reject, trigger lands (any signer).
-    env.advance_time(12 * 3600 + 1);
-    let err = env.register_player(1).unwrap_err();
-    assert!(
-        err.contains("6011") || err.contains("DeadlinePassed"),
-        "{err}"
-    );
-    let rando = Keypair::new();
-    env.svm.airdrop(&rando.pubkey(), 1_000_000_000).unwrap();
-    let platform_before = env.balance(&platform_pda());
-    let ix = trigger_refund_ix(&rando.pubkey(), 1);
-    env.send(&[ix], &[&rando]).expect("trigger_refund");
-    assert_eq!(read_pool(&env.svm, &pool_pda(1)).state, 4, "Refunding");
-    // The untouched pot returned to the treasury; the vault reaped.
-    assert_eq!(
-        env.balance(&vault_pda(1)),
-        VAULT_RENT_CUSHION,
-        "pot returned at trigger; the rent cushion stays behind"
-    );
-    assert_eq!(
-        env.balance(&platform_pda()) - platform_before,
-        POT,
-        "treasury got the pot back"
-    );
-    assert_eq!(read_config(&env.svm).platform_reserved, 0);
-
-    // Refund all three — each gets the FULL 0.1 SOL back.
-    for (player, entry) in &players {
-        let before = env.balance(&player.pubkey());
-        let ix = refund_ix(&rando.pubkey(), 1, entry, &player.pubkey());
-        env.send(&[ix], &[&rando]).expect("refund");
-        assert_eq!(
-            env.balance(&player.pubkey()) - before,
-            ENTRY,
-            "R7 full refund"
-        );
-        // Second refund of the same entry rejected — AlreadyRefunded while
-        // the pool is still Refunding; PoolNotRefunding once the last refund
-        // closed it (the state gate fires first).
-        let ix = refund_ix(&rando.pubkey(), 1, entry, &player.pubkey());
-        let err = env.send(&[ix], &[&rando]).unwrap_err();
-        assert!(err.contains("6035") || err.contains("6034"), "{err}");
-    }
-
-    let pv = read_pool(&env.svm, &pool_pda(1));
-    assert_eq!(pv.state, 5, "Closed");
-    assert_eq!(env.balance(&vault_pda(1)), VAULT_RENT_CUSHION);
-    let cfg = read_config(&env.svm);
-    assert_eq!(
-        cfg.platform_refundable, 0,
-        "every refundable lamport repaid"
-    );
-    assert_eq!(cfg.active_pool_by_tier[0], 0, "slot freed at Closed");
-}
-
 /// PHASE 2 STAGE F — a sanctions hold blocks every route to the money.
 ///
 /// The published sentence is that we check the WINNING wallet against
@@ -416,11 +583,15 @@ fn refund_fork_returns_the_full_entry() {
 /// hold that survives the two things an integrity flag does not survive: the
 /// seven-day permissionless release, and the next-place split. This test is
 /// that property, end to end, against the real program.
+///
+/// Run in a ONE-PLACE pool (a migrated pre-Ladder pool), because route 3 is
+/// `pay_next_place`, which refuses every Ladder pool (`NextPlaceUnsupported`)
+/// — there a forfeited share is held, and a held share reaches nobody.
 #[test]
 fn a_sanctions_hold_blocks_both_release_paths_and_the_next_place_split() {
     const AUTO_RELEASE_SECS: i64 = 7 * 24 * 60 * 60;
     let Some(mut env) = Env::new() else { return };
-    env.open_ready_pool(1, 0);
+    env.open_legacy_pool(1, 0);
     let mut players: Vec<(Keypair, Pubkey)> = Vec::new();
     for _ in 0..64 {
         players.push(env.register_player(1).unwrap());
@@ -470,7 +641,7 @@ fn a_sanctions_hold_blocks_both_release_paths_and_the_next_place_split() {
     assert!(!read_entry(&env.svm, &players[0].1).flagged);
 
     let metas: Vec<(Pubkey, Pubkey)> = players[..2].iter().map(|(p, e)| (p.pubkey(), *e)).collect();
-    let ix = pay_prizes_ix(&settlement.pubkey(), 1, &[0, 1], &metas);
+    let ix = env.pay_ix(1, &[0, 1], &metas);
     env.send(&[ix], &[&settlement]).expect("pay");
     assert_eq!(read_entry(&env.svm, &players[0].1).escrow_lamports, POT / 2);
     // Twice is refused, so a double placement is visible rather than silent.
@@ -582,39 +753,30 @@ fn a_sanctions_hold_blocks_both_release_paths_and_the_next_place_split() {
     assert_eq!(read_entry(&env.svm, &players[0].1).escrow_lamports, 0);
 }
 
-/// A hold placed BEFORE payment diverts the share into escrow on its own.
+/// A hold placed BEFORE payment diverts the share into escrow on its own —
+/// in a Ladder pool, where several seats are paid in one batch.
 ///
 /// This is the clause that makes every other check in the previous test
 /// reachable. `release_escrow` and `pay_next_place` both only ever see money
 /// that is already escrowed, so without `pay_prizes` escrowing on the hold a
-/// screened-and-matched winner would simply be paid out of the vault and the
-/// hold would guard nothing. The unheld co-winner in the same batch is paid
+/// screened-and-matched first place would simply be paid out of the vault and
+/// the hold would guard nothing. The unheld places in the same batch are paid
 /// normally, which is the other half of the property: one wallet is held, the
 /// pool still settles.
 #[test]
 fn a_sanctions_hold_escrows_the_share_at_payout_without_any_flag() {
     let Some(mut env) = Env::new() else { return };
     env.open_ready_pool(1, 0);
-    let mut players: Vec<(Keypair, Pubkey)> = Vec::new();
-    for _ in 0..64 {
-        players.push(env.register_player(1).unwrap());
-    }
+    let players = env.register_n(1, 64);
     let settlement = env.settlement.insecure_clone();
+    env.reveal(1);
+    let payouts = straight_payouts(&LADDER_TABLES[3], ENTRY);
+    env.commit(1, [1u8; 32], &payouts).expect("commit_results");
 
-    let secret = env.pool_secret;
-    let ix = settle_ix(&settlement.pubkey(), 1, "reveal_pool_secret", &secret);
-    env.send(&[ix], &[&settlement]).unwrap();
-    let payouts = tied_first_payouts(POT, 2);
-    let wallets: Vec<Pubkey> = players.iter().map(|(p, _)| p.pubkey()).collect();
-    let (leaves, _ranks) = results_leaves(&wallets, &payouts);
-    let mut commit_args = merkle_root(&leaves).to_vec();
-    commit_args.extend_from_slice(&encode_payouts(&payouts));
-    let ix = settle_ix(&settlement.pubkey(), 1, "commit_results", &commit_args);
-    env.send(&[ix], &[&settlement]).unwrap();
-
-    // Seat 0 matched a list during resolving. The crank places the hold in
-    // the same pass that scored the pool — before it pays. No flag: nothing
-    // about a list membership is a finding against the competition.
+    // Seat 0 (first place) matched a list during resolving. The crank places
+    // the hold in the same pass that scored the pool — before it pays. No
+    // flag: nothing about a list membership is a finding against the
+    // competition.
     let ix = sanctions_hold_ix(
         &settlement.pubkey(),
         1,
@@ -626,30 +788,35 @@ fn a_sanctions_hold_escrows_the_share_at_payout_without_any_flag() {
     assert!(!read_entry(&env.svm, &players[0].1).flagged);
 
     let held_before = env.balance(&players[0].0.pubkey());
-    let free_before = env.balance(&players[1].0.pubkey());
-    let metas: Vec<(Pubkey, Pubkey)> = players[..2].iter().map(|(p, e)| (p.pubkey(), *e)).collect();
-    let ix = pay_prizes_ix(&settlement.pubkey(), 1, &[0, 1], &metas);
-    env.send(&[ix], &[&settlement]).expect("pay");
+    let deltas = env.pay_all(1, &players, &payouts);
 
     // The held seat: settled, escrowed, not a lamport moved.
     let held = read_entry(&env.svm, &players[0].1);
     assert!(held.settled, "the seat settles — the batch must not revert");
-    assert_eq!(held.escrow_lamports, POT / 2, "the share is escrowed");
+    assert_eq!(held.escrow_lamports, 12 * ENTRY, "first place is escrowed");
+    assert_eq!(deltas[0], 0, "a held wallet receives nothing at payout");
+    assert_eq!(env.balance(&players[0].0.pubkey()), held_before);
+
+    // Every other paid place: paid in the same batches, unaffected.
+    for (i, &(seat, amount)) in payouts.iter().enumerate().skip(1) {
+        assert_eq!(deltas[i], amount, "seat {seat} is paid normally");
+        assert_eq!(
+            read_entry(&env.svm, &players[seat as usize].1).escrow_lamports,
+            0
+        );
+    }
     assert_eq!(
-        env.balance(&players[0].0.pubkey()),
-        held_before,
-        "a held wallet receives nothing at payout"
+        env.balance(&vault_pda(1)),
+        12 * ENTRY + VAULT_RENT_CUSHION,
+        "only the held share stays in the vault"
     );
 
-    // The co-winner: paid in the same batch, unaffected.
-    assert_eq!(
-        env.balance(&players[1].0.pubkey()) - free_before,
-        POT / 2,
-        "the unheld co-winner is paid normally"
-    );
-    assert_eq!(read_entry(&env.svm, &players[1].1).escrow_lamports, 0);
-
-    // And the pool reached Paid, so the tier's slot is freed and the pot
-    // leaves `platform_reserved`: one held wallet must not strand a tier.
+    // And the pool reached Paid, so the type's slot is freed and the pot
+    // leaves `platform_reserved`: one held wallet must not strand a type.
     assert_eq!(read_pool(&env.svm, &pool_pda(1)).state, 3, "Paid");
+    assert_eq!(
+        read_pool_type(&env.svm, &env.pool_type_of(1)).active_pool,
+        0
+    );
+    assert_eq!(read_config(&env.svm).platform_reserved, 0);
 }

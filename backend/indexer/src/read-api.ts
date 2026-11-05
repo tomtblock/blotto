@@ -5,12 +5,16 @@
  * issues SELECTs; there is no write path in this module.
  *
  *   GET /pools                         → PoolSummary[] — filterable by
- *                                        ?state=&tier=&before=<id>&limit=
- *                                        (E3: the archive list is
- *                                        /pools?state=Paid, paged by id)
+ *                                        ?state=&tier=&mode=&capacity=
+ *                                        &before=<id>&limit= (E3: the archive
+ *                                        list is /pools?state=Paid, paged by
+ *                                        id; capacity is 8|16|32|64, D-E19)
  *   GET /pools/:pool                   → PoolSummary (+ held_shares,
  *                                        resolving, resolving_until — Stage C,
- *                                        derived, see `resolvingOf`)
+ *                                        derived, see `resolvingOf`). Every
+ *                                        pool row carries its own capacity,
+ *                                        minimum field and prize table (the
+ *                                        Ladder, `poolLadderFields`)
  *   GET /pools/:pool/entries           → EntryRow[]
  *   GET /pools/:pool/results           → ResultRow[]
  *   GET /pools/:pool/leaderboard       → the VERIFIED archive ranking (E3):
@@ -31,13 +35,23 @@
  *   after reveal the battles and salts are in the published bundle, which is
  *   what the what-beat-you view now reads — and `/profiles/:player/rivals`,
  *   a co-entrant graph nothing in scoring, payment or verification needed.
+ *   GET /pool-types                    → every pool type (D-E19): its
+ *                                        switch and its tier's, table,
+ *                                        floor, prize pool and amounts, live
+ *                                        pool and cooldown stamp; chain
+ *                                        first, the ledger projection as the
+ *                                        fallback, `source` says which
+ *                                        (pool-types.ts)
  *   GET /tiers                         → one row per CONFIGURED tier:
  *                                        `enabled` / `status` (the founder's
  *                                        `open_tiers`, resolved by the same
  *                                        function /treasury uses) and
  *                                        `next_open_at` (the cooldown stamp,
  *                                        prompt v2 §B.6), plus `server_time`
- *                                        and `enablement_source`
+ *                                        and `enablement_source`. Kept for
+ *                                        older readers: since D-E19 the stamp
+ *                                        is the tier's 64-player type's, and
+ *                                        the app reads /pool-types
  *   GET /time                          → { server_time } — the clock every
  *                                        countdown in the app derives from
  *                                        (never the device's Date.now())
@@ -67,7 +81,9 @@ import {
   startBucketSweeper,
   type HygieneConfig,
 } from '../../_shared/src/http-hygiene';
-import { MIN_SEATS, REVIEW_WINDOW_SECS } from '../../scoring/src/prizes';
+import { isPoolCapacity, REVIEW_WINDOW_SECS } from '../../scoring/src/prizes';
+import { preLadderTable } from '../../_shared/src/pool-account';
+import { poolLadderFields, poolTypesBody } from './pool-types';
 import type { Queryable } from './shared';
 import { hardTierEnablement, tierEnablement, treasuryReport } from './treasury-report';
 import {
@@ -166,45 +182,24 @@ function poolRow(r: Record<string, unknown>, now: Now): Json {
     // Stage C: held shares and the derived resolving flag (see `resolvingOf`).
     held_shares: heldShares,
     ...resolvingOf(heldShares, settledAt, nowUnix),
-    // R7-b (founder instruction 2026-09-12 §4.3): the floor this pool plays
-    // at, and what its deadline would do RIGHT NOW.
+    // The Ladder (D-E19, migration 0026): the pool's size and the FIXED
+    // table it pays — whole multiples of the entry, rank 1 first, one per
+    // paid place — with the same table in lamports, both copied onto the
+    // pool at open and never rewritten.
     //
-    // Read from the SHARED CONSTANT, not from the pool's own `min_seats`.
-    // The chain carries the floor per pool so an upgrade cannot move it
-    // under seated players, and that is the number the program enforces —
-    // but `PoolOpened` does not carry it and the derived `pools` table has
-    // no column for it, so there is nothing here to read it from. The
-    // derived tables are a pure function of the event ledger by design; a
-    // chain read in this path would break that, which is why the honest fix
-    // is an event field rather than a lookup.
-    //
-    // WHAT MAKES THIS SAFE, precisely — it is an operational rule, not a
-    // property of the data: **`admin.ts pools --upgrade-preflight` refuses
-    // the program upgrade while any pool is Open**, so no pool is ever open
-    // across a change to the floor, so every live pool's stored floor IS
-    // this constant. `docs/guide/OPERATING-MANUAL.md` is where the rule is
-    // carried out and says why.
-    //
-    // An earlier version of this comment justified the shortcut differently
-    // — that the only pools with a different floor were the ones predating
-    // the field, "all of them long terminal". That was wrong on 2026-09-13:
-    // pool 10 was Open and predated the field, so the migration would have
-    // given it 52 while this served 40, and a pool of it sitting between the
-    // two at its deadline would have been shown "will play" and then
-    // refunded. It does not take a SECOND change to the floor to break the
-    // assumption; the first one already leaves pools open across an upgrade.
-    //
-    // BEFORE MAINNET: add `min_seats` to `PoolOpened`, store it per pool,
-    // and serve the stored value. Then the site cannot disagree with the
-    // chain whatever the deploy order, and the pre-flight refusal goes back
-    // to being belt-and-braces. Anyone relaxing that refusal must do this
-    // first — this comment is the marker.
+    // R7-b (founder instruction 2026-09-12 §4.3), per pool since D-E19:
+    // `min_seats` is the floor THIS pool plays at — the pool's own
+    // `Pool.min_seats`, carried by `PoolOpened` (and restated by
+    // `PoolMigrated`) — and `outcome_if_deadline_now` is what its deadline
+    // would do RIGHT NOW. Until the Ladder this served one shared constant
+    // and a comment explained why that was safe only while no pool stayed
+    // open across a change to the floor; the event now carries the floor,
+    // so the site cannot disagree with the chain whatever the deploy order.
     //
     // The app shows a live countdown beside an entrant count, and until this
-    // existed a player watching a pool at 38 seats with an hour left had to
-    // know the rule and do the comparison themselves.
-    min_seats: Number(MIN_SEATS),
-    outcome_if_deadline_now: Number(r.entrants) >= Number(MIN_SEATS) ? 'seal' : 'refund',
+    // existed a player watching a pool near its floor with an hour left had
+    // to know the rule and do the comparison themselves.
+    ...poolLadderFields(r),
     // The clock the app's countdowns derive from (unix seconds, string).
     server_time: String(nowUnix),
   };
@@ -257,15 +252,23 @@ export async function handleRead(
     // rows with mode 1, migration 0025). The app decides from `hard.enabled`
     // alone whether a hard card exists at all — there is no switch in the
     // app for it (Phase B plan, decision 3).
+    //
+    // ONE SIZE since the Ladder (D-E19, migration 0026): the stamp a tier row
+    // carries is its 64-player pool type's — the only size there was, so
+    // the field keeps the meaning older readers gave it. Every size's stamp
+    // is on GET /pool-types, which is what the app reads.
     const res = await db.query(
-      'SELECT tier, mode, next_open_at, last_pool_id FROM tier_status ORDER BY tier ASC, mode ASC'
+      'SELECT tier, mode, capacity, next_open_at, last_pool_id FROM tier_status ORDER BY tier ASC, mode ASC'
     );
-    const rows = res.rows as Array<{
-      tier: number;
-      mode?: unknown;
-      next_open_at: unknown;
-      last_pool_id: unknown;
-    }>;
+    const rows = (
+      res.rows as Array<{
+        tier: number;
+        mode?: unknown;
+        capacity?: unknown;
+        next_open_at: unknown;
+        last_pool_id: unknown;
+      }>
+    ).filter((t) => t.capacity === null || t.capacity === undefined || Number(t.capacity) === 64);
     // A row from before 0025 carries no mode: the easy ladder's.
     const modeOf = (t: { mode?: unknown }) => (Number(t.mode) === 1 ? 1 : 0);
     const byTier = new Map(rows.filter((t) => modeOf(t) === 0).map((t) => [Number(t.tier), t]));
@@ -298,6 +301,14 @@ export async function handleRead(
         }),
       },
     };
+  }
+
+  if (parts[0] === 'pool-types' && parts.length === 1) {
+    // The Ladder (D-E19): the lobby's source. Chain first — every
+    // `PoolType` account and Config's tier switches, through the same
+    // cached, fail-soft reader /treasury uses — and the `pool_types`
+    // projection when that read fails; `source` says which answered.
+    return { status: 200, body: await poolTypesBody(db, now(), chain) };
   }
 
   if (parts[0] === 'pools' && parts.length === 1) {
@@ -452,6 +463,15 @@ async function poolsList(db: Queryable, query: URLSearchParams, now: Now): Promi
     params.push(mode === 'hard' ? 1 : 0);
     where.push(`mode = $${params.length}`);
   }
+  // The Ladder (D-E19): ?capacity=8|16|32|64 — one pool size's pools.
+  const capacity = query.get('capacity');
+  if (capacity !== null) {
+    if (!/^\d{1,2}$/.test(capacity) || !isPoolCapacity(Number(capacity))) {
+      return { status: 400, body: { error: 'bad capacity filter' } };
+    }
+    params.push(Number(capacity));
+    where.push(`capacity = $${params.length}`);
+  }
   const before = query.get('before');
   if (before !== null) {
     if (!/^\d{1,19}$/.test(before)) return { status: 400, body: { error: 'bad before cursor' } };
@@ -575,6 +595,24 @@ async function verifyRecord(db: Queryable, pool: string): Promise<ReadApiResult>
   let revealedSecretHex = '';
   let resultsRootHex = '';
   let committedPayouts: Array<{ entryIndex: number; amount: string }> = [];
+  // The Ladder (D-E19): the size, floor and table the pool was opened under,
+  // as the chain stated them — so the verify page can check the table a
+  // results bundle claims against the one the program recorded, rather than
+  // recompute from the bundle's own copy. A pre-Ladder `PoolOpened` carries
+  // none: 64 seats and `preLadderTable`, until a `PoolMigrated` restates it.
+  let capacity = 64;
+  let minSeats: number | null = null;
+  let paidPlaces = 0;
+  let prizeTable: number[] = [];
+  const ladderTail = (e: Record<string, unknown>): boolean => {
+    if (e.capacity === null || e.capacity === undefined) return false;
+    capacity = Number(e.capacity);
+    paidPlaces = Number(e.paid_places ?? 0);
+    prizeTable = Array.isArray(e.prize_table)
+      ? (e.prize_table as unknown[]).slice(0, paidPlaces).map(Number)
+      : [];
+    return true;
+  };
   const battlesHashByPlayer: Record<string, string> = {};
   const payouts: Array<{ player: string; entryIndex: number; amount: string }> = [];
   for (const row of res.rows) {
@@ -584,6 +622,17 @@ async function verifyRecord(db: Queryable, pool: string): Promise<ReadApiResult>
         sealingSecretHashHex = e.sealing_secret_hash as string;
         entryLamports = e.entry_lamports as string;
         potLamports = e.pot_lamports as string;
+        if (e.min_seats !== null && e.min_seats !== undefined) minSeats = Number(e.min_seats);
+        if (!ladderTail(e) && entryLamports && potLamports) {
+          const t = preLadderTable(BigInt(entryLamports), BigInt(potLamports));
+          capacity = 64;
+          paidPlaces = t.paidPlaces;
+          prizeTable = t.prizeTable.slice(0, t.paidPlaces);
+        }
+        break;
+      case 'PoolMigrated':
+        if (e.min_seats !== null && e.min_seats !== undefined) minSeats = Number(e.min_seats);
+        ladderTail(e);
         break;
       case 'EntryRegistered':
         battlesHashByPlayer[e.player as string] = e.battles_hash as string;
@@ -620,6 +669,10 @@ async function verifyRecord(db: Queryable, pool: string): Promise<ReadApiResult>
       committedPayouts,
       battlesHashByPlayer,
       payouts,
+      capacity,
+      minSeats,
+      paidPlaces,
+      prizeTable,
     },
   };
 }

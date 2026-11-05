@@ -120,6 +120,9 @@ pub fn handle_init_config(
     config.hard_open_tiers = [false; N_TIERS];
     config.hard_active_pool_by_tier = [0; N_TIERS];
     config.hard_tier_next_open_at = [now; N_TIERS];
+    // D-E19: no pool type exists yet, so none is enabled. Pool types are
+    // created and enabled one by one after init (`init_pool_type`, …).
+    config.enabled_pool_types = 0;
     config.bump = ctx.bumps.config;
     config.platform_bump = ctx.bumps.platform;
     Ok(())

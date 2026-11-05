@@ -106,10 +106,13 @@ function buildVendor(
     timeoutMs: intEnv(env, 'GEO_VENDOR_TIMEOUT_MS', 4000, { min: 1 }),
   });
   // The request budget is real: two lookups per entrant (the /geo pre-flight
-  // on page load, then /packet) across 64 entrants is 128 per pool, against a
-  // DAILY cap over a finite, non-renewing credit balance. The cache changes
-  // no verdict — see geo-cache.ts for why — it only stops the same address
-  // being asked about twice.
+  // on page load, then /packet) is 128 for one full 64-player pool, and
+  // since the Ladder (D-E19) several pools fill at once — the eight 0.1 SOL
+  // pool types of the devnet launch hold 2 × (8 + 16 + 32 + 64) = 240 seats,
+  // 480 lookups per round of fills — against a DAILY cap over a finite,
+  // non-renewing credit balance. The cache changes no verdict — see
+  // geo-cache.ts for why — it only stops the same address being asked about
+  // twice.
   const ttlMs = intEnv(env, 'GEO_CACHE_TTL_MS', 15 * 60 * 1000, { min: 0 });
   if (ttlMs > 0) return { lookup: new CachingGeoLookup(vendor, { ttlMs }), cached: true };
   return { lookup: vendor, cached: false };
@@ -125,10 +128,15 @@ function buildVendor(
  * inventing a number here would either throttle a paid tier for no reason or
  * give false comfort on a free one.
  *
- * PHASE-6-REVIEW: the reserve defaults to a quarter of the cap — enough for a
- * full 64-seat field twice over at any cap worth setting, small enough not to
- * squeeze ordinary traffic. The split is an operator-owned number, so it is a
- * default with an override (`GEO_ISSUANCE_RESERVE`) rather than a constant.
+ * PHASE-6-REVIEW: the reserve defaults to a quarter of the cap — small enough
+ * not to squeeze ordinary traffic. Since the Ladder (D-E19) the field it must
+ * cover is every pool filling at once, not one pool: the issuance lookups for
+ * one round of the eight launch pool types are 240 (one per seat), so a
+ * quarter covers a round only at a cap of 960 or more (it covered a 64-seat
+ * field twice over from 512). The split and the cap are operator-owned
+ * numbers, so this is a default with an override (`GEO_ISSUANCE_RESERVE`)
+ * rather than a constant; size `GEO_DAILY_CAP` against the pool types
+ * actually enabled.
  */
 // Exported for its own spec. The stub's opt-in (E-03 / C-31) is a refusal
 // decided entirely by which variables are present, and the only honest way to

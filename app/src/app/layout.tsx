@@ -10,6 +10,7 @@ import { SkipLink } from '@/components/shell/skip-link';
 import { RouteFocus } from '@/components/shell/route-focus';
 import { ForgetBlottStills } from '@/storage/ForgetBlottStills';
 import { MobileWalletAdapter } from '@/wallet/mobile-wallet';
+import { TestNetworkNotice } from '@/components/shell/test-network-notice';
 
 // SELF-HOSTED, NOT FETCHED (2026-09-22). These three were `next/font/google`,
 // which downloads the font files from Google at BUILD TIME. That made every
@@ -87,6 +88,9 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         {/* First in the tab order on every page (2026-09-13). */}
         <SkipLink />
+        {/* Every build that is not mainnet says so on every page (2026-11-05,
+            when the pre-launch code gate came down). Renders nothing on mainnet. */}
+        <TestNetworkNotice />
         <AuthProvider>
           <QueryProvider>
             <ToastProvider>

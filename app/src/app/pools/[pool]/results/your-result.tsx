@@ -14,13 +14,21 @@
  * without one). The replay reads the bundle at the archive's permanent URI
  * in the browser, checks each seat's battles against its committed hash
  * (results/what-beat-you.ts), and shows only what checks out. Nobody's
- * wallet is rendered; the opponent is named by rank.
+ * wallet is rendered; the opponent is named by place.
+ *
+ * D-E19 (the Ladder; founder brief 2026-11-05): a pool pays its highest
+ * places. A paid finish shows the amount the chain committed for this
+ * player (or that it is held while a flag is reviewed); an unpaid finish
+ * is said ONCE, factually — "You finished 11th of 26. Prizes were paid to
+ * 1st–8th." — in the same type as everything else: no near-miss styling,
+ * no "so close", no animation. The paid-place count is the pool's own.
  */
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import type { BattleSet } from '@blotto/scoring';
 import { COPY } from '@/copy';
+import { lamportsToSol } from '@/data/format';
 import type { PoolLeaderboard } from '@/data/types';
 import type { PublishedBundle } from '@/verify/logic';
 import { useAuth } from '@/wallet/auth-context';
@@ -35,7 +43,21 @@ const KEY_QUIET =
 
 type Bundle = { state: 'idle' } | { state: 'loading' } | { state: 'ready'; battles: Map<number, BattleSet> } | { state: 'failed' };
 
-export function YourResult({ pool, poolId, archive }: { pool: string; poolId: string; archive: PoolLeaderboard | null }) {
+export function YourResult({
+  pool,
+  poolId,
+  archive,
+  paidPlaces,
+  heldPlayers = [],
+}: {
+  pool: string;
+  poolId: string;
+  archive: PoolLeaderboard | null;
+  /** The pool's own number of paid places (`poolLadder`). */
+  paidPlaces: number;
+  /** Wallets whose committed share is held for review right now. */
+  heldPlayers?: readonly string[];
+}) {
   const r = COPY.results.yourResult;
   const auth = useAuth();
   const wallet = auth.status === 'signed-in' ? auth.walletAddress : null;
@@ -73,6 +95,9 @@ export function YourResult({ pool, poolId, archive }: { pool: string; poolId: st
   const mine = bundle.state === 'ready' && me.seat !== null ? (bundle.battles.get(me.seat) ?? null) : null;
   const theirs = bundle.state === 'ready' && opponent && opponent.seat !== null ? (bundle.battles.get(opponent.seat) ?? null) : null;
   const opponentLabel = opponent ? (opponent.rank === 1 ? r.replayWinner : r.replayRank(opponent.rank)) : '';
+  // Paid = the chain's committed amount for this player is above zero.
+  const paid = /^\d+$/.test(me.amount_lamports) && BigInt(me.amount_lamports) > 0n;
+  const held = paid && heldPlayers.includes(me.player);
   const verifyHref = `/verify?pool=${pool}&bundle=${encodeURIComponent(archive.uri)}`;
   const shareOnX = () => {
     const url = `${window.location.origin}/card/${pool}/${wallet}`;
@@ -88,7 +113,7 @@ export function YourResult({ pool, poolId, archive }: { pool: string; poolId: st
       <div className="flex flex-wrap items-end gap-x-8 gap-y-3">
         <div>
           <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-ink-muted">{r.positionLabel}</p>
-          <p className={`tnum font-display text-[48px] leading-none font-extrabold ${me.rank === 1 ? 'text-prize' : 'text-ink'}`}>
+          <p className={`tnum font-display text-[48px] leading-none font-extrabold ${paid ? 'text-prize' : 'text-ink'}`}>
             {r.position(me.rank, archive.rows.length)}
           </p>
         </div>
@@ -99,10 +124,17 @@ export function YourResult({ pool, poolId, archive }: { pool: string; poolId: st
             {r.battlesWonOf(battleScoreLabel(me.recomputed?.score_half), 7 * Math.max(0, archive.rows.length - 1))}
           </p>
         </div>
-        {me.amount_lamports !== '0' ? (
-          <p className="text-[14px] font-semibold text-prize">{r.paid}</p>
+        {paid ? (
+          <p className="text-[14px] font-semibold text-prize" data-testid="your-result-prize">
+            {held ? r.held : r.paid(lamportsToSol(me.amount_lamports))}
+          </p>
         ) : null}
       </div>
+      {!paid ? (
+        <p className="mt-3 text-[15px] leading-6 text-ink" data-testid="your-result-finish">
+          {r.unpaid(me.rank, archive.rows.length, paidPlaces)}
+        </p>
+      ) : null}
 
       <div className="mt-5 flex flex-wrap items-center gap-2">
         <a href="#standings" className={KEY_CREAM} data-testid="your-result-leaderboard">

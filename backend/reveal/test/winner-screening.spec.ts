@@ -9,7 +9,7 @@
  */
 import { expect } from 'chai';
 import { createHash } from 'crypto';
-import { crankPool, FakeChain, MemoryPublisher, makeWinnerScreen, type FakeEntry } from '../src';
+import { crankPool, MemoryPublisher, makeWinnerScreen, type FakeEntry } from '../src';
 import {
   LocalCustody,
   MemoryCiphertextStore,
@@ -18,7 +18,8 @@ import {
   type SealedPayload,
 } from '../../sealing/src';
 import { StubSanctionsCheck, type SanctionsCheck } from '../../sanctions/src';
-import { battlesHash, potForTier, type BattleSet } from '../../scoring/src';
+import { battlesHash, ladderTable, type BattleSet } from '../../scoring/src';
+import { ladderChain, ladderPoolView } from './ladder-fixtures';
 import { base58Encode } from '../../_shared/src/blotto-events';
 
 const sha = (s: string) => new Uint8Array(createHash('sha256').update(s).digest());
@@ -33,9 +34,10 @@ function battlesFor(base: number): BattleSet {
   return Array.from({ length: 7 }, (_, k) => alloc(base + k)) as never;
 }
 
-/** A sealed 64-entry pool, ready to crank. */
+/** A sealed 64-entry pool, ready to crank — its pool type (easy, tier 0,
+ * 64 players) exists, as `pay_prizes` requires (D-E19). */
 async function sealedPool() {
-  const chain = new FakeChain();
+  const chain = await ladderChain();
   const custody = new LocalCustody(async (id) => (await chain.getPool(id)).state !== 'Open');
   const store = new MemoryCiphertextStore();
   const publisher = new MemoryPublisher();
@@ -64,22 +66,7 @@ async function sealedPool() {
     await store.put(1n, player, seal(encodePayload(payload), publicKey));
   }
 
-  chain.pools.set('1', {
-    poolId: 1n,
-    tier: 0,
-    state: 'Sealed',
-    resultsRootHex: null,
-    vrfCommitted: true,
-    entryLamports: 100_000_000n,
-    potLamports: potForTier(0),
-    fillDeadline: 0n,
-    secretRevealed: false,
-    resultsCommitted: false,
-    paidMask: 0n,
-    payouts: [],
-    entrants: 64,
-    mode: 0,
-  });
+  chain.pools.set('1', ladderPoolView());
   chain.entries.set('1', entries);
   return { chain, custody, store, publisher, players };
 }
@@ -250,6 +237,31 @@ describe('the winner check (Stage F)', () => {
       expect(threw!.message).to.match(/could not answer/);
       expect(t.chain.paid.size, 'nobody is paid unscreened').to.equal(0);
       expect(t.chain.sanctionsHeld.size, 'and no hold was recorded for an outage').to.equal(0);
+    });
+
+    it('screens EVERY paid seat of the table, not first place alone (D-E19)', async function () {
+      this.timeout(30000);
+      const t = await sealedPool();
+      const asked: string[][] = [];
+      await crankPool(
+        {
+          chain: t.chain,
+          custody: t.custody,
+          ciphertexts: t.store,
+          publisher: t.publisher,
+          screenWinners: async (_poolId, wallets) => {
+            asked.push([...wallets]);
+            return [];
+          },
+        },
+        1n
+      );
+      const pool = await t.chain.getPool(1n);
+      const entries = await t.chain.getEntries(1n);
+      const paidWallets = pool.payouts.map((p) => entries.find((e) => e.index === p.entryIndex)!.player);
+      expect(asked).to.have.length(1);
+      expect(asked[0]).to.deep.equal(paidWallets);
+      expect(asked[0].length, 'a 64-player table pays sixteen places').to.be.at.least(ladderTable(64).length);
     });
 
     it('a resumed crank does not place a hold twice', async function () {

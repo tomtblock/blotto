@@ -31,6 +31,18 @@ pub struct PoolOpened {
     /// was emitted without it; the decoder reads it only when the byte is
     /// there and reports 0 otherwise, which is the rule those pools played.
     pub mode: u8,
+    // ---- APPENDED by the Ladder (D-E19). A `PoolOpened` emitted before it
+    // ends at `mode`; the decoder reads the tail only when the bytes are
+    // there and otherwise reports the pre-Ladder rule (64 seats, one place).
+    /// The pool's size: 8, 16, 32 or 64.
+    pub capacity: u16,
+    /// The pool's minimum field, copied from its pool type.
+    pub min_seats: u16,
+    /// Places paid (`capacity / 4`).
+    pub paid_places: u8,
+    /// The prize table in whole multiples of the entry, rank 1 first,
+    /// zero-padded to 16.
+    pub prize_table: [u8; 16],
 }
 
 // `PoolVrfSeeded` and `PassCollectionCreated` are declared beside their
@@ -95,6 +107,47 @@ pub struct TierSlotFreed {
     pub next_open_at: i64,
     /// Which ladder's slot (Phase B, appended; absent = easy).
     pub mode: u8,
+    /// Which size's slot (D-E19, appended; absent = 64, the only size before
+    /// it). Since D-E19 the slot freed is the pool TYPE's.
+    pub capacity: u16,
+}
+
+/// A pool type created (D-E19): one per (mode, tier, capacity), disabled and
+/// without a table until `set_pool_type_economics` and
+/// `set_pool_type_enabled` run.
+#[event]
+pub struct PoolTypeInitialized {
+    pub pool_type: Pubkey,
+    pub mode: u8,
+    pub tier: u8,
+    pub capacity: u16,
+}
+
+/// A pool type's published economics set (D-E19). Applies to the NEXT pool
+/// of this type only; every open pool keeps the terms copied onto it.
+#[event]
+pub struct PoolTypeEconomicsSet {
+    pub pool_type: Pubkey,
+    pub mode: u8,
+    pub tier: u8,
+    pub capacity: u16,
+    pub min_seats: u16,
+    pub paid_places: u8,
+    pub prize_table: [u8; 16],
+    pub pot_lamports: u64,
+}
+
+/// A pool type switched on or off (D-E19). Off stops the NEXT pool; it never
+/// touches a pool already taking entries.
+#[event]
+pub struct PoolTypeEnabledSet {
+    pub pool_type: Pubkey,
+    pub mode: u8,
+    pub tier: u8,
+    pub capacity: u16,
+    pub enabled: bool,
+    /// How many pool types are enabled after this call (`Config.enabled_pool_types`).
+    pub enabled_count: u16,
 }
 
 #[event]
@@ -222,6 +275,14 @@ pub struct PoolMigrated {
     /// Always `MODE_EASY` (Phase B, appended): a pool that predates the
     /// field played easy.
     pub mode: u8,
+    // ---- APPENDED by the Ladder (D-E19): what a pre-Ladder pool is recorded
+    // as having played by — 64 seats, one paid place, and its prize pool in
+    // whole entries (40 at every devnet pool that played). A pool that never
+    // played and whose prize pool is not a whole number of entries is
+    // recorded with no table (`paid_places = 0`): it has nothing to recompute.
+    pub capacity: u16,
+    pub paid_places: u8,
+    pub prize_table: [u8; 16],
 }
 
 /// Phase B (founder rulings 2026-09-24): `migrate_config` grew Config with

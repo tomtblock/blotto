@@ -53,7 +53,9 @@ Each key is described by its role. The current public keys are in
 `scripts/check-standing-rules.sh` asserts the exact exit set in CI:
 
 - The prize vault's exits are `pay_prizes`, `release_escrow`, `pay_next_place` and
-  `trigger_refund`.
+  `trigger_refund`. Since D-E19 `pay_next_place` serves pools paying one place only (those opened
+  before the Ladder); a forfeited share in a multi-place pool stays in its vault until the
+  field-moves-up payout ships.
 - The treasury's exits are `refund` and the admin-gated, floor-guarded `withdraw_platform`.
 - `forfeit_escrow` moves nothing.
 
@@ -72,7 +74,10 @@ Each rule exists because breaking it once caused a real problem.
    to run while the CLI's configured default disagrees with the key it was given.
 2. **Admin transactions are prepared by one person and approved by the multisig.** Run the
    command with `--emit-proposal`, check every account against the printed payload, then approve
-   the proposal in Squads. Simulate before you approve.
+   it through the multisig. Simulate before you approve. On devnet the admin is a **Squads v3**
+   multisig whose web interface is retired: proposals are created, approved and executed with
+   `npm run squads` (§3, "Running a proposal through Squads v3"). Mainnet's admin must be a Squads
+   v4 multisig from the first `init_config`, because the program has no `set_admin`.
 3. **Never print, echo or log a secret.** Confirm a key by its public key or by its name, never
    by its contents. The pre-commit hook rejects any staged file that contains a 64-integer array,
    which is the shape of a Solana keypair.
@@ -97,11 +102,35 @@ examples for every command are in [`DEVNET-REHEARSAL.md`](DEVNET-REHEARSAL.md).
   permissionless commands, and for the admin commands only on a deployment whose admin is a
   local key.
 - **`--emit-proposal`.** Prints the instruction (program, accounts with their signer and
-  writable flags, and the data in base64) without signing or sending it. This is the normal path
-  for every admin command, because the admin is a Squads vault. Pass `--admin <vault address>`
-  so the payload names the vault. Nothing in this script can sign for a multisig, by design.
-  Squads' custom-instruction form may ask for the data in base58 rather than base64. Convert it
-  and check that the bytes match.
+  writable flags, and the data in base64) as JSON on stdout, without signing or sending it. This
+  is the normal path for every admin command, because the admin is a Squads vault. Pass `--admin
+  <vault address>` so the payload names the vault; every admin command refuses an `--admin` that
+  is not `Config.admin`. Nothing in `admin.ts` can sign for a multisig, by design.
+
+**Running a proposal through Squads v3 (devnet).** The Squads v3 web interface has been retired.
+The v3 program still runs, and `scripts/squads-v3.ts` drives it with the multisig member's key
+(`MEMBER_KEYPAIR`, a path, never printed): it creates the transaction, adds each emitted
+instruction, activates, approves and executes it, and prints every signature. It refuses a
+multisig whose threshold is above one (each member would then have to approve separately) and an
+instruction whose signer is not the multisig's vault. Devnet values: multisig
+`9EL1m9wvqGSznHJ8zkS5YaXQnG4gq4aNYsbGnP1TmFyN`, vault `9EEWtzyu72a3DKJVUkCaeYX4HuBKD59xXCcENnDVe34Z`,
+member `4ydbVZuNupTPu1cKGCc2cePs95B8iMkrR4TvsCLiwcL1`.
+
+```
+npm run -s admin -- <command> --emit-proposal --admin 9EEWtzyu72a3DKJVUkCaeYX4HuBKD59xXCcENnDVe34Z > ix.json
+```
+
+```
+npm run -s squads -- run --multisig 9EL1m9wvqGSznHJ8zkS5YaXQnG4gq4aNYsbGnP1TmFyN --ix-file ix.json --dry-run
+```
+
+```
+MEMBER_KEYPAIR=<member keypair path> npm run -s squads -- run --multisig 9EL1m9wvqGSznHJ8zkS5YaXQnG4gq4aNYsbGnP1TmFyN --ix-file ix.json
+```
+
+The dry run builds and simulates the whole sequence and sends nothing. If a run stops after
+approval, finish it with `npm run -s squads -- execute --multisig <multisig> --index <n>`;
+`npm run -s squads -- show --multisig <multisig> --index <n>` prints a transaction's state.
 
 Money flags take integer lamports or an exact decimal ending in `sol` (for example `0.5sol`).
 They are parsed as integers, and no float ever touches an amount.
@@ -111,13 +140,17 @@ They are parsed as integers, and no float ever touches an amount.
 | `status` | read | Config: keys, both tier ladders, prices, pots, switches, treasury, timings. Warns if Config is on an older layout |
 | `pools` | read | Every pool with its state and mode, then the **drain verdict**. It exits 1 while any pool is Sealed, Scored or Refunding. Add `--upgrade-preflight` to also refuse while any pool is Open ([§4](#4-program-upgrades-and-account-migrations)). `--self-test` runs the verdict's fixtures |
 | `init-config` | becomes admin | One-time setup. There is no `set_admin`, so whoever signs this is the admin for good |
-| `migrate-config` | admin | One-shot growth of Config to the current layout after an upgrade that adds fields. Self-disabling ([§4](#4-program-upgrades-and-account-migrations)) |
+| `migrate-config` | admin | One-shot growth of Config to the current layout (605 bytes) from 603 or 484 after an upgrade that adds fields. Self-disabling ([§4](#4-program-upgrades-and-account-migrations)) |
 | `migrate-pool` | permissionless | One-shot growth of one pool (`--pool-id`) or every pool (`--all`) to the current layout. Self-disabling, and it skips pools already current |
 | `set-keeper` | admin | Sets the only key `open_pool` accepts |
 | `register-signers` | admin | Rotates the entry signer and the settlement signer. A settlement rotation takes the keeper with it unless you pass `--keep-keeper`, because leaving the keeper behind stops every new pool |
 | `set-pool-timing` | admin | Fill deadline and cooldown for **future** pools. An open pool keeps the terms copied onto it at open |
-| `set-open-tiers` | admin | Which tiers may open pools. `--mode hard` sends `set_hard_open_tiers`, the hard ladder's own switch. Guarded ([§5](#5-opening-and-closing-a-tier)) |
-| `set-tier-economics` | admin | One tier's price and pot. Refuses a pot above the minimum field's intake (40 × price). A pot exactly equal to it is the launch relationship (R7-b) |
+| `set-open-tiers` | admin | Which tiers may open pools — R6's tier switch. `--mode hard` sends `set_hard_open_tiers`, the hard ladder's own switch. Within an open tier, each pool type has its own switch (below). Guarded ([§5](#5-opening-and-closing-a-tier)) |
+| `init-pool-type` | admin | Creates the pool type for one (`--mode`, `--tier`, `--capacity` 8/16/32/64), disabled and with no table (D-E19). The vault pays its rent |
+| `set-pool-type-economics` | admin | The table, minimum field and prize pool the NEXT pool of that type opens with. Defaults to the launch table and minimum field for the size at the tier's live price, prints the prize pool, and refuses a non-launch table unless `--table` is given explicitly |
+| `set-pool-type-enabled` | admin | Switches one pool type on or off (`--enabled true|false`). On requires its economics; off stops the next pool and never touches an open one |
+| `ladder-launch` | read / admin | Reads the chain and prints (or, with `--emit-proposal`, emits as one JSON file) only the steps still missing to bring a launch grid live: `migrate-config` if Config is pre-Ladder, then per pool type init → economics → enable. Example: `--tier 0 --modes easy,hard --capacities 8,16,32,64` |
+| `set-tier-economics` | admin | One tier's price, and its 64-player reference prize pool (no pool is funded from it since D-E19). **A price change makes every pool type of that tier stale**: `open_pool` refuses them until `set-pool-type-economics` restates each one |
 | `set-treasury-policy` | admin | The treasury floor (`--min-platform`) and the number of idle-tier pots held in reserve |
 | `set-vault-ceiling` | admin | One tier's gross-intake ceiling |
 | `set-paused` | admin | The kill switch. Blocks `register` and nothing else |
@@ -126,21 +159,25 @@ They are parsed as integers, and no float ever touches an amount.
 | `forfeit-escrow` | admin | Records that review upheld a flag. **Moves no lamports** |
 | `lift-sanctions-hold` | admin | Clears a sanctions hold that review found to be a false positive. **Moves no lamports**. There is no command to *place* a hold |
 | `fund-platform-wallet` | anyone | Deposits into the treasury |
-| `withdraw-platform` | admin | The treasury's one gated exit. It is floor-guarded on-chain and cannot reach a prize vault |
+| `withdraw-platform` | admin | The treasury's one gated exit. It is floor-guarded on-chain and cannot reach a prize vault. Passes every enabled pool type (the reserve); the program refuses a list that leaves one out |
 | `seal-at-deadline` | permissionless | Seals a pool that is past its deadline with its floor seated. This is the manual fallback when the daemon is down |
-| `trigger-refund` | permissionless | Starts the refund of a pool that is past its deadline and below its floor. The untouched pot goes back to the treasury. A pool with no entrants goes straight to Closed. Refuses at or above the floor (`FieldReached`) |
-| `refund` | permissionless | Repays one entry in full from the treasury, for a pool in Refunding. Run it once per entrant |
+| `trigger-refund` | permissionless | Starts the refund of a pool that is past its deadline and below its floor. The untouched pot goes back to the treasury. A pool with no entrants goes straight to Closed. Refuses at or above the floor (`FieldReached`). Passes the pool's own pool type, whose slot it frees |
+| `refund` | permissionless | Repays one entry in full from the treasury, for a pool in Refunding. Run it once per entrant. Passes the pool's own pool type |
 
 Three commands need extra care.
 
-- **`set-kyc-threshold`.** One place is paid, so the winner's payout is the whole pot. Any
-  threshold below the smallest pot therefore escrows **every** payout at **every** tier. The two
-  release paths, the seven-day release and the next-place split, do not check a KYC packet, so revisit
-  both before turning the switch on.
+- **`set-kyc-threshold`.** Under the Ladder the largest payout is first place: at 0.1 SOL,
+  0.3 SOL in an 8-player pool and 1.2 SOL in a 64-player pool. A threshold below a size's first
+  prize escrows that place's payout in every pool of that size; a threshold below its smallest
+  prize escrows every payout. The two release paths, the seven-day release and the next-place
+  split, do not check a KYC packet, so revisit both before turning the switch on.
 - **`forfeit-escrow`.** It takes a prize away from the player who won it, which is why only the
-  admin can sign it. The share does not come to the operator. It stays in that pool's vault
-  until `pay_next_place` divides it among the eligible players at the rank it passes to. The
-  daemon runs that step itself.
+  admin can sign it. The share does not come to the operator. It stays in that pool's vault. In a
+  pool paying one place (opened before the Ladder) `pay_next_place` then divides it among the
+  eligible players at the rank it passes to, and the daemon runs that step itself. **In a pool
+  paying more than one place it is held** — the program refuses `pay_next_place`
+  (`NextPlaceUnsupported`) — until the field-moves-up payout ships (D-E19). The daemon reports it
+  once as held; nothing needs doing, and nothing can move it anywhere else.
 - **`lift-sanctions-hold`.** This is the only way a held share ever moves again. Use it only
   when a review has established that the match was a false positive. Where a *confirmed* match's
   share finally goes is an open question. Until it is settled, the share stays in the pool's
@@ -149,8 +186,8 @@ Three commands need extra care.
 ## 4. Program upgrades and account migrations
 
 This is the reusable procedure for any program upgrade. It covers the common case where the
-upgrade grows `Config` or `Pool`. The current layouts are Config 603 bytes and Pool 850 bytes
-(`programs/blotto_cup/src/state.rs`, pinned by unit tests).
+upgrade grows `Config` or `Pool`. The current layouts are Config 605 bytes, Pool 869 bytes and
+PoolType 57 bytes (`programs/blotto_cup/src/state.rs`, pinned by unit tests).
 
 ### Why an upgrade needs a window
 
@@ -176,10 +213,11 @@ The drain verdict must read **CLEAR**: no pool Sealed, Scored or Refunding. A po
 mid-settlement by an upgrade is the one case that can strand money, because the engine that
 settles a pool enforces its prize rule.
 
-**When an Open pool also matters.** Use the stricter check when the upgrade changes a rule that
-each pool stores for itself but that the site reads from a shared constant. The only such rule
-today is the minimum field (`min_seats`): the read API serves `MIN_SEATS`, not each pool's own
-value.
+**When an Open pool also matters.** Use the stricter check when the upgrade changes a published
+rule — a prize table, a minimum field, a size. Since D-E19 the read API serves each pool's own
+floor, size and table, so the site never mis-describes an open pool; the stricter window is what
+guarantees no player is seated under one rule while the next pool of the same kind opens under
+another.
 
 ```
 npm run admin -- pools --upgrade-preflight
@@ -265,8 +303,9 @@ npm run admin -- migrate-config --emit-proposal --admin <vault address>
 
 Check the payload before you approve it. The vault is signer **and writable**, because it pays
 the rent top-up. The accounts are the Config PDA and the System Program. The data is the 8-byte
-discriminator alone, because the instruction takes no argument. Approve and execute in Squads. A
-second execution fails cleanly, so a double send cannot hurt. Verify:
+discriminator alone, because the instruction takes no argument. On devnet, run it through the
+Squads v3 executor (§3): `--dry-run` first, then for real. A second execution fails cleanly
+(`ConfigAlreadyMigrated`), so a double send cannot hurt. Verify:
 
 ```
 npm run admin -- status
@@ -292,7 +331,14 @@ its own does not prove it, because the reader shows an old-size pool with defaul
 
 Values that a migration writes are the ones the pool's players entered under, never the new
 rule. For example, `min_seats` for a pool that existed before the rule changed is written as the
-old floor.
+old floor, and the Ladder migration (D-E19) records a pre-Ladder pool as 64 players paying one
+place worth its whole prize pool (`[40]` at 0.1 SOL). A pool that never played and whose prize
+pool is not a whole number of entries (devnet pool #1) is recorded with no table.
+
+**A pre-Ladder pool still needs its pool type.** After the Ladder upgrade, `pay_prizes`,
+`trigger_refund` and `refund` take the pool's own pool type — (mode, tier, 64) for every
+pre-Ladder pool. A pre-Ladder pool that still has to be paid or refunded cannot be until that pool
+type exists (`init-pool-type`; it need not be enabled).
 
 ### Step 6 — Redeploy the backend (if the wire contract changed)
 
@@ -330,6 +376,12 @@ deploying a program that reads the new layouts. In practice that is the new prog
 feature left switched off.
 
 ### Upgrading once the authority is a Squads vault
+
+This is mainnet's path, where the upgrade authority and the admin are a **Squads v4** vault and
+Squads' program-upgrade flow (app.squads.so) builds the proposal. On devnet the upgrade authority
+is a single key, so `deploy-devnet.sh` is used; should it ever move to devnet's Squads v3
+multisig, whose web interface is retired, step 5 becomes the loader's `Upgrade` instruction run
+through `scripts/squads-v3.ts`.
 
 `scripts/deploy-devnet.sh` cannot upgrade a program whose authority is a multisig. It reads the
 on-chain authority first and refuses in one line. Everything above still applies: the drain, the
@@ -443,6 +495,59 @@ cannot read Config. The chain is still right, and `open_pool` still enforces it.
 open with no pool appearing means the treasury cannot fund the pot while holding its floor, or
 the tier is cooling down. `status` shows both, and `GET /tiers` gives `next_open_at` per tier.
 
+### Pool types (D-E19)
+
+Since the Ladder a price tier holds up to eight **pool types**: easy and hard × 8, 16, 32 and 64
+players. Each is a `PoolType` account with its own switch, one-pool-at-a-time slot, cooldown,
+prize table, minimum field and prize pool, and each runs one pool at a time. A pool type opens
+pools only where **its tier is open for its mode** (`set-open-tiers`, above — R6's switch, still in
+force) **and the type itself is enabled**. Closing either stops the next pool of that type and
+never touches one already taking entries.
+
+**Bringing pool types live.** `ladder-launch` reads the chain and plans only what is missing:
+
+```
+npm run -s admin -- ladder-launch --tier 0 --modes easy,hard --capacities 8,16,32,64
+```
+
+Read the plan, then emit it and run it through the multisig (§3):
+
+```
+npm run -s admin -- ladder-launch --tier 0 --modes easy,hard --capacities 8,16,32,64 --emit-proposal --admin <vault address> > ladder.json
+```
+
+```
+npm run -s squads -- run --multisig <multisig> --ix-file ladder.json --dry-run
+```
+
+```
+MEMBER_KEYPAIR=<member keypair path> npm run -s squads -- run --multisig <multisig> --ix-file ladder.json
+```
+
+The plan is grouped one pool type per transaction: `init_pool_type`, then
+`set_pool_type_economics` with the launch table at the tier's live price, then
+`set_pool_type_enabled`. Re-running `ladder-launch` afterwards plans nothing. Verify with
+`npm run admin -- status`: every type enabled, its economics reading "launch", and
+`enabled pool types` equal to the number you enabled.
+
+**Funding.** The daemon opens a type's pool only when the treasury, after funding that prize pool
+and its rent cushion, still holds the policy minimum plus one further prize pool for every other
+enabled, idle pool type on an open tier. Bringing the eight 0.1 SOL types up from nothing
+therefore needs the whole set at once: 2 × (0.5 + 1 + 2 + 4) = 15 SOL of prize pools, eight
+cushions and the 0.5 SOL minimum — 15.5052 SOL in the treasury at the 2026-11-05 rent. Fund
+headroom above that (`fund-platform-wallet`), because every cooldown re-reserves a prize pool.
+
+**Changing a type's economics.** `set-pool-type-economics` affects the next pool of that type only.
+A price change on the tier (`set-tier-economics`) makes every type of that tier stale: `open_pool`
+refuses them (`PoolTypeEconomicsStale`) until each is restated. That is deliberate — a published
+prize can never move with a price silently.
+
+**What the program refuses** (and `admin.ts` refuses first, with the reason): a capacity other than
+8, 16, 32 or 64; a table that does not pay exactly the top quarter, increases, or holds a zero
+inside its paid places; a minimum field not above the places paid or above the capacity; a prize
+pool that is not exactly the table at the tier's price, or that exceeds the minimum field's
+entries; enabling a type with no economics.
+
 ## 6. The daemon: keeper and crank
 
 The daemon (`backend/reveal`) is the one long-running process the pool loop needs. It works in
@@ -457,21 +562,23 @@ banners in this order:
     (below).
 - **KEEP.** Finishes the launch step of every live Open pool on both ladders: the pass
   collection, without which `register` cannot mint. No randomness seed is committed since R22.
-- **OPEN.** For each enabled tier on each ladder whose slot is free, whose cooldown has passed,
-  and which the treasury can fund, it opens the next pool. Custody creates the sealing key, then
+- **OPEN.** For each enabled pool type on an open tier whose slot is free, whose cooldown has
+  passed and whose economics are current, and which the treasury can fund, it opens the next pool
+  — passing every other enabled pool type, as the program's reserve check requires. A type the
+  program refuses is skipped for the rest of the tick and does not block the others. Custody creates the sealing key, then
   `open_pool`, then `create_pass_collection`. While the deployment is
   paused, the daemon skips this phase, because nobody could enter the pool.
 
 ```
 open_pool → create_pass_collection → register × n
    │
-   ├─ 64th seat, or the deadline with ≥ the pool's floor seated
+   ├─ the pool's capacity reached, or the deadline with ≥ the pool's floor seated
    │     Sealed → reveal_pool_secret → commit_results → Scored → pay_prizes → Paid
    │
    └─ the deadline below the floor
          Refunding → refund × n → Closed      (no entrants: straight to Closed)
                                    │
-            the tier's slot frees and its cooldown starts
+            the pool type's slot frees and its cooldown starts
 ```
 
 **It is idempotent.** Every tick re-reads the chain and does only what is missing. A crashed
@@ -501,8 +608,11 @@ rather than paying twice.
   - a sanctions hold on the same entry;
   - a forfeit already logged by a reviewer. Once the window passes with the on-chain forfeit
     still not landed, the daemon raises `reveal forfeit logged but not landed on chain`.
-- **The next-place step.** On the tick after a forfeit lands, the daemon runs `pay_next_place`.
-  It waits while any other committed seat in the pool is still under review.
+- **The next-place step.** On the tick after a forfeit lands in a pool paying ONE place, the
+  daemon runs `pay_next_place`. It waits while any other committed seat in the pool is still
+  under review. In a pool paying more than one place it does not: the share is held in the
+  vault until the field-moves-up payout ships, and the daemon reports it once (log
+  `pay_next_place:held-until-cascade`, metric `reveal_release_held{reason="next_place_unsupported"}`).
 - **The owed bundle.** A Paid pool whose results bundle is not on record is retried every ten
   minutes through a publish-only path. After three failures the daemon raises
   `reveal settled pool still unpublished`.
@@ -607,8 +717,10 @@ That is escrow. Two different things put a share there, and they are cleared in 
   - the settlement signer releases it after review, or the daemon does so itself when the
     12-hour window passes with no decision;
   - anyone releases it after seven days (`ESCROW_AUTO_RELEASE_SECS`);
-  - the admin forfeits it, and it is divided among the eligible players at the rank it passes
-    to.
+  - the admin forfeits it. In a pool paying one place it is then divided among the eligible
+    players at the rank it passes to; in a pool paying more than one place it stays held in the
+    vault until the field-moves-up payout ships (D-E19). Either way it never reaches the
+    operator.
 - **Sanctions hold** (`sanctions_hold`). The crank screened the wallet before payment and did
   not send the share. `lift-sanctions-hold` is the **only** way it moves again, and it is for a
   false positive established by review. Nothing else moves it: not the 12-hour clock, not the
@@ -621,10 +733,13 @@ That is escrow. Two different things put a share there, and they are cleared in 
 `open_pool` refuses unless, after funding, the treasury still holds all of:
 
 - the minimum balance;
-- one further pot for every other enabled tier that is idle;
+- one further prize pool (with its rent cushion) for every other enabled pool type, on an open
+  tier, that is idle (D-E19);
 - every refundable entry.
 
-`status` prints all four numbers. Fund the treasury (`fund-platform-wallet`) or disable a tier.
+`status` prints these numbers. Fund the treasury (`fund-platform-wallet`) or disable a pool type.
+`PoolTypeListIncomplete` instead means the caller did not pass every enabled pool type — a
+daemon or CLI bug, not a funding problem.
 
 ### Entries are being refused
 
@@ -641,7 +756,9 @@ In order of likelihood:
 
 ### The site says no tournament is open
 
-Check whether the tier is cooling down (`GET /tiers`, `next_open_at`) before assuming a fault.
+Check whether the pool type is cooling down (`GET /pool-types`, `next_open_at`), disabled
+(`type_enabled`), on a closed tier (`tier_open`) or stale after a price change before assuming a
+fault. `source` says whether the read came from the chain or fell back to the ledger.
 If the read API returns `[]` while the chain has pools, run the `indexer-backfill` workflow and
 read its `inserted` count. Zero on a chain that has pools points to a code defect, not a slow
 RPC.
@@ -726,7 +843,8 @@ wherever possible.
    member list and appends it to the signed decision log (`GET /decisions` is public).
 2. **Clear or release** is sent by the review service with the settlement signer.
 3. **Forfeit** is written to the log first, answering "recorded". An admin then lands it on
-   chain with `forfeit-escrow` as a Squads proposal. Until it lands, the daemon holds the share
+   chain with `forfeit-escrow` as a multisig proposal (on devnet, through the Squads v3 executor,
+   §3). Until it lands, the daemon holds the share
    and does not release it. If the window closes first, the daemon raises an alert.
 4. **The published review window is 12 hours from settlement.** If no decision is made in that
    time, the daemon releases the share to its player. A reviewer who needs longer must decide

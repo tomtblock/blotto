@@ -16,20 +16,22 @@ Scoring rules implemented (PID §4.4/§5, TECH-ARCH §6):
     BOTH are TIED (D3-B, ratified 2026-08-27) and share a COMPETITION rank
     (1, 2, 2, 4 — one plus the number of strictly-better players); entry
     index never breaks a rank
-  - prizes: the pot is the tier's FIXED constant (D-A1 revised, funded from
-    the prize treasury at open_pool, never derived from entries — the launch
-    table below); ONE paid place (D-E2, ratified 2026-09-06): a tie group at
-    rank r of size s occupies positions r..r+s-1 and its combined prize is
-    the sum of the band amounts of those positions that are <= PAID_RANKS
-    (PRIZE_BANDS_1024[p-1]/1024 of the pot each — the table is [1024], so
-    position 1 is the whole pot and every other position is zero; see
-    programs/blotto_cup/src/constants.rs); each member takes
-    floor(combined/s), the indivisible remainder goes to the group's lowest
-    entry index; every tied member with a nonzero share is paid — so the
-    winner takes the pot, or a tie for first splits it, and nobody else is
-    paid
-  - field size: a pool runs with 40..64 players (R7-b, MIN_SEATS = 40); the
-    n = 52 and n = 58 pool vectors below cover the minimum-field path
+  - prizes (THE LADDER, D-E19, founder ruling 2026-11-04, superseding
+    D-E2's winner-takes-all): a pool holds 8, 16, 32 or 64 players and pays
+    the top quarter of its capacity on a FIXED table of whole multiples of
+    the entry price (LADDER_TABLES below; programs/blotto_cup/src/
+    constants.rs carries the same numbers). Position p is worth
+    table[p-1] * entry for p <= len(table) and zero past it. The table
+    depends on the capacity only, never on how many players entered. A tie
+    group at rank r of size s occupies positions r..r+s-1 and its combined
+    prize is the sum of those positions' worth — so a group can straddle
+    the paid line; each member takes floor(combined/s), the indivisible
+    remainder goes to the group's lowest entry index; every tied member
+    with a nonzero share is paid (D3-B, unchanged)
+  - field size: a pool runs with its minimum field..capacity players (5/8,
+    10/16, 20/32, 40/64 — the minimum field is the break-even field, where
+    entries equal the prize pool); vectors below cover every capacity full
+    and at its minimum field
   - results leaf: sha256(0x00 || player(32) || rank(u8) || amount(u64 LE)),
     node: sha256(0x01 || left || right); an odd node is PROMOTED, not
     duplicated; leaves ordered (rank asc, entry index asc)
@@ -60,28 +62,39 @@ import sys
 
 STATS = 5
 BATTLES = 7
-CAPACITY = 64
-MIN_SEATS = 40  # R7-b (2026-09-12): the smallest field that runs
-PAID_RANKS = 1  # D-E2: winner takes all
-PRIZE_BANDS_1024 = [1024]
+MAX_CAPACITY = 64  # the largest pool; every fixed array is sized by it
+MAX_PAID_PLACES = 16  # the on-chain prize table is [u8; 16]
 ENTRY_LAMPORTS = 100_000_000  # the 0.1 SOL tier anchors every amount vector
-# The launch economics table (D1 prices; D-A1 revised FIXED pots) — mirrors
-# constants.rs. A pot is a table entry, never arithmetic over entries.
+# The D1 entry prices — mirrors constants.rs.
 TIER_ENTRY_LAMPORTS = [
     100_000_000, 500_000_000, 750_000_000, 1_000_000_000,
     2_500_000_000, 5_000_000_000, 7_500_000_000,
 ]
-TIER_POT_LAMPORTS = [
-    4_000_000_000, 20_000_000_000, 30_000_000_000, 40_000_000_000,
-    100_000_000_000, 200_000_000_000, 300_000_000_000,
-]
+# THE LADDER (D-E19): multiples of the entry, rank 1 first, per capacity.
+# Written out by hand from the founder's spec (section 4), not derived.
+CAPACITIES = [8, 16, 32, 64]
+LADDER_TABLES = {
+    8: [3, 2],
+    16: [5, 3, 1, 1],
+    32: [8, 4, 2, 2, 1, 1, 1, 1],
+    64: [12, 6, 3, 3, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1],
+}
+MIN_FIELD = {8: 5, 16: 10, 32: 20, 64: 40}
 
-
-def pot_for_entry(entry_lamports: int) -> int:
-    return TIER_POT_LAMPORTS[TIER_ENTRY_LAMPORTS.index(entry_lamports)]
-
-
-POT = pot_for_entry(ENTRY_LAMPORTS)  # 4_000_000_000 (D-E1)
+# The spec's structural claims, checked against the hand-written numbers
+# above so a typo in either cannot reach a vector: each table pays the top
+# quarter, never increases, sums to 62.5% of a full field (5/8 of the
+# capacity, in entries), and the minimum field is exactly break-even (the
+# prize pool equals the minimum field's entries) and larger than the number
+# of places paid.
+for _c, _t in LADDER_TABLES.items():
+    assert len(_t) == _c // 4, f"{_c}: pays the top quarter"
+    assert len(_t) <= MAX_PAID_PLACES
+    assert all(m >= 1 for m in _t), f"{_c}: no zero inside the paid places"
+    assert all(_t[i] >= _t[i + 1] for i in range(len(_t) - 1)), f"{_c}: never increases"
+    assert sum(_t) * 8 == _c * 5, f"{_c}: the prize pool is 62.5% of a full field"
+    assert sum(_t) == MIN_FIELD[_c], f"{_c}: the minimum field is break-even"
+    assert MIN_FIELD[_c] > len(_t), f"{_c}: the minimum field exceeds the paid places"
 
 
 def sha256(b: bytes) -> bytes:
@@ -230,20 +243,25 @@ def score_with_missing(players: list[list[list[int]]] | list[None]) -> list[dict
     ]
 
 
-def band_amount(pot: int, position: int) -> int:
-    if 1 <= position <= PAID_RANKS:
-        return pot * PRIZE_BANDS_1024[position - 1] // 1024
+def place_amount(table: list[int], entry: int, position: int) -> int:
+    """What one position is worth: table[p-1] whole entries, zero past the table."""
+    if 1 <= position <= len(table):
+        return table[position - 1] * entry
     return 0
 
 
-def assign_prizes(results: list[dict], pot: int) -> dict[int, int]:
-    """D3-B split-pot assignment: seat -> lamports (0 for unpaid seats)."""
+def prize_pool(table: list[int], entry: int) -> int:
+    return sum(m * entry for m in table)
+
+
+def assign_prizes(results: list[dict], table: list[int], entry: int) -> dict[int, int]:
+    """D3-B split-pot assignment over a Ladder table: seat -> lamports."""
     amounts = {r["index"]: 0 for r in results}
     groups: dict[int, list[int]] = {}
     for r in results:
         groups.setdefault(r["rank"], []).append(r["index"])
     for rank, seats in groups.items():
-        combined = sum(band_amount(pot, p) for p in range(rank, rank + len(seats)))
+        combined = sum(place_amount(table, entry, p) for p in range(rank, rank + len(seats)))
         if combined == 0:
             continue
         each = combined // len(seats)
@@ -251,8 +269,13 @@ def assign_prizes(results: list[dict], pot: int) -> dict[int, int]:
         low = min(seats)
         for seat in seats:
             amounts[seat] = each + (rem if seat == low else 0)
-    expected = sum(band_amount(pot, p) for p in range(1, min(PAID_RANKS, len(results)) + 1))
+    expected = sum(place_amount(table, entry, p) for p in range(1, min(len(table), len(results)) + 1))
     assert sum(amounts.values()) == expected, "split-pot conservation failed"
+    # The spec's property: every UNTIED paid amount is a whole multiple of
+    # the entry. (A tie group may split into fractions; an untied seat never.)
+    for rank, seats in groups.items():
+        if len(seats) == 1:
+            assert amounts[seats[0]] % entry == 0, "an untied prize is a whole multiple"
     return amounts
 
 
@@ -321,11 +344,10 @@ def rust_merkle_vectors(pools: list[dict]) -> str:
     the TypeScript engine (CLAUDE.md: a vector captured from our own Rust
     output proves nothing). Proofs for the first, a middle, the promoted
     (odd-position) and the last leaf of pool `full_0` (64 leaves) and of
-    the minimum-field pool (MIN_SEATS leaves). The second one exists to
-    exercise an ODD level on the way up the tree, where the last node is
-    carried unhashed: 64 is a clean power of two and never produces one.
-    That property survives the R7-b change from 52 to 40 seats — 40 halves
-    to 20, 10, 5, and 5 is odd."""
+    the 64-player pool's minimum field (`field_min_64`, 40 leaves). The
+    second one exists to exercise an ODD level on the way up the tree, where
+    the last node is carried unhashed: 64 is a clean power of two and never
+    produces one; 40 halves to 20, 10, 5, and 5 is odd."""
     out = [
         "//! GENERATED by backend/scoring/fixtures/gen_vectors.py — do not edit.",
         "//! Merkle proofs computed by the Python oracle (R20) over the pool",
@@ -344,7 +366,7 @@ def rust_merkle_vectors(pools: list[dict]) -> str:
         "}",
         "",
     ]
-    for name, const in (("full_0", "FULL_0"), (f"field_{MIN_SEATS}", "FIELD_MIN")):
+    for name, const in (("full_0", "FULL_0"), ("field_min_64", "FIELD_MIN")):
         pool = next(p for p in pools if p["name"] == name)
         n = len(pool["leaves_hex"])
         leaves = [bytes.fromhex(h) for h in pool["leaves_hex"]]
@@ -431,19 +453,24 @@ def pool_vector(
     name: str,
     players: list[list[list[int]]],
     with_tree: bool,
+    capacity: int,
     entry_lamports: int = ENTRY_LAMPORTS,
     mode: str = "easy",
 ) -> dict:
+    assert len(players) <= capacity, name
+    table = LADDER_TABLES[capacity]
     results = score_pool(players)
-    pot = pot_for_entry(entry_lamports)
-    amounts = assign_prizes(results, pot)
+    amounts = assign_prizes(results, table, entry_lamports)
     for r in results:
         r["amount_lamports"] = str(amounts[r["index"]])
     # Published leaf order: rank asc, entry index asc (ranks repeat).
     by_rank = sorted(results, key=lambda r: (r["rank"], r["index"]))
     vec = {
         "name": name,
+        "capacity": capacity,
+        "prize_table": table,
         "entry_lamports": str(entry_lamports),
+        "prize_pool_lamports": str(prize_pool(table, entry_lamports)),
         "players": [
             {"battles": p, "battles_hex": encode_battles(p, mode).hex()} for p in players
         ],
@@ -473,11 +500,12 @@ def pool_vector(
     return vec
 
 
-def split_case(name: str, group_sizes: list[int], entry_lamports: int) -> dict:
-    """A constructed ranking with the given tie-group sizes over a field of
-    52..64 seats (D-E4), fed through the SAME assign_prizes as the real
-    pools."""
-    assert MIN_SEATS <= sum(group_sizes) <= CAPACITY, name
+def split_case(name: str, group_sizes: list[int], capacity: int,
+               entry_lamports: int = ENTRY_LAMPORTS) -> dict:
+    """A constructed ranking with the given tie-group sizes over a field
+    between the capacity's minimum field and the capacity, fed through the
+    SAME assign_prizes as the real pools."""
+    assert MIN_FIELD[capacity] <= sum(group_sizes) <= capacity, name
     results = []
     rank = 1
     seat = 0
@@ -486,10 +514,11 @@ def split_case(name: str, group_sizes: list[int], entry_lamports: int) -> dict:
             results.append({"index": seat, "rank": rank})
             seat += 1
         rank += size
-    pot = pot_for_entry(entry_lamports)
-    amounts = assign_prizes(results, pot)
+    table = LADDER_TABLES[capacity]
+    amounts = assign_prizes(results, table, entry_lamports)
     return {
         "name": name,
+        "capacity": capacity,
         "entry_lamports": str(entry_lamports),
         "group_sizes": group_sizes,
         "payouts": [
@@ -521,42 +550,51 @@ def missing_vector(name: str, players: list) -> dict:
 
 def main() -> None:
     pools = []
-    # 20 hand-checkable 4-player pools from the deterministic stream.
+    # 20 hand-checkable 4-player pools from the deterministic stream, priced
+    # on the 8-player table (the smallest; four players occupy both of its
+    # paid places).
     for p in range(20):
         players = [battles_from_counter(p * 1000 + i * 100) for i in range(4)]
-        pools.append(pool_vector(f"four_{p}", players, with_tree=False))
+        pools.append(pool_vector(f"four_{p}", players, with_tree=False, capacity=8))
     # 5 full 64-player pools, with the results tree.
     for p in range(5):
         players = [
-            battles_from_counter(100_000 + p * 100_000 + i * 100) for i in range(CAPACITY)
+            battles_from_counter(100_000 + p * 100_000 + i * 100) for i in range(64)
         ]
-        pools.append(pool_vector(f"full_{p}", players, with_tree=True))
+        pools.append(pool_vector(f"full_{p}", players, with_tree=True, capacity=64))
+    # A full field at every other capacity, with the tree.
+    for cap in (8, 16, 32):
+        players = [battles_from_counter(600_000 + cap * 1000 + i * 100) for i in range(cap)]
+        pools.append(pool_vector(f"full_cap{cap}", players, with_tree=True, capacity=cap))
     # Per-tier 64-player vectors for the D1 tiers beyond 0.1 SOL (same
-    # battles, different pots — amounts must scale exactly).
-    tier_players = [battles_from_counter(700_000 + i * 100) for i in range(CAPACITY)]
-    for entry in (500_000_000, 750_000_000, 1_000_000_000, 2_500_000_000,
-                  5_000_000_000, 7_500_000_000):
+    # battles, different entry prices — amounts must scale exactly).
+    tier_players = [battles_from_counter(700_000 + i * 100) for i in range(64)]
+    for entry in TIER_ENTRY_LAMPORTS[1:]:
         pools.append(
             pool_vector(
-                f"tier_{entry}", tier_players, with_tree=True, entry_lamports=entry
+                f"tier_{entry}", tier_players, with_tree=True, capacity=64,
+                entry_lamports=entry,
             )
         )
-    # Minimum-field pools: a pool that sealed at its deadline with MIN_SEATS
-    # (40 since R7-b, founder instruction 2026-09-12) or 58 players. Same
-    # rules, a shorter leaf list, the whole pot to rank 1 — the tree over
-    # n < 64 leaves exercises the odd node being carried up unhashed at
-    # different depths.
-    for n in (MIN_SEATS, 58):
-        players = [battles_from_counter(800_000 + n * 1000 + i * 100) for i in range(n)]
-        pools.append(pool_vector(f"field_{n}", players, with_tree=True))
+    # Minimum-field pools: a pool that sealed at its deadline with exactly its
+    # minimum field, at every capacity, plus a 58-player 64-pool. Same rules,
+    # the full table paid, a shorter leaf list — the tree over a field that is
+    # not a power of two exercises the odd node being carried up unhashed.
+    for cap in CAPACITIES:
+        n = MIN_FIELD[cap]
+        players = [battles_from_counter(800_000 + cap * 10_000 + i * 100) for i in range(n)]
+        pools.append(pool_vector(f"field_min_{cap}", players, with_tree=True, capacity=cap))
+    players = [battles_from_counter(800_000 + 58 * 1000 + i * 100) for i in range(58)]
+    pools.append(pool_vector("field_58", players, with_tree=True, capacity=64))
     # Edge cases. Identical battle sets are exact ties (D3-B): every member
-    # shares rank 1 and the pot splits evenly.
+    # shares rank 1 and the whole table splits evenly.
     even = [[20, 20, 20, 20, 20] for _ in range(BATTLES)]
-    pools.append(pool_vector("all_identical", [even] * 4, with_tree=False))
-    pools.append(pool_vector("all_identical_64", [even] * CAPACITY, with_tree=True))
+    pools.append(pool_vector("all_identical", [even] * 4, with_tree=False, capacity=8))
+    pools.append(pool_vector("all_identical_8", [even] * 8, with_tree=True, capacity=8))
+    pools.append(pool_vector("all_identical_64", [even] * 64, with_tree=True, capacity=64))
     alloc = alloc_from_counter(9_000_000)
     pools.append(
-        pool_vector("all_tied_pairwise", [[alloc] * BATTLES] * 4, with_tree=False)
+        pool_vector("all_tied_pairwise", [[alloc] * BATTLES] * 4, with_tree=False, capacity=8)
     )
 
     # Lost-ciphertext pools (TECH-ARCH §5). scoreWithMissing decides every
@@ -587,56 +625,68 @@ def main() -> None:
     pl[3] = battles_from_counter(2_200_000)
     missing_pools.append(missing_vector("one_present_of_5", pl))
     # A realistic settlement: a full field with a handful lost.
-    pl = _p(2_300_000, CAPACITY)
+    pl = _p(2_300_000, 64)
     for seat in (0, 7, 31, 62, 63):
         pl[seat] = None
     missing_pools.append(missing_vector("full_64_five_missing", pl))
     # A minimum field with one lost, the shape a pool that sealed at its
     # deadline actually takes.
-    pl = _p(2_400_000, MIN_SEATS)
-    pl[MIN_SEATS - 1] = None
-    missing_pools.append(missing_vector(f"field_{MIN_SEATS}_one_missing", pl))
+    pl = _p(2_400_000, MIN_FIELD[64])
+    pl[MIN_FIELD[64] - 1] = None
+    missing_pools.append(missing_vector(f"field_{MIN_FIELD[64]}_one_missing", pl))
     # None missing at all: scoreWithMissing must agree with scorePool exactly,
     # which is the claim its doc comment makes about relative ranking.
     missing_pools.append(missing_vector("none_missing_4", _p(2_500_000, 4)))
 
-    # D3-B split-pot cases under D-E2, through the same assign_prizes as the
-    # pools: a two-way tie for 1st at EVERY tier (pot / 2, exact — every pot
-    # is even); a three-way tie for 1st at tier 0 with the visible integer
-    # remainder (4_000_000_000 / 3 leaves 1 lamport to the lowest seat); a
-    # tie for SECOND, which pays exactly one seat (nothing below first is
-    # paid); a 64-way tie splitting the whole pot; and the same shapes over
-    # a 52-seat field.
-    split_cases = [
-        split_case(f"two_way_first_tier_{entry}", [2] + [1] * 62, entry)
+    # D3-B split-pot cases under the Ladder, through the same assign_prizes
+    # as the pools. At every capacity: two- and three-way ties for first; a
+    # pair tied on the last paid place (half of it each); four players tied
+    # across the paid line (the paid positions inside the group, shared four
+    # ways); everyone tied at capacity and at the minimum field; a two-way
+    # tie for first at the minimum field. At 64: the spec's own example
+    # (four tied across 15th-18th share 15th and 16th: 0.5 entries each), a
+    # tie for second, and a two-way tie for first at every tier.
+    split_cases = []
+    for cap in CAPACITIES:
+        paid = len(LADDER_TABLES[cap])
+        mn = MIN_FIELD[cap]
+        split_cases += [
+            split_case(f"two_way_first_cap{cap}", [2] + [1] * (cap - 2), cap),
+            split_case(f"three_way_first_cap{cap}", [3] + [1] * (cap - 3), cap),
+            split_case(f"pair_on_paid_line_cap{cap}", [1] * (paid - 1) + [2] + [1] * (cap - paid - 1), cap),
+            split_case(f"four_across_paid_line_cap{cap}", [1] * (paid - 2) + [4] + [1] * (cap - paid - 2), cap),
+            split_case(f"all_identical_cap{cap}", [cap], cap),
+            split_case(f"all_identical_min_field_cap{cap}", [mn], cap),
+            split_case(f"two_way_first_min_field_cap{cap}", [2] + [1] * (mn - 2), cap),
+        ]
+    split_cases += [
+        split_case("four_way_15th_to_18th_cap64", [1] * 14 + [4] + [1] * 46, 64),
+        split_case("tie_for_second_cap64", [1, 2] + [1] * 61, 64),
+    ] + [
+        split_case(f"two_way_first_tier_{entry}_cap64", [2] + [1] * 62, 64, entry)
         for entry in TIER_ENTRY_LAMPORTS
     ] + [
-        split_case("three_way_first", [3] + [1] * 61, ENTRY_LAMPORTS),
-        split_case("tie_for_second", [1, 2] + [1] * 61, ENTRY_LAMPORTS),
-        split_case("all_identical_64", [64], ENTRY_LAMPORTS),
-        split_case("two_way_first_field_52", [2] + [1] * 50, ENTRY_LAMPORTS),
-        split_case("three_way_first_field_52", [3] + [1] * 49, ENTRY_LAMPORTS),
-        # The floor itself (R7-b): a two-way tie for first in a pool that
-        # sealed at exactly MIN_SEATS. The 52-seat cases above keep their
-        # names and their fields -- 52 is still an ordinary field between the
-        # floor and capacity, and what they pin is the tie shape, not the
-        # floor.
-        split_case("two_way_first_field_min", [2] + [1] * (MIN_SEATS - 2), ENTRY_LAMPORTS),
-        split_case("all_identical_52", [52], ENTRY_LAMPORTS),
+        split_case(f"two_way_first_tier_{entry}_cap8", [2] + [1] * 6, 8, entry)
+        for entry in TIER_ENTRY_LAMPORTS
     ]
 
-    # Per-tier prize tables: the band amounts at every configured tier — one
-    # band under D-E2, equal to the pot.
+    # Per-tier, per-capacity prize tables: the prize pool and every paid
+    # place's amount at every configured tier — the spec's "prize pool by
+    # tier" grid, recomputed here and pinned against the TypeScript and the
+    # program's validation.
     tier_tables = [
         {
             "entry_lamports": str(entry),
-            "pot_lamports": str(pot_for_entry(entry)),
-            "bands": [
-                str(band_amount(pot_for_entry(entry), p)) for p in range(1, PAID_RANKS + 1)
+            "capacity": cap,
+            "min_seats": MIN_FIELD[cap],
+            "prize_pool_lamports": str(prize_pool(LADDER_TABLES[cap], entry)),
+            "places": [
+                str(place_amount(LADDER_TABLES[cap], entry, p))
+                for p in range(1, len(LADDER_TABLES[cap]) + 1)
             ],
         }
-        for entry in (100_000_000, 500_000_000, 750_000_000, 1_000_000_000,
-                      2_500_000_000, 5_000_000_000, 7_500_000_000)
+        for entry in TIER_ENTRY_LAMPORTS
+        for cap in CAPACITIES
     ]
 
     # Draw-rate sanity over the stream: single-battle comparisons.
@@ -671,12 +721,16 @@ def main() -> None:
     hard_pools = []
     for p in range(5):
         players = [hard_battles_from_counter(p * 100 + i) for i in range(4)]
-        hard_pools.append(pool_vector(f"hard_four_{p}", players, with_tree=False, mode="hard"))
-    players = [hard_battles_from_counter(10_000 + i) for i in range(CAPACITY)]
-    hard_pools.append(pool_vector("hard_full_0", players, with_tree=True, mode="hard"))
-    players = [hard_battles_from_counter(20_000 + i) for i in range(MIN_SEATS)]
+        hard_pools.append(
+            pool_vector(f"hard_four_{p}", players, with_tree=False, capacity=8, mode="hard")
+        )
+    players = [hard_battles_from_counter(10_000 + i) for i in range(64)]
+    hard_pools.append(pool_vector("hard_full_0", players, with_tree=True, capacity=64, mode="hard"))
+    players = [hard_battles_from_counter(15_000 + i) for i in range(16)]
+    hard_pools.append(pool_vector("hard_full_cap16", players, with_tree=True, capacity=16, mode="hard"))
+    players = [hard_battles_from_counter(20_000 + i) for i in range(MIN_FIELD[64])]
     hard_pools.append(
-        pool_vector(f"hard_field_{MIN_SEATS}", players, with_tree=True, mode="hard")
+        pool_vector("hard_field_min_64", players, with_tree=True, capacity=64, mode="hard")
     )
     empty = [0, 0, 0, 0, 0]
     stacked = [
@@ -685,7 +739,9 @@ def main() -> None:
         [empty] * (BATTLES - 1) + [[140, 140, 140, 140, 140]],
         [[100] * 5] * BATTLES and [[20, 20, 20, 20, 20]] * BATTLES,
     ]
-    hard_pools.append(pool_vector("hard_stacked_edges", stacked, with_tree=False, mode="hard"))
+    hard_pools.append(
+        pool_vector("hard_stacked_edges", stacked, with_tree=False, capacity=8, mode="hard")
+    )
     hard_missing = []
     pl = [hard_battles_from_counter(30_000 + i) for i in range(6)]
     pl[2] = None
@@ -737,10 +793,11 @@ def main() -> None:
             "battle: stat won by larger number, ties to neither, battle won by "
             ">=3 stats else draw; score in half-points (win 2, draw 1); rank by "
             "score desc, zones desc; equal on both = TIED, shared competition "
-            "rank (D3-B), tie group splits the combined band prize of its "
-            "occupied positions <= PAID_RANKS (= 1, D-E2: the winner takes the "
-            "pot) evenly, remainder to the lowest seat; a pool runs with 52..64 "
-            "players (D-E4); "
+            "rank (D3-B); THE LADDER (D-E19): position p of a pool of capacity "
+            "c is worth LADDER_TABLES[c][p-1] whole entries, zero past the "
+            "table; a tie group splits the combined worth of the positions it "
+            "occupies evenly, remainder to the lowest seat; a pool runs with "
+            "its minimum field..capacity players; "
             "leaf sha256(0x00||player||rank_u8||amount_u64le), node "
             "sha256(0x01||l||r), odd node promoted, leaves (rank asc, seat asc); "
             "HARD mode (Phase B): the board's 35 stats sum to exactly 700 (no "
@@ -749,10 +806,13 @@ def main() -> None:
         ),
         "hard_total": HARD_TOTAL,
         "entry_lamports": str(ENTRY_LAMPORTS),
-        "pot_lamports": str(POT),
-        "paid_ranks": PAID_RANKS,
-        "min_seats": MIN_SEATS,
-        "prize_bands_1024": PRIZE_BANDS_1024,
+        "max_capacity": MAX_CAPACITY,
+        "max_paid_places": MAX_PAID_PLACES,
+        "ladder": {
+            "capacities": CAPACITIES,
+            "tables": {str(c): LADDER_TABLES[c] for c in CAPACITIES},
+            "min_seats": {str(c): MIN_FIELD[c] for c in CAPACITIES},
+        },
         "battle_cases": hand_battle_cases(),
         "pools": pools,
         "missing_pools": missing_pools,

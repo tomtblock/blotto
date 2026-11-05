@@ -13,7 +13,9 @@
  * mode, and Post on X opens the intent with the founder's line and
  * nothing else — the pass PNG that downloaded beside it ("looks like a
  * virus") and the note that explained it are gone, with the canvas that
- * drew it. What is posted is the pool and the seat: nothing sealed. V4:
+ * drew it. What is posted is the pool and the seat: nothing sealed. D-E19:
+ * the pass line and the rule beside it are the POOL's own size and
+ * minimum field, never a typed 64 or a global floor. V4:
  * from the sm breakpoint the "Sealed" card and the three keys stand to
  * the RIGHT of the pass, spread over its full height; on a phone they
  * stack under it. V5 (founder 2026-09-30: "looks great on a mobile, a
@@ -33,7 +35,6 @@
 
 import Link from 'next/link';
 import { useCallback, useState } from 'react';
-import { MIN_SEATS } from '@blotto/scoring';
 import { COPY } from '@/copy';
 import { XMark } from '@/wallet/wallet-icons';
 import { Button } from '@/components/ui/button';
@@ -74,6 +75,8 @@ export function EnteredPanel({
   asset,
   poolNumber,
   mode,
+  capacity,
+  minSeats,
   poolAddress,
   wallet,
   signer,
@@ -86,6 +89,9 @@ export function EnteredPanel({
   poolNumber?: string | number;
   /** The rule this pool played; on the pass line beside the pool. */
   mode: BoardMode;
+  /** THIS pool's size and minimum field (D-E19), from its record. */
+  capacity: number;
+  minSeats: number;
   poolAddress: string;
   wallet: string;
   signer: PoolNotifySigner | undefined;
@@ -129,7 +135,7 @@ export function EnteredPanel({
             {COPY.shell.title} · {passPoolLine(poolNumber)} · {mode === 'hard' ? COPY.board.modeHard : COPY.board.modeEasy}
           </p>
           <p className="mt-2 font-display text-[56px] leading-none font-extrabold text-brand-berry lg:text-[84px]">{r.passEntered}</p>
-          <p className="mt-3 text-[18px] font-semibold text-brand-berry lg:text-[24px]">{r.cardSeat(entryIndex)}</p>
+          <p className="mt-3 text-[18px] font-semibold text-brand-berry lg:text-[24px]">{r.cardEntry(entryIndex, capacity)}</p>
           <p className="mt-1 font-mono text-[11px] text-brand-berry/60 lg:text-[12px]">{truncateAddress(asset)}</p>
         </div>
       </Card>
@@ -137,7 +143,7 @@ export function EnteredPanel({
       <div className="flex flex-col justify-between gap-4">
       <Card className="p-5 lg:p-7">
         <h2 className="font-display text-[28px] leading-8 font-extrabold text-ink lg:text-[36px] lg:leading-10">{r.sealedTitle}</h2>
-        <p className="mt-2 text-[14px] leading-5 text-ink-muted lg:text-[16px] lg:leading-6">{COPY.pool.checkBack(Number(MIN_SEATS))}</p>
+        <p className="mt-2 text-[14px] leading-5 text-ink-muted lg:text-[16px] lg:leading-6">{COPY.pool.checkBack(capacity, minSeats)}</p>
       </Card>
 
       <div className="flex flex-col gap-3">

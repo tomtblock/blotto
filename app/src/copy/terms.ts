@@ -59,7 +59,9 @@
 
 import {
   DEFAULT_FILL_DEADLINE_SECS,
-  MIN_SEATS,
+  LADDER_TABLES,
+  MIN_FIELD_BY_CAPACITY,
+  POOL_CAPACITIES,
   REVIEW_WINDOW_SECS,
   ESCROW_AUTO_RELEASE_SECS,
 } from '@blotto/scoring';
@@ -68,8 +70,24 @@ import {
   COMPLAINT_RESOLVE_DAYS,
 } from '@blotto/detection/complaint-windows';
 
-/** Small display integers from the shared mirrors of the program constants. */
-const MIN_FIELD = Number(MIN_SEATS);
+/*
+ * Small display integers from the shared mirrors of the program constants.
+ * D-E19 (version 6): the four tournament sizes, each with its minimum field
+ * and its number of paid places — read from the launch tables, never typed.
+ */
+const SIZES = POOL_CAPACITIES.map((capacity) => ({
+  capacity,
+  minField: MIN_FIELD_BY_CAPACITY[capacity],
+  paidPlaces: LADDER_TABLES[capacity].length,
+}));
+/** "8, 16, 32 or 64". */
+const SIZE_LIST = `${SIZES.slice(0, -1).map((z) => z.capacity).join(', ')} or ${SIZES[SIZES.length - 1]!.capacity}`;
+/** "5 of 8, 10 of 16, 20 of 32 or 40 of 64". */
+const FLOOR_LIST = SIZES.map((z) => `${z.minField} of ${z.capacity}`);
+const FLOORS = `${FLOOR_LIST.slice(0, -1).join(', ')} or ${FLOOR_LIST[FLOOR_LIST.length - 1]}`;
+/** "8 pays 2, 16 pays 4, 32 pays 8 and 64 pays 16". */
+const PAID_LIST = SIZES.map((z) => `${z.capacity} pays ${z.paidPlaces}`);
+const PAID = `${PAID_LIST.slice(0, -1).join(', ')} and ${PAID_LIST[PAID_LIST.length - 1]}`;
 const FILL_HOURS = Number(DEFAULT_FILL_DEADLINE_SECS / 3600n);
 const REVIEW_HOURS = Number(REVIEW_WINDOW_SECS / 3600n);
 const RELEASE_DAYS = Number(ESCROW_AUTO_RELEASE_SECS / 86400n);
@@ -97,6 +115,24 @@ export const TERMS = {
   /** The version line, from config/terms.json via the page. */
   versionLine: (version: number, updated: string) =>
     `Version ${version}, ${updated}. Accepting these terms is recorded against your wallet and against this version.`,
+  /*
+   * WHAT CHANGED (version 6, 2026-11-05 — D-E19, the Ladder). Every wallet
+   * is asked to accept again before its next entry, so the page says in
+   * plain words what is different from version 5 rather than leaving a
+   * returning player to diff a legal document. Not part of the agreement:
+   * the sections below are. Written without first-person promises so it
+   * adds nothing to the claims register it does not already carry.
+   * PHASE-N-REVIEW: draft wording; founder voice / counsel.
+   */
+  changes: {
+    heading: 'What changed in this version',
+    points: [
+      `Tournaments now come in four sizes: ${SIZE_LIST} players. Each size has its own minimum field (${FLOORS}).`,
+      `More than one place is paid. Each tournament pays its highest places from a fixed prize table set by its size and entry price: a tournament of ${PAID} places. The tables are on the rules page.`,
+      'Players tied on a rank share equally the prizes of the places they occupy, including a tie that reaches past the last paid place.',
+      'If a flag is upheld, the withheld prize stays in the tournament\u2019s prize vault and can only ever be paid to other players of the same tournament; it never goes to the operator.',
+    ],
+  },
   /** The one honest line about the unnamed operator, shown when any value is unset. */
   operatorUnsetNote:
     'The operating entity is not yet incorporated, so the entries below that name it read “not yet set”. Nothing is hidden by that: no real-money tournament runs until they are filled in.',
@@ -164,8 +200,9 @@ export const TERMS = {
       id: 'what-this-is',
       heading: 'What the service is',
       body: [
-        'Blotto Cup runs tournaments. Up to sixty-four players pay a fixed entry for a tournament, and each player sets seven battles of five attributes under the placing rule that tournament was opened with: in an easy tournament, 100 points split across the five attributes in each battle; in a hard tournament, 700 points placed anywhere across the seven battles, any attribute from 0 to 700. Which rule a tournament plays is shown before you enter and cannot change once it has opened. Those seven decisions are encrypted on your own device before you pay, and the program records only a fingerprint of them.',
-        'When the tournament closes, every entry is scored against every other entry by a published rule: for each of the seven battles, the entry that takes at least three of the five attributes wins it, and an equal split is a draw worth half a win to each. Players are ranked by battles won, then by attributes won. The player ranked first is paid the prize.',
+        `Blotto Cup runs tournaments. A tournament holds ${SIZE_LIST} players, fixed when it opens; each player pays a fixed entry and sets seven battles of five attributes under the placing rule that tournament was opened with: in an easy tournament, 100 points split across the five attributes in each battle; in a hard tournament, 700 points placed anywhere across the seven battles, any attribute from 0 to 700. Which rule a tournament plays is shown before you enter and cannot change once it has opened. Those seven decisions are encrypted on your own device before you pay, and the program records only a fingerprint of them.`,
+        // Version 6 (D-E19): the highest places are paid, not first alone.
+        'When the tournament closes, every entry is scored against every other entry by a published rule: for each of the seven battles, the entry that takes at least three of the five attributes wins it, and an equal split is a draw worth half a win to each. Players are ranked by battles won, then by attributes won. The players ranked highest are paid the prizes set for their places.',
         'Nothing in the path from your entry to the payment is decided by chance. The one random draw in the product chooses which character artwork your pass shows, and no class value is read anywhere in the scoring, ranking, prize or tiebreak path.',
         'These terms describe what the service does and how it decides. They do not assert what the service is in law, in either direction.',
       ],
@@ -183,21 +220,27 @@ export const TERMS = {
     {
       // PRODUCT-FACTS §1: Pool.min_seats is written at open, so a later
       // change to the constant cannot move the floor under players who
-      // already entered. R7-b (founder ruling 2026-09-13).
+      // already entered. R7-b (founder ruling 2026-09-13). Version 6
+      // (D-E19): so are the size and the prize table (Pool.capacity,
+      // Pool.prize_table, copied from the pool type at open_pool).
       id: 'rules-as-published',
       heading: 'The rules that apply are the ones published when you entered',
       body: [
-        `Each tournament carries its own minimum field and its own deadline, recorded on it when it opens. A later change to either cannot move them for a tournament you have already entered: the numbers you were shown are the numbers your tournament plays by. Tournaments opened under the current rules run with at least ${MIN_FIELD} players and close to entries ${FILL_HOURS} hours after opening.`,
+        `Each tournament carries its own size, prize table, minimum field and deadline, recorded on it when it opens. A later change to any of them cannot move them for a tournament you have already entered: the numbers you were shown are the numbers your tournament plays by. Tournaments opened under the current rules close to entries ${FILL_HOURS} hours after opening and run with at least ${FLOORS} players.`,
       ],
     },
     {
-      // PRODUCT-FACTS §2: fixed pots funded before entries open; one paid
-      // place (D-E2); the ties rule (D3-B); automatic payment (R10).
+      // PRODUCT-FACTS §2: fixed prizes funded before entries open; the
+      // Ladder's fixed table per size (D-E19, version 6, superseding D-E2's
+      // one paid place); the ties rule (D3-B), across the paid line too;
+      // automatic payment (R10). backend/scoring/src/prizes.ts and
+      // engine.ts `assignPrizes` are the rule as code.
+      // PHASE-N-REVIEW: draft wording; founder voice / counsel.
       id: 'prizes',
       heading: 'Prizes',
       body: [
-        'Each tier has one fixed prize, published on the rules page. It is moved into the tournament’s own account from our treasury before entries open, so a tournament’s ability to pay never depends on how many people entered it. The prize is the same whether the field is the minimum or a full sixty-four.',
-        'One place is paid: the player ranked first takes the whole prize. Players equal on both ranking criteria share a rank, and a tie for first splits the prize equally between them, with an indivisible remainder of a few lamports going to the eligible player with the lowest entry number. No other position is paid.',
+        `Every tournament pays fixed prizes to its highest places, from a table set by its size and its entry price and published on the rules page: a tournament of ${PAID} places. The whole table is moved into the tournament’s own account from our treasury before entries open, so a tournament’s ability to pay never depends on how many people entered it, and the prizes are the same whether the field is the minimum or full.`,
+        'Players equal on both ranking criteria share a rank, and share equally the prizes of the places they occupy together. That includes a tie that reaches past the last paid place: the prizes of the paid places it covers are divided equally between everyone in the tie. An indivisible remainder of a few lamports goes to the eligible player with the lowest entry number. No other position is paid.',
         'Prizes are paid automatically when results are committed. There is no claim step and no action you need to take.',
       ],
     },
@@ -230,7 +273,13 @@ export const TERMS = {
         // the founder rather than changed here.
         'Five signals are computed over every tournament. Nothing is flagged automatically: a flag is a decision taken by a person that an entry meets one of the criteria published on the rules page, and a flag by itself decides nothing — it holds the prize while the decision is made. Every decision and the criterion cited are recorded in a log anyone can read.',
         `A held prize stays in the tournament’s own account. It is not paid to us and it is not paid to anyone else while the decision is open. If no decision is made within ${REVIEW_HOURS} hours, the flag is cleared and the prize is paid. As a safeguard against our own failure, the program lets anyone at all release a held prize to the player it belongs to after ${RELEASE_DAYS} days, without our involvement.`,
-        'Where a flag is upheld, the prize passes to the next eligible player in the same tournament. It is never kept by us: the program has no instruction that can move it to us, and no instruction that can take back a prize already paid.',
+        // Version 6 (D-E19): the forfeiture sentence the rules page carries,
+        // in this document's nouns. PHASE-N-REVIEW: counsel approves the
+        // final wording; until the field-moves-up instructions ship, a
+        // withheld share in a tournament paying several places is held in
+        // its vault, so the sentence states a constraint ("can only ever be
+        // paid to"), never a payment that cannot yet be made.
+        'If a flag is upheld, the withheld prize stays in the tournament’s prize vault and can only ever be paid to other players of the same tournament; it never goes to the operator. It is never kept by us: the program has no instruction that can move it to us, and no instruction that can take back a prize already paid.',
         'You may challenge a decision through our complaints route, and we will tell you which criterion was cited.',
       ],
     },
@@ -257,7 +306,7 @@ export const TERMS = {
       body: [
         'We may refuse to accept an entry from an address, or withhold a prize that has not yet been paid, where we determine on reasonable grounds that: the integrity criteria published in the rules have been met; the address is one of several controlled by the same person in a single tournament; entry was made from a territory where the service is not available, or by a person under 18, or by an address on a published sanctions list; or these terms have otherwise been breached.',
         'Where we do either, we will tell you which ground we relied on. You may challenge the decision through our complaints route, and a decision on that challenge will be made by someone other than whoever made the original one wherever that is possible.',
-        'A prize we withhold is never kept by us. It passes to the next eligible player in the same tournament. We cannot recover a prize that has already been paid, and we will not try to.',
+        'A prize we withhold is never kept by us. It stays in the tournament’s prize vault and can only ever be paid to other players of the same tournament. We cannot recover a prize that has already been paid, and we will not try to.',
       ],
     },
     {

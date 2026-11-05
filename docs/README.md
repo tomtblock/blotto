@@ -28,6 +28,7 @@ Where any document and the code disagree, the code is right and the document is 
 | [`guide/OPERATING-MANUAL.md`](guide/OPERATING-MANUAL.md) | Operating a deployment: roles and keys, the admin CLI, opening tiers, program upgrades, the daemon, reviews, incidents |
 | [`guide/MOBILE.md`](guide/MOBILE.md) | **The mobile channel**: the complete list of what differs on a phone, building and signing the Android package (`mobile/`), change control for one app on two channels, and the Solana dApp Store submission checklist |
 | [`guide/DEVNET-REHEARSAL.md`](guide/DEVNET-REHEARSAL.md) | The offline settlement rehearsal CI runs, and worked examples of the admin CLI against devnet |
+| [`guide/LADDER-LAUNCH.md`](guide/LADDER-LAUNCH.md) | The one-time devnet launch of the Ladder (D-E19): the order and the values, from draining the last winner-takes-all pools to eight 0.1 SOL pool types live. Points to the operating manual for each procedure |
 
 ## Architecture — what is built and why
 
@@ -35,7 +36,7 @@ Where any document and the code disagree, the code is right and the document is 
 |---|---|
 | [`architecture/ARCHITECTURE.md`](architecture/ARCHITECTURE.md) | **What exists — the as-built description**: services, the program's instructions and accounts, the money model, sealing, scoring, both modes, detection, what is not built |
 | [`architecture/DIAGRAMS.md`](architecture/DIAGRAMS.md) | Annotated diagrams of the same — canonical for nothing; `ARCHITECTURE.md` wins on any disagreement |
-| [`architecture/DECISIONS.md`](architecture/DECISIONS.md) | Every product and design decision, by ID (`R1`–`R23`, `D-A1`…`D-E18`), with its status and where it is enforced |
+| [`architecture/DECISIONS.md`](architecture/DECISIONS.md) | Every product and design decision, by ID (`R1`–`R23`, `D-A1`…`D-E19`), with its status and where it is enforced |
 | [`architecture/adr/`](architecture/adr/) | Design records for the class draw, the randomness digest, the pass standard and its non-transferability, and the program's threat mitigations |
 
 ## Testing — the evidence
@@ -44,7 +45,7 @@ Where any document and the code disagree, the code is right and the document is 
 |---|---|
 | [`testing/TESTING-REPORT.md`](testing/TESTING-REPORT.md) | **The consolidated test report**: automated suites, CI lanes, the devnet trial's results, findings and their status |
 | [`skill-evidence/REPORT.md`](skill-evidence/REPORT.md) · [`skill-evidence/hard/REPORT.md`](skill-evidence/hard/REPORT.md) | The skill-evidence study for each mode — how often each strategy finishes first. **Generated** by `npm run skill-evidence` in `tests/rehearsal`; a nightly CI lane fails on drift. Never edit by hand |
-| [`testing/FILL-SIMULATION.md`](testing/FILL-SIMULATION.md) | How often a pool fills under the 40-seat, 12-hour rule. **Generated** by `scripts/sim/fill-replay.ts --write` |
+| [`testing/FILL-SIMULATION.md`](testing/FILL-SIMULATION.md) | How often a pool fills under the 12-hour rule, at each pool size and its minimum field (D-E19). **Generated** by `scripts/sim/fill-replay.ts --write` |
 | [`testing/LIVE-SKILL-ENDPOINTS.md`](testing/LIVE-SKILL-ENDPOINTS.md) | The live read-API endpoints that publish the same statistics from real tournaments |
 | [`testing/MOBILE-E2E.md`](testing/MOBILE-E2E.md) | **The evidence of each mobile end-to-end run on devnet**: one table per run, every signature with its source, and what was not recorded |
 | [`../battle-test/`](../battle-test/) | The devnet trial's tooling, frozen predictions and raw on-chain evidence |

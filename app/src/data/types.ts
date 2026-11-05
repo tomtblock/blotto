@@ -20,9 +20,34 @@ export interface PoolSummary {
   /** Hex, 32 bytes — the X25519 key entries seal to (from PoolOpened). */
   sealing_pubkey: string;
   entrants: number;
-  /** The floor this pool plays at (R7-b). Below it at the deadline, every
-   * entry refunds in full; at or above, the pool seals and plays. */
+  /** The floor THIS pool plays at — `Pool.min_seats`, copied from its pool
+   * type at open (D-E19: 5 / 10 / 20 / 40 for 8 / 16 / 32 / 64 at launch),
+   * never a global. Below it at the deadline, every entry refunds in full;
+   * at or above, the pool seals and plays. */
   min_seats: number;
+  /**
+   * The Ladder (D-E19, founder ruling 2026-11-04): how many players this
+   * pool holds — 8, 16, 32 or 64 — and the FIXED prize table it pays, both
+   * copied onto `Pool` at open and never rewritten. `prize_table` is the
+   * pool's own whole multiples of the entry, rank 1 first, one per paid
+   * place (an internal unit: players are shown SOL, never multiples);
+   * `prize_amounts` is the same table in lamports (decimal strings,
+   * `table[i] × entry_lamports`).
+   *
+   * OPTIONAL on the wire for the reason `mode` is: the app must stay safe
+   * against a read API from before the Ladder, which serves none of them —
+   * and every pool before the Ladder held 64 players and paid one place
+   * worth its whole prize pool. Read them through `poolLadder()`
+   * (data/format.ts), never by hand, so that default lives in one place.
+   *
+   * PHASE-N-REVIEW: optional rather than required — the app and the
+   * indexer deploy separately, and a required field the old API omits
+   * renders "undefined players" on the landing.
+   */
+  capacity?: number;
+  paid_places?: number;
+  prize_table?: number[];
+  prize_amounts?: string[];
   /** What the deadline would do RIGHT NOW, derived by the read API from the
    * seat count and the floor. The page shows a live countdown beside an
    * entrant count, and a player should not have to know the rule and do the
@@ -56,46 +81,45 @@ export interface PoolSummary {
   mode?: 'easy' | 'hard';
 }
 
-/** The hard ladder's row at one tier (Phase B): its own switch and stamp. */
-export interface HardTierStatus {
-  enabled: boolean;
-  status: 'open' | 'closed';
-  next_open_at: string;
-  last_pool_id: string | null;
-}
-
-/** One tier's enablement and cooldown stamp, from GET /tiers. One row per
- * CONFIGURED tier, whether or not it has ever run a pool. */
-export interface TierStatusRow {
+/**
+ * One pool TYPE (D-E19): a (mode, tier, capacity) the founder can open, from
+ * GET /pool-types — the `PoolType` account on chain, the event ledger's
+ * projection as a fallback. One row per type that exists, whether or not it
+ * has a pool open now. Lamports are decimal strings; the clocks are unix
+ * seconds as numbers (the read API's shape for this route).
+ */
+export interface PoolTypeRow {
+  mode: 'easy' | 'hard';
   tier: number;
-  /** The founder's `Config.open_tiers[tier]` — whether a pool may be opened
-   * in this tier at all (roadmap R6/D1). Nothing in the app may decide this
-   * for itself; see `enablement_source`. */
-  enabled: boolean;
-  status: 'open' | 'closed';
-  /** Unix seconds, decimal string; the tier's next pool may open from here.
-   * '0' for a tier that has never settled a pool. */
-  next_open_at: string;
-  last_pool_id: string | null;
-  /**
-   * Phase B: the HARD ladder at this tier. Optional for the same reason as
-   * `PoolSummary.mode` — a read API from before the backend change serves
-   * no `hard`, and that reads as "no hard tier is open", which is true of
-   * it. The landing decides from `hard.enabled` alone whether a hard card
-   * exists (Phase B plan, decision 3): there is no switch in the app.
-   */
-  hard?: HardTierStatus;
+  capacity: number;
+  /** Takes entries at all: its tier is open for its mode (R6) AND the type
+   * is enabled. Nothing in the app decides this for itself. */
+  live: boolean;
+  type_enabled: boolean;
+  tier_open: boolean;
+  min_seats: number;
+  paid_places: number;
+  /** Whole multiples of the entry, rank 1 first — internal, never shown. */
+  prize_table: number[];
+  entry_lamports: string;
+  prize_pool_lamports: string;
+  /** Lamports per paid place, rank 1 first. */
+  prize_amounts: string[];
+  /** The open pool of this type (its Pool PDA), or null. */
+  live_pool: string | null;
+  live_pool_id: number | null;
+  /** The type's next pool may open from here (cooldown), or null. */
+  next_open_at: number | null;
+  last_pool_id: number | null;
 }
 
-export interface TiersResponse {
-  server_time: string;
-  /** Where `enabled` came from: the live Config account, the event ledger,
-   * or `init_config`'s seeded posture when the founder has never sent
-   * `set_open_tiers`. Published so a stale answer is visible. */
-  enablement_source: 'chain' | 'ledger' | 'launch_default';
-  /** The hard ladder's source, by the same three-way rule (Phase B). */
-  hard_enablement_source?: 'chain' | 'ledger' | 'launch_default';
-  tiers: TierStatusRow[];
+/** GET /pool-types — sorted by mode (easy first), tier, capacity. */
+export interface PoolTypesResponse {
+  server_time: number;
+  /** Where the rows came from: the live accounts, or the event ledger when
+   * the chain read failed. Published so a stale answer is visible. */
+  source: 'chain' | 'ledger';
+  pool_types: PoolTypeRow[];
 }
 
 export interface EntryRow {
@@ -247,8 +271,10 @@ export interface IndexerApi {
   /** D3 additions. */
   getCareer(player: string): Promise<CareerRow[]>;
   getTreasury(): Promise<TreasuryTiers | null>;
-  /** GET /tiers — the per-tier cooldown stamps plus the server's clock. */
-  getTiers(): Promise<TiersResponse | null>;
+  /** GET /pool-types (D-E19) — every pool type, live or not, plus the
+   * server's clock. Null when the read API has no such route (a read API
+   * from before the Ladder): the landing then falls back to the open pools. */
+  getPoolTypes(): Promise<PoolTypesResponse | null>;
   /** E3: null when the pool has no VERIFIED archive (fail-closed 404). */
   getLeaderboard(pool: string): Promise<PoolLeaderboard | null>;
 }

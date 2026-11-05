@@ -17,9 +17,14 @@
  *
  * ABOVE IS BY RANK (audit 2026-09-11, F-07). The panel used to be handed
  * the committed PAYOUT list and decide "above" by a larger amount: that
- * list holds only the paid seats, and under D-E2 one place is paid, so a
- * player who came fourth of sixty-four was shown the winner and nobody
- * else. Rank is the ordering the competition is decided by.
+ * list holds only the paid seats — under D-E2 one, so a player who came
+ * fourth of sixty-four was shown the winner and nobody else. Under D-E19
+ * (the Ladder) the list holds the paid places, which is still not the
+ * field: a player who finished 20th of 32 has 19 players above them and
+ * only 8 of those were paid, and a tie can make a lower place pay more
+ * than a higher one. Rank is the ordering the competition is decided by;
+ * the amount shown beside a row is that row's committed prize, nothing
+ * more.
  *
  * Rank comes from the pool's VERIFIED archive (E3) and from nowhere else —
  * the same rule the career chart follows: a rank label appears only once

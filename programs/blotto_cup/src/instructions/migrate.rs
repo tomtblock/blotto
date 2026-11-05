@@ -1,59 +1,41 @@
-//! `migrate_config` — the one-shot Config growth for the Phase B upgrade
-//! (hard mode, 2026-09-24): the V2 → V3 migration.
+//! `migrate_config` — the one-shot Config growth after a layout-changing
+//! upgrade. Two source layouts are accepted, and both end at `Config::SPACE`:
 //!
-//! Config gains the hard ladder — `hard_open_tiers`, `hard_active_pool_by_tier`
-//! and `hard_tier_next_open_at`, `Config::HARD_TAIL_LEN` bytes appended AFTER
-//! `tier_next_open_at` (`state.rs`). The live devnet account sits at
-//! `Config::SPACE_V2` (484 bytes, where the 2026-09-07 migration left it), and
+//!   - `Config::SPACE_V3` (603 bytes, Phase B → the Ladder, D-E19): grown by
+//!     `LADDER_TAIL_LEN` and written `enabled_pool_types = 0`. Every pool
+//!     type starts disabled, so zero is exact, and `set_pool_type_enabled`
+//!     keeps it exact from there. Devnet's Config is here today.
+//!   - `Config::SPACE_V2` (484 bytes, before Phase B): grown through BOTH
+//!     tails — the hard ladder (`hard_open_tiers` all off,
+//!     `hard_active_pool_by_tier` all zero, `hard_tier_next_open_at` stamped
+//!     now) and the Ladder count.
+//!
 //! Anchor's `Account<Config>` refuses to deserialise a short account, so
 //! between the program upgrade and this transaction EVERY instruction that
 //! touches Config fails — including `set_paused(false)`. The runbook
-//! therefore runs this immediately after `deploy-devnet.sh`, before anything
-//! else.
+//! therefore runs this immediately after the upgrade, before anything else.
 //!
-//! # History: the V1 → V2 path this replaces
+//! # History: the V1 → V2 path
 //!
 //! Until 2026-09-24 this instruction grew a 380-byte Config to 484, writing
 //! `keeper`, the two timing fields and `tier_next_open_at` (the 2026-09-07
 //! upgrade — prompt v2 §G). Its stated retirement condition — every
 //! deployment's Config at `SPACE_V2` — was met on devnet on 2026-09-13, and
 //! mainnet is initialised at the current layout, so that path is gone: an
-//! account at `SPACE_V1` is now refused (`ConfigNotMigratable`) rather than
-//! grown. The `keeper` argument left with it; nothing this migration writes
-//! is deployment-specific.
+//! account at `SPACE_V1` is refused (`ConfigNotMigratable`) rather than grown.
 //!
 //! Why by hand: the account cannot be an `Account<Config>` here (it is the
 //! old layout), so it arrives as an `UncheckedAccount` whose address is
 //! PDA-checked by Anchor (`seeds` + `bump`), and whose owner, discriminator,
 //! size and admin field are checked below before anything is written. The
-//! old bytes are never touched; the tail is written at the exact offsets the
+//! old bytes are never touched; each tail is written at the exact offsets the
 //! `config_len_matches_serialized_size` test pins.
 //!
-//! Self-disabling: an account already at the new size is refused
-//! (`ConfigAlreadyMigrated`), so a repeated transaction is a clean no-op
-//! failure, never a second write. A fresh deployment never calls this —
-//! `init_config` writes the whole new layout.
-//!
-//! # Why this is here at all, when nothing reaches it
-//!
-//! It is UNREACHABLE ON A FRESH DEPLOYMENT, by construction: `init_config`
-//! allocates `Config::SPACE`, and the length check refuses anything that
-//! size. Every test fixture and every local validator therefore starts past
-//! it (the LiteSVM harness shrinks a fresh Config back to `SPACE_V2` to
-//! exercise it), and reachability analysis reads it as dead code (audit
-//! 2026-09-11, A-15 — recorded KEEP). It is not dead: the DEPLOYED devnet
-//! Config is at `Config::SPACE_V2` and this is the only instruction that can
-//! grow it. Deleting it would strand that account — every instruction
-//! touching Config would keep failing to deserialise, with no path back, and
-//! `set_paused(false)` among them.
-//!
-//! RETIREMENT CONDITION, so this does not sit here forever: once every
-//! deployment's Config account is at `Config::SPACE` (the devnet one after
-//! the Phase B runbook's post-upgrade transaction; mainnet is initialised at
-//! the new layout and never needs it), this instruction can go, or be
-//! replaced by the next layout's migration the way this one replaced the
-//! last. `ConfigNotMigratable` / `ConfigAlreadyMigrated` stay either way —
-//! removing an error variant renumbers every later code (header of
+//! RETIREMENT CONDITION: once every deployment's Config account is at
+//! `Config::SPACE` (mainnet is initialised at the new layout and never needs
+//! it), this instruction can go, or be replaced by the next layout's
+//! migration. `ConfigNotMigratable` / `ConfigAlreadyMigrated` stay either
+//! way — removing an error variant renumbers every later code (header of
 //! `error.rs`).
 
 use anchor_lang::prelude::*;
@@ -85,25 +67,26 @@ pub struct MigrateConfig<'info> {
 pub fn handle_migrate_config(ctx: Context<MigrateConfig>) -> Result<()> {
     let config_info = ctx.accounts.config.to_account_info();
 
-    // ---- 1. Prove this is the V2 Config and the caller is its admin ------
+    // ---- 1. Prove this is an old Config and the caller is its admin ------
     require_keys_eq!(
         *config_info.owner,
         crate::ID,
         ErrorCode::ConfigNotMigratable
     );
-    {
+    let from_v2 = {
         let data = config_info.try_borrow_data()?;
         if data.len() >= Config::SPACE {
             return Err(ErrorCode::ConfigAlreadyMigrated.into());
         }
-        // Exactly V2: a V1 account (380 bytes) has no path any more — see
+        // V2 or V3 only: a V1 account (380 bytes) has no path any more — see
         // the module header. Refusing it is the safe failure; growing it
         // would leave the V2 tail zeroed, and a zero keeper is the outage
         // audit A7 refuses elsewhere.
-        require!(
-            data.len() == Config::SPACE_V2,
-            ErrorCode::ConfigNotMigratable
-        );
+        let from_v2 = match data.len() {
+            Config::SPACE_V2 => true,
+            Config::SPACE_V3 => false,
+            _ => return Err(ErrorCode::ConfigNotMigratable.into()),
+        };
         require!(
             data[..8] == *Config::DISCRIMINATOR,
             ErrorCode::ConfigNotMigratable
@@ -116,7 +99,8 @@ pub fn handle_migrate_config(ctx: Context<MigrateConfig>) -> Result<()> {
             ctx.accounts.admin.key(),
             ErrorCode::ConfigNotMigratable
         );
-    }
+        from_v2
+    };
 
     // ---- 2. Rent for the larger account, paid by the admin ---------------
     // Through the vault chokepoint like every other credit (standing rule 6:
@@ -132,142 +116,177 @@ pub fn handle_migrate_config(ctx: Context<MigrateConfig>) -> Result<()> {
         )?;
     }
 
-    // ---- 3. Grow, then write the tail at the pinned offsets --------------
+    // ---- 3. Grow, then write each missing tail at the pinned offsets -----
     // PHASE-E1-REVIEW: Solana 3.x names the in-place grow `resize`
     // (`realloc` is the deprecated spelling); the new bytes are zeroed.
     config_info.resize(Config::SPACE)?;
-    // `hard_open_tiers` all false and `hard_active_pool_by_tier` all zero
-    // ARE the zeroed bytes `resize` leaves, and both are the values wanted:
-    // no hard tier is enabled until `set_hard_open_tiers` says so, and none
-    // has a live pool. Only the cooldown clocks need a write — every hard
-    // tier's stamp starts at the migration, not at the epoch, for the same
-    // reason the easy ones did in 2026-09-07's migration: `open_pool`
-    // requires `now >= next_open_at`, and while a zero would be harmless
-    // today (the tier is disabled, and enabling it restamps), the field's
-    // meaning is "the earliest this tier may open" and the epoch is not that.
     let now = Clock::get()?.unix_timestamp;
     {
         let mut data = config_info.try_borrow_mut_data()?;
-        let mut off = Config::SPACE_V2;
-        // hard_open_tiers: N_TIERS × false (already zero — written anyway so
-        // the offsets below are explicit rather than assumed).
-        for _ in 0..N_TIERS {
-            data[off] = 0;
-            off += 1;
+        if from_v2 {
+            // The Phase B tail. `hard_open_tiers` all false and
+            // `hard_active_pool_by_tier` all zero ARE the zeroed bytes
+            // `resize` leaves; only the cooldown clocks need a value — every
+            // hard tier's stamp starts at the migration, not the epoch,
+            // because the field means "the earliest this tier may open".
+            let mut off = Config::SPACE_V2;
+            for _ in 0..N_TIERS {
+                data[off] = 0;
+                off += 1;
+            }
+            for _ in 0..N_TIERS {
+                data[off..off + 8].copy_from_slice(&0u64.to_le_bytes());
+                off += 8;
+            }
+            for _ in 0..N_TIERS {
+                data[off..off + 8].copy_from_slice(&now.to_le_bytes());
+                off += 8;
+            }
+            debug_assert_eq!(off, Config::SPACE_V3);
         }
-        // hard_active_pool_by_tier: N_TIERS × 0u64.
-        for _ in 0..N_TIERS {
-            data[off..off + 8].copy_from_slice(&0u64.to_le_bytes());
-            off += 8;
-        }
-        // hard_tier_next_open_at: N_TIERS × now.
-        for _ in 0..N_TIERS {
-            data[off..off + 8].copy_from_slice(&now.to_le_bytes());
-            off += 8;
-        }
-        debug_assert_eq!(off, Config::SPACE);
+        // The Ladder tail (D-E19): `enabled_pool_types = 0`. Every pool type
+        // is created disabled, so zero is exact, and only
+        // `set_pool_type_enabled` moves it from here.
+        let off = Config::SPACE_V3;
+        data[off..off + 2].copy_from_slice(&0u16.to_le_bytes());
+        debug_assert_eq!(off + Config::LADDER_TAIL_LEN, Config::SPACE);
     }
 
-    emit!(HardLadderAdded { migrated_at: now });
+    if from_v2 {
+        emit!(HardLadderAdded { migrated_at: now });
+    }
     Ok(())
 }
 
 // ---------------------------------------------------------------------------
-// `migrate_pool` — the Pool account migration, now covering two old layouts.
+// `migrate_pool` — the Pool account migration, covering three old layouts.
 // ---------------------------------------------------------------------------
 //
-// Two appended fields have grown `Pool` since launch, and a devnet pool can
-// be at either old size:
+// Three appended groups of fields have grown `Pool` since launch, and a
+// devnet pool can be at any of the old sizes:
 //
 //  - `Pool::SPACE_V1` (847): pre-R7-b, before `min_seats: u16` (2026-09-13).
-//    Grown to the current size and written `MIN_SEATS_V1` (52) — the floor
-//    its players actually entered under, never the new 40 — then `mode`.
+//    Written `MIN_SEATS_V1` (52) — the floor its players actually entered
+//    under — then `mode`, then the Ladder tail.
 //  - `Pool::SPACE_V2` (849): post-R7-b, before `mode: u8` (Phase B,
-//    2026-09-24). Grown by one byte and written `mode`; its `min_seats` is
+//    2026-09-24). Written `mode`, then the Ladder tail; its `min_seats` is
 //    left exactly as it is.
+//  - `Pool::SPACE_V3` (850): Phase B, before the Ladder (D-E19). Written the
+//    Ladder tail only. Every devnet pool today.
 //
-// `mode` is always `MODE_EASY`: every pool that predates the field played
-// easy, because hard did not exist. (It is also the zero `resize` leaves, so
-// the write is belt-and-braces; the debug assertion pins the offset.)
+// `mode` is always `MODE_EASY` when it is written: every pool that predates
+// the field played easy, because hard did not exist.
+//
+// THE LADDER TAIL records what the pool's players entered under: 64 seats
+// and ONE paid place — the winner takes the whole prize pool (D-E2). The
+// table is the prize pool in whole entries, `[pot / entry]`, which is 40 for
+// every devnet pool that played (4 SOL at 0.1 SOL). The spec proposed
+// writing `[40]` everywhere; this writes what each pool's own figures say,
+// because one devnet pool (#1, Closed, refunded, from before D-E1) holds a
+// 5.12 SOL prize pool that is not a whole number of entries.
+// PHASE-N-REVIEW: that refinement is the agent's, recorded rather than buried.
+//
+//   - prize pool divisible by the entry, quotient in 1..=255 →
+//     `paid_places = 1`, `prize_table = [pot / entry, 0, …]`. Exact: rank 1
+//     is owed the whole prize pool.
+//   - otherwise, a pool that NEVER PLAYED (`Refunding` or `Closed`) →
+//     `paid_places = 0`, an all-zero table: there is nothing to recompute.
+//   - otherwise → refused (`MigrationUnrepresentable`). A pool that played,
+//     or could still play, must carry a table its prize pool can be checked
+//     against; none exists on devnet, and mainnet starts at the new layout.
 //
 // Anchor's `Account<Pool>` refuses a short account, so between the program
 // upgrade and this transaction every instruction touching an old pool fails
-// — including `pay_next_place` and `release_escrow`, which run on pools that
-// are already `Paid`. The runbook runs it for every pool on the deployment.
+// — including `release_escrow` on pools that are already `Paid`. The runbook
+// runs it for every pool on the deployment.
 //
-// Same shape as `migrate_config` above, and the same reasons for each part:
-// the account arrives as an `UncheckedAccount` whose address is PDA-checked
-// by Anchor, because it cannot be deserialised as `Pool` until it has grown;
-// its owner, discriminator and size are checked by hand; the old bytes are
-// never touched; and an account already at the new size is refused, so a
-// repeated transaction is a clean no-op failure rather than a second write.
+// The account arrives as an `UncheckedAccount` whose address is PDA-checked
+// by Anchor; its owner, discriminator, id and size are checked by hand; the
+// old bytes are never touched; and an account already at the new size is
+// refused, so a repeated transaction is a clean no-op failure.
 //
-// PERMISSIONLESS, unlike `migrate_config`. It writes known constants into one
-// PDA-checked account and refuses every account that is not an un-migrated
-// pool, so there is nothing for an admin signature to protect; and there are
-// dozens of these to run against live pools some of which hold money, so a
-// path that does not depend on the multisig being available is the safer
-// one. The admin pays nothing either — rent comes from whoever sends it.
+// PERMISSIONLESS, unlike `migrate_config`: it writes values determined by
+// the pool's own bytes into one PDA-checked account and refuses everything
+// else, so there is nothing for an admin signature to protect, and a path
+// that does not depend on the multisig being available is the safer one.
+// Rent comes from whoever sends it.
 //
 // RETIREMENT CONDITION: once every deployment's pools are at `Pool::SPACE`,
-// this instruction, `MIN_SEATS_V1`, `Pool::LEN_V1`, `Pool::LEN_V2` and the
-// two error variants can go together. Removing the error variants renumbers
-// every later code — see the header of `error.rs`.
+// this instruction, `MIN_SEATS_V1` and the `LEN_V*` constants can go
+// together. Removing an error variant renumbers every later code — see the
+// header of `error.rs`.
 
-use crate::constants::{MIN_SEATS_V1, MODE_EASY};
+use crate::constants::{CAPACITY, MAX_PAID_PLACES, MIN_SEATS_V1, MODE_EASY};
 use crate::events::PoolMigrated;
-use crate::state::{Pool, POOL_SEED};
+use crate::state::{Pool, PoolState, POOL_SEED};
 
 #[derive(Accounts)]
 #[instruction(pool_id: u64)]
 pub struct MigratePool<'info> {
-    /// Permissionless — pays the rent top-up for the extra bytes.
+    /// Anyone — pays the rent top-up.
     #[account(mut)]
     pub payer: Signer<'info>,
 
-    /// CHECK: The Pool PDA at its pre-migration size. Address enforced by the
-    /// seeds; owner, discriminator and size enforced by hand in the handler
-    /// because the account cannot be deserialised as `Pool` until it has
-    /// grown.
+    /// CHECK: An old-layout Pool, PDA-checked by these seeds; owner,
+    /// discriminator, stored id and size are checked in the handler.
     #[account(mut, seeds = [POOL_SEED, &pool_id.to_le_bytes()], bump)]
     pub pool: UncheckedAccount<'info>,
 
     pub system_program: Program<'info, System>,
 }
 
+/// The Ladder tail for a pre-Ladder pool, from its own entry price, prize
+/// pool and state (see the section comment). Pure, so it is unit-tested.
+pub(crate) fn pre_ladder_table(
+    entry_lamports: u64,
+    pot_lamports: u64,
+    state_byte: u8,
+) -> Result<(u8, [u8; MAX_PAID_PLACES])> {
+    let mut table = [0u8; MAX_PAID_PLACES];
+    if entry_lamports > 0 && pot_lamports.is_multiple_of(entry_lamports) {
+        let multiple = pot_lamports / entry_lamports;
+        if (1..=255).contains(&multiple) {
+            table[0] = multiple as u8;
+            return Ok((1, table));
+        }
+    }
+    let never_played =
+        state_byte == PoolState::Refunding as u8 || state_byte == PoolState::Closed as u8;
+    require!(never_played, ErrorCode::MigrationUnrepresentable);
+    Ok((0, table))
+}
+
 pub fn handle_migrate_pool(ctx: Context<MigratePool>, pool_id: u64) -> Result<()> {
     let pool_info = ctx.accounts.pool.to_account_info();
 
-    // ---- 1. Prove this is an un-migrated pool of ours ---------------------
     require_keys_eq!(*pool_info.owner, crate::ID, ErrorCode::PoolNotMigratable);
-    let from_v1 = {
+    let (from_len, entry_lamports, pot_lamports, state_byte) = {
         let data = pool_info.try_borrow_data()?;
         if data.len() >= Pool::SPACE {
             return Err(ErrorCode::PoolAlreadyMigrated.into());
         }
-        let from_v1 = match data.len() {
-            Pool::SPACE_V1 => true,
-            Pool::SPACE_V2 => false,
+        let from_len = match data.len() {
+            Pool::SPACE_V1 | Pool::SPACE_V2 | Pool::SPACE_V3 => data.len(),
             _ => return Err(ErrorCode::PoolNotMigratable.into()),
         };
         require!(
             data[..8] == *Pool::DISCRIMINATOR,
             ErrorCode::PoolNotMigratable
         );
-        // `id` is the first field after the discriminator (state.rs). The
-        // seeds already bind the address to `pool_id`; this catches a PDA
-        // that somehow holds a different pool's bytes.
-        let stored_id = u64::from_le_bytes(
-            data[8..16]
-                .try_into()
-                .map_err(|_| ErrorCode::PoolNotMigratable)?,
-        );
-        require!(stored_id == pool_id, ErrorCode::PoolNotMigratable);
-        from_v1
+        let read_u64 = |at: usize| -> Result<u64> {
+            Ok(u64::from_le_bytes(
+                data[at..at + 8]
+                    .try_into()
+                    .map_err(|_| ErrorCode::PoolNotMigratable)?,
+            ))
+        };
+        // Offsets pinned by every reader of the Pool head (state.rs): id at
+        // 8, entry_lamports at 17, pot_lamports at 25, state at 51.
+        require!(read_u64(8)? == pool_id, ErrorCode::PoolNotMigratable);
+        (from_len, read_u64(17)?, read_u64(25)?, data[51])
     };
+    let (paid_places, prize_table) = pre_ladder_table(entry_lamports, pot_lamports, state_byte)?;
 
-    // ---- 2. Rent for the larger account ----------------------------------
-    // Through the vault chokepoint like every other credit (standing rule 6).
     let required = Rent::get()?.minimum_balance(Pool::SPACE);
     let held = pool_info.lamports();
     if held < required {
@@ -279,36 +298,85 @@ pub fn handle_migrate_pool(ctx: Context<MigratePool>, pool_id: u64) -> Result<()
         )?;
     }
 
-    // ---- 3. Grow, then write the tail at the pinned offsets ---------------
-    // The new bytes are zeroed by `resize`, and a zero `min_seats` would let
-    // ANY field seal — so the V1 write is not optional, and the debug
-    // assertion pins that the last byte written is the end of the account.
     pool_info.resize(Pool::SPACE)?;
-    let min_seats = {
+    let (min_seats, mode) = {
         let mut data = pool_info.try_borrow_mut_data()?;
-        let min_seats = if from_v1 {
+        let min_seats = if from_len == Pool::SPACE_V1 {
             let off = Pool::SPACE_V1;
             data[off..off + 2].copy_from_slice(&MIN_SEATS_V1.to_le_bytes());
             MIN_SEATS_V1
         } else {
-            // Report the floor the pool already carries, so the event reads
-            // the same for both paths.
             u16::from_le_bytes(
                 data[Pool::SPACE_V1..Pool::SPACE_V1 + 2]
                     .try_into()
                     .map_err(|_| ErrorCode::PoolNotMigratable)?,
             )
         };
-        let off = Pool::SPACE_V2;
-        data[off] = MODE_EASY;
-        debug_assert_eq!(off + 1, Pool::SPACE);
-        min_seats
+        if from_len < Pool::SPACE_V3 {
+            data[Pool::SPACE_V2] = MODE_EASY;
+        }
+        let mode = data[Pool::SPACE_V2];
+        // The Ladder tail: capacity, paid_places, prize_table.
+        let mut off = Pool::SPACE_V3;
+        data[off..off + 2].copy_from_slice(&CAPACITY.to_le_bytes());
+        off += 2;
+        data[off] = paid_places;
+        off += 1;
+        data[off..off + MAX_PAID_PLACES].copy_from_slice(&prize_table);
+        off += MAX_PAID_PLACES;
+        debug_assert_eq!(off, Pool::SPACE);
+        (min_seats, mode)
     };
 
     emit!(PoolMigrated {
         pool: pool_info.key(),
         min_seats,
-        mode: MODE_EASY,
+        mode,
+        capacity: CAPACITY,
+        paid_places,
+        prize_table,
     });
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_played_pool_records_its_prize_pool_in_whole_entries() {
+        // Every devnet pool that played: 4 SOL at 0.1 SOL → [40].
+        let (paid, t) =
+            pre_ladder_table(100_000_000, 4_000_000_000, PoolState::Paid as u8).unwrap();
+        assert_eq!(paid, 1);
+        assert_eq!(t[0], 40);
+        assert!(t[1..].iter().all(|&m| m == 0));
+    }
+
+    #[test]
+    fn a_pool_that_never_played_may_carry_no_table() {
+        // Pool #1 on devnet: 5.12 SOL at 0.1 SOL, Closed.
+        let (paid, t) =
+            pre_ladder_table(100_000_000, 5_120_000_000, PoolState::Closed as u8).unwrap();
+        assert_eq!(paid, 0);
+        assert!(t.iter().all(|&m| m == 0));
+        assert!(pre_ladder_table(100_000_000, 5_120_000_000, PoolState::Refunding as u8).is_ok());
+    }
+
+    #[test]
+    fn a_pool_that_played_or_could_play_must_be_representable() {
+        for st in [
+            PoolState::Open,
+            PoolState::Sealed,
+            PoolState::Scored,
+            PoolState::Paid,
+        ] {
+            assert!(
+                pre_ladder_table(100_000_000, 5_120_000_000, st as u8).is_err(),
+                "{st:?}"
+            );
+        }
+        // More than 255 entries' worth cannot be a u8 multiple.
+        assert!(pre_ladder_table(1, 256, PoolState::Paid as u8).is_err());
+    }
 }

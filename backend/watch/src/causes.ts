@@ -148,13 +148,13 @@ export function explain(inc: Incident): Explanation {
         };
       }
       return {
-        cause: 'The settlement service is not opening the next pool on an enabled tier.',
+        cause: 'The settlement service is not opening the next pool of an enabled pool type.',
         action: `${BACKEND_STATUS} (daemon, "keeper:hold" names the reason). If the treasury is short, it is a funding question.`,
       };
     case 'treasury':
       return {
-        cause: 'The platform treasury cannot fund the next pot, so that tier will not open another pool.',
-        action: 'Fund the platform treasury (OPERATING-MANUAL, treasury section), or disable the tier.',
+        cause: 'The platform treasury cannot fund the next prize pool, so that pool type will not open another pool.',
+        action: 'Fund the platform treasury (OPERATING-MANUAL, treasury section), or disable the pool type.',
       };
     case 'indexer':
       if (name === 'read-api') {

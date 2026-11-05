@@ -82,8 +82,9 @@ fn commit_vrf_seed_copies_a_revealed_value_write_once() {
     let Some(mut env) = Env::new() else { return };
     // Open a pool WITHOUT the harness's seed patch.
     let settlement = env.settlement.insecure_clone();
+    env.ensure_pool_type(MODE_EASY, 0, 64);
     env.fund_platform(TIER_POTS[0] + VAULT_RENT_CUSHION);
-    let ix = open_pool_ix(&settlement.pubkey(), 1, 0, [9; 32], env.sealing_secret_hash);
+    let ix = env.open_ix(&settlement.pubkey(), 1, 0, MODE_EASY, 64);
     env.send(&[ix], &[&settlement]).unwrap();
     let pool = pool_pda(1);
     assert_eq!(read_vrf_seed(&env, &pool), [0u8; 32], "opens uncommitted");
@@ -136,8 +137,9 @@ fn commit_vrf_seed_refuses_once_a_pool_has_an_entry() {
     // applies the pool's one seed to every entry. The commit refuses instead.
     let Some(mut env) = Env::new() else { return };
     let settlement = env.settlement.insecure_clone();
+    env.ensure_pool_type(MODE_EASY, 0, 64);
     env.fund_platform(TIER_POTS[0] + VAULT_RENT_CUSHION);
-    let ix = open_pool_ix(&settlement.pubkey(), 1, 0, [9; 32], env.sealing_secret_hash);
+    let ix = env.open_ix(&settlement.pubkey(), 1, 0, MODE_EASY, 64);
     env.send(&[ix], &[&settlement]).unwrap();
     let ix = create_pass_collection_ix(&settlement.pubkey(), 1);
     env.send(&[ix], &[&settlement])

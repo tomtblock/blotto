@@ -6,6 +6,14 @@
  * and the tier filter is a row of them. One shape everywhere so a player
  * learns it once.
  *
+ * `layout="stacked"` (D-E19, founder brief 2026-11-05): the landing's size
+ * toggle — "8 · 16 · 32 · 64" with each size's live fill under it — puts
+ * the detail BELOW the label instead of beside it, so the row stays four
+ * narrow keys at 375 px. `layout="responsive"` is stacked on a phone and
+ * inline from the `sm` width: the landing's board toggle, whose two
+ * inline options ("EASY 100 per battle · HARD 700 anywhere") are wider
+ * than a 375 px card and used to wrap inside their own pill.
+ *
  * Accessibility: a radiogroup — one option is always chosen, arrow keys
  * move between options, the chosen one carries `aria-checked`. A disabled
  * option stays in the row (the founder's greyed-out tiers) but cannot be
@@ -22,6 +30,8 @@ export interface ToggleOption<T extends string> {
   /** Present but unchoosable — greyed, with the reason as a tooltip. */
   disabled?: boolean;
   disabledReason?: string;
+  /** The option's accessible name, where the visible text is terse ("16", "5/16"). */
+  ariaLabel?: string;
 }
 
 export interface ToggleProps<T extends string> {
@@ -33,6 +43,9 @@ export interface ToggleProps<T extends string> {
   /** `cream` on a dark (plum) surface; `berry` on the pink field or a cream card. */
   tone?: 'cream' | 'berry';
   size?: 'md' | 'lg';
+  /** `inline`: the detail beside the label. `stacked`: under it.
+   * `responsive`: under it on a phone, beside it from `sm`. */
+  layout?: 'inline' | 'stacked' | 'responsive';
   className?: string;
   'data-testid'?: string;
 }
@@ -57,6 +70,7 @@ export function Toggle<T extends string>({
   label,
   tone = 'cream',
   size = 'md',
+  layout = 'inline',
   className = '',
   'data-testid': testId,
 }: ToggleProps<T>) {
@@ -74,14 +88,32 @@ export function Toggle<T extends string>({
     e.preventDefault();
     onChange(enabled[next]!.value);
   };
-  const pad = size === 'lg' ? 'px-5 py-2.5 text-[15px]' : 'px-3.5 py-1.5 text-[13px]';
+  const stacked = layout === 'stacked';
+  const responsive = layout === 'responsive';
+  const pad = stacked
+    ? size === 'lg'
+      ? 'min-w-[56px] px-3.5 py-1.5 text-[17px]'
+      : 'min-w-[48px] px-3 py-1 text-[15px]'
+    : responsive
+      ? size === 'lg'
+        ? 'px-4 py-1.5 text-[15px] sm:px-5 sm:py-2.5'
+        : 'px-3 py-1 text-[13px] sm:px-3.5 sm:py-1.5'
+      : size === 'lg'
+        ? 'px-5 py-2.5 text-[15px]'
+        : 'px-3.5 py-1.5 text-[13px]';
+  const shape = stacked
+    ? 'flex-col items-center gap-0 rounded-[18px] leading-tight'
+    : responsive
+      ? 'flex-col items-center gap-0 rounded-[18px] leading-tight sm:flex-row sm:items-baseline sm:gap-1.5 sm:rounded-full sm:leading-normal'
+      : 'items-baseline gap-1.5 rounded-full';
+  const track = stacked ? 'rounded-[22px]' : responsive ? 'rounded-[22px] sm:rounded-full' : 'rounded-full';
   return (
     <div
       role="radiogroup"
       aria-label={label}
       data-testid={testId}
       onKeyDown={onKey}
-      className={`inline-flex max-w-full flex-wrap gap-1 rounded-full border p-1 ${TRACK[tone]} ${className}`}
+      className={`inline-flex max-w-full flex-wrap gap-1 border p-1 ${track} ${TRACK[tone]} ${className}`}
     >
       {options.map((o) => {
         const on = o.value === value;
@@ -92,6 +124,7 @@ export function Toggle<T extends string>({
             type="button"
             role="radio"
             aria-checked={on}
+            aria-label={o.ariaLabel}
             aria-disabled={o.disabled || undefined}
             title={o.disabled ? o.disabledReason : undefined}
             tabIndex={on ? 0 : -1}
@@ -100,7 +133,7 @@ export function Toggle<T extends string>({
             }}
             data-testid={testId ? `${testId}-${o.value}` : undefined}
             className={
-              `flex items-baseline gap-1.5 rounded-full font-display font-bold uppercase tracking-wide ` +
+              `flex ${shape} font-display font-bold uppercase tracking-wide ` +
               `transition-colors outline-none focus-visible:ring-2 focus-visible:ring-brand-cream ${pad} ` +
               (o.disabled ? 'cursor-not-allowed opacity-40 ' : 'cursor-pointer ') +
               (on ? ON[tone] : OFF[tone])
@@ -108,7 +141,12 @@ export function Toggle<T extends string>({
           >
             <span>{o.label}</span>
             {o.detail ? (
-              <span className="font-body text-[11px] font-medium normal-case tracking-normal opacity-80">{o.detail}</span>
+              <span
+                className={`font-body font-medium normal-case tracking-normal opacity-80 ${stacked ? 'tnum text-[11px] leading-4' : 'text-[11px]'}`}
+                data-testid={testId ? `${testId}-${o.value}-detail` : undefined}
+              >
+                {o.detail}
+              </span>
             ) : null}
           </button>
         );

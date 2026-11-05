@@ -1,13 +1,13 @@
 //! `seal_at_deadline` (D-E4, founder decision 2026-09-06; option A per the
-//! ruling of 2026-09-07) — the second seal path. The first is the 64th
-//! `register`; this one closes a pool that reached the minimum field but
+//! ruling of 2026-09-07) — the second seal path. The first is the
+//! `register` that fills the pool to its capacity; this one closes a pool that reached the minimum field but
 //! not capacity when its deadline passes (`Pool.fill_deadline`, set once at
 //! open from `Config.fill_deadline_seconds` — 12 h at launch — and never
 //! rewritten).
 //!
-//! PERMISSIONLESS AND PURE, by design and by test. Under winner-takes-all,
-//! field size is the winner's competition: a 52-seat pool and a 64-seat pool
-//! pay the same prize against different fields. If the operator could
+//! PERMISSIONLESS AND PURE, by design and by test. Field size is every
+//! paid player's competition: a pool at its minimum field and a full pool
+//! pay the same fixed table (D-E19) against different fields. If the operator could
 //! CHOOSE when to seal, the operator would be choosing that, and no amount
 //! of good faith fixes how it reads (proposal E1 §11.3). So the seal is a
 //! function of on-chain state and the clock and nothing else: any signer,
@@ -17,12 +17,12 @@
 //!
 //! Deliberately separate from `trigger_refund`: one instruction, one job,
 //! one guard. Past the deadline the field decides the fork — `entrants <
-//! MIN_SEATS` refunds there, `entrants >= MIN_SEATS` seals here — and each
+//! min_seats` refunds there, `entrants >= min_seats` seals here (the pool's
+//! own floor) — and each
 //! instruction rejects the other's case, so neither can be raced.
 
 use anchor_lang::prelude::*;
 
-use crate::constants::CAPACITY;
 use crate::error::ErrorCode;
 use crate::events::SealReason;
 use crate::instructions::register::seal_pool;
@@ -65,9 +65,9 @@ pub fn handle_seal_at_deadline(ctx: Context<SealAtDeadline>, _pool_id: u64) -> R
         pool.entrants >= pool.min_seats,
         ErrorCode::FieldBelowMinimum
     );
-    // A full pool sealed itself at the 64th `register`; it is never Open.
-    // Defense in depth, like `trigger_refund`'s mirror-image check was.
-    require!(pool.entrants < CAPACITY, ErrorCode::PoolFull);
+    // A full pool sealed itself at the `register` that filled it; it is
+    // never Open. Defense in depth, against the pool's OWN capacity.
+    require!(pool.entrants < pool.capacity, ErrorCode::PoolFull);
 
     let pool_key = pool.key();
     seal_pool(

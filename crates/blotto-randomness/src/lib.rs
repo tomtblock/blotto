@@ -125,7 +125,7 @@ pub fn derive_class_randomness(
 /// would complicate audit replay, since an auditor re-deriving an old entry would
 /// have to replay the loop with the same retry count, for no economically or
 /// competitively meaningful gain. The class confers nothing (PID §8.4), so even a
-/// measurable bias would move nothing a player could cash.
+/// measurable bias would move nothing a player could be paid.
 ///
 /// Determinism: identical `(rng_bytes, class_counters)` always yields the same
 /// class. Over many draws against a fixed distribution (without decrement), the

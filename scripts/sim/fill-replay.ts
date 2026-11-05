@@ -1,45 +1,56 @@
 /**
- * Fill-rule replay (founder instruction 2026-09-12 §5.2).
+ * Fill-rule replay (founder instruction 2026-09-12 §5.2), per pool size since
+ * the Ladder (D-E19).
  *
- * The question this exists to answer, in the founder's words: *"how often,
- * on realistic arrival curves, does the 40-at-12h rule seal vs refund — I
- * will use it to decide whether the numbers stay."*
+ * The question this exists to answer, first asked of the single 64-player
+ * pool: *"how often, on realistic arrival curves, does the rule seal vs
+ * refund — I will use it to decide whether the numbers stay."* Since D-E19
+ * there are four sizes, each with its own minimum field (8 → 5, 16 → 10,
+ * 32 → 20, 64 → 40), so the answer is four curves.
  *
  * So it is not a test. It is a measurement, and its output is a markdown
  * report (`docs/testing/FILL-SIMULATION.md`).
  *
- * WHAT IT MODELS. Entries arriving at a pool as a Poisson process over the
- * 12-hour window, run through the two gates that can stop one — the
- * territory schedule and the pool's capacity — and then through the fill
- * state machine exactly as `seal_at_deadline` and `trigger_refund` define
- * it: seal at 64 whenever the 64th lands, seal at the deadline at or above
- * the floor, refund below it.
+ * WHAT IT MODELS. Entries arriving at one pool as a Poisson process over the
+ * fill window, run through the two gates that can stop one — the territory
+ * schedule and the pool's capacity — and then through the fill state machine
+ * exactly as `seal_at_deadline` and `trigger_refund` define it: seal when the
+ * last seat of the pool's capacity fills, seal at the deadline at or above
+ * the pool's minimum field, refund below it.
  *
  * WHAT IT DOES NOT MODEL, so nobody reads more into it than is there:
- *   - demand is exogenous. A pool that refunds probably depresses the next
- *     pool's arrivals, and a pool that fills fast probably raises them;
- *     nothing here has a feedback term, so the seal rates below are a
- *     first-order estimate, not a forecast.
+ *   - demand is exogenous, and each size is simulated alone. A pool that
+ *     refunds probably depresses the next pool's arrivals; a fast fill
+ *     probably raises them; and with four sizes open at once, players
+ *     choosing one size are players another size does not get. Nothing here
+ *     has a feedback or a split term, so the rates below are first-order
+ *     estimates, not a forecast.
  *   - arrivals are independent and uniform in rate. Real entries will
  *     cluster around whatever is posted, and clustering RAISES the seal rate
- *     at a given mean by making the count less like a Poisson draw.
+ *     at a given mean.
  *   - the sanctions screening is not simulated: it rejects by wallet
  *     against live lists, which a country code cannot stand in for.
  *
- * Deterministic: one seeded PRNG, so a re-run reproduces the report and a
- * change to the rule shows up as a diff.
+ * Every figure comes from the shared constants (`@blotto/scoring`'s
+ * LADDER_TABLES, MIN_FIELD_BY_CAPACITY, TIER_ENTRY_LAMPORTS, the fill
+ * deadline) and `config/territories.json` — nothing is typed here.
  *
- * Run: npx tsx scripts/sim/fill-replay.ts [--write]
+ * Deterministic: one seeded PRNG per (size, rate), so a re-run reproduces the
+ * report and a change to the rule shows up as a diff.
+ *
+ * Run: npx tsx scripts/sim/fill-replay.ts [--write | --self-test]
  */
 
 import { writeFileSync } from 'fs';
 import { resolve } from 'path';
 import {
-  CAPACITY,
-  MIN_SEATS,
   DEFAULT_FILL_DEADLINE_SECS,
+  LADDER_TABLES,
+  MIN_FIELD_BY_CAPACITY,
+  POOL_CAPACITIES,
   TIER_ENTRY_LAMPORTS,
-  TIER_POT_LAMPORTS,
+  prizePoolFor,
+  type PoolCapacity,
 } from '../../backend/scoring/src/prizes';
 import {
   loadTerritorySchedule,
@@ -49,11 +60,8 @@ import {
 
 const ROOT = resolve(__dirname, '..', '..');
 const DEADLINE = Number(DEFAULT_FILL_DEADLINE_SECS);
-const CAP = Number(CAPACITY);
-const FLOOR = Number(MIN_SEATS);
-/** The floor this change replaced, reported beside the new one so the
- * comparison the founder is making is on the same page as the numbers. */
-const PREVIOUS_FLOOR = 52;
+/** The report prices every size at tier 0 — the tier the devnet launch opens. */
+const TIER = 0;
 
 // ---------------------------------------------------------------------------
 // A seeded PRNG. mulberry32 — small, fast, and good enough for arrival times.
@@ -82,8 +90,11 @@ export interface Arrival {
 
 export interface PoolOutcome {
   outcome: 'sealed_at_capacity' | 'sealed_at_deadline' | 'refunded';
+  capacity: number;
+  floor: number;
   seated: number;
-  potLamports: bigint;
+  /** The pool's fixed prize pool (its size's table at the tier price). */
+  prizePoolLamports: bigint;
   /** Entries returned in full, when the pool refunded. */
   refunds: number;
   rejectedByTerritory: number;
@@ -93,17 +104,19 @@ export interface PoolOutcome {
 }
 
 /**
- * One pool, from a timeline. The state machine here mirrors the program's:
- * `register` accepts while `now <= fill_deadline` and `entrants < CAPACITY`;
- * the 64th seals immediately; past the deadline the field decides the fork.
+ * One pool of `capacity`, from a timeline. The state machine mirrors the
+ * program's: `register` accepts while `now <= fill_deadline` and
+ * `entrants < capacity`; the last seat seals immediately; past the deadline
+ * the pool's minimum field decides the fork.
  */
 export function replayPool(
   arrivals: readonly Arrival[],
   schedule: TerritorySchedule,
-  opts: { floor?: number; tier?: number } = {}
+  opts: { capacity: PoolCapacity; floor?: number; tier?: number }
 ): PoolOutcome {
-  const floor = opts.floor ?? FLOOR;
-  const tier = opts.tier ?? 0;
+  const capacity = opts.capacity;
+  const floor = opts.floor ?? MIN_FIELD_BY_CAPACITY[capacity];
+  const tier = opts.tier ?? TIER;
   let seated = 0;
   let rejectedByTerritory = 0;
   let rejectedByDeadline = 0;
@@ -126,41 +139,18 @@ export function replayPool(
       continue;
     }
     seated++;
-    if (seated === CAP) sealedAt = a.t_offset_secs;
+    if (seated === capacity) sealedAt = a.t_offset_secs;
   }
 
-  const potLamports = TIER_POT_LAMPORTS[tier];
+  const prizePoolLamports = prizePoolFor(LADDER_TABLES[capacity], TIER_ENTRY_LAMPORTS[tier]);
+  const base = { capacity, floor, seated, prizePoolLamports, rejectedByTerritory, rejectedByDeadline };
   if (sealedAt !== null) {
-    return {
-      outcome: 'sealed_at_capacity',
-      seated,
-      potLamports,
-      refunds: 0,
-      rejectedByTerritory,
-      rejectedByDeadline,
-      concludedAtSecs: sealedAt,
-    };
+    return { ...base, outcome: 'sealed_at_capacity', refunds: 0, concludedAtSecs: sealedAt };
   }
   if (seated >= floor) {
-    return {
-      outcome: 'sealed_at_deadline',
-      seated,
-      potLamports,
-      refunds: 0,
-      rejectedByTerritory,
-      rejectedByDeadline,
-      concludedAtSecs: DEADLINE,
-    };
+    return { ...base, outcome: 'sealed_at_deadline', refunds: 0, concludedAtSecs: DEADLINE };
   }
-  return {
-    outcome: 'refunded',
-    seated,
-    potLamports,
-    refunds: seated,
-    rejectedByTerritory,
-    rejectedByDeadline,
-    concludedAtSecs: DEADLINE,
-  };
+  return { ...base, outcome: 'refunded', refunds: seated, concludedAtSecs: DEADLINE };
 }
 
 // ---------------------------------------------------------------------------
@@ -181,9 +171,9 @@ const COUNTRY_MIX: readonly (readonly [string, number])[] = [
   ['NL', 5],
   ['ES', 4],
   ['JP', 3],
-  ['AU', 6], // blocked
-  ['IN', 4], // blocked under schedule v3
-  ['SG', 2], // blocked under schedule v3
+  ['AU', 6],
+  ['IN', 4],
+  ['SG', 2],
 ];
 
 function pickCountry(rnd: () => number): string {
@@ -200,36 +190,29 @@ function pickCountry(rnd: () => number): string {
  * A Poisson arrival process over the window: inter-arrival times are
  * exponential with mean `window / expected`.
  */
-export function poissonTimeline(
-  expected: number,
-  rnd: () => number,
-  window = DEADLINE
-): Arrival[] {
+export function poissonTimeline(expected: number, rnd: () => number, window = DEADLINE): Arrival[] {
   const out: Arrival[] = [];
   const mean = window / expected;
   let t = 0;
   let i = 0;
   for (;;) {
     t += -Math.log(1 - rnd()) * mean;
-    // A pool cannot take more than capacity, but the TIMELINE can carry more
-    // than that: the surplus is what `rejectedByDeadline` counts once the
-    // pool has closed, and it is real demand the next pool inherits.
+    // A pool cannot take more than its capacity, but the TIMELINE can carry
+    // more: the surplus is what `rejectedByDeadline` counts once the pool has
+    // closed, and it is real demand the next pool inherits.
     if (t > window * 1.5) break;
     out.push({ t_offset_secs: Math.round(t), wallet: `sim-${i++}`, country: pickCountry(rnd) });
   }
   return out;
 }
 
-/** §5.2 fixture 3: the adversarial case — one seat short until the last
- * minute, and the seat that would have saved it arrives one second late. */
-export function adversarialTimeline(floor = FLOOR): Arrival[] {
+/** §5.2 fixture 3: the adversarial case — one entry short of the minimum
+ * field until the last minute, and the entry that would have saved it
+ * arrives one second late. */
+export function adversarialTimeline(floor: number): Arrival[] {
   const out: Arrival[] = [];
   for (let i = 0; i < floor - 1; i++) {
-    out.push({
-      t_offset_secs: DEADLINE - 60 + Math.floor(i / 10),
-      wallet: `edge-${i}`,
-      country: 'GB',
-    });
+    out.push({ t_offset_secs: DEADLINE - 60 + Math.floor(i / 10), wallet: `edge-${i}`, country: 'GB' });
   }
   out.push({ t_offset_secs: DEADLINE + 1, wallet: 'edge-late', country: 'GB' });
   return out;
@@ -239,46 +222,43 @@ export function adversarialTimeline(floor = FLOOR): Arrival[] {
 // The sweep
 // ---------------------------------------------------------------------------
 
+/** Mean attempts in the window, as multiples of the pool's capacity — the
+ * same relative curve at every size, so the four tables compare directly. */
+const RATE_MULTIPLES: readonly number[] = [0.5, 0.75, 1, 1.25, 1.5, 2, 3];
+
 interface RateResult {
   expected: number;
   trials: number;
   sealedAtCapacity: number;
   sealedAtDeadline: number;
   refunded: number;
-  /** The same trials judged against the floor this change replaced. */
-  refundedUnderPrevious: number;
   meanSeated: number;
   meanTerritoryRejected: number;
-  /** Treasury result per pool, in lamports, averaged over trials that ran. */
+  /** Treasury result per pool that ran, in lamports: its entries less its prize pool. */
   meanReturnLamports: bigint;
 }
 
-function sweep(schedule: TerritorySchedule, rates: readonly number[], trials: number): RateResult[] {
-  const price = TIER_ENTRY_LAMPORTS[0];
-  const pot = TIER_POT_LAMPORTS[0];
-  return rates.map((expected) => {
-    const rnd = mulberry32(0x5eed + Math.round(expected * 1000));
+function sweep(schedule: TerritorySchedule, capacity: PoolCapacity, trials: number): RateResult[] {
+  const price = TIER_ENTRY_LAMPORTS[TIER];
+  return RATE_MULTIPLES.map((k) => Math.round(capacity * k)).map((expected) => {
+    const rnd = mulberry32(0x5eed + capacity * 100_000 + Math.round(expected * 1000));
     let sealedAtCapacity = 0;
     let sealedAtDeadline = 0;
     let refunded = 0;
-    let refundedUnderPrevious = 0;
     let seatedTotal = 0;
     let territoryTotal = 0;
     let returnTotal = 0n;
     for (let i = 0; i < trials; i++) {
-      const timeline = poissonTimeline(expected, rnd);
-      const r = replayPool(timeline, schedule);
+      const r = replayPool(poissonTimeline(expected, rnd), schedule, { capacity });
       seatedTotal += r.seated;
       territoryTotal += r.rejectedByTerritory;
       if (r.outcome === 'sealed_at_capacity') sealedAtCapacity++;
       else if (r.outcome === 'sealed_at_deadline') sealedAtDeadline++;
       else refunded++;
-      // A pool that plays returns its field's entries less the pot; one that
-      // refunds returns nothing and costs nothing (the pot goes back).
-      if (r.outcome !== 'refunded') returnTotal += BigInt(r.seated) * price - pot;
-      // The same arrivals under the old floor.
-      const prev = replayPool(timeline, schedule, { floor: PREVIOUS_FLOOR });
-      if (prev.outcome === 'refunded') refundedUnderPrevious++;
+      // A pool that plays returns its field's entries less its prize pool;
+      // one that refunds returns nothing and costs nothing (the prize pool
+      // goes back to the treasury).
+      if (r.outcome !== 'refunded') returnTotal += BigInt(r.seated) * price - r.prizePoolLamports;
     }
     const ran = sealedAtCapacity + sealedAtDeadline;
     return {
@@ -287,7 +267,6 @@ function sweep(schedule: TerritorySchedule, rates: readonly number[], trials: nu
       sealedAtCapacity,
       sealedAtDeadline,
       refunded,
-      refundedUnderPrevious,
       meanSeated: seatedTotal / trials,
       meanTerritoryRejected: territoryTotal / trials,
       meanReturnLamports: ran === 0 ? 0n : returnTotal / BigInt(ran),
@@ -309,114 +288,121 @@ const pct = (n: number, of: number): string => `${((100 * n) / of).toFixed(1)}%`
 // The report
 // ---------------------------------------------------------------------------
 
-function report(schedule: TerritorySchedule, rows: RateResult[], trials: number): string {
-  const blocked = schedule.blocked.join(', ');
-  const adversarial = replayPool(adversarialTimeline(), schedule);
-  const adversarialPrev = replayPool(adversarialTimeline(), schedule, { floor: PREVIOUS_FLOOR });
-
+function report(schedule: TerritorySchedule, results: Map<PoolCapacity, RateResult[]>, trials: number): string {
+  const price = TIER_ENTRY_LAMPORTS[TIER];
   const lines: string[] = [];
-  lines.push('# Fill-rule simulation — does 40-at-12h seal often enough?');
+  lines.push('# Fill-rule simulation — how often does each pool size seal?');
   lines.push('');
-  lines.push('**Generated by `scripts/sim/fill-replay.ts`. Do not edit by hand — re-run it.**');
+  lines.push('**Generated by `scripts/sim/fill-replay.ts`. Do not edit by hand — re-run it with `--write`.**');
   lines.push('');
   lines.push(
-    `It answers one question: on realistic arrival curves, how often does the 40-at-12h ` +
-      `rule seal a pool rather than refund it?`
+    'It answers one question per pool size (D-E19): on realistic arrival curves, how often does a pool ' +
+      'reach its minimum field by its deadline and play, rather than refund every entry?'
   );
   lines.push('');
 
-  // The lead finding, computed rather than written: the founder asked a
-  // question and should not have to read a table to get the answer.
-  const midRates = rows.filter((r) => r.expected >= 40 && r.expected <= 55);
-  const avgNew = midRates.reduce((a, r) => a + r.refunded / r.trials, 0) / midRates.length;
-  const avgOld = midRates.reduce((a, r) => a + r.refundedUnderPrevious / r.trials, 0) / midRates.length;
-  const breakEven = rows.find((r) => r.refunded / r.trials <= 0.1);
   lines.push('## What it says');
   lines.push('');
   {
     const total = COUNTRY_MIX.reduce((a, [, w]) => a + w, 0);
-    const blockedWeight = COUNTRY_MIX.filter(([c]) => !territoryAllowed(schedule, c, null)).reduce(
-      (a, [, w]) => a + w,
-      0,
-    );
-    const pct = Math.round((blockedWeight / total) * 100);
+    const blockedWeight = COUNTRY_MIX.filter(([c]) => !territoryAllowed(schedule, c, null)).reduce((a, [, w]) => a + w, 0);
     lines.push(
       `**Read this first.** The simulated arrivals follow an assumed country mix (below), and under ` +
-        `territory schedule version ${schedule.version} **${pct}% of that mix is blocked** at the entry gate. ` +
-        'The figures therefore depend heavily on that assumption; the "Mean seated" column is what ' +
-        'actually reaches a seat.',
+        `territory schedule version ${schedule.version} **${Math.round((blockedWeight / total) * 100)}% of that mix is blocked** ` +
+        'at the entry gate. The figures therefore depend heavily on that assumption; the "Mean seated" column is ' +
+        'what actually reaches a seat.'
     );
     lines.push('');
   }
-  lines.push(
-    `**Floor 40 against floor 52.** Averaged over ` +
-      `${midRates[0].expected}-${midRates[midRates.length - 1].expected} attempts in 12 hours, ` +
-      `the 40-seat floor refunds **${(100 * avgNew).toFixed(0)}%** of pools; the old 52-seat ` +
-      `floor refunded **${(100 * avgOld).toFixed(0)}%** on the same arrivals. The full curve is ` +
-      `in the table below.`
-  );
+  lines.push('**The rate each size needs.** The attempts in 12 hours at which a pool refunds less than one time in ten:');
   lines.push('');
-  if (breakEven) {
+  for (const capacity of POOL_CAPACITIES) {
+    const rows = results.get(capacity) ?? [];
+    const enough = rows.find((r) => r.refunded / r.trials <= 0.1);
     lines.push(
-      `**The rate you need.** A pool refunds less than one time in ten once attempts reach about ` +
-        `**${breakEven.expected} in 12 hours** — roughly ${(breakEven.expected / 12).toFixed(1)} an hour, ` +
-        `sustained. Below that, refunds are common; the rule is working, the audience is not there yet.`
+      `- **${capacity} players** (minimum field ${MIN_FIELD_BY_CAPACITY[capacity]}): ` +
+        (enough
+          ? `about **${enough.expected}** attempts — roughly ${(enough.expected / 12).toFixed(1)} an hour, sustained.`
+          : `more than ${rows[rows.length - 1]?.expected ?? '?'} attempts — beyond the range simulated.`)
     );
-    lines.push('');
   }
+  lines.push('');
   lines.push(
-    `**What a pool returns.** A pool sealing at the floor returns nothing — by design, ` +
-      `because the prize pool equals forty entries (decision R7-b). The "mean return" column is the average over pools ` +
-      `that ran, and it stays well under the 2.4 SOL of a full field until arrivals are ` +
-      `comfortably above capacity, because a pool that seals at the deadline usually seals ` +
-      `near the floor rather than near 64.`
+    '**What a pool returns.** Every minimum field is exactly break-even — the prize pool equals the minimum ' +
+      "field's entries (D-E19, as R7-b was at 64) — so a pool sealing at its floor returns nothing. A full pool " +
+      'returns the entries above its prize pool. The "mean return" column is the average over pools that ran.'
   );
   lines.push('');
+
   lines.push('## What was simulated');
   lines.push('');
-  lines.push(`- Floor **${FLOOR}** seats (R7-b), capacity **${CAP}**, window **${DEADLINE / 3600} hours**.`);
-  lines.push(`- Tier 0: entry ${sol(TIER_ENTRY_LAMPORTS[0])} SOL, prize pool ${sol(TIER_POT_LAMPORTS[0])} SOL.`);
-  lines.push(`- ${trials.toLocaleString()} pools per arrival rate, Poisson arrivals, one seeded PRNG.`);
-  lines.push(`- Territory schedule version ${schedule.version} (${schedule.posture}), blocking: ${blocked}.`);
+  lines.push(`- Window **${DEADLINE / 3600} hours** (the fill deadline), tier ${TIER}: entry ${sol(price)} SOL.`);
   lines.push('');
-  lines.push('## The result');
-  lines.push('');
-  lines.push(
-    '| Mean arrivals in 12h | Seals at 64 | Seals at deadline | **Refunds** | Refunds at the old 52-seat floor | Mean seated | Blocked by territory | Mean return per pool that ran |'
-  );
-  lines.push('|---|---|---|---|---|---|---|---|');
-  for (const r of rows) {
+  lines.push('| Pool size | Minimum field | Places paid | Prize pool | Full-pool return |');
+  lines.push('|---|---|---|---|---|');
+  for (const capacity of POOL_CAPACITIES) {
+    const pool = prizePoolFor(LADDER_TABLES[capacity], price);
     lines.push(
-      `| ${r.expected} | ${pct(r.sealedAtCapacity, r.trials)} | ${pct(r.sealedAtDeadline, r.trials)} | ` +
-        `**${pct(r.refunded, r.trials)}** | ${pct(r.refundedUnderPrevious, r.trials)} | ` +
-        `${r.meanSeated.toFixed(1)} | ${r.meanTerritoryRejected.toFixed(1)} | ${sol(r.meanReturnLamports)} SOL |`
+      `| ${capacity} | ${MIN_FIELD_BY_CAPACITY[capacity]} | ${LADDER_TABLES[capacity].length} | ${sol(pool)} SOL | ` +
+        `${sol(BigInt(capacity) * price - pool)} SOL |`
     );
   }
   lines.push('');
-  lines.push('Note the arrival rate is **attempts**, before the territory gate — the "mean seated"');
-  lines.push('column is what actually reaches a seat, and the gap between them is the blocked share.');
+  lines.push(
+    `- ${trials.toLocaleString('en-GB')} pools per size and arrival rate, Poisson arrivals, one seeded PRNG per ` +
+      `(size, rate). Rates are ${RATE_MULTIPLES.map((k) => `${k}x`).join(', ')} the pool size.`
+  );
+  lines.push(`- Territory schedule version ${schedule.version} (${schedule.posture}), blocking: ${schedule.blocked.join(', ')}.`);
   lines.push('');
+
+  lines.push('## The result');
+  for (const capacity of POOL_CAPACITIES) {
+    lines.push('');
+    lines.push(`### ${capacity} players — minimum field ${MIN_FIELD_BY_CAPACITY[capacity]}`);
+    lines.push('');
+    lines.push(
+      '| Mean attempts in 12h | Seals full | Seals at deadline | **Refunds** | Mean seated | Blocked by territory | Mean return per pool that ran |'
+    );
+    lines.push('|---|---|---|---|---|---|---|');
+    for (const r of results.get(capacity) ?? []) {
+      lines.push(
+        `| ${r.expected} | ${pct(r.sealedAtCapacity, r.trials)} | ${pct(r.sealedAtDeadline, r.trials)} | ` +
+          `**${pct(r.refunded, r.trials)}** | ${r.meanSeated.toFixed(1)} | ${r.meanTerritoryRejected.toFixed(1)} | ` +
+          `${sol(r.meanReturnLamports)} SOL |`
+      );
+    }
+  }
+  lines.push('');
+  lines.push('The arrival rate is **attempts**, before the territory gate — the "mean seated" column is what');
+  lines.push('actually reaches a seat, and the gap between them is the blocked share.');
+  lines.push('');
+
   lines.push('## The adversarial case');
   lines.push('');
   lines.push(
-    `One seat short of the floor until the last minute, and the seat that would have saved it ` +
-      `arrives one second after the deadline.`
+    'One entry short of the minimum field until the last minute, and the entry that would have saved it ' +
+      'arrives one second after the deadline.'
   );
   lines.push('');
-  lines.push(`- Outcome: **${adversarial.outcome}**, ${adversarial.seated} seated, ${adversarial.refunds} refunded.`);
-  lines.push(`- Rejected by the deadline: ${adversarial.rejectedByDeadline}.`);
-  lines.push(`- Under the old 52-seat floor the same timeline: **${adversarialPrev.outcome}**.`);
+  lines.push('| Pool size | Outcome | Seated | Refunded | Rejected by the deadline |');
+  lines.push('|---|---|---|---|---|');
+  for (const capacity of POOL_CAPACITIES) {
+    const a = replayPool(adversarialTimeline(MIN_FIELD_BY_CAPACITY[capacity]), schedule, { capacity });
+    lines.push(`| ${capacity} | **${a.outcome}** | ${a.seated} | ${a.refunds} | ${a.rejectedByDeadline} |`);
+  }
   lines.push('');
   lines.push('This is the case worth being uncomfortable about: it refunds, and it refunds for the');
   lines.push('sake of one second. It is also the case the rule is supposed to produce — the');
   lines.push('alternative is a clock that moves, and a clock that moves is a clock the operator');
   lines.push('chooses. Nothing here is a bug; it is the cost of the boundary being strict.');
   lines.push('');
+
   lines.push('## What this does not model');
   lines.push('');
-  lines.push('- **Demand is exogenous.** A pool that refunds probably depresses the next one, and a');
-  lines.push('  pool that fills fast probably raises it. There is no feedback term, so these are');
-  lines.push('  first-order estimates, not a forecast.');
+  lines.push('- **Demand is exogenous, and each size runs alone.** A pool that refunds probably depresses the');
+  lines.push('  next one, a fast fill probably raises it, and with several sizes open at once a player who');
+  lines.push('  chooses one size is a player another size does not get. There is no feedback or split term,');
+  lines.push('  so these are first-order estimates, not a forecast.');
   lines.push('- **Arrivals are independent.** Real entries cluster around whatever is posted, and');
   lines.push('  clustering RAISES the seal rate at a given mean by making the count less random.');
   lines.push('  The refund percentages above are therefore pessimistic.');
@@ -430,10 +416,9 @@ function report(schedule: TerritorySchedule, rows: RateResult[], trials: number)
 
 /**
  * The sim RE-IMPLEMENTS the fill rule, which makes it the one place that can
- * drift from the program while every other lane stays green. These pin it to
- * the same boundaries `tests/litesvm/tests/fill_rule.rs` pins on chain — the
- * same house standard as the check scripts: the gate tests itself before it
- * reports.
+ * drift from the program while every other lane stays green. These pin it, at
+ * EVERY pool size, to the same boundaries `tests/litesvm/tests/fill_rule.rs`
+ * pins on chain — the gate tests itself before it reports.
  */
 function selfTest(schedule: TerritorySchedule): boolean {
   let pass = true;
@@ -444,44 +429,41 @@ function selfTest(schedule: TerritorySchedule): boolean {
     }
   };
   const gb = (n: number, at: number): Arrival[] =>
-    Array.from({ length: n }, (_, i) => ({
-      t_offset_secs: at,
-      wallet: `t-${i}`,
-      country: 'GB',
-    }));
+    Array.from({ length: n }, (_, i) => ({ t_offset_secs: at, wallet: `t-${i}`, country: 'GB' }));
+  const price = TIER_ENTRY_LAMPORTS[TIER];
 
-  // The floor, from both sides — the same boundary as S4/S5 on chain.
-  ok('at the floor it seals', replayPool(gb(FLOOR, 100), schedule).outcome === 'sealed_at_deadline');
-  ok(
-    'one below the floor it refunds',
-    replayPool(gb(FLOOR - 1, 100), schedule).outcome === 'refunded'
-  );
-  // Capacity seals early, and the surplus is refused rather than seated.
-  const full = replayPool(gb(CAP + 5, 100), schedule);
-  ok('capacity seals', full.outcome === 'sealed_at_capacity');
-  ok('capacity is never exceeded', full.seated === CAP);
-  ok('the surplus is refused', full.rejectedByDeadline === 5);
-  // The deadline is strict on both sides — S8.
-  ok(
-    'an entry AT the deadline is accepted',
-    replayPool(gb(FLOOR, DEADLINE), schedule).outcome === 'sealed_at_deadline'
-  );
-  ok(
-    'an entry one second past it is not',
-    replayPool(gb(FLOOR, DEADLINE + 1), schedule).seated === 0
-  );
-  // The territory gate runs before the seat is taken.
-  const blocked = schedule.blocked[0];
-  if (blocked !== undefined && !blocked.includes('-')) {
-    const r = replayPool(
-      [...gb(FLOOR, 100), { t_offset_secs: 100, wallet: 'x', country: blocked }],
-      schedule
-    );
-    ok('a blocked territory takes no seat', r.seated === FLOOR && r.rejectedByTerritory === 1);
+  ok('the four Ladder sizes are simulated', POOL_CAPACITIES.join(',') === '8,16,32,64');
+  for (const capacity of POOL_CAPACITIES) {
+    const floor = MIN_FIELD_BY_CAPACITY[capacity];
+    const at = (n: number, t = 100) => replayPool(gb(n, t), schedule, { capacity });
+    const name = (s: string) => `${capacity} players: ${s}`;
+    // The rule's own shape, which the report's "returns nothing at the floor" rests on.
+    ok(name('the minimum field is break-even'), prizePoolFor(LADDER_TABLES[capacity], price) === BigInt(floor) * price);
+    ok(name('the minimum field is above the places paid and within the size'), floor > LADDER_TABLES[capacity].length && floor <= capacity);
+    // The floor, from both sides — the same boundary as S4/S5 on chain.
+    ok(name('at the floor it seals'), at(floor).outcome === 'sealed_at_deadline');
+    ok(name('one below the floor it refunds'), at(floor - 1).outcome === 'refunded');
+    // Capacity seals early, and the surplus is refused rather than seated.
+    const full = at(capacity + 5);
+    ok(name('capacity seals'), full.outcome === 'sealed_at_capacity');
+    ok(name('capacity is never exceeded'), full.seated === capacity);
+    ok(name('the surplus is refused'), full.rejectedByDeadline === 5);
+    ok(name('one short of capacity does not seal early'), at(capacity - 1).outcome === 'sealed_at_deadline');
+    // The deadline is strict on both sides — S8.
+    ok(name('an entry AT the deadline is accepted'), at(floor, DEADLINE).outcome === 'sealed_at_deadline');
+    ok(name('an entry one second past it is not'), at(floor, DEADLINE + 1).seated === 0);
+    // The territory gate runs before the seat is taken.
+    const blocked = schedule.blocked[0];
+    if (blocked !== undefined && !blocked.includes('-')) {
+      const r = replayPool([...gb(floor, 100), { t_offset_secs: 100, wallet: 'x', country: blocked }], schedule, { capacity });
+      ok(name('a blocked territory takes no seat'), r.seated === floor && r.rejectedByTerritory === 1);
+    }
+    // A refunded pool returns every entry it took.
+    const short = at(floor - 1);
+    ok(name('a refund returns every seat'), short.refunds === short.seated);
+    // The adversarial fixture is one short and then one second late.
+    ok(name('the adversarial case refunds'), replayPool(adversarialTimeline(floor), schedule, { capacity }).outcome === 'refunded');
   }
-  // A refunded pool returns every entry it took.
-  const short = replayPool(gb(FLOOR - 1, 100), schedule);
-  ok('a refund returns every seat', short.refunds === short.seated);
   return pass;
 }
 
@@ -495,10 +477,10 @@ function main(): void {
     console.log('fill-replay: self-test passed');
     return;
   }
-  const rates = [30, 40, 45, 50, 55, 64, 80, 100];
   const trials = 2000;
-  const rows = sweep(schedule, rates, trials);
-  const md = report(schedule, rows, trials);
+  const results = new Map<PoolCapacity, RateResult[]>();
+  for (const capacity of POOL_CAPACITIES) results.set(capacity, sweep(schedule, capacity, trials));
+  const md = report(schedule, results, trials);
   if (process.argv.includes('--write')) {
     const out = resolve(ROOT, 'docs', 'testing', 'FILL-SIMULATION.md');
     writeFileSync(out, `${md}\n`);

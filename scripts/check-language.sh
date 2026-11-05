@@ -59,7 +59,7 @@ PATTERN='casino|gambl|disguised|dopamine|shill|degen|the house|pump|bonding|lott
 # `grep -i` and so cannot see the seam between `Pack` and `Opened`. Kept as a
 # separate pattern for exactly that reason: it is the one check here that must
 # NOT be case-insensitive.
-PATTERN_CAMEL='\b(Pack|Roll|Pull|Bet|Deal|Odds|Rake|Wager|Gambl|Lotter|Jackpot|Casino)[A-Z]|[a-z]Xp\b'
+PATTERN_CAMEL='\b(Pack|Roll|Pull|Bet|Deal|Odds|Rake|Wager|Gambl|Lotter|Jackpot|Casino|Cash)[A-Z]|[a-z]Xp\b|[a-z]Cash'
 
 # D-B7 (ratified 2026-08-27): the amended lexicon. Five further groups, each a
 # distinct failure mode. Public copy describes MECHANICS instead — "sealed-
@@ -89,12 +89,21 @@ PATTERN_B7='non.custodial|provably fair|\blicensed\b|\bregulated\b|\bcompliant\b
 # PATTERN above.)
 PATTERN_D3='\bhurry\b|last chance|don.?t miss|\bstreaks?\b|daily bonus(es)?|\bspin(s|ning)?\b|\blucky\b'
 
+# The Ladder (D-E19, spec §9, 2026-11-05): with more than one paid place the
+# poker-tournament vocabulary arrives with it — "cash" (and "in the cash"),
+# "min-cash" for the lowest paid place, "double up" for a place worth twice
+# the entry. Each frames a ranked prize as a payout on a stake. Banned in
+# every file, like the rest of this gate. The inflections and compounds are
+# enumerated for the same reason as `pack` above: `\bcash\w*` would also flag
+# `cashew`, and a gate that cries wolf collects exclusions.
+PATTERN_LADDER='\bcash(es|ed|ing|out|outs|back)?\b|\bcash[_-]|min.?cash|\bdouble[ _-]?ups?\b'
+
 # ---------------------------------------------------------------------------
 # Exclusions. Each one has a reason; do not extend this list without the same
 # scrutiny, and never exclude a path merely because it fails.
 # ---------------------------------------------------------------------------
 hits="$(
-  grep -rniE "($PATTERN|$PATTERN_B7|$PATTERN_D3)" . \
+  grep -rniE "($PATTERN|$PATTERN_B7|$PATTERN_D3|$PATTERN_LADDER)" . \
     --exclude-dir=node_modules \
     --exclude-dir=target \
     --exclude-dir=.git \
@@ -209,15 +218,17 @@ for probe in \
   odds jackpot rake \
   deal deals dealt dealing \
   roll rolls rolled rolling roll_open \
-  xp XP
+  xp XP \
+  cash Cash cashed cashing cashout cash_out cash-out min-cash min_cash mincash \
+  "double up" double-up doubleup "double ups" "in the cash"
 do
-  if ! printf '%s' "$probe" | grep -qiE "($PATTERN|$PATTERN_B7|$PATTERN_D3)"; then
+  if ! printf '%s' "$probe" | grep -qiE "($PATTERN|$PATTERN_B7|$PATTERN_D3|$PATTERN_LADDER)"; then
     selftest_failures="${selftest_failures}${selftest_failures:+, }$probe"
   fi
 done
 
 # CamelCase probes go to the case-SENSITIVE pattern.
-for probe in PackOpened RollCalled PullRequested BetPlaced DealClosed playerXp; do
+for probe in PackOpened RollCalled PullRequested BetPlaced DealClosed playerXp CashOut minCash; do
   if ! printf '%s' "$probe" | grep -qE "$PATTERN_CAMEL"; then
     selftest_failures="${selftest_failures}${selftest_failures:+, }$probe"
   fi
@@ -227,8 +238,9 @@ done
 # exclusions bolted onto it until it means nothing, and this repository ships a
 # `backend/packet/` service — so this is a live constraint, not a hypothetical.
 for safe in packet packets package packages rollback payroll better between \
-  RegExp regexp expiry export; do
-  if printf '%s' "$safe" | grep -qiE "($PATTERN|$PATTERN_B7|$PATTERN_D3)"; then
+  RegExp regexp expiry export cashew cache cached double doubled double-check \
+  doubles update; do
+  if printf '%s' "$safe" | grep -qiE "($PATTERN|$PATTERN_B7|$PATTERN_D3|$PATTERN_LADDER)"; then
     selftest_failures="${selftest_failures}${selftest_failures:+, }FALSE-POSITIVE:$safe"
   fi
   # The CamelCase sweep is a second way to flag the same word, so the

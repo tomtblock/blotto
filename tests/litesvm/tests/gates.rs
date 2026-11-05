@@ -1,6 +1,9 @@
 //! Gate tests: admin authority, the pause switch, pool-opening rules
-//! (R6/R14/ceiling), registering without a VRF seed (R22), packet rejection
-//! cases, and settlement-signer binding. (Roadmap 1.1–1.3 acceptance criteria.)
+//! (R6/R14/ceiling, per pool type since D-E19), registering without a VRF
+//! seed (R22), packet rejection cases, settlement-signer binding, and the
+//! committed payout list's refusals — including D-E19's two new bounds, a
+//! zero amount and an amount above first place. (Roadmap 1.1–1.3 acceptance
+//! criteria; the pool-type instructions' own gates are in `pool_types.rs`.)
 
 use blotto_litesvm_tests::*;
 use solana_sdk::clock::Clock;
@@ -55,7 +58,7 @@ fn non_admin_reverts_on_every_admin_instruction() {
             .unwrap_or_else(|e| panic!("{name} as admin: {e}"));
     }
     // `withdraw_platform` has its own account shape — same has_one gate.
-    let ix = withdraw_platform_ix(&mallory.pubkey(), &mallory.pubkey(), 1);
+    let ix = withdraw_platform_ix(&mallory.pubkey(), &mallory.pubkey(), 1, &[]);
     let err = env.send(&[ix], &[&mallory]).unwrap_err();
     assert!(
         err.contains("2001"),
@@ -91,10 +94,16 @@ fn pause_blocks_register_and_only_register() {
 fn pool_opening_gates_hold() {
     let Some(mut env) = Env::new() else { return };
     let settlement = env.settlement.insecure_clone();
+    // The 64-player types of tiers 0 and 1, configured and enabled — tier 1's
+    // TIER stays closed (R6), so its type is ready but must not open.
+    env.ensure_pool_type(MODE_EASY, 0, 64);
+    env.ensure_pool_type(MODE_EASY, 1, 64);
+    // Both enabled types are on the tier-0 open's remaining-accounts list;
+    // tier 1's reserves nothing while its tier is closed.
 
     // With an EMPTY treasury, even the enabled tier cannot open: the pot
     // must be fundable first (D-A1 revised policy gate).
-    let ix = open_pool_ix(&settlement.pubkey(), 1, 0, [9; 32], env.sealing_secret_hash);
+    let ix = env.open_ix(&settlement.pubkey(), 1, 0, MODE_EASY, 64);
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
     assert!(
         err.contains("6049") || err.contains("TreasuryShortfall"),
@@ -105,18 +114,25 @@ fn pool_opening_gates_hold() {
     // before the treasury check, but a funded treasury keeps them isolated).
     env.fund_platform(2_000_000_000_000);
 
-    // A closed tier (1 = 0.5 SOL, closed at launch per R6) rejects.
-    let ix = open_pool_ix(&settlement.pubkey(), 1, 1, [9; 32], env.sealing_secret_hash);
+    // A closed tier (1 = 0.5 SOL, closed at launch per R6) rejects, though
+    // its pool type is enabled: the tier switch still governs.
+    let ix = env.open_ix(&settlement.pubkey(), 1, 1, MODE_EASY, 64);
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
     assert!(err.contains("6006") || err.contains("TierNotOpen"), "{err}");
 
-    // An unknown tier rejects.
-    let ix = open_pool_ix(&settlement.pubkey(), 1, 9, [9; 32], env.sealing_secret_hash);
-    let err = env.send(&[ix], &[&settlement]).unwrap_err();
+    // An unknown tier can have no pool type — `init_pool_type` refuses it
+    // by name — so an open naming it finds no account to open.
+    let err = env.init_pool_type(MODE_EASY, 9, 64).unwrap_err();
     assert!(err.contains("6007") || err.contains("UnknownTier"), "{err}");
+    let ix = env.open_ix(&settlement.pubkey(), 1, 9, MODE_EASY, 64);
+    let err = env.send(&[ix], &[&settlement]).unwrap_err();
+    assert!(
+        err.contains("3012") || err.contains("AccountNotInitialized"),
+        "{err}"
+    );
 
     // A pool id that skips the counter rejects.
-    let ix = open_pool_ix(&settlement.pubkey(), 7, 0, [9; 32], env.sealing_secret_hash);
+    let ix = env.open_ix(&settlement.pubkey(), 7, 0, MODE_EASY, 64);
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
     assert!(err.contains("6041") || err.contains("WrongPoolId"), "{err}");
 
@@ -129,17 +145,17 @@ fn pool_opening_gates_hold() {
     // this is the test that should have caught it.
     let mallory = Keypair::new();
     env.svm.airdrop(&mallory.pubkey(), 10_000_000_000).unwrap();
-    let ix = open_pool_ix(&mallory.pubkey(), 1, 0, [9; 32], env.sealing_secret_hash);
+    let ix = env.open_ix(&mallory.pubkey(), 1, 0, MODE_EASY, 64);
     let err = env.send(&[ix], &[&mallory]).unwrap_err();
     assert!(
         err.contains("6054") || err.contains("NotKeeper"),
         "a stranger cannot open a fresh tier's pool: {err}"
     );
     // The keeper (the init default is the settlement signer) opens it, and a
-    // second tier-0 pool then violates the sequential rule.
-    let ix = open_pool_ix(&settlement.pubkey(), 1, 0, [9; 32], env.sealing_secret_hash);
+    // second pool of the type then violates the sequential rule.
+    let ix = env.open_ix(&settlement.pubkey(), 1, 0, MODE_EASY, 64);
     env.send(&[ix], &[&settlement]).expect("the keeper opens");
-    let ix = open_pool_ix(&settlement.pubkey(), 2, 0, [9; 32], env.sealing_secret_hash);
+    let ix = env.open_ix(&settlement.pubkey(), 2, 0, MODE_EASY, 64);
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
     assert!(
         err.contains("6008") || err.contains("TierAlreadyHasOpenPool"),
@@ -147,24 +163,32 @@ fn pool_opening_gates_hold() {
     );
 
     // Open the 5 SOL tier (index 5) but lower its ceiling one lamport below
-    // its own gross pass sales (5 × 64 = 320 SOL): the next open in that
-    // tier rejects.
+    // a 64-player pool's gross pass sales (5 × 64 = 320 SOL): the next
+    // 64-player open in that tier rejects.
     let admin = env.admin.pubkey();
     env.send(
         &[admin_ix(&admin, "set_open_tiers", &[1, 1, 1, 1, 1, 1, 1])],
         &[],
     )
     .unwrap();
+    env.ensure_pool_type(MODE_EASY, 5, 64);
     let mut args = vec![5u8];
     args.extend_from_slice(&(320_000_000_000u64 - 1).to_le_bytes());
     env.send(&[admin_ix(&admin, "set_vault_ceiling", &args)], &[])
         .unwrap();
-    let ix = open_pool_ix(&settlement.pubkey(), 2, 5, [9; 32], env.sealing_secret_hash);
+    let ix = env.open_ix(&settlement.pubkey(), 2, 5, MODE_EASY, 64);
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
     assert!(
         err.contains("6009") || err.contains("VaultCeilingExceeded"),
         "{err}"
     );
+    // The ceiling caps price × the type's OWN capacity (D-E19): a 32-player
+    // pool's gross (160 SOL) fits under the same ceiling.
+    env.ensure_pool_type(MODE_EASY, 5, 32);
+    env.fund_platform(env.open_funding_bound(MODE_EASY, 5, 32));
+    let ix = env.open_ix(&settlement.pubkey(), 2, 5, MODE_EASY, 32);
+    env.send(&[ix], &[&settlement])
+        .expect("a smaller pool type fits under the same ceiling");
 }
 
 #[test]
@@ -173,8 +197,13 @@ fn seven_tiers_open_concurrently_and_the_eighth_open_rejects() {
     let settlement = env.settlement.insecure_clone();
     let admin = env.admin.pubkey();
 
+    // The 64-player type of every tier, configured and enabled.
+    for tier in 0u8..7 {
+        env.ensure_pool_type(MODE_EASY, tier, 64);
+    }
+
     // Tier 6 (7.5 SOL) is gated until the founder's switch opens it (D1/R6).
-    let ix = open_pool_ix(&settlement.pubkey(), 1, 6, [9; 32], env.sealing_secret_hash);
+    let ix = env.open_ix(&settlement.pubkey(), 1, 6, MODE_EASY, 64);
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
     assert!(err.contains("6006") || err.contains("TierNotOpen"), "{err}");
 
@@ -184,23 +213,17 @@ fn seven_tiers_open_concurrently_and_the_eighth_open_rejects() {
     )
     .unwrap();
 
-    // Enough treasury for all seven pots plus the shrinking idle-tier
-    // reserve at each step (Σ pots = 888.32 SOL; the first open needs
-    // pot + the other six pots in reserve).
+    // Enough treasury for all seven prize pools plus the shrinking idle
+    // reserve at each step (Σ = 694 SOL; the first open needs its pool plus
+    // the other six in reserve).
     env.fund_platform(1_800_000_000_000);
 
     // One pool per tier — all seven Open at the same time (the sequential
-    // rule is per-tier; the launch ceilings admit every tier's own gross
-    // pass sales, tier 6's 480 SOL included).
+    // rule is per pool type; the launch ceilings admit every tier's own
+    // 64-player gross pass sales, tier 6's 480 SOL included).
     for tier in 0u8..7 {
         let pool_id = tier as u64 + 1;
-        let ix = open_pool_ix(
-            &settlement.pubkey(),
-            pool_id,
-            tier,
-            [9; 32],
-            env.sealing_secret_hash,
-        );
+        let ix = env.open_ix(&settlement.pubkey(), pool_id, tier, MODE_EASY, 64);
         env.send(&[ix], &[&settlement])
             .unwrap_or_else(|e| panic!("open tier {tier}: {e}"));
     }
@@ -208,8 +231,8 @@ fn seven_tiers_open_concurrently_and_the_eighth_open_rejects() {
         assert_eq!(read_pool(&env.svm, &pool_pda(tier + 1)).state, 0, "Open");
     }
 
-    // An eighth pool must land in a tier that already has one: rejected.
-    let ix = open_pool_ix(&settlement.pubkey(), 8, 3, [9; 32], env.sealing_secret_hash);
+    // An eighth pool must land in a type that already has one: rejected.
+    let ix = env.open_ix(&settlement.pubkey(), 8, 3, MODE_EASY, 64);
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
     assert!(
         err.contains("6008") || err.contains("TierAlreadyHasOpenPool"),
@@ -226,8 +249,9 @@ fn lowering_a_ceiling_blocks_the_next_open_not_the_open_pool() {
     // Pool 1 opens on tier 0 at the launch ceiling (6.4 SOL = its own gross).
     // Two opens happen on this funding: the refund below returns the pot to
     // the treasury but each open leaves a rent cushion behind in its vault.
+    env.ensure_pool_type(MODE_EASY, 0, 64);
     env.fund_platform(TIER_POTS[0] + 2 * VAULT_RENT_CUSHION);
-    let ix = open_pool_ix(&settlement.pubkey(), 1, 0, [9; 32], env.sealing_secret_hash);
+    let ix = env.open_ix(&settlement.pubkey(), 1, 0, MODE_EASY, 64);
     env.send(&[ix], &[&settlement]).unwrap();
 
     // Lower tier 0's ceiling below the gross. The ceiling is checked at
@@ -242,15 +266,15 @@ fn lowering_a_ceiling_blocks_the_next_open_not_the_open_pool() {
         "pool 1 stays Open"
     );
 
-    // Free the tier slot via the refund fork, then try the NEXT open: the
+    // Free the type's slot via the refund fork, then try the NEXT open: the
     // lowered ceiling is what blocks it.
     env.advance_time(12 * 3600 + 1);
-    let ix = trigger_refund_ix(&settlement.pubkey(), 1);
+    let ix = env.trigger_refund_ix(&settlement.pubkey(), 1);
     env.send(&[ix], &[&settlement]).unwrap();
-    // Closed stamps the tier's cooldown (prompt v2 §B.6); wait it out so the
+    // Closed stamps the type's cooldown (prompt v2 §B.6); wait it out so the
     // ceiling — not the cooldown — is what the next open trips on.
     env.advance_time(5 * 60);
-    let ix = open_pool_ix(&settlement.pubkey(), 2, 0, [9; 32], env.sealing_secret_hash);
+    let ix = env.open_ix(&settlement.pubkey(), 2, 0, MODE_EASY, 64);
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
     assert!(
         err.contains("6009") || err.contains("VaultCeilingExceeded"),
@@ -262,7 +286,7 @@ fn lowering_a_ceiling_blocks_the_next_open_not_the_open_pool() {
     args.extend_from_slice(&6_400_000_000u64.to_le_bytes());
     env.send(&[admin_ix(&admin, "set_vault_ceiling", &args)], &[])
         .unwrap();
-    let ix = open_pool_ix(&settlement.pubkey(), 2, 0, [9; 32], env.sealing_secret_hash);
+    let ix = env.open_ix(&settlement.pubkey(), 2, 0, MODE_EASY, 64);
     env.send(&[ix], &[&settlement])
         .expect("reopen after restore");
 }
@@ -274,8 +298,9 @@ fn register_draws_from_the_other_four_inputs_without_a_seed() {
     // 90 on, after Switchboard's oracles stopped (R22). The pass
     // collection is still created: `register` mints into it.
     let settlement = env.settlement.insecure_clone();
+    env.ensure_pool_type(MODE_EASY, 0, 64);
     env.fund_platform(TIER_POTS[0] + VAULT_RENT_CUSHION);
-    let ix = open_pool_ix(&settlement.pubkey(), 1, 0, [9; 32], env.sealing_secret_hash);
+    let ix = env.open_ix(&settlement.pubkey(), 1, 0, MODE_EASY, 64);
     env.send(&[ix], &[&settlement]).unwrap();
     let ix = create_pass_collection_ix(&settlement.pubkey(), 1);
     env.send(&[ix], &[&settlement])
@@ -421,83 +446,94 @@ fn settlement_instructions_bind_to_the_settlement_signer() {
 fn malformed_payout_lists_and_wrong_recipients_reject() {
     let Some(mut env) = Env::new() else { return };
     env.open_ready_pool(1, 0);
-    let mut players = Vec::new();
-    for _ in 0..64 {
-        players.push(env.register_player(1).unwrap());
-    }
+    let players = env.register_n(1, 64);
     let settlement = env.settlement.insecure_clone();
-    let secret = env.pool_secret;
-    env.send(
-        &[settle_ix(
-            &settlement.pubkey(),
-            1,
-            "reveal_pool_secret",
-            &secret,
-        )],
-        &[&settlement],
-    )
-    .unwrap();
+    env.reveal(1);
+    let entry = TIER_PRICES[0];
 
-    // D-E2: a two-way tie for first — two rows, so the ordering and
-    // duplicate checks have something to trip on.
-    let good = tied_first_payouts(TIER_POTS[0], 2);
+    // The 64-player table with no ties: sixteen rows, so the ordering,
+    // duplicate and bound checks all have something to trip on.
+    let good = straight_payouts(&LADDER_TABLES[3], entry);
+    let first_prize = 12 * entry;
+    assert_eq!(good[0].1, first_prize);
 
     // A duplicate seat rejects at commit (strict-ascending check).
     let mut dup = good.clone();
     dup[1].0 = dup[0].0;
-    let mut args = [1u8; 32].to_vec();
-    args.extend_from_slice(&encode_payouts(&dup));
-    let ix = settle_ix(&settlement.pubkey(), 1, "commit_results", &args);
-    let err = env.send(&[ix], &[&settlement]).unwrap_err();
-    assert!(
-        err.contains("6043") || err.contains("PayoutListMalformed"),
-        "{err}"
+    assert_refused(
+        env.commit(1, [1u8; 32], &dup),
+        "6043",
+        "PayoutListMalformed",
     );
 
     // An unsorted list rejects the same way.
     let mut unsorted = good.clone();
     unsorted.swap(0, 1);
-    let mut args = [1u8; 32].to_vec();
-    args.extend_from_slice(&encode_payouts(&unsorted));
-    let ix = settle_ix(&settlement.pubkey(), 1, "commit_results", &args);
-    let err = env.send(&[ix], &[&settlement]).unwrap_err();
-    assert!(
-        err.contains("6043") || err.contains("PayoutListMalformed"),
-        "{err}"
+    assert_refused(
+        env.commit(1, [1u8; 32], &unsorted),
+        "6043",
+        "PayoutListMalformed",
     );
 
-    // Amounts one lamport off the pot reject.
-    let mut off = good.clone();
-    off[1].1 += 1;
-    let mut args = [1u8; 32].to_vec();
-    args.extend_from_slice(&encode_payouts(&off));
-    let ix = settle_ix(&settlement.pubkey(), 1, "commit_results", &args);
-    let err = env.send(&[ix], &[&settlement]).unwrap_err();
-    assert!(
-        err.contains("6044") || err.contains("PayoutSumMismatch"),
-        "{err}"
+    // A seat outside the field rejects.
+    let mut outside = good.clone();
+    outside[15].0 = 64;
+    assert_refused(
+        env.commit(1, [1u8; 32], &outside),
+        "6043",
+        "PayoutListMalformed",
     );
+
+    // Amounts one lamport off the prize pool reject.
+    let mut off = good.clone();
+    off[15].1 += 1;
+    assert_refused(env.commit(1, [1u8; 32], &off), "6044", "PayoutSumMismatch");
+
+    // D-E19 §7.6: no seat may be owed more than first place — even when the
+    // list still sums to the prize pool (first place takes one lamport too
+    // many, second one too few).
+    let mut above = good.clone();
+    above[0].1 += 1;
+    above[1].1 -= 1;
+    assert_eq!(above.iter().map(|&(_, a)| a).sum::<u64>(), TIER_POTS[0]);
+    assert_refused(
+        env.commit(1, [1u8; 32], &above),
+        "6085",
+        "PayoutAboveFirstPrize",
+    );
+    // The old winner-takes-all row — the whole prize pool to one seat — is
+    // exactly that refusal under the Ladder.
+    assert_refused(
+        env.commit(1, [1u8; 32], &winner_payout(TIER_POTS[0])),
+        "6085",
+        "PayoutAboveFirstPrize",
+    );
+
+    // And a zero amount is not a payout, wherever it sits.
+    let mut zero = good.clone();
+    zero.push((16, 0));
+    assert_refused(env.commit(1, [1u8; 32], &zero), "6086", "PayoutZero");
+
+    // Nothing landed: the pool is still Sealed and committable.
+    assert_eq!(read_pool(&env.svm, &pool_pda(1)).state, 1, "Sealed");
 
     // Commit the proper list.
-    let mut args = [1u8; 32].to_vec();
-    args.extend_from_slice(&encode_payouts(&good));
-    let ix = settle_ix(&settlement.pubkey(), 1, "commit_results", &args);
-    env.send(&[ix], &[&settlement]).unwrap();
+    env.commit(1, [1u8; 32], &good).unwrap();
 
     // Paying seat 0 with a DIFFERENT player's wallet rejects: the Entry
     // account is the on-chain seat→player map.
     let (p2, _) = &players[1];
     let (_, e1) = &players[0];
-    let ix = pay_prizes_ix(&settlement.pubkey(), 1, &[0], &[(p2.pubkey(), *e1)]);
+    let ix = env.pay_ix(1, &[0], &[(p2.pubkey(), *e1)]);
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
     assert!(
         err.contains("6031") || err.contains("WinnerMismatch"),
         "{err}"
     );
 
-    // A seat outside the committed list rejects (second place, under D-E2).
-    let (p17, e17) = &players[2];
-    let ix = pay_prizes_ix(&settlement.pubkey(), 1, &[2], &[(p17.pubkey(), *e17)]);
+    // A seat outside the committed list rejects (17th place).
+    let (p17, e17) = &players[16];
+    let ix = env.pay_ix(1, &[16], &[(p17.pubkey(), *e17)]);
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
     assert!(
         err.contains("6045") || err.contains("SeatNotInPayouts"),

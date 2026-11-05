@@ -45,9 +45,21 @@
  * WHAT IT WILL NOT DO: there is no path here that sends a lamport anywhere
  * but to a player. The forfeiter is never a recipient, the operator is never
  * a recipient, and the treasury is not an account this module can name.
+ *
+ * AND, SINCE THE LADDER (D-E19), IT PLANS NOTHING FOR A MULTI-PLACE POOL.
+ * The rule above — the committed payout list IS the tied first-place group,
+ * and the share passes to rank `1 + committed.length` — holds only for a
+ * pool that pays ONE place, i.e. every pool opened before the Ladder. In a
+ * pool paying 2, 4, 8 or 16 places the payout list spans several ranks, and
+ * dividing a forfeited share among it would pay the wrong players. The
+ * program refuses (`NextPlaceUnsupported`, escrow.rs) and the share stays in
+ * the pool's own vault until the "field moves up" payout ships in its own
+ * upgrade. `planNextPlace` mirrors that gate (`next_place_unsupported`) so
+ * no caller can build those arguments, and the daemon checks
+ * `nextPlaceSupported` before it recomputes anything.
  */
 
-import type { ChainEntryView, ChainProofStep, SettlementChain } from './chain';
+import type { ChainEntryView, ChainPoolView, ChainProofStep, SettlementChain } from './chain';
 import { eligibleFor, reviewPending } from './chain';
 import type { PublishedRanking } from './ranking';
 import { proofForRow } from './ranking';
@@ -85,7 +97,19 @@ export type NextPlaceBlocker =
   | 'no_forfeited_share'
   | 'review_still_pending'
   | 'no_eligible_recipient'
-  | 'rank_not_in_ranking';
+  | 'rank_not_in_ranking'
+  /** A pool paying more than one place (D-E19): the program refuses
+   * `pay_next_place` (`NextPlaceUnsupported`); the share is held. */
+  | 'next_place_unsupported';
+
+/**
+ * `escrow.rs::handle_pay_next_place`'s D-E19 gate, mirrored:
+ * `pool.paid_places <= 1`. True for every pool opened before the Ladder (one
+ * place, or none recorded); false for every Ladder pool (2, 4, 8 or 16).
+ */
+export function nextPlaceSupported(pool: Pick<ChainPoolView, 'paidPlaces'>): boolean {
+  return pool.paidPlaces <= 1;
+}
 
 export interface NextPlacePlan {
   portions: NextPlacePortion[];
@@ -114,10 +138,16 @@ export function planNextPlace(
   ranking: PublishedRanking,
   entries: readonly ChainEntryView[],
   committedSeats: readonly number[],
-  forfeiter: ChainEntryView
+  forfeiter: ChainEntryView,
+  /** The pool's places paid (`Pool.paid_places`) — required, so no caller
+   * can plan for a pool without saying how many places it pays. */
+  pool: Pick<ChainPoolView, 'paidPlaces'>
 ): NextPlacePlan {
   const none = (blocker: NextPlaceBlocker): NextPlacePlan => ({ portions: [], blocker });
   if (!forfeiter.forfeited || forfeiter.escrowLamports === 0n) return none('no_forfeited_share');
+  // D-E19: checked before anything is planned — the program refuses every
+  // portion of a multi-place pool, whatever the arguments.
+  if (!nextPlaceSupported(pool)) return none('next_place_unsupported');
 
   const byPlayer = new Map(entries.map((e) => [e.player, e]));
   const bySeat = new Map(entries.map((e) => [e.index, e]));

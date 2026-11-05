@@ -1,4 +1,5 @@
 /* Lamports → SOL display, without ever passing through a float. */
+import { MAX_CAPACITY, assertPrizeTable } from '@blotto/scoring';
 import type { BoardMode } from '@/battle/board/mode';
 import type { PoolSummary } from './types';
 
@@ -57,4 +58,50 @@ export function formatDay(unixSeconds: string | null | undefined): string {
 
 export function poolMode(pool: Pick<PoolSummary, 'mode'>): BoardMode {
   return pool.mode === 'hard' ? 'hard' : 'easy';
+}
+
+/**
+ * A pool's own size and prize table (D-E19, the Ladder), read in ONE place.
+ *
+ * The four fields are optional on the wire (types.ts): a read API from
+ * before the Ladder serves none of them, and every pool before it held
+ * `MAX_CAPACITY` players and paid one place worth its whole prize pool —
+ * the same reconstruction `decodePoolHead` makes for a pre-Ladder account
+ * (backend/_shared/src/pool-account.ts, `preLadderTable`). So that default
+ * is stated here and nowhere else.
+ *
+ * Amounts are BIGINT lamports, rank 1 first, one per paid place: the read
+ * API's `prize_amounts` where it serves them, else `table[i] × entry` —
+ * the definition of the field, in integers. Formatting to SOL happens at
+ * the edge, never here.
+ */
+export interface PoolLadder {
+  /** 8, 16, 32 or 64 — the players this pool holds. */
+  capacity: number;
+  /** The pool's own minimum field. */
+  minSeats: number;
+  /** Lamports per paid place, rank 1 first. Never empty. */
+  prizeAmounts: readonly bigint[];
+}
+
+export function poolLadder(
+  pool: Pick<
+    PoolSummary,
+    'capacity' | 'paid_places' | 'prize_table' | 'prize_amounts' | 'entry_lamports' | 'pot_lamports' | 'min_seats'
+  >
+): PoolLadder {
+  const capacity = typeof pool.capacity === 'number' && pool.capacity > 0 ? pool.capacity : Number(MAX_CAPACITY);
+  const table = Array.isArray(pool.prize_table) && pool.prize_table.length > 0 ? pool.prize_table : null;
+  let prizeAmounts: bigint[];
+  if (table === null) {
+    // Before the Ladder: one place, worth the pool's whole prize pool.
+    prizeAmounts = [BigInt(pool.pot_lamports)];
+  } else if (Array.isArray(pool.prize_amounts) && pool.prize_amounts.length === table.length) {
+    prizeAmounts = pool.prize_amounts.map((a) => BigInt(a));
+  } else {
+    assertPrizeTable(table);
+    const entry = BigInt(pool.entry_lamports);
+    prizeAmounts = table.map((m) => BigInt(m) * entry);
+  }
+  return { capacity, minSeats: pool.min_seats, prizeAmounts };
 }

@@ -370,6 +370,16 @@ pub fn handle_pay_next_place<'info>(
         pool.state == PoolState::Paid,
         ErrorCode::ResultsNotCommitted
     );
+    // D-E19: this instruction's rule — "the committed payout list IS the
+    // tied first-place group" — holds only for a pool that pays ONE place
+    // (every pool opened before the Ladder). Under a multi-place table the
+    // payout list spans several ranks, and dividing a forfeited share among
+    // it would pay the wrong players. So a Ladder pool's forfeited share is
+    // HELD in its vault — never paid wrongly, never to the operator — until
+    // the spec's "field moves up" payout (`commit_cascade` / `pay_cascade`)
+    // ships in its own upgrade. PHASE-N-REVIEW: founder decision of
+    // 2026-11-05 (option (a)) to ship the eight pools before the cascade.
+    require!(pool.paid_places <= 1, ErrorCode::NextPlaceUnsupported);
     require!(from.forfeited, ErrorCode::EscrowNotForfeited);
     let remaining = from.escrow_lamports;
     require!(remaining > 0, ErrorCode::NoEscrow);
@@ -389,7 +399,7 @@ pub fn handle_pay_next_place<'info>(
     );
     require!(!to.sanctions_hold, ErrorCode::SanctionsHoldActive);
     require!(!review_pending(to), ErrorCode::NextPlaceReviewPending);
-    require!(to.index < 64, ErrorCode::InvalidRank);
+    require!(to.index < pool.entrants, ErrorCode::InvalidRank);
     let to_bit = 1u64 << to.index;
     require!(
         from.split_paid_mask & to_bit == 0,

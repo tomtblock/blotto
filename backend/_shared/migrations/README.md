@@ -34,7 +34,7 @@ Forward-only Postgres schema migrations (`.sql`), applied by the indexer's `migr
   false positive costs one needless replay and a false negative serves empty tables.
   `declaresRederive()` in `backend/indexer/src/migrate.ts` is the matcher, and
   `backend/indexer/test/migrate-marker.spec.ts` pins both the real files that carry it
-  (`0004`, `0019`, `0025`) and near-misses that must not match.
+  (`0004`, `0019`, `0025`, `0026`) and near-misses that must not match.
 - **On-chain quantities are `NUMERIC`, never `BIGINT` or `DOUBLE PRECISION`.** Lamport amounts are
   `u64` and exceed both a signed 64-bit integer's range and a double's exact-integer range. A prize
   amount rounded by a float is a payment bug.
@@ -59,6 +59,7 @@ Forward-only Postgres schema migrations (`.sql`), applied by the indexer's `migr
 | `0023_notify_pool_optin.sql` | `notify_pool_optin`. |
 | `0024_complaints.sql` | `complaints`. |
 | `0025_pool_mode.sql` | `pools.mode` (0 easy, 1 hard) and `tier_status` re-keyed by `(tier, mode)`, since each mode keeps its own tier ladder. |
+| `0026_ladder.sql` | The Ladder (D-E19): `pools.capacity`, `min_seats`, `paid_places` and `prize_table`; a `pool_types` table keyed `(mode, tier, capacity)`; `tier_status` re-keyed by `(tier, mode, capacity)`, since each pool type keeps its own slot and cooldown. Carries the rederive marker. |
 
 The remaining files add or drop columns and indexes on these tables; each file's header says what
 and why.

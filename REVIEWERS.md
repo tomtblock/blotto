@@ -15,12 +15,12 @@ what decides who is paid, and how a player checks it.
 | # | File | Why it matters |
 |---|---|---|
 | 1 | [`programs/blotto_cup/src/lib.rs`](programs/blotto_cup/src/lib.rs) | Every instruction the program has, and the two invariants that outrank any instruction added later. Every transfer goes through [`vault.rs`](programs/blotto_cup/src/vault.rs) |
-| 2 | [`programs/blotto_cup/src/instructions/open_pool.rs`](programs/blotto_cup/src/instructions/open_pool.rs) | The fixed prize pool moves from the treasury into the pool's vault before a single entry exists. Only the keeper may open a pool |
+| 2 | [`programs/blotto_cup/src/instructions/open_pool.rs`](programs/blotto_cup/src/instructions/open_pool.rs) | The fixed prize pool moves from the treasury into the pool's vault before a single entry exists. Only the keeper may open a pool, only of an enabled pool type (mode, tier and size — [`pool_type.rs`](programs/blotto_cup/src/instructions/pool_type.rs)), and the pool copies that type's size, prize table and minimum field |
 | 3 | [`programs/blotto_cup/src/instructions/register.rs`](programs/blotto_cup/src/instructions/register.rs) | One entry in one transaction: verify the signed entry packet, take the price into the treasury, draw the cosmetic class, mint the frozen pass. Only `sha256(battles ‖ salt)` reaches the chain |
-| 4 | [`programs/blotto_cup/src/instructions/reveal_commit.rs`](programs/blotto_cup/src/instructions/reveal_commit.rs) | The pool's secret goes on chain, hash-checked against the commitment made at open. The payout list must sum exactly to the pot |
-| 5 | [`programs/blotto_cup/src/instructions/pay_prizes.rs`](programs/blotto_cup/src/instructions/pay_prizes.rs) | Vault to winner, batched by seat over the committed list. The settlement signer chooses only the batching |
+| 4 | [`programs/blotto_cup/src/instructions/reveal_commit.rs`](programs/blotto_cup/src/instructions/reveal_commit.rs) | The pool's secret goes on chain, hash-checked against the commitment made at open. The payout list must sum exactly to the prize pool, and no amount may be zero or larger than the pool's first prize |
+| 5 | [`programs/blotto_cup/src/instructions/pay_prizes.rs`](programs/blotto_cup/src/instructions/pay_prizes.rs) | Vault to the paid players, batched by seat over the committed list. The settlement signer chooses only the batching |
 | 6 | [`programs/blotto_cup/src/instructions/refund.rs`](programs/blotto_cup/src/instructions/refund.rs) | A pool that misses its minimum field refunds every entry in full. Both steps are permissionless, so a vanished operator strands nothing |
-| 7 | [`backend/scoring/src/engine.ts`](backend/scoring/src/engine.ts) | All-vs-all scoring in integer half-points. The same module runs in settlement and in the browser (decision `R20`) |
+| 7 | [`backend/scoring/src/engine.ts`](backend/scoring/src/engine.ts) | All-vs-all scoring in integer half-points, and the prize split over the pool's own table ([`prizes.ts`](backend/scoring/src/prizes.ts)). The same module runs in settlement and in the browser (decision `R20`) |
 | 8 | [`backend/reveal/src/crank.ts`](backend/reveal/src/crank.ts) | Settlement end to end: export the secret, reveal, score, screen winners, commit, pay, publish. Resumable from chain state |
 | 9 | [`backend/sealing/src/custody-turnkey.ts`](backend/sealing/src/custody-turnkey.ts) | Each pool's sealing secret is export-locked in Turnkey until the pool is sealed or past its deadline, and the limits of that, stated |
 | 10 | [`app/src/verify/logic.ts`](app/src/verify/logic.ts) | The verify page: recomputes a whole pool from the published bundle and the chain, and turns red if any number differs |
@@ -48,17 +48,17 @@ sequenceDiagram
   participant R as Irys
   G->>D: every merge runs the full CI gate, then the frontend host rebuilds the app
   G->>K: the backend deploys by hand (deploy-backend workflow)
-  K->>C: open_pool moves the pot from treasury to vault and publishes the sealing key
+  K->>C: open_pool moves the pool type's prize pool from treasury to vault and publishes the sealing key
   D->>D: the board is sealed on the device to the pool's public key
   D->>P: ciphertext stored before any money moves
   P->>T: territory, sanctions and 18+ checks pass, then Turnkey signs the entry packet
   P-->>D: entry packet, valid for 60 seconds
   D->>C: one wallet-signed transaction with the entry and the price, never via the operator
   C-->>I: finalized event by webhook (the indexer is a projection)
-  Note over C: 64th entry, or the deadline with at least min_seats, seals the pool
+  Note over C: the entry that fills the pool (8, 16, 32 or 64), or the deadline with at least min_seats, seals it
   K->>T: export the pool secret (refused until sealed or past the deadline)
-  K->>C: reveal_pool_secret, then commit_results with payouts summing to the pot
-  K->>C: pay_prizes, vault to winner, in batches
+  K->>C: reveal_pool_secret, then commit_results with payouts summing to the prize pool
+  K->>C: pay_prizes, vault to the paid players, in batches
   K->>R: publish the bundle with the secret, every board, salt, result and the root
   D->>R: the verify page recomputes the pool from the bundle and the chain
 ```
@@ -116,8 +116,8 @@ standing; nothing below changes how a pool is scored or who is paid.
 
 | Mechanic | What the player sees | Where |
 |---|---|---|
-| A new pool after every pool | Each mode and tier runs its pools in sequence: when one is paid or closed, the keeper opens the next after a five-minute cooldown | [`open_pool.rs`](programs/blotto_cup/src/instructions/open_pool.rs), [`constants.rs`](programs/blotto_cup/src/constants.rs) |
-| Two modes | Easy (100 points in each battle) and hard (700 across the board), each with its own pools. Which tiers and modes are open is an owner decision (`R6`) | [`backend/scoring/src/allocation.ts`](backend/scoring/src/allocation.ts) |
+| A new pool after every pool | Each pool type (mode, tier and size) runs its pools in sequence: when one is paid or closed, the keeper opens the next after a five-minute cooldown | [`open_pool.rs`](programs/blotto_cup/src/instructions/open_pool.rs), [`constants.rs`](programs/blotto_cup/src/constants.rs) |
+| Two modes, four sizes | Easy (100 points in each battle) and hard (700 across the board), each in pools of 8, 16, 32 or 64 players (`D-E19`). Which tiers, modes and sizes are open is an owner decision (`R6`, `D-E19`) | [`backend/scoring/src/allocation.ts`](backend/scoring/src/allocation.ts), [`pool_type.rs`](programs/blotto_cup/src/instructions/pool_type.rs) |
 | The verified ranking of each pool | Every player's rank in a settled pool, served only from a bundle that verified | [`backend/indexer/src/read-api.ts`](backend/indexer/src/read-api.ts) (`GET /pools/:pool/leaderboard`) |
 | What finished above you | After a pool, the board that ranked above the player's, battle by battle | [`app/src/results/what-beat-you.ts`](app/src/results/what-beat-you.ts), [`what-beat-you-panel.tsx`](app/src/app/pools/%5Bpool%5D/results/what-beat-you-panel.tsx) |
 | A profile | A lifetime record (pools entered, seats paid, total won) and previous finishes with each pool's verified rank. The class is shown nowhere on it | [`profile-client.tsx`](app/src/app/profile/profile-client.tsx), [`finishes.tsx`](app/src/components/profile/finishes.tsx) |
@@ -147,5 +147,14 @@ is the project owner's decision and is not proposed here.
   and the admin is passed explicitly) is tested on a branch and ships with the next program upgrade,
   before any mainnet deployment — see
   [`SCANNER-TRIAGE-2026-10-11.md` §2, item A](docs/security/SCANNER-TRIAGE-2026-10-11.md).
+- **The Ladder (`D-E19`) is new.** Pools of four sizes pay the top quarter on fixed tables. Its
+  devnet launch opens all eight 0.1 SOL pool types (two modes, four sizes). Before any pool takes
+  real money it needs counsel's sign-off and terms version 6. A share forfeited after an upheld
+  review in a pool that pays more than one place is held in its vault until the "field moves up"
+  payout is built; `pay_next_place` refuses it (`NextPlaceUnsupported`).
+- **The admin key.** The devnet admin is a Squads v3 multisig whose web interface has been retired,
+  so its transactions are built with `scripts/squads-v3.ts`. There is no `set_admin`, so a mainnet
+  deployment must name a Squads v4 multisig as admin at `init_config` — see
+  [`docs/ROADMAP.md` §3](docs/ROADMAP.md#3-road-to-mainnet).
 - **Known limitations** of the as-built system are listed in
   [`docs/architecture/ARCHITECTURE.md` §10](docs/architecture/ARCHITECTURE.md#10-not-built-and-known-limitations).

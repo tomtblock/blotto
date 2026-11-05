@@ -8,10 +8,17 @@
 //!
 //! ```text
 //!   min_platform_lamports
-//! + reserve_pots × Σ (pot[t] + vault cushion)   for every ENABLED tier t
-//!                                                with no live pool
+//! + reserve_pots × Σ (prize pool + vault cushion)  for every ENABLED pool
+//!                                                   type, on an open tier,
+//!                                                   with no live pool
 //! + platform_refundable       (entry payments of pools that can still refund)
 //! ```
+//!
+//! Since D-E19 the reserve is computed over `PoolType` accounts, which the
+//! caller passes as remaining accounts — one per enabled pool type, in
+//! ascending address order. `Config.enabled_pool_types` is the count they
+//! must match, so a caller who leaves one out (and so shrinks the reserve)
+//! is refused rather than believed.
 //!
 //! The vault cushion is the rent-exempt minimum `open_pool` funds every prize
 //! vault with on top of its pot (2026-09-12, `vault::rent_floor`). A reserved
@@ -27,50 +34,76 @@
 
 use anchor_lang::prelude::*;
 
-use crate::constants::{MIN_SEATS, MODE_EASY, MODE_HARD, N_TIERS};
+use crate::constants::{LADDER_MIN_SEATS, N_TIERS};
 use crate::error::ErrorCode;
 use crate::events::{PlatformFunded, PlatformWithdrawn, TierEconomicsSet, TreasuryPolicySet};
-use crate::state::{Config, CONFIG_SEED, PLATFORM_SEED};
+use crate::state::{Config, PoolType, CONFIG_SEED, PLATFORM_SEED};
 
-/// The policy reserve for tiers with no live pool: `reserve_pots` further
-/// pots of every enabled (tier, mode) whose slot is empty, optionally
-/// excluding one (the one being opened right now). Since Phase B each tier
-/// has an easy and a hard slot (founder rulings 2026-09-24); an idle enabled
-/// hard tier reserves a pot exactly as an idle enabled easy tier does, at
-/// the same tier pot — two pools, two pots, one treasury.
+/// The policy reserve for pool types with no live pool (D-A1's reserve,
+/// per pool type since D-E19): `reserve_pots` further prize pools — each
+/// with its vault cushion — of every ENABLED pool type whose tier is open
+/// and whose slot is empty, optionally excluding one (the type being opened
+/// right now, which the caller passes separately).
 ///
-/// Each reserved pot carries `vault_cushion` — the rent-exempt minimum
-/// `open_pool` funds the vault with alongside the pot — because the reserve
-/// exists so the treasury can OPEN those pools, and an open costs the pot
-/// plus the cushion. Counting the pot alone (as this did until 2026-09-12)
-/// left the reserve one cushion short per pot: after opening one tier at its
-/// exact threshold the treasury held exactly the next tier's pot, and could
-/// not open it. The ladder test in `tests/litesvm/tests/treasury_gates.rs`
-/// pins the corrected property to the lamport.
+/// The pool types arrive as `remaining` accounts and are believed only if
+/// they are EXACTLY the enabled set: every account owned by this program
+/// and deserialising as a `PoolType` (the discriminator), every one enabled,
+/// strictly ascending by address (sorted and duplicate-free in one check),
+/// none equal to `exclude`, and as many as `Config.enabled_pool_types`
+/// (minus one when `exclude` is given). A pool type can only exist at its
+/// own PDA — `init_pool_type` is the only creator — so owner + discriminator
+/// is proof of a genuine one, and the count proves none was left out.
 ///
-/// The sum is accumulated in `u128` because it is a product that can grow
-/// (`threat-tm-403`), and saturates rather than truncating on the way back to
-/// `u64`. That direction matters: this value is a FLOOR, so overstating it
-/// blocks a withdrawal that might have been fine, while understating it — which
-/// is what a wrapping `as u64` would do — would release money the policy is
-/// meant to hold. The sum is unreachable at any configured tier (seven tiers of
-/// 300 SOL at the maximum reserve is a rounding error against `u64::MAX`); the
-/// saturation is here so the direction of failure is chosen rather than left to
-/// a cast.
-pub fn idle_tier_reserve(config: &Config, exclude: Option<(u8, usize)>, vault_cushion: u64) -> u64 {
+/// Each reserved prize pool carries `vault_cushion` — the rent-exempt
+/// minimum `open_pool` funds the vault with alongside it — because the
+/// reserve exists so the treasury can OPEN those pools, and an open costs
+/// the prize pool plus the cushion (the ladder test in
+/// `tests/litesvm/tests/treasury_gates.rs` pins this to the lamport).
+///
+/// The sum is accumulated in `u128` (`threat-tm-403`) and saturates rather
+/// than truncating on the way back to `u64`: this value is a FLOOR, so
+/// overstating it blocks a withdrawal that might have been fine, while
+/// understating it would release money the policy is meant to hold.
+pub fn idle_pool_type_reserve<'info>(
+    config: &Config,
+    remaining: &'info [AccountInfo<'info>],
+    exclude: Option<Pubkey>,
+    vault_cushion: u64,
+) -> Result<u64> {
+    let expected = if exclude.is_some() {
+        (config.enabled_pool_types as usize)
+            .checked_sub(1)
+            .ok_or(ErrorCode::PoolTypeListIncomplete)?
+    } else {
+        config.enabled_pool_types as usize
+    };
+    require!(
+        remaining.len() == expected,
+        ErrorCode::PoolTypeListIncomplete
+    );
     let mut reserve: u128 = 0;
-    for mode in [MODE_EASY, MODE_HARD] {
-        for t in 0..N_TIERS {
-            if Some((mode, t)) == exclude {
-                continue;
-            }
-            if config.open_tiers_for(mode)[t] && config.active_pool(mode, t) == 0 {
-                let per_pool = (config.tier_pot_lamports[t] as u128) + (vault_cushion as u128);
-                reserve = reserve.saturating_add(per_pool * (config.treasury_reserve_pots as u128));
-            }
+    let mut previous: Option<Pubkey> = None;
+    for info in remaining.iter() {
+        require_keys_eq!(*info.owner, crate::ID, ErrorCode::PoolTypeAccountInvalid);
+        if let Some(prev) = previous {
+            require!(*info.key > prev, ErrorCode::PoolTypeListIncomplete);
         }
+        require!(
+            Some(*info.key) != exclude,
+            ErrorCode::PoolTypeListIncomplete
+        );
+        let t: Account<'info, PoolType> =
+            Account::try_from(info).map_err(|_| ErrorCode::PoolTypeAccountInvalid)?;
+        require!(t.enabled, ErrorCode::PoolTypeListIncomplete);
+        let tier = t.tier as usize;
+        require!(tier < N_TIERS, ErrorCode::PoolTypeAccountInvalid);
+        if config.open_tiers_for(t.mode)[tier] && t.active_pool == 0 {
+            let per_pool = (t.pot_lamports as u128) + (vault_cushion as u128);
+            reserve = reserve.saturating_add(per_pool * (config.treasury_reserve_pots as u128));
+        }
+        previous = Some(*info.key);
     }
-    u64::try_from(reserve).unwrap_or(u64::MAX)
+    Ok(u64::try_from(reserve).unwrap_or(u64::MAX))
 }
 
 // ---------------------------------------------------------------------------
@@ -133,13 +166,19 @@ pub struct WithdrawPlatform<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn handle_withdraw_platform(ctx: Context<WithdrawPlatform>, amount: u64) -> Result<()> {
+/// Remaining accounts: every enabled `PoolType`, ascending by address
+/// (`idle_pool_type_reserve`). Leaving one out is refused, not believed.
+pub fn handle_withdraw_platform<'info>(
+    ctx: Context<'info, WithdrawPlatform<'info>>,
+    amount: u64,
+) -> Result<()> {
     require!(amount > 0, ErrorCode::ZeroAmount);
     let config = &ctx.accounts.config;
     let balance = ctx.accounts.platform.lamports();
     let cushion = crate::vault::rent_floor()?;
+    let reserve = idle_pool_type_reserve(config, ctx.remaining_accounts, None, cushion)?;
     let floor = (config.treasury_min_platform_lamports as u128)
-        + (idle_tier_reserve(config, None, cushion) as u128)
+        + (reserve as u128)
         + (config.platform_refundable as u128);
     require!(
         (balance as u128) >= (amount as u128) + floor,
@@ -183,26 +222,20 @@ pub fn handle_set_tier_economics(
     let t = tier as usize;
     require!(t < N_TIERS, ErrorCode::UnknownTier);
     require!(price_lamports > 0, ErrorCode::ZeroAmount);
-    // The band table divides in 1024ths; a pot off the grid would strand a
-    // residue in the vault (prize_math's zero-residual property). Kept under
-    // D-E2's single band on purpose (constants.rs).
-    require!(
-        pot_lamports > 0 && pot_lamports.is_multiple_of(1024),
-        ErrorCode::PotNotDivisible
-    );
-    // The minimum field must COVER the pot: a pot larger than the floor's
-    // intake means every pool that plays at the floor pays out more than it
-    // took in, at the operator's expense, for ever. A comparison against the
-    // live values — the pot itself is never derived from them
-    // (standing-rules check (g)).
+    // D-E19 retired the 1024-lamport grid (`PotNotDivisible` is no longer
+    // raised): prizes are `multiple × entry`, exact with no division.
+    require!(pot_lamports > 0, ErrorCode::ZeroAmount);
+    // Since D-E19 the tier pot funds NO pool — every pool type carries its
+    // own prize pool (`set_pool_type_economics`). It is kept as the
+    // 64-player reference figure, and checked as one: no larger than the
+    // 64-player pool's minimum field's entries (R7-b's break-even rule).
     //
-    // `<=`, not `<`, since R7-b (founder ruling 2026-09-13). D-E4 required
-    // the floor to EXCEED the pot, which at the D-E1 pots put the minimum
-    // field at 41 or above; the founder set it at exactly 40, which is
-    // exactly break-even, on the ground that the pot is pre-funded from the
-    // treasury (D-A1) and so a pool's ability to pay never depended on its
-    // own entries. This admits that case and nothing worse.
-    let min_field_entries = (MIN_SEATS as u64)
+    // A PRICE change here makes every pool type of this tier stale: its
+    // stored prize pool no longer equals its table at the new price, and
+    // `open_pool` refuses it (`PoolTypeEconomicsStale`) until
+    // `set_pool_type_economics` restates it. A published prize can never
+    // move silently with a price.
+    let min_field_entries = (LADDER_MIN_SEATS[3] as u64)
         .checked_mul(price_lamports)
         .ok_or(ErrorCode::Overflow)?;
     require!(

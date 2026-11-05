@@ -1,29 +1,32 @@
 /**
  * GET /treasury (D-A1 revised, master prompt v2 2026-08-27) — the treasury
- * report. Numbers only: balances, pots, the policy floor, per-tier status,
- * and the shortfall to the next unlock.
+ * report. Numbers only: balances, prize pools, the policy floor, per-pool-
+ * type status and margins, and the shortfall to the next unlock.
  *
  * WHERE EACH NUMBER COMES FROM, and why it moved (audit B-18, D-18, and
- * prior-audit O26's report half, all 2026-09-12):
+ * prior-audit O26's report half, all 2026-09-12; the Ladder, D-E19):
  *
- *   POLICY — the minimum balance, `reserve_pots`, the two tier tables and
- *   the tier enablement — is read from the LIVE `Config` account when the
- *   chain read is available (`treasury-chain.ts`), and from the ledger only
- *   as a fallback. It has to be: `init_config` writes all of them and emits
- *   NO event (`instructions/admin.rs`), so a ledger-only report published a
- *   0 minimum against a program enforcing 0.6 SOL, and six of seven tier
- *   pots wrong (O26, `docs/security/SECURITY-REVIEW.md` §8 O26). `policy_source`
- *   says which was used on every response; `enablement_source` does the same
- *   for `open_tiers`, as it already did.
+ *   POLICY — the minimum balance, `reserve_pots`, the tier prices, the tier
+ *   enablement and, since D-E19, every POOL TYPE's switch, prize pool,
+ *   table, floor and slot — is read from the LIVE accounts when the chain
+ *   read is available (`treasury-chain.ts`: `Config` and every `PoolType`),
+ *   and from the ledger only as a fallback. It has to be: `init_config`
+ *   writes the minimum and the tier tables and emits NO event
+ *   (`instructions/admin.rs`), so a ledger-only report published a 0
+ *   minimum against a program enforcing 0.6 SOL, and six of seven tier
+ *   pots wrong (O26, `docs/security/SECURITY-REVIEW.md` §8 O26). The ledger
+ *   fallback for pool types is the `pool_types` projection (migration
+ *   0026), which the three pool-type events fill completely.
+ *   `policy_source` says which was used on every response;
+ *   `enablement_source` does the same for `open_tiers`.
  *
- *   THE LIVE-POOL AGGREGATE — reserved pots, refundable entries, which tier
- *   holds a live pool and in what state — is read from the derived `pools`
- *   table (`_shared/migrations/0003`, `0007`). It carries `tier`,
- *   `entry_lamports`, `pot_lamports`, `state`, `entrants` and
- *   `refunded_count`, which is every field the old per-pool fold recomputed
- *   from the whole ledger. Only LIVE pools (Open, Sealed, Scored, Refunding)
- *   reach the output at all — a Paid or Closed pool contributes nothing to
- *   any field here.
+ *   THE LIVE-POOL AGGREGATE — locked prize pools, refundable entries, which
+ *   pool type holds a live pool and in what state — is read from the
+ *   derived `pools` table (`_shared/migrations/0003`, `0007`, `0026`). Only
+ *   LIVE pools (Open, Sealed, Scored, Refunding) reach it at all.
+ *
+ *   THE REALISED MARGIN — entries sold minus the prize pool, per pool type,
+ *   over the pools that have paid — is one GROUP BY over the same table.
  *
  *   THE BALANCE is ANCHORED, not accumulated: `PlatformFunded` and
  *   `PlatformWithdrawn` carry the exact post-move balance and assign it
@@ -37,26 +40,39 @@
  * `cache: 'no-store'`. It used to answer every one of those by selecting the
  * entire events table with no WHERE and no LIMIT and folding every row.
  * Every statement this module issues is now bounded — by the anchor's
- * position, by an event-name filter, by a pool key set, or by LIMIT 1.
+ * position, by an event-name filter, by a pool key set, by LIMIT 1, or (the
+ * derived tables) by their size: one row per pool, one per pool type.
  *
  * All lamport arithmetic is bigint; every amount serializes as a decimal
- * string.
+ * string. No float touches any number here.
  */
 
-import { MIN_SEATS, TIER_ENTRY_LAMPORTS, TIER_POT_LAMPORTS } from '../../scoring/src/prizes';
+import {
+  TIER_ENTRY_LAMPORTS,
+  ladderTable,
+  minFieldFor,
+  prizePoolFor,
+} from '../../scoring/src/prizes';
 import type { Queryable } from './shared';
 import type { TreasuryChainReader, TreasuryChainView } from './treasury-chain';
 
 /** `init_config`'s posture: tier 0 enabled, the rest waiting on the ladder. */
 const LAUNCH_OPEN_TIERS: readonly boolean[] = [true, false, false, false, false, false, false];
 
-/** Pool states that still hold a tier's slot and can still move money. */
+/** Pool states that still hold a pool type's slot and can still move money. */
 const LIVE_STATES = ['Open', 'Sealed', 'Scored', 'Refunding'] as const;
+
+/**
+ * The only pool size before the Ladder (D-E19), and the size the
+ * back-compatible `tiers[]` rows describe: before D-E19 "the tier's slot"
+ * WAS its 64-player pool, so those rows keep meaning what they meant.
+ */
+const REFERENCE_CAPACITY = 64;
 
 /** The events that move the platform balance. Nothing else is read for it —
  * notably not `EscrowForfeited`: a forfeit moves nothing (founder ruling 4,
- * 2026-09-07), the share stays in the pool's vault until `NextPlacePaid`
- * pays it to the next eligible place, and no event credits the treasury with
+ * 2026-09-07), the share stays in the pool's vault until it is paid onward
+ * to other players of the same pool, and no event credits the treasury with
  * a player's prize. The report must never learn one. */
 const BALANCE_EVENTS = [
   'PlatformFunded',
@@ -68,49 +84,103 @@ const BALANCE_EVENTS = [
 ] as const;
 
 /** One live pool, as the derived `pools` table holds it. */
-interface LivePool {
+export interface LivePool {
+  pool: string;
+  /** The on-chain id, decimal string. */
+  id: string | null;
   tier: number;
+  /** The ladder (Phase B): 0 easy, 1 hard. */
+  mode: number;
+  /** The pool's size (D-E19); 64 for a pre-Ladder pool. */
+  capacity: number;
   price: bigint;
   pot: bigint;
   state: 'Open' | 'Sealed' | 'Scored' | 'Refunding';
   entrants: bigint;
   refunded: bigint;
-  /** The ladder (Phase B): 0 easy, 1 hard. */
-  mode: number;
 }
 
+export type SlotStatus = 'open' | 'settling' | 'openable' | 'short' | 'disabled';
+
+/**
+ * One tier, as the report has always published it — KEPT for readers that
+ * predate the Ladder (the admin page). Since D-E19 a tier holds several pool
+ * types; this row describes the tier's 64-player type on each ladder (the
+ * only size there was), and `pool_types` describes every type.
+ */
 export interface TierStatus {
   tier: number;
   price_lamports: string;
+  /** The 64-player type's prize pool when its economics are set; otherwise
+   * Config's 64-player reference figure (`tier_pot_lamports`), which since
+   * D-E19 funds no pool. */
   pot_lamports: string;
   /** 'open' (live pool taking entries) | 'settling' (live, past entries) |
    * 'openable' | 'short' | 'disabled' (not enabled; contributes nothing to
    * the floor and is never "short"). */
-  status: 'open' | 'settling' | 'openable' | 'short' | 'disabled';
+  status: SlotStatus;
   live_pool_state: string | null;
   short_by_lamports: string;
-  /** The HARD ladder at this tier (Phase B): the same three fields for its
-   * own slot. Disabled until the founder's `set_hard_open_tiers`. */
+  /** The HARD ladder's 64-player type at this tier (Phase B). */
   hard: {
-    status: 'open' | 'settling' | 'openable' | 'short' | 'disabled';
+    status: SlotStatus;
     live_pool_state: string | null;
     short_by_lamports: string;
   };
 }
 
+/**
+ * One pool type (D-E19: a (mode, tier, capacity)) — locked capital, idle
+ * reserve and margin, judged as the program judges it.
+ */
+export interface PoolTypeTreasury {
+  mode: 'easy' | 'hard';
+  tier: number;
+  capacity: number;
+  /** The type's own switch (`set_pool_type_enabled`). */
+  type_enabled: boolean;
+  /** The tier's switch for this mode (R6). Both must be on for a pool to open. */
+  tier_open: boolean;
+  status: SlotStatus;
+  live_pool_id: string | null;
+  live_pool_state: string | null;
+  /** The tier's entry price today. */
+  entry_lamports: string;
+  /** The FIXED prize pool the next pool of this type opens with. */
+  prize_pool_lamports: string;
+  min_seats: number;
+  paid_places: number;
+  /** The prize pool sitting in this type's live pool's vault (0 when there
+   * is none, or when it is Refunding and the prize pool has gone back). */
+  locked_lamports: string;
+  /** What this type adds to the withdraw floor: `(prize pool + cushion) ×
+   * reserve_pots` when it is enabled, its tier is open and its slot is
+   * empty — `idle_pool_type_reserve`, term for term — else 0. */
+  idle_reserve_lamports: string;
+  short_by_lamports: string;
+  /** One pool's margin — entries in, prize pool out — at the type's own
+   * minimum field and full, at today's price. Null until economics are set. */
+  margin_lamports: { minimum_field: string; full: string } | null;
+  /** What pools of this type that have PAID actually returned:
+   * Σ (entry × entrants − prize pool). */
+  realised: { pools_paid: string; margin_lamports: string };
+}
+
 export interface TreasuryReport {
   platform_balance_lamports: string;
+  /** Prize pools locked in live pools' vaults (every type). */
   reserved_pot_lamports: string;
   refundable_entry_lamports: string;
   policy: { reserve_pots: number; min_platform_lamports: string };
   /**
    * `vault::rent_floor()` — the rent-exempt minimum for a zero-data account,
-   * which `open_pool` funds every prize vault with ON TOP of its pot and
-   * which `idle_tier_reserve` counts once per reserved pot. Published as its
-   * own field so the floor is checkable by hand:
+   * which `open_pool` funds every prize vault with ON TOP of its prize pool
+   * and which `idle_pool_type_reserve` counts once per reserved prize pool.
+   * Published as its own field so the floor is checkable by hand:
    *
    *   floor = min_platform
-   *         + Σ over ENABLED idle tiers of (pot + cushion) × reserve_pots
+   *         + Σ over ENABLED pool types, on an OPEN tier, with NO live pool,
+   *             of (prize pool + cushion) × reserve_pots
    *         + refundable
    *
    * It is a CLUSTER parameter, not policy, and it is only knowable from the
@@ -120,34 +190,64 @@ export interface TreasuryReport {
    * devnet.
    */
   vault_cushion_lamports: string;
+  /** The middle term of the floor above: Σ `pool_types[].idle_reserve_lamports`. */
+  idle_reserve_lamports: string;
   withdraw_floor_lamports: string;
   withdrawable_lamports: string;
+  /** Back-compatible per-tier rows: each tier's 64-player type. */
   tiers: TierStatus[];
+  /** Every pool type, sorted mode (easy first), tier, capacity. */
+  pool_types: PoolTypeTreasury[];
+  /** Σ over every pool that has paid, of every type and from before the
+   * Ladder too: entries sold minus the prize pool. */
+  realised_margin_lamports: string;
   /**
-   * Where the policy came from: `'chain'` = the live `Config` account and
-   * the platform PDA (the minimum, `reserve_pots`, both tier tables,
-   * `platform_refundable`, the balance and the cushion); `'ledger'` = the
-   * bounded event ledger, the launch tier tables from
-   * `backend/scoring/src/prizes.ts`, and a cushion of zero. A reader must be
-   * able to tell a chain-anchored number from a ledger-derived one, and
-   * O26 is what happens when they cannot.
+   * Where the policy came from: `'chain'` = the live `Config`, every
+   * `PoolType` and the platform PDA (the minimum, `reserve_pots`, the tier
+   * tables, the pool types, `platform_refundable`, the balance and the
+   * cushion); `'ledger'` = the bounded event ledger, the `pool_types`
+   * projection, the launch tier prices from `backend/scoring/src/prizes.ts`,
+   * and a cushion of zero. A reader must be able to tell a chain-anchored
+   * number from a ledger-derived one, and O26 is what happens when they
+   * cannot.
    */
   policy_source: 'chain' | 'ledger';
   /** Where the tier enablement came from: the live `Config`, the ledger's
    * latest `TiersOpened`, or `init_config`'s launch posture when neither is
    * available. */
   enablement_source: 'chain' | 'ledger' | 'launch_default';
-  /** One tier-0 pool's margin — pass sales in, pot out — at the two ends of
-   * the field a pool can run with (D-E4): the 52-seat minimum and a full 64.
-   * A pool sealed at its deadline lands somewhere in between. */
+  /** One tier-0 64-player pool's margin — entries in, prize pool out — at
+   * the two ends of the field it can run with: its minimum field and a full
+   * 64. A pool sealed at its deadline lands somewhere in between. Every
+   * type's own pair is in `pool_types[].margin_lamports`. */
   tier0_margin_lamports: { minimum_field: string; full: string };
-  /** Tier-0 pools needed to cover the first shortfall if every one of them
-   * FILLS (the best case); null when nothing is short or the margin is not
+  /** Tier-0 64-player pools needed to cover the first shortfall (lowest
+   * tier, easy before hard, smallest size first) if every one of them FILLS
+   * (the best case); null when nothing is short or the margin is not
    * positive. */
   tier0_pools_to_next_unlock: string | null;
-  /** The same count if every pool runs at the 52-seat minimum (the worst
-   * case that still plays). */
+  /** The same count if every pool runs at its minimum field (the worst case
+   * that still plays) — null at a break-even floor, where no number of such
+   * pools covers anything. */
   tier0_pools_to_next_unlock_at_minimum_field: string | null;
+}
+
+/** One pool type as the policy knows it, however it was obtained. */
+interface PolicyPoolType {
+  mode: number;
+  tier: number;
+  capacity: number;
+  enabled: boolean;
+  minSeats: number;
+  paidPlaces: number;
+  potLamports: bigint;
+  /**
+   * The type's live pool id as `PoolType.active_pool` holds it — what
+   * `idle_pool_type_reserve` reads — on the chain path; null on the ledger
+   * path and for a type known only from a live pool, where the `pools`
+   * table says whether the slot is held.
+   */
+  activePool: bigint | null;
 }
 
 /**
@@ -157,12 +257,15 @@ interface Policy {
   minPlatform: bigint;
   reservePots: bigint;
   tierPrice: bigint[];
+  /** Config's 64-player reference figure per tier (since D-E19 it funds no
+   * pool; kept for the back-compatible `tiers[]` rows). */
   tierPot: bigint[];
   enabled: readonly boolean[];
   /** The hard ladder's enablement (Phase B): `hard_open_tiers`, or the
    * ledger's latest `HardTiersOpened`, or all-closed — a hard tier the
    * founder never enabled reserves nothing and opens nothing. */
   hardEnabled: readonly boolean[];
+  poolTypes: PolicyPoolType[];
   cushion: bigint;
   source: 'chain' | 'ledger';
   enablementSource: 'chain' | 'ledger' | 'launch_default';
@@ -170,6 +273,11 @@ interface Policy {
    * both; null means "compute them from the derived tables and the ledger". */
   balance: bigint | null;
   refundable: bigint | null;
+}
+
+/** `${mode}:${tier}:${capacity}` — one pool type. */
+export function poolTypeKey(mode: number, tier: number, capacity: number): string {
+  return `${mode}:${tier}:${capacity}`;
 }
 
 /**
@@ -186,25 +294,26 @@ export async function treasuryReport(
 ): Promise<TreasuryReport> {
   const chainView = await tryChainRead(chain);
   const live = await livePools(db);
+  const realised = await realisedByType(db);
   const policy = chainView ? policyFromChain(chainView) : await policyFromLedger(db);
 
-  // The live pools, from the derived table: which tier holds a slot and in
-  // what state, the pots they reserve, and the entries they could still
-  // refund. `reserved_pot_lamports` is always this sum — a sum over exactly
-  // the pools whose per-tier status the same response publishes, so those
-  // two halves can never disagree. The REFUNDABLE total is this sum only on
-  // the ledger path; on the chain path `Config.platform_refundable` wins,
-  // because that is the number the program's own floor is computed from.
-  const liveByTier: (LivePool | null)[] = policy.tierPot.map(() => null);
-  // The hard ladder's live pools (Phase B): its own slot per tier, counted
-  // in the reserve exactly as the easy one, published per tier under `hard`.
-  const hardLiveByTier: (LivePool | null)[] = policy.tierPot.map(() => null);
+  // The live pools, from the derived table: which pool type holds a slot
+  // and in what state, the prize pools they lock, and the entries they
+  // could still refund. `reserved_pot_lamports` is always this sum — a sum
+  // over exactly the pools whose per-type status the same response
+  // publishes, so those two halves can never disagree. The REFUNDABLE total
+  // is this sum only on the ledger path; on the chain path
+  // `Config.platform_refundable` wins, because that is the number the
+  // program's own floor is computed from.
+  const liveByType = new Map<string, LivePool>();
   let reserved = 0n;
   let ledgerRefundable = 0n;
   for (const p of live) {
-    if (p.tier < 0 || p.tier >= liveByTier.length) continue;
-    if (p.mode === 1) hardLiveByTier[p.tier] = p;
-    else liveByTier[p.tier] = p;
+    if (p.tier < 0 || p.tier >= policy.tierPrice.length) continue;
+    const k = poolTypeKey(p.mode, p.tier, p.capacity);
+    // One live pool per type on chain (SEQUENTIAL slots); should the table
+    // ever hold two, the one taking entries is the one to show.
+    if (!liveByType.has(k) || p.state === 'Open') liveByType.set(k, p);
     if (p.state !== 'Refunding') reserved += p.pot;
     if (p.state === 'Open') ledgerRefundable += p.price * p.entrants;
     if (p.state === 'Refunding') ledgerRefundable += p.price * (p.entrants - p.refunded);
@@ -213,87 +322,182 @@ export async function treasuryReport(
   const refundable = policy.refundable ?? ledgerRefundable;
   const balance = policy.balance ?? (await ledgerBalance(db));
 
+  // Every pool type the policy knows, plus any (mode, tier, capacity) that
+  // holds a live pool the policy has no type for — a pool opened before the
+  // Ladder, whose slot lived on Config. It is shown (its locked prize pool
+  // is real) and reserves nothing (it is no enabled type).
+  const types = new Map<string, PolicyPoolType>();
+  for (const t of policy.poolTypes) types.set(poolTypeKey(t.mode, t.tier, t.capacity), t);
+  for (const [k, p] of liveByType) {
+    if (!types.has(k)) {
+      types.set(k, {
+        mode: p.mode,
+        tier: p.tier,
+        capacity: p.capacity,
+        enabled: false,
+        minSeats: 0,
+        paidPlaces: 0,
+        potLamports: p.pot,
+        activePool: null,
+      });
+    }
+  }
+
+  const tierOpen = (mode: number, tier: number): boolean =>
+    (mode === 1 ? policy.hardEnabled : policy.enabled)[tier] === true;
+
   // ---- The floor. THIS IS THE THIRD COPY OF ONE SUM, and the sum has now
   // been wrong twice.
   //
-  // `idle_tier_reserve` lives in the program (`instructions/treasury.rs`),
-  // in the keeper's mirror (`backend/reveal/src/treasury.ts`), and here. On
-  // 2026-09-12 the program started counting a per-reserved-pot RENT CUSHION
-  // — `open_pool` funds a prize vault with pot PLUS `vault::rent_floor()`,
-  // so a RESERVED pot costs `(pot + cushion) * reserve_pots` — and neither
-  // TypeScript mirror was changed with it. The keeper's was fixed the same
-  // day (commit "keeper: the open gate must count the rent cushion the
-  // program counts"); this one is audit finding D-18. Nothing compares a
-  // Rust figure with its TypeScript mirror, which is how one change left
-  // three copies disagreeing.
+  // `idle_pool_type_reserve` lives in the program (`instructions/
+  // treasury.rs`), in the keeper's mirror (`backend/reveal/src/
+  // treasury.ts`), and here. On 2026-09-12 the program started counting a
+  // per-reserved-pot RENT CUSHION and neither TypeScript mirror was changed
+  // with it (audit D-18). Nothing compares a Rust figure with its
+  // TypeScript mirror, which is how one change left three copies
+  // disagreeing.
   //
-  // THE PROGRAM IS THE SPEC. `handle_withdraw_platform`:
-  //   floor = min_platform + idle_tier_reserve(config, None, cushion)
-  //         + platform_refundable
-  // and `open_pool`, for the tier being opened:
-  //   needed = pot + cushion + min_platform
-  //          + idle_tier_reserve(config, Some(tier), cushion)
+  // THE PROGRAM IS THE SPEC. Since D-E19, over every ENABLED pool type:
+  //   reserve += (pot + cushion) × reserve_pots
+  //     when open_tiers_for(mode)[tier] && active_pool == 0
+  // `handle_withdraw_platform`:
+  //   floor = min_platform + idle_pool_type_reserve(None) + platform_refundable
+  // and `open_pool`, for the type being opened:
+  //   needed = pot + cushion + min_platform + idle_pool_type_reserve(Some(type))
   // Change one of the three and change all three.
-  // Both ladders since Phase B: an idle enabled HARD tier reserves a pot
-  // exactly as an idle enabled easy one (`idle_tier_reserve` walks both).
-  const idleReserve = (exclude: { tier: number; mode: number } | null): bigint => {
+  //
+  // "No live pool" is the type's own `active_pool` on the chain path — the
+  // field the program reads — and the `pools` table on the ledger path.
+  const slotEmpty = (t: PolicyPoolType): boolean =>
+    t.activePool !== null
+      ? t.activePool === 0n
+      : !liveByType.has(poolTypeKey(t.mode, t.tier, t.capacity));
+  const reservesIdle = (t: PolicyPoolType): boolean => t.enabled && tierOpen(t.mode, t.tier) && slotEmpty(t);
+  const reserveOf = (t: PolicyPoolType): bigint =>
+    reservesIdle(t) ? (t.potLamports + policy.cushion) * policy.reservePots : 0n;
+  const idleReserve = (excludeKey: string | null): bigint => {
     let r = 0n;
-    for (let t = 0; t < policy.tierPot.length; t++) {
-      for (const mode of [0, 1]) {
-        if (exclude !== null && exclude.tier === t && exclude.mode === mode) continue;
-        const enabled = mode === 1 ? policy.hardEnabled[t] : policy.enabled[t];
-        const liveHere = mode === 1 ? hardLiveByTier[t] : liveByTier[t];
-        if (enabled && !liveHere) {
-          r += (policy.tierPot[t] + policy.cushion) * policy.reservePots;
-        }
-      }
-    }
+    for (const [k, t] of types) if (k !== excludeKey) r += reserveOf(t);
     return r;
   };
 
-  const floor = policy.minPlatform + idleReserve(null) + refundable;
+  const totalIdle = idleReserve(null);
+  const floor = policy.minPlatform + totalIdle + refundable;
   const withdrawable = balance > floor ? balance - floor : 0n;
   const available = balance - refundable;
 
-  let firstShort: bigint | null = null;
-  /** One ladder's slot at one tier, judged as `open_pool` would judge it. */
-  const slotStatus = (t: number, mode: number): TierStatus['hard'] => {
-    const livePool = mode === 1 ? hardLiveByTier[t] : liveByTier[t];
+  /** One pool type's slot, judged as `open_pool` would judge it. */
+  const slotStatus = (
+    t: PolicyPoolType
+  ): { status: SlotStatus; live_pool_state: string | null; live_pool_id: string | null; short: bigint } => {
+    const k = poolTypeKey(t.mode, t.tier, t.capacity);
+    const livePool = liveByType.get(k);
     if (livePool) {
       return {
         status: livePool.state === 'Open' ? 'open' : 'settling',
         live_pool_state: livePool.state,
-        short_by_lamports: '0',
+        live_pool_id: livePool.id,
+        short: 0n,
       };
     }
-    const enabled = mode === 1 ? policy.hardEnabled[t] : policy.enabled[t];
-    if (!enabled) return { status: 'disabled', live_pool_state: null, short_by_lamports: '0' };
-    const needed = policy.tierPot[t] + policy.cushion + policy.minPlatform + idleReserve({ tier: t, mode });
+    if (t.activePool !== null && t.activePool !== 0n) {
+      // The chain holds a live pool this indexer has not (or no longer)
+      // projected as live: the slot is taken, its state is not known here.
+      return { status: 'settling', live_pool_state: null, live_pool_id: t.activePool.toString(), short: 0n };
+    }
+    if (!t.enabled || !tierOpen(t.mode, t.tier)) {
+      return { status: 'disabled', live_pool_state: null, live_pool_id: null, short: 0n };
+    }
+    const needed = t.potLamports + policy.cushion + policy.minPlatform + idleReserve(k);
     const short = available >= needed ? 0n : needed - available;
-    if (short > 0n && firstShort === null) firstShort = short;
-    return {
-      status: short === 0n ? 'openable' : 'short',
-      live_pool_state: null,
-      short_by_lamports: short.toString(),
-    };
+    return { status: short === 0n ? 'openable' : 'short', live_pool_state: null, live_pool_id: null, short };
   };
-  const tiers: TierStatus[] = policy.tierPot.map((pot, t) => ({
-    tier: t,
-    price_lamports: policy.tierPrice[t].toString(),
-    pot_lamports: pot.toString(),
-    // Easy first, then hard: `firstShort` is the lowest tier's easy slot
-    // when both are short, matching the keeper's own order.
-    ...slotStatus(t, 0),
-    hard: slotStatus(t, 1),
-  }));
 
-  // One tier-0 pool's margin: pass sales in, pot out — at a full field and
-  // at the 52-seat minimum (D-E4). Shown as a range because the field a
-  // pool actually runs with is decided by the players, not the operator.
-  const marginFull = policy.tierPrice[0] * 64n - policy.tierPot[0];
-  const marginMin = policy.tierPrice[0] * MIN_SEATS - policy.tierPot[0];
+  const sorted = [...types.values()].sort(
+    (a, b) => a.mode - b.mode || a.tier - b.tier || a.capacity - b.capacity
+  );
+  const statusByKey = new Map<string, ReturnType<typeof slotStatus>>();
+  for (const t of sorted) statusByKey.set(poolTypeKey(t.mode, t.tier, t.capacity), slotStatus(t));
+
+  // The first shortfall: the lowest tier, easy before hard, smallest size
+  // first — the cheapest pool type the treasury cannot yet open.
+  let firstShort: bigint | null = null;
+  for (const t of [...sorted].sort((a, b) => a.tier - b.tier || a.mode - b.mode || a.capacity - b.capacity)) {
+    const s = statusByKey.get(poolTypeKey(t.mode, t.tier, t.capacity))!;
+    if (s.status === 'short') {
+      firstShort = s.short;
+      break;
+    }
+  }
+
+  const economicsSet = (t: PolicyPoolType): boolean => t.paidPlaces > 0 && t.potLamports > 0n;
+  const pool_types: PoolTypeTreasury[] = sorted.map((t) => {
+    const k = poolTypeKey(t.mode, t.tier, t.capacity);
+    const s = statusByKey.get(k)!;
+    const livePool = liveByType.get(k);
+    const price = policy.tierPrice[t.tier] ?? 0n;
+    const r = realised.get(k);
+    return {
+      mode: t.mode === 1 ? 'hard' : 'easy',
+      tier: t.tier,
+      capacity: t.capacity,
+      type_enabled: t.enabled,
+      tier_open: tierOpen(t.mode, t.tier),
+      status: s.status,
+      live_pool_id: s.live_pool_id,
+      live_pool_state: s.live_pool_state,
+      entry_lamports: price.toString(),
+      prize_pool_lamports: t.potLamports.toString(),
+      min_seats: t.minSeats,
+      paid_places: t.paidPlaces,
+      locked_lamports: livePool && livePool.state !== 'Refunding' ? livePool.pot.toString() : '0',
+      idle_reserve_lamports: reserveOf(t).toString(),
+      short_by_lamports: s.short.toString(),
+      margin_lamports: economicsSet(t)
+        ? {
+            minimum_field: (price * BigInt(t.minSeats) - t.potLamports).toString(),
+            full: (price * BigInt(t.capacity) - t.potLamports).toString(),
+          }
+        : null,
+      realised: { pools_paid: r?.pools ?? '0', margin_lamports: r?.margin ?? '0' },
+    };
+  });
+
+  // The back-compatible tier rows: each tier's 64-player type, per ladder.
+  const referenceSlot = (mode: number, tier: number): TierStatus['hard'] => {
+    const k = poolTypeKey(mode, tier, REFERENCE_CAPACITY);
+    const s = statusByKey.get(k);
+    if (!s) return { status: 'disabled', live_pool_state: null, short_by_lamports: '0' };
+    return { status: s.status, live_pool_state: s.live_pool_state, short_by_lamports: s.short.toString() };
+  };
+  const tiers: TierStatus[] = policy.tierPrice.map((price, t) => {
+    const easy64 = types.get(poolTypeKey(0, t, REFERENCE_CAPACITY));
+    const pot = easy64 && economicsSet(easy64) ? easy64.potLamports : policy.tierPot[t];
+    return {
+      tier: t,
+      price_lamports: price.toString(),
+      pot_lamports: pot.toString(),
+      ...referenceSlot(0, t),
+      hard: referenceSlot(1, t),
+    };
+  });
+
+  // One tier-0 64-player pool's margin: entries in, prize pool out — at a
+  // full field and at its minimum field. Shown as a range because the field
+  // a pool actually runs with is decided by the players, not the operator.
+  // From the type's own economics when set; otherwise Config's reference
+  // prize pool at the launch minimum field (`MIN_FIELD_BY_CAPACITY`).
+  const ref = types.get(poolTypeKey(0, 0, REFERENCE_CAPACITY));
+  const price0 = policy.tierPrice[0];
+  const pot0 = ref && economicsSet(ref) ? ref.potLamports : policy.tierPot[0];
+  const minField0 = ref && economicsSet(ref) ? BigInt(ref.minSeats) : BigInt(minFieldFor(REFERENCE_CAPACITY));
+  const marginFull = price0 * BigInt(REFERENCE_CAPACITY) - pot0;
+  const marginMin = price0 * minField0 - pot0;
   const poolsToUnlock = (margin: bigint): string | null =>
     firstShort !== null && margin > 0n ? ((firstShort + margin - 1n) / margin).toString() : null;
+
+  let realisedTotal = 0n;
+  for (const r of realised.values()) realisedTotal += BigInt(r.margin);
 
   return {
     platform_balance_lamports: balance.toString(),
@@ -304,9 +508,12 @@ export async function treasuryReport(
       min_platform_lamports: policy.minPlatform.toString(),
     },
     vault_cushion_lamports: policy.cushion.toString(),
+    idle_reserve_lamports: totalIdle.toString(),
     withdraw_floor_lamports: floor.toString(),
     withdrawable_lamports: withdrawable.toString(),
     tiers,
+    pool_types,
+    realised_margin_lamports: realisedTotal.toString(),
     policy_source: policy.source,
     enablement_source: policy.enablementSource,
     tier0_margin_lamports: { minimum_field: marginMin.toString(), full: marginFull.toString() },
@@ -319,7 +526,7 @@ export async function treasuryReport(
  * `TiersOpened`, or — when the founder has never sent one —
  * `init_config`'s seeded posture, which is what the account then holds.
  * Separated from the rest of the ledger policy so `GET /tiers` can reach it
- * without the two economics queries it does not need. */
+ * without the economics queries it does not need. */
 async function enablementFromLedger(
   db: Queryable
 ): Promise<{ enabled: readonly boolean[]; source: 'ledger' | 'launch_default' }> {
@@ -345,8 +552,7 @@ async function hardEnablementFromLedger(
 
 /**
  * Which tiers may open a HARD pool (Phase B) — `tierEnablement`'s twin, by
- * the same three-way resolution, for `GET /tiers`. The app decides from
- * this alone whether a hard card exists (no switch of its own).
+ * the same three-way resolution, for `GET /tiers` and `GET /pool-types`.
  */
 export async function hardTierEnablement(
   db: Queryable,
@@ -370,9 +576,9 @@ export async function hardTierEnablement(
  * visible rather than silent.
  *
  * This is a DISPLAY signal. The gate itself is `open_pool`'s
- * `require!(config.open_tiers[tier], TierNotOpen)` — a tier shown open here
- * that is closed on chain costs a refused transaction, not an entry, and no
- * player can enter a pool that was never opened.
+ * `require!(config.open_tiers_for(mode)[tier], TierNotOpen)` — a tier shown
+ * open here that is closed on chain costs a refused transaction, not an
+ * entry, and no player can enter a pool that was never opened.
  */
 export async function tierEnablement(
   db: Queryable,
@@ -383,8 +589,8 @@ export async function tierEnablement(
   return enablementFromLedger(db);
 }
 
-/** One chain read, or null. Never throws: the route is public. */
-async function tryChainRead(
+/** One chain read, or null. Never throws: the routes that call it are public. */
+export async function tryChainRead(
   chain: TreasuryChainReader | null | undefined
 ): Promise<TreasuryChainView | null> {
   if (!chain) return null;
@@ -405,6 +611,16 @@ function policyFromChain(view: TreasuryChainView): Policy {
     tierPot: [...view.tierPotLamports],
     enabled: [...view.openTiers],
     hardEnabled: [...view.hardOpenTiers],
+    poolTypes: (view.poolTypes ?? []).map((t) => ({
+      mode: t.mode,
+      tier: t.tier,
+      capacity: t.capacity,
+      enabled: t.enabled,
+      minSeats: t.minSeats,
+      paidPlaces: t.paidPlaces,
+      potLamports: t.potLamports,
+      activePool: t.activePool,
+    })),
     cushion: view.vaultCushionLamports,
     source: 'chain',
     enablementSource: 'chain',
@@ -414,19 +630,20 @@ function policyFromChain(view: TreasuryChainView): Policy {
 }
 
 /**
- * The fallback policy: three single-row lookups, each bounded by LIMIT or by
- * the seven tiers. Seeded from the launch tables, which is the honest thing
- * a ledger alone can say — `init_config` seeds `Config` from the same
- * constants and emits nothing, and `set_tier_economics` /
- * `set_treasury_policy` / `set_open_tiers` DO emit, so a ledger that has
- * seen those events is current for whatever they changed and stale for the
- * rest. The cushion is not knowable off-chain at all: it is zero here, and
- * `vault_cushion_lamports` publishes that so the floor reads as the lower
- * bound it is.
+ * The tier prices and Config's 64-player reference prize pools as the
+ * LEDGER can state them: `set_tier_economics` emits `TierEconomicsSet`, so
+ * a tier the founder has moved is current; every other tier is at its
+ * launch value — `init_config` seeds `Config` from the same constants and
+ * emits nothing. The launch reference prize pool is the 64-player table at
+ * the launch price (`prizePoolFor(ladderTable(64), price)` — 40 entries,
+ * what `constants.rs::TIER_POT_LAMPORTS` holds). One DISTINCT ON, bounded
+ * by the seven tiers.
  */
-async function policyFromLedger(db: Queryable): Promise<Policy> {
+export async function tierEconomicsFromLedger(
+  db: Queryable
+): Promise<{ tierPrice: bigint[]; tierPot: bigint[] }> {
   const tierPrice = TIER_ENTRY_LAMPORTS.map((v) => v);
-  const tierPot = TIER_POT_LAMPORTS.map((v) => v);
+  const tierPot = TIER_ENTRY_LAMPORTS.map((price) => prizePoolFor(ladderTable(REFERENCE_CAPACITY), price));
 
   const economics = await db.query(
     "SELECT DISTINCT ON (raw->>'tier') raw FROM events WHERE name = 'TierEconomicsSet' " +
@@ -440,10 +657,85 @@ async function policyFromLedger(db: Queryable): Promise<Policy> {
       tierPot[t] = BigInt(e.pot_lamports as string);
     }
   }
+  return { tierPrice, tierPot };
+}
 
+/** One row of the `pool_types` projection (migration 0026). */
+export interface LedgerPoolTypeRow {
+  mode: number;
+  tier: number;
+  capacity: number;
+  poolType: string | null;
+  minSeats: number;
+  paidPlaces: number;
+  /** `paid_places` entries, rank 1 first. */
+  prizeTable: number[];
+  potLamports: bigint;
+  enabled: boolean;
+  nextOpenAt: bigint;
+  lastPoolId: bigint | null;
+}
+
+/**
+ * The `pool_types` projection, every row — one per (mode, tier, capacity),
+ * at most 56. Rows a `PoolType` event created carry its address; a row
+ * created only by a pre-Ladder `TierSlotFreed` (a slot stamp, not an
+ * account) has none, and `realOnly` drops it.
+ */
+export async function ledgerPoolTypeRows(db: Queryable, realOnly = true): Promise<LedgerPoolTypeRow[]> {
+  const res = await db.query(
+    `SELECT mode, tier, capacity, pool_type, min_seats, paid_places, prize_table,
+            pot_lamports::text AS pot_lamports, enabled,
+            next_open_at::text AS next_open_at, last_pool_id::text AS last_pool_id
+       FROM pool_types`
+  );
+  const rows = (res.rows as Array<Record<string, unknown>>).map((r) => {
+    const table = Array.isArray(r.prize_table) ? (r.prize_table as unknown[]).map(Number) : [];
+    return {
+      mode: Number(r.mode) === 1 ? 1 : 0,
+      tier: Number(r.tier),
+      capacity: Number(r.capacity),
+      poolType: typeof r.pool_type === 'string' ? r.pool_type : null,
+      minSeats: r.min_seats === null || r.min_seats === undefined ? 0 : Number(r.min_seats),
+      paidPlaces: r.paid_places === null || r.paid_places === undefined ? table.length : Number(r.paid_places),
+      prizeTable: table,
+      potLamports: BigInt((r.pot_lamports as string | null) ?? '0'),
+      enabled: r.enabled === true,
+      nextOpenAt: BigInt((r.next_open_at as string | null) ?? '0'),
+      lastPoolId:
+        r.last_pool_id === null || r.last_pool_id === undefined ? null : BigInt(r.last_pool_id as string),
+    };
+  });
+  return realOnly ? rows.filter((r) => r.poolType !== null) : rows;
+}
+
+/**
+ * The fallback policy: bounded lookups, each a single row (LIMIT 1), a
+ * DISTINCT ON over the seven tiers, or the pool-type projection. Seeded from
+ * the launch tables, which is the honest thing a ledger alone can say —
+ * `init_config` seeds `Config` from the same constants and emits nothing,
+ * and `set_tier_economics` / `set_treasury_policy` / `set_open_tiers` and
+ * the three pool-type instructions DO emit, so a ledger that has seen those
+ * events is current for whatever they changed and stale for the rest. The
+ * cushion is not knowable off-chain at all: it is zero here, and
+ * `vault_cushion_lamports` publishes that so the floor reads as the lower
+ * bound it is.
+ */
+async function policyFromLedger(db: Queryable): Promise<Policy> {
+  const { tierPrice, tierPot } = await tierEconomicsFromLedger(db);
   const policySet = await latestEvent(db, 'TreasuryPolicySet');
   const fromLedger = await enablementFromLedger(db);
   const hardFromLedger = await hardEnablementFromLedger(db);
+  const poolTypes = (await ledgerPoolTypeRows(db)).map((r) => ({
+    mode: r.mode,
+    tier: r.tier,
+    capacity: r.capacity,
+    enabled: r.enabled,
+    minSeats: r.minSeats,
+    paidPlaces: r.paidPlaces,
+    potLamports: r.potLamports,
+    activePool: null,
+  }));
 
   return {
     minPlatform: policySet ? BigInt(policySet.min_platform_lamports as string) : 0n,
@@ -452,6 +744,7 @@ async function policyFromLedger(db: Queryable): Promise<Policy> {
     tierPot,
     enabled: fromLedger.enabled,
     hardEnabled: hardFromLedger.enabled,
+    poolTypes,
     cushion: 0n,
     source: 'ledger',
     enablementSource: fromLedger.source,
@@ -472,26 +765,56 @@ async function latestEvent(
   return res.rows.length > 0 ? (res.rows[0].raw as Record<string, unknown>) : null;
 }
 
-/** The live pools, straight off the derived table. At most one per tier. */
-async function livePools(db: Queryable): Promise<LivePool[]> {
+/** The live pools, straight off the derived table. At most one per pool type. */
+export async function livePools(db: Queryable): Promise<LivePool[]> {
   const res = await db.query(
-    `SELECT tier, entry_lamports::text AS entry_lamports, pot_lamports::text AS pot_lamports,
-            state, entrants::text AS entrants, refunded_count::text AS refunded_count,
-            mode
+    `SELECT pool, id::text AS id, tier, mode, capacity,
+            entry_lamports::text AS entry_lamports, pot_lamports::text AS pot_lamports,
+            state, entrants::text AS entrants, refunded_count::text AS refunded_count
        FROM pools
       WHERE state = ANY($1)`,
     [[...LIVE_STATES]]
   );
   return res.rows.map((r: Record<string, unknown>) => ({
+    pool: String(r.pool),
+    id: r.id === null || r.id === undefined ? null : String(r.id),
     tier: Number(r.tier),
     price: BigInt((r.entry_lamports as string | null) ?? '0'),
     pot: BigInt((r.pot_lamports as string | null) ?? '0'),
     state: r.state as LivePool['state'],
     entrants: BigInt((r.entrants as string | null) ?? '0'),
     refunded: BigInt((r.refunded_count as string | null) ?? '0'),
-    // A row from before 0025 carries no mode: easy.
+    // A row from before 0025 carries no mode: easy. One from before 0026
+    // carries no capacity: 64, the only size there was.
     mode: Number(r.mode) === 1 ? 1 : 0,
+    capacity: r.capacity === null || r.capacity === undefined ? REFERENCE_CAPACITY : Number(r.capacity),
   }));
+}
+
+/**
+ * What pools that PAID returned, per pool type: how many, and Σ (entry ×
+ * entrants − prize pool) — computed in SQL over NUMERIC, so exact, and
+ * returned as decimal strings. A Closed pool refunded every entry and got
+ * its prize pool back, so it returned nothing and is not counted.
+ */
+async function realisedByType(db: Queryable): Promise<Map<string, { pools: string; margin: string }>> {
+  const res = await db.query(
+    `SELECT mode, tier, capacity, count(*)::text AS pools,
+            COALESCE(sum(entry_lamports * entrants - pot_lamports), 0)::text AS margin
+       FROM pools
+      WHERE state = 'Paid'
+      GROUP BY mode, tier, capacity`
+  );
+  const out = new Map<string, { pools: string; margin: string }>();
+  for (const r of res.rows as Array<Record<string, unknown>>) {
+    const mode = Number(r.mode) === 1 ? 1 : 0;
+    const capacity = r.capacity === null || r.capacity === undefined ? REFERENCE_CAPACITY : Number(r.capacity);
+    out.set(poolTypeKey(mode, Number(r.tier), capacity), {
+      pools: String(r.pools),
+      margin: String(r.margin),
+    });
+  }
+  return out;
 }
 
 /**

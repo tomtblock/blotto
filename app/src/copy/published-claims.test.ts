@@ -127,8 +127,11 @@ const RULES_PROMISES: readonly Promised[] = [
   },
   {
     kind: 'mechanism',
-    phrase: 'we check the winning wallet against published sanctions lists',
-    commitment: 'The winning wallet is screened against sanctions lists before payment.',
+    // D-E19: several places are paid, so the sentence names every wallet
+    // due a prize — the crank already screened every wallet in the committed
+    // payout list, which is what the proof below does.
+    phrase: 'we check every wallet due a prize against published sanctions lists',
+    commitment: 'Every wallet due a prize is screened against sanctions lists before payment.',
     // Fully operational at both ends (Stage F). At ENTRY the packet service
     // screens every entrant (Stage B). At RESOLVING the crank screens every
     // wallet in the committed payout list and places an on-chain
@@ -284,7 +287,7 @@ const RULES_PROMISES: readonly Promised[] = [
   {
     kind: 'mechanism',
     phrase: 'It is never returned to us',
-    commitment: 'A forfeited first-place share is never taken by the operator.',
+    commitment: 'A forfeited share is never taken by the operator.',
     // The founder's ruling of 2026-09-07: `forfeit_escrow` moves nothing, an
     // upheld flag leaves the share in its own pool vault, and the only
     // lamport exits are pay_prizes, release_escrow, pay_next_place and
@@ -407,7 +410,13 @@ const TERMS_PROMISES: readonly Promised[] = [
   {
     kind: 'mechanism',
     phrase: 'A prize we withhold is never kept by us',
-    commitment: 'A withheld prize passes to the next eligible player, never to the operator.',
+    // D-E19: in a pool paying several places the withheld share is HELD in
+    // the pool's vault until the field-moves-up instructions ship
+    // (pay_next_place refuses with NextPlaceUnsupported); in a one-place
+    // pool pay_next_place still pays it on. Either way the vault's exits
+    // never reach the operator — check-standing-rules.sh asserts the set.
+    commitment:
+      'A withheld prize stays in the pool vault and goes on to other players of the same pool, never to the operator.',
     proof: 'programs/blotto_cup/src/instructions/escrow.rs',
   },
   {
@@ -705,7 +714,9 @@ function rulesCopy(): string {
 function documentCopy(): string {
   const lines: string[] = [];
   const t = COPY.terms;
-  lines.push(t.intro, t.operatorUnsetNote);
+  // Version 6 (D-E19): the plain-language summary of what changed is prose
+  // on the terms page too, so a promise in it would have to be registered.
+  lines.push(t.intro, t.operatorUnsetNote, t.changes.heading, ...t.changes.points);
   for (const s of t.sections) {
     lines.push(...s.body);
     if (s.points) lines.push(...s.points);

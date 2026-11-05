@@ -96,10 +96,13 @@ export const METRIC = {
      */
     keeperHold: 'reveal_keeper_hold',
     /**
-     * Counter (label `reason`: sanctions_hold|forfeit_logged): the review clock
-     * left a held share where it was instead of releasing it — a sanctions hold
-     * the program would refuse anyway, or a reviewer's forfeit already logged
-     * and waiting for its on-chain transaction (audit 2026-09-11, B-30 / D-03).
+     * Counter (label `reason`: sanctions_hold|forfeit_logged|next_place_unsupported):
+     * the review clock left a held share where it was instead of releasing it —
+     * a sanctions hold the program would refuse anyway, a reviewer's forfeit
+     * already logged and waiting for its on-chain transaction (audit
+     * 2026-09-11, B-30 / D-03), or — since D-E19 — a forfeited share in a pool
+     * paying more than one place, held in its vault until the field-moves-up
+     * payout ships (counted once per pool).
      */
     releaseHeld: 'reveal_release_held',
     /** Counter: a settled pool's reveal bundle was published for the first time. */

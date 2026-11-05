@@ -20,7 +20,7 @@ Each privileged instruction takes the role as `Signer<'info>` and binds it to th
 
 | Role (stored on `Config`) | Instructions | Check |
 |---|---|---|
-| `admin` (a multisig vault) | every `set_*` switch, `rotate_entry_signer`, `withdraw_platform`, `lift_sanctions_hold`, `forfeit_escrow` | `has_one = admin` |
+| `admin` (a multisig vault) | every `set_*` switch (`set_pool_type_economics` and `set_pool_type_enabled` included), `init_pool_type`, `rotate_entry_signer`, `withdraw_platform`, `lift_sanctions_hold`, `forfeit_escrow` | `has_one = admin` |
 | `settlement_signer` | `reveal_pool_secret`, `commit_results`, `pay_prizes`, `flag_entry`, `clear_flag`, `place_sanctions_hold`, `pay_next_place` | `has_one = settlement_signer` |
 | `settlement_signer`, or anyone after 7 days | `release_escrow` | compared to `Config.settlement_signer` in the handler unless the auto-release window (`ESCROW_AUTO_RELEASE_SECS`) has passed |
 | `keeper` | `open_pool` | `opener == config.keeper`, else `NotKeeper` |
@@ -32,8 +32,10 @@ state checks (deadline passed, pool below the minimum field, write-once), not fr
 
 Tests: `tests/litesvm/tests/gates.rs` (`non_admin_reverts_on_every_admin_instruction`) calls every
 admin instruction from a non-admin key and expects Anchor's `ConstraintHasOne` (2001), then succeeds
-as the admin. `keeper_and_timing.rs` proves that only the keeper opens a pool (`NotKeeper`) and
-that the service keys cannot enter; `lifecycle.rs` covers settlement-signer refusals.
+as the admin. The three pool-type instructions (D-E19) carry the same `has_one = admin`; that test
+does not yet call them. `keeper_and_timing.rs` proves that only the keeper opens a pool
+(`NotKeeper`) and that the service keys cannot enter; `lifecycle.rs` covers settlement-signer
+refusals.
 
 ## Residual risk
 

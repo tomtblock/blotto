@@ -1,22 +1,31 @@
 /*
  * Verify-page logic specs: a consistent pool verifies green; every category
  * of tampering — a swapped battle set, a doctored rank, a wrong payout, a
- * forged secret — turns exactly the right check red.
+ * forged secret, a prize table the chain never opened with — turns exactly
+ * the right check red.
+ *
+ * D-E19 (the Ladder): the fixture is a version-4 bundle of a 64-player pool
+ * paying its published 16-place table at the tier-0 price — amounts from
+ * `assignPrizes(results, table, entry)`, the crank's call, never typed.
  */
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'crypto';
 import { verifyPool, type OnChainRecord, type PublishedBundle } from './logic';
 import {
+  LADDER_TABLES,
+  MIN_FIELD_BY_CAPACITY,
+  TIER_ENTRY_LAMPORTS,
   assignPrizes,
   battlesHash,
   decodeBattleSet,
   encodeBattleSet,
-  potForTier,
+  prizePoolFor,
   rankOrder,
   scorePool,
   leafBytes,
   merkleRoot,
   type BattleSet,
+  type PoolCapacity,
 } from '@blotto/scoring';
 import { base58Encode, base58Decode } from '@blotto/shared/blotto-events';
 import { scoreWithMissing } from '@blotto/scoring';
@@ -30,16 +39,19 @@ function alloc(i: number): number[] {
   return [d[0], d[1] - d[0], d[2] - d[1], d[3] - d[2], 100 - d[3]];
 }
 
-function fixture(): { bundle: PublishedBundle; chain: OnChainRecord } {
-  const n = 64;
+function fixture(
+  n = 64,
+  capacity: PoolCapacity = 64
+): { bundle: PublishedBundle; chain: OnChainRecord } {
   const players = Array.from({ length: n }, (_, i) => base58Encode(sha(`p:${i}`)));
   const battles: BattleSet[] = Array.from({ length: n }, (_, i) =>
     Array.from({ length: 7 }, (_, k) => alloc(i * 100 + k))
   ) as never;
   const salts = Array.from({ length: n }, (_, i) => sha(`salt:${i}`));
-  const entry = 100_000_000n;
-  const pot = potForTier(0);
-  const results = assignPrizes(scorePool(battles), pot);
+  const entry = TIER_ENTRY_LAMPORTS[0]!;
+  const table = [...LADDER_TABLES[capacity]];
+  const pot = prizePoolFor(table, entry);
+  const results = assignPrizes(scorePool(battles), table, entry);
   // Leaf order (D3-B): rank asc, entry index asc.
   const byRank = [...results].sort((a, b) => a.rank - b.rank || a.index - b.index);
   const leaves = byRank.map((r) =>
@@ -56,6 +68,11 @@ function fixture(): { bundle: PublishedBundle; chain: OnChainRecord } {
   const secret = sha('the-pool-secret');
 
   const bundle: PublishedBundle = {
+    version: 4,
+    capacity,
+    paid_places: table.length,
+    prize_table: table,
+    min_seats: MIN_FIELD_BY_CAPACITY[capacity],
     pool_id: '1',
     secret: hex(secret),
     entry_lamports: entry.toString(),
@@ -86,6 +103,8 @@ function fixture(): { bundle: PublishedBundle; chain: OnChainRecord } {
     sealingSecretHashHex: hex(new Uint8Array(createHash('sha256').update(secret).digest())),
     entryLamports: entry.toString(),
     potLamports: pot.toString(),
+    capacity,
+    prizeTable: [...table],
     revealedSecretHex: hex(secret),
     resultsRootHex: root,
     committedPayouts: committed.map((r) => ({
@@ -113,6 +132,7 @@ describe('verifyPool', () => {
       'secret-commitment:pass',
       'bundle-secret:pass',
       'entry-commitments:pass',
+      'prize-table:pass',
       'rescore:pass',
       'results-root:pass',
       'committed-payouts:pass',
@@ -157,10 +177,11 @@ describe('verifyPool', () => {
 
   it('a payout routed to a different wallet turns payouts red', () => {
     const { bundle, chain } = fixture();
-    // Under D-E2 the paid set is usually one seat, so the wrong wallet is
-    // any OTHER entrant's — not a second payout row.
+    // The wrong wallet is an entrant who was NOT paid — not a second
+    // payout row, which would be caught as a duplicate rather than a theft.
     const winner = chain.payouts[0];
-    const other = bundle.entries.find((e) => e.index !== winner.entryIndex)!;
+    const paidSeats = new Set(chain.payouts.map((p) => p.entryIndex));
+    const other = bundle.entries.find((e) => !paidSeats.has(e.index))!;
     winner.player = other.player;
     const report = verifyPool(bundle, chain);
     expect(report.checks.find((c) => c.name === 'payouts')!.ok).toBe(false);
@@ -455,7 +476,8 @@ function fixtureMissing(bundle: PublishedBundle): {
         battles: e.battles !== null ? decodeBattleSet(Buffer.from(e.battles, 'hex')) : null,
       }))
     ),
-    potForTier(0)
+    bundle.prize_table!,
+    BigInt(bundle.entry_lamports)
   );
   const byRank = [...results].sort((a, b) => a.rank - b.rank || a.index - b.index);
   const root = hex(
@@ -505,7 +527,7 @@ function fixture63(bundle: PublishedBundle): {
 } {
   const byIndex = [...bundle.entries].sort((a, b) => a.index - b.index);
   const battles = byIndex.map((e) => decodeBattleSet(Buffer.from(e.battles!, 'hex')));
-  const results = assignPrizes(scorePool(battles), potForTier(0));
+  const results = assignPrizes(scorePool(battles), bundle.prize_table!, BigInt(bundle.entry_lamports));
   const byRank = [...results].sort((a, b) => a.rank - b.rank || a.index - b.index);
   const root = hex(
     merkleRoot(
@@ -543,3 +565,131 @@ function fixture63(bundle: PublishedBundle): {
     })),
   };
 }
+
+/*
+ * D-E19 (the Ladder). The amounts recompute from the POOL's own table, and
+ * the table is held to the chain before anything is computed from it: a
+ * bundle that could name its own prizes would let a wrong payout verify.
+ */
+describe('the prize table (D-E19)', () => {
+  it('pays the published table, place by place, in a full pool of 64', () => {
+    const { bundle } = fixture();
+    const byRank = [...bundle.results].sort((a, b) => a.rank - b.rank);
+    // No ties in this field at the top, or the place-by-place check is about nothing.
+    expect(byRank.slice(0, 16).map((r) => r.rank)).toEqual(Array.from({ length: 16 }, (_, i) => i + 1));
+    const entry = TIER_ENTRY_LAMPORTS[0]!;
+    LADDER_TABLES[64].forEach((m, i) => {
+      expect(BigInt(byRank[i]!.amount_lamports), `place ${i + 1}`).toBe(BigInt(m) * entry);
+    });
+    expect(byRank.slice(16).every((r) => r.amount_lamports === '0')).toBe(true);
+  });
+
+  it('verifies a pool of 32 played at a short field, paying its 8 places', () => {
+    const { bundle, chain } = fixture(26, 32);
+    const report = verifyPool(bundle, chain);
+    expect(report.verdict).toBe('match');
+    expect(report.checks.find((c) => c.name === 'prize-table')!.detail).toContain('a pool of 32 paying 8 places');
+    expect(bundle.payouts.length).toBeGreaterThanOrEqual(8);
+  });
+
+  it('a table that does not sum to the on-chain prize pool is red', () => {
+    const { bundle, chain } = fixture(16, 16);
+    // 5,3,1,1 → 5,2,1,1: still well-formed, one entry short of the prize pool.
+    bundle.prize_table = [5, 2, 1, 1];
+    chain.prizeTable = undefined;
+    const report = verifyPool(bundle, chain);
+    const row = report.checks.find((c) => c.name === 'prize-table')!;
+    expect(row.status).toBe('fail');
+    expect(row.detail).toContain('prize pool');
+    expect(report.verdict).toBe('mismatch');
+  });
+
+  it('a table with the right sum but not the one the pool opened with is red', () => {
+    const { bundle, chain } = fixture(16, 16);
+    // 5,3,1,1 and 4,4,1,1 both sum to 10 entries: only the chain's copy can tell.
+    bundle.prize_table = [4, 4, 1, 1];
+    const report = verifyPool(bundle, chain);
+    const row = report.checks.find((c) => c.name === 'prize-table')!;
+    expect(row.status).toBe('fail');
+    expect(row.detail).toContain('not the one the pool opened with');
+  });
+
+  it('without the chain’s copy of the table, the sum is checked and the row says what was not', () => {
+    const { bundle, chain } = fixture(16, 16);
+    chain.prizeTable = undefined;
+    chain.capacity = undefined;
+    const report = verifyPool(bundle, chain);
+    const row = report.checks.find((c) => c.name === 'prize-table')!;
+    expect(row.status).toBe('incomplete');
+    expect(row.detail).toContain('could not be compared');
+    expect(report.verdict).toBe('incomplete');
+  });
+
+  it('a malformed table stops the report there, red, instead of throwing', () => {
+    const { bundle, chain } = fixture(8, 8);
+    bundle.prize_table = [2, 3];
+    const report = verifyPool(bundle, chain);
+    expect(report.ok).toBe(false);
+    expect(report.checks[report.checks.length - 1]!.name).toBe('prize-table');
+    expect(report.checks[report.checks.length - 1]!.status).toBe('fail');
+  });
+
+  it('more entrants than the pool holds is red', () => {
+    const { bundle, chain } = fixture(9, 8);
+    const row = verifyPool(bundle, chain).checks.find((c) => c.name === 'prize-table')!;
+    expect(row.status).toBe('fail');
+    expect(row.detail).toContain('9 entrants in a pool of 8');
+  });
+
+  it('a pre-Ladder (version 3) bundle recomputes as 64 players, one place, the whole prize pool', () => {
+    // The pool before D-E19: one place worth 40 entries — table [pot / entry].
+    const { bundle, chain } = fixture();
+    const entry = TIER_ENTRY_LAMPORTS[0]!;
+    const table = [40];
+    const results = assignPrizes(
+      scorePool(bundle.entries.map((e) => decodeBattleSet(Buffer.from(e.battles!, 'hex')))),
+      table,
+      entry
+    );
+    const byRank = [...results].sort((a, b) => a.rank - b.rank || a.index - b.index);
+    const paid = results.filter((r) => r.amountLamports > 0n).sort((a, b) => a.index - b.index);
+    const old: PublishedBundle = {
+      ...bundle,
+      version: 3,
+      capacity: undefined,
+      paid_places: undefined,
+      prize_table: undefined,
+      min_seats: undefined,
+      results: byRank.map((r) => ({
+        index: r.index,
+        player: bundle.entries[r.index]!.player,
+        score_half: r.scoreHalf,
+        zones: r.zones,
+        rank: r.rank,
+        amount_lamports: r.amountLamports.toString(),
+      })),
+    };
+    const root = hex(
+      merkleRoot(
+        byRank.map((r) =>
+          leafBytes({ player: base58Decode(bundle.entries[r.index]!.player), rank: r.rank, amountLamports: r.amountLamports })
+        )
+      )
+    );
+    const record: OnChainRecord = {
+      ...chain,
+      potLamports: (40n * entry).toString(),
+      capacity: undefined,
+      prizeTable: undefined,
+      resultsRootHex: root,
+      committedPayouts: paid.map((r) => ({ entryIndex: r.index, amount: r.amountLamports.toString() })),
+      payouts: paid.map((r) => ({ player: bundle.entries[r.index]!.player, entryIndex: r.index, amount: r.amountLamports.toString() })),
+    };
+    const report = verifyPool(old, record);
+    expect(report.checks.map((c) => `${c.name}:${c.status}`)).toContain('prize-table:pass');
+    expect(report.verdict).toBe('match');
+    // The whole prize pool to rank 1 (shared only on a tie for first).
+    const total = paid.reduce((a, r) => a + r.amountLamports, 0n);
+    expect(total).toBe(40n * entry);
+  });
+});

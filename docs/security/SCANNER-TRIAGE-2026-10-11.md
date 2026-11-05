@@ -149,7 +149,7 @@ nine. Against this app:
 | GHSA-39w2: development server | low | 16.3.8 | Development only |
 
 None is a bypass of the request proxy, so the pre-launch gate in `app/src/proxy.ts` is not
-affected. **Fix:** `next` and `eslint-config-next` to `16.3.8` in `app/package.json`; regenerate
+affected. (That gate was removed on 2026-11-05; this triage is dated and keeps its finding as written.) **Fix:** `next` and `eslint-config-next` to `16.3.8` in `app/package.json`; regenerate
 the lockfile (see item C for the npm-version note); run typecheck, tests, lint and `next build`;
 let Vercel redeploy. 16.4.0 is also clean but is a minor release — not the change to make the
 week of a submission.

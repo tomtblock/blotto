@@ -22,6 +22,7 @@
 
 import {
   assignPrizes,
+  prizeTableFromChain,
   base58Decode,
   battlesHash,
   decodePayload,
@@ -166,7 +167,8 @@ export interface RankingRow {
   player: string;
   /** Competition rank (D3-B): tied players share one — 1, 2, 2, 4. */
   rank: number;
-  /** The split-pot amount committed for this seat; 0 for an unpaid seat. */
+  /** The amount committed for this seat under the pool's table (D3-B ties
+   * share the positions they occupy); 0 for an unpaid seat. */
   amountLamports: bigint;
   scoreHalf: number;
   zones: number;
@@ -214,9 +216,39 @@ export function proofForRow(ranking: PublishedRanking, rowPosition: number): Pro
 }
 
 /**
+ * A pool's prize table as the engine takes it (D-E19): its OWN on-chain
+ * `prize_table` / `paid_places`, copied at open — never the launch table,
+ * because a pool plays by the terms it opened under. Refuses a pool with no
+ * table (`paid_places == 0`: a pre-Ladder pool whose prize pool is not a
+ * whole number of entries, which `migrate_pool` can only record as
+ * unrepresentable) rather than guessing one: an amount computed from a
+ * guessed table is a payment bug, and `commit_results` is final.
+ */
+export function poolPrizeTable(
+  rawTable: readonly number[],
+  paidPlaces: number,
+  poolId: bigint
+): number[] {
+  if (paidPlaces === 0) {
+    throw new Error(
+      `pool ${poolId} records no prize table (a pre-Ladder pool whose prize pool is not ` +
+        `a whole number of entries) — refusing to settle it against a guessed one`
+    );
+  }
+  return prizeTableFromChain(rawTable, paidPlaces);
+}
+
+/** The prize terms a pool is settled under: its table and its entry price,
+ * both as copied onto the Pool account at open (D-E19). */
+export interface PrizeTerms {
+  table: readonly number[];
+  entryLamports: bigint;
+}
+
+/**
  * Recompute a SETTLED pool's published ranking from the secret and the
- * sealed ciphertexts. The pot is read from chain state (D-A1 revised),
- * never derived from the entry price.
+ * sealed ciphertexts. The prize terms are read from chain state (the pool's
+ * own table and entry price — D-E19), never from a launch table.
  *
  * Throws when the recomputed root does not equal the pool's committed
  * `results_root`: every proof built from this ranking would be rejected by
@@ -238,7 +270,8 @@ export async function recomputeRanking(
    * Pool account already.
    */
   expectedEntrants: number,
-  potLamports: bigint,
+  /** The pool's own table and entry price (`poolPrizeTable`, `Pool.entry_lamports`). */
+  prize: PrizeTerms,
   committedRootHex: string | null,
   /** The pool's recorded placing rule (Phase B) — `Pool.mode`, never guessed. */
   mode: BoardMode = 'easy'
@@ -251,7 +284,7 @@ export async function recomputeRanking(
   }
   const sorted = [...entries].sort((a, b) => a.index - b.index);
   const { scoringInput } = await revealEntries(ciphertexts, poolId, secret, sorted, () => {}, mode);
-  const results = assignPrizes(scoreWithMissing(scoringInput, mode), potLamports);
+  const results = assignPrizes(scoreWithMissing(scoringInput, mode), prize.table, prize.entryLamports);
   const byIndex = new Map(sorted.map((e) => [e.index, e.player]));
   const ranking = buildRanking(results, (i) => {
     const p = byIndex.get(i);

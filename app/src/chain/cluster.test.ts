@@ -198,9 +198,27 @@ describe('clusterGate', () => {
       fileURLToPath(new URL('../../next.config.ts', import.meta.url)),
       'utf8',
     );
-    expect(config).toMatch(/import\s*\{\s*clusterGate\s*\}\s*from\s*"\.\/src\/chain\/cluster"/);
+    // The import may name more than the gate (since 2026-11-05 the config
+    // also reads `isMainnet` for the noindex header); what matters is that
+    // `clusterGate` is imported from this module and called.
+    expect(config).toMatch(/import\s*\{[^}]*\bclusterGate\b[^}]*\}\s*from\s*"\.\/src\/chain\/cluster"/);
     // Called at module scope — Next evaluates the config before compiling,
     // so a call inside a lazy export would not be a build-time gate.
     expect(config).toMatch(/^clusterGate\(\);$/m);
+  });
+
+  /*
+   * 2026-11-05: the pre-launch code gate was removed, and with it the only
+   * noindex on the public domain. The rule moved into the config's header
+   * block, keyed on the cluster: every non-mainnet build sends it.
+   */
+  it('sends noindex from every build that is not mainnet', () => {
+    const config = readFileSync(
+      fileURLToPath(new URL('../../next.config.ts', import.meta.url)),
+      'utf8',
+    );
+    expect(config).toMatch(
+      /\.\.\.\(isMainnet\(\)\s*\?\s*\[\]\s*:\s*\[\{\s*key:\s*"X-Robots-Tag",\s*value:\s*"noindex, nofollow"\s*\}\]\)/,
+    );
   });
 });

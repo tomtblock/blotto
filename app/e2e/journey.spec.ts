@@ -12,9 +12,13 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 
+/** The open EASY pool of 8 (scenarios.ts, `open`) — the picker's default (D-E19). */
 const POOL = 'F1XTUREPoo1111111111111111111111111111111111';
-/** The open HARD pool in the fixture catalogue (scenarios.ts, `hard-open`). */
+/** The open HARD pool of 8 in the fixture catalogue (scenarios.ts, `hard-open`). */
 const HARD_POOL = 'F1XTUREhard111111111111111111111111111111111';
+/** The open easy and hard pools of 16 (scenarios.ts, `deadline` and `hard-16`). */
+const EASY_16 = 'F1XTUREdead1ine11111111111111111111111111111';
+const HARD_16 = 'F1XTUREhard161111111111111111111111111111111';
 const SHOTS = '../docs/testing/screenshots/journey';
 
 const shot = (page: Page, name: string, project: string) =>
@@ -22,9 +26,10 @@ const shot = (page: Page, name: string, project: string) =>
 
 test('landing: montage hero, the choose-your-pool control, the 18+ line above the fold', async ({ page }, info) => {
   await page.goto('/');
-  // V3 (founder 2026-09-27): the founder's three lines.
+  // V3 (founder 2026-09-27): three lines. D-E19 (2026-11-05): the pools
+  // hold 8 to 64 players and pay their highest places (draft wording).
   await expect(page.getByTestId('hero-lines')).toHaveText(
-    'Sixty Four Seats. Seven Battlefields.Everyone battles everyone.The winner takes the prize pool.'
+    'Eight to Sixty Four Players. Seven Battlefields.Everyone battles everyone.The top of the ranking takes the prizes.'
   );
   // Founder 2026-09-09: the hero is the full-bleed montage. V2 (founder
   // 2026-09-27): with two boards the hero's control cannot name a pool, so
@@ -47,13 +52,17 @@ test('landing: montage hero, the choose-your-pool control, the 18+ line above th
 test('landing: one picker, Easy / Hard toggle, each side down its own pool (V2)', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('blotto.preloader.seen', 'v2'));
   await page.goto('/');
-  // The fixture catalogue holds one open easy pool and one open hard pool in
-  // tier 0: one card, Easy chosen first, the whole card switching on the
-  // toggle.
+  // The fixture catalogue holds one open pool per board and size in tier 0
+  // (D-E19): one card, Easy and size 8 chosen first, the whole card
+  // switching on the toggles.
   const picker = page.getByTestId('pool-picker');
   await expect(picker).toBeVisible();
   await expect(picker).toHaveAttribute('data-mode', 'easy');
+  await expect(picker).toHaveAttribute('data-size', '8');
   await expect(picker.getByTestId('pool-picker-state')).toContainText('Open now');
+  await expect(picker.getByTestId('pool-picker-summary')).toHaveText('8 players · 2 prizes · 1st 0.3 SOL');
+  await expect(picker.getByTestId('pool-picker-players')).toHaveText('3/ 8');
+  await expect(picker.getByTestId('prize-table')).toBeVisible();
   await expect(picker.getByText('Closes in')).toBeVisible();
   // V5 (founder 2026-09-30): Enter lands on the BOARD — the pool page is
   // no longer a stop on the way in.
@@ -70,6 +79,43 @@ test('landing: one picker, Easy / Hard toggle, each side down its own pool (V2)'
   await page.goto('/');
   await page.getByTestId('pool-picker-enter').click();
   await expect(page).toHaveURL(new RegExp(`/play\\?pool=${POOL}$`));
+});
+
+test('landing: the size toggle — live fills, the URL holds the choice, Back walks it (D-E19)', async ({ page }, info) => {
+  await page.addInitScript(() => localStorage.setItem('blotto.preloader.seen', 'v2'));
+  await page.goto('/');
+  const picker = page.getByTestId('pool-picker');
+  const size = picker.getByTestId('pool-picker-size');
+  await expect(size).toBeVisible();
+  // Every size with its live fill on the board on show.
+  await expect(size.getByTestId('pool-picker-size-8-detail')).toHaveText('3/8');
+  await expect(size.getByTestId('pool-picker-size-16-detail')).toHaveText('7/16');
+  await expect(size.getByTestId('pool-picker-size-32-detail')).toHaveText('22/32');
+  await expect(size.getByTestId('pool-picker-size-64-detail')).toHaveText('61/64');
+  await picker.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: `${SHOTS}/picker-${info.project.name}.png` });
+  // Choose 16: the card is that pool's, and the URL says so.
+  await size.getByTestId('pool-picker-size-16').click();
+  await expect(page).toHaveURL(/\?mode=easy&size=16/);
+  await expect(picker).toHaveAttribute('data-size', '16');
+  await expect(picker.getByTestId('pool-picker-summary')).toHaveText('16 players · 4 prizes · 1st 0.5 SOL');
+  await expect(picker.getByTestId('pool-picker-enter')).toHaveAttribute('href', new RegExp(`/play\\?pool=${EASY_16}$`));
+  // Switching board keeps the size, and the fills follow the board.
+  await picker.getByTestId('pool-picker-mode-hard').click();
+  await expect(page).toHaveURL(/\?mode=hard&size=16/);
+  await expect(picker).toHaveAttribute('data-mode', 'hard');
+  await expect(picker).toHaveAttribute('data-size', '16');
+  await expect(size.getByTestId('pool-picker-size-16-detail')).toHaveText('9/16');
+  await expect(picker.getByTestId('pool-picker-enter')).toHaveAttribute('href', new RegExp(`/play\\?pool=${HARD_16}$`));
+  // Back walks the toggles.
+  await page.goBack();
+  await expect(picker).toHaveAttribute('data-mode', 'easy');
+  await expect(picker).toHaveAttribute('data-size', '16');
+  // A link opens the card on the pool it names.
+  await page.goto('/?mode=hard&size=8');
+  await expect(picker).toHaveAttribute('data-mode', 'hard');
+  await expect(picker).toHaveAttribute('data-size', '8');
+  await expect(picker.getByTestId('pool-picker-enter')).toHaveAttribute('href', new RegExp(`/play\\?pool=${HARD_POOL}$`));
 });
 
 test('landing: the board demo pours points and locks a field (founder 2026-09-24)', async ({ page }) => {
@@ -121,28 +167,41 @@ test('landing: the board demo pours points and locks a field (founder 2026-09-24
   await expect(grab).toHaveAttribute('aria-pressed', 'false');
 });
 
-test('pool page: the fixed pot as one Stat, §8.6 above the enter control', async ({
+test('pool page: the prize pool, the prize table, §8.6 above the enter control', async ({
   page,
 }, info) => {
   await page.goto(`/pools/${POOL}`);
-  // D-E2: ONE paid place. The pool page shows the pot the pool OPENED with
-  // as a single Stat (the tier-0 fixture's fixed 4 SOL, D-E1). The
-  // per-position table is gone — assert it stays gone.
+  // D-E19 (the Ladder): the pool of 8 pays its 2 places. The page shows the
+  // prize pool it OPENED with as a Stat and, above the Enter control, its
+  // full prize table in SOL — the table is BACK (D-E2's one place is gone).
   await expect(page.getByText('Prize pool', { exact: true })).toBeVisible();
-  await expect(page.locator('.text-prize').first()).toHaveText('4SOL');
+  await expect(page.locator('.text-prize').first()).toHaveText('0.5SOL');
+  await expect(page.getByTestId('pool-summary')).toHaveText('8 players · 2 prizes · 1st 0.3 SOL');
+  await expect(page.getByRole('img', { name: '3 / 8 entered · 5 needed to run' })).toBeVisible();
   await expect(page.getByTestId('pool-mode')).toHaveText('Easy · 100 per battle');
   // V5 (founder 2026-09-30): "How this pool…" and the rails clip left this
   // page for the board's rail; the page is the pool's record, its Enter
   // lands on the board, and it streams nothing.
   await expect(page.getByTestId('pool-rules')).toHaveCount(0);
   await expect(page.locator('video')).toHaveCount(0);
-  await expect(page.getByRole('table')).toHaveCount(0);
+  const table = page.getByRole('table', { name: 'Prizes in a pool of 8 players' });
+  await expect(table).toBeVisible();
+  await expect(table.getByRole('row')).toHaveCount(3);
+  await expect(table).toContainText('0.3 SOL');
+  await expect(table).toContainText('0.2 SOL');
   const finalText = page.getByText(/Decisions are final/);
   await expect(finalText).toBeVisible();
   const enter = page.getByRole('link', { name: 'Enter this pool' });
   await expect(enter).toBeVisible();
   await expect(enter).toHaveAttribute('href', new RegExp(`/play\\?pool=${POOL}$`));
-  // §8.6: the statement renders ABOVE the enter control in the document.
+  // §8.6: the statement renders ABOVE the enter control in the document,
+  // and the prize table above both.
+  const tableAbove = await page.evaluate(() => {
+    const t = document.querySelector('[data-testid="prize-table"]');
+    const control = [...document.querySelectorAll('a')].find((a) => a.textContent?.includes('Enter this pool'));
+    return Boolean(t && control && t.compareDocumentPosition(control) & Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+  expect(tableAbove).toBe(true);
   const above = await page.evaluate(() => {
     const statement = [...document.querySelectorAll('p')].find((p) =>
       p.textContent?.includes('Decisions are final')
@@ -171,6 +230,11 @@ test('entry path fail-closed: the designed territory panel, never a bare sentenc
 test('pools, results (uncommitted), rules, custody, verify all render', async ({ page }, info) => {
   await page.goto('/pools');
   await expect(page.getByRole('heading', { name: 'Pools' })).toBeVisible();
+  // D-E19: grouped by size, with a size filter.
+  await expect(page.getByTestId('pools-group-16')).toBeVisible();
+  await page.getByTestId('pools-size-filter-16').click();
+  await expect(page.getByTestId('pools-group-16')).toBeVisible();
+  await expect(page.getByTestId('pools-group-64')).toHaveCount(0);
 
   await page.goto(`/pools/${POOL}/results`);
   await expect(page.getByText('Results are not committed yet.')).toBeVisible();

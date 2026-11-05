@@ -40,10 +40,12 @@ describe('browser bundle', () => {
     const scoring = factory(undefined, undefined, undefined);
 
     const pool = vectors.pools.find((p: any) => p.name === 'full_0');
-    const pot = scoring.potForEntry(BigInt(pool.entry_lamports));
+    // The pool's own table and entry price (D-E19) — as the verify page
+    // reads them from the pool account.
     const results = scoring.assignPrizes(
       scoring.scorePool(pool.players.map((p: any) => p.battles)),
-      pot
+      scoring.ladderTable(pool.capacity),
+      BigInt(pool.entry_lamports)
     );
     // Leaf order under D3-B: rank asc, entry index asc (ranks repeat).
     const byRank = [...results].sort((a: any, b: any) => a.rank - b.rank || a.index - b.index);

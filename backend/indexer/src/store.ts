@@ -24,8 +24,8 @@
  * described the old product. The ledger below is generic and complete on its own.
  *
  * The projection is attached (roadmap 2.5, R15): `./projection` derives `pools`,
- * `entries`, `results`, `payouts`, `profiles`, `player_history` and `tier_status`
- * from the TECH-ARCH §3.3 events, and it commits in the SAME transaction as the
+ * `entries`, `results`, `payouts`, `profiles`, `player_history`, `tier_status`
+ * and `pool_types` from the TECH-ARCH §3.3 events, and it commits in the SAME transaction as the
  * ledger append. The ledger stays the source of truth and the derived tables stay
  * a pure function of it — which is what `rederive()` exists to prove. A derived
  * table that cannot be rebuilt from the ledger alone has become a second source of

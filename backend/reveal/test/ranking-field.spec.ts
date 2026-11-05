@@ -9,6 +9,7 @@
 
 import { expect } from 'chai';
 import { recomputeRanking } from '../src/ranking';
+import { TIER_ENTRY_LAMPORTS, ladderTable } from '../../scoring/src';
 import type { CiphertextStore } from '../../sealing/src';
 
 const untouched: CiphertextStore = {
@@ -27,7 +28,16 @@ describe('recomputeRanking against a short field', () => {
   it('refuses when fewer entry accounts were read than the pool reports', async () => {
     let threw: unknown = null;
     try {
-      await recomputeRanking(untouched, 7n, new Uint8Array(32), [], 64, 4_000_000_000n, null);
+      // The pool's own terms (D-E19): a 64-player table at tier 0's price.
+      await recomputeRanking(
+        untouched,
+        7n,
+        new Uint8Array(32),
+        [],
+        64,
+        { table: ladderTable(64), entryLamports: TIER_ENTRY_LAMPORTS[0] },
+        null
+      );
     } catch (e) {
       threw = e;
     }

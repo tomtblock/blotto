@@ -18,15 +18,16 @@
  *
  * Four bindings: the JSON the page imports is exactly the study's CSV
  * re-shaped (so the nightly reproduction of the CSV covers the page); the
- * table is built from the "mixed" rows at both ratified field sizes; the
- * class-draw replay the page claims is RUN here against the committed
- * cross-language vectors; and every other mechanism the page describes
- * points at the file that implements it.
+ * table is built from the "mixed" rows at every pool size, full and at its
+ * minimum field (D-E19); the class-draw replay the page claims is RUN here
+ * against the committed cross-language vectors; and every other mechanism
+ * the page describes points at the file that implements it.
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import evidence from '@docs/skill-evidence/results.json';
+import { MIN_FIELD_BY_CAPACITY, POOL_CAPACITIES } from '@blotto/scoring';
 import { COPY } from '@/copy';
 import {
   CLASS_NAMES,
@@ -34,7 +35,13 @@ import {
   deriveClassRandomness,
   weightedClassDraw,
 } from '../../../../backend/class-digest/src';
-import { FULL_FIELD, MIN_FIELD, SKILL_CLASSES, skillTable } from './fair-play.config';
+import {
+  POOL_SIZES,
+  SKILL_CLASSES,
+  rateFor,
+  skillTable,
+  type EvidenceRow,
+} from './fair-play.config';
 
 const REPO = join(__dirname, '..', '..', '..', '..');
 
@@ -45,36 +52,100 @@ function csvRows(csv: string): Record<string, string>[] {
   return lines.map((l) => Object.fromEntries(cols.map((c, i) => [c, l.split(',')[i]])));
 }
 
+const mixedRow = (cls: string, capacity: number, seats: number) =>
+  (evidence.rows as EvidenceRow[]).find(
+    (r) =>
+      r.run === 'mixed' &&
+      r.class === cls &&
+      Number(r.capacity) === capacity &&
+      Number(r.seats) === seats,
+  );
+
 describe('the skill evidence the page shows', () => {
   it('is the committed CSV, exactly', () => {
     const csv = readFileSync(join(REPO, 'docs/skill-evidence/results.csv'), 'utf8');
     expect(evidence.rows).toEqual(csvRows(csv));
     expect(evidence.columns).toEqual(csv.trim().split('\n')[0].split(','));
+    expect(evidence.columns).toContain('capacity');
+    expect(evidence.columns).toContain('seats');
   });
 
-  it('covers both ratified field sizes for every class, from the mixed run', () => {
+  it('shows every pool size, full and at its minimum field, from the shared constants', () => {
+    // Derived, never typed: the sizes and floors are the program mirrors.
+    expect(POOL_SIZES.map((s) => s.capacity)).toEqual([...POOL_CAPACITIES]);
+    for (const s of POOL_SIZES) {
+      expect(s.minField).toBe(MIN_FIELD_BY_CAPACITY[s.capacity as keyof typeof MIN_FIELD_BY_CAPACITY]);
+    }
+  });
+
+  it('covers every pool size at both fields for every class, from the mixed run', () => {
     const table = skillTable();
     expect(table.map((r) => r.cls)).toEqual([...SKILL_CLASSES]);
     for (const row of table) {
-      const full = evidence.rows.find(
-        (r) => r.run === 'mixed' && r.class === row.cls && Number(r.seats) === FULL_FIELD,
-      );
-      const min = evidence.rows.find(
-        (r) => r.run === 'mixed' && r.class === row.cls && Number(r.seats) === MIN_FIELD,
-      );
-      expect(row.fullPct).toBe(full?.rank1_rate_pct);
-      expect(row.minPct).toBe(min?.rank1_rate_pct);
       expect(row.label).toBe(COPY.fairPlay.skillRows[row.cls]);
+      expect(row.full).toHaveLength(POOL_SIZES.length);
+      expect(row.min).toHaveLength(POOL_SIZES.length);
+      POOL_SIZES.forEach((s, i) => {
+        expect(row.full[i]).toBe(mixedRow(row.cls, s.capacity, s.capacity)?.rank1_rate_pct);
+        expect(row.min[i]).toBe(mixedRow(row.cls, s.capacity, s.minField)?.rank1_rate_pct);
+      });
+    }
+  });
+
+  it('refuses to build the table when the evidence lacks a row, rather than showing a gap', () => {
+    const rows = evidence.rows as EvidenceRow[];
+    // Every row the page reads, present: no throw.
+    expect(() => skillTable(rows)).not.toThrow();
+    // Drop one row (the 5-player field of the 8-player pool) and the page
+    // must fail, naming what is missing.
+    const without = rows.filter(
+      (r) => !(r.run === 'mixed' && r.class === 'optimised' && r.capacity === '8' && r.seats === '5'),
+    );
+    expect(without.length).toBe(rows.length - 1);
+    expect(() => skillTable(without)).toThrow(/optimised at 5 players in a pool of 8/);
+    // A field the rules do not offer has no row to find.
+    expect(() => rateFor(rows, 'random', 64, 52)).toThrow(/no mixed row/);
+    // Homogeneous rows are never read as the page's evidence.
+    expect(() => rateFor(rows.filter((r) => r.run !== 'mixed'), 'random', 64, 64)).toThrow();
+  });
+
+  it('heads each column with the numbers the data under it was measured at', () => {
+    // The 2026-09-16 failure: 40-player evidence under a "52 seats" heading.
+    // The headings are functions of the same derived sizes as the data.
+    const h = COPY.fairPlay.skillHeadings;
+    for (const s of POOL_SIZES) {
+      expect(h.poolSize(s.capacity)).toContain(String(s.capacity));
+      expect(h.minField(s.minField)).toContain(String(s.minField));
     }
   });
 
   it('says the default player never placed first only while that is what the study shows', () => {
     // The copy states "never"; if a future engine change lets an even split
-    // win, the sentence must change with it, not outlive it.
+    // place first in any field, the sentence must change with it, not
+    // outlive it.
     const uniform = skillTable().find((r) => r.cls === 'uniform');
-    expect(uniform?.fullPct).toBe('0.000');
-    expect(uniform?.minPct).toBe('0.000');
+    expect(uniform?.full.every((p) => p === '0.000')).toBe(true);
+    expect(uniform?.min.every((p) => p === '0.000')).toBe(true);
     expect(COPY.fairPlay.skillIntro).toContain('never placed first');
+  });
+
+  it('keeps the D-E19 wording rules in the skill copy', () => {
+    // Players see places in SOL, never multiples or paid percentages; the
+    // copy names no winner and no seat.
+    const h = COPY.fairPlay.skillHeadings;
+    const strings = [
+      COPY.fairPlay.skillIntro,
+      COPY.fairPlay.skillNote,
+      h.player,
+      h.caption,
+      h.fullGroup,
+      h.minGroup,
+      ...POOL_SIZES.flatMap((s) => [h.poolSize(s.capacity), h.minField(s.minField)]),
+      ...Object.values(COPY.fairPlay.skillRows),
+    ];
+    for (const s of strings) {
+      expect(s).not.toMatch(/winner|×|\bseats?\b|% paid|\bpot\b/i);
+    }
   });
 });
 

@@ -13,6 +13,7 @@ import {
   decodeClockUnix,
   decodePool,
   getAccounts,
+  getPoolTypes,
   passCollectionPda,
   poolPda,
   RpcError,
@@ -20,6 +21,9 @@ import {
   vaultPda,
   type Fetch,
 } from './solana';
+
+/** Pools per `getMultipleAccounts` call: three accounts each, under the 100 cap. */
+const POOLS_PER_CALL = 33;
 
 /** GET a URL; any answer is recorded with its status and up to `maxBytes` of body. */
 export async function httpProbe(
@@ -69,9 +73,18 @@ function describeError(e: unknown): string {
 }
 
 /**
- * Read Config, the chain clock, and every live pool with its vault and pass
- * collection — two `getMultipleAccounts` calls. Throws on any RPC failure:
+ * Read Config, the chain clock, every pool type, and every live pool with its
+ * vault and pass collection — one `getMultipleAccounts` for Config and the
+ * clock, one `getProgramAccounts` for the pool types (D-E19), and one
+ * `getMultipleAccounts` per 33 live pools. Throws on any RPC failure, and on
+ * a pool-type list that does not hold every type Config counts as enabled:
  * a half-read snapshot would make the pool checks guess.
+ *
+ * The live pools are the pool types' slots (`PoolType.active_pool`, where
+ * the Ladder program keeps them) together with Config's per-tier slots,
+ * where a pool opened before the Ladder kept its slot. After the upgrade
+ * nothing writes those again; a slot still set there is a pool from before
+ * it, and is watched like any other until it settles.
  */
 export async function readChain(rpcUrl: string, timeoutMs: number, fetchImpl: Fetch = fetch): Promise<ChainSnapshot> {
   const opts = { fetchImpl, timeoutMs };
@@ -81,20 +94,34 @@ export async function readChain(rpcUrl: string, timeoutMs: number, fetchImpl: Fe
   const config = decodeConfigAccount(cfgAcc.data);
   const nowUnix = decodeClockUnix(clockAcc.data);
 
-  const ids = [...new Set([...config.activePoolByTier, ...config.hardActivePoolByTier].filter((id) => id !== 0n))];
+  const poolTypes = await getPoolTypes(rpcUrl, opts);
+  const enabled = poolTypes.filter((t) => t.enabled).length;
+  if (config.ladderPresent && enabled !== config.enabledPoolTypes) {
+    throw new Error(
+      `read ${enabled} enabled pool types but Config counts ${config.enabledPoolTypes}`
+    );
+  }
+
+  const ids = [
+    ...new Set(
+      [...poolTypes.map((t) => t.activePool), ...config.activePoolByTier, ...config.hardActivePoolByTier].filter(
+        (id) => id !== 0n
+      )
+    ),
+  ];
   const addrs = ids.map((id) => {
     const pool = poolPda(id);
     return { id, pool, vault: vaultPda(id), collection: passCollectionPda(pool) };
   });
-  const accounts = await getAccounts(
-    rpcUrl,
-    addrs.flatMap((a) => [a.pool, a.vault, a.collection]),
-    opts
-  );
+  const accounts: Awaited<ReturnType<typeof getAccounts>> = [];
+  for (let i = 0; i < addrs.length; i += POOLS_PER_CALL) {
+    const batch = addrs.slice(i, i + POOLS_PER_CALL);
+    accounts.push(...(await getAccounts(rpcUrl, batch.flatMap((a) => [a.pool, a.vault, a.collection]), opts)));
+  }
   const pools: ChainPool[] = [];
   addrs.forEach((a, i) => {
     const [poolAcc, vaultAcc, collectionAcc] = accounts.slice(i * 3, i * 3 + 3);
-    if (!poolAcc) throw new Error(`pool ${a.id} is active in Config but its account was not found`);
+    if (!poolAcc) throw new Error(`pool ${a.id} holds a live slot but its account was not found`);
     pools.push({
       address: a.pool,
       pool: decodePool(poolAcc.data),
@@ -102,7 +129,7 @@ export async function readChain(rpcUrl: string, timeoutMs: number, fetchImpl: Fe
       vaultLamports: vaultAcc ? vaultAcc.lamports : null,
     });
   });
-  return { nowUnix, config, pools };
+  return { nowUnix, config, poolTypes, pools };
 }
 
 /**

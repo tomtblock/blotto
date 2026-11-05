@@ -57,7 +57,7 @@ The loop runs every `loop.intervalSeconds`; "N polls" below means N rounds of th
 | `chain.failuresToAlert` | 2 | Pool and vault are read in one slot; two rounds rule out a lagging node. |
 | `chain.passCollectionGraceSeconds` | 120 | The daemon creates the collection on the tick after `open_pool` and retries every 15 s: eight chances. |
 | `chain.fillDeadlineSlackSeconds` | 300 | The daemon tries to close a pool on every tick after its deadline; twenty missed ticks means it is stuck. |
-| `chain.keeperSlackSeconds` | 300 | The same for opening the next pool once a tier may open one. |
+| `chain.keeperSlackSeconds` | 300 | The same for opening the next pool once a pool type may open one (an enabled type on an open tier, past its cooldown — D-E19). |
 | `chain.sealedMaxMinutes` | 30 | Sealed → Scored is a few ticks of reveal and scoring. `PHASE-N-REVIEW`: set against the devnet trial's measured times. |
 | `chain.scoredMaxMinutes` | 15 | Scored → Paid is one payout transaction per seat. |
 | `chain.refundingMaxMinutes` | 30 | Refunds are one transaction per entrant. |
@@ -91,8 +91,8 @@ The loop runs every `loop.intervalSeconds`; "N polls" below means N rounds of th
 
 | Key | Value | Why |
 |---|---|---|
-| `site.aliasUrl` | the Vercel alias `/api/version` | Ungated; serves the same build as the domain. |
-| `site.domainUrl` | `www.blotto.gg/.well-known/assetlinks.json` | The one ungated path on the gated domain, and the file the Android app's wallet link depends on. |
+| `site.aliasUrl` | the Vercel alias `/api/version` | Serves the same build as the domain; read here because it reports the deployed version. |
+| `site.domainUrl` | `www.blotto.gg/.well-known/assetlinks.json` | The file the Android app's wallet link depends on, on the public domain. (It was chosen while a pre-launch code gate covered the rest of the domain; the gate was removed on 2026-11-05 and the file is still the right one to watch.) |
 | `site.failuresToAlert` | 3 | The CDN caches the file; three minutes rules out a blip. |
 | `site.versionLagMinutes` | 20 | Installing the backend packages plus `next build`. `PHASE-N-REVIEW`: set against Vercel's measured build time. |
 

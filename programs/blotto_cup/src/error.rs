@@ -214,6 +214,42 @@ pub enum ErrorCode {
     // only on a pool nobody has entered.
     #[msg("A VRF seed can only be committed before the first entry")]
     VrfSeedAfterEntries,
+
+    // 6076-6089 — the Ladder (D-E19, founder ruling 2026-11-04): pool sizes,
+    // per-size prize tables and the pool-type slot. APPENDED, numbered by
+    // position like every variant above.
+    #[msg("Pool capacity must be 8, 16, 32 or 64")]
+    UnknownCapacity,
+    #[msg("This pool type is not enabled")]
+    PoolTypeDisabled,
+    #[msg("This pool type has no prize table yet")]
+    PoolTypeEconomicsUnset,
+    #[msg("The pool type's prize pool no longer matches its table at the tier's price")]
+    PoolTypeEconomicsStale,
+    #[msg("Prize table must pay the top quarter, never increase, and hold no zero inside the paid places")]
+    PrizeTableMalformed,
+    #[msg("Minimum field must exceed the paid places and not exceed the capacity")]
+    MinimumFieldInvalid,
+    #[msg("The prize pool must equal the table at the tier's price")]
+    PrizePoolMismatch,
+    #[msg("Every enabled pool type must be passed, once each, in address order")]
+    PoolTypeListIncomplete,
+    #[msg("Account is not a pool type of this program")]
+    PoolTypeAccountInvalid,
+    #[msg("A payout is larger than first place")]
+    PayoutAboveFirstPrize,
+    #[msg("A committed payout must be positive")]
+    PayoutZero,
+    #[msg("This pool pays more than one place; its forfeited share is held until the field-moves-up payout ships")]
+    NextPlaceUnsupported,
+    #[msg("This pool's prize pool is not a whole number of entries and it played; it cannot be given a table")]
+    MigrationUnrepresentable,
+    #[msg("The pool type does not match the requested mode, tier and capacity")]
+    PoolTypeMismatch,
+    // 6090 — the entry-price floor below which commit_results' first-place
+    // bound could refuse the published rule's own tie split (D-E19).
+    #[msg("Entry price is below the smallest price a prize table can be set at")]
+    EntryPriceTooSmall,
 }
 
 #[cfg(test)]
@@ -246,6 +282,21 @@ mod error_numbers {
             (ErrorCode::PoolNotMigratable, 6073),
             (ErrorCode::UnknownMode, 6074),
             (ErrorCode::VrfSeedAfterEntries, 6075),
+            (ErrorCode::UnknownCapacity, 6076),
+            (ErrorCode::PoolTypeDisabled, 6077),
+            (ErrorCode::PoolTypeEconomicsUnset, 6078),
+            (ErrorCode::PoolTypeEconomicsStale, 6079),
+            (ErrorCode::PrizeTableMalformed, 6080),
+            (ErrorCode::MinimumFieldInvalid, 6081),
+            (ErrorCode::PrizePoolMismatch, 6082),
+            (ErrorCode::PoolTypeListIncomplete, 6083),
+            (ErrorCode::PoolTypeAccountInvalid, 6084),
+            (ErrorCode::PayoutAboveFirstPrize, 6085),
+            (ErrorCode::PayoutZero, 6086),
+            (ErrorCode::NextPlaceUnsupported, 6087),
+            (ErrorCode::MigrationUnrepresentable, 6088),
+            (ErrorCode::PoolTypeMismatch, 6089),
+            (ErrorCode::EntryPriceTooSmall, 6090),
         ] {
             assert_eq!(u32::from(code), expected, "{code:?}");
         }

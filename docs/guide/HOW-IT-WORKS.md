@@ -10,25 +10,46 @@ Blotto Cup runs on the Solana **test network (devnet) only**. No real money has 
 
 ## The shape of it
 
-Up to **64 players** enter a pool. Each pays the same entry — **0.1 SOL** at the only tier open
-today. The prize is **4 SOL**, fixed in advance, and it is moved into the pool's own account
-**when the pool opens, before the first player enters**. It does not grow or shrink with the
-number of entries.
+A pool holds **8, 16, 32 or 64 players**. Everyone in a pool pays the same entry — **0.1 SOL** at
+the only price open today. The **top quarter** of the pool's size is paid, and each pool size has
+its own prize list, fixed before anyone enters:
 
-**One player is paid.** The player ranked first receives the whole 4 SOL; everyone else receives
-nothing. Players tied for first divide it evenly (the indivisible lamport remainder goes to the
-tied player who entered first).
+| Pool size | Places paid | Prize for each place (0.1 SOL entry) | All prizes together |
+|---|---|---|---|
+| 8 players | 2 | 1st 0.3 SOL, 2nd 0.2 SOL | 0.5 SOL |
+| 16 players | 4 | 1st 0.5 SOL, 2nd 0.3 SOL, 3rd 0.1 SOL, 4th 0.1 SOL | 1 SOL |
+| 32 players | 8 | 1st 0.8 SOL, 2nd 0.4 SOL, 3rd 0.2 SOL, 4th 0.2 SOL, 5th to 8th 0.1 SOL each | 2 SOL |
+| 64 players | 16 | 1st 1.2 SOL, 2nd 0.6 SOL, 3rd 0.3 SOL, 4th 0.3 SOL, 5th to 8th 0.2 SOL each, 9th to 16th 0.1 SOL each | 4 SOL |
 
-A pool takes entries for **12 hours** and closes early the moment the 64th seat fills. If the 12
-hours end with **40 or more** players seated, the pool plays. With fewer than 40, every entry is
-repaid in full and the pool closes.
+The whole prize is moved into the pool's own account **when the pool opens, before the first
+player enters**. The list depends on the pool's size and nothing else: it does not grow or shrink
+with the number of entries.
+
+**Ties.** Players level on the ranking share the prizes of the places they occupy, equally. A tie
+can cross the last paid place, and then the tied players share only what the paid places inside the
+tie are worth. In an 8-player pool, two players tied for 2nd occupy 2nd and 3rd: they share 2nd
+place's 0.2 SOL, 0.1 SOL each. In a 64-player pool, four players tied for 15th occupy 15th to 18th:
+they share the 15th and 16th prizes, 0.2 SOL between four, 0.05 SOL each. A share that does not
+divide to the last lamport gives the leftover to the tied player who entered first.
+
+**When a pool plays.** A pool takes entries for **12 hours** and closes early the moment it is
+full. If the 12 hours end with at least its **minimum field**, the pool plays. With fewer, every
+entry is repaid in full and the pool closes. The minimum field for each size:
+
+| Pool size | Minimum field |
+|---|---|
+| 8 players | 5 |
+| 16 players | 10 |
+| 32 players | 20 |
+| 64 players | 40 |
 
 ---
 
 ## Two modes
 
 Every pool plays one of two placing rules, and says which before anyone pays. The two are separate
-pools with separate prizes; the price, prize and seat rules are the same for both.
+pools with separate prizes; the sizes, prices, prize lists and minimum fields are the same for
+both.
 
 | | Easy | Hard |
 |---|---|---|
@@ -72,11 +93,11 @@ buy, and nothing that costs money after the entry.
 
 ---
 
-## How the winner is decided
+## How the ranking is decided
 
 When the pool concludes, every player's seven battles are compared against **every other player's
-corresponding battle**. In a full pool that is 441 comparisons per player (63 opponents × 7
-battles) and 14,112 in total.
+corresponding battle**. In a full 64-player pool that is 441 comparisons per player (63 opponents ×
+7 battles) and 14,112 in total; in a full 8-player pool, 49 per player and 196 in total.
 
 - **A stat** goes to whoever placed more on it. Equal numbers: nobody takes it.
 - **A battle** is won by taking **three or more** of its five stats. Otherwise it is a draw.
@@ -103,10 +124,11 @@ read — by the operator or anyone else — while the pool is still taking entri
 and every battle set, the scoring inputs and the ranking are published. A fingerprint of the full
 ranking is written on-chain before any prize moves. The scoring engine is a single open module — the
 same code the website runs and the settlement process runs — so anyone can take the published data,
-recompute the ranking, and check that the player paid is the player who won.
+recompute the ranking and every prize, and check that the players paid are the ones the ranking
+says.
 
 **The pool closes by rule, not by choice.** Closing at the deadline, and repaying a pool that did
-not reach 40, are steps **anyone** can trigger once the conditions hold. The operator cannot choose
+not reach its minimum field, are steps **anyone** can trigger once the conditions hold. The operator cannot choose
 when a pool seals, and a pool that has taken money cannot be stranded because the operator's
 servers are down.
 
@@ -121,20 +143,21 @@ each of them.
 the account open on-chain — from the treasury when the pool opens. Money leaves it only
 by:
 
-- **paying the winner** (or the tied winners);
+- **paying the players in the paid places** (and players tied into them);
 - **releasing a held share** to the player it belongs to (see *Review* below);
-- **passing a forfeited share to the next eligible place**;
-- **returning the untouched prize to the treasury** — only for a pool that did not reach 40 and so
-  never played.
+- **paying a forfeited share onward to other players in the same pool** (see *Review* below);
+- **returning the untouched prize to the treasury** — only for a pool that did not reach its
+  minimum field and so never played.
 
 There is no instruction that lets the operator withdraw a prize. **Once a pool plays, its prize is
 only ever paid to players.**
 
-**The treasury** (also program-controlled). Entry payments go here. Apart from funding each new pool's prize, it
-has exactly two exits: **repaying entries in full** when a pool does not reach 40 (anyone can trigger it, for any
-seat), and a **gated operator withdrawal**. That withdrawal is signed by the program's admin key and
-is refused if it would take the balance below a floor that covers a minimum balance, the prize
-money reserved for tiers that are switched on, and every entry that might still have to be repaid.
+**The treasury** (also program-controlled). Entry payments go here. Apart from funding each new
+pool's prize, it has exactly two exits: **repaying entries in full** when a pool does not reach its
+minimum field (anyone can trigger it, for any entry), and a **gated operator withdrawal**. That
+withdrawal is signed by the program's admin key and is refused if it would take the balance below a
+floor that covers a minimum balance, the prize money reserved for every pool size and price that is
+switched on, and every entry that might still have to be repaid.
 
 ---
 
@@ -148,8 +171,13 @@ keys**, published in the repository (`config/reviewers.json`).
 - **If nobody decides within seven days, the player is paid anyway:** after that, anyone may
   release the held share to its owner. Inaction pays the player, never the operator.
 - If a flag is cleared, the share is released to the player.
-- If a flag is upheld, the share stays in the vault and **passes to the next eligible place**. It
-  never returns to the operator.
+- If a flag is upheld, the share stays in the vault. It **never returns to the operator**. In a
+  pool that pays several places, the rule is that the field moves up: the prizes are worked out
+  again as if that player had never been ranked, and the share goes to the players the new ranking
+  pays. The part of the program that makes that payment is not built yet, so until it is, an
+  upheld share stays held in the pool's vault — paid to no one, and not to the operator. (Pools
+  from before the four sizes paid one place; there an upheld share is divided among the next
+  eligible players.)
 - A player can challenge a decision; wherever possible the challenge is decided by someone other
   than whoever made the original decision. Every decision is written to a signed, append-only log.
 
@@ -178,8 +206,10 @@ published in [`docs/security/SECURITY-REVIEW.md`](../security/SECURITY-REVIEW.md
 the product is pending.
 
 **Set by the operator**, changeable without new code and never for a pool already taking entries:
-entry prices, prize amounts, the 12-hour window, which tiers and modes are open, the territory list
-and the reviewer list. The 40-player minimum is fixed in the program. Only the 0.1 SOL tier is open.
+entry prices, each size's prize list and minimum field, the 12-hour window, which prices, modes and
+sizes are open, the territory list and the reviewer list. The program refuses a prize list that
+pays more or fewer than the top quarter, pays a lower place more than a higher one, or skips a
+place. Only the 0.1 SOL price is open; on devnet it runs in both modes at all four sizes.
 
 ---
 

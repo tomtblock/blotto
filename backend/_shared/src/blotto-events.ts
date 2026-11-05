@@ -138,10 +138,30 @@ class Reader {
    * `mode` to `PoolOpened`, `TierSlotFreed` and `PoolMigrated`, and every
    * pool devnet opened before that upgrade emitted them one byte shorter.
    * A consumer treats `null` as easy: hard did not exist when that event
-   * was written. Only ever the LAST field of a layout — `end()` still
-   * refuses any remainder after it. */
+   * was written. Tail readers only ever appear at the END of a layout (the
+   * Ladder appended several in a row, each null once the body is exhausted)
+   * — `end()` still refuses any remainder after the last. */
   tailU8(): number | null {
     return this.remaining() > 0 ? this.u8() : null;
+  }
+  /** A `[u8; 16]` read as sixteen numbers — the Ladder's prize table
+   * (D-E19), whole multiples of the entry, rank 1 first, zero-padded. */
+  u8x16(): number[] {
+    const v = this.b.subarray(this.o, this.o + 16);
+    if (v.length !== 16) throw new Error('short read');
+    this.o += 16;
+    return Array.from(v);
+  }
+  /** APPENDED fields of the Ladder (D-E19), read the same way as `tailU8`:
+   * the value when the bytes are there, `null` when the event ended before
+   * them (a pre-Ladder event: 64 seats, one paid place). Several of these
+   * may follow each other at the end of a layout; each returns null once the
+   * body is exhausted, and `end()` still refuses any remainder. */
+  tailU16(): number | null {
+    return this.remaining() > 0 ? this.u16() : null;
+  }
+  tailU8x16(): number[] | null {
+    return this.remaining() > 0 ? this.u8x16() : null;
   }
   /** Every byte must be consumed — a trailing remainder is a layout drift. */
   end(): void {
@@ -200,6 +220,12 @@ export function registerBlottoEventLayouts(): void {
     // Phase B (appended): 0 easy, 1 hard; null on a pre-Phase-B event,
     // which was an easy pool by construction.
     mode: r.tailU8(),
+    // The Ladder (D-E19, appended): size, floor, places paid and the table.
+    // Null on a pre-Ladder event: 64 seats, one paid place.
+    capacity: r.tailU16(),
+    min_seats: r.tailU16(),
+    paid_places: r.tailU8(),
+    prize_table: r.tailU8x16(),
   }));
 
   // vrf.rs
@@ -280,6 +306,12 @@ export function registerBlottoEventLayouts(): void {
     pool: r.pubkey(),
     min_seats: r.u16(),
     mode: r.tailU8(),
+    // The Ladder (D-E19, appended): what a pre-Ladder pool is recorded as
+    // having played by — 64 seats, one paid place (or none, for a pool that
+    // never played and whose prize pool is not a whole number of entries).
+    capacity: r.tailU16(),
+    paid_places: r.tailU8(),
+    prize_table: r.tailU8x16(),
   }));
 
   // (`GoTimerStarted` — the first cut's option-B go-timer — was removed by
@@ -297,6 +329,35 @@ export function registerBlottoEventLayouts(): void {
     // ladders keep separate slots and cooldown clocks per tier. Null on a
     // pre-Phase-B event: the easy ladder, the only one there was.
     mode: r.tailU8(),
+    // The Ladder (D-E19, appended): which SIZE's slot — the slot is the pool
+    // type's. Null on a pre-Ladder event: 64, the only size there was.
+    capacity: r.tailU16(),
+  }));
+
+  // The Ladder (D-E19): pool types — one per (mode, tier, capacity).
+  layout('PoolTypeInitialized', (r) => ({
+    pool_type: r.pubkey(),
+    mode: r.u8(),
+    tier: r.u8(),
+    capacity: r.u16(),
+  }));
+  layout('PoolTypeEconomicsSet', (r) => ({
+    pool_type: r.pubkey(),
+    mode: r.u8(),
+    tier: r.u8(),
+    capacity: r.u16(),
+    min_seats: r.u16(),
+    paid_places: r.u8(),
+    prize_table: r.u8x16(),
+    pot_lamports: r.u64(),
+  }));
+  layout('PoolTypeEnabledSet', (r) => ({
+    pool_type: r.pubkey(),
+    mode: r.u8(),
+    tier: r.u8(),
+    capacity: r.u16(),
+    enabled: r.bool(),
+    enabled_count: r.u16(),
   }));
 
   layout('PoolSecretRevealed', (r) => ({

@@ -13,7 +13,7 @@
 
 use anchor_lang::prelude::*;
 
-use crate::constants::{CAPACITY, N_TIERS};
+use crate::constants::{CAPACITY, MAX_PAID_PLACES, N_TIERS};
 
 // ---------------------------------------------------------------------------
 // PDA seed prefixes — one distinct prefix per PDA type (threat-tm-401).
@@ -53,6 +53,21 @@ pub const ENTRY_SEED: &[u8] = b"entry";
 /// Metaplex Core Collection asset PDA for a pool's character passes:
 /// `[PASS_COLLECTION_SEED, pool.key()]` (carried from Phase 0).
 pub const PASS_COLLECTION_SEED: &[u8] = b"pass_collection";
+
+/// Pool-type PDA (D-E19, the Ladder): `[POOL_TYPE_SEED, &[mode], &[tier],
+/// &capacity.to_le_bytes()]` — one per (mode, tier, capacity).
+///
+/// Deliberately NOT `b"pool_type"`, the name the spec proposed. Solana
+/// concatenates seeds with no length prefix, so a PDA type whose prefix
+/// STARTS WITH another type's prefix can, for some seed lengths, produce the
+/// same hash input as it. With today's seeds that cannot happen —
+/// `[b"pool", id_le(8)]` is 12 bytes and `[b"pool_type", mode, tier, cap(2)]`
+/// would be 13 — but it would take only a later change to either seed list
+/// to open the door. threat-tm-401's rule is distinct prefixes; this takes it
+/// one step further (no prefix is a prefix of another), and the test below
+/// checks exactly that. PHASE-N-REVIEW: hygiene, not a live collision —
+/// corrected 2026-11-05 after the first draft of this comment overstated it.
+pub const POOL_TYPE_SEED: &[u8] = b"ptype";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -164,6 +179,19 @@ pub struct Config {
     pub hard_active_pool_by_tier: [u64; N_TIERS],
     /// The hard twin of `tier_next_open_at`.
     pub hard_tier_next_open_at: [i64; N_TIERS],
+    // ---- Appended by the Ladder upgrade (D-E19). Same rule as the tails
+    // above. Since D-E19 the per-(mode, tier) slots, cooldowns and pots above
+    // are NO LONGER READ by `open_pool`: each `PoolType` carries its own slot,
+    // cooldown and prize pool. `open_tiers` / `hard_open_tiers` still are —
+    // they stay the tier-level switch R6 governs (a pool type opens only
+    // where its tier is open AND it is enabled).
+    /// How many `PoolType` accounts are enabled. Maintained ONLY by
+    /// `set_pool_type_enabled`, on a change of state. `open_pool` and
+    /// `withdraw_platform` compute the treasury reserve over the enabled
+    /// pool types passed as remaining accounts, and refuse unless exactly
+    /// this many distinct ones were passed — so a caller cannot shrink the
+    /// reserve by leaving one out.
+    pub enabled_pool_types: u16,
 }
 
 impl Config {
@@ -227,8 +255,81 @@ impl Config {
     /// hard_active_pool_by_tier (8·N_TIERS) + hard_tier_next_open_at
     /// (8·N_TIERS).
     pub const HARD_TAIL_LEN: usize = N_TIERS + 8 * N_TIERS + 8 * N_TIERS;
-    pub const LEN: usize = Self::LEN_V2 + Self::HARD_TAIL_LEN;
+    /// The layout from Phase B until the Ladder (595 bytes, 603 with the
+    /// discriminator) — what devnet holds until this upgrade's
+    /// `migrate_config` runs. History; never change.
+    pub const LEN_V3: usize = Self::LEN_V2 + Self::HARD_TAIL_LEN;
+    pub const SPACE_V3: usize = 8 + Self::LEN_V3;
+    /// The Ladder tail: `enabled_pool_types` (u16).
+    pub const LADDER_TAIL_LEN: usize = 2;
+    pub const LEN: usize = Self::LEN_V3 + Self::LADDER_TAIL_LEN;
     pub const SPACE: usize = 8 + Self::LEN;
+}
+
+// ---------------------------------------------------------------------------
+// PoolType (D-E19, the Ladder)
+// ---------------------------------------------------------------------------
+
+/// One pool type: a (mode, tier, capacity) combination — 2 × 7 × 4 = 56
+/// possible — with its published economics and its slot. Each type runs one
+/// pool at a time, exactly as each (mode, tier) did before: the slot is set
+/// by `open_pool` and cleared only when that pool reaches `Paid` or `Closed`,
+/// which also stamps the cooldown.
+///
+/// The economics here are what the NEXT pool of this type opens with; every
+/// pool copies them at open, so a change never touches a pool players have
+/// entered.
+#[account]
+pub struct PoolType {
+    /// `MODE_EASY` / `MODE_HARD`. Part of the PDA seeds; never rewritten.
+    pub mode: u8,
+    /// Tier index into the entry-price table. Part of the seeds.
+    pub tier: u8,
+    /// 8, 16, 32 or 64. Part of the seeds.
+    pub capacity: u16,
+    /// The minimum field (`LADDER_MIN_SEATS` at launch). Below it at the
+    /// deadline every entry refunds; at or above it the pool seals and plays.
+    pub min_seats: u16,
+    /// Places paid: `capacity / 4`. 0 until economics are set.
+    pub paid_places: u8,
+    /// Whole multiples of the entry price, rank 1 first, zero-padded.
+    pub prize_table: [u8; MAX_PAID_PLACES],
+    /// The FIXED prize pool moved from the treasury into the vault at open
+    /// (D-A1). Stored and COMPARED against `Σ table × price`, never derived
+    /// on chain — the standing rule (g).
+    pub pot_lamports: u64,
+    /// The admin's switch for this type (`set_pool_type_enabled`).
+    pub enabled: bool,
+    /// The live pool's id, 0 if none.
+    pub active_pool: u64,
+    /// The earliest unix time the next pool of this type may open; stamped
+    /// `now + Config.cooldown_seconds` when the slot frees. 0 = never settled.
+    pub next_open_at: i64,
+    pub bump: u8,
+}
+
+impl PoolType {
+    pub const LEN: usize = 1 // mode
+        + 1 // tier
+        + 2 // capacity
+        + 2 // min_seats
+        + 1 // paid_places
+        + MAX_PAID_PLACES // prize_table
+        + 8 // pot_lamports
+        + 1 // enabled
+        + 8 // active_pool
+        + 8 // next_open_at
+        + 1; // bump
+    pub const SPACE: usize = 8 + Self::LEN;
+
+    /// The table's value at `price`, in lamports: `Σ multiple × price`, in
+    /// `u128` (threat-tm-403). The comparison partner of `pot_lamports`.
+    pub fn table_value(prize_table: &[u8; MAX_PAID_PLACES], price: u64) -> u128 {
+        prize_table
+            .iter()
+            .map(|&m| (m as u128) * (price as u128))
+            .sum()
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -363,6 +464,18 @@ pub struct Pool {
     /// the verify page checks against. Every pool that predates the field
     /// played easy, and `migrate_pool` writes 0.
     pub mode: u8,
+    // ---- Appended by the Ladder (D-E19), copied from the pool's `PoolType`
+    // at open and never rewritten — the same guarantee as `min_seats` and
+    // `mode`. Pools that predate the fields are given what their players
+    // entered under: 64 seats, one paid place, and the prize pool in whole
+    // entries (see `migrate_pool`).
+    /// The pool's size: 8, 16, 32 or 64. `register` refuses past it and
+    /// seals at it.
+    pub capacity: u16,
+    /// Places paid. `commit_results` bounds every amount by the first.
+    pub paid_places: u8,
+    /// Whole multiples of `entry_lamports`, rank 1 first, zero-padded.
+    pub prize_table: [u8; MAX_PAID_PLACES],
 }
 
 impl Pool {
@@ -388,20 +501,37 @@ impl Pool {
         + 1 // timer_seconds
         + 1 + 1 // bumps
         + 2 // min_seats (R7-b, appended 2026-09-12)
-        + 1; // mode (Phase B, appended 2026-09-24)
+        + 1 // mode (Phase B, appended 2026-09-24)
+        + 2 // capacity (D-E19)
+        + 1 // paid_places (D-E19)
+        + MAX_PAID_PLACES; // prize_table (D-E19)
     pub const SPACE: usize = 8 + Self::LEN;
 
+    /// The Ladder tail: capacity (2) + paid_places (1) + prize_table (16).
+    pub const LADDER_TAIL_LEN: usize = 2 + 1 + MAX_PAID_PLACES;
+    /// The layout from Phase B until the Ladder (842 bytes, 850 with the
+    /// discriminator) — every pool on devnet today. History; never change.
+    pub const LEN_V3: usize = Self::LEN - Self::LADDER_TAIL_LEN;
+    pub const SPACE_V3: usize = 8 + Self::LEN_V3;
     /// The layout before R7-b appended `min_seats` (2026-09-13). Pools
     /// allocated at this size may still exist on devnet and `migrate_pool`
     /// grows them; like `Config::LEN_V1` this is history and must never
     /// change.
-    pub const LEN_V1: usize = Self::LEN - 3;
+    pub const LEN_V1: usize = Self::LEN_V3 - 3;
     pub const SPACE_V1: usize = 8 + Self::LEN_V1;
     /// The layout from R7-b until Phase B appended `mode` (2026-09-24) —
     /// what every pool opened between those dates was allocated at.
     /// `migrate_pool` grows these too. History; never change.
-    pub const LEN_V2: usize = Self::LEN - 1;
+    pub const LEN_V2: usize = Self::LEN_V3 - 1;
     pub const SPACE_V2: usize = 8 + Self::LEN_V2;
+
+    /// First place under THIS pool's table: `prize_table[0] ×
+    /// entry_lamports` — the largest amount any single seat can be owed, which
+    /// `commit_results` uses as a bound. `u128` so the product cannot wrap
+    /// (threat-tm-403).
+    pub fn first_prize(&self) -> u128 {
+        (self.prize_table[0] as u128) * (self.entry_lamports as u128)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -509,20 +639,34 @@ mod tests {
     use super::*;
     use crate::constants::LAUNCH_CLASS_COUNTERS;
 
-    /// Distinct seed prefix per PDA type (threat-tm-401).
+    /// Distinct seed prefix per PDA type (threat-tm-401) — and, since D-E19,
+    /// PREFIX-FREE: no type's prefix is the start of another's. Seeds are
+    /// concatenated with no length prefix, so `b"pool"` + `b"X"` + 8 bytes
+    /// and `b"poolX"` + 8 bytes hash the same input; distinct prefixes alone
+    /// do not rule that shape out.
     #[test]
     fn pda_seed_prefixes_are_pairwise_distinct() {
-        let prefixes: [&[u8]; 6] = [
+        let prefixes: [&[u8]; 7] = [
             CONFIG_SEED,
             POOL_SEED,
             VAULT_SEED,
             PLATFORM_SEED,
             ENTRY_SEED,
             PASS_COLLECTION_SEED,
+            POOL_TYPE_SEED,
         ];
         for (i, a) in prefixes.iter().enumerate() {
-            for b in prefixes.iter().skip(i + 1) {
+            for (j, b) in prefixes.iter().enumerate() {
+                if i == j {
+                    continue;
+                }
                 assert_ne!(a, b, "seed prefixes collide (TM-401)");
+                assert!(
+                    !b.starts_with(a),
+                    "seed prefix {:?} is a prefix of {:?} (TM-401)",
+                    String::from_utf8_lossy(a),
+                    String::from_utf8_lossy(b)
+                );
             }
         }
     }
@@ -541,6 +685,11 @@ mod tests {
             Pubkey::find_program_address(&[ENTRY_SEED, pool.as_ref(), player.as_ref()], &crate::ID)
                 .0,
             Pubkey::find_program_address(&[PASS_COLLECTION_SEED, pool.as_ref()], &crate::ID).0,
+            Pubkey::find_program_address(
+                &[POOL_TYPE_SEED, &[0u8], &[0u8], &8u16.to_le_bytes()],
+                &crate::ID,
+            )
+            .0,
         ];
         for (i, a) in addrs.iter().enumerate() {
             for b in addrs.iter().skip(i + 1) {
@@ -579,6 +728,7 @@ mod tests {
             hard_open_tiers: [false, true, false, false, false, false, false],
             hard_active_pool_by_tier: [u64::MAX; N_TIERS],
             hard_tier_next_open_at: [i64::MAX; N_TIERS],
+            enabled_pool_types: 0xABCD,
         };
         let mut buf = Vec::new();
         c.serialize(&mut buf).unwrap();
@@ -587,8 +737,10 @@ mod tests {
         // previous layout's bytes — what the migrations write by hand.
         assert_eq!(
             buf.len(),
-            Config::LEN_V1 + Config::TAIL_LEN + Config::HARD_TAIL_LEN
+            Config::LEN_V1 + Config::TAIL_LEN + Config::HARD_TAIL_LEN + Config::LADDER_TAIL_LEN
         );
+        // The Ladder tail: the enabled pool-type count, last.
+        assert_eq!(&buf[Config::LEN_V3..Config::LEN], &0xABCDu16.to_le_bytes());
         assert_eq!(&buf[Config::LEN_V1..Config::LEN_V1 + 32], c.keeper.as_ref());
         assert_eq!(
             &buf[Config::LEN_V1 + 32..Config::LEN_V1 + 40],
@@ -601,7 +753,43 @@ mod tests {
             &buf[hard + N_TIERS..hard + N_TIERS + 8],
             &u64::MAX.to_le_bytes()
         );
-        assert_eq!(&buf[Config::LEN - 8..Config::LEN], &i64::MAX.to_le_bytes());
+        assert_eq!(
+            &buf[Config::LEN_V3 - 8..Config::LEN_V3],
+            &i64::MAX.to_le_bytes()
+        );
+    }
+
+    #[test]
+    fn pool_type_len_matches_serialized_size() {
+        let t = PoolType {
+            mode: 1,
+            tier: 6,
+            capacity: 64,
+            min_seats: 40,
+            paid_places: 16,
+            prize_table: [12, 6, 3, 3, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1],
+            pot_lamports: u64::MAX,
+            enabled: true,
+            active_pool: u64::MAX,
+            next_open_at: i64::MAX,
+            bump: 255,
+        };
+        let mut buf = Vec::new();
+        t.serialize(&mut buf).unwrap();
+        assert_eq!(buf.len(), PoolType::LEN, "PoolType::LEN is stale");
+    }
+
+    /// The table's value is exact at every launch table and tier, and is the
+    /// published prize pool (5/8 of the capacity, in entries).
+    #[test]
+    fn table_value_is_the_published_prize_pool() {
+        use crate::constants::{LADDER_TABLES, POOL_CAPACITIES, TIER_ENTRY_LAMPORTS};
+        for (k, table) in LADDER_TABLES.iter().enumerate() {
+            for &price in TIER_ENTRY_LAMPORTS.iter() {
+                let v = PoolType::table_value(table, price);
+                assert_eq!(v * 8, (POOL_CAPACITIES[k] as u128) * 5 * (price as u128));
+            }
+        }
     }
 
     #[test]
@@ -634,15 +822,25 @@ mod tests {
             vault_bump: 254,
             min_seats: 40,
             mode: 1,
+            capacity: 32,
+            paid_places: 8,
+            prize_table: [8, 4, 2, 2, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
         };
         let mut buf = Vec::new();
         p.serialize(&mut buf).unwrap();
         assert_eq!(buf.len(), Pool::LEN, "Pool::LEN is stale");
-        // `mode` is the last byte — what `migrate_pool` writes by hand.
-        assert_eq!(buf[Pool::LEN - 1], 1);
+        // `mode` is the last byte of the Phase B layout — what `migrate_pool`
+        // writes by hand for a V1/V2 pool.
+        assert_eq!(buf[Pool::LEN_V3 - 1], 1);
         // `min_seats` is the two bytes before it — what the V1 path of
         // `migrate_pool` writes by hand.
         assert_eq!(&buf[Pool::LEN_V1..Pool::LEN_V2], &40u16.to_le_bytes());
+        // The Ladder tail, in order: capacity, paid_places, prize_table.
+        let t = Pool::LEN_V3;
+        assert_eq!(&buf[t..t + 2], &32u16.to_le_bytes());
+        assert_eq!(buf[t + 2], 8);
+        assert_eq!(&buf[t + 3..t + 3 + 16], &p.prize_table);
+        assert_eq!(t + 3 + 16, Pool::LEN);
     }
 
     /// The account layouts are load-bearing beyond this crate: the LiteSVM
@@ -655,9 +853,12 @@ mod tests {
     /// after `bump`, the readers learn the tail, and an account that must
     /// grow gets a migration instruction in the same upgrade
     /// (`migrate_config`). `Pool::LEN` was 839 until 2026-09-13, 841 until
-    /// Phase B (R7-b appended `min_seats: u16` after `vault_bump`) and is
-    /// now 842: Phase B appended `mode: u8` (founder rulings 2026-09-24),
-    /// and `migrate_pool` grows every pool that predates either field. 839
+    /// Phase B (R7-b appended `min_seats: u16` after `vault_bump`), 842
+    /// until the Ladder (Phase B appended `mode: u8`, founder rulings
+    /// 2026-09-24) and is now 861: the Ladder (D-E19) appended `capacity`,
+    /// `paid_places` and `prize_table`. `migrate_pool` grows every pool that
+    /// predates any of these fields; Config grew 595 → 597 for
+    /// `enabled_pool_types` and `migrate_config` grows it. 839
     /// is also not the 834 the proposal and prompt v2 repeat (that number is
     /// `paid_mask`'s byte offset, D1/D14; the founder's note against it is in
     /// the decision register). These pins turn a layout change into a
@@ -669,10 +870,14 @@ mod tests {
     /// point of appending.
     #[test]
     fn account_layouts_are_pinned() {
-        assert_eq!(Pool::LEN, 842, "Pool layout changed — read the note above");
-        assert_eq!(Pool::SPACE, 850);
+        assert_eq!(Pool::LEN, 861, "Pool layout changed — read the note above");
+        assert_eq!(Pool::SPACE, 869);
         assert_eq!(Pool::SPACE_V1, 847, "history — never change");
         assert_eq!(Pool::SPACE_V2, 849, "history — never change");
+        assert_eq!(Pool::LEN_V3, 842, "history — never change");
+        assert_eq!(Pool::SPACE_V3, 850, "history — never change");
+        assert_eq!(PoolType::LEN, 49);
+        assert_eq!(PoolType::SPACE, 57);
         assert_eq!(
             Config::LEN_V1,
             372,
@@ -683,12 +888,14 @@ mod tests {
         assert_eq!(Config::LEN_V2, 476, "history — never change");
         assert_eq!(Config::SPACE_V2, 484);
         assert_eq!(Config::HARD_TAIL_LEN, 119);
+        assert_eq!(Config::LEN_V3, 595, "history — never change");
+        assert_eq!(Config::SPACE_V3, 603);
         assert_eq!(
             Config::LEN,
-            595,
+            597,
             "Config layout changed — append after the tail and ship a migration"
         );
-        assert_eq!(Config::SPACE, 603);
+        assert_eq!(Config::SPACE, 605);
         assert_eq!(Entry::LEN_V1, 183);
         assert_eq!(Entry::TAIL_LEN, 37);
         assert_eq!(Entry::LEN, 220);

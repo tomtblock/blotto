@@ -8,9 +8,15 @@
  *
  * Colour literals here MIRROR src/design/tokens.ts (an OG image renders
  * outside the CSS pipeline, so tokens cannot be referenced by name).
+ *
+ * D-E19 (the Ladder): the line under the amount is the FINISH and the field
+ * — "3rd of 32 players" — where the pool's verified archive (E3) holds this
+ * player's place; before that, the field alone. The place comes only from
+ * the verified archive, never from the payout amount, and the field is the
+ * players who played (the archive's rows, else the pool's count), never a
+ * typed 64. Nothing sealed and no class is on this card.
  */
 import { ImageResponse } from 'next/og';
-import { CAPACITY } from '@blotto/scoring';
 import { COPY } from '@/copy';
 import { indexerApi, live } from '@/data/api';
 import { lamportsToSol } from '@/data/format';
@@ -33,13 +39,15 @@ export async function GET(
   // SSR outage guard: an unreachable indexer answers 503 (retryable),
   // never an unhandled 500 from the image renderer.
   const reads = await live(() =>
-    Promise.all([api.getPool(poolId), api.getResults(poolId), api.getEntries(poolId)])
+    Promise.all([api.getPool(poolId), api.getResults(poolId), api.getEntries(poolId), api.getLeaderboard(poolId)])
   );
   if (!reads.ok) return new Response('live data unavailable', { status: 503 });
-  const [pool, results, entries] = reads.value;
+  const [pool, results, entries, archive] = reads.value;
   const entry = entries.find((e) => e.player === player);
   const amount = entry ? results.find((r) => r.seat === entry.idx)?.amount : undefined;
   const paid = amount !== undefined && BigInt(amount) > 0n;
+  const placed = archive?.rows.find((r) => r.player === player) ?? null;
+  const field = archive ? archive.rows.length : (pool?.entrants ?? entries.length);
 
   return new ImageResponse(
     (
@@ -106,21 +114,20 @@ export async function GET(
                 <span style={{ fontSize: 44, color: INK_MUTED }}>SOL</span>
               </>
             ) : (
-              'Entered'
+              COPY.card.entered
             )}
           </div>
           <div style={{ fontSize: 34, color: INK_MUTED, display: 'flex' }}>
             {/* The drawn class is NOT on this card (founder 2026-09-14: the
               * rarity assignment is not broadcast to players) — a public OG
-              * image is broadcast by definition. Seat count from the published
-              * constant, never typed: this card is the most redistributed
-              * surface in the product, so a capacity change must not leave a
-              * wrong number on every shared image. */}
-            {entry ? `seat ${entry.idx + 1} of ${CAPACITY}` : `${CAPACITY} seats`}
+              * image is broadcast by definition. The field is the pool's
+              * own, never typed: this card is the most redistributed surface
+              * in the product, so a wrong number would be on every share. */}
+            {placed ? COPY.card.finish(placed.rank, field) : COPY.card.field(field)}
           </div>
         </div>
         <div style={{ marginTop: 36, fontSize: 24, color: INK_MUTED }}>
-          Every result recomputable from published data
+          {COPY.card.recomputable}
         </div>
       </div>
     ),

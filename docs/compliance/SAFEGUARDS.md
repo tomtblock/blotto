@@ -124,7 +124,8 @@ pool.
 **What it is.** When a pool concludes, a results bundle is published to permanent storage: every
 entry's battles and salt, every score, rank and amount, and the committed payouts. The root of the
 results tree is committed on-chain. Anyone can recompute the whole result in a browser, with no
-wallet and no help from the operator, and check that the player paid is the player who won.
+wallet and no help from the operator — the ranking and every amount, from the pool's own prize
+table — and check that the players paid are the ones the ranking says.
 
 **Enforced by.**
 - `backend/reveal/src/bundle.ts`, `publisher-irys.ts` — the bundle and its publication.
@@ -145,17 +146,23 @@ Lamports leave a vault by exactly four instructions:
 
 | Instruction | Where the money goes |
 |---|---|
-| `pay_prizes` | the winning player(s) |
+| `pay_prizes` | the players in the paid places, by the pool's own prize table |
 | `release_escrow` | the player whose held share it is |
-| `pay_next_place` | the next eligible player(s), after a flag is upheld |
+| `pay_next_place` | the next eligible player(s), after a flag is upheld — in a pool that pays one place only |
 | `trigger_refund` | back to the platform treasury — only for a pool that did **not** reach its minimum field and never played |
 
 So **once a pool plays, its prize is only ever paid to players.** `forfeit_escrow` moves nothing:
-an upheld flag leaves the share in the vault until `pay_next_place` divides it among the eligible
-players at the rank it passes to. A withheld prize never returns to the operator.
+an upheld flag leaves the share in the vault. In a pool that pays one place (every pool opened
+before the Ladder, D-E19), `pay_next_place` divides it among the eligible players at the rank it
+passes to. In a pool that pays more than one place the rule is "the field moves up" — prizes
+recomputed as if the forfeited player had never been ranked, paid only to players — and its
+instructions are not built: until they ship, `pay_next_place` refuses (`NextPlaceUnsupported`) and
+the share stays held in its vault. A withheld prize never returns to the operator, and is never
+paid by a rule that does not fit its pool.
 
-**Enforced by.** `programs/blotto_cup/src/instructions/` — `pay_prizes.rs`, `escrow.rs`,
-`refund.rs`; `programs/blotto_cup/src/vault.rs` is the only file that may call the system transfer.
+**Enforced by.** `programs/blotto_cup/src/instructions/` — `pay_prizes.rs`, `escrow.rs` (the
+`paid_places <= 1` guard in `handle_pay_next_place`), `refund.rs`; `programs/blotto_cup/src/vault.rs`
+is the only file that may call the system transfer.
 
 **Proven by.**
 - `scripts/check-standing-rules.sh` rule 6: vault debits may occur only in the four named
@@ -169,34 +176,47 @@ players at the rank it passes to. A withheld prize never returns to the operator
 
 ## 6. The prize pool is fixed and funded before entries open
 
-**What it is.** Each tier's prize pool is a fixed amount. Opening a pool moves it from the platform
-treasury into the pool's vault before any entry is sold. It is never computed from entries and is
-the same whether 40 or 64 players enter. Entries go to the treasury, never to a prize vault. A tier
-cannot open a pool unless the treasury holds the full prize pool plus its reserve floor.
+**What it is.** Each pool type — a mode, an entry price and a pool size — has a fixed prize pool
+and a fixed prize table: the top quarter of the size is paid, each place a set amount (D-E19). Opening a
+pool moves the whole prize pool from the platform treasury into the pool's vault before any entry
+is sold, and the pool copies its table, so a later change never reaches it. The table depends on
+the pool's size only: it is never computed from entries and is the same however many players
+enter. Entries go to the treasury, never to a prize vault. A pool type cannot open a pool unless
+the treasury holds the full prize pool plus its reserve floor, and the reserve counts every enabled
+pool type — the program refuses a reserve computed over a list that leaves one out.
 
-**Enforced by.** `programs/blotto_cup/src/constants.rs` (`TIER_POT_LAMPORTS`);
-`instructions/open_pool.rs`; `instructions/register.rs`; `instructions/treasury.rs` (the treasury's
-own withdrawal, `withdraw_platform`, is multisig-gated and refused below a floor that covers every
-open pool's prize and every refundable entry). D-A1, D-E1.
+**Enforced by.** `programs/blotto_cup/src/constants.rs` (`LADDER_TABLES`);
+`instructions/pool_type.rs` (a table must pay exactly the top quarter, never increase and skip no
+place; the stated prize pool must equal the table at the tier's price); `instructions/open_pool.rs`
+(refuses a pool type whose prize pool no longer matches today's price); `instructions/register.rs`;
+`instructions/reveal_commit.rs` (no committed amount may be zero or above the pool's first prize,
+and the list must sum to the prize pool); `instructions/treasury.rs` (`idle_pool_type_reserve`; the
+treasury's own withdrawal, `withdraw_platform`, is multisig-gated and refused below a floor that
+covers the reserve and every refundable entry). D-A1, D-E1, D-E19.
 
 **Proven by.** `scripts/check-standing-rules.sh` checks 6(e) (treasury debits only in `open_pool`,
 `refund` and `withdraw_platform`), 6(f) (`register` never touches a vault) and 6(g) (no prize
 arithmetic over entries or balances); `tests/litesvm/tests/treasury_gates.rs`
 (`open_blocked_when_the_policy_floor_is_unmet`,
 `withdraw_blocked_below_the_floor_including_refundable_entries`); `fill_rule.rs`
-(`set_tier_economics_accepts_break_even_and_refuses_more`).
+(`set_tier_economics_accepts_break_even_and_refuses_more`); the program's unit tests
+`every_launch_table_has_the_published_shape` and `malformed_tables_are_refused` (`pool_type.rs`)
+and `prize_pools_are_the_published_grid` (`prize_math.rs`); the Python-generated scoring vectors
+(`backend/scoring/fixtures/gen_vectors.py`, `backend/scoring/test/vectors.spec.ts`).
 
-## 7. Refund below 40 seats
+## 7. Refund below the minimum field
 
-**What it is.** A pool runs only with at least 40 players. If its 12-hour deadline passes with
-fewer, it refunds: `trigger_refund` returns the untouched prize pool to the treasury, and `refund`
-repays each entry **in full** from the treasury. Both are callable by anyone, so a refund does not
-depend on the operator being available. The floor is written onto each pool when it opens, so it
-cannot move under players who already entered. Sealing at the deadline with 40–63 players is also
-callable by anyone.
+**What it is.** A pool runs only with at least its minimum field: 5, 10, 20 or 40 players for a
+pool of 8, 16, 32 or 64. If its 12-hour deadline passes with fewer, it refunds: `trigger_refund`
+returns the untouched prize pool to the treasury, and `refund` repays each entry **in full** from
+the treasury. Both are callable by anyone, so a refund does not depend on the operator being
+available. The minimum field is written onto each pool when it opens, so it cannot move under
+players who already entered. Sealing at the deadline with at least the minimum field but fewer
+than the pool's size is also callable by anyone.
 
-**Enforced by.** `instructions/refund.rs`, `seal.rs`; `state.rs` `Pool.min_seats`;
-`constants.rs` `MIN_SEATS`, `DEFAULT_FILL_DEADLINE_SECS`. R7-b, D-E6.
+**Enforced by.** `instructions/refund.rs`, `seal.rs`; `state.rs` `Pool.min_seats`, `Pool.capacity`;
+`constants.rs` `LADDER_MIN_SEATS`, `DEFAULT_FILL_DEADLINE_SECS`; `instructions/pool_type.rs` (a
+minimum field must exceed the places paid and not exceed the size). R7-b, D-E6, D-E19.
 
 **Proven by.** `tests/litesvm/tests/fill_rule.rs`
 (`below_the_minimum_field_the_pool_refunds_and_cannot_seal`,
@@ -402,9 +422,15 @@ These are published on the terms or rules page rather than left to be found.
 - **A pool's sealing key cannot be replaced.** If one were permanently lost after its pool closed to
   entries, that pool could not be revealed, settled or refunded (`trigger_refund` requires an open
   pool, `instructions/refund.rs`). Its custody is disclosed in full on the `/custody` page.
-- **Group completeness at a later rank is asserted, not proven.** When a forfeited share passes
-  below first place, each recipient is proven on-chain against the results root, but that the group
-  is complete is the settlement signer's assertion — checkable from the published bundle.
+- **Group completeness at a later rank is asserted, not proven.** When a forfeited share in a
+  one-place pool passes below first place, each recipient is proven on-chain against the results
+  root, but that the group is complete is the settlement signer's assertion — checkable from the
+  published bundle.
+- **The program does not rank.** It bounds every committed amount by the pool's first prize and
+  checks the exact total; who is paid what is checked by recomputation from the published bundle
+  (D-E15 as narrowed by D-E19).
+- **A forfeited share in a multi-place pool is held.** Until the field-moves-up payout ships, it
+  stays in its pool's vault — paid to no one, and never to the operator (D-E19).
 
 ## Known gaps
 

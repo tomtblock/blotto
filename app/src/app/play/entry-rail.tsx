@@ -23,14 +23,15 @@
  */
 
 import { useSyncExternalStore } from 'react';
-import { DEFAULT_FILL_DEADLINE_SECS, MIN_SEATS } from '@blotto/scoring';
+import Link from 'next/link';
+import { DEFAULT_FILL_DEADLINE_SECS } from '@blotto/scoring';
 import { COPY } from '@/copy';
 import { BOARD_CLOCK_BUDGET_MS, type BoardMode } from '@/battle/board/mode';
+import type { PoolLadder } from '@/data/format';
 import { PoolRules } from '@/components/pools/pool-rules';
 import { hasLocalAttestation } from '@/entry/attestation';
 import './entry-rail.css';
 
-const MIN_SEATS_N = Number(MIN_SEATS);
 const FILL_HOURS = Number(DEFAULT_FILL_DEADLINE_SECS / 3600n);
 const BOARD_MINUTES = BOARD_CLOCK_BUDGET_MS / 60_000;
 
@@ -58,6 +59,8 @@ export function useAttested(wallet: string): boolean {
 
 export interface EntryRailProps {
   mode: BoardMode;
+  /** THIS pool's size, floor and prize table (D-E19), from its record. */
+  ladder: PoolLadder;
   /** On record for this wallet: the statement tiles are not drawn. */
   attested: boolean;
   ageChecked: boolean;
@@ -70,6 +73,7 @@ export interface EntryRailProps {
 
 export function EntryRail({
   mode,
+  ladder,
   attested,
   ageChecked,
   termsChecked,
@@ -85,7 +89,7 @@ export function EntryRail({
       ] as const);
   return (
     <div className="entry-rail" data-testid="entry-rail">
-      <PoolRules mode={mode} minutes={BOARD_MINUTES} minSeats={MIN_SEATS_N} fillHours={FILL_HOURS} />
+      <PoolRules mode={mode} minutes={BOARD_MINUTES} ladder={ladder} fillHours={FILL_HOURS} />
       {statements.length > 0 ? (
         <ol className="flex flex-col gap-2.5" aria-label={COPY.gate.statementsLabel} data-testid="entry-statements">
           {statements.map((st, i) => (
@@ -94,6 +98,15 @@ export function EntryRail({
             </li>
           ))}
         </ol>
+      ) : null}
+      {/* Terms version 6 (D-E19) re-prompts every wallet: the way to what
+          changed sits under the statement that accepts them. */}
+      {statements.length > 0 ? (
+        <p className="text-[13px] leading-5 text-ink-muted">
+          <Link href="/terms#what-changed" target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-ink" data-testid="terms-what-changed-link">
+            {COPY.terms.changes.heading}
+          </Link>
+        </p>
       ) : null}
     </div>
   );

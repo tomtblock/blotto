@@ -9,7 +9,7 @@ pipelines read from.
 - **`events`** (the ledger) — one row per decoded event, keyed `(signature, event_index)`, with the
   decoded body in a raw `jsonb` column. Defined in `../_shared/migrations/0001_events_ledger.sql`.
 - **Derived tables** — projections of that ledger (`pools`, `entries`, `results`, `payouts`,
-  `profiles`, `player_history`, `tier_status`, `rankings`, `bundles` and others). The per-migration
+  `profiles`, `player_history`, `tier_status`, `pool_types`, `rankings`, `bundles` and others). The per-migration
   detail is in [`../_shared/migrations/README.md`](../_shared/migrations/README.md).
   `src/projection.ts` is the reference projection and `src/projection-pg.ts` the Postgres one; both
   commit in the same transaction as the ledger append.
@@ -27,13 +27,14 @@ the event list** — the table below is a reading aid. In registration order:
 
 | Event | Carries |
 |---|---|
-| `PoolOpened` | `pool, id, tier, entry_lamports, pot_lamports, fill_deadline, timer_seconds, sealing_pubkey, sealing_secret_hash, mode` — `pot_lamports` is the fixed prize pool moved treasury → pool vault at open; `mode` is 0 easy / 1 hard |
+| `PoolOpened` | `pool, id, tier, entry_lamports, pot_lamports, fill_deadline, timer_seconds, sealing_pubkey, sealing_secret_hash, mode, capacity, min_seats, paid_places, prize_table` — `pot_lamports` is the fixed prize pool moved treasury → pool vault at open; `mode` is 0 easy / 1 hard; the last four are the pool's size, minimum field and prize table (D-E19) |
 | `PoolVrfSeeded` | `pool, randomness_account, vrf_seed, slot` — the class draw's seed |
 | `PassCollectionCreated` | `pool, pass_collection, name, uri` |
 | `EntryRegistered` | `pool, player, index, battles_hash, class, slot_hash, pass_asset, terms_version` |
-| `PoolSealed` | `pool, entrants, pot_lamports, reason` — the field the pool plays with (64 at the 64th entry, or 40–63 when the fill deadline closed it); `reason` is `Capacity` or `DeadlineMinFill` |
-| `PoolMigrated` | `pool, min_seats, mode` — a pool account grown to the current layout |
-| `TierSlotFreed` | `tier, pool_id, next_open_at, mode` — the cooldown stamp the "next pool in" countdown reads |
+| `PoolSealed` | `pool, entrants, pot_lamports, reason` — the field the pool plays with (its capacity when it filled, or at least its minimum field when the fill deadline closed it); `reason` is `Capacity` or `DeadlineMinFill` |
+| `PoolMigrated` | `pool, min_seats, mode, capacity, paid_places, prize_table` — a pool account grown to the current layout |
+| `TierSlotFreed` | `tier, pool_id, next_open_at, mode, capacity` — the pool type's cooldown stamp the "next pool in" countdown reads |
+| `PoolTypeInitialized` / `PoolTypeEconomicsSet` / `PoolTypeEnabledSet` | one pool type per (mode, tier, capacity): created; its table, minimum field and prize pool; its switch (D-E19) |
 | `PoolSecretRevealed` | `pool, secret` — after which anyone can decrypt and verify every entry |
 | `ResultsCommitted` | `pool, root, payouts[{entry_index, amount}]` — the results-tree root the verify page recomputes against, plus the seat-keyed payout list |
 | `PrizesPaid` | `payouts[{player, entry_index, amount, escrowed}], paid_mask` — the prize pushed to the winning seat, or split across a tie for first; `escrowed` marks a share held for review |
@@ -70,8 +71,9 @@ npm run sync        # deployment entry: migrate (re-derive if a migration requir
 
 `src/read-api.ts` is the app's data source (`app/src/data/`): read-only JSON served from the derived
 tables — the pool list and one pool, a pool's entries, results, payouts, archive ranking and verify
-record; a player's profile and history; the per-tier cooldown stamps; the server clock every
-countdown derives from; and the treasury report. The module header carries the route table and each
+record; a player's profile and history; every pool type (`/pool-types`, read from the chain first
+and from the `pool_types` projection as a fallback); the per-tier cooldown stamps; the server clock
+every countdown derives from; and the treasury report. The module header carries the route table and each
 route's fail-closed rules. Route handling is a pure function (path → handler), so the suite tests it
 without sockets; `serveReadApi` is the thin Node http wrapper.
 

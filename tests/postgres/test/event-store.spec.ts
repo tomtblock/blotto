@@ -53,12 +53,19 @@ const sigFor = (i: number) => `SIG${String(i).padStart(4, '0')}`;
 const DERIVED: ReadonlyArray<{ table: string; key: readonly string[] }> = [
   { table: 'pools', key: ['pool'] },
   { table: 'entries', key: ['pool', 'player'] },
-  { table: 'results', key: ['pool', 'rank'] },
-  { table: 'payouts', key: ['pool', 'rank'] },
+  // Keyed by SEAT since migration 0004 (`results` and `payouts` have no rank
+  // column). Until 2026-11-05 these two read ['pool', 'rank'], which named a
+  // column that does not exist: every row's key was `rank=null`, so rows were
+  // matched by arrival order alone. With one paid seat per pool that happened
+  // to agree; the Ladder's sixteen-place pool exposed it.
+  { table: 'results', key: ['pool', 'seat'] },
+  { table: 'payouts', key: ['pool', 'seat'] },
   { table: 'profiles', key: ['player'] },
   { table: 'player_history', key: ['pool', 'player'] },
-  // Keyed per ladder since Phase B (migration 0025).
-  { table: 'tier_status', key: ['tier', 'mode'] },
+  // Keyed per ladder since Phase B (migration 0025), per pool type since
+  // the Ladder (migration 0026, D-E19).
+  { table: 'tier_status', key: ['tier', 'mode', 'capacity'] },
+  { table: 'pool_types', key: ['mode', 'tier', 'capacity'] },
 ];
 
 /**
@@ -199,6 +206,7 @@ function expectSameTable(
       'profiles',
       'player_history',
       'tier_status',
+      'pool_types',
     ]);
   });
 

@@ -6,7 +6,7 @@
  * it ships on a real screen. Dev-only (see page.tsx).
  */
 import { useState } from "react";
-import { TIER_POT_LAMPORTS } from "@blotto/scoring";
+import { LADDER_TABLES, MIN_FIELD_BY_CAPACITY, TIER_ENTRY_LAMPORTS, amountForRank, prizePoolFor } from "@blotto/scoring";
 import { COPY } from "@/copy";
 import { palette, type as typeTokens, motion, elevation } from "@/design/tokens";
 import { lamportsToSol } from "@/data/format";
@@ -73,11 +73,12 @@ function MotionDemo({ name, animateClass }: { name: string; animateClass: string
   );
 }
 
-/* Every SOL figure on this page is the tier-0 pot — the smallest of the seven
- * fixed pots, funded from the treasury before entries open. Derived from the
- * shared table (backend/scoring/src/prizes.ts) rather than typed, so the
- * gallery cannot drift from the founder’s numbers. Renders as "4". */
-const DEMO_POT_SOL = lamportsToSol(TIER_POT_LAMPORTS[0].toString());
+/* Every SOL figure on this page is a tier-0 pool of 16 (D-E19, the Ladder):
+ * its whole prize pool and its 1st prize, derived from the published tables
+ * (backend/scoring/src/prizes.ts) rather than typed, so the gallery cannot
+ * drift from the founder’s numbers. Render as "1" and "0.5". */
+const DEMO_POT_SOL = lamportsToSol(prizePoolFor(LADDER_TABLES[16], TIER_ENTRY_LAMPORTS[0]!).toString());
+const DEMO_FIRST_SOL = lamportsToSol(amountForRank(LADDER_TABLES[16], TIER_ENTRY_LAMPORTS[0]!, 1).toString());
 
 function ToastDemoButtons() {
   const toast = useToast();
@@ -186,13 +187,11 @@ export function Gallery() {
 
         <Section title="Stat">
           <div className="flex flex-wrap items-end gap-10">
-            {/* The two prize figures are the same number on purpose: the winner’s
-                prize IS the pool, so "your prize" can only ever be the whole pot
-                — or an equal share of it on a tie for first. */}
+            {/* D-E19: a pool's whole prize pool, and the 1st prize of its table. */}
             <Stat label="Prize pool" value={DEMO_POT_SOL} unit="SOL" tone="prize" />
-            <Stat label="Seats filled" value="23/64" tone="brand" />
+            <Stat label="Players" value="11/16" tone="brand" />
             <Stat label="Battles" value="7" />
-            <Stat label="Your prize" value={DEMO_POT_SOL} unit="SOL" tone="prize" size="moment" />
+            <Stat label="Your prize" value={DEMO_FIRST_SOL} unit="SOL" tone="prize" size="moment" />
           </div>
         </Section>
 
@@ -256,6 +255,8 @@ export function Gallery() {
                 asset="F1XTUREpass11111111111111111111111111111111"
                 poolNumber={7}
                 mode="easy"
+                capacity={16}
+                minSeats={MIN_FIELD_BY_CAPACITY[16]}
                 poolAddress="F1XTUREPoo1111111111111111111111111111111111"
                 wallet="F1XTUREP1ayer111111111111111111111111111111"
                 signer={undefined}

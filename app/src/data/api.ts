@@ -29,9 +29,9 @@ import type {
   PayoutRow,
   PoolLeaderboard,
   PoolSummary,
+  PoolTypesResponse,
   ProfileRow,
   ResultRow,
-  TiersResponse,
   TreasuryTiers,
 } from './types';
 import { FIXTURE_API } from './fixture';
@@ -115,8 +115,11 @@ class HttpIndexerApi implements IndexerApi {
   async getTreasury() {
     return this.get<TreasuryTiers>('/treasury');
   }
-  async getTiers() {
-    return this.get<TiersResponse>('/tiers');
+  async getPoolTypes() {
+    // D-E19: the landing's source for which pool types take entries. GET
+    // /tiers stays on the read API for other readers; the app no longer
+    // reads it. A 404 (a read API from before the Ladder) reads as null.
+    return this.get<PoolTypesResponse>('/pool-types');
   }
   async getLeaderboard(pool: string) {
     // 404 = no VERIFIED archive for this pool (the read API fails closed;

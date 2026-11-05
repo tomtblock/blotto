@@ -1,8 +1,10 @@
 //! THE FILL RULE against the compiled artifact (R7-b, founder instruction
-//! 2026-09-12; was D-E4 with a 52-seat floor). A pool seals at the 64th
-//! seat, or at its fill deadline with at least its own `min_seats`, and
-//! refunds in full below that. Nothing in between. One clock, set once at
-//! open from `Config.fill_deadline_seconds` (12 h), never rewritten.
+//! 2026-09-12; was D-E4 with a 52-seat floor; per pool size since D-E19). A
+//! pool seals at its capacity, or at its fill deadline with at least its own
+//! `min_seats`, and refunds in full below that. Nothing in between. One
+//! clock, set once at open from `Config.fill_deadline_seconds` (12 h), never
+//! rewritten. This file runs the rule on the 64-player pool in depth;
+//! `ladder_sizes.rs` runs it at every capacity.
 //!
 //! Renamed from `min_field.rs` on 2026-09-13. Its assertions are rewritten
 //! in place rather than deleted, per the instruction's standing rule 0.7:
@@ -10,7 +12,7 @@
 //!
 //!   - no seat changes the deadline;
 //!   - past the deadline a pool at the floor SEALS, by any signer, and
-//!     settles to Paid with the winner taking the whole pot;
+//!     settles to Paid with the paid places taking the whole table;
 //!   - the same at 63 (the top of the range) — the seal-accounting trap
 //!     (`entry × entrants`, never `× 64`) fails HERE if it ever comes back;
 //!   - below the floor the pool refunds and cannot be sealed; at the floor
@@ -20,7 +22,7 @@
 //!     random keypair succeeds the moment the deadline passes;
 //!   - `set_tier_economics` accepts a pot up to and INCLUDING the floor's
 //!     intake, and refuses anything above it;
-//!   - a pool plays by the floor it was OPENED with, not by the constant.
+//!   - a pool plays by the floor it was OPENED with, not by its type's.
 
 use blotto_litesvm_tests::*;
 use solana_sdk::pubkey::Pubkey;
@@ -28,32 +30,28 @@ use solana_sdk::signature::Keypair;
 use solana_sdk::signer::Signer;
 
 const ENTRY: u64 = 100_000_000; // tier 0
-const POT: u64 = 4_000_000_000; // tier 0 (D-E1)
+const POT: u64 = 4_000_000_000; // a 64-player pool's prize pool at tier 0: 40 entries
 /// constants.rs::DEFAULT_FILL_DEADLINE_SECS — 12 h (founder ruling 1,
 /// 2026-09-07), seeded into `Config.fill_deadline_seconds` at init.
 const FILL_DEADLINE_SECS: i64 = 12 * 60 * 60;
+/// The 64-player pool's minimum field (constants.rs::LADDER_MIN_SEATS).
+const MIN_SEATS: u16 = LADDER_MIN_SEATS[3];
 
 fn register_n(env: &mut Env, pool_id: u64, n: u16) -> Vec<(Keypair, Pubkey)> {
-    (0..n)
-        .map(|_| env.register_player(pool_id).unwrap())
-        .collect()
+    env.register_n(pool_id, n)
 }
 
-/// Reveal, commit the winner and pay them; returns the winner's delta.
-fn settle_winner(env: &mut Env, pool_id: u64, players: &[(Keypair, Pubkey)]) -> u64 {
-    let settlement = env.settlement.insecure_clone();
-    let secret = env.pool_secret;
-    let ix = settle_ix(&settlement.pubkey(), pool_id, "reveal_pool_secret", &secret);
-    env.send(&[ix], &[&settlement]).expect("reveal");
-    let mut args = [1u8; 32].to_vec();
-    args.extend_from_slice(&encode_payouts(&winner_payout(POT)));
-    let ix = settle_ix(&settlement.pubkey(), pool_id, "commit_results", &args);
-    env.send(&[ix], &[&settlement]).expect("commit");
-    let (p, e) = &players[0];
-    let before = env.balance(&p.pubkey());
-    let ix = pay_prizes_ix(&settlement.pubkey(), pool_id, &[0], &[(p.pubkey(), *e)]);
-    env.send(&[ix], &[&settlement]).expect("pay");
-    env.balance(&p.pubkey()) - before
+/// Reveal, commit the 64-player table with no ties and pay every place;
+/// returns the total the paid places received.
+fn settle_table(env: &mut Env, pool_id: u64, players: &[(Keypair, Pubkey)]) -> u64 {
+    env.reveal(pool_id);
+    let payouts = straight_payouts(&LADDER_TABLES[3], ENTRY);
+    env.commit(pool_id, [1u8; 32], &payouts).expect("commit");
+    let deltas = env.pay_all(pool_id, players, &payouts);
+    for (i, &(_, amount)) in payouts.iter().enumerate() {
+        assert_eq!(deltas[i], amount, "place {} paid its table amount", i + 1);
+    }
+    deltas.iter().sum()
 }
 
 #[test]
@@ -74,18 +72,18 @@ fn the_deadline_is_twelve_hours_from_open_and_no_seat_moves_it() {
     );
 
     register_n(&mut env, 1, MIN_SEATS - 1);
-    assert_eq!(read_pool(&env.svm, &pool).fill_deadline, opened, "51 seats");
+    assert_eq!(read_pool(&env.svm, &pool).fill_deadline, opened, "39 seats");
     env.advance_time(3600);
     register_n(&mut env, 1, 1);
     let pv = read_pool(&env.svm, &pool);
     assert_eq!(pv.entrants, MIN_SEATS);
     assert_eq!(
         pv.state, 0,
-        "still Open at 52 — the deadline decides, not the seat"
+        "still Open at the floor — the deadline decides, not the seat"
     );
     assert_eq!(
         pv.fill_deadline, opened,
-        "the 52nd seat moves nothing (option A)"
+        "the floor's seat moves nothing (option A)"
     );
     register_n(&mut env, 1, 3);
     assert_eq!(
@@ -96,7 +94,7 @@ fn the_deadline_is_twelve_hours_from_open_and_no_seat_moves_it() {
 }
 
 #[test]
-fn a_minimum_field_pool_seals_at_the_deadline_and_pays_the_winner() {
+fn a_minimum_field_pool_seals_at_the_deadline_and_pays_the_table() {
     let Some(mut env) = Env::new() else { return };
     env.open_ready_pool(1, 0);
     let platform_at_open = env.balance(&platform_pda());
@@ -114,12 +112,8 @@ fn a_minimum_field_pool_seals_at_the_deadline_and_pays_the_winner() {
             "{err}"
         );
     }
-    let err = env
-        .send(
-            &[trigger_refund_ix(&settlement.pubkey(), 1)],
-            &[&settlement],
-        )
-        .unwrap_err();
+    let ix = env.trigger_refund_ix(&settlement.pubkey(), 1);
+    let err = env.send(&[ix], &[&settlement]).unwrap_err();
     assert!(
         err.contains("6012") || err.contains("DeadlineNotPassed"),
         "{err}"
@@ -147,12 +141,8 @@ fn a_minimum_field_pool_seals_at_the_deadline_and_pays_the_winner() {
         err.contains("6011") || err.contains("DeadlinePassed"),
         "{err}"
     );
-    let err = env
-        .send(
-            &[trigger_refund_ix(&settlement.pubkey(), 1)],
-            &[&settlement],
-        )
-        .unwrap_err();
+    let ix = env.trigger_refund_ix(&settlement.pubkey(), 1);
+    let err = env.send(&[ix], &[&settlement]).unwrap_err();
     assert!(
         err.contains("6052") || err.contains("FieldReached"),
         "{err}"
@@ -168,14 +158,15 @@ fn a_minimum_field_pool_seals_at_the_deadline_and_pays_the_winner() {
     // The bag is drawn down, not emptied (D-E4 — PID §3 reissue).
     let remaining: u32 = pv.class_counters.iter().map(|&c| c as u32).sum();
     assert_eq!(remaining, (64 - MIN_SEATS - 1) as u32, "undrawn classes");
-    // Seal accounting on the REAL field: 53 entries became revenue exactly.
+    // Seal accounting on the REAL field: 41 entries became revenue exactly.
     let cfg = read_config(&env.svm);
     assert_eq!(
         cfg.platform_refundable, 0,
         "entrants × price left the refundable floor"
     );
     assert_eq!(
-        cfg.active_pool_by_tier[0], 1,
+        read_pool_type(&env.svm, &env.pool_type_of(1)).active_pool,
+        1,
         "slot held until Paid (sequential)"
     );
     // A second seal is refused: the pool is no longer Open.
@@ -184,10 +175,15 @@ fn a_minimum_field_pool_seals_at_the_deadline_and_pays_the_winner() {
         .unwrap_err();
     assert!(err.contains("6000") || err.contains("PoolNotOpen"), "{err}");
 
-    // Settle: the winner takes the whole pot, the vault reaps to zero, and
+    // Settle: the sixteen paid places take the whole table — the same
+    // fixed table at the floor as at 64 (D-E19: the table depends on the
+    // capacity only, never on entrants) — the vault ends at its cushion, and
     // the treasury holds the field's entries minus the pot.
-    let won = settle_winner(&mut env, 1, &players);
-    assert_eq!(won, POT, "winner takes all, at the floor as at 64");
+    let won = settle_table(&mut env, 1, &players);
+    assert_eq!(
+        won, POT,
+        "the paid places share the prize pool, at the floor as at 64"
+    );
     assert_eq!(env.balance(&vault_pda(1)), VAULT_RENT_CUSHION);
     assert_eq!(read_pool(&env.svm, &pool_pda(1)).state, 3, "Paid");
     assert_eq!(
@@ -197,8 +193,9 @@ fn a_minimum_field_pool_seals_at_the_deadline_and_pays_the_winner() {
     );
 
     // THE FLOOR IS EXACTLY BREAK-EVEN — the founder's ruling of 2026-09-13,
-    // measured. This assertion read `== 1_200_000_000, "margin at the floor:
-    // 1.2 SOL"` under D-E4's 52-seat floor. R7-b spends that whole buffer
+    // measured, and D-E19's rule at every size (the table sums to the floor).
+    // This assertion read `== 1_200_000_000, "margin at the floor: 1.2 SOL"`
+    // under D-E4's 52-seat floor. R7-b spends that whole buffer
     // deliberately: at 40 seats a pool takes in precisely what it pays out.
     //
     // Stated as an equality rather than `>= 0` on purpose. A pot that ever
@@ -238,7 +235,7 @@ fn a_63_seat_pool_seals_the_same_way() {
         0,
         "63 × price released, not 64"
     );
-    assert_eq!(settle_winner(&mut env, 1, &players), POT);
+    assert_eq!(settle_table(&mut env, 1, &players), POT);
     assert_eq!(env.balance(&vault_pda(1)), VAULT_RENT_CUSHION);
 }
 
@@ -251,7 +248,7 @@ fn below_the_minimum_field_the_pool_refunds_and_cannot_seal() {
     let settlement = env.settlement.insecure_clone();
     let err = env
         .send(
-            &[trigger_refund_ix(&settlement.pubkey(), 1)],
+            &[env.trigger_refund_ix(&settlement.pubkey(), 1)],
             &[&settlement],
         )
         .unwrap_err();
@@ -268,7 +265,7 @@ fn below_the_minimum_field_the_pool_refunds_and_cannot_seal() {
         "{err}"
     );
     env.send(
-        &[trigger_refund_ix(&settlement.pubkey(), 1)],
+        &[env.trigger_refund_ix(&settlement.pubkey(), 1)],
         &[&settlement],
     )
     .expect("refund fork below the minimum");
@@ -276,7 +273,7 @@ fn below_the_minimum_field_the_pool_refunds_and_cannot_seal() {
     // Every entrant repaid in full (R7 unchanged).
     for (p, e) in &players {
         let before = env.balance(&p.pubkey());
-        let ix = refund_ix(&settlement.pubkey(), 1, e, &p.pubkey());
+        let ix = env.refund_ix(&settlement.pubkey(), 1, e, &p.pubkey());
         env.send(&[ix], &[&settlement]).expect("refund");
         assert_eq!(env.balance(&p.pubkey()) - before, ENTRY);
     }
@@ -305,19 +302,18 @@ fn set_tier_economics_accepts_break_even_and_refuses_more() {
     env.send(&[ix], &[])
         .expect("break-even is accepted since R7-b");
 
-    // One 1024-multiple ABOVE it is refused: the guard still holds the line
-    // it was written for. (4 SOL is a multiple of 1024, so 4 SOL + 1024 is
-    // too — the divisibility check cannot be what rejects this.)
-    assert_eq!(floor_intake % 1024, 0);
-    let ix = set_tier_economics_ix(&admin, 0, ENTRY, floor_intake + 1024);
+    // One LAMPORT above it is refused: the guard still holds the line it was
+    // written for. (D-E19 retired the 1024-lamport grid, so no divisibility
+    // check stands in front of this one any more.)
+    let ix = set_tier_economics_ix(&admin, 0, ENTRY, floor_intake + 1);
     let err = env.send(&[ix], &[]).unwrap_err();
     assert!(
         err.contains("6053") || err.contains("PotExceedsMinimumField"),
         "a pot above the floor's intake must still be refused: {err}"
     );
 
-    // And well below is fine.
-    let ix = set_tier_economics_ix(&admin, 0, ENTRY, floor_intake - 1024);
+    // And below is fine — any lamport count, the 1024 grid being gone.
+    let ix = set_tier_economics_ix(&admin, 0, ENTRY, floor_intake - 1);
     env.send(&[ix], &[])
         .expect("a pot under the floor's intake is accepted");
 
@@ -332,11 +328,12 @@ fn set_tier_economics_accepts_break_even_and_refuses_more() {
 
 /// The reason `Pool.min_seats` exists, proven from outside the program.
 ///
-/// `MIN_SEATS` is a compile-time constant, so "an upgrade moves the floor"
-/// cannot be staged in a test. What CAN be staged is the observable
-/// consequence: a pool whose stored floor differs from the constant must
-/// seal and refund by ITS OWN number. If either guard read `MIN_SEATS`
-/// instead of `pool.min_seats`, every assertion below would invert.
+/// What CAN be staged is the observable consequence of a floor moving: a
+/// pool whose stored floor differs from its pool type's (40) must seal and
+/// refund by ITS OWN number. If either guard read the type, or a constant,
+/// instead of `pool.min_seats`, every assertion below would invert. (Since
+/// D-E19 the type's floor can move with one `set_pool_type_economics`, so
+/// this is no longer only an upgrade's hazard.)
 ///
 /// This is not a hypothetical sequence. The upgrade drain gate is
 /// `{Sealed, Scored, Refunding}` (`scripts/admin.ts`) and does NOT include
@@ -348,11 +345,11 @@ fn a_pool_seals_and_refunds_by_its_own_stored_floor() {
     let Some(mut env) = Env::new() else { return };
     env.open_ready_pool(1, 0);
 
-    // Opened with the constant.
+    // Opened with its pool type's floor.
     assert_eq!(
         read_min_seats(&env.svm, &pool_pda(1)),
         MIN_SEATS,
-        "open_pool copies the constant"
+        "open_pool copies the pool type's floor"
     );
 
     // Now give this pool the OLD floor, as a pool opened before R7-b has.
@@ -379,14 +376,14 @@ fn a_pool_seals_and_refunds_by_its_own_stored_floor() {
 
     // And the refund fork — which the constant would have refused — opens.
     env.send(
-        &[trigger_refund_ix(&settlement.pubkey(), 1)],
+        &[env.trigger_refund_ix(&settlement.pubkey(), 1)],
         &[&settlement],
     )
     .expect("below its own floor, the pool refunds");
     assert_eq!(read_pool(&env.svm, &pool_pda(1)).state, 4, "Refunding");
     for (p, e) in &players {
         let before = env.balance(&p.pubkey());
-        let ix = refund_ix(&settlement.pubkey(), 1, e, &p.pubkey());
+        let ix = env.refund_ix(&settlement.pubkey(), 1, e, &p.pubkey());
         env.send(&[ix], &[&settlement]).expect("refund");
         assert_eq!(env.balance(&p.pubkey()) - before, ENTRY);
     }
@@ -409,7 +406,7 @@ fn a_lower_stored_floor_seals_where_the_constant_would_refuse() {
     // The refund fork is closed at this pool's floor...
     let err = env
         .send(
-            &[trigger_refund_ix(&settlement.pubkey(), 1)],
+            &[env.trigger_refund_ix(&settlement.pubkey(), 1)],
             &[&settlement],
         )
         .unwrap_err();
@@ -438,7 +435,7 @@ fn an_empty_pool_closes_and_returns_the_pot() {
     env.advance_time(FILL_DEADLINE_SECS + 1);
     let settlement = env.settlement.insecure_clone();
     env.send(
-        &[trigger_refund_ix(&settlement.pubkey(), 1)],
+        &[env.trigger_refund_ix(&settlement.pubkey(), 1)],
         &[&settlement],
     )
     .expect("an empty pool past its deadline closes");
@@ -453,8 +450,11 @@ fn an_empty_pool_closes_and_returns_the_pot() {
         "the pot returns to the treasury"
     );
     assert_eq!(env.balance(&vault_pda(1)), VAULT_RENT_CUSHION);
-    // And the tier slot frees at once: there is nothing left to settle.
-    assert_eq!(read_config(&env.svm).active_pool_by_tier[0], 0);
+    // And the type's slot frees at once: there is nothing left to settle.
+    assert_eq!(
+        read_pool_type(&env.svm, &env.pool_type_of(1)).active_pool,
+        0
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -499,6 +499,14 @@ fn migrate_pool_writes_the_floor_those_players_entered_under() {
     // Phase B: a pool from before either field played easy (hard did not
     // exist). `hard_mode.rs` covers the 849-byte pre-Phase-B shape.
     assert_eq!(pv.mode, MODE_EASY);
+    // D-E19: and it played winner-takes-all on 64 seats — one place, its
+    // prize pool in whole entries (4 SOL at 0.1 SOL is 40), the shape every
+    // pre-Ladder pool is recorded with. `ladder_migration.rs` covers the
+    // 850-byte pre-Ladder shape and the pools that cannot be given a table.
+    assert_eq!((pv.capacity, pv.paid_places), (64, 1));
+    let mut one_place = [0u8; 16];
+    one_place[0] = 40;
+    assert_eq!(pv.prize_table, one_place);
 }
 
 /// Run twice, and the second is a clean refusal rather than a second write.
@@ -561,7 +569,7 @@ fn a_migrated_pool_plays_by_the_floor_the_migration_gave_it() {
         "51 is below the migrated floor of 52: {err}"
     );
     env.send(
-        &[trigger_refund_ix(&settlement.pubkey(), 1)],
+        &[env.trigger_refund_ix(&settlement.pubkey(), 1)],
         &[&settlement],
     )
     .expect("and the refund fork is open");
