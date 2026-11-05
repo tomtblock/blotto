@@ -47,6 +47,20 @@ pub const LADDER_TABLES: [[u8; MAX_PAID_PLACES]; 4] = [
 /// `Pool.min_seats`, copied from its `PoolType` at open.
 pub const LADDER_MIN_SEATS: [u16; 4] = [5, 10, 20, 40];
 
+/// The smallest entry price a prize table may be set at: `CAPACITY²` = 4,096
+/// lamports. Not a product number — a mathematical floor. `commit_results`
+/// bounds every amount by first place (`prize_table[0] × entry`). A tie
+/// group's lowest seat receives `floor(combined / k) + (combined mod k)`,
+/// and the remainder is below `k ≤ CAPACITY`. Either the group covers only
+/// positions worth exactly first place (the split is then exact), or at
+/// least one of its positions is a whole entry or more below first, so
+/// `floor(combined / k) ≤ first − entry / k`, and the lowest seat stays at
+/// or under first place whenever `entry / k ≥ k` — that is, whenever `entry ≥
+/// CAPACITY²`. Below it, a legitimate tie list could be refused and its pool
+/// left Sealed. Every configured tier is at least 0.1 SOL, 24,000 times this.
+/// `prize_math`'s exhaustive test checks the bound over every tie shape.
+pub const MIN_TABLE_ENTRY_LAMPORTS: u64 = (CAPACITY as u64) * (CAPACITY as u64);
+
 // The battle shape — seven battles of five stats summing to 100 — is
 // deliberately NOT a constant here. This program never sees an allocation:
 // `register` takes only `battles_hash`, and the plaintext appears after the

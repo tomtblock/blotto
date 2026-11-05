@@ -1874,6 +1874,7 @@ impl Env {
     /// that still serve one-place pools — `pay_next_place` above all, which
     /// refuses every Ladder pool — stay proven against the artifact.
     pub fn open_legacy_pool(&mut self, pool_id: u64, tier: u8) {
+        // PHASE-N-REVIEW: simulated by open → shrink → migrate rather than a hand-built account, so every byte but the slot owner is the program's own.
         self.open_ready_pool(pool_id, tier);
         shrink_pool_to_v3(&mut self.svm, &pool_pda(pool_id));
         let settlement = self.settlement.insecure_clone();

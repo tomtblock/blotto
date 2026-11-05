@@ -140,6 +140,7 @@ impl Shape {
     }
 
     /// Shapes `0..4` are the Ladder's capacities in order; `4` is legacy.
+    // PHASE-N-REVIEW: legacy kept as a fifth shape so the next-place split stays fuzzed; it is the only shape where that path still moves money.
     fn nth(i: usize) -> Shape {
         if i < POOL_CAPACITIES.len() {
             Shape::ladder(i)
@@ -168,6 +169,7 @@ impl Shape {
     /// A one-place pool has no second place; there it is half the prize
     /// pool, the D-E2 split — a solo winner escrows, a tied member does not.
     fn kyc_split(&self, price: u64) -> u64 {
+        // PHASE-N-REVIEW: the old split (pot / 2) escrows nothing under a multi-place table; second place's worth is the analogous line.
         if self.paid_places() > 1 {
             self.table[1] as u64 * price
         } else {

@@ -409,3 +409,25 @@ fn a_pool_type_change_never_touches_an_open_pool() {
         "the next pool copies the restated terms"
     );
 }
+
+/// The entry-price floor (`MIN_TABLE_ENTRY_LAMPORTS` = 4,096 lamports): below
+/// it `commit_results`' first-place bound could refuse the rule's own tie
+/// split, so no table may be set at such a price. At exactly the floor the
+/// table is accepted.
+#[test]
+fn set_pool_type_economics_refuses_a_price_below_the_table_floor() {
+    let Some(mut env) = Env::new() else { return };
+    env.init_pool_type(MODE_EASY, 0, 16).unwrap();
+    let good = LADDER_TABLES[1]; // [5, 3, 1, 1]
+    for (price, accepted) in [(4_095u64, false), (4_096u64, true)] {
+        let admin = env.admin.pubkey();
+        env.send(&[set_tier_economics_ix(&admin, 0, price, 40 * price)], &[])
+            .unwrap();
+        let r = economics(&mut env, 16, 10, good, 10 * price);
+        if accepted {
+            r.unwrap();
+        } else {
+            assert_refused(r, "6090", "EntryPriceTooSmall");
+        }
+    }
+}

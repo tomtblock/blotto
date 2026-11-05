@@ -246,6 +246,10 @@ pub enum ErrorCode {
     MigrationUnrepresentable,
     #[msg("The pool type does not match the requested mode, tier and capacity")]
     PoolTypeMismatch,
+    // 6090 — the entry-price floor below which commit_results' first-place
+    // bound could refuse the published rule's own tie split (D-E19).
+    #[msg("Entry price is below the smallest price a prize table can be set at")]
+    EntryPriceTooSmall,
 }
 
 #[cfg(test)]
@@ -292,6 +296,7 @@ mod error_numbers {
             (ErrorCode::NextPlaceUnsupported, 6087),
             (ErrorCode::MigrationUnrepresentable, 6088),
             (ErrorCode::PoolTypeMismatch, 6089),
+            (ErrorCode::EntryPriceTooSmall, 6090),
         ] {
             assert_eq!(u32::from(code), expected, "{code:?}");
         }

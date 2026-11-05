@@ -346,7 +346,8 @@ mod tests {
     #[test]
     fn a_played_pool_records_its_prize_pool_in_whole_entries() {
         // Every devnet pool that played: 4 SOL at 0.1 SOL → [40].
-        let (paid, t) = pre_ladder_table(100_000_000, 4_000_000_000, PoolState::Paid as u8).unwrap();
+        let (paid, t) =
+            pre_ladder_table(100_000_000, 4_000_000_000, PoolState::Paid as u8).unwrap();
         assert_eq!(paid, 1);
         assert_eq!(t[0], 40);
         assert!(t[1..].iter().all(|&m| m == 0));
@@ -364,7 +365,12 @@ mod tests {
 
     #[test]
     fn a_pool_that_played_or_could_play_must_be_representable() {
-        for st in [PoolState::Open, PoolState::Sealed, PoolState::Scored, PoolState::Paid] {
+        for st in [
+            PoolState::Open,
+            PoolState::Sealed,
+            PoolState::Scored,
+            PoolState::Paid,
+        ] {
             assert!(
                 pre_ladder_table(100_000_000, 5_120_000_000, st as u8).is_err(),
                 "{st:?}"

@@ -104,6 +104,7 @@ fn lifecycle_log_fixture() {
     // until it lands, so it comes first), then the pool types — the
     // instructions after it in the same transaction read the grown Config —
     // then the deposit pool 1's open needs.
+    // PHASE-N-REVIEW: one bundled transaction keeps the head indexes replay-order.spec.ts hard-codes (tx 1 PoolOpened, 3..35 entries).
     downgrade_config_to_v2(&mut env.svm);
     let launch = |mode: u8, cap: u16| {
         let t = ladder_table(cap);

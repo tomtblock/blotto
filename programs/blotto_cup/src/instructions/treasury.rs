@@ -88,7 +88,10 @@ pub fn idle_pool_type_reserve<'info>(
         if let Some(prev) = previous {
             require!(*info.key > prev, ErrorCode::PoolTypeListIncomplete);
         }
-        require!(Some(*info.key) != exclude, ErrorCode::PoolTypeListIncomplete);
+        require!(
+            Some(*info.key) != exclude,
+            ErrorCode::PoolTypeListIncomplete
+        );
         let t: Account<'info, PoolType> =
             Account::try_from(info).map_err(|_| ErrorCode::PoolTypeAccountInvalid)?;
         require!(t.enabled, ErrorCode::PoolTypeListIncomplete);

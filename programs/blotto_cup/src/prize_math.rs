@@ -120,9 +120,12 @@ mod tests {
         assert_eq!(place_amount(&LADDER_TABLES[1], e, 1), 500_000_000); // 0.5 SOL
         assert_eq!(place_amount(&LADDER_TABLES[2], e, 1), 800_000_000); // 0.8 SOL
         assert_eq!(place_amount(&LADDER_TABLES[3], e, 1), 1_200_000_000); // 1.2 SOL
-        // The largest single prize anywhere in the grid: 1st of a 7.5 SOL
-        // 64-player pool, 90 SOL.
-        assert_eq!(place_amount(&LADDER_TABLES[3], TIER_ENTRY_LAMPORTS[6], 1), 90_000_000_000);
+                                                                          // The largest single prize anywhere in the grid: 1st of a 7.5 SOL
+                                                                          // 64-player pool, 90 SOL.
+        assert_eq!(
+            place_amount(&LADDER_TABLES[3], TIER_ENTRY_LAMPORTS[6], 1),
+            90_000_000_000
+        );
     }
 
     /// Every untied prize is a whole multiple of the entry, every rank past
@@ -159,17 +162,27 @@ mod tests {
                 let cap = POOL_CAPACITIES[k];
                 let paid = cap / 4;
                 // Solo first.
-                assert_eq!(split_group(table, entry, 1, 1), (table[0] as u64 * entry, 0));
+                assert_eq!(
+                    split_group(table, entry, 1, 1),
+                    (table[0] as u64 * entry, 0)
+                );
                 // Everyone tied: the whole prize pool, split.
                 let (each, rem) = split_group(table, entry, 1, cap);
-                assert_eq!(each as u128 * cap as u128 + rem as u128, prize_pool(table, entry) as u128);
+                assert_eq!(
+                    each as u128 * cap as u128 + rem as u128,
+                    prize_pool(table, entry) as u128
+                );
                 // A group entirely below the paid line is worth nothing.
                 assert_eq!(split_group(table, entry, paid + 1, cap - paid), (0, 0));
                 // Every k-way tie for first conserves 1st..kth.
                 for g in 1..=cap {
                     let (each, rem) = split_group(table, entry, 1, g);
                     let want: u128 = (1..=g).map(|r| place_amount(table, entry, r) as u128).sum();
-                    assert_eq!(each as u128 * g as u128 + rem as u128, want, "{cap}: {g}-way");
+                    assert_eq!(
+                        each as u128 * g as u128 + rem as u128,
+                        want,
+                        "{cap}: {g}-way"
+                    );
                     assert!(rem < g as u64);
                 }
             }
@@ -181,6 +194,40 @@ mod tests {
         // A three-way tie for first of 8 at 0.1 SOL: (3 + 2 + 0) entries =
         // 0.5 SOL over three, two indivisible lamports to the lowest seat.
         assert_eq!(split_group(&LADDER_TABLES[0], e, 1, 3), (166_666_666, 2));
+    }
+
+    /// `commit_results` refuses any amount above first place. That bound must
+    /// never refuse the published rule's own output: for every launch table,
+    /// every tie group (every start rank, every size that fits the pool),
+    /// at the smallest price a table can be set at and at every configured
+    /// tier, the lowest seat's share — `each + remainder` — is at most first
+    /// place. Below `MIN_TABLE_ENTRY_LAMPORTS` it can fail (the case that
+    /// set the floor: a 13-way tie for first of 64 at 1 lamport).
+    #[test]
+    fn the_first_place_bound_never_refuses_a_rule_split() {
+        use crate::constants::MIN_TABLE_ENTRY_LAMPORTS;
+        let mut prices = vec![MIN_TABLE_ENTRY_LAMPORTS, MIN_TABLE_ENTRY_LAMPORTS + 1];
+        prices.extend_from_slice(&TIER_ENTRY_LAMPORTS);
+        for (k, table) in LADDER_TABLES.iter().enumerate() {
+            let cap = POOL_CAPACITIES[k];
+            for &entry in &prices {
+                let first = place_amount(table, entry, 1);
+                for start in 1..=cap {
+                    for size in 1..=(cap - start + 1) {
+                        let (each, rem) = split_group(table, entry, start, size);
+                        assert!(
+                            each + rem <= first,
+                            "{cap}: tie of {size} from rank {start} at {entry} lamports pays {} > first {first}",
+                            each + rem
+                        );
+                    }
+                }
+            }
+        }
+        // And the floor is not slack: at 1 lamport the bound does refuse a
+        // rule split, which is why the floor exists.
+        let (each, rem) = split_group(&LADDER_TABLES[3], 1, 1, 13);
+        assert!(each + rem > place_amount(&LADDER_TABLES[3], 1, 1));
     }
 
     #[test]

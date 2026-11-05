@@ -24,7 +24,9 @@
 
 use anchor_lang::prelude::*;
 
-use crate::constants::{MAX_PAID_PLACES, N_MODES, N_TIERS, POOL_CAPACITIES};
+use crate::constants::{
+    MAX_PAID_PLACES, MIN_TABLE_ENTRY_LAMPORTS, N_MODES, N_TIERS, POOL_CAPACITIES,
+};
 use crate::error::ErrorCode;
 use crate::events::{PoolTypeEconomicsSet, PoolTypeEnabledSet, PoolTypeInitialized};
 use crate::state::{Config, PoolType, CONFIG_SEED, POOL_TYPE_SEED};
@@ -46,10 +48,7 @@ fn check_coordinates(mode: u8, tier: u8, capacity: u16) -> Result<()> {
 /// The published rule's SHAPE for a table (D-E19 §7.2): exactly `paid_places`
 /// leading non-zero multiples, zeros after them, never increasing.
 /// Returns the number of places paid.
-pub(crate) fn check_prize_table(
-    prize_table: &[u8; MAX_PAID_PLACES],
-    capacity: u16,
-) -> Result<u8> {
+pub(crate) fn check_prize_table(prize_table: &[u8; MAX_PAID_PLACES], capacity: u16) -> Result<u8> {
     // The top quarter of the capacity is paid — no more, no fewer.
     let paid = (capacity / 4) as usize;
     require!(
@@ -158,7 +157,10 @@ pub struct AdminPoolType<'info> {
 ///      comparison the admin's stated prize pool must pass, never a value
 ///      the program derives and stores;
 ///   4. `pot_lamports <= min_seats × price` — the minimum field covers the
-///      prize pool (break-even at most, R7-b's rule at every size).
+///      prize pool (break-even at most, R7-b's rule at every size);
+///   5. the tier's price is at least `MIN_TABLE_ENTRY_LAMPORTS` (4,096
+///      lamports), below which `commit_results`' first-place bound could
+///      refuse a legitimate tie split.
 pub fn handle_set_pool_type_economics(
     ctx: Context<AdminPoolType>,
     mode: u8,
@@ -177,6 +179,12 @@ pub fn handle_set_pool_type_economics(
     require!(pot_lamports > 0, ErrorCode::ZeroAmount);
     let price = ctx.accounts.config.tier_price_lamports[tier as usize];
     require!(price > 0, ErrorCode::ZeroAmount);
+    // The floor under which commit_results' first-place bound could refuse
+    // the rule's own tie split (constants.rs, MIN_TABLE_ENTRY_LAMPORTS).
+    require!(
+        price >= MIN_TABLE_ENTRY_LAMPORTS,
+        ErrorCode::EntryPriceTooSmall
+    );
     require!(
         PoolType::table_value(&prize_table, price) == pot_lamports as u128,
         ErrorCode::PrizePoolMismatch
@@ -269,7 +277,7 @@ mod tests {
     #[test]
     fn malformed_tables_are_refused() {
         let ok = LADDER_TABLES[1]; // 16: [5,3,1,1]
-        // Increasing.
+                                   // Increasing.
         let mut t = ok;
         t[1] = 6;
         assert!(check_prize_table(&t, 16).is_err());

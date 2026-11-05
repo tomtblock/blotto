@@ -232,9 +232,8 @@ pub fn handle_open_pool<'info>(
         Some(ctx.accounts.pool_type.key()),
         cushion,
     )?;
-    let needed = funding
-        + (ctx.accounts.config.treasury_min_platform_lamports as u128)
-        + (reserve as u128);
+    let needed =
+        funding + (ctx.accounts.config.treasury_min_platform_lamports as u128) + (reserve as u128);
     require!(available >= needed, ErrorCode::TreasuryShortfall);
 
     // Fund the pot: treasury → this pool's prize vault, locked before any
