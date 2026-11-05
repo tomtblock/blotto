@@ -13,7 +13,6 @@
  * and a one-row list is not a design of anything.
  */
 
-import { TIER_ENTRY_LAMPORTS } from '@blotto/scoring';
 import type { IndexerApi } from './types';
 import {
   FIXTURE_CAREER,
@@ -22,6 +21,7 @@ import {
   FIXTURE_TREASURY,
   SCENARIOS,
   SCENARIO_BY_POOL,
+  fixturePoolTypes,
 } from './scenarios';
 
 export const FIXTURE_API: IndexerApi = {
@@ -49,32 +49,14 @@ export const FIXTURE_API: IndexerApi = {
   async getCareer() {
     return FIXTURE_CAREER;
   },
-  async getTiers() {
-    // The fixture has no settled tier to count toward; the clock is the
-    // fixture's own (it IS the server here). Enablement mirrors
-    // `init_config`'s launch posture — tier 0 only (R6/D1) — so the fixture
-    // ladder renders what production renders rather than an empty page.
-    //
-    // Phase B: the hard ladder is enabled at tier 0 too, matching the open
-    // hard scenario in the catalogue — so the landing renders both cards,
-    // which is the state the design work needs to see.
+  async getPoolTypes() {
+    // D-E19: the devnet launch posture — both boards × the four sizes at
+    // tier 0, every one live — so the landing's size toggle renders what
+    // production renders. The clock is the fixture's own (it IS the server).
     return {
-      server_time: String(Math.floor(Date.now() / 1000)),
-      enablement_source: 'launch_default' as const,
-      hard_enablement_source: 'launch_default' as const,
-      tiers: TIER_ENTRY_LAMPORTS.map((_, tier) => ({
-        tier,
-        enabled: tier === 0,
-        status: (tier === 0 ? 'open' : 'closed') as 'open' | 'closed',
-        next_open_at: '0',
-        last_pool_id: null,
-        hard: {
-          enabled: tier === 0,
-          status: (tier === 0 ? 'open' : 'closed') as 'open' | 'closed',
-          next_open_at: '0',
-          last_pool_id: null,
-        },
-      })),
+      server_time: Math.floor(Date.now() / 1000),
+      source: 'chain' as const,
+      pool_types: fixturePoolTypes(),
     };
   },
   async getTreasury() {

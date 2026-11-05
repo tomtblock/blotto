@@ -81,6 +81,7 @@ const ALL_MIGRATIONS = [
   '0023_notify_pool_optin.sql',
   '0024_complaints.sql',
   '0025_pool_mode.sql',
+  '0026_ladder.sql',
 ];
 
 describe('the re-derive marker, against the real migrations (audit E-15)', () => {
@@ -133,10 +134,14 @@ describe('the re-derive marker, against the real migrations (audit E-15)', () =>
     // 0025 (Phase B) added `pools.mode` and re-keyed `tier_status` per
     // ladder; only a replay fills the mode of pools opened after the
     // upgrade rather than leaving the column at its default.
+    // 0026 (the Ladder, D-E19) added each pool's size, floor and table,
+    // re-keyed `tier_status` per pool type and created `pool_types`; only a
+    // replay fills them from the events already in the ledger.
     expect(marked, 'exactly the migrations that invalidate a derived table').to.deep.equal([
       '0004_seat_payouts.sql',
       '0019_sanctions.sql',
       '0025_pool_mode.sql',
+      '0026_ladder.sql',
     ]);
   });
 });
@@ -180,6 +185,7 @@ describe('migrate() reports the invalidation to its caller', () => {
       '0004_seat_payouts.sql',
       '0019_sanctions.sql',
       '0025_pool_mode.sql',
+      '0026_ladder.sql',
     ]);
     expect(run.rederiveRequired).to.equal(true);
     // Each applied file is recorded under its own name.
@@ -207,6 +213,7 @@ describe('migrate() reports the invalidation to its caller', () => {
       '0004_seat_payouts.sql',
       '0019_sanctions.sql',
       '0025_pool_mode.sql',
+      '0026_ladder.sql',
     ]);
     expect(run.rederiveRequired).to.equal(true);
   });

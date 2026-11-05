@@ -4,7 +4,9 @@
  * `projection.ts`; this file only translates each mechanical op to SQL.
  * Runs on the SAME client (transaction) as the ledger append.
  *
- * Tables: backend/_shared/migrations/0003_derived_tables.sql.
+ * Tables: backend/_shared/migrations/0003_derived_tables.sql, re-shaped by
+ * later migrations — `pool_types` and the Ladder's pool columns are 0026's.
+ * Array values (`prize_table`) bind as Postgres arrays through `pg`.
  */
 
 import type { Queryable } from './shared';
@@ -113,7 +115,7 @@ export class PgProjection implements Projection {
 
   async reset(): Promise<void> {
     await this.db.query(
-      'TRUNCATE pools, entries, results, payouts, profiles, player_history, tier_status'
+      'TRUNCATE pools, entries, results, payouts, profiles, player_history, tier_status, pool_types'
     );
   }
 }

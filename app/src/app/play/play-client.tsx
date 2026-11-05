@@ -31,7 +31,7 @@ import { Button } from '@/components/ui/button';
 import { BoardFlow } from '@/battle/components/board/BoardFlow';
 import type { Allocation } from '@/battle/allocation';
 import { indexerApi } from '@/data/api';
-import { lamportsToSol, poolMode } from '@/data/format';
+import { lamportsToSol, poolLadder, poolMode, type PoolLadder } from '@/data/format';
 import type { PoolSummary } from '@/data/types';
 import { rpcUrl } from '@/chain/rpc';
 import { makeTxRpc } from '@/tx/tx-rpc';
@@ -716,6 +716,7 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
       <BoardWithRail
         wallet={flowWallet}
         mode={poolMode(pool)}
+        ladder={poolLadder(pool)}
         ageChecked={ageChecked}
         termsChecked={termsChecked}
         onAgeChange={setAgeChecked}
@@ -748,6 +749,8 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
             asset={card.asset}
             poolNumber={pool.id}
             mode={poolMode(pool)}
+            capacity={poolLadder(pool).capacity}
+            minSeats={poolLadder(pool).minSeats}
             poolAddress={pool.pool}
             wallet={auth.walletAddress ?? ''}
             signer={auth.signers.find((s) => s.address === auth.walletAddress)}
@@ -890,6 +893,7 @@ export function PlayClient({ initial = null }: { initial?: InitialPool }) {
 function BoardWithRail({
   wallet,
   mode,
+  ladder,
   ageChecked,
   termsChecked,
   onAgeChange,
@@ -900,6 +904,7 @@ function BoardWithRail({
 }: {
   wallet: string;
   mode: ReturnType<typeof poolMode>;
+  ladder: PoolLadder;
   ageChecked: boolean;
   termsChecked: boolean;
   onAgeChange: (next: boolean) => void;
@@ -919,6 +924,7 @@ function BoardWithRail({
       rail={
         <EntryRail
           mode={mode}
+          ladder={ladder}
           attested={attested}
           ageChecked={ageChecked}
           termsChecked={termsChecked}

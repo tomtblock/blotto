@@ -13,6 +13,12 @@
  * behind a storage vendor. Verifiability is not a payment step; a bundle
  * still owed is recoverable, a frozen tier is not.
  *
+ * THE LADDER (D-E19): a pool pays the top quarter of its capacity on the
+ * FIXED table copied onto it at open — 2, 4, 8 or 16 places. Amounts come
+ * from `assignPrizes` over that table and the pool's entry price, ties
+ * sharing the positions they occupy (D3-B); every seat with a nonzero amount
+ * is committed, screened and paid, in batches.
+ *
  * IDEMPOTENT AND RESUMABLE: every step reads the pool's CURRENT on-chain
  * state and skips what already happened — a crashed crank rerun on the same
  * pool id continues where the chain says it stopped, and a completed pool is
@@ -86,7 +92,7 @@ import {
   type PoolKeyCustody,
 } from './deps';
 import { scoreWithMissing } from './deps';
-import { buildRanking, revealEntries } from './ranking';
+import { buildRanking, poolPrizeTable, revealEntries } from './ranking';
 import type { ScreenWinners } from './winner-screening';
 
 /** What the detection pipeline sees per entry (backend/detection). */
@@ -465,11 +471,11 @@ async function assembleBundle(
   }
 
   // ---- 3. Score + prizes + tree ------------------------------------------
-  // D3-B: competition ranks (tied players share one), split-pot amounts.
-  // The pot is the POOL'S fixed pot (D-A1 revised) — read from chain state,
-  // never derived from the entry price.
-  const pot = pool.potLamports;
-  const results = assignPrizes(scoreWithMissing(scoringInput, mode), pot);
+  // D3-B: competition ranks (tied players share the positions they occupy).
+  // D-E19: the table and the entry price are the POOL's own, copied at open
+  // — read from chain state, never the launch table.
+  const table = poolPrizeTable(pool.prizeTable, pool.paidPlaces, poolId);
+  const results = assignPrizes(scoreWithMissing(scoringInput, mode), table, pool.entryLamports);
   const playerAt = (index: number) => chainEntries[index].player;
   // Published leaf order (rank asc, entry index asc) is built in one place —
   // see ranking.ts, which the next-place driver reuses to prove against the
@@ -480,15 +486,36 @@ async function assembleBundle(
     .filter((r) => r.amountLamports > 0n)
     .sort((a, b) => a.index - b.index)
     .map((r) => ({ entryIndex: r.index, amountLamports: r.amountLamports }));
-  step('scored', { root: hex(root), paidSeats: payouts.length });
+  // `commit_results` requires the list to sum to EXACTLY the pool's fixed
+  // prize pool. Under the table that holds whenever the field fills every
+  // paid place — always, for a pool that played (its minimum field exceeds
+  // its places paid) — and the prize pool was the table at the entry price
+  // when it opened (`PoolTypeEconomicsStale` guarded that). A disagreement
+  // means one of those failed; refuse here, by name, rather than send a
+  // list the program refuses (`PayoutSumMismatch`).
+  const paidTotal = payouts.reduce((a, p) => a + p.amountLamports, 0n);
+  if (paidTotal !== pool.potLamports) {
+    throw new Error(
+      `pool ${poolId}: the prize table pays ${paidTotal} lamports over this field of ` +
+        `${chainEntries.length}, but the pool's prize pool is ${pool.potLamports} — ` +
+        `refusing to commit a payout list that does not equal it`
+    );
+  }
+  step('scored', { root: hex(root), paidSeats: payouts.length, paidPlaces: table.length });
 
   // ---- 4. Assemble the bundle (published at step 7, after the money) ----
   const bundle: RevealBundle = {
-    version: 3,
+    version: 4,
     mode,
     pool_id: poolId.toString(),
     secret: hex(secret),
     entry_lamports: pool.entryLamports.toString(),
+    // D-E19: the terms the pool was settled under, all copied from the Pool
+    // account — the verify page recomputes every amount from these.
+    capacity: pool.capacity,
+    paid_places: table.length,
+    prize_table: [...table],
+    min_seats: pool.minSeats,
     entries: bundleEntries,
     results: byRank.map((r) => ({
       index: r.index,

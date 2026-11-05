@@ -107,6 +107,23 @@ export default function TermsPage() {
           <p className="-mt-3 mb-6 max-w-prose text-[14px] leading-5 text-brand-berry">
             {t.versionLine(termsConfig.version, termsConfig.updated)}
           </p>
+          {/* Version 6 (D-E19): every wallet re-accepts, so the changes are
+              said plainly above the document they summarise. */}
+          <section
+            id="what-changed"
+            aria-labelledby="what-changed-heading"
+            className="mb-6 rounded-[20px] border-2 border-brand-berry/25 bg-brand-cream px-5 py-4 text-brand-berry"
+            data-testid="terms-what-changed"
+          >
+            <h2 id="what-changed-heading" className="font-display text-[18px] leading-6 font-extrabold">
+              {t.changes.heading}
+            </h2>
+            <ul className="mt-2 flex list-disc flex-col gap-1.5 pl-5 text-[14px] leading-5">
+              {t.changes.points.map((point) => (
+                <li key={point}>{point}</li>
+              ))}
+            </ul>
+          </section>
           <SectionTiles
             label={t.tilesLabel}
             allowAll

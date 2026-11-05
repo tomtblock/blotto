@@ -33,6 +33,17 @@
  * that ignored `mode` would decode a hard board as a malformed easy one, so
  * the version moved rather than the field being slipped in. Version 2
  * bundles (every pool settled before the upgrade) read as easy.
+ *
+ * VERSION 4 (the Ladder, D-E19, founder ruling 2026-11-04/05): a pool holds
+ * 8, 16, 32 or 64 players and pays the top quarter of its capacity on a
+ * FIXED table of whole multiples of the entry. The bundle carries the terms
+ * the pool was settled under, all copied from its Pool account: `capacity`,
+ * `paid_places`, `prize_table` (rank 1 first, `paid_places` long) and
+ * `min_seats`. Every amount is `assignPrizes(results, prize_table,
+ * entry_lamports)` — recomputable from these fields alone. A version 3
+ * bundle (settled before the Ladder) is read as 64 players, one place worth
+ * the whole prize pool — the same rule as `preLadderTable` in
+ * `backend/_shared/src/pool-account.ts`.
  */
 
 import type { BoardMode } from './deps';
@@ -56,7 +67,8 @@ export interface RevealBundleResult {
   zones: number;
   /** Competition rank (D3-B): tied players share one — 1, 2, 2, 4. */
   rank: number;
-  /** The split-pot amount actually committed for this seat (0 unpaid). */
+  /** The amount actually committed for this seat under the pool's table
+   * (D3-B ties share the positions they occupy; 0 unpaid). */
   amount_lamports: string;
 }
 
@@ -68,18 +80,29 @@ export interface RevealBundlePayout {
 }
 
 export interface RevealBundle {
-  /** 3 since Phase B (`mode` added) — see the header for what left with v1. */
-  version: 3;
+  /** 4 since the Ladder (`capacity`, `paid_places`, `prize_table`,
+   * `min_seats` added); 3 since Phase B (`mode`) — see the header. */
+  version: 4;
   /** The placing rule this pool's boards were scored by (Phase B). */
   mode: BoardMode;
   pool_id: string;
   secret: string; // hex 32 — also on-chain
   entry_lamports: string;
+  /** The pool's size: 8, 16, 32 or 64 (D-E19). */
+  capacity: number;
+  /** Places paid — the top quarter of the capacity. */
+  paid_places: number;
+  /** Whole multiples of `entry_lamports`, rank 1 first, `paid_places` long. */
+  prize_table: number[];
+  /** The pool's own minimum field: at its deadline, at or above it the pool
+   * played; below it every entry was refunded. */
+  min_seats: number;
   entries: RevealBundleEntry[];
   results: RevealBundleResult[];
   /**
-   * The committed payout list (D3-B), seat-sorted — under D-E2 that is the
-   * single paid place, or one row per member of a tie for first.
+   * The committed payout list (D3-B), seat-sorted: every seat with a nonzero
+   * amount under the pool's table — the paid places, plus every member of a
+   * tie that straddles the paid line and shares what it covers.
    */
   payouts: RevealBundlePayout[];
   results_root: string; // hex 32 — must equal the on-chain commitment

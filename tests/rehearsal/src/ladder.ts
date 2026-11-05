@@ -33,6 +33,12 @@
 
 import { createHash } from 'crypto';
 import type { BoardMode } from '../../../backend/scoring/src/allocation';
+import {
+  MAX_CAPACITY,
+  POOL_CAPACITIES,
+  minFieldFor,
+  type PoolCapacity,
+} from '../../../backend/scoring/src/prizes';
 import type { GeneratedEntrant } from './strategies';
 
 export type LadderClass = 'uniform' | 'random' | 'heuristic' | 'optimised';
@@ -52,24 +58,35 @@ const sha = (s: string) => createHash('sha256').update(s).digest();
 const DEDUPE_SALT_LIMIT = 64;
 
 /**
- * Field sizes the study runs. 64 is a full pool (CAPACITY); `MIN_FIELD` is
- * the MINIMUM a pool may seal and run at — a pool whose deadline passes with
- * `MIN_FIELD..63` entrants plays out rather than refunding.
- *
- * **This tracks `MIN_SEATS` in `programs/blotto_cup/src/constants.rs` and
- * must be changed with it.** It was 52 under D-E4 and is 40 since R7-b
- * (2026-09-13). The number matters here because the study answers "what
+ * The fields the study runs (D-E19, the Ladder): every pool size, played FULL
+ * and at its MINIMUM field — the smallest field the rules let that size seal
+ * and play at (5 of 8, 10 of 16, 20 of 32, 40 of 64). Read from the scoring
+ * engine's mirrors of `constants.rs` (`POOL_CAPACITIES`,
+ * `MIN_FIELD_BY_CAPACITY`), never typed here: the study answers "what
  * happens in the smallest field the rules allow?", and an answer measured at
- * a field size the rules no longer permit answers nothing. Lowering it
- * re-measures: fewer players is the harder case for a skill claim, so the
- * result is the thing to read rather than assume.
+ * a field size the rules no longer permit answers nothing.
  *
- * Both must divide by the number of ladder classes so a mixed field carries
- * equal numbers of each, leaving class membership uncorrelated with anything:
- * 64/4 = 16 and 40/4 = 10, both exact.
+ * Until 2026-11-05 this was two constants, `FULL_FIELD = 64` and
+ * `MIN_FIELD = 40`, for the one pool size that existed (R7-b).
+ *
+ * Order: smallest pool first, its full field before its minimum one. The
+ * order fixes the CSV's row order; each field's SEEDS are fixed by
+ * `fieldSeedOffset` in skill-evidence.ts, not by its position here.
  */
-export const FULL_FIELD = 64;
-export const MIN_FIELD = 40;
+export interface StudyField {
+  /** The pool size (the prize table it settles on depends on this alone). */
+  capacity: PoolCapacity;
+  /** Players actually seated. */
+  seats: number;
+}
+
+export const STUDY_FIELDS: readonly StudyField[] = POOL_CAPACITIES.flatMap((capacity) => [
+  { capacity, seats: capacity },
+  { capacity, seats: minFieldFor(capacity) },
+]);
+
+/** The largest pool, and the default field of a study population. */
+export const LARGEST_FIELD = Number(MAX_CAPACITY);
 
 /** All ten 3-of-5 stat trios, in a fixed order. */
 const TRIOS: readonly (readonly [number, number, number])[] = [
@@ -337,39 +354,66 @@ export function ensureUniqueWithinClass(
 }
 
 /**
- * One study pool: `seats / 4` entrants of each class, seat order shuffled by
- * a seeded Fisher–Yates so class membership is uncorrelated with seat index
- * (seat order places the indivisible remainder of a tie split and the leaf
- * order — never who is paid — but the study removes even that correlation).
+ * How many entrants of each class (ladder order) a mixed pool of `seats`
+ * holds. A field that divides by four holds equal numbers — 16 each at 64,
+ * 2 each at 8 — exactly as before the Ladder, so those pools are unchanged
+ * byte for byte.
  *
- * `seats` defaults to a full pool. Pass MIN_FIELD to measure the shortest
- * field the rules allow: the claim being published is about the competition
- * as offered, and a pool that seals at its floor is as real as one that fills.
+ * Two minimum fields do NOT divide by four: 5 (of 8) and 10 (of 16). There
+ * the remainder seats ROTATE: pool seed s gives its one or two extra seats to
+ * the classes starting at ladder index `s mod 4`, so over any run of
+ * consecutive seeds whose length is a multiple of four (the study's 200
+ * pools) every class holds exactly the same number of entries, and every
+ * class is the doubled-up one equally often. Class membership stays
+ * uncorrelated with the field size; per-entry rates stay comparable.
+ *
+ * PHASE-N-REVIEW: rotating the surplus is this harness's choice for fields of
+ * 5 and 10 (the alternatives — rounding the field to 4 or 8, or dropping a
+ * class — would measure a field the rules do not offer or a different mix).
+ */
+export function classCounts(seats: number, poolSeed: number): number[] {
+  const k = LADDER.length;
+  if (!Number.isInteger(seats) || seats < k) {
+    throw new Error(`a mixed field needs at least one entrant per class (${k}), got ${seats}`);
+  }
+  const base = Math.floor(seats / k);
+  const extra = seats % k;
+  const start = ((poolSeed % k) + k) % k;
+  return LADDER.map((_, c) => base + ((c - start + k) % k < extra ? 1 : 0));
+}
+
+/**
+ * One study pool: `classCounts(seats, poolSeed)` entrants of each class,
+ * seat order shuffled by a seeded Fisher–Yates so class membership is
+ * uncorrelated with seat index (seat order places the indivisible remainder
+ * of a tie split and the leaf order — never who is paid — but the study
+ * removes even that correlation).
+ *
+ * `seats` defaults to the largest pool. The study passes every field in
+ * `STUDY_FIELDS`, minimum fields included: the claim being published is about
+ * the competition as offered, and a pool that seals at its floor is as real
+ * as one that fills.
+ *
+ * Entrant seeds are `poolSeed × 1000 + class × 100 + member` — the scheme
+ * since D-A2, so a field that divides by four reproduces its old pools.
  */
 export function ladderPopulation(
   poolSeed: number,
-  seats: number = FULL_FIELD,
+  seats: number = LARGEST_FIELD,
   mode: BoardMode = 'easy'
 ): GeneratedEntrant[] {
-  if (seats % LADDER.length !== 0) {
-    throw new Error(
-      `field of ${seats} does not divide by ${LADDER.length} classes — ` +
-        'an unequal mixed field would correlate class with seat count'
-    );
-  }
-  const per = seats / LADDER.length;
+  const counts = classCounts(seats, poolSeed);
   const out: GeneratedEntrant[] = [];
+  const seedAt: number[] = [];
   LADDER.forEach((cls, c) => {
-    for (let i = 0; i < per; i++) {
-      out.push(generateLadderEntrant(cls, poolSeed * 1000 + c * 100 + i, 0, mode));
+    for (let i = 0; i < counts[c]; i++) {
+      const seed = poolSeed * 1000 + c * 100 + i;
+      out.push(generateLadderEntrant(cls, seed, 0, mode));
+      seedAt.push(seed);
     }
   });
-  // Pre-shuffle, index i belongs to class floor(i/per), member i%per.
-  ensureUniqueWithinClass(
-    out,
-    (i) => poolSeed * 1000 + Math.floor(i / per) * 100 + (i % per),
-    mode
-  );
+  // Pre-shuffle, index i carries the seed it was generated from.
+  ensureUniqueWithinClass(out, (i) => seedAt[i], mode);
   for (let i = out.length - 1; i > 0; i--) {
     const h = sha(`shuffle:${poolSeed}:${i}`);
     const j = (h[0] | (h[1] << 8)) % (i + 1);
@@ -381,15 +425,15 @@ export function ladderPopulation(
 /**
  * A HOMOGENEOUS-field pool (v2's A2 amendment): every seat from one class —
  * the "equally-skilled entrants" runs whose outcome spread the report
- * compares against the everyone-equal baseline (each seat expecting 1/`seats`
- * of the pot). Uniqueness within the class enforced as above (a homogeneous
+ * compares against the everyone-equal baseline (each entrant expecting the
+ * prize pool over the field). Uniqueness within the class enforced as above (a homogeneous
  * uniform pool would be one n-way tie by definition and is not part of the
  * study).
  */
 export function homogeneousPopulation(
   cls: LadderClass,
   poolSeed: number,
-  seats: number = FULL_FIELD,
+  seats: number = LARGEST_FIELD,
   mode: BoardMode = 'easy'
 ): GeneratedEntrant[] {
   if (cls === 'uniform') {

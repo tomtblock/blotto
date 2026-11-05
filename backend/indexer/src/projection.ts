@@ -15,9 +15,76 @@
  * the cosmetic class collection. Nothing here can affect a pool. (Rank
  * labels are not projected: under D3-B they are not in the events — they
  * live in the published bundle, where the verify page recomputes them.)
+ *
+ * The Ladder (D-E19, migration 0026): every pool row carries its size,
+ * minimum field and prize table, and `pool_types` holds one row per
+ * (mode, tier, capacity) — its switch, economics and cooldown stamp.
  */
 
+import { preLadderTable } from '../../_shared/src/pool-account';
 import type { DecodedEvent } from './shared';
+
+/** The only pool size before the Ladder (D-E19): what a pre-Ladder event means. */
+const PRE_LADDER_CAPACITY = 64;
+
+/** `x ?? fallback` for a decoded tail field, which is `null` on an older event. */
+function tail<T>(v: unknown, fallback: T): T {
+  return v === null || v === undefined ? fallback : (v as T);
+}
+
+/** A `[u8; 16]` table cut to its paid places — the zero padding is not data. */
+function tableOf(raw: unknown, paidPlaces: number): number[] {
+  return Array.isArray(raw) ? (raw as number[]).slice(0, paidPlaces).map(Number) : [];
+}
+
+/**
+ * The size and table a pool was opened under, from `PoolOpened`. A
+ * pre-Ladder event carries no tail: the pool held 64 and paid one place
+ * worth its whole prize pool in whole entries — `preLadderTable`, the same
+ * rule the program's `migrate_pool` writes and `decodePoolHead` reads, so
+ * the projection, the account decoder and the chain agree on an old pool.
+ * The minimum field is NOT reconstructed: a pre-Ladder `PoolOpened` does
+ * not state it, and a guess here would be served as the pool's own floor.
+ * It stays null until `PoolMigrated` (which always carries it) says.
+ */
+function ladderFromOpened(e: DecodedEvent): {
+  capacity: number;
+  min_seats: number | null;
+  paid_places: number;
+  prize_table: number[];
+} {
+  if (e.capacity === null || e.capacity === undefined) {
+    let paidPlaces = 0;
+    let prizeTable: number[] = [];
+    if (e.entry_lamports !== undefined && e.pot_lamports !== undefined) {
+      const t = preLadderTable(BigInt(e.entry_lamports as string), BigInt(e.pot_lamports as string));
+      paidPlaces = t.paidPlaces;
+      prizeTable = t.prizeTable.slice(0, t.paidPlaces);
+    }
+    return {
+      capacity: PRE_LADDER_CAPACITY,
+      min_seats: tail<number | null>(e.min_seats, null),
+      paid_places: paidPlaces,
+      prize_table: prizeTable,
+    };
+  }
+  const paidPlaces = Number(e.paid_places ?? 0);
+  return {
+    capacity: Number(e.capacity),
+    min_seats: tail<number | null>(e.min_seats, null),
+    paid_places: paidPlaces,
+    prize_table: tableOf(e.prize_table, paidPlaces),
+  };
+}
+
+/** A pool type's key in `pool_types` (and `tier_status`'s capacity). */
+function poolTypeKey(e: DecodedEvent): { mode: number; tier: number; capacity: number } {
+  return {
+    mode: Number(tail(e.mode, 0)),
+    tier: Number(e.tier),
+    capacity: Number(tail(e.capacity, PRE_LADDER_CAPACITY)),
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Operations
@@ -33,7 +100,8 @@ export type ProjectionOp =
         | 'payouts'
         | 'profiles'
         | 'player_history'
-        | 'tier_status';
+        | 'tier_status'
+        | 'pool_types';
       key: Record<string, string | number>;
       set: Record<string, unknown>;
     }
@@ -96,6 +164,9 @@ export function projectEvent(e: DecodedEvent): ProjectionOp[] {
             // Phase B: the placing rule (0025). A pre-Phase-B event carries
             // no byte and decodes `mode: null` — that pool played easy.
             mode: e.mode === null || e.mode === undefined ? 0 : (e.mode as number),
+            // The Ladder (0026): size, floor, places paid and the table —
+            // or the pre-Ladder reading of an event that carries none.
+            ...ladderFromOpened(e),
             state: 'Open',
             entrants: 0,
             paid_mask: 0,
@@ -176,22 +247,89 @@ export function projectEvent(e: DecodedEvent): ProjectionOp[] {
         },
       ];
     }
-    case 'TierSlotFreed':
-      // Prompt v2 §B.6: the tier's slot freed (Paid or Closed) and its
-      // cooldown started — the "next pool in" countdown's source. One row
-      // per (tier, ladder) since Phase B (0013 + 0025): the easy and hard
-      // ladders keep separate slots and clocks, and a pre-Phase-B event
-      // (`mode: null`) is the easy ladder's. `pools.go_deadline` (0012) is
-      // no longer written: the go-timer was removed before any deployment.
+    case 'TierSlotFreed': {
+      // Prompt v2 §B.6: a slot freed (Paid or Closed) and its cooldown
+      // started — the "next pool in" countdown's source. Since D-E19 the
+      // slot is the pool TYPE's (0026): one row per (mode, tier, capacity).
+      // A pre-Phase-B event (`mode: null`) is the easy ladder's and a
+      // pre-Ladder one (`capacity: null`) the 64-player slot, the only
+      // size there was. Written to `pool_types` (the type's own stamp) and
+      // to `tier_status` (GET /tiers, kept for older readers).
+      // `pools.go_deadline` (0012) is no longer written: the go-timer was
+      // removed before any deployment.
+      const k = poolTypeKey(e);
+      const stamp = { next_open_at: e.next_open_at, last_pool_id: e.pool_id };
       return [
         {
           kind: 'upsert',
           table: 'tier_status',
-          key: {
-            tier: e.tier as number,
-            mode: e.mode === null || e.mode === undefined ? 0 : (e.mode as number),
+          key: { tier: k.tier, mode: k.mode, capacity: k.capacity },
+          set: stamp,
+        },
+        { kind: 'upsert', table: 'pool_types', key: k, set: stamp },
+      ];
+    }
+    case 'PoolMigrated': {
+      // A pool account grown to the current layout. It states the pool's
+      // own minimum field (always), and — from the Ladder's migration on —
+      // the size and table it is recorded as having played by (64 seats,
+      // one place: `migrate_pool`). An earlier migration's event ends
+      // before that tail and changes only the floor.
+      const set: Record<string, unknown> = { min_seats: e.min_seats };
+      if (e.capacity !== null && e.capacity !== undefined) {
+        const paidPlaces = Number(e.paid_places ?? 0);
+        set.capacity = Number(e.capacity);
+        set.paid_places = paidPlaces;
+        set.prize_table = tableOf(e.prize_table, paidPlaces);
+      }
+      return [{ kind: 'upsert', table: 'pools', key: { pool: e.pool as string }, set }];
+    }
+    // The Ladder (D-E19): the three pool-type events, one row per
+    // (mode, tier, capacity). Initialisation writes exactly what
+    // `init_pool_type` writes — disabled, no table, no prize pool, a zero
+    // cooldown stamp (the PoolType's own clock starts empty; a pre-Ladder
+    // stamp lived on Config) — so a row reads as the account does.
+    case 'PoolTypeInitialized':
+      return [
+        {
+          kind: 'upsert',
+          table: 'pool_types',
+          key: poolTypeKey(e),
+          set: {
+            pool_type: e.pool_type,
+            enabled: false,
+            min_seats: 0,
+            paid_places: 0,
+            prize_table: [],
+            pot_lamports: '0',
+            next_open_at: '0',
           },
-          set: { next_open_at: e.next_open_at, last_pool_id: e.pool_id },
+        },
+      ];
+    case 'PoolTypeEconomicsSet': {
+      const paidPlaces = Number(e.paid_places ?? 0);
+      return [
+        {
+          kind: 'upsert',
+          table: 'pool_types',
+          key: poolTypeKey(e),
+          set: {
+            pool_type: e.pool_type,
+            min_seats: e.min_seats,
+            paid_places: paidPlaces,
+            prize_table: tableOf(e.prize_table, paidPlaces),
+            pot_lamports: e.pot_lamports,
+          },
+        },
+      ];
+    }
+    case 'PoolTypeEnabledSet':
+      return [
+        {
+          kind: 'upsert',
+          table: 'pool_types',
+          key: poolTypeKey(e),
+          set: { pool_type: e.pool_type, enabled: e.enabled === true },
         },
       ];
     case 'PoolSealed':

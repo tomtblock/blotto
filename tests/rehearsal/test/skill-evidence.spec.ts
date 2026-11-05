@@ -6,20 +6,59 @@
  * one ordering that is robust even at a small sample size.
  */
 import { expect } from 'chai';
-import { potForTier } from '../../../backend/scoring/src';
 import {
+  LADDER_TABLES,
+  MIN_FIELD_BY_CAPACITY,
+  POOL_CAPACITIES,
+} from '../../../backend/scoring/src';
+import {
+  CSV_COLUMNS,
   LADDER,
+  STUDY_FIELDS,
+  classCounts,
   generateLadderEntrant,
   homogeneousPopulation,
   ladderPopulation,
+  offlinePoolTerms,
   runSkillEvidence,
+  type FieldResult,
 } from '../src';
+import { csvToJson } from '../src/skill-evidence-json';
 
-// The study settles tier-0 pools; conservation is asserted against the same
-// pot table the engine pays from (D-E1). The constant itself is pinned in
-// prize_math.rs and backend/scoring — this suite checks the money adds up,
-// not what the number is.
-const TIER0_POT = potForTier(0);
+// The study settles tier-0 pools; conservation is asserted against each
+// pool size's prize pool as the pool is opened with it (D-E19). The tables
+// themselves are pinned in constants.rs and backend/scoring — this suite
+// checks the money adds up, not what the numbers are.
+const prizePoolOf = (f: FieldResult) => offlinePoolTerms(f.capacity).potLamports;
+
+/** Every field's money, checked: each run pays exactly `pools` prize pools. */
+function expectConserved(fields: FieldResult[], pools: number) {
+  for (const f of fields) {
+    const label = `${f.seats} of ${f.capacity}`;
+    expect(f.prizePoolLamports, label).to.equal(prizePoolOf(f));
+    let mixed = 0n;
+    let entrants = 0;
+    let paid = 0;
+    for (const r of f.rows) {
+      expect(r.paidEntries, label).to.be.at.most(r.entrants);
+      expect(r.rankOne, label).to.be.at.most(r.entrants);
+      mixed += r.paidLamports;
+      entrants += r.entrants;
+      paid += r.paidEntries;
+    }
+    expect(mixed, `${label} mixed conservation`).to.equal(f.prizePoolLamports * BigInt(pools));
+    expect(entrants, `${label} seats filled`).to.equal(f.seats * pools);
+    // Ties can only widen the paid set past the table, never narrow it.
+    expect(paid, `${label} paid places`).to.be.at.least(f.table.length * pools);
+    for (const r of f.homogeneous) {
+      expect(r.entrants).to.equal(f.seats * pools);
+      // Everyone in the pool is the class, so the class total IS the prize pool.
+      expect(r.paidLamports, `${label} ${r.cls} homogeneous`).to.equal(
+        f.prizePoolLamports * BigInt(pools)
+      );
+    }
+  }
+}
 
 describe('the skill-evidence strategy ladder', () => {
   it('every class emits only valid allocations, deterministically', () => {
@@ -80,6 +119,37 @@ describe('the skill-evidence strategy ladder', () => {
     );
   });
 
+  it('studies every pool size, full and at its minimum field, from the shared constants', () => {
+    expect(STUDY_FIELDS.map((f) => [f.capacity, f.seats])).to.deep.equal(
+      POOL_CAPACITIES.flatMap((c) => [
+        [c, c],
+        [c, MIN_FIELD_BY_CAPACITY[c]],
+      ])
+    );
+  });
+
+  it('a field of 5 or 10 rotates its extra entries so every class is equally represented over four pools', () => {
+    for (const seats of [5, 10]) {
+      const totals = LADDER.map(() => 0);
+      for (let seed = 1000; seed < 1004; seed++) {
+        const counts = classCounts(seats, seed);
+        expect(counts.reduce((a, b) => a + b, 0)).to.equal(seats);
+        for (const c of counts) expect(c).to.be.oneOf([Math.floor(seats / 4), Math.floor(seats / 4) + 1]);
+        counts.forEach((c, i) => (totals[i] += c));
+        const population = ladderPopulation(seed, seats);
+        expect(population.length).to.equal(seats);
+        LADDER.forEach((cls, i) =>
+          expect(population.filter((e) => e.strategy === cls).length).to.equal(counts[i])
+        );
+      }
+      expect(new Set(totals).size, `${seats}: equal totals over four pools`).to.equal(1);
+    }
+    // A field that divides by four is the old, equal split — unchanged.
+    expect(classCounts(64, 7)).to.deep.equal([16, 16, 16, 16]);
+    expect(classCounts(8, 7)).to.deep.equal([2, 2, 2, 2]);
+    expect(() => classCounts(3, 1)).to.throw(/at least one entrant per class/);
+  });
+
   it('a study pool holds 16 of each class with class uncorrelated to seat', () => {
     const population = ladderPopulation(9001);
     expect(population.length).to.equal(64);
@@ -93,74 +163,92 @@ describe('the skill-evidence strategy ladder', () => {
 });
 
 describe('the skill-evidence study', () => {
-  it('is deterministic, conserves the pot, and separates the ladder ends', async function () {
-    this.timeout(120_000);
-    const params = { pools: 6, baseSeed: 555000 };
+  it('is deterministic, conserves every prize pool, and separates the ladder ends', async function () {
+    this.timeout(300_000);
+    // Four pools per run: a multiple of four, so the 5- and 10-player
+    // fields rotate their extra entries evenly.
+    const params = { pools: 4, baseSeed: 555000 };
     const a = await runSkillEvidence(params);
     const b = await runSkillEvidence(params);
     expect(a.csv).to.equal(b.csv, 'same parameters must reproduce the CSV byte for byte');
     expect(a.report).to.equal(b.report);
 
-    const byClass = new Map(a.rows.map((r) => [r.cls, r]));
-    let total = 0n;
-    for (const r of a.rows) {
-      expect(r.entrants).to.equal(16 * params.pools);
-      expect(r.paidSeats).to.be.at.most(r.entrants);
-      expect(r.rankOne).to.be.at.most(r.entrants);
-      total += r.paidLamports;
+    // Every field the rules offer, in order, each on its own table.
+    expect(a.fields.map((f) => [f.capacity, f.seats])).to.deep.equal(
+      STUDY_FIELDS.map((f) => [f.capacity, f.seats])
+    );
+    for (const f of a.fields) {
+      expect([...f.table]).to.deep.equal([...LADDER_TABLES[f.capacity]]);
+      for (const r of f.rows) expect(r.entrants, `${f.seats} of ${f.capacity} ${r.cls}`).to.equal((f.seats * params.pools) / 4);
     }
-    // Conservation across the whole study: every pool's pot, fully assigned.
-    expect(total).to.equal(TIER0_POT * BigInt(params.pools));
+    expectConserved(a.fields, params.pools);
 
     // The one ordering robust even at a small sample: a three-stat
     // concentrator beats the untouched pentagon (uniform loses its trio
     // stats against every concentrated opponent).
+    const byClass = new Map(a.rows.map((r) => [r.cls, r]));
+    expect(a.rows).to.equal(a.fields.find((f) => f.capacity === 64 && f.seats === 64)!.rows);
     const uniform = byClass.get('uniform')!;
     const optimised = byClass.get('optimised')!;
-    expect(optimised.paidSeats).to.be.greaterThan(uniform.paidSeats);
+    expect(optimised.paidEntries).to.be.greaterThan(uniform.paidEntries);
     expect(optimised.paidLamports > uniform.paidLamports).to.equal(true);
+
+    // The CSV: the declared columns, a capacity beside the field, integer
+    // counts beside every rate, and nothing a float could have produced.
+    const json = csvToJson(a.csv);
+    expect(json.columns).to.deep.equal([...CSV_COLUMNS]);
+    expect(json.rows.length).to.equal(a.fields.length * 7);
+    for (const row of json.rows) {
+      expect(Number(row.capacity)).to.be.oneOf([...POOL_CAPACITIES]);
+      expect(row.rank1_rate_pct).to.match(/^\d+\.\d{3}$/);
+      expect(row.paid_rate_pct).to.match(/^\d+\.\d{2}$/);
+      expect(row.paid_rate_vs_random_pp).to.match(/^[+-]?\d+\.\d{2}$/);
+      expect(row.return_per_entry).to.match(/^\d+\.\d{4}$/);
+      expect(row.total_paid_lamports).to.match(/^\d+$/);
+    }
+    // In the homogeneous runs every class returns exactly the prize pool
+    // over the field: conservation, printed.
+    const full64 = json.rows.filter((r) => r.run === 'homogeneous' && r.capacity === '64' && r.seats === '64');
+    for (const r of full64) expect(r.return_per_entry).to.equal('0.6250');
+    const min64 = json.rows.filter((r) => r.run === 'homogeneous' && r.capacity === '64' && r.seats === '40');
+    for (const r of min64) expect(r.return_per_entry).to.equal('1.0000');
 
     // CSV never contains a bare 64-integer JSON array (the gitleaks
     // keypair-shape rule) — CSV rows are unbracketed by construction.
     expect(a.csv.includes('[')).to.equal(false);
 
-    // The homogeneous runs (v2 amendment): one row per class, all 64 seats
-    // that class, conservation per run, and the mean share pinned at the
-    // everyone-equal baseline — the pot divided by the field, exactly.
-    expect(a.homogeneous.map((r) => r.cls)).to.deep.equal([
-      'random',
-      'heuristic',
-      'optimised',
-    ]);
-    for (const r of a.homogeneous) {
-      expect(r.entrants).to.equal(64 * params.pools);
-      // Everyone in the pool is the class, so the class total IS the pot.
-      expect(r.paidLamports).to.equal(TIER0_POT * BigInt(params.pools));
-    }
+    // The report describes the Ladder, in SOL, and no longer the one paid
+    // place it replaced; and it never states a prize as a multiple.
+    expect(a.report).to.include('The Ladder (D-E19)');
+    expect(a.report).to.include('| 64 | 40 | 16 | 1.2; 0.6; 0.3; 0.3; 0.2 each, 5th–8th; 0.1 each, 9th–16th | 4 |');
+    expect(a.report).to.include('| 8 | 5 | 2 | 0.3; 0.2 | 0.5 |');
+    expect(a.report).to.not.match(/one paid place/i);
+    expect(a.report).to.not.match(/× ?entry/);
+
+    // The homogeneous runs (v2 amendment): one row per class per field.
+    expect(a.homogeneous.map((r) => r.cls)).to.deep.equal(['random', 'heuristic', 'optimised']);
   });
 
-  it('runs the hard board through the same crank: conserves the pot, stacking beats the default', async function () {
-    this.timeout(120_000);
+  it('runs the hard board through the same crank: conserves every prize pool, stacking beats the default', async function () {
+    this.timeout(300_000);
     const params = { pools: 4, baseSeed: 556000, mode: 'hard' as const };
     const a = await runSkillEvidence(params);
     const b = await runSkillEvidence(params);
     expect(a.csv).to.equal(b.csv, 'the hard study must reproduce byte for byte');
     expect(a.report).to.include('(hard board)');
     expect(a.report).to.include('## Draw rate under the hard rule');
-    let total = 0n;
-    for (const r of a.rows) total += r.paidLamports;
-    expect(total).to.equal(TIER0_POT * BigInt(params.pools));
+    expectConserved(a.fields, params.pools);
     const byClass = new Map(a.rows.map((r) => [r.cls, r]));
     // A conceded battle loses 5–0 to the even split, but the five stacked
-    // battles beat it 3–2 each: five wins to two, every time.
-    expect(byClass.get('optimised')!.paidSeats).to.be.greaterThan(byClass.get('uniform')!.paidSeats);
+    // battles beat it 3–2 each: five battles to two, every time.
+    expect(byClass.get('optimised')!.paidEntries).to.be.greaterThan(byClass.get('uniform')!.paidEntries);
     // Every run carries its draw tally, and the mixed run has some draws (the
-    // uniform quarter draws every battle against itself).
+    // uniform entrants draw every battle against each other).
     for (const f of a.fields) {
       expect(f.draws.map((d) => d.run)).to.deep.equal(['mixed', 'random', 'heuristic', 'optimised']);
       for (const d of f.draws) expect(d.comparisons > 0n).to.equal(true);
-      expect(f.draws[0].draws > 0n).to.equal(true);
     }
+    expect(a.fields.find((f) => f.seats === 64)!.draws[0].draws > 0n).to.equal(true);
   });
 
   it('enforces within-class uniqueness of full allocation sets', () => {

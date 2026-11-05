@@ -2,9 +2,9 @@
 //! the substitute for an audit under R5, so it errs toward paranoia).
 //!
 //! A model of the program's money flows is driven through 10k random
-//! instruction sequences. The model calls the SAME arithmetic the handlers
-//! call (`prize_math`, `vault::rent_safe`), and mirrors each handler's
-//! preconditions; after every step it asserts the two-wallet ledger
+//! instruction sequences PER POOL SHAPE. The model calls the SAME arithmetic
+//! the handlers call (`prize_math`, `vault::rent_safe`), and mirrors each
+//! handler's preconditions; after every step it asserts the two-wallet ledger
 //! identities:
 //!
 //! ```text
@@ -50,12 +50,13 @@
 //! vault at exactly the cushion with every entrant repaid their exact price
 //! — R7's "full refund" is exact, not approximate.
 //!
-//! Pools are SEQUENTIAL (D-A1 revised): the model re-opens a new pool only
+//! Pools are SEQUENTIAL per pool type (D-A1 revised; the slot is the pool
+//! TYPE's since D-E19): the model is one pool type, re-opens a new pool only
 //! after the previous reached `Paid` or `Closed`, mirroring
-//! `active_pool_by_tier`, and the ledger identities run ACROSS pools.
+//! `PoolType.active_pool`, and the ledger identities run ACROSS pools.
 //!
 //! D-E4 (2026-09-06, option A per the 2026-09-07 ruling) adds the second
-//! seal path: past the deadline a pool at or above `MIN_SEATS` seals
+//! seal path: past the deadline a pool at or above its minimum field seals
 //! (`seal_at_deadline`) and below it refunds (`trigger_refund`). The model
 //! abstracts the clock the same way it always did for the refund fork — the
 //! deadline is assumed past whenever either op fires — and mirrors the field
@@ -65,18 +66,118 @@
 //! models one `release`. The next-place payout's rank proof is the LiteSVM suite's job;
 //! here `pay_next_place` mirrors only the money and the eligibility flags.
 //!
+//! # The Ladder (D-E19)
+//!
+//! Since D-E19 a pool's size, minimum field and prize table are its own,
+//! copied from its pool type: 8, 16, 32 or 64 seats, the minimum field
+//! `LADDER_MIN_SEATS`, and `LADDER_TABLES` in whole multiples of the entry —
+//! the top quarter paid, the prize pool `Σ table × price`. The model is
+//! parameterised by that SHAPE (`Shape`), and every property runs once per
+//! capacity, the money-ledger property 10,000 sequences each. A fifth shape,
+//! `Shape::legacy()`, is a pool opened before the Ladder as `migrate_pool`
+//! records it — 64 seats, ONE paid place, table `[40]` — because two paths
+//! still serve it and only it: winner-takes-all settlement and
+//! `pay_next_place`. In a Ladder pool `pay_next_place` is refused
+//! (`NextPlaceUnsupported`, founder decision of 2026-11-05) and a forfeited
+//! share is HELD in the vault; the model mirrors the refusal and its
+//! terminal checks count held shares as claims, exactly as they count a
+//! share no eligible seat can take.
+//!
+//! `commit_results` now also refuses a zero amount and any amount above the
+//! pool's first prize (`prize_table[0] × entry`). The model does not mirror
+//! those as refusals: it ASSERTS that the published rule (`split_group`
+//! over the table) never produces such a list, at every shape, tier and tie
+//! pattern — so a refusal on chain could only ever meet a list the rule did
+//! not make.
+//!
 //! What this does and does not prove: it proves the arithmetic and the state
 //! machine conserve lamports under any interleaving the program permits. It
 //! does not execute the real BPF program — the LiteSVM integration suite
 //! covers the on-chain half against the compiled artifact.
 
-use blotto_cup::constants::{CAPACITY, MIN_SEATS, TIER_ENTRY_LAMPORTS, TIER_POT_LAMPORTS};
+use blotto_cup::constants::{
+    CAPACITY, LADDER_MIN_SEATS, LADDER_TABLES, MAX_PAID_PLACES, POOL_CAPACITIES,
+    TIER_ENTRY_LAMPORTS,
+};
 use blotto_cup::prize_math::split_group;
 use blotto_cup::vault::rent_safe;
 use proptest::prelude::*;
 
+/// The fixed arrays' width — the largest pool (`Pool.payouts`, the
+/// `paid_mask` bits). A pool's own size is `Shape::capacity`.
 const CAP: usize = CAPACITY as usize;
-const MIN: usize = MIN_SEATS as usize;
+
+/// A pool's shape: what its pool type copies onto it at open (D-E19).
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Shape {
+    capacity: usize,
+    min_seats: usize,
+    table: [u8; MAX_PAID_PLACES],
+}
+
+impl Shape {
+    /// The launch shape for `POOL_CAPACITIES[k]`.
+    fn ladder(k: usize) -> Shape {
+        Shape {
+            capacity: POOL_CAPACITIES[k] as usize,
+            min_seats: LADDER_MIN_SEATS[k] as usize,
+            table: LADDER_TABLES[k],
+        }
+    }
+
+    /// A pool opened before the Ladder, as `migrate_pool` records it: 64
+    /// seats, one place, its prize pool in whole entries — `[40]` at every
+    /// launch price (40 × price is the D-E1 tier pot) — and the R7-b floor
+    /// of 40 it was opened with.
+    fn legacy() -> Shape {
+        let mut table = [0u8; MAX_PAID_PLACES];
+        table[0] = 40;
+        Shape {
+            capacity: CAP,
+            min_seats: 40,
+            table,
+        }
+    }
+
+    /// Shapes `0..4` are the Ladder's capacities in order; `4` is legacy.
+    fn nth(i: usize) -> Shape {
+        if i < POOL_CAPACITIES.len() {
+            Shape::ladder(i)
+        } else {
+            Shape::legacy()
+        }
+    }
+
+    fn paid_places(&self) -> usize {
+        self.table.iter().take_while(|&&m| m > 0).count()
+    }
+
+    /// `Σ table × price` — the pool type's prize pool (`PoolType::table_value`).
+    fn pot(&self, price: u64) -> u64 {
+        self.table.iter().map(|&m| m as u64 * price).sum()
+    }
+
+    /// First place: the bound `commit_results` holds every amount to.
+    fn first_prize(&self, price: u64) -> u64 {
+        self.table[0] as u64 * price
+    }
+
+    /// Where the KYC switch splits the paid set when it is on: above second
+    /// place's worth, so a solo first place (and a tie group whose share
+    /// exceeds second place) escrows while every lower place pays direct.
+    /// A one-place pool has no second place; there it is half the prize
+    /// pool, the D-E2 split — a solo winner escrows, a tied member does not.
+    fn kyc_split(&self, price: u64) -> u64 {
+        if self.paid_places() > 1 {
+            self.table[1] as u64 * price
+        } else {
+            self.pot(price) / 2
+        }
+    }
+}
+
+/// Every shape the properties run over: the four capacities, then legacy.
+const N_SHAPES: usize = 5;
 
 /// The rent cushion every prize vault is funded with on top of its pot
 /// (2026-09-12, audit B-03): the rent-exempt minimum for a ZERO-DATA
@@ -133,7 +234,10 @@ impl EntryModel {
 /// the model itself cannot mask one in the program's u64 math — every u64
 /// the program would hold is asserted to fit).
 struct Model {
+    /// The pool type's shape: capacity, minimum field, table (D-E19).
+    shape: Shape,
     price: u64,
+    /// `Σ table × price`, the prize pool every pool of the type is funded with.
     pot: u64,
     min_platform: u64,
     // Treasury.
@@ -178,10 +282,11 @@ struct Model {
 }
 
 impl Model {
-    fn new(price: u64, pot: u64, min_platform: u64, kyc_above: u64) -> Self {
+    fn new(shape: Shape, price: u64, min_platform: u64, kyc_above: u64) -> Self {
         Model {
+            shape,
             price,
-            pot,
+            pot: shape.pot(price),
             min_platform,
             platform: 0,
             reserved: 0,
@@ -210,9 +315,9 @@ impl Model {
         }
     }
 
-    /// The single tier's idle reserve: `reserve_pots (1) × (pot + cushion)`
+    /// The single pool type's idle reserve: `reserve_pots (1) × (pot + cushion)`
     /// when the tier has no live pool, excluding the tier being opened when
-    /// asked (mirrors `idle_tier_reserve`'s exclude parameter). A reserved
+    /// asked (mirrors `idle_pool_type_reserve`'s exclude parameter). A reserved
     /// pot is an OPENABLE pot, and an open costs the pot plus the cushion
     /// (treasury.rs, 2026-09-12).
     ///
@@ -351,10 +456,11 @@ impl Model {
         self.entries = [EntryModel::default(); CAP];
     }
 
-    /// `register` — the full price into the treasury; the 64th entry seals.
+    /// `register` — the full price into the treasury; the entry that reaches
+    /// the pool's OWN capacity seals it (D-E19: 8, 16, 32 or 64).
     fn register(&mut self) {
-        if !self.opened || self.state != St::Open || self.entrants >= CAP {
-            return; // handler would revert
+        if !self.opened || self.state != St::Open || self.entrants >= self.shape.capacity {
+            return; // handler would revert (PoolFull is unreachable: it sealed)
         }
         // Belt-and-braces mirror: the vault must already hold the pot and
         // its cushion.
@@ -367,14 +473,14 @@ impl Model {
         self.refundable += self.price as u128;
         self.entries[self.entrants].exists = true;
         self.entrants += 1;
-        if self.entrants == CAP {
+        if self.entrants == self.shape.capacity {
             self.seal();
         }
     }
 
     /// The shared seal (`register::seal_pool`): refunds are now impossible,
     /// so the pool's REAL field's prices become revenue — `entrants`, never
-    /// `CAP` (equal at 64; below 64 only the former is correct).
+    /// the capacity (equal when full; below it only the former is correct).
     fn seal(&mut self) {
         self.state = St::Sealed;
         self.refundable -= self.price as u128 * self.entrants as u128;
@@ -388,10 +494,10 @@ impl Model {
         if !self.opened || self.state != St::Open {
             return; // PoolNotOpen
         }
-        if self.entrants < MIN {
+        if self.entrants < self.shape.min_seats {
             return; // FieldBelowMinimum — this pool refunds instead
         }
-        if self.entrants >= CAP {
+        if self.entrants >= self.shape.capacity {
             return; // PoolFull — unreachable while Open, mirrored anyway
         }
         self.seal();
@@ -406,19 +512,23 @@ impl Model {
     }
 
     /// `commit_results` (D3-B) — a seeded RANKING of the pool's seats (the
-    /// REAL field, `entrants`: 52..=64 under D-E4) is partitioned into tie
-    /// groups, each group's prize split by the SAME `split_group` the
-    /// program's arithmetic module exposes (each × size + remainder,
-    /// remainder to the group's lowest seat), and the seats with a non-zero
-    /// amount become the committed payout list — under D-E2 that is the
-    /// winner, or every member of a tie for first. Conservation is therefore
-    /// a THEOREM the invariant re-checks, not an assumption.
+    /// REAL field, `entrants`: anywhere from the minimum field to the
+    /// capacity) is partitioned into tie groups, each group's prize split by
+    /// the SAME `split_group` the program's arithmetic module exposes, over
+    /// THIS pool's table (each × size + remainder, remainder to the group's
+    /// lowest seat), and the seats with a non-zero amount become the
+    /// committed payout list — every seat of every group that reaches the
+    /// paid places (a group may straddle the line). Conservation is
+    /// therefore a THEOREM the invariant re-checks, not an assumption.
     fn commit(&mut self, seed: u64) {
         if !self.opened || self.state != St::Sealed {
             return;
         }
         let n = self.entrants;
-        assert!(n >= MIN, "a sealed pool holds at least the minimum field");
+        assert!(
+            n >= self.shape.min_seats,
+            "a sealed pool holds at least the minimum field"
+        );
         // Seeded permutation of the seats = the ranking (rank 1 first): an
         // odd stride is coprime to any even n; for odd n fall back to a
         // stride of 1 (still a permutation — the start offset varies).
@@ -461,15 +571,39 @@ impl Model {
         assert_eq!(ranking.len(), n);
         assert_eq!(sizes.iter().sum::<usize>(), n);
         let potv = self.pot;
+        let paid_places = self.shape.paid_places();
+        let first_prize = self.shape.first_prize(self.price);
         let mut payouts: Vec<(usize, u64)> = Vec::new();
         let mut pos: usize = 0; // 0-based position; rank = pos + 1
         for &size in sizes {
-            let (each, remainder) = split_group(potv, (pos + 1) as u16, size as u16);
+            let (each, remainder) =
+                split_group(&self.shape.table, self.price, (pos + 1) as u16, size as u16);
             let group = &ranking[pos..pos + size];
             let lowest_seat = *group.iter().min().unwrap();
+            // A group is owed something exactly when its first position is a
+            // paid place — straddling the line included (D3-B under D-E19).
+            let reaches_paid_line = pos < paid_places;
             for &seat in group {
                 let amount = each + if seat == lowest_seat { remainder } else { 0 };
+                assert!(
+                    amount > 0 || (each == 0 && remainder == 0),
+                    "a zero share inside a paid group"
+                );
+                assert_eq!(
+                    each > 0,
+                    reaches_paid_line,
+                    "rank {} (group of {size}): paid iff the group reaches the paid places",
+                    pos + 1
+                );
                 if amount > 0 {
+                    // `commit_results`' D-E19 bounds — PayoutZero and
+                    // PayoutAboveFirstPrize — asserted as THEOREMS of the
+                    // published rule rather than mirrored as refusals: a
+                    // list the rule makes never trips either.
+                    assert!(
+                        amount <= first_prize,
+                        "a share of {amount} exceeds first place ({first_prize}) — the program would refuse the rule's own list"
+                    );
                     payouts.push((seat, amount));
                 }
             }
@@ -480,11 +614,12 @@ impl Model {
         // same so a split_group bug fails HERE, loudly.
         let total: u128 = payouts.iter().map(|&(_, a)| a as u128).sum();
         assert_eq!(total, potv as u128, "committed payouts must sum to the pot");
-        // D-E2: the paid set is exactly the tie group at rank 1 — one seat,
-        // or every member of a tie for first — never a seat outside it.
+        // The paid set is every member of the groups reaching the paid
+        // places — never empty, never past the field, never wider than the
+        // payouts array.
         assert!(
-            !payouts.is_empty() && payouts.len() <= n,
-            "the paid set is the rank-1 group"
+            !payouts.is_empty() && payouts.len() <= n && payouts.len() <= CAP,
+            "the paid set is the groups at the paid places"
         );
         self.committed = payouts;
         self.state = St::Scored;
@@ -608,9 +743,18 @@ impl Model {
     /// next-rank member and the signer's asserted group size is modelled as
     /// 1 (the rank proof and the completeness disclosure are the on-chain
     /// suite's business; the money is modelled here).
+    ///
+    /// D-E19: only in a ONE-PLACE pool. Under a multi-place table the
+    /// committed list spans several ranks and this rule would pay the wrong
+    /// players, so the program refuses (`NextPlaceUnsupported`) and the
+    /// forfeited share stays in the vault — never paid wrongly, never to the
+    /// operator — until the field-moves-up payout ships.
     fn pay_next_place(&mut self, from: usize, to: usize) {
         if !self.opened || self.state != St::Paid || from == to {
             return;
+        }
+        if self.shape.paid_places() > 1 {
+            return; // NextPlaceUnsupported — the share is held
         }
         let f = self.entries[from];
         if !f.exists || !f.forfeited || f.escrow == 0 {
@@ -688,7 +832,7 @@ impl Model {
         if !self.opened || self.state != St::Open {
             return;
         }
-        if self.entrants >= MIN {
+        if self.entrants >= self.shape.min_seats {
             return; // FieldReached — this pool seals instead
         }
         if self.entrants == 0 {
@@ -866,8 +1010,10 @@ impl Model {
     /// Settle every outstanding escrow the way the operator would: release
     /// the unforfeited holds, then split each forfeited share among the
     /// eligible players at the rank it passes to. Returns the lamports that
-    /// could NOT be paid onward (no eligible seat exists — every entrant
-    /// flagged), which stay in the vault as claims.
+    /// could NOT be paid onward, which stay in the vault as claims: in a
+    /// one-place pool, a share no eligible seat exists for (every entrant
+    /// flagged); in a Ladder pool, EVERY forfeited share — held until the
+    /// field-moves-up payout ships (`NextPlaceUnsupported`).
     fn settle_all_escrow(&mut self) -> u128 {
         for i in 0..CAP {
             if !self.entries[i].forfeited {
@@ -877,6 +1023,20 @@ impl Model {
         let mut stuck: u128 = 0;
         for from in 0..CAP {
             if !self.entries[from].forfeited || self.entries[from].escrow == 0 {
+                continue;
+            }
+            if self.shape.paid_places() > 1 {
+                // Held, and provably so: the refused call moves nothing.
+                let before = (self.vault, self.entries[from].escrow);
+                if let Some(to) = (0..CAP).find(|&t| t != from && self.entries[t].eligible()) {
+                    self.pay_next_place(from, to);
+                }
+                assert_eq!(
+                    (self.vault, self.entries[from].escrow),
+                    before,
+                    "a Ladder pool's forfeited share must stay in the vault"
+                );
+                stuck += self.entries[from].escrow as u128;
                 continue;
             }
             // Every eligible member of the group takes its portion: the
@@ -940,12 +1100,13 @@ enum Op {
     Pay(Vec<u16>),
     Release(usize),
     Forfeit(usize),
-    /// Ruling 4 (ii): a forfeited share to the next eligible place.
+    /// Ruling 4 (ii): a forfeited share to the next eligible place — paid in
+    /// a one-place pool, refused (held) in a Ladder pool.
     NextPlace(usize, usize),
     TriggerRefund,
     /// D-E4: the second seal path. Weighted like `TriggerRefund` — rare
-    /// enough that pools mostly fill, common enough that every fill in
-    /// `MIN..CAP` is exercised across 10k sequences.
+    /// enough that pools mostly fill, common enough that every fill from the
+    /// minimum field to the capacity is exercised across 10k sequences.
     SealAtDeadline,
     Refund(usize),
 }
@@ -968,76 +1129,160 @@ fn op_strategy() -> impl Strategy<Value = Op> {
     ]
 }
 
+/// The money-ledger property for one shape: a random instruction sequence,
+/// every invariant after every step.
+fn run_ledger(shape: Shape, tier: usize, kyc_on: bool, min_platform: u64, ops: Vec<Op>) {
+    let price = TIER_ENTRY_LAMPORTS[tier];
+    // When the KYC switch is on, put the threshold where it splits the paid
+    // set (`Shape::kyc_split`): first place escrows, the lower places pay
+    // direct, and tie groups land on either side.
+    let kyc_above = if kyc_on { shape.kyc_split(price) } else { 0 };
+    let mut m = Model::new(shape, price, min_platform, kyc_above);
+    for op in ops {
+        match op {
+            Op::Fund(a) => m.fund(a),
+            Op::Withdraw(a) => m.withdraw(a),
+            Op::OpenPool => m.open_pool(),
+            Op::Register => m.register(),
+            Op::Flag(i, b) => m.flag(i % CAP, b),
+            Op::Commit(seed) => m.commit(seed),
+            Op::Pay(seats) => m.pay(&seats),
+            Op::Release(i) => m.release(i % CAP),
+            Op::Forfeit(i) => m.forfeit(i % CAP),
+            Op::NextPlace(f, t) => m.pay_next_place(f % CAP, t % CAP),
+            Op::TriggerRefund => m.trigger_refund(),
+            Op::SealAtDeadline => m.seal_at_deadline(),
+            Op::Refund(i) => m.refund(i % CAP),
+        }
+        m.assert_invariant();
+        m.assert_terminal();
+    }
+}
+
+/// Every pool shape a property runs over: the four Ladder capacities and the
+/// one-place legacy shape.
+fn any_shape() -> impl Strategy<Value = Shape> {
+    (0usize..N_SHAPES).prop_map(Shape::nth)
+}
+
+// Roadmap 1.7: "Fuzz runs 10k sequences clean in CI" — since D-E19, 10k per
+// pool size, each its own test so a failure names the capacity, plus the
+// one-place shape pre-Ladder pools are migrated to.
 proptest! {
-    // Roadmap 1.7: "Fuzz runs 10k sequences clean in CI."
     #![proptest_config(ProptestConfig { cases: 10_000, .. ProptestConfig::default() })]
 
     #[test]
-    fn money_ledger_holds_under_random_instruction_sequences(
+    fn money_ledger_holds_at_capacity_8(
         tier in 0usize..TIER_ENTRY_LAMPORTS.len(),
         kyc_on in any::<bool>(),
         min_platform in prop_oneof![Just(0u64), Just(1_000_000_000u64)],
         ops in proptest::collection::vec(op_strategy(), 1..250),
     ) {
+        run_ledger(Shape::ladder(0), tier, kyc_on, min_platform, ops);
+    }
+
+    #[test]
+    fn money_ledger_holds_at_capacity_16(
+        tier in 0usize..TIER_ENTRY_LAMPORTS.len(),
+        kyc_on in any::<bool>(),
+        min_platform in prop_oneof![Just(0u64), Just(1_000_000_000u64)],
+        ops in proptest::collection::vec(op_strategy(), 1..250),
+    ) {
+        run_ledger(Shape::ladder(1), tier, kyc_on, min_platform, ops);
+    }
+
+    #[test]
+    fn money_ledger_holds_at_capacity_32(
+        tier in 0usize..TIER_ENTRY_LAMPORTS.len(),
+        kyc_on in any::<bool>(),
+        min_platform in prop_oneof![Just(0u64), Just(1_000_000_000u64)],
+        ops in proptest::collection::vec(op_strategy(), 1..250),
+    ) {
+        run_ledger(Shape::ladder(2), tier, kyc_on, min_platform, ops);
+    }
+
+    #[test]
+    fn money_ledger_holds_at_capacity_64(
+        tier in 0usize..TIER_ENTRY_LAMPORTS.len(),
+        kyc_on in any::<bool>(),
+        min_platform in prop_oneof![Just(0u64), Just(1_000_000_000u64)],
+        ops in proptest::collection::vec(op_strategy(), 1..250),
+    ) {
+        run_ledger(Shape::ladder(3), tier, kyc_on, min_platform, ops);
+    }
+
+    /// The one-place shape every pre-Ladder pool is migrated to — the only
+    /// shape in which `pay_next_place` still moves money.
+    #[test]
+    fn money_ledger_holds_for_a_migrated_one_place_pool(
+        tier in 0usize..TIER_ENTRY_LAMPORTS.len(),
+        kyc_on in any::<bool>(),
+        min_platform in prop_oneof![Just(0u64), Just(1_000_000_000u64)],
+        ops in proptest::collection::vec(op_strategy(), 1..250),
+    ) {
+        run_ledger(Shape::legacy(), tier, kyc_on, min_platform, ops);
+    }
+}
+
+proptest! {
+    // The shaped properties below are each exhaustive over their own small
+    // space; proptest's default case count covers every (shape, tier) pair
+    // many times over.
+
+    /// The launch shapes are the published rule (D-E19): the top quarter
+    /// paid, the prize pool five-eighths of a full field's entries, and the
+    /// minimum field EXACTLY break-even — at every tier. The legacy shape is
+    /// the winner-takes-all pool it records: one place, 40 entries' worth.
+    #[test]
+    fn every_shape_is_the_published_rule(shape in any_shape(), tier in 0usize..TIER_ENTRY_LAMPORTS.len()) {
         let price = TIER_ENTRY_LAMPORTS[tier];
-        let pot = TIER_POT_LAMPORTS[tier];
-        // When the KYC switch is on, put the threshold where it splits the
-        // D-E2 paid set: a solo winner (the whole pot) escrows, a member of
-        // a two-way-or-wider tie for first (pot / k ≤ pot / 2) does not.
-        let kyc_above = if kyc_on { pot / 2 } else { 0 };
-        let mut m = Model::new(price, pot, min_platform, kyc_above);
-        for op in ops {
-            match op {
-                Op::Fund(a) => m.fund(a),
-                Op::Withdraw(a) => m.withdraw(a),
-                Op::OpenPool => m.open_pool(),
-                Op::Register => m.register(),
-                Op::Flag(i, b) => m.flag(i % CAP, b),
-                Op::Commit(seed) => m.commit(seed),
-                Op::Pay(seats) => m.pay(&seats),
-                Op::Release(i) => m.release(i % CAP),
-                Op::Forfeit(i) => m.forfeit(i % CAP),
-                Op::NextPlace(f, t) => m.pay_next_place(f % CAP, t % CAP),
-                Op::TriggerRefund => m.trigger_refund(),
-                Op::SealAtDeadline => m.seal_at_deadline(),
-                Op::Refund(i) => m.refund(i % CAP),
-            }
-            m.assert_invariant();
-            m.assert_terminal();
+        let pot = shape.pot(price) as u128;
+        prop_assert_eq!(pot, shape.min_seats as u128 * price as u128, "the minimum field is break-even");
+        if shape == Shape::legacy() {
+            prop_assert_eq!(shape.paid_places(), 1);
+            prop_assert_eq!(shape.first_prize(price) as u128, pot, "one place takes the whole prize pool");
+        } else {
+            prop_assert_eq!(shape.paid_places(), shape.capacity / 4, "the top quarter is paid");
+            prop_assert_eq!(pot * 8, shape.capacity as u128 * 5 * price as u128, "5/8 of a full field");
+            prop_assert!(shape.table.windows(2).all(|w| w[1] <= w[0]), "never increasing");
         }
+        prop_assert!(shape.min_seats > shape.paid_places() && shape.min_seats <= shape.capacity);
     }
 
     /// The happy path, exhaustively: bootstrap the treasury, open (pot and
-    /// cushion fund BEFORE any entry), fill, commit, pay all committed seats,
-    /// settle all escrow (release the even holds, forfeit the odd ones and
-    /// pay each forfeited share to the next eligible seat) — the vault must
-    /// end at EXACTLY its cushion for every tier and every flag pattern, and
-    /// the treasury must hold the bootstrap + all 64 entry payments − the
-    /// pool's funding (pot and cushion). No forfeit term: forfeited money
-    /// never reaches the treasury (ruling 4).
+    /// cushion fund BEFORE any entry), fill to the pool's capacity, commit,
+    /// pay all committed seats, settle all escrow (release the even holds,
+    /// forfeit the odd ones and pay each forfeited share onward where the
+    /// shape allows it) — the vault must end at EXACTLY its cushion plus the
+    /// claims nobody could be paid yet, for every shape, tier and flag
+    /// pattern, and the treasury must hold the bootstrap + the field's entry
+    /// payments − the pool's funding (pot and cushion). No forfeit term:
+    /// forfeited money never reaches the treasury (ruling 4).
     #[test]
     fn full_lifecycle_drains_the_vault_to_the_cushion(
+        shape in any_shape(),
         tier in 0usize..TIER_ENTRY_LAMPORTS.len(),
         seed in any::<u64>(),
         flagged_bits in any::<u16>(),
     ) {
         let price = TIER_ENTRY_LAMPORTS[tier];
-        let pot = TIER_POT_LAMPORTS[tier];
+        let pot = shape.pot(price);
         let cushion = VAULT_RENT_CUSHION as u128;
-        let mut m = Model::new(price, pot, 0, 0);
-        // Policy at open (single tier, excluded as the one being opened):
+        let mut m = Model::new(shape, price, 0, 0);
+        // Policy at open (single type, excluded as the one being opened):
         // needs pot + cushion + min(0) + 0 available.
         m.fund(pot + VAULT_RENT_CUSHION);
         m.open_pool();
         prop_assert_eq!(m.state, St::Open);
         prop_assert_eq!(m.vault, pot as u128 + cushion); // funded before any entry
-        for _ in 0..CAP { m.register(); }
+        for _ in 0..CAP { m.register(); } // the extras past capacity are refused
+        prop_assert_eq!(m.entrants, shape.capacity, "seals at its own capacity");
         prop_assert_eq!(m.state, St::Sealed);
         prop_assert_eq!(m.refundable, 0u128); // revenue at seal
         m.commit(seed);
-        // Flag paid seats according to the bit pattern (the committed list
-        // is the rank-1 tie group — D-E2 over D3-B).
+        // Flag paid seats according to the bit pattern.
         let paid_seats: Vec<usize> = m.committed.iter().map(|&(s, _)| s).collect();
+        prop_assert!(paid_seats.len() >= shape.paid_places(), "every paid place is owed to someone");
         for (i, &seat) in paid_seats.iter().enumerate() {
             if flagged_bits & (1 << (i % 16)) != 0 { m.flag(seat, true); }
         }
@@ -1051,46 +1296,50 @@ proptest! {
             if i % 2 == 1 { m.forfeit(seat); }
             m.assert_invariant();
         }
+        let forfeited: u128 = m.entries.iter().filter(|e| e.forfeited).map(|e| e.escrow as u128).sum();
         let vault_before = m.vault;
         let stuck = m.settle_all_escrow();
         m.assert_invariant();
         prop_assert_eq!(m.vault, stuck + cushion,
-            "vault must end at exactly its cushion plus the claims no eligible seat can take");
-        // A forfeited share is stuck only when NO eligible seat exists —
-        // every seat flagged, which needs an everyone-tied commit with every
-        // bit set. Then the claims are still in the vault, on their entries.
-        if stuck > 0 {
+            "vault must end at exactly its cushion plus the claims not yet payable");
+        if shape.paid_places() > 1 {
+            // D-E19: a Ladder pool HOLDS every forfeited share.
+            prop_assert_eq!(stuck, forfeited, "a Ladder pool's forfeited shares are held whole");
+        } else if stuck > 0 {
+            // One place: a forfeited share is stuck only when NO eligible
+            // seat exists — every seat flagged, which needs an everyone-tied
+            // commit with every bit set.
             prop_assert!(m.entries.iter().all(|e| !e.exists || e.flagged));
         }
         prop_assert!(m.vault <= vault_before);
         // Treasury conservation across the pool: bootstrap + entries − the
         // pool's funding (pot and cushion, both out at open; only the pot is
         // ever paid onward). Forfeits contribute NOTHING (ruling 4).
-        let expected = (pot + VAULT_RENT_CUSHION) as u128 + CAP as u128 * price as u128
+        let expected = (pot + VAULT_RENT_CUSHION) as u128 + shape.capacity as u128 * price as u128
             - m.total_pots_funded
             - m.total_cushions_funded;
         prop_assert_eq!(m.platform, expected, "treasury drifted over the lifecycle");
-        prop_assert_eq!(m.platform, CAP as u128 * price as u128,
+        prop_assert_eq!(m.platform, shape.capacity as u128 * price as u128,
             "the treasury keeps exactly the field's entries");
         prop_assert_eq!(m.total_paid + m.total_released + m.total_next_place + stuck, pot as u128,
             "the pot reached players (or stayed as their claims), never the operator");
     }
 
-    /// The refund fork, exhaustively: any fill BELOW the minimum field (D-E4
-    /// moved the threshold from 64 to `MIN_SEATS`), trigger (pot returns
-    /// whole), refund all — the vault ends at exactly its cushion, every
-    /// entrant is repaid exactly their price, and the treasury ends where it
-    /// started less the one cushion that stays in the vault. A seal attempt
-    /// on such a pool is a no-op: the fork is decided by the field, and the
-    /// two instructions reject each other's case.
+    /// The refund fork, exhaustively: any fill BELOW the pool's minimum
+    /// field, trigger (pot returns whole), refund all — the vault ends at
+    /// exactly its cushion, every entrant is repaid exactly their price, and
+    /// the treasury ends where it started less the one cushion that stays in
+    /// the vault. A seal attempt on such a pool is a no-op: the fork is
+    /// decided by the field, and the two instructions reject each other's
+    /// case.
     #[test]
     fn refund_fork_returns_every_lamport(
+        (shape, fill) in any_shape().prop_flat_map(|s| (Just(s), 0usize..s.min_seats)),
         tier in 0usize..TIER_ENTRY_LAMPORTS.len(),
-        fill in 0usize..MIN, // strictly below the minimum field
     ) {
         let price = TIER_ENTRY_LAMPORTS[tier];
-        let pot = TIER_POT_LAMPORTS[tier];
-        let mut m = Model::new(price, pot, 0, 0);
+        let pot = shape.pot(price);
+        let mut m = Model::new(shape, price, 0, 0);
         m.fund(pot + VAULT_RENT_CUSHION);
         m.open_pool();
         for _ in 0..fill { m.register(); }
@@ -1112,26 +1361,27 @@ proptest! {
         prop_assert_eq!(m.platform, pot as u128, "treasury drifted over the refund fork");
     }
 
-    /// The minimum-field path, exhaustively (D-E4): any fill in
-    /// `MIN_SEATS..CAPACITY`, the deadline passes, the pool SEALS (a refund
-    /// attempt is refused), the winner (or the tie for first) is paid the
-    /// whole pot, the vault ends at exactly its cushion, and the treasury
-    /// keeps the field's entries minus the pot — strictly positive at every
-    /// fill, which is the §11.1 break-even property the constants promise,
-    /// exercised rather than asserted.
+    /// The minimum-field path, exhaustively: any fill from the pool's
+    /// minimum field up to (not including) its capacity, the deadline
+    /// passes, the pool SEALS (a refund attempt is refused), the paid places
+    /// are paid the whole prize pool, the vault ends at exactly its cushion,
+    /// and the treasury keeps the field's entries — never less than the
+    /// prize pool, and EXACTLY it at the minimum field: the break-even
+    /// property every launch table is built on, exercised rather than
+    /// asserted.
     #[test]
-    fn min_field_seals_and_pays_the_winner(
+    fn min_field_seals_and_pays_the_paid_places(
+        (shape, fill) in any_shape().prop_flat_map(|s| (Just(s), s.min_seats..s.capacity)),
         tier in 0usize..TIER_ENTRY_LAMPORTS.len(),
-        fill in MIN..CAP,
         seed in any::<u64>(),
     ) {
         let price = TIER_ENTRY_LAMPORTS[tier];
-        let pot = TIER_POT_LAMPORTS[tier];
-        let mut m = Model::new(price, pot, 0, 0);
+        let pot = shape.pot(price);
+        let mut m = Model::new(shape, price, 0, 0);
         m.fund(pot + VAULT_RENT_CUSHION);
         m.open_pool();
         for _ in 0..fill { m.register(); }
-        prop_assert_eq!(m.state, St::Open, "below 64 the pool is still Open");
+        prop_assert_eq!(m.state, St::Open, "below capacity the pool is still Open");
         prop_assert_eq!(m.refundable, fill as u128 * price as u128);
         m.trigger_refund(); // FieldReached — must not refund
         prop_assert_eq!(m.state, St::Open, "a playable field must not refund");
@@ -1141,73 +1391,69 @@ proptest! {
         m.assert_invariant();
         m.commit(seed);
         let paid_seats: Vec<u16> = m.committed.iter().map(|&(s, _)| s as u16).collect();
-        prop_assert!(!paid_seats.is_empty());
+        prop_assert!(paid_seats.len() >= shape.paid_places());
         prop_assert!(paid_seats.iter().all(|&s| (s as usize) < fill), "only real seats are paid");
         m.pay(&paid_seats);
         m.assert_invariant();
         prop_assert_eq!(m.state, St::Paid);
         prop_assert_eq!(m.vault, VAULT_RENT_CUSHION as u128,
             "the whole pot left the vault; the cushion stays");
-        prop_assert_eq!(m.total_paid, pot as u128, "the winner set received exactly the pot");
+        prop_assert_eq!(m.total_paid, pot as u128, "the paid places received exactly the pot");
         // The bootstrap (pot and cushion) left the treasury at open, so what
-        // remains is the field's entries. Those COVER the pot the treasury
-        // funded at every field size in range — with margin above the floor,
-        // and exactly at it.
-        //
-        // `>=`, not `>`, since R7-b (founder instruction 2026-09-12). This
-        // read `> pot` under D-E4's 52-seat floor, which carried a 12-seat
-        // buffer; the floor is now the break-even point itself, by the
-        // founder's ruling of 2026-09-13. The property that matters is
-        // unchanged and is the one asserted here: a pool that plays never
-        // pays out more than it took in.
+        // remains is the field's entries — which cover the prize pool the
+        // treasury funded at every field in range, exactly at the floor.
         prop_assert_eq!(m.platform, fill as u128 * price as u128, "treasury holds the field's entries");
         prop_assert!(m.platform >= pot as u128, "the field covers the pot the treasury funded");
-        if fill == MIN {
+        if fill == shape.min_seats {
             prop_assert_eq!(m.platform, pot as u128, "at the floor, exactly break-even");
         }
     }
 
     /// Prompt v2 §C.5 — the widest tie a minimum field can produce, paid in
     /// batches as ONE transaction each: a tie for first across the whole
-    /// floor at every tier (52-way before R7-b, 40-way now), batches of
-    /// twelve, with one batch that FAILS (it repeats an
-    /// already-paid seat) and reverts whole — nothing moves, the pool stays
-    /// Scored — then resumes. The pot is conserved to the lamport, the
-    /// indivisible remainder sits on the lowest seat, and the vault ends at
-    /// exactly its cushion.
+    /// floor at every shape and tier (5-, 10-, 20- and 40-way), in batches,
+    /// with one batch that FAILS (it repeats an already-paid seat) and
+    /// reverts whole — nothing moves, the pool stays Scored — then resumes.
+    /// The floor covers every paid place, so the group shares the WHOLE
+    /// prize pool; it is conserved to the lamport, the indivisible remainder
+    /// sits on the lowest seat, and the vault ends at exactly its cushion.
     #[test]
     fn a_floor_wide_tie_settles_across_batches_and_survives_a_failed_batch(
+        shape in any_shape(),
         tier in 0usize..TIER_ENTRY_LAMPORTS.len(),
-        bad_batch in 0usize..MIN.div_ceil(12),
+        bad_batch_seed in any::<usize>(),
     ) {
         let price = TIER_ENTRY_LAMPORTS[tier];
-        let pot = TIER_POT_LAMPORTS[tier];
-        let mut m = Model::new(price, pot, 0, 0);
+        let pot = shape.pot(price);
+        let min = shape.min_seats;
+        let mut m = Model::new(shape, price, 0, 0);
         m.fund(pot + VAULT_RENT_CUSHION);
         m.open_pool();
-        for _ in 0..MIN { m.register(); }
+        for _ in 0..min { m.register(); }
         m.seal_at_deadline();
         prop_assert_eq!(m.state, St::Sealed);
         // Everyone tied for first, in seat order.
-        let ranking: Vec<usize> = (0..MIN).collect();
-        m.commit_ranking(&ranking, &[MIN]);
-        prop_assert_eq!(m.committed.len(), MIN, "every seat is paid in a floor-wide tie");
-        let each = pot / MIN as u64;
-        let rem = pot % MIN as u64;
+        let ranking: Vec<usize> = (0..min).collect();
+        m.commit_ranking(&ranking, &[min]);
+        prop_assert_eq!(m.committed.len(), min, "every seat is paid in a floor-wide tie");
+        let each = pot / min as u64;
+        let rem = pot % min as u64;
         prop_assert_eq!(m.committed[0].1, each + rem, "remainder to the lowest seat");
         prop_assert!(m.committed[1..].iter().all(|&(_, a)| a == each));
 
-        let batches: Vec<Vec<u16>> = (0..MIN as u16)
+        // Batches of at most twelve, at least two batches at every shape —
+        // derived from the floor, never a second copy of it.
+        let batch = 12.min(min.div_ceil(2));
+        let batches: Vec<Vec<u16>> = (0..min as u16)
             .collect::<Vec<_>>()
-            .chunks(12)
+            .chunks(batch)
             .map(|c| c.to_vec())
             .collect();
-        // Derived, not repeated: 52 seats in twelves was five batches, 40 is
-        // four. A hard-coded count is a second copy of the floor.
-        prop_assert_eq!(batches.len(), MIN.div_ceil(12));
+        prop_assert!(batches.len() >= 2);
+        let bad_batch = 1 + bad_batch_seed % (batches.len() - 1);
         let mut paid_so_far: u128 = 0;
         for (i, batch) in batches.iter().enumerate() {
-            if i == bad_batch && i > 0 {
+            if i == bad_batch {
                 // Resend a seat from the previous batch alongside this one:
                 // the program rejects the whole transaction.
                 let mut bad = batch.clone();
@@ -1228,23 +1474,24 @@ proptest! {
         prop_assert_eq!(m.state, St::Paid);
         prop_assert_eq!(m.vault, VAULT_RENT_CUSHION as u128,
             "the vault holds exactly its cushion after the last batch");
-        prop_assert_eq!(m.total_paid, pot as u128, "52 shares sum to the pot exactly");
+        prop_assert_eq!(m.total_paid, pot as u128, "the shares sum to the pot exactly");
     }
 
     /// `withdraw_platform`'s floor: a withdrawal that would dip below
-    /// min + idle-tier reserve + refundable is refused with NOTHING moved,
-    /// and one exactly at the floor succeeds. The idle reserve counts a
-    /// pool's whole funding — pot plus the vault's rent cushion — because a
-    /// reserved pot is an openable pot (treasury.rs, 2026-09-12).
+    /// min + idle reserve + refundable is refused with NOTHING moved, and one
+    /// exactly at the floor succeeds. The idle reserve counts a pool type's
+    /// whole funding — its prize pool plus the vault's rent cushion —
+    /// because a reserved pot is an openable pot (treasury.rs, 2026-09-12).
     #[test]
     fn withdraw_floor_is_exact(
+        shape in any_shape(),
         tier in 0usize..TIER_ENTRY_LAMPORTS.len(),
         min_platform in 0u64..10_000_000_000,
         surplus in 0u64..10_000_000_000,
     ) {
         let price = TIER_ENTRY_LAMPORTS[tier];
-        let pot = TIER_POT_LAMPORTS[tier];
-        let mut m = Model::new(price, pot, min_platform, 0);
+        let pot = shape.pot(price);
+        let mut m = Model::new(shape, price, min_platform, 0);
         // No live pool → idle reserve = one pot + one cushion (reserve_pots = 1).
         let floor = min_platform as u128 + pot as u128 + VAULT_RENT_CUSHION as u128;
         m.fund(pot + VAULT_RENT_CUSHION + min_platform + surplus);
@@ -1259,23 +1506,23 @@ proptest! {
     }
 
     /// Ruling 4 as a property: over any sequence, the lamports that leave a
-    /// vault go to players (paid, released, paid onward) or back to the treasury
-    /// ONLY as an untouched pot on the refund fork — never as a forfeit. The
-    /// forfeit tally the old model kept is gone; this pins that nothing
-    /// re-introduces one by checking the platform against deposits + entries
-    /// + pot returns − pots − refunds − withdrawals with no other term.
+    /// vault go to players (paid, released, paid onward) or back to the
+    /// treasury ONLY as an untouched pot on the refund fork — never as a
+    /// forfeit. In a one-place pool a forfeited share is paid onward; in a
+    /// Ladder pool it is held (D-E19); in neither does it reach the treasury.
     #[test]
     fn forfeited_money_never_reaches_the_treasury(
+        shape in any_shape(),
         tier in 0usize..TIER_ENTRY_LAMPORTS.len(),
         seed in any::<u64>(),
     ) {
         let price = TIER_ENTRY_LAMPORTS[tier];
-        let pot = TIER_POT_LAMPORTS[tier];
+        let pot = shape.pot(price);
         let cushion = VAULT_RENT_CUSHION as u128;
-        let mut m = Model::new(price, pot, 0, 0);
+        let mut m = Model::new(shape, price, 0, 0);
         m.fund(pot + VAULT_RENT_CUSHION);
         m.open_pool();
-        for _ in 0..CAP { m.register(); }
+        for _ in 0..shape.capacity { m.register(); }
         m.commit(seed);
         // Flag and forfeit EVERY committed seat.
         let paid_seats: Vec<usize> = m.committed.iter().map(|&(s, _)| s).collect();
@@ -1291,14 +1538,18 @@ proptest! {
         // Releasing a forfeited share is refused.
         for &s in &paid_seats { m.release(s); }
         prop_assert_eq!(m.vault, vault_before, "a forfeited share cannot be released");
-        // Next-place payout pays the next eligible seat(s); the treasury is untouched
-        // throughout, and the vault ends at its cushion unless the whole field
-        // is flagged (a 64-way tie — then the claims stay in the vault too).
+        // Next-place payout pays the next eligible seat(s) in a one-place
+        // pool and is refused in a Ladder pool; the treasury is untouched
+        // throughout, and the vault ends at its cushion plus what is held.
         let stuck = m.settle_all_escrow();
         m.assert_invariant();
         prop_assert_eq!(m.platform, treasury_before, "a forfeit reached the treasury");
         prop_assert_eq!(m.vault, stuck + cushion);
         prop_assert_eq!(m.total_next_place + stuck, pot as u128);
+        if shape.paid_places() > 1 {
+            prop_assert_eq!(stuck, pot as u128, "a Ladder pool holds every forfeited share");
+            prop_assert_eq!(m.total_next_place, 0u128);
+        }
         prop_assert!(m.entries.iter().all(|e| !e.forfeited || e.next_place == 0));
     }
 
@@ -1316,17 +1567,18 @@ proptest! {
     /// minimum — a liveness wrinkle, not a loss.
     #[test]
     fn treasury_debits_refuse_the_rent_paying_band(
+        shape in any_shape(),
         tier in 0usize..TIER_ENTRY_LAMPORTS.len(),
         dust in 1u64..VAULT_RENT_CUSHION,
     ) {
         let price = TIER_ENTRY_LAMPORTS[tier];
-        let pot = TIER_POT_LAMPORTS[tier];
+        let pot = shape.pot(price);
         let cushion = VAULT_RENT_CUSHION;
 
         // (1) An open whose funding debit would leave dust: the policy gate
-        // passes (min 0, this tier excluded from the idle reserve), the
+        // passes (min 0, this type excluded from the idle reserve), the
         // debit refuses, nothing moves.
-        let mut m = Model::new(price, pot, 0, 0);
+        let mut m = Model::new(shape, price, 0, 0);
         m.fund(pot + cushion + dust);
         m.open_pool();
         prop_assert!(!m.opened, "an open that would leave the treasury rent-paying is refused");
@@ -1345,7 +1597,7 @@ proptest! {
         // (2) A withdrawal: a Sealed pool has no refundable entries and no
         // idle reserve, so the floor is zero — to dust is refused, to exactly
         // the cushion lands, and to exactly zero lands (the account reaps).
-        for _ in 0..CAP { m.register(); }
+        for _ in 0..shape.capacity { m.register(); }
         prop_assert_eq!(m.state, St::Sealed);
         let balance = m.platform;
         m.withdraw(balance as u64 - dust);
@@ -1359,7 +1611,7 @@ proptest! {
         // (3) The last refund: a Refunding pool whose treasury holds the last
         // entry's price plus dust — the refund is refused and the entrant
         // waits on a deposit; the refundable sum itself is still covered.
-        let mut m = Model::new(price, pot, 0, 0);
+        let mut m = Model::new(shape, price, 0, 0);
         m.fund(pot + cushion);
         m.open_pool();
         m.register();

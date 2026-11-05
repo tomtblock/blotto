@@ -14,7 +14,7 @@ import { SiteFooter } from '@/components/shell/site-footer';
 import { PageIntro } from '@/components/ui/page-intro';
 import { SectionTiles } from '@/components/ui/section-tiles';
 import { TabBar } from '@/components/shell/tab-bar';
-import { FULL_FIELD, MIN_FIELD, fairPlayView } from './fair-play.config';
+import { fairPlayView } from './fair-play.config';
 
 export const metadata: Metadata = { title: COPY.fairPlay.title };
 
@@ -34,24 +34,46 @@ export default function FairPlayPage() {
       content: (
         <Box id="skill">
           <p className="max-w-prose text-[15px] leading-6 text-ink-muted">{c.skillIntro}</p>
+          {/* One table: a row per player, a column per pool size; the
+              second body repeats the rows at each size's minimum field,
+              whose player count heads its column. */}
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-left text-sm" data-testid="skill-table">
+              <caption className="pb-2 text-left text-[13px] text-ink-muted">{c.skillHeadings.caption}</caption>
               <thead>
                 <tr className="text-[12px] uppercase tracking-[0.1em] text-ink-muted">
-                  <th className="py-2 pr-4 font-medium">{c.skillHeadings.player}</th>
-                  <th className="pr-4 text-right font-medium">{c.skillHeadings.full(FULL_FIELD)}</th>
-                  <th className="text-right font-medium">{c.skillHeadings.min(MIN_FIELD)}</th>
+                  <th scope="col" className="py-2 pr-3 font-medium">{c.skillHeadings.player}</th>
+                  {view.sizes.map((s) => (
+                    <th key={s.capacity} scope="col" className="pr-3 text-right font-medium last:pr-0">
+                      {c.skillHeadings.poolSize(s.capacity)}
+                    </th>
+                  ))}
                 </tr>
               </thead>
-              <tbody>
-                {view.skill.map((row) => (
-                  <tr key={row.cls} className={'border-t border-line ' + (row.cls === 'uniform' ? 'text-prize' : 'text-ink')}>
-                    <td className="py-2 pr-4 text-[15px] font-medium">{row.label}</td>
-                    <td className="tnum py-2 pr-4 text-right font-mono text-[15px]">{row.fullPct}%</td>
-                    <td className="tnum py-2 text-right font-mono text-[15px]">{row.minPct}%</td>
+              {(['full', 'min'] as const).map((field) => (
+                <tbody key={field} data-testid={`skill-${field}`}>
+                  <tr className="border-t border-line text-[12px] text-ink-muted">
+                    <th scope="colgroup" className="pt-3 pb-1 pr-3 text-left font-medium">
+                      {field === 'full' ? c.skillHeadings.fullGroup : c.skillHeadings.minGroup}
+                    </th>
+                    {view.sizes.map((s) => (
+                      <th key={s.capacity} scope="col" className="pt-3 pb-1 pr-3 text-right font-normal last:pr-0">
+                        {field === 'min' ? c.skillHeadings.minField(s.minField) : null}
+                      </th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
+                  {view.skill.map((row) => (
+                    <tr key={row.cls} className={'border-t border-line ' + (row.cls === 'uniform' ? 'text-prize' : 'text-ink')}>
+                      <th scope="row" className="py-2 pr-3 text-left text-[15px] font-medium">{row.label}</th>
+                      {row[field].map((rate, i) => (
+                        <td key={view.sizes[i].capacity} className="tnum py-2 pr-3 text-right font-mono text-[14px] last:pr-0">
+                          {rate}%
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              ))}
             </table>
           </div>
           <p className="mt-3 max-w-prose text-[13px] leading-5 text-ink-muted">{c.skillNote}</p>

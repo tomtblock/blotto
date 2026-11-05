@@ -25,7 +25,18 @@ import {
   encodePayload,
   seal,
 } from '../../../backend/sealing/src';
-import { battlesHash, boardModeByte, potForTier, type BoardMode } from '../../../backend/scoring/src';
+import {
+  MAX_CAPACITY,
+  MAX_PAID_PLACES,
+  TIER_ENTRY_LAMPORTS,
+  battlesHash,
+  boardModeByte,
+  ladderTable,
+  minFieldFor,
+  prizePoolFor,
+  type BoardMode,
+  type PoolCapacity,
+} from '../../../backend/scoring/src';
 import { base58Encode } from '../../../backend/_shared/src/blotto-events';
 import {
   FakeChain,
@@ -81,6 +92,43 @@ export interface OfflinePoolOptions {
    * scores a malformed set as all-losses rather than refusing the pool.
    */
   mode?: BoardMode;
+  /**
+   * The pool size (D-E19): 8, 16, 32 or 64. Default 64, the size every pool
+   * had before the Ladder. The pool is opened the way `open_pool` opens one —
+   * the size's published table, minimum field and prize pool copied onto it —
+   * and the crank settles it on THAT table, read back from the pool, never on
+   * a table it chose itself. The population may be smaller than the size (a
+   * pool sealed at its deadline), never larger.
+   */
+  capacity?: PoolCapacity;
+}
+
+/** The tier every offline pool plays: tier 0, the 0.1 SOL entry (D1). */
+export const OFFLINE_TIER = 0;
+export const OFFLINE_ENTRY_LAMPORTS = TIER_ENTRY_LAMPORTS[OFFLINE_TIER];
+
+/**
+ * What `open_pool` copies onto a pool of `capacity` at tier 0 (D-E19): the
+ * launch table zero-padded to the on-chain `[u8; 16]`, the minimum field and
+ * the fixed prize pool. Exported so the rehearsal's assertions read the same
+ * numbers the pool was opened with.
+ */
+export function offlinePoolTerms(capacity: PoolCapacity): {
+  capacity: number;
+  minSeats: number;
+  paidPlaces: number;
+  prizeTable: number[];
+  potLamports: bigint;
+} {
+  const table = ladderTable(capacity);
+  const prizeTable = [...table, ...new Array<number>(MAX_PAID_PLACES - table.length).fill(0)];
+  return {
+    capacity,
+    minSeats: minFieldFor(capacity),
+    paidPlaces: table.length,
+    prizeTable,
+    potLamports: prizePoolFor(table, OFFLINE_ENTRY_LAMPORTS),
+  };
 }
 
 /** Build, fill and settle one offline pool end to end. */
@@ -97,6 +145,11 @@ export async function runOfflinePool(
   const { publicKey } = await custody.createPoolKey(poolId);
   const population = options.population ?? poolPopulation(poolSeed);
   const mode: BoardMode = options.mode ?? 'easy';
+  const capacity: PoolCapacity = options.capacity ?? (Number(MAX_CAPACITY) as PoolCapacity);
+  if (population.length > capacity) {
+    throw new Error(`a pool of ${capacity} cannot seat ${population.length} entrants`);
+  }
+  const terms = offlinePoolTerms(capacity);
   const players: string[] = [];
   const entries: FakeEntry[] = [];
 
@@ -123,12 +176,18 @@ export async function runOfflinePool(
 
   chain.pools.set(poolId.toString(), {
     poolId,
-    tier: 0,
+    tier: OFFLINE_TIER,
     state: 'Sealed',
     resultsRootHex: null,
     vrfCommitted: true,
-    entryLamports: 100_000_000n,
-    potLamports: potForTier(0),
+    entryLamports: OFFLINE_ENTRY_LAMPORTS,
+    // The pool's own terms, copied at open (D-E19): the crank settles on the
+    // table it reads here.
+    potLamports: terms.potLamports,
+    capacity: terms.capacity,
+    minSeats: terms.minSeats,
+    paidPlaces: terms.paidPlaces,
+    prizeTable: terms.prizeTable,
     fillDeadline: 0n,
     secretRevealed: false,
     resultsCommitted: false,
@@ -136,9 +195,9 @@ export async function runOfflinePool(
     payouts: [],
     // The rule the pool was opened under (Phase B); the crank reads it here.
     mode: boardModeByte(mode),
-    // The real field size: a pool seals at 64, or at its floor..63 when its
-    // deadline passes (D-E4). The crank commits over `entrants`, so a
-    // population smaller than 64 rehearses the minimum-field path.
+    // The real field size: a pool seals at its capacity, or with its minimum
+    // field or more when its deadline passes (D-E19). The crank commits over
+    // `entrants`, so a population below the capacity rehearses that path.
     entrants: population.length,
   });
   chain.entries.set(poolId.toString(), entries);

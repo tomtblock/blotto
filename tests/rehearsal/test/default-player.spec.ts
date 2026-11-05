@@ -28,7 +28,9 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { generateLadderEntrant } from '../src/ladder';
 import { generateEntrant } from '../src/strategies';
-import { scorePool } from '../../../backend/scoring/src/engine';
+import { assignPrizes, scorePool } from '../../../backend/scoring/src/engine';
+import { ladderTable, minFieldFor } from '../../../backend/scoring/src/prizes';
+import { OFFLINE_ENTRY_LAMPORTS } from '../src/orchestrator';
 
 const ALLOCATION_TS = join(__dirname, '..', '..', '..', 'app', 'src', 'battle', 'allocation.ts');
 
@@ -99,7 +101,12 @@ describe('the default player — app default == the study uniform class', () => 
  */
 describe('the default is the middle of three tiers, not the bottom (§H22)', () => {
   const EVEN = () => Array.from({ length: 7 }, () => [20, 20, 20, 20, 20]);
-  const SEATS = 40;
+  // A 64-player pool at its minimum field — the 40 of the devnet pool that
+  // prompted the correction — paid on that size's table (D-E19).
+  const CAPACITY = 64;
+  const SEATS = minFieldFor(CAPACITY);
+  const TABLE = ladderTable(CAPACITY);
+  const ENTRY = OFFLINE_ENTRY_LAMPORTS;
 
   /** Every seat's rank under the real rule: ties share the better rank. */
   function rankOfFirst(players: number[][][]): { rank: number; winners: number } {
@@ -143,23 +150,32 @@ describe('the default is the middle of three tiers, not the bottom (§H22)', () 
     ).to.equal(60);
   });
 
-  it('cannot be a strategy: if everyone leaves it, everyone ties and nobody profits', () => {
+  it('cannot be a strategy: if everyone leaves it, everyone ties and each gets exactly the entry back', () => {
     const field = Array.from({ length: SEATS }, EVEN);
     const { winners } = rankOfFirst(field);
-    expect(winners, 'all seats score identically, so all tie for first').to.equal(SEATS);
-    // One paid place, split among the tie group: each gets pot/SEATS, and with
-    // pot = SEATS x entry that is exactly the entry back. Nobody profits.
+    expect(winners, 'all entrants score identically, so all tie for first').to.equal(SEATS);
+    // The tie occupies every place, so it shares the whole prize pool — at the
+    // minimum field that is exactly one entry each (the break-even field).
+    const paid = assignPrizes(scorePool(field as never), TABLE, ENTRY);
+    for (const r of paid) expect(r.amountLamports, `entrant ${r.index}`).to.equal(ENTRY);
   });
 
-  it('one deliberate entrant takes the whole pot from a field of defaults', () => {
+  it('one deliberate entrant places first alone, and the defaults each get back less than their entry', () => {
     for (const cls of ['heuristic', 'optimised'] as const) {
       const field = [
         generateLadderEntrant(cls, 4242).battles,
         ...Array.from({ length: SEATS - 1 }, EVEN),
       ];
       const { rank, winners } = rankOfFirst(field);
-      expect(rank, `${cls} must win outright against a field of defaults`).to.equal(1);
-      expect(winners, `${cls} must be the ONLY winner, so it takes the whole pot`).to.equal(1);
+      expect(rank, `${cls} must place first against a field of defaults`).to.equal(1);
+      expect(winners, `${cls} must be alone in first`).to.equal(1);
+      // It takes the first prize; the defaults tie for second and share what
+      // places 2 onward pay — each of them less than the entry they paid.
+      const paid = assignPrizes(scorePool(field as never), TABLE, ENTRY);
+      expect(paid[0].amountLamports).to.equal(BigInt(TABLE[0]) * ENTRY);
+      for (const r of paid.slice(1)) {
+        expect(r.amountLamports < ENTRY, `default entrant ${r.index}`).to.equal(true);
+      }
     }
   });
 });

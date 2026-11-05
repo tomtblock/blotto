@@ -20,19 +20,56 @@ import { TERMS } from './terms';
 /*
  * The hero's lines (founder wording, V3 2026-09-27), one per line on the
  * landing. Joined, they are the shell's tagline (the <title>).
+ *
+ * D-E19 (the Ladder, 2026-11-05): "Sixty Four Seats" and "The winner takes
+ * the prize pool" stopped being true — pools hold 8, 16, 32 or 64 players
+ * and pay their highest places on a fixed table.
+ * PHASE-N-REVIEW: draft wording; founder voice / counsel.
  */
-const HERO_LINES = ['Sixty Four Seats. Seven Battlefields.', 'Everyone battles everyone.', 'The winner takes the prize pool.'] as const;
+const HERO_LINES = ['Eight to Sixty Four Players. Seven Battlefields.', 'Everyone battles everyone.', 'The top of the ranking takes the prizes.'] as const;
+
+/**
+ * A finishing place in words: 1st, 2nd, 3rd, 4th … 11th, 12th, 13th … 21st.
+ * Display only; the rank itself is the integer the results tree commits to.
+ */
+function place(n: number): string {
+  const tens = n % 100;
+  if (tens >= 11 && tens <= 13) return `${n}th`;
+  const unit = n % 10;
+  return `${n}${unit === 1 ? 'st' : unit === 2 ? 'nd' : unit === 3 ? 'rd' : 'th'}`;
+}
+
+/** "8, 16, 32 or 64" — a list of figures the caller derived, never typed here. */
+function orList(items: readonly (string | number)[]): string {
+  const all = items.map(String);
+  return all.length <= 1 ? (all[0] ?? '') : `${all.slice(0, -1).join(', ')} or ${all[all.length - 1]}`;
+}
+
+/** One pool size and the figures that go with it — every number from @blotto/scoring via the caller. */
+export interface SizeFacts {
+  capacity: number;
+  minField: number;
+  paidPlaces: number;
+}
+
+/** A run of places paying the same amount, already formatted (data/prizes.ts groups them). */
+export interface PrizeRunText {
+  from: number;
+  to: number;
+  sol: string;
+}
 
 export const COPY = {
   shell: {
     title: 'Blotto Cup',
-    // D-E2 (ratified 2026-09-06): one paid place. The substance — one
-    // winner, a fixed prize pool, recomputable results — is the register
-    // speaking. No multiple, ever (proposal E1 §2.5's copy constraint).
+    // D-E19 (the Ladder, 2026-11-05; superseding D-E2's one paid place):
+    // fixed prizes for the highest places, recomputable results. No
+    // multiple and no percentage, ever (proposal E1 §2.5's copy constraint).
+    // PHASE-N-REVIEW: draft wording; founder voice / counsel.
     tagline: HERO_LINES.join(' '),
     metaDescription:
-      'Up to sixty-four players enter, each sets seven sealed battles of five stats — 100 points a battle, or 700 placed anywhere in a hard pool. ' +
-      'The player ranked first takes a fixed prize pool, and every result is recomputable from published data.',
+      'Pools of eight to sixty-four players, each setting seven sealed battles of five stats — 100 points a battle, or 700 placed anywhere in a hard pool. ' +
+      'The highest-ranked players in every pool are paid fixed prizes, funded before entries open, and every result is recomputable from published data.',
     tabs: { play: 'Play', pools: 'Pools', profile: 'Profile' },
     // The honest degraded state: the data service is unreachable, which is
     // NOT the same statement as "no tournament is open".
@@ -95,7 +132,8 @@ export const COPY = {
     // button did nothing. See wallet/types.ts.
     twitter: 'Continue with X',
     // The provider modal's own subtitle (capped at 100 characters by the SDK).
-    modalMessage: 'Seven sealed battles. The winner takes the prize pool.',
+    // PHASE-N-REVIEW: draft wording (D-E19); founder voice / counsel.
+    modalMessage: 'Seven sealed battles. Fixed prizes, funded before entries open.',
     walletDivider: 'or connect a wallet',
     detected: 'Detected',
     moreWallets: 'More wallets',
@@ -270,7 +308,7 @@ export const COPY = {
     // 2026-09-09: the entry page checks the pool's state and this wallet's
     // existing entry BEFORE the ninety seconds start. PHASE-N-REVIEW.
     poolClosedTitle: 'This pool has closed',
-    poolClosed: 'It is no longer taking entries. Another pool in this tier opens once this one has concluded.',
+    poolClosed: 'It is no longer taking entries. Another pool of this size opens once this one has concluded.',
     poolClosedLink: 'See open pools',
     alreadyEnteredTitle: 'You are already in this pool',
     alreadyEntered: (seat: number) =>
@@ -369,16 +407,20 @@ export const COPY = {
     // "Winner takes the prize pool" (pool.tierWinner). Still words, not
     // digits, on the brand surface. Proposal until ratified; alternates in
     // CHANGE-2026-09-16_ui-uplift.md §C.
-    line: 'Sixty-four seats \u00b7 Seven battles \u00b7 Winner takes the prize pool',
+    // D-E19 (2026-11-05): the pools hold 8 to 64 players and pay a fixed
+    // table, so "seats" and "winner takes" went. Still three pieces split on
+    // the middle dot. PHASE-N-REVIEW: draft wording; founder voice / counsel.
+    line: 'Eight to sixty-four players \u00b7 Seven battles \u00b7 Fixed prizes',
     // Visually hidden equivalent of the decorative video, for screen readers.
-    srIntro: 'Blotto Cup. Sixty-four seats, seven battles, the winner takes the prize pool.',
+    srIntro: 'Blotto Cup. Pools of eight to sixty-four players, seven battles, fixed prizes for the top of the ranking.',
     dialogLabel: 'Blotto Cup intro',
   },
 
   pool: {
-    // D-E4: the field a pool needs is stated beside the count, always from
-    // the shared constant (callers pass MIN_SEATS), never hand-typed.
-    entrantsOf: (n: number, minSeats: number) => `${n} / 64 entered · ${minSeats} needed to run`,
+    // D-E4: the field a pool needs is stated beside the count. D-E19: both
+    // numbers are the POOL's own (`poolLadder`), never a global or a literal.
+    entrantsOf: (n: number, capacity: number, minSeats: number) =>
+      `${n} / ${capacity} entered · ${minSeats} needed to run`,
     fillDeadline: 'Pool closes for entries in',
     /**
      * What the deadline would do right now (R7-b, founder instruction
@@ -395,16 +437,17 @@ export const COPY = {
     // Kept because the read API still reports the field it names.
     outcomeIfDeadlineNow: (outcome: 'seal' | 'refund', minSeats: number) =>
       outcome === 'seal'
-        ? 'Enough players are seated: if the clock ran out now, this pool would run.'
+        ? 'Enough players have entered: if the clock ran out now, this pool would run.'
         : `Not enough players yet: if the clock ran out now, every entry would be refunded in full. ${minSeats} are needed.`,
-    // D-E2: the prize is ONE number — the pot — shown as a Stat, with the
-    // rule beside it. The per-position table is gone (a one-row table reads
-    // as a bug, not a rule).
+    // The pool's whole prize pool, as one Stat. D-E19: the per-place table
+    // is back (components/pools/prize-table.tsx) — a pool pays its highest
+    // places, so the total alone no longer says who is paid what.
     prizeLabel: 'Prize pool',
-    // SUBSTANCE FIXED (D-E2 + D3-B; wording per the founder's addendum of
-    // 2026-09-07): one paid place; a tie for first splits equally.
+    // SUBSTANCE FIXED (D3-B; D-E19 superseding D-E2's one paid place): paid
+    // by place; a tie shares the prizes of the places it occupies.
+    // PHASE-N-REVIEW: draft wording; founder voice / counsel.
     prizeRule:
-      'The player ranked first receives the full prize pool. If two or more players are ranked first, they are paid an equal share each; an indivisible remainder of a few lamports goes to the eligible player with the lowest entry number.',
+      'Prizes are paid by place, from the pool\u2019s fixed prize table. Players tied on a rank share equally the prizes of the places they occupy together; an indivisible remainder of a few lamports goes to the eligible player with the lowest entry number.',
     // PID §8.6: displayed ABOVE the enter button, always.
     decisionsFinal:
       'Decisions are final. Once your seven battles are submitted they cannot be changed or withdrawn.',
@@ -451,11 +494,21 @@ export const COPY = {
             'At the buzzer whatever is on the board is your entry. Points you have not placed are spread evenly across every stat of every battle you have not locked in.',
             'A battle is won by taking three of the five stats against an opponent. Every player faces every other player.',
           ],
-    aboutPoints: (minSeats: number, fillHours: number): readonly string[] => [
-      'The player ranked first takes the whole prize pool. A tie for first splits it equally.',
+    // D-E19: the "Pays" side states THIS pool's table in the founder's
+    // prize sentence (`prizes.sentence`, built by the caller from the pool's
+    // own amounts) and its own size and floor. PHASE-N-REVIEW: draft
+    // wording; founder voice / counsel.
+    aboutPoints: (p: {
+      prizeSentence: string;
+      capacity: number;
+      minSeats: number;
+      fillHours: number;
+    }): readonly string[] => [
+      p.prizeSentence,
+      'Players tied on a rank share equally the prizes of the places they occupy together.',
       'Your battles are encrypted on your device; the key stays locked in our systems until the pool closes. Only their hash goes on-chain at entry.',
-      `Entries stay open for up to ${fillHours} hours. The pool runs the moment all 64 seats fill, or at the deadline with at least ${minSeats} seated.`,
-      `Fewer than ${minSeats} seated at the deadline: every entry is refunded in full.`,
+      `Entries stay open for up to ${p.fillHours} hours. The pool runs the moment ${p.capacity} players have entered, or at the deadline with at least ${p.minSeats}.`,
+      `Fewer than ${p.minSeats} players at the deadline: every entry is refunded in full.`,
     ],
     entryLabel: 'Entry',
     resultsLink: 'Results',
@@ -466,29 +519,30 @@ export const COPY = {
     // string carried 52 until 2026-09-16 and is the screen a player reads
     // immediately AFTER paying (the success screen, entered-panel.tsx),
     // where PID §8.6 requires the fill deadline and refund rule to be stated
-    // accurately. It is a function of the shared constant for that reason,
-    // not for tidiness. PHASE-N-REVIEW: a draft; the founder owns the words.
-    checkBack: (minSeats: number) =>
-      `The pool plays at 64 players, or at its deadline with at least ${minSeats}. Every battle is then revealed and scored, and the ranking appears on the pool page.`,
-    // D-E1 §1.4 (option A): shown on any pool whose on-chain pot differs
-    // from the CURRENT launch table — the guarantee the architecture
-    // already provides, said out loud instead of read as a cut.
-    potFixedAtOpen:
-      'This pool\u2019s prize pool was fixed when it opened and is unaffected by later changes.',
+    // accurately. It is a function of the POOL's own size and floor
+    // (D-E19) for that reason, not for tidiness. PHASE-N-REVIEW: draft
+    // wording; founder voice / counsel.
+    checkBack: (capacity: number, minSeats: number) =>
+      `The pool plays when ${capacity} players have entered, or at its deadline with at least ${minSeats}. Every battle is then revealed and scored, and the ranking appears on the pool page.`,
+    // `potFixedAtOpen` went with D-E19: a pool's table is its own on-chain
+    // copy, so there is no launch table for the page to compare it with.
     noOpenPool: 'No pool is open for entries right now.',
+    // PHASE-N-REVIEW: draft wording (D-E19); founder voice / counsel.
     noOpenPoolDetail:
-      'A tier opens once the prize treasury holds its full prize pool, the previous pool in that tier has paid out or closed, and the tier\u2019s short cooldown has passed.',
+      'A pool opens once the prize treasury holds its full prize pool, the previous pool of the same size, board and price has paid out or closed, and a short cooldown has passed.',
     // D-E4 (option A, 2026-09-07): the fill rule in one breath — field
-    // size, the one clock, the refund. Numbers come from the shared
-    // constants via the caller (12 hours at launch).
-    refundRule: (minSeats: number, fillHours: number) =>
-      `Entries stay open for up to ${fillHours} hours. The pool runs the moment all 64 seats fill, or when time runs out with at least ${minSeats} players seated. If fewer than ${minSeats} are seated when time runs out, every entry is refunded in full.`,
+    // size, the one clock, the refund. D-E19: the pool's own size and floor,
+    // from the caller (12 hours at launch). PHASE-N-REVIEW: draft wording.
+    refundRule: (capacity: number, minSeats: number, fillHours: number) =>
+      `Entries stay open for up to ${fillHours} hours. The pool runs the moment ${capacity} players have entered, or when time runs out with at least ${minSeats}. If fewer than ${minSeats} have entered when time runs out, every entry is refunded in full.`,
     // Per-tier lobby (the old handover's §5A remainder, closed 2026-08-28).
     tierEntry: (sol: string) => `${sol} SOL entry`,
     tierPot: (sol: string) => `${sol} SOL prize pool`,
-    // D-E2: the first-place share IS the prize pool shown beside it — no
-    // second figure, no multiple.
-    tierWinner: 'Winner takes the prize pool',
+    // D-E19 (the pools tab): one group per pool size, headed by its size.
+    // PHASE-N-REVIEW: draft wording; founder voice.
+    sizeGroup: (sol: string, capacity: number) => `${sol} SOL · ${capacity} players`,
+    sizeFilterAria: 'Show pools of this size',
+    sizeFilterAll: 'All',
     tierTableLink: 'Full prize tables',
     // E3: the archive strip on the pools tab. Draft pending founder voice
     // review; the substance (settled pools remain browsable, every result
@@ -538,21 +592,39 @@ export const COPY = {
      * founder-owned.
      */
     pickBoardTitle: 'Pick your board',
+    // PHASE-N-REVIEW: draft wording (D-E19, the four sizes); founder voice.
     pickBoardLine:
-      'Both boards give you 700 points for seven battles. Easy puts exactly 100 in every battle. Hard lets you move them anywhere.',
+      'Both boards give you 700 points for seven battles. Easy puts exactly 100 in every battle. Hard lets you move them anywhere. Every pool comes in four sizes, and the bigger the pool, the more places are paid.',
     pickBoardAria: 'Which board',
     tierFilterAria: 'Which entry price',
     tierNotOpen: 'Not open yet',
     tierLegend: 'Greyed prices are not open yet',
+    /*
+     * D-E19 (founder brief 2026-11-05): the size toggle beside the board
+     * toggle — "8 · 16 · 32 · 64", each with its live fill for the board on
+     * show, so the toggle doubles as a view of every pool. PHASE-N-REVIEW:
+     * draft wording; founder voice.
+     */
+    sizeAria: 'How many players',
+    sizeLabel: 'Players',
+    /** The fill under a size: entered / capacity, both the pool's own. */
+    fill: (entered: number, capacity: number) => `${entered}/${capacity}`,
+    /** Under a size that is switched on with no pool open yet. */
+    fillSoon: 'Soon',
+    /** Under a size that is not open. */
+    fillNone: '—',
+    sizeNotOpen: 'Not open yet',
+    /** The size and its fill, read out (the toggle's visible text is terse). */
+    sizeOptionAria: (capacity: number, fill: string) => `${capacity} players, ${fill}`,
     openNow: 'Open now',
     opensSoon: 'Opens soon',
     opensSoonLine: (mode: 'easy' | 'hard') =>
       mode === 'hard'
-        ? 'The hard board is switched on. Its first pool at this price opens shortly.'
-        : 'The easy board is switched on. Its next pool at this price opens shortly.',
-    seatsOf: (n: number) => `${n} of 64 seats`,
+        ? 'The hard board is switched on. Its next pool of this size opens shortly.'
+        : 'The easy board is switched on. Its next pool of this size opens shortly.',
     closesIn: 'Closes in',
-    seatsLabel: 'Seats',
+    // D-E19: "Seats" left the card; the box reads players entered / capacity.
+    playersLabel: 'Players',
     enterEasy: 'Enter the easy pool',
     enterHard: 'Enter the hard pool',
     bestFor: 'Best for',
@@ -610,14 +682,16 @@ export const COPY = {
     pentagonCaption: 'Spread Your Skill. Outsmart Your Opponent. Best Strategy Wins.',
     // R7-b (2026-09-12) moved the minimum field 52 -> 40, and step 3 carried
     // the old figure on the LANDING PAGE until 2026-09-16. Like
-    // `rules.howToEnter` below, the steps are now a function of the shared
-    // constant so the number cannot go stale again; `check-published-numbers`
-    // fails the build if a literal comes back.
-    steps: (minSeats: number) => [
+    // `rules.howToEnter` below, the steps are a function of the shared
+    // constants so a number cannot go stale again. D-E19 (2026-11-05): four
+    // sizes, each with its own minimum field and paid places, all passed in
+    // by the caller from @blotto/scoring. PHASE-N-REVIEW: draft wording for
+    // steps 1, 3 and 4; founder voice / counsel.
+    steps: (sizes: readonly SizeFacts[]) => [
       {
-        title: 'Take a seat',
+        title: 'Pick a pool',
         body:
-          'Pick an open pool and pay the entry — up to sixty-four players per pool. Your character pass is cosmetic art: its look never affects scoring or prizes.',
+          `Pick an open pool of ${orList(sizes.map((z) => z.capacity))} players and pay the entry. Your character pass is cosmetic art: its look never affects scoring or prizes.`,
       },
       {
         title: 'Set seven battles',
@@ -630,12 +704,12 @@ export const COPY = {
       {
         title: 'Everyone fights everyone',
         body:
-          `When the pool runs — all sixty-four seats filled, or at least ${minSeats} seated when its clock ends — entries are revealed. Your battle one faces every other player’s battle one, and so on through seven. A battle is won by taking three of the five stats.`,
+          `When the pool runs — full, or when its clock ends with at least its minimum field (${sizes.map((z) => `${z.minField} of ${z.capacity}`).join(', ')}) — entries are revealed. Your battle one faces every other player’s battle one, and so on through seven. A battle is won by taking three of the five stats.`,
       },
       {
-        title: 'The winner takes the prize pool',
+        title: 'The top of the ranking is paid',
         body:
-          'Ranking is by battles won, then by stats won. The player ranked first is paid the full prize pool automatically — it is funded before entries open. A tie for first splits it exactly.',
+          `Ranking is by battles won, then by stats won. Every pool pays fixed prizes to its highest places (${sizes.map((z) => `${z.paidPlaces} in a pool of ${z.capacity}`).join(', ')}), automatically, and they are funded before entries open. Players tied on a rank share the prizes of the places they occupy.`,
       },
       {
         title: 'Check the math yourself',
@@ -660,16 +734,24 @@ export const COPY = {
     intro:
       'What keeps this competition fair, who may enter, and how to check any of it yourself.',
     skillHeading: 'Skill, measured',
+    // PHASE-N-REVIEW: Ladder (D-E19) draft wording, pending founder voice and
+    // counsel — the study now covers every pool size, full and at its
+    // minimum field. The "never placed first" claim is pinned to the data by
+    // fair-play.test.ts across all eight fields.
     skillIntro:
-      'Two hundred pools were played with the same scoring engine that pays every real pool, at both field sizes. The only thing that differed between the players below was how they split their points across the seven battles. A player who leaves every battle on the default even split never placed first — not rarely, never: against any battle that concentrates its points on three stats, an even split takes only the two that were left short, and loses three to two by construction.',
-    // The two field sizes the study is measured at. Hard-coded until
-    // 2026-09-16, when `min` still read "52 seats" over data computed at
-    // MIN_SEATS = 40 (fair-play.config.ts derives the number; only the
-    // heading was missed). Both are functions of the shared constants now.
+      'Two hundred pools were played at every pool size, full and at the smallest field each plays at, with the same scoring engine that pays every real pool. The only thing that differed between the players below was how they split their points across the seven battles; the table shows how often each placed first. A player who leaves every battle on the default even split never placed first — not rarely, never: against any battle that concentrates its points on three stats, an even split takes only the two that were left short, and loses three to two by construction.',
+    // The fields the study is measured at: every pool size, full and at its
+    // minimum field. Hard-coded until 2026-09-16, when a heading still read
+    // "52 seats" over data computed at 40; every number here is a parameter
+    // fed from fair-play.config.ts, which derives it from the shared
+    // constants. Never "seats" in public copy (D-E19 wording rules).
     skillHeadings: {
       player: 'Player',
-      full: (seats: number) => `First place, ${seats} seats`,
-      min: (seats: number) => `First place, ${seats} seats`,
+      caption: 'How often each player placed first',
+      poolSize: (players: number) => `Pool of ${players}`,
+      fullGroup: 'Full pool',
+      minGroup: 'Smallest field it plays at',
+      minField: (players: number) => `${players} players`,
     },
     skillRows: {
       uniform: 'Leaves the default split',
@@ -709,7 +791,7 @@ export const COPY = {
     entriesPaused:
       "Entries are paused right now, so this one was not accepted and nothing settled. Try again a little later.",
     poolFull:
-      "This pool filled before your entry reached it, so nothing settled. Another pool in this tier opens once this one has been paid out.",
+      "This pool filled before your entry reached it, so nothing settled. Another pool of this size opens once this one has been paid out.",
     deadlinePassed:
       "This pool stopped taking entries at its deadline before your entry reached it, so nothing settled.",
     /*
@@ -988,7 +1070,8 @@ export const COPY = {
     greeting: 'Welcome to Blotto Cup.',
     paragraphs: [
       "We're the Blotto Cup team. Thank you for joining — we mean that.",
-      'Blotto Cup is a competition of judgement: seven sealed battles, five stats in each — 100 points a battle on the easy board, or 700 placed anywhere on the hard board — and the player ranked first takes the whole prize pool. Nothing is decided at random, and every result can be recomputed by anyone from published data.',
+      // D-E19 (2026-11-05). PHASE-N-REVIEW: draft wording; founder voice / counsel.
+      'Blotto Cup is a competition of judgement: seven sealed battles, five stats in each — 100 points a battle on the easy board, or 700 placed anywhere on the hard board — and the highest places in every pool are paid fixed prizes. Nothing is decided at random, and every result can be recomputed by anyone from published data.',
       'Pick a pool, make your seven, seal them, and check back when it has played. If anything is unclear, the rules page says it plainly.',
     ],
     justNow: 'Just now',
@@ -1028,7 +1111,9 @@ export const COPY = {
     // notification"). A Paid pool that paid THIS wallet reads as the win it
     // is — the list line, the toast, and the headline at the top of the
     // sheet. The amount is the chain's (career row, bigint → string).
-    won: (id: string, sol: string) => `Pool #${id}: you won ${sol} SOL`,
+    // D-E19: a prize is any paid place now, so the line names the prize, not
+    // a win. PHASE-N-REVIEW: draft wording; founder voice.
+    won: (id: string, sol: string) => `Pool #${id}: your prize of ${sol} SOL is paid`,
     refunding: (id: string) => `Pool #${id} did not reach its minimum field — refunds are open`,
     /*
      * THE TABLE (V2, founder 2026-09-27, sketch G): the sheet is a clip over
@@ -1046,8 +1131,11 @@ export const COPY = {
     viewResults: 'View results',
     viewPool: 'View pool',
     newTag: 'New',
-    positionRank: (rank: number) => `#${rank}`,
-    positionWinner: 'Winner',
+    // D-E19: place-based — "1st", "11th" — and a paid finish with no
+    // verified rank yet says it was a paid place, not "Winner" (any of a
+    // pool's top places is paid now). PHASE-N-REVIEW: draft wording.
+    positionRank: (rank: number) => place(rank),
+    positionPaid: 'Paid place',
     positionSealed: 'Revealing',
     positionRefund: 'Refund',
     positionPending: '—',
@@ -1057,7 +1145,7 @@ export const COPY = {
     // 2026-09-16: the panel reads the published battle set and checks each
     // seat against its on-chain fingerprint; it no longer opens sealed
     // boxes. PHASE-N-REVIEW: wording is a proposal pending the founder's voice.
-    note: 'Re-scored in your browser from the published battle set, each seat checked against its on-chain fingerprint. Seats only — no names.',
+    note: 'Re-scored in your browser from the published battle set, each entry checked against its on-chain fingerprint. Entry numbers only — no names.',
     // V4 (founder 2026-09-27): YOUR record against that seat, said as
     // yours — "against you" read as if the winner had lost to you.
     headToHead: (w: number, d: number, l: number) => `You ${w}W · ${d}D · ${l}L`,
@@ -1104,8 +1192,11 @@ export const COPY = {
      */
     challenge: {
       title: 'Challenge this decision',
+      // D-E19: an upheld flag no longer passes a share straight on — in a
+      // pool that pays several places it is held in the pool's vault until
+      // it is paid on. PHASE-N-REVIEW: draft wording; founder voice / counsel.
       note:
-        'A flag against your entry was upheld and your prize passed to the next eligible player. You can challenge that decision here. A person reads it, decides it against the published criteria, and the decision and the criterion cited are recorded. If a challenge succeeds after the prize has gone to another player, we pay you the full prize ourselves.',
+        'A flag against your entry was upheld and your prize was withheld: it stays in this pool\u2019s prize vault and is paid on to other players of this pool, never to the operator. You can challenge that decision here. A person reads it, decides it against the published criteria, and the decision and the criterion cited are recorded. If a challenge succeeds after the prize has gone to another player, we pay you the full prize ourselves.',
     },
     /*
      * YOUR RESULT (V2, founder 2026-09-27: "player-first"; your-result.tsx).
@@ -1117,12 +1208,22 @@ export const COPY = {
     yourResult: {
       title: 'Your result',
       positionLabel: 'Position',
-      position: (rank: number, of: number) => `#${rank} of ${of}`,
+      // D-E19: place-based ("11th of 26"). PHASE-N-REVIEW: draft wording.
+      position: (rank: number, of: number) => `${place(rank)} of ${of}`,
       battlesWon: 'Battles won',
       // V4: of every battle this player fought — seven against each of
       // the other seats in the verified field.
       battlesWonOf: (label: string, fought: number) => `${label} of ${fought}`,
-      paid: 'Prize paid to your wallet',
+      // D-E19: every paid place shows its own amount (the archive's
+      // committed leaf), and an unpaid finish is said once, factually — no
+      // near-miss styling, no animation (founder brief 2026-11-05).
+      // PHASE-N-REVIEW: draft wording; founder voice.
+      paid: (sol: string) => `Prize paid to your wallet: ${sol} SOL`,
+      held: 'Your prize is held while a flag is reviewed.',
+      unpaid: (rank: number, of: number, lastPaid: number) =>
+        lastPaid === 1
+          ? `You finished ${place(rank)} of ${of}. The prize was paid to 1st place.`
+          : `You finished ${place(rank)} of ${of}. Prizes were paid to 1st–${place(lastPaid)}.`,
       leaderboard: 'See full leaderboard',
       verify: 'Verify pool',
       verifyWhat: 'What does verifying do?',
@@ -1130,12 +1231,13 @@ export const COPY = {
         'Verifying recomputes this whole result in your own browser: it fetches the published battles and the revealed pool secret, re-scores every player against every other, rebuilds the results tree and compares it to what the chain holds. Every number on this page can be reached that way. Nothing asks for trust.',
       shareX: 'Share on X',
       shareText: (rank: number, poolId: string) =>
-        `I finished #${rank} in Blotto Cup pool #${poolId}. Seven sealed battles, every result recomputable by anyone. blotto.gg`,
+        `I finished ${place(rank)} in Blotto Cup pool #${poolId}. Seven sealed battles, every result recomputable by anyone. blotto.gg`,
       // The replay: your seven battles against one opponent, fought on
       // screen from the published battles. Named by rank, never by wallet.
       replayTitle: (opponent: string) => `Your seven battles against ${opponent}`,
-      replayWinner: 'the winner',
-      replayRank: (rank: number) => `#${rank}`,
+      // D-E19: several places are paid, so first place is named by place.
+      replayWinner: 'first place',
+      replayRank: (rank: number) => place(rank),
       replayPlay: 'Play the replay',
       replaySkip: 'Skip to the result',
       replayAgain: 'Watch again',
@@ -1156,14 +1258,15 @@ export const COPY = {
       feedback: 'Something look wrong? Tell us. A person reads every message.',
       feedbackLink: 'Send a message',
     },
-    // No denominator: a pool runs with MIN_SEATS..64 players (R7-b, which
-    // superseded D-E4's 52 on 2026-09-12) and the career
-    // row does not carry its field size.
-    rank: (r: number) => `Ranked #${r}`,
-    // SUBSTANCE FIXED (D3-B, ratified 2026-08-27; substance amended by D-E2,
-    // ratified 2026-09-06 — one paid place): the split-pot tie rule.
+    // No denominator: a pool runs with anything from its minimum field to its
+    // capacity (D-E19), and the career row does not carry its field size.
+    rank: (r: number) => `Ranked ${place(r)}`,
+    // SUBSTANCE FIXED (D3-B, ratified 2026-08-27; substance amended by
+    // D-E19, 2026-11-04 — the top places paid on a fixed table, superseding
+    // D-E2's one place): the split-pot tie rule, across the paid line too.
+    // PHASE-N-REVIEW: draft wording; founder voice / counsel.
     tieNote:
-      'Tied players \u2014 equal on battles won and on stats won \u2014 share a rank. A tie for first splits the prize pool equally between the tied players, an indivisible remainder of a few lamports to the eligible player with the lowest entry number; no other position is paid. The full ranking with tie labels is recomputable on the Verify page from the published data.',
+      'Tied players \u2014 equal on battles won and on stats won \u2014 share a rank, and share equally the prizes of the places they occupy together, an indivisible remainder of a few lamports to the eligible player with the lowest entry number. A tie that reaches past the last paid place shares the prizes of the paid places it covers between everyone in it. The full ranking with tie labels is recomputable on the Verify page from the published data.',
     // E3 (proposal E1 §4): the verified archive. Drafts pending founder
     // voice review — substance (provenance, recomputability) is the
     // architecture speaking; the wording is the founder's to shape.
@@ -1184,8 +1287,13 @@ export const COPY = {
       seatUnknown: 'Entry number not in our records',
       bundleLink: 'Published data',
       verifyLink: 'Recompute on the Verify page',
-      winner: (playerShort: string, amountSol: string) =>
-        `Winner: ${playerShort} — ${amountSol} SOL`,
+      // D-E19: every paid place is listed, not only the first, and the
+      // table draws the paid line. PHASE-N-REVIEW: draft wording.
+      paidTitle: 'Prizes paid',
+      paidRow: (rank: number, playerShort: string, amountSol: string) =>
+        `${place(rank)} · ${playerShort} — ${amountSol} SOL`,
+      paidLine: (lastPaid: number) =>
+        lastPaid === 1 ? 'The prize was paid to 1st place.' : `Prizes were paid to 1st–${place(lastPaid)}.`,
       seat: 'Seat',
       player: 'Player',
       rank: 'Rank',
@@ -1501,8 +1609,16 @@ export const COPY = {
     sealedTitle: 'Sealed',
     rarityNames: ['Common', 'Uncommon', 'Rare', 'Epic', 'Mythic'] as const,
     rarityCounts: [38, 15, 7, 3, 1] as const,
-    rarityOf: (count: number) => `${count} of every 64 passes`,
-    cardSeat: (n: number) => `Seat ${n + 1} of 64`,
+    // D-E19: a pool holds 8 to 64 players, but every pass is still drawn
+    // from the one published bag (LAUNCH_CLASS_COUNTERS), whose size is the
+    // sum of the counts above — never a typed figure. PHASE-N-REVIEW: draft
+    // wording; founder voice.
+    rarityOf: (count: number) =>
+      `${count} in the same mix of ${[38, 15, 7, 3, 1].reduce((a, b) => a + b, 0)} that every pass is drawn from`,
+    // The pass's line on the success screen (entered-panel.tsx): the entry
+    // number out of the POOL's own size (D-E19), never a typed 64.
+    // PHASE-N-REVIEW: draft wording; founder voice.
+    cardEntry: (n: number, capacity: number) => `Entry ${n + 1} of ${capacity}`,
     /*
      * The pass as a SHAREABLE card (2026-09-13). This replaces the share
      * that used to sit on the review screen BEFORE sealing: that one handed
@@ -1536,8 +1652,10 @@ export const COPY = {
     // V3 (founder 2026-09-27): the founder's own line. Text only — the
     // pass PNG that used to download beside it is gone ("looks like a
     // virus"), and so is the note that explained it.
+    // D-E19: "The winner takes the prize pool" went with one-place pools.
+    // PHASE-N-REVIEW: draft wording; founder voice / counsel.
     passShareText: (n: string | number) =>
-      `I'm in Blotto Cup pool #${n} on blotto.gg. Seven sealed battlefields, everyone plays everyone. The winner takes the prize pool. Come and join me!`,
+      `I'm in Blotto Cup pool #${n} on blotto.gg. Seven sealed battlefields, everyone plays everyone, fixed prizes for the top of the ranking. Come and join me!`,
     passShareX: 'Post on X',
     // Founder 2026-09-27: the success screen's way onward is another pool.
     playAgain: 'Play again',
@@ -1545,6 +1663,45 @@ export const COPY = {
     stalled:
       'Confirmation is taking longer than usual. Your entry is submitted and nothing further is needed — results appear on the pool page once the network confirms.',
     stalledDismiss: 'Back to the pool',
+  },
+  /*
+   * PRIZES BY PLACE (D-E19, the Ladder; founder brief 2026-11-05). The
+   * words around a pool's fixed table. The AMOUNTS are never here: they are
+   * the pool's own (`poolLadder`) or LADDER_TABLES × the entry price, formatted
+   * to SOL by the caller; the grouping into rows and runs is
+   * data/prizes.ts. Copy rules: a pool is described by players and
+   * prizes; never a multiple of the entry, never a percentage paid, never
+   * "pot", "seat", "cash", "winner takes".
+   * PHASE-N-REVIEW: draft wording; founder voice / counsel.
+   */
+  prizes: {
+    place,
+    /** A band's place label: "1st", "5th–8th". */
+    band: (from: number, to: number) => (from === to ? place(from) : `${place(from)}–${place(to)}`),
+    amount: (sol: string) => `${sol} SOL`,
+    each: 'each',
+    colPlace: 'Place',
+    colPrize: 'Prize',
+    tableLabel: (capacity: number) => `Prizes in a pool of ${capacity} players`,
+    total: 'All prizes',
+    /** "16 players · 4 prizes · 1st 0.5 SOL" — how a pool is described. */
+    summary: (capacity: number, places: number, firstSol: string) =>
+      `${capacity} players \u00b7 ${places} ${places === 1 ? 'prize' : 'prizes'} \u00b7 1st ${firstSol} SOL`,
+    /** "16 players" — a size whose table this surface does not hold. */
+    players: (capacity: number) => `${capacity} players`,
+    /**
+     * The founder's prize sentence: "The prizes are fixed and funded before
+     * entries open. 1st 0.8 SOL, 2nd 0.4 SOL, 3rd and 4th 0.2 SOL each, 5th
+     * to 8th 0.1 SOL each." Runs of equal places come from data/prizes.ts.
+     */
+    sentence: (runs: readonly PrizeRunText[]) =>
+      `The prizes are fixed and funded before entries open. ${runs
+        .map((r) =>
+          r.from === r.to
+            ? `${place(r.from)} ${r.sol} SOL`
+            : `${place(r.from)} ${r.to === r.from + 1 ? 'and' : 'to'} ${place(r.to)} ${r.sol} SOL each`
+        )
+        .join(', ')}.`,
   },
   rules: {
     // D-B6 (ratified 2026-08-27): the rules tab, plain language, one section
@@ -1555,15 +1712,28 @@ export const COPY = {
     // re-phrase with the substance intact.
     title: 'Rules',
     // Strings that carry the field-size numbers are functions of the shared
-    // constants (rules.config passes MIN_SEATS and the go-timer) — the D-B6
-    // rule that no figure on this page is hand-typed.
-    howToEnter: (minSeats: number, boardMinutes: number) =>
-      `Sign in, pick an open pool, and confirm the 18+ and terms statements — your wallet signs that confirmation once per terms version. Pay the entry price for the tier. Before an entry is accepted, your wallet is checked against published sanctions lists; every winning wallet is checked again before payment. You then set seven battles on one ${boardMinutes}-minute clock, which starts when you place your first point: in an easy pool each battle splits 100 points across five stats; in a hard pool you place 700 points anywhere across the seven battles, every stat between 0 and 700, and the pool's page says which rule it plays. Your battles are encrypted on your device before any payment moves. One entry per wallet per pool; there is no limit across pools. The keys that run the service — the admin, the keeper, the entry signer and the settlement signer — can never enter. A pool has 64 seats and runs with at least ${minSeats} players (see the field-size rule). Decisions are final: a submitted entry cannot be changed or withdrawn (see the refund rule for pools that never reach their minimum field).`,
+    // constants (rules.config passes the pool sizes, their minimum fields
+    // and the board clock) — the D-B6 rule that no figure on this page is
+    // hand-typed.
+    // D-E19 (2026-11-05): the pool sizes and their floors come in from
+    // rules.config.ts (POOL_CAPACITIES / MIN_FIELD_BY_CAPACITY), never typed.
+    // "Every winning wallet" became every wallet due a prize: several places
+    // are paid. PHASE-N-REVIEW: draft wording; founder voice / counsel.
+    howToEnter: (sizes: readonly SizeFacts[], boardMinutes: number) =>
+      `Sign in, pick an open pool, and confirm the 18+ and terms statements — your wallet signs that confirmation once per terms version. Pay the entry price for the tier. Before an entry is accepted, your wallet is checked against published sanctions lists; every wallet due a prize is checked again before payment. You then set seven battles on one ${boardMinutes}-minute clock, which starts when you place your first point: in an easy pool each battle splits 100 points across five stats; in a hard pool you place 700 points anywhere across the seven battles, every stat between 0 and 700, and the pool's page says which rule it plays. Your battles are encrypted on your device before any payment moves. One entry per wallet per pool; there is no limit across pools. The keys that run the service — the admin, the keeper, the entry signer and the settlement signer — can never enter. A pool holds ${orList(sizes.map((z) => z.capacity))} players and runs with at least its minimum field (see the field-size rule). Decisions are final: a submitted entry cannot be changed or withdrawn (see the refund rule for pools that never reach their minimum field).`,
+    // PHASE-N-REVIEW: draft wording (D-E19); founder voice / counsel.
     priceIntro: (cooldownMinutes: number) =>
-      `Seven tiers are configured, each with a fixed prize pool. A tier must be switched on by the operator before pools open in it; at launch only the smallest tier is on. One pool per tier is open at a time, and a new pool of that tier opens ${cooldownMinutes} minutes after the previous one has paid out or closed.`,
-    // D-E2 (ratified 2026-09-06): one paid place. No percentage, no multiple.
+      `Seven entry prices (tiers) are configured. A tier must be switched on by the operator before pools open in it; at launch only the smallest tier is on. In each tier, pools come in four sizes on each board, and one pool of each size and board is open at a time; a new one opens ${cooldownMinutes} minutes after the previous one has paid out or closed.`,
+    // D-E19 (founder ruling 2026-11-04, superseding D-E2's one paid place):
+    // the highest places are paid on a fixed table per size. No percentage,
+    // no multiple — the tables below this text are SOL, generated from
+    // LADDER_TABLES × the entry price (rules.config.ts).
+    // PHASE-N-REVIEW: draft wording; founder voice / counsel.
     prizeIntro:
-      'Every pool pays a fixed prize pool, funded from the prize treasury before entries open — the table above shows it per tier beside the entry price, and it is the same whatever size the field turns out to be. The player ranked first receives the whole prize pool; if players tie for first, they split it exactly (see ties). Prizes are paid automatically when results are committed; there is no claim step.',
+      'Every pool pays fixed prizes to its highest places, from a table set by the pool\u2019s size and entry price \u2014 never by how many players entered. The prizes are moved into the pool\u2019s own prize vault from the prize treasury before entries open, and they are the same whatever size the field turns out to be. The tables below give every prize, by pool size and entry price. Players tied on a rank share the prizes of the places they occupy (see ties). Prizes are paid automatically when results are committed; there is no claim step.',
+    /** The heading over one size's table (D-E19). */
+    prizeTableHeading: (z: SizeFacts) =>
+      `${z.capacity} players \u00b7 ${z.paidPlaces} ${z.paidPlaces === 1 ? 'prize' : 'prizes'} \u00b7 minimum field ${z.minField}`,
     // SUBSTANCE FIXED (D3-B): identical-field scoring, exactly as the engine
     // implements it (backend/scoring/src/engine.ts). The timer rule has its
     // own section (battleTimer — R9-b).
@@ -1578,13 +1748,22 @@ export const COPY = {
     // PHASE-N-REVIEW: the operator owns the final wording.
     battleTimer:
       'One clock runs for the whole board. It starts when you place your first point. When you submit, or when the clock ends, any points you have not placed are spread evenly across the stats of every battle you have not locked in: in an easy pool each battle spreads its own unplaced points across its five stats, so a battle you never touch is entered as 20 points in each; in a hard pool the board\u2019s unplaced points are spread across every stat of every unlocked battle. Against any allocation that concentrates points on three stats, an even split loses that battle three stats to two, every time \u2014 so it never beats a player who is thinking. Nothing is decided at random: the spread is fixed and published, and leaving points unplaced is a decision like any other. After an early submit you see the result and can go back while time remains; when the clock ends, the board is final.',
-    // SUBSTANCE FIXED (D3-B; D-E2; the founder's addendum of 2026-09-07,
-    // rulings 2 and 3, wording verbatim): ranking, ties, and where a
-    // forfeited first-place share goes — always to a player, never to us.
+    // SUBSTANCE FIXED (D3-B; D-E19 superseding D-E2; the founder's addendum
+    // of 2026-09-07, rulings 2 and 3): ranking, ties — including a tie that
+    // straddles the paid line — and where a forfeited share goes: always to
+    // players, never to us.
+    //
+    // PHASE-N-REVIEW: the forfeiture sentence is the brief's draft of
+    // 2026-11-05; counsel approves the final wording. It states the
+    // destination ("paid on to other players of the same pool"); until the
+    // field-moves-up instructions ship, a forfeited share in a pool that
+    // pays several places is HELD in its vault (pay_next_place refuses with
+    // NextPlaceUnsupported), so "is paid on" describes where it goes, not
+    // that it has already moved.
     ties:
       'Players are ranked by battles won, then by total stats won. Players who remain equal on both share a rank. Entry order plays no part in ranking or in deciding who is paid. It determines only where an indivisible remainder of a few lamports falls when a prize cannot be divided exactly. Your entry number is recorded when you enter and is visible to you before the pool closes. No random process is used at any stage of ranking or payment. ' +
-      'If two or more players are ranked first, they are paid an equal share of the prize pool each; nobody ranked below first is paid. ' +
-      'If a player ranked first is not paid because a flag against them is upheld, their share is divided equally between the remaining eligible players ranked first. If none of the players ranked first is eligible, the whole prize pool passes to the next rank and is divided equally between the eligible players there. Any indivisible remainder goes to the eligible player with the lowest entry number. ' +
+      'Players who share a rank share equally the prizes of the places they occupy together: two players tied for 3rd are each paid half of the 3rd and 4th prizes combined. A tie that reaches past the last paid place is treated the same way \u2014 the prizes of the paid places it covers are divided equally between everyone in the tie, so each of them is paid a share even though some of the places they occupy pay nothing. Nobody ranked below the last paid place, and outside such a tie, is paid. ' +
+      'If a flag is upheld, the withheld prize stays in the pool\u2019s prize vault and is paid on to other players of the same pool; it never goes to the operator. Any indivisible remainder goes to the eligible player with the lowest entry number. ' +
       'A prize is always paid to a player. It is never returned to us. ' +
       'Where more than one player shares the rank a prize passes to, we identify that group. The published rule is that they share equally, with any remainder going to the lowest entry number. The results bundle we publish after every pool lets anyone check that we identified the group correctly.',
     // SUBSTANCE FIXED: randomness scope (PID §8.3/§8.4).
@@ -1599,15 +1778,20 @@ export const COPY = {
     // 2026-09-07): the minimum field and the ONE clock, 12 hours at launch.
     // SUBSTANCE FIXED: the seat count and the clock decide when a pool runs
     // \u2014 never the operator; the start and the refund are both permissionless.
-    fieldSize: (minSeats: number, fillHours: number) =>
-      `A pool has 64 seats and runs with at least ${minSeats} players. Entries stay open for up to ${fillHours} hours from the moment the pool opens. The pool runs the moment the 64th seat fills, or when the ${fillHours} hours end with at least ${minSeats} players seated. Nobody decides when a pool runs; the seat count and the clock do, and anyone can trigger the start once the clock has ended. The prize pool is the same whatever the field size.`,
-    refund: (minSeats: number, fillHours: number) =>
-      `A pool whose clock runs out with fewer than ${minSeats} players seated \u2014 ${fillHours} hours after it opened \u2014 refunds every entry in full and closes. Your entry payment is held by the program until the pool runs, so the refund never depends on the operator. Anyone can trigger the refund once the deadline passes; no one\u2019s permission is needed.`,
+    // D-E19: one minimum field per size, each the break-even field for its
+    // table, carried by the pool from its open (Pool.min_seats). The sizes
+    // and floors come from the caller. PHASE-N-REVIEW: draft wording.
+    fieldSize: (sizes: readonly SizeFacts[], fillHours: number) =>
+      `A pool holds ${orList(sizes.map((z) => z.capacity))} players, and each size has its own minimum field: ${sizes.map((z) => `${z.minField} players in a pool of ${z.capacity}`).join(', ')}. Entries stay open for up to ${fillHours} hours from the moment the pool opens. The pool runs the moment it is full, or when the ${fillHours} hours end with at least its minimum field. Nobody decides when a pool runs; the number of players entered and the clock do, and anyone can trigger the start once the clock has ended. The prizes are the same whatever the field size.`,
+    refund: (fillHours: number) =>
+      `A pool whose clock runs out with fewer players than its minimum field \u2014 ${fillHours} hours after it opened \u2014 refunds every entry in full and closes. Your entry payment is held by the program until the pool runs, so the refund never depends on the operator. Anyone can trigger the refund once the deadline passes; no one\u2019s permission is needed.`,
     // D-A1 revised (master prompt v2, 2026-08-27): the pool-opening rule,
     // plus the cooldown (prompt v2 §B.6). SUBSTANCE FIXED: sequential pools
     // + pre-funded fixed pots + the cooldown between them.
+    // D-E19: the unit that runs one pool at a time is the pool TYPE (size,
+    // board and price). PHASE-N-REVIEW: draft wording.
     poolOpening: (cooldownMinutes: number) =>
-      `Each tier runs one pool at a time. A tier opens when the prize treasury holds its full prize pool, the previous pool in that tier has paid out or closed, and ${cooldownMinutes} minutes have passed since. Prize pools are fixed per tier and are funded before entries open.`,
+      `Each size of pool runs one pool at a time on each board and at each price. A pool opens when the prize treasury holds its full prize pool, the previous pool of the same size, board and price has paid out or closed, and ${cooldownMinutes} minutes have passed since. Prize tables are fixed per size and price, and are funded before entries open.`,
     verify:
       'Every number a player is paid is recomputable by that player. The Verify page decrypts the published battles with the revealed pool secret, re-runs the same scoring engine in your browser, rebuilds the results tree, and compares it against what was committed on-chain. Nothing on that page trusts the operator.',
     verifyLink: 'Open the Verify page',
@@ -1693,14 +1877,14 @@ export const COPY = {
      */
     reviewProcess:
       'When a pool closes, results are published and the pool enters resolving. Resolving lasts up to 12 hours. ' +
-      'During resolving we check the winning wallet against published sanctions lists, as we are required to. Where an entry has been flagged against the integrity criteria published above, a person decides that flag against those criteria. A flagged prize is held by the program: it is not paid to us and it is not paid to anyone else while the review runs. ' +
+      'During resolving we check every wallet due a prize against published sanctions lists, as we are required to. Where an entry has been flagged against the integrity criteria published above, a person decides that flag against those criteria. A flagged prize is held by the program: it is not paid to us and it is not paid to anyone else while the review runs. ' +
       'If no decision is made within 12 hours, the flag is cleared and the prize is paid. Separately, and as a safeguard against our own failure, the program allows anyone at all to release a held prize to the player it belongs to after seven days, without our involvement. ' +
       'You may challenge a decision through our complaints route, and we will tell you which criterion was cited. Every decision and the criterion cited are recorded. If a challenge succeeds after the prize has been paid to another player, we pay you the full prize ourselves and do not seek to recover a prize already paid.',
     fairPlayLink: 'What keeps this fair, and who may enter',
     headings: {
       howToEnter: 'How to enter',
-      price: 'Price and prize pool per tier',
-      prizes: 'Who is paid',
+      price: 'Entry prices',
+      prizes: 'Prizes by place',
       scoring: 'How scoring works',
       battleTimer: 'The clock and unplaced points',
       ties: 'Ranking, ties and forfeited prizes',
@@ -1718,7 +1902,11 @@ export const COPY = {
     tableHeadings: {
       tier: 'Tier',
       entry: 'Entry (SOL)',
-      pot: 'Prize pool (SOL)',
+      // D-E19: the per-size prize tables — a row per place band, a column
+      // per entry price. PHASE-N-REVIEW: draft wording.
+      place: 'Place',
+      entryColumn: (sol: string) => `${sol} SOL entry`,
+      allPrizes: 'All prizes',
     },
     // V3 (founder 2026-09-27): every section is a tile that opens its
     // text. Short labels by section id; the headings above stay the
@@ -1727,7 +1915,7 @@ export const COPY = {
     tiles: {
       'how-to-enter': 'Entering',
       price: 'Prices',
-      prizes: 'Who is paid',
+      prizes: 'Prizes',
       scoring: 'Scoring',
       'battle-timer': 'The clock',
       ties: 'Ties',

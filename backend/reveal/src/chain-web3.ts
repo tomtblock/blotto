@@ -27,6 +27,7 @@ import {
 import type {
   ChainConfigView,
   ChainEntryView,
+  ChainPoolTypeView,
   ChainPoolView,
   ChainProofStep,
   CommittedPayout,
@@ -42,6 +43,15 @@ import {
   decodeConfigAccount,
 } from '../../_shared/src/config-account';
 import { decodePoolHead } from '../../_shared/src/pool-account';
+// The PoolType account (D-E19): layout, seeds and the address order the
+// program requires of its remaining accounts — shared, like Config's.
+import {
+  POOL_TYPE_SPACE,
+  compareAddressBytes,
+  decodePoolTypeAccount,
+  poolTypeSeeds,
+} from '../../_shared/src/pool-type-account';
+import { base58Encode } from '../../_shared/src/blotto-events';
 
 
 /** Metaplex Core, pinned by address in the program (`pass.rs::MPL_CORE_ID`). */
@@ -68,7 +78,58 @@ export const ENTRY_SPACE = 228;
  * G-06): an account that is not a Pool must be refused by name, up front,
  * not decoded into plausible numbers.
  */
-export { POOL_SPACE, POOL_SPACE_V2 } from '../../_shared/src/pool-account';
+export { POOL_SPACE, POOL_SPACE_V2, POOL_SPACE_V3 } from '../../_shared/src/pool-account';
+
+/** `PoolType::SPACE` (57), re-exported for the `getProgramAccounts` size
+ * filter and the layout test. */
+export { POOL_TYPE_SPACE } from '../../_shared/src/pool-type-account';
+
+/**
+ * Anchor's account discriminator for `PoolType`: `sha256("account:PoolType")`
+ * truncated to 8 bytes (23bee6af4b720965). The size filter alone would admit
+ * any 57-byte account the program owns; this is what makes a match a
+ * PoolType, and it is checked on every account returned whether or not the
+ * RPC honoured the memcmp filter.
+ */
+export const POOL_TYPE_DISCRIMINATOR: Buffer = createHash('sha256')
+  .update('account:PoolType')
+  .digest()
+  .subarray(0, 8);
+
+/**
+ * `open_pool`'s remaining accounts (open_pool.rs, treasury.rs
+ * `idle_pool_type_reserve`): every OTHER enabled pool type, strictly
+ * ascending by the 32 raw address bytes, as many as
+ * `Config.enabled_pool_types - 1`. The program refuses a list that is short,
+ * long, unsorted or that includes the type being opened
+ * (`PoolTypeListIncomplete`), so this refuses the same lists BEFORE a
+ * transaction is spent on them — a lagging `getProgramAccounts` that missed a
+ * newly enabled type is the realistic cause, and waiting a tick fixes it.
+ *
+ * `opening` is the address of the type being opened, or null for
+ * `withdraw_platform`'s list (every enabled type, none excluded). Pure.
+ */
+export function poolTypeRemainingAccounts(
+  enabledPoolTypes: number,
+  poolTypes: readonly Pick<ChainPoolTypeView, 'address' | 'enabled'>[],
+  opening: string | null
+): PublicKey[] {
+  const enabled = poolTypes.filter((t) => t.enabled);
+  if (enabled.length !== enabledPoolTypes) {
+    throw new Error(
+      `read ${enabled.length} enabled pool type(s) but Config.enabled_pool_types is ` +
+        `${enabledPoolTypes} — the program would refuse the list (PoolTypeListIncomplete); ` +
+        `not sending`
+    );
+  }
+  if (opening !== null && !enabled.some((t) => t.address === opening)) {
+    throw new Error(`pool type ${opening} is not enabled — open_pool would refuse it (PoolTypeDisabled)`);
+  }
+  return enabled
+    .filter((t) => t.address !== opening)
+    .map((t) => new PublicKey(t.address))
+    .sort((a, b) => compareAddressBytes(a.toBytes(), b.toBytes()));
+}
 
 /**
  * Where `getEntries` reads each Entry field: BYTE OFFSETS from the start of
@@ -187,6 +248,17 @@ export class Web3Chain implements KeeperChain {
   private entryPda(pool: PublicKey, player: PublicKey): PublicKey {
     return this.pda([Buffer.from('entry'), pool.toBuffer(), player.toBuffer()]);
   }
+  /** `[b"ptype", [mode], [tier], capacity u16 LE]` (D-E19) — the shared
+   * seeds, which refuse a coordinate the program would refuse by name. */
+  private poolTypePda(mode: number, tier: number, capacity: number): PublicKey {
+    return this.pda(poolTypeSeeds(mode, tier, capacity));
+  }
+  /** The pool type a pool's settlement instructions name: derived from the
+   * POOL's own recorded mode, tier and capacity (a pre-Ladder account reads
+   * as 64 seats — `decodePoolHead`), exactly as the program's seeds are. */
+  private poolTypeOf(pool: Pick<ChainPoolView, 'mode' | 'tier' | 'capacity'>): PublicKey {
+    return this.poolTypePda(pool.mode, pool.tier, pool.capacity);
+  }
 
   private async send(
     ixs: TransactionInstruction[],
@@ -231,7 +303,10 @@ export class Web3Chain implements KeeperChain {
     // (asserted by its serialize-LEN tests and the LiteSVM readers): … |
     // state 1 (51) | sealing 32 | hash 32 | vrf 32 | counters 10 |
     // secret_revealed 1 | root 32 | committed 1 | payouts_len 2 |
-    // payouts 64×(seat 2 + amount 8) | paid_mask 8 | ...
+    // payouts 64×(seat 2 + amount 8) | paid_mask 8 (834) | ... — every one
+    // of them before 842, so neither Phase B's `mode` nor the Ladder's tail
+    // (capacity, paid_places, prize_table — read by `decodePoolHead`) moved
+    // them; `test/chain-web3.spec.ts` derives them from `state.rs`.
     const committed = d[191] !== 0;
     const payouts: CommittedPayout[] = [];
     if (committed) {
@@ -261,6 +336,11 @@ export class Web3Chain implements KeeperChain {
       payouts,
       entrants: head.entrants,
       mode: head.mode,
+      // D-E19, from the shared head (reconstructed for a pre-Ladder account).
+      capacity: head.capacity,
+      minSeats: head.minSeats,
+      paidPlaces: head.paidPlaces,
+      prizeTable: head.prizeTable,
     };
   }
 
@@ -276,6 +356,32 @@ export class Web3Chain implements KeeperChain {
     const info = await this.cfg.connection.getAccountInfo(this.configPda(), 'confirmed');
     if (!info) throw new Error('config account not found');
     return decodeConfigAccount(info.data);
+  }
+
+  /**
+   * Every `PoolType` account (D-E19): `getProgramAccounts` filtered on the
+   * account's size (57) and its discriminator, each decoded by the shared
+   * layout (`_shared/src/pool-type-account.ts`). The discriminator is checked
+   * again on what comes back — an RPC that ignored the memcmp must not turn
+   * another 57-byte account into a pool type. Ordered by (mode, tier,
+   * capacity) for a stable log; `open_pool` sorts its own list by address.
+   */
+  async getPoolTypes(): Promise<ChainPoolTypeView[]> {
+    const accounts = await this.cfg.connection.getProgramAccounts(this.cfg.programId, {
+      commitment: 'confirmed',
+      filters: [
+        { dataSize: POOL_TYPE_SPACE },
+        { memcmp: { offset: 0, bytes: base58Encode(POOL_TYPE_DISCRIMINATOR) } },
+      ],
+    });
+    return accounts
+      .filter(({ account }) => Buffer.from(account.data.subarray(0, 8)).equals(POOL_TYPE_DISCRIMINATOR))
+      .map(({ pubkey, account }) => {
+        const address = pubkey.toBase58();
+        const { bump: _bump, ...view } = decodePoolTypeAccount(account.data, `pool type ${address}`);
+        return { address, ...view };
+      })
+      .sort((a, b) => a.mode - b.mode || a.tier - b.tier || a.capacity - b.capacity);
   }
 
   async getPlatformBalance(): Promise<bigint> {
@@ -315,16 +421,38 @@ export class Web3Chain implements KeeperChain {
     return clockUnixTimestamp(info.data);
   }
 
+  /**
+   * `open_pool` (D-E19): opens one pool TYPE. The instruction carries the
+   * type's own account (writable — its slot is set) and, as remaining
+   * accounts, every OTHER enabled pool type in ascending address order, so
+   * the program can compute the treasury reserve over all of them
+   * (`poolTypeRemainingAccounts`). Both are read fresh here: the list is
+   * what the program checks against `Config.enabled_pool_types`, and a stale
+   * one is refused whole.
+   *
+   * PHASE-D-E19-REVIEW: a legacy transaction carries the remaining list as
+   * plain keys. With the fixed accounts, the program, the compute-budget
+   * program and the 84-byte data, roughly twenty enabled pool types fit in
+   * the 1,232-byte limit; past that `open_pool` needs a v0 transaction with
+   * an address lookup table. The launch enables eight.
+   */
   async openPool(
     poolId: bigint,
     tier: number,
     sealingPubkey: Uint8Array,
     sealingSecretHash: Uint8Array,
-    mode: number
+    mode: number,
+    capacity: number
   ): Promise<void> {
     if (mode !== 0 && mode !== 1) throw new Error(`unknown board mode ${mode}`);
+    // Refuses a capacity that is not 8, 16, 32 or 64 before any read.
+    const poolType = this.poolTypePda(mode, tier, capacity);
+    const [config, types] = await Promise.all([this.getConfig(), this.getPoolTypes()]);
+    const others = poolTypeRemainingAccounts(config.enabledPoolTypes, types, poolType.toBase58());
     const le = Buffer.alloc(8);
     le.writeBigUInt64LE(poolId);
+    const cap = Buffer.alloc(2);
+    cap.writeUInt16LE(capacity);
     const keeper = this.keeper();
     await this.send(
       [
@@ -332,14 +460,18 @@ export class Web3Chain implements KeeperChain {
           programId: this.cfg.programId,
           keys: [
             // Keeper-signed since 2026-09-07 (prompt v2 §A): `Config.keeper`
-            // pays the Pool's rent; any signer only after the liveness
-            // fallback (open_pool.rs).
+            // pays the Pool's rent, and no other signer may open a pool.
             { pubkey: keeper.publicKey, isSigner: true, isWritable: true },
             { pubkey: this.configPda(), isSigner: false, isWritable: true },
             { pubkey: this.poolPda(poolId), isSigner: false, isWritable: true },
             { pubkey: this.vaultPda(poolId), isSigner: false, isWritable: true },
             { pubkey: this.platformPda(), isSigner: false, isWritable: true },
+            // D-E19: the type being opened — its slot, cooldown, table,
+            // floor and prize pool.
+            { pubkey: poolType, isSigner: false, isWritable: true },
             { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+            // Remaining: every OTHER enabled pool type, ascending, read-only.
+            ...others.map((other) => ({ pubkey: other, isSigner: false, isWritable: false })),
           ],
           data: Buffer.concat([
             disc('open_pool'),
@@ -349,6 +481,8 @@ export class Web3Chain implements KeeperChain {
             Buffer.from(sealingSecretHash),
             // Phase B: the appended `mode` argument (0 easy, 1 hard).
             Buffer.from([mode]),
+            // D-E19: the appended `capacity` argument, u16 LE.
+            cap,
           ]),
         }),
       ],
@@ -564,6 +698,8 @@ export class Web3Chain implements KeeperChain {
   async payPrizes(poolId: bigint, seats: number[]): Promise<void> {
     const pool = await this.getPool(poolId);
     if (!pool.resultsCommitted) throw new Error('results not committed');
+    // D-E19: the pool's own type, whose slot the final batch frees.
+    const poolType = this.poolTypeOf(pool);
     // The Entry accounts are the on-chain seat→player map; resolve each
     // seat's wallet from them (the program re-checks the binding).
     const entries = await this.getEntries(poolId);
@@ -579,14 +715,16 @@ export class Web3Chain implements KeeperChain {
     const keys = [
       { pubkey: this.cfg.settlementSigner.publicKey, isSigner: true, isWritable: false },
       // WRITABLE: `PayPrizes` declares Config `mut` and the final batch
-      // writes it (the pot leaves `platform_reserved` and the tier slot
-      // frees). Anchor checks that constraint while assembling accounts,
+      // writes it (the pot leaves `platform_reserved`; since D-E19 the slot
+      // that frees is the pool type's, below). Anchor checks that constraint
+      // while assembling accounts,
       // before the handler runs, so a read-only Config reverted EVERY batch,
       // not just the last — no pool could be paid at all. Pinned across the
       // language boundary by test/account-metas.spec.ts (audit A-01).
       { pubkey: this.configPda(), isSigner: false, isWritable: true },
       { pubkey: poolKey, isSigner: false, isWritable: true },
       { pubkey: this.vaultPda(poolId), isSigner: false, isWritable: true },
+      { pubkey: poolType, isSigner: false, isWritable: true },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     ];
     for (const seat of seats) {
@@ -800,6 +938,9 @@ export class Web3Chain implements KeeperChain {
   }
 
   async triggerRefund(poolId: bigint): Promise<void> {
+    // D-E19: the pool's own type, derived from what the POOL records — its
+    // slot frees here when the pool closes empty.
+    const poolType = this.poolTypeOf(await this.getPool(poolId));
     const le = Buffer.alloc(8);
     le.writeBigUInt64LE(poolId);
     await this.send([
@@ -812,6 +953,7 @@ export class Web3Chain implements KeeperChain {
           // The untouched pot returns vault → treasury at trigger.
           { pubkey: this.vaultPda(poolId), isSigner: false, isWritable: true },
           { pubkey: this.platformPda(), isSigner: false, isWritable: true },
+          { pubkey: poolType, isSigner: false, isWritable: true },
           { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
         ],
         data: Buffer.concat([disc('trigger_refund'), le]),
@@ -820,6 +962,8 @@ export class Web3Chain implements KeeperChain {
   }
 
   async refund(poolId: bigint, player: string): Promise<void> {
+    // D-E19: the pool's own type — the last refund closes the pool and frees it.
+    const poolType = this.poolTypeOf(await this.getPool(poolId));
     const poolKey = this.poolPda(poolId);
     const playerKey = new PublicKey(player);
     const le = Buffer.alloc(8);
@@ -835,6 +979,7 @@ export class Web3Chain implements KeeperChain {
           { pubkey: this.platformPda(), isSigner: false, isWritable: true },
           { pubkey: this.entryPda(poolKey, playerKey), isSigner: false, isWritable: true },
           { pubkey: playerKey, isSigner: false, isWritable: true },
+          { pubkey: poolType, isSigner: false, isWritable: true },
           { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
         ],
         data: Buffer.concat([disc('refund'), le]),

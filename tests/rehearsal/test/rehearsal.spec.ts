@@ -2,82 +2,145 @@
  * The offline dress rehearsal (roadmap 5.1/5.2's semantics without a
  * cluster): twenty pools filled by the four-strategy population and settled
  * through the REAL crank + detection; the refund fork; conservation
- * reconciled on every pool. The devnet run repeats exactly this through
- * Web3Chain (docs/guide/DEVNET-REHEARSAL.md).
+ * reconciled on every pool. Since the Ladder (D-E19) the twenty pools cycle
+ * through the four pool sizes — five of each — and every one is checked to
+ * have paid ITS OWN table: the amounts re-derived from the published scores
+ * with `assignPrizes` over the table read back off the pool. The devnet run
+ * repeats exactly this through Web3Chain (docs/guide/DEVNET-REHEARSAL.md).
  */
 import { expect } from 'chai';
-import { runOfflinePool } from '../src';
-import { poolPopulation } from '../src/strategies';
-import { MIN_SEATS, potForTier } from '../../../backend/scoring/src';
-
-/** The minimum field, and the largest field that refunds, as small integers.
- * Read from the shared mirror of `constants.rs::MIN_SEATS` rather than typed:
- * these two cases ARE the boundary, so a literal here would go on asserting
- * the old rule against the new program. Rewritten 2026-09-13 for R7-b (the
- * founder instruction of 2026-09-12 §4, standing rule 0.7 — a test encoding a
- * replaced rule is rewritten in place, never deleted); they read 52 and 51
- * under D-E4. */
-const MIN_FIELD = Number(MIN_SEATS);
-const LARGEST_REFUNDING_FIELD = MIN_FIELD - 1;
-import { FakeChain } from '../../../backend/reveal/src';
-import { crankPool } from '../../../backend/reveal/src';
-import { LocalCustody, MemoryCiphertextStore } from '../../../backend/sealing/src';
-import { MemoryPublisher } from '../../../backend/reveal/src';
-import { base58Encode } from '../../../backend/_shared/src/blotto-events';
 import { createHash } from 'crypto';
+import { offlinePoolTerms, runOfflinePool, type OfflinePoolRun } from '../src';
+import { poolPopulation } from '../src/strategies';
+import {
+  POOL_CAPACITIES,
+  assignPrizes,
+  assignRanks,
+  ladderTable,
+  minFieldFor,
+  prizeTableFromChain,
+  type PoolCapacity,
+} from '../../../backend/scoring/src';
+import { FakeChain, MemoryPublisher, crankPool } from '../../../backend/reveal/src';
+import { LocalCustody, MemoryCiphertextStore } from '../../../backend/sealing/src';
+import { base58Encode } from '../../../backend/_shared/src/blotto-events';
+
+/*
+ * The minimum field, and the largest field that refunds, per pool size.
+ * Read from the shared mirror of `constants.rs::LADDER_MIN_SEATS`
+ * (`minFieldFor`) rather than typed: these cases ARE the boundary, so a
+ * literal here would go on asserting the old rule against the new program.
+ * Rewritten 2026-09-13 for R7-b and again 2026-11-05 for D-E19 (standing
+ * rule 0.7 — a test encoding a replaced rule is rewritten in place, never
+ * deleted); under R7-b they read 40 and 39 for the one 64-player pool.
+ */
+const largestRefundingField = (capacity: PoolCapacity) => minFieldFor(capacity) - 1;
+
+/**
+ * Everything a settled pool must satisfy under the Ladder, from the pool's
+ * OWN terms: it opened with its size's table, minimum field and prize pool;
+ * paid + escrowed equals the prize pool to the lamport; the committed list
+ * is exactly what `assignPrizes` pays over the table read back off the pool
+ * (D3-B ties included); every committed seat settled once; the bundle names
+ * the root and the terms.
+ */
+async function expectSettledOnOwnTable(run: OfflinePoolRun, capacity: PoolCapacity, label: string) {
+  expect(run.outcome.finalState, label).to.equal('Paid');
+  const pool = await run.chain.getPool(run.poolId);
+  const terms = offlinePoolTerms(capacity);
+
+  // Opened on its size's terms.
+  expect(pool.capacity, `${label} capacity`).to.equal(capacity);
+  expect(pool.minSeats, `${label} minimum field`).to.equal(minFieldFor(capacity));
+  const table = prizeTableFromChain(pool.prizeTable, pool.paidPlaces);
+  expect(table, `${label} table`).to.deep.equal([...ladderTable(capacity)]);
+  expect(pool.potLamports, `${label} prize pool`).to.equal(terms.potLamports);
+
+  // Conservation: paid + escrowed == the prize pool, to the lamport.
+  let total = 0n;
+  for (const v of run.chain.paid.values()) total += v;
+  for (const v of run.chain.escrowed.values()) total += v;
+  expect(total, `${label} conservation`).to.equal(pool.potLamports);
+
+  // The published bundle carries the committed root and the pool's terms.
+  const bundle = run.publisher.published.get(run.outcome.bundleUri!)!;
+  expect(bundle.results_root).to.equal(
+    Buffer.from(run.chain.committedRoots.get(run.poolId.toString())!).toString('hex')
+  );
+  const v4 = bundle as unknown as {
+    version: number;
+    capacity: number;
+    paid_places: number;
+    prize_table: number[];
+    min_seats: number;
+  };
+  expect(v4.version, `${label} bundle version`).to.equal(4);
+  expect(v4.capacity).to.equal(capacity);
+  expect(v4.paid_places).to.equal(table.length);
+  expect(v4.prize_table).to.deep.equal(table);
+  expect(v4.min_seats).to.equal(minFieldFor(capacity));
+
+  // The committed list IS assignPrizes over the pool's own table, recomputed
+  // from the published scores alone — what a player's recomputation does.
+  const expected = assignPrizes(
+    assignRanks(bundle.results.map((r) => ({ index: r.index, scoreHalf: r.score_half, zones: r.zones }))),
+    table,
+    pool.entryLamports
+  );
+  const expectedPayouts = expected
+    .filter((r) => r.amountLamports > 0n)
+    .sort((a, b) => a.index - b.index)
+    .map((r) => ({ entryIndex: r.index, amountLamports: r.amountLamports }));
+  expect(pool.payouts, `${label} committed list`).to.deep.equal(expectedPayouts);
+  for (const r of expected) {
+    const published = bundle.results.find((b) => b.index === r.index)!;
+    expect(BigInt(published.amount_lamports), `${label} seat ${r.index}`).to.equal(r.amountLamports);
+    const reached =
+      (run.chain.paid.get(run.players[r.index]) ?? 0n) + (run.chain.escrowed.get(run.players[r.index]) ?? 0n);
+    expect(reached, `${label} seat ${r.index} received`).to.equal(r.amountLamports);
+  }
+
+  // Ties can only widen the paid set past the table, never narrow it.
+  expect(pool.payouts.length).to.be.at.least(Math.min(table.length, pool.entrants));
+  for (const c of pool.payouts) {
+    expect((pool.paidMask >> BigInt(c.entryIndex)) & 1n, `${label} seat ${c.entryIndex}`).to.equal(1n);
+  }
+}
 
 describe('the offline dress rehearsal', () => {
-  it('settles twenty pools cleanly with the pot conserved in every one', async function () {
+  it('settles twenty pools across the four sizes, each on its own table, the prize pool conserved', async function () {
     this.timeout(240_000);
-    const pot = potForTier(0);
+    const seen = new Map<number, number>();
     for (let p = 1; p <= 20; p++) {
-      const run = await runOfflinePool(p);
-      expect(run.outcome.finalState, `pool ${p}`).to.equal('Paid');
-      // Conservation: paid + escrowed == pot, to the lamport.
-      let total = 0n;
-      for (const v of run.chain.paid.values()) total += v;
-      for (const v of run.chain.escrowed.values()) total += v;
-      expect(total, `pool ${p} conservation`).to.equal(pot);
-      // The published bundle carries the committed root.
-      const bundle = run.publisher.published.get(run.outcome.bundleUri!)!;
-      expect(bundle.results_root).to.equal(
-        Buffer.from(run.chain.committedRoots.get(run.poolId.toString())!).toString('hex')
-      );
-      // The paid set is exactly the rank-1 group (D-E2: one paid place; a
-      // tie for first splits the pot), and every committed seat settled
-      // exactly once.
+      const capacity = POOL_CAPACITIES[(p - 1) % POOL_CAPACITIES.length];
+      const run = await runOfflinePool(p, { population: poolPopulation(p, capacity), capacity });
       const pool = await run.chain.getPool(run.poolId);
-      const winners = bundle.results.filter((r) => r.rank === 1).map((r) => r.index);
-      expect(pool.payouts.map((c) => c.entryIndex), `pool ${p} paid set`).to.deep.equal(
-        [...winners].sort((a, b) => a - b)
-      );
-      expect(pool.payouts.length).to.be.at.least(1);
-      for (const c of pool.payouts) {
-        expect((pool.paidMask >> BigInt(c.entryIndex)) & 1n, `seat ${c.entryIndex}`).to.equal(1n);
-      }
+      expect(pool.entrants, `pool ${p} full`).to.equal(capacity);
+      await expectSettledOnOwnTable(run, capacity, `pool ${p} (${capacity})`);
+      seen.set(capacity, (seen.get(capacity) ?? 0) + 1);
     }
+    // Five pools of every size.
+    expect([...seen.entries()].sort((a, b) => a[0] - b[0])).to.deep.equal(
+      POOL_CAPACITIES.map((c) => [c, 5])
+    );
   });
 
-  it('a pool at exactly the minimum field settles to Paid with the pot conserved', async function () {
-    this.timeout(60_000);
-    const pot = potForTier(0);
-    const population = poolPopulation(77).slice(0, MIN_FIELD);
-    const run = await runOfflinePool(77, { population });
-    expect(run.outcome.finalState).to.equal('Paid');
-    const pool = await run.chain.getPool(run.poolId);
-    expect(pool.entrants).to.equal(MIN_FIELD);
-    let total = 0n;
-    for (const v of run.chain.paid.values()) total += v;
-    for (const v of run.chain.escrowed.values()) total += v;
-    expect(total, `conservation over ${MIN_FIELD} seats`).to.equal(pot);
-    // The tree has one leaf per seat; the paid set is the rank-1 group.
-    const bundle = run.publisher.published.get(run.outcome.bundleUri!)!;
-    expect(bundle.results.length).to.equal(MIN_FIELD);
-    for (const c of pool.payouts) {
-      expect(c.entryIndex).to.be.below(MIN_FIELD);
-      expect(bundle.results.find((r) => r.index === c.entryIndex)!.rank).to.equal(1);
-    }
-  });
+  for (const capacity of POOL_CAPACITIES) {
+    it(`a pool of ${capacity} at exactly its minimum field settles on its full table`, async function () {
+      this.timeout(60_000);
+      const field = minFieldFor(capacity);
+      const population = poolPopulation(77 + capacity, capacity).slice(0, field);
+      const run = await runOfflinePool(77 + capacity, { population, capacity });
+      const pool = await run.chain.getPool(run.poolId);
+      expect(pool.entrants).to.equal(field);
+      // The table depends on the size alone (D-E19): a pool that seals at its
+      // floor pays the same places, and the same prize pool, as a full one.
+      await expectSettledOnOwnTable(run, capacity, `${field} of ${capacity}`);
+      const bundle = run.publisher.published.get(run.outcome.bundleUri!)!;
+      expect(bundle.results.length).to.equal(field);
+      for (const c of pool.payouts) expect(c.entryIndex).to.be.below(field);
+    });
+  }
 
   it('detection runs, reports, and blocks nobody — shadow mode (D-E9)', async () => {
     // WHAT THIS USED TO ASSERT (audit 2026-09-11, G-13). One entry's
@@ -115,65 +178,73 @@ describe('the offline dress rehearsal', () => {
     ).to.deep.equal([]);
     expect(
       [...run.chain.escrowed.values()].filter((v) => v > 0n),
-      'nothing escrowed, so the whole pot was paid out'
+      'nothing escrowed, so the whole prize pool was paid out'
     ).to.deep.equal([]);
     let paid = 0n;
     for (const v of run.chain.paid.values()) paid += v;
-    expect(paid, 'the pot reached wallets in full').to.equal(potForTier(0));
+    expect(paid, 'the prize pool reached wallets in full').to.equal(offlinePoolTerms(64).potLamports);
   });
 
-  it('the refund fork drains a pool one seat under the minimum field, in full', async () => {
-    // One below the floor is the largest field that refunds: at the floor the
-    // pool seals and plays instead (the daemon specs cover that fork over the
-    // same FakeChain). Both numbers derive from MIN_SEATS — see the note at
-    // the top of this file.
-    const chain = new FakeChain(() => 0n);
-    const players = Array.from({ length: LARGEST_REFUNDING_FIELD }, (_, i) =>
-      base58Encode(new Uint8Array(createHash('sha256').update(`r:${i}`).digest()))
-    );
-    chain.pools.set('9', {
-      poolId: 9n,
-      tier: 0,
-      state: 'Refunding',
-      resultsRootHex: null,
-      vrfCommitted: true,
-      entryLamports: 100_000_000n,
-      potLamports: potForTier(0),
-      fillDeadline: 0n,
-      secretRevealed: false,
-      resultsCommitted: false,
-      mode: 0,
-      paidMask: 0n,
-      payouts: [],
-      entrants: LARGEST_REFUNDING_FIELD,
+  for (const capacity of POOL_CAPACITIES) {
+    it(`the refund fork drains a pool of ${capacity} one entrant under its minimum field, in full`, async () => {
+      // One below the floor is the largest field that refunds: at the floor
+      // the pool seals and plays instead (the daemon specs cover that fork
+      // over the same FakeChain). Both numbers derive from the size's
+      // minimum field — see the note at the top of this file.
+      const field = largestRefundingField(capacity);
+      const terms = offlinePoolTerms(capacity);
+      const chain = new FakeChain(() => 0n);
+      const players = Array.from({ length: field }, (_, i) =>
+        base58Encode(new Uint8Array(createHash('sha256').update(`r:${capacity}:${i}`).digest()))
+      );
+      chain.pools.set('9', {
+        poolId: 9n,
+        tier: 0,
+        state: 'Refunding',
+        resultsRootHex: null,
+        vrfCommitted: true,
+        entryLamports: 100_000_000n,
+        potLamports: terms.potLamports,
+        fillDeadline: 0n,
+        secretRevealed: false,
+        resultsCommitted: false,
+        mode: 0,
+        paidMask: 0n,
+        payouts: [],
+        entrants: field,
+        capacity: terms.capacity,
+        minSeats: terms.minSeats,
+        paidPlaces: terms.paidPlaces,
+        prizeTable: terms.prizeTable,
+      });
+      chain.entries.set(
+        '9',
+        players.map((player, i) => ({
+          player,
+          index: i,
+          battlesHash: '00'.repeat(32),
+          flagged: false,
+          refunded: false,
+          settled: false,
+          forfeited: false,
+        }))
+      );
+      const outcome = await crankPool(
+        {
+          chain,
+          custody: new LocalCustody(async () => false),
+          ciphertexts: new MemoryCiphertextStore(),
+          publisher: new MemoryPublisher(),
+        },
+        9n
+      );
+      expect(outcome.finalState).to.equal('Closed');
+      let total = 0n;
+      for (const v of chain.paid.values()) total += v;
+      expect(total).to.equal(
+        100_000_000n * BigInt(field),
+        'every entry back in FULL, nothing withheld'
+      );
     });
-    chain.entries.set(
-      '9',
-      players.map((player, i) => ({
-        player,
-        index: i,
-        battlesHash: '00'.repeat(32),
-        flagged: false,
-        refunded: false,
-        settled: false,
-        forfeited: false,
-      }))
-    );
-    const outcome = await crankPool(
-      {
-        chain,
-        custody: new LocalCustody(async () => false),
-        ciphertexts: new MemoryCiphertextStore(),
-        publisher: new MemoryPublisher(),
-      },
-      9n
-    );
-    expect(outcome.finalState).to.equal('Closed');
-    let total = 0n;
-    for (const v of chain.paid.values()) total += v;
-    expect(total).to.equal(
-      100_000_000n * BigInt(LARGEST_REFUNDING_FIELD),
-      'every entry back in FULL, nothing withheld'
-    );
-  });
+  }
 });

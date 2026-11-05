@@ -9,7 +9,7 @@
  */
 import { expect } from 'chai';
 import { createHash } from 'crypto';
-import { crankPool, FakeChain, MemoryPublisher, makeWinnerScreen, type FakeEntry } from '../src';
+import { crankPool, MemoryPublisher, makeWinnerScreen, type FakeEntry } from '../src';
 import {
   LocalCustody,
   MemoryCiphertextStore,
@@ -18,7 +18,8 @@ import {
   type SealedPayload,
 } from '../../sealing/src';
 import { StubSanctionsCheck, type SanctionsCheck } from '../../sanctions/src';
-import { battlesHash, potForTier, type BattleSet } from '../../scoring/src';
+import { battlesHash, type BattleSet } from '../../scoring/src';
+import { ladderChain, ladderPoolView } from './ladder-fixtures';
 import { base58Encode } from '../../_shared/src/blotto-events';
 
 const sha = (s: string) => new Uint8Array(createHash('sha256').update(s).digest());
@@ -33,9 +34,10 @@ function battlesFor(base: number): BattleSet {
   return Array.from({ length: 7 }, (_, k) => alloc(base + k)) as never;
 }
 
-/** A sealed 64-entry pool, ready to crank. */
+/** A sealed 64-entry pool, ready to crank — its pool type (easy, tier 0,
+ * 64 players) exists, as `pay_prizes` requires (D-E19). */
 async function sealedPool() {
-  const chain = new FakeChain();
+  const chain = await ladderChain();
   const custody = new LocalCustody(async (id) => (await chain.getPool(id)).state !== 'Open');
   const store = new MemoryCiphertextStore();
   const publisher = new MemoryPublisher();
@@ -64,22 +66,7 @@ async function sealedPool() {
     await store.put(1n, player, seal(encodePayload(payload), publicKey));
   }
 
-  chain.pools.set('1', {
-    poolId: 1n,
-    tier: 0,
-    state: 'Sealed',
-    resultsRootHex: null,
-    vrfCommitted: true,
-    entryLamports: 100_000_000n,
-    potLamports: potForTier(0),
-    fillDeadline: 0n,
-    secretRevealed: false,
-    resultsCommitted: false,
-    paidMask: 0n,
-    payouts: [],
-    entrants: 64,
-    mode: 0,
-  });
+  chain.pools.set('1', ladderPoolView());
   chain.entries.set('1', entries);
   return { chain, custody, store, publisher, players };
 }

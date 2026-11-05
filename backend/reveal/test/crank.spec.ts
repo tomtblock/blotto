@@ -27,11 +27,19 @@ import {
 import {
   assignPrizes,
   battlesHash,
-  potForTier,
+  ladderTable,
+  minFieldFor,
+  prizePoolFor,
   scorePool,
+  TIER_ENTRY_LAMPORTS,
   type BattleSet,
 } from '../../scoring/src';
 import { base58Encode } from '../../_shared/src/blotto-events';
+import { LAUNCH_CAPACITIES, ladderChain, ladderPoolView } from './ladder-fixtures';
+
+/** The 64-player pool's prize pool at tier 0 — the launch table at the
+ * tier's price, exactly what `open_pool` would have funded. */
+const POT_64 = prizePoolFor(ladderTable(64), TIER_ENTRY_LAMPORTS[0]);
 
 const sha = (s: string) => new Uint8Array(createHash('sha256').update(s).digest());
 const hex = (b: Uint8Array) => Buffer.from(b).toString('hex');
@@ -55,12 +63,17 @@ interface TestPool {
   battles: BattleSet[];
 }
 
-async function buildSealedPool(sabotage: {
-  missing?: number;
-  garbage?: number;
-  hashMismatch?: number;
-}): Promise<TestPool> {
-  const chain = new FakeChain();
+async function buildSealedPool(
+  sabotage: {
+    missing?: number;
+    garbage?: number;
+    hashMismatch?: number;
+  },
+  /** The pool's size (D-E19); a full field of it is sealed. */
+  capacity = 64
+): Promise<TestPool> {
+  // Config and the pool's own pool type must exist: `pay_prizes` names it.
+  const chain = await ladderChain(() => 0n, [[0, 0, capacity]]);
   const custody = new LocalCustody(async (id) => {
     const p = await chain.getPool(id);
     return p.state !== 'Open';
@@ -73,7 +86,7 @@ async function buildSealedPool(sabotage: {
   const battles: BattleSet[] = [];
   const entries: FakeEntry[] = [];
 
-  for (let i = 0; i < 64; i++) {
+  for (let i = 0; i < capacity; i++) {
     const player = base58Encode(sha(`player:${i}`));
     players.push(player);
     const b = battlesFor(i * 100);
@@ -105,22 +118,7 @@ async function buildSealedPool(sabotage: {
     }
   }
 
-  chain.pools.set('1', {
-    poolId: 1n,
-    tier: 0,
-    state: 'Sealed',
-      resultsRootHex: null,
-    vrfCommitted: true,
-    entryLamports: 100_000_000n,
-    potLamports: potForTier(0),
-    fillDeadline: 0n,
-    secretRevealed: false,
-    resultsCommitted: false,
-    mode: 0,
-    paidMask: 0n,
-    payouts: [],
-    entrants: 64,
-  });
+  chain.pools.set('1', ladderPoolView({ capacity, entrants: capacity }));
   chain.entries.set('1', entries);
   return { chain, custody, store, publisher, players, battles };
 }
@@ -277,44 +275,121 @@ describe('the settlement crank', () => {
     expect(pool.paidMask).to.equal(0n);
   });
 
-  it('drives a sealed pool to Paid with every band exact', async function () {
+  // D-E19: each size pays the top quarter of its capacity on its own fixed
+  // table — 2, 4, 8 or 16 places — and the paid set carries exactly the
+  // pool's prize pool, to the lamport.
+  for (const capacity of LAUNCH_CAPACITIES) {
+    it(`drives a sealed ${capacity}-player pool to Paid on its table, every amount exact`, async function () {
+      this.timeout(30000);
+      const t = await buildSealedPool({}, capacity);
+      const outcome = await crankPool(
+        { chain: t.chain, custody: t.custody, ciphertexts: t.store, publisher: t.publisher },
+        1n
+      );
+      expect(outcome.finalState).to.equal('Paid');
+      expect(outcome.bundleUri).to.be.a('string');
+
+      // The bundle's ranking and amounts equal the pure engine's over the
+      // same battles, the pool's table and its entry price (D3-B ties).
+      const table = ladderTable(capacity);
+      const entry = TIER_ENTRY_LAMPORTS[0];
+      const pot = prizePoolFor(table, entry);
+      const bundle = t.publisher.published.get(outcome.bundleUri!)!;
+      const engine = assignPrizes(scorePool(t.battles), table, entry);
+      for (const r of bundle.results) {
+        const e = engine[r.index];
+        expect(r.score_half).to.equal(e.scoreHalf);
+        expect(r.rank).to.equal(e.rank);
+        expect(r.amount_lamports).to.equal(e.amountLamports.toString());
+      }
+      expect(bundle.scored_as_all_losses).to.deep.equal([]);
+      expect(bundle.results_root).to.equal(hex(t.chain.committedRoots.get('1')!));
+      // Version 4 carries the terms the pool was settled under.
+      expect(bundle.version).to.equal(4);
+      expect(bundle.capacity).to.equal(capacity);
+      expect(bundle.paid_places).to.equal(capacity / 4);
+      expect(bundle.prize_table).to.deep.equal([...table]);
+      expect(bundle.min_seats).to.equal((await t.chain.getPool(1n)).minSeats);
+
+      // The committed set is every seat with a nonzero amount — the paid
+      // places, plus a tie that straddles the line — and each was paid
+      // exactly its amount; nobody past the table's positions is paid.
+      const committed = (await t.chain.getPool(1n)).payouts;
+      const paidSeats = engine
+        .filter((r) => r.amountLamports > 0n)
+        .map((r) => r.index)
+        .sort((a, b) => a - b);
+      expect(committed.map((c) => c.entryIndex)).to.deep.equal(paidSeats);
+      expect(committed.length).to.be.at.least(table.length);
+      expect(engine.filter((r) => r.rank > table.length).every((r) => r.amountLamports === 0n)).to.equal(true);
+      for (const c of committed) {
+        expect(t.chain.paid.get(t.players[c.entryIndex])).to.equal(c.amountLamports);
+        expect(c.amountLamports).to.equal(engine[c.entryIndex].amountLamports);
+        expect(c.amountLamports <= BigInt(table[0]) * entry, 'never above first place').to.equal(true);
+      }
+      let total = 0n;
+      for (const v of t.chain.paid.values()) total += v;
+      expect(total).to.equal(pot);
+      expect(total).to.equal((await t.chain.getPool(1n)).potLamports);
+    });
+  }
+
+  it('pays a 16-place table in batches of four (pay_prizes stays one packet)', async function () {
     this.timeout(30000);
     const t = await buildSealedPool({});
+    const seen: number[][] = [];
+    const original = t.chain.payPrizes.bind(t.chain);
+    t.chain.payPrizes = async (poolId, seats) => {
+      seen.push([...seats]);
+      return original(poolId, seats);
+    };
     const outcome = await crankPool(
       { chain: t.chain, custody: t.custody, ciphertexts: t.store, publisher: t.publisher },
       1n
     );
     expect(outcome.finalState).to.equal('Paid');
-    expect(outcome.bundleUri).to.be.a('string');
+    const committed = (await t.chain.getPool(1n)).payouts.map((p) => p.entryIndex);
+    expect(seen.every((b) => b.length <= 4)).to.equal(true);
+    expect(seen.flat()).to.deep.equal(committed);
+    expect(seen.length).to.equal(Math.ceil(committed.length / 4));
+  });
 
-    // The bundle's ranking and amounts equal the pure engine's (with the
-    // D3-B split-pot assignment) over the same battles.
-    const bundle = t.publisher.published.get(outcome.bundleUri!)!;
-    const pot = potForTier(0);
-    const engine = assignPrizes(scorePool(t.battles), pot);
-    for (const r of bundle.results) {
-      const e = engine[r.index];
-      expect(r.score_half).to.equal(e.scoreHalf);
-      expect(r.rank).to.equal(e.rank);
-      expect(r.amount_lamports).to.equal(e.amountLamports.toString());
+  it('refuses to settle a pool whose table does not add up to its prize pool', async function () {
+    this.timeout(30000);
+    const t = await buildSealedPool({});
+    // A prize pool one lamport off its table: `commit_results` would refuse
+    // the list (PayoutSumMismatch), so the crank refuses first, by name.
+    t.chain.pools.get('1')!.potLamports = POT_64 + 1n;
+    let threw: Error | null = null;
+    try {
+      await crankPool(
+        { chain: t.chain, custody: t.custody, ciphertexts: t.store, publisher: t.publisher },
+        1n
+      );
+    } catch (e) {
+      threw = e as Error;
     }
-    expect(bundle.scored_as_all_losses).to.deep.equal([]);
-    expect(bundle.results_root).to.equal(hex(t.chain.committedRoots.get('1')!));
+    expect(threw?.message ?? '').to.match(/does not equal it/);
+    expect((await t.chain.getPool(1n)).resultsCommitted).to.equal(false);
+  });
 
-    // The committed set is exactly the rank-1 group (D-E2: one paid place,
-    // a tie for first splits the pot); every committed seat got exactly
-    // its split-pot amount; total = pot.
-    const committed = (await t.chain.getPool(1n)).payouts;
-    const winners = engine.filter((r) => r.rank === 1).map((r) => r.index);
-    expect(committed.map((c) => c.entryIndex)).to.deep.equal(winners);
-    expect(engine.filter((r) => r.rank > 1).every((r) => r.amountLamports === 0n)).to.equal(true);
-    for (const c of committed) {
-      expect(t.chain.paid.get(t.players[c.entryIndex])).to.equal(c.amountLamports);
-      expect(c.amountLamports).to.equal(engine[c.entryIndex].amountLamports);
+  it('refuses a pool that records no table rather than guessing one', async function () {
+    this.timeout(30000);
+    const t = await buildSealedPool({});
+    const pool = t.chain.pools.get('1')!;
+    pool.paidPlaces = 0;
+    pool.prizeTable = new Array(16).fill(0);
+    let threw: Error | null = null;
+    try {
+      await crankPool(
+        { chain: t.chain, custody: t.custody, ciphertexts: t.store, publisher: t.publisher },
+        1n
+      );
+    } catch (e) {
+      threw = e as Error;
     }
-    let total = 0n;
-    for (const v of t.chain.paid.values()) total += v;
-    expect(total).to.equal(pot);
+    expect(threw?.message ?? '').to.match(/records no prize table/);
+    expect((await t.chain.getPool(1n)).resultsCommitted).to.equal(false);
   });
 
   it('is idempotent: a second run over a Paid pool changes nothing', async function () {
@@ -338,9 +413,9 @@ describe('the settlement crank', () => {
 
     // First run, but the RPC dies AFTER the first pay batch landed and
     // before its confirmation came back — the crash window that tempts a
-    // resumed crank into paying the same seats again. (Under D-E2 the paid
-    // set is usually one batch, so the crash has to sit after the landing,
-    // not between batches.)
+    // resumed crank into paying the same seats again. (A 64-player table
+    // pays sixteen places in four batches; the crash sits after the first
+    // landed, so the resume must pay exactly the other three.)
     const original = t.chain.payPrizes.bind(t.chain);
     let batches = 0;
     t.chain.payPrizes = async (poolId, seats) => {
@@ -358,10 +433,9 @@ describe('the settlement crank', () => {
 
     const resumed = await crankPool(deps, 1n);
     expect(resumed.finalState).to.equal('Paid');
-    const pot = potForTier(0);
     let total = 0n;
     for (const v of t.chain.paid.values()) total += v;
-    expect(total).to.equal(pot, 'no seat paid twice, none skipped');
+    expect(total).to.equal(POT_64, 'no seat paid twice, none skipped');
   });
 
   it('scores lost, garbage and mismatched ciphertexts as all losses and publishes them', async function () {
@@ -384,23 +458,8 @@ describe('the settlement crank', () => {
   });
 
   it('drains a Refunding pool', async () => {
-    const chain = new FakeChain();
-    chain.pools.set('9', {
-      poolId: 9n,
-      tier: 0,
-      state: 'Refunding',
-      resultsRootHex: null,
-      vrfCommitted: true,
-      entryLamports: 100_000_000n,
-      potLamports: potForTier(0),
-      fillDeadline: 0n,
-      secretRevealed: false,
-      resultsCommitted: false,
-      mode: 0,
-      paidMask: 0n,
-      payouts: [],
-      entrants: 3,
-    });
+    const chain = await ladderChain();
+    chain.pools.set('9', ladderPoolView({ poolId: 9n, state: 'Refunding', entrants: 3 }));
     chain.entries.set(
       '9',
       [0, 1, 2].map((i) => ({
@@ -461,10 +520,10 @@ describe('scoring with missing entries (the published all-losses rule)', () => {
  * seat whose battle set the collusion fixture below duplicates.
  *
  * Read off the fixture rather than guessed, and asserted by the collusion
- * test itself (the committed paid set must be exactly the two colluders), so
- * a change to the fixture's allocations fails loudly here instead of quietly
- * hollowing out the escrow assertions — which is precisely what audit G-14
- * found had already happened.
+ * test itself (the two colluders must tie for first and both sit in the
+ * committed paid set), so a change to the fixture's allocations fails loudly
+ * here instead of quietly hollowing out the escrow assertions — which is
+ * precisely what audit G-14 found had already happened.
  */
 const WINNING_SEAT = 47;
 
@@ -541,14 +600,23 @@ describe('detection wired into the crank (R11, roadmap 4.3)', () => {
     );
 
     // A flagged seat in the committed paid set has its share ESCROWED, not
-    // paid. Unconditional (G-14): the paid set must contain the colluders,
-    // and each of them must be held.
+    // paid. Unconditional (G-14): the colluders must tie for first — so both
+    // are in the paid set, sharing 1st and 2nd — and each must be held.
     const pool = await t.chain.getPool(1n);
-    const committedSeats = pool.payouts.map((x) => x.entryIndex).sort((a, b) => a - b);
+    const committedSeats = pool.payouts.map((x) => x.entryIndex);
+    for (const seat of COLLUDERS) {
+      expect(
+        committedSeats,
+        'the colluders must be in the paid set, or this test checks nothing about escrow'
+      ).to.include(seat);
+    }
+    const tiedShare = pool.payouts.find((p) => p.entryIndex === COLLUDERS[1])!.amountLamports;
+    const table = ladderTable(64);
     expect(
-      committedSeats,
-      'the colluders must BE the paid set, or this test checks nothing about escrow'
-    ).to.deep.equal([...COLLUDERS].sort((a, b) => a - b));
+      pool.payouts.find((p) => p.entryIndex === COLLUDERS[0])!.amountLamports +
+        tiedShare,
+      'two players tied for first share 1st and 2nd (D3-B)'
+    ).to.equal(BigInt(table[0] + table[1]) * TIER_ENTRY_LAMPORTS[0]);
     for (const seat of COLLUDERS) {
       const player = t.players[seat];
       expect(
@@ -557,14 +625,18 @@ describe('detection wired into the crank (R11, roadmap 4.3)', () => {
       ).to.equal(true);
       expect(t.chain.paid.get(player) ?? 0n, `seat ${seat} must not be paid`).to.equal(0n);
     }
-    // Nothing reached any wallet at all: both committed seats are held.
-    expect([...t.chain.paid.values()].filter((v) => v > 0n)).to.deep.equal([]);
-    // Total conservation: paid + escrowed == the whole pot.
-    const pot = potForTier(0);
+    // Every OTHER committed seat was paid normally: a flag holds one share.
+    const colluderWallets = new Set(COLLUDERS.map((seat) => t.players[seat]));
+    for (const p of pool.payouts) {
+      const player = t.players[p.entryIndex];
+      if (colluderWallets.has(player)) continue;
+      expect(t.chain.paid.get(player), `seat ${p.entryIndex} is paid`).to.equal(p.amountLamports);
+    }
+    // Total conservation: paid + escrowed == the whole prize pool.
     let total = 0n;
     for (const v of t.chain.paid.values()) total += v;
     for (const v of t.chain.escrowed.values()) total += v;
-    expect(total).to.equal(pot);
+    expect(total).to.equal(POT_64);
   });
 
   it('flags nobody when detection returns nothing — the production contract (G-13)', async function () {
@@ -645,7 +717,7 @@ describe('detection wired into the crank (R11, roadmap 4.3)', () => {
     expect([...t.chain.escrowed.values()].filter((v) => v > 0n)).to.deep.equal([]);
     let paid = 0n;
     for (const v of t.chain.paid.values()) paid += v;
-    expect(paid, 'the whole pot reached wallets').to.equal(potForTier(0));
+    expect(paid, 'the whole prize pool reached wallets').to.equal(POT_64);
   });
 
   it('publishes neither the device hash nor the timings, and still hands both to detection (B-31)', async function () {
@@ -667,14 +739,19 @@ describe('detection wired into the crank (R11, roadmap 4.3)', () => {
     expect(outcome.finalState).to.equal('Paid');
 
     // The published object — after the JSON round trip MemoryPublisher
-    // performs — is version 3 (Phase B: it names the mode), still carrying
-    // neither key on any entry. The
-    // bundle is permanent public storage; these two fields identify a
+    // performs — is version 4 (the Ladder: it carries the pool's terms;
+    // Phase B's mode before it), still carrying neither key on any entry.
+    // The bundle is permanent public storage; these two fields identify a
     // browser across pools and time a player's screens, and no verification
     // step reads either.
     const bundle = t.publisher.published.get(outcome.bundleUri!)!;
-    expect(bundle.version).to.equal(3);
+    expect(bundle.version).to.equal(4);
     expect(bundle.mode).to.equal('easy');
+    expect([bundle.capacity, bundle.paid_places, bundle.min_seats]).to.deep.equal([
+      64,
+      ladderTable(64).length,
+      minFieldFor(64),
+    ]);
     expect(bundle.entries.length).to.equal(64);
     for (const e of bundle.entries) {
       expect(e).to.not.have.property('device_hash');

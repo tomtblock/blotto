@@ -11,12 +11,18 @@
  * Removed in V2 (founder 2026-09-27): the two side-by-side pool cards, the
  * "Opens soon" card and the per-tier "Prize pools" ladder — the picker's
  * tier filter is the one place every tier is listed.
+ *
+ * D-E19 (the Ladder, 2026-11-05): every (board, tier) holds four pool
+ * types — 8, 16, 32 and 64 players — and the picker gets one slot per type,
+ * from GET /pool-types and the open pools.
  */
 import Link from 'next/link';
-import { MIN_SEATS, TIER_ENTRY_LAMPORTS, TIER_POT_LAMPORTS } from '@blotto/scoring';
+import { POOL_CAPACITIES, TIER_ENTRY_LAMPORTS, type PoolCapacity } from '@blotto/scoring';
 import { COPY } from '@/copy';
 import { indexerApi, live } from '@/data/api';
-import { poolMode } from '@/data/format';
+import { poolLadder, poolMode } from '@/data/format';
+import { LAUNCH_SIZES } from '@/data/prizes';
+import type { PoolSummary, PoolTypeRow } from '@/data/types';
 import { AppHeader } from '@/components/shell/app-header';
 import { TabBar } from '@/components/shell/tab-bar';
 import { SiteFooter } from '@/components/shell/site-footer';
@@ -24,7 +30,8 @@ import { LiveDataUnavailable } from '@/components/shell/live-unavailable';
 import { AmbientClip, type ClipTier, type PosterTier } from '@/components/ui/ambient-clip';
 import { LiveDemo } from '@/components/landing/LiveDemo';
 import { HowItWorksCarousel } from '@/components/landing/HowItWorksCarousel';
-import { PoolPicker, type PickerTier } from '@/components/landing/PoolPicker';
+import { PoolPicker } from '@/components/landing/PoolPicker';
+import { defaultSize, defaultTier, type PickerSlot, type PickerTier } from '@/components/landing/picker-state';
 import { PreloaderGate } from '@/components/preloader/PreloaderGate';
 import { WelcomeNote } from '@/components/landing/WelcomeNote';
 
@@ -62,42 +69,49 @@ const HERO_OUTLINE =
 export default async function LandingPage() {
   const api = indexerApi();
   // SSR outage guard: a dead indexer degrades this page, never kills it.
-  const [poolsLive, tiersLive] = await Promise.all([live(() => api.listPools()), live(() => api.getTiers())]);
+  const [poolsLive, typesLive] = await Promise.all([live(() => api.listPools()), live(() => api.getPoolTypes())]);
   const pools = poolsLive.ok ? poolsLive.value : [];
   const open = pools.filter((p) => p.state === 'Open');
-  // One pool per ladder per tier is open at a time in production; the
-  // fixture catalogue holds several, and the FIRST listed is the one every
-  // surface (and the journey test) treats as the tier's open pool.
-  const openByTier = (mode: 'easy' | 'hard') => {
-    const m = new Map<number, (typeof open)[number]>();
-    for (const p of open) if (poolMode(p) === mode && !m.has(p.tier)) m.set(p.tier, p);
-    return m;
+  // One pool per pool TYPE (board, tier, size) is open at a time in
+  // production; the fixture catalogue holds one per type too, and where two
+  // ever share a type the FIRST listed is the type's open pool.
+  const typeKey = (mode: 'easy' | 'hard', tier: number, capacity: number) => `${mode}:${tier}:${capacity}`;
+  const openByType = new Map<string, PoolSummary>();
+  for (const p of open) {
+    const k = typeKey(poolMode(p), p.tier, poolLadder(p).capacity);
+    if (!openByType.has(k)) openByType.set(k, p);
+  }
+  // WHICH POOL TYPES TAKE ENTRIES — read, never assumed (founder
+  // instruction 2026-09-12 §2.3; D-E19). `GET /pool-types` resolves it from
+  // the live accounts; on an outage, or a read API from before the Ladder,
+  // the ground truth in `/pools` stands in (a type holding an Open pool is
+  // live by construction).
+  const typesRead = typesLive.ok ? typesLive.value : null;
+  const typeByKey = new Map<string, PoolTypeRow>(
+    (typesRead?.pool_types ?? []).map((t) => [typeKey(t.mode, t.tier, t.capacity), t])
+  );
+  const slot = (mode: 'easy' | 'hard', tier: number, capacity: PoolCapacity): PickerSlot => {
+    const k = typeKey(mode, tier, capacity);
+    const pool = openByType.get(k) ?? null;
+    const type = typeByKey.get(k);
+    return {
+      capacity,
+      pool,
+      live: pool !== null || type?.live === true,
+      typeAmounts: type ? type.prize_amounts : null,
+    };
   };
-  const easyByTier = openByTier('easy');
-  const hardByTier = openByTier('hard');
-  // WHICH TIERS THE FOUNDER HAS OPENED — read, never assumed (founder
-  // instruction 2026-09-12 §2.3). `GET /tiers` resolves it from the live
-  // Config account; on an outage the ground truth in `/pools` stands in (a
-  // tier holding an Open pool is open by construction).
-  const tiersRead = tiersLive.ok ? tiersLive.value : null;
-  const easyEnabled = tiersRead
-    ? new Map(tiersRead.tiers.map((t) => [t.tier, t.enabled]))
-    : new Map([...easyByTier.keys()].map((tier) => [tier, true]));
-  const hardEnabled = tiersRead
-    ? new Map(tiersRead.tiers.map((t) => [t.tier, t.hard?.enabled === true]))
-    : new Map([...hardByTier.keys()].map((tier) => [tier, true]));
   const pickerTiers: PickerTier[] = TIER_ENTRY_LAMPORTS.map((entry, tier) => ({
     tier,
     entryLamports: entry.toString(),
-    potLamports: TIER_POT_LAMPORTS[tier]!.toString(),
-    easy: easyByTier.get(tier) ?? null,
-    hard: hardByTier.get(tier) ?? null,
-    easyEnabled: easyEnabled.get(tier) === true,
-    hardEnabled: hardEnabled.get(tier) === true,
+    easy: POOL_CAPACITIES.map((c) => slot('easy', tier, c)),
+    hard: POOL_CAPACITIES.map((c) => slot('hard', tier, c)),
   }));
-  const serverTime = tiersRead?.server_time ?? open[0]?.server_time ?? null;
-  // The picker's own default: the lowest tier with an open easy pool.
-  const firstEasy = pickerTiers.find((t) => t.easy !== null)?.easy ?? null;
+  const serverTime = typesRead ? String(typesRead.server_time) : (open[0]?.server_time ?? null);
+  // The demo's "Enter for real": the easy pool the picker opens on by
+  // default — the lowest tier with an open easy pool, at its default size.
+  const easyRow = pickerTiers.find((t) => t.tier === defaultTier(pickerTiers, 'easy'));
+  const firstEasy = easyRow ? (easyRow.easy.find((x) => x.capacity === defaultSize(easyRow.easy))?.pool ?? null) : null;
 
   return (
     <>
@@ -180,12 +194,12 @@ export default async function LandingPage() {
               a time (V3, founder 2026-09-27: before the demo). */}
           <section id="how" className="mt-14 scroll-mt-20">
             <h2 className={`mb-4 ${H2}`}>{COPY.howItWorks.title}</h2>
-            <HowItWorksCarousel steps={COPY.howItWorks.steps(Number(MIN_SEATS))} />
+            <HowItWorksCarousel steps={COPY.howItWorks.steps(LAUNCH_SIZES)} />
           </section>
 
           {/* ——— The live demo: the toy is the pitch. Beside it, Enter for
-              real: the open easy pool at the lowest open tier, the start of
-              the easy flow. */}
+              real: the easy pool the picker opens on (the lowest open tier,
+              the default size), the start of the easy flow. */}
           <section id="demo" className="mt-14 scroll-mt-20">
             <LiveDemo
               title={COPY.howItWorks.pentagonCaption}
