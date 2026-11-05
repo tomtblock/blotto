@@ -320,3 +320,63 @@ fn migrate_config_grows_a_603_byte_config_with_no_enabled_types_admin_only_once(
     assert_eq!(read_config(&env.svm).enabled_pool_types, 1);
     assert_eq!(read_pool(&env.svm, &pool_pda(1)).capacity, 8);
 }
+
+/// The runbook's "do not wait" path (LADDER-LAUNCH §1(b)): a pre-Ladder pool
+/// still Open at the upgrade — its slot held on Config, not on any pool type —
+/// is migrated, a Ladder pool of the same (mode, tier, 64) type opens beside
+/// it, and at its deadline the old pool closes through the new pool type's
+/// account WITHOUT touching the new pool's hold on that type's slot: the
+/// prize pool returns to the treasury, `platform_reserved` drops by exactly
+/// it, and the type's `active_pool` and cooldown stamp are unchanged.
+#[test]
+fn a_pre_ladder_open_pool_closes_beside_a_new_pool_of_its_type() {
+    let Some(mut env) = Env::new() else { return };
+    let settlement = env.settlement.insecure_clone();
+    let payer = rando(&mut env);
+
+    // Pool 1 as the upgrade finds it: Open, empty, 850 bytes, and holding NO
+    // pool-type slot (before the Ladder its slot lived on Config).
+    env.open_ready_pool(1, 0);
+    let ty = env.pool_type_of(1);
+    patch_pool_bytes(&mut env.svm, &ty, 40, &0u64.to_le_bytes());
+    shrink_pool_to_v3(&mut env.svm, &pool_pda(1));
+    env.send(&[migrate_pool_ix(&payer.pubkey(), 1)], &[&payer])
+        .expect("an Open pool with a whole-entry pot migrates");
+    let old = read_pool(&env.svm, &pool_pda(1));
+    assert_eq!(
+        (old.state, old.capacity, old.paid_places, old.prize_table),
+        (0, 64, 1, one_place(40))
+    );
+
+    // A Ladder pool of the same type opens beside it and holds the slot.
+    env.advance_time(3600);
+    env.open_ready_pool(2, 0);
+    assert_eq!(env.pool_type_of(2), ty, "the same pool type");
+    let held = read_pool_type(&env.svm, &ty);
+    assert_eq!(held.active_pool, 2);
+
+    // The old pool's deadline passes; the new pool's has not.
+    let now = env.now();
+    env.advance_time(old.fill_deadline - now + 1);
+    assert!(env.now() <= read_pool(&env.svm, &pool_pda(2)).fill_deadline);
+
+    let treasury_before = env.balance(&platform_pda());
+    let reserved_before = read_config(&env.svm).platform_reserved;
+    let ix = env.trigger_refund_ix(&settlement.pubkey(), 1);
+    env.send(&[ix], &[&settlement])
+        .expect("the old pool closes through its type's account");
+
+    assert_eq!(read_pool(&env.svm, &pool_pda(1)).state, 5, "Closed");
+    assert_eq!(env.balance(&vault_pda(1)), VAULT_RENT_CUSHION);
+    assert_eq!(env.balance(&platform_pda()), treasury_before + POT);
+    assert_eq!(
+        read_config(&env.svm).platform_reserved,
+        reserved_before - POT
+    );
+    assert_eq!(
+        read_pool_type(&env.svm, &ty),
+        held,
+        "the new pool's slot and the type's cooldown stamp are untouched"
+    );
+    assert_eq!(read_pool(&env.svm, &pool_pda(2)).state, 0, "still Open");
+}

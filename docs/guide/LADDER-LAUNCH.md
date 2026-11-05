@@ -42,8 +42,8 @@ fly scale count 0 -a blotto-daemon
 
 ## 1. Close the last old pools — choose one
 
-- **(a) Clean — recommended.** Wait until 03:09 UTC, then close both (they have no entrants, so
-  each goes straight to Closed and returns its 4 SOL to the treasury):
+- **(a) Clean.** Wait until 03:09 UTC, then close both (they have no entrants, so each goes
+  straight to Closed and returns its 4 SOL to the treasury):
 
 ```bash
 FEE_PAYER_KEYPAIR=<funded keypair> npm run admin -- trigger-refund --pool-id 182
@@ -53,10 +53,13 @@ FEE_PAYER_KEYPAIR=<funded keypair> npm run admin -- trigger-refund --pool-id 182
 FEE_PAYER_KEYPAIR=<funded keypair> npm run admin -- trigger-refund --pool-id 183
 ```
 
-- **(b) Now.** Skip this step. #182 and #183 stay Open until 03:09 UTC as 64-player pools paying
-  one place under the rules they opened with, beside the new pools; the new daemon closes them at
-  their deadline. They do not appear in the lobby (which lists pool types), only in the Pools tab.
-  Step 7's funding must then also cover their 8 SOL still in their vaults.
+- **(b) Now — chosen 2026-11-05.** Skip this step. #182 and #183 stay Open until 03:09 UTC as
+  64-player pools paying one place under the rules they opened with, beside the new pools. At
+  their deadline the new daemon closes them through the 64-player pool types that step 4 creates,
+  without touching the new 64-player pools' slots (LiteSVM:
+  `a_pre_ladder_open_pool_closes_beside_a_new_pool_of_its_type`), and their 8 SOL returns to the
+  treasury then. They do not appear in the lobby (which lists pool types), only in the Pools tab.
+  Step 3's funding must cover the 8 SOL that stays in their vaults until then.
 
 ## 2. Merge, then upgrade the program
 
@@ -93,13 +96,14 @@ FEE_PAYER_KEYPAIR=<funded keypair> npm run admin -- migrate-pool --all
 
 The eight pool types need **15.50520192 SOL** in the treasury before the first pool can open
 (15 SOL of prize pools, eight rent cushions at today's 650,240 lamports, the 0.5 SOL minimum).
-After step 1(a) it holds about 15.486 SOL. Add headroom — every cooldown re-reserves a prize pool:
+On 2026-11-05 at 20:15 UTC it held 7.486208 SOL. Add headroom — every cooldown re-reserves a
+prize pool. After 1(b), which leaves #182 and #183 holding their 8 SOL until 03:09 UTC:
 
 ```bash
-FEE_PAYER_KEYPAIR=<funded keypair> npm run admin -- fund-platform-wallet --amount 5sol
+FEE_PAYER_KEYPAIR=<funded keypair> npm run admin -- fund-platform-wallet --amount 13sol
 ```
 
-(After 1(b), add 8 SOL more: #182 and #183 still hold their prize pools.)
+After 1(a), which returns that 8 SOL first, `--amount 5sol` gives the same balance, about 20.49 SOL.
 
 ## 4. Create, configure and enable the eight pool types
 
@@ -159,7 +163,8 @@ fly scale count 1 -a blotto-daemon
 
 The daemon opens one pool per type, bounded per tick, about a minute for all eight. Check:
 
-- `npm run admin -- pools` — eight new Open pools, one per (mode, size), each with its capacity;
+- `npm run admin -- pools` — eight new Open pools, one per (mode, size), each with its capacity
+  (after 1(b), #182 and #183 are listed too, Open until 03:09 UTC and Closed after);
 - `GET https://blotto-indexer.fly.dev/pool-types` — eight rows with `"live": true` and
   `"source": "chain"`;
 - the site: the lobby's 8 · 16 · 32 · 64 toggle on both Easy and Hard, each card showing its
