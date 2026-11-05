@@ -10,7 +10,8 @@
 Each pass carries one of five cosmetic classes. The class is the only random element in the
 product, and it is kept away from anything a player can win: it affects no stat, no battle, no
 pool, no prize and no ranking tiebreak. The draw still has to be fair and checkable, because its
-published description ("one Mythic in every 64") is a statement to players. That needs:
+published description (a mix of 64 characters holding one Mythic) is a statement to players. That
+needs:
 
 - a fixed, published composition per pool, not an independent chance per entry;
 - replay from public data by anyone, with no hidden table;
@@ -19,7 +20,9 @@ published description ("one Mythic in every 64") is a statement to players. That
 ## Decision
 
 **A bag without replacement.** Each pool opens with `class_counters = [38, 15, 7, 3, 1]`
-(sum 64, one per seat), written by `open_pool` from `LAUNCH_CLASS_COUNTERS`. The five indices are
+(sum 64, one per place in the largest pool), written by `open_pool` from `LAUNCH_CLASS_COUNTERS`.
+Since the Ladder (D-E19) pools hold 8, 16, 32 or 64 players, and **every pool, at every size,
+draws from this same mix of 64**: no size is a route to a rarer character. The five indices are
 shown to players as **Common, Uncommon, Rare, Epic, Mythic**, in the profile's collection only.
 
 For each entry, inside `register`:
@@ -30,19 +33,20 @@ For each entry, inside `register`:
    little-endian `u64`, reduce it modulo the remaining total, and walk the counters as a cumulative
    distribution to pick an index in `0..5`. The function reads the counters and does not change
    them.
-3. The caller decrements the chosen counter, so the bag total falls by exactly one per entry and
-   reaches zero at the 64th. The class index is written to `Entry.class` and emitted in
-   `EntryRegistered`.
+3. The caller decrements the chosen counter, so the bag total falls by exactly one per entry. It
+   reaches zero only at the 64th entry of a 64-player pool. The class index is written to
+   `Entry.class` and emitted in `EntryRegistered`.
 
 The argument and field are named `class_counters`. No variable in the draw is named after chance
 or weighting, by project rule.
 
 ## Consequences
 
-- **The composition is fixed per pool, not per entry.** A full pool contains exactly one Mythic,
-  three Epic, seven Rare, fifteen Uncommon and thirty-eight Common. A pool that seals between 40
-  and 63 seats (R7-b) draws the bag down without emptying it; each draw is still uniform over what
-  remains, and the published statement describes the bag.
+- **The composition is fixed per pool, not per entry.** A full 64-player pool contains exactly one
+  Mythic, three Epic, seven Rare, fifteen Uncommon and thirty-eight Common. Every smaller pool, and
+  every pool that seals below its size at its minimum field or above (R7-b, D-E19), draws the bag
+  down without emptying it and closes with passes left in the mix; each draw is still uniform over
+  what remains, and the published statement describes the bag, not the outcome.
 - **Replayable from events.** The on-chain bag replaces the original design's committed, shuffled
   class table: with the seed (`PoolVrfSeeded`), each entry's slot hash and index
   (`EntryRegistered`) and the two public keys, anyone can replay every draw in order.
@@ -56,8 +60,9 @@ or weighting, by project rule.
 - **Modulo bias is accepted.** With at most 64 items against a 2^64 input space the bias is on the
   order of 1 in 2^58. Rejection sampling would make an audit replay depend on a retry count, for no
   effect on anything a player can win.
-- **The empty bag is unreachable.** The 64th entry seals the pool before another `register` can
-  run; the function panics on an empty bag as a defence-in-depth check.
+- **The empty bag is unreachable.** No pool holds more than 64, and the entry that reaches a pool's
+  capacity seals it before another `register` can run; the function panics on an empty bag as a
+  defence-in-depth check.
 
 ## Alternatives considered
 

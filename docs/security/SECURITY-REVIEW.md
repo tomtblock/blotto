@@ -34,10 +34,10 @@ what it can and cannot do if it goes wrong.
 
 | Boundary | What it holds or decides | What it cannot do |
 |---|---|---|
-| **The program and prize vaults** | Every lamport. Each pool's fixed pot sits in its own vault PDA from the moment the pool opens, before any entry is sold. Entry payments go to a separate platform treasury PDA | There is no instruction that withdraws from a prize vault, no admin escape hatch and no recover-funds path (§3) |
-| **The operator backend** (entry service, indexer, settlement daemon, review service) | Signs entry packets. Stores sealed ciphertexts. Seals, scores and settles pools. Commits the results root and the payout list | It cannot read an allocation before the pool closes (sealing, below). It cannot pay a prize to itself or to the treasury. The program checks that a committed payout list sums to the pool's pot, has the right length and uses in-range, strictly ordered seats. **Who is paid what** is checked by recomputation: the pool secret, every sealed entry and the scoring engine are published, and the verify page recomputes the ranking and checks the roster against the chain |
+| **The program and prize vaults** | Every lamport. Each pool's fixed prize pool sits in its own vault PDA from the moment the pool opens, before any entry is sold. Entry payments go to a separate platform treasury PDA | There is no instruction that withdraws from a prize vault, no admin escape hatch and no recover-funds path (§3) |
+| **The operator backend** (entry service, indexer, settlement daemon, review service) | Signs entry packets. Stores sealed ciphertexts. Seals, scores and settles pools. Commits the results root and the payout list | It cannot read an allocation before the pool closes (sealing, below). It cannot pay a prize to itself or to the treasury. The program checks that a committed payout list sums to the pool's prize pool, has the right length, uses in-range, strictly ordered seats, and holds no amount that is zero or larger than the pool's first prize (D-E19). **Who is paid what** is checked by recomputation: the pool secret, every sealed entry and the scoring engine are published, and the verify page recomputes the ranking and checks the roster against the chain |
 | **Sealing keys** | Each pool has its own X25519 key. The browser encrypts the player's battles to it before payment, and only `sha256(battles ‖ salt)` goes on chain. The hash of the pool secret is committed at `open_pool` | The key's export policy prevents reading plaintext before the pool closes. After close the secret is revealed on chain, checked against the committed hash, and every entry becomes publicly checkable against its on-chain commitment |
-| **Reviewers** (two members in `config/reviewers.json`) | Can flag a winning entry for fair-play review, which holds that share in escrow | Cannot move lamports. Upholding a flag (`forfeit_escrow`) requires the admin multisig and moves nothing. The share stays in the pool's vault and passes only to the next eligible player. If no decision lands within the published 12-hour review window, the share is released to its player. An appeal is decided by a different registry member |
+| **Reviewers** (two members in `config/reviewers.json`) | Can flag a winning entry for fair-play review, which holds that share in escrow | Cannot move lamports. Upholding a flag (`forfeit_escrow`) requires the admin multisig and moves nothing. The share stays in the pool's vault and is paid onward only to players: in a one-place pool by `pay_next_place`, and in a multi-place pool not at all until the field-moves-up payout ships (D-E19). If no decision lands within the published 12-hour review window, the share is released to its player. An appeal is decided by a different registry member |
 | **The client** (browser app) | Enforces the allocation shape at submission and seals the payload | The program never sees an allocation, so it cannot enforce the shape. The scoring engine enforces it again at reveal: a malformed or unreadable sealed set scores as all losses and is published as such, and settlement does not halt |
 
 **Carried threat-model entries.** Four entries from the design's threat model remain in force:
@@ -46,15 +46,49 @@ overflow and truncation (TM-403), and failure or compromise of the randomness or
 cosmetic class draw (TM-502). Only the class draw uses randomness, and the class is cosmetic: no
 scoring, payout or ranking input reads it, and CI enforces that (§3).
 
+**What the Ladder (D-E19) adds to the threat model.** Four surfaces are new, each with its
+mitigation in the program:
+
+- **The treasury reserve is computed from accounts the caller passes.** `open_pool` and
+  `withdraw_platform` read every enabled `PoolType` as a remaining account to size the reserve. A
+  caller who left one out would shrink the reserve and could open a pool, or withdraw, against
+  money the policy holds back. The program believes the list only if it is complete: every account
+  owned by the program and deserialising as a `PoolType` (discriminator checked), every one
+  enabled, strictly ascending by address (sorted and duplicate-free in one comparison), none the
+  type being opened, and exactly `Config.enabled_pool_types` of them (one fewer at `open_pool`).
+  `init_pool_type` is the only creator and writes only at the type's own PDA, so owner and
+  discriminator prove a genuine account and the count proves none was left out. The count is
+  maintained only by `set_pool_type_enabled`, on a change of state
+  (`instructions/treasury.rs` `idle_pool_type_reserve`; `PoolTypeListIncomplete`,
+  `PoolTypeAccountInvalid`).
+- **A new PDA type next to `pool`.** Seeds are concatenated with no length prefix, so when one
+  type's prefix begins with another's, two seed lists of the same total length can spell the same
+  bytes and derive the same address. The spec proposed `b"pool_type"`, which begins with
+  `b"pool"`. With today's fixed-length seeds the two cannot meet (`pool` and an 8-byte id is 12
+  bytes; `pool_type`, mode, tier and a 2-byte capacity is 13), but TM-401's rule is now that no
+  prefix is the start of another, so the pool type's prefix is `b"ptype"` and the seed test checks
+  prefix-freeness as well as distinctness ([`threat-tm-401`](../architecture/adr/threat-tm-401.md)).
+- **A multi-place payout list.** Under one paid place the committed list was the rank-1 group.
+  Under a table it spans several ranks, so `commit_results` now bounds every amount: none may be
+  zero (`PayoutZero`) or above the pool's first prize, `prize_table[0] × entry_lamports` in `u128`
+  (`PayoutAboveFirstPrize`), and the total must equal the prize pool exactly. The program still
+  does not rank (D-E15 as narrowed by D-E19): a list paying the right amounts to the wrong seats
+  would land, and recomputation from the published bundle and the on-chain root is what catches it.
+- **Forfeits under a multi-place table.** `pay_next_place` treats the committed list as the tied
+  first-place group, which is true only when one place is paid. In a Ladder pool it would divide a
+  forfeited share among players at several ranks, so it refuses any pool with more than one paid
+  place (`NextPlaceUnsupported`). The share stays held in its vault — never paid wrongly, never to
+  the operator — until the field-moves-up payout ships (§5).
+
 ## 3. On-chain invariants and how they are enforced
 
 | Invariant | Enforcement | Test or check |
 |---|---|---|
-| **No withdraw path from a prize vault.** Vault lamport exits are exactly `pay_prizes`, `release_escrow`, `pay_next_place` (all pay players) and `trigger_refund` (the untouched pot of an unplayed pool returns to the treasury). Once a pool plays, its prize is only ever paid to players. `forfeit_escrow` moves nothing | All lamport movement goes through two debit helpers in `programs/blotto_cup/src/vault.rs`. `system_program::transfer` appears nowhere else | `scripts/check-standing-rules.sh`, on every push. It allow-lists the files that may call each helper, then enumerates **functions**: every function that calls `vault_debit` or `platform_debit` must be one of seven named `file:function` pairs. A call site the extractor cannot place fails the check. It also asserts that `escrow.rs` cannot address the treasury, that `forfeit_escrow` moves no lamports, and that `register` credits no vault. The script tests itself first against a probe tree that breaks every rule |
-| **Treasury exits are bounded.** The treasury's exits are `open_pool` (pot into a vault), `refund` (each entry repaid in full on an unplayed pool) and the admin-gated `withdraw_platform` | `withdraw_platform` is refused on chain below a floor: the minimum balance, plus one pot and rent cushion per idle enabled tier, plus every refundable entry | Same script (check 6(e)). LiteSVM `treasury_gates.rs`. The property model in `programs/blotto_cup/tests/vault_model.rs` |
-| **Pots are fixed, never derived** | A tier's pot is a configured constant copied onto the `Pool` at open | Standing-rules check 6(g) fails on pot arithmetic over entries or balances |
-| **Distinct PDA seed prefixes** (TM-401) | Six prefixes: `config`, `platform`, `pool`, `vault`, `entry`, `pass_collection` | Pairwise-distinctness and derived-address tests in `state.rs` |
-| **Signer checks on privileged instructions** (TM-402) | Admin instructions use `Signer` plus `has_one = admin` (the admin is a multisig vault). Settlement instructions use `has_one = settlement_signer`. `open_pool` accepts only the configured keeper. Each permissionless instruction is justified where it is defined (write-once, state-gated, or pays a fixed recipient) | Negative tests for every admin instruction and the settlement path (LiteSVM `gates.rs`, `keeper_and_timing.rs`) |
+| **No withdraw path from a prize vault.** Vault lamport exits are exactly `pay_prizes`, `release_escrow`, `pay_next_place` (all pay players; the last only in a one-place pool since D-E19) and `trigger_refund` (the untouched prize pool of an unplayed pool returns to the treasury). Once a pool plays, its prize is only ever paid to players. `forfeit_escrow` moves nothing | All lamport movement goes through two debit helpers in `programs/blotto_cup/src/vault.rs`. `system_program::transfer` appears nowhere else | `scripts/check-standing-rules.sh`, on every push. It allow-lists the files that may call each helper, then enumerates **functions**: every function that calls `vault_debit` or `platform_debit` must be one of seven named `file:function` pairs. A call site the extractor cannot place fails the check. It also asserts that `escrow.rs` cannot address the treasury, that `forfeit_escrow` moves no lamports, and that `register` credits no vault. The script tests itself first against a probe tree that breaks every rule |
+| **Treasury exits are bounded.** The treasury's exits are `open_pool` (a prize pool into a vault), `refund` (each entry repaid in full on an unplayed pool) and the admin-gated `withdraw_platform` | `withdraw_platform` is refused on chain below a floor: the minimum balance, plus `reserve_pots` prize pools and rent cushions for every enabled pool type on an open tier with no live pool, plus every refundable entry. The enabled pool types are passed in and must be exactly the enabled set (§2) | Same script (check 6(e)). LiteSVM `treasury_gates.rs`. The property model in `programs/blotto_cup/tests/vault_model.rs` |
+| **Prize pools are fixed, never derived** | A pool type's prize pool is stated by the admin and compared with `Σ table × price` (in `u128`) at `set_pool_type_economics` and again at `open_pool`, then copied onto the `Pool` at open | Standing-rules check 6(g) fails on prize arithmetic over entries or balances. Unit tests in `instructions/pool_type.rs` and `prize_math.rs` |
+| **Distinct, prefix-free PDA seed prefixes** (TM-401) | Seven prefixes: `config`, `platform`, `pool`, `vault`, `entry`, `pass_collection`, `ptype`. No prefix is the start of another (§2) | `pda_seed_prefixes_are_pairwise_distinct` (distinct and prefix-free) and `pda_types_derive_distinct_addresses` in `state.rs` |
+| **Signer checks on privileged instructions** (TM-402) | Admin instructions, the three pool-type instructions included, use `Signer` plus `has_one = admin` (the admin is a multisig vault). Settlement instructions use `has_one = settlement_signer`. `open_pool` accepts only the configured keeper. Each permissionless instruction is justified where it is defined (write-once, state-gated, or pays a fixed recipient) | Negative tests for every admin instruction that predates D-E19 and the settlement path (LiteSVM `gates.rs`, `keeper_and_timing.rs`); the three pool-type instructions are not yet among them (§5) |
 | **Checked integer math** (TM-403) | No floats anywhere in on-chain or scoring math. `u128` intermediates in prize arithmetic, `checked_add` on growing counters, and saturating (not wrapping) down-casts on floors. `overflow-checks = true` in the workspace release profile, which applies to the deployed build | 10,000-sequence vault property test, exact-division tests |
 | **Vault dust and rent cushion** | `open_pool` funds each vault with the pot **plus** the runtime's rent-exempt minimum for an empty account, read from the network at open. Both debit helpers refuse any transfer that would leave an account between zero and rent-exempt (`WouldStrandRentBalance`). A lamport donated to a vault can no longer freeze its payout or refund | Rust unit tests. LiteSVM `vault_dust.rs`: a vault with a donated lamport still pays and still refunds. Also shown on devnet: a pool whose vault held a donated lamport refunded in full and closed |
 | **Other Anchor classes** | Typed accounts wherever state is read. `remaining_accounts` checked for owner, discriminator and pool/player binding. mpl-core pinned by address. Sysvars pinned by `address =`. No `init_if_needed` and no `close`. Every handler requires an explicit `PoolState` | LiteSVM lifecycle, double-payment, fill-rule and state-matrix suites (`tests/litesvm/tests/`) |
@@ -210,9 +244,24 @@ findings about deployment and logging rather than the program:
   multisig is currently 1-of-1 with no upgrade timelock set. Both are mainnet preconditions, and
   the public custody page shows the current values.
 - **Program-side hardening batch not yet shipped.** Medium and low program findings from the
-  2026-09-11 review are scheduled for the next program upgrade. One example: an on-chain check of
-  who is paid what. Today the program checks the payout list's total, length, seat range and
-  order, and recomputation from published data catches a wrong recipient.
+  2026-09-11 review are scheduled for the next program upgrade. The on-chain check of who is paid
+  what (D-E15) was narrowed by D-E19 to bounds: the program checks the payout list's total, length,
+  seat range and order, and that every amount is positive and no larger than the pool's first
+  prize. It does not rank; recomputation from published data catches a wrong recipient.
+- **The field-moves-up payout is not built** (D-E19). A share forfeited in a pool that pays more
+  than one place is held in its vault until it ships, in its own program upgrade. Holding is the
+  safe failure: the money is never paid wrongly and never reaches the operator. It is a
+  precondition for mainnet ([`../ROADMAP.md` §3](../ROADMAP.md#3-road-to-mainnet)).
+- **The admin for mainnet.** The program has no `set_admin`, so whoever `init_config` names as
+  admin is permanent. The devnet admin is a Squads v3 multisig whose web interface has been
+  retired; its transactions are now built by `scripts/squads-v3.ts`, new tooling on the admin
+  path. A mainnet deployment must name a Squads v4 multisig at `init_config`.
+- **Test coverage of the Ladder's refusals.** The program's unit tests cover the table shape, the
+  pool-type coordinates, the prize grid and the pre-Ladder migration. The refusals that guard money
+  (`PoolTypeListIncomplete`, `PoolTypeAccountInvalid`, `PayoutZero`, `PayoutAboveFirstPrize`,
+  `NextPlaceUnsupported`, `PoolTypeEconomicsStale`) and the pool-type instructions' signer checks
+  are enforced in the program, but no test in the LiteSVM suite, which drives the compiled program,
+  names them yet.
 - **Remaining medium and low findings** from the 2026-09-11 review are open across the backend,
   app, CI and tests. This page does not give an item-by-item count.
 - **Settlement key.** The settlement signer is a software key held by the settlement service.

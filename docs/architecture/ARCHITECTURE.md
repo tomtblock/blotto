@@ -29,13 +29,16 @@ The board is encrypted **on the player's device** before payment; only a hash go
 player pays a fixed entry and receives a non-transferable character pass whose class is drawn
 on-chain — cosmetic, read by nothing that decides money or ranking.
 
-A pool has **64 seats** and plays with **at least 40**. It seals when the 64th seat fills, or when
-its **12-hour** deadline passes with 40 or more seated. Below 40 at the deadline, every entry is
-refunded in full. No operator key decides which of those happens.
+A pool holds **8, 16, 32 or 64** players (`Pool.capacity`, the Ladder — D-E19) and plays with at
+least its **minimum field**: 5, 10, 20 or 40, the break-even field for its size. It seals when its
+last place fills, or when its **12-hour** deadline passes with at least the minimum field entered.
+Below it at the deadline, every entry is refunded in full. No operator key decides which of those
+happens.
 
 After sealing, the pool's decryption secret is published on-chain, every board becomes readable,
-the scoring is re-run by anyone who wants to, and the player ranked first is paid the whole fixed
-prize pool — funded from the treasury before entries opened, the same size whatever the field.
+the scoring is re-run by anyone who wants to, and the top quarter of the pool's capacity is paid on
+the pool's fixed prize table — whole multiples of the entry, copied onto the pool at open — out of
+a prize pool funded from the treasury before entries opened, the same whatever the field.
 
 Scoring is identical in both modes: a stat is won by the larger number, a battle by winning three
 of five stats (otherwise a draw), and every player is compared with every other player.
@@ -46,7 +49,7 @@ of five stats (otherwise a draw), and every player is compared with every other 
                  browser (Next.js app)
                    │        │            │
        packet ◄────┘        │            └────► indexer read API
-     (entry gate)           │                    (GET /pools, /tiers, /treasury …)
+     (entry gate)           │                    (GET /pools, /pool-types, /treasury …)
           │                 ▼
           │            Solana devnet ───► RPC webhook ──► indexer
           │          (program blotto_cup)                    │
@@ -93,7 +96,7 @@ vendor map and configuration: [`../guide/HOSTING.md`](../guide/HOSTING.md).
 
 | Service | Public | Restricted |
 |---|---|---|
-| Indexer read API | `GET /health`, `/time`, `/tiers`, `/pools` (`?state=`, `?tier=`, `?mode=`), `/pools/:pool` and its `/entries`, `/results`, `/payouts`, `/leaderboard`, `/verify-record`; `/treasury`; `/history/summary`, `/history/persistence`, `/history/entries`; `/profiles/:player`, `/profiles/:player/history` | Webhook ingest and the daemon's `POST /bundles` announce (shared secret) |
+| Indexer read API | `GET /health`, `/time`, `/tiers`, `/pool-types`, `/pools` (`?state=`, `?tier=`, `?mode=`, `?capacity=`), `/pools/:pool` and its `/entries`, `/results`, `/payouts`, `/leaderboard`, `/verify-record`; `/treasury`; `/history/summary`, `/history/persistence`, `/history/entries`; `/profiles/:player`, `/profiles/:player/history` | Webhook ingest and the daemon's `POST /bundles` announce (shared secret) |
 | Packet service | `GET /health`, `/geo`; `POST /attestation`, `/ciphertexts`, `/packet`, `/notify`, `/notify/pool`; `GET /ciphertexts/status` | — |
 | Review service | `GET /health`, `/decisions`, `/appeals`, `/pending`; `POST /decisions` (reviewer-signed), `POST /appeals` (player-signed), `POST /complaints`; `GET /complaints?ref=` (the complainant's own thread); `POST /complaints/answer` (reviewer-signed) | `GET /detection`, `GET /complaints/open` — operator token, fail closed |
 
@@ -124,16 +127,20 @@ and each backend service's `BLOTTO_PROGRAM_ID` (set by `deploy-backend.yml`).
 
 ### Accounts
 
-Every PDA type has its own seed prefix. Layouts are pinned byte for byte by
+Every PDA type has its own seed prefix, and no prefix is the start of another: the pool type's is
+`ptype`, not `pool_type`, because seeds are concatenated without a length prefix, so a prefix that
+begins with another's can let two seed lists spell the same bytes
+([`adr/threat-tm-401.md`](adr/threat-tm-401.md)). Layouts are pinned byte for byte by
 `account_layouts_are_pinned` in `state.rs`.
 
 | PDA | Seeds | Space (bytes) | Holds |
 |---|---|---|---|
-| `Config` | `["config"]` | 603 | The four service keys (admin, entry signer, settlement signer, keeper); per-tier prices, pots and ceilings; the easy and hard ladders' enable switches, live-pool slots and cooldown stamps; pause, KYC and detection switches; treasury book-keeping (`platform_reserved`, `platform_refundable`) and policy; fill deadline and cooldown. Singleton. |
-| `Pool` | `["pool", id]` | 850 | One competition: tier, mode, price, pot, deadline, `min_seats`, state, the class bag, sealing commitments, the results root and the committed payout list. |
+| `Config` | `["config"]` | 605 | The four service keys (admin, entry signer, settlement signer, keeper); per-tier prices, ceilings and the 64-player reference prize pool; the easy and hard ladders' tier switches (`open_tiers`, `hard_open_tiers`); pause, KYC and detection switches; treasury book-keeping (`platform_reserved`, `platform_refundable`) and policy; fill deadline and cooldown; `enabled_pool_types`, the count of enabled pool types. The per-(mode, tier) slots and cooldown stamps stay in the layout but are no longer read. Singleton. |
+| `PoolType` | `["ptype", mode, tier, capacity (u16 LE)]` | 57 | One (mode, tier, capacity) — up to 2 × 7 × 4 = 56: its minimum field, paid places, prize table (`[u8; 16]`, multiples of the entry), fixed prize pool, enable switch, live-pool slot and cooldown stamp. Every pool copies the economics at open. |
+| `Pool` | `["pool", id]` | 869 | One competition: tier, mode, capacity, price, prize pool, deadline, `min_seats`, `paid_places`, `prize_table`, state, the class bag, sealing commitments, the results root and the committed payout list. |
 | `Entry` | `["entry", pool, player]` | 228 | One seat: player, index, battles hash, class, pass, flags, escrow, sanctions hold, and the next-place split book-keeping. Keyed by player, so one entry per wallet per pool is structural. |
-| Prize vault | `["vault", id]` | 0 | Zero-data, system-owned. Holds that pool's pot plus a rent cushion. |
-| Treasury | `["platform"]` | 0 | Zero-data, system-owned. Receives every entry payment and funds every pot. |
+| Prize vault | `["vault", id]` | 0 | Zero-data, system-owned. Holds that pool's prize pool plus a rent cushion. |
+| Treasury | `["platform"]` | 0 | Zero-data, system-owned. Receives every entry payment and funds every prize pool. |
 | Pass collection | `["pass_collection", pool]` | — | The Metaplex Core collection whose frozen state every pass inherits. |
 
 Pool states: `Open → Sealed → Scored → Paid`, or `Open → Refunding → Closed` (a pool with no
@@ -145,18 +152,18 @@ one-shot migration:
 
 | Account | Sizes (with discriminator) | Migration |
 |---|---|---|
-| `Config` | 380 → 484 (keeper, timings, cooldowns) → 603 (hard ladder) | `migrate_config` (admin); now V2 → V3 only, a V1 account is refused |
-| `Pool` | 847 → 849 (`min_seats`, R7-b) → 850 (`mode`) | `migrate_pool` (permissionless, moves no lamports). A pre-R7-b pool gets `min_seats` = 52, the floor its players entered under, and `mode` = easy; a pre-hard-mode pool gets `mode` = easy |
+| `Config` | 380 → 484 (keeper, timings, cooldowns) → 603 (hard ladder) → 605 (`enabled_pool_types`, D-E19) | `migrate_config` (admin): 603 → 605, or 484 → 605 through both tails; a 380-byte account is refused. `enabled_pool_types` starts at 0 because every pool type starts disabled |
+| `Pool` | 847 → 849 (`min_seats`, R7-b) → 850 (`mode`) → 869 (`capacity`, `paid_places`, `prize_table`, D-E19) | `migrate_pool` (permissionless, moves no lamports). A pre-R7-b pool gets `min_seats` = 52, the floor its players entered under; a pre-hard-mode pool gets `mode` = easy; a pre-Ladder pool is recorded as what its players entered: capacity 64, one paid place, table `[prize pool ÷ entry]`. A pool that never played and whose prize pool is not a whole number of entries gets no table; any other pool that cannot be represented is refused (`MigrationUnrepresentable`) |
 
 ### Instructions
 
-Thirty-four instructions, grouped by who may send them. Every privileged instruction checks its
+Thirty-seven instructions, grouped by who may send them. Every privileged instruction checks its
 signer against `Config`.
 
 | Signer | Instructions |
 |---|---|
-| **Admin** (the Squads multisig vault) | `init_config`, `migrate_config`, `set_keeper`, `set_pool_timing`, `set_paused`, `rotate_entry_signer`, `set_settlement_signer`, `set_open_tiers`, `set_hard_open_tiers`, `set_vault_ceiling`, `set_kyc_threshold`, `set_detection_hard_block`, `set_tier_economics`, `set_treasury_policy`, `withdraw_platform`, `forfeit_escrow`, `lift_sanctions_hold` |
-| **Keeper** | `open_pool` (takes `mode`: 0 easy, 1 hard) |
+| **Admin** (the Squads multisig vault) | `init_config`, `migrate_config`, `set_keeper`, `set_pool_timing`, `set_paused`, `rotate_entry_signer`, `set_settlement_signer`, `set_open_tiers`, `set_hard_open_tiers`, `set_vault_ceiling`, `set_kyc_threshold`, `set_detection_hard_block`, `set_tier_economics`, `set_treasury_policy`, `init_pool_type`, `set_pool_type_economics`, `set_pool_type_enabled`, `withdraw_platform`, `forfeit_escrow`, `lift_sanctions_hold` |
+| **Keeper** | `open_pool` (takes `mode`: 0 easy, 1 hard, and `capacity`: 8, 16, 32 or 64) |
 | **Settlement signer** | `reveal_pool_secret`, `commit_results`, `pay_prizes`, `pay_next_place`, `flag_entry`, `clear_flag`, `place_sanctions_hold`, `release_escrow` (reviewed path) |
 | **Player** | `register` |
 | **Anyone** | `fund_platform_wallet`, `commit_vrf_seed`, `create_pass_collection`, `seal_at_deadline`, `trigger_refund`, `refund`, `migrate_pool`, `release_escrow` (after the 7-day window) |
@@ -169,9 +176,19 @@ Notes on the split:
 - **Placing a sanctions hold is settlement-signed; lifting one is admin-signed.** A hold moves
   nothing and must be fast. Upholding a forfeit and clearing a list match both need the multisig.
 - **The four service keys cannot enter a pool** — `register` refuses them.
-- **Each (mode, tier) has its own slot.** `set_open_tiers` and `set_hard_open_tiers` are separate
-  switches; the two ladders share each tier's price, pot and ceiling. Pools in one (mode, tier)
-  run one at a time, with a 5-minute cooldown between them.
+- **Each pool type has its own slot** (D-E19). A pool type opens only when its tier is open for
+  its mode (`set_open_tiers` / `set_hard_open_tiers`, R6) **and** the type is enabled
+  (`set_pool_type_enabled`). Pools of one type run one at a time, with a 5-minute cooldown between
+  them (`PoolType.next_open_at`); pools of different types run side by side. Both modes share each
+  tier's price and ceiling.
+- **Pool-type economics are checked for shape, never derived.** `set_pool_type_economics` refuses a
+  table that does not pay exactly `capacity / 4` places, increases, or holds a zero inside the paid
+  places; a minimum field not above the places paid or above the capacity; a stated prize pool that
+  is not exactly `Σ table × price` at the tier's current price (`PrizePoolMismatch`); and a prize
+  pool above `min_seats × price` (`PotExceedsMinimumField`). `open_pool` re-checks the prize pool
+  against today's price and refuses a stale type (`PoolTypeEconomicsStale`), so a price change
+  cannot open a pool whose published prizes no longer match. Enabling requires economics set
+  (`PoolTypeEconomicsUnset`).
 
 ### The money model
 
@@ -182,12 +199,12 @@ function.
 | Step | Instruction | From → to |
 |---|---|---|
 | Fund the treasury | `fund_platform_wallet` | anyone → treasury |
-| Open a pool | `open_pool` | treasury → the pool's vault: the tier's **fixed pot** plus a rent cushion, before any entry |
+| Open a pool | `open_pool` | treasury → the pool's vault: the pool type's **fixed prize pool** plus a rent cushion, before any entry |
 | Enter | `register` | player → treasury: the full entry price. Counted in `Config.platform_refundable` until the pool seals |
-| Pay the winner | `pay_prizes` | vault → rank-1 player(s); a tie for first splits the pot |
+| Pay the paid places | `pay_prizes` | vault → every player on the committed payout list, by the pool's own table; ties split by D3-B |
 | Release a held share | `release_escrow` | vault → that player (after review, or by anyone after 7 days) |
-| Pay a forfeited share onward | `pay_next_place` | vault → the next eligible player(s) at the rank it passes to |
-| Refund an unplayed pool | `trigger_refund` | vault → treasury: the untouched pot (the rent cushion stays in the vault) |
+| Pay a forfeited share onward | `pay_next_place` | vault → the next eligible player(s) at the rank it passes to — **one-place pools only** since D-E19 |
+| Refund an unplayed pool | `trigger_refund` | vault → treasury: the untouched prize pool (the rent cushion stays in the vault) |
 | Refund an entry | `refund` | treasury → player: the full entry price |
 | Operator withdrawal | `withdraw_platform` | treasury → admin destination, only above the floor |
 
@@ -197,17 +214,29 @@ The guarantees this adds up to:
   `pay_prizes`, `release_escrow`, `pay_next_place` and `trigger_refund`; the last applies only to an
   `Open` pool past its deadline below its `min_seats`, i.e. a pool that never played.
 - **`forfeit_escrow` moves nothing.** It records that review upheld a flag. The share stays in the
-  pool's vault until `pay_next_place` divides it among eligible players. There is no path from a
-  prize vault to the operator, no admin escape hatch and no recover-stuck-funds instruction.
-- **Pots are fixed per tier** (`TIER_POT_LAMPORTS` in `constants.rs`: 4 / 20 / 30 / 40 / 100 /
-  200 / 300 SOL against entry prices of 0.1 / 0.5 / 0.75 / 1 / 2.5 / 5 / 7.5 SOL) and never
-  derived from entries or balances; CI fails on such arithmetic. Prices and pots can be changed
-  for future pools by `set_tier_economics`; an open pool keeps what it opened with.
+  pool's vault until it is paid onward to players: by `pay_next_place` in a one-place pool, and in
+  a multi-place pool by the field-moves-up payout, which is not built — until then the share is
+  held (§10). There is no path from a prize vault to the operator, no admin escape hatch and no
+  recover-stuck-funds instruction.
+- **Prize pools are fixed per pool type** (`PoolType.pot_lamports`, copied onto `Pool.pot_lamports`
+  at open) and never derived from entries or balances; CI fails on such arithmetic. The launch
+  values are `LADDER_TABLES` in `constants.rs` times the tier price (`TIER_ENTRY_LAMPORTS`: 0.1 /
+  0.5 / 0.75 / 1 / 2.5 / 5 / 7.5 SOL): 5, 10, 20 and 40 entries for 8, 16, 32 and 64 players, so
+  0.5 / 1 / 2 / 4 SOL at 0.1 SOL. The 64-player column equals D-E1's tier pots
+  (`TIER_POT_LAMPORTS`), which `Config` still records but no pool is funded from. Prices change by
+  `set_tier_economics` and tables by `set_pool_type_economics`, for future pools only.
 - **Refunds are program-held money.** The treasury's exits are `open_pool` (into a vault),
   `refund`, and `withdraw_platform`, which is refused below
-  `min balance + one reserved pot (plus cushion) per idle enabled tier, per ladder + every refundable entry`.
-- **One paid place** (`PAID_RANKS` = 1). Players tied for first split the pot equally; the
-  indivisible remainder goes to the tied player with the lowest entry index.
+  `min balance + reserve_pots × (prize pool + cushion) for every enabled pool type on an open tier with no live pool + every refundable entry`.
+  The enabled pool types arrive as remaining accounts, strictly ascending by address; the program
+  refuses unless every one is a genuine enabled `PoolType` (owner and discriminator) and there are
+  exactly `Config.enabled_pool_types` of them (`open_pool` takes every other one), so leaving one
+  out to shrink the reserve is refused (`PoolTypeListIncomplete`, `PoolTypeAccountInvalid`).
+- **The top quarter is paid** (D-E19). A pool pays `paid_places` = `capacity / 4` places, place *r*
+  worth `prize_table[r-1] × entry_lamports`, exact with no division. A tie group shares the combined
+  worth of the positions it occupies, which can cross the paid line; the indivisible remainder
+  goes to the tied player with the lowest entry index (D3-B). Pools from before the Ladder pay one
+  place, worth the whole prize pool.
 
 ### Holds, escrow and the forfeited-share split
 
@@ -219,23 +248,25 @@ a pool short of `Paid`.
 | Held because | How it leaves the vault |
 |---|---|
 | Flag, not upheld | `release_escrow` to the player: by the daemon once the 12-hour review window has passed (`REVIEW_WINDOW_SECS`), by the settlement signer after review, or by anyone once 7 days have passed since `escrowed_at` |
-| Flag upheld (`forfeit_escrow`, admin) | `pay_next_place`, divided **equally** among the eligible players at the rank it passes to |
+| Flag upheld (`forfeit_escrow`, admin) | In a one-place pool: `pay_next_place`, divided **equally** among the eligible players at the rank it passes to. In a multi-place pool: **held** in the vault — `pay_next_place` refuses it (`NextPlaceUnsupported`) — until the field-moves-up payout ships (§10) |
 | Sanctions hold | Nothing moves while it stands: both `release_escrow` paths refuse, and the entry cannot receive a next-place portion. Only `lift_sanctions_hold` (admin) clears it. No instruction moves a held share anywhere else |
 
-At first place the program computes the eligible group itself (under one paid place, the
-committed payout list is the rank-1 group) and refuses arguments that disagree. When no first-place
-member is eligible, the share passes to the next competition rank; each recipient proves its rank
-with a Merkle proof against the committed results root. The program cannot prove the presented
-group is *complete* — that is the settlement signer's assertion, stated on the rules page, and the
-published bundle names the whole group so a deviation is visible. The four service keys can never
+`pay_next_place` serves only pools that pay one place (`paid_places <= 1`): every pool opened
+before the Ladder. There, at first place the program computes the eligible group itself (under one
+paid place, the committed payout list is the rank-1 group) and refuses arguments that disagree.
+When no first-place member is eligible, the share passes to the next competition rank; each
+recipient proves its rank with a Merkle proof against the committed results root. The program
+cannot prove the presented group is *complete* — that is the settlement signer's assertion, stated
+on the rules page, and the published bundle names the whole group so a deviation is visible. The four service keys can never
 hold a seat, and `escrow.rs` has no treasury path at all.
 
 ### The class draw and the pass
 
 Five classes (Goblin, Knight, Wizard, Dragon, Titan) drawn without replacement from an on-chain bag
-of `[38, 15, 7, 3, 1]` (sum 64) stored on the pool as `class_counters`. The draw digest combines the
-pool's VRF seed, a slot hash from at least five slots back, the pool, the entry index and the
-player key. Since R22 (2026-10-15) no oracle commits a seed — Switchboard shut down — so pools from
+of `[38, 15, 7, 3, 1]` (sum 64) stored on the pool as `class_counters`. Every pool, at every size,
+starts from this same mix of 64 (D-E19), so no size is a route to a rarer character; a pool smaller
+than 64 closes with passes left in it. The draw digest combines the pool's VRF seed, a slot hash
+from at least five slots back, the pool, the entry index and the player key. Since R22 (2026-10-15) no oracle commits a seed — Switchboard shut down — so pools from
 90 on hash 32 zero bytes in the seed's place; `commit_vrf_seed` remains, and refuses once a pool has
 an entry
 ([`adr/adr-021-bag-without-replacement-draw.md`](adr/adr-021-bag-without-replacement-draw.md),
@@ -268,7 +299,9 @@ with an Easy / Hard toggle and a tier filter; the card shows the chosen pool's o
 and deadline clock. When the hard ladder is enabled but no hard pool is open at that tier, the hard
 side reads "Opens soon"; a tier the founder has not opened is listed greyed as "Not open yet". The
 pool, pools-index, results and verify pages all name the mode. The read API serves `mode`
-(`'easy' | 'hard'`) per pool and the hard ladder per tier under `GET /tiers`.
+(`'easy' | 'hard'`) per pool with the pool's `capacity`, `min_seats`, `paid_places`, `prize_table`
+and `prize_amounts` (lamports per place); every pool type, live or not, under `GET /pool-types`
+(D-E19); and the per-tier view under `GET /tiers`, kept for older clients.
 
 ## 5. Sealing
 
@@ -308,12 +341,20 @@ never halts a pool.
 - **Score** in integer half-points — win 2, draw 1, loss 0. No float touches a score or a lamport.
 - **Ranking**: score, then stats won. Players equal on both share a competition rank. Entry order
   never decides rank; it only places a split's indivisible remainder and the published leaf order.
+- **Prizes** (`assignPrizes`): over the pool's **own** table, read from the chain
+  (`prizeTableFromChain(Pool.prize_table, Pool.paid_places)`), never the launch table. A tie group
+  shares the positions it occupies; positions past the table are worth zero.
 - **Results tree**: one leaf per seat (player ‖ rank ‖ amount), domain-separated sha256. The root
   and the payout list are committed on-chain by `commit_results`, which refuses a list that is
-  unsorted, duplicated, out of range or does not sum to the pot.
-- **The bundle** (version 3, names `mode`; a version-2 bundle reads as easy) is published on Irys:
-  the secret, every board, salts, commitments, statuses, results, payouts and the root. Timings and
-  the device hash are never published.
+  empty, unsorted, duplicated or out of range, holds a zero amount (`PayoutZero`) or one above the
+  pool's first prize, `prize_table[0] × entry_lamports` (`PayoutAboveFirstPrize`), or does not sum
+  to exactly the prize pool. The program does not rank (D-E15 as narrowed by D-E19): who is paid
+  what is checked by recomputation.
+- **The bundle** (version 4: adds the pool's `capacity`, `min_seats`, `paid_places` and
+  `prize_table`; version 3 named `mode`; a version-2 bundle reads as easy, and a version-3 bundle as
+  64 players with one place worth the whole prize pool) is published on Irys: the secret, every
+  board, salts, commitments, statuses, results, payouts and the root. Timings and the device hash
+  are never published.
 
 The same scoring module runs in the crank and the browser. The verify page fetches the bundle,
 reads the revealed secret and committed root from RPC, re-scores, rebuilds the tree and compares
@@ -348,8 +389,8 @@ read it and for how long is canonical in
 
 | Where | What |
 |---|---|
-| Chain | `Config`, `Pool`, `Entry`, vaults, treasury, passes; events in transaction logs, from which every off-chain number is replayed |
-| Postgres — indexer | `events`, `pools`, `entries`, `results`, `payouts`, `rankings`, `profiles`, `player_history`, `tier_status`, `bundles`, `published_bundles` |
+| Chain | `Config`, `PoolType`, `Pool`, `Entry`, vaults, treasury, passes; events in transaction logs, from which every off-chain number is replayed |
+| Postgres — indexer | `events`, `pools`, `pool_types`, `entries`, `results`, `payouts`, `rankings`, `profiles`, `player_history`, `tier_status`, `bundles`, `published_bundles` |
 | Postgres — packet | `attestations`, `sealed_entries` (read by the daemon at settlement, served to nobody), `notify_optin`, `notify_pool_optin`, `sanctions_refusals` |
 | Postgres — daemon | `published_pool_keys` (public halves only), `detection_reports` |
 | Postgres — review | `review_decisions` (decisions and appeals), `complaints` |
@@ -405,6 +446,9 @@ too late for it, so the watcher runs on Fly. Running all of this locally:
 | Item | State |
 |---|---|
 | Mainnet | Not deployed. The upgrade authority is a single devnet key and the multisig threshold is one; both are disclosed in `config/custody.json`. |
+| The admin multisig | The devnet admin is a Squads v3 multisig whose web interface has been retired; admin transactions are built and proposed with `scripts/squads-v3.ts`. The program has no `set_admin`, so the admin named at `init_config` is permanent: a mainnet deployment must be initialised with a Squads v4 multisig as admin. |
+| Forfeits in multi-place pools | The field-moves-up payout (D-E19) is not built. A share forfeited after an upheld flag in a pool that pays more than one place stays held in that pool's vault — never paid wrongly, never to the operator — and `pay_next_place` refuses it (`NextPlaceUnsupported`). It is paid when the payout ships in its own program upgrade. |
+| Who is paid what, on chain | The program does not rank (D-E15 as narrowed by D-E19). `commit_results` bounds every amount by the pool's first prize and checks the exact total; a list that paid the right amounts to the wrong seats would land, and recomputation from the published bundle is what catches it. |
 | Pool key generation | Each pool's sealing key is generated in the operator's process, imported into the custody service and wiped locally (Turnkey offers no X25519 curve). For that instant the process holds the secret, so sealing rests on the custody policy. See [`../../backend/sealing/README.md`](../../backend/sealing/README.md). |
 | Settlement key custody | The settlement signer (also the keeper on devnet) is a local keypair loaded by the daemon, not co-signed through a custody service. |
 | Class-draw replay in the app | `backend/class-digest` implements the replay and is pinned to the Python vectors, but no page imports it. A player can replay their class from published events (`PoolVrfSeeded.vrf_seed`, each `EntryRegistered`'s index and slot hash, pool and player); there is no page that does it for them. |

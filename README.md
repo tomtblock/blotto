@@ -4,12 +4,25 @@
 
 A paid-entry tournament on Solana, built on the Colonel Blotto game: the result is decided by the players' decisions, with no chance in the scoring.
 
-Up to 64 players enter a pool. Each one places points across **seven sealed battles** of five
-stats — Strength, Speed, Heart, Wit, Durability — on a board, against one three-minute clock. When
-the pool closes, every allocation is revealed and each player's seven battles are scored against the
-matching battle of **every other player** (441 comparisons per player, 14,112 in a full pool). No
-pairings, no bracket, no chance in the mechanism: everyone faces the identical field. The player
-ranked first is paid the pool's whole fixed prize pool (players tied for first share it equally).
+A pool holds 8, 16, 32 or 64 players. Each one places points across **seven sealed battles** of
+five stats — Strength, Speed, Heart, Wit, Durability — on a board, against one three-minute clock.
+When the pool closes, every allocation is revealed and each player's seven battles are scored
+against the matching battle of **every other player** (441 comparisons per player in a full
+64-player pool, 49 in a full 8-player pool). No pairings, no bracket, no chance in the mechanism:
+everyone faces the identical field. The top quarter of the pool's size is paid, from a prize table
+that is fixed for each size before anyone enters. For a 0.1 SOL entry:
+
+| Pool size | Places paid | Prizes |
+|---|---|---|
+| 8 players | 2 | 1st 0.3 SOL, 2nd 0.2 SOL |
+| 16 players | 4 | 1st 0.5 SOL, 2nd 0.3 SOL, 3rd and 4th 0.1 SOL each |
+| 32 players | 8 | 1st 0.8 SOL, 2nd 0.4 SOL, 3rd and 4th 0.2 SOL each, 5th to 8th 0.1 SOL each |
+| 64 players | 16 | 1st 1.2 SOL, 2nd 0.6 SOL, 3rd and 4th 0.3 SOL each, 5th to 8th 0.2 SOL each, 9th to 16th 0.1 SOL each |
+
+Players level on the ranking share the prizes of the places they occupy equally. The tables live
+in [`programs/blotto_cup/src/constants.rs`](programs/blotto_cup/src/constants.rs) (`LADDER_TABLES`)
+and decision `D-E19`; the product requirements for pools and prizes are in
+[`docs/product/PRD.md` §6](docs/product/PRD.md#6-pools-tiers-and-prizes).
 
 Each entrant also receives a non-transferable character pass whose class is drawn with verifiable
 on-chain randomness. **The class is cosmetic** — nothing in scoring, payout or ranking reads it.
@@ -28,32 +41,36 @@ on-chain randomness. **The class is cosmetic** — nothing in scoring, payout or
 | How a battle is won | the larger number wins a stat; three stats of five win the battle; otherwise a draw | identical |
 | Clock | one three-minute clock for the whole board, starting at the first point placed | identical |
 
-Each mode runs its own pools with its own entry and prize pool. The rules live in
-[`backend/scoring/src/allocation.ts`](backend/scoring/src/allocation.ts) and
+Each mode runs its own pools, at every size, with the same entry prices and prize tables. The rules
+live in [`backend/scoring/src/allocation.ts`](backend/scoring/src/allocation.ts) and
 [`backend/scoring/src/engine.ts`](backend/scoring/src/engine.ts); the one scoring module is run
 unchanged by the settlement service and by the browser, so any player can recompute the result.
 
 ## How the money moves
 
-1. **The prize is funded before anyone can enter.** Opening a pool moves that tier's fixed pot from
-   the platform treasury into the pool's own vault. The pot is a constant per tier, not a share of
-   entries, so it is the same whether 40 players enter or 64.
+1. **The prize is funded before anyone can enter.** Opening a pool moves its whole prize pool from
+   the platform treasury into the pool's own vault. The prize pool is fixed for the pool's size and
+   entry price, not a share of entries, so it is the same however many players enter.
 2. **Entries go to the treasury.** An entry never touches the prize vault.
-3. **The pool either plays or refunds.** Entries close 12 hours after opening. With 40 or more seats
-   filled (or all 64) the pool seals and plays. Below 40, every entry is refunded in full from the
-   treasury and the untouched pot returns to the treasury. The floor is written onto each pool when
-   it opens, so a later change cannot move it under players who already entered.
+3. **The pool either plays or refunds.** Entries close 12 hours after opening, or as soon as the
+   pool is full. Each size has a minimum field — 5, 10, 20 or 40 players for 8, 16, 32 or 64. At
+   or above it the pool plays; below it, every entry is refunded in full from the treasury and the
+   untouched prize returns to the treasury. The minimum field is written onto each pool when it
+   opens, so a later change cannot move it under players who already entered.
 4. **Once a pool plays, its prize is only ever paid to players.** The prize leaves the vault through
-   `pay_prizes`, `release_escrow` or `pay_next_place`. A share held back by an upheld review is not
-   returned to the operator — it passes to the next eligible place. There is no withdraw
+   `pay_prizes`, `release_escrow` or `pay_next_place`. A share held back by an upheld review is
+   never returned to the operator: in a pool that pays several places it stays in the vault until
+   the payout that moves the rest of the field up is built (decision `D-E19`). There is no withdraw
    instruction on a vault and no admin escape hatch;
    [`scripts/check-standing-rules.sh`](scripts/check-standing-rules.sh) asserts the exact exit set on
    every change.
 
-Seven entry tiers exist, from 0.1 SOL to 7.5 SOL, on the same ladder for both modes; the prices, pots and which tiers are open live in
+Seven entry tiers exist, from 0.1 SOL to 7.5 SOL, the same for both modes and every size; only
+0.1 SOL is open. The prices, the prize tables and the minimum fields live in
 [`programs/blotto_cup/src/constants.rs`](programs/blotto_cup/src/constants.rs) and on-chain in
-`Config`. [`docs/compliance/PRODUCT-FACTS.md`](docs/compliance/PRODUCT-FACTS.md) lists every value
-with its source.
+`Config` and one `PoolType` account per mode, tier and size; which of them are open is set there
+too. [`docs/compliance/PRODUCT-FACTS.md`](docs/compliance/PRODUCT-FACTS.md) lists every value with
+its source.
 
 ## Documentation
 

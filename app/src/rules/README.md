@@ -16,24 +16,28 @@ server-side in `backend/packet`. Nothing in the browser gates anything.
 
 `app/src/app/rules/rules.config.ts` is the page's single data source. Section wording comes from
 `app/src/copy/`; every number comes from the shared constants in `@blotto/scoring`
-(`TIER_ENTRY_LAMPORTS`, `TIER_POT_LAMPORTS`, `MIN_SEATS`, `DEFAULT_FILL_DEADLINE_SECS`,
-`DEFAULT_COOLDOWN_SECS`) or from `config/`, never typed in, so the page cannot drift from what the
-program pays or enforces. `rules.config.test.ts` pins this.
+(`TIER_ENTRY_LAMPORTS`, `POOL_CAPACITIES`, `LADDER_TABLES`, `MIN_FIELD_BY_CAPACITY`,
+`DEFAULT_FILL_DEADLINE_SECS`, `DEFAULT_COOLDOWN_SECS`) or from `config/`, never typed in, so the
+page cannot drift from what the program pays or enforces. `rules.config.test.ts` pins this. The
+prize tables are in multiples of the entry; the page multiplies them by the entry price and shows
+SOL per place, never a multiple or a percentage (D-E19).
 
 The page states, before any payment:
 
-- **How to enter**, and the entry price and fixed prize pool for each tier.
-- **Who is paid**: the player ranked first receives the whole prize pool; a tie for first splits it
-  equally; a forfeited share passes to the next eligible players and is never returned to the
-  operator.
+- **How to enter**, and the entry price for each tier.
+- **Who is paid**: the top quarter of each pool size (8, 16, 32 or 64 players), with the prize for
+  every paid place in SOL; players tied across places share those places' prizes equally, even
+  across the last paid place; a forfeited share is never returned to the operator — in a pool that
+  pays several places it is held until the field-moves-up payout ships (D-E19).
 - **How scoring works**: a stat is won by the larger number, a battle by three of five stats,
   otherwise a draw; every player faces every other player.
 - **The battle timer** and what happens to unplaced points when it ends.
 - **What randomness does**: it picks the cosmetic character class and nothing else.
 - **Sealing**: battles are encrypted on the player's device; the wording is fixed in
   `app/src/copy/` and explained in [`backend/sealing/README.md`](../../../backend/sealing/README.md).
-- **Field size and refunds**: a pool has 64 seats, runs with at least 40 (`MIN_SEATS`) once the
-  12-hour fill deadline passes, and refunds every entry in full below that.
+- **Field size and refunds**: each pool size's minimum field (`MIN_FIELD_BY_CAPACITY`: 5, 10, 20,
+  40), with which a pool runs once the 12-hour fill deadline passes; below it every entry is
+  refunded in full.
 - **When tournaments open**, including the cooldown between pools.
 - **How to verify a result**, linking to `/verify`.
 - **Availability**, rendered from the territory schedule above.

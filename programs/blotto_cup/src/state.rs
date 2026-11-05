@@ -57,12 +57,16 @@ pub const PASS_COLLECTION_SEED: &[u8] = b"pass_collection";
 /// Pool-type PDA (D-E19, the Ladder): `[POOL_TYPE_SEED, &[mode], &[tier],
 /// &capacity.to_le_bytes()]` — one per (mode, tier, capacity).
 ///
-/// Deliberately NOT `b"pool_type"`, the name the spec proposed: Solana
-/// concatenates seeds with no length prefix, so `[b"pool", id_le(8)]` and
-/// `[b"pool_type", mode, tier, cap(2)]` are both 13 bytes and would collide
-/// for a pool id whose bytes spell `_type…`. Pool ids are sequential and
-/// never get there, but threat-tm-401's rule is that no PDA type's prefix is
-/// a prefix of another's, and the test below now checks exactly that.
+/// Deliberately NOT `b"pool_type"`, the name the spec proposed. Solana
+/// concatenates seeds with no length prefix, so a PDA type whose prefix
+/// STARTS WITH another type's prefix can, for some seed lengths, produce the
+/// same hash input as it. With today's seeds that cannot happen —
+/// `[b"pool", id_le(8)]` is 12 bytes and `[b"pool_type", mode, tier, cap(2)]`
+/// would be 13 — but it would take only a later change to either seed list
+/// to open the door. threat-tm-401's rule is distinct prefixes; this takes it
+/// one step further (no prefix is a prefix of another), and the test below
+/// checks exactly that. PHASE-N-REVIEW: hygiene, not a live collision —
+/// corrected 2026-11-05 after the first draft of this comment overstated it.
 pub const POOL_TYPE_SEED: &[u8] = b"ptype";
 
 // ---------------------------------------------------------------------------
@@ -637,8 +641,9 @@ mod tests {
 
     /// Distinct seed prefix per PDA type (threat-tm-401) — and, since D-E19,
     /// PREFIX-FREE: no type's prefix is the start of another's. Seeds are
-    /// concatenated with no length prefix, so `b"pool"` + 9 bytes and
-    /// `b"poolX"` + 8 bytes hash the same input; distinct is not enough.
+    /// concatenated with no length prefix, so `b"pool"` + `b"X"` + 8 bytes
+    /// and `b"poolX"` + 8 bytes hash the same input; distinct prefixes alone
+    /// do not rule that shape out.
     #[test]
     fn pda_seed_prefixes_are_pairwise_distinct() {
         let prefixes: [&[u8]; 7] = [

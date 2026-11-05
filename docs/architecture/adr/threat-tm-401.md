@@ -17,7 +17,8 @@ mitigation is simple.
 
 ## Mitigation in Blotto Cup
 
-- **Every PDA type has its own literal seed prefix**, declared once in `state.rs`:
+- **Every PDA type has its own literal seed prefix**, declared once in `state.rs`, and **no prefix
+  is the start of another** (since D-E19):
 
   | PDA | Seeds |
   |---|---|
@@ -27,12 +28,18 @@ mitigation is simple.
   | Platform treasury | `[b"platform"]` |
   | `Entry` | `[b"entry", pool, player]` |
   | Pass Collection | `[b"pass_collection", pool]` |
+  | `PoolType` | `[b"ptype", mode (u8), tier (u8), capacity (u16 LE)]` |
 
+- **Why prefix-free, not only distinct.** Seeds are concatenated with no length prefix, so when
+  one prefix begins with another, two seed lists of equal total length can spell the same bytes.
+  The pool type's prefix is `b"ptype"` rather than the `b"pool_type"` first proposed, because the
+  latter begins with `b"pool"`. With today's fixed-length seeds those two could not collide (12
+  bytes against 13), but the rule removes the class rather than relying on lengths staying apart.
 - Every account constraint derives its address through Anchor's `seeds = [...]` with one of these
   constants and the stored canonical `bump`; no seed prefix is written inline.
-- Two unit tests in `state.rs` guard the scheme: `pda_seed_prefixes_are_pairwise_distinct` and
-  `pda_types_derive_distinct_addresses` (the six types derive six different addresses from related
-  inputs).
+- Two unit tests in `state.rs` guard the scheme: `pda_seed_prefixes_are_pairwise_distinct` (no two
+  prefixes equal, and none the start of another) and `pda_types_derive_distinct_addresses` (the
+  seven types derive seven different addresses from related inputs).
 - The prize vault and treasury seeds may appear in a signed transfer only inside `vault.rs`;
   `scripts/check-standing-rules.sh` fails CI otherwise.
 - The `Entry` PDA keyed on `(pool, player)` also enforces one entry per wallet per pool (decision
@@ -40,5 +47,5 @@ mitigation is simple.
 
 ## Residual risk
 
-**Low.** A new PDA type must add its prefix to the constants and to both tests; code review checks
-for it.
+**Low.** A new PDA type must add its prefix to the constants and to both tests, and choose one
+that neither begins nor is begun by an existing prefix; code review checks for it.

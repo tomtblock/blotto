@@ -1,9 +1,11 @@
 # Blotto Cup — rules for AI coding agents
 
-You are working on Blotto Cup, a paid-entry skill tournament on Solana: up to 64 players per pool (a
-pool runs with at least 40), a non-transferable cosmetic character pass, seven sealed battles of
-five stats placed on a board in one of two modes (easy: 100 per battle; hard: 700 across the
-board), all-vs-all scoring, the player ranked first paid the whole fixed prize pool.
+You are working on Blotto Cup, a paid-entry skill tournament on Solana: pools of 8, 16, 32 or 64
+players (each runs with at least its break-even minimum field), a non-transferable cosmetic
+character pass, seven sealed battles of five stats placed on a board in one of two modes (easy: 100
+per battle; hard: 700 across the board), all-vs-all scoring, and the top quarter of each pool's
+capacity paid on a fixed prize table that depends on the pool's size only (the Ladder, decision
+`D-E19`).
 
 **Read [`docs/README.md`](docs/README.md) first.** It maps which document is canonical for which
 subject. Product facts, constants and the scoring rules live in the code and in those documents —

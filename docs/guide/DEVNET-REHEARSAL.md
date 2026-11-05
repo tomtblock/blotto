@@ -25,8 +25,8 @@ cd tests/rehearsal && npm ci && npm run typecheck && npm test
 
 It asserts that:
 
-- **twenty 64-entrant pools** settle cleanly, with the pot conserved to the lamport in each;
-- a pool at **exactly the minimum field** settles to `Paid`, with the pot conserved;
+- **twenty 64-entrant pools** settle cleanly, with the prize pool conserved to the lamport in each;
+- a pool at **exactly the minimum field** settles to `Paid`, with the prize pool conserved;
 - **detection** runs and reports, and blocks nobody (shadow mode, D-E9);
 - a pool **one seat under the minimum field** refunds every entry in full.
 
@@ -75,8 +75,9 @@ Every admin call runs through `scripts/admin.ts`, in one of two ways:
 - **direct-signed** (a rehearsal where the admin is a local keypair): set `FEE_PAYER_KEYPAIR` and
   run the command;
 - **`--emit-proposal --admin <squads-vault>`** (a multisig admin): prints the instruction's
-  accounts and base64 data **without signing**, ready to paste into a Squads proposal. The CLI
-  cannot sign for a multisig, by design.
+  accounts and base64 data **without signing**, for a Squads proposal. The CLI cannot sign for a
+  multisig, by design. The devnet admin is a Squads v3 multisig whose web interface has been
+  retired, so its proposals are built and submitted with `scripts/squads-v3.ts`.
 
 Amounts are integer lamports, or an exact decimal SOL string such as `6.4sol`. Both are parsed in
 bigint, never as a float. The CLI has no defaults for values the operator sets: tier economics,
@@ -91,7 +92,8 @@ $A status
 $A pools                     # every pool's state and mode
 
 # One-time setup: the signing key becomes admin. --ceilings is each tier's
-# gross-intake ceiling (D2); the example is entry × 64 for the seven tiers.
+# gross-intake ceiling (D2); the example is entry × 64 for the seven tiers,
+# which covers every pool size (see "Ceilings per size" below).
 $A init-config \
   --entry-signer      <entry-signer-pubkey> \
   --settlement-signer <settlement-signer-pubkey> \
@@ -136,6 +138,47 @@ $A set-open-tiers --tiers 1,0,0,0,0,0,0 --emit-proposal --admin <squads-vault>
 The fill deadline shown (43200 s, 12 hours) is the ratified value (D-E6). Every other number above
 is illustrative; the operator sets the real values.
 
+**Pool types (D-E19).** Opening a tier is no longer enough for the keeper to open a pool there. Each
+(mode, tier, size) is a `PoolType` account that must exist, carry its economics and be switched on,
+in three admin instructions:
+
+1. `init_pool_type(mode, tier, capacity)` creates it, disabled, at
+   `["ptype", mode, tier, capacity (u16 LE)]`. The admin pays its rent.
+2. `set_pool_type_economics(mode, tier, capacity, min_seats, prize_table, pot_lamports)` records
+   the table, the minimum field and the prize pool. The program refuses a table that does not pay
+   exactly the top quarter, a minimum field outside (places paid, capacity], and a prize pool that
+   is not exactly the table at the tier's current price or exceeds the minimum field's entries.
+3. `set_pool_type_enabled(mode, tier, capacity, true)` switches it on, which requires step 2.
+
+The launch values, from `constants.rs` (`LADDER_TABLES`, `LADDER_MIN_SEATS`) and D-E19, at the
+0.1 SOL tier:
+
+| Size | `min_seats` | `prize_table` (multiples of the entry) | `pot_lamports` |
+|---|---|---|---|
+| 8 | 5 | 3, 2 | 500,000,000 (0.5 SOL) |
+| 16 | 10 | 5, 3, 1, 1 | 1,000,000,000 (1 SOL) |
+| 32 | 20 | 8, 4, 2, 2, 1, 1, 1, 1 | 2,000,000,000 (2 SOL) |
+| 64 | 40 | 12, 6, 3, 3, 2, 2, 2, 2, then 1 × 8 | 4,000,000,000 (4 SOL) |
+
+The devnet launch enables all eight 0.1 SOL pool types: these four sizes in each mode.
+`scripts/admin.ts` does not issue the three pool-type instructions; on devnet they go through
+`scripts/squads-v3.ts` like every other admin transaction. After a tier's price changes, every pool
+type of that tier refuses to open (`PoolTypeEconomicsStale`) until `set_pool_type_economics`
+restates its prize pool.
+
+**Ceilings per size.** The D2 ceiling caps a pool's pass sales, price × capacity, and is set per
+tier, so a tier's ceiling must cover the largest size enabled in it. At 0.1 SOL a pool's pass sales
+are 0.8, 1.6, 3.2 and 6.4 SOL for 8, 16, 32 and 64 players; the 6.4 SOL ceiling above covers all
+four.
+
+**Treasury funding for eight pool types.** Every enabled pool type on an open tier with no live
+pool is held in reserve: `treasury_reserve_pots` prize pools, each with its rent cushion. With all
+eight 0.1 SOL types enabled, tier 0 open in both modes and the reserve at one, the first open
+therefore needs the whole 2 × (0.5 + 1 + 2 + 4) = 15 SOL of prize pools, eight rent cushions and
+the minimum balance, above any refundable entries, before it is allowed. `open_pool` is passed
+every other enabled pool type, and `withdraw_platform` every enabled one, as remaining accounts in
+ascending address order; a short list is refused (`PoolTypeListIncomplete`).
+
 **Permissionless fallbacks**, for when the daemon is down. The program checks state and deadline,
 so a mistimed call is refused:
 
@@ -161,7 +204,8 @@ including `set-vault-ceiling`, `set-kyc-threshold`, `set-detection-hard-block`,
   backfills are safe. If a gap is suspected, run `npm --prefix backend/indexer run backfill`.
 - **Entry service**: `@blotto/packet` `serveEntryApi`, with the custody-backed packet signer.
 - **Daemon**: `@blotto/reveal` `makeDaemon` over `Web3Chain`, with custody, the results publisher
-  and the randomness coordinator. It settles sealed pools and keeps one open pool per open tier.
+  and the randomness coordinator. It settles sealed pools and keeps one open pool per enabled pool
+  type on an open tier.
 - **Review service**: `@blotto/detection` `serveReviewApi`, with `config/reviewers.json`.
 - **App**: `NEXT_PUBLIC_INDEXER_URL`, `NEXT_PUBLIC_ENTRY_API_URL`, `NEXT_PUBLIC_REVIEW_API_URL`,
   `NEXT_PUBLIC_PROGRAM_ID`, `NEXT_PUBLIC_SOLANA_RPC_URL`.
@@ -179,10 +223,12 @@ automated in `app/e2e/journey.spec.ts` and runs in `ci-fast` → journey.
 ### Step 5 — Failure paths
 
 - **Under the floor**: let a pool reach its deadline below its `min_seats`. `trigger_refund`
-  returns the untouched pot to the treasury, and `refund` repays every entry in full from the
+  returns the untouched prize pool to the treasury, and `refund` repays every entry in full from the
   treasury. A pool at or above the floor seals and plays instead (`seal_at_deadline`), and the
-  program refuses the refund. The floor is the pool's own `min_seats`: 40 since R7-b, and 52 on
-  pools that predate that change.
+  program refuses the refund. The floor is the pool's own `min_seats`: under the Ladder 5, 10, 20
+  or 40 for a pool of 8, 16, 32 or 64; 40 on 64-player pools opened under R7-b; 52 on pools that
+  predate R7-b. The smallest sizes make this path cheap to rehearse: an 8-player pool refunds at
+  four entries and plays at five.
 - **Pause**: `set-paused --paused true` mid-fill makes `register` revert; unpausing resumes the
   fill.
 - **Custody refusal**: if the pool secret cannot be exported for a pool past its deadline, the
@@ -191,8 +237,10 @@ automated in `app/e2e/journey.spec.ts` and runs in `ci-fast` → journey.
 ### Step 6 — Verify and measure
 
 Check each settled pool on the public verify page and recompute its results root from the
-published bundle. Record the fill time with all 64 entrants, the time from seal to payout, the
-compute units used by `register`, and conservation for the treasury and each vault.
+published bundle. Record the fill time of a full field at each size, the time from seal to payout,
+the compute units used by `register`, and conservation for the treasury and each vault. In a
+multi-place pool, check that every committed amount matches the pool's own table — including a tie
+across the last paid place — and that the list sums to the prize pool.
 
 ## 4. Results
 

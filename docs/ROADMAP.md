@@ -20,6 +20,13 @@ between 2026-09-16 and 2026-09-22. Every test that ran conserved money to the la
 ([`testing/TESTING-REPORT.md`](testing/TESTING-REPORT.md)). Nothing is deployed on mainnet, and no
 real money has been taken. Devnet SOL has no value.
 
+On 2026-11-05 the founder confirmed **the Ladder** (D-E19): pools of four sizes, each paying the
+top quarter of its size on a fixed table, in place of one 64-player pool paying one place. The
+program, the scoring engine and its Python oracle carry it; its devnet launch opens all eight
+0.1 SOL pool types, both modes at all four sizes. The devnet site is open to the public: the
+pre-launch access code is gone, and every non-mainnet build asks search engines not to index it and
+shows a one-line test-network notice.
+
 ## 2. Phases
 
 The build was planned in phases, each ending in a gate. The plan dates from 2026-08-26. The table
@@ -29,9 +36,9 @@ mainnet) and 8 (opening further tiers) have not started; they are covered by §3
 | Phase | Goal | Status | What changed from the plan |
 |---|---|---|---|
 | 0 Extraction | A new repository carrying the tested components (the class-draw crate, the pass, sign-in and backend plumbing) with CI green | **Done with changes** | The scoring engine was scaffolded as TypeScript in `backend/scoring/`, not as a Rust crate (R20) |
-| 1 Program | The Anchor program with the vault-invariant suite, deployed to devnet | **Done with changes** | The money model was rebuilt. The treasury pre-funds a fixed prize pool at open (D-A1, D-E1). **One paid place** replaced sixteen (D-E2). A 12-hour deadline and a 40-seat minimum field replaced 72 hours and a full pool (D-E6, R7-b). A forfeited share passes to the next eligible place, not to a later pool (D-E7). A rent cushion was added (2026-09-12). The admin is a multisig vault, but the gate's upgrade-authority item is still open (§3) |
-| 2 Scoring and sealing | A sealed devnet pool reveals, scores and pays automatically; the TypeScript engine matches Python vectors | **Done with changes** | The engine pays one place, so a pool pays one winner or splits a tie, not sixteen payouts. The custody service has no X25519 curve, so each pool key is generated in the operator's process and then imported under an export policy (see [ARCHITECTURE §10](architecture/ARCHITECTURE.md#10-not-built-and-known-limitations)) |
-| 3 Frontend | A stranger enters a devnet pool from a fresh browser, plays, sees the result and verifies it | **In progress** | The draggable pentagon and its 15-second timer were replaced by the battle board, which has one 3-minute clock (D-E17). A second pool type, hard mode, was added (D-E17 Phase B). The app is tested at mobile and desktop widths (R18). The gate has not passed: no one outside the project has verified a pool (T8, §3) |
+| 1 Program | The Anchor program with the vault-invariant suite, deployed to devnet | **Done with changes** | The money model was rebuilt. The treasury pre-funds a fixed prize pool at open (D-A1, D-E1). **One paid place** replaced sixteen (D-E2), and then **the Ladder** replaced one paid place: four pool sizes, each a pool type with its own switch, slot, table, minimum field and prize pool, paying the top quarter (D-E19). A 12-hour deadline and a break-even minimum field replaced 72 hours and a full pool (D-E6, R7-b, D-E19). A forfeited share passes to the next eligible place in a one-place pool, not to a later pool (D-E7); in a Ladder pool it is held until the field-moves-up payout ships (D-E19). A rent cushion was added (2026-09-12). The admin is a multisig vault, but the gate's upgrade-authority item is still open (§3) |
+| 2 Scoring and sealing | A sealed devnet pool reveals, scores and pays automatically; the TypeScript engine matches Python vectors | **Done with changes** | The engine paid one place from D-E2 until the Ladder; it now pays each pool's own table, the top quarter of its size, and its Python oracle generates the vectors for all four sizes (D-E19). The custody service has no X25519 curve, so each pool key is generated in the operator's process and then imported under an export policy (see [ARCHITECTURE §10](architecture/ARCHITECTURE.md#10-not-built-and-known-limitations)) |
+| 3 Frontend | A stranger enters a devnet pool from a fresh browser, plays, sees the result and verifies it | **In progress** | The draggable pentagon and its 15-second timer were replaced by the battle board, which has one 3-minute clock (D-E17). A second mode, hard, was added (D-E17 Phase B). The app is tested at mobile and desktop widths (R18). The gate has not passed: no one outside the project has verified a pool (T8, §3) |
 | 4 Gates and detection | Entry packet enforced on-chain, territory blocking, detection, a review page | **Done with changes** | Detection only reports, and a reviewer decides every flag (D-E9). The territory allow-list became a block-list (D-B3-2). The identity-check switch is built and off (R3, D-E5). A second reviewer key was added on 2026-09-24. The same-device review path has not run on devnet (T7, frozen) |
 | 5 Devnet dress rehearsal | Twenty settled pools including the refund path; every failure path exercised; internal review written | **In progress** | The twenty-pool rehearsal runs offline in CI ([`guide/DEVNET-REHEARSAL.md`](guide/DEVNET-REHEARSAL.md)). The live trial passed T1, T2R, T3, T4, T5 and T6. T7 is frozen and has not run; T8 has not run. The internal reviews are summarised in [`security/SECURITY-REVIEW.md`](security/SECURITY-REVIEW.md) |
 | 6 Compliance and documentation | Rules, terms and privacy live; language audit clean; territory named; mainnet keys listed | **In progress** | Rules, terms, privacy and a complaints route are live on devnet (2026-09-19). The language gate runs in CI. The territory schedule is at version 5. Still open: legal review, the operating entity and the mainnet keys (§3) |
@@ -52,8 +59,16 @@ Every item must be closed before a mainnet deploy.
       and [SECURITY-REVIEW §5](security/SECURITY-REVIEW.md#5-open-items).
 - [ ] **Settlement key custody.** The settlement signer is a software key with no co-signing.
       Tracked in [ARCHITECTURE §10](architecture/ARCHITECTURE.md#10-not-built-and-known-limitations).
-- [ ] **Program-side hardening batch,** including the on-chain prize-table check (D-E15).
-      Tracked in [SECURITY-REVIEW §5](security/SECURITY-REVIEW.md#5-open-items).
+- [ ] **Program-side hardening batch.** The on-chain prize-table check (D-E15) was narrowed by
+      D-E19 to bounds on each amount, which the Ladder program carries; the rest of the batch is
+      open. Tracked in [SECURITY-REVIEW §5](security/SECURITY-REVIEW.md#5-open-items).
+- [ ] **The field-moves-up payout** (D-E19). Until it ships, a forfeited share in a pool that pays
+      more than one place is held in its vault. Tracked in
+      [ARCHITECTURE §10](architecture/ARCHITECTURE.md#10-not-built-and-known-limitations).
+- [ ] **A Squads v4 multisig as admin from `init_config`.** The program has no `set_admin`, so the
+      admin named at initialisation is permanent. The devnet admin is a Squads v3 multisig whose
+      web interface has been retired. Tracked in
+      [SECURITY-REVIEW §5](security/SECURITY-REVIEW.md#5-open-items).
 - [ ] **Remaining medium and low findings** from the 2026-09-11 review. Tracked in
       [SECURITY-REVIEW §4–§5](security/SECURITY-REVIEW.md#4-findings-and-fixes).
 - [ ] **Backup and restore for the sealed-entry store,** rehearsed. Tracked in
@@ -87,6 +102,9 @@ The open items are tracked in [TESTING-REPORT §8](testing/TESTING-REPORT.md#8-l
 
 - [ ] **Independent legal review.** No outside opinion has been obtained (R1, R1-b). Tracked in
       [SAFEGUARDS — Known gaps](compliance/SAFEGUARDS.md#known-gaps).
+- [ ] **Counsel's sign-off on the Ladder and terms version 6.** D-E19 is gated on both before any
+      pool takes real money. Tracked in
+      [DECISIONS — D-E19](architecture/DECISIONS.md#prize-structure-and-settlement-d-e).
 - [ ] **The operating entity named** in [`../config/operator.json`](../config/operator.json).
       Every value is unset today, and `scripts/check-operator-identity.ts` refuses a mainnet deploy
       until all are filled.
@@ -121,7 +139,8 @@ The open items are tracked in [TESTING-REPORT §8](testing/TESTING-REPORT.md#8-l
 Only steps the recorded decisions already plan are listed here.
 
 - **Restricted start.** Mainnet opens with the 0.1 SOL tier only. Every other tier stays closed
-  behind `set_open_tiers` (R6, D1).
+  behind `set_open_tiers` (R6, D1). Within it, which pool sizes open is set per pool type (D-E19);
+  the recorded decision covers the devnet launch only.
 - **The 0.5 SOL tier** opens only after the independent audit and one written legal opinion (R6,
   R1). Its success target is one 0.5 SOL pool filling within 24 hours without outreach (R17).
 - **Higher tiers** open only by a later explicit decision (R6). The identity-check switch is

@@ -12,7 +12,7 @@ Where this document and the code disagree, the code is right.
 the product is pending; this document makes no claim about the product's legal status.
 
 **Document history.** Supersedes the original product document, v0.5 (not published). Reconciled
-against the code on 2026-09-26.
+against the code on 2026-09-26; pools and prizes rewritten for the Ladder (D-E19) on 2026-11-05.
 
 Contents: [1 Summary](#1-summary) · [2 Players and the session](#2-players-and-the-session) ·
 [3 The game](#3-the-game) · [4 Why decisions decide](#4-why-decisions-decide-the-result) ·
@@ -25,14 +25,15 @@ Contents: [1 Summary](#1-summary) · [2 Players and the session](#2-players-and-
 
 ## 1. Summary
 
-Blotto Cup is a paid-entry tournament built on the Colonel Blotto game. Up to 64 players enter a
-pool at the same fixed price. Each receives a non-transferable character pass whose class is
-decorative, then places points on a board of **seven battles × five stats** within one
+Blotto Cup is a paid-entry tournament built on the Colonel Blotto game. A pool holds 8, 16, 32 or
+64 players, all at the same fixed price. Each receives a non-transferable character pass whose
+class is decorative, then places points on a board of **seven battles × five stats** within one
 three-minute clock. The entry is sealed on the player's device before payment. When the pool
 closes, every entry is revealed and compared battle by battle against every other entry, and the
-player ranked first receives the whole prize pool — a fixed amount moved into the pool's own
-account before the first entry was sold. There is no pairing, no bracket and no random element in
-the result, and anyone can recompute the ranking from published data.
+top quarter of the pool's size is paid from a prize table fixed for that size (§6). The whole prize
+pool is a fixed amount moved into the pool's own account before the first entry was sold. There is
+no pairing, no bracket and no random element in the result, and anyone can recompute the ranking
+and every amount from published data.
 
 ## 2. Players and the session
 
@@ -46,7 +47,7 @@ choices are hidden. Nothing rewards reaction speed, spending more, or playing mo
 |---|---|---|
 | Sign in | An embedded wallet with social sign-in, or an external wallet (R19) | `app/src/wallet/` |
 | Accept terms and attest age | The wallet signs an 18+ statement naming the current terms version (§8) | `backend/packet/src/attestations.ts` |
-| Choose a pool | Each pool card names its mode, entry price, prize pool, seats taken and deadline before anyone pays | `app/src/app/page.tsx`, `app/src/app/pools/` |
+| Choose a pool | Each pool card names its mode, size, entry price, the prize for each paid place in SOL, places taken and deadline before anyone pays | `app/src/app/page.tsx`, `app/src/app/pools/` |
 | Fill the board | Seven battles, three-minute clock from the first point placed (§3) | `app/src/battle/board/` |
 | Seal and pay | The board is encrypted on the device, then one transaction pays the entry and records the entry's hash. Decisions are final on submission, and the page says so before payment (R4) | `app/src/entry/submit.ts`; `app/src/app/rules/` |
 | Wait | Optional, opt-in, wallet-signed notification: one factual message per opt-in (D-E11) | `backend/packet/src/notify-pool.ts` |
@@ -84,8 +85,8 @@ the board, in sealing, in scoring or in the prize reads the channel.
 | Lock-in | A battle can be locked once it holds its full 100 | Any battle can be locked, except the last open one while points remain |
 
 Sources: `backend/scoring/src/allocation.ts` (`STATS`, `BATTLES`, `ALLOCATION_SUM`, `HARD_TOTAL`);
-`app/src/battle/board/mode.ts`. Each mode runs in its own pools with its own prize; price, prize
-and seat rules per tier are the same in both (D-E17).
+`app/src/battle/board/mode.ts`. Each mode runs in its own pools; sizes, prices, prize tables and
+minimum fields are the same in both (D-E17, D-E19).
 
 Requirements on the interaction (D-E17; `app/src/battle/board/`):
 
@@ -120,17 +121,20 @@ Identical in both modes (`backend/scoring/src/engine.ts`, pinned to Python-gener
 `backend/scoring/fixtures/gen_vectors.py`):
 
 - **Every player faces the identical field.** Battle *k* is compared with every other entry's
-  battle *k*: 63 × 7 = **441 comparisons per player** in a full pool, and 64 × 63 × 7 ÷ 2 =
-  **14,112 pairings** in all.
+  battle *k*: in a full 64-player pool, 63 × 7 = **441 comparisons per player** and 64 × 63 × 7 ÷ 2
+  = **14,112 pairings** in all; in a full 8-player pool, 7 × 7 = **49** per player and 8 × 7 × 7 ÷ 2
+  = **196** in all.
 - **A stat** goes to the larger number; equal numbers go to neither.
 - **A battle** is won by taking three or more of its five stats; otherwise it is a draw.
 - **Score**: a win is worth 2 half-points, a draw 1 half-point to each side. Integer arithmetic
   throughout — no float anywhere in scoring or payment.
 - **Ranking**: by score, then by total stats won across every comparison.
 - **Ties**: players equal on both share a competition rank (1, 2, 2, 4) and split the combined
-  prize of the places they occupy evenly; with one paid place, only a tie for first affects a
-  prize. An indivisible lamport remainder goes to the tied player with the lowest entry number.
-  Entry order never decides rank (D3-B, `backend/scoring/src/prizes.ts`).
+  prize of the places they occupy evenly. A tie group can straddle the paid line and shares only
+  what the paid places inside it are worth: four players tied across 15th to 18th of a 64-player
+  pool share the 15th and 16th prizes (at 0.1 SOL, 0.2 SOL between four, 0.05 SOL each). An
+  indivisible lamport remainder goes to the tied player with the lowest entry number. Entry order
+  never decides rank (D3-B, `backend/scoring/src/engine.ts` `assignPrizes`).
 
 ## 4. Why decisions decide the result
 
@@ -141,8 +145,10 @@ evidence of that which anyone can reproduce (D-A2).
 
 The repository publishes a deterministic study of the real scoring engine, regenerated and diffed
 nightly in CI: [`../skill-evidence/REPORT.md`](../skill-evidence/REPORT.md) (easy) and
-[`../skill-evidence/hard/REPORT.md`](../skill-evidence/hard/REPORT.md) (hard). Rate of finishing
-first, by strategy class, against the everyone-equal baseline (1 ÷ seats):
+[`../skill-evidence/hard/REPORT.md`](../skill-evidence/hard/REPORT.md) (hard). The figures below
+are the 64-player pool's, at its full field and its minimum field; the study has not yet been run
+for the 8-, 16- and 32-player pools (§12). Rate of finishing first, by strategy class, against the
+everyone-equal baseline (1 ÷ seats):
 
 | Mode | Seats | Baseline | Random valid allocations | Tuned plan (`optimised`) | Tuned ÷ baseline |
 |---|---|---|---|---|---|
@@ -151,8 +157,8 @@ first, by strategy class, against the everyone-equal baseline (1 ÷ seats):
 | Hard | 64 | 1.5625% | 0.000% | **6.093%** | 3.9× |
 | Hard | 40 | 2.5000% | 0.000% | **9.250%** | 3.7× |
 
-Considered play finishes first several times as often as the baseline, at the full field and at the
-smallest field a pool plays with; allocation without intent finishes first essentially never in
+Considered play finishes first several times as often as the baseline, at the 64-player pool's
+full field and at its minimum field; allocation without intent finishes first essentially never in
 these fields. Within one strategy class every seat sits at the baseline, which is what a
 competition decided by choices should show. The study is explicit that the even-split default's
 result depends on the field it meets (0 of 400 pools won against three-stat players, 400 of 400
@@ -198,7 +204,7 @@ published; the study in §4.1 is the evidence the product relies on.
 |---|---|
 | Every entry mints one pass: a Metaplex Core asset, frozen at collection level with a permanent freeze delegate. **No instruction can unfreeze it**; there is no transfer and no market | `programs/blotto_cup/src/pass.rs`; [adr-003](../architecture/adr/adr-003-metaplex-core.md), [adr-027](../architecture/adr/adr-027-collection-freeze-propagation.md) |
 | **Class is cosmetic.** Nothing that decides a stat, battle, pool, prize or ranking reads it; a Mythic's Strength is worth exactly what a Common's is. CI fails if the class appears in the scoring path | `scripts/check-standing-rules.sh` rule 5; [SAFEGUARDS §1](../compliance/SAFEGUARDS.md#1-class-is-cosmetic-and-is-read-by-nothing-in-scoring) |
-| The class is drawn without replacement from a per-pool on-chain bag, `class_counters` = **38 / 15 / 7 / 3 / 1** of 64 (Common, Uncommon, Rare, Epic, Mythic). A pool that plays below 64 leaves the rest of the bag undrawn | `constants.rs` `LAUNCH_CLASS_COUNTERS`; [adr-021](../architecture/adr/adr-021-bag-without-replacement-draw.md) |
+| The class is drawn without replacement from a per-pool on-chain bag, `class_counters` = **38 / 15 / 7 / 3 / 1** of 64 (Common, Uncommon, Rare, Epic, Mythic). Every pool, at every size, draws from this same mix of 64, so no size is a route to a rarer character (D-E19); a pool smaller than 64, or one that seals below its size, closes with passes left in the mix | `constants.rs` `LAUNCH_CLASS_COUNTERS`; [adr-021](../architecture/adr/adr-021-bag-without-replacement-draw.md) |
 | Each draw mixes a committed Switchboard VRF seed, a slot hash from at least five slots back, the seat number, the pool address and the player address, and replays from published events | `programs/blotto_cup/src/vrf.rs`; [adr-026](../architecture/adr/adr-026-multi-source-randomness.md) |
 | **No class reveal at entry.** Rarity appears only on the player's profile, beside the line: "Rarity is decorative. It changes nothing: not your battles, not your score, not your ranking, and no prize. A Mythic's Strength is worth exactly a Common's." | `app/src/copy/index.ts` (`rarityCaveat`); `app/src/app/profile/` |
 | Passes are typographic (`BLOTTO PASS #<pool>-<index>`); illustrated art, if ever added, is a metadata change and never a change to the competition (R12) | `programs/blotto_cup/src/pass.rs` |
@@ -208,48 +214,118 @@ improve the chance of winning? — and both answers must be no.
 
 ## 6. Pools, tiers and prizes
 
-**Seats.** A pool has **64 seats** (`CAPACITY`) and plays with **at least 40** (`MIN_SEATS`,
-R7-b). It seals the moment the 64th seat fills, or when its **12-hour** fill deadline
-(`DEFAULT_FILL_DEADLINE_SECS`, D-E6) passes with 40 or more seated. Below 40 at the deadline,
-every entry is repaid in full. The floor and the deadline are written onto each pool when it
-opens, so a later change never moves them under players already seated. Sealing at the deadline
-and starting a refund are permissionless.
+The Ladder (D-E19) replaced the single 64-player pool that paid one place (D-E2, superseded). Each
+requirement below names where it is enforced; the values live in `constants.rs` (`POOL_CAPACITIES`,
+`LADDER_TABLES`, `LADDER_MIN_SEATS`, `TIER_ENTRY_LAMPORTS`) and on each `PoolType` account.
 
-**Tiers.** Seven tiers are configured, the same ladder in both modes (`constants.rs`
-`TIER_ENTRY_LAMPORTS`, `TIER_POT_LAMPORTS`; D1, D-E1):
+### 6.1 Sizes and the minimum field
 
-| Tier | Entry | Prize pool (fixed) |
+A pool holds **8, 16, 32 or 64** players. It seals the moment its last place fills, or when its
+**12-hour** fill deadline (`DEFAULT_FILL_DEADLINE_SECS`, D-E6) passes with at least its minimum
+field entered. Below the minimum field at the deadline, every entry is repaid in full. The
+minimum field is the **break-even field**: the number of entries whose payments equal the prize
+pool (R7-b, generalised to every size by D-E19).
+
+| Size | Minimum field | Places paid |
 |---|---|---|
-| 0 | 0.1 SOL | 4 SOL |
-| 1 | 0.5 SOL | 20 SOL |
-| 2 | 0.75 SOL | 30 SOL |
-| 3 | 1 SOL | 40 SOL |
-| 4 | 2.5 SOL | 100 SOL |
-| 5 | 5 SOL | 200 SOL |
-| 6 | 7.5 SOL | 300 SOL |
+| 8 | 5 | 2 |
+| 16 | 10 | 4 |
+| 32 | 20 | 8 |
+| 64 | 40 | 16 |
 
-These are the seed values; prices and prize pools are set by the operator (`set_tier_economics`)
-and never change for an open pool. **Which tiers and modes are open is set by the operator**
-(`set_open_tiers`, `set_hard_open_tiers`); only the 0.1 SOL tier is switched on (R6). One pool per
-tier per mode runs at a time; the next opens **5 minutes** after the previous one is paid or
-closed (`DEFAULT_COOLDOWN_SECS`).
+A pool copies its size, minimum field, prize table and deadline when it opens (`Pool.capacity`,
+`Pool.min_seats`, `Pool.prize_table`, `Pool.fill_deadline`), so a later change never moves them
+under players who already entered. Sealing at the deadline and starting a refund are
+permissionless.
 
-**Prize requirements.**
+### 6.2 Prize tables
 
-- **The prize pool is fixed and funded before entry.** Opening a pool moves the tier's prize pool,
-  plus a small rent reserve, from the treasury into the pool's own vault. It never depends on the
-  number of entries (D-A1).
+**Requirement: the top quarter of the pool's size is paid, on a fixed table that depends on the
+size only** — never on how many players entered, never on any balance. Each place is a whole
+multiple of the entry price, which is the internal unit:
+
+| Size | Multiples of the entry, 1st first | Sum |
+|---|---|---|
+| 8 | 3, 2 | 5 |
+| 16 | 5, 3, 1, 1 | 10 |
+| 32 | 8, 4, 2, 2, 1, 1, 1, 1 | 20 |
+| 64 | 12, 6, 3, 3, 2, 2, 2, 2, then 1 for 9th to 16th | 40 |
+
+Each table sums to its size's minimum field, so the prize pool is 62.5% of a full field's entries
+at every size. **Players see the amount in SOL for each place, never a multiple or a percentage**
+(D-E19). At the 0.1 SOL tier, the only one open:
+
+| Size | 1st | 2nd | 3rd | 4th | 5th–8th, each | 9th–16th, each | Prize pool |
+|---|---|---|---|---|---|---|---|
+| 8 | 0.3 SOL | 0.2 SOL | — | — | — | — | 0.5 SOL |
+| 16 | 0.5 SOL | 0.3 SOL | 0.1 SOL | 0.1 SOL | — | — | 1 SOL |
+| 32 | 0.8 SOL | 0.4 SOL | 0.2 SOL | 0.2 SOL | 0.1 SOL | — | 2 SOL |
+| 64 | 1.2 SOL | 0.6 SOL | 0.3 SOL | 0.3 SOL | 0.2 SOL | 0.1 SOL | 4 SOL |
+
+An untied prize is exact at every tier: `multiple × entry`, with no division
+(`backend/scoring/src/prizes.ts` `amountForRank`; `prize_math.rs` `place_amount`). Ties follow
+§3.3 and can cross the paid line.
+
+### 6.3 Tiers and pool types
+
+Seven tiers are configured, the same in both modes and at every size (`TIER_ENTRY_LAMPORTS`; D1).
+A pool's prize pool is its table's sum times the tier's entry price, pinned cell by cell by
+`prize_math.rs` `prize_pools_are_the_published_grid`:
+
+| Tier | Entry | 8 players | 16 players | 32 players | 64 players |
+|---|---|---|---|---|---|
+| 0 | 0.1 SOL | 0.5 SOL | 1 SOL | 2 SOL | 4 SOL |
+| 1 | 0.5 SOL | 2.5 SOL | 5 SOL | 10 SOL | 20 SOL |
+| 2 | 0.75 SOL | 3.75 SOL | 7.5 SOL | 15 SOL | 30 SOL |
+| 3 | 1 SOL | 5 SOL | 10 SOL | 20 SOL | 40 SOL |
+| 4 | 2.5 SOL | 12.5 SOL | 25 SOL | 50 SOL | 100 SOL |
+| 5 | 5 SOL | 25 SOL | 50 SOL | 100 SOL | 200 SOL |
+| 6 | 7.5 SOL | 37.5 SOL | 75 SOL | 150 SOL | 300 SOL |
+
+The 64-player column is D-E1's tier prize pool, unchanged.
+
+**Pool types.** Each combination of mode, tier and size is a **pool type** (`PoolType`,
+`instructions/pool_type.rs`) with its own switch, one-pool-at-a-time slot, cooldown, prize table,
+minimum field and prize pool. A pool type opens only where its tier is open for its mode
+(`set_open_tiers`, `set_hard_open_tiers`; R6) **and** the type itself is enabled
+(`set_pool_type_enabled`). One pool per pool type runs at a time; the next opens **5 minutes**
+after the previous one is paid or closed (`DEFAULT_COOLDOWN_SECS`). Pools of different types run
+side by side. Only the 0.1 SOL tier is open (R6); its devnet launch opens all eight 0.1 SOL pool
+types, both modes at all four sizes (D-E19).
+
+Prices, tables, minimum fields and prize pools are set by the operator (`set_tier_economics`,
+`set_pool_type_economics`) and never change for an open pool. The program refuses a table whose
+**shape** breaks the published rule: it must pay exactly the top quarter of the size, never
+increase down the table, and hold no zero inside the paid places; the minimum field must exceed
+the places paid and not exceed the size; the stated prize pool must equal the table at the tier's
+current price; and it may not exceed the minimum field's entries. A price change leaves every pool
+type of that tier unable to open until its prize pool is restated (`PoolTypeEconomicsStale`), so a
+published prize never moves silently with a price.
+
+### 6.4 Prize requirements
+
+- **The prize pool is fixed and funded before entry.** Opening a pool moves its pool type's prize
+  pool, plus a small rent reserve, from the treasury into the pool's own vault. It never depends on
+  the number of entries (D-A1).
 - **Entries go to the treasury**, never to a prize vault, and stay repayable until the pool seals.
-- **One paid place** (`PAID_RANKS = 1`, D-E2): the player ranked first receives the whole prize
-  pool; a tie for first splits it (§3.3). Payment is automatic on settlement; there is no claim
-  step (R10).
-- **Refunds.** Below 40 at the deadline, `trigger_refund` returns the untouched prize pool to the
-  treasury and `refund` repays each entry in full from the treasury. Both are permissionless.
+- **The top quarter is paid automatically on settlement**; there is no claim step (R10).
+- **Refunds.** Below the minimum field at the deadline, `trigger_refund` returns the untouched prize
+  pool to the treasury and `refund` repays each entry in full from the treasury. Both are
+  permissionless.
 - **Once a pool plays, its prize is only ever paid to players.** The vault's only exits are
   `pay_prizes`, `release_escrow` and `pay_next_place`, plus `trigger_refund` for a pool that never
-  played. `forfeit_escrow` moves nothing; an upheld flag passes the share to the next eligible
-  place. There is no withdraw instruction, and CI asserts the exact exit set
+  played. `forfeit_escrow` moves nothing. There is no withdraw instruction, and CI asserts the exact
+  exit set
   ([SAFEGUARDS §5](../compliance/SAFEGUARDS.md#5-the-prize-vault-has-no-withdraw-path-a-played-pools-prize-only-goes-to-players)).
+- **A forfeited share.** The rule under a multi-place table is **"the field moves up"**: prizes are
+  recomputed as if the forfeited player had never been ranked, and paid only to players (D-E19).
+  Those instructions are not built. Until they ship, a forfeited share in a pool that pays more
+  than one place stays held in its vault — never paid wrongly and never to the operator —
+  and `pay_next_place` refuses it (`NextPlaceUnsupported`). Pools opened before the Ladder pay one
+  place, and there `pay_next_place` divides a forfeited share equally among the eligible players at
+  the rank it passes to (D-E6, D-E7).
+- **Pools from before the Ladder** keep the rule they were entered under: `migrate_pool` records
+  them as 64 players with one paid place worth the whole prize pool.
 
 ## 7. Fairness and verifiability
 
@@ -291,11 +367,14 @@ check that cannot get an answer refuses. Details and proofs are in
   legal or trust status (D-B7).
 - **Published numbers come from the program's constants**, not hand-typed copy (D-B6); CI refuses
   copy that carries a stale value.
+- **Prizes are shown in SOL for each place**, never as a multiple of the entry or a percentage of
+  anything (D-E19).
 - **Every undertaking on the rules, terms and privacy pages is registered** against the file or
   person that keeps it (`app/src/copy/published-claims.test.ts`).
 - **The rules page publishes** the scoring rule, the allocation rule for each mode, the clock and
-  buzzer spread, the fill deadline and refund, how sealing works, the review window, and that
-  decisions are final on submission (R4).
+  buzzer spread, each size's prize for every paid place and its minimum field, the fill deadline
+  and refund, how sealing works, the review window, and that decisions are final on submission
+  (R4).
 - The default's effect is described as how the allocation performs, never as a chance of anything
   (D-E7).
 
@@ -336,30 +415,39 @@ Stated neutrally; status for each is tracked in [`../ROADMAP.md`](../ROADMAP.md)
 linked.
 
 1. **Further tiers.** When are the conditions in R6 met for opening the 0.5 SOL tier and above?
-2. **Step sizes and clustering.** The board's ±5 / ±10 / ±20 steps are a deliberate exception to
+2. **Sizes on mainnet.** The devnet launch opens all eight 0.1 SOL pool types (D-E19). Which pool
+   types open on mainnet is not yet decided.
+3. **Counsel's sign-off on the Ladder.** The four sizes, their tables and terms version 6 need
+   counsel's sign-off before any pool takes real money (D-E19).
+4. **The field-moves-up payout.** Until its instructions ship, a forfeited share in a pool that pays
+   more than one place stays held in its vault (§6.4). It is listed before mainnet in the roadmap.
+5. **Evidence at the smaller sizes.** The skill-evidence study (§4.1) and the fill simulation
+   ([`../testing/FILL-SIMULATION.md`](../testing/FILL-SIMULATION.md)) measure the 64-player pool
+   only. Neither has yet been run for the 8-, 16- and 32-player fields.
+6. **Step sizes and clustering.** The board's ±5 / ±10 / ±20 steps are a deliberate exception to
    the "no prominent targets" principle (§4.2). How much of a live field lands on multiples of
    five? No measurement is published yet; if many players do, the draw rate moves toward the
    5-point row of the table in §4.2.
-3. **The buzzer default.** The even split's result depends on the field it meets (§4.1). Is it the
+7. **The buzzer default.** The even split's result depends on the field it meets (§4.1). Is it the
    right shape for unplaced points? Under review (ROADMAP, finding 5.6).
-4. **Published rules wording.** The rules page's timer section (`battleTimer` in
+8. **Published rules wording.** The rules page's timer section (`battleTimer` in
    `app/src/copy/index.ts`) still describes a per-battle timer that enters an unlocked battle as an
    even split. The board's rule (§3.1) is one clock and an even spread of *unplaced* points only.
-5. **Identity checks.** At what prize value, if any, does the identity-check switch turn on
+9. **Identity checks.** At what prize value, if any, does the identity-check switch turn on
    (R3, D-E5)?
-6. **Location and screening vendors.** A second vendor is a precondition of the first public pool
-   (D-E14). The sanctioned-jurisdictions country list is not yet in the territory schedule, and
-   sub-national blocking cannot be enforced with the current location source.
-7. **A confirmed sanctions match.** Where does a held share finally go? Any answer will not be a
-   path to the operator.
-8. **Verifiability gaps.** The class draw replays from published events but no page does it for
-   the player; a refunded pool never reveals its secret, so its entrants cannot check that their
-   allocation stayed sealed; each pool's sealing key is generated in the operator's process before
-   it is imported into custody.
-9. **Detection under the board.** The timing signal was designed for per-screen times, and hard-mode
-   thresholds are untuned.
-10. **The reviewer panel.** The two reviewer keys are not yet held by two different people, so
+10. **Location and screening vendors.** A second vendor is a precondition of the first public pool
+    (D-E14). The sanctioned-jurisdictions country list is not yet in the territory schedule, and
+    sub-national blocking cannot be enforced with the current location source.
+11. **A confirmed sanctions match.** Where does a held share finally go? Any answer will not be a
+    path to the operator.
+12. **Verifiability gaps.** The class draw replays from published events but no page does it for
+    the player; a refunded pool never reveals its secret, so its entrants cannot check that their
+    allocation stayed sealed; each pool's sealing key is generated in the operator's process before
+    it is imported into custody.
+13. **Detection under the board.** The timing signal was designed for per-screen times, and hard-mode
+    thresholds are untuned.
+14. **The reviewer panel.** The two reviewer keys are not yet held by two different people, so
     "decided by someone else" is recorded rather than enforced.
-11. **Operating entity, data-protection impact assessment and retention periods** — not yet
+15. **Operating entity, data-protection impact assessment and retention periods** — not yet
     settled (D6; [`../compliance/DATA-INVENTORY.md`](../compliance/DATA-INVENTORY.md)).
-12. **Pass art and class names beyond the rarity labels** (R12).
+16. **Pass art and class names beyond the rarity labels** (R12).

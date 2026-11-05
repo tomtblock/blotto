@@ -38,7 +38,7 @@ flowchart LR
     SQUADS["Squads multisig<br/>the admin"]
   end
   subgraph chain["Solana via Helius RPC"]
-    PROG["Blotto program<br/>Config, Pool, Entry"]
+    PROG["Blotto program<br/>Config, PoolType, Pool, Entry"]
     TREAS["treasury PDA"]
     VAULT["prize vault per pool"]
     MPL["Metaplex Core passes"]
@@ -77,7 +77,9 @@ flowchart LR
 7. **Turnkey holds two kinds of secret:** the entry signer, which can only sign packets, and each
    pool's sealing secret, export-locked until the pool is sealed or past its deadline.
 8. **Squads is the admin.** Every admin instruction is a multisig transaction (threshold one on
-   devnet, disclosed in `config/custody.json`).
+   devnet, disclosed in `config/custody.json`). The devnet multisig is Squads v3, whose web
+   interface has been retired, so its transactions are built with `scripts/squads-v3.ts`; a mainnet
+   deployment must start with a Squads v4 multisig, because there is no `set_admin`.
 9. **Irys is where results are published**, so the verify page, and anyone else, can recompute a
    pool without asking the operator.
 
@@ -113,7 +115,7 @@ sequenceDiagram
   B->>W: sign
   Note over B: the fresh pass keypair co-signs locally
   B->>C: sendTransaction, then poll to "confirmed"
-  Note over C: register: verify packet, move the price to the treasury, draw the class, mint the frozen pass, emit EntryRegistered · the 64th seat seals
+  Note over C: register: verify packet, move the price to the treasury, draw the class, mint the frozen pass, emit EntryRegistered · the entry that fills the pool seals it
   C-->>B: the landed transaction's own event: class, seat, pass
   C-->>P: finalized webhook to the indexer a few seconds later
 ```
@@ -141,7 +143,8 @@ sequenceDiagram
    because Metaplex Core requires the new asset's signature.
 10. **One transaction does everything.** The program reads the Ed25519 instruction from the sysvar,
     binds it to this wallet and pool, moves the price to the treasury PDA, draws the cosmetic class,
-    mints the frozen pass and emits the event. The 64th entry seals the pool in the same call.
+    mints the frozen pass and emits the event. The entry that reaches the pool's capacity (8, 16, 32
+    or 64) seals the pool in the same call.
 11. **Confirmed means the chain said so.** The browser reads the landed transaction's own event. If
     the logs cannot be read it shows a recovery state, never a guess and never a retry.
 12. **The indexer catches up** on the finalized event a few seconds later.
@@ -155,40 +158,47 @@ fork a pool takes: the deadline, the field and the clock decide.
 
 ```mermaid
 stateDiagram-v2
-  [*] --> Open: keeper open_pool(mode) (1)<br/>pot + rent cushion moves treasury to vault, sealing key, 12 h clock
-  Open --> Sealed: 64th register, or seal_at_deadline with ≥ min_seats (2)
+  [*] --> Open: keeper open_pool(mode, capacity) (1)<br/>prize pool + rent cushion moves treasury to vault, sealing key, 12 h clock
+  Open --> Sealed: the register that reaches capacity, or seal_at_deadline with ≥ min_seats (2)
   Sealed --> Scored: reveal_pool_secret then commit_results (3)
   Scored --> Paid: pay_prizes, batched; flagged or held shares escrowed (4)
-  Open --> Refunding: trigger_refund, anyone, < min_seats past the deadline (5)<br/>the untouched pot returns to the treasury
+  Open --> Refunding: trigger_refund, anyone, < min_seats past the deadline (5)<br/>the untouched prize pool returns to the treasury
   Open --> Closed: 0 entrants past the deadline
   Refunding --> Closed: refund × n, anyone, the full price from the treasury
-  Paid --> [*]: a held share (6) · release at 12 h or by anyone at 7 days · forfeit then pay_next_place · sanctions hold lifted by admin only
+  Paid --> [*]: a held share (6) · release at 12 h or by anyone at 7 days · forfeit, then pay_next_place (one-place pools) or held · sanctions hold lifted by admin only
   Closed --> [*]
-  note right of Paid: the (mode, tier) slot frees, 5-minute cooldown, the keeper opens the next pool (7)
+  note right of Paid: the pool type's slot frees, 5-minute cooldown, the keeper opens the next pool (7)
 ```
 
-1. **Opening funds the pot first.** The keeper moves the tier's fixed pot, plus the vault's rent
-   cushion, from the treasury into the new pool's vault before a single entry exists, publishes the
-   pool's sealing public key and secret hash, records the mode (0 easy, 1 hard), and stamps a
-   12-hour deadline that is never rewritten.
-2. **Two ways to seal.** The 64th entry seals in the same transaction. Past the deadline anyone may
-   seal a pool holding at least its own `min_seats` — 40 for every pool opened under R7-b, 52 for
-   older pools, the figure each pool's players entered under. Sealing releases the pool's entry
-   payments from the refundable floor.
+1. **Opening funds the prize pool first.** The keeper opens one pool type — a mode, tier and
+   capacity whose tier is open and which is enabled — and moves that type's fixed prize pool, plus
+   the vault's rent cushion, from the treasury into the new pool's vault before a single entry
+   exists. It publishes the pool's sealing public key and secret hash, and the pool copies the
+   mode (0 easy, 1 hard), the capacity (8, 16, 32 or 64), the minimum field and the prize table,
+   with a 12-hour deadline that is never rewritten.
+2. **Two ways to seal.** The entry that reaches capacity seals in the same transaction. Past the
+   deadline anyone may seal a pool holding at least its own `min_seats` — 5, 10, 20 or 40 by size
+   for Ladder pools (D-E19), 40 for 64-player pools opened under R7-b, 52 for older pools: the
+   figure each pool's players entered under. Sealing releases the pool's entry payments from the
+   refundable floor.
 3. **Reveal then commit.** The settlement signer publishes the secret, hash-checked against the
-   commitment made at open, then commits the results root and the payout list, which the program
-   checks sums exactly to the pot.
+   commitment made at open, then commits the results root and the payout list. The program checks
+   that the list sums exactly to the prize pool and that no amount is zero or larger than the
+   pool's first prize.
 4. **Paying is batched and idempotent.** Each committed seat is paid once. A flagged or
    sanctions-held seat is escrowed instead of sent. All seats settled means Paid.
 5. **The refund fork applies only to a pool that never played.** Below its floor past the deadline
-   anyone may trigger the refund: the untouched pot returns to the treasury (the rent cushion stays),
-   then each entry is repaid in full from the treasury, permissionlessly, until Closed.
+   anyone may trigger the refund: the untouched prize pool returns to the treasury (the rent cushion
+   stays), then each entry is repaid in full from the treasury, permissionlessly, until Closed.
 6. **A held share has no door to the operator.** A flag is released by review, by the daemon's
-   12-hour clock, or by anyone after seven days. An upheld flag is paid onward to the next eligible
-   place, split equally. A sanctions hold moves only when the admin lifts it.
-7. **Sequential pools per (mode, tier).** Each ladder has its own slot, switch and cooldown; the
-   slot frees only at Paid or Closed, and the keeper opens the next pool when the treasury policy
-   allows it. An easy and a hard pool can run side by side at the same tier.
+   12-hour clock, or by anyone after seven days. An upheld flag in a one-place pool is paid onward
+   to the next eligible place, split equally; in a pool that pays more than one place it stays
+   held in the vault until the field-moves-up payout ships (D-E19). A sanctions hold moves only
+   when the admin lifts it.
+7. **Sequential pools per pool type.** Each (mode, tier, capacity) has its own slot, switch and
+   cooldown on its `PoolType` account; the slot frees only at Paid or Closed, and the keeper opens
+   the next pool when the treasury policy allows it. Pools of different types — another mode, tier
+   or size — run side by side.
 
 ---
 
@@ -204,13 +214,13 @@ flowchart LR
   S2["2 reveal_pool_secret<br/>on chain, hash-checked"]
   S3["3 decrypt by Pool.mode, verify<br/>each entry against its commitment;<br/>failures scored all losses"]
   S4["4 score<br/>identical field, half-points as integers"]
-  S5["5 rank and split<br/>score, then stats won"]
+  S5["5 rank and split<br/>score, then stats won;<br/>the pool's own prize table"]
   S6["6 results tree<br/>leaf = player ‖ rank ‖ amount"]
   S7["7 detection report<br/>advisory, persisted"]
-  S8["8 screen winners<br/>match: hold · no answer: retry next tick"]
-  S9["9 commit_results<br/>root + payouts, sum = pot"]
+  S8["8 screen the paid players<br/>match: hold · no answer: retry next tick"]
+  S9["9 commit_results<br/>root + payouts, sum = prize pool,<br/>each ≤ first prize"]
   S10["10 pay_prizes<br/>batched; escrow for flagged or held"]
-  S11["11 publish the bundle<br/>Irys, version 3, names the mode"]
+  S11["11 publish the bundle<br/>Irys, version 4, names the mode,<br/>capacity and prize table"]
   S12["12 onward<br/>slot frees, cooldown, next pool"]
   TICK --> S1 --> S2 --> S3 --> S4 --> S5 --> S6 --> S7 --> S8 --> S9 --> S10 --> S11 --> S12
 ```
@@ -225,26 +235,31 @@ flowchart LR
    halts a pool.
 4. **Identical-field scoring, the same in both modes.** Battle k against every other entry's battle
    k: three of five stats wins, otherwise a draw; win 2, draw 1, loss 0 in integer half-points.
-5. **Ranking and the split.** Score, then stats won. Players equal on both share a rank and split the
-   pot equally if that rank is first.
+5. **Ranking and the split.** Score, then stats won. Players equal on both share a rank. Prizes come
+   from the pool's own table, copied on chain at open: place *r* is worth its multiple times the
+   entry, and a tie group splits the combined worth of the places it occupies equally — including
+   a group that straddles the last paid place.
 6. **The results tree.** One leaf per seat, domain-separated sha256. The root is what the chain
    commits and what a player recomputes.
 7. **Detection is advisory.** Five signals run on every pool and the report is persisted. A flag is
    a signed human decision on the review desk, never the daemon's.
-8. **Winner screening.** Every wallet in the payout list is checked against the sanctions lists. A
+8. **Payout screening.** Every wallet in the payout list is checked against the sanctions lists. A
    match places an on-chain hold before anything is committed. A screening that cannot answer places
    nothing: the crank refuses to commit and screens again on the next tick.
 9. **Commit.** The root and the payout list go on chain. The program refuses a list that is
-   unsorted, duplicated, out of range or does not sum to the pot.
-10. **Pay.** Vault to winner, batched. A flagged or held seat's share stays in the vault as escrow.
+   unsorted, duplicated or out of range, holds a zero amount or one above the pool's first prize,
+   or does not sum to the prize pool. It does not rank; who is paid what is checked by
+   recomputation.
+10. **Pay.** Vault to the paid players, batched. A flagged or held seat's share stays in the vault
+    as escrow.
 11. **Publication, after the money.** The bundle carries the secret, every board and salt, the
     commitments and statuses, the results, the payouts and the root. Timings and device markers are
     never published. It runs last on purpose (`backend/reveal/src/crank.ts`): an upload that keeps
     failing must not hold a sealed pool's prize behind a storage vendor, so a bundle still owed is
     published on a later tick.
-12. **Onward.** The slot frees, the cooldown runs, and the OPEN phase funds the next pot from the
-    treasury if the policy floor allows, with a fresh sealing key, randomness account and pass
-    collection.
+12. **Onward.** The pool type's slot frees, the cooldown runs, and the OPEN phase funds the next
+    prize pool from the treasury if the policy floor allows, with a fresh sealing key, randomness
+    account and pass collection.
 
 ---
 
@@ -259,41 +274,44 @@ flowchart LR
   FUNDER["Operator, or anyone<br/>fund_platform_wallet"]
   PLAYER["Player wallet<br/>pays the price and its own rent"]
   KEEPER["Keeper / settlement wallet<br/>rent and fees per pool"]
-  TREAS["1 Treasury PDA<br/>exits: open_pool, refund, withdraw_platform<br/>floor = minimum + idle-tier pots + refundable"]
-  VAULT["2 Prize vault, one per pool<br/>the fixed pot + rent cushion"]
+  TREAS["1 Treasury PDA<br/>exits: open_pool, refund, withdraw_platform<br/>floor = minimum + idle pool-type reserve + refundable"]
+  VAULT["2 Prize vault, one per pool<br/>the fixed prize pool + rent cushion"]
   ADMIN["4 Admin destination<br/>withdraw_platform, multisig-signed"]
-  WINNER["Rank 1, ties split equally<br/>pay_prizes, release_escrow"]
-  NEXT["Next eligible place<br/>pay_next_place, a forfeited share"]
+  WINNER["The paid places, ties split equally<br/>pay_prizes, release_escrow"]
+  NEXT["Next eligible place<br/>pay_next_place, a forfeited share<br/>(one-place pools)"]
   NOBODY["5 Nobody, ever<br/>no vault exit to the operator"]
   FUNDER -- "deposits" --> TREAS
   PLAYER -- "3 register: the entry price<br/>refundable until the pool seals" --> TREAS
   TREAS -- "refund: the full price<br/>pool below its floor at the deadline" --> PLAYER
-  TREAS -- "open_pool: the tier's fixed pot<br/>before any entry" --> VAULT
-  VAULT -- "trigger_refund: the untouched pot<br/>unplayed pools only" --> TREAS
+  TREAS -- "open_pool: the pool type's fixed prize pool<br/>before any entry" --> VAULT
+  VAULT -- "trigger_refund: the untouched prize pool<br/>unplayed pools only" --> TREAS
   TREAS -- "only above the floor" --> ADMIN
-  VAULT -- "pay_prizes: the whole pot" --> WINNER
+  VAULT -- "pay_prizes: the pool's prize table" --> WINNER
   VAULT -- "equal split at that rank" --> NEXT
   VAULT -. "forfeit_escrow moves nothing at all" .-> NOBODY
   PLAYER -. "Entry + pass rent" .-> CHAIN["rent, held by the chain"]
   KEEPER -. "open, randomness, settlement fees" .-> CHAIN
 ```
 
-1. **The treasury PDA** receives every entry payment and funds every pot. Its exits are `open_pool`
-   (into a vault), `refund` (to a player) and `withdraw_platform` (admin-gated, refused below a floor
-   the program computes: the minimum balance, plus one reserved pot for every idle enabled tier on
-   each ladder, plus every entry that can still be refunded).
-2. **A prize vault** holds the pot from the moment the pool opens. Its exits are `pay_prizes`,
-   `release_escrow`, `pay_next_place` and `trigger_refund`'s pot return, pinned function by function
-   by `scripts/check-standing-rules.sh`. Once a pool plays, only the first three apply, and all three
-   pay players.
+1. **The treasury PDA** receives every entry payment and funds every prize pool. Its exits are
+   `open_pool` (into a vault), `refund` (to a player) and `withdraw_platform` (admin-gated, refused
+   below a floor the program computes: the minimum balance, plus the policy's reserve of prize
+   pools for every enabled pool type on an open tier with no live pool, plus every entry that can
+   still be refunded). The enabled pool types are passed in and must be all of them: the program
+   counts them against `Config.enabled_pool_types`.
+2. **A prize vault** holds the prize pool from the moment the pool opens. Its exits are
+   `pay_prizes`, `release_escrow`, `pay_next_place` and `trigger_refund`'s prize-pool return,
+   pinned function by function by `scripts/check-standing-rules.sh`. Once a pool plays, only the
+   first three apply, and all three pay players.
 3. **An entry is refundable until seal.** The program tracks the sum on `Config`; a withdrawal cannot
    dip into it, so a refund is program-held money rather than an operator promise.
 4. **Withdrawal is the only way anything reaches the operator,** and only from the treasury, only
    above the floor, only signed by the multisig, always emitted as an event the treasury report
    replays.
-5. **A forfeited share moves nothing.** It stays in its pool's vault until divided equally among the
-   eligible players at the rank it passes to. The settlement key cannot route it to itself, and the
-   four service keys can never hold a seat.
+5. **A forfeited share moves nothing.** It stays in its pool's vault. In a one-place pool it is
+   divided equally among the eligible players at the rank it passes to; in a multi-place pool it is
+   held until the field-moves-up payout ships (D-E19). The settlement key cannot route it to
+   itself, and the four service keys can never hold a seat.
 
 ---
 
@@ -305,7 +323,7 @@ keys for each role are disclosed in `config/custody.json`.
 
 | Key | Held as | Can | Cannot |
 |---|---|---|---|
-| Admin | A Squads multisig vault (threshold one on devnet) | Pause entries; set tiers, ladders and prices for future pools; set the treasury policy; withdraw above the floor; record an upheld flag (forfeit); lift a sanctions hold | Reach a prize vault; shorten a live pool; enter a pool |
+| Admin | A Squads multisig vault (v3, threshold one on devnet; driven by `scripts/squads-v3.ts`) | Pause entries; set tiers, ladders and prices for future pools; create pool types, set their tables, minimum fields and prize pools, and switch them on or off; set the treasury policy; withdraw above the floor; record an upheld flag (forfeit); lift a sanctions hold | Reach a prize vault; change an open pool's size, table or minimum field; shorten a live pool; enter a pool |
 | Upgrade authority | A single devnet key | Replace the program | Anything else |
 | Keeper / settlement signer (one key on devnet) | A keypair loaded by the daemon and the review service | Open pools (the program's gates decide whether); reveal, commit, pay, flag, clear, release, pay onward; place a sanctions hold | Withdraw anything; forfeit; enter a pool; pay itself |
 | Entry signer | Turnkey, sign-only, non-exportable | Sign entry packets | Move money; enter a pool |
@@ -326,20 +344,21 @@ long: [`../compliance/DATA-INVENTORY.md`](../compliance/DATA-INVENTORY.md).
 flowchart LR
   subgraph chain["The chain: the truth"]
     C1["1 Config<br/>keys, both ladders, switches, treasury book-keeping"]
-    C2["Pool × n<br/>mode, price, pot, deadline, state, bag, root, payouts"]
+    CT["PoolType × up to 56<br/>mode, tier, capacity, table, minimum field,<br/>prize pool, switch, slot, cooldown"]
+    C2["Pool × n<br/>mode, capacity, price, prize pool, table,<br/>deadline, state, bag, root, payouts"]
     C3["Entry × n<br/>seat, battles hash, class, flags, escrow, hold"]
     C4["prize vault × n, treasury PDA<br/>zero-data, system-owned; lamports only"]
     C5["pass collection, passes<br/>Metaplex Core, frozen"]
     C6["2 events in transaction logs<br/>PoolOpened … PrizesPaid: the replay source"]
   end
   subgraph pg["Postgres: a projection, rebuildable"]
-    N1["3 indexer<br/>events, pools, entries, results, payouts,<br/>rankings, profiles, player_history,<br/>tier_status, bundles"]
+    N1["3 indexer<br/>events, pools, pool_types, entries, results,<br/>payouts, rankings, profiles, player_history,<br/>tier_status, bundles"]
     N2["4 packet<br/>attestations, sealed_entries, notify opt-ins,<br/>sanctions refusals"]
     N3["daemon<br/>published_pool_keys (public halves only),<br/>detection_reports"]
     N4["review<br/>review_decisions (signed log, appeals), complaints"]
   end
   subgraph pub["Published and local"]
-    P1["5 Irys bundle, per settled pool<br/>secret, boards, salts, results,<br/>payouts, root, all-losses list, mode"]
+    P1["5 Irys bundle, per settled pool<br/>secret, boards, salts, results,<br/>payouts, root, all-losses list, mode,<br/>capacity, prize table"]
     P2["Browser storage<br/>attestation flag, device marker,<br/>active wallet, UI preferences"]
     P3["6 The verify page<br/>bundle + on-chain root, recomputed,<br/>wallet disconnected"]
     P4["7 Turnkey<br/>pool secrets, export-locked; the entry signer"]
@@ -350,8 +369,9 @@ flowchart LR
   C2 -- "RPC: the revealed secret and the committed root" --> P3
 ```
 
-1. **On chain:** one Config, one Pool and one vault per pool, one Entry and one pass per seat, the
-   treasury PDA, and the events that every off-chain number is replayed from.
+1. **On chain:** one Config, one PoolType per mode, tier and size in use, one Pool and one vault per
+   pool, one Entry and one pass per seat, the treasury PDA, and the events that every off-chain
+   number is replayed from.
 2. **Into Postgres** by webhook at finalized commitment, with a backfill from RPC on every restart,
    so a dropped delivery is caught.
 3. **The indexer's tables** are the events ledger and the derived views the read API serves.
@@ -360,8 +380,8 @@ flowchart LR
    and served to nobody.
 5. **The bundle** is the published record of a settled pool, addressed by content on Irys.
 6. **The verify page** needs no operator service: it fetches the bundle, reads the revealed secret
-   and committed root from RPC, decodes under the bundle's mode, scores, rebuilds the tree and
-   compares, with the wallet disconnected.
+   and committed root from RPC, decodes under the bundle's mode, scores, assigns prizes from the
+   bundle's prize table, rebuilds the tree and compares, with the wallet disconnected.
 7. **Turnkey** holds the only copy of each pool's sealing secret and the entry signer. Postgres holds
    only the public halves.
 
@@ -382,7 +402,7 @@ flowchart LR
   WATCH["4 backend-watch<br/>every 15 min: probe /health, start a stopped machine"]
   DRIFT["5 deployed-drift<br/>daily: simulate every instruction against the live program"]
   UPGRADE["6 scripts/deploy-devnet.sh<br/>drain, pause, upgrade, migrate, unpause"]
-  SQUADS["7 Squads multisig<br/>every admin instruction"]
+  SQUADS["7 Squads multisig<br/>every admin instruction<br/>(v3 on devnet: scripts/squads-v3.ts)"]
   PROG["the live program"]
   GH --> CI
   CI -- "merge" --> HOST --> APP
@@ -409,4 +429,6 @@ flowchart LR
 6. **A program upgrade** is a sequenced window: drain every pool to Paid or Closed (the pre-flight
    refuses while any pool is Open), pause entries, upgrade, migrate any grown account in the same
    window, unpause. Pausing blocks new entries only; settlement and refunds keep running.
-7. **Admin instructions** go through the multisig: each is a proposal its members approve.
+7. **Admin instructions** go through the multisig: each is a proposal its members approve. On
+   devnet the multisig is Squads v3 and proposals are built with `scripts/squads-v3.ts`, because
+   its web interface has been retired.
