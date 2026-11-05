@@ -40,7 +40,7 @@ import {
   groupInstructions,
   ixDiscriminator,
   legacyTransactionSize,
-  packInstructions,
+  batchInstructions,
   parseEmitted,
   programInstructionNames,
   squadsPda,
@@ -243,7 +243,7 @@ test('sdk: a pool-type group (three instructions) executes in one transaction; 2
   const attached = inner.map((ix, i) => ({ pda: pk(SDK.instructionPdas[i]), programId: ix.programId, keys: ix.keys }));
   const execute = executeTransactionIx({ multisig: MULTISIG, transaction: tx, member: MEMBER, attached });
   assert.ok(legacyTransactionSize([execute], MEMBER) <= PACKET_DATA_SIZE);
-  // The proposal half of the same group packs into one transaction too.
+  // The proposal half of the same group fits one transaction too.
   const proposal = [
     createTransactionIx({ multisig: MULTISIG, transaction: tx, creator: MEMBER, authorityIndex: 1 }),
     ...inner.map((incoming, i) =>
@@ -252,7 +252,7 @@ test('sdk: a pool-type group (three instructions) executes in one transaction; 2
     activateTransactionIx({ multisig: MULTISIG, transaction: tx, creator: MEMBER }),
     approveTransactionIx({ multisig: MULTISIG, transaction: tx, member: MEMBER }),
   ];
-  assert.equal(packInstructions(proposal, MEMBER).length, 1);
+  assert.equal(batchInstructions(proposal, MEMBER).length, 1);
   // A launch grid in ONE Squads transaction is far past the packet limit,
   // which is why ladder-launch groups by pool type.
   const many = Array.from({ length: 25 }, (_, i) => ({

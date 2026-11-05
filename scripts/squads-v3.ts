@@ -35,7 +35,7 @@
  * ENCODING. Built by hand from squads-mpl v1.3.1's source
  * (programs/squads-mpl/src/{lib,account,state}.rs) and its IDL v1.3.0 — the
  * IDL @sqds/sdk 2.0.4 bundles is identical to the one the program stores on
- * chain. The SDK itself is not a dependency (it pulls @coral-xyz/anchor 0.26
+ * chain. The SDK itself is not a dependency (it brings in @coral-xyz/anchor 0.26
  * and a second web3.js). `scripts/squads-v3.test.ts` pins every instruction
  * against a transaction the Squads interface sent on devnet and against the
  * SDK's own builders (generator: scripts/squads-v3-vectors.gen.cjs).
@@ -524,8 +524,8 @@ export function legacyTransactionSize(ixs: TransactionInstruction[], payer: Publ
   }
 }
 
-/** Greedy, order-preserving packing into transactions that fit the packet. */
-export function packInstructions(ixs: TransactionInstruction[], payer: PublicKey): TransactionInstruction[][] {
+/** Greedy, order-preserving batching into transactions that fit the size limit. */
+export function batchInstructions(ixs: TransactionInstruction[], payer: PublicKey): TransactionInstruction[][] {
   const out: TransactionInstruction[][] = [];
   let current: TransactionInstruction[] = [];
   for (const ix of ixs) {
@@ -799,7 +799,7 @@ async function simulatePlanned(env: Env, p: Planned): Promise<boolean> {
     return s.ok;
   }
   let ok = true;
-  for (const [i, chunk] of packInstructions(p.proposal, env.member).entries()) {
+  for (const [i, chunk] of batchInstructions(p.proposal, env.member).entries()) {
     const s = await simulate(env.connection, chunk, env.member);
     printSimulation(`proposal transaction ${i + 1}`, s);
     ok = ok && s.ok;
@@ -807,7 +807,7 @@ async function simulatePlanned(env: Env, p: Planned): Promise<boolean> {
   }
   // The inner instructions on their own, the vault as fee payer and signer
   // (simulation does not verify signatures) — what the program will do.
-  for (const [i, chunk] of packInstructions([...p.inner, computeLimit()], env.vault).entries()) {
+  for (const [i, chunk] of batchInstructions([...p.inner, computeLimit()], env.vault).entries()) {
     const s = await simulate(env.connection, chunk, env.vault);
     printSimulation(`inner instructions ${i + 1} (signed by the vault, simulation only)`, s);
     ok = ok && s.ok;
@@ -867,7 +867,7 @@ async function cmdRun(f: Flags): Promise<void> {
           `execute transaction; the limit is ${PACKET_DATA_SIZE}. Run with --split each.`
       );
     }
-    packInstructions(p.proposal, env.member); // throws if one step cannot fit on its own
+    batchInstructions(p.proposal, env.member); // throws if one step cannot fit on its own
   }
   console.log(`\n${entries.length} instruction(s) in ${plans.length} Squads transaction(s), #${plans[0].index}..#${plans[plans.length - 1].index}`);
   for (const p of plans) describe(p, names);
@@ -910,7 +910,7 @@ async function cmdRun(f: Flags): Promise<void> {
       );
     }
     const sigs: string[] = [];
-    for (const chunk of packInstructions(p.proposal, env.member)) {
+    for (const chunk of batchInstructions(p.proposal, env.member)) {
       try {
         sigs.push(await send(env, chunk));
       } catch (e) {

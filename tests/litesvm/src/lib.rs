@@ -1467,11 +1467,14 @@ pub fn patch_vrf_seed(svm: &mut LiteSVM, pool: &Pubkey, seed: [u8; 32]) {
     patch_pool_bytes(svm, pool, 116, &seed);
 }
 
-/// Assert `r` failed with `code` (e.g. "6083") or `name` in its message.
+/// Assert `r` failed with program error `code` (e.g. "6083") — as the
+/// transaction error `Custom(6083)` — or with Anchor's logged `Error Code:
+/// {name}`. Deliberately stricter than a bare `contains("6083")`, which a
+/// compute-unit count in the logs ("consumed 16083 of …") can satisfy.
 pub fn assert_refused<T: std::fmt::Debug>(r: Result<T, String>, code: &str, name: &str) -> String {
     let err = r.expect_err(&format!("expected {name} ({code})"));
     assert!(
-        err.contains(code) || err.contains(name),
+        err.contains(&format!("Custom({code})")) || err.contains(&format!("Error Code: {name}")),
         "expected {name} ({code}): {err}"
     );
     err

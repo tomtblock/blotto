@@ -76,7 +76,7 @@ const ERR_FALLBACK_NOT_FOUND = 101;
  * live account holds until the Ladder `migrate_config` runs, `CONFIG_SPACE_V2`
  * the 2026-09-07 size and `CONFIG_SPACE_V1` the original. Kept as literals
  * rather than imported from backend/_shared/src/config-account.ts because
- * that module pulls @noble/hashes and this lane installs only the root
+ * that module imports @noble/hashes and this lane installs only the root
  * tooling; `scripts/check-mirrors.py` and the shared module's own tests pin
  * the same numbers against state.rs. */
 const CONFIG_SPACE = 605;
