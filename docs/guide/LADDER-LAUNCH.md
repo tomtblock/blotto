@@ -28,7 +28,7 @@ commit, after `npm run setup && yarn install` ([OPERATING-MANUAL §2](OPERATING-
 
 ## 0. Before the window
 
-1. **Merge-ready.** CI is green on the pull request — `ci-fast`, `on-chain` (the LiteSVM suite and
+1. **Merge-ready.** CI is green on the PR — `ci-fast`, `on-chain` (the LiteSVM suite and
    the vault model) and the journey. Do not merge yet.
 2. **Read the chain.** `npm run admin -- status` should say Config is the pre-Ladder layout (603
    bytes). `npm run admin -- pools` lists the two empty Open pools the old daemon opened, #182
@@ -60,7 +60,7 @@ FEE_PAYER_KEYPAIR=<funded keypair> npm run admin -- trigger-refund --pool-id 183
 
 ## 2. Merge, then upgrade the program
 
-1. **Merge the pull request to `main`.** Vercel starts building the new site; until step 8 lands
+1. **Merge the PR to `main`.** Vercel starts building the new site; until step 6 lands
    the new backend, the lobby may say live data is unavailable. Keep the next steps moving.
 2. **Upgrade the program** (it extends the program-data account by about 55,600 bytes itself):
 
