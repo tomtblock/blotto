@@ -460,17 +460,29 @@ fn malformed_payout_lists_and_wrong_recipients_reject() {
     // A duplicate seat rejects at commit (strict-ascending check).
     let mut dup = good.clone();
     dup[1].0 = dup[0].0;
-    assert_refused(env.commit(1, [1u8; 32], &dup), "6043", "PayoutListMalformed");
+    assert_refused(
+        env.commit(1, [1u8; 32], &dup),
+        "6043",
+        "PayoutListMalformed",
+    );
 
     // An unsorted list rejects the same way.
     let mut unsorted = good.clone();
     unsorted.swap(0, 1);
-    assert_refused(env.commit(1, [1u8; 32], &unsorted), "6043", "PayoutListMalformed");
+    assert_refused(
+        env.commit(1, [1u8; 32], &unsorted),
+        "6043",
+        "PayoutListMalformed",
+    );
 
     // A seat outside the field rejects.
     let mut outside = good.clone();
     outside[15].0 = 64;
-    assert_refused(env.commit(1, [1u8; 32], &outside), "6043", "PayoutListMalformed");
+    assert_refused(
+        env.commit(1, [1u8; 32], &outside),
+        "6043",
+        "PayoutListMalformed",
+    );
 
     // Amounts one lamport off the prize pool reject.
     let mut off = good.clone();
@@ -484,7 +496,11 @@ fn malformed_payout_lists_and_wrong_recipients_reject() {
     above[0].1 += 1;
     above[1].1 -= 1;
     assert_eq!(above.iter().map(|&(_, a)| a).sum::<u64>(), TIER_POTS[0]);
-    assert_refused(env.commit(1, [1u8; 32], &above), "6085", "PayoutAboveFirstPrize");
+    assert_refused(
+        env.commit(1, [1u8; 32], &above),
+        "6085",
+        "PayoutAboveFirstPrize",
+    );
     // The old winner-takes-all row — the whole prize pool to one seat — is
     // exactly that refusal under the Ladder.
     assert_refused(

@@ -124,7 +124,8 @@ fn closing_a_tier_blocks_the_next_open_not_the_open_pool() {
     }
 
     env.open_ready_pool(1, 0);
-    env.register_player(1).expect("entries work before the close");
+    env.register_player(1)
+        .expect("entries work before the close");
 
     env.send(
         &[admin_ix(&admin, "set_open_tiers", &[0, 0, 0, 0, 0, 0, 0])],

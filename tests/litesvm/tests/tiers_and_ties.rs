@@ -33,7 +33,11 @@ fn pay_all_and_measure(
 
 fn fill_and_reveal(env: &mut Env, pool_id: u64, capacity: u16) -> Vec<(Keypair, Pubkey)> {
     let players = env.register_n(pool_id, capacity);
-    assert_eq!(read_pool(&env.svm, &pool_pda(pool_id)).state, 1, "Sealed at capacity");
+    assert_eq!(
+        read_pool(&env.svm, &pool_pda(pool_id)).state,
+        1,
+        "Sealed at capacity"
+    );
     env.reveal(pool_id);
     players
 }
@@ -66,7 +70,11 @@ fn tier_2_and_tier_6_pools_pay_the_table_exactly() {
     env.open_ready_pool(2, 6);
     let players = fill_and_reveal(&mut env, 2, 64);
     let payouts = straight_payouts(&LADDER_TABLES[3], TIER_PRICES[6]);
-    assert_eq!(payouts[0], (0, 90_000_000_000), "1st: 90 SOL, the largest prize in the grid");
+    assert_eq!(
+        payouts[0],
+        (0, 90_000_000_000),
+        "1st: 90 SOL, the largest prize in the grid"
+    );
     assert_eq!(payouts.iter().map(|&(_, a)| a).sum::<u64>(), TIER_POTS[6]);
     env.commit(2, [1u8; 32], &payouts).expect("commit");
     let deltas = pay_all_and_measure(&mut env, 2, &players, &payouts);
@@ -94,7 +102,11 @@ fn ties_split_the_positions_they_occupy_and_pay_nobody_past_the_line() {
     groups.extend(std::iter::repeat_n(1u16, 11)); // ranks 4..14
     groups.push(3); // ranks 15..17
     let payouts = ladder_payouts(&LADDER_TABLES[3], entry, &groups);
-    assert_eq!(payouts.len(), 17, "fourteen places plus the straddling three");
+    assert_eq!(
+        payouts.len(),
+        17,
+        "fourteen places plus the straddling three"
+    );
     assert_eq!(
         &payouts[..3],
         &[(0, 700_000_000), (1, 700_000_000), (2, 700_000_000)]
@@ -156,7 +168,11 @@ fn a_sixty_four_way_tie_splits_the_pot_with_zero_remainder() {
     env.open_ready_pool(1, 0);
     let players = fill_and_reveal(&mut env, 1, 64);
     let payouts = ladder_payouts(&LADDER_TABLES[3], TIER_PRICES[0], &[64]);
-    assert_eq!(payouts.len(), 64, "a tie across the whole field pays the whole field");
+    assert_eq!(
+        payouts.len(),
+        64,
+        "a tie across the whole field pays the whole field"
+    );
     assert!(
         payouts.iter().all(|&(_, a)| a == 62_500_000),
         "4 SOL / 64 each"

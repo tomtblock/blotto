@@ -38,8 +38,15 @@ fn full_lifecycle_pays_the_ladder_table_to_the_lamport() {
     );
     let cfg = read_config(&env.svm);
     assert_eq!(cfg.platform_reserved, POT, "prize pool recorded as locked");
-    assert_eq!(read_pool_type(&env.svm, &pool_type).active_pool, 1, "the type's slot taken");
-    assert_eq!(cfg.active_pool_by_tier, [0; 7], "Config's per-tier slot is no longer written");
+    assert_eq!(
+        read_pool_type(&env.svm, &pool_type).active_pool,
+        1,
+        "the type's slot taken"
+    );
+    assert_eq!(
+        cfg.active_pool_by_tier, [0; 7],
+        "Config's per-tier slot is no longer written"
+    );
     let platform_at_open = env.balance(&platform_pda());
     let opened_deadline = pv.fill_deadline;
 
@@ -78,7 +85,11 @@ fn full_lifecycle_pays_the_ladder_table_to_the_lamport() {
     let cfg = read_config(&env.svm);
     assert_eq!(cfg.platform_refundable, 0, "entries became revenue at seal");
     // SEQUENTIAL pools (D-A1 revised): sealing does NOT free the slot.
-    assert_eq!(read_pool_type(&env.svm, &pool_type).active_pool, 1, "slot still held after seal");
+    assert_eq!(
+        read_pool_type(&env.svm, &pool_type).active_pool,
+        1,
+        "slot still held after seal"
+    );
 
     // ---- 65th entry rejected ----
     let err = env.register_player(1).unwrap_err();
@@ -125,7 +136,10 @@ fn full_lifecycle_pays_the_ladder_table_to_the_lamport() {
     env.commit(1, [1u8; 32], &payouts).expect("commit_results");
     let pv = read_pool(&env.svm, &pool);
     assert_eq!(pv.state, 2, "Scored");
-    assert_eq!(pv.payouts, payouts, "sixteen committed seats, the whole table");
+    assert_eq!(
+        pv.payouts, payouts,
+        "sixteen committed seats, the whole table"
+    );
 
     // ---- 17th place is not in the paid set (checked while Scored, so the
     // ---- list — not the state gate — is what refuses it) ----
@@ -147,7 +161,11 @@ fn full_lifecycle_pays_the_ladder_table_to_the_lamport() {
         payouts.iter().map(|&(_, a)| a).collect::<Vec<u64>>(),
         "each place receives exactly its table amount"
     );
-    assert_eq!(deltas.iter().sum::<u64>(), POT, "the places share the prize pool exactly");
+    assert_eq!(
+        deltas.iter().sum::<u64>(),
+        POT,
+        "the places share the prize pool exactly"
+    );
     let pv = read_pool(&env.svm, &pool);
     assert_eq!(pv.state, 3, "Paid");
     assert_eq!(pv.paid_mask, 0xFFFF, "sixteen bits: seats 0..15");
@@ -163,7 +181,11 @@ fn full_lifecycle_pays_the_ladder_table_to_the_lamport() {
     );
     // Paid frees the type's slot and releases the pot from the book-keeping.
     let cfg = read_config(&env.svm);
-    assert_eq!(read_pool_type(&env.svm, &pool_type).active_pool, 0, "slot freed at Paid");
+    assert_eq!(
+        read_pool_type(&env.svm, &pool_type).active_pool,
+        0,
+        "slot freed at Paid"
+    );
     assert_eq!(cfg.platform_reserved, 0, "pot released from reserved");
 
     // ---- a paid place cannot be paid again: the state gate answers ----
@@ -202,7 +224,10 @@ fn flagged_ladder_seats_escrow_and_a_forfeited_share_is_held() {
     groups.extend(std::iter::repeat_n(1u16, 14));
     let payouts = ladder_payouts(&LADDER_TABLES[3], ENTRY, &groups);
     assert_eq!(payouts.len(), 16);
-    assert_eq!(&payouts[..3], &[(0, 900_000_000), (1, 900_000_000), (2, 300_000_000)]);
+    assert_eq!(
+        &payouts[..3],
+        &[(0, 900_000_000), (1, 900_000_000), (2, 300_000_000)]
+    );
     assert_eq!(payouts.iter().map(|&(_, a)| a).sum::<u64>(), POT);
     env.commit(1, [1u8; 32], &payouts).expect("commit");
     let deltas = env.pay_all(1, &players, &payouts);
@@ -210,15 +235,23 @@ fn flagged_ladder_seats_escrow_and_a_forfeited_share_is_held() {
     // The two flagged seats escrowed; the other fourteen were paid.
     assert_eq!(&deltas[..2], &[0, 0]);
     assert_eq!(deltas[2..].iter().sum::<u64>(), POT - 1_800_000_000);
-    for seat in 0..2 {
-        assert_eq!(read_entry(&env.svm, &players[seat].1).escrow_lamports, 900_000_000);
+    for (_, entry) in &players[..2] {
+        assert_eq!(read_entry(&env.svm, entry).escrow_lamports, 900_000_000);
     }
-    assert_eq!(env.balance(&vault_pda(1)), 1_800_000_000 + VAULT_RENT_CUSHION);
+    assert_eq!(
+        env.balance(&vault_pda(1)),
+        1_800_000_000 + VAULT_RENT_CUSHION
+    );
     assert_eq!(read_pool(&env.svm, &pool_pda(1)).state, 3, "Paid");
 
     // Seat 0's review cleared: released to its player.
     let before = env.balance(&players[0].0.pubkey());
-    let ix = release_escrow_ix(&settlement.pubkey(), 1, &players[0].1, &players[0].0.pubkey());
+    let ix = release_escrow_ix(
+        &settlement.pubkey(),
+        1,
+        &players[0].1,
+        &players[0].0.pubkey(),
+    );
     env.send(&[ix], &[&settlement]).expect("release");
     assert_eq!(env.balance(&players[0].0.pubkey()) - before, 900_000_000);
 
@@ -227,7 +260,11 @@ fn flagged_ladder_seats_escrow_and_a_forfeited_share_is_held() {
     env.send(&[forfeit_escrow_ix(&admin, 1, &players[1].1)], &[])
         .expect("forfeit");
     assert!(read_entry(&env.svm, &players[1].1).forfeited);
-    assert_eq!(env.balance(&platform_pda()), platform_before, "no lamport reaches the operator");
+    assert_eq!(
+        env.balance(&platform_pda()),
+        platform_before,
+        "no lamport reaches the operator"
+    );
 
     // And the share cannot be paid onward in a Ladder pool — not to the
     // cleared co-leader, not to anyone — so it is HELD where it is.
@@ -245,18 +282,38 @@ fn flagged_ladder_seats_escrow_and_a_forfeited_share_is_held() {
         true,
         &[],
     );
-    assert_refused(env.send(&[ix], &[&settlement]), "6087", "NextPlaceUnsupported");
+    assert_refused(
+        env.send(&[ix], &[&settlement]),
+        "6087",
+        "NextPlaceUnsupported",
+    );
     assert_eq!(env.balance(&players[0].0.pubkey()), before);
-    assert_eq!(read_entry(&env.svm, &players[1].1).escrow_lamports, 900_000_000);
+    assert_eq!(
+        read_entry(&env.svm, &players[1].1).escrow_lamports,
+        900_000_000
+    );
     assert_eq!(
         env.balance(&vault_pda(1)),
         900_000_000 + VAULT_RENT_CUSHION,
         "the forfeited share is held in the pool's own vault"
     );
     // A forfeited share is never released to the forfeiter either.
-    let ix = release_escrow_ix(&settlement.pubkey(), 1, &players[1].1, &players[1].0.pubkey());
-    assert_refused(env.send(&[ix], &[&settlement]), "6057", "EscrowForfeitedAlready");
-    assert_eq!(env.balance(&platform_pda()), platform_before, "still nothing to the operator");
+    let ix = release_escrow_ix(
+        &settlement.pubkey(),
+        1,
+        &players[1].1,
+        &players[1].0.pubkey(),
+    );
+    assert_refused(
+        env.send(&[ix], &[&settlement]),
+        "6057",
+        "EscrowForfeitedAlready",
+    );
+    assert_eq!(
+        env.balance(&platform_pda()),
+        platform_before,
+        "still nothing to the operator"
+    );
 }
 
 #[test]
@@ -333,7 +390,11 @@ fn refund_fork_returns_the_full_entry() {
     );
     let t = read_pool_type(&env.svm, &pool_type);
     assert_eq!(t.active_pool, 0, "slot freed at Closed");
-    assert_eq!(t.next_open_at, env.now() + 5 * 60, "and the type's cooldown stamped");
+    assert_eq!(
+        t.next_open_at,
+        env.now() + 5 * 60,
+        "and the type's cooldown stamped"
+    );
 }
 
 /// Escrow in a ONE-PLACE pool — every pool opened before the Ladder, once
@@ -739,7 +800,10 @@ fn a_sanctions_hold_escrows_the_share_at_payout_without_any_flag() {
     // Every other paid place: paid in the same batches, unaffected.
     for (i, &(seat, amount)) in payouts.iter().enumerate().skip(1) {
         assert_eq!(deltas[i], amount, "seat {seat} is paid normally");
-        assert_eq!(read_entry(&env.svm, &players[seat as usize].1).escrow_lamports, 0);
+        assert_eq!(
+            read_entry(&env.svm, &players[seat as usize].1).escrow_lamports,
+            0
+        );
     }
     assert_eq!(
         env.balance(&vault_pda(1)),
@@ -750,6 +814,9 @@ fn a_sanctions_hold_escrows_the_share_at_payout_without_any_flag() {
     // And the pool reached Paid, so the type's slot is freed and the pot
     // leaves `platform_reserved`: one held wallet must not strand a type.
     assert_eq!(read_pool(&env.svm, &pool_pda(1)).state, 3, "Paid");
-    assert_eq!(read_pool_type(&env.svm, &env.pool_type_of(1)).active_pool, 0);
+    assert_eq!(
+        read_pool_type(&env.svm, &env.pool_type_of(1)).active_pool,
+        0
+    );
     assert_eq!(read_config(&env.svm).platform_reserved, 0);
 }

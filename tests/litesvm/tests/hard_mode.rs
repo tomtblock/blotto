@@ -156,7 +156,11 @@ fn the_hard_ladder_starts_disabled_and_has_its_own_switch() {
     open_mode(&mut env, 1, MODE_HARD).expect("the keeper opens the first hard pool");
     assert_eq!(read_pool(&env.svm, &pool_pda(1)).mode, MODE_HARD);
     assert_eq!(ptype(&env, MODE_HARD).active_pool, 1);
-    assert_eq!(ptype(&env, MODE_EASY).active_pool, 0, "the easy slot is still free");
+    assert_eq!(
+        ptype(&env, MODE_EASY).active_pool,
+        0,
+        "the easy slot is still free"
+    );
     let cfg = read_config(&env.svm);
     assert_eq!(
         (cfg.hard_active_pool_by_tier[0], cfg.active_pool_by_tier[0]),
@@ -189,7 +193,10 @@ fn the_hard_ladder_starts_disabled_and_has_its_own_switch() {
         "a running cooldown is never shortened by a re-enable"
     );
     let err = open_mode(&mut env, 2, MODE_HARD).unwrap_err();
-    assert!(err.contains("6055") || err.contains("TierCoolingDown"), "{err}");
+    assert!(
+        err.contains("6055") || err.contains("TierCoolingDown"),
+        "{err}"
+    );
 }
 
 #[test]
@@ -215,7 +222,11 @@ fn easy_and_hard_pools_run_side_by_side_on_one_tier() {
     assert_eq!(read_pool(&env.svm, &pool_pda(2)).mode, MODE_HARD);
     assert_eq!(ptype(&env, MODE_EASY).active_pool, 1);
     assert_eq!(ptype(&env, MODE_HARD).active_pool, 2);
-    assert_eq!(read_config(&env.svm).next_pool_id, 3, "one id sequence across both ladders");
+    assert_eq!(
+        read_config(&env.svm).next_pool_id,
+        3,
+        "one id sequence across both ladders"
+    );
     // Each pool has its own vault, funded with its own pot.
     assert_eq!(
         env.balance(&vault_pda(1)),
@@ -279,7 +290,8 @@ fn easy_and_hard_pools_run_side_by_side_on_one_tier() {
         .expect("easy pool refunds empty");
     assert_eq!(ptype(&env, MODE_EASY).active_pool, 0);
     assert_eq!(
-        ptype(&env, MODE_HARD).active_pool, 3,
+        ptype(&env, MODE_HARD).active_pool,
+        3,
         "the hard pool is untouched"
     );
 }
@@ -412,7 +424,9 @@ fn a_full_hard_pool_settles_like_an_easy_one_and_frees_the_hard_slot() {
     assert_eq!(hard.active_pool, 0, "the HARD type's slot freed");
     assert_eq!(hard.next_open_at, now(&env) + COOLDOWN_SECS);
     assert!(
-        env.svm.get_account(&pool_type_pda(MODE_EASY, 0, 64)).is_none(),
+        env.svm
+            .get_account(&pool_type_pda(MODE_EASY, 0, 64))
+            .is_none(),
         "the easy type was never even created"
     );
 }
@@ -457,7 +471,10 @@ fn migrate_pool_grows_a_pre_phase_b_pool_and_records_it_easy_and_one_place() {
     );
     assert_eq!(pv.state, 0, "still Open");
     assert_eq!(pv.pot_lamports, TIER_POTS[0]);
-    assert_eq!((pv.capacity, pv.paid_places, pv.prize_table[0]), (64, 1, 40));
+    assert_eq!(
+        (pv.capacity, pv.paid_places, pv.prize_table[0]),
+        (64, 1, 40)
+    );
 
     // Refused a second time.
     let err = env

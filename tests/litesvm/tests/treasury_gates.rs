@@ -230,7 +230,6 @@ fn seven_tier_ladder_unlocks_at_exact_thresholds_from_bootstrap() {
         &[],
     )
     .unwrap();
-    let mut next_pool = 2u64;
     for tier in 1u8..7 {
         // Idle enabled types right now: tiers > `tier` (lower ones are live).
         let idle_reserve: u64 = (1u8..7)
@@ -239,6 +238,8 @@ fn seven_tier_ladder_unlocks_at_exact_thresholds_from_bootstrap() {
             .sum();
         let threshold = TIER_POTS[tier as usize] + VAULT_RENT_CUSHION + idle_reserve;
         let balance = env.balance(&platform_pda());
+        // Pool 1 is tier 0's; tier t opens pool t + 1.
+        let next_pool = tier as u64 + 1;
         let ix = env.open_ix(&settlement.pubkey(), next_pool, tier, MODE_EASY, 64);
         if balance < threshold {
             // Fund to one lamport UNDER the threshold: blocked.
@@ -268,7 +269,6 @@ fn seven_tier_ladder_unlocks_at_exact_thresholds_from_bootstrap() {
         }
         env.send(&[ix], &[&settlement])
             .unwrap_or_else(|e| panic!("tier {tier} rung at threshold: {e}"));
-        next_pool += 1;
     }
     // All seven live at once — the ladder is fully unlocked.
     for t in 0u8..7 {

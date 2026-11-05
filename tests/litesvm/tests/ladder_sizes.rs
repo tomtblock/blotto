@@ -45,16 +45,19 @@ fn open_all_sizes(env: &mut Env) {
     }
     assert_eq!(read_config(&env.svm).enabled_pool_types, 4);
     // Four live pools, four pots reserved.
-    let reserved: u64 = (0..4)
-        .map(|k| table_value(&LADDER_TABLES[k], ENTRY))
-        .sum();
+    let reserved: u64 = (0..4).map(|k| table_value(&LADDER_TABLES[k], ENTRY)).sum();
     assert_eq!(read_config(&env.svm).platform_reserved, reserved);
     assert_eq!(reserved, 75 * ENTRY, "5 + 10 + 20 + 40 entries");
 }
 
 /// Σ of the vault, the treasury and every paid wallet — the settlement
 /// signer pays the fees, so payment must leave this sum exactly unchanged.
-fn money_in_play(env: &Env, pool_id: u64, players: &[(Keypair, Pubkey)], payouts: &[(u16, u64)]) -> u128 {
+fn money_in_play(
+    env: &Env,
+    pool_id: u64,
+    players: &[(Keypair, Pubkey)],
+    payouts: &[(u16, u64)],
+) -> u128 {
     let mut total = env.balance(&vault_pda(pool_id)) as u128 + env.balance(&platform_pda()) as u128;
     for &(seat, _) in payouts {
         total += env.balance(&players[seat as usize].0.pubkey()) as u128;
@@ -74,9 +77,17 @@ fn commit_and_pay(env: &mut Env, k: usize, players: &[(Keypair, Pubkey)], payout
     let mut above = payouts.to_vec();
     above[0].1 += 1;
     above[1].1 -= 1;
-    assert_refused(env.commit(pool_id, [1u8; 32], &above), "6085", "PayoutAboveFirstPrize");
+    assert_refused(
+        env.commit(pool_id, [1u8; 32], &above),
+        "6085",
+        "PayoutAboveFirstPrize",
+    );
     // The whole prize pool to one seat — the retired winner-takes-all row.
-    assert_refused(env.commit(pool_id, [1u8; 32], &[(0, pot)]), "6085", "PayoutAboveFirstPrize");
+    assert_refused(
+        env.commit(pool_id, [1u8; 32], &[(0, pot)]),
+        "6085",
+        "PayoutAboveFirstPrize",
+    );
     // A zero amount.
     let mut zero = payouts.to_vec();
     zero.push((cap / 4, 0));
@@ -84,17 +95,30 @@ fn commit_and_pay(env: &mut Env, k: usize, players: &[(Keypair, Pubkey)], payout
     // A list one lamport short of the prize pool; and one place left out.
     let mut short = payouts.to_vec();
     short.last_mut().unwrap().1 -= 1;
-    assert_refused(env.commit(pool_id, [1u8; 32], &short), "6044", "PayoutSumMismatch");
+    assert_refused(
+        env.commit(pool_id, [1u8; 32], &short),
+        "6044",
+        "PayoutSumMismatch",
+    );
     assert_refused(
         env.commit(pool_id, [1u8; 32], &payouts[..payouts.len() - 1]),
         "6044",
         "PayoutSumMismatch",
     );
-    assert_eq!(read_pool(&env.svm, &pool_pda(pool_id)).state, 1, "{cap}: still Sealed");
+    assert_eq!(
+        read_pool(&env.svm, &pool_pda(pool_id)).state,
+        1,
+        "{cap}: still Sealed"
+    );
 
-    env.commit(pool_id, [1u8; 32], payouts).expect("commit_results");
+    env.commit(pool_id, [1u8; 32], payouts)
+        .expect("commit_results");
     assert_eq!(payouts[0].1, first);
-    assert_eq!(payouts.len(), (cap / 4) as usize, "{cap}: the top quarter is paid");
+    assert_eq!(
+        payouts.len(),
+        (cap / 4) as usize,
+        "{cap}: the top quarter is paid"
+    );
 
     let before = money_in_play(env, pool_id, players, payouts);
     let vault_before = env.balance(&vault_pda(pool_id));
@@ -111,14 +135,22 @@ fn commit_and_pay(env: &mut Env, k: usize, players: &[(Keypair, Pubkey)], payout
         );
         assert_eq!(deltas[i], amount);
     }
-    assert_eq!(deltas.iter().sum::<u64>(), pot, "{cap}: the places share the prize pool");
+    assert_eq!(
+        deltas.iter().sum::<u64>(),
+        pot,
+        "{cap}: the places share the prize pool"
+    );
     assert_eq!(
         vault_before - env.balance(&vault_pda(pool_id)),
         pot,
         "{cap}: exactly the prize pool left the vault"
     );
     assert_eq!(env.balance(&vault_pda(pool_id)), VAULT_RENT_CUSHION);
-    assert_eq!(env.balance(&platform_pda()), platform_before, "{cap}: the treasury did not move");
+    assert_eq!(
+        env.balance(&platform_pda()),
+        platform_before,
+        "{cap}: the treasury did not move"
+    );
     assert_eq!(
         money_in_play(env, pool_id, players, payouts),
         before,
@@ -134,7 +166,11 @@ fn commit_and_pay(env: &mut Env, k: usize, players: &[(Keypair, Pubkey)], payout
     );
     let t = read_pool_type(&env.svm, &pool_type_pda(MODE_EASY, 0, cap));
     assert_eq!(t.active_pool, 0, "{cap}: its type's slot freed");
-    assert_eq!(t.next_open_at, env.now() + 5 * 60, "{cap}: its cooldown stamped");
+    assert_eq!(
+        t.next_open_at,
+        env.now() + 5 * 60,
+        "{cap}: its cooldown stamped"
+    );
 }
 
 #[test]
@@ -147,7 +183,11 @@ fn every_size_fills_and_seals_at_its_capacity_and_pays_its_top_quarter() {
         let platform_before = env.balance(&platform_pda());
         let players = env.register_n(id(k), cap);
         let pv = read_pool(&env.svm, &pool_pda(id(k)));
-        assert_eq!((pv.state, pv.entrants), (1, cap), "{cap}: Sealed at capacity");
+        assert_eq!(
+            (pv.state, pv.entrants),
+            (1, cap),
+            "{cap}: Sealed at capacity"
+        );
         assert_eq!(
             env.balance(&platform_pda()) - platform_before,
             cap as u64 * ENTRY,
@@ -161,7 +201,11 @@ fn every_size_fills_and_seals_at_its_capacity_and_pays_its_top_quarter() {
         assert_refused(env.register_player(id(k)), "6000", "PoolNotOpen");
         fields.push(players);
     }
-    assert_eq!(read_config(&env.svm).platform_refundable, 0, "every field became revenue at seal");
+    assert_eq!(
+        read_config(&env.svm).platform_refundable,
+        0,
+        "every field became revenue at seal"
+    );
 
     for (k, players) in fields.iter().enumerate() {
         env.reveal(id(k));
@@ -197,7 +241,11 @@ fn every_size_seals_at_its_deadline_at_exactly_the_minimum_field() {
         env.send(&[seal_at_deadline_ix(&rando.pubkey(), id(k))], &[&rando])
             .unwrap_or_else(|e| panic!("{cap}: seal at {min}: {e}"));
         let pv = read_pool(&env.svm, &pool_pda(id(k)));
-        assert_eq!((pv.state, pv.entrants), (1, min), "{cap}: Sealed at its minimum field");
+        assert_eq!(
+            (pv.state, pv.entrants),
+            (1, min),
+            "{cap}: Sealed at its minimum field"
+        );
     }
     assert_eq!(read_config(&env.svm).platform_refundable, 0);
 
@@ -242,7 +290,11 @@ fn every_size_refunds_in_full_one_seat_below_its_minimum_field() {
         let ix = env.trigger_refund_ix(&settlement.pubkey(), id(k));
         env.send(&[ix], &[&settlement])
             .unwrap_or_else(|e| panic!("{cap}: trigger_refund: {e}"));
-        assert_eq!(read_pool(&env.svm, &pool_pda(id(k))).state, 4, "{cap}: Refunding");
+        assert_eq!(
+            read_pool(&env.svm, &pool_pda(id(k))).state,
+            4,
+            "{cap}: Refunding"
+        );
         assert_eq!(
             env.balance(&platform_pda()) - platform_before,
             pot,
@@ -252,9 +304,17 @@ fn every_size_refunds_in_full_one_seat_below_its_minimum_field() {
             let before = env.balance(&p.pubkey());
             let ix = env.refund_ix(&settlement.pubkey(), id(k), e, &p.pubkey());
             env.send(&[ix], &[&settlement]).expect("refund");
-            assert_eq!(env.balance(&p.pubkey()) - before, ENTRY, "{cap}: R7 full refund");
+            assert_eq!(
+                env.balance(&p.pubkey()) - before,
+                ENTRY,
+                "{cap}: R7 full refund"
+            );
         }
-        assert_eq!(read_pool(&env.svm, &pool_pda(id(k))).state, 5, "{cap}: Closed");
+        assert_eq!(
+            read_pool(&env.svm, &pool_pda(id(k))).state,
+            5,
+            "{cap}: Closed"
+        );
         assert_eq!(env.balance(&vault_pda(id(k))), VAULT_RENT_CUSHION);
         let t = read_pool_type(&env.svm, &pool_type_pda(MODE_EASY, 0, cap));
         assert_eq!(t.active_pool, 0, "{cap}: its slot freed at Closed");

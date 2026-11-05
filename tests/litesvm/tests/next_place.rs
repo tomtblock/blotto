@@ -578,7 +578,12 @@ fn a_ladder_pools_forfeited_share_is_held_not_paid_onward() {
     let payouts = ladder_payouts(&LADDER_TABLES[1], entry, &[2, 1, 1]);
     assert_eq!(
         payouts,
-        vec![(0, 400_000_000), (1, 400_000_000), (2, 100_000_000), (3, 100_000_000)]
+        vec![
+            (0, 400_000_000),
+            (1, 400_000_000),
+            (2, 100_000_000),
+            (3, 100_000_000)
+        ]
     );
     // A REAL results root, so a refusal cannot be blamed on the proof.
     let leaves: Vec<Vec<u8>> = players
@@ -600,7 +605,10 @@ fn a_ladder_pools_forfeited_share_is_held_not_paid_onward() {
     env.commit(1, merkle_root(&leaves), &payouts).unwrap();
     env.pay_all(1, &players, &payouts);
     assert_eq!(read_pool(&env.svm, &pool_pda(1)).state, 3, "Paid");
-    assert_eq!(read_entry(&env.svm, &players[1].1).escrow_lamports, 400_000_000);
+    assert_eq!(
+        read_entry(&env.svm, &players[1].1).escrow_lamports,
+        400_000_000
+    );
     let admin = env.admin.pubkey();
     env.send(&[forfeit_escrow_ix(&admin, 1, &players[1].1)], &[])
         .expect("forfeit");
@@ -628,19 +636,42 @@ fn a_ladder_pools_forfeited_share_is_held_not_paid_onward() {
             rem,
             &[],
         );
-        assert_refused(env.send(&[ix], &[&settlement]), "6087", "NextPlaceUnsupported");
+        assert_refused(
+            env.send(&[ix], &[&settlement]),
+            "6087",
+            "NextPlaceUnsupported",
+        );
     }
     let from = read_entry(&env.svm, &players[1].1);
     assert!(from.forfeited);
-    assert_eq!(from.escrow_lamports, 400_000_000, "the claim on the share is intact");
-    assert_eq!((from.split_total, from.split_paid_mask), (0, 0), "nothing was split");
-    assert_eq!(env.balance(&vault_pda(1)), vault_before, "the share stays in the vault");
-    assert_eq!(env.balance(&platform_pda()), platform_before, "and never reaches the operator");
+    assert_eq!(
+        from.escrow_lamports, 400_000_000,
+        "the claim on the share is intact"
+    );
+    assert_eq!(
+        (from.split_total, from.split_paid_mask),
+        (0, 0),
+        "nothing was split"
+    );
+    assert_eq!(
+        env.balance(&vault_pda(1)),
+        vault_before,
+        "the share stays in the vault"
+    );
+    assert_eq!(
+        env.balance(&platform_pda()),
+        platform_before,
+        "and never reaches the operator"
+    );
     // Nor does the seven-day auto-release reach a forfeited share.
     env.advance_time(AUTO_RELEASE_SECS + 1);
     let stranger = Keypair::new();
     env.svm.airdrop(&stranger.pubkey(), 1_000_000_000).unwrap();
     let ix = release_escrow_ix(&stranger.pubkey(), 1, &players[1].1, &players[1].0.pubkey());
-    assert_refused(env.send(&[ix], &[&stranger]), "6057", "EscrowForfeitedAlready");
+    assert_refused(
+        env.send(&[ix], &[&stranger]),
+        "6057",
+        "EscrowForfeitedAlready",
+    );
     assert_eq!(env.balance(&vault_pda(1)), vault_before);
 }

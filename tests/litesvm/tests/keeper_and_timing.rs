@@ -255,7 +255,11 @@ fn the_keeper_opens_pools_and_nobody_else_ever_does() {
     let closed_at = now(&env);
     let t = ptype(&env, 0);
     assert_eq!(t.active_pool, 0);
-    assert_eq!(t.next_open_at, closed_at + COOLDOWN_SECS, "cooldown stamped");
+    assert_eq!(
+        t.next_open_at,
+        closed_at + COOLDOWN_SECS,
+        "cooldown stamped"
+    );
 
     // Inside the cooldown nobody opens — not even the keeper.
     let err = open_as(&mut env, &keeper, 2).unwrap_err();

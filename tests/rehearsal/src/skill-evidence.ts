@@ -173,7 +173,8 @@ function paidVsRandom(r: ClassRow, random: ClassRow): string {
   const num =
     BigInt(r.paidEntries) * BigInt(random.entrants) - BigInt(random.paidEntries) * BigInt(r.entrants);
   const s = pct(num, BigInt(r.entrants) * BigInt(random.entrants), 2);
-  return num > 0n ? `+${s}` : s;
+  // A sign only on a difference that survives truncation: never "+0.00".
+  return num > 0n && /[1-9]/.test(s) ? `+${s}` : s;
 }
 
 /**
@@ -592,13 +593,14 @@ field, *in this study*.`,
   };
 }
 
-/** Whether uniform's mean score beats random's in every field's mixed run. */
-function uniformOutscoresRandom(fields: FieldResult[]): boolean {
-  return fields.every((f) => {
+/** The fields whose mixed run gives `uniform` a higher mean score than
+ *  `random` — an exact bigint comparison of the two classes' averages. */
+function fieldsUniformOutscoresRandom(fields: FieldResult[]): number {
+  return fields.filter((f) => {
     const u = f.rows.find((r) => r.cls === 'uniform')!;
     const r = f.rows.find((x) => x.cls === 'random')!;
     return u.scoreHalf * BigInt(r.entrants) > r.scoreHalf * BigInt(u.entrants);
-  });
+  }).length;
 }
 
 /**
@@ -752,13 +754,24 @@ function easyDefaultReading(fields: FieldResult[], tiers: DefaultTiers): string 
       return `| ${r.label} | **${rate}%** (${r.firsts}/${DEFAULT_TIER_POOLS}) | ${tierCell(r, seats)} |`;
     })
     .join('\n');
-  const outscores = uniformOutscoresRandom(fields)
-    ? `The superlative that used to appear
-here, and in the app's rules copy, is not supported by this study's own data:
-the \`uniform\` class outscores the \`random\` class within these very runs, in
-every field.`
-    : `The superlative that used to appear
-here, and in the app's rules copy, is not supported by the measurement above.`;
+  // GENERATED since the Ladder re-run (2026-11-05). Until then this read
+  // "the uniform class outscores the random class within these very runs",
+  // hand-written — and the easy mixed runs show the reverse: random's mean
+  // score is above uniform's. The sentence now reports what the runs show.
+  const arbitrary = tiers.rows[tiers.rows.length - 1];
+  const ahead = fieldsUniformOutscoresRandom(fields);
+  const meanScores =
+    ahead === fields.length
+      ? `Inside this study's mixed runs the \`uniform\` class's mean score is also
+above the \`random\` class's, in every field.`
+      : `Inside this study's mixed runs, though, the \`uniform\` class's mean score
+is above the \`random\` class's in ${ahead} of ${fields.length} fields: which tier an
+allocation lands in depends on the field it faces, which is why the table
+above fixes the field.`;
+  const outscores = `The superlative that used to appear
+here, and in the app's rules copy, is not supported by the measurement above:
+against ${arbitrary.label} the default placed first in ${arbitrary.firsts} of
+${DEFAULT_TIER_POOLS} pools. ${meanScores}`;
   return `**The part of this that is structural.** A battle is won by taking three of
 the five stats. Against any opponent who concentrates on three, the flat
 split loses those three and takes only the two the opponent starved — so it
@@ -904,7 +917,9 @@ function renderReport(params: StudyParams, fields: FieldResult[]): string {
     .flatMap((f) => f.homogeneous.map((r) => fieldRow(f, r, randomOf(f.homogeneous))))
     .join('\n');
 
-  const capacities = [...new Set(fields.map((f) => f.capacity))].join(', ');
+  const sizes = [...new Set(fields.map((f) => f.capacity))];
+  const capacities =
+    sizes.length > 1 ? `${sizes.slice(0, -1).join(', ')} or ${sizes[sizes.length - 1]}` : `${sizes[0]}`;
   const entrySol = solString(OFFLINE_ENTRY_LAMPORTS);
 
   const modeNote = hard

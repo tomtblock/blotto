@@ -48,7 +48,11 @@ fn open_pool_refuses_a_disabled_type_a_closed_tier_and_stale_economics() {
         12,
         &env.enabled_pool_types(),
     );
-    assert_refused(env.send(&[ix], &[&settlement]), "3012", "AccountNotInitialized");
+    assert_refused(
+        env.send(&[ix], &[&settlement]),
+        "3012",
+        "AccountNotInitialized",
+    );
 
     // Disabled type: refused by name.
     env.set_pool_type_enabled(MODE_EASY, 0, 16, false).unwrap();
@@ -57,20 +61,31 @@ fn open_pool_refuses_a_disabled_type_a_closed_tier_and_stale_economics() {
     env.set_pool_type_enabled(MODE_EASY, 0, 16, true).unwrap();
 
     // Closed tier: R6's switch governs above the type.
-    env.send(&[admin_ix(&admin, "set_open_tiers", &[0; 7])], &[]).unwrap();
+    env.send(&[admin_ix(&admin, "set_open_tiers", &[0; 7])], &[])
+        .unwrap();
     let ix = env.open_ix(&settlement.pubkey(), 1, 0, MODE_EASY, 16);
     assert_refused(env.send(&[ix], &[&settlement]), "6006", "TierNotOpen");
-    env.send(&[admin_ix(&admin, "set_open_tiers", &[1, 0, 0, 0, 0, 0, 0])], &[])
-        .unwrap();
+    env.send(
+        &[admin_ix(&admin, "set_open_tiers", &[1, 0, 0, 0, 0, 0, 0])],
+        &[],
+    )
+    .unwrap();
 
     // Stale: the founder moves tier 0's price to 0.2 SOL. The type's stored
     // prize pool (1 SOL) is no longer its table at the price (2 SOL), and
     // the program refuses rather than publish prizes that moved silently.
     let new_price = 200_000_000;
-    env.send(&[set_tier_economics_ix(&admin, 0, new_price, 40 * new_price)], &[])
-        .expect("set_tier_economics");
+    env.send(
+        &[set_tier_economics_ix(&admin, 0, new_price, 40 * new_price)],
+        &[],
+    )
+    .expect("set_tier_economics");
     let ix = env.open_ix(&settlement.pubkey(), 1, 0, MODE_EASY, 16);
-    assert_refused(env.send(&[ix], &[&settlement]), "6079", "PoolTypeEconomicsStale");
+    assert_refused(
+        env.send(&[ix], &[&settlement]),
+        "6079",
+        "PoolTypeEconomicsStale",
+    );
     // A restatement at the OLD prize pool is refused at the source...
     let ix = set_pool_type_economics_ix(&admin, MODE_EASY, 0, 16, 10, LADDER_TABLES[1], 10 * ENTRY);
     assert_refused(env.send(&[ix], &[]), "6082", "PrizePoolMismatch");
@@ -82,9 +97,13 @@ fn open_pool_refuses_a_disabled_type_a_closed_tier_and_stale_economics() {
         10 * new_price
     );
     let ix = env.open_ix(&settlement.pubkey(), 1, 0, MODE_EASY, 16);
-    env.send(&[ix], &[&settlement]).expect("restated economics open");
+    env.send(&[ix], &[&settlement])
+        .expect("restated economics open");
     let pv = read_pool(&env.svm, &pool_pda(1));
-    assert_eq!((pv.entry_lamports, pv.pot_lamports), (new_price, 10 * new_price));
+    assert_eq!(
+        (pv.entry_lamports, pv.pot_lamports),
+        (new_price, 10 * new_price)
+    );
     assert_eq!(env.balance(&vault_pda(1)), 10 * new_price + C);
 }
 
@@ -104,7 +123,10 @@ fn open_pool_believes_only_exactly_every_other_enabled_type_in_address_order() {
     let own = pool_type_pda(MODE_EASY, 0, 16);
     let others = env.other_enabled_pool_types(MODE_EASY, 0, 16);
     assert_eq!(others.len(), 3);
-    assert!(others.windows(2).all(|w| w[0] < w[1]), "the harness sorts by raw bytes");
+    assert!(
+        others.windows(2).all(|w| w[0] < w[1]),
+        "the harness sorts by raw bytes"
+    );
     let open = |env: &mut Env, list: &[Pubkey]| {
         let ix = open_pool_ix(
             &settlement.pubkey(),
@@ -133,7 +155,11 @@ fn open_pool_believes_only_exactly_every_other_enabled_type_in_address_order() {
     // Too many: the opened type itself appended.
     let mut long = others.clone();
     long.push(own);
-    assert_refused(open(&mut env, &sorted(long)), "6083", "PoolTypeListIncomplete");
+    assert_refused(
+        open(&mut env, &sorted(long)),
+        "6083",
+        "PoolTypeListIncomplete",
+    );
     // Unsorted (every rotation of the right set but the sorted one).
     let mut rev = others.clone();
     rev.reverse();
@@ -168,11 +194,20 @@ fn open_pool_believes_only_exactly_every_other_enabled_type_in_address_order() {
         );
         env.send(&[ix], &[&settlement])
     };
-    for fake in [config_pda(), pool_pda(1), platform_pda(), settlement.pubkey()] {
+    for fake in [
+        config_pda(),
+        pool_pda(1),
+        platform_pda(),
+        settlement.pubkey(),
+    ] {
         let list = sorted(vec![others[0], others[1], fake]);
         assert_refused(open2(&mut env, &list), "6084", "PoolTypeAccountInvalid");
     }
-    assert_eq!(read_config(&env.svm).next_pool_id, 2, "nothing but pool 1 opened");
+    assert_eq!(
+        read_config(&env.svm).next_pool_id,
+        2,
+        "nothing but pool 1 opened"
+    );
 
     // Exactly the other enabled types, ascending: it opens.
     open2(&mut env, &others).expect("the exact list opens");
@@ -186,14 +221,21 @@ fn withdraw_platform_needs_the_whole_list_and_holds_the_per_type_reserve_exactly
     let settlement = env.settlement.insecure_clone();
     let dest = Pubkey::new_unique();
     // Three enabled types across both modes; hard tier 0 open.
-    env.send(&[set_hard_open_tiers_ix(&admin, [true, false, false, false, false, false, false])], &[])
-        .unwrap();
+    env.send(
+        &[set_hard_open_tiers_ix(
+            &admin,
+            [true, false, false, false, false, false, false],
+        )],
+        &[],
+    )
+    .unwrap();
     env.ensure_pool_type(MODE_EASY, 0, 8);
     env.ensure_pool_type(MODE_EASY, 0, 64);
     env.ensure_pool_type(MODE_HARD, 0, 16);
     // Policy: TWO further pools of every idle enabled type, and 0.3 SOL.
     let min = 3 * ENTRY;
-    env.send(&[set_treasury_policy_ix(&admin, 2, min)], &[]).unwrap();
+    env.send(&[set_treasury_policy_ix(&admin, 2, min)], &[])
+        .unwrap();
     let per_type = |cap: u16| 2 * (pot(cap) + C);
     let floor = min + per_type(8) + per_type(64) + per_type(16);
     let surplus = 7 * ENTRY;
@@ -207,27 +249,51 @@ fn withdraw_platform_needs_the_whole_list_and_holds_the_per_type_reserve_exactly
     };
     // The list must be every enabled type: short, empty, unsorted,
     // duplicated, smuggled — all refused, nothing moved.
-    assert_refused(withdraw(&mut env, &all[..2], 1), "6083", "PoolTypeListIncomplete");
+    assert_refused(
+        withdraw(&mut env, &all[..2], 1),
+        "6083",
+        "PoolTypeListIncomplete",
+    );
     assert_refused(withdraw(&mut env, &[], 1), "6083", "PoolTypeListIncomplete");
     let mut rev = all.clone();
     rev.reverse();
-    assert_refused(withdraw(&mut env, &rev, 1), "6083", "PoolTypeListIncomplete");
+    assert_refused(
+        withdraw(&mut env, &rev, 1),
+        "6083",
+        "PoolTypeListIncomplete",
+    );
     let mut dup = vec![all[0], all[0], all[2]];
     dup.sort();
-    assert_refused(withdraw(&mut env, &dup, 1), "6083", "PoolTypeListIncomplete");
+    assert_refused(
+        withdraw(&mut env, &dup, 1),
+        "6083",
+        "PoolTypeListIncomplete",
+    );
     env.init_pool_type(MODE_HARD, 0, 32).unwrap();
     env.set_launch_economics(MODE_HARD, 0, 32).unwrap();
     let mut smuggled = vec![all[0], all[1], pool_type_pda(MODE_HARD, 0, 32)];
     smuggled.sort();
-    assert_refused(withdraw(&mut env, &smuggled, 1), "6083", "PoolTypeListIncomplete");
+    assert_refused(
+        withdraw(&mut env, &smuggled, 1),
+        "6083",
+        "PoolTypeListIncomplete",
+    );
     let mut fake = vec![all[0], all[1], config_pda()];
     fake.sort();
-    assert_refused(withdraw(&mut env, &fake, 1), "6084", "PoolTypeAccountInvalid");
+    assert_refused(
+        withdraw(&mut env, &fake, 1),
+        "6084",
+        "PoolTypeAccountInvalid",
+    );
     assert_eq!(env.balance(&dest), 0);
 
     // With the whole list the floor is exact: one lamport over the surplus
     // is refused, the surplus itself leaves.
-    assert_refused(withdraw(&mut env, &all, surplus + 1), "6048", "WithdrawBelowFloor");
+    assert_refused(
+        withdraw(&mut env, &all, surplus + 1),
+        "6048",
+        "WithdrawBelowFloor",
+    );
     withdraw(&mut env, &all, surplus).expect("exactly the surplus");
     assert_eq!(env.balance(&platform_pda()), floor);
     assert_refused(withdraw(&mut env, &all, 1), "6048", "WithdrawBelowFloor");
@@ -236,7 +302,8 @@ fn withdraw_platform_needs_the_whole_list_and_holds_the_per_type_reserve_exactly
     // and RELEASES the rest of that reserve: a live type reserves nothing,
     // so exactly (pot + cushion) more becomes withdrawable.
     let ix = env.open_ix(&settlement.pubkey(), 1, 0, MODE_EASY, 64);
-    env.send(&[ix], &[&settlement]).expect("open from the reserve");
+    env.send(&[ix], &[&settlement])
+        .expect("open from the reserve");
     assert_eq!(env.balance(&platform_pda()), floor - (pot(64) + C));
     let released = pot(64) + C;
     assert_refused(
@@ -248,7 +315,8 @@ fn withdraw_platform_needs_the_whole_list_and_holds_the_per_type_reserve_exactly
 
     // Closing the hard TIER releases its type's reserve (the type stays
     // enabled — still on the list — but reserves nothing on a closed tier).
-    env.send(&[set_hard_open_tiers_ix(&admin, [false; 7])], &[]).unwrap();
+    env.send(&[set_hard_open_tiers_ix(&admin, [false; 7])], &[])
+        .unwrap();
     assert_refused(
         withdraw(&mut env, &all, per_type(16) + 1),
         "6048",
@@ -258,7 +326,11 @@ fn withdraw_platform_needs_the_whole_list_and_holds_the_per_type_reserve_exactly
 
     // Disabling a type takes it off the list AND out of the reserve.
     env.set_pool_type_enabled(MODE_EASY, 0, 8, false).unwrap();
-    assert_refused(withdraw(&mut env, &all, 1), "6083", "PoolTypeListIncomplete");
+    assert_refused(
+        withdraw(&mut env, &all, 1),
+        "6083",
+        "PoolTypeListIncomplete",
+    );
     let all = env.enabled_pool_types();
     assert_eq!(all.len(), 2);
     assert_refused(
@@ -280,8 +352,14 @@ fn withdraw_platform_needs_the_whole_list_and_holds_the_per_type_reserve_exactly
 fn a_permissionless_caller_cannot_free_another_types_slot() {
     let Some(mut env) = Env::new() else { return };
     let admin = env.admin.pubkey();
-    env.send(&[set_hard_open_tiers_ix(&admin, [true, false, false, false, false, false, false])], &[])
-        .unwrap();
+    env.send(
+        &[set_hard_open_tiers_ix(
+            &admin,
+            [true, false, false, false, false, false, false],
+        )],
+        &[],
+    )
+    .unwrap();
     env.ensure_pool_type(MODE_HARD, 0, 64);
     let rando = Keypair::new();
     env.svm.airdrop(&rando.pubkey(), 10_000_000_000).unwrap();
@@ -372,8 +450,14 @@ fn eight_pool_types_at_tier_zero_are_all_open_at_once_under_the_treasury_policy(
     let Some(mut env) = Env::new() else { return };
     let admin = env.admin.pubkey();
     let settlement = env.settlement.insecure_clone();
-    env.send(&[set_hard_open_tiers_ix(&admin, [true, false, false, false, false, false, false])], &[])
-        .unwrap();
+    env.send(
+        &[set_hard_open_tiers_ix(
+            &admin,
+            [true, false, false, false, false, false, false],
+        )],
+        &[],
+    )
+    .unwrap();
     let mut types: Vec<(u8, u16)> = Vec::new();
     for mode in [MODE_EASY, MODE_HARD] {
         for &cap in &POOL_CAPACITIES {
@@ -383,7 +467,13 @@ fn eight_pool_types_at_tier_zero_are_all_open_at_once_under_the_treasury_policy(
     }
     let cfg = read_config(&env.svm);
     assert_eq!(cfg.enabled_pool_types, 8);
-    assert_eq!((cfg.treasury_reserve_pots, cfg.treasury_min_platform_lamports), (1, 0));
+    assert_eq!(
+        (
+            cfg.treasury_reserve_pots,
+            cfg.treasury_min_platform_lamports
+        ),
+        (1, 0)
+    );
     let total_pots: u64 = types.iter().map(|&(_, cap)| pot(cap)).sum();
     assert_eq!(total_pots, 15_000_000_000, "2 × (0.5 + 1 + 2 + 4) SOL");
     let total = total_pots + 8 * C;
@@ -401,7 +491,11 @@ fn eight_pool_types_at_tier_zero_are_all_open_at_once_under_the_treasury_policy(
     let mut idle: Vec<(u8, u16)> = types.clone();
     for (i, &(mode, cap)) in types.iter().enumerate() {
         let expected: u64 = idle.iter().map(|&(_, c)| pot(c) + C).sum();
-        assert_eq!(env.balance(&platform_pda()), expected, "before opening ({mode}, {cap})");
+        assert_eq!(
+            env.balance(&platform_pda()),
+            expected,
+            "before opening ({mode}, {cap})"
+        );
         let ix = env.withdraw_ix(&Pubkey::new_unique(), 1);
         assert_refused(env.send(&[ix], &[]), "6048", "WithdrawBelowFloor");
         let id = i as u64 + 1;
@@ -432,5 +526,9 @@ fn eight_pool_types_at_tier_zero_are_all_open_at_once_under_the_treasury_policy(
     // A ninth pool has no type to go to: every type's slot is taken.
     env.fund_platform(100 * ENTRY);
     let ix = env.open_ix(&settlement.pubkey(), 9, 0, MODE_HARD, 32);
-    assert_refused(env.send(&[ix], &[&settlement]), "6008", "TierAlreadyHasOpenPool");
+    assert_refused(
+        env.send(&[ix], &[&settlement]),
+        "6008",
+        "TierAlreadyHasOpenPool",
+    );
 }

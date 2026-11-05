@@ -12,14 +12,31 @@ ladder (`tests/rehearsal/src/ladder.ts`, "THE HARD LADDER"): uniform is
 still 20 in every stat (the hard board's own buzzer default, 700 / 35);
 random is 700 over the 35 cells; heuristic concedes two battles and stacks
 the other five at 140 each across a trio; optimised is that family tuned.
-The easy study is `../REPORT.md` and is unchanged by this one.
+The easy study is `../REPORT.md`.
 
-Every run below is measured at **two field sizes**: 64 and 40 seats.
-64 is a full pool; 40 is the smallest field the rules
-allow a pool to play at — a pool whose deadline passes holding
-40..63 entrants runs rather than refunding (R7-b,
-2026-09-13; it was 52 under D-E4). A claim measured only at full capacity
-would leave the obvious question about the shortest field unanswered.
+**The Ladder (D-E19).** A pool holds 8, 16, 32 or 64 players and pays the top
+quarter of its size on a fixed prize table that depends on the size alone —
+never on how many entered. Every run below is measured at **every pool size,
+full and at its minimum field**: 8 of 8, 5 of 8, 16 of 16, 10 of 16, 32 of 32, 20 of 32, 64 of 64, 40 of 64. The minimum field is
+the smallest field a size may play at — a pool whose deadline passes holding
+at least that many entrants plays rather than refunding. A claim measured
+only at one size, or only at full capacity, would leave the obvious questions
+about the others unanswered.
+
+## The prizes these pools paid
+
+At the 0.1 SOL entry every pool in this study settled on its size's
+published table (`LADDER_TABLES`, `backend/scoring/src/prizes.ts`, copied
+onto the pool at open as `open_pool` does). Players tied on battles and
+stats share the prizes of the places they occupy (D3-B), so a tie can
+straddle the last paid place and every member of it is paid.
+
+| Pool size | Minimum field | Places paid | Prizes in SOL, 1st place first | Prize pool (SOL) |
+|---|---|---|---|---|
+| 8 | 5 | 2 | 0.3; 0.2 | 0.5 |
+| 16 | 10 | 4 | 0.5; 0.3; 0.1; 0.1 | 1 |
+| 32 | 20 | 8 | 0.8; 0.4; 0.2; 0.2; 0.1 each, 5th–8th | 2 |
+| 64 | 40 | 16 | 1.2; 0.6; 0.3; 0.3; 0.2 each, 5th–8th; 0.1 each, 9th–16th | 4 |
 
 ## Headline: considered play against unconsidered play
 
@@ -28,22 +45,54 @@ input that differs between the rows below is how the entrant allocated
 stats across the seven battles. The spread between **random** (valid
 allocations with no intent) and **optimised** (a tuned three-stat plan) is
 the measured effect of that choice under the published scoring rule
-(battles won, then stats won; the ranked-first player takes the pot, a tie
-for first splitting it evenly per D3-B):
+(battles won, then stats won; the pool's table paid by rank, ties sharing
+per D3-B):
 
-| Seats | Class | Entrants | Rank-1 rate | Paid-seat rate | Eliminated from the paid set | Mean payout share of pot |
-|---|---|---|---|---|---|---|
-| 64 | random | 3200 | 0.000% | 0.00% | 100.00% | 0.0000% |
-| 64 | heuristic | 3200 | 0.156% | 0.15% | 99.84% | 0.1562% |
-| 64 | optimised | 3200 | 6.093% | 6.09% | 93.90% | 6.0937% |
-| 40 | random | 2000 | 0.000% | 0.00% | 100.00% | 0.0000% |
-| 40 | heuristic | 2000 | 0.800% | 0.80% | 99.20% | 0.8000% |
-| 40 | optimised | 2000 | 9.250% | 9.25% | 90.75% | 9.2000% |
+| Pool size | Field | Class | Entrants | Rank-1 rate | Paid rate | Paid rate vs random | Return per entry |
+|---|---|---|---|---|---|---|---|
+| 8 | 8 | random | 400 | 0.000% | 0.25% | 0.00 pp | 0.0050 |
+| 8 | 8 | heuristic | 400 | 11.500% | 25.25% | +25.00 pp | 0.6162 |
+| 8 | 8 | optimised | 400 | 38.750% | 75.50% | +75.25 pp | 1.8787 |
+| 8 | 5 | random | 250 | 1.200% | 3.60% | 0.00 pp | 0.0840 |
+| 8 | 5 | heuristic | 250 | 22.800% | 66.00% | +62.40 pp | 1.5340 |
+| 8 | 5 | optimised | 250 | 56.400% | 84.00% | +80.40 pp | 2.2340 |
+| 16 | 16 | random | 800 | 0.000% | 0.00% | 0.00 pp | 0.0000 |
+| 16 | 16 | heuristic | 800 | 3.875% | 27.62% | +27.62 pp | 0.5225 |
+| 16 | 16 | optimised | 800 | 21.250% | 72.50% | +72.50 pp | 1.9775 |
+| 16 | 10 | random | 500 | 0.000% | 1.60% | 0.00 pp | 0.0160 |
+| 16 | 10 | heuristic | 500 | 9.400% | 69.20% | +67.60 pp | 1.3430 |
+| 16 | 10 | optimised | 500 | 30.600% | 88.80% | +87.20 pp | 2.6350 |
+| 32 | 32 | random | 1600 | 0.000% | 0.00% | 0.00 pp | 0.0000 |
+| 32 | 32 | heuristic | 1600 | 1.437% | 25.18% | +25.18 pp | 0.4550 |
+| 32 | 32 | optimised | 1600 | 11.062% | 74.87% | +74.87 pp | 2.0450 |
+| 32 | 20 | random | 1000 | 0.000% | 0.30% | 0.00 pp | 0.0030 |
+| 32 | 20 | heuristic | 1000 | 2.000% | 66.60% | +66.30 pp | 1.0400 |
+| 32 | 20 | optimised | 1000 | 18.000% | 93.40% | +93.10 pp | 2.9570 |
+| 64 | 64 | random | 3200 | 0.000% | 0.12% | 0.00 pp | 0.0021 |
+| 64 | 64 | heuristic | 3200 | 0.156% | 19.59% | +19.46 pp | 0.2700 |
+| 64 | 64 | optimised | 3200 | 6.093% | 80.34% | +80.21 pp | 2.2278 |
+| 64 | 40 | random | 2000 | 0.000% | 0.15% | 0.00 pp | 0.0015 |
+| 64 | 40 | heuristic | 2000 | 0.800% | 63.95% | +63.80 pp | 0.9377 |
+| 64 | 40 | optimised | 2000 | 9.250% | 95.95% | +95.80 pp | 3.0607 |
 
-The everyone-equal baseline — what one seat is worth if nothing an entrant
-does matters — is 1.5625% in a 64-seat pool, and 2.5000% in a 40-seat pool. The gap between the rows above, produced
-purely by allocation choices, is the product's skill evidence, and it holds
-at both field sizes.
+The everyone-equal baseline — what each entry is worth if nothing an
+entrant does matters, so that every entrant is equally placed to take any
+rank:
+
+| Pool size | Field | Rank-1 rate | Paid rate | Return per entry |
+|---|---|---|---|---|
+| 8 | 8 | 12.500% | 25.00% | 0.6250 |
+| 8 | 5 | 20.000% | 40.00% | 1.0000 |
+| 16 | 16 | 6.250% | 25.00% | 0.6250 |
+| 16 | 10 | 10.000% | 40.00% | 1.0000 |
+| 32 | 32 | 3.125% | 25.00% | 0.6250 |
+| 32 | 20 | 5.000% | 40.00% | 1.0000 |
+| 64 | 64 | 1.562% | 25.00% | 0.6250 |
+| 64 | 40 | 2.500% | 40.00% | 1.0000 |
+
+In every field above — every pool size, full and at its minimum — the
+optimised class's paid rate is above the random class's. That gap, produced
+purely by allocation choices, is the product's skill evidence.
 
 ## Leaving the allocation on its default
 
@@ -54,10 +103,16 @@ the app's `EVEN_SPLIT` (`app/src/battle/allocation.ts`, the constant every
 screen opens on), so these rows are the measured outcome for a player who
 opens the flow, touches nothing, and locks in all seven battles.
 
-| Seats | Class | Entrants | Rank-1 rate | Paid-seat rate | Eliminated from the paid set | Mean payout share of pot |
-|---|---|---|---|---|---|---|
-| 64 | uniform | 3200 | 0.000% | 0.00% | 100.00% | 0.0000% |
-| 40 | uniform | 2000 | 0.000% | 0.00% | 100.00% | 0.0000% |
+| Pool size | Field | Class | Entrants | Rank-1 rate | Paid rate | Paid rate vs random | Return per entry |
+|---|---|---|---|---|---|---|---|
+| 8 | 8 | uniform | 400 | 0.000% | 0.00% | -0.25 pp | 0.0000 |
+| 8 | 5 | uniform | 250 | 1.200% | 6.80% | +3.20 pp | 0.1480 |
+| 16 | 16 | uniform | 800 | 0.000% | 0.00% | 0.00 pp | 0.0000 |
+| 16 | 10 | uniform | 500 | 0.000% | 1.80% | +0.20 pp | 0.0060 |
+| 32 | 32 | uniform | 1600 | 0.000% | 0.00% | 0.00 pp | 0.0000 |
+| 32 | 20 | uniform | 1000 | 0.000% | 0.00% | -0.30 pp | 0.0000 |
+| 64 | 64 | uniform | 3200 | 0.000% | 0.00% | -0.12 pp | 0.0000 |
+| 64 | 40 | uniform | 2000 | 0.000% | 0.00% | -0.15 pp | 0.0000 |
 
 **The part of this that is structural.** Under the hard rule the default is
 20 in every stat of every battle. Against a stacked battle (140 across a
@@ -67,12 +122,13 @@ class it wins exactly the two conceded battles and loses the other five —
 every time, not on average.
 
 **The part of this that is about THIS population.** Half of every mixed
-field here is the two stacked classes, so the rows above say the default
-never places first and never takes a lamport *in this study*. Against a
-field of free-integer boards (the `random` class, about 20 a stat with
-spread) the default is an even contest stat for stat, and against careless
-concentration it can rank well — as the easy study measured on 2026-09-19.
-The 0.000% is real and reproducible; it is a property of a field that is
+field here (as near half as a field of 5 or 10 allows) is the two stacked
+classes. The rows above say the default placed first in 3 of 9750
+entries and was paid in 26 of 9750, across every pool size and
+field, *in this study*. Against a field of free-integer boards (the
+`random` class, about 20 a stat with spread) the default is an even contest
+stat for stat, and against careless concentration it can rank well — as the
+easy study measured on 2026-09-19. Those rates are real and reproducible; they are a property of a field that is
 half deliberate play, not a property of the allocation. These rows are kept
 OUT of the headline comparison above for the same reason as in the easy
 report: the honest measure of skill is the spread between entrants who are
@@ -80,29 +136,50 @@ all genuinely competing.
 
 ## Fields of equally-skilled entrants
 
-The v2 amendment's control runs: **200 pools per class, per field
-size**, in which every seat plays the SAME strategy class (with within-class
+The v2 amendment's control runs: **200 pools per class, per
+field**, in which every seat plays the SAME strategy class (with within-class
 uniqueness — no two entrants in a pool share an allocation set, see
 Methodology). When everyone is equally skilled, outcomes should spread toward
-the everyone-equal baseline: rank-1 rate near one seat's share, paid-seat
-rate equal to it (one paid place under D-E2: the paid set IS the rank-1
-group, a tie for first splitting the pot per D3-B), and mean payout share at
-exactly that baseline (conservation forces the class total to equal the pot;
-the spread is who takes which slice).
+the everyone-equal baseline above: rank-1 rate near one entry's share of the
+field, paid rate near the places paid over the field (a tie straddling the
+last paid place lifts it a little, since every member of that tie is paid),
+and return per entry at exactly the baseline (conservation forces the class
+total to equal the prize pool; the spread is who takes which prize). The
+"vs random" column here compares against the homogeneous random run of the
+same field.
 
-| Seats | Class | Entrants | Rank-1 rate | Paid-seat rate | Eliminated from the paid set | Mean payout share of pot |
-|---|---|---|---|---|---|---|
-| 64 | random | 12800 | 1.562% | 1.56% | 98.43% | 1.5625% |
-| 64 | heuristic | 12800 | 1.562% | 1.56% | 98.43% | 1.5625% |
-| 64 | optimised | 12800 | 1.562% | 1.56% | 98.43% | 1.5625% |
-| 40 | random | 8000 | 2.500% | 2.50% | 97.50% | 2.5000% |
-| 40 | heuristic | 8000 | 2.500% | 2.50% | 97.50% | 2.5000% |
-| 40 | optimised | 8000 | 2.500% | 2.50% | 97.50% | 2.5000% |
+| Pool size | Field | Class | Entrants | Rank-1 rate | Paid rate | Paid rate vs random | Return per entry |
+|---|---|---|---|---|---|---|---|
+| 8 | 8 | random | 1600 | 12.562% | 25.00% | 0.00 pp | 0.6250 |
+| 8 | 8 | heuristic | 1600 | 12.687% | 25.31% | +0.31 pp | 0.6250 |
+| 8 | 8 | optimised | 1600 | 12.750% | 25.12% | +0.12 pp | 0.6250 |
+| 8 | 5 | random | 1000 | 20.100% | 40.10% | 0.00 pp | 1.0000 |
+| 8 | 5 | heuristic | 1000 | 20.200% | 40.20% | +0.10 pp | 1.0000 |
+| 8 | 5 | optimised | 1000 | 20.100% | 40.30% | +0.20 pp | 1.0000 |
+| 16 | 16 | random | 3200 | 6.250% | 25.03% | 0.00 pp | 0.6250 |
+| 16 | 16 | heuristic | 3200 | 6.281% | 25.06% | +0.03 pp | 0.6250 |
+| 16 | 16 | optimised | 3200 | 6.250% | 25.09% | +0.06 pp | 0.6250 |
+| 16 | 10 | random | 2000 | 10.050% | 40.10% | 0.00 pp | 1.0000 |
+| 16 | 10 | heuristic | 2000 | 10.000% | 40.10% | 0.00 pp | 1.0000 |
+| 16 | 10 | optimised | 2000 | 10.100% | 40.20% | +0.10 pp | 1.0000 |
+| 32 | 32 | random | 6400 | 3.125% | 25.01% | 0.00 pp | 0.6250 |
+| 32 | 32 | heuristic | 6400 | 3.125% | 25.01% | 0.00 pp | 0.6250 |
+| 32 | 32 | optimised | 6400 | 3.125% | 25.01% | 0.00 pp | 0.6250 |
+| 32 | 20 | random | 4000 | 5.000% | 40.00% | 0.00 pp | 1.0000 |
+| 32 | 20 | heuristic | 4000 | 5.000% | 40.00% | 0.00 pp | 1.0000 |
+| 32 | 20 | optimised | 4000 | 5.025% | 40.07% | +0.07 pp | 1.0000 |
+| 64 | 64 | random | 12800 | 1.562% | 25.00% | 0.00 pp | 0.6250 |
+| 64 | 64 | heuristic | 12800 | 1.562% | 25.00% | 0.00 pp | 0.6250 |
+| 64 | 64 | optimised | 12800 | 1.562% | 25.01% | +0.01 pp | 0.6250 |
+| 64 | 40 | random | 8000 | 2.500% | 40.01% | 0.00 pp | 1.0000 |
+| 64 | 40 | heuristic | 8000 | 2.500% | 40.00% | -0.01 pp | 1.0000 |
+| 64 | 40 | optimised | 8000 | 2.500% | 40.00% | -0.01 pp | 1.0000 |
 
-Reading: among equals, no entrant holds an edge — the mean share sits at
-the baseline for every class, at both field sizes. Skill differentiates
-BETWEEN classes (the headline table); within a class it cannot, which is
-exactly the shape a skill competition's outcomes should have.
+Reading: among equals, no entrant holds an edge — the return per entry sits
+at the baseline for every class, at every pool size and field. Skill
+differentiates BETWEEN classes (the headline table); within a class it
+cannot, which is exactly the shape a skill competition's outcomes should
+have.
 
 
 ## Draw rate under the hard rule
@@ -114,64 +191,94 @@ meeting, from two boards that happen to split a battle 2–2 with a tied
 stat, and from the uniform class meeting itself. The table counts every
 pairwise battle comparison the crank scored in each run:
 
-| Seats | Run | Battle comparisons | Drawn | Draw rate |
-|---|---|---|---|---|
-| 64 | mixed | 2822400 | 377360 | 13.370% |
-| 64 | random | 2822400 | 131343 | 4.653% |
-| 64 | heuristic | 2822400 | 1064386 | 37.712% |
-| 64 | optimised | 2822400 | 1032606 | 36.586% |
-| 40 | mixed | 1092000 | 142428 | 13.042% |
-| 40 | random | 1092000 | 50638 | 4.637% |
-| 40 | heuristic | 1092000 | 413377 | 37.855% |
-| 40 | optimised | 1092000 | 400303 | 36.657% |
+| Pool size | Field | Run | Battle comparisons | Drawn | Draw rate |
+|---|---|---|---|---|---|
+| 8 | 8 | mixed | 39200 | 3745 | 9.553% |
+| 8 | 8 | random | 39200 | 1883 | 4.803% |
+| 8 | 8 | heuristic | 39200 | 14548 | 37.112% |
+| 8 | 8 | optimised | 39200 | 14203 | 36.232% |
+| 8 | 5 | mixed | 14000 | 1096 | 7.828% |
+| 8 | 5 | random | 14000 | 653 | 4.664% |
+| 8 | 5 | heuristic | 14000 | 5296 | 37.828% |
+| 8 | 5 | optimised | 14000 | 5180 | 37.000% |
+| 16 | 16 | mixed | 168000 | 19952 | 11.876% |
+| 16 | 16 | random | 168000 | 7792 | 4.638% |
+| 16 | 16 | heuristic | 168000 | 63898 | 38.034% |
+| 16 | 16 | optimised | 168000 | 61762 | 36.763% |
+| 16 | 10 | mixed | 63000 | 6804 | 10.800% |
+| 16 | 10 | random | 63000 | 2964 | 4.704% |
+| 16 | 10 | heuristic | 63000 | 24125 | 38.293% |
+| 16 | 10 | optimised | 63000 | 22886 | 36.326% |
+| 32 | 32 | mixed | 694400 | 89482 | 12.886% |
+| 32 | 32 | random | 694400 | 32101 | 4.622% |
+| 32 | 32 | heuristic | 694400 | 261544 | 37.664% |
+| 32 | 32 | optimised | 694400 | 253399 | 36.491% |
+| 32 | 20 | mixed | 266000 | 32576 | 12.246% |
+| 32 | 20 | random | 266000 | 12346 | 4.641% |
+| 32 | 20 | heuristic | 266000 | 100295 | 37.704% |
+| 32 | 20 | optimised | 266000 | 97369 | 36.604% |
+| 64 | 64 | mixed | 2822400 | 377360 | 13.370% |
+| 64 | 64 | random | 2822400 | 131343 | 4.653% |
+| 64 | 64 | heuristic | 2822400 | 1064386 | 37.712% |
+| 64 | 64 | optimised | 2822400 | 1032606 | 36.586% |
+| 64 | 40 | mixed | 1092000 | 142428 | 13.042% |
+| 64 | 40 | random | 1092000 | 50638 | 4.637% |
+| 64 | 40 | heuristic | 1092000 | 413377 | 37.855% |
+| 64 | 40 | optimised | 1092000 | 400303 | 36.657% |
 
-The `mixed` row includes the uniform quarter of the field, which draws
-every battle against itself by construction; the `random` row is the
+The `mixed` rows include the uniform quarter of the field, which draws
+every battle against itself by construction; the `random` rows are the
 free-integer draw rate of the hard board on its own.
 
 ## Methodology
 
-- **Runs**: at EACH field size (64 and 40 seats), one mixed-field run
-  (200 pools, equal numbers of each class — 16 per class at 64 seats, 10 per class at 40 seats — seat
-  order shuffled per pool by a seeded Fisher–Yates so class is uncorrelated
-  with seat index) and three homogeneous-field runs
-  (200 pools of one class each, for random / heuristic /
-  optimised).
-- **Seeds**: base seed **20260827**. Field size k offsets every
-  seed by k × 100,000,000; the FULL field is index 0, so its seeds — and
-  therefore its published numbers — are unchanged by the addition of a second
-  field size. Within a field, mixed-run pool p uses baseSeed + offset + p
-  (p = 1..200); homogeneous run i (1 = random, 2 = heuristic,
-  3 = optimised) uses baseSeed + offset + i×1,000,000 + p. Every entrant
-  stream is sha256 of a labelled seed string — no wall clock, no
-  `Math.random` — so a run is reproducible from its parameters alone.
+- **Runs**: at EACH field (8 of 8, 5 of 8, 16 of 16, 10 of 16, 32 of 32, 20 of 32, 64 of 64, 40 of 64), one mixed-field run
+  (200 pools; 2 each at 8 of 8; 1 or 2 each at 5 of 8 (the extra entries rotating between classes pool by pool); 4 each at 16 of 16; 2 or 3 each at 10 of 16 (the extra entries rotating between classes pool by pool); 8 each at 32 of 32; 5 each at 20 of 32; 16 each at 64 of 64; 10 each at 40 of 64; seat order shuffled per
+  pool by a seeded Fisher–Yates so class is uncorrelated with seat index)
+  and three homogeneous-field runs (200 pools of one class each,
+  for random / heuristic / optimised).
+- **Seeds**: base seed **20260827**. Each field has a fixed seed
+  offset — 8 of 8 → 700,000,000; 5 of 8 → 800,000,000; 16 of 16 → 900,000,000; 10 of 16 → 1,000,000,000; 32 of 32 → 1,100,000,000; 20 of 32 → 1,200,000,000; 64 of 64 → 0; 40 of 64 → 100,000,000. The two 64-player fields keep the
+  seeds this study has used since D-A2 and 2026-09-08, so their populations,
+  and with them their rank-1 rates, are unchanged by the Ladder; what moved
+  in those rows is the prize table. Within a field, mixed-run pool p uses
+  baseSeed + offset + p (p = 1..200); homogeneous run i
+  (1 = random, 2 = heuristic, 3 = optimised) uses
+  baseSeed + offset + i×1,000,000 + p. Every entrant stream is sha256 of a
+  labelled seed string — no wall clock, no `Math.random` — so a run is
+  reproducible from its parameters alone.
 - **Within-class uniqueness**: no two entrants of one class in one pool
   share the identical seven-battle allocation set. The jitter model moves
-  0..jitterMax points between trio stats (sum stays exactly 100); any
+  0..jitterMax points between trio stats (the sum holds exactly); any
   residual full-set collision is repaired deterministically by regenerating
   the later entrant with a bumped salt (`ensureUniqueWithinClass`,
   `tests/rehearsal/src/ladder.ts`). The uniform class is exempt —
   20/20/20/20/20 is its definition, which is also why no homogeneous uniform
   run exists: it would be a single n-way tie.
-- **Definitions**: *rank-1 rate* — share of a class's entrants whose
-  competition rank was 1 (ties share rank 1); *paid-seat rate* — share
-  whose seat appears in the committed payout list (nonzero amount under the
-  D3-B split — with one paid place, D-E2, this equals the rank-1 rate and
-  the column is kept so the two definitions are seen to agree); *mean
-  payout share* — the class's total committed lamports over (pot × class
-  entrants), in percent.
+- **Definitions**: *rank-1 rate* — share of a class's entries whose
+  competition rank was 1 (ties share rank 1); *paid rate* — share of a
+  class's entries committed a nonzero amount; *paid rate vs random* — the
+  class's paid rate minus the `random` class's in the same run and field,
+  in percentage points; *return per entry* — the class's total committed
+  lamports over (class entries × the entry price), i.e. prize lamports per
+  lamport of entry. Every figure is computed from integer counts and
+  lamports and truncated to the places shown only when printed; the CSV
+  carries the integer counts beside each rate.
 - **Pipeline**: the real settlement crank over the offline chain mirror
-  (`FakeChain`) — decrypt, score, rank, split-pot assignment, Merkle
-  commitment, batched payout — with conservation asserted on every pool
-  (committed amounts sum to the pot exactly). Detection is off: identical
-  or near-identical sets inside a class are the study's construction, not
+  (`FakeChain`) — decrypt, score, rank, prize assignment over the pool's own
+  table, Merkle commitment, batched payout — with conservation asserted on
+  every pool (committed amounts sum to the prize pool exactly) and every
+  committed amount re-derived from the published scores with
+  `assignPrizes` over the same table. Detection is off: identical or
+  near-identical sets inside a class are the study's construction, not
   collusion. **The engine scoring these pools is the same module the crank
   runs in production and the verify page runs in the browser** — a player
   can recompute any pool of this study from its published data.
-- **Tier**: 0.1 SOL entries, the 4 SOL fixed pot (D-A1,
-  pot revised by D-E1) — read from the same pot table the engine pays from,
-  never restated here. Shares are pot-relative, so per-class statistics
-  carry to every tier unchanged.
+- **Tier**: 0.1 SOL entries (tier 0, D1). Each pool's prizes are its
+  size's table at that entry (D-E19), read from the same tables the engine
+  pays from, never restated here. Every prize is a whole multiple of the
+  entry, so every rate and every return per entry carries to every tier
+  unchanged.
 - **Reproduce**:
 
   ```bash

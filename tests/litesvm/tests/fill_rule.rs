@@ -180,7 +180,10 @@ fn a_minimum_field_pool_seals_at_the_deadline_and_pays_the_table() {
     // capacity only, never on entrants) — the vault ends at its cushion, and
     // the treasury holds the field's entries minus the pot.
     let won = settle_table(&mut env, 1, &players);
-    assert_eq!(won, POT, "the paid places share the prize pool, at the floor as at 64");
+    assert_eq!(
+        won, POT,
+        "the paid places share the prize pool, at the floor as at 64"
+    );
     assert_eq!(env.balance(&vault_pda(1)), VAULT_RENT_CUSHION);
     assert_eq!(read_pool(&env.svm, &pool_pda(1)).state, 3, "Paid");
     assert_eq!(
@@ -448,7 +451,10 @@ fn an_empty_pool_closes_and_returns_the_pot() {
     );
     assert_eq!(env.balance(&vault_pda(1)), VAULT_RENT_CUSHION);
     // And the type's slot frees at once: there is nothing left to settle.
-    assert_eq!(read_pool_type(&env.svm, &env.pool_type_of(1)).active_pool, 0);
+    assert_eq!(
+        read_pool_type(&env.svm, &env.pool_type_of(1)).active_pool,
+        0
+    );
 }
 
 // ---------------------------------------------------------------------------

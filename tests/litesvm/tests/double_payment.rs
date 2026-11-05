@@ -156,7 +156,11 @@ fn a_seat_cannot_be_paid_twice_while_the_pool_is_still_payable() {
         "the pot left exactly once; the rent cushion stays behind"
     );
     let cfg = read_config(&env.svm);
-    assert_eq!(read_pool_type(&env.svm, &env.pool_type_of(1)).active_pool, 0, "slot freed at Paid");
+    assert_eq!(
+        read_pool_type(&env.svm, &env.pool_type_of(1)).active_pool,
+        0,
+        "slot freed at Paid"
+    );
     assert_eq!(cfg.platform_reserved, 0, "pot released from reserved");
 }
 

@@ -40,7 +40,10 @@ fn switch_off_pays_every_place_directly() {
     let deltas = env.pay_all(1, &players, &payouts);
     assert_eq!(deltas, payouts.iter().map(|&(_, a)| a).collect::<Vec<_>>());
     for &(seat, _) in &payouts {
-        assert_eq!(read_entry(&env.svm, &players[seat as usize].1).escrow_lamports, 0);
+        assert_eq!(
+            read_entry(&env.svm, &players[seat as usize].1).escrow_lamports,
+            0
+        );
     }
 }
 
@@ -117,7 +120,10 @@ fn switch_on_pays_tied_shares_under_the_threshold_directly() {
     let deltas = env.pay_all(1, &players, &payouts);
     for (i, &(seat, amount)) in payouts.iter().enumerate() {
         assert_eq!(deltas[i], amount, "seat {seat} paid direct");
-        assert_eq!(read_entry(&env.svm, &players[seat as usize].1).escrow_lamports, 0);
+        assert_eq!(
+            read_entry(&env.svm, &players[seat as usize].1).escrow_lamports,
+            0
+        );
     }
     assert_eq!(
         env.balance(&vault_pda(1)),

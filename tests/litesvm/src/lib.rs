@@ -520,7 +520,13 @@ pub const MODE_HARD: u8 = 1;
 /// `init_pool_type(mode, tier, capacity)` — admin (signer, pays rent),
 /// config (read-only), the pool-type PDA, the system program.
 pub fn init_pool_type_ix(admin: &Pubkey, mode: u8, tier: u8, capacity: u16) -> Instruction {
-    init_pool_type_at_ix(admin, mode, tier, capacity, &pool_type_pda(mode, tier, capacity))
+    init_pool_type_at_ix(
+        admin,
+        mode,
+        tier,
+        capacity,
+        &pool_type_pda(mode, tier, capacity),
+    )
 }
 
 /// `init_pool_type` with the pool-type account given explicitly — for the
@@ -1326,7 +1332,11 @@ pub struct PoolTypeView {
 
 pub fn read_pool_type(svm: &LiteSVM, pool_type: &Pubkey) -> PoolTypeView {
     let acct = svm.get_account(pool_type).expect("pool type account");
-    assert_eq!(acct.owner, program_id(), "a pool type is owned by the program");
+    assert_eq!(
+        acct.owner,
+        program_id(),
+        "a pool type is owned by the program"
+    );
     let data = acct.data;
     assert_eq!(
         data.len(),
@@ -1619,7 +1629,12 @@ impl Env {
     /// table, its minimum field, and the table's value at the tier's CURRENT
     /// price on Config (so a test that moved the price restates at the new
     /// one).
-    pub fn set_launch_economics(&mut self, mode: u8, tier: u8, capacity: u16) -> Result<(), String> {
+    pub fn set_launch_economics(
+        &mut self,
+        mode: u8,
+        tier: u8,
+        capacity: u16,
+    ) -> Result<(), String> {
         let price = read_config(&self.svm).tier_price_lamports[tier as usize];
         let table = ladder_table(capacity);
         let ix = set_pool_type_economics_ix(
@@ -1862,8 +1877,11 @@ impl Env {
         self.open_ready_pool(pool_id, tier);
         shrink_pool_to_v3(&mut self.svm, &pool_pda(pool_id));
         let settlement = self.settlement.insecure_clone();
-        self.send(&[migrate_pool_ix(&settlement.pubkey(), pool_id)], &[&settlement])
-            .expect("migrate_pool to the one-place shape");
+        self.send(
+            &[migrate_pool_ix(&settlement.pubkey(), pool_id)],
+            &[&settlement],
+        )
+        .expect("migrate_pool to the one-place shape");
         let pv = read_pool(&self.svm, &pool_pda(pool_id));
         assert_eq!((pv.capacity, pv.paid_places), (64, 1), "one-place shape");
     }
@@ -1903,7 +1921,8 @@ impl Env {
         let settlement = self.settlement.insecure_clone();
         let secret = self.pool_secret;
         let ix = settle_ix(&settlement.pubkey(), pool_id, "reveal_pool_secret", &secret);
-        self.send(&[ix], &[&settlement]).expect("reveal_pool_secret");
+        self.send(&[ix], &[&settlement])
+            .expect("reveal_pool_secret");
     }
 
     /// `commit_results` with `root` and `payouts`, settlement-signed.
