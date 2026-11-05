@@ -17,8 +17,9 @@
  * `200` with content type exactly `application/json`, with no redirect
  * followed; the fingerprint is the SHA-256 of the signing certificate as 32
  * colon-separated hex bytes. `app/src/app/.well-known/assetlinks.json/
- * route.ts` serves it; `src/proxy.ts` lets it through the gate, since the
- * wallet's fetch carries no cookie.
+ * route.ts` serves it. (Until 2026-11-05 `src/proxy.ts` had to exempt it from
+ * the pre-launch code gate, since the wallet's fetch carries no cookie; the
+ * gate is gone and nothing stands in front of the file now.)
  *
  * Both values are the owner's: the package id is the permanent identity of
  * the store listing, and the fingerprint is that of the store signing key

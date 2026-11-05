@@ -91,8 +91,8 @@ The loop runs every `loop.intervalSeconds`; "N polls" below means N rounds of th
 
 | Key | Value | Why |
 |---|---|---|
-| `site.aliasUrl` | the Vercel alias `/api/version` | Ungated; serves the same build as the domain. |
-| `site.domainUrl` | `www.blotto.gg/.well-known/assetlinks.json` | The one ungated path on the gated domain, and the file the Android app's wallet link depends on. |
+| `site.aliasUrl` | the Vercel alias `/api/version` | Serves the same build as the domain; read here because it reports the deployed version. |
+| `site.domainUrl` | `www.blotto.gg/.well-known/assetlinks.json` | The file the Android app's wallet link depends on, on the public domain. (It was chosen while a pre-launch code gate covered the rest of the domain; the gate was removed on 2026-11-05 and the file is still the right one to watch.) |
 | `site.failuresToAlert` | 3 | The CDN caches the file; three minutes rules out a blip. |
 | `site.versionLagMinutes` | 20 | Installing the backend packages plus `next build`. `PHASE-N-REVIEW`: set against Vercel's measured build time. |
 

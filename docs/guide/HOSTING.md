@@ -282,7 +282,6 @@ bundle at build time, so **a change needs a redeploy**, and nothing secret may u
 | `NEXT_PUBLIC_PRIVY_APP_ID`, `NEXT_PUBLIC_PRIVY_CLIENT_ID` | From the sign-in provider |
 | `NEXT_PUBLIC_DEVNET_FAUCET` | `1` on devnet: the "Get test SOL" link. Testers cannot pass the balance check without it |
 | `REVIEW_OPERATOR_TOKEN` | **Server-side only.** The review service's operator token, used by the app's reviewer routes |
-| `GATE_CODE`, `GATE_COOKIE_SECRET`, `GATE_HOSTS` | The optional pre-launch access gate |
 
 These must stay **unset** on any site people can reach:
 

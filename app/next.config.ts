@@ -1,6 +1,6 @@
 import path from "node:path";
 import type { NextConfig } from "next";
-import { clusterGate } from "./src/chain/cluster";
+import { clusterGate, isMainnet } from "./src/chain/cluster";
 
 /*
  * THE CLUSTER GATE (audit 2026-09-11, A-06 / E-02).
@@ -234,6 +234,20 @@ const nextConfig: NextConfig = {
             key: "Strict-Transport-Security",
             value: "max-age=31536000; includeSubDomains",
           },
+          /*
+           * A TEST-NETWORK BUILD IS NOT INDEXED (2026-11-05). Until today the
+           * pre-launch code gate (src/proxy.ts, removed) set this header on
+           * blotto.gg and was the only thing keeping the devnet site out of
+           * search results. With the site open to everyone, the rule moves
+           * here and keys on the CLUSTER rather than on a host list: every
+           * build that is not mainnet says noindex, on every response, and a
+           * mainnet build drops it with no code change on launch day.
+           *
+           * A header rather than robots.txt on purpose: a crawler that is
+           * refused the page by robots.txt never sees a noindex, and can
+           * still list the bare URL from a link elsewhere.
+           */
+          ...(isMainnet() ? [] : [{ key: "X-Robots-Tag", value: "noindex, nofollow" }]),
         ],
       },
     ];

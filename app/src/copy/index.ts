@@ -45,6 +45,11 @@ export const COPY = {
     oneSectionAtATime: 'One section at a time',
     // The close key on every dialog (components/ui/modal.tsx, sheet.tsx).
     close: 'Close',
+    // 2026-11-05: the site is open to everyone while it still runs on the
+    // test network, so every page says so (components/shell/test-network-notice.tsx).
+    // Rendered on every build that is not mainnet; a mainnet build never shows it.
+    // PHASE-N-REVIEW: draft wording; founder voice.
+    testNetworkNotice: 'Test network. Entries use test SOL, which has no value. No real money is involved.',
     // 2026-09-13 (accessibility baseline): the skip link and the footer
     // landmark, which no page had. PHASE-N-REVIEW: drafts; founder voice.
     skipToContent: 'Skip to content',
