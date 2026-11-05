@@ -73,9 +73,11 @@ export interface GeoBudgetOptions {
    * Lookups at the end of the allowance that only issuance may spend.
    *
    * Defaults to a quarter of the cap. A quarter is a judgement, not a
-   * ratified number: it is enough for a full field twice over at the
-   * documented 64-seat pool size, and small enough that ordinary traffic
-   * is not squeezed. See the PHASE-6-REVIEW note in `main.ts`.
+   * ratified number: small enough that ordinary traffic is not squeezed,
+   * and — since several pools fill at once under the Ladder (D-E19) —
+   * enough for one round of every enabled pool type only when the cap is
+   * four times their seats (960 for the eight launch types' 240). See the
+   * PHASE-6-REVIEW note in `main.ts`.
    */
   reserve?: number;
   /** Window length. One day, matching the vendor plans this guards. */

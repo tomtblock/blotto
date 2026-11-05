@@ -14,15 +14,31 @@
  * re-running the sealed-box decryption would add no integrity beyond it
  * (recorded in the Phase 3 report). The revealed secret is still checked
  * against the `sha256(secret)` committed at open.
+ *
+ * D-E19 (the Ladder): amounts recompute from the POOL's own prize table —
+ * `assignPrizes(results, table, entry)`, the crank's call. A version-4
+ * bundle carries `capacity`, `paid_places` and `prize_table` copied from
+ * the pool account; an older bundle (version 3 or before) is a pre-Ladder
+ * pool, which held 64 players and paid one place worth its whole prize
+ * pool — table `[pot / entry]`, the rule `preLadderTable` states in
+ * backend/_shared/src/pool-account.ts. Either way the table is checked
+ * against the chain before anything is computed from it: its sum at the
+ * on-chain entry price must be the on-chain prize pool, and where the
+ * record carries the table PoolOpened logged, it must be that table. A
+ * bundle cannot pick its own prizes.
  */
 
 import { sha256 } from '@noble/hashes/sha256';
 import {
+  MAX_CAPACITY,
+  assertPrizeTable,
   assignPrizes,
   battlesHash,
   decodeBattleSet,
+  isPoolCapacity,
   leafBytes,
   merkleRoot,
+  prizePoolFor,
   type BoardMode,
 } from '@blotto/scoring';
 import { base58Decode } from '@blotto/shared/blotto-events';
@@ -74,9 +90,18 @@ export interface OnChainRecord {
   /** From PoolOpened. */
   sealingSecretHashHex: string;
   entryLamports: string;
-  /** From PoolOpened (D-A1 revised): the pool's FIXED pot — the amounts
-   * recompute against THIS, never against arithmetic over the price. */
+  /** From PoolOpened (D-A1 revised): the pool's FIXED prize pool. D-E19:
+   * the bundle's prize table must sum to exactly this at `entryLamports`. */
   potLamports: string;
+  /**
+   * From PoolOpened's appended fields (D-E19): the pool's size and its
+   * prize table as opened, rank 1 first, one per paid place. OPTIONAL — a
+   * record assembled before the read API serves them (or from a pre-Ladder
+   * event, which logged none) leaves the bundle's table checked against
+   * the prize pool alone, and the row says so.
+   */
+  capacity?: number;
+  prizeTable?: number[];
   /** From PoolSecretRevealed. */
   revealedSecretHex: string;
   /** From ResultsCommitted. */
@@ -91,8 +116,14 @@ export interface OnChainRecord {
 
 /** The published bundle (the crank's RevealBundle shape, already parsed). */
 export interface PublishedBundle {
-  /** 2 (every pool settled before Phase B) or 3 (names `mode`). */
+  /** 2 (every pool settled before Phase B), 3 (names `mode`) or 4 (the
+   * Ladder, D-E19: names `capacity`, `paid_places`, `prize_table`, `min_seats`). */
   version?: number;
+  /** Version 4: the pool's size and prize table, copied from the pool account. */
+  capacity?: number;
+  paid_places?: number;
+  prize_table?: number[];
+  min_seats?: number;
   /** Phase B: the placing rule the pool's boards were scored by. A version-2
    * bundle carries none and played easy. Read through `bundleMode()`. */
   mode?: 'easy' | 'hard';
@@ -138,6 +169,72 @@ export function bundleMode(bundle: Pick<PublishedBundle, 'version' | 'mode'>): B
   if (bundle.mode === undefined || bundle.mode === 'easy') return 'easy';
   if (bundle.mode === 'hard') return 'hard';
   throw new Error(`published bundle names an unknown mode: ${String(bundle.mode)}`);
+}
+
+/** The first bundle version that carries its pool's own size and table (D-E19). */
+const LADDER_BUNDLE_VERSION = 4;
+
+/**
+ * The prize table the amounts recompute from, and whether the chain agrees
+ * with it (D-E19). `table` is null only when there is no table to compute
+ * from at all — a malformed one, or a pre-Ladder prize pool that is not a
+ * whole number of entries — and then nothing below can run.
+ */
+export function prizeTableCheck(
+  bundle: Pick<PublishedBundle, 'version' | 'capacity' | 'paid_places' | 'prize_table' | 'entry_lamports' | 'entries'>,
+  chain: Pick<OnChainRecord, 'entryLamports' | 'potLamports' | 'capacity' | 'prizeTable'>
+): { table: number[] | null; capacity: number; status: CheckStatus; detail: string } {
+  const entry = BigInt(chain.entryLamports);
+  const pot = BigInt(chain.potLamports);
+  const problems: string[] = [];
+  let table: number[] | null = null;
+  let capacity = Number(MAX_CAPACITY);
+
+  if ((bundle.version ?? 0) >= LADDER_BUNDLE_VERSION) {
+    if (typeof bundle.capacity === 'number' && isPoolCapacity(bundle.capacity)) capacity = bundle.capacity;
+    else problems.push(`the bundle names no pool size the program allows (capacity ${String(bundle.capacity)})`);
+    try {
+      table = [...assertPrizeTable(bundle.prize_table ?? [])];
+    } catch (e) {
+      problems.push(`the bundle's prize table is malformed: ${(e as Error).message}`);
+    }
+    if (table && bundle.paid_places !== table.length) {
+      problems.push(`the bundle says ${String(bundle.paid_places)} paid places over a table of ${table.length}`);
+    }
+  } else {
+    // Before the Ladder: 64 players, one place worth the whole prize pool.
+    const m = entry > 0n && pot % entry === 0n ? pot / entry : 0n;
+    if (m >= 1n && m <= 255n) table = [Number(m)];
+    else problems.push('a pre-Ladder prize pool that is not a whole number of entries has no table to recompute from');
+  }
+
+  if (bundle.entry_lamports !== chain.entryLamports) {
+    problems.push(`the bundle's entry price ${bundle.entry_lamports} is not the on-chain ${chain.entryLamports}`);
+  }
+  if (bundle.entries.length > capacity) {
+    problems.push(`${bundle.entries.length} entrants in a pool of ${capacity}`);
+  }
+  if (table && entry > 0n && prizePoolFor(table, entry) !== pot) {
+    problems.push(`the prize table sums to ${prizePoolFor(table, entry)} lamports, the on-chain prize pool is ${pot}`);
+  }
+  if (table && chain.prizeTable !== undefined && JSON.stringify(chain.prizeTable) !== JSON.stringify(table)) {
+    problems.push('the prize table is not the one the pool opened with on chain');
+  }
+  if (chain.capacity !== undefined && chain.capacity !== capacity) {
+    problems.push(`the bundle's pool size ${capacity} is not the on-chain ${chain.capacity}`);
+  }
+
+  if (problems.length > 0) return { table, capacity, status: 'fail', detail: problems.join('; ') };
+  const what = `a pool of ${capacity} paying ${table!.length} place${table!.length === 1 ? '' : 's'}, its table summing to the on-chain prize pool`;
+  if (chain.prizeTable === undefined && (bundle.version ?? 0) >= LADDER_BUNDLE_VERSION) {
+    return {
+      table,
+      capacity,
+      status: 'incomplete',
+      detail: `${what}; the on-chain record carries no prize table, so the table itself could not be compared — only its sum`,
+    };
+  }
+  return { table, capacity, status: 'pass', detail: what };
 }
 
 /** `Ab3k…9fQz` — enough of an address to find it, never the whole string
@@ -321,7 +418,15 @@ export function verifyPool(bundle: PublishedBundle, chain: OnChainRecord): Verif
         (unchecked.length > 3 ? ` and ${unchecked.length - 3} more` : '')
   );
 
-  // 3. Rescore from the published plaintext (the identical-field engine,
+  // 3. The prize table (D-E19): the pool's own, and the chain's.
+  const prizes = prizeTableCheck(bundle, chain);
+  push('prize-table', prizes.status, prizes.detail);
+  if (prizes.table === null) {
+    // Nothing to compute amounts from; the report is already red.
+    return report(checks);
+  }
+
+  // 4. Rescore from the published plaintext (the identical-field engine,
   //    with the published all-losses rule for unpublished entries).
   const byIndex = [...bundle.entries].sort((a, b) => a.index - b.index);
   const results = scoreWithMissing(
@@ -332,9 +437,9 @@ export function verifyPool(bundle: PublishedBundle, chain: OnChainRecord): Verif
     mode
   );
   // Amounts recomputed with the published split-pot rule (D3-B): tied
-  // players share a competition rank and split the combined band prize.
-  const pot = BigInt(chain.potLamports);
-  const withPrizes = assignPrizes(results, pot);
+  // players share a competition rank and split the combined prizes of the
+  // places they occupy — across the paid line too (D-E19).
+  const withPrizes = assignPrizes(results, prizes.table, BigInt(chain.entryLamports));
   let resultsOk = true;
   for (const r of bundle.results) {
     const mine = withPrizes[r.index];
@@ -353,7 +458,7 @@ export function verifyPool(bundle: PublishedBundle, chain: OnChainRecord): Verif
     'recomputed scores, zones, competition ranks and split-pot amounts equal the published results'
   );
 
-  // 4. Rebuild the tree; compare to the ON-CHAIN root (the bundle's copy is
+  // 5. Rebuild the tree; compare to the ON-CHAIN root (the bundle's copy is
   //    informational). Leaf order: rank asc, entry index asc.
   const byRank = [...withPrizes].sort((a, b) => a.rank - b.rank || a.index - b.index);
   const playerAt = (index: number) => byIndex[index].player;
@@ -371,9 +476,9 @@ export function verifyPool(bundle: PublishedBundle, chain: OnChainRecord): Verif
     'recomputed Merkle root equals the on-chain commitment'
   );
 
-  // 5. The committed payout list is exactly the recomputed one: every seat
+  // 6. The committed payout list is exactly the recomputed one: every seat
   //    with a nonzero split-pot share, seat-sorted, to the lamport. (The
-  //    paid set can exceed 16 seats when a tie straddles position 16.)
+  //    paid set can exceed the table when a tie straddles the paid line.)
   const myPayouts = withPrizes
     .filter((r) => r.amountLamports > 0n)
     .sort((a, b) => a.index - b.index)
@@ -385,7 +490,7 @@ export function verifyPool(bundle: PublishedBundle, chain: OnChainRecord): Verif
   );
 
   /*
-   * 6. Every settled payout went to the wallet that entered that seat, at
+   * 7. Every settled payout went to the wallet that entered that seat, at
    *    the committed amount.
    *
    * A pool that has COMMITTED its results but not yet PAID them has no

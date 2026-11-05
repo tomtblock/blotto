@@ -13,11 +13,11 @@
  * The SDK is NOT a dependency of this repository. To regenerate, install it
  * somewhere outside the tree and pass its node_modules directory:
  *
- *   mkdir /tmp/sqds && cd /tmp/sqds && npm init -y >/dev/null \
- *     && npm install --ignore-scripts @sqds/sdk@2.0.4
- *   node scripts/squads-v3-vectors.gen.cjs /tmp/sqds/node_modules
+ *   mkdir /tmp/sqds && cd /tmp/sqds && npm init -y >/dev/null && npm install --ignore-scripts @sqds/sdk@2.0.4
+ *   node scripts/squads-v3-vectors.gen.cjs /tmp/sqds/node_modules > scripts/squads-v3.vectors.json
  *
- * It prints JSON; the test's `SDK_VECTOR` constant is that output verbatim.
+ * It prints JSON; `scripts/squads-v3.vectors.json` is that output verbatim,
+ * and the test reads it.
  * Nothing here touches the network: the SDK's execute builder fetches the
  * transaction and its instructions, so those two reads are answered from
  * the inputs below.

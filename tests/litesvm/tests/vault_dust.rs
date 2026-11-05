@@ -7,8 +7,9 @@
 //! single lamport and the final payout tries to leave a balance of 1, which
 //! the runtime refuses because it moves a rent-exempt account into the
 //! rent-paying band. The pot froze, the entrants went unpaid, and since the
-//! tier slot is freed only by `pay_prizes` or the two refund paths, that
-//! tier could never open another pool. Cost to the attacker: one lamport.
+//! slot is freed only by `pay_prizes` or the two refund paths, that tier
+//! (since D-E19, that pool type) could never open another pool. Cost to the
+//! attacker: one lamport.
 //!
 //! `docs/security/SECURITY-REVIEW.md` IR-3 had considered unsolicited donations and
 //! accepted them as harmless — correct about this program's own logic, which
@@ -34,7 +35,7 @@ use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Keypair;
 use solana_sdk::signer::Signer;
 
-const POT: u64 = 4_000_000_000; // tier 0's fixed pot
+const POT: u64 = 4_000_000_000; // a 64-player pool's prize pool at tier 0
 
 /// A plain System transfer, built by hand the way this harness builds every
 /// other instruction (index 2, then the lamports, both little-endian).
@@ -122,9 +123,11 @@ fn the_harness_enforces_the_rent_state_transition() {
     );
 }
 
-/// The attack itself: donate a lamport, then run the pool through to Paid.
+/// The attack itself: donate a lamport, then run the pool through to Paid —
+/// sixteen payments, the last of which is the one that used to be
+/// unlandable.
 #[test]
-fn a_poisoned_vault_still_pays_the_winner() {
+fn a_poisoned_vault_still_pays_every_place() {
     let Some(mut env) = Env::new() else { return };
     env.open_ready_pool(1, 0);
 
@@ -142,33 +145,18 @@ fn a_poisoned_vault_still_pays_the_winner() {
     }
     assert_eq!(read_pool(&env.svm, &pool_pda(1)).state, 1, "Sealed");
 
-    let settlement = env.settlement.insecure_clone();
-    let secret = env.pool_secret;
-    let ix = settle_ix(&settlement.pubkey(), 1, "reveal_pool_secret", &secret);
-    env.send(&[ix], &[&settlement]).expect("reveal");
+    env.reveal(1);
+    let payouts = straight_payouts(&LADDER_TABLES[3], TIER_PRICES[0]);
+    env.commit(1, [1u8; 32], &payouts).expect("commit_results");
 
-    let payouts = winner_payout(POT);
-    let mut commit_args = [1u8; 32].to_vec();
-    commit_args.extend_from_slice(&encode_payouts(&payouts));
-    let ix = settle_ix(&settlement.pubkey(), 1, "commit_results", &commit_args);
-    env.send(&[ix], &[&settlement]).expect("commit_results");
-
-    // The moment that used to be unlandable.
-    let (winner, winner_entry) = &players[0];
-    let before = env.balance(&winner.pubkey());
-    let ix = pay_prizes_ix(
-        &settlement.pubkey(),
-        1,
-        &[0],
-        &[(winner.pubkey(), *winner_entry)],
-    );
-    env.send(&[ix], &[&settlement])
-        .expect("a donated lamport must not be able to freeze the payout");
+    // The moment that used to be unlandable: the batch that empties the
+    // prize pool (`pay_all` panics on a refused batch).
+    let deltas = env.pay_all(1, &players, &payouts);
 
     assert_eq!(
-        env.balance(&winner.pubkey()) - before,
+        deltas.iter().sum::<u64>(),
         POT,
-        "the winner is paid the pot in full, donation or no donation"
+        "the places are paid the prize pool in full, donation or no donation"
     );
     assert_eq!(read_pool(&env.svm, &pool_pda(1)).state, 3, "Paid");
     assert_eq!(
@@ -176,11 +164,11 @@ fn a_poisoned_vault_still_pays_the_winner() {
         VAULT_RENT_CUSHION + 1,
         "the cushion and the stranger's lamport stay behind, harmlessly"
     );
-    // The point of the whole finding: the tier is not dead.
+    // The point of the whole finding: the pool type is not dead.
     assert_eq!(
-        read_config(&env.svm).active_pool_by_tier[0],
+        read_pool_type(&env.svm, &env.pool_type_of(1)).active_pool,
         0,
-        "the tier slot freed, so a successor pool can open"
+        "the type's slot freed, so a successor pool can open"
     );
 }
 
@@ -202,7 +190,7 @@ fn a_poisoned_vault_still_refunds() {
     let rando = Keypair::new();
     env.svm.airdrop(&rando.pubkey(), 1_000_000_000).unwrap();
     let platform_before = env.balance(&platform_pda());
-    let ix = trigger_refund_ix(&rando.pubkey(), 1);
+    let ix = env.trigger_refund_ix(&rando.pubkey(), 1);
     env.send(&[ix], &[&rando])
         .expect("a donated lamport must not be able to freeze the refund");
 

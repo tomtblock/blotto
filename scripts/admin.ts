@@ -575,8 +575,8 @@ function needLadderConfig(cfg: LiveConfig, what: string): void {
 }
 
 /** The vault ceilings (D2) — not in the shared view; `vault_ceiling_lamports` at 112 (7 × u64). */
-function vaultCeiling(cfg: LiveConfig, tier: number): bigint {
-  return cfg.raw.readBigUInt64LE(112 + 8 * tier);
+function vaultCeiling(rawConfig: Buffer, tier: number): bigint {
+  return rawConfig.readBigUInt64LE(112 + 8 * tier);
 }
 
 function tierOpenFor(view: ConfigAccountView, mode: number, tier: number): boolean {
@@ -771,7 +771,7 @@ async function cmdStatus(ctx: Ctx): Promise<void> {
       'figure; since D-E19 no pool is funded from it'
   );
   const ceilings: bigint[] = [];
-  for (let t = 0; t < N_TIERS; t++) ceilings.push(vaultCeiling({ raw: d, view, admin: PublicKey.default }, t));
+  for (let t = 0; t < N_TIERS; t++) ceilings.push(vaultCeiling(d, t));
   say(`vault ceilings:    [${ceilings.join(', ')}] lamports (price x capacity must fit)`);
   say(`reserve pots:      ${view.treasuryReservePots}`);
   say(`min platform:      ${view.treasuryMinPlatformLamports} lamports`);
@@ -1663,7 +1663,8 @@ async function cmdLadderLaunch(ctx: Ctx): Promise<void> {
   const cushion = BigInt(await ctx.connection.getMinimumBalanceForRentExemption(0));
   let inits = 0;
   let enabledAfter = cfg.view.enabledPoolTypes;
-  let fundingAllLive = 0n;
+  /** Each named type's opening cost — its prize pool plus the vault's rent cushion. */
+  const openCosts: bigint[] = [];
   const warnings: string[] = [];
   coords.forEach(({ mode, capacity }, i) => {
     const group = `pool-type ${MODE_NAMES[mode]}/${tier}/${capacity}`;
@@ -1671,7 +1672,7 @@ async function cmdLadderLaunch(ctx: Ctx): Promise<void> {
     const info = infos[i];
     const view = info ? decodePoolTypeAccount(info.data, label) : null;
     const e = economicsFor(capacity, price);
-    fundingAllLive += e.pot + cushion;
+    openCosts.push(e.pot + cushion);
     if (!view) {
       inits++;
       steps.push({
@@ -1694,10 +1695,10 @@ async function cmdLadderLaunch(ctx: Ctx): Promise<void> {
       steps.push({ ix: setPoolTypeEnabledIx(ctx, admin, mode, tier, capacity, true), summary: `enable ${label}`, group });
     }
     const gross = price * BigInt(capacity);
-    if (gross > vaultCeiling(cfg, tier)) {
+    if (gross > vaultCeiling(cfg.raw, tier)) {
       warnings.push(
         `${label}: price x capacity = ${gross} lamports exceeds tier ${tier}'s vault ceiling ` +
-          `${vaultCeiling(cfg, tier)} — open_pool will refuse it (VaultCeilingExceeded) until set-vault-ceiling`
+          `${vaultCeiling(cfg.raw, tier)} — open_pool will refuse it (VaultCeilingExceeded) until set-vault-ceiling`
       );
     }
     if (!tierOpenFor(cfg.view, mode, tier)) {
@@ -1735,11 +1736,26 @@ async function cmdLadderLaunch(ctx: Ctx): Promise<void> {
       `); admin balance ${adminBalance}` +
       (adminBalance < adminCost ? ' — NOT ENOUGH, fund the vault first' : '')
   );
+  // open_pool's treasury test (open_pool.rs): balance − refundable must
+  // cover this type's (pot + cushion) + the minimum + reserve_pots × the
+  // (pot + cushion) of every OTHER enabled idle type on an open tier. With
+  // every named type enabled and idle, the cheapest FIRST open is the
+  // minimum of that over the types; all of them live at once needs their
+  // sum (no idle type is left to reserve for).
+  const r = BigInt(cfg.view.treasuryReservePots);
+  const fixed = cfg.view.treasuryMinPlatformLamports + cfg.view.platformRefundable;
+  const sumCosts = openCosts.reduce((a, b) => a + b, 0n);
+  const firstOpen = openCosts.length === 0
+    ? 0n
+    : openCosts.map((c) => c + r * (sumCosts - c)).reduce((a, b) => (b < a ? b : a)) + fixed;
+  const allLive = sumCosts + fixed;
   say(
-    `treasury: every pool type named live at once needs ${fundingAllLive} lamports (${sol(fundingAllLive)} SOL: ` +
-      `each prize pool + its ${cushion}-lamport vault cushion) on top of the ${cfg.view.treasuryMinPlatformLamports}` +
-      `-lamport minimum and refundable entries, and reserve_pots = ${cfg.view.treasuryReservePots} further ` +
-      `prize pools per idle enabled type; the platform holds ${platform}`
+    `treasury: the platform holds ${platform} lamports (${sol(platform)} SOL). With these types enabled and ` +
+      `idle (reserve_pots = ${r}, minimum ${cfg.view.treasuryMinPlatformLamports}, refundable ` +
+      `${cfg.view.platformRefundable}), the FIRST pool can open only once it holds ${firstOpen} ` +
+      `(${sol(firstOpen)} SOL); all of them live at once needs ${allLive} (${sol(allLive)} SOL). ` +
+      `Each figure is prize pools plus a ${cushion}-lamport vault cushion each.` +
+      (platform < firstOpen ? ' NOT ENOUGH YET — fund-platform-wallet before expecting a pool.' : '')
   );
   for (const w of warnings) say(`warning: ${w}`);
 
@@ -1750,11 +1766,10 @@ async function cmdLadderLaunch(ctx: Ctx): Promise<void> {
     );
     return;
   }
-  await assertAdminSigner(ctx, steps.map((s) => s.ix)).catch((e) => {
-    // A pre-Ladder Config still records the admin at the same offset; any
-    // mismatch was refused above — this is the same check, kept central.
-    throw e;
-  });
+  // A pre-Ladder Config records the admin at the same offset; the mismatch
+  // was refused above already — this is the same central check every
+  // admin command passes through.
+  await assertAdminSigner(ctx, steps.map((s) => s.ix));
   console.log(
     JSON.stringify(
       steps.map((s, i) =>
@@ -1907,20 +1922,34 @@ async function cmdSealAtDeadline(ctx: Ctx): Promise<void> {
 /**
  * The pool's own type (D-E19): `trigger_refund` and `refund` take the
  * PoolType of the POOL's recorded mode, tier and capacity — the slot the
- * pool holds, freed when it closes. Read from the pool, never assumed; a
- * pool still at a pre-Ladder size is refused here because the program
- * refuses the short account.
+ * pool holds, freed when it closes. Read from the pool, never assumed.
+ *
+ * A pool still at the pre-Ladder size (850, or 849) can only be acted on by
+ * the PRE-Ladder program, whose account lists carry no pool type: that is
+ * the drain window before the Ladder upgrade (OPERATING-MANUAL §4 step 1 —
+ * the two empty open pools on devnet are closed exactly this way). After the
+ * upgrade the program refuses a short pool whatever list it is handed, so
+ * the legacy list cannot do harm there; the note says to migrate first.
  */
-async function poolTypeOfPool(ctx: Ctx, poolId: bigint): Promise<{ head: PoolHead; poolType: PublicKey }> {
+// PHASE-N-REVIEW: the pre-Ladder wire is chosen by POOL size, not by probing the deployed program — an 850-byte pool can only succeed against the old program, and fails cleanly on the new one.
+async function poolTypeOfPool(ctx: Ctx, poolId: bigint): Promise<{ head: PoolHead; poolType: PublicKey | null }> {
   const info = await ctx.connection.getAccountInfo(ctx.pdas.pool(poolId), 'confirmed');
   if (!info) throw new Error(`pool ${poolId}: no account at ${ctx.pdas.pool(poolId).toBase58()}`);
-  if (info.data.length !== POOL_SPACE) {
+  if (info.data.length !== POOL_SPACE && info.data.length !== 850 && info.data.length !== 849) {
     throw new Error(
-      `REFUSED — pool ${poolId} is ${info.data.length} bytes; the program reads ${POOL_SPACE}. ` +
-        `Run \`migrate-pool --pool-id ${poolId}\` first.`
+      `REFUSED — pool ${poolId} is ${info.data.length} bytes; run \`migrate-pool --pool-id ${poolId}\` first.`
     );
   }
   const head = decodePoolHead(info.data, `pool ${poolId}`);
+  say(`pool ${poolId}: ${head.state}, ${head.entrants} entrants, minimum ${head.minSeats}, ${info.data.length} bytes`);
+  if (!head.ladderPresent) {
+    say(
+      `pool ${poolId}: PRE-LADDER layout — building the pre-Ladder account list (no pool type), which ` +
+        'only the pre-Ladder program accepts: the drain before the Ladder upgrade. After the upgrade, ' +
+        `run \`migrate-pool --pool-id ${poolId}\` and then this again.`
+    );
+    return { head, poolType: null };
+  }
   const poolType = ctx.pdas.poolType(head.mode, head.tier, head.capacity);
   if (!(await ctx.connection.getAccountInfo(poolType, 'confirmed'))) {
     throw new Error(
@@ -1929,11 +1958,13 @@ async function poolTypeOfPool(ctx: Ctx, poolId: bigint): Promise<{ head: PoolHea
         '(it need not be enabled to settle a pool).'
     );
   }
-  say(
-    `pool ${poolId}: ${head.state}, ${head.entrants} entrants, minimum ${head.minSeats}, ` +
-      `type ${poolTypeLabel(head.mode, head.tier, head.capacity)} (${poolType.toBase58()})`
-  );
+  say(`pool ${poolId}: type ${poolTypeLabel(head.mode, head.tier, head.capacity)} (${poolType.toBase58()})`);
   return { head, poolType };
+}
+
+/** The pool type slot, placed just before the System Program (wire contract). */
+function poolTypeKey(poolType: PublicKey | null): { pubkey: PublicKey; isSigner: boolean; isWritable: boolean }[] {
+  return poolType ? [{ pubkey: poolType, isSigner: false, isWritable: true }] : [];
 }
 
 async function cmdTriggerRefund(ctx: Ctx): Promise<void> {
@@ -1952,7 +1983,7 @@ async function cmdTriggerRefund(ctx: Ctx): Promise<void> {
           // rent cushion stays in the vault, which keeps the account alive.
           { pubkey: ctx.pdas.vault(poolId), isSigner: false, isWritable: true },
           { pubkey: ctx.pdas.platform(), isSigner: false, isWritable: true },
-          { pubkey: poolType, isSigner: false, isWritable: true },
+          ...poolTypeKey(poolType),
           { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
         ],
         data: Buffer.concat([disc('trigger_refund'), u64le(poolId)]),
@@ -1980,7 +2011,7 @@ async function cmdRefund(ctx: Ctx): Promise<void> {
           { pubkey: ctx.pdas.platform(), isSigner: false, isWritable: true },
           { pubkey: ctx.pdas.entry(pool, player), isSigner: false, isWritable: true },
           { pubkey: player, isSigner: false, isWritable: true },
-          { pubkey: poolType, isSigner: false, isWritable: true },
+          ...poolTypeKey(poolType),
           { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
         ],
         data: Buffer.concat([disc('refund'), u64le(poolId)]),

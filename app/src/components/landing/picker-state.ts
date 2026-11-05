@@ -20,7 +20,8 @@
  */
 import { POOL_CAPACITIES, isPoolCapacity, type PoolCapacity } from '@blotto/scoring';
 import type { BoardMode } from '@/battle/board/mode';
-import type { PoolSummary } from '@/data/types';
+import type { PoolSummary, PoolTypeRow } from '@/data/types';
+import { poolLadder, poolMode } from '@/data/format';
 import { COPY } from '@/copy';
 
 /** One pool type on the card: a size on one board at one tier. */
@@ -47,6 +48,50 @@ export interface PickerTier {
 }
 
 const MODES: readonly BoardMode[] = ['easy', 'hard'];
+
+/**
+ * The card's slots: one per (board, tier, size), from the open pools and
+ * GET /pool-types. One pool per pool type is open at a time in production;
+ * where two ever share a type, the FIRST listed is the type's open pool.
+ * WHICH TYPES TAKE ENTRIES is read, never assumed (founder instruction
+ * 2026-09-12 §2.3; D-E19): the pool-types answer where there is one, and on
+ * an outage — or a read API from before the Ladder, `types === null` — the
+ * ground truth in `/pools` stands in (a type holding an Open pool is live
+ * by construction).
+ */
+export function buildPickerTiers(
+  pools: readonly PoolSummary[],
+  types: readonly PoolTypeRow[] | null,
+  tierEntries: readonly bigint[]
+): PickerTier[] {
+  const key = (mode: BoardMode, tier: number, capacity: number) => `${mode}:${tier}:${capacity}`;
+  const openByType = new Map<string, PoolSummary>();
+  for (const p of pools) {
+    if (p.state !== 'Open') continue;
+    const k = key(poolMode(p), p.tier, poolLadder(p).capacity);
+    if (!openByType.has(k)) openByType.set(k, p);
+  }
+  const typeByKey = new Map<string, PoolTypeRow>((types ?? []).map((t) => [key(t.mode, t.tier, t.capacity), t]));
+  const slot = (mode: BoardMode, tier: number, capacity: PoolCapacity): PickerSlot => {
+    const pool = openByType.get(key(mode, tier, capacity)) ?? null;
+    const type = typeByKey.get(key(mode, tier, capacity));
+    return { capacity, pool, live: pool !== null || type?.live === true, typeAmounts: type ? type.prize_amounts : null };
+  };
+  return tierEntries.map((entry, tier) => ({
+    tier,
+    entryLamports: entry.toString(),
+    easy: POOL_CAPACITIES.map((c) => slot('easy', tier, c)),
+    hard: POOL_CAPACITIES.map((c) => slot('hard', tier, c)),
+  }));
+}
+
+/** The pool the picker opens on for a board by default (the landing demo's "Enter for real"). */
+export function defaultPool(tiers: readonly PickerTier[], mode: BoardMode): PoolSummary | null {
+  const row = tiers.find((t) => t.tier === defaultTier(tiers, mode));
+  if (!row) return null;
+  const size = defaultSize(row[mode]);
+  return row[mode].find((x) => x.capacity === size)?.pool ?? null;
+}
 
 /** The board and size a query string names, each null when absent or not one. */
 export function readPickerParams(search: string): { mode: BoardMode | null; size: PoolCapacity | null } {

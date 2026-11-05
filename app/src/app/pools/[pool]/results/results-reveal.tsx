@@ -29,6 +29,8 @@ export interface RevealRow {
   player: string;
   /** Preformatted SOL amount, or null when the share is held for review. */
   amountSol: string | null;
+  /** The share is held for review (escrowed, not yet released). */
+  held?: boolean;
 }
 
 const ROW_STAGGER_MS = 90;

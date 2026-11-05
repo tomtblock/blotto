@@ -26,6 +26,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { FIXTURE_PLAYER, SCENARIOS } from '@/data/scenarios';
+import { poolLadder } from '@/data/format';
 
 export const metadata = { title: 'Preview — dev only' };
 
@@ -119,7 +120,7 @@ export default function PreviewIndexPage() {
             <div className="px-4 pt-3">
               <span className="font-mono text-[13px] text-ink">{s.key}</span>
               <span className="ml-2 rounded bg-raised px-1.5 py-0.5 text-[11px] text-ink-muted">
-                {s.summary.state} · {s.summary.entrants}/64
+                {s.summary.state} · {s.summary.entrants}/{poolLadder(s.summary).capacity}
               </span>
             </div>
             <p className="px-4 pt-0.5 text-[13px] leading-5 text-ink-muted">{s.what}</p>

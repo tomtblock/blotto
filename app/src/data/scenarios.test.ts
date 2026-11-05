@@ -4,14 +4,28 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import {
+  LADDER_TABLES,
+  MIN_FIELD_BY_CAPACITY,
+  POOL_CAPACITIES,
+  TIER_ENTRY_LAMPORTS,
+  amountForRank,
+  prizePoolFor,
+  type PoolCapacity,
+} from '@blotto/scoring';
 import { FIXTURE_API } from './fixture';
 import {
   FIXTURE_PLAYER,
   FIXTURE_TREASURY,
   SCENARIOS,
   SCENARIO_BY_POOL,
+  fixturePoolTypes,
 } from './scenarios';
+import { poolLadder } from './format';
 import type { PoolSummary } from './types';
+
+const ENTRY = TIER_ENTRY_LAMPORTS[0]!;
+const tableOf = (s: { summary: PoolSummary }) => LADDER_TABLES[s.summary.capacity as PoolCapacity];
 
 const BASE58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
@@ -63,26 +77,93 @@ describe('the preview scenarios', () => {
     for (const s of SCENARIOS) expect(s.entries.length, s.key).toBe(s.summary.entrants);
   });
 
-  it('pays the winner the whole pot where it pays at all (D-E2), never above it', () => {
+  /*
+   * D-E19 (the Ladder): every pool carries its size's published table and
+   * floor, computed by @blotto/scoring — a fixture amount typed by hand
+   * would render on every preview as what the program pays.
+   */
+  it('carries each pool\u2019s own size, floor and table, from the published tables', () => {
     for (const s of SCENARIOS) {
-      if (s.payouts.length === 0) continue;
-      // One paid place: the fixture's winner is the viewer's seat 3.
-      expect(s.payouts.length, s.key).toBe(1);
-      expect(s.payouts[0].seat, s.key).toBe(3);
-      const total = s.payouts.reduce((acc, p) => acc + BigInt(p.amount), 0n);
-      expect(total, `${s.key} pays exactly its pot`).toBe(BigInt(s.summary.pot_lamports));
+      const capacity = s.summary.capacity as PoolCapacity;
+      expect(POOL_CAPACITIES as readonly number[], s.key).toContain(capacity);
+      expect(s.summary.min_seats, s.key).toBe(MIN_FIELD_BY_CAPACITY[capacity]);
+      expect(s.summary.prize_table, s.key).toEqual([...LADDER_TABLES[capacity]]);
+      expect(s.summary.paid_places, s.key).toBe(LADDER_TABLES[capacity].length);
+      expect(s.summary.prize_amounts, s.key).toEqual(
+        LADDER_TABLES[capacity].map((_, i) => amountForRank(LADDER_TABLES[capacity], ENTRY, i + 1).toString())
+      );
+      expect(BigInt(s.summary.pot_lamports), s.key).toBe(prizePoolFor(LADDER_TABLES[capacity], ENTRY));
+      expect(s.summary.entrants, `${s.key} fits its pool`).toBeLessThanOrEqual(capacity);
+      // The deadline's answer follows the POOL's own floor.
+      if (s.summary.state === 'Open') {
+        expect(s.summary.outcome_if_deadline_now, s.key).toBe(
+          s.summary.entrants >= s.summary.min_seats ? 'seal' : 'refund'
+        );
+      }
     }
   });
 
-  it('a settled pool’s archive ranks the paid seat first and everyone else at zero', () => {
+  it('holds exactly one open pool per pool type at tier 0 — both boards × the four sizes', () => {
+    const open = SCENARIOS.filter((s) => s.summary.state === 'Open');
+    const types = open.map((s) => `${s.summary.mode ?? 'easy'}:${s.summary.tier}:${s.summary.capacity}`);
+    expect(new Set(types).size, 'two open pools share a type').toBe(types.length);
+    for (const mode of ['easy', 'hard']) {
+      for (const capacity of POOL_CAPACITIES) expect(types, `${mode} ${capacity}`).toContain(`${mode}:0:${capacity}`);
+    }
+    // The landing's default size (8, easy) is the original fixture pool.
+    expect(open.find((s) => s.key === 'open')?.summary.capacity).toBe(8);
+  });
+
+  it('pays the table place by place where it pays at all, and the total never above the prize pool', () => {
+    for (const s of SCENARIOS) {
+      if (s.payouts.length === 0) continue;
+      const table = tableOf(s);
+      const rankBySeat = new Map(s.leaderboard?.rows.map((r) => [r.seat, r.rank]) ?? []);
+      for (const p of s.payouts) {
+        const rank = rankBySeat.get(p.seat);
+        expect(rank, `${s.key} seat ${p.seat} has a place`).toBeDefined();
+        expect(BigInt(p.amount), `${s.key} seat ${p.seat}`).toBe(amountForRank(table, ENTRY, rank!));
+      }
+      const total = s.payouts.reduce((acc, p) => acc + BigInt(p.amount), 0n);
+      expect(total, `${s.key} never pays above its prize pool`).toBeLessThanOrEqual(BigInt(s.summary.pot_lamports));
+      // With n players the occupied places are 1..n: the paid places are min(table, n).
+      expect(s.payouts.length, s.key).toBe(Math.min(table.length, s.summary.entrants));
+    }
+  });
+
+  it('a settled pool’s archive pays its table’s places and everyone below the line zero', () => {
     for (const s of SCENARIOS) {
       if (!s.leaderboard) continue;
+      const table = tableOf(s);
       expect(s.leaderboard.rows.length, s.key).toBe(s.summary.entrants);
-      const first = s.leaderboard.rows.filter((r) => r.rank === 1);
-      expect(first.map((r) => r.seat), s.key).toEqual(s.payouts.map((p) => p.seat));
       for (const r of s.leaderboard.rows) {
-        if (r.rank !== 1) expect(r.amount_lamports, `${s.key} seat ${r.seat}`).toBe('0');
+        expect(BigInt(r.amount_lamports), `${s.key} rank ${r.rank}`).toBe(amountForRank(table, ENTRY, r.rank));
       }
+      const paidSeats = s.leaderboard.rows.filter((r) => r.amount_lamports !== '0').map((r) => r.seat);
+      expect([...paidSeats].sort((a, b) => a! - b!), s.key).toEqual(s.payouts.map((p) => p.seat));
+    }
+  });
+
+  it('shows an unpaid finish and a paid one, so both lines of the results page render', () => {
+    const viewerRank = (key: string) =>
+      SCENARIOS.find((s) => s.key === key)!.leaderboard!.rows.find((r) => r.player === FIXTURE_PLAYER)!;
+    expect(viewerRank('paid').amount_lamports).not.toBe('0');
+    expect(viewerRank('field-paid').amount_lamports).toBe('0');
+    expect(viewerRank('field-paid').rank).toBeGreaterThan(LADDER_TABLES[32].length);
+  });
+
+  it('answers GET /pool-types with every launch type, live, naming its open pool', () => {
+    const rows = fixturePoolTypes();
+    expect(rows.map((r) => `${r.mode}:${r.capacity}`)).toEqual(
+      ['easy', 'hard'].flatMap((m) => POOL_CAPACITIES.map((c) => `${m}:${c}`))
+    );
+    for (const r of rows) {
+      expect(r.live, `${r.mode} ${r.capacity}`).toBe(true);
+      const open = SCENARIO_BY_POOL.get(r.live_pool!);
+      expect(open?.summary.state).toBe('Open');
+      expect(open?.summary.capacity).toBe(r.capacity);
+      expect(r.prize_amounts).toEqual(poolLadder(open!.summary).prizeAmounts.map(String));
+      expect(BigInt(r.prize_pool_lamports)).toBe(prizePoolFor(r.prize_table, ENTRY));
     }
   });
 
@@ -99,7 +180,8 @@ describe('the preview scenarios', () => {
       // archive table has to render is exercised by the preview data.
       const seatless = s.leaderboard.rows.filter((r) => r.seat === null);
       expect(seatless.length, `${s.key} exercises the absent entry number`).toBe(1);
-      expect(seatless[0].rank, `${s.key} keeps the paid row's entry number`).not.toBe(1);
+      expect(seatless[0].amount_lamports, `${s.key} keeps every paid row's entry number`).toBe('0');
+      expect(seatless[0].player, `${s.key} keeps the viewer's entry number`).not.toBe(FIXTURE_PLAYER);
       for (const r of s.leaderboard.rows) {
         // Half-points stay integers — a fixture is not allowed to be the
         // place a float enters a score.
@@ -155,7 +237,8 @@ describe('the fixture API over the catalogue', () => {
   it('answers each pool with its own rows and unknown pools with nothing', async () => {
     const paid = SCENARIOS.find((s) => s.key === 'paid')!;
     expect((await FIXTURE_API.getPool(paid.summary.pool))?.state).toBe('Paid');
-    expect(await FIXTURE_API.getPayouts(paid.summary.pool)).toHaveLength(1);
+    // D-E19: a full pool of 64 pays its 16 places.
+    expect(await FIXTURE_API.getPayouts(paid.summary.pool)).toHaveLength(LADDER_TABLES[64].length);
     expect(await FIXTURE_API.getPool('F1XTUREnope1111111111111111111111111111111111')).toBeNull();
     expect(await FIXTURE_API.getPayouts('F1XTUREnope1111111111111111111111111111111111')).toHaveLength(0);
   });

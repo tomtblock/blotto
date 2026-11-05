@@ -34,7 +34,7 @@ export interface PoolFacts {
    * Seats taken. Read for ONE purpose: telling a player whose entry arrived
    * late whether the pool FILLED or simply stopped taking entries.
    *
-   * Both look identical from `state` alone — a pool that took its 64th entry
+   * Both look identical from `state` alone — a pool that took its last seat
    * and a pool that reached its deadline are both no longer `Open` — and
    * before 2026-09-19 the app could not tell them apart either, so it showed
    * a sentence that hedged between two unrelated causes (battle-test pool 22,
@@ -54,6 +54,15 @@ export interface PoolFacts {
    * the player had paid. Absent (a projection from before 0025) means easy.
    */
   mode?: number;
+  /**
+   * The pool's size (the Ladder, D-E19): 8, 16, 32 or 64 — from
+   * `pools.capacity` (migration 0026). Read for the same one purpose as
+   * `entrants`: a pool is FULL at its own capacity, and an 8-player pool
+   * that took its eighth entry filled just as a 64-player pool does at 64.
+   * Absent (a projection from before 0026) means 64, the only size there
+   * was.
+   */
+  capacity?: number;
 }
 
 export interface PoolIdResolver {
@@ -74,11 +83,11 @@ export class PgPoolIdResolver implements PoolIdResolver {
 
   async lookup(pool: string): Promise<PoolFacts | null> {
     const res = await this.db.query(
-      'SELECT id, state, entrants, mode FROM pools WHERE pool = $1',
+      'SELECT id, state, entrants, mode, capacity FROM pools WHERE pool = $1',
       [pool]
     );
     const row = res.rows[0] as
-      | { id: unknown; state: unknown; entrants: unknown; mode?: unknown }
+      | { id: unknown; state: unknown; entrants: unknown; mode?: unknown; capacity?: unknown }
       | undefined;
     if (!row || row.id === null || row.id === undefined) return null;
     // `entrants` is NOT NULL DEFAULT 0 in the projection, but a NUMERIC comes
@@ -89,11 +98,17 @@ export class PgPoolIdResolver implements PoolIdResolver {
     // `mode` is SMALLINT NOT NULL DEFAULT 0 since 0025; a row from before
     // it, or an unreadable value, is the easy ladder — the only one there was.
     const mode = Number(row.mode);
+    // `capacity` is SMALLINT NOT NULL DEFAULT 64 since 0026. A row from
+    // before it, or an unreadable value, is 64 — the only size there was.
+    // Only a positive whole number is believed: a capacity read as 0 would
+    // make every closed pool look "filled".
+    const capacity = Number(row.capacity);
     return {
       id: BigInt(String(row.id)),
       state: String(row.state ?? ''),
       entrants: Number.isFinite(seats) && seats >= 0 ? seats : 0,
       mode: mode === 1 ? 1 : 0,
+      capacity: Number.isInteger(capacity) && capacity > 0 ? capacity : 64,
     };
   }
 }
@@ -102,8 +117,8 @@ export class PgPoolIdResolver implements PoolIdResolver {
 export class MemoryPoolIdResolver implements PoolIdResolver {
   private readonly pools = new Map<string, PoolFacts>();
 
-  set(pool: string, id: bigint, state = 'Open', entrants = 0, mode = 0): void {
-    this.pools.set(pool, { id, state, entrants, mode });
+  set(pool: string, id: bigint, state = 'Open', entrants = 0, mode = 0, capacity = 64): void {
+    this.pools.set(pool, { id, state, entrants, mode, capacity });
   }
 
   async lookup(pool: string): Promise<PoolFacts | null> {

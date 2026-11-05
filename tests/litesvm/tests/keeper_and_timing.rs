@@ -1,12 +1,13 @@
 //! The 2026-09-07 upgrade's operational half against the compiled artifact
 //! (prompt v2 §A, §B.6, §G; founder rulings 1 and 2), with `migrate_config`
-//! re-pointed at the Phase B upgrade (2026-09-24):
+//! re-pointed at the Phase B upgrade (2026-09-24) and the Ladder (D-E19):
 //!
-//!   - `migrate_config` grows a PRE-Phase-B Config (484 bytes) to the new
-//!     layout in place — the hard ladder appended, every hard tier disabled
-//!     — admin-only, once; every other instruction is dead between the
-//!     upgrade and that transaction, and alive after it; the original
-//!     380-byte layout, whose migration this replaced, is refused;
+//!   - `migrate_config` grows a PRE-Phase-B Config (484 bytes) to the current
+//!     layout in place — the hard ladder appended, every hard tier disabled,
+//!     then the Ladder's `enabled_pool_types = 0` — admin-only, once; every
+//!     other instruction is dead between the upgrade and that transaction,
+//!     and alive after it; the original 380-byte layout, whose migration this
+//!     replaced, is refused (`ladder_migration.rs` covers the 603-byte one);
 //!   - the keeper opens pools; a tier idle for 24 h past its cooldown opens
 //!     for anyone (the liveness fallback, removed 2026-09-07). Since the security fix of
 //!     2026-09-07 a tier that has never settled a pool is NOT open to anyone:
@@ -14,8 +15,10 @@
 //!     `tier_next_open_at`, because at zero the fallback window sits decades
 //!     in the past and the opener chooses the pool's sealing key;
 //!   - the four service keys cannot enter a pool;
-//!   - a settled tier cools down for `cooldown_seconds` before its next
-//!     pool, stamped in `tier_next_open_at`;
+//!   - a settled pool TYPE cools down for `cooldown_seconds` before its next
+//!     pool, stamped in `PoolType.next_open_at` (D-E19 — Config's
+//!     `tier_next_open_at` is still restamped by `set_open_tiers`, but no
+//!     longer gates anything);
 //!   - `set_pool_timing` changes the deadline for pools opened from now on
 //!     and never moves a pool players already entered; zero is refused.
 
@@ -38,19 +41,24 @@ fn funded_keypair(env: &mut Env) -> Keypair {
     k
 }
 
-/// Open pool `id` on tier 0 as `opener` (no VRF / collection — enough to
-/// exercise the open gates).
+/// Open pool `id` — the easy 64-player type on tier 0 — as `opener` (no VRF
+/// / collection — enough to exercise the open gates).
 fn open_as(env: &mut Env, opener: &Keypair, id: u64) -> Result<(), String> {
-    let ix = open_pool_ix(&opener.pubkey(), id, 0, [9; 32], env.sealing_secret_hash);
+    let ix = env.open_ix(&opener.pubkey(), id, 0, MODE_EASY, 64);
     env.send(&[ix], &[opener])
 }
 
+/// Tier `tier`'s easy 64-player pool type, as the chain holds it.
+fn ptype(env: &Env, tier: u8) -> PoolTypeView {
+    read_pool_type(&env.svm, &pool_type_pda(MODE_EASY, tier, 64))
+}
+
 /// Take pool `id` (Open, 0 entrants) to Closed via the refund fork — the
-/// cheapest way to free a tier slot and stamp its cooldown.
+/// cheapest way to free a type's slot and stamp its cooldown.
 fn close_empty(env: &mut Env, id: u64) {
     env.advance_time(FILL_DEADLINE_SECS + 1);
     let settlement = env.settlement.insecure_clone();
-    let ix = trigger_refund_ix(&settlement.pubkey(), id);
+    let ix = env.trigger_refund_ix(&settlement.pubkey(), id);
     env.send(&[ix], &[&settlement])
         .expect("trigger_refund on an empty pool");
     assert_eq!(read_pool(&env.svm, &pool_pda(id)).state, 5, "Closed");
@@ -97,8 +105,8 @@ fn migrate_config_grows_the_old_account_once_and_revives_every_instruction() {
         "{err}"
     );
 
-    // The migration: grows to 603, tops up rent from the admin, writes the
-    // hard tail, touches nothing before it.
+    // The migration: grows to 605, tops up rent from the admin, writes the
+    // hard tail and the Ladder tail, touches nothing before them.
     let admin_before = env.balance(&admin);
     let ix = migrate_config_ix(&admin);
     env.send(&[ix], &[]).expect("migrate_config");
@@ -141,6 +149,8 @@ fn migrate_config_grows_the_old_account_once_and_revives_every_instruction() {
         migrated_at, fresh.tier_next_open_at[0],
         "the clock did move"
     );
+    // The Ladder tail: no pool type existed, so none is enabled.
+    assert_eq!(cfg.enabled_pool_types, 0);
 
     // Self-disabling: a second run is a clean failure, not a second write.
     env.advance_time(60);
@@ -154,8 +164,9 @@ fn migrate_config_grows_the_old_account_once_and_revives_every_instruction() {
     );
 
     // And the program is alive again: a deposit lands, an admin instruction
-    // lands, and the keeper opens a pool — an easy one, and, once the founder
-    // enables the tier, a hard one beside it.
+    // lands, pool types can be created (`open_ready_pool*` creates and
+    // enables them), and the keeper opens a pool — an easy one, and, once the
+    // founder enables the tier, a hard one beside it.
     let ix = fund_platform_ix(&admin, 1_000_000_000);
     env.send(&[ix], &[])
         .expect("a deposit lands after migration");
@@ -200,6 +211,7 @@ fn the_keeper_opens_pools_and_nobody_else_ever_does() {
     let admin = env.admin.pubkey();
     let settlement = env.settlement.insecure_clone();
     let keeper = funded_keypair(&mut env);
+    env.ensure_pool_type(MODE_EASY, 0, 64);
     env.fund_platform(TIER_POTS[0] * 4);
 
     // Rotate the keeper away from the settlement signer (the init default).
@@ -217,7 +229,7 @@ fn the_keeper_opens_pools_and_nobody_else_ever_does() {
         "admin only: {err}"
     );
 
-    // A tier that has never settled a pool is NOT open to strangers.
+    // A type that has never settled a pool is NOT open to strangers.
     //
     // The opener supplies `sealing_pubkey` and `sealing_secret_hash`: a pool
     // carrying a stranger's sealing key can never be revealed by us, so it
@@ -225,8 +237,11 @@ fn the_keeper_opens_pools_and_nobody_else_ever_does() {
     // longer refund either, stranding the pot AND every entry. That is why
     // the 24-hour liveness fallback was removed outright on 2026-09-07
     // (founder ruling; audit O9b) rather than narrowed.
-    let seeded_at = read_config(&env.svm).tier_next_open_at[0];
-    assert!(seeded_at > 0, "init_config stamps the cooldown clock");
+    assert_eq!(
+        ptype(&env, 0).next_open_at,
+        0,
+        "a new pool type has no cooldown to wait out"
+    );
     let err = open_as(&mut env, &settlement, 1).unwrap_err();
     assert!(
         err.contains("6054") || err.contains("NotKeeper"),
@@ -234,17 +249,13 @@ fn the_keeper_opens_pools_and_nobody_else_ever_does() {
     );
     open_as(&mut env, &keeper, 1).expect("the keeper opens the tier's first pool");
 
-    // Settle it (Closed via the empty refund fork): the slot frees and the
-    // cooldown is stamped at exactly now + cooldown_seconds.
+    // Settle it (Closed via the empty refund fork): the TYPE's slot frees
+    // and its cooldown is stamped at exactly now + cooldown_seconds.
     close_empty(&mut env, 1);
     let closed_at = now(&env);
-    let cfg = read_config(&env.svm);
-    assert_eq!(cfg.active_pool_by_tier[0], 0);
-    assert_eq!(
-        cfg.tier_next_open_at[0],
-        closed_at + COOLDOWN_SECS,
-        "cooldown stamped"
-    );
+    let t = ptype(&env, 0);
+    assert_eq!(t.active_pool, 0);
+    assert_eq!(t.next_open_at, closed_at + COOLDOWN_SECS, "cooldown stamped");
 
     // Inside the cooldown nobody opens — not even the keeper.
     let err = open_as(&mut env, &keeper, 2).unwrap_err();
@@ -367,6 +378,8 @@ fn set_pool_timing_applies_to_future_pools_only() {
         &[],
     )
     .unwrap();
+    env.ensure_pool_type(MODE_EASY, 0, 64);
+    env.ensure_pool_type(MODE_EASY, 1, 64);
     env.fund_platform(TIER_POTS[0] + TIER_POTS[1] * 2);
 
     // Pool 1 on tier 0 under the launch timing.
@@ -415,42 +428,35 @@ fn set_pool_timing_applies_to_future_pools_only() {
         t0 + FILL_DEADLINE_SECS
     );
     // Pool 2 (tier 1) opens under the new deadline.
-    let ix = open_pool_ix(&settlement.pubkey(), 2, 1, [9; 32], env.sealing_secret_hash);
+    let ix = env.open_ix(&settlement.pubkey(), 2, 1, MODE_EASY, 64);
     env.send(&[ix], &[&settlement]).unwrap();
     assert_eq!(read_pool(&env.svm, &pool_pda(2)).fill_deadline, t0 + 3600);
 
     // Pool 1 still needs the full 12 h before its fork opens.
     env.advance_time(3601);
-    let err = env
-        .send(
-            &[trigger_refund_ix(&settlement.pubkey(), 1)],
-            &[&settlement],
-        )
-        .unwrap_err();
+    let ix = env.trigger_refund_ix(&settlement.pubkey(), 1);
+    let err = env.send(&[ix], &[&settlement]).unwrap_err();
     assert!(err.contains("6012"), "{err}");
-    // Pool 2's hour has passed: it refunds, and its tier's cooldown is the
+    // Pool 2's hour has passed: it refunds, and its type's cooldown is the
     // NEW one minute.
-    env.send(
-        &[trigger_refund_ix(&settlement.pubkey(), 2)],
-        &[&settlement],
-    )
-    .expect("pool 2 past its one-hour deadline");
-    assert_eq!(read_config(&env.svm).tier_next_open_at[1], now(&env) + 60);
+    let ix = env.trigger_refund_ix(&settlement.pubkey(), 2);
+    env.send(&[ix], &[&settlement])
+        .expect("pool 2 past its one-hour deadline");
+    assert_eq!(ptype(&env, 1).next_open_at, now(&env) + 60);
 }
 
-/// Enabling a tier restamps its cooldown clock, and never shortens a running
-/// one.
+/// Enabling a tier restamps Config's clock, and nothing — neither the tier
+/// switch nor the pool type's own — ever shortens a running cooldown.
 ///
-/// `tier_next_open_at` serves one purpose since 2026-09-07: `open_pool`
-/// requires `now >= tier_next_open_at`, so it is the tier's cooldown. (It was
-/// ALSO the origin of a liveness fallback window until the founder ruling of
-/// that date removed the fallback — audit O9b. A stale stamp used to be a
-/// security hole; now it only means the keeper may open at once, which is
-/// correct.) `set_open_tiers` stamps `max(stamp, now)` on the
-/// disabled-to-enabled edge, which keeps a running cooldown intact and keeps
-/// the published "next pool opens in" instant meaningful.
+/// Since D-E19 the cooldown gate is the pool TYPE's `next_open_at`, stamped
+/// only when its slot frees. `set_open_tiers` still restamps Config's
+/// `tier_next_open_at` to `max(stamp, now)` on the disabled-to-enabled edge
+/// (the field is kept, and still published), but `open_pool` no longer reads
+/// it. What has to hold is unchanged: a tier — or a type — switched off and
+/// on again during its cooldown does not get a shorter one, and a tier that
+/// sat disabled for months is still the keeper's alone to open.
 #[test]
-fn enabling_a_tier_restamps_its_cooldown_without_shortening_one() {
+fn enabling_a_tier_or_type_never_shortens_a_running_cooldown() {
     let Some(mut env) = Env::new() else { return };
     let admin = env.admin.pubkey();
     let settlement = env.settlement.insecure_clone();
@@ -458,17 +464,20 @@ fn enabling_a_tier_restamps_its_cooldown_without_shortening_one() {
     env.send(&[set_keeper_ix(&admin, &keeper.pubkey())], &[])
         .expect("set_keeper");
     env.fund_platform(TIER_POTS.iter().sum::<u64>() * 3);
+    // Tier 1's pool type, configured and enabled while its TIER is closed.
+    env.ensure_pool_type(MODE_EASY, 1, 64);
 
     // Tier 1 is disabled at launch and carries the deployment stamp.
     let deployed_at = now(&env);
     assert!(!read_config(&env.svm).open_tiers[1]);
     assert_eq!(read_config(&env.svm).tier_next_open_at[1], deployed_at);
 
-    // Months disabled. Nobody can open a disabled tier — keeper included.
+    // Months disabled. Nobody can open on a disabled tier — keeper included,
+    // however enabled its pool type is.
     env.advance_time(30 * 24 * 60 * 60);
     let stranger = funded_keypair(&mut env);
     let open_tier1 = |env: &mut Env, opener: &Keypair, id: u64| -> Result<(), String> {
-        let ix = open_pool_ix(&opener.pubkey(), id, 1, [9; 32], env.sealing_secret_hash);
+        let ix = env.open_ix(&opener.pubkey(), id, 1, MODE_EASY, 64);
         env.send(&[ix], &[opener])
     };
     let err = open_tier1(&mut env, &stranger, 1).unwrap_err();
@@ -479,8 +488,8 @@ fn enabling_a_tier_restamps_its_cooldown_without_shortening_one() {
     let err = open_tier1(&mut env, &keeper, 1).unwrap_err();
     assert!(err.contains("6006") || err.contains("TierNotOpen"), "{err}");
 
-    // Enable it: the stamp moves to now, and tier 0 (already enabled) is
-    // left exactly as it was.
+    // Enable it: Config's stamp moves to now, and tier 0 (already enabled)
+    // is left exactly as it was.
     env.send(
         &[admin_ix(&admin, "set_open_tiers", &[1, 1, 0, 0, 0, 0, 0])],
         &[],
@@ -508,10 +517,10 @@ fn enabling_a_tier_restamps_its_cooldown_without_shortening_one() {
     assert!(err.contains("6054"), "nor the settlement signer: {err}");
     open_tier1(&mut env, &keeper, 1).expect("the keeper opens at once");
 
-    // Now the property that stamp still carries: a tier disabled and
-    // re-enabled DURING its cooldown does not get a shorter one.
+    // Now the property: a tier — or the type — disabled and re-enabled
+    // DURING the type's cooldown does not get a shorter one.
     close_empty_tier(&mut env, 1);
-    let freed_at = read_config(&env.svm).tier_next_open_at[1];
+    let freed_at = ptype(&env, 1).next_open_at;
     assert_eq!(
         freed_at,
         now(&env) + COOLDOWN_SECS,
@@ -527,8 +536,12 @@ fn enabling_a_tier_restamps_its_cooldown_without_shortening_one() {
         &[],
     )
     .expect("re-enable it");
+    env.set_pool_type_enabled(MODE_EASY, 1, 64, false)
+        .expect("disable the type mid-cooldown");
+    env.set_pool_type_enabled(MODE_EASY, 1, 64, true)
+        .expect("re-enable it");
     assert_eq!(
-        read_config(&env.svm).tier_next_open_at[1],
+        ptype(&env, 1).next_open_at,
         freed_at,
         "a cooldown still running is never shortened by a re-enable"
     );
@@ -546,7 +559,7 @@ fn enabling_a_tier_restamps_its_cooldown_without_shortening_one() {
 fn close_empty_tier(env: &mut Env, id: u64) {
     env.advance_time(FILL_DEADLINE_SECS + 1);
     let settlement = env.settlement.insecure_clone();
-    let ix = trigger_refund_ix(&settlement.pubkey(), id);
+    let ix = env.trigger_refund_ix(&settlement.pubkey(), id);
     env.send(&[ix], &[&settlement])
         .expect("trigger_refund on an empty pool");
 }

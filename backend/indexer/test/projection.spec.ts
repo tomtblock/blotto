@@ -211,11 +211,29 @@ describe('blotto event decoding against real emitted bytes', () => {
     // Option A (2026-09-07): no pool carries a go-deadline — the deadline
     // set at open is the only clock.
     for (const p of pools) expect(p.go_deadline).to.equal(undefined);
-    // Prompt v2 §B.6: the tier's cooldown stamp, from the LAST slot release
-    // (pool 3, Paid), with the pool that freed it.
+    // The Ladder (D-E19, 0026): every pool in this fixture predates it, so
+    // each reads as 64 seats and one paid place worth its whole 4 SOL prize
+    // pool — 40 entries at 0.1 SOL — the rule `migrate_pool` writes. The
+    // floor is stated only where an event stated it: pool 2's migration
+    // from the pre-R7-b layout wrote 52; the others' `PoolOpened` never
+    // carried one, so it is not guessed.
+    for (const p of pools) {
+      expect(p).to.include({ capacity: 64, paid_places: 1 });
+      expect(p.prize_table).to.deep.equal([40]);
+    }
+    expect(closedPool!.min_seats).to.equal(52);
+    expect(fullPool!.min_seats).to.equal(null);
+    expect(shortFieldPool!.min_seats).to.equal(null);
+    // Prompt v2 §B.6: the cooldown stamp, from the LAST slot release (pool
+    // 3, Paid), with the pool that freed it — keyed by pool type since
+    // D-E19, and a pre-Ladder release is the 64-player slot's.
     const tierStatus = Object.values(snap.tier_status);
     expect(tierStatus.length).to.equal(1);
     expect(tierStatus[0].tier).to.equal(0);
+    expect(tierStatus[0].capacity).to.equal(64);
+    const typeStamp = Object.values(snap.pool_types);
+    expect(typeStamp.length).to.equal(1);
+    expect(typeStamp[0]).to.include({ mode: 0, tier: 0, capacity: 64, last_pool_id: tierStatus[0].last_pool_id });
     expect(tierStatus[0].next_open_at).to.be.a('string');
     expect(BigInt(tierStatus[0].next_open_at as string) > 0n).to.equal(true);
     expect(tierStatus[0].last_pool_id).to.equal(String(shortFieldPool!.id));

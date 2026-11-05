@@ -26,10 +26,11 @@
 //!
 //! # How the guard is reached
 //!
-//! A pool with a TWO-WAY tie for first has two committed seats, so paying
-//! one of them leaves the pool in `Scored` — the state gate opens, and the
-//! mask guard is the next thing in the way. Two attempts are made in that
-//! window:
+//! A pool with more than one committed seat stays `Scored` after the first
+//! payment — the state gate opens, and the mask guard is the next thing in
+//! the way. Under the Ladder (D-E19) every pool commits several seats (a
+//! 64-player pool sixteen), so the window is simply the normal case. Two
+//! attempts are made in it:
 //!
 //!   1. a second batch naming the seat that was already paid;
 //!   2. a single batch naming one seat TWICE, which is the shape a
@@ -48,7 +49,8 @@ use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Keypair;
 use solana_sdk::signer::Signer;
 
-const POT: u64 = 4_000_000_000; // tier 0's FIXED pot (D-E1)
+const POT: u64 = 4_000_000_000; // a 64-player pool's prize pool at tier 0
+const ENTRY: u64 = 100_000_000;
 
 #[test]
 fn a_seat_cannot_be_paid_twice_while_the_pool_is_still_payable() {
@@ -62,45 +64,36 @@ fn a_seat_cannot_be_paid_twice_while_the_pool_is_still_payable() {
     }
     let settlement = env.settlement.insecure_clone();
 
-    // A two-way tie for first: seats 0 and 1, half the pot each. Two
-    // committed seats is what keeps the pool in `Scored` after the first
-    // payment, which is the whole point — it is the window in which the
-    // mask guard, rather than the state gate, is the thing saying no.
-    let secret = env.pool_secret;
-    let ix = settle_ix(&settlement.pubkey(), 1, "reveal_pool_secret", &secret);
-    env.send(&[ix], &[&settlement]).expect("reveal");
-
-    let payouts = tied_first_payouts(POT, 2);
-    assert_eq!(payouts, vec![(0, POT / 2), (1, POT / 2)]);
-    let wallets: Vec<Pubkey> = players.iter().map(|(p, _)| p.pubkey()).collect();
-    let (leaves, _ranks) = results_leaves(&wallets, &payouts);
-    let root = merkle_root(&leaves);
-    let mut commit_args = root.to_vec();
-    commit_args.extend_from_slice(&encode_payouts(&payouts));
-    let ix = settle_ix(&settlement.pubkey(), 1, "commit_results", &commit_args);
-    env.send(&[ix], &[&settlement]).expect("commit_results");
+    // The 64-player table: sixteen committed seats. More than one committed
+    // seat is what keeps the pool in `Scored` after the first payment, which
+    // is the whole point — it is the window in which the mask guard, rather
+    // than the state gate, is the thing saying no.
+    env.reveal(1);
+    let payouts = straight_payouts(&LADDER_TABLES[3], ENTRY);
+    assert_eq!(&payouts[..2], &[(0, 12 * ENTRY), (1, 6 * ENTRY)]);
+    env.commit(1, [1u8; 32], &payouts).expect("commit_results");
     assert_eq!(read_pool(&env.svm, &pool).state, 2, "Scored");
 
     // ---- seat 0 is paid once ----
     let (w0, e0) = (&players[0].0, players[0].1);
     let (w1, e1) = (&players[1].0, players[1].1);
     let w0_before = env.balance(&w0.pubkey());
-    let ix = pay_prizes_ix(&settlement.pubkey(), 1, &[0], &[(w0.pubkey(), e0)]);
+    let ix = env.pay_ix(1, &[0], &[(w0.pubkey(), e0)]);
     env.send(&[ix], &[&settlement]).expect("pay seat 0");
     assert_eq!(
         env.balance(&w0.pubkey()) - w0_before,
-        POT / 2,
-        "seat 0 takes its half"
+        12 * ENTRY,
+        "seat 0 takes first place"
     );
 
     let pv = read_pool(&env.svm, &pool);
-    assert_eq!(pv.state, 2, "still Scored — seat 1 is unpaid");
+    assert_eq!(pv.state, 2, "still Scored — fifteen places are unpaid");
     assert_eq!(pv.paid_mask, 0b01, "only seat 0's bit is set");
     let vault_after_first = env.balance(&vault_pda(1));
     let w0_after_first = env.balance(&w0.pubkey());
 
     // ---- THE GUARD, attempt 1: a second batch for the same seat ----
-    let ix = pay_prizes_ix(&settlement.pubkey(), 1, &[0], &[(w0.pubkey(), e0)]);
+    let ix = env.pay_ix(1, &[0], &[(w0.pubkey(), e0)]);
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
     assert!(
         err.contains("6030") || err.contains("RankAlreadySettled"),
@@ -127,12 +120,7 @@ fn a_seat_cannot_be_paid_twice_while_the_pool_is_still_payable() {
     // batch meets it. A guard that only compared against the mask as it
     // stood when the instruction started would pay this seat twice in one
     // transaction.
-    let ix = pay_prizes_ix(
-        &settlement.pubkey(),
-        1,
-        &[1, 1],
-        &[(w1.pubkey(), e1), (w1.pubkey(), e1)],
-    );
+    let ix = env.pay_ix(1, &[1, 1], &[(w1.pubkey(), e1), (w1.pubkey(), e1)]);
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
     assert!(
         err.contains("6030") || err.contains("RankAlreadySettled"),
@@ -148,19 +136,19 @@ fn a_seat_cannot_be_paid_twice_while_the_pool_is_still_payable() {
         "seat 1's entry must not carry a settled flag from a reverted batch"
     );
 
-    // ---- and the pool is still payable by its remaining seat ----
-    // A guard that wedged the pool would strand the tier slot and the
+    // ---- and the pool is still payable by its remaining seats ----
+    // A guard that wedged the pool would strand the type's slot and the
     // reserved pot as surely as a double payment would drain the vault.
     let w1_before = env.balance(&w1.pubkey());
-    let ix = pay_prizes_ix(&settlement.pubkey(), 1, &[1], &[(w1.pubkey(), e1)]);
-    env.send(&[ix], &[&settlement]).expect("pay seat 1");
-    assert_eq!(env.balance(&w1.pubkey()) - w1_before, POT / 2);
+    let deltas = env.pay_all(1, &players, &payouts[1..]);
+    assert_eq!(env.balance(&w1.pubkey()) - w1_before, 6 * ENTRY);
+    assert_eq!(deltas.iter().sum::<u64>(), POT - 12 * ENTRY);
 
     let pv = read_pool(&env.svm, &pool);
     assert_eq!(pv.state, 3, "Paid");
     assert_eq!(
-        pv.paid_mask, 0b11,
-        "both committed seats settled, once each"
+        pv.paid_mask, 0xFFFF,
+        "all sixteen committed seats settled, once each"
     );
     assert_eq!(
         env.balance(&vault_pda(1)),
@@ -168,7 +156,7 @@ fn a_seat_cannot_be_paid_twice_while_the_pool_is_still_payable() {
         "the pot left exactly once; the rent cushion stays behind"
     );
     let cfg = read_config(&env.svm);
-    assert_eq!(cfg.active_pool_by_tier[0], 0, "slot freed at Paid");
+    assert_eq!(read_pool_type(&env.svm, &env.pool_type_of(1)).active_pool, 0, "slot freed at Paid");
     assert_eq!(cfg.platform_reserved, 0, "pot released from reserved");
 }
 
@@ -189,17 +177,9 @@ fn a_batch_cannot_redirect_a_committed_seat_to_another_wallet() {
     }
     let settlement = env.settlement.insecure_clone();
 
-    let secret = env.pool_secret;
-    let ix = settle_ix(&settlement.pubkey(), 1, "reveal_pool_secret", &secret);
-    env.send(&[ix], &[&settlement]).expect("reveal");
-    let payouts = tied_first_payouts(POT, 2);
-    let wallets: Vec<Pubkey> = players.iter().map(|(p, _)| p.pubkey()).collect();
-    let (leaves, _ranks) = results_leaves(&wallets, &payouts);
-    let root = merkle_root(&leaves);
-    let mut commit_args = root.to_vec();
-    commit_args.extend_from_slice(&encode_payouts(&payouts));
-    let ix = settle_ix(&settlement.pubkey(), 1, "commit_results", &commit_args);
-    env.send(&[ix], &[&settlement]).expect("commit_results");
+    env.reveal(1);
+    let payouts = straight_payouts(&LADDER_TABLES[3], ENTRY);
+    env.commit(1, [1u8; 32], &payouts).expect("commit_results");
 
     let (w0, e0) = (&players[0].0, players[0].1);
     let stranger = &players[7].0;
@@ -207,7 +187,7 @@ fn a_batch_cannot_redirect_a_committed_seat_to_another_wallet() {
 
     // Seat 0's Entry with seat 7's wallet: the program compares the wallet
     // against `entry.player`.
-    let ix = pay_prizes_ix(&settlement.pubkey(), 1, &[0], &[(stranger.pubkey(), e0)]);
+    let ix = env.pay_ix(1, &[0], &[(stranger.pubkey(), e0)]);
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
     assert!(
         err.contains("6031") || err.contains("WinnerMismatch"),
@@ -222,7 +202,7 @@ fn a_batch_cannot_redirect_a_committed_seat_to_another_wallet() {
     // Seat 0's wallet with seat 1's Entry: the program compares
     // `entry.index` against the seat asked for.
     let e1 = players[1].1;
-    let ix = pay_prizes_ix(&settlement.pubkey(), 1, &[0], &[(w0.pubkey(), e1)]);
+    let ix = env.pay_ix(1, &[0], &[(w0.pubkey(), e1)]);
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
     assert!(
         err.contains("6031")

@@ -81,4 +81,41 @@ describe('ArchiveStandings', () => {
     expect(html).toContain('#1');
     expect(html).toContain('4 SOL');
   });
+
+  /*
+   * D-E19 (the Ladder): a pool pays its highest places, so every paid row is
+   * listed (not rank 1 alone) and the table draws the paid line once, after
+   * the last paid row — a tie straddling the line is paid on both sides.
+   */
+  it('lists every paid place with its amount, and draws the paid line once after the last paid row', () => {
+    const rows = [
+      row({ player: 'A111111111111111111111111111111111111111111', rank: 1, amount_lamports: '300000000', seat: 0 }),
+      row({ player: 'B111111111111111111111111111111111111111111', rank: 2, amount_lamports: '100000000', seat: 1 }),
+      // A tie for 2nd across the paid line of a pool of 8 (2 places): the
+      // 2nd prize shared, so both are paid.
+      row({ player: 'C111111111111111111111111111111111111111111', rank: 2, amount_lamports: '100000000', seat: 2 }),
+      row({ player: 'D111111111111111111111111111111111111111111', rank: 4, amount_lamports: '0', seat: 3 }),
+    ];
+    const html = renderToString(<ArchiveStandings archive={archive(rows)} paidPlaces={2} />).replaceAll('<!-- -->', '');
+    expect(html).toContain(c.paidTitle);
+    expect(html).toContain(c.paidRow(1, 'A1111111…', '0.3'));
+    expect(html).toContain(c.paidRow(2, 'B1111111…', '0.1'));
+    expect(html).toContain(c.paidRow(2, 'C1111111…', '0.1'));
+    expect(html).not.toContain('D1111111… —');
+    // The line, once, between the last paid row and the first unpaid one.
+    expect(html.match(/data-testid="paid-line"/g)?.length).toBe(1);
+    expect(html).toContain(c.paidLine(2));
+    expect(c.paidLine(2)).toBe('Prizes were paid to 1st–2nd.');
+    const line = html.indexOf('data-testid="paid-line"');
+    expect(html.indexOf('C1111111…', html.indexOf('<tbody'))).toBeLessThan(line);
+    expect(html.indexOf('D1111111…', html.indexOf('<tbody'))).toBeGreaterThan(line);
+    // No winner wording survives.
+    expect(html).not.toMatch(/winner/i);
+  });
+
+  it('says a one-place pool paid 1st place, in the same plain line', () => {
+    expect(c.paidLine(1)).toBe('The prize was paid to 1st place.');
+    const html = render([row(), row({ player: 'Bbbb1111111111111111111111111111111111111111', rank: 2, amount_lamports: '0' })]);
+    expect(html).toContain(c.paidLine(1));
+  });
 });

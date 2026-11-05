@@ -58,7 +58,7 @@
 import nacl from 'tweetnacl';
 import { payloadBytes, type CiphertextStore } from '../../sealing/src';
 import { ciphertextMessage, ciphertextStatusMessage } from './ciphertext-message';
-import { CAPACITY, boardModeOf } from '../../scoring/src';
+import { boardModeOf } from '../../scoring/src';
 import type { PoolIdResolver } from './pool-ids';
 import type { SeatResolver } from './seats';
 import { base58Decode } from './shared';
@@ -135,14 +135,17 @@ export async function acceptCiphertext(
     return { status: 400, body: { error: 'unknown pool' } };
   }
   if (pool.state !== OPEN) {
-    // A pool that took its 64th entry and a pool that reached its deadline
+    // A pool that took its last seat and a pool that reached its deadline
     // are BOTH no longer Open, so `state` alone cannot separate them. The
-    // seat count can: at capacity it filled, below it the clock ran out.
-    // A pool can never exceed capacity — `register` refuses past it — so
-    // `>=` and `===` agree here; `>=` is used so a projection that ever
-    // over-counts degrades to the more specific message rather than the
-    // vaguer one.
-    const filled = pool.entrants >= Number(CAPACITY);
+    // seat count can: at ITS capacity it filled, below it the clock ran
+    // out. Since the Ladder (D-E19) that capacity is the pool's own — 8,
+    // 16, 32 or 64 — so an 8-player pool with eight seated filled, and a
+    // 64-player pool with eight seated did not. A projection without the
+    // column reads as 64, the only size there was. A pool can never exceed
+    // its capacity — `register` refuses past it — so `>=` and `===` agree
+    // here; `>=` is used so a projection that ever over-counts degrades to
+    // the more specific message rather than the vaguer one.
+    const filled = pool.entrants >= (pool.capacity ?? 64);
     return {
       status: 409,
       body: { error: filled ? CLOSED_BECAUSE_FULL : CLOSED_TO_ENTRIES },

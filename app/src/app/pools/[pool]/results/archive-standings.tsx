@@ -17,10 +17,18 @@
  * The battle-score column displays `recomputed.score_half` (half-point
  * integer units, seven battles, max 14) as points — integer arithmetic only,
  * display only: nothing on this page feeds a score back into anything.
+ *
+ * D-E19 (the Ladder): a pool pays its highest places, so every paid row is
+ * listed above the table with its amount (not rank 1 alone), and the table
+ * draws the PAID LINE after the last paid row with one factual sentence —
+ * "Prizes were paid to 1st–8th." A row is paid when its COMMITTED amount
+ * is above zero, which is what the chain holds; a tie that straddles the
+ * line is paid on both sides of it and the line falls after the whole tie.
+ * No near-miss styling: the rows below the line read like any other.
  */
 import { COPY } from '@/copy';
 import { lamportsToSol } from '@/data/format';
-import type { PoolLeaderboard } from '@/data/types';
+import type { LeaderboardRow, PoolLeaderboard } from '@/data/types';
 import { NeonSection } from '@/components/ui/neon-section';
 
 /** Stands in for a number this row does not carry. */
@@ -47,20 +55,37 @@ export function battleScoreLabel(scoreHalf: number | null | undefined): string {
 
 const shortAddr = (p: string) => `${p.slice(0, 8)}…`;
 
-export function ArchiveStandings({ archive }: { archive: PoolLeaderboard }) {
-  const winners = archive.rows.filter((r) => r.rank === 1);
+const isPaid = (r: LeaderboardRow) => r.amount_lamports !== '0' && /^\d+$/.test(r.amount_lamports);
+
+export function ArchiveStandings({
+  archive,
+  paidPlaces,
+}: {
+  archive: PoolLeaderboard;
+  /** The pool's own number of paid places (`poolLadder`); names the line. */
+  paidPlaces?: number;
+}) {
+  const paid = archive.rows.filter(isPaid);
+  const lastPaidIndex = archive.rows.reduce((at, r, i) => (isPaid(r) ? i : at), -1);
+  // Without the pool's own count, the deepest committed rank stands in.
+  const places = paidPlaces ?? paid.reduce((m, r) => Math.max(m, r.rank), 0);
   return (
     // Round four A2 (founder 2026-09-17): the standings are a titled neon box
     // like every block on the pink field; the table sits inside it.
     <NeonSection id="standings" heading={COPY.results.archive.title} data-testid="archive-standings">
-      {winners.length > 0 && (
-        <p className="mb-3 text-[17px] font-semibold text-prize">
-          {winners
-            .map((w) =>
-              COPY.results.archive.winner(shortAddr(w.player), lamportsToSol(w.amount_lamports))
-            )
-            .join(' · ')}
-        </p>
+      {paid.length > 0 && (
+        <div className="mb-4" data-testid="archive-paid">
+          <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-ink-muted">
+            {COPY.results.archive.paidTitle}
+          </p>
+          <ol className="mt-1.5 grid gap-x-6 gap-y-1 text-[15px] font-semibold text-prize sm:grid-cols-2">
+            {paid.map((r) => (
+              <li key={r.player} className="tnum">
+                {COPY.results.archive.paidRow(r.rank, shortAddr(r.player), lamportsToSol(r.amount_lamports))}
+              </li>
+            ))}
+          </ol>
+        </div>
       )}
       <div className="mb-3 overflow-x-auto rounded-2xl border border-white/10 bg-white/5">
         <table className="w-full min-w-[480px] border-collapse text-[14px]">
@@ -79,12 +104,10 @@ export function ArchiveStandings({ archive }: { archive: PoolLeaderboard }) {
           <tbody>
             {/* Keyed by player, not by entry number: one wallet holds one
                 entry in a pool, and the entry number may be null. */}
-            {archive.rows.map((r) => (
+            {archive.rows.flatMap((r, i) => [
               <tr
                 key={r.player}
-                className={
-                  'border-t border-line ' + (r.rank === 1 ? 'font-semibold text-ink' : 'text-ink-muted')
-                }
+                className={'border-t border-line ' + (isPaid(r) ? 'font-semibold text-ink' : 'text-ink-muted')}
               >
                 <td className="tnum px-3 py-1.5">#{r.rank}</td>
                 <td className="tnum px-3 py-1.5">
@@ -101,11 +124,25 @@ export function ArchiveStandings({ archive }: { archive: PoolLeaderboard }) {
                 <td className="tnum px-3 py-1.5 text-right">
                   {battleScoreLabel(r.recomputed?.score_half)}
                 </td>
-                <td className="tnum px-3 py-1.5 text-right">
-                  {r.amount_lamports === '0' ? '—' : `${lamportsToSol(r.amount_lamports)} SOL`}
+                <td className={`tnum px-3 py-1.5 text-right ${isPaid(r) ? 'text-prize' : ''}`}>
+                  {isPaid(r) ? `${lamportsToSol(r.amount_lamports)} SOL` : '—'}
                 </td>
-              </tr>
-            ))}
+              </tr>,
+              // The paid line, once, after the last paid row — a rule and a
+              // sentence, nothing more.
+              ...(i === lastPaidIndex && places > 0
+                ? [
+                    <tr key="paid-line" data-testid="paid-line">
+                      <td
+                        colSpan={5}
+                        className="border-t-2 border-dashed border-brand/70 px-3 py-1.5 text-[12px] text-ink-muted"
+                      >
+                        {COPY.results.archive.paidLine(places)}
+                      </td>
+                    </tr>,
+                  ]
+                : []),
+            ])}
           </tbody>
         </table>
       </div>

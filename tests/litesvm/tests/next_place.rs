@@ -18,6 +18,17 @@
 //!     signature are refused;
 //!   - the seven-day auto-release: a random keypair pays an un-forfeited
 //!     hold once the window passes, never before, never once forfeited.
+//!
+//! # Since the Ladder (D-E19)
+//!
+//! The rule above — "the committed payout list IS the tied first-place
+//! group" — holds only in a pool that pays ONE place, which since D-E19 means
+//! a pool opened before the Ladder (`migrate_pool` records those as 64 seats,
+//! one place, `[pot / entry]`). Every scene here is therefore such a pool
+//! (`Env::open_legacy_pool`). In a Ladder pool the program refuses the call
+//! (`NextPlaceUnsupported`, founder decision of 2026-11-05) and the forfeited
+//! share is HELD in the vault until the field-moves-up payout ships — the
+//! last test in this file.
 
 use blotto_litesvm_tests::*;
 use solana_sdk::clock::Clock;
@@ -34,14 +45,14 @@ struct Scene {
     payouts: Vec<(u16, u64)>,
 }
 
-/// A 64-seat pool with a k-way tie for first (seats 0..k), every tied seat
+/// A 64-seat ONE-PLACE pool with a k-way tie for first (seats 0..k), every tied seat
 /// flagged before payout so every share escrows; committed under a real
 /// results root whose unpaid seats hold ranks `1 + k, 2 + k, …` in seat
 /// order, EXCEPT that the seats in `next_rank_group` all share rank
 /// `1 + k` (a tie at the next competition rank). `pay` lists the seats to
 /// settle (→ Paid when it is the whole group).
 fn tied_pool(env: &mut Env, k: u16, next_rank_group: &[u16], pay: &[u16]) -> Scene {
-    env.open_ready_pool(1, 0);
+    env.open_legacy_pool(1, 0);
     let players: Vec<(Keypair, Pubkey)> =
         (0..64).map(|_| env.register_player(1).unwrap()).collect();
     let settlement = env.settlement.insecure_clone();
@@ -80,7 +91,7 @@ fn tied_pool(env: &mut Env, k: u16, next_rank_group: &[u16], pay: &[u16]) -> Sce
             .iter()
             .map(|&s| (players[s as usize].0.pubkey(), players[s as usize].1))
             .collect();
-        let ix = pay_prizes_ix(&settlement.pubkey(), 1, pay, &metas);
+        let ix = env.pay_ix(1, pay, &metas);
         env.send(&[ix], &[&settlement]).unwrap();
     }
     Scene {
@@ -460,8 +471,7 @@ fn the_payout_waits_for_paid() {
     // Paying seat 1 (its own share escrows) reaches Paid; seat 1's review
     // is pending, so the forfeited share still waits.
     let settlement = env.settlement.insecure_clone();
-    let ix = pay_prizes_ix(
-        &settlement.pubkey(),
+    let ix = env.pay_ix(
         1,
         &[1],
         &[(scene.players[1].0.pubkey(), scene.players[1].1)],
@@ -547,4 +557,90 @@ fn a_held_share_auto_releases_to_its_player_after_seven_days_unless_forfeited() 
     let got = pay(&mut env, &scene, 1, 0, 1, POT / 2, 1, true).expect("pay the next place");
     assert_eq!(got, POT / 2);
     assert_eq!(env.balance(&vault_pda(1)), VAULT_RENT_CUSHION);
+}
+
+/// D-E19: a Ladder pool pays several places, so "the committed list is the
+/// first-place group" no longer holds and dividing a forfeited share by it
+/// would pay the wrong players. The program refuses (`NextPlaceUnsupported`)
+/// whatever the arguments — a correct-looking proof, a group of one, the
+/// cleared co-leader as target — and the share stays in the vault, with the
+/// forfeiter's claim on it intact, out of the operator's reach. A one-place
+/// pool in the same deployment still pays onward (the tests above).
+#[test]
+fn a_ladder_pools_forfeited_share_is_held_not_paid_onward() {
+    let Some(mut env) = Env::new() else { return };
+    env.open_ready_pool_sized(1, 0, MODE_EASY, 16);
+    let players = env.register_n(1, 16);
+    let settlement = env.settlement.insecure_clone();
+    let entry = TIER_PRICES[0];
+    // A two-way tie for first of 16 ([5, 3, 1, 1]): seats 0 and 1 share 1st
+    // and 2nd — 0.4 SOL each — and seats 2, 3 take 3rd and 4th.
+    let payouts = ladder_payouts(&LADDER_TABLES[1], entry, &[2, 1, 1]);
+    assert_eq!(
+        payouts,
+        vec![(0, 400_000_000), (1, 400_000_000), (2, 100_000_000), (3, 100_000_000)]
+    );
+    // A REAL results root, so a refusal cannot be blamed on the proof.
+    let leaves: Vec<Vec<u8>> = players
+        .iter()
+        .enumerate()
+        .map(|(seat, (p, _))| {
+            let (rank, amount) = match seat {
+                0 | 1 => (1u8, 400_000_000),
+                2 => (3, 100_000_000),
+                3 => (4, 100_000_000),
+                s => (s as u8 + 1, 0),
+            };
+            leaf_bytes(&p.pubkey(), rank, amount)
+        })
+        .collect();
+    let flag = flag_ix(&settlement.pubkey(), 1, &players[1].1, "flag_entry");
+    env.send(&[flag], &[&settlement]).unwrap();
+    env.reveal(1);
+    env.commit(1, merkle_root(&leaves), &payouts).unwrap();
+    env.pay_all(1, &players, &payouts);
+    assert_eq!(read_pool(&env.svm, &pool_pda(1)).state, 3, "Paid");
+    assert_eq!(read_entry(&env.svm, &players[1].1).escrow_lamports, 400_000_000);
+    let admin = env.admin.pubkey();
+    env.send(&[forfeit_escrow_ix(&admin, 1, &players[1].1)], &[])
+        .expect("forfeit");
+
+    let vault_before = env.balance(&vault_pda(1));
+    let platform_before = env.balance(&platform_pda());
+    assert_eq!(vault_before, 400_000_000 + VAULT_RENT_CUSHION);
+    // To the cleared co-leader (the one-place rule's answer), to the next
+    // rank, with and without the remainder: every shape is refused.
+    for (to, rank, amount, group, rem) in [
+        (0usize, 1u8, 400_000_000u64, 1u16, true),
+        (0, 1, 400_000_000, 2, false),
+        (2, 3, 100_000_000, 1, true),
+    ] {
+        let ix = pay_next_place_ix(
+            &settlement.pubkey(),
+            1,
+            &players[1].1,
+            &players[to].1,
+            &players[to].0.pubkey(),
+            rank,
+            amount,
+            &merkle_proof(&leaves, to),
+            group,
+            rem,
+            &[],
+        );
+        assert_refused(env.send(&[ix], &[&settlement]), "6087", "NextPlaceUnsupported");
+    }
+    let from = read_entry(&env.svm, &players[1].1);
+    assert!(from.forfeited);
+    assert_eq!(from.escrow_lamports, 400_000_000, "the claim on the share is intact");
+    assert_eq!((from.split_total, from.split_paid_mask), (0, 0), "nothing was split");
+    assert_eq!(env.balance(&vault_pda(1)), vault_before, "the share stays in the vault");
+    assert_eq!(env.balance(&platform_pda()), platform_before, "and never reaches the operator");
+    // Nor does the seven-day auto-release reach a forfeited share.
+    env.advance_time(AUTO_RELEASE_SECS + 1);
+    let stranger = Keypair::new();
+    env.svm.airdrop(&stranger.pubkey(), 1_000_000_000).unwrap();
+    let ix = release_escrow_ix(&stranger.pubkey(), 1, &players[1].1, &players[1].0.pubkey());
+    assert_refused(env.send(&[ix], &[&stranger]), "6057", "EscrowForfeitedAlready");
+    assert_eq!(env.balance(&vault_pda(1)), vault_before);
 }

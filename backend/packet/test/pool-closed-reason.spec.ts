@@ -22,6 +22,9 @@
  * of a paid seat answers a third — three causes, three strings, and the route
  * is the only place that can tell them apart.
  *
+ * Since the Ladder (D-E19) "capacity" is the POOL's own — 8, 16, 32 or 64 —
+ * so eight seated is a full 8-player pool and a short 64-player one.
+ *
  * It also pins the thing that must NOT change: none of these says anything
  * about the caller. The `/packet` refusal, which is where PID §8's generic-
  * refusal rule actually bites, is untouched and has its own suites.
@@ -30,10 +33,11 @@
 import { expect } from 'chai';
 import nacl from 'tweetnacl';
 import { acceptCiphertext } from '../src/ciphertexts';
-import { MemoryPoolIdResolver } from '../src/pool-ids';
+import { MemoryPoolIdResolver, PgPoolIdResolver } from '../src/pool-ids';
+import type { Queryable } from '../../_shared/src/db';
 import { MemorySeatResolver } from '../src/seats';
 import { MemoryCiphertextStore } from '../../sealing/src';
-import { CAPACITY } from '../../scoring/src/prizes';
+import { POOL_CAPACITIES } from '../../scoring/src/prizes';
 import { base58Encode } from '../src/shared';
 import { ciphertextMessage } from '../src/ciphertext-message';
 
@@ -58,14 +62,22 @@ function wallet() {
 
 const bytes = (fill: number): Uint8Array => new Uint8Array(CIPHERTEXT_BYTES).fill(fill);
 
+/** The largest pool, and the only size before the Ladder. */
+const FULL_64 = 64;
+
 /** Post one sealed allocation into a pool in the given state and seat count. */
 async function post(
   state: string,
   entrants: number,
-  opts: { player?: ReturnType<typeof wallet>; fill?: number; store?: MemoryCiphertextStore } = {}
+  opts: {
+    player?: ReturnType<typeof wallet>;
+    fill?: number;
+    store?: MemoryCiphertextStore;
+    capacity?: number;
+  } = {}
 ) {
   const poolIds = new MemoryPoolIdResolver();
-  poolIds.set(POOL_PDA, POOL_ID, state, entrants);
+  poolIds.set(POOL_PDA, POOL_ID, state, entrants, 0, opts.capacity ?? FULL_64);
   const store = opts.store ?? new MemoryCiphertextStore();
   const player = opts.player ?? wallet();
   const ciphertext = bytes(opts.fill ?? 1);
@@ -83,9 +95,30 @@ async function post(
 
 describe('a late allocation is told WHY the pool would not take it', () => {
   it('a pool at capacity answers "pool filled" — the case pool 22 hit', async () => {
-    const { result } = await post('Sealed', Number(CAPACITY));
+    const { result } = await post('Sealed', FULL_64);
     expect(result.status).to.equal(409);
     expect(result.body).to.deep.equal({ error: 'pool filled' });
+  });
+
+  it('every pool size fills at ITS OWN capacity, and only there (D-E19)', async () => {
+    for (const capacity of POOL_CAPACITIES) {
+      const full = await post('Sealed', capacity, { capacity });
+      expect(full.result.body, `${capacity} of ${capacity}`).to.deep.equal({ error: 'pool filled' });
+      const short = await post('Sealed', capacity - 1, { capacity });
+      expect(short.result.body, `${capacity - 1} of ${capacity}`).to.deep.equal({
+        error: 'pool closed to entries',
+      });
+    }
+  });
+
+  it('eight seated filled an 8-player pool, and did NOT fill a 64-player one', async () => {
+    // The bug a single shared capacity would have: an 8-player pool's late
+    // entrant told it "closed" when it filled, or a 64-player pool's told
+    // it "filled" at eight.
+    expect((await post('Sealed', 8, { capacity: 8 })).result.body).to.deep.equal({ error: 'pool filled' });
+    expect((await post('Sealed', 8, { capacity: 64 })).result.body).to.deep.equal({
+      error: 'pool closed to entries',
+    });
   });
 
   it('every post-Open state says filled while the seats are full', async () => {
@@ -93,7 +126,7 @@ describe('a late allocation is told WHY the pool would not take it', () => {
     // after the crank has run. "It filled" is true at Sealed, Scored and Paid
     // alike, and is the answer they are owed at any of them.
     for (const state of ['Sealed', 'Scored', 'Paid']) {
-      const { result } = await post(state, Number(CAPACITY));
+      const { result } = await post(state, FULL_64);
       expect(result.body, state).to.deep.equal({ error: 'pool filled' });
     }
   });
@@ -115,8 +148,10 @@ describe('a late allocation is told WHY the pool would not take it', () => {
     // of a refusal the state has already decided on. If this ever fails, the
     // seat count has become a gate of its own and the 64th honest entrant is
     // being turned away by the copy layer.
-    const { result } = await post('Open', Number(CAPACITY));
+    const { result } = await post('Open', FULL_64);
     expect(result.status).to.equal(204);
+    const small = await post('Open', 8, { capacity: 8 });
+    expect(small.result.status).to.equal(204);
   });
 
   it('overwriting a PAID seat still answers "already sealed", and not a pool reason', async () => {
@@ -157,12 +192,39 @@ describe('a late allocation is told WHY the pool would not take it', () => {
     // stays generic there (PID §8). A reason that carried an address would be
     // a channel for exactly what that rule forbids.
     const cases = [
-      await post('Sealed', Number(CAPACITY)),
+      await post('Sealed', FULL_64),
       await post('Sealed', 39),
     ];
     for (const { player, result } of cases) {
       expect(JSON.stringify(result.body)).to.not.contain(player.address);
       expect(JSON.stringify(result.body)).to.not.contain(POOL_PDA);
+    }
+  });
+});
+
+describe('the pool resolver reads each pool’s own capacity (D-E19)', () => {
+  function resolverOver(row: Record<string, unknown> | null) {
+    const issued: string[] = [];
+    const db: Queryable = {
+      async query(sql: string) {
+        issued.push(sql);
+        return { rows: row ? [row] : [] } as never;
+      },
+    };
+    return { resolver: new PgPoolIdResolver(db), issued };
+  }
+
+  it('selects the capacity column with the rest of the pool facts', async () => {
+    const { resolver, issued } = resolverOver({ id: '31', state: 'Sealed', entrants: '8', mode: 0, capacity: 8 });
+    const facts = await resolver.lookup(POOL_PDA);
+    expect(issued[0]).to.match(/\bcapacity\b/);
+    expect(facts).to.deep.equal({ id: 31n, state: 'Sealed', entrants: 8, mode: 0, capacity: 8 });
+  });
+
+  it('reads a row without the column, or an unreadable one, as 64 — the only size before the Ladder', async () => {
+    for (const capacity of [undefined, null, 0, 'x']) {
+      const { resolver } = resolverOver({ id: '9', state: 'Sealed', entrants: '64', mode: 0, capacity });
+      expect((await resolver.lookup(POOL_PDA))?.capacity, String(capacity)).to.equal(64);
     }
   });
 });

@@ -52,8 +52,14 @@ describe('positionLabel', () => {
   it('is the verified rank where there is one, and the state otherwise', () => {
     expect(positionLabel(itemFor(row({ rank: 1 }))!)).toBe(COPY.notify.positionRank(1));
     expect(positionLabel(itemFor(row({ rank: 12, paid: false, amount_lamports: '0' }))!)).toBe(COPY.notify.positionRank(12));
-    // A win with no archive rank yet still reads as the winner.
-    expect(positionLabel(itemFor(row())!)).toBe(COPY.notify.positionWinner);
+    // D-E19: a paid finish with no verified place yet reads as a paid
+    // place — any of a pool's top places is paid, so never "Winner".
+    expect(positionLabel(itemFor(row())!)).toBe(COPY.notify.positionPaid);
+    expect(positionLabel(itemFor(row())!)).not.toMatch(/winner/i);
+    // The verified place is said as a place.
+    expect(positionLabel(itemFor(row({ rank: 3 }))!)).toBe('3rd');
+    expect(positionLabel(itemFor(row({ rank: 11, paid: false, amount_lamports: '0' }))!)).toBe('11th');
+    expect(positionLabel(itemFor(row({ rank: 22 }))!)).toBe('22nd');
     expect(positionLabel(itemFor(row({ paid: false, amount_lamports: '0' }))!)).toBe(COPY.notify.positionPending);
     expect(positionLabel(itemFor(row({ state: 'Sealed' }))!)).toBe(COPY.notify.positionSealed);
     expect(positionLabel(itemFor(row({ state: 'Refunding' }))!)).toBe(COPY.notify.positionRefund);

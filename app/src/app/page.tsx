@@ -17,12 +17,10 @@
  * from GET /pool-types and the open pools.
  */
 import Link from 'next/link';
-import { POOL_CAPACITIES, TIER_ENTRY_LAMPORTS, type PoolCapacity } from '@blotto/scoring';
+import { TIER_ENTRY_LAMPORTS } from '@blotto/scoring';
 import { COPY } from '@/copy';
 import { indexerApi, live } from '@/data/api';
-import { poolLadder, poolMode } from '@/data/format';
 import { LAUNCH_SIZES } from '@/data/prizes';
-import type { PoolSummary, PoolTypeRow } from '@/data/types';
 import { AppHeader } from '@/components/shell/app-header';
 import { TabBar } from '@/components/shell/tab-bar';
 import { SiteFooter } from '@/components/shell/site-footer';
@@ -31,7 +29,7 @@ import { AmbientClip, type ClipTier, type PosterTier } from '@/components/ui/amb
 import { LiveDemo } from '@/components/landing/LiveDemo';
 import { HowItWorksCarousel } from '@/components/landing/HowItWorksCarousel';
 import { PoolPicker } from '@/components/landing/PoolPicker';
-import { defaultSize, defaultTier, type PickerSlot, type PickerTier } from '@/components/landing/picker-state';
+import { buildPickerTiers, defaultPool } from '@/components/landing/picker-state';
 import { PreloaderGate } from '@/components/preloader/PreloaderGate';
 import { WelcomeNote } from '@/components/landing/WelcomeNote';
 
@@ -71,47 +69,16 @@ export default async function LandingPage() {
   // SSR outage guard: a dead indexer degrades this page, never kills it.
   const [poolsLive, typesLive] = await Promise.all([live(() => api.listPools()), live(() => api.getPoolTypes())]);
   const pools = poolsLive.ok ? poolsLive.value : [];
-  const open = pools.filter((p) => p.state === 'Open');
-  // One pool per pool TYPE (board, tier, size) is open at a time in
-  // production; the fixture catalogue holds one per type too, and where two
-  // ever share a type the FIRST listed is the type's open pool.
-  const typeKey = (mode: 'easy' | 'hard', tier: number, capacity: number) => `${mode}:${tier}:${capacity}`;
-  const openByType = new Map<string, PoolSummary>();
-  for (const p of open) {
-    const k = typeKey(poolMode(p), p.tier, poolLadder(p).capacity);
-    if (!openByType.has(k)) openByType.set(k, p);
-  }
-  // WHICH POOL TYPES TAKE ENTRIES — read, never assumed (founder
-  // instruction 2026-09-12 §2.3; D-E19). `GET /pool-types` resolves it from
-  // the live accounts; on an outage, or a read API from before the Ladder,
-  // the ground truth in `/pools` stands in (a type holding an Open pool is
-  // live by construction).
   const typesRead = typesLive.ok ? typesLive.value : null;
-  const typeByKey = new Map<string, PoolTypeRow>(
-    (typesRead?.pool_types ?? []).map((t) => [typeKey(t.mode, t.tier, t.capacity), t])
-  );
-  const slot = (mode: 'easy' | 'hard', tier: number, capacity: PoolCapacity): PickerSlot => {
-    const k = typeKey(mode, tier, capacity);
-    const pool = openByType.get(k) ?? null;
-    const type = typeByKey.get(k);
-    return {
-      capacity,
-      pool,
-      live: pool !== null || type?.live === true,
-      typeAmounts: type ? type.prize_amounts : null,
-    };
-  };
-  const pickerTiers: PickerTier[] = TIER_ENTRY_LAMPORTS.map((entry, tier) => ({
-    tier,
-    entryLamports: entry.toString(),
-    easy: POOL_CAPACITIES.map((c) => slot('easy', tier, c)),
-    hard: POOL_CAPACITIES.map((c) => slot('hard', tier, c)),
-  }));
-  const serverTime = typesRead ? String(typesRead.server_time) : (open[0]?.server_time ?? null);
+  // D-E19: one slot per (board, tier, size) — the open pools and the pool
+  // types, read never assumed (picker-state.ts `buildPickerTiers`).
+  const pickerTiers = buildPickerTiers(pools, typesRead?.pool_types ?? null, TIER_ENTRY_LAMPORTS);
+  const serverTime = typesRead
+    ? String(typesRead.server_time)
+    : (pools.find((p) => p.state === 'Open')?.server_time ?? null);
   // The demo's "Enter for real": the easy pool the picker opens on by
   // default — the lowest tier with an open easy pool, at its default size.
-  const easyRow = pickerTiers.find((t) => t.tier === defaultTier(pickerTiers, 'easy'));
-  const firstEasy = easyRow ? (easyRow.easy.find((x) => x.capacity === defaultSize(easyRow.easy))?.pool ?? null) : null;
+  const firstEasy = defaultPool(pickerTiers, 'easy');
 
   return (
     <>

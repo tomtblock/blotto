@@ -131,13 +131,32 @@ export function offlinePoolTerms(capacity: PoolCapacity): {
   };
 }
 
+/**
+ * A FakeChain with Config initialised as `init_config` leaves it (the
+ * settlement signer and keeper both `settle`, the devnet posture), and no
+ * pool type yet — each run adds the one its pool needs. The vault ceilings
+ * are 64 entries at each tier's price, the largest pool's worth, as the
+ * reveal suite's own fixtures set them.
+ */
+export async function offlineChain(now?: () => bigint): Promise<FakeChain> {
+  const chain = new FakeChain(now);
+  await chain.initConfig({
+    entrySigner: 'entry',
+    settlementSigner: 'settle',
+    keeper: 'settle',
+    vaultCeilingLamports: TIER_ENTRY_LAMPORTS.map((e) => e * MAX_CAPACITY),
+    treasuryMinPlatformLamports: 0n,
+  });
+  return chain;
+}
+
 /** Build, fill and settle one offline pool end to end. */
 export async function runOfflinePool(
   poolSeed: number,
   options: OfflinePoolOptions = {}
 ): Promise<OfflinePoolRun> {
   const poolId = BigInt(poolSeed);
-  const chain = new FakeChain();
+  const chain = await offlineChain();
   const custody = new LocalCustody(async (id) => (await chain.getPool(id)).state !== 'Open');
   const store = new MemoryCiphertextStore();
   const publisher = new MemoryPublisher();
@@ -149,7 +168,11 @@ export async function runOfflinePool(
   if (population.length > capacity) {
     throw new Error(`a pool of ${capacity} cannot seat ${population.length} entrants`);
   }
-  const terms = offlinePoolTerms(capacity);
+  // The pool's type, created and priced the way the launch admin does
+  // (`init_pool_type`, `set_pool_type_economics`, `set_pool_type_enabled`):
+  // since D-E19 `pay_prizes`, `trigger_refund` and `refund` each name it, so
+  // a pool without one cannot settle. Its terms are what the pool copies.
+  const poolType = chain.addPoolType(boardModeByte(mode), OFFLINE_TIER, capacity);
   const players: string[] = [];
   const entries: FakeEntry[] = [];
 
@@ -181,13 +204,13 @@ export async function runOfflinePool(
     resultsRootHex: null,
     vrfCommitted: true,
     entryLamports: OFFLINE_ENTRY_LAMPORTS,
-    // The pool's own terms, copied at open (D-E19): the crank settles on the
-    // table it reads here.
-    potLamports: terms.potLamports,
-    capacity: terms.capacity,
-    minSeats: terms.minSeats,
-    paidPlaces: terms.paidPlaces,
-    prizeTable: terms.prizeTable,
+    // The pool's own terms, copied from its pool type at open as `open_pool`
+    // does (D-E19): the crank settles on the table it reads here.
+    potLamports: poolType.potLamports,
+    capacity: poolType.capacity,
+    minSeats: poolType.minSeats,
+    paidPlaces: poolType.paidPlaces,
+    prizeTable: [...poolType.prizeTable],
     fillDeadline: 0n,
     secretRevealed: false,
     resultsCommitted: false,

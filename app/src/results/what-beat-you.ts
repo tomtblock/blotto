@@ -102,12 +102,15 @@ export interface StandingRow {
  *
  *  - the payout list contains ONLY THE PAID SEATS, so every unpaid player
  *    who nonetheless finished ahead of you was invisible;
- *  - under D-E2 one place is paid, so "a strictly larger amount" can only
- *    ever be the winner. A player who came 4th of 64 was shown exactly one
- *    opponent and told that was what finished above them.
+ *  - under D-E2 one place was paid, so "a strictly larger amount" could
+ *    only ever be the winner. A player who came 4th of 64 was shown exactly
+ *    one opponent and told that was what finished above them.
  *
  * Rank is the ordering the competition is decided by; money is a
- * consequence of it, and under a one-paid-place band it is a constant.
+ * consequence of it. Under D-E19 (the Ladder) the paid places are a fixed
+ * table cut at a pool's top quarter, so every rank below the paid line is
+ * the same zero, and a tie that straddles the line pays its members equal
+ * shares of the places it covers — amounts still cannot order a field.
  *
  * Ties (D3-B) share a rank, and a player is not "above" someone they tied
  * with: the test is strictly smaller rank.

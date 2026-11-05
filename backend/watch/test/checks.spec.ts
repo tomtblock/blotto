@@ -19,7 +19,7 @@ import {
 } from '../src/checks';
 import { probeProvider } from '../src/collect';
 import { CLOCK_SYSVAR } from '../src/solana';
-import { byKey, cfg, chainPool, configView, fakeFetch, snapshot, T0 } from './fixtures';
+import { byKey, cfg, chainPool, configView, fakeFetch, poolType, snapshot, T0 } from './fixtures';
 
 const NOW = Date.parse('2026-10-15T02:10:00Z');
 const ok = { status: 200, body: '{"ok":true}', error: null };
@@ -137,10 +137,12 @@ describe('pool checks, on the chain clock', () => {
     expect(r.detail).to.match(/pool 100 \(easy\): Sealed for \d+ min/);
   });
 
-  it('fails none-open for an enabled tier with no live pool past its open time — unless the treasury is short', () => {
-    const idle = snapshot(T0 + 10_000n, [], configView({ easyActive: 0n, hardActive: 0n, tierNextOpenAt: T0 }));
+  it('before the Ladder: fails none-open for an enabled tier with no live pool past its open time — unless the treasury is short', () => {
+    const legacy = configView({ ladder: false, easyActive: 0n, hardActive: 0n, tierNextOpenAt: T0 });
+    expect(legacy.ladderPresent).to.equal(false);
+    const idle = snapshot(T0 + 10_000n, [], legacy, []);
     expect(byKey(poolResults(idle, ages, null, cfg), 'pools:none-open').status).to.equal('fail');
-    const short = { policySource: 'chain', short: [{ tier: 0, shortByLamports: 5n }] };
+    const short = { policySource: 'chain', short: [{ tier: 0, mode: null, capacity: null, shortByLamports: 5n }] };
     expect(byKey(poolResults(idle, ages, short, cfg), 'pools:none-open').status).to.equal('pass');
   });
 
@@ -149,15 +151,111 @@ describe('pool checks, on the chain clock', () => {
   });
 });
 
+/**
+ * The Ladder (D-E19): the keeper opens one pool per POOL TYPE, so a stall is
+ * per type. The devnet launch runs all eight 0.1 SOL types — both modes ×
+ * 8, 16, 32 and 64 players — and the watcher must see which one is idle.
+ */
+describe('pool checks per pool type (D-E19)', () => {
+  const ages = new Map<string, number>();
+  const NOW_CHAIN = T0 + 10_000n;
+  const SLACK = BigInt(cfg.chain.keeperSlackSeconds);
+
+  /** All eight launch types; the three named live, the rest idle with the stamps given. */
+  function launch(stamps: Partial<Record<string, bigint>> = {}, over: Partial<Record<string, { enabled?: boolean }>> = {}) {
+    const types = [];
+    let pool = 200n;
+    for (const mode of [0, 1] as const) {
+      for (const capacity of [8, 16, 32, 64] as const) {
+        const k = `${mode === 1 ? 'hard' : 'easy'}/${capacity}`;
+        const live = ['easy/8', 'easy/64', 'hard/32'].includes(k);
+        types.push(
+          poolType({
+            mode,
+            capacity,
+            activePool: live ? pool++ : 0n,
+            nextOpenAt: stamps[k] ?? NOW_CHAIN - 60n,
+            enabled: over[k]?.enabled ?? true,
+          })
+        );
+      }
+    }
+    return types;
+  }
+
+  it('passes when every enabled type holds a pool or is still within its cooldown and the slack', () => {
+    const snap = snapshot(NOW_CHAIN, [], configView({ enabledPoolTypes: 8 }), launch());
+    expect(byKey(poolResults(snap, ages, null, cfg), 'pools:none-open').status).to.equal('pass');
+  });
+
+  it('names the ONE idle type past its cooldown and the slack, by mode and size', () => {
+    const snap = snapshot(NOW_CHAIN, [], configView({ enabledPoolTypes: 8 }), launch({ 'easy/16': NOW_CHAIN - SLACK - 120n }));
+    const r = byKey(poolResults(snap, ages, null, cfg), 'pools:none-open');
+    expect(r.status).to.equal('fail');
+    expect(r.detail).to.equal(`tier 0 (easy, 16 players): no open pool for ${(SLACK + 120n) / 60n} min after it could open`);
+  });
+
+  it('a type still cooling down is not idle, however long since its tier opened', () => {
+    const snap = snapshot(NOW_CHAIN, [], configView({ enabledPoolTypes: 8 }), launch({ 'hard/16': NOW_CHAIN + 300n }));
+    expect(byKey(poolResults(snap, ages, null, cfg), 'pools:none-open').status).to.equal('pass');
+  });
+
+  it('a type that never ran a pool is measured from its tier’s stamp', () => {
+    // The type's own stamp is 0 (never settled); the tier opened recently.
+    const recent = snapshot(NOW_CHAIN, [], configView({ enabledPoolTypes: 8, tierNextOpenAt: NOW_CHAIN - 60n }), launch({ 'easy/32': 0n }));
+    expect(byKey(poolResults(recent, ages, null, cfg), 'pools:none-open').status).to.equal('pass');
+    const long = snapshot(NOW_CHAIN, [], configView({ enabledPoolTypes: 8, tierNextOpenAt: NOW_CHAIN - SLACK - 60n }), launch({ 'easy/32': 0n }));
+    const r = byKey(poolResults(long, ages, null, cfg), 'pools:none-open');
+    expect(r.status).to.equal('fail');
+    expect(r.detail).to.contain('tier 0 (easy, 32 players)');
+  });
+
+  it('a disabled type, or every type of a closed tier, is never a stall', () => {
+    const old = NOW_CHAIN - SLACK - 600n;
+    const disabled = snapshot(NOW_CHAIN, [], configView({ enabledPoolTypes: 7 }), launch({ 'easy/16': old }, { 'easy/16': { enabled: false } }));
+    expect(byKey(poolResults(disabled, ages, null, cfg), 'pools:none-open').status).to.equal('pass');
+    const hardClosed = snapshot(NOW_CHAIN, [], configView({ enabledPoolTypes: 8, hardOpen: false }), launch({ 'hard/8': old, 'hard/64': old }));
+    expect(byKey(poolResults(hardClosed, ages, null, cfg), 'pools:none-open').status).to.equal('pass');
+  });
+
+  it('a type /treasury reports short is the treasury’s incident, not a stall — and only that type', () => {
+    const old = NOW_CHAIN - SLACK - 600n;
+    const snap = snapshot(NOW_CHAIN, [], configView({ enabledPoolTypes: 8 }), launch({ 'easy/16': old, 'hard/8': old }));
+    const short = { policySource: 'chain', short: [{ tier: 0, mode: 'easy' as const, capacity: 16, shortByLamports: 5n }] };
+    const r = byKey(poolResults(snap, ages, short, cfg), 'pools:none-open');
+    expect(r.status).to.equal('fail');
+    expect(r.detail).to.contain('tier 0 (hard, 8 players)');
+    expect(r.detail).to.not.contain('easy, 16');
+  });
+
+});
+
 describe('treasury and indexer checks', () => {
   const treasuryBody = (status: string, source = 'chain') =>
     JSON.stringify({ policy_source: source, tiers: [{ tier: 0, status, short_by_lamports: status === 'short' ? '1500000000' : '0' }] });
 
-  it('reads a short tier off /treasury', () => {
+  it('reads a short tier off an indexer from before the Ladder', () => {
     const t = parseTreasury({ status: 200, body: treasuryBody('short'), error: null });
     const r = treasuryResult(t);
     expect(r.status).to.equal('fail');
     expect(r.detail).to.equal('tier 0 short by 1.5 SOL');
+  });
+
+  it('reads a short POOL TYPE off /treasury, and names it (D-E19)', () => {
+    const body = JSON.stringify({
+      policy_source: 'chain',
+      // The back-compatible tier row says nothing short; the pool types do.
+      tiers: [{ tier: 0, status: 'open', short_by_lamports: '0' }],
+      pool_types: [
+        { mode: 'easy', tier: 0, capacity: 8, status: 'open', short_by_lamports: '0' },
+        { mode: 'hard', tier: 0, capacity: 16, status: 'short', short_by_lamports: '250000000' },
+      ],
+    });
+    const t = parseTreasury({ status: 200, body, error: null });
+    expect(t?.short).to.deep.equal([{ tier: 0, mode: 'hard', capacity: 16, shortByLamports: 250_000_000n }]);
+    const r = treasuryResult(t);
+    expect(r.status).to.equal('fail');
+    expect(r.detail).to.equal('tier 0 (hard, 16 players) short by 0.25 SOL');
   });
 
   it('fails behind on a newest-pool gap and on an entrant-count gap', () => {

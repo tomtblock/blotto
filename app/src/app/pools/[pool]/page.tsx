@@ -13,13 +13,20 @@
  * window, the results and verify links — reached from the profile, the
  * notifications, a shared link and the results page's back link, and its
  * own Enter goes straight to the board like the home card's.
+ *
+ * D-E19 (the Ladder): the ring counts players entered of THIS pool's size,
+ * and the pool's full prize table in SOL stands above the Enter control —
+ * a pool now pays several places, so the total alone no longer says who is
+ * paid what. The old "prize pool differs from the launch table" note is
+ * gone: a pool's table is its own on-chain copy, with no launch figure to
+ * compare it with.
  */
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { REVIEW_WINDOW_SECS, TIER_POT_LAMPORTS } from '@blotto/scoring';
+import { REVIEW_WINDOW_SECS } from '@blotto/scoring';
 import { COPY } from '@/copy';
 import { indexerApi, live } from '@/data/api';
-import { lamportsToSol, poolMode } from '@/data/format';
+import { lamportsToSol, poolLadder, poolMode } from '@/data/format';
 import { AppHeader } from '@/components/shell/app-header';
 import { TabBar } from '@/components/shell/tab-bar';
 import { LiveDataUnavailable } from '@/components/shell/live-unavailable';
@@ -32,6 +39,7 @@ import { ProgressRing } from '@/components/ui/progress-ring';
 import { Countdown } from '@/components/ui/countdown';
 import { poolStateLabel } from '@/components/pools/pool-state-label';
 import { MarqueeHeading } from '@/components/ui/marquee-heading';
+import { PrizeTable, prizeSummary } from '@/components/pools/prize-table';
 
 const REVIEW_HOURS = Number(REVIEW_WINDOW_SECS / 3600n);
 
@@ -58,12 +66,8 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
   // Phase B: the rule this pool plays, from its record — the badge reads
   // it, and the play page's board too.
   const mode = poolMode(pool);
-  // D-E1 §1.4: a pool carries the pot it OPENED with; when the launch
-  // table has since moved, say the guarantee rather than look like a cut.
-  const potDiffers =
-    pool.tier >= 0 &&
-    pool.tier < TIER_POT_LAMPORTS.length &&
-    BigInt(pool.pot_lamports) !== TIER_POT_LAMPORTS[pool.tier];
+  // D-E19: the pool's own size, floor and table — from its record.
+  const ladder = poolLadder(pool);
 
   return (
     <>
@@ -116,24 +120,22 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
           )}
 
           <Card live={open} className="mb-6 p-6 sm:p-8">
-            {potDiffers && (
-              <p className="mb-4 text-[15px] leading-6 text-ink-muted">
-                {COPY.pool.potFixedAtOpen}
-              </p>
-            )}
             {/* Founder 2026-09-16 (round two): the card carries the fixture's
                 numbers, larger, and nothing else. The rule for who is paid and
                 the fill rule are on the board's rail, where the player enters. */}
+            <p className="tnum mb-5 font-display text-[18px] font-bold text-ink" data-testid="pool-summary">
+              {prizeSummary(ladder.capacity, ladder.prizeAmounts)}
+            </p>
             <div className="flex flex-wrap items-center gap-6 sm:gap-8">
               <ProgressRing
                 value={pool.entrants}
-                total={64}
+                total={ladder.capacity}
                 size={140}
-                label={`${pool.entrants} of 64 seats filled`}
+                label={COPY.pool.entrantsOf(pool.entrants, ladder.capacity, ladder.minSeats)}
               >
                 <span className="tnum font-display text-[28px] font-bold leading-none text-ink">
                   {pool.entrants}
-                  <span className="text-[18px] text-ink-muted">/64</span>
+                  <span className="text-[18px] text-ink-muted">/{ladder.capacity}</span>
                 </span>
               </ProgressRing>
               <div className="flex min-w-0 flex-1 flex-col gap-5">
@@ -157,6 +159,8 @@ export default async function PoolPage({ params }: { params: Promise<{ pool: str
                 </div>
               </div>
             </div>
+            {/* D-E19: every prize by place, in SOL, from the pool's own table. */}
+            <PrizeTable amounts={ladder.prizeAmounts} capacity={ladder.capacity} className="mt-6" />
           </Card>
 
           {open ? (

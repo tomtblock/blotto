@@ -12,7 +12,7 @@
 import { notFound } from 'next/navigation';
 import { COPY } from '@/copy';
 import { indexerApi, live } from '@/data/api';
-import { lamportsToSol, poolMode } from '@/data/format';
+import { lamportsToSol, poolLadder, poolMode } from '@/data/format';
 import { AppHeader } from '@/components/shell/app-header';
 import { TabBar } from '@/components/shell/tab-bar';
 import { BackLink } from '@/components/ui/back-link';
@@ -61,10 +61,11 @@ export default async function ResultsPage({ params }: { params: Promise<{ pool: 
   }
   if (!pageLive.value) notFound();
   const { pool, results, payouts, entries, archive } = pageLive.value;
-  // D3-B under D-E2: the committed list is keyed by seat and one place is
-  // paid, so the paid set is a single row unless a tie for first splits the
-  // pot across several. Rank labels are not on-chain — the verify page
-  // recomputes them from the published data.
+  // D3-B under D-E19: the committed list is keyed by seat and holds every
+  // paid place — the pool's table, plus anyone sharing a tie across the
+  // paid line. Rank labels are not on-chain — the verify page recomputes
+  // them from the published data; the verified archive carries them.
+  const ladder = poolLadder(pool);
   const payoutBySeat = new Map(payouts.map((p) => [p.seat, p]));
   const entryBySeat = new Map(entries.map((e) => [e.idx, e]));
   const rows: RevealRow[] = [...results]
@@ -80,8 +81,10 @@ export default async function ResultsPage({ params }: { params: Promise<{ pool: 
         player: entry?.player ?? '',
         playerShort: entry ? `${entry.player.slice(0, 8)}…` : '—',
         amountSol: held ? null : lamportsToSol(r.amount),
+        held,
       };
     });
+  const heldPlayers = rows.filter((r) => r.held && r.player !== '').map((r) => r.player);
 
   return (
     <>
@@ -120,20 +123,30 @@ export default async function ResultsPage({ params }: { params: Promise<{ pool: 
                 first — position, battles won, the leaderboard / verify /
                 share keys, the replay — then the pool's. Renders only under
                 a verified archive, for a wallet in it. */}
-            <YourResult pool={pool.pool} poolId={pool.id} archive={archive} />
+            <YourResult
+              pool={pool.pool}
+              poolId={pool.id}
+              archive={archive}
+              paidPlaces={ladder.prizeAmounts.length}
+              heldPlayers={heldPlayers}
+            />
             <NeonSection heading={COPY.results.title} data-testid="results-box">
               <div className="rounded-2xl border border-white/10 bg-white/5 p-1">
                 <ResultsReveal rows={rows} />
               </div>
-              <p className="mt-4 max-w-prose text-[13px] leading-5 text-ink-muted">
+              {/* D-E19: the paid line, said once under the paid rows. */}
+              <p className="mt-4 text-[14px] font-medium text-ink">
+                {COPY.results.archive.paidLine(ladder.prizeAmounts.length)}
+              </p>
+              <p className="mt-2 max-w-prose text-[13px] leading-5 text-ink-muted">
                 {COPY.results.tieNote}
               </p>
             </NeonSection>
             {/* v3 D3: browser-side decrypt + re-score of the seats above
                 yours, and the share card for your own result. */}
             {/* F-07: "above" is decided by RANK, which lives in the
-                verified archive — never by the payout amount, which under
-                D-E2 can only ever name the winner. */}
+                verified archive — never by the payout amount, which names
+                only the paid places (and, under D-E2, only the winner). */}
             <WhatBeatYouPanel
               pool={pool.pool}
               secretHex={pool.secret}
@@ -159,7 +172,7 @@ export default async function ResultsPage({ params }: { params: Promise<{ pool: 
                 .filter((e) => e.escrow_settled === 'forfeited')
                 .map((e) => e.player)}
             />
-            {archive && <ArchiveStandings archive={archive} />}
+            {archive && <ArchiveStandings archive={archive} paidPlaces={ladder.prizeAmounts.length} />}
             {/* Founder 2026-09-09: every battle of every player, from the
                 same verified bundle, after the reveal. */}
             {archive && <AllBattles uri={archive.uri} />}

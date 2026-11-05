@@ -1,22 +1,30 @@
 /*
  * The watcher's read-only view of the chain: PDA derivation, one JSON-RPC
- * call shape, and decoders for the three accounts it reads.
+ * call shape, and decoders for the four accounts it reads.
  *
- * Deliberately not `@solana/web3.js`. The watcher needs `getMultipleAccounts`
- * and an off-curve check, nothing else, and every dependency it carries is
- * one more thing that can stop it starting — and a watcher that cannot start
- * is silent, which is the one failure it exists to prevent.
+ * Deliberately not `@solana/web3.js`. The watcher needs `getMultipleAccounts`,
+ * `getProgramAccounts` and an off-curve check, nothing else, and every
+ * dependency it carries is one more thing that can stop it starting — and a
+ * watcher that cannot start is silent, which is the one failure it exists to
+ * prevent.
  *
  * Every layout here is the program's (`programs/blotto_cup/src/state.rs`),
  * read through the SAME decoders the daemon uses: Config through
  * `backend/_shared/src/config-account.ts`, Pool through
- * `backend/_shared/src/pool-account.ts`. No offset is copied into this package.
+ * `backend/_shared/src/pool-account.ts`, PoolType (the Ladder, D-E19) through
+ * `backend/_shared/src/pool-type-account.ts`. No offset is copied into this
+ * package.
  */
 
 import { ed25519 } from '@noble/curves/ed25519';
 import { sha256 } from '@noble/hashes/sha256';
 import { base58Decode, base58Encode } from '../../_shared/src/blotto-events';
 import { decodePoolHead, type PoolHead } from '../../_shared/src/pool-account';
+import {
+  POOL_TYPE_SPACE,
+  decodePoolTypeAccount,
+  type PoolTypeView,
+} from '../../_shared/src/pool-type-account';
 
 export const PROGRAM_ID = '5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17';
 export const CLOCK_SYSVAR = 'SysvarC1ock11111111111111111111111111111111';
@@ -157,4 +165,45 @@ export interface PoolView extends Omit<PoolHead, 'mode'> {
 export function decodePool(data: Uint8Array): PoolView {
   const head = decodePoolHead(data);
   return { ...head, mode: head.mode === 1 ? 'hard' : 'easy' };
+}
+
+/**
+ * Anchor's account discriminator for `PoolType`: `sha256("account:PoolType")`
+ * truncated to 8 bytes. The size filter alone would accept any 57-byte
+ * account the program owns; this is what says it is a pool type.
+ */
+export const POOL_TYPE_DISCRIMINATOR: Uint8Array = sha256(new TextEncoder().encode('account:PoolType')).slice(0, 8);
+
+/** One `PoolType` account, with where it lives. */
+export interface PoolTypeAccount extends PoolTypeView {
+  address: string;
+}
+
+/**
+ * Every `PoolType` account the program owns (D-E19): `getProgramAccounts`
+ * filtered to `PoolType::SPACE` (57 bytes), each checked for the account
+ * discriminator and decoded by the shared layout. Throws `RpcError` like
+ * every other call here.
+ */
+export async function getPoolTypes(
+  url: string,
+  opts: { fetchImpl?: Fetch; timeoutMs?: number; programId?: string } = {}
+): Promise<PoolTypeAccount[]> {
+  const result = await rpcCall<{ pubkey: string; account: { data: [string, string] } }[]>(
+    url,
+    'getProgramAccounts',
+    [
+      opts.programId ?? PROGRAM_ID,
+      { encoding: 'base64', commitment: 'confirmed', filters: [{ dataSize: POOL_TYPE_SPACE }] },
+    ],
+    opts
+  );
+  const out: PoolTypeAccount[] = [];
+  for (const { pubkey, account } of result) {
+    const data = new Uint8Array(Buffer.from(account.data[0], 'base64'));
+    if (data.length !== POOL_TYPE_SPACE) continue;
+    if (!POOL_TYPE_DISCRIMINATOR.every((b, i) => data[i] === b)) continue;
+    out.push({ ...decodePoolTypeAccount(data, `pool type ${pubkey}`), address: pubkey });
+  }
+  return out;
 }

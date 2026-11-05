@@ -3,9 +3,10 @@
  * and randomness rules in plain language, one section per topic. Every
  * number comes through rules.config.ts from the same shared constants the
  * prize path uses; the availability section renders from the founder-owned
- * config/territories.json. Strings live in the copy module. Under D-E2 the
- * per-tier table (entry → prize pool) is the only table: the winner takes
- * the pool, so there is no per-position table to render.
+ * config/territories.json. Strings live in the copy module. D-E19 (the
+ * Ladder): the entry prices are one table and the prizes are one table PER
+ * POOL SIZE — a row per place band, a column per entry price — generated
+ * from LADDER_TABLES × TIER_ENTRY_LAMPORTS in rules.config.ts.
  *
  * V3 (founder 2026-09-27): every section is a tile (components/ui/
  * section-tiles); a tile opens its text on the cream card, a click outside
@@ -19,7 +20,7 @@ import { TabBar } from '@/components/shell/tab-bar';
 import { SiteFooter } from '@/components/shell/site-footer';
 import { PageIntro } from '@/components/ui/page-intro';
 import { SectionTiles } from '@/components/ui/section-tiles';
-import { rulesSections, type RulesSection, type TierRow } from './rules.config';
+import { rulesSections, type RulesSection, type SizePrizeTable, type TierRow } from './rules.config';
 
 function TierPriceTable({ rows }: { rows: TierRow[] }) {
   const h = COPY.rules.tableHeadings;
@@ -29,22 +30,74 @@ function TierPriceTable({ rows }: { rows: TierRow[] }) {
         <thead>
           <tr className="text-[12px] uppercase tracking-[0.1em] text-ink-muted">
             <th className="py-2 pr-4 font-medium">{h.tier}</th>
-            <th className="pr-4 font-medium">{h.entry}</th>
-            <th className="font-medium">{h.pot}</th>
+            <th className="font-medium">{h.entry}</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
             <tr key={r.tier} className="border-t border-line">
               <td className="tnum py-2 pr-4 font-mono text-ink-muted">{r.tier}</td>
-              <td className="tnum py-2 pr-4 font-display text-[15px] font-semibold text-ink">
-                {r.entrySol}
-              </td>
-              <td className="tnum font-display text-[15px] font-semibold text-prize">{r.potSol}</td>
+              <td className="tnum py-2 font-display text-[15px] font-semibold text-ink">{r.entrySol}</td>
             </tr>
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/**
+ * One pool size's prizes (D-E19): a row per place band, a column per entry
+ * price, the whole table's sum at the foot. Scrolls sideways inside its own
+ * box on a phone — the page itself never does.
+ */
+function SizePrizes({ t }: { t: SizePrizeTable }) {
+  const h = COPY.rules.tableHeadings;
+  const p = COPY.prizes;
+  return (
+    <div className="mt-5" data-testid={`rules-prizes-${t.capacity}`}>
+      <h3 className="font-display text-[16px] font-bold text-ink">{t.heading}</h3>
+      <div className="mt-2 overflow-x-auto">
+        <table className="w-full min-w-[560px] text-left text-sm">
+          <caption className="sr-only">{p.tableLabel(t.capacity)}</caption>
+          <thead>
+            <tr className="text-[11px] uppercase tracking-[0.08em] text-ink-muted">
+              <th scope="col" className="py-2 pr-3 font-medium">
+                {h.place}
+              </th>
+              {t.columns.map((c) => (
+                <th key={c.tier} scope="col" className="py-2 pr-3 text-right font-medium whitespace-nowrap">
+                  {h.entryColumn(c.entrySol)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {t.rows.map((r) => (
+              <tr key={r.from} className="border-t border-line">
+                <th scope="row" className="tnum py-1.5 pr-3 font-mono text-[13px] font-normal whitespace-nowrap text-ink-muted">
+                  {r.from === r.to ? p.band(r.from, r.to) : `${p.band(r.from, r.to)} ${p.each}`}
+                </th>
+                {r.perTier.map((sol, i) => (
+                  <td key={t.columns[i]!.tier} className="tnum py-1.5 pr-3 text-right font-display text-[14px] font-semibold text-prize">
+                    {sol}
+                  </td>
+                ))}
+              </tr>
+            ))}
+            <tr className="border-t-2 border-line">
+              <th scope="row" className="py-1.5 pr-3 text-[12px] font-medium text-ink-muted">
+                {h.allPrizes}
+              </th>
+              {t.totals.map((sol, i) => (
+                <td key={t.columns[i]!.tier} className="tnum py-1.5 pr-3 text-right font-display text-[14px] font-semibold text-ink">
+                  {sol}
+                </td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -62,6 +115,7 @@ function RuleSection({ s }: { s: RulesSection }) {
           <TierPriceTable rows={s.rows} />
         </div>
       )}
+      {s.kind === 'prizes' && s.tables.map((t) => <SizePrizes key={t.capacity} t={t} />)}
       {s.kind === 'verify' && (
         <p className="mt-3 text-[15px]">
           <Link href={s.href} className="text-brand underline underline-offset-2 hover:text-brand-hot">

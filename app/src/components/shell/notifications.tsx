@@ -150,12 +150,17 @@ export function itemFor(
   }
 }
 
-/** The Position cell: the archive's rank where there is one, else the state. */
+/**
+ * The Position cell: the archive's place where there is one ("1st", "11th"),
+ * else the state. D-E19: any of a pool's top places is paid, so a paid
+ * finish whose verified place is not in yet reads as a paid place — never
+ * "Winner", which a 4th-place prize is not.
+ */
 export function positionLabel(item: Pick<NotifyItem, 'state' | 'rank' | 'wonSol'>): string {
   if (item.state === 'Sealed') return COPY.notify.positionSealed;
   if (item.state === 'Refunding') return COPY.notify.positionRefund;
   if (item.rank !== null) return COPY.notify.positionRank(item.rank);
-  if (item.wonSol !== null) return COPY.notify.positionWinner;
+  if (item.wonSol !== null) return COPY.notify.positionPaid;
   return COPY.notify.positionPending;
 }
 

@@ -266,8 +266,14 @@ export function populationScore(entries: RevealedEntry[]): Finding[] {
   const findings: Finding[] = [];
   for (const e of entries) {
     const z = (e.scoreHalf - mean) / sd;
-    // PROPOSED: |z| ≥ 3 over a 64-player field is worth a look — a note,
-    // never conclusive (someone IS best).
+    // PROPOSED: |z| ≥ 3 against the pool's own field is worth a look — a
+    // note, never conclusive (someone IS best). Since the Ladder (D-E19)
+    // a field runs from 5 seats (an 8-player pool at its minimum) to 64,
+    // and over n scores no |z| can exceed √(n − 1) (one outlier, the rest
+    // equal), so this note CANNOT fire on a field under 10 — every 8-player
+    // pool, and a 16-player pool at its minimum field.
+    // PHASE-N-REVIEW: kept at 3 rather than scaled to the field; a smaller
+    // field is a thinner sample, so silence there errs toward no note.
     if (Math.abs(z) >= 3) {
       findings.push({
         signal: 'population_score',

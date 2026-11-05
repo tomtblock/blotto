@@ -6,8 +6,13 @@
 //! never covered is the middle, which is the case the founder will actually
 //! run: opening ONE tier and leaving the rest shut.
 //!
+//! Since D-E19 each tier's sizes are pool TYPES with their own enable switch;
+//! every test here configures and ENABLES the 64-player type of the tiers it
+//! touches, so what refuses an open is the tier bitmap and nothing else — the
+//! R6 switch still governs a whole price tier, above its pool types.
+//!
 //! That matters because of the gate's ORDER. `open_pool` checks the tier
-//! bitmap third, before the cooldown, the keeper and the ceiling, and a test
+//! bitmap early, before the cooldown, the keeper and the ceiling, and a test
 //! that opens every tier at once (as `gates.rs` does, to reach the ceiling
 //! assertions) cannot tell a per-tier check from a global one. If
 //! `open_tiers` were ever read as "any tier is open", every one of these
@@ -35,11 +40,15 @@ fn every_tier_but_the_launch_tier_is_shut_at_init() {
     let settlement = env.settlement.insecure_clone();
     // Fund past the treasury gate so a refusal here is about the TIER and
     // not about the money — the gate order puts the tier check first, but a
-    // funded treasury keeps the assertion honest either way.
+    // funded treasury keeps the assertion honest either way. Every tier's
+    // pool type is enabled, so the TIER switch is the only thing in the way.
     env.fund_platform(4_000_000_000_000);
+    for tier in 0u8..7 {
+        env.ensure_pool_type(MODE_EASY, tier, 64);
+    }
 
     for tier in 1u8..7 {
-        let ix = open_pool_ix(&settlement.pubkey(), 1, tier, [9; 32], env.sealing_secret_hash);
+        let ix = env.open_ix(&settlement.pubkey(), 1, tier, MODE_EASY, 64);
         let err = env.send(&[ix], &[&settlement]).unwrap_err();
         assert!(
             err.contains("6006") || err.contains("TierNotOpen"),
@@ -49,7 +58,7 @@ fn every_tier_but_the_launch_tier_is_shut_at_init() {
 
     // And tier 0 opens, so the loop above is proving a closed gate rather
     // than a broken environment.
-    let ix = open_pool_ix(&settlement.pubkey(), 1, 0, [9; 32], env.sealing_secret_hash);
+    let ix = env.open_ix(&settlement.pubkey(), 1, 0, MODE_EASY, 64);
     env.send(&[ix], &[&settlement])
         .expect("the launch tier opens");
 }
@@ -65,6 +74,9 @@ fn opening_one_tier_opens_exactly_that_tier() {
     let settlement = env.settlement.insecure_clone();
     let admin = env.admin.pubkey();
     env.fund_platform(4_000_000_000_000);
+    for tier in 0u8..7 {
+        env.ensure_pool_type(MODE_EASY, tier, 64);
+    }
 
     env.send(
         &[admin_ix(&admin, "set_open_tiers", &[1, 1, 0, 0, 0, 0, 0])],
@@ -73,13 +85,13 @@ fn opening_one_tier_opens_exactly_that_tier() {
     .expect("set_open_tiers");
 
     // Tier 1 now opens.
-    let ix = open_pool_ix(&settlement.pubkey(), 1, 1, [9; 32], env.sealing_secret_hash);
+    let ix = env.open_ix(&settlement.pubkey(), 1, 1, MODE_EASY, 64);
     env.send(&[ix], &[&settlement])
         .expect("tier 1 opens once enabled");
 
     // Tier 2 — the very next index — is still refused. An off-by-one in the
     // bitmap read shows up exactly here.
-    let ix = open_pool_ix(&settlement.pubkey(), 2, 2, [9; 32], env.sealing_secret_hash);
+    let ix = env.open_ix(&settlement.pubkey(), 2, 2, MODE_EASY, 64);
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
     assert!(
         err.contains("6006") || err.contains("TierNotOpen"),
@@ -87,7 +99,7 @@ fn opening_one_tier_opens_exactly_that_tier() {
     );
 
     // So is tier 6, at the far end of the array.
-    let ix = open_pool_ix(&settlement.pubkey(), 2, 6, [9; 32], env.sealing_secret_hash);
+    let ix = env.open_ix(&settlement.pubkey(), 2, 6, MODE_EASY, 64);
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
     assert!(
         err.contains("6006") || err.contains("TierNotOpen"),
@@ -107,6 +119,9 @@ fn closing_a_tier_blocks_the_next_open_not_the_open_pool() {
     let settlement = env.settlement.insecure_clone();
     let admin = env.admin.pubkey();
     env.fund_platform(4_000_000_000_000);
+    for tier in 0u8..7 {
+        env.ensure_pool_type(MODE_EASY, tier, 64);
+    }
 
     env.open_ready_pool(1, 0);
     env.register_player(1).expect("entries work before the close");
@@ -124,7 +139,7 @@ fn closing_a_tier_blocks_the_next_open_not_the_open_pool() {
 
     // But no new pool opens anywhere.
     for tier in 0u8..7 {
-        let ix = open_pool_ix(&settlement.pubkey(), 2, tier, [9; 32], env.sealing_secret_hash);
+        let ix = env.open_ix(&settlement.pubkey(), 2, tier, MODE_EASY, 64);
         let err = env.send(&[ix], &[&settlement]).unwrap_err();
         assert!(
             err.contains("6006") || err.contains("TierNotOpen"),
@@ -153,7 +168,8 @@ fn only_the_admin_moves_the_bitmap() {
     // The bitmap is unchanged: tier 1 is still refused.
     let settlement = env.settlement.insecure_clone();
     env.fund_platform(4_000_000_000_000);
-    let ix = open_pool_ix(&settlement.pubkey(), 1, 1, [9; 32], env.sealing_secret_hash);
+    env.ensure_pool_type(MODE_EASY, 1, 64);
+    let ix = env.open_ix(&settlement.pubkey(), 1, 1, MODE_EASY, 64);
     let err = env.send(&[ix], &[&settlement]).unwrap_err();
     assert!(
         err.contains("6006") || err.contains("TierNotOpen"),

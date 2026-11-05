@@ -311,8 +311,9 @@ export const COPY = {
     poolClosed: 'It is no longer taking entries. Another pool of this size opens once this one has concluded.',
     poolClosedLink: 'See open pools',
     alreadyEnteredTitle: 'You are already in this pool',
+    // D-E19 sweep: "seat" left the public copy; the number is the entry number.
     alreadyEntered: (seat: number) =>
-      `Seat ${seat} is yours. Your seven battles are sealed and cannot be changed or entered again — one entry per wallet per pool.`,
+      `Entry number ${seat} is yours. Your seven battles are sealed and cannot be changed or entered again — one entry per wallet per pool.`,
     alreadyEnteredPool: 'Open the pool page',
     alreadyEnteredResults: 'Results and the leaderboard',
     entriesChecking: 'Checking your entries',
@@ -811,7 +812,7 @@ export const COPY = {
      */
     // 2026-09-09: the two refusals the founder met that read as a network fault.
     alreadyEntered:
-      "This wallet has already entered this pool, so nothing settled. One entry per wallet per pool is the rule — your seat is held and your battles are sealed. Check the pool page for your entry.",
+      "This wallet has already entered this pool, so nothing settled. One entry per wallet per pool is the rule — your entry is held and your battles are sealed. Check the pool page for your entry.",
     poolClosed:
       "This pool is no longer taking entries, so nothing settled. Open pools are listed on the Pools tab.",
     // 2026-09-11 (audit O27): the entry packet is good for sixty seconds, so
@@ -1294,7 +1295,8 @@ export const COPY = {
         `${place(rank)} · ${playerShort} — ${amountSol} SOL`,
       paidLine: (lastPaid: number) =>
         lastPaid === 1 ? 'The prize was paid to 1st place.' : `Prizes were paid to 1st–${place(lastPaid)}.`,
-      seat: 'Seat',
+      // D-E19 sweep: the column is the entry number; "seat" left the public copy.
+      seat: 'Entry',
       player: 'Player',
       rank: 'Rank',
       /** Battle score across the seven battles; a drawn battle counts half. */
@@ -1313,7 +1315,7 @@ export const COPY = {
       title: 'Every battle',
       note:
         'All seven battles of every player, read from the published data after the reveal. Five numbers per battle, in the order Strength · Speed · Heart · Wit · Durability.',
-      seat: 'Seat',
+      seat: 'Entry',
       battle: (n: number) => `B${n}`,
       notRevealed: 'not revealed',
       loading: 'Reading the published data…',
@@ -1545,7 +1547,7 @@ export const COPY = {
       keeper: {
         name: 'Keeper',
         can: 'Open the next pool of a tier once the previous one has paid out or closed and the tier\u2019s cooldown has passed. Nobody else can open a pool, however long a tier sits idle: if the keeper stops, no new pool opens and no money is at risk — sealing and refunding a pool that is already running stay open to anyone, and the admin can rotate the keeper at any time.',
-        cannot: 'Enter a pool, move money, or decide when a pool runs \u2014 the seat count and the clock do.',
+        cannot: 'Enter a pool, move money, or decide when a pool runs \u2014 the number of players entered and the clock do.',
       },
       entrySigner: {
         name: 'Entry signer',
@@ -1556,7 +1558,7 @@ export const COPY = {
         name: 'Settlement signer',
         can: 'Reveal pool secrets after seal, commit results, run the prize payments the program validates, and pay a forfeited prize onward to the next eligible player against the committed results.',
         cannot:
-          'Choose amounts or recipients, or enter a pool. The program checks every payout list against the pot and the recorded entries, and every onward payment against the committed results; a wrong list is rejected on-chain.',
+          'Choose amounts or recipients, or enter a pool. The program checks every payout list against the prize pool and the recorded entries, and every onward payment against the committed results; a wrong list is rejected on-chain.',
       },
       poolSealing: {
         name: 'Pool sealing keys (one per pool)',
@@ -1663,6 +1665,18 @@ export const COPY = {
     stalled:
       'Confirmation is taking longer than usual. Your entry is submitted and nothing further is needed — results appear on the pool page once the network confirms.',
     stalledDismiss: 'Back to the pool',
+  },
+  /*
+   * THE SHARE CARD (app/card/[pool]/[player]/route.tsx). D-E19: "seat N of
+   * 64" became the finish and the field — "3rd of 32 players" — from the
+   * verified archive; before it verifies, the field alone. Three literals
+   * that lived in the route moved here. PHASE-N-REVIEW: draft wording.
+   */
+  card: {
+    finish: (rank: number, field: number) => `${place(rank)} of ${field} players`,
+    field: (field: number) => `${field} players`,
+    entered: 'Entered',
+    recomputable: 'Every result recomputable from published data',
   },
   /*
    * PRIZES BY PLACE (D-E19, the Ladder; founder brief 2026-11-05). The

@@ -456,3 +456,381 @@ describe('read API — a read that throws (2026-10-17)', () => {
     }
   });
 });
+
+/**
+ * The Ladder (D-E19) on the read API: every pool row carries its OWN size,
+ * floor and table, and GET /pool-types lists every pool type — chain first,
+ * the `pool_types` projection when the chain read fails.
+ */
+describe('read API — every pool row carries its own size, floor and table (D-E19)', () => {
+  const base = {
+    pool: POOL,
+    id: '30',
+    tier: 0,
+    entry_lamports: '100000000',
+    fill_deadline: '4102444800',
+    timer_seconds: 15,
+    state: 'Open',
+    sealing_pubkey: '11'.repeat(32),
+    results_root: null,
+    secret: null,
+  };
+  const one = async (row: Record<string, unknown>) =>
+    (await handleRead(db(() => [row]), `/pools/${POOL}`)).body as Record<string, unknown>;
+
+  it('serves a 16-player pool’s table, its amounts in lamports, and ITS floor', async () => {
+    const row = {
+      ...base,
+      capacity: 16,
+      min_seats: 10,
+      paid_places: 4,
+      prize_table: [5, 3, 1, 1],
+      pot_lamports: '1000000000',
+      entrants: '12',
+    };
+    const r = await one(row);
+    expect(r).to.include({ capacity: 16, min_seats: 10, paid_places: 4 });
+    expect(r.prize_table).to.deep.equal([5, 3, 1, 1]);
+    // table[i] × entry, decimal strings — and they add up to the prize pool.
+    expect(r.prize_amounts).to.deep.equal(['500000000', '300000000', '100000000', '100000000']);
+    const sum = (r.prize_amounts as string[]).reduce((a, x) => a + BigInt(x), 0n);
+    expect(sum.toString()).to.equal(row.pot_lamports);
+    // 12 seated against a floor of 10: the deadline would seal it. Under the
+    // old shared floor of 40 this read 'refund' — the bug a per-pool floor
+    // exists to make impossible.
+    expect(r.outcome_if_deadline_now).to.equal('seal');
+    expect((await one({ ...row, entrants: '9' })).outcome_if_deadline_now).to.equal('refund');
+    expect((await one({ ...row, entrants: '10' })).outcome_if_deadline_now).to.equal('seal');
+  });
+
+  it('judges an 8-player pool by its own floor of 5, and a full pool as sealed', async () => {
+    const row = { ...base, capacity: 8, min_seats: 5, paid_places: 2, prize_table: [3, 2], pot_lamports: '500000000' };
+    expect((await one({ ...row, entrants: '4' })).outcome_if_deadline_now).to.equal('refund');
+    expect((await one({ ...row, entrants: '5' })).outcome_if_deadline_now).to.equal('seal');
+    expect((await one({ ...row, entrants: '8', state: 'Sealed' })).outcome_if_deadline_now).to.equal('seal');
+    expect((await one(row)).prize_amounts).to.deep.equal(['300000000', '200000000']);
+  });
+
+  it('serves a migrated pre-Ladder pool’s recorded floor, not a launch value', async () => {
+    // `migrate_pool` restated this pool's floor as 52 (it opened before
+    // R7-b): 45 seated would REFUND, whatever today's 64-player floor is.
+    const row = { ...base, capacity: 64, min_seats: 52, paid_places: 1, prize_table: [40], pot_lamports: '4000000000', entrants: '45' };
+    const r = await one(row);
+    expect(r).to.include({ min_seats: 52, outcome_if_deadline_now: 'refund' });
+    expect(r.prize_amounts).to.deep.equal(['4000000000']);
+  });
+
+  it('reads a row without the Ladder columns by the pre-Ladder rule', async () => {
+    // A row projected before 0026 and not yet rederived: 64 seats, one place
+    // worth the whole prize pool in whole entries, the 64-player floor.
+    const r = await one({ ...base, pot_lamports: '4000000000', entrants: '40' });
+    expect(r).to.include({ capacity: 64, paid_places: 1, min_seats: 40, outcome_if_deadline_now: 'seal' });
+    expect(r.prize_table).to.deep.equal([40]);
+    expect(r.prize_amounts).to.deep.equal(['4000000000']);
+    // A prize pool that is not a whole number of entries has no table at all
+    // (devnet pool #1, which never played): nothing is invented for it.
+    const odd = await one({ ...base, pot_lamports: '5120000000', entrants: '0', state: 'Closed' });
+    expect(odd).to.include({ capacity: 64, paid_places: 0 });
+    expect(odd.prize_table).to.deep.equal([]);
+    expect(odd.prize_amounts).to.deep.equal([]);
+  });
+
+  it('no amount is ever a JSON number', async () => {
+    const r = await one({ ...base, capacity: 64, min_seats: 40, paid_places: 16, prize_table: [12, 6, 3, 3, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1], pot_lamports: '4000000000', entrants: '3' });
+    for (const a of r.prize_amounts as unknown[]) expect(a).to.be.a('string').and.match(/^\d+$/);
+    expect(r.prize_amounts).to.have.length(16);
+  });
+});
+
+describe('read API — ?capacity= (D-E19)', () => {
+  function capturing() {
+    const calls: Array<{ sql: string; params?: readonly unknown[] }> = [];
+    const q: Queryable = {
+      async query(sql: string, params?: readonly unknown[]) {
+        calls.push({ sql, params });
+        return { rows: [] } as never;
+      },
+    };
+    return { q, calls };
+  }
+
+  it('filters one pool size as a bind parameter', async () => {
+    const { q, calls } = capturing();
+    expect((await handleRead(q, '/pools?capacity=16&mode=hard')).status).to.equal(200);
+    const sql = calls[0].sql.replace(/\s+/g, ' ');
+    expect(sql).to.include('WHERE mode = $1 AND capacity = $2');
+    expect(calls[0].params).to.deep.equal([1, 16, 100]);
+  });
+
+  it('refuses anything that is not one of the four sizes, touching no SQL', async () => {
+    for (const path of ['/pools?capacity=12', '/pools?capacity=0', '/pools?capacity=128', '/pools?capacity=x', '/pools?capacity=016']) {
+      const { q, calls } = capturing();
+      expect((await handleRead(q, path)).status).to.equal(400, path);
+      expect(calls).to.have.length(0, `${path} must not reach the database`);
+    }
+  });
+});
+
+describe('GET /pool-types — the lobby’s pool types (D-E19)', () => {
+  const NOW = 1_800_000_000;
+  const PRICE = 100_000_000n;
+  const CAPS = [8, 16, 32, 64] as const;
+  const TABLES: Record<number, number[]> = {
+    8: [3, 2],
+    16: [5, 3, 1, 1],
+    32: [8, 4, 2, 2, 1, 1, 1, 1],
+    64: [12, 6, 3, 3, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1],
+  };
+  const FLOORS: Record<number, number> = { 8: 5, 16: 10, 32: 20, 64: 40 };
+  const potOf = (cap: number): bigint => TABLES[cap].reduce((a, m) => a + BigInt(m) * PRICE, 0n);
+  const LIVE_ADDR = (id: number) => `Poo1Addr${id}`.padEnd(44, '1');
+
+  /** One PoolType account as the chain reader hands it over. */
+  function chainType(mode: number, cap: number, over: Record<string, unknown> = {}) {
+    const table = TABLES[cap];
+    return {
+      mode,
+      tier: 0,
+      capacity: cap,
+      minSeats: FLOORS[cap],
+      paidPlaces: table.length,
+      prizeTable: [...table, ...new Array(16 - table.length).fill(0)],
+      potLamports: potOf(cap),
+      enabled: true,
+      activePool: 0n,
+      nextOpenAt: 0n,
+      bump: 255,
+      address: `Type${mode}${cap}`,
+      activePoolAddress: null as string | null,
+      ...over,
+    };
+  }
+
+  /**
+   * The devnet launch: all eight 0.1 SOL pool types (both modes × four
+   * sizes), tier 0 open on both ladders. Three hold a live pool, two are
+   * cooling down after a pool settled, one has never run a pool, one is
+   * past its cooldown and idle, and one is switched off.
+   */
+  function launchView(over: Record<string, unknown> = {}) {
+    return {
+      openTiers: [true, false, false, false, false, false, false],
+      hardOpenTiers: [true, false, false, false, false, false, false],
+      tierPriceLamports: [PRICE, 500_000_000n, 750_000_000n, 1_000_000_000n, 2_500_000_000n, 5_000_000_000n, 7_500_000_000n],
+      poolTypes: [
+        chainType(0, 8, { activePool: 40n, activePoolAddress: LIVE_ADDR(40) }), // live
+        chainType(0, 16), // never ran a pool
+        chainType(0, 32, { nextOpenAt: BigInt(NOW + 120) }), // cooling
+        chainType(0, 64, { activePool: 41n, activePoolAddress: LIVE_ADDR(41) }), // live
+        chainType(1, 8, { nextOpenAt: BigInt(NOW - 600) }), // idle, cooldown over
+        chainType(1, 16, { nextOpenAt: BigInt(NOW + 300) }), // cooling
+        chainType(1, 32, { activePool: 42n, activePoolAddress: LIVE_ADDR(42) }), // live
+        chainType(1, 64, { enabled: false }), // switched off
+      ],
+      ...over,
+    };
+  }
+
+  /** The `pool_types` projection, and the other ledger reads the fallback makes. */
+  function ledgerDb(opts: {
+    types?: Array<Record<string, unknown>>;
+    live?: Array<Record<string, unknown>>;
+    tiersOpened?: boolean[];
+    hardTiersOpened?: boolean[];
+  } = {}): Queryable {
+    return db((sql, params) => {
+      if (sql.includes('FROM pool_types')) return opts.types ?? [];
+      if (sql.includes('FROM pools')) return opts.live ?? [];
+      if (sql.includes('DISTINCT ON')) return [];
+      if (sql.includes('name = $1')) {
+        if (params?.[0] === 'TiersOpened' && opts.tiersOpened) return [{ raw: { open_tiers: opts.tiersOpened } }];
+        if (params?.[0] === 'HardTiersOpened' && opts.hardTiersOpened) return [{ raw: { open_tiers: opts.hardTiersOpened } }];
+        return [];
+      }
+      return [];
+    });
+  }
+
+  type Body = { server_time: number; source: string; pool_types: Array<Record<string, unknown>> };
+  const key = (r: Record<string, unknown>) => `${r.mode}/${r.capacity}`;
+
+  it('lists all eight launch types from the chain, sorted mode, tier, capacity', async () => {
+    const res = await handleRead(
+      ledgerDb({ types: [{ mode: 1, tier: 0, capacity: 8, pool_type: 'Type18', last_pool_id: '7', prize_table: [3, 2] }] }),
+      '/pool-types',
+      () => NOW,
+      (async () => launchView()) as never
+    );
+    expect(res.status).to.equal(200);
+    const body = res.body as Body;
+    expect(body.source).to.equal('chain');
+    expect(body.server_time).to.equal(NOW);
+    expect(body.pool_types.map(key)).to.deep.equal([
+      'easy/8', 'easy/16', 'easy/32', 'easy/64', 'hard/8', 'hard/16', 'hard/32', 'hard/64',
+    ]);
+
+    for (const r of body.pool_types) {
+      const cap = r.capacity as number;
+      expect(r.tier).to.equal(0);
+      expect(r.entry_lamports).to.equal(PRICE.toString());
+      expect(r.prize_table, key(r)).to.deep.equal(TABLES[cap]);
+      expect(r.paid_places).to.equal(cap / 4);
+      expect(r.min_seats).to.equal(FLOORS[cap]);
+      expect(r.prize_pool_lamports).to.equal(potOf(cap).toString());
+      // Lamports per place, rank 1 first: table[i] × entry — and they sum
+      // to the prize pool, at every size.
+      expect(r.prize_amounts).to.deep.equal(TABLES[cap].map((m) => (BigInt(m) * PRICE).toString()));
+      const sum = (r.prize_amounts as string[]).reduce((a, x) => a + BigInt(x), 0n);
+      expect(sum.toString()).to.equal(r.prize_pool_lamports);
+    }
+  });
+
+  it('says which types are live, which hold a pool, and which are cooling down', async () => {
+    const body = (
+      await handleRead(
+        ledgerDb({ types: [{ mode: 1, tier: 0, capacity: 8, pool_type: 'Type18', last_pool_id: '7', prize_table: [3, 2] }] }),
+        '/pool-types',
+        () => NOW,
+        (async () => launchView()) as never
+      )
+    ).body as Body;
+    const row = (k: string) => body.pool_types.find((r) => key(r) === k)!;
+
+    // `live` = tier open for the mode AND the type enabled.
+    for (const k of ['easy/8', 'easy/16', 'easy/32', 'easy/64', 'hard/8', 'hard/16', 'hard/32']) {
+      expect(row(k), k).to.include({ live: true, type_enabled: true, tier_open: true });
+    }
+    expect(row('hard/64')).to.include({ live: false, type_enabled: false, tier_open: true });
+
+    // A live pool: its Pool PDA and id.
+    expect(row('easy/8')).to.include({ live_pool: LIVE_ADDR(40), live_pool_id: 40 });
+    expect(row('easy/64')).to.include({ live_pool: LIVE_ADDR(41), live_pool_id: 41 });
+    expect(row('hard/32')).to.include({ live_pool: LIVE_ADDR(42), live_pool_id: 42 });
+    // Idle: no pool.
+    expect(row('easy/16')).to.include({ live_pool: null, live_pool_id: null });
+
+    // The cooldown stamp, unix seconds as a number; null for a type that has
+    // never settled a pool (no cooldown to wait out).
+    expect(row('easy/32').next_open_at).to.equal(NOW + 120);
+    expect(row('hard/16').next_open_at).to.equal(NOW + 300);
+    expect(row('hard/8').next_open_at).to.equal(NOW - 600);
+    expect(row('easy/16').next_open_at).to.equal(null);
+
+    // `last_pool_id` is the ledger's (the account does not carry it).
+    expect(row('hard/8').last_pool_id).to.equal(7);
+    expect(row('easy/8').last_pool_id).to.equal(null);
+  });
+
+  it('a closed tier takes no entries, whatever its types’ own switches say', async () => {
+    const body = (
+      await handleRead(
+        ledgerDb(),
+        '/pool-types',
+        () => NOW,
+        (async () => launchView({ hardOpenTiers: [false, false, false, false, false, false, false] })) as never
+      )
+    ).body as Body;
+    for (const r of body.pool_types.filter((x) => x.mode === 'hard')) {
+      expect(r, key(r)).to.include({ tier_open: false, live: false });
+    }
+    expect(body.pool_types.find((r) => key(r) === 'hard/8')).to.include({ type_enabled: true });
+  });
+
+  it('falls back to the pool_types projection when the chain read fails, and says so', async () => {
+    const res = await handleRead(
+      ledgerDb({
+        types: [
+          { mode: 0, tier: 0, capacity: 8, pool_type: 'Type08', min_seats: 5, paid_places: 2, prize_table: [3, 2], pot_lamports: '500000000', enabled: true, next_open_at: '0', last_pool_id: null },
+          { mode: 0, tier: 0, capacity: 64, pool_type: 'Type064', min_seats: 40, paid_places: 16, prize_table: TABLES[64], pot_lamports: '4000000000', enabled: true, next_open_at: String(NOW + 60), last_pool_id: '39' },
+          { mode: 1, tier: 0, capacity: 8, pool_type: 'Type18', min_seats: 5, paid_places: 2, prize_table: [3, 2], pot_lamports: '500000000', enabled: true, next_open_at: '0', last_pool_id: null },
+          // A pre-Ladder slot stamp: a row with no PoolType behind it.
+          { mode: 1, tier: 0, capacity: 64, pool_type: null, min_seats: null, paid_places: null, prize_table: null, pot_lamports: null, enabled: false, next_open_at: '1700000000', last_pool_id: '5' },
+        ],
+        live: [{ pool: LIVE_ADDR(41), id: '41', tier: 0, mode: 0, capacity: 64, entry_lamports: '100000000', pot_lamports: '4000000000', state: 'Open', entrants: '3', refunded_count: '0' }],
+        tiersOpened: [true, false, false, false, false, false, false],
+      }),
+      '/pool-types',
+      () => NOW,
+      (async () => {
+        throw new Error('rpc down');
+      }) as never
+    );
+    expect(res.status).to.equal(200);
+    const body = res.body as Body;
+    expect(body.source).to.equal('ledger');
+    // The stamp-only row is not a pool type.
+    expect(body.pool_types.map(key)).to.deep.equal(['easy/8', 'easy/64', 'hard/8']);
+    const row = (k: string) => body.pool_types.find((r) => key(r) === k)!;
+    expect(row('easy/64')).to.include({
+      live: true,
+      live_pool: LIVE_ADDR(41),
+      live_pool_id: 41,
+      next_open_at: NOW + 60,
+      last_pool_id: 39,
+      prize_pool_lamports: '4000000000',
+    });
+    expect(row('easy/8').prize_amounts).to.deep.equal(['300000000', '200000000']);
+    // No HardTiersOpened on the ledger: the hard ladder is closed, as
+    // `init_config` leaves it.
+    expect(row('hard/8')).to.include({ tier_open: false, live: false, type_enabled: true });
+  });
+
+  it('with no chain reader, answers from the ledger', async () => {
+    const body = (await handleRead(ledgerDb(), '/pool-types', () => NOW)).body as Body;
+    expect(body).to.deep.equal({ server_time: NOW, source: 'ledger', pool_types: [] });
+  });
+});
+
+describe('GET /tiers — kept for older readers, on the 64-player slot (D-E19)', () => {
+  it('serves each tier’s 64-player stamp and ignores the other sizes’', async () => {
+    const res = await handleRead(
+      db((sql) =>
+        sql.includes('FROM tier_status')
+          ? [
+              { tier: 0, mode: 0, capacity: 8, next_open_at: '1900', last_pool_id: '12' },
+              { tier: 0, mode: 0, capacity: 64, next_open_at: '1700', last_pool_id: '9' },
+            ]
+          : []
+      ),
+      '/tiers'
+    );
+    const body = res.body as { tiers: Array<Record<string, unknown>> };
+    expect(body.tiers[0]).to.include({ next_open_at: '1700', last_pool_id: '9' });
+  });
+});
+
+describe('the verify record carries the table the chain recorded (D-E19)', () => {
+  it('reads size, floor and table off PoolOpened', async () => {
+    const rows = [
+      {
+        name: 'PoolOpened',
+        raw: {
+          pool: POOL,
+          entry_lamports: '100000000',
+          pot_lamports: '1000000000',
+          sealing_secret_hash: 'aa'.repeat(32),
+          capacity: 16,
+          min_seats: 10,
+          paid_places: 4,
+          prize_table: [5, 3, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        },
+      },
+    ];
+    const r = (await handleRead(db(() => rows), `/pools/${POOL}/verify-record`)).body as Record<string, unknown>;
+    expect(r).to.include({ capacity: 16, minSeats: 10, paidPlaces: 4 });
+    expect(r.prizeTable).to.deep.equal([5, 3, 1, 1]);
+  });
+
+  it('reads a pre-Ladder pool as 64 seats and one place, and takes the floor PoolMigrated states', async () => {
+    const rows = [
+      { name: 'PoolOpened', raw: { pool: POOL, entry_lamports: '100000000', pot_lamports: '4000000000', sealing_secret_hash: 'aa'.repeat(32), capacity: null } },
+      { name: 'PoolMigrated', raw: { pool: POOL, min_seats: 40, mode: 0, capacity: 64, paid_places: 1, prize_table: [40, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } },
+    ];
+    const r = (await handleRead(db(() => rows), `/pools/${POOL}/verify-record`)).body as Record<string, unknown>;
+    expect(r).to.include({ capacity: 64, minSeats: 40, paidPlaces: 1 });
+    expect(r.prizeTable).to.deep.equal([40]);
+    const unmigrated = (await handleRead(db(() => rows.slice(0, 1)), `/pools/${POOL}/verify-record`)).body as Record<string, unknown>;
+    expect(unmigrated).to.include({ capacity: 64, minSeats: null, paidPlaces: 1 });
+    expect(unmigrated.prizeTable).to.deep.equal([40]);
+  });
+});

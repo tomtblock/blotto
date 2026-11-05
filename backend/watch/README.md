@@ -29,7 +29,7 @@ Secrets and deployment: [`docs/guide/HOSTING.md`](../../docs/guide/HOSTING.md). 
 | `src/github.ts` | CI lane verdicts, main's head, whether a deploy is running, and starting a diagnosis. |
 | `src/diagnosis.ts` | When to ask Claude, the answer's schema, and how the answer reads in the thread. |
 | `src/redact.ts` | Removes credentials, IPs and wallet addresses from evidence, and again from Claude's answer. |
-| `src/solana.ts` | PDA derivation and `getMultipleAccounts`. Layouts come from `backend/_shared` (`config-account.ts`, `pool-account.ts`). |
+| `src/solana.ts` | PDA derivation, `getMultipleAccounts`, and `getProgramAccounts` for the pool types (one per mode, tier and size since the Ladder, D-E19; idleness is checked per pool type). Layouts come from `backend/_shared` (`config-account.ts`, `pool-account.ts`, `pool-type-account.ts`). |
 | `src/cli/*.ts` | The steps `diagnose.yml` and `deploy-watch.yml` run: `snapshot`, `redact`, `post-diagnosis`, `telegram-test`. |
 
 ## Running it locally

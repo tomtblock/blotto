@@ -21,8 +21,10 @@
  *      minutes rather than persisting for the run.
  *
  * It exists because the plan's request budget is real: two lookups per
- * entrant across 64 entrants is 128 per pool against a 1,000/day cap over a
- * finite, non-renewing credit balance.
+ * entrant is 128 for one full 64-player pool, and 480 for one round of the
+ * eight launch pool types (240 seats across the four sizes and two modes,
+ * D-E19), against a 1,000/day cap over a finite, non-renewing credit
+ * balance.
  */
 
 import type { GeoLookup, GeoLookupResult } from './service';

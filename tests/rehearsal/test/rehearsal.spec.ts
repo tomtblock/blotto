@@ -10,7 +10,7 @@
  */
 import { expect } from 'chai';
 import { createHash } from 'crypto';
-import { offlinePoolTerms, runOfflinePool, type OfflinePoolRun } from '../src';
+import { offlineChain, offlinePoolTerms, runOfflinePool, type OfflinePoolRun } from '../src';
 import { poolPopulation } from '../src/strategies';
 import {
   POOL_CAPACITIES,
@@ -21,7 +21,7 @@ import {
   prizeTableFromChain,
   type PoolCapacity,
 } from '../../../backend/scoring/src';
-import { FakeChain, MemoryPublisher, crankPool } from '../../../backend/reveal/src';
+import { MemoryPublisher, crankPool } from '../../../backend/reveal/src';
 import { LocalCustody, MemoryCiphertextStore } from '../../../backend/sealing/src';
 import { base58Encode } from '../../../backend/_shared/src/blotto-events';
 
@@ -193,7 +193,9 @@ describe('the offline dress rehearsal', () => {
       // minimum field — see the note at the top of this file.
       const field = largestRefundingField(capacity);
       const terms = offlinePoolTerms(capacity);
-      const chain = new FakeChain(() => 0n);
+      const chain = await offlineChain(() => 0n);
+      // `trigger_refund` and `refund` name the pool's type (D-E19).
+      chain.addPoolType(0, 0, capacity);
       const players = Array.from({ length: field }, (_, i) =>
         base58Encode(new Uint8Array(createHash('sha256').update(`r:${capacity}:${i}`).digest()))
       );

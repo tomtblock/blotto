@@ -25,22 +25,47 @@
  * pays. The budget is reached only by a key that is signing decisions faster
  * than a person reviews, which is the case it exists to catch.
  *
- * The derivation, kept because a ratified number still has to be defensible:
+ * The derivation, kept because a ratified number still has to be defensible
+ * — RE-DERIVED for the Ladder (D-E19, 2026-11-05), because the one it
+ * replaced reasoned from a single 64-seat pool and that is no longer the
+ * worst honest moment:
  *
- *   A pool holds at most 64 entries and runs with at least MIN_SEATS, which
- *   is 40 since R7-b (2026-09-12; it was 52 under D-E4, which is what this
- *   line used to cite). The bound below reasons from the CAPACITY end, so
- *   the floor moving does not change it. The largest
- *   HONEST burst of review work that can exist at one moment is therefore one
- *   pool's worth of entries, 64, and that is already an extreme: it is every
- *   seat in a pool flagged and decided by one person inside an hour.
+ *   WHAT A DECISION CAN ACT ON. A decision is a flag, a clear, a release or a
+ *   forfeit on one entry (`preconditions.ts`). A flag only matters on a seat
+ *   that will be PAID — it holds that seat's prize in escrow — and a release
+ *   or forfeit exists only for a seat that was paid into escrow. So the
+ *   honest review work at one moment is bounded by the paid places of every
+ *   pool that is live at that moment, not by its seats.
+ *
+ *   HOW MANY POOLS ARE LIVE AT ONCE. Since D-E19 one pool per pool type
+ *   (mode × tier × size) can be live, all at the same time. The devnet
+ *   launch enables eight: both modes × the four sizes at tier 0.
+ *
+ *     paid places per mode  =  2 + 4 + 8 + 16   (8, 16, 32, 64 seats: the
+ *                                                top quarter is paid)
+ *                           =  30
+ *     paid places, launch   =  2 modes × 30     =  60
+ *     seats, launch         =  2 × (8 + 16 + 32 + 64)  =  240
+ *
+ *   AGAINST 64 PER HOUR:
+ *     - every paid place of all eight launch pools flagged inside one hour
+ *       is 60 decisions — under the budget, with 4 to spare;
+ *     - flagging AND deciding each of them in the same hour is 120 — over
+ *       it: the second half waits for the next window;
+ *     - a decision on every seat (240) was never honest review work and
+ *       stays far over it.
+ *   A tie that straddles the paid line (D3-B) can pay a few more seats than
+ *   the table has places; the margin of 4 absorbs a small one, not a large
+ *   one. And each further (mode, tier) the founder enables adds 30 paid
+ *   places: with a second tier on both modes the honest worst case (120)
+ *   is past the budget in one window.
+ *
  *   Detection is manual (D-E9) and a flag is a considered human act, so real
- *   traffic is units per pool, not dozens.
- *
- *   64 decisions / hour is thus roughly 1x the worst honest burst and about
- *   two orders of magnitude below what a script can do with a stolen key in
- *   the same hour. An hour is also long enough that an operator answering an
- *   alert is looking at a window that has not already closed.
+ *   traffic is units per pool, not dozens — the figures above are the
+ *   extremes, not the expectation. 64 / hour stays about two orders of
+ *   magnitude below what a script can do with a stolen key in the same
+ *   hour, and an hour is long enough that an operator answering an alert is
+ *   looking at a window that has not already closed.
  *
  *   The cost of the bound being too tight is a 429 and a second window — a
  *   review decision is never time-critical to the minute, because the
@@ -48,14 +73,20 @@
  *   appeal windows in days. The cost of it being too loose is that a key that
  *   has gone wrong gets further before anyone sees it.
  *
+ * PHASE-N-REVIEW: 64 is kept (D-E13 is the founder's number); it covers the
+ * launch's 60 paid places once per hour but not a flag-and-decide of each,
+ * nor more enabled tiers — raising it is the founder's call, not this file's.
+ *
  * The count is taken from the decision log itself: every accepted decision is
  * a row signed by that key, so the log IS the budget's ledger and there is no
  * second store to keep consistent with it.
  */
 
 /**
- * Decisions one reviewer key may sign per window — RATIFIED at 64, one
- * pool's worth of seats (D-E13, founder ruling 2026-09-13).
+ * Decisions one reviewer key may sign per window — RATIFIED at 64 (D-E13,
+ * founder ruling 2026-09-13): one 64-seat pool's worth of seats when it was
+ * set, and since the Ladder the paid places of all eight launch pool types
+ * (60) once each per hour — see the derivation above.
  */
 export const REVIEWER_ACTION_BUDGET = 64;
 

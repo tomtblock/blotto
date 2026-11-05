@@ -12,6 +12,7 @@
  */
 
 import type { ConfigAccountView } from '../../_shared/src/config-account';
+import type { PoolTypeView } from '../../_shared/src/pool-type-account';
 import { lamportsToSol, solToLamports, type WatchConfig } from './config';
 import type { PoolView } from './solana';
 
@@ -257,13 +258,20 @@ export interface ChainSnapshot {
   /** The chain's own clock (the Clock sysvar), never the watcher's. */
   nowUnix: bigint;
   config: ConfigAccountView;
+  /** Every `PoolType` account (D-E19); empty before the Ladder. */
+  poolTypes: PoolTypeView[];
   pools: ChainPool[];
 }
 
-/** Tiers the indexer's `/treasury` reports as unable to fund their next pot. */
+/**
+ * Pool types the indexer's `/treasury` reports as unable to fund their next
+ * prize pool. Read from its `pool_types` rows (D-E19); an indexer from before
+ * the Ladder serves only `tiers`, read as before — a tier's easy slot, with no
+ * size (`mode` and `capacity` null match any).
+ */
 export interface TreasuryView {
   policySource: string;
-  short: { tier: number; shortByLamports: bigint }[];
+  short: { tier: number; mode: 'easy' | 'hard' | null; capacity: number | null; shortByLamports: bigint }[];
 }
 
 export function parseTreasury(probe: Probe): TreasuryView | null {
@@ -272,16 +280,31 @@ export function parseTreasury(probe: Probe): TreasuryView | null {
     const j = JSON.parse(probe.body) as {
       policy_source?: string;
       tiers?: { tier: number; status: string; short_by_lamports: string }[];
+      pool_types?: { mode: string; tier: number; capacity: number; status: string; short_by_lamports: string }[];
     };
-    return {
-      policySource: String(j.policy_source ?? ''),
-      short: (j.tiers ?? [])
-        .filter((x) => x.status === 'short')
-        .map((x) => ({ tier: x.tier, shortByLamports: BigInt(x.short_by_lamports) })),
-    };
+    const short: TreasuryView['short'] = Array.isArray(j.pool_types)
+      ? j.pool_types
+          .filter((x) => x.status === 'short')
+          .map((x) => ({
+            tier: x.tier,
+            mode: x.mode === 'hard' ? 'hard' : 'easy',
+            capacity: Number(x.capacity),
+            shortByLamports: BigInt(x.short_by_lamports),
+          }))
+      : (j.tiers ?? [])
+          .filter((x) => x.status === 'short')
+          .map((x) => ({ tier: x.tier, mode: null, capacity: null, shortByLamports: BigInt(x.short_by_lamports) }));
+    return { policySource: String(j.policy_source ?? ''), short };
   } catch {
     return null;
   }
+}
+
+/** Is this pool type among the ones `/treasury` reports short? */
+function isShort(treasury: TreasuryView | null, mode: 'easy' | 'hard', tier: number, capacity: number): boolean {
+  return (treasury?.short ?? []).some(
+    (s) => s.tier === tier && (s.mode === null || s.mode === mode) && (s.capacity === null || s.capacity === capacity)
+  );
 }
 
 /**
@@ -337,7 +360,7 @@ export function poolResults(
   };
   const noneOpen: Base = {
     key: 'pools:none-open',
-    title: 'No pool is open on an enabled tier',
+    title: 'No pool is open on an enabled pool type',
     severity: 'critical',
     failuresToOpen: c.failuresToAlert,
   };
@@ -374,21 +397,46 @@ export function poolResults(
     }
   }
 
-  const shortTiers = new Set((treasury?.short ?? []).map((s) => s.tier));
   const idle: string[] = [];
-  const ladders: [string, boolean[], bigint[], bigint[]][] = [
-    ['easy', snap.config.openTiers, snap.config.activePoolByTier, snap.config.tierNextOpenAt],
-    ['hard', snap.config.hardOpenTiers, snap.config.hardActivePoolByTier, snap.config.hardTierNextOpenAt],
-  ];
-  for (const [mode, enabled, active, nextOpenAt] of ladders) {
-    enabled.forEach((on, tier) => {
+  if (snap.config.ladderPresent) {
+    // The Ladder (D-E19): the keeper opens one pool per POOL TYPE, so a
+    // stall is per type — enabled, its tier open for its mode, its slot
+    // empty, and its cooldown over for longer than the keeper's slack.
+    // "Could open" is the later of the type's own cooldown stamp and the
+    // tier's (Config stamps a tier when the founder opens it); a type that
+    // has never run a pool has no stamp of its own.
+    // PHASE-N-REVIEW: the moment a TYPE was switched on is not on chain, so
+    // a type enabled on an open tier is measured from the tier's stamp; the
+    // check's own consecutive-failure count covers the keeper's first tick.
+    for (const t of snap.poolTypes) {
+      const mode = t.mode === 1 ? 'hard' : 'easy';
+      const tierOpen = (t.mode === 1 ? snap.config.hardOpenTiers : snap.config.openTiers)[t.tier] === true;
       // A short treasury is its own incident (treasury:short), not a stall.
-      if (!on || active[tier] !== 0n || shortTiers.has(tier)) return;
-      const since = now - nextOpenAt[tier];
+      if (!t.enabled || !tierOpen || t.activePool !== 0n || isShort(treasury, mode, t.tier, t.capacity)) continue;
+      const tierStamp = (t.mode === 1 ? snap.config.hardTierNextOpenAt : snap.config.tierNextOpenAt)[t.tier] ?? 0n;
+      const couldOpenAt = t.nextOpenAt > tierStamp ? t.nextOpenAt : tierStamp;
+      const since = now - couldOpenAt;
       if (since > BigInt(c.keeperSlackSeconds)) {
-        idle.push(`tier ${tier} (${mode}): no open pool for ${since / 60n} min after it could open`);
+        idle.push(
+          `tier ${t.tier} (${mode}, ${t.capacity} players): no open pool for ${since / 60n} min after it could open`
+        );
       }
-    });
+    }
+  } else {
+    // Before the Ladder migration: one slot per (mode, tier) on Config.
+    const ladders: ['easy' | 'hard', boolean[], bigint[], bigint[]][] = [
+      ['easy', snap.config.openTiers, snap.config.activePoolByTier, snap.config.tierNextOpenAt],
+      ['hard', snap.config.hardOpenTiers, snap.config.hardActivePoolByTier, snap.config.hardTierNextOpenAt],
+    ];
+    for (const [mode, enabled, active, nextOpenAt] of ladders) {
+      enabled.forEach((on, tier) => {
+        if (!on || active[tier] !== 0n || isShort(treasury, mode, tier, 64)) return;
+        const since = now - nextOpenAt[tier];
+        if (since > BigInt(c.keeperSlackSeconds)) {
+          idle.push(`tier ${tier} (${mode}): no open pool for ${since / 60n} min after it could open`);
+        }
+      });
+    }
   }
 
   const verdict = (base: Base, problems: string[], ok: string): CheckResult =>
@@ -397,22 +445,24 @@ export function poolResults(
     verdict(enterable, blocked, 'every open pool has what entry needs'),
     verdict(pastDeadline, late, 'no pool overdue'),
     verdict(stuck, stalled, 'no pool stuck'),
-    verdict(noneOpen, idle, 'every enabled tier has a pool'),
+    verdict(noneOpen, idle, 'every enabled pool type has a pool'),
   ];
 }
 
 export function treasuryResult(treasury: TreasuryView | null): CheckResult {
   const base: Base = {
     key: 'treasury:short',
-    title: 'The platform treasury cannot fund the next pot',
+    title: 'The platform treasury cannot fund the next prize pool',
     severity: 'warning',
     failuresToOpen: 2,
   };
   if (treasury === null) return unknown(base);
-  if (treasury.short.length === 0) return pass(base, 'no tier short');
+  if (treasury.short.length === 0) return pass(base, 'no pool type short');
+  const name = (s: TreasuryView['short'][number]): string =>
+    s.mode === null || s.capacity === null ? `tier ${s.tier}` : `tier ${s.tier} (${s.mode}, ${s.capacity} players)`;
   return fail(
     base,
-    treasury.short.map((s) => `tier ${s.tier} short by ${lamportsToSol(s.shortByLamports)} SOL`).join('; ')
+    treasury.short.map((s) => `${name(s)} short by ${lamportsToSol(s.shortByLamports)} SOL`).join('; ')
   );
 }
 
