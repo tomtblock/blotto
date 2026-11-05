@@ -65,14 +65,15 @@ export interface Verdict {
  *              command; a permanent non-zero exit would make it useless.
  *
  * WHY THE SECOND ONE EXISTS (R7-b, 2026-09-13). A pool open across the program
- * upgrade keeps the floor it opened under — 52, written by `migrate_pool` —
- * while `backend/indexer/src/read-api.ts` serves the shared constant, 40. Such
- * a pool sitting between the two numbers at its deadline would be shown "this
- * pool will play" and would refund instead. Upgrading only when no pool is
- * Open makes every live pool's floor equal the constant, which is what makes
- * that read honest. The durable fix is to carry each pool's floor through
- * `PoolOpened` so the site never has to assume; until then this refusal is the
- * guarantee, and the read API's comment names it.
+ * upgrade keeps the terms it opened under, while a new pool of the same kind
+ * may open under different ones. Until the Ladder (D-E19) the read API served
+ * one shared minimum field, so a pool between the old and new floors could be
+ * shown "this pool will play" and then refund. Since D-E19 the read API serves
+ * each pool's OWN floor and capacity (carried through `PoolOpened` and
+ * `migrate_pool`), which was the durable fix this note asked for. The refusal
+ * is kept as the stricter window for an upgrade that changes published rules:
+ * it guarantees no player is seated under one rule while the site describes
+ * another, and it costs only waiting for open pools to reach their deadline.
  */
 export function drainVerdict(rows: readonly PoolRow[], upgradePreflight: boolean): Verdict {
   const settling = rows.filter((r) => MID_SETTLEMENT.has(r.state)).map((r) => r.id);

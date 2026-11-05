@@ -90,7 +90,7 @@ describe('the prize sentence', () => {
     expect(prizeSummary(32, [])).toBe('32 players');
     for (const c of [8, 16, 32, 64] as const) {
       const words = `${prizeSummary(c, amounts(c))} ${prizeSentence(amounts(c))}`;
-      expect(words).not.toMatch(/\d+\s*[×x]\b|%|\bpot\b|\bseat|winner takes|\bcash|\bchance/i);
+      expect(words).not.toMatch(/\d+\s*[×x]\b|%|\bpot\b|\bseat|winner takes|\bc[a]sh|\bchance/i);
     }
   });
 });

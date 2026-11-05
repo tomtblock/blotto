@@ -218,8 +218,11 @@ export const COPY = {
     faucetNote:
       'This is a test network. SOL here has no value and cannot be bought; a faucet gives it away.',
     // V2 (founder 2026-09-27): the exit is called what it is for.
-    send: 'Cash out',
-    sendTitle: 'Cash out — send SOL',
+    // 2026-11-05: the language gate now refuses the poker vocabulary the
+    // Ladder brings with it, and the founder's word for this key was one.
+    // PHASE-N-REVIEW: draft wording; founder voice.
+    send: 'Withdraw',
+    sendTitle: 'Withdraw — send SOL',
     sendTo: 'To (Solana address)',
     sendAmount: 'Amount (SOL)',
     sendMax: 'Max',
@@ -1197,7 +1200,7 @@ export const COPY = {
       // pool that pays several places it is held in the pool's vault until
       // it is paid on. PHASE-N-REVIEW: draft wording; founder voice / counsel.
       note:
-        'A flag against your entry was upheld and your prize was withheld: it stays in this pool\u2019s prize vault and is paid on to other players of this pool, never to the operator. You can challenge that decision here. A person reads it, decides it against the published criteria, and the decision and the criterion cited are recorded. If a challenge succeeds after the prize has gone to another player, we pay you the full prize ourselves.',
+        'A flag against your entry was upheld and your prize was withheld: it stays in this pool\u2019s prize vault and can only ever be paid to other players of this pool, never to the operator. You can challenge that decision here. A person reads it, decides it against the published criteria, and the decision and the criterion cited are recorded. If a challenge succeeds after the prize has gone to another player, we pay you the full prize ourselves.',
     },
     /*
      * YOUR RESULT (V2, founder 2026-09-27: "player-first"; your-result.tsx).
@@ -1685,7 +1688,8 @@ export const COPY = {
    * to SOL by the caller; the grouping into rows and runs is
    * data/prizes.ts. Copy rules: a pool is described by players and
    * prizes; never a multiple of the entry, never a percentage paid, never
-   * "pot", "seat", "cash", "winner takes".
+   * "pot", "seat", "winner takes", nor the poker words the language gate
+   * lists (scripts/check-language.sh).
    * PHASE-N-REVIEW: draft wording; founder voice / counsel.
    */
   prizes: {
@@ -1767,17 +1771,18 @@ export const COPY = {
     // straddles the paid line — and where a forfeited share goes: always to
     // players, never to us.
     //
-    // PHASE-N-REVIEW: the forfeiture sentence is the brief's draft of
-    // 2026-11-05; counsel approves the final wording. It states the
-    // destination ("paid on to other players of the same pool"); until the
-    // field-moves-up instructions ship, a forfeited share in a pool that
+    // PHASE-N-REVIEW: the forfeiture sentence is a draft of 2026-11-05;
+    // counsel approves the final wording. It states a CONSTRAINT ("can only
+    // ever be paid to other players of the same pool"), not a payment: until
+    // the field-moves-up instructions ship, a forfeited share in a pool that
     // pays several places is HELD in its vault (pay_next_place refuses with
-    // NextPlaceUnsupported), so "is paid on" describes where it goes, not
-    // that it has already moved.
+    // NextPlaceUnsupported). Both halves are true today — the vault has no
+    // exit to the operator, and the only exit for a forfeited share pays
+    // players. Do not change it to "is paid on" until the cascade ships.
     ties:
       'Players are ranked by battles won, then by total stats won. Players who remain equal on both share a rank. Entry order plays no part in ranking or in deciding who is paid. It determines only where an indivisible remainder of a few lamports falls when a prize cannot be divided exactly. Your entry number is recorded when you enter and is visible to you before the pool closes. No random process is used at any stage of ranking or payment. ' +
       'Players who share a rank share equally the prizes of the places they occupy together: two players tied for 3rd are each paid half of the 3rd and 4th prizes combined. A tie that reaches past the last paid place is treated the same way \u2014 the prizes of the paid places it covers are divided equally between everyone in the tie, so each of them is paid a share even though some of the places they occupy pay nothing. Nobody ranked below the last paid place, and outside such a tie, is paid. ' +
-      'If a flag is upheld, the withheld prize stays in the pool\u2019s prize vault and is paid on to other players of the same pool; it never goes to the operator. Any indivisible remainder goes to the eligible player with the lowest entry number. ' +
+      'If a flag is upheld, the withheld prize stays in the pool\u2019s prize vault and can only ever be paid to other players of the same pool; it never goes to the operator. Any indivisible remainder goes to the eligible player with the lowest entry number. ' +
       'A prize is always paid to a player. It is never returned to us. ' +
       'Where more than one player shares the rank a prize passes to, we identify that group. The published rule is that they share equally, with any remainder going to the lowest entry number. The results bundle we publish after every pool lets anyone check that we identified the group correctly.',
     // SUBSTANCE FIXED: randomness scope (PID §8.3/§8.4).

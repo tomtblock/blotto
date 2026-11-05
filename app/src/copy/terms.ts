@@ -130,7 +130,7 @@ export const TERMS = {
       `Tournaments now come in four sizes: ${SIZE_LIST} players. Each size has its own minimum field (${FLOORS}).`,
       `More than one place is paid. Each tournament pays its highest places from a fixed prize table set by its size and entry price: a tournament of ${PAID} places. The tables are on the rules page.`,
       'Players tied on a rank share equally the prizes of the places they occupy, including a tie that reaches past the last paid place.',
-      'If a flag is upheld, the withheld prize stays in the tournament\u2019s prize vault and is paid on to other players of the same tournament; it never goes to the operator.',
+      'If a flag is upheld, the withheld prize stays in the tournament\u2019s prize vault and can only ever be paid to other players of the same tournament; it never goes to the operator.',
     ],
   },
   /** The one honest line about the unnamed operator, shown when any value is unset. */
@@ -277,9 +277,9 @@ export const TERMS = {
         // in this document's nouns. PHASE-N-REVIEW: counsel approves the
         // final wording; until the field-moves-up instructions ship, a
         // withheld share in a tournament paying several places is held in
-        // its vault, so "is paid on" names the destination, not a payment
-        // already made.
-        'If a flag is upheld, the withheld prize stays in the tournament’s prize vault and is paid on to other players of the same tournament; it never goes to the operator. It is never kept by us: the program has no instruction that can move it to us, and no instruction that can take back a prize already paid.',
+        // its vault, so the sentence states a constraint ("can only ever be
+        // paid to"), never a payment that cannot yet be made.
+        'If a flag is upheld, the withheld prize stays in the tournament’s prize vault and can only ever be paid to other players of the same tournament; it never goes to the operator. It is never kept by us: the program has no instruction that can move it to us, and no instruction that can take back a prize already paid.',
         'You may challenge a decision through our complaints route, and we will tell you which criterion was cited.',
       ],
     },
@@ -306,7 +306,7 @@ export const TERMS = {
       body: [
         'We may refuse to accept an entry from an address, or withhold a prize that has not yet been paid, where we determine on reasonable grounds that: the integrity criteria published in the rules have been met; the address is one of several controlled by the same person in a single tournament; entry was made from a territory where the service is not available, or by a person under 18, or by an address on a published sanctions list; or these terms have otherwise been breached.',
         'Where we do either, we will tell you which ground we relied on. You may challenge the decision through our complaints route, and a decision on that challenge will be made by someone other than whoever made the original one wherever that is possible.',
-        'A prize we withhold is never kept by us. It stays in the tournament’s prize vault and is paid on to other players of the same tournament. We cannot recover a prize that has already been paid, and we will not try to.',
+        'A prize we withhold is never kept by us. It stays in the tournament’s prize vault and can only ever be paid to other players of the same tournament. We cannot recover a prize that has already been paid, and we will not try to.',
       ],
     },
     {

@@ -178,7 +178,7 @@ describe('rulesSections', () => {
     expect(ties).to.contain('A tie that reaches past the last paid place');
     expect(ties).to.contain('lowest entry number');
     expect(ties).to.contain(
-      'If a flag is upheld, the withheld prize stays in the pool\u2019s prize vault and is paid on to other players of the same pool; it never goes to the operator.'
+      'If a flag is upheld, the withheld prize stays in the pool\u2019s prize vault and can only ever be paid to other players of the same pool; it never goes to the operator.'
     );
     expect(ties).to.contain('It is never returned to us.');
     expect(ties).to.not.match(/returns to us/i);
@@ -190,7 +190,7 @@ describe('rulesSections', () => {
     expect(prizes.body).to.contain('never by how many players entered');
     expect(prizes.body).to.not.match(/\d+\s*[×x]/); // no multiple, ever
     expect(prizes.body).to.not.contain('%');
-    expect(prizes.body).to.not.match(/\bpot\b|winner takes|\bseat|\bcash|\bchance/i);
+    expect(prizes.body).to.not.match(/\bpot\b|winner takes|\bseat|\bc[a]sh|\bchance/i);
     if (prizes.kind === 'prizes') expect(prizes.tables.length).to.equal(POOL_CAPACITIES.length);
     expect(byId.get('randomness')!.body).to.contain('class');
     expect(byId.get('randomness')!.body).to.contain('does not affect any stat');

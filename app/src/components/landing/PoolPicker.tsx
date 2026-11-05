@@ -191,6 +191,7 @@ export function PoolPicker({ tiers, serverTime }: { tiers: readonly PickerTier[]
               ]}
               tone={dark ? 'cream' : 'berry'}
               size="lg"
+              layout="responsive"
               data-testid="pool-picker-mode"
             />
             <div className="flex flex-col items-start gap-1 sm:items-end">
