@@ -57,7 +57,7 @@ The loop runs every `loop.intervalSeconds`; "N polls" below means N rounds of th
 | `chain.failuresToAlert` | 2 | Pool and vault are read in one slot; two rounds rule out a lagging node. |
 | `chain.passCollectionGraceSeconds` | 120 | The daemon creates the collection on the tick after `open_pool` and retries every 15 s: eight chances. |
 | `chain.fillDeadlineSlackSeconds` | 300 | The daemon tries to close a pool on every tick after its deadline; twenty missed ticks means it is stuck. |
-| `chain.keeperSlackSeconds` | 300 | The same for opening the next pool once a tier may open one. |
+| `chain.keeperSlackSeconds` | 300 | The same for opening the next pool once a pool type may open one (an enabled type on an open tier, past its cooldown — D-E19). |
 | `chain.sealedMaxMinutes` | 30 | Sealed → Scored is a few ticks of reveal and scoring. `PHASE-N-REVIEW`: set against the devnet trial's measured times. |
 | `chain.scoredMaxMinutes` | 15 | Scored → Paid is one payout transaction per seat. |
 | `chain.refundingMaxMinutes` | 30 | Refunds are one transaction per entrant. |

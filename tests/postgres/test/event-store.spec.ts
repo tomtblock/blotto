@@ -57,8 +57,10 @@ const DERIVED: ReadonlyArray<{ table: string; key: readonly string[] }> = [
   { table: 'payouts', key: ['pool', 'rank'] },
   { table: 'profiles', key: ['player'] },
   { table: 'player_history', key: ['pool', 'player'] },
-  // Keyed per ladder since Phase B (migration 0025).
-  { table: 'tier_status', key: ['tier', 'mode'] },
+  // Keyed per ladder since Phase B (migration 0025), per pool type since
+  // the Ladder (migration 0026, D-E19).
+  { table: 'tier_status', key: ['tier', 'mode', 'capacity'] },
+  { table: 'pool_types', key: ['mode', 'tier', 'capacity'] },
 ];
 
 /**
@@ -199,6 +201,7 @@ function expectSameTable(
       'profiles',
       'player_history',
       'tier_status',
+      'pool_types',
     ]);
   });
 
