@@ -72,7 +72,17 @@ import { resolveRpcUrl } from '../backend/_shared/src/cluster';
 /** squads-mpl's `declare_id!` (programs/squads-mpl/src/lib.rs). */
 export const SQUADS_V3_PROGRAM_ID = new PublicKey('SMPLecH534NA9acpos4G6x7uf3LWbCAwZQE9e8ZekMu');
 
-const DEFAULT_BLOTTO_PROGRAM_ID = '5aawXayPYgEqrnHi6pGiYRpuHNuwauj8GqftRjkeXH17';
+/** The program's source, read for its id and its instruction names — so this
+ * script carries no copy of either that could drift (the id's copies are
+ * pinned by lib.rs's `program_id_copies`; this one never exists). */
+const LIB_RS = resolve(__dirname, '../programs/blotto_cup/src/lib.rs');
+
+/** `declare_id!` in lib.rs — the default blotto_cup program. */
+export function declaredProgramId(libRsPath = LIB_RS): PublicKey {
+  const m = readFileSync(libRsPath, 'utf8').match(/declare_id!\("([1-9A-HJ-NP-Za-km-z]{32,44})"\)/);
+  if (!m) throw new Error(`no declare_id! in ${libRsPath}`);
+  return new PublicKey(m[1]);
+}
 
 /** The compute limit an execute transaction asks for. It costs nothing
  * without a priority fee, and an execute runs every attached instruction as
@@ -502,7 +512,7 @@ export function checkPayload(
 /** Instruction names by discriminator, read from the program's own source —
  * the same reading check-deployed.ts uses, so a new instruction needs no
  * edit here. */
-export function programInstructionNames(libRsPath = resolve(__dirname, '../programs/blotto_cup/src/lib.rs')): Map<string, string> {
+export function programInstructionNames(libRsPath = LIB_RS): Map<string, string> {
   const src = readFileSync(libRsPath, 'utf8');
   const names = new Map<string, string>();
   for (const m of src.matchAll(/^\s*pub fn ([a-z_]+)\s*(?:<[^>]*>)?\s*\(/gm)) {
@@ -571,7 +581,7 @@ commands
 flags
   --authority-index <n>  the vault's authority index (default 1)
   --rpc <url>            default: BLOTTO_CLUSTER / BLOTTO_RPC_URL resolution (devnet)
-  --program <pubkey>     blotto_cup (default ${DEFAULT_BLOTTO_PROGRAM_ID} or BLOTTO_PROGRAM_ID)
+  --program <pubkey>     blotto_cup (default: BLOTTO_PROGRAM_ID, else declare_id! in lib.rs)
 
 env
   MEMBER_KEYPAIR   path to the member's keypair JSON (never printed)
@@ -648,7 +658,7 @@ async function loadEnv(f: Flags): Promise<Env> {
   const rpc = f.values.get('rpc') ?? resolveRpcUrl({ BLOTTO_CLUSTER: process.env.BLOTTO_CLUSTER, BLOTTO_RPC_URL: process.env.BLOTTO_RPC_URL });
   const connection = new Connection(rpc, 'confirmed');
   const multisig = new PublicKey(need(f, 'multisig'));
-  const programId = new PublicKey(f.values.get('program') ?? process.env.BLOTTO_PROGRAM_ID ?? DEFAULT_BLOTTO_PROGRAM_ID);
+  const programId = new PublicKey(f.values.get('program') ?? process.env.BLOTTO_PROGRAM_ID ?? declaredProgramId());
   const info = await connection.getAccountInfo(multisig, 'confirmed');
   if (!info) throw new Error(`no account at ${multisig.toBase58()} on ${rpc}`);
   if (!info.owner.equals(SQUADS_V3_PROGRAM_ID)) {
@@ -689,17 +699,18 @@ async function loadEnv(f: Flags): Promise<Env> {
 }
 
 /** Threshold > 1 cannot be completed with one key; say what each member does. */
+// PHASE-N-REVIEW: no propose-only / approve-only mode yet — the devnet multisig is 1 of 1; mainnet's n-of-m needs one before it is used there.
 function refuseThreshold(env: Env, index: number): never {
   const lines = [
-    `REFUSED — this multisig needs ${env.ms.threshold} approvals; this script runs every step with ONE key and`,
-    'would leave a half-approved transaction on chain. What each member must do instead:',
-    `  1. one member (the proposer) creates transaction #${index} with authority index ${env.authorityIndex}, adds`,
-    '     each instruction from the payload in order, and activates it (create_transaction,',
-    '     add_instruction x n, activate_transaction — run with --split each so each is checkable);',
-    `  2. each of ${env.ms.threshold} members, with their own key, checks every account and the data against the`,
-    '     payload (`squads-v3.ts show --index <n>`) and sends approve_transaction;',
-    '  3. once approvals reach the threshold the transaction is ExecuteReady, and any member runs',
+    `REFUSED — this multisig needs ${env.ms.threshold} approvals. This script runs every step with ONE key, so it`,
+    'would leave a half-approved transaction on chain; it sends nothing. What each member must do instead:',
+    `  1. one member (the proposer) sends create_transaction (authority index ${env.authorityIndex}; it becomes`,
+    `     transaction #${index}), add_instruction for each payload instruction in order, and activate_transaction;`,
+    '  2. each approving member, with their OWN key, checks every account and the data against the payload',
+    '     (`squads-v3.ts show --index <n>` prints them) and sends approve_transaction;',
+    '  3. once approvals reach the threshold the transaction is ExecuteReady, and any one member runs',
     '     `squads-v3.ts execute --index <n>`.',
+    'This script has no propose-only or approve-only mode yet, so steps 1 and 2 need another signer tool.',
     `Members: ${env.ms.keys.map((k) => k.toBase58()).join(', ')}`,
   ];
   throw new Error(lines.join('\n'));
@@ -738,6 +749,12 @@ function printSimulation(label: string, s: Simulation): void {
   console.log(`  simulate ${label}: ${s.ok ? 'OK' : 'FAILED'}${s.units !== undefined ? ` (${s.units} compute units)` : ''}`);
   if (!s.ok) {
     console.log(`    error: ${s.error}`);
+    if (/"Custom":101\b/.test(s.error)) {
+      console.log(
+        '    hint: Anchor 101 — the DEPLOYED program has no such instruction. Deploy this branch first ' +
+          '(`npm run check-deployed` names every missing one).'
+      );
+    }
     for (const l of s.logs.slice(-25)) console.log(`    | ${l}`);
   } else {
     for (const l of s.logs.filter((x) => /Program log: Instruction: /.test(x))) console.log(`    | ${l}`);

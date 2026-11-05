@@ -44,7 +44,7 @@ Where any document and the code disagree, the code is right and the document is 
 |---|---|
 | [`testing/TESTING-REPORT.md`](testing/TESTING-REPORT.md) | **The consolidated test report**: automated suites, CI lanes, the devnet trial's results, findings and their status |
 | [`skill-evidence/REPORT.md`](skill-evidence/REPORT.md) · [`skill-evidence/hard/REPORT.md`](skill-evidence/hard/REPORT.md) | The skill-evidence study for each mode — how often each strategy finishes first. **Generated** by `npm run skill-evidence` in `tests/rehearsal`; a nightly CI lane fails on drift. Never edit by hand |
-| [`testing/FILL-SIMULATION.md`](testing/FILL-SIMULATION.md) | How often a pool fills under the 40-seat, 12-hour rule. **Generated** by `scripts/sim/fill-replay.ts --write` |
+| [`testing/FILL-SIMULATION.md`](testing/FILL-SIMULATION.md) | How often a pool fills under the 12-hour rule, at each pool size and its minimum field (D-E19). **Generated** by `scripts/sim/fill-replay.ts --write` |
 | [`testing/LIVE-SKILL-ENDPOINTS.md`](testing/LIVE-SKILL-ENDPOINTS.md) | The live read-API endpoints that publish the same statistics from real tournaments |
 | [`testing/MOBILE-E2E.md`](testing/MOBILE-E2E.md) | **The evidence of each mobile end-to-end run on devnet**: one table per run, every signature with its source, and what was not recorded |
 | [`../battle-test/`](../battle-test/) | The devnet trial's tooling, frozen predictions and raw on-chain evidence |

@@ -36,6 +36,7 @@ import {
   decodeMsInstruction,
   decodeMsTransaction,
   decodeMultisig,
+  declaredProgramId,
   executeTransactionIx,
   groupInstructions,
   ixDiscriminator,
@@ -296,6 +297,10 @@ test('groupInstructions: by payload group, all, each', () => {
   assert.deepEqual(groupInstructions(list, 'all').map((g) => g.length), [5]);
   assert.deepEqual(groupInstructions(list, 'each').map((g) => g.length), [1, 1, 1, 1, 1]);
   assert.deepEqual(groupInstructions([x(), x()], 'group').map((g) => g.length), [2]);
+});
+
+test('the default program is the one lib.rs declares', () => {
+  assert.equal(declaredProgramId().toBase58(), BLOTTO.toBase58());
 });
 
 test('checkPayload: only the vault signs, only blotto_cup, labels match bytes', () => {

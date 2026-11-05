@@ -160,7 +160,7 @@ export const DEFAULT_TERRITORY_SCHEDULE: TerritorySchedule = {
   //     D-B3-4) — ES, FR, IT. §9 had these "open subject to counsel
   //     confirmation"; the instruction supersedes that pending a written
   //     opinion, on the counsel brief Part 6.3 reading that all three need a
-  //     state authorisation for paid skill competitions with cash prizes
+  //     state authorisation for paid skill competitions with money prizes
   //     whatever the answer on chance.
   blocked: [
     'AE', 'AU', 'BE', 'BH', 'CN', 'ES', 'FR', 'HK', 'ID',

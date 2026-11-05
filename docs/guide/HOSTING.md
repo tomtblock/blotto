@@ -425,7 +425,7 @@ wallet's own signature over a message it composes itself, and the admin pages ch
 against `config/reviewers.json`. The wallet to reconnect is remembered under an opaque browser
 key holding the wallet-standard id and a token of the address, never the address. A direct session
 has no email, no funding window and no key export (those are the provider's, for its embedded
-wallet); it has the send / cash-out flow. Social sign-in, with its embedded wallet, is unchanged.
+wallet); it has the send / off-ramp flow. Social sign-in, with its embedded wallet, is unchanged.
 
 **The Google consent screen** names the sign-in provider's application, not the product, unless
 the operator supplies its own Google OAuth credentials to the provider.

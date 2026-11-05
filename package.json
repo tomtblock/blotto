@@ -11,7 +11,9 @@
     "test": "anchor test",
     "setup": "for p in _shared scoring class-digest sealing sanctions reveal indexer packet detection watch; do (cd \"backend/$p\" && npm ci --no-audit --no-fund) || exit 1; done && (cd app && npm ci --no-audit --no-fund)",
     "admin": "ts-node --transpile-only scripts/admin.ts",
-    "check-deployed": "ts-node --transpile-only scripts/check-deployed.ts"
+    "squads": "ts-node --transpile-only scripts/squads-v3.ts",
+    "check-deployed": "ts-node --transpile-only scripts/check-deployed.ts",
+    "test:squads-v3": "ts-node --transpile-only scripts/squads-v3.test.ts"
   },
   "devDependencies": {
     "@solana/web3.js": "^1.98.4",
