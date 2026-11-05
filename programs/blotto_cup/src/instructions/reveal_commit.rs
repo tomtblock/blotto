@@ -77,10 +77,15 @@ pub fn handle_reveal_pool_secret(
 /// Commit the results root and the settled payout list (D3-B). `Sealed` +
 /// revealed only — results for a refunding pool are meaningless.
 ///
-/// Four checks make a malformed list unlandable: bounded by capacity,
+/// Six checks make a malformed list unlandable: bounded by capacity,
 /// sorted strictly by seat (which also proves no duplicates), every seat in
-/// range, and the amounts summing to EXACTLY the pot — the settlement
-/// signer chooses the split the published rule dictates, never the total.
+/// range, every amount positive and no larger than this pool's FIRST prize
+/// (`prize_table[0] × entry_lamports`, D-E19 §7.6 — no single seat can be
+/// owed more than first place, ties only ever share it), and the amounts
+/// summing to EXACTLY the pot — the settlement signer chooses the split the
+/// published rule dictates, never the total. Who is paid what is still
+/// recomputed off chain (the verify page, D-E15 deferred by D-E19
+/// decision 6: the program does not rank).
 /// (Worst case on the wire: 64 payouts × 10 bytes + the root ≈ 700 bytes —
 /// one transaction, comfortably.)
 pub fn handle_commit_results(
@@ -98,11 +103,19 @@ pub fn handle_commit_results(
         !payouts.is_empty() && payouts.len() <= CAPACITY as usize,
         ErrorCode::PayoutListMalformed
     );
+    let first_prize = pool.first_prize();
     let mut total: u128 = 0;
     for (i, p) in payouts.iter().enumerate() {
         require!(
             p.entry_index < pool.entrants,
             ErrorCode::PayoutListMalformed
+        );
+        // D-E19 §7.6: the cheap bounds. A zero amount is not a payout, and no
+        // seat is ever owed more than first place.
+        require!(p.amount > 0, ErrorCode::PayoutZero);
+        require!(
+            (p.amount as u128) <= first_prize,
+            ErrorCode::PayoutAboveFirstPrize
         );
         if i > 0 {
             // Strictly ascending seats: sorted AND duplicate-free in one check.

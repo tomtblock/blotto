@@ -16,14 +16,19 @@ import {
   battlesHash,
   encodeBattleSet,
   amountForRank,
-  potForEntry,
+  prizePoolFor,
+  ladderTable,
   leafBytes,
   merkleRoot,
   merkleProof,
   verifyProof,
-  PAID_RANKS,
-  PRIZE_BANDS_1024,
+  LADDER_TABLES,
+  MIN_FIELD_BY_CAPACITY,
+  POOL_CAPACITIES,
+  MAX_CAPACITY,
+  MAX_PAID_PLACES,
   TIER_ENTRY_LAMPORTS,
+  type PoolCapacity,
   type Allocation,
   type BattleSet,
   type PlayerResult,
@@ -47,7 +52,7 @@ describe('battle outcomes (hand-checked cases)', () => {
   }
 });
 
-describe('pool vectors (20 four-player + 5 full + minimum-field + edge cases)', () => {
+describe('pool vectors (four-player, full at every capacity, minimum fields, edge cases)', () => {
   for (const pool of vectors.pools) {
     it(pool.name, () => {
       const players: BattleSet[] = pool.players.map((p: any) => p.battles);
@@ -55,8 +60,13 @@ describe('pool vectors (20 four-player + 5 full + minimum-field + edge cases)', 
       for (let i = 0; i < players.length; i++) {
         expect(hex(encodeBattleSet(players[i]))).to.equal(pool.players[i].battles_hex);
       }
-      const pot = potForEntry(BigInt(pool.entry_lamports));
-      const results = assignPrizes(scorePool(players), pot);
+      // The pool's table is the launch table for its capacity; the oracle
+      // records both so a mismatch names itself.
+      const table = ladderTable(pool.capacity);
+      expect([...table]).to.deep.equal(pool.prize_table);
+      const entry = BigInt(pool.entry_lamports);
+      expect(prizePoolFor(table, entry).toString()).to.equal(pool.prize_pool_lamports);
+      const results = assignPrizes(scorePool(players), table, entry);
       for (const expected of pool.results) {
         const got = results[expected.index];
         expect(got.scoreHalf, `score of seat ${expected.index}`).to.equal(expected.score_half);
@@ -157,103 +167,196 @@ describe('lost-ciphertext pools (TECH-ARCH §5, scoreWithMissing)', () => {
   });
 });
 
-describe('split-pot cases (D3-B, through the same assignPrizes)', () => {
+describe('split-pot cases (D3-B over the Ladder tables, through the same assignPrizes)', () => {
+  const build = (groupSizes: number[]): PlayerResult[] => {
+    const results: PlayerResult[] = [];
+    let rank = 1;
+    let seat = 0;
+    for (const size of groupSizes) {
+      for (let k = 0; k < size; k++) {
+        results.push({ index: seat++, scoreHalf: 0, zones: 0, rank, amountLamports: 0n });
+      }
+      rank += size;
+    }
+    return results;
+  };
+  const caseNamed = (name: string) => {
+    const c = vectors.split_cases.find((x: any) => x.name === name);
+    expect(c, name).to.exist;
+    return c;
+  };
+
   for (const c of vectors.split_cases) {
     it(c.name, () => {
       // Rebuild the constructed ranking the oracle described: consecutive
-      // tie groups over a 52..64-seat field.
+      // tie groups over a field between the minimum field and the capacity.
+      const field = (c.group_sizes as number[]).reduce((a, b) => a + b, 0);
+      expect(field).to.be.within(MIN_FIELD_BY_CAPACITY[c.capacity as PoolCapacity], c.capacity);
+      const table = ladderTable(c.capacity);
+      const entry = BigInt(c.entry_lamports);
+      const assigned = assignPrizes(build(c.group_sizes), table, entry);
+      const myPayouts = assigned
+        .filter((r) => r.amountLamports > 0n)
+        .map((r) => ({ entry_index: r.index, amount: r.amountLamports.toString() }));
+      expect(myPayouts).to.deep.equal(c.payouts);
+      // Conservation: the paid set carries the whole prize pool, because
+      // every case's field is at least its minimum field, which exceeds the
+      // number of places paid.
+      let total = 0n;
+      for (const r of assigned) total += r.amountLamports;
+      expect(total).to.equal(prizePoolFor(table, entry));
+    });
+  }
+
+  it("the spec's example: four tied across 15th–18th of 64 share 15th and 16th", () => {
+    const c = caseNamed('four_way_15th_to_18th_cap64');
+    const entry = BigInt(c.entry_lamports);
+    // 15th and 16th are worth one entry each: two entries over four players.
+    const tied = c.payouts.filter((p: any) => p.entry_index >= 14).map((p: any) => BigInt(p.amount));
+    expect(tied).to.deep.equal([entry / 2n, entry / 2n, entry / 2n, entry / 2n]);
+    // 17th and 18th, otherwise unpaid, are paid by sharing; 19th onward is not.
+    expect(c.payouts.map((p: any) => p.entry_index)).to.not.include(18);
+  });
+
+  it('a pair tied on the last paid place halves it, at every capacity', () => {
+    for (const cap of POOL_CAPACITIES) {
+      const c = caseNamed(`pair_on_paid_line_cap${cap}`);
+      const table = LADDER_TABLES[cap];
+      const last = BigInt(table[table.length - 1]) * BigInt(c.entry_lamports);
+      const pair = c.payouts.slice(-2).map((p: any) => BigInt(p.amount));
+      expect(pair, `cap ${cap}`).to.deep.equal([last / 2n + (last % 2n), last / 2n]);
+      expect(c.payouts.length, `cap ${cap}: one more seat than the table`).to.equal(table.length + 1);
+    }
+  });
+
+  it('a three-way tie for first of 8 leaves the indivisible lamports on the lowest seat', () => {
+    // 1st + 2nd + 3rd of an 8-pool at 0.1 SOL = (3 + 2 + 0) × 0.1 = 0.5 SOL;
+    // 500_000_000 / 3 = 166_666_666 remainder 2.
+    const c = caseNamed('three_way_first_cap8');
+    expect(c.payouts.map((p: any) => BigInt(p.amount))).to.deep.equal([
+      166_666_668n,
+      166_666_666n,
+      166_666_666n,
+    ]);
+  });
+
+  it('a tie for second of 64 pays both tied seats the mean of 2nd and 3rd', () => {
+    const c = caseNamed('tie_for_second_cap64');
+    const entry = BigInt(c.entry_lamports);
+    expect(BigInt(c.payouts[0].amount)).to.equal(12n * entry);
+    expect(BigInt(c.payouts[1].amount)).to.equal(((6n + 3n) * entry) / 2n);
+    expect(BigInt(c.payouts[2].amount)).to.equal(((6n + 3n) * entry) / 2n);
+  });
+
+  it('a two-way tie for first splits 1st + 2nd exactly at every tier (8 and 64)', () => {
+    for (const cap of [8, 64] as const) {
+      const cases = vectors.split_cases.filter(
+        (x: any) => String(x.name).startsWith('two_way_first_tier_') && x.capacity === cap
+      );
+      expect(cases.length).to.equal(TIER_ENTRY_LAMPORTS.length);
+      const [a, b] = LADDER_TABLES[cap];
+      for (const c of cases) {
+        const combined = BigInt(a + b) * BigInt(c.entry_lamports);
+        expect(BigInt(c.payouts[0].amount)).to.equal(combined / 2n + (combined % 2n));
+        expect(BigInt(c.payouts[1].amount)).to.equal(combined / 2n);
+      }
+    }
+  });
+});
+
+describe('the prize property (D-E19): untied amounts are whole multiples; every pool conserves', () => {
+  // A deterministic sweep over random tie structures at every capacity and
+  // tier — not a vector from the oracle, a property of the rule itself.
+  let x = 0x9e3779b9;
+  const next = () => {
+    x ^= x << 13;
+    x ^= x >>> 17;
+    x ^= x << 5;
+    return (x >>> 0) / 0x1_0000_0000;
+  };
+  it('holds over 4,000 random fields', () => {
+    for (let trial = 0; trial < 4000; trial++) {
+      const cap = POOL_CAPACITIES[trial % 4];
+      const entry = TIER_ENTRY_LAMPORTS[Math.floor(next() * TIER_ENTRY_LAMPORTS.length)];
+      const mn = MIN_FIELD_BY_CAPACITY[cap];
+      const n = mn + Math.floor(next() * (cap - mn + 1));
+      const sizes: number[] = [];
+      let left = n;
+      while (left > 0) {
+        const size = Math.min(left, 1 + Math.floor(next() * next() * 6));
+        sizes.push(size);
+        left -= size;
+      }
       const results: PlayerResult[] = [];
       let rank = 1;
       let seat = 0;
-      for (const size of c.group_sizes as number[]) {
+      for (const size of sizes) {
         for (let k = 0; k < size; k++) {
           results.push({ index: seat++, scoreHalf: 0, zones: 0, rank, amountLamports: 0n });
         }
         rank += size;
       }
-      const pot = potForEntry(BigInt(c.entry_lamports));
-      const assigned = assignPrizes(results, pot);
-      const myPayouts = assigned
-        .filter((r) => r.amountLamports > 0n)
-        .map((r) => ({ entry_index: r.index, amount: r.amountLamports.toString() }));
-      expect(myPayouts).to.deep.equal(c.payouts);
-      // Conservation: the paid set carries the whole pot.
+      const table = LADDER_TABLES[cap];
+      const out = assignPrizes(results, table, entry);
       let total = 0n;
-      for (const r of assigned) total += r.amountLamports;
-      expect(total).to.equal(pot);
-    });
-  }
-  it('a two-way tie for first halves the pot exactly at every tier (D-E2)', () => {
-    const cases = vectors.split_cases.filter((x: any) =>
-      String(x.name).startsWith('two_way_first_tier_')
-    );
-    expect(cases.length).to.equal(7);
-    for (const c of cases) {
-      const pot = potForEntry(BigInt(c.entry_lamports));
-      expect(c.payouts.map((p: any) => p.entry_index)).to.deep.equal([0, 1]);
-      for (const p of c.payouts) expect(BigInt(p.amount)).to.equal(pot / 2n);
+      for (const r of out) total += r.amountLamports;
+      expect(total, `trial ${trial}`).to.equal(prizePoolFor(table, entry));
+      const groupSize = new Map<number, number>();
+      for (const r of out) groupSize.set(r.rank, (groupSize.get(r.rank) ?? 0) + 1);
+      for (const r of out) {
+        if (groupSize.get(r.rank) === 1) {
+          expect(r.amountLamports % entry, `trial ${trial} seat ${r.index}`).to.equal(0n);
+          expect(r.amountLamports).to.equal(amountForRank(table, entry, r.rank));
+        }
+        // No amount ever exceeds first place — the on-chain commit bound.
+        expect(r.amountLamports <= BigInt(table[0]) * entry).to.equal(true);
+      }
     }
-  });
-  it('the three-way tie for first leaves one lamport on the lowest seat', () => {
-    for (const name of ['three_way_first', 'three_way_first_field_52']) {
-      const c = vectors.split_cases.find((x: any) => x.name === name);
-      expect(c.payouts.length, name).to.equal(3);
-      const tied = c.payouts.map((p: any) => BigInt(p.amount));
-      // D-E1 pot 4 SOL: 4_000_000_000 / 3 = 1_333_333_333 remainder 1 — the
-      // single indivisible lamport lands on the lowest seat.
-      expect(tied).to.deep.equal([1_333_333_334n, 1_333_333_333n, 1_333_333_333n]);
-    }
-  });
-  it('a tie for second pays exactly one seat — nothing below first is paid', () => {
-    const c = vectors.split_cases.find((x: any) => x.name === 'tie_for_second');
-    expect(c.payouts).to.deep.equal([{ entry_index: 0, amount: '4000000000' }]);
-  });
-  it('an everyone-tied 52-seat field splits the pot with a visible remainder', () => {
-    const c = vectors.split_cases.find((x: any) => x.name === 'all_identical_52');
-    expect(c.payouts.length).to.equal(52);
-    // 4_000_000_000 / 52 = 76_923_076 remainder 48: the lowest seat takes
-    // the 48 indivisible lamports; conservation is checked above.
-    expect(BigInt(c.payouts[0].amount)).to.equal(76_923_076n + 48n);
-    expect(BigInt(c.payouts[1].amount)).to.equal(76_923_076n);
   });
 });
 
-describe('minimum-field pool vectors', () => {
-  // The generator builds one at MIN_SEATS and one at 58. The first moved
-  // from 52 to 40 with R7-b (founder instruction 2026-09-12), so it is read
-  // from the mirror rather than repeated here — repeating it is how the
-  // LiteSVM harness ended up asserting the old rule against the new program.
-  for (const n of [Number(require('../src').MIN_SEATS), 58]) {
-    it(`field_${n}: ${n} leaves, one winner, the whole pot`, () => {
-      const pool = vectors.pools.find((x: any) => x.name === `field_${n}`);
-      expect(pool, `field_${n} present`).to.exist;
+describe('minimum-field pool vectors (every capacity)', () => {
+  for (const cap of POOL_CAPACITIES) {
+    const n = MIN_FIELD_BY_CAPACITY[cap];
+    it(`field_min_${cap}: ${n} leaves, the full ${cap}-player table paid`, () => {
+      const pool = vectors.pools.find((x: any) => x.name === `field_min_${cap}`);
+      expect(pool, `field_min_${cap} present`).to.exist;
+      expect(pool.capacity).to.equal(cap);
       expect(pool.players.length).to.equal(n);
       expect(pool.leaves_hex.length).to.equal(n);
-      const pot = potForEntry(BigInt(pool.entry_lamports));
       const total = pool.payouts.reduce((a: bigint, p: any) => a + BigInt(p.amount), 0n);
-      expect(total).to.equal(pot);
-      const winners = pool.results.filter((r: any) => r.rank === 1);
-      expect(pool.payouts.length).to.equal(winners.length);
+      expect(total).to.equal(prizePoolFor(LADDER_TABLES[cap], BigInt(pool.entry_lamports)));
+      // A minimum field is larger than the paid places, so every place is paid.
+      expect(pool.payouts.length).to.be.at.least(LADDER_TABLES[cap].length);
     });
   }
 });
 
-describe('per-tier prize tables (D1)', () => {
-  it('TIER_ENTRY_LAMPORTS mirrors the oracle tier table exactly', () => {
-    const { TIER_ENTRY_LAMPORTS } = require('../src');
-    expect(TIER_ENTRY_LAMPORTS.map((v: bigint) => v.toString())).to.deep.equal(
-      vectors.tier_tables.map((t: { entry_lamports: string }) => t.entry_lamports)
-    );
+describe('the Ladder tables (D-E19)', () => {
+  it('mirror the oracle exactly', () => {
+    expect([...POOL_CAPACITIES]).to.deep.equal(vectors.ladder.capacities);
+    for (const cap of POOL_CAPACITIES) {
+      expect([...LADDER_TABLES[cap]], `table ${cap}`).to.deep.equal(vectors.ladder.tables[String(cap)]);
+      expect(MIN_FIELD_BY_CAPACITY[cap], `min ${cap}`).to.equal(vectors.ladder.min_seats[String(cap)]);
+    }
+    expect(Number(MAX_CAPACITY)).to.equal(vectors.max_capacity);
+    expect(MAX_PAID_PLACES).to.equal(vectors.max_paid_places);
   });
-
+  it('TIER_ENTRY_LAMPORTS mirrors the oracle tier table exactly', () => {
+    const tiers = [...new Set(vectors.tier_tables.map((t: any) => t.entry_lamports))];
+    expect(TIER_ENTRY_LAMPORTS.map((v) => v.toString())).to.deep.equal(tiers);
+  });
   for (const t of vectors.tier_tables) {
-    it(`entry ${t.entry_lamports}`, () => {
-      const pot = potForEntry(BigInt(t.entry_lamports));
-      expect(pot.toString()).to.equal(t.pot_lamports);
-      expect(t.bands.length).to.equal(PAID_RANKS);
-      for (let r = 1; r <= PAID_RANKS; r++) {
-        expect(amountForRank(pot, r).toString()).to.equal(t.bands[r - 1]);
+    it(`entry ${t.entry_lamports} × ${t.capacity} players`, () => {
+      const table = LADDER_TABLES[t.capacity as PoolCapacity];
+      const entry = BigInt(t.entry_lamports);
+      expect(prizePoolFor(table, entry).toString()).to.equal(t.prize_pool_lamports);
+      expect(t.places.length).to.equal(table.length);
+      for (let r = 1; r <= table.length; r++) {
+        expect(amountForRank(table, entry, r).toString()).to.equal(t.places[r - 1]);
       }
+      expect(amountForRank(table, entry, table.length + 1)).to.equal(0n);
+      expect(amountForRank(table, entry, 64)).to.equal(0n);
     });
   }
 });
@@ -287,23 +390,6 @@ describe('battles hash', () => {
       expect(hex(battlesHash(c.battles, unhex(c.salt)))).to.equal(c.expected);
     });
   }
-});
-
-describe('prize bands', () => {
-  it('sum to exactly 1024', () => {
-    expect(PRIZE_BANDS_1024.reduce((a, b) => a + b, 0n)).to.equal(1024n);
-    expect(vectors.prize_bands_1024.map(BigInt)).to.deep.equal([...PRIZE_BANDS_1024]);
-  });
-  it('one paid place: rank 1 is the pot, every lower rank takes zero (D-E2)', () => {
-    expect(PAID_RANKS).to.equal(1);
-    expect(vectors.paid_ranks).to.equal(PAID_RANKS);
-    for (let tier = 0; tier < 7; tier++) {
-      const pot = potForEntry(TIER_ENTRY_LAMPORTS[tier]);
-      expect(amountForRank(pot, 1)).to.equal(pot);
-      expect(amountForRank(pot, 2)).to.equal(0n);
-      expect(amountForRank(pot, 64)).to.equal(0n);
-    }
-  });
 });
 
 /**
@@ -341,8 +427,8 @@ describe('hard mode: pool vectors (four-player, full field, minimum field, stack
       expect(() => scorePool(players), 'a hard board is not an easy one').to.throw(
         /sum to exactly 100|integers in \[0, 100\]/
       );
-      const pot = potForEntry(BigInt(pool.entry_lamports));
-      const results = assignPrizes(scorePool(players, 'hard'), pot);
+      const table = ladderTable(pool.capacity);
+      const results = assignPrizes(scorePool(players, 'hard'), table, BigInt(pool.entry_lamports));
       for (const expected of pool.results) {
         const got = results[expected.index];
         expect(got.scoreHalf, `score of seat ${expected.index}`).to.equal(expected.score_half);

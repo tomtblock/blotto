@@ -24,7 +24,8 @@ use anchor_lang::prelude::*;
 use crate::error::ErrorCode;
 use crate::events::{RefundTriggered, Refunded};
 use crate::state::{
-    Config, Entry, Pool, PoolState, CONFIG_SEED, PLATFORM_SEED, POOL_SEED, VAULT_SEED,
+    Config, Entry, Pool, PoolState, PoolType, CONFIG_SEED, PLATFORM_SEED, POOL_SEED,
+    POOL_TYPE_SEED, VAULT_SEED,
 };
 
 #[derive(Accounts)]
@@ -55,6 +56,15 @@ pub struct TriggerRefund<'info> {
     #[account(mut, seeds = [PLATFORM_SEED], bump = config.platform_bump)]
     pub platform: UncheckedAccount<'info>,
 
+    /// The pool's own type (D-E19), derived from the pool's recorded mode,
+    /// tier and capacity — the slot this pool holds, freed when it closes.
+    #[account(
+        mut,
+        seeds = [POOL_TYPE_SEED, &[pool.mode], &[pool.tier], &pool.capacity.to_le_bytes()],
+        bump = pool_type.bump,
+    )]
+    pub pool_type: Box<Account<'info, PoolType>>,
+
     pub system_program: Program<'info, System>,
 }
 
@@ -64,9 +74,10 @@ pub fn handle_trigger_refund(ctx: Context<TriggerRefund>, _pool_id: u64) -> Resu
 
     // Only an Open pool refunds: a Sealed pool closed to entries, and every
     // later state descends from Sealed. Past the deadline the field decides
-    // the fork (D-E4): below `MIN_SEATS` refunds here, at or above it seals
-    // via `seal_at_deadline` — so a 52-seat pool can never be refunded out
-    // from under its entrants by anyone racing the seal.
+    // the fork (D-E4): below the pool's minimum field refunds here, at or
+    // above it seals via `seal_at_deadline` — so a pool that reached its
+    // floor can never be refunded out from under its entrants by anyone
+    // racing the seal.
     require!(pool.state == PoolState::Open, ErrorCode::PoolNotOpen);
     require!(now > pool.fill_deadline, ErrorCode::DeadlineNotPassed);
     // The pool's OWN floor, copied at open (R7-b) — the mirror image of
@@ -112,14 +123,10 @@ pub fn handle_trigger_refund(ctx: Context<TriggerRefund>, _pool_id: u64) -> Resu
     // pools, D-A1 revised): here on the straight-to-Closed empty path, else
     // when the last `refund` closes the pool. Freeing stamps the cooldown.
     if pool.state == PoolState::Closed {
-        let tier_idx = pool.tier as usize;
-        let pool_id = pool.id;
-        let mode = pool.mode;
-        crate::instructions::slot::free_tier_slot(
-            &mut ctx.accounts.config,
-            mode,
-            tier_idx,
-            pool_id,
+        crate::instructions::slot::free_pool_type_slot(
+            &mut ctx.accounts.pool_type,
+            ctx.accounts.config.cooldown_seconds,
+            pool.id,
             now,
         )?;
     }
@@ -163,6 +170,15 @@ pub struct Refund<'info> {
     #[account(mut, address = entry.player)]
     pub player: UncheckedAccount<'info>,
 
+    /// The pool's own type (D-E19), derived from the pool's recorded mode,
+    /// tier and capacity — the slot this pool holds, freed when it closes.
+    #[account(
+        mut,
+        seeds = [POOL_TYPE_SEED, &[pool.mode], &[pool.tier], &pool.capacity.to_le_bytes()],
+        bump = pool_type.bump,
+    )]
+    pub pool_type: Box<Account<'info, PoolType>>,
+
     pub system_program: Program<'info, System>,
 }
 
@@ -199,14 +215,10 @@ pub fn handle_refund(ctx: Context<Refund>, _pool_id: u64) -> Result<()> {
         // Fully refunded — the tier's slot frees and its cooldown starts
         // (sequential pools; prompt v2 §B.6).
         let now = Clock::get()?.unix_timestamp;
-        let tier_idx = pool.tier as usize;
-        let pool_id = pool.id;
-        let mode = pool.mode;
-        crate::instructions::slot::free_tier_slot(
-            &mut ctx.accounts.config,
-            mode,
-            tier_idx,
-            pool_id,
+        crate::instructions::slot::free_pool_type_slot(
+            &mut ctx.accounts.pool_type,
+            ctx.accounts.config.cooldown_seconds,
+            pool.id,
             now,
         )?;
     }

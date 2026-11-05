@@ -1,6 +1,6 @@
 //! `register` (roadmap 1.3) — pay the entry, submit the sealed battles hash;
 //! the cosmetic class comes from the bag, the pass is minted frozen, and the
-//! 64th entry seals the pool.
+//! entry that reaches the pool's capacity (8, 16, 32 or 64 — D-E19) seals the pool.
 //!
 //! Order of operations in the handler (each step names its test):
 //!
@@ -22,7 +22,7 @@
 //!      PID §8.4);
 //!   5. pass mint — bare member of the frozen Collection (`pass.rs`);
 //!   6. state writes + `EntryRegistered`;
-//!   7. the 64th entry seals via `seal_pool` — refunds are now impossible,
+//!   7. the entry that fills the pool seals via `seal_pool` — refunds are now impossible,
 //!      so the pool's entry payments leave `platform_refundable` and become
 //!      withdrawable revenue. The tier slot is NOT freed here: pools per
 //!      tier are SEQUENTIAL (D-A1 revised supersedes R14) and the slot
@@ -68,7 +68,7 @@ pub struct Register<'info> {
     pub player: Signer<'info>,
 
     /// `mut`: every entry moves its price through `platform_refundable`
-    /// (and the 64th entry releases the pool's 64 prices from it at seal).
+    /// (and the entry that fills the pool releases its entry prices from it at seal).
     #[account(mut, seeds = [CONFIG_SEED], bump = config.bump)]
     pub config: Box<Account<'info, Config>>,
 
@@ -158,7 +158,12 @@ pub fn handle_register(
         now <= ctx.accounts.pool.fill_deadline,
         ErrorCode::DeadlinePassed
     );
-    require!(ctx.accounts.pool.entrants < CAPACITY, ErrorCode::PoolFull);
+    // D-E19: the pool's OWN capacity (8, 16, 32 or 64), copied from its
+    // pool type at open — never the 64 maximum.
+    require!(
+        ctx.accounts.pool.entrants < ctx.accounts.pool.capacity,
+        ErrorCode::PoolFull
+    );
     // No seed gate (decision R22, 2026-10-15). Until then `register`
     // refused every entry while `Pool.vrf_seed` was zero. Switchboard, the
     // only oracle that could commit it, shut down (announced 2026-09-19); its
@@ -279,14 +284,18 @@ pub fn handle_register(
         terms_version: packet.terms_version,
     });
 
-    // ---- 7. The 64th entry seals ----------------------------------------
+    // ---- 7. The entry that fills the pool seals -------------------------
     // (Option A, founder ruling 2026-09-07: no go-timer — the deadline set
     // at open is never rewritten; `seal_at_deadline` handles 52..63 there.)
-    if pool.entrants == CAPACITY {
-        debug_assert_eq!(
-            pool.class_counters.iter().map(|&c| c as u32).sum::<u32>(),
-            0,
-            "a full pool must have an empty bag"
+    if pool.entrants == pool.capacity {
+        // Only a full 64-player pool empties the bag of 64 exactly. Every
+        // smaller pool draws from the same mix of 64 and closes with passes
+        // left in it (D-E19 decision 2: one mix for every size, so no size is
+        // a route to a rarer character).
+        debug_assert!(
+            pool.capacity != CAPACITY
+                || pool.class_counters.iter().map(|&c| c as u32).sum::<u32>() == 0,
+            "a full 64-player pool must have an empty bag"
         );
         seal_pool(
             pool,
@@ -301,7 +310,7 @@ pub fn handle_register(
 
 /// Close a pool to entries: `Open → Sealed`, its entry payments leave the
 /// refundable floor and become platform revenue, `PoolSealed` carries the
-/// field it plays with. Shared by the 64th `register` and `seal_at_deadline`
+/// field it plays with. Shared by the filling `register` and `seal_at_deadline`
 /// (D-E4) so the two seal paths cannot drift; the accounting uses the REAL
 /// field (`entrants`), never `CAPACITY` — at 64 they are equal, below 64
 /// only the former is correct (subtracting 64 prices from a 52-seat pool

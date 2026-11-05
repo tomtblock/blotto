@@ -4,8 +4,48 @@
 //! register in `docs/architecture/DECISIONS.md` (CLAUDE.md: never invent values).
 //! The one derived table — the prize bands — shows its derivation inline.
 
-/// Seats per pool (PID §2, TECH-ARCH §2).
+/// The LARGEST pool, and the size every fixed array is dimensioned by:
+/// `Pool.payouts`, the `paid_mask` bit field (a `u64` — one bit per seat),
+/// the class bag (`LAUNCH_CLASS_COUNTERS` sums to it). Since D-E19 (the
+/// Ladder, founder ruling 2026-11-04) a pool's own size is `Pool.capacity`,
+/// one of `POOL_CAPACITIES`; nothing gates a pool on this constant any more.
 pub const CAPACITY: u16 = 64;
+
+/// The four pool sizes (D-E19), smallest first. `init_pool_type` refuses
+/// any other. Index into `LADDER_TABLES` / `LADDER_MIN_SEATS` by position.
+pub const POOL_CAPACITIES: [u16; 4] = [8, 16, 32, 64];
+
+/// The widest prize table: a 64-player pool pays its top quarter, 16 places.
+/// `PoolType.prize_table` and `Pool.prize_table` are `[u8; MAX_PAID_PLACES]`.
+pub const MAX_PAID_PLACES: usize = 16;
+
+/// The published prize tables (D-E19), in whole multiples of the entry
+/// price, rank 1 first, zero-padded to `MAX_PAID_PLACES`, one row per
+/// `POOL_CAPACITIES` entry. Prize for rank r = `table[r-1] × entry_lamports`,
+/// exact in integers at every tier. Every rank past the table is paid zero.
+///
+/// These are the LAUNCH values — what the admin configures each `PoolType`
+/// with through `set_pool_type_economics` and what the rules page shows. The
+/// program does not require a pool type to carry exactly these numbers; it
+/// enforces their SHAPE (top quarter paid, never increasing, no zero inside
+/// the paid places, the prize pool equal to the table at the price, the
+/// prize pool no larger than the minimum field's entries). Mirrored in
+/// `backend/scoring/src/prizes.ts` and the Python oracle; pinned together by
+/// `scripts/check-mirrors.py` and the scoring vector suite.
+pub const LADDER_TABLES: [[u8; MAX_PAID_PLACES]; 4] = [
+    [3, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [5, 3, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [8, 4, 2, 2, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+    [12, 6, 3, 3, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1],
+];
+
+/// The minimum field per capacity (D-E19; generalises R7-b's 40 at 64): the
+/// break-even field, where entries equal the prize pool (each table sums to
+/// exactly its minimum field). A pool seals at its capacity, or at its
+/// deadline with at least its minimum field; below it every entry refunds
+/// in full. A seat count, never a percentage. The live value of a pool is
+/// `Pool.min_seats`, copied from its `PoolType` at open.
+pub const LADDER_MIN_SEATS: [u16; 4] = [5, 10, 20, 40];
 
 // The battle shape — seven battles of five stats summing to 100 — is
 // deliberately NOT a constant here. This program never sees an allocation:
@@ -45,34 +85,14 @@ pub const DEFAULT_COOLDOWN_SECS: i64 = 5 * 60;
 /// Inaction pays the player, never the operator.
 pub const ESCROW_AUTO_RELEASE_SECS: i64 = 7 * 24 * 60 * 60;
 
-/// Minimum field for a pool to play (R7-b, founder instruction 2026-09-12;
-/// was 52 under D-E4, 2026-09-06). A pool seals at the 64th entry, or at its
-/// deadline when it holds at least this many seats (`seal_at_deadline`);
-/// below it, every entry refunds in full. Nothing in between.
-///
-/// Expressed ONLY as a seat count, never as a percentage, anywhere in the
-/// program, the engine or the copy.
-///
-/// THIS IS EXACTLY BREAK-EVEN, BY DECISION. At the D-E1 pots the pot is
-/// forty entries' worth at every tier (`pot = price / 8 * 5 * 64 = price ×
-/// 40`), so a pool sealing at this floor takes in precisely what it pays
-/// out. D-E4's rule was that the minimum field must EXCEED the pot, which
-/// bought a 12-seat buffer; the founder's ruling of 2026-09-13 spends that
-/// buffer deliberately:
-///
-///   "We are keeping the size at 4 SOL. We accept that some pools will
-///    break even. We are pre-funding the prize pool from the treasury
-///    beforehand so the amount of money we take in is not relevant to the
-///    number of players."
-///
-/// That is right about the mechanism: under D-A1 the pot is moved from the
-/// treasury into the vault at `open_pool`, before any pass sells, so a
-/// pool's ability to pay never depended on its own entries. The comparison
-/// in `prize_math` and in `set_tier_economics` is therefore `pot <= MIN_SEATS
-/// × price`, which admits exactly break-even and still refuses any pot
-/// LARGER than the minimum field's intake. Margin is `1 − 40/seats` of
-/// intake: nil at 40, 37.5% at a full 64.
-pub const MIN_SEATS: u16 = 40;
+// `MIN_SEATS` (40, R7-b) was the one minimum field while every pool held 64.
+// Since D-E19 each pool type carries its own (`LADDER_MIN_SEATS`, copied onto
+// `PoolType.min_seats` and then onto every pool at open). The rule it
+// encoded is unchanged and now holds per size: the minimum field is exactly
+// break-even — the prize pool equals its entries — so a pool sealing at its
+// floor takes in precisely what it pays out (the founder's ruling of
+// 2026-09-13: the prize pool is pre-funded from the treasury, D-A1, so a
+// pool's ability to pay never depended on its own entries).
 
 /// The minimum field pools opened BEFORE R7-b played at (D-E4, 2026-09-06 —
 /// 52 seats). `migrate_pool` writes this into every pool that predates
@@ -125,15 +145,14 @@ pub const TIER_ENTRY_LAMPORTS: [u64; N_TIERS] = [
 ];
 
 /// Configured tiers' INITIAL pots (D-A1 revised; amounts re-ratified by
-/// D-E1, 2026-09-06): FIXED constants — 4 / 20 / 30 / 40 / 100 / 200 /
-/// 300 SOL — funded from the platform treasury at `open_pool`, BEFORE any
-/// pass is sold. The founder's stated derivation for these values is
-/// 62.5% of price × 64 (equivalently price / 8 × 5 × 64, exact in integer
-/// arithmetic at every tier); the derivation is history, the constant is
-/// the law — on-chain a pot is a constant, never arithmetic over entries
-/// or balances (the standing-rules grep asserts exactly that). Every value
-/// is a multiple of 1024 lamports so the band table divides with zero
-/// residue (prize_math tests assert per tier).
+/// D-E1, 2026-09-06): 4 / 20 / 30 / 40 / 100 / 200 / 300 SOL — the prize
+/// pool of a 64-player pool at each tier. Seeds `Config.tier_pot_lamports`.
+///
+/// Since D-E19 NO POOL IS FUNDED FROM THIS. Each pool type carries its own
+/// fixed prize pool (`PoolType.pot_lamports`), and `open_pool` moves that.
+/// The tier pot stays in Config's layout (offsets are load-bearing) as the
+/// 64-player reference figure `set_tier_economics` records alongside the
+/// price; it equals `LADDER_TABLES[3]`'s sum (40) times the tier's price.
 pub const TIER_POT_LAMPORTS: [u64; N_TIERS] = [
     4_000_000_000,
     20_000_000_000,
@@ -144,26 +163,12 @@ pub const TIER_POT_LAMPORTS: [u64; N_TIERS] = [
     300_000_000_000,
 ];
 
-/// Number of paid places (D-E2, founder decision 2026-09-06: winner takes
-/// all — PID §6 reissue pending counsel). Was 16 under PID §6 v0.5.
-pub const PAID_RANKS: usize = 1;
-
-/// Prize bands in 1024ths of the pot, rank 1 → rank `PAID_RANKS`.
-///
-/// D-E2 (2026-09-06): the player ranked first receives the entire pot —
-/// `1024/1024`, exact for any pot. Ties for first split it through
-/// `prize_math::split_group` (each = pot / k, the indivisible remainder to
-/// the tied player with the lowest entry index); every rank below the
-/// paid line receives zero, and ranks 2+ appear in the committed ranking
-/// with amount 0.
-///
-/// The 1024ths form and the "pot is a multiple of 1024" invariant are kept
-/// on purpose even though a single band no longer needs them: they cost
-/// nothing, keep tie splits well-conditioned, and make a return to a
-/// multi-place table a constants edit rather than a re-derivation. The
-/// previous table (270/158/102/78/50×4/27×8, PID §6 v0.5) lives in git
-/// history and in the revert branch prepared for the D-E2 upgrade.
-pub const PRIZE_BANDS_1024: [u64; PAID_RANKS] = [1024];
+// `PAID_RANKS` (1) and `PRIZE_BANDS_1024` ([1024]) — D-E2's winner-takes-all
+// table in 1024ths of the pot — were retired by D-E19 together with the rule
+// that every pot be a multiple of 1024 lamports. Under the Ladder a prize is
+// `multiple × entry_lamports`, exact at every tier with no division at all,
+// so the 1024ths grid has nothing left to guarantee (most 8- and 16-player
+// prize pools are not multiples of 1024 lamports: 0.5 SOL is not).
 
 /// Entry-packet freshness window, seconds (roadmap 4.1: "issued_at within 60s").
 pub const PACKET_MAX_AGE_SECS: i64 = 60;

@@ -53,7 +53,7 @@ pub use instructions::*;
 pub use pass::*;
 pub use vrf::*;
 
-use crate::constants::N_TIERS;
+use crate::constants::{MAX_PAID_PLACES, N_TIERS};
 use crate::state::Payout;
 
 // Devnet program identity, generated fresh during Phase 0 extraction. The
@@ -223,11 +223,15 @@ pub mod blotto_cup {
     }
 
     /// Admin (Squads): the ONE treasury exit, blocked below the policy
-    /// floor — the minimum balance, plus `reserve_pots` further pots (each
-    /// counted with the prize vault's rent cushion, because that is what an
-    /// open costs) for every enabled tier with no live pool, plus every
-    /// refundable entry payment still owed to players.
-    pub fn withdraw_platform(ctx: Context<WithdrawPlatform>, amount: u64) -> Result<()> {
+    /// floor — the minimum balance, plus `reserve_pots` further prize pools
+    /// (each counted with the prize vault's rent cushion, because that is
+    /// what an open costs) for every enabled pool type with no live pool,
+    /// plus every refundable entry payment still owed to players. Remaining
+    /// accounts: every enabled `PoolType`, ascending by address (D-E19).
+    pub fn withdraw_platform<'info>(
+        ctx: Context<'info, WithdrawPlatform<'info>>,
+        amount: u64,
+    ) -> Result<()> {
         instructions::handle_withdraw_platform(ctx, amount)
     }
 
@@ -240,18 +244,22 @@ pub mod blotto_cup {
     /// key, and a pool sealed to a key our custody does not hold can never
     /// be revealed, therefore never settled. The gates are the tier's
     /// enablement, the SEQUENTIAL rule plus its cooldown, and the treasury
-    /// policy; the pot — plus the prize vault's rent cushion — moves from
-    /// the treasury into the new vault before any entry. `mode` (Phase B,
-    /// appended) picks the ladder: 0 easy, 1 hard — each (mode, tier) has
-    /// its own enablement switch, live slot and cooldown clock, and shares
-    /// the tier's price, pot and ceiling.
-    pub fn open_pool(
-        ctx: Context<OpenPool>,
+    /// policy; the prize pool — plus the prize vault's rent cushion — moves
+    /// from the treasury into the new vault before any entry. `mode` (Phase
+    /// B, appended) picks the ladder: 0 easy, 1 hard. `capacity` (D-E19,
+    /// appended) picks the size: 8, 16, 32 or 64. Each (mode, tier,
+    /// capacity) is a `PoolType` with its own switch, slot, cooldown, table,
+    /// minimum field and prize pool; it shares the tier's price, ceiling and
+    /// R6 switch. Remaining accounts: every OTHER enabled `PoolType`,
+    /// ascending by address (the treasury reserve).
+    pub fn open_pool<'info>(
+        ctx: Context<'info, OpenPool<'info>>,
         pool_id: u64,
         tier: u8,
         sealing_pubkey: [u8; 32],
         sealing_secret_hash: [u8; 32],
         mode: u8,
+        capacity: u16,
     ) -> Result<()> {
         instructions::handle_open_pool(
             ctx,
@@ -260,7 +268,56 @@ pub mod blotto_cup {
             sealing_pubkey,
             sealing_secret_hash,
             mode,
+            capacity,
         )
+    }
+
+    /// Admin (Squads): create the pool type for (mode, tier, capacity) —
+    /// D-E19. Disabled and without a table until the next two instructions.
+    /// Refuses any capacity other than 8, 16, 32 or 64.
+    pub fn init_pool_type(
+        ctx: Context<InitPoolType>,
+        mode: u8,
+        tier: u8,
+        capacity: u16,
+    ) -> Result<()> {
+        instructions::handle_init_pool_type(ctx, mode, tier, capacity)
+    }
+
+    /// Admin (Squads): the economics the NEXT pool of this type opens with —
+    /// minimum field, prize table (whole multiples of the entry, rank 1
+    /// first) and the prize pool, which must equal the table at the tier's
+    /// price. Never touches an open pool.
+    pub fn set_pool_type_economics(
+        ctx: Context<AdminPoolType>,
+        mode: u8,
+        tier: u8,
+        capacity: u16,
+        min_seats: u16,
+        prize_table: [u8; MAX_PAID_PLACES],
+        pot_lamports: u64,
+    ) -> Result<()> {
+        instructions::handle_set_pool_type_economics(
+            ctx,
+            mode,
+            tier,
+            capacity,
+            min_seats,
+            prize_table,
+            pot_lamports,
+        )
+    }
+
+    /// Admin (Squads): switch a pool type on or off. Off stops the next pool
+    /// of the type; a pool already taking entries is untouched.
+    pub fn set_pool_type_enabled(
+        ctx: Context<AdminPoolType>,
+        mode: u8,
+        tier: u8,
+        capacity: u16,
+        enabled: bool,
+    ) -> Result<()> {
+        instructions::handle_set_pool_type_enabled(ctx, mode, tier, capacity, enabled)
     }
 
     /// Commit the pool's Switchboard On-Demand VRF seed. Write-once, Open

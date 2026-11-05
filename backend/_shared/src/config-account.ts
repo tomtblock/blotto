@@ -27,10 +27,20 @@ import { base58Encode } from './blotto-events';
 export const N_TIERS = 7;
 
 /**
- * `Config::SPACE` since the Phase B upgrade (2026-09-24, `state.rs`): 8
- * discriminator + `LEN_V1` 372 + `TAIL_LEN` 104 + `HARD_TAIL_LEN` 119.
+ * `Config::SPACE` since the Ladder upgrade (D-E19, `state.rs`): 8
+ * discriminator + `LEN_V1` 372 + `TAIL_LEN` 104 + `HARD_TAIL_LEN` 119 +
+ * `LADDER_TAIL_LEN` 2 (`enabled_pool_types`).
  */
-export const CONFIG_SPACE = 603;
+export const CONFIG_SPACE = 605;
+
+/**
+ * `Config::SPACE_V3` — Phase B until the Ladder (603). The live devnet
+ * account is this size until the Ladder's `migrate_config` runs; it is read
+ * with `enabledPoolTypes` absent (`ladderPresent: false`). Since D-E19 the
+ * per-(mode, tier) slots, cooldowns and pots on Config are no longer what
+ * opens a pool — each `PoolType` carries its own (`pool-type-account.ts`).
+ */
+export const CONFIG_SPACE_V3 = 603;
 
 /**
  * `Config::SPACE_V2` — the size between the 2026-09-07 upgrade and Phase B
@@ -97,6 +107,14 @@ export interface ConfigAccountView {
    */
   hardLadderPresent: boolean;
   hardOpenTiers: boolean[];
+  /**
+   * The Ladder (D-E19): how many `PoolType` accounts are enabled — the
+   * count `open_pool` and `withdraw_platform` check the remaining accounts
+   * against. `ladderPresent` is false (and the count 0) on a 603-byte
+   * account the Ladder migration has not grown yet.
+   */
+  ladderPresent: boolean;
+  enabledPoolTypes: number;
   hardActivePoolByTier: bigint[];
   hardTierNextOpenAt: bigint[];
 }
@@ -118,7 +136,8 @@ export interface ConfigAccountView {
  *   cooldown_seconds 8 (420) | tier_next_open_at 7x8 (428) — 484 so far |
  *   — the Phase B tail, appended after that: hard_open_tiers 7 (484) |
  *   hard_active_pool_by_tier 7x8 (491) | hard_tier_next_open_at 7x8 (547)
- *   — 603 in all.
+ *   — 603 so far | — the Ladder tail (D-E19): enabled_pool_types 2 (603)
+ *   — 605 in all.
  *
  * A wrong offset here does not throw: it reads a neighbouring field as if it
  * were the one asked for. `backend/indexer/test/treasury-report.spec.ts`
@@ -143,6 +162,7 @@ const OFF = {
   hardOpenTiers: 484,
   hardActivePoolByTier: 491,
   hardTierNextOpenAt: 547,
+  enabledPoolTypes: 603,
 } as const;
 
 /**
@@ -161,13 +181,14 @@ export function decodeConfigAccount(data: Uint8Array): ConfigAccountView {
         'on this deployment, and the current program has no path to grow it'
     );
   }
-  if (data.length !== CONFIG_SPACE && data.length !== CONFIG_SPACE_V2) {
+  if (data.length !== CONFIG_SPACE && data.length !== CONFIG_SPACE_V3 && data.length !== CONFIG_SPACE_V2) {
     throw new Error(
       `Config account is ${data.length} bytes; source says ${CONFIG_SPACE} ` +
-        `(or ${CONFIG_SPACE_V2} before Phase B)`
+        `(or ${CONFIG_SPACE_V3} before the Ladder, ${CONFIG_SPACE_V2} before Phase B)`
     );
   }
-  const hardLadderPresent = data.length === CONFIG_SPACE;
+  const hardLadderPresent = data.length >= CONFIG_SPACE_V3;
+  const ladderPresent = data.length === CONFIG_SPACE;
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const u64 = (offset: number): bigint => view.getBigUint64(offset, true);
   const i64 = (offset: number): bigint => view.getBigInt64(offset, true);
@@ -210,6 +231,8 @@ export function decodeConfigAccount(data: Uint8Array): ConfigAccountView {
     hardOpenTiers,
     hardActivePoolByTier,
     hardTierNextOpenAt,
+    ladderPresent,
+    enabledPoolTypes: ladderPresent ? view.getUint16(OFF.enabledPoolTypes, true) : 0,
   };
 }
 

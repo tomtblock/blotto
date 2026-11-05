@@ -59,15 +59,28 @@ import sys
 # ---------------------------------------------------------------------------
 CONSTANT_MIRRORS = [
     ("programs/blotto_cup/src/constants.rs", "CAPACITY", [
-        ("backend/scoring/src/prizes.ts", "CAPACITY"),
+        # The largest pool since D-E19; every fixed array is sized by it.
+        ("backend/scoring/src/prizes.ts", "MAX_CAPACITY"),
     ]),
-    ("programs/blotto_cup/src/constants.rs", "MIN_SEATS", [
-        ("backend/scoring/src/prizes.ts", "MIN_SEATS"),
-        # The LiteSVM harness repeats it too, and until 2026-09-13 that copy
-        # lived inside one test file, unchecked, claiming in a comment to
-        # mirror the program. R7-b moved the program to 40 and the copy stayed
-        # at 52, so two tests asserted the OLD rule against the new artifact.
-        ("tests/litesvm/src/lib.rs", "MIN_SEATS"),
+    ("programs/blotto_cup/src/constants.rs", "POOL_CAPACITIES", [
+        ("backend/scoring/src/prizes.ts", "POOL_CAPACITIES"),
+    ]),
+    ("programs/blotto_cup/src/constants.rs", "MAX_PAID_PLACES", [
+        ("backend/scoring/src/prizes.ts", "MAX_PAID_PLACES"),
+    ]),
+    # The Ladder's minimum fields and tables (D-E19). The TypeScript side
+    # holds them as records keyed by capacity, which this value comparer does
+    # not parse; `backend/scoring/test/mirror.spec.ts` pins those two against
+    # constants.rs instead, and the vector suite pins them to the Python
+    # oracle. The LiteSVM harness repeats the minimum fields as an array, and
+    # that copy is checked here — until 2026-09-13 its predecessor (one
+    # `MIN_SEATS`) lived unchecked and asserted an old rule against a new
+    # program.
+    ("programs/blotto_cup/src/constants.rs", "LADDER_MIN_SEATS", [
+        ("tests/litesvm/src/lib.rs", "LADDER_MIN_SEATS"),
+    ]),
+    ("programs/blotto_cup/src/constants.rs", "LADDER_TABLES", [
+        ("tests/litesvm/src/lib.rs", "LADDER_TABLES"),
     ]),
     ("programs/blotto_cup/src/constants.rs", "DEFAULT_FILL_DEADLINE_SECS", [
         ("backend/scoring/src/prizes.ts", "DEFAULT_FILL_DEADLINE_SECS"),
@@ -80,15 +93,6 @@ CONSTANT_MIRRORS = [
     ]),
     ("programs/blotto_cup/src/constants.rs", "TIER_ENTRY_LAMPORTS", [
         ("backend/scoring/src/prizes.ts", "TIER_ENTRY_LAMPORTS"),
-    ]),
-    ("programs/blotto_cup/src/constants.rs", "TIER_POT_LAMPORTS", [
-        ("backend/scoring/src/prizes.ts", "TIER_POT_LAMPORTS"),
-    ]),
-    ("programs/blotto_cup/src/constants.rs", "PAID_RANKS", [
-        ("backend/scoring/src/prizes.ts", "PAID_RANKS"),
-    ]),
-    ("programs/blotto_cup/src/constants.rs", "PRIZE_BANDS_1024", [
-        ("backend/scoring/src/prizes.ts", "PRIZE_BANDS_1024"),
     ]),
     ("programs/blotto_cup/src/constants.rs", "N_TIERS", [
         ("backend/_shared/src/config-account.ts", "N_TIERS"),
@@ -130,6 +134,11 @@ TYPE_FOR_READER = {
     # pre-append shape of the event) — Phase B's `mode`. The Rust type is
     # still a plain u8; only the decoder tolerates its absence.
     "tailU8": "u8",
+    # The Ladder (D-E19): the prize table, and the appended u16 / table read
+    # only when present (null on a pre-Ladder event).
+    "u8x16": "[u8;16]",
+    "tailU16": "u16",
+    "tailU8x16": "[u8;16]",
 }
 
 

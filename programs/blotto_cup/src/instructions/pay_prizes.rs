@@ -44,7 +44,9 @@ use anchor_lang::prelude::*;
 use crate::constants::CAPACITY;
 use crate::error::ErrorCode;
 use crate::events::{PayoutRecord, PrizesPaid};
-use crate::state::{Config, Entry, Pool, PoolState, CONFIG_SEED, POOL_SEED, VAULT_SEED};
+use crate::state::{
+    Config, Entry, Pool, PoolState, PoolType, CONFIG_SEED, POOL_SEED, POOL_TYPE_SEED, VAULT_SEED,
+};
 
 #[derive(Accounts)]
 #[instruction(pool_id: u64)]
@@ -72,6 +74,15 @@ pub struct PayPrizes<'info> {
     /// CHECK: Prize-vault PDA, derivation-checked against the stored bump.
     #[account(mut, seeds = [VAULT_SEED, &pool_id.to_le_bytes()], bump = pool.vault_bump)]
     pub vault: UncheckedAccount<'info>,
+
+    /// The pool's own type (D-E19), derived from the pool's recorded mode,
+    /// tier and capacity — the slot this pool holds, freed when it is Paid.
+    #[account(
+        mut,
+        seeds = [POOL_TYPE_SEED, &[pool.mode], &[pool.tier], &pool.capacity.to_le_bytes()],
+        bump = pool_type.bump,
+    )]
+    pub pool_type: Box<Account<'info, PoolType>>,
 
     pub system_program: Program<'info, System>,
     // remaining_accounts: for each seat in `seats`, IN ORDER:
@@ -113,6 +124,8 @@ pub fn handle_pay_prizes<'info>(
         // `paid_mask` being a u64 — shifting by 64 or more is undefined —
         // but a bare 64 beside a capacity that lives in a constant is how
         // the two drift apart unnoticed.
+        // `seat < entrants <= capacity <= CAPACITY` was proven at
+        // `commit_results`; this keeps the shift below defined regardless.
         require!(seat < CAPACITY, ErrorCode::InvalidRank);
         let bit: u64 = 1u64 << seat;
         require!(
@@ -189,13 +202,11 @@ pub fn handle_pay_prizes<'info>(
             .platform_reserved
             .checked_sub(ctx.accounts.pool.pot_lamports)
             .ok_or(ErrorCode::Overflow)?;
-        let tier_idx = ctx.accounts.pool.tier as usize;
         let pool_id = ctx.accounts.pool.id;
-        let mode = ctx.accounts.pool.mode;
-        crate::instructions::slot::free_tier_slot(
-            &mut ctx.accounts.config,
-            mode,
-            tier_idx,
+        let cooldown = ctx.accounts.config.cooldown_seconds;
+        crate::instructions::slot::free_pool_type_slot(
+            &mut ctx.accounts.pool_type,
+            cooldown,
             pool_id,
             now,
         )?;

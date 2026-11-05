@@ -94,3 +94,13 @@ export {
 } from './http-hygiene';
 
 export { registerBlottoEventLayouts, base58Encode, base58Decode } from './blotto-events';
+
+export {
+  decodePoolTypeAccount,
+  poolTypeSeeds,
+  compareAddressBytes,
+  POOL_TYPE_SPACE,
+  POOL_TYPE_SEED,
+  POOL_TYPE_OFFSETS,
+  type PoolTypeView,
+} from './pool-type-account';
