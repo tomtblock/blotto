@@ -23,6 +23,10 @@ admin) `9EEWtzyu72a3DKJVUkCaeYX4HuBKD59xXCcENnDVe34Z`, daemon app `blotto-daemon
 
 Every command is one line, names its key, and is run from the repository root on the merged
 commit, after `npm run setup && yarn install` ([OPERATING-MANUAL §2](OPERATING-MANUAL.md#2-standing-rules)).
+Without a global yarn, `npx yarn@1.22.22 install` does the second half; the admin and Squads
+scripts need it. Every key is a keypair JSON file: `solana-keygen pubkey <file>` must print the
+public key in the table above. A member key held only in a wallet app has to be exported to such
+a file first.
 
 ---
 
@@ -147,8 +151,12 @@ Expect every row green (Config 605, Pool 869, PoolType 57, the new instructions 
 
 ## 6. Deploy the backend and the watcher
 
-1. **Actions → deploy-backend → Run workflow**, on `main` ([HOSTING](HOSTING.md)). The indexer
-   applies migration 0026 and rebuilds its derived tables before it serves.
+1. **Actions → deploy-backend → Run workflow**, on `main` ([HOSTING](HOSTING.md)), with
+   **`allow_dev_credentials` ticked**: devnet has no location provider (`GEO_VENDOR_URL` and
+   `GEO_VENDOR_API_KEY` are unset), so an unticked run stops at its credential preflight and
+   deploys nothing. Ticked, the only fallback it takes is the geo stub; the entry signer stays
+   Turnkey. Check that "What this run shipped" lists all four services. The indexer applies
+   migration 0026 and rebuilds its derived tables before it serves.
 2. **Bring the daemon back** if the deploy left it at zero:
 
 ```bash
@@ -156,8 +164,9 @@ fly scale count 1 -a blotto-daemon
 ```
 
 3. **Actions → deploy-watch → Run workflow**, on `main` — the watcher reads the new layouts.
-4. **Location budget.** Eight pools can seat up to 240 players a round; size the packet service's
-   `GEO_DAILY_CAP` for that (its default reserve covers one round only at a cap of 960 or more).
+4. **Location budget** (once a location provider is connected). Eight pools can seat up to 240
+   players a round; size the packet service's `GEO_DAILY_CAP` for that (its default reserve covers
+   one round only at a cap of 960 or more).
 
 ## 7. Watch the eight pools open
 
