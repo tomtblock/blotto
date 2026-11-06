@@ -202,10 +202,13 @@ A refusal is a red first step within a minute or so, and nothing on any app chan
 Then:
 
 1. **Actions → deploy-backend → Run workflow**, with the branch on `main`.
-2. Leave **`allow_dev_credentials`** unticked. When ticked, it falls back only where a
-   production credential is missing: a development entry-signer seed, or a geo stub that admits
-   every address. It warns by name for each fallback, and it never replaces a credential that is
-   already real.
+2. **`allow_dev_credentials`**: when ticked, the run falls back only where a production
+   credential is missing: a development entry-signer seed, or a geo stub that admits every
+   address. It warns by name for each fallback, and it never replaces a credential that is
+   already real. **Devnet today has no location provider** (`GEO_VENDOR_URL` and
+   `GEO_VENDOR_API_KEY` are unset), so a devnet deploy must be run with it ticked and serves the
+   geo stub; the deploys of 2026-11-01 and 2026-11-06 did. Leave it unticked once a provider is
+   connected, which mainnet requires.
 3. Leave **`deploy_despite_red_ci`** unticked. It overrides only the test half of the gate, and
    the run records that you chose it. It never overrides the `main`-only rule.
 

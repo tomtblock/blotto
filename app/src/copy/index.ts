@@ -603,6 +603,8 @@ export const COPY = {
     tierFilterAria: 'Which entry price',
     tierNotOpen: 'Not open yet',
     tierLegend: 'Greyed prices are not open yet',
+    /** One price on the entry row, read out (its visible text is "0.5" over "SOL"). */
+    tierOptionAria: (price: string, open: boolean) => `${price} SOL entry${open ? '' : ', not open yet'}`,
     /*
      * D-E19 (founder brief 2026-11-05): the size toggle beside the board
      * toggle — "8 · 16 · 32 · 64", each with its live fill for the board on
