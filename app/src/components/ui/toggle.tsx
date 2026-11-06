@@ -6,6 +6,10 @@
  * and the tier filter is a row of them. One shape everywhere so a player
  * learns it once.
  *
+ * `size="sm"` with `layout="stacked"`: the landing's entry-price row,
+ * seven prices with "SOL" under each, narrow enough to sit on one line of a
+ * 375 px card; it grows to the `md` keys from the `sm` width.
+ *
  * `layout="stacked"` (D-E19, founder brief 2026-11-05): the landing's size
  * toggle — "8 · 16 · 32 · 64" with each size's live fill under it — puts
  * the detail BELOW the label instead of beside it, so the row stays four
@@ -42,7 +46,8 @@ export interface ToggleProps<T extends string> {
   label: string;
   /** `cream` on a dark (plum) surface; `berry` on the pink field or a cream card. */
   tone?: 'cream' | 'berry';
-  size?: 'md' | 'lg';
+  /** `sm` is the stacked entry-price row: compact on a phone, `md` from the `sm` width. */
+  size?: 'sm' | 'md' | 'lg';
   /** `inline`: the detail beside the label. `stacked`: under it.
    * `responsive`: under it on a phone, beside it from `sm`. */
   layout?: 'inline' | 'stacked' | 'responsive';
@@ -93,7 +98,9 @@ export function Toggle<T extends string>({
   const pad = stacked
     ? size === 'lg'
       ? 'min-w-[56px] px-3.5 py-1.5 text-[17px]'
-      : 'min-w-[48px] px-3 py-1 text-[15px]'
+      : size === 'sm'
+        ? 'min-w-[36px] px-1.5 py-1 text-[13px] sm:min-w-[48px] sm:px-3 sm:text-[15px]'
+        : 'min-w-[48px] px-3 py-1 text-[15px]'
     : responsive
       ? size === 'lg'
         ? 'px-4 py-1.5 text-[15px] sm:px-5 sm:py-2.5'

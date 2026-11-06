@@ -25,8 +25,9 @@
  * 32 · 64", each with its live fill on the board on show ("5/8"), so the
  * toggle doubles as a view of every pool. Board and size live in the URL
  * (`?mode=…&size=…`, picker-state.ts) so a link opens the card on a pool
- * and Back walks the toggles. The tier toggle, when more than one tier is
- * open, takes its own row below. The card names the pool by players and
+ * and Back walks the toggles. The entry-price toggle sits under the board
+ * toggle in the same bar, every configured price listed and the ones not
+ * open greyed (founder 2026-11-06, restoring the ruling of 2026-09-27). The card names the pool by players and
  * prizes ("16 players · 4 prizes · 1st 0.5 SOL"), its numbers box counts
  * players entered of the pool's own size, and a compact prize table sits
  * above the Enter key.
@@ -109,20 +110,25 @@ export function PoolPicker({ tiers, serverTime }: { tiers: readonly PickerTier[]
   const dark = mode === 'hard';
   const words = COPY.landing.board[mode];
 
-  const tierOptions = tiers.map((t) => ({
-    value: String(t.tier),
-    label: `${lamportsToSol(t.entryLamports)} SOL`,
-    disabled: !tierChoosable(t),
-    disabledReason: COPY.landing.tierNotOpen,
-  }));
+  const tierOptions = tiers.map((t) => {
+    const price = lamportsToSol(t.entryLamports);
+    const open = tierChoosable(t);
+    return {
+      value: String(t.tier),
+      label: price,
+      detail: 'SOL',
+      ariaLabel: COPY.landing.tierOptionAria(price, open),
+      disabled: !open,
+      disabledReason: COPY.landing.tierNotOpen,
+    };
+  });
   /*
-   * PHASE-N-REVIEW (founder brief 2026-11-05): the tier toggle shows only
-   * when more than one tier is open — the brief's reading of the card — and
-   * then on its own row, listing every configured tier with the unopened
-   * ones greyed (the ruling of 2026-09-27). The code before this change drew
-   * the seven-price row even with one tier open.
+   * Every configured price is listed, the ones not open greyed and not
+   * choosable (founder 2026-11-06: the higher entry pools visible in the
+   * bar; the ruling of 2026-09-27). Nothing here opens a price: whether a
+   * tier takes entries is the chain's answer, handed in by the page.
    */
-  const showTiers = tiers.filter(tierChoosable).length > 1;
+  const showTiers = tiers.length > 1;
   const sizeOptions = slots.map((x) => {
     const fill = fillLabel(x);
     return {
@@ -173,27 +179,55 @@ export function PoolPicker({ tiers, serverTime }: { tiers: readonly PickerTier[]
       <div className={`relative overflow-hidden rounded-[28px] border-2 ${shell}`}>
         <div aria-hidden="true" className={`absolute inset-x-0 top-0 h-2 ${stripe}`} />
         <div className="flex flex-col gap-5 p-5 pt-7 sm:p-7 sm:pt-9">
-          {/* The two toggles: which board, how many players (D-E19). Board
-              left, size right; on a phone the size row wraps under. */}
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <Toggle
-              label={COPY.landing.pickBoardAria}
-              value={mode}
-              onChange={(m) => {
-                // Keep the size (founder brief). Keep the tier if the other
-                // board offers anything there; else that board's best tier.
-                if (row && !row[m].some((x) => x.pool !== null || x.live)) setTierChoice(defaultTier(tiers, m));
-                pushChoice(m, size);
-              }}
-              options={[
-                { value: 'easy', label: COPY.landing.board.easy.name, detail: COPY.landing.board.easy.title },
-                { value: 'hard', label: COPY.landing.board.hard.name, detail: COPY.landing.board.hard.title },
-              ]}
-              tone={dark ? 'cream' : 'berry'}
-              size="lg"
-              layout="responsive"
-              data-testid="pool-picker-mode"
-            />
+          {/* The bar: which board and, under it, which entry price on the
+              left; how many players on the right (D-E19). On a phone the
+              players row wraps under. */}
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex min-w-0 flex-col items-start gap-3">
+              <Toggle
+                label={COPY.landing.pickBoardAria}
+                value={mode}
+                onChange={(m) => {
+                  // Keep the size (founder brief). Keep the tier if the other
+                  // board offers anything there; else that board's best tier.
+                  if (row && !row[m].some((x) => x.pool !== null || x.live)) setTierChoice(defaultTier(tiers, m));
+                  pushChoice(m, size);
+                }}
+                options={[
+                  { value: 'easy', label: COPY.landing.board.easy.name, detail: COPY.landing.board.easy.title },
+                  { value: 'hard', label: COPY.landing.board.hard.name, detail: COPY.landing.board.hard.title },
+                ]}
+                tone={dark ? 'cream' : 'berry'}
+                size="lg"
+                layout="responsive"
+                data-testid="pool-picker-mode"
+              />
+              {showTiers ? (
+                <div className="flex flex-col items-start gap-1">
+                  <span className={`${LABEL} ${muted}`} aria-hidden="true">
+                    {COPY.pool.entryLabel}
+                  </span>
+                  <Toggle
+                    label={COPY.landing.tierFilterAria}
+                    value={String(row?.tier ?? 0)}
+                    onChange={(v) => setTierChoice(Number(v))}
+                    options={tierOptions}
+                    tone={dark ? 'cream' : 'berry'}
+                    size="sm"
+                    layout="stacked"
+                    data-testid="pool-picker-tier"
+                  />
+                  {tierOptions.some((o) => o.disabled) ? (
+                    <span
+                      className={`font-mono text-[10px] uppercase tracking-[0.1em] ${muted}`}
+                      data-testid="pool-picker-tier-legend"
+                    >
+                      {COPY.landing.tierLegend}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
             <div className="flex flex-col items-start gap-1 sm:items-end">
               <span className={`${LABEL} ${muted}`} aria-hidden="true">
                 {COPY.landing.sizeLabel}
@@ -209,22 +243,6 @@ export function PoolPicker({ tiers, serverTime }: { tiers: readonly PickerTier[]
               />
             </div>
           </div>
-          {showTiers ? (
-            <div className="flex flex-col items-start gap-1">
-              <Toggle
-                label={COPY.landing.tierFilterAria}
-                value={String(row?.tier ?? 0)}
-                onChange={(v) => setTierChoice(Number(v))}
-                options={tierOptions}
-                tone={dark ? 'cream' : 'berry'}
-                data-testid="pool-picker-tier"
-              />
-              {tierOptions.some((o) => o.disabled) ? (
-                <span className={`font-mono text-[10px] uppercase tracking-[0.1em] ${muted}`}>{COPY.landing.tierLegend}</span>
-              ) : null}
-            </div>
-          ) : null}
-
           <div className="grid gap-4 md:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] md:gap-5">
             {/* The clip well: one loop, the mode's own. It sets the row's height. */}
             <div className={`relative aspect-[4/5] overflow-hidden rounded-[20px] ${well}`} aria-hidden="true">

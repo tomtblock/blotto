@@ -149,7 +149,23 @@ describe('PoolPicker (server render: the defaults)', () => {
     expect(html).toContain(`href="/play?pool=${open('open').pool}"`);
   });
 
-  it('draws no tier row while only one tier is open', () => {
-    expect(html).not.toContain('data-testid="pool-picker-tier"');
+  it('lists every entry price in the bar, under the board toggle, greying the ones not open', () => {
+    expect(html).toContain('data-testid="pool-picker-tier"');
+    const mode = html.indexOf('data-testid="pool-picker-mode"');
+    const tierRow = html.indexOf('data-testid="pool-picker-tier"');
+    const sizes = html.indexOf('data-testid="pool-picker-size"');
+    expect(mode).toBeLessThan(tierRow);
+    expect(tierRow).toBeLessThan(sizes);
+    TIER_ENTRY_LAMPORTS.forEach((_, tier) => {
+      const t = tiers[tier]!;
+      const open = t.easy.concat(t.hard).some((x) => x.live || x.pool !== null);
+      const price = Number(TIER_ENTRY_LAMPORTS[tier]) / 1e9;
+      expect(html).toContain(`aria-label="${COPY.landing.tierOptionAria(String(price), open)}"`);
+      const button = html.match(new RegExp(`<button[^>]*data-testid="pool-picker-tier-${tier}"[^>]*>`))![0];
+      expect(button.includes('aria-disabled="true"')).toBe(!open);
+    });
+    // The open price is the one chosen; the fixture opens tier 0 only.
+    expect(html).toMatch(/aria-checked="true"[^>]*data-testid="pool-picker-tier-0"/);
+    expect(html).toContain(COPY.landing.tierLegend);
   });
 });
