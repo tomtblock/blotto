@@ -147,7 +147,10 @@ types 8; tier 0 open on both ladders; the treasury above 15.5052 SOL.
 npm run check-deployed
 ```
 
-Expect every row green (Config 605, Pool 869, PoolType 57, the new instructions present).
+Expect every row green (Config 605, Pool 869, PoolType 57, the new instructions present). Then
+**Actions → deployed-drift → Run workflow** on `main`. The run the merge started was red, because
+it ran before the upgrade, and without a fresh run the watcher reports it after step 6
+([OPERATING-MANUAL §4](OPERATING-MANUAL.md#4-program-upgrades-and-account-migrations)).
 
 ## 6. Deploy the backend and the watcher
 

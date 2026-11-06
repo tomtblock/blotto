@@ -340,6 +340,12 @@ pool is not a whole number of entries (devnet pool #1) is recorded with no table
 pre-Ladder pool. A pre-Ladder pool that still has to be paid or refunded cannot be until that pool
 type exists (`init-pool-type`; it need not be enabled).
 
+**Then re-run the drift check on `main`:** Actions → `deployed-drift` → Run workflow. The merge
+that carried the program change started a run before the upgrade, and that run failed, correctly
+at the time. It stays the latest run until the daily 06:17 UTC schedule, and a restarted watcher
+reports it as a live incident whose suggested fix is to redeploy. Do not redeploy: a fresh run
+replaces it (devnet, 2026-11-06).
+
 ### Step 6 — Redeploy the backend (if the wire contract changed)
 
 If the upgrade changed an instruction the services send or an event they read, run
